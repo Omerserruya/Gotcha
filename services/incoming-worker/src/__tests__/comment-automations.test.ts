@@ -131,7 +131,7 @@ const commentFlow = (o: any = {}) => ({
   nodes: [
     trig,
     { id: "pub", type: "send_comment_reply", data: { mode: "text", text: "Sent you a DM, @{{comment.from.username}}" } },
-    { id: "b", type: "send_buttons", data: { text: "Want the price list?", buttons: [{ id: "yes", title: "Yes please" }] } },
+    { id: "b", type: "send_buttons", data: { text: "{{first_name}}, want the {{business_name}} price list?", buttons: [{ id: "yes", title: "Yes please" }] } },
     { id: "w", type: "wait_for_reply", data: { timeoutMs: 3 * 24 * 3_600_000 } },
     { id: "list", type: "send_message_text", data: { text: "Here it is" } },
     { id: "late", type: "send_message_text", data: { text: "Still interested?" } },
@@ -160,7 +160,7 @@ const legacyCanvas = () => ({
 beforeEach(() => {
   H.seq = 0; H.sent = []; H.queued = []; H.failPrivateReply = false;
   H.db = {
-    tenant: [{ id: T, status: "ACTIVE" }],
+    tenant: [{ id: T, status: "ACTIVE", name: "Urban Supply" }],
     channelAccount: [{ id: "ca1", tenantId: T, isActive: true, externalId: "ig-biz", credentials: {} }],
     chatbotFlow: [commentFlow()],
     flowCanvas: [legacyCanvas()],
@@ -172,6 +172,7 @@ describe("★ one run per comment", () => {
     await processCommentTrigger(job());
     expect(H.sent.map((s) => s.kind)).toEqual(["comment_reply", "private_reply"]);
     expect(H.sent[0]).toMatchObject({ body: "Sent you a DM, @dana", extra: { commentId: "cm1" } });
+    expect(H.sent[1]).toMatchObject({ body: "dana, want the Urban Supply price list?" });
     expect(H.sent[1]!.extra.buttons).toEqual([{ id: "yes", title: "Yes please" }]);
     expect(H.db.automationRun).toHaveLength(1);
     expect(H.db.automationRun![0]).toMatchObject({ triggerType: "comment_received", eventKey: "comment:cm1", answeredInbound: true });

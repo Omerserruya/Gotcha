@@ -105,11 +105,25 @@ A run in a conversation the viewer may not see (department rules) is not listed,
 | `new_customer` | `{ channels?: Channel[] }` | the first message ever from a customer | yes |
 | `message_from_ad` | `{ channels?: Channel[], adIds?: string[] }` | the FIRST message of a conversation that came from an ad (Click-to-WhatsApp / Meta referral); `adIds` (Meta ad ids, matched trimmed and case-insensitive) narrows it to chosen ads | yes |
 | `button_tapped` | `{ channels?: Channel[], payloads?: string[] }` | a button / list row tapped when no flow is waiting for it (e.g. a campaign template's quick reply); `payloads` narrows it to chosen button ids | yes |
+| `comment_received` ("Comment on a post") | `{ channels?: ("INSTAGRAM"\|"MESSENGER")[], postIds?: string[], keywords?: string[], match?: "contains"\|"exact"\|"any_word" }` | a public comment on an Instagram / Facebook post; `postIds` narrows it to chosen posts (Meta media / post ids), `keywords` to matching comments. Runs before the playbook's comment triggers; when an automation took the comment, the playbook does not answer it too. The first send is Meta's private reply (one per comment); see "Comment automations" below | yes |
 | `tag_added` | `{ tags: string[] }` | one of the tags is added to the customer | yes |
+| `cart_abandoned` ("Cart left behind") | `{ channels?: Channel[], delayMinutes?: number }` (15 to 2880, default 120) | a Shopify checkout or a WooCommerce order waiting for payment that is not bought within the delay. Sends only to customers who agreed to marketing (the store's record, else a granted consent); otherwise the run is recorded `skipped` with the reason. A purchase stops a waiting run. On WhatsApp (or channels left open) only a template may be sent | yes |
 | `schedule` | `{ at: "09:00", days?: ["sun".."sat"], timezone?: "Asia/Jerusalem" }` | at that time; there is no customer on this path (Send nodes unavailable) | yes **(building)** |
 | `webhook` | `{}` | a POST to the automation's webhook URL; the body is `{{body.*}}`. The URL and secret come from the existing `/api/webhook-triggers` (create one with `workflowId` = the automation id) | yes |
 | `call_missed` / `call_answered` | `{ lines?: string[] }` | voice call events | **no** (`no_event_source`) until voice events feed the dispatcher (building) |
-| `order_event`, `cart_abandoned`, `form_submitted`, `story_mention` | | | **no**: `reason: "no_event_source"` (drawn dimmed) |
+| `order_event`, `form_submitted`, `story_mention` | | | **no**: `reason: "no_event_source"` (drawn dimmed) |
+
+**Comment automations.** The steps before the first `wait_for_reply` run on the comment itself
+and may only be: `send_comment_reply`, `send_message_text`, `send_message_file`,
+`send_message_image`, `send_message_interactive`, `send_buttons`, `wait_for_reply`,
+`set_variable`, `condition_group` (else `comment_step_unsupported`). Variables there:
+`{{comment.text}}`, `{{comment.from.username}}`, `{{comment.postId}}`, `{{comment.postPermalink}}`,
+`{{business_name}}`, and `{{first_name}}` (a comment carries only the username, so it is that).
+At `wait_for_reply` the run continues in the DM conversation the private reply opened, like any
+automation; its timeout is capped just under Meta's 24 h comment-to-DM window. A send Meta refuses
+is a failed step and the run ends `failed`.
+
+**Cart variables:** `{{cart_url}}`, `{{cart_total}}`, `{{cart_items}}`, `{{first_name}}`.
 
 Rules that hold for every trigger:
 - **One run per event**: the same event never runs the same automation twice (webhook retries,
@@ -147,6 +161,7 @@ Variables in text: `{{first_name}}`, `{{business_name}}`, `{{opening_hours}}`, `
 | `send_list` | send | `{ text, buttonText, options: [{ id, title, description? }] }` (max 10, WhatsApp) | `next` |
 | `ai_generate` ("AI writes a message") | send | `{ prompt, aiAgentId, responseVariable?, send?: true }` - one message written by that AI employee from the instruction (and the customer's latest message), sent unless `send: false`; also kept in `{{var.<responseVariable>}}` | `next` |
 | `send_message_template` | send | existing template shape | `next` |
+| `send_comment_reply` ("Reply to the comment") | send | `{ mode: "text", text }` or `{ mode: "ai", agentId, fallbackText? }` - a PUBLIC reply under the comment. Only in a `comment_received` automation, before any Wait for reply (else `comment_reply_misplaced`) | `next` |
 | `assign` | do | `{ to: "team"\|"person", departmentId?, userId? }` | `next` |
 | `hand_to_ai` | do | `{ aiAgentId }` | none (ends the automation's ownership) |
 | `run_skill` | do | `{ skillId, aiAgentId }` | none (ends ownership; the employee runs that skill) |

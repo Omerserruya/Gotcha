@@ -363,6 +363,14 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
     "comment.from.id": args.comment.fromUserId,
     "comment.from.username": args.comment.fromUsername || "",
   };
+  // An automation's variables, as its DM steps will have them: a comment
+  // carries only the username, which is also the conversation's name.
+  if (args.run) {
+    const first = String(args.comment.fromUsername ?? "").trim().split(/\s+/)[0];
+    if (first) vars.first_name = first;
+    const tenant = await prisma.tenant.findUnique({ where: { id: args.tenantId }, select: { name: true } }).catch(() => null);
+    if (tenant?.name) vars.business_name = tenant.name;
+  }
 
   let currentId: string | null = args.startNodeId;
   const visited = new Set<string>();
