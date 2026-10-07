@@ -15,7 +15,9 @@ import {
   prisma,
   normalizeWebchatConfig,
   readShopifyLiveChatConfig,
+  waMeDigits,
   type WebchatConfig,
+  type ShopifyChatUx,
 } from "@chatcenter/shared";
 import { listChannels, saveChannelConfig } from "./shopify-live-chat.service";
 import { activationSnapshot } from "./shopify-chat-install.service";
@@ -140,6 +142,40 @@ export async function assignedEmployeeOf(tenantId: string): Promise<{ id: string
   return null;
 }
 
+/** The workspace's WhatsApp numbers, for "Continue on WhatsApp", and whether each can take it. */
+export async function whatsappNumbers(tenantId: string): Promise<Array<{ channelId: string; name: string; phone: string | null; available: boolean; reason?: "not_connected" | "number_unknown" }>> {
+  const accounts = await prisma.channelAccount.findMany({
+    where: { tenantId, channel: "WHATSAPP" as any },
+    select: { id: true, displayName: true, connectionStatus: true, isActive: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!accounts.length) return [];
+  const numbers = await (prisma as any).whatsAppNumber.findMany({
+    where: { tenantId, channelAccountId: { in: accounts.map((a) => a.id) } },
+    select: { channelAccountId: true, displayPhoneNumber: true },
+  });
+  const phoneOf = new Map<string, string | null>((numbers as any[]).map((n) => [n.channelAccountId, n.displayPhoneNumber ?? null]));
+  return accounts.map((a) => {
+    const phone = phoneOf.get(a.id) ?? null;
+    const connected = a.connectionStatus === "CONNECTED" && a.isActive;
+    // A number connected before WhatsAppNumber rows existed has no known phone: wa.me needs one.
+    const reason = !connected ? "not_connected" as const : !waMeDigits(phone) ? "number_unknown" as const : undefined;
+    return { channelId: a.id, name: a.displayName || phone || "WhatsApp", phone, available: !reason, ...(reason ? { reason } : {}) };
+  });
+}
+
+/** The wa.me digits the handoff opens, or null when the button must not show. */
+export async function handoffTarget(tenantId: string, ux: ShopifyChatUx): Promise<{ channelAccountId: string; digits: string } | null> {
+  if (!ux.whatsapp.enabled || !ux.whatsapp.channelAccountId) return null;
+  const n = (await whatsappNumbers(tenantId)).find((x) => x.channelId === ux.whatsapp.channelAccountId);
+  const digits = n?.available ? waMeDigits(n.phone) : null;
+  return digits ? { channelAccountId: n!.channelId, digits } : null;
+}
+
+export class WidgetInputError extends Error {
+  constructor(public code: string, public field: string) { super(code); }
+}
+
 export async function getWidget(tenantId: string) {
   const [webchat, shops] = await Promise.all([
     prisma.channelAccount.findFirst({ where: { tenantId, channel: "WEBCHAT" as any }, orderBy: { createdAt: "asc" } }),
@@ -153,6 +189,8 @@ export async function getWidget(tenantId: string) {
   return {
     settings,
     assignedEmployee: await assignedEmployeeOf(tenantId).catch(() => null),
+    // For "Continue on WhatsApp": the numbers to choose from, each with whether it can take it.
+    whatsappNumbers: await whatsappNumbers(tenantId),
     places: {
       code: webchat ? { channelId: webchat.id } : null,
       shopify: shops.map((s) => ({ channelId: s.id, shopDomain: s.config.shopDomain })),
@@ -171,6 +209,12 @@ export async function putWidget(tenantId: string, patch: Partial<WidgetSettings>
     listChannels(tenantId),
   ]);
   if (!webchat && !shops.length) return null;
+  // A WhatsApp number for the handoff must be one of this workspace's.
+  const chosen = (patch.ux as any)?.whatsapp?.channelAccountId;
+  if (typeof chosen === "string" && chosen) {
+    const owned = await prisma.channelAccount.findFirst({ where: { id: chosen, tenantId, channel: "WHATSAPP" as any }, select: { id: true } });
+    if (!owned) throw new WidgetInputError("WHATSAPP_NUMBER_NOT_FOUND", "ux.whatsapp.channelAccountId");
+  }
   // One canonical result, from the webchat normaliser, then written everywhere.
   const current = webchat
     ? normalizeWebchatConfig(webchat.credentials)

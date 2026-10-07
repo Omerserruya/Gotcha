@@ -796,6 +796,11 @@ export {
   defaultShopifyChatUx,
   normalizeShopifyChatUx,
   publicUxConfig,
+  WIDGET_LOOKS,
+  defaultWhatsapp,
+  normalizeWhatsapp,
+  type WidgetLook,
+  type ShopifyChatWhatsapp,
 } from "./lib/shopify-chat-ux";
 export type {
   WidgetState,
@@ -1219,3 +1224,19 @@ export {
 
 // No em/en dash or horizontal bar in operator-facing model text.
 export { withoutWideDashes } from "./lib/wide-dash";
+
+// "Continue on WhatsApp" from the website widget: one definition for ai and the inbound worker.
+export {
+  HANDOFF_REF_ALPHABET,
+  HANDOFF_REF_LENGTH,
+  HANDOFF_TTL_SECONDS,
+  handoffRefKey,
+  handoffConversationKey,
+  newHandoffRef,
+  handoffMessage,
+  handoffButtonLabel,
+  findHandoffRef,
+  waMeDigits,
+  waMeUrl,
+  type HandoffRecord,
+} from "./lib/whatsapp-handoff";

@@ -10,7 +10,7 @@ import {
   requireActiveTenant,
   requirePermission,
 } from "@chatcenter/shared";
-import { getWidget, putWidget, installOf, type WidgetSettings } from "../services/website-widget.service";
+import { getWidget, putWidget, installOf, WidgetInputError, type WidgetSettings } from "../services/website-widget.service";
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
@@ -46,6 +46,10 @@ router.put("/", requirePermission("channels:manage:update"), async (req: Request
     }
     res.json({ data });
   } catch (err) {
+    if (err instanceof WidgetInputError) {
+      res.status(422).json({ error: "This WhatsApp number is not one of this workspace's", code: err.code, field: err.field });
+      return;
+    }
     console.error("[website-widget] put failed:", (err as Error)?.message);
     res.status(500).json({ error: "Could not save the widget" });
   }

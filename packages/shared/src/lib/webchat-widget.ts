@@ -271,5 +271,6 @@ function publicUx(ux: ShopifyChatUx) {
     proactive: { ...ux.proactive },
     sounds: ux.sounds,
     behavior: ux.behavior,
+    look: ux.look,
   };
 }

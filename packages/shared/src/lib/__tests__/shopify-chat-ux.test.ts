@@ -552,14 +552,17 @@ describe("public widget payload", () => {
       hero: { mediaType: "image", mediaUrl: "https://cdn.example.com/h.jpg" },
       launcher: { label: "Need help?" },
       proactive: { enabled: true, includeUrls: ["/products/*"] },
+      whatsapp: { enabled: true, channelAccountId: "ca_whatsapp_secret" },
     });
     const pub = publicUxConfig(ux);
     const serialized = JSON.stringify(pub);
 
     // Everything a shopper's browser needs to draw the widget.
     expect(Object.keys(pub).sort()).toEqual(
-      ["behavior", "hero", "launcher", "proactive", "sounds", "welcome"].sort(),
+      ["behavior", "hero", "launcher", "look", "proactive", "sounds", "welcome"].sort(),
     );
+    // The WhatsApp handoff's number is the merchant's channel account: never public.
+    expect(serialized).not.toContain("ca_whatsapp_secret");
 
     // ...and nothing it does not. These are the shapes that would matter
     // if one ever slipped in: an id, a secret, a routing decision.

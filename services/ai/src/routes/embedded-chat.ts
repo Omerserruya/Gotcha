@@ -9,10 +9,12 @@ import {
   getRedis,
   BUSINESS_HOURS_KEY,
   parseBusinessHours,
-  evaluateBusinessHours, readDurableSetting } from "@chatcenter/shared";
+  evaluateBusinessHours, readDurableSetting,
+  HANDOFF_TTL_SECONDS, handoffRefKey, handoffConversationKey, newHandoffRef, handoffMessage, handoffButtonLabel, waMeUrl,
+  type HandoffRecord, type WebchatConfig } from "@chatcenter/shared";
 import crypto from "crypto";
 import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanitizer.service";
-import { recordWebchatSeen, hostOf } from "../services/website-widget.service";
+import { recordWebchatSeen, hostOf, handoffTarget } from "../services/website-widget.service";
 
 const router = Router();
 
@@ -164,7 +166,7 @@ router.post("/bootstrap", initLimiter, async (req: Request, res: Response) => {
     res.json({
       data: {
         availability: offline ? "offline" : "online",
-        widget: publicWebchatConfig(config, { offline }),
+        widget: await withHandoff(account.tenantId, config, offline),
       },
     });
   } catch (err) {
@@ -180,6 +182,22 @@ router.post("/bootstrap", initLimiter, async (req: Request, res: Response) => {
  * shows up in URLs and logs) is never enough, and only a WEBCHAT conversation
  * qualifies. Anything else is a plain 404: no hint that the id exists.
  */
+/**
+ * The public config plus "Continue on WhatsApp": the button shows only when
+ * the merchant turned it on AND its number can take it (connected, phone
+ * known). The number itself never reaches the page.
+ */
+async function withHandoff(tenantId: string, config: WebchatConfig, offline = false) {
+  const base = publicWebchatConfig(config, { offline });
+  const target = await withCrossTenantAccess(() => handoffTarget(tenantId, config.ux)).catch(() => null);
+  const lang = config.appearance.language === "he" ? "he" : "en";
+  return {
+    ...base,
+    features: { ...base.features, whatsappHandoff: !!target },
+    ...(target ? { whatsapp: { label: handoffButtonLabel(lang) } } : {}),
+  };
+}
+
 async function visitorConversation(conversationId: string, token: unknown) {
   if (typeof token !== "string" || !token || !conversationId) return null;
   const c = await prisma.conversation.findUnique({
@@ -191,6 +209,46 @@ async function visitorConversation(conversationId: string, token: unknown) {
   const b = Buffer.from(token);
   return a.length === b.length && crypto.timingSafeEqual(a, b) ? c : null;
 }
+
+/**
+ * POST /whatsapp-handoff { sessionId, sessionToken, locale? } -> { url, ref }
+ * "Continue on WhatsApp": a short code tied to this visitor's conversation,
+ * and the wa.me link with the message that carries it. The same conversation
+ * gets the same code (a second click does not orphan the first). 404 when the
+ * button should not be there (off, number unavailable) or the token is wrong.
+ */
+router.post("/whatsapp-handoff", messageLimiter, async (req: Request, res: Response) => {
+  try {
+    const conv = await withCrossTenantAccess(() => visitorConversation(String(req.body?.sessionId ?? ""), req.body?.sessionToken));
+    if (!conv || !conv.channelAccountId) { res.status(404).json({ error: "unavailable" }); return; }
+    const account = await withCrossTenantAccess(() => prisma.channelAccount.findFirst({
+      where: { id: conv.channelAccountId!, tenantId: conv.tenantId, channel: "WEBCHAT" },
+      select: { credentials: true },
+    }));
+    if (!account) { res.status(404).json({ error: "unavailable" }); return; }
+    const config = normalizeWebchatConfig(account.credentials);
+    const target = await withCrossTenantAccess(() => handoffTarget(conv.tenantId, config.ux));
+    if (!target) { res.status(404).json({ error: "unavailable" }); return; }
+
+    const redis = getRedis();
+    let ref = await redis.get(handoffConversationKey(conv.id));
+    if (!ref) {
+      const record: HandoffRecord = { tenantId: conv.tenantId, conversationId: conv.id, whatsappChannelAccountId: target.channelAccountId, createdAt: new Date().toISOString() };
+      for (let i = 0; i < 5 && !ref; i++) {
+        const candidate = newHandoffRef((n) => crypto.randomBytes(n));
+        if (await redis.set(handoffRefKey(candidate), JSON.stringify(record), "EX", HANDOFF_TTL_SECONDS, "NX")) ref = candidate;
+      }
+      if (!ref) { res.status(503).json({ error: "try_again" }); return; }
+      await redis.set(handoffConversationKey(conv.id), ref, "EX", HANDOFF_TTL_SECONDS);
+    }
+    const asked = req.body?.locale;
+    const locale = asked === "he" || asked === "en" ? asked : config.appearance.language === "he" ? "he" : "en";
+    res.json({ data: { url: waMeUrl(target.digits, handoffMessage(ref, locale)), ref } });
+  } catch (err) {
+    console.error("Embedded chat whatsapp-handoff error:", (err as Error)?.message);
+    res.status(500).json({ error: "unavailable" });
+  }
+});
 
 router.post("/init", initLimiter, async (req: Request, res: Response) => {
   try {

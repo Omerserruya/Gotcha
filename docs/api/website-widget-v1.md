@@ -84,8 +84,18 @@ and `WebchatConfig.appearance` (`webchat-widget.ts`); every value is normalised
 on write (an unknown or invalid value falls back to its default, never 400s).
 Text fields are plain text (no markup), URLs https only.
 
-**Stage B (not yet):** `look: "gotcha" | "whatsapp"` and
-`whatsapp: { enabled, numberId }` ("Continue on WhatsApp"). Absent in A.
+**Stage B (2026-10-07):** two more `ux` fields, saved like the rest:
+- `ux.look`: `"gotcha"` (default) | `"whatsapp"`: the customer-side panel style.
+  An unknown value falls back to `"gotcha"`.
+- `ux.whatsapp`: `{ enabled: boolean, channelAccountId: string | null }`
+  ("Continue on WhatsApp"). The number must be one of the workspace's
+  WhatsApp channels: another id is `422 { code: "WHATSAPP_NUMBER_NOT_FOUND",
+  field: "ux.whatsapp.channelAccountId" }`.
+
+GET also returns `whatsappNumbers: [{ channelId, name, phone, available,
+reason? }]` for the picker. `reason`: `"not_connected"`, or `"number_unknown"`
+(connected before the number's phone was recorded; reconnecting records it).
+Only an `available` number makes the button show.
 
 ---
 
@@ -120,6 +130,24 @@ Text fields are plain text (no markup), URLs https only.
 `lastSeenAt` / `lastHost` come from the snippet's `/bootstrap` (host from the
 page's Origin, else Referer), written at most hourly. `embedLive` means a theme
 heartbeat within the last 7 days.
+
+---
+
+## 2b. The visitor's side (public, `/api/embedded-chat`)
+
+- `POST /bootstrap` → `widget.ux.look`; `widget.features.whatsappHandoff`
+  (true only when on AND its number is available); when true,
+  `widget.whatsapp: { label }` ("המשך בוואטסאפ" / "Continue on WhatsApp", by
+  the widget's language). The number never reaches the page.
+- `POST /whatsapp-handoff { sessionId, sessionToken, locale? }` →
+  `{ data: { url, ref } }`: open `url` (wa.me with the message pre-filled:
+  "היי, ממשיכים את השיחה מהאתר (REF)" / "Hi, continuing our chat from the
+  website (REF)"). The same conversation keeps the same `ref` for 7 days.
+  `404 { error: "unavailable" }` when the button should not be there or the
+  token is not this conversation's.
+- When the customer sends that message, the WhatsApp conversation is linked to
+  the website one (stage B part 2: same customer, the website chat's history as
+  context, the website chat closed as continued on WhatsApp).
 
 ---
 
