@@ -359,6 +359,31 @@ export interface FlowResumeJob {
 }
 
 /**
+ * A shopper's checkout, normalised from any store (job name "cart-event" on
+ * the incoming-messages queue). Shopify checkouts/* and orders/create, the
+ * WooCommerce poller and the internal test path all produce this shape; the
+ * incoming worker decides abandonment from it.
+ */
+export interface CartEventJob {
+  tenantId: string;
+  source: "shopify" | "woocommerce" | "test";
+  /** Stable per checkout: one abandonment run per automation per checkout. */
+  checkoutId: string;
+  /** The checkout became an order (or was completed): stop everything for it. */
+  completed: boolean;
+  /** When the store last changed this checkout (ISO). */
+  updatedAt: string;
+  customer: { email?: string | null; phone?: string | null; firstName?: string | null };
+  items: Array<{ title: string; quantity: number; price?: number | null }>;
+  total?: number | null;
+  currency?: string | null;
+  /** The store's own recovery link. */
+  cartUrl?: string | null;
+  /** What the store recorded about marketing consent (null = the store has none). */
+  marketingConsent?: { email?: boolean | null; sms?: boolean | null } | null;
+}
+
+/**
  * An event that can fire automations without an inbound message (job name
  * "automation-event" on the incoming-messages queue). `eventKey` is the
  * event's identity: one run per automation per key.

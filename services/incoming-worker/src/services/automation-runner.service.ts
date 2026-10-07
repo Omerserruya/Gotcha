@@ -26,7 +26,7 @@ import {
 
 export const LOOP_GUARD_PER_MIN = 5;
 
-export type AutomationTrigger = "message_received" | "new_customer" | "message_from_ad" | "button_tapped" | "tag_added" | "schedule" | "webhook" | "call_missed" | "call_answered";
+export type AutomationTrigger = "message_received" | "new_customer" | "message_from_ad" | "button_tapped" | "tag_added" | "cart_abandoned" | "schedule" | "webhook" | "call_missed" | "call_answered";
 
 export interface TriggerEvent {
   type: AutomationTrigger;
@@ -197,10 +197,14 @@ export async function runAutomationsForEvent(ev: {
   replyPayload?: string | null;
   tag?: string | null;
   adId?: string | null;
+  /** Only these automations (a per-automation delayed check, e.g. carts). */
+  onlyFlowIds?: string[];
+  /** The event's variables for the walk ({{cart_url}}, ...). */
+  vars?: Record<string, unknown>;
 }): Promise<{ answered: boolean; runs: Array<{ id: string; flowId: string; status: string }> }> {
   const out = { answered: false, runs: [] as Array<{ id: string; flowId: string; status: string }> };
   const flows = await prisma.chatbotFlow.findMany({
-    where: { tenantId: ev.tenantId, isActive: true, triggerType: { in: ev.types } },
+    where: { tenantId: ev.tenantId, isActive: true, triggerType: { in: ev.types }, ...(ev.onlyFlowIds ? { id: { in: ev.onlyFlowIds } } : {}) },
     orderBy: { activatedAt: "asc" },
     select: { id: true, triggerType: true, triggerConfig: true },
   });
@@ -243,7 +247,7 @@ export async function runAutomationsForEvent(ev: {
       result = ev.conversationId
         ? await executeSubFlow({
             tenantId: ev.tenantId, conversationId: ev.conversationId, message: ev.message, channel: ev.channel,
-            flowId: flow.id, replyPayload: ev.replyPayload ?? null, run,
+            flowId: flow.id, replyPayload: ev.replyPayload ?? null, run, vars: ev.vars,
           })
         : await executeWebhookFlow({ tenantId: ev.tenantId, workflowId: flow.id, payload: {}, run });
     } catch (err) {
@@ -310,7 +314,7 @@ export async function resumeAutomationRun(opts: {
   timeout?: boolean;
 }): Promise<{ answered: boolean; status: string }> {
   const [runRow, conv] = await Promise.all([
-    prisma.automationRun.findFirst({ where: { id: opts.runId, tenantId: opts.tenantId }, select: { id: true, flowId: true, status: true } }),
+    prisma.automationRun.findFirst({ where: { id: opts.runId, tenantId: opts.tenantId }, select: { id: true, flowId: true, status: true, triggerType: true, eventKey: true } }),
     prisma.conversation.findFirst({ where: { id: opts.conversationId, tenantId: opts.tenantId }, select: { chatbotNodeId: true, automationRunId: true, flowVariables: true, handledBy: true } }),
   ]);
   if (!conv) return { answered: false, status: "gone" };
@@ -323,6 +327,16 @@ export async function resumeAutomationRun(opts: {
     // Nothing to resume: never leave the conversation pointing at it.
     if (conv.automationRunId === opts.runId) await release(opts.tenantId, opts.conversationId, run, false);
     return { answered: false, status: runRow?.status ?? "gone" };
+  }
+  // A cart reminder stops the moment the customer buys: a purchase that
+  // arrived while the run waited ends it before anything else is sent.
+  if ((runRow as any).triggerType === "cart_abandoned" && String((runRow as any).eventKey ?? "").startsWith("cart:")) {
+    const { isCheckoutDone } = await import("./cart.service");
+    if (await isCheckoutDone(opts.tenantId, String((runRow as any).eventKey).slice(5))) {
+      await prisma.automationRun.update({ where: { id: opts.runId }, data: { status: "completed", error: "stopped: purchased", currentNodeId: null, endedAt: new Date() } });
+      await release(opts.tenantId, opts.conversationId, run, false);
+      return { answered: false, status: "completed" };
+    }
   }
   let result: FlowExecutionResult | null = null;
   let error: unknown = null;

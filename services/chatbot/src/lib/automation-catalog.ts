@@ -35,7 +35,14 @@ export type TriggerType = (typeof TRIGGER_TYPES)[number];
 // call_missed / call_answered are NOT live: nothing feeds voice events to the
 // automation dispatcher yet (only the old voice_trigger nodes hear them).
 // Offering them made an automation that could never run.
-const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "message_from_ad", "button_tapped", "tag_added", "schedule", "webhook"]);
+const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "message_from_ad", "button_tapped", "tag_added", "cart_abandoned", "schedule", "webhook"]);
+/**
+ * Triggers that fire when the customer has not written to us: on WhatsApp the
+ * 24 h service window is closed, so only an approved template can be sent.
+ */
+const OUTSIDE_WINDOW_TRIGGERS = new Set<TriggerType>(["tag_added", "cart_abandoned"]);
+/** Of those, the ones that NEVER follow a customer message: the validator refuses a free-form WhatsApp send. */
+const WINDOW_CLOSED_TRIGGERS = new Set<TriggerType>(["cart_abandoned"]);
 /** Triggers that carry no customer: their path cannot send a message. */
 const CUSTOMERLESS_TRIGGERS = new Set<TriggerType>(["schedule", "webhook"]);
 const VOICE_TRIGGERS = new Set<TriggerType>(["call_missed", "call_answered"]);
@@ -49,7 +56,7 @@ const TRIGGERS: TriggerDef[] = [
   { type: "message_from_ad", label: "Message from an ad", description: "Click-to-WhatsApp and other ads, any ad or chosen ones", channels: ["WHATSAPP", "MESSENGER", "INSTAGRAM"], synonyms: ["ad", "campaign", "click to whatsapp", "ctwa", "referral", "facebook ad"] },
   { type: "button_tapped", label: "Button tapped", description: "A button in a template or campaign, outside a flow", channels: ["WHATSAPP", "MESSENGER", "INSTAGRAM"], synonyms: ["button", "tap", "quick reply", "template button", "postback"] },
   { type: "order_event", label: "Order event", description: "Created, paid, shipped, delivered", channels: [], synonyms: ["order", "paid", "shipped", "delivered", "store"] },
-  { type: "cart_abandoned", label: "Cart left behind", description: "After a delay you set", channels: [], synonyms: ["cart", "abandoned"] },
+  { type: "cart_abandoned", label: "Cart left behind", description: "After a delay you set. Sends only to customers who agreed to marketing", channels: ["WHATSAPP", "EMAIL"], synonyms: ["cart", "abandoned", "checkout", "recover", "reminder"] },
   { type: "form_submitted", label: "Form submitted", description: "Website or Instagram lead form", channels: ["WEBCHAT", "INSTAGRAM"], synonyms: ["form", "lead"] },
   { type: "story_mention", label: "Story mention", description: "Someone tags you", channels: ["INSTAGRAM"], synonyms: ["story", "mention", "instagram"] },
   { type: "tag_added", label: "Tag added", description: "On a customer or conversation", channels: [], synonyms: ["tag", "label"] },
@@ -119,6 +126,15 @@ export function normalizeTrigger(input: any): { type: TriggerType; config: Recor
       if (c.timezone != null) {
         try { new Intl.DateTimeFormat("en", { timeZone: String(c.timezone) }); } catch { throw new AutomationInputError("trigger.config.timezone", "unknown timezone"); }
         config.timezone = String(c.timezone);
+      }
+      break;
+    }
+    case "cart_abandoned": {
+      const ch = channels(c.channels); if (ch?.length) config.channels = ch;
+      if (c.delayMinutes != null) {
+        const n = Number(c.delayMinutes);
+        if (!Number.isFinite(n) || n < 15 || n > 2880) throw new AutomationInputError("trigger.config.delayMinutes", "the delay is 15 minutes to 2 days");
+        config.delayMinutes = Math.round(n);
       }
       break;
     }
@@ -222,7 +238,7 @@ function nodeAvailability(def: NodeDef, ctx: CatalogContext): { available: boole
   if (ctx.channel && def.channels.length && !def.channels.includes(ctx.channel)) return { available: false, reason: "channel_not_supported" };
   // A schedule or a tag can fire long after the customer last wrote: on
   // WhatsApp only an approved template is sure to arrive.
-  if (def.needsWindow && ctx.channel === "WHATSAPP" && ctx.triggerType === "tag_added") return { available: false, reason: "needs_24h_window" };
+  if (def.needsWindow && ctx.channel === "WHATSAPP" && ctx.triggerType && OUTSIDE_WINDOW_TRIGGERS.has(ctx.triggerType)) return { available: false, reason: "needs_24h_window" };
   return { available: true, reason: null };
 }
 
@@ -332,6 +348,14 @@ function nodeIssues(n: ANode, trigger: { type: string; config?: any } | null, ch
   if (def?.coming) out.push(err("node_unavailable", `"${def.label}" is not available yet.`));
   if (def?.sends && trigger && CUSTOMERLESS_TRIGGERS.has(trigger.type as TriggerType)) {
     out.push(err("no_customer_on_path", `"${def.label}" needs a customer, and this trigger has none.`));
+  }
+  // Outside the 24 h window on WhatsApp only a template arrives. When the
+  // trigger's channels do not rule WhatsApp out, a free-form send is refused.
+  if (def?.needsWindow && trigger && WINDOW_CLOSED_TRIGGERS.has(trigger.type as TriggerType)) {
+    const chs: string[] = Array.isArray(trigger.config?.channels) ? trigger.config.channels : [];
+    if (!chs.length || chs.includes("WHATSAPP")) {
+      out.push(err("needs_24h_window", `"${def.label}" cannot reach a WhatsApp customer who has not written in 24 hours. Use a template, or limit this automation to other channels.`));
+    }
   }
   if (def && channel && def.channels.length && !def.channels.includes(channel)) {
     out.push(err("channel_not_supported", `"${def.label}" does not work on ${channel}.`));

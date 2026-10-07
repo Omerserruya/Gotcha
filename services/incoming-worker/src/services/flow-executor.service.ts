@@ -226,6 +226,8 @@ export async function executeSubFlow(opts: {
   timeout?: boolean;
   /** This walk is an automation run. */
   run?: AutomationRunCtx;
+  /** The triggering event's variables ({{cart_url}}, {{order_number}}, ...). */
+  vars?: Record<string, unknown>;
 }): Promise<FlowExecutionResult> {
   const flow = await prisma.chatbotFlow.findFirst({
     where: { id: opts.flowId, tenantId: opts.tenantId, isActive: true },
@@ -302,6 +304,7 @@ export async function executeSubFlow(opts: {
   const ctx = await buildCtx(opts, { flowScope: "sub", flowId: opts.flowId });
   ctx.resumingCollectInputVar = resumingVar;
   ctx.run = opts.run;
+  if (opts.run) Object.assign(ctx.vars, await runVariables(ctx), opts.vars ?? {});
   ctx.trace.push(...resumeTrace);
   return walk(startId, nodes, edges, ctx);
 }
@@ -2212,6 +2215,35 @@ async function sendList(body: string, buttonText: string, rows: Array<{ id: stri
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
 const internalKey = () => process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN || "";
+
+/**
+ * The variables every automation can write: {{first_name}} (the customer's
+ * card, first word) and {{business_name}}. Never overwrites a value the run
+ * already has (a resumed run keeps what it set).
+ */
+async function runVariables(ctx: FlowExecCtx): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  try {
+    const [conv, tenant] = await Promise.all([
+      ctx.conversationId
+        ? prisma.conversation.findFirst({ where: { id: ctx.conversationId, tenantId: ctx.tenantId }, select: { channel: true, customerExternalId: true, customerName: true } })
+        : Promise.resolve(null),
+      prisma.tenant.findUnique({ where: { id: ctx.tenantId }, select: { name: true } }),
+    ]);
+    let name: string | null = (conv as any)?.customerName ?? null;
+    if (conv) {
+      const contact = await prisma.contact.findFirst({
+        where: { tenantId: ctx.tenantId, channel: (conv as any).channel, externalId: (conv as any).customerExternalId },
+        select: { displayName: true },
+      });
+      name = contact?.displayName ?? name;
+    }
+    const first = String(name ?? "").trim().split(/\s+/)[0];
+    if (first && ctx.vars.first_name == null) out.first_name = first;
+    if (tenant?.name && ctx.vars.business_name == null) out.business_name = tenant.name;
+  } catch { /* variables are a nicety: a failed read leaves them empty */ }
+  return out;
+}
 
 async function conversationAgentId(ctx: FlowExecCtx): Promise<string | null> {
   if (!ctx.conversationId) return null;

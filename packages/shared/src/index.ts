@@ -13,6 +13,7 @@ export type {
   ScheduledMessageJob,
   FlowResumeJob,
   AutomationEventJob,
+  CartEventJob,
   HistoricalImportChunkJob,
   HistoricalIntelligenceJob,
 } from "./lib/queue";

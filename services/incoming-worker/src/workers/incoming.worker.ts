@@ -923,6 +923,17 @@ export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob 
     await processWebhookTrigger(job as Job<WebhookTriggerJob>);
     return;
   }
+  if (job.name === "cart-event") {
+    const { onCartEvent } = await import("../services/cart.service");
+    await onCartEvent((job as any).data);
+    return;
+  }
+  if (job.name === "cart-check") {
+    const { onCartCheck } = await import("../services/cart.service");
+    const r = await onCartCheck((job as any).data);
+    console.log(`[incoming-worker] cart-check checkout=${(job as any).data?.checkoutId} outcome=${r.outcome}`);
+    return;
+  }
   if (job.name === "automation-event") {
     await processAutomationEvent(job as unknown as Job<AutomationEventJob>);
     return;

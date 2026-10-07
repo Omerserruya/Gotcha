@@ -430,3 +430,35 @@ describe("message from an ad, button tapped, AI writes a message", () => {
     expect(codes.join(" ")).toMatch(/AI employee/);
   });
 });
+
+describe("★ cart left behind", () => {
+  const cartGraph = (nodeType: string, data: any) => ({
+    nodes: [{ id: "t", type: "automation_trigger", data: {} }, { id: "s", type: nodeType, data }],
+    edges: [{ id: "e", source: "t", target: "s" }],
+  });
+
+  it("is live, says it needs consent, and keeps a 15 min - 2 day delay", async () => {
+    const it0 = Object.fromEntries((await request(app).get("/api/automations/catalog")).body.data.groups.flatMap((g: any) => g.items.map((i: any) => [i.type, i])));
+    expect(it0["trigger:cart_abandoned"]).toMatchObject({ available: true, description: expect.stringMatching(/agreed to marketing/) });
+    expect(normalizeTrigger({ type: "cart_abandoned", config: { delayMinutes: 90, channels: ["WHATSAPP"] } })).toEqual({ type: "cart_abandoned", config: { channels: ["WHATSAPP"], delayMinutes: 90 } });
+    expect(() => normalizeTrigger({ type: "cart_abandoned", config: { delayMinutes: 5 } })).toThrow(/15 minutes/);
+  });
+
+  it("★ on WhatsApp (or unspecified channels) only a template: a plain message is refused with the reason", () => {
+    const g = cartGraph("send_message_text", { text: "You left something behind" });
+    for (const config of [{}, { channels: ["WHATSAPP"] }]) {
+      const errs = validateAutomation({ type: "cart_abandoned", config }, g.nodes as any, g.edges as any).errors;
+      expect(errs.map((e) => e.code)).toContain("needs_24h_window");
+      expect(errs.find((e) => e.code === "needs_24h_window")!.message).toMatch(/template/);
+    }
+    const t = cartGraph("send_message_template", { templateId: "tpl1" });
+    expect(validateAutomation({ type: "cart_abandoned", config: {} }, t.nodes as any, t.edges as any).errors).toEqual([]);
+    // Email-only cart reminders may be free text.
+    expect(validateAutomation({ type: "cart_abandoned", config: { channels: ["EMAIL"] } }, g.nodes as any, g.edges as any).errors).toEqual([]);
+  });
+
+  it("a tag automation is not refused (the customer is usually mid-conversation)", () => {
+    const g = cartGraph("send_message_text", { text: "hi" });
+    expect(validateAutomation({ type: "tag_added", config: { tags: ["vip"] } }, g.nodes as any, g.edges as any).errors).toEqual([]);
+  });
+});
