@@ -117,6 +117,16 @@ describe("★ one responder per inbound", () => {
     expect(mocks.routeConversation).not.toHaveBeenCalled();
   });
 
+  it("an Instagram story mention reaches the automations with its link", async () => {
+    S.answered = true;
+    await dispatch({ ...JOB, data: { ...JOB.data, normalizedMessage: { ...JOB.data.normalizedMessage, body: "[Story mention]", metadata: { storyMention: { url: "https://cdn/story/1" } } } } });
+    expect(mocks.automationsForInbound).toHaveBeenCalledWith(expect.objectContaining({ storyMention: { url: "https://cdn/story/1" } }));
+    (prisma.conversation as any).__reset();
+    mocks.automationsForInbound.mockClear();
+    await dispatch(JOB);
+    expect(mocks.automationsForInbound).toHaveBeenCalledWith(expect.objectContaining({ storyMention: null }));
+  });
+
   it("no automation answered: the AI answers as before", async () => {
     S.conv = baseConv({ handledBy: "ai_agent", assignedAiAgentId: "maya" });
     S.messageCount = 4;

@@ -126,6 +126,13 @@ describe("Instagram inbound media", () => {
     });
   });
 
+  it("keeps a story mention's link (it used to be dropped, leaving only \"[Story mention]\")", () => {
+    expect(ig({ type: "story_mention", payload: { url: "https://lookaside.fbsbx.com/story/1" } })).toEqual({
+      type: "text", text: "[Story mention]", storyMention: { url: "https://lookaside.fbsbx.com/story/1" },
+    });
+    expect(ig({ type: "story_mention", payload: {} })).toMatchObject({ storyMention: { url: null } });
+  });
+
   it("handles a file attachment rather than printing it as text", () => {
     expect(ig({ type: "file", name: "brief.pdf", payload: { url: "https://cdn/b.pdf" } })).toMatchObject({
       type: "document", mediaUrl: "https://cdn/b.pdf", fileName: "brief.pdf",

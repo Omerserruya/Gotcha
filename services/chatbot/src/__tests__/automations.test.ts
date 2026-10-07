@@ -603,3 +603,16 @@ describe("★ order event", () => {
     expect(d.variables).toEqual(expect.arrayContaining(["order_number", "order_total", "order_status", "order_items", "order_url", "first_name"]));
   });
 });
+
+describe("story mention", () => {
+  it("is live, on Instagram, with the story's link as a variable", async () => {
+    const items = (d: any) => Object.fromEntries(d.groups.flatMap((x: any) => x.items.map((i: any) => [i.type, i])));
+    expect(items((await request(app).get("/api/automations/catalog")).body.data)["trigger:story_mention"]).toMatchObject({ available: true, channels: ["INSTAGRAM"] });
+    const a = await create({ ...goodGraph(), trigger: { type: "story_mention", config: {} } });
+    const d = (await request(app).get(`/api/automations/catalog?automationId=${a.id}&after=t`)).body.data;
+    expect(d.context.channel).toBe("INSTAGRAM");
+    expect(items(d).send_list).toMatchObject({ available: false, reason: "channel_not_supported" });
+    expect(d.variables).toEqual(expect.arrayContaining(["story_url", "first_name"]));
+  });
+});
+

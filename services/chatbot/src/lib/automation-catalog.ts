@@ -38,7 +38,7 @@ export type TriggerType = (typeof TRIGGER_TYPES)[number];
 /** Triggers whose events reach the dispatcher today. */
 // call_missed / call_answered: the shared call-state transition queues them
 // (inbound calls only); the reply goes to the caller on WhatsApp.
-const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "message_from_ad", "button_tapped", "comment_received", "tag_added", "cart_abandoned", "order_event", "call_missed", "call_answered", "schedule", "webhook"]);
+const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "message_from_ad", "button_tapped", "comment_received", "tag_added", "cart_abandoned", "order_event", "story_mention", "call_missed", "call_answered", "schedule", "webhook"]);
 /**
  * Triggers that fire when the customer has not written to us: on WhatsApp the
  * 24 h service window is closed, so only an approved template can be sent.
@@ -62,7 +62,7 @@ const TRIGGERS: TriggerDef[] = [
   { type: "order_event", label: "Order event", description: "A Shopify or WooCommerce order is created, paid, shipped or cancelled", channels: [], synonyms: ["order", "paid", "shipped", "delivered", "store"] },
   { type: "cart_abandoned", label: "Cart left behind", description: "After a delay you set. Sends only to customers who agreed to marketing", channels: ["WHATSAPP", "EMAIL"], synonyms: ["cart", "abandoned", "checkout", "recover", "reminder"] },
   { type: "form_submitted", label: "Form submitted", description: "Website or Instagram lead form", channels: ["WEBCHAT", "INSTAGRAM"], synonyms: ["form", "lead"] },
-  { type: "story_mention", label: "Story mention", description: "Someone tags you", channels: ["INSTAGRAM"], synonyms: ["story", "mention", "instagram"] },
+  { type: "story_mention", label: "Story mention", description: "Someone mentions you in their Instagram story", channels: ["INSTAGRAM"], synonyms: ["story", "mention", "instagram"] },
   { type: "tag_added", label: "Tag added", description: "On a customer or conversation", channels: [], synonyms: ["tag", "label"] },
   { type: "schedule", label: "On a schedule", description: "Daily, weekly, a date", channels: [], synonyms: ["schedule", "daily", "weekly", "time", "cron"] },
   { type: "webhook", label: "Webhook received", description: "From any system", channels: [], synonyms: ["webhook", "api", "http"] },
@@ -315,6 +315,7 @@ function variablesFor(ctx: CatalogContext, hasCustomer: boolean): string[] {
   const base = ["first_name", "business_name", "opening_hours"];
   if (ctx.triggerType === "comment_received") return [...base, ...COMMENT_VARIABLES];
   if (ctx.triggerType === "cart_abandoned") return [...base, "cart_url", "cart_total", "cart_items"];
+  if (ctx.triggerType === "story_mention") return [...base, "story_url"];
   if (ctx.triggerType === "order_event") return [...base, "order_number", "order_total", "order_status", "order_items", "order_url"];
   if (ctx.triggerType && VOICE_TRIGGERS.has(ctx.triggerType)) return [...base, "caller_number", "line_name", "call_duration", "call_recording_url"];
   return base;
@@ -329,6 +330,7 @@ export interface AEdge { id?: string; source: string; target: string; sourceHand
 export function pathChannelOf(trigger: { type: string; config?: any } | null): Channel | null {
   if (!trigger) return null;
   if (VOICE_TRIGGERS.has(trigger.type as TriggerType)) return "WHATSAPP"; // the reply goes to the caller on WhatsApp
+  if (trigger.type === "story_mention") return "INSTAGRAM";
   const ch = Array.isArray(trigger.config?.channels) ? trigger.config.channels : [];
   return ch.length === 1 ? ch[0] : null;
 }

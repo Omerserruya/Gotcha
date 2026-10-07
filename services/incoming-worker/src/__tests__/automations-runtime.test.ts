@@ -431,6 +431,21 @@ describe("★ message from an ad, button tapped, AI writes a message", () => {
     expect(await automationsForInbound({ tenantId: T, conversation: conv(), messageId: "m3", message: "Write here", channel: "whatsapp", replyPayload: "write" })).toBe(false);
   });
 
+  it("★ a story mention fires the story automation with its link, and NOT the message automations", async () => {
+    // The message automation is first in line: if a story mention counted as a message, it would answer.
+    H.db.chatbotFlow.push(
+      flow("any", [trig, { id: "s", type: "send_message_text", data: { text: "ANY MESSAGE" } }], [e("t", "s")]),
+      flow("story", [trig, { id: "s", type: "send_message_text", data: { text: "Thanks for the mention! {{story_url}}" } }], [e("t", "s")], { triggerType: "story_mention" }),
+    );
+    H.db.message.push({ id: "s1", conversationId: CONV, direction: "INBOUND" }, { id: "s0", conversationId: CONV, direction: "INBOUND" });
+    expect(await automationsForInbound({ tenantId: T, conversation: conv(), messageId: "s1", message: "[Story mention]", channel: "instagram", storyMention: { url: "https://cdn/story/1" } })).toBe(true);
+    expect(H.sent.map((s) => s.body)).toEqual(["Thanks for the mention! https://cdn/story/1"]);
+    // A message the customer wrote is not a story mention.
+    H.sent = [];
+    expect(await automationsForInbound({ tenantId: T, conversation: conv(), messageId: "s2", message: "hello", channel: "instagram" })).toBe(true);
+    expect(H.sent.map((s) => s.body)).toEqual(["ANY MESSAGE"]);
+  });
+
   it("★ AI writes a message: the employee's one-shot is sent; with no employee nothing is", async () => {
     const realFetch = global.fetch;
     const calls: any[] = [];

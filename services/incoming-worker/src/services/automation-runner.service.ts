@@ -26,7 +26,7 @@ import {
 
 export const LOOP_GUARD_PER_MIN = 5;
 
-export type AutomationTrigger = "message_received" | "new_customer" | "message_from_ad" | "button_tapped" | "tag_added" | "cart_abandoned" | "order_event" | "comment_received" | "schedule" | "webhook" | "call_missed" | "call_answered";
+export type AutomationTrigger = "message_received" | "new_customer" | "message_from_ad" | "button_tapped" | "tag_added" | "cart_abandoned" | "order_event" | "comment_received" | "story_mention" | "schedule" | "webhook" | "call_missed" | "call_answered";
 
 export interface TriggerEvent {
   type: AutomationTrigger;
@@ -378,6 +378,8 @@ export async function automationsForInbound(opts: {
   channel: string;          // lowercase
   replyPayload?: string | null;
   contactId?: string | null;
+  /** An Instagram story mention (Meta sends it as a DM). */
+  storyMention?: { url: string | null } | null;
 }): Promise<boolean> {
   const c = opts.conversation;
   // A run is parked here: this message is its to take (or, on a timed wait,
@@ -411,7 +413,9 @@ export async function automationsForInbound(opts: {
     ...(isNewCustomer ? ["new_customer" as const] : []),
     // A tap with no flow waiting for it (e.g. a campaign template's button).
     ...(opts.replyPayload ? ["button_tapped" as const] : []),
-    "message_received",
+    // A story mention is not something the customer wrote: it fires "Story
+    // mention" automations, not "Message received" ones.
+    ...(opts.storyMention ? ["story_mention" as const] : ["message_received" as const]),
   ];
   const r = await runAutomationsForEvent({
     tenantId: opts.tenantId,
@@ -423,6 +427,7 @@ export async function automationsForInbound(opts: {
     channel: opts.channel,
     message: opts.message,
     replyPayload: opts.replyPayload ?? null,
+    ...(opts.storyMention ? { vars: { story_url: opts.storyMention.url ?? "" } } : {}),
   });
   return r.answered;
 }

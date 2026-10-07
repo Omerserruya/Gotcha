@@ -341,10 +341,13 @@ router.post("/", async (req: Request, res: Response) => {
             // Structured and already reduced by the adapter to name, numbers,
             // emails and organization. The worker copies producer metadata onto
             // the message row verbatim.
-            ...(msg.content.contacts?.length || msg.content.unsupported
+            ...(msg.content.contacts?.length || msg.content.unsupported || msg.content.storyMention
               ? {
                   metadata: {
                     ...(msg.content.contacts?.length ? { contacts: msg.content.contacts } : {}),
+                    // An Instagram story mention: the story's link, for the
+                    // inbox and for "Story mention" automations.
+                    ...(msg.content.storyMention ? { storyMention: msg.content.storyMention } : {}),
                     // The provider's own reason for a message it could not
                     // represent. Persisted because it is the ONLY evidence
                     // that will exist: the payload log truncates, and the

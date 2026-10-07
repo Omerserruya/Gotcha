@@ -706,6 +706,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         channel: channel.toLowerCase(),
         replyPayload: interactiveReply?.payload ?? null,
         contactId: savedContact?.id ?? null,
+        storyMention: ((producerMetadata as any)?.storyMention as { url: string | null } | undefined) ?? null,
       });
       if (answeredByAutomation) return;
       // An automation may have moved ownership while it ran (hand to AI,

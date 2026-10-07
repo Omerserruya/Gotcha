@@ -98,6 +98,12 @@ export interface MessageContent {
    * row. The provider's own reason is the only evidence that exists; it is
    * kept here and written to the message's metadata.
    */
+  /**
+   * The customer mentioned the business in their Instagram story. Meta sends
+   * it as a DM with a `story_mention` attachment; `url` is the story's media
+   * (Meta's CDN link, which stops working when the story expires, about 24 h).
+   */
+  storyMention?: { url: string | null };
   unsupported?: {
     /** The provider's own type string, e.g. "unsupported", "revoke", "edit". */
     providerType: string;

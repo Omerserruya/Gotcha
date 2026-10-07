@@ -243,3 +243,33 @@ describe("Webhook Service", () => {
     });
   });
 });
+
+describe("Instagram story mention → the queued message", () => {
+  it("carries the story's link in the message metadata", async () => {
+    vi.clearAllMocks();
+    (prisma.channelAccount.findFirst as any).mockResolvedValue({ id: "ca-ig", tenantId: "tenant-1", externalId: "ig-1" });
+    (detectInboundAdapter as any).mockReturnValue({
+      channel: "INSTAGRAM",
+      getSignatureHeader: () => "x-hub-signature-256",
+      verifySignature: vi.fn().mockReturnValue(true),
+      resolveChannelAccountExternalId: vi.fn().mockReturnValue("ig-1"),
+      extractMessages: vi.fn().mockReturnValue([{
+        externalMessageId: "ig-msg-1", senderId: "igsid-1", timestamp: new Date(),
+        content: { type: "text", text: "[Story mention]", storyMention: { url: "https://lookaside.fbsbx.com/story/1" } },
+      }]),
+      extractStatusUpdates: vi.fn().mockReturnValue([]),
+    });
+    const res = await request(createTestApp()).post("/api/webhook").send({ object: "instagram", entry: [{ id: "ig-1", messaging: [{}] }] });
+    expect(res.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(incomingMessageQueue.add).toHaveBeenCalledWith(
+      "process",
+      expect.objectContaining({
+        channel: "INSTAGRAM",
+        normalizedMessage: expect.objectContaining({ body: "[Story mention]", metadata: { storyMention: { url: "https://lookaside.fbsbx.com/story/1" } } }),
+      }),
+      expect.any(Object),
+    );
+  });
+});
+
