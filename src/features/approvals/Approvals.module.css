@@ -451,7 +451,8 @@
 
   /* White, radius 14, `1px #C9D8B4`; the head `#F1F5EC` at `15px 18px`. */
   .momentDone {
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
     background-color: var(--panel-field);
     border: 1px solid var(--calm-edge);
     border-radius: var(--radius-card);
@@ -609,7 +610,8 @@
 
   /* "What GOTCHA sent": white, radius 14; head `12px 18px` with a violet dot. */
   .momentCard {
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
     background-color: var(--panel-field);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-card);
@@ -798,7 +800,8 @@
     background-color: var(--panel-field);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-card);
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
     line-height: normal;
   }
 

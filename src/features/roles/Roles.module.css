@@ -73,7 +73,8 @@
     background-color: var(--panel-field);
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: var(--radius-card);
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
   }
 
   .permission {
@@ -424,7 +425,8 @@
 
   /* ── 12b, measured: the roles as one table ──────────────────────────── */
   .table {
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
     border: 1px solid var(--border-default);
     border-radius: var(--radius-card);
     background-color: var(--panel-field);
@@ -934,7 +936,8 @@
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: var(--radius-card);
     background-color: var(--panel-field);
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
   }
 
   .gridHead,

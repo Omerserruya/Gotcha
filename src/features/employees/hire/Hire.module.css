@@ -229,7 +229,8 @@
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: var(--radius-card);
     background-color: var(--panel-field);
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
   }
 
   .eyebrow {

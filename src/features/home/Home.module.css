@@ -322,7 +322,8 @@
     background-color: var(--panel-field);
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: var(--radius-card);
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
   }
 
   /* ── Queue rows ─────────────────────────────────────────────────────── */
@@ -737,7 +738,8 @@
     background-color: var(--panel-field);
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: var(--radius-card);
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
     flex: 1;
   }
 

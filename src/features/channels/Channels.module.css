@@ -13,7 +13,8 @@
     background-color: var(--panel-field);
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: var(--radius-card);
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
   }
 
   /* A row: `padding:15px 18px`, gap 16 - tile, name over line, state, Settings. */

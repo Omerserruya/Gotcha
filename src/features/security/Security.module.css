@@ -38,7 +38,8 @@
     background-color: var(--panel-field);
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: var(--radius-card);
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
   }
 
   /* Inside `.block` the list is already framed by the block itself. */
@@ -365,7 +366,7 @@
   .auditChip {
     flex: 0 1 auto;
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     padding-block: 5px;
     padding-inline: var(--space-11);

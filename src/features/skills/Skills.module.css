@@ -61,7 +61,8 @@
   .table {
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: 14px;
     background-color: var(--panel-field);

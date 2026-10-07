@@ -132,7 +132,8 @@
     background-color: var(--panel-field);
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: var(--radius-card);
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
   }
 
   .rule {
@@ -190,7 +191,8 @@
 
   /* ── 15: "Tell me when" × In app · Email · WhatsApp ─────────────────── */
   .matrix {
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
     border: 1px solid var(--border-default);
     border-radius: var(--radius-card);
     background-color: var(--panel-field);

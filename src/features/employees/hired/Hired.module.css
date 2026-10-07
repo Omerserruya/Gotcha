@@ -64,7 +64,8 @@
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: 13px;
     background-color: var(--panel-field);
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
   }
 
   .row {

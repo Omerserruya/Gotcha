@@ -109,7 +109,8 @@
 
   /* ── A group: one white card, its mono head on `#F5F2EC` ── */
   .group {
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
     border: 1px solid var(--border-default);
     border-radius: var(--radius-card);
     background-color: var(--panel-field);

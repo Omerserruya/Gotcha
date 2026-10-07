@@ -245,7 +245,8 @@
     display: flex;
     flex-direction: column;
     margin-block-start: 26px;
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: 14px;
     background-color: var(--panel-field);
@@ -575,7 +576,8 @@
   .facts {
     margin: 0;
     padding: 0;
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: 12px;
     background-color: var(--panel-field);

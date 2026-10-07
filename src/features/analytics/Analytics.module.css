@@ -186,7 +186,8 @@
     background-color: var(--panel-field);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-card);
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
   }
 
   .kpi {
@@ -443,7 +444,8 @@
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     margin: 0;
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
     background-color: var(--panel-field);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-card);
@@ -897,7 +899,8 @@
     inline-size: 400px;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
     background-color: var(--panel-field);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-card);

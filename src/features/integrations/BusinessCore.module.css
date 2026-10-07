@@ -79,7 +79,8 @@
 
   /* The parts as one white card, grouped. */
   .table {
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
     border: 1px solid var(--border-default);
     border-radius: var(--radius-card);
     background-color: var(--panel-field);

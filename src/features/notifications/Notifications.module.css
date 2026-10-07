@@ -11,7 +11,8 @@
     inset-inline-end: var(--size-frame-inset);
     z-index: var(--z-panel);
     border-radius: var(--radius-panel);
-    overflow: hidden;
+    overflow: clip;
+    min-inline-size: 0;
   }
 
   .scrim {
