@@ -237,9 +237,28 @@ export async function getDailyVolume(tenantId: string, days = 30) {
   return volumes;
 }
 
+/**
+ * THE definition of "waiting for a person" - one place, used by Home's count
+ * (getQueueDepth), Home's ranked queue (getQueueItems) and, through the API,
+ * the assistant. Unassigned, open, not a rehearsal, and not being answered by
+ * the AI or a flow (unless the AI handed it over). The count used to include
+ * conversations the AI was answering, so Home said "21 waiting on you" while
+ * its own queue listed 10.
+ */
+export function waitingForPersonWhere(tenantId: string) {
+  return {
+    tenantId,
+    // Not a setup rehearsal: isTest, and the sandbox test-chat conversations.
+    ...REAL_CONVERSATION,
+    status: { in: ["OPEN", "WAITING"] as ("OPEN" | "WAITING")[] },
+    assignedAgentId: null,
+    OR: [{ handledBy: null }, { handledBy: "human" }, { isHandedOver: true }],
+  };
+}
+
 export async function getQueueDepth(tenantId: string) {
   const waitingConversations = await prisma.conversation.findMany({
-    where: { tenantId, isTest: false, status: { in: ["OPEN", "WAITING"] }, assignedAgentId: null },
+    where: waitingForPersonWhere(tenantId),
     select: { createdAt: true, lastMessageAt: true },
   });
   const now = Date.now();
@@ -1050,14 +1069,8 @@ export async function getQueueItems(
     return Number.isFinite(n) && n > 0 ? n : 0;
   })();
 
-  const where = {
-    tenantId,
-    // A rehearsal from setup is not somebody waiting for an answer.
-    isTest: false,
-    status: { in: ["OPEN", "WAITING"] as ("OPEN" | "WAITING")[] },
-    assignedAgentId: null,
-    OR: [{ handledBy: null }, { handledBy: "human" }, { isHandedOver: true }],
-  };
+  // The same "waiting for a person" as Home's count (see waitingForPersonWhere).
+  const where = waitingForPersonWhere(tenantId);
 
   const [candidates, totalWaiting] = await Promise.all([
     prisma.conversation.findMany({

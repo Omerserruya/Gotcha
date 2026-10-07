@@ -48,6 +48,9 @@ describe("analytics never counts setup conversations", () => {
       // that excluded sandbox rehearsals CORRECTLY - a guard rejecting the right
       // answer because it only recognised the incomplete one.
       if (/\.\.\.REAL_CONVERSATION/.test(window)) return false;
+      // The shared "waiting for a person" predicate (Home's count and queue):
+      // it carries REAL_CONVERSATION itself, checked by the next test.
+      if (/where:\s*waitingForPersonWhere\(|=\s*waitingForPersonWhere\(/.test(window)) return false;
       // The incomplete form, still accepted because 21 sites use it.
       //
       // ⚠ `isTest: false` ALONE DOES NOT EXCLUDE SANDBOX CONVERSATIONS. They are
@@ -68,9 +71,11 @@ describe("analytics never counts setup conversations", () => {
   });
 
   it("the shared queue `where` carries the exclusion", () => {
-    // getQueueItems builds one `where` and uses it for both the page and the
-    // total, so the filter has to live in the object, not at each call.
-    const block = SOURCE.slice(SOURCE.indexOf("const where = {"));
-    expect(block.slice(0, 400)).toMatch(/isTest:\s*false/);
+    // Home's count and its ranked queue share ONE predicate, so the filter has
+    // to live in it, not at each call.
+    const block = SOURCE.slice(SOURCE.indexOf("export function waitingForPersonWhere"));
+    expect(block.slice(0, 600)).toMatch(/\.\.\.REAL_CONVERSATION/);
+    expect(SOURCE).toMatch(/getQueueDepth[\s\S]{0,200}waitingForPersonWhere\(tenantId\)/);
+    expect(SOURCE).toMatch(/const where = waitingForPersonWhere\(tenantId\);/);
   });
 });
