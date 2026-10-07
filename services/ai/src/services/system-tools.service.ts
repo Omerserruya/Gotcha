@@ -13,7 +13,7 @@
  * operator-side semantics isolated.
  */
 
-import { prisma, visibilityClause, type Viewer } from "@chatcenter/shared";
+import { prisma, visibilityClause, readDurableSetting, parseBusinessHours, type Viewer } from "@chatcenter/shared";
 import {
   buildAgentToolsForAIAgent,
   evaluateToolGate,
@@ -385,7 +385,14 @@ async function dispatchSystemTool(
           take: limit,
           select: { id: true, displayName: true, channel: true, email: true, phone: true },
         });
-        return { toolCallId, content: JSON.stringify({ ok: true, results: rows }) };
+        const locale = ctx.locale ?? "en";
+        return {
+          toolCallId,
+          content: JSON.stringify({
+            ok: true,
+            results: rows.map((r: any) => ({ id: r.id, name: r.displayName, channel: channelName(r.channel, locale), email: r.email, phone: r.phone })),
+          }),
+        };
       }
       case "system_summarize_conversation": {
         const cid = args.conversationId || ctx.selectedConversationId;
@@ -414,6 +421,8 @@ async function dispatchSystemTool(
           take: limit,
           select: { direction: true, body: true, createdAt: true, senderName: true },
         });
+        const locale = ctx.locale ?? "en";
+        const tz = await tenantTimeZone(ctx.tenantId);
         return {
           toolCallId,
           content: JSON.stringify({
@@ -421,10 +430,11 @@ async function dispatchSystemTool(
             conversationId: cid,
             messageCount: messages.length,
             messages: messages.map((m) => ({
-              at: m.createdAt.toISOString(),
+              when: whenText(m.createdAt, locale, tz),
               role: m.direction === "INBOUND" ? "customer" : "agent",
               by: m.senderName || null,
-              body: (m.body || "").slice(0, 600),
+              // Null, not "": no text (a photo, a voice note) is a fact to say plainly.
+              text: m.body ? m.body.slice(0, 600) : null,
             })),
           }),
         };
@@ -441,24 +451,32 @@ async function dispatchSystemTool(
             body: true,
             createdAt: true,
             conversation: {
-              select: { customerName: true, customerExternalId: true, channel: true },
+              select: { customerName: true, customerExternalId: true, channel: true, createdAt: true },
             },
           },
         });
+        // Written for a person, in the interface language: channel names, dates
+        // as people say them, and when each conversation started (so "0 new
+        // conversations, 7 messages" can be told as messages in ongoing ones).
+        const locale = ctx.locale ?? "en";
+        const tz = await tenantTimeZone(ctx.tenantId);
         return {
           toolCallId,
           content: JSON.stringify({
             ok: true,
-            results: rows.map((m) => ({
-              at: m.createdAt.toISOString(),
-              conversationId: m.conversationId,
-              channel: (m as any).conversation?.channel,
-              who:
-                (m as any).conversation?.customerName ||
-                (m as any).conversation?.customerExternalId ||
-                "unknown",
-              body: (m.body || "").slice(0, 200),
-            })),
+            messageCount: rows.length,
+            conversationCount: new Set(rows.map((m) => m.conversationId)).size,
+            results: rows.map((m) => {
+              const c = (m as any).conversation;
+              return {
+                when: whenText(m.createdAt, locale, tz),
+                conversationId: m.conversationId,
+                channel: channelName(c?.channel, locale),
+                customer: c?.customerName || c?.customerExternalId || null,
+                conversationStarted: c?.createdAt ? whenText(c.createdAt, locale, tz, false) : null,
+                text: m.body ? m.body.slice(0, 200) : null,
+              };
+            }),
           }),
         };
       }
@@ -529,6 +547,30 @@ const STATUS_WORDS: Record<string, { en: string; he: string }> = {
   WAITING: { en: "conversations waiting for the customer to reply", he: "שיחות שמחכות לתשובת הלקוח" },
   CLOSED: { en: "closed conversations", he: "שיחות סגורות" },
 };
+/** A channel as the inbox names it, in the interface language; never the enum key. */
+export function channelName(channel: unknown, locale: "he" | "en" = "en"): string {
+  return (CHANNEL_NAMES[String(channel ?? "").toUpperCase()] ?? OTHER_CHANNEL)[locale];
+}
+
+/** The workspace's timezone (its business hours), else UTC. */
+async function tenantTimeZone(tenantId: string): Promise<string> {
+  try {
+    return parseBusinessHours(await readDurableSetting(tenantId, "businessHours"))?.timezone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+/** A moment as people say it ("7 באוקטובר בשעה 14:05", "7 October at 14:05"), never ISO. */
+export function whenText(d: Date, locale: "he" | "en" = "en", timeZone = "UTC", withTime = true): string {
+  const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", timeZone, ...(withTime ? { hour: "2-digit", minute: "2-digit", hour12: false } : {}) };
+  try {
+    return new Intl.DateTimeFormat(locale === "he" ? "he-IL" : "en-GB", opts).format(d);
+  } catch {
+    return new Intl.DateTimeFormat(locale === "he" ? "he-IL" : "en-GB", { ...opts, timeZone: "UTC" }).format(d);
+  }
+}
+
 /** The inbox's channel names (redesign i18n channels.json `name.<ENUM>`), never the enum key. */
 const CHANNEL_NAMES: Record<string, { en: string; he: string }> = {
   WHATSAPP: { en: "WhatsApp", he: "וואטסאפ" },
@@ -550,7 +592,7 @@ function countLabel(args: any, locale: "he" | "en" = "en"): string {
   const parts = [status];
   const channel = args?.channel ? (CHANNEL_NAMES[String(args.channel).toUpperCase()] ?? OTHER_CHANNEL)[locale] : "";
   if (channel) parts.push(he ? `בערוץ ${channel}` : `on ${channel}`);
-  if (args?.sinceISO) parts.push(`${he ? "מאז" : "since"} ${String(args.sinceISO).slice(0, 10)}`);
+  if (args?.sinceISO && !isNaN(Date.parse(String(args.sinceISO)))) parts.push(`${he ? "מאז" : "since"} ${whenText(new Date(String(args.sinceISO)), locale, "UTC", false)}`);
   return parts.join(" ");
 }
 

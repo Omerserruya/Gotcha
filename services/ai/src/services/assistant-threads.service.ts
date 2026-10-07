@@ -17,6 +17,7 @@ import { prisma, getRedis, type Viewer } from "@chatcenter/shared";
 import { runAgent, type AgentRuntimeEvent } from "./agent-runtime.service";
 import { generateResponse, getMicroModel } from "./ai.service";
 import { withoutWideDashes } from "../lib/wide-dash";
+import { whenText } from "./system-tools.service";
 
 // ─── Scope ──────────────────────────────────────────────────
 
@@ -64,11 +65,12 @@ export function scopeDates(scope: ThreadScope, now = new Date()): { from: string
 }
 
 /** The system line that tells the model what this thread is about. */
-export function scopeLine(scope: ThreadScope, now = new Date()): string {
+export function scopeLine(scope: ThreadScope, now = new Date(), locale: "he" | "en" = "en"): string {
   const { from, to } = scopeDates(scope, now);
   const ch = scope.channels === "all" ? "all channels" : `only these channels: ${scope.channels.join(", ")}`;
+  const say = (d: string) => whenText(new Date(`${d}T00:00:00.000Z`), locale, "UTC", false);
   return [
-    `Scope of this conversation: ${from} to ${to} (inclusive), ${ch}.`,
+    `Scope of this conversation: ${from} to ${to} (inclusive), ${ch}. When you mention the period, say it as "${say(from)} - ${say(to)}" (never the ISO dates).`,
     `Use the period for questions about activity over time (new conversations, messages, what was closed, trends): sinceISO=${from}T00:00:00.000Z.`,
     `Never apply the period to the current state: "how many are open", "what is waiting for us" are about now, whenever the conversation started; omit sinceISO for them.`,
     scope.channels === "all" ? "" : "Apply the channel filter to every count and search.",
@@ -227,7 +229,7 @@ const LANG_NAME = { he: "Hebrew", en: "English" } as const;
 
 export function threadSystemLines(scope: ThreadScope, locale: "he" | "en", now = new Date()): string[] {
   return [
-    scopeLine(scope, now),
+    scopeLine(scope, now, locale),
     `Answer format for this screen: markdown limited to bold, italics, bullet and numbered lists, inline code and links (http(s) or in-app paths starting with /). No tables, images or HTML. After the answer, on its own last line, write ${SUGGESTIONS_MARKER} followed by a JSON array of 2 or 3 short follow-up questions the user may ask next, written in ${LANG_NAME[locale]}. Write nothing after that array.`,
   ];
 }
