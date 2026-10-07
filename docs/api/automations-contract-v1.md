@@ -118,12 +118,16 @@ and may only be: `send_comment_reply`, `send_message_text`, `send_message_file`,
 `send_message_image`, `send_message_interactive`, `send_buttons`, `wait_for_reply`,
 `set_variable`, `condition_group` (else `comment_step_unsupported`). Variables there:
 `{{comment.text}}`, `{{comment.from.username}}`, `{{comment.postId}}`, `{{comment.postPermalink}}`,
-`{{business_name}}`, and `{{first_name}}` (a comment carries only the username, so it is that).
+and `{{business_name}}`. Not `{{first_name}}`: a comment carries only the username, which is not a
+name (it renders empty there). After the Wait for reply the DM steps have `{{first_name}}` as usual,
+and still the `comment.*` variables. In the catalogue (`?automationId=&after=`) a step that would run
+on the comment shows the other steps `available: false, reason: "after_customer_replies"`, and the
+public reply elsewhere is `reason: "comment_automation_only"`; `variables` follows the same rule.
 At `wait_for_reply` the run continues in the DM conversation the private reply opened, like any
 automation; its timeout is capped just under Meta's 24 h comment-to-DM window. A send Meta refuses
 is a failed step and the run ends `failed`.
 
-**Cart variables:** `{{cart_url}}`, `{{cart_total}}`, `{{cart_items}}`, `{{first_name}}`.
+**Cart variables:** `{{cart_url}}`, `{{cart_total}}`, `{{cart_items}}`, `{{first_name}}` (from the store's checkout).
 
 Rules that hold for every trigger:
 - **One run per event**: the same event never runs the same automation twice (webhook retries,
@@ -198,6 +202,7 @@ queue if no one owns it.
           "reason": null                         // when false: "first_step_only" | "channel_not_supported"
                                                  //   | "no_customer_on_path" | "needs_24h_window"
                                                  //   | "no_event_source" | "not_connected" | "coming_later"
+                                                 //   | "after_customer_replies" | "comment_automation_only"
         }]
       }
     ],

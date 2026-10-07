@@ -15,7 +15,7 @@ import {
   visibilityClause, viewerOf,
 } from "@chatcenter/shared";
 import {
-  AutomationInputError, normalizeTrigger, validateAutomation, catalogFor, pathOf, pathChannelOf,
+  AutomationInputError, normalizeTrigger, validateAutomation, catalogFor, pathOf, pathChannelOf, beforeFirstWait,
   TRIGGER_TYPES, CHANNELS, type Channel, type TriggerType, type ANode, type AEdge,
 } from "../lib/automation-catalog";
 
@@ -147,6 +147,7 @@ router.get("/catalog", CAN_READ, async (req: Request, res: Response) => {
     let channel: Channel | null = typeof q.channel === "string" && (CHANNELS as string[]).includes(q.channel) ? (q.channel as Channel) : null;
     let afterNodeType: string | null = null;
     let firstStep = true;
+    let onComment = false;
     if (typeof q.automationId === "string" && q.automationId) {
       const f = await findAutomation(req.tenantId!, q.automationId);
       if (!f) { res.status(404).json({ error: "Automation not found" }); return; }
@@ -156,13 +157,16 @@ router.get("/catalog", CAN_READ, async (req: Request, res: Response) => {
         const n = arr(f.nodes).find((x: any) => x?.id === q.after);
         afterNodeType = n?.type ?? null;
         firstStep = false;
+        // A step added after this one runs on the comment while no Wait for reply came before it.
+        onComment = triggerType === "comment_received" && !!n && n.type !== "wait_for_reply"
+          && beforeFirstWait(arr(f.nodes) as ANode[], arr(f.edges) as AEdge[]).has(n.id);
       } else {
         firstStep = !arr(f.nodes).some((n: any) => n?.type === "automation_trigger") || !triggerType;
       }
     } else if (typeof q.after === "string" && q.after) {
       firstStep = false;
     }
-    res.json({ data: catalogFor({ channel, firstStep, triggerType, afterNodeType, voiceConnected: await voiceConnected(req.tenantId!) }) });
+    res.json({ data: catalogFor({ channel, firstStep, triggerType, afterNodeType, onComment, voiceConnected: await voiceConnected(req.tenantId!) }) });
   } catch (err) { fail(res, err, "read the catalogue"); }
 });
 

@@ -457,6 +457,13 @@ describe("★ cart left behind", () => {
     expect(validateAutomation({ type: "cart_abandoned", config: { channels: ["EMAIL"] } }, g.nodes as any, g.edges as any).errors).toEqual([]);
   });
 
+  it("the catalogue offers the cart variables", async () => {
+    const g = cartGraph("send_message_template", { templateId: "tpl1" });
+    const c = await create({ ...g, trigger: { type: "cart_abandoned", config: {} } });
+    const d = (await request(app).get(`/api/automations/catalog?automationId=${c.id}&after=t`)).body.data;
+    expect(d.variables).toEqual(expect.arrayContaining(["cart_url", "cart_total", "cart_items", "first_name"]));
+  });
+
   it("a tag automation is not refused (the customer is usually mid-conversation)", () => {
     const g = cartGraph("send_message_text", { text: "hi" });
     expect(validateAutomation({ type: "tag_added", config: { tags: ["vip"] } }, g.nodes as any, g.edges as any).errors).toEqual([]);
@@ -500,6 +507,33 @@ describe("★ comment on a post", () => {
     expect(errs(graph(["send_comment_reply", { text: "hi" }]), msgTrigger).map((e) => e.code)).toContain("comment_reply_misplaced");
     const late = graph(["send_message_text", { text: "hi" }], ["wait_for_reply", { timeoutMs: 60_000 }], ["send_comment_reply", { text: "x" }]);
     expect(errs(late).map((e) => e.code)).toContain("comment_reply_misplaced");
+  });
+
+  it("★ the catalogue: on the comment only the comment walker's steps and variables; after the reply, everything", async () => {
+    const g = graph(
+      ["send_comment_reply", { mode: "text", text: "Sent you a DM!" }],
+      ["send_buttons", { text: "Want it?", buttons: [{ id: "y", title: "Yes" }] }],
+      ["wait_for_reply", { timeoutMs: 3_600_000 }],
+      ["send_message_text", { text: "Here" }],
+    );
+    (g.edges[3] as any).sourceHandle = "btn:y";
+    const a = await create({ ...g, trigger: T() });
+    const at = async (after: string) => (await request(app).get(`/api/automations/catalog?automationId=${a.id}&after=${after}`)).body.data;
+    const items = (d: any) => Object.fromEntries(d.groups.flatMap((x: any) => x.items.map((i: any) => [i.type, i])));
+    const onComment = await at("n0");
+    expect(items(onComment).hand_to_ai).toMatchObject({ available: false, reason: "after_customer_replies" });
+    expect(items(onComment).send_comment_reply).toMatchObject({ available: true });
+    expect(onComment.variables).toContain("comment.from.username");
+    expect(onComment.variables).not.toContain("first_name");
+    const afterReply = await at("n3");
+    expect(items(afterReply).hand_to_ai).toMatchObject({ available: true });
+    expect(items(afterReply).send_comment_reply).toMatchObject({ available: false, reason: "comment_automation_only" });
+    expect(afterReply.variables).toEqual(expect.arrayContaining(["first_name", "comment.text"]));
+    // A message automation never offers the public reply.
+    const m = await create({ ...goodGraph(), trigger: msgTrigger });
+    const mid = (await request(app).get(`/api/automations/catalog?automationId=${m.id}&after=b`)).body.data;
+    expect(items(mid).send_comment_reply).toMatchObject({ available: false, reason: "comment_automation_only" });
+    expect(mid.variables).toEqual(["first_name", "business_name", "opening_hours"]);
   });
 
   it("the public reply needs its text, or its AI employee", () => {

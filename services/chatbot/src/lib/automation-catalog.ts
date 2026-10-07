@@ -18,7 +18,10 @@ const MESSAGING: Channel[] = ["WHATSAPP", "MESSENGER", "INSTAGRAM", "EMAIL", "GM
 
 export type Reason =
   | "first_step_only" | "channel_not_supported" | "no_customer_on_path" | "needs_24h_window"
-  | "no_event_source" | "not_connected" | "coming_later";
+  | "no_event_source" | "not_connected" | "coming_later"
+  // A comment automation: before the customer replies only the comment
+  // walker's steps run; a public comment reply exists only there.
+  | "after_customer_replies" | "comment_automation_only";
 
 export type Group = "trigger" | "logic" | "send" | "do";
 
@@ -231,6 +234,8 @@ export interface CatalogContext {
   triggerType: TriggerType | null;
   afterNodeType: string | null;
   voiceConnected: boolean;
+  /** A comment automation's step that comes before any Wait for reply (runs on the comment). */
+  onComment?: boolean;
 }
 
 export interface CatalogItem {
@@ -247,6 +252,8 @@ export function triggerAvailability(type: TriggerType, ctx: Pick<CatalogContext,
 
 function nodeAvailability(def: NodeDef, ctx: CatalogContext): { available: boolean; reason: Reason | null } {
   if (def.coming) return { available: false, reason: "coming_later" };
+  if (ctx.onComment && !COMMENT_WALK_TYPES.has(def.type)) return { available: false, reason: "after_customer_replies" };
+  if (def.type === "send_comment_reply" && !ctx.onComment) return { available: false, reason: "comment_automation_only" };
   if (def.sends && ctx.triggerType && CUSTOMERLESS_TRIGGERS.has(ctx.triggerType)) return { available: false, reason: "no_customer_on_path" };
   if (ctx.channel && def.channels.length && !def.channels.includes(ctx.channel)) return { available: false, reason: "channel_not_supported" };
   // A schedule or a tag can fire long after the customer last wrote: on
@@ -284,10 +291,24 @@ export function catalogFor(ctx: CatalogContext) {
       group("send", "Send"),
       group("do", "Do"),
     ],
-    variables: ctx.triggerType === "webhook"
-      ? ["body.<field>"]
-      : hasCustomer ? ["first_name", "business_name", "opening_hours"] : ["business_name"],
+    variables: variablesFor(ctx, hasCustomer),
   };
+}
+
+/**
+ * What a step can write, by where it sits. On a comment (before the customer
+ * replies) only the comment is known: the commenter's username is not a
+ * first name, so {{first_name}} is not offered there.
+ */
+const COMMENT_VARIABLES = ["comment.text", "comment.from.username", "comment.postId", "comment.postPermalink"];
+function variablesFor(ctx: CatalogContext, hasCustomer: boolean): string[] {
+  if (ctx.triggerType === "webhook") return ["body.<field>"];
+  if (!hasCustomer) return ["business_name"];
+  if (ctx.onComment) return [...COMMENT_VARIABLES, "business_name"];
+  const base = ["first_name", "business_name", "opening_hours"];
+  if (ctx.triggerType === "comment_received") return [...base, ...COMMENT_VARIABLES];
+  if (ctx.triggerType === "cart_abandoned") return [...base, "cart_url", "cart_total", "cart_items"];
+  return base;
 }
 
 // ── Graph helpers ──────────────────────────────────────────────────────────
@@ -436,7 +457,7 @@ const COMMENT_WALK_TYPES = new Set([
 ]);
 
 /** Node ids reachable from the trigger without passing a Wait for reply. */
-function beforeFirstWait(nodes: ANode[], edges: AEdge[]): Set<string> {
+export function beforeFirstWait(nodes: ANode[], edges: AEdge[]): Set<string> {
   const start = nodes.find((n) => n.type === TRIGGER_NODE_TYPE);
   const out = new Set<string>();
   const stack = start ? [start.id] : [];

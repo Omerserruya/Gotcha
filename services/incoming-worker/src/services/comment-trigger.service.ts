@@ -363,11 +363,15 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
     "comment.from.id": args.comment.fromUserId,
     "comment.from.username": args.comment.fromUsername || "",
   };
-  // An automation's variables, as its DM steps will have them: a comment
-  // carries only the username, which is also the conversation's name.
+  // An automation's variables. Not {{first_name}}: a comment carries only the
+  // username, which is not a name (after the Wait for reply the DM walker
+  // fills it from the customer's profile as usual). The comment is also kept
+  // nested, because the DM walker reads {{comment.text}} as a path.
   if (args.run) {
-    const first = String(args.comment.fromUsername ?? "").trim().split(/\s+/)[0];
-    if (first) vars.first_name = first;
+    vars.comment = {
+      text: args.comment.text, id: args.comment.commentId, postId: args.comment.postId,
+      postPermalink: args.comment.postPermalink || "", from: { id: args.comment.fromUserId, username: args.comment.fromUsername || "" },
+    };
     const tenant = await prisma.tenant.findUnique({ where: { id: args.tenantId }, select: { name: true } }).catch(() => null);
     if (tenant?.name) vars.business_name = tenant.name;
   }

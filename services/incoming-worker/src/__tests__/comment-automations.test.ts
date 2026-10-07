@@ -131,9 +131,9 @@ const commentFlow = (o: any = {}) => ({
   nodes: [
     trig,
     { id: "pub", type: "send_comment_reply", data: { mode: "text", text: "Sent you a DM, @{{comment.from.username}}" } },
-    { id: "b", type: "send_buttons", data: { text: "{{first_name}}, want the {{business_name}} price list?", buttons: [{ id: "yes", title: "Yes please" }] } },
+    { id: "b", type: "send_buttons", data: { text: "Hi {{first_name}}@{{comment.from.username}}, want the {{business_name}} price list?", buttons: [{ id: "yes", title: "Yes please" }] } },
     { id: "w", type: "wait_for_reply", data: { timeoutMs: 3 * 24 * 3_600_000 } },
-    { id: "list", type: "send_message_text", data: { text: "Here it is" } },
+    { id: "list", type: "send_message_text", data: { text: "Here it is, about \"{{comment.text}}\"" } },
     { id: "late", type: "send_message_text", data: { text: "Still interested?" } },
   ],
   edges: [e("t", "pub"), e("pub", "b"), e("b", "w"), e("w", "list", "btn:yes"), e("w", "late", "timeout")],
@@ -172,7 +172,8 @@ describe("★ one run per comment", () => {
     await processCommentTrigger(job());
     expect(H.sent.map((s) => s.kind)).toEqual(["comment_reply", "private_reply"]);
     expect(H.sent[0]).toMatchObject({ body: "Sent you a DM, @dana", extra: { commentId: "cm1" } });
-    expect(H.sent[1]).toMatchObject({ body: "dana, want the Urban Supply price list?" });
+    // A username is not a first name: {{first_name}} is empty on a comment.
+    expect(H.sent[1]).toMatchObject({ body: "Hi @dana, want the Urban Supply price list?" });
     expect(H.sent[1]!.extra.buttons).toEqual([{ id: "yes", title: "Yes please" }]);
     expect(H.db.automationRun).toHaveLength(1);
     expect(H.db.automationRun![0]).toMatchObject({ triggerType: "comment_received", eventKey: "comment:cm1", answeredInbound: true });
@@ -243,7 +244,8 @@ describe("★ parks in the DM, resumes on the reply", () => {
       tenantId: T, conversation: { ...conv }, messageId: "m1", message: "Yes please", channel: "instagram", replyPayload: "yes",
     });
     expect(answered).toBe(true);
-    expect(H.sent.map((s) => [s.kind, s.body])).toEqual([["dm", "Here it is"]]);
+    // The DM walker reads the comment too.
+    expect(H.sent.map((s) => [s.kind, s.body])).toEqual([["dm", "Here it is, about \"price please?\""]]);
     expect(H.db.automationRun![0]).toMatchObject({ status: "completed" });
     expect(H.db.conversation![0]).toMatchObject({ automationRunId: null, flowExpiresAt: null });
   });
