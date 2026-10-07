@@ -84,7 +84,9 @@ describe("Issue 1 - closure posture", () => {
       flags: { pendingApprovalsCount: 0, humanHandoffRequested: false },
     });
     expect(state.closurePosture).toBe("needs_followup");
-    expect(state.requiredActions).toContain("schedule_followup");
+    // No time given: the bot asks when (Omer, 2026-10-07), it does not schedule.
+    expect(state.requiredActions).toContain("ask_question");
+    expect(state.requiredActions).not.toContain("schedule_followup");
   });
 
   it("pending approval blocks closure even on a farewell", () => {
@@ -138,7 +140,9 @@ describe("Issue 1c - Hebrew infinitive defer markers (live test gap)", () => {
       flags: { pendingApprovalsCount: 0, humanHandoffRequested: false },
     });
     expect(state.closurePosture).toBe("needs_followup");
-    expect(state.requiredActions).toContain("schedule_followup");
+    // "Tomorrow" with no hour: ask what time; scheduling stays allowed for when they answer.
+    expect(state.requiredActions).toContain("ask_question");
+    expect(state.requiredActions).not.toContain("schedule_followup");
     expect(state.allowedActions).toContain("schedule_followup");
   });
 
