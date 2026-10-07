@@ -2305,7 +2305,8 @@ router.post("/webchat/create", authenticate, resolveTenant, requirePermission("c
 
 // ─── Update Webchat Widget Settings ─────────────────────────
 
-router.put("/webchat/:id/settings", authenticate, resolveTenant, async (req: Request, res: Response) => {
+// Changing the widget is managing a channel (it used to need only sign-in).
+router.put("/webchat/:id/settings", authenticate, resolveTenant, requirePermission("channels:manage:update"), async (req: Request, res: Response) => {
   try {
     const account = await prisma.channelAccount.findFirst({
       where: { id: String(req.params.id), tenantId: req.tenantId!, channel: "WEBCHAT" },
@@ -2337,7 +2338,7 @@ router.put("/webchat/:id/settings", authenticate, resolveTenant, async (req: Req
 
 // ─── Get Webchat Widget Settings ────────────────────────────
 
-router.get("/webchat/:id/settings", authenticate, resolveTenant, async (req: Request, res: Response) => {
+router.get("/webchat/:id/settings", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (req: Request, res: Response) => {
   try {
     const account = await prisma.channelAccount.findFirst({
       where: { id: String(req.params.id), tenantId: req.tenantId!, channel: "WEBCHAT" },

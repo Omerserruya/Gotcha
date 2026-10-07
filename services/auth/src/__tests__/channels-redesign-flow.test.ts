@@ -40,7 +40,7 @@ const state = {
 };
 
 const mocks = vi.hoisted(() => ({ prismaMock: {} as any }));
-const R = vi.hoisted(() => ({ used: new Set<string>() }));
+const R = vi.hoisted(() => ({ used: new Set<string>(), denied: new Set<string>() }));
 // The REAL state store runs (jwt signature + single-use jti); only Redis is
 // doubled, with SET NX semantics, so "replayed" is a real outcome here.
 vi.mock("ioredis", () => ({
@@ -114,7 +114,9 @@ vi.mock("@chatcenter/shared", async () => {
       tenantId: "tenant_a",
       role: "ADMIN",
     }),
-    requirePermission: () => (_req: any, _res: any, next: any) => next(),
+    // Allows everything unless a test denies a permission by name.
+    requirePermission: (perm: string) => (_req: any, res: any, next: any) =>
+      R.denied.has(perm) ? res.status(403).json({ error: "Forbidden" }) : next(),
     requireCapacity: () => (_req: any, _res: any, next: any) => next(),
     validate: () => (_req: any, _res: any, next: any) => next(),
   };
@@ -137,6 +139,7 @@ beforeEach(() => {
   state.channelWrites = [];
   state.stateStore.clear();
   R.used.clear();
+  R.denied.clear();
 
   mocks.prismaMock.channelAccount = {
     count: async () => 0,
@@ -311,6 +314,23 @@ describe("★ no per-channel response mode", () => {
     await cb({ code: "c", state: st("gmail", "redesign_studio") });
     expect(state.channelWrites.length).toBeGreaterThanOrEqual(2);
     for (const w of state.channelWrites) expect(w).not.toHaveProperty("responseMode");
+  });
+});
+
+describe("★ web chat settings need channel permissions", () => {
+  it("a member without channels:manage:update cannot change the widget (403, nothing written)", async () => {
+    R.denied.add("channels:manage:update");
+    const r = await request(app()).put("/api/channels/webchat/ca_1/settings").send({ appearance: { primaryColor: "#000000" } });
+    expect(r.status).toBe(403);
+    expect(state.channelWrites).toEqual([]);
+  });
+
+  it("a member without channels:manage:read cannot read the widget's settings (403)", async () => {
+    R.denied.add("channels:manage:read");
+    let read = false;
+    mocks.prismaMock.channelAccount.findFirst = async () => { read = true; return null; };
+    expect((await request(app()).get("/api/channels/webchat/ca_1/settings")).status).toBe(403);
+    expect(read).toBe(false);
   });
 });
 
