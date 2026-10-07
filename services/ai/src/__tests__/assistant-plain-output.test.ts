@@ -87,7 +87,19 @@ describe("★ the other tools too", () => {
   it("a count label's date is in words", async () => {
     // count needs prisma.conversation.count: covered through the label alone.
     const { stepText } = await import("../services/system-tools.service");
-    expect(stepText("system_count_conversations", { status: "OPEN", sinceISO: "2026-10-01T00:00:00.000Z" }, "he")).toBe("סופר שיחות פתוחות מאז 1 באוקטובר");
+    // "since" is when the conversations STARTED, and the label says so.
+    expect(stepText("system_count_conversations", { status: "CLOSED", sinceISO: "2026-10-01T00:00:00.000Z" }, "he")).toBe("סופר שיחות שנסגרו (נפתחו מאז 1 באוקטובר)");
+    expect(stepText("system_count_conversations", { status: "CLOSED", sinceISO: "2026-10-01T00:00:00.000Z" }, "en")).toBe("Counting closed conversations (started since 1 October)");
+  });
+});
+
+describe("★ no tool speaks as \"the system\"", () => {
+  it("tool descriptions talk about the business, not the system or the tenant", async () => {
+    const { buildSystemAgentTools } = await import("../services/system-tools.service");
+    const tools: any[] = await buildSystemAgentTools({ tenantId: "T", aiAgentId: null } as any).catch(() => []);
+    const text = JSON.stringify(tools.filter((t) => String(t.function?.name).startsWith("system_")).map((t) => t.function.description));
+    expect(text.length).toBeGreaterThan(100);
+    expect(text).not.toMatch(/\btenant\b|the system|as the screens show|report/i);
   });
 });
 
@@ -104,5 +116,9 @@ describe("★ the thread's period and the prompt", () => {
     expect(prompt).toMatch(/Do not guess at technical causes/);
     expect(prompt).toMatch(/explain them in business terms/);
     expect(prompt).toMatch(/never as 2026-10-01/);
+    // ★ The example against "the system reports" (it surfaced live despite the rule).
+    expect(prompt).toContain('Not "המערכת מדווחת על 0 שיחות');
+    expect(prompt).toContain('"לא נפתחו שיחות חדשות השבוע"');
+    expect(prompt).toMatch(/Say what happened, not who reported it/);
   });
 });

@@ -29,7 +29,7 @@ const SYSTEM_COUNT_CONVERSATIONS = {
   function: {
     name: "system_count_conversations",
     description:
-      "Count conversations in the current tenant, optionally filtered by status, channel, or a time window. " +
+      "Count the business's conversations, optionally filtered by status, channel, or when they started. " +
       "Use for questions like 'how many open conversations do we have?' or 'how many WhatsApp chats this week?'.",
     parameters: {
       type: "object",
@@ -58,7 +58,7 @@ const SYSTEM_GET_METRIC = {
   function: {
     name: "system_get_metric",
     description:
-      "Fetch a workspace figure, defined exactly as the screens show it. Metrics: " +
+      "How many of something the business has right now, the same figure the owner sees on Home. Metrics: " +
       "'waiting_for_person' (conversations waiting for someone on the team to answer: the number on Home and the inbox queue; " +
       "conversations the AI is answering are NOT waiting), " +
       "'pending_approvals' (actions waiting for someone's approval, as on Home and the Approvals page), " +
@@ -90,7 +90,7 @@ const SYSTEM_SEARCH_CUSTOMERS = {
   function: {
     name: "system_search_customers",
     description:
-      "Search contacts in this tenant by name, email, or phone substring. Returns up to 20 matches with id, displayName, channel, email, phone. " +
+      "Search the business's customers by name, email, or phone substring. Returns up to 20 matches with id, displayName, channel, email, phone. " +
       "Use to look up a customer the operator referenced by name.",
     parameters: {
       type: "object",
@@ -125,7 +125,7 @@ const SYSTEM_RECENT_ACTIVITY = {
   function: {
     name: "system_recent_activity",
     description:
-      "List recent inbound activity across the tenant: last N inbound messages with timestamp, customer, and snippet. " +
+      "The latest messages customers sent, on every channel: when, who, the channel, when their conversation started, and the text. " +
       "Useful for 'what's new today' / triage questions.",
     parameters: {
       type: "object",
@@ -545,7 +545,7 @@ export const METRIC_LABELS: Record<string, { en: string; he: string }> = {
 const STATUS_WORDS: Record<string, { en: string; he: string }> = {
   OPEN: { en: "open conversations", he: "שיחות פתוחות" },
   WAITING: { en: "conversations waiting for the customer to reply", he: "שיחות שמחכות לתשובת הלקוח" },
-  CLOSED: { en: "closed conversations", he: "שיחות סגורות" },
+  CLOSED: { en: "closed conversations", he: "שיחות שנסגרו" },
 };
 /** A channel as the inbox names it, in the interface language; never the enum key. */
 export function channelName(channel: unknown, locale: "he" | "en" = "en"): string {
@@ -592,7 +592,9 @@ function countLabel(args: any, locale: "he" | "en" = "en"): string {
   const parts = [status];
   const channel = args?.channel ? (CHANNEL_NAMES[String(args.channel).toUpperCase()] ?? OTHER_CHANNEL)[locale] : "";
   if (channel) parts.push(he ? `בערוץ ${channel}` : `on ${channel}`);
-  if (args?.sinceISO && !isNaN(Date.parse(String(args.sinceISO)))) parts.push(`${he ? "מאז" : "since"} ${whenText(new Date(String(args.sinceISO)), locale, "UTC", false)}`);
+  // sinceISO filters by when a conversation STARTED: say so ("closed since 1
+  // October" would claim something the count does not measure).
+  if (args?.sinceISO && !isNaN(Date.parse(String(args.sinceISO)))) parts.push(`(${he ? "נפתחו מאז" : "started since"} ${whenText(new Date(String(args.sinceISO)), locale, "UTC", false)})`);
   return parts.join(" ");
 }
 
