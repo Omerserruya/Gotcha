@@ -411,5 +411,27 @@
     "stepsLeft": "{count, plural, one {One step left before it can go live.} other {# steps left before it can go live.}}",
     "allSteps": "Every step is done.",
     "headingNamed": "Your workspace is ready, {name}"
+  },
+  "conversation": {
+    "label": "Conversation with GOTCHA",
+    "home": "Home",
+    "share": "Share with team",
+    "nextStage": "Next stage",
+    "shareWhy": "Sharing a conversation with your team comes in the next stage.",
+    "placeholder": "Reply, or tell GOTCHA what to do next…",
+    "send": "Send",
+    "stop": "Stop",
+    "working": "Working on it…",
+    "failed": "It couldn't answer just now. Try again in a moment.",
+    "failedWith": "It couldn't answer: {why}",
+    "stopped": "Stopped.",
+    "awaitingApproval": "Waiting for your approval: {what}",
+    "step": {
+      "running": "working",
+      "succeeded": "done",
+      "failed": "failed",
+      "denied": "not allowed",
+      "seconds": "{count, plural, =0 {· under 1s} other {· #s}}"
+    }
   }
 }

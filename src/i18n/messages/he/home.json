@@ -411,5 +411,27 @@
     "stepsLeft": "{count, plural, one {נשאר צעד אחד לפני שאפשר לעלות לאוויר.} other {נשארו # צעדים לפני שאפשר לעלות לאוויר.}}",
     "allSteps": "כל הצעדים הושלמו.",
     "headingNamed": "סביבת העבודה שלך מוכנה, {name}"
+  },
+  "conversation": {
+    "label": "שיחה עם GOTCHA",
+    "home": "בית",
+    "share": "שיתוף עם הצוות",
+    "nextStage": "בשלב הבא",
+    "shareWhy": "שיתוף שיחה עם הצוות יגיע בשלב הבא.",
+    "placeholder": "אפשר להגיב, או לומר ל־GOTCHA מה לעשות עכשיו…",
+    "send": "שליחה",
+    "stop": "עצירה",
+    "working": "עובדים על זה…",
+    "failed": "לא הצלחנו לענות כרגע. אפשר לנסות שוב בעוד רגע.",
+    "failedWith": "לא הצלחנו לענות: {why}",
+    "stopped": "נעצר.",
+    "awaitingApproval": "ממתין לאישור שלך: {what}",
+    "step": {
+      "running": "בעבודה",
+      "succeeded": "הסתיים",
+      "failed": "נכשל",
+      "denied": "לא מורשה",
+      "seconds": "{count, plural, =0 {· פחות משנייה} other {· # שנ׳}}"
+    }
   }
 }

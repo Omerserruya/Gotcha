@@ -29,6 +29,12 @@ export interface AgentStep {
   readonly name: string;
   readonly status: 'running' | 'succeeded' | 'failed' | 'denied';
   readonly detail?: string;
+  /**
+   * When its start and its end ARRIVED here (ms). The stream carries no
+   * durations; the gap between the two is what the page measured - "· 6s".
+   */
+  readonly startedAt?: number;
+  readonly endedAt?: number;
 }
 
 const IDLE: AgentRunState = { status: 'idle', answer: '', steps: [] };
@@ -103,7 +109,7 @@ export function useAgentRun() {
           logger.debug('agent.unrecognised_event', { event: frame.event });
           continue;
         }
-        setState((current) => reduce(current, parsed.data));
+        setState((current) => reduce(current, parsed.data, Date.now()));
       }
 
       setState((current) =>
@@ -129,8 +135,8 @@ function safeJson(raw: string): unknown {
   }
 }
 
-/** Folds one event into the visible state. */
-function reduce(current: AgentRunState, event: AgentEvent): AgentRunState {
+/** Folds one event into the visible state. `now`: when it arrived, for a step's duration. */
+export function reduce<S extends AgentRunState>(current: S, event: AgentEvent, now: number): S {
   switch (event.type) {
     case 'token':
       return { ...current, answer: current.answer + event.text };
@@ -144,6 +150,7 @@ function reduce(current: AgentRunState, event: AgentEvent): AgentRunState {
             id: event.toolCallId ?? `${event.name}-${current.steps.length}`,
             name: event.name ?? 'unknown',
             status: 'running',
+            startedAt: now,
           },
         ],
       };
@@ -157,6 +164,7 @@ function reduce(current: AgentRunState, event: AgentEvent): AgentRunState {
                 ...step,
                 status: event.ok === false ? 'failed' : 'succeeded',
                 detail: event.resultSummary,
+                endedAt: now,
               }
             : step,
         ),

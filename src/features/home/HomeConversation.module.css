@@ -1,0 +1,273 @@
+@layer features {
+  /*
+   * 01a, measured: a 60px bar (← Home · rule · title · Share), the turns in a
+   * 780px column, newest at the bottom, and the dark box docked under them
+   * (radius 16, `14px 16px 12px 18px`).
+   */
+  .chat {
+    display: flex;
+    flex-direction: column;
+    block-size: 100%;
+    min-block-size: 0;
+    background-color: var(--panel-base);
+    line-height: normal;
+  }
+
+  .bar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    block-size: 60px;
+    padding-inline: 28px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .back {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .back:dir(rtl) svg {
+    transform: scaleX(-1);
+  }
+
+  .rule {
+    inline-size: 1px;
+    block-size: 14px;
+    background-color: var(--border-default);
+  }
+
+  .title {
+    min-inline-size: 0;
+    margin: 0;
+    overflow: hidden;
+    font-size: 13.5px;
+    font-weight: var(--font-weight-semibold);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .barEnd {
+    margin-inline-start: auto;
+  }
+
+  .scroll {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    padding: var(--space-24) 40px 18px;
+  }
+
+  .turns {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    max-inline-size: 780px;
+    margin: 0 auto;
+    padding: 0;
+    list-style: none;
+  }
+
+  .turn {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .question {
+    align-self: flex-end;
+    max-inline-size: 520px;
+    margin: 0;
+    padding: 11px 16px;
+    border-radius: 16px 16px 4px;
+    background-color: var(--panel-inset);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .question:dir(rtl) {
+    border-radius: 16px 16px 16px 4px;
+  }
+
+  .answerRow {
+    display: flex;
+    gap: var(--space-14);
+  }
+
+  .avatar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 28px;
+    block-size: 28px;
+    border-radius: 50%;
+    background-color: var(--frame-raised);
+  }
+
+  .avatar > span {
+    inline-size: 8px;
+    block-size: 8px;
+    border-radius: 50%;
+    background-color: var(--signal-ai);
+  }
+
+  .answerBody {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .step {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
+  .stepMark {
+    display: inline-flex;
+    justify-content: center;
+    inline-size: 12px;
+    color: var(--signal-done-text);
+  }
+
+  .step[data-status='failed'] .stepMark,
+  .step[data-status='denied'] .stepMark {
+    color: var(--intent-urgent-text);
+  }
+
+  .stepState {
+    color: var(--text-faint);
+  }
+
+  .stepTime {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-faint);
+  }
+
+  .stepDetail {
+    flex-basis: 100%;
+    padding-inline-start: 20px;
+    color: var(--text-muted);
+  }
+
+  .spinner {
+    inline-size: 10px;
+    block-size: 10px;
+    border: 1.5px solid var(--border-default);
+    border-block-start-color: var(--text-subtle);
+    border-radius: 50%;
+    animation: turn-spin 0.8s linear infinite;
+  }
+
+  @keyframes turn-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinner {
+      animation: none;
+    }
+  }
+
+  .working,
+  .note {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
+  .answer {
+    margin: 0;
+    font-size: 14.5px;
+    line-height: 1.6;
+    white-space: pre-line;
+    text-wrap: pretty;
+  }
+
+  .problem {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--intent-urgent-text);
+  }
+
+  .dock {
+    flex: none;
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-10);
+    inline-size: min(780px, calc(100% - 80px));
+    margin: 0 auto var(--space-24);
+    padding: 14px 16px 12px 18px;
+    border-radius: 16px;
+    background-color: var(--frame-raised);
+  }
+
+  .input {
+    flex: 1;
+    min-inline-size: 0;
+    max-block-size: 160px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: var(--frame-text);
+    resize: none;
+    field-sizing: content;
+  }
+
+  .input::placeholder {
+    color: var(--frame-text-faint);
+  }
+
+  .input:focus {
+    outline: none;
+  }
+
+  .send {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 30px;
+    block-size: 30px;
+    border: 0;
+    border-radius: 50%;
+    background-color: var(--signal-ai);
+    color: var(--frame-base);
+    cursor: pointer;
+  }
+
+  .send:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}

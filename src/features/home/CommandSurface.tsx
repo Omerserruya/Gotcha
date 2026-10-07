@@ -7,6 +7,7 @@ import { useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Text } from '@/design-system/primitives/text/Text';
 
 import styles from './CommandSurface.module.css';
+import { useHomeAsk } from './HomeConversation';
 import { useAgentRun, type AgentStep } from './use-agent-run';
 
 /**
@@ -35,7 +36,13 @@ export function CommandSurface({
 }) {
   const t = useTranslations('home.command');
   const [message, setMessage] = useState(initial);
-  const { state, run, cancel } = useAgentRun();
+  const { state, run: runHere, cancel } = useAgentRun();
+  /*
+   * On Home (design 7, 01a) the question turns Home into the conversation,
+   * in place; anywhere else the box answers under itself, as before.
+   */
+  const homeAsk = useHomeAsk();
+  const run = (question: string) => (homeAsk ? homeAsk(question) : runHere(question));
 
   const isRunning = state.status === 'running';
 
