@@ -1886,4 +1886,114 @@
   .tabRow[data-outcome='ACTION_REQUIRED'] .tabRowName {
     color: var(--intent-blocked-text);
   }
+
+  /* 13b's foot, live: a result beside Refresh, the spinner while it runs. */
+  .footAction {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .spinning {
+    animation: foot-spin 0.9s linear infinite;
+  }
+
+  @keyframes foot-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinning {
+      animation: none;
+    }
+  }
+
+  .confirmRow {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-8);
+    margin-block-start: var(--space-14);
+  }
+
+  .confirmKeep,
+  .confirmDanger,
+  .rowRemove,
+  .contactAdd {
+    padding: 6px 12px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .confirmKeep,
+  .rowRemove {
+    border: 1px solid var(--border-default);
+    background: none;
+    color: var(--text-secondary);
+  }
+
+  .confirmDanger {
+    border: 0;
+    background-color: var(--intent-urgent-text);
+    color: var(--panel-field);
+  }
+
+  .contactAdd {
+    border: 0;
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .confirmDanger:disabled,
+  .contactAdd:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .rowRemove {
+    align-self: flex-start;
+    padding: 3px 9px;
+    font-size: 11px;
+  }
+
+  .rowConfirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: 12px;
+  }
+
+  .contactForm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-10);
+    margin-block-start: var(--space-16);
+  }
+
+  .contactForm > .footProblem {
+    flex-basis: 100%;
+  }
+
+  .contactField {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .contactField input {
+    padding: 7px 10px;
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
 }

@@ -172,6 +172,7 @@ export default async function Page({
             whatsapp[0] ? tw('panelLine', { count: numberCount(whatsapp[0]) }) : tw('description')
           }
           tab={panelTab}
+          numbers={(whatsapp[0]?.data ?? []).map((n) => ({ id: n.id, phoneNumber: n.phoneNumber }))}
         >
           {panelTab === 'templates' ? (
             <TemplatesTab templates={(await loadTemplates()).templates} />

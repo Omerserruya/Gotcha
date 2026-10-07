@@ -587,6 +587,15 @@ export const channelEndpoints = {
    * person think their rule was rewritten.
    */
   whatsappExclusions: () => endpoint('/api/channels/whatsapp/exclusions'),
+  /** DELETE one rule - tenant-scoped on the route; 404 when it is not this workspace's. */
+  whatsappExclusion: (id: string) => endpoint('/api/channels/whatsapp/exclusions/{id}', { id }),
+  /**
+   * ★ DELETE disconnects a number: the channel row goes, and with it the
+   * number, its events and its private contacts; conversations and history
+   * imports are kept, detached. The account's webhook subscription goes only
+   * when it was the last number on it. Never pressed by a test or a capture.
+   */
+  whatsappNumber: (id: string) => endpoint('/api/channels/whatsapp/numbers/{id}', { id }),
 } as const;
 
 /**

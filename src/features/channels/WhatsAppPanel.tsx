@@ -1,10 +1,10 @@
-import { List, MessageCircle, X } from 'lucide-react';
+import { MessageCircle, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
 
-import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link } from '@/i18n/navigation';
 
+import { PanelFoot } from './PanelFoot';
 import { PanelTabs } from './PanelTabs';
 import { WHATSAPP_TABS, type WhatsAppTab } from './whatsapp-tabs';
 import styles from './Channels.module.css';
@@ -21,12 +21,15 @@ import styles from './Channels.module.css';
 export async function WhatsAppPanel({
   line,
   tab = 'numbers',
+  numbers = [],
   children,
 }: {
   /** The account in one line: how many numbers. */
   readonly line: string;
   /** The open tab (`?tab=`); its content is `children`. */
   readonly tab?: WhatsAppTab;
+  /** Numbers GOTCHA keeps a record of - what the foot's Refresh and Disconnect act on. */
+  readonly numbers?: readonly { readonly id: string; readonly phoneNumber: string | null }[];
   readonly children: ReactNode;
 }) {
   const t = await getTranslations('channels.whatsapp');
@@ -78,35 +81,7 @@ export async function WhatsAppPanel({
         >
           {children}
         </div>
-        {/*
-          02's foot: Refresh from Meta · Activity log, and Disconnect in red.
-          The log is the Activity tab. Refresh and Disconnect are not wired
-          from here: a status in the one look, never something to press.
-        */}
-        <footer className={styles.panelFoot}>
-          <UnavailableAction
-            label={t('foot.refresh')}
-            tag={t('notYet')}
-            why={t('footNotYet')}
-            testid="whatsapp-foot-refresh"
-          />
-          <Link
-            href={{ pathname: '/settings/channels', query: { panel: 'whatsapp', tab: 'activity' } }}
-            replace
-            scroll={false}
-            className={styles.panelFootLink}
-            data-testid="whatsapp-foot-activity"
-          >
-            <List size={13} aria-hidden="true" />
-            {t('foot.activity')}
-          </Link>
-          <UnavailableAction
-            label={t('foot.disconnect')}
-            tag={t('notYet')}
-            why={t('footNotYet')}
-            testid="whatsapp-foot-disconnect"
-          />
-        </footer>
+        <PanelFoot numbers={numbers} />
       </aside>
     </div>
   );

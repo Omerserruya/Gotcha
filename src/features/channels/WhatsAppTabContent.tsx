@@ -4,6 +4,7 @@ import { templateStance, type Template } from '@/api/contracts/templates';
 import type { Exclusion, NumberEvent } from '@/api/contracts/whatsapp-numbers';
 import { Link } from '@/i18n/navigation';
 
+import { PrivateContacts } from './PrivateContacts';
 import styles from './Channels.module.css';
 
 const CATEGORIES = ['MARKETING', 'UTILITY', 'AUTHENTICATION'] as const;
@@ -77,7 +78,7 @@ export async function TemplatesTab({
   );
 }
 
-/** 13b · Private contacts: numbers GOTCHA leaves alone on this account, as they were typed. */
+/** 13b · Private contacts: the list, with add and remove (PrivateContacts); unread is said. */
 export async function ContactsTab({
   exclusions,
 }: {
@@ -91,32 +92,7 @@ export async function ContactsTab({
       </p>
     );
   }
-  if (exclusions.length === 0) {
-    return (
-      <p className={styles.tabNote} data-testid="tab-empty">
-        {t('contacts.none')}
-      </p>
-    );
-  }
-  return (
-    <>
-      <p className={styles.tabNote}>{t('contacts.lead')}</p>
-      <ul className={styles.tabList} data-testid="tab-contacts">
-        {exclusions.map((rule) => (
-          <li key={rule.id} className={styles.tabRow} data-testid={`tab-contact-${rule.id}`}>
-            <bdi dir="ltr" className={styles.tabRowName}>
-              {rule.value}
-            </bdi>
-            {rule.note ? (
-              <bdi dir="auto" className={styles.tabRowMeta}>
-                {rule.note}
-              </bdi>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-    </>
-  );
+  return <PrivateContacts exclusions={exclusions} />;
 }
 
 /** 13b · Activity: what happened to each number, newest first, in our words where we know the step. */
