@@ -20,6 +20,7 @@ const H = vi.hoisted(() => ({
   accounts: [] as any[],
   numbers: [] as any[],
   conversations: [] as any[],
+  created: [] as any[],
 }));
 
 // The public routes' rate limits have their own tests; here they would only
@@ -50,6 +51,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       },
       whatsAppNumber: { findMany: async (a: any) => H.numbers.filter((r) => match(r, a.where)) },
       conversation: { findUnique: async (a: any) => H.conversations.find((c) => c.id === a.where.id) ?? null },
+      message: { create: async (a: any) => { H.created.push(a.data); return { id: "m1", ...a.data }; } },
       flowCanvas: { findUnique: async () => null },
       shopifyChatInstallation: { findMany: async () => [] },
       $executeRaw: async () => 1,
@@ -71,7 +73,7 @@ const boot = async () => (await request(app()).post("/api/embedded-chat/bootstra
 const handoff = (body: any = { sessionId: "conv_web", sessionToken: "sess_abc" }) => request(app()).post("/api/embedded-chat/whatsapp-handoff").send(body);
 
 beforeEach(() => {
-  H.kv.clear(); H.ttl.clear();
+  H.kv.clear(); H.ttl.clear(); H.created = [];
   H.accounts = [web({ whatsapp: { enabled: true, channelAccountId: "wa_1" } }), wa("wa_1"), wa("wa_old"), wa("wa_off", { connectionStatus: "DISCONNECTED" }), { ...wa("wa_x"), tenantId: "OTHER" }];
   H.numbers = [{ tenantId: "T", channelAccountId: "wa_1", displayPhoneNumber: "+972 52-555-1234" }, { tenantId: "T", channelAccountId: "wa_off", displayPhoneNumber: "+972 52-555-9999" }];
   H.conversations = [
@@ -118,6 +120,17 @@ describe("★ POST /whatsapp-handoff", () => {
     expect(JSON.parse(H.kv.get(`wahandoff:ref:${ref}`))).toMatchObject({ tenantId: "T", conversationId: "conv_web", whatsappChannelAccountId: "wa_1" });
     expect(H.ttl.get(`wahandoff:ref:${ref}`)).toBe(7 * 24 * 3600);
     expect((await handoff()).body.data.ref).toBe(ref);
+  });
+
+  it("★ the WhatsApp look's own words: kept in the website chat (not queued for a website answer), pre-filled with the code", async () => {
+    const r = await handoff({ sessionId: "conv_web", sessionToken: "sess_abc", text: "  Is the oak lamp in stock?  " });
+    const { url, ref } = r.body.data;
+    expect(url).toBe(`https://wa.me/972525551234?text=${encodeURIComponent(`Is the oak lamp in stock? (${ref})`)}`);
+    expect(H.created).toEqual([expect.objectContaining({ conversationId: "conv_web", direction: "INBOUND", body: "Is the oak lamp in stock?", metadata: { source: "whatsapp_handoff" } })]);
+    // Without text nothing is recorded.
+    H.created = [];
+    await handoff();
+    expect(H.created).toEqual([]);
   });
 
   it("refused when the token is wrong, it is not a web chat, it is off or the number cannot take it", async () => {

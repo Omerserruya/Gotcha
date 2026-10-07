@@ -211,11 +211,16 @@ async function visitorConversation(conversationId: string, token: unknown) {
 }
 
 /**
- * POST /whatsapp-handoff { sessionId, sessionToken, locale? } -> { url, ref }
+ * POST /whatsapp-handoff { sessionId, sessionToken, locale?, text? } -> { url, ref }
  * "Continue on WhatsApp": a short code tied to this visitor's conversation,
  * and the wa.me link with the message that carries it. The same conversation
  * gets the same code (a second click does not orphan the first). 404 when the
  * button should not be there (off, number unavailable) or the token is wrong.
+ *
+ * `text` is the WhatsApp look's "write here and we continue on WhatsApp": the
+ * visitor's own words. They are kept in the website chat (the WhatsApp side
+ * reads it as context) WITHOUT a website reply, since the answer comes on
+ * WhatsApp, and they open WhatsApp pre-filled, followed by the code.
  */
 router.post("/whatsapp-handoff", messageLimiter, async (req: Request, res: Response) => {
   try {
@@ -243,7 +248,19 @@ router.post("/whatsapp-handoff", messageLimiter, async (req: Request, res: Respo
     }
     const asked = req.body?.locale;
     const locale = asked === "he" || asked === "en" ? asked : config.appearance.language === "he" ? "he" : "en";
-    res.json({ data: { url: waMeUrl(target.digits, handoffMessage(ref, locale)), ref } });
+    const text = typeof req.body?.text === "string" ? sanitizeUntrusted(req.body.text, { wrap: false, maxLength: 500 }).trim() : "";
+    if (text) {
+      // Recorded, not queued: no website answer to a question asked on WhatsApp.
+      await withCrossTenantAccess(() => prisma.message.create({
+        data: {
+          tenantId: conv.tenantId, conversationId: conv.id, channel: "WEBCHAT", direction: "INBOUND",
+          body: text, messageType: "text", status: "DELIVERED", senderName: conv.customerName || "Visitor",
+          metadata: { source: "whatsapp_handoff" },
+        },
+      }));
+    }
+    const prefilled = text ? `${text} (${ref})` : handoffMessage(ref, locale);
+    res.json({ data: { url: waMeUrl(target.digits, prefilled), ref } });
   } catch (err) {
     console.error("Embedded chat whatsapp-handoff error:", (err as Error)?.message);
     res.status(500).json({ error: "unavailable" });
