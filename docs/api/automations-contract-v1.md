@@ -5,8 +5,11 @@ backend will return; anything still being built is marked **(building)**. Owner:
 (Rebrand-gaps-Backend). Plan: `docs/product/ai-studio-skills-automations.md` §3.3.
 
 Base path: **`/api/automations`** (chatbot service, through the gateway; `/t/:tenant/api/automations`
-works too). Auth: the normal session. Reads: any signed-in member of the tenant (as `/api/chatbot-flows`);
-writes need `ai:workflows:update` (or ADMIN); activate/pause need `ai:workflows:publish` (or ADMIN).
+works too). Auth: the normal session. Reads (every GET, and POST `/:id/validate`) need `ai:workflows:read`
+(owner and admin have it by default; department managers and agents do not); writes need
+`ai:workflows:update` (or ADMIN); activate/pause need `ai:workflows:publish` (or ADMIN). Without the permission
+the answer is 403 `{ error: "Permission denied", code: "PERMISSION_DENIED", permissions: [key] }` - hide the
+Automations nav for a user without `ai:workflows:read`.
 `/api/chatbot-flows` answers 409 for an automation: edit and activate it only here.
 
 An automation **is** a `ChatbotFlow` that has a structured trigger. Flows without a trigger (the old

@@ -18,6 +18,8 @@ const H = vi.hoisted(() => ({
   viewer: { userId: "admin1", role: "ADMIN", departmentId: undefined as string | undefined },
   db: {} as Record<string, any[]>,
   seq: 0,
+  // Permissions the viewer does NOT hold (the gate answers 403 for them).
+  lacking: new Set<string>(),
 }));
 
 function m(row: any, where: any): boolean {
@@ -93,7 +95,8 @@ vi.mock("@chatcenter/shared", async () => {
     viewerOf: (req: any) => ({ userId: req.user.userId, role: req.user.role, departmentId: req.user.departmentId }),
     authenticate: (req: any, _r: any, n: any) => { req.user = { ...H.viewer }; n(); },
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = H.tenant; n(); },
-    requirePermissionOrRole: () => pass,
+    requirePermissionOrRole: (perm: string) => (_q: any, res: any, n: any) =>
+      H.lacking.has(perm) ? res.status(403).json({ error: "Permission denied", code: "PERMISSION_DENIED", permissions: [perm] }) : n(),
     requireEntitlement: () => pass,
     requireCapacity: () => pass,
     validate: () => pass,
@@ -148,6 +151,7 @@ beforeEach(() => {
   H.tenant = "T";
   H.viewer = { userId: "admin1", role: "ADMIN", departmentId: undefined };
   H.seq = 0;
+  H.lacking = new Set();
   H.db = {
     chatbotFlow: [
       { id: "legacy", tenantId: "T", name: "Sub-flow", triggerType: null, isActive: true, nodes: [], edges: [], updatedAt: new Date(0), createdAt: new Date(0) },
@@ -377,5 +381,32 @@ describe("★ the run log", () => {
     const s = (await request(app).get(`/api/automations/${a.id}/node-stats`)).body.data;
     expect(s.b).toEqual({ reached: 2, failed: 1, branches: {} });
     expect(s.w).toEqual({ reached: 1, failed: 0, branches: { "btn:call": 1 } });
+  });
+});
+
+describe("★ reading automations needs ai:workflows:read", () => {
+  it("every read door answers 403 without the permission, and with it as before", async () => {
+    const a = await create(goodGraph());
+    H.db.automationRun.push({ id: "r1", tenantId: "T", flowId: a.id, triggerType: "message_received", status: "completed", conversationId: null, startedAt: new Date() });
+    const reads: Array<[string, string]> = [
+      ["get", "/api/automations"], ["get", "/api/automations/catalog"], ["get", `/api/automations/${a.id}`],
+      ["get", `/api/automations/${a.id}/runs`], ["get", "/api/automations/runs/r1"], ["get", `/api/automations/${a.id}/node-stats`],
+      ["post", `/api/automations/${a.id}/validate`],
+    ];
+    H.lacking = new Set(["ai:workflows:read"]);
+    for (const [m, path] of reads) {
+      const r = await (request(app) as any)[m](path).send({});
+      expect(r.status, path).toBe(403);
+      expect(r.body.data, path).toBeUndefined();
+    }
+    H.lacking = new Set();
+    for (const [m, path] of reads) expect((await (request(app) as any)[m](path).send({})).status, path).toBe(200);
+  });
+
+  it("read does not imply write: with read but not update, a save is 403", async () => {
+    const a = await create(goodGraph());
+    H.lacking = new Set(["ai:workflows:update"]);
+    expect((await request(app).get(`/api/automations/${a.id}`)).status).toBe(200);
+    expect((await request(app).put(`/api/automations/${a.id}`).send({ name: "x" })).status).toBe(403);
   });
 });

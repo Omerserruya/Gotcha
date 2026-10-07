@@ -22,6 +22,9 @@ import {
 const router = Router();
 router.use(authenticate, resolveTenant);
 
+// Reading automations is a permission like reading skills (Omer, 2026-10-07):
+// owner and admin have it by default; department managers and agents do not.
+const CAN_READ = requirePermissionOrRole("ai:workflows:read", "ADMIN");
 const CAN_WRITE = requirePermissionOrRole("ai:workflows:update", "ADMIN");
 const CAN_PUBLISH = requirePermissionOrRole("ai:workflows:publish", "ADMIN");
 
@@ -125,7 +128,7 @@ function starterGraph(): { nodes: ANode[]; edges: AEdge[] } {
 
 // ── Static paths before /:id ───────────────────────────────────────────────
 
-router.get("/", async (req: Request, res: Response) => {
+router.get("/", CAN_READ, async (req: Request, res: Response) => {
   try {
     const status = typeof req.query.status === "string" ? req.query.status : null;
     const where: any = { tenantId: req.tenantId!, ...AUTOMATION };
@@ -137,7 +140,7 @@ router.get("/", async (req: Request, res: Response) => {
   } catch (err) { fail(res, err, "list automations"); }
 });
 
-router.get("/catalog", async (req: Request, res: Response) => {
+router.get("/catalog", CAN_READ, async (req: Request, res: Response) => {
   try {
     const q = req.query;
     let triggerType: TriggerType | null = null;
@@ -163,7 +166,7 @@ router.get("/catalog", async (req: Request, res: Response) => {
   } catch (err) { fail(res, err, "read the catalogue"); }
 });
 
-router.get("/runs/:runId", async (req: Request, res: Response) => {
+router.get("/runs/:runId", CAN_READ, async (req: Request, res: Response) => {
   try {
     const run = await prisma.automationRun.findFirst({
       where: { id: String(req.params.runId), tenantId: req.tenantId! },
@@ -177,7 +180,7 @@ router.get("/runs/:runId", async (req: Request, res: Response) => {
 
 // ── One automation ─────────────────────────────────────────────────────────
 
-router.get("/:id", async (req: Request, res: Response) => {
+router.get("/:id", CAN_READ, async (req: Request, res: Response) => {
   try {
     const f = await findAutomation(req.tenantId!, String(req.params.id));
     if (!f) { res.status(404).json({ error: "Automation not found" }); return; }
@@ -230,7 +233,7 @@ router.put("/:id", CAN_WRITE, async (req: Request, res: Response) => {
   } catch (err) { fail(res, err, "update the automation"); }
 });
 
-router.post("/:id/validate", async (req: Request, res: Response) => {
+router.post("/:id/validate", CAN_READ, async (req: Request, res: Response) => {
   try {
     const existing = await findAutomation(req.tenantId!, String(req.params.id));
     if (!existing) { res.status(404).json({ error: "Automation not found" }); return; }
@@ -315,7 +318,7 @@ async function presentRuns(tenantId: string, runs: any[]) {
   }));
 }
 
-router.get("/:id/runs", async (req: Request, res: Response) => {
+router.get("/:id/runs", CAN_READ, async (req: Request, res: Response) => {
   try {
     const f = await findAutomation(req.tenantId!, String(req.params.id));
     if (!f) { res.status(404).json({ error: "Automation not found" }); return; }
@@ -340,7 +343,7 @@ router.get("/:id/runs", async (req: Request, res: Response) => {
   } catch (err) { fail(res, err, "list runs"); }
 });
 
-router.get("/:id/node-stats", async (req: Request, res: Response) => {
+router.get("/:id/node-stats", CAN_READ, async (req: Request, res: Response) => {
   try {
     const f = await findAutomation(req.tenantId!, String(req.params.id));
     if (!f) { res.status(404).json({ error: "Automation not found" }); return; }
