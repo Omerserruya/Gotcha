@@ -111,6 +111,14 @@ describe("★ POST onboarding-preview-answer", () => {
     expect(H.model.calls).toBe(0);
   });
 
+  it("an excerpt scoring 0.3 that answers it is used (short Hebrew questions score low - measured on dev)", async () => {
+    H.chunks = [{ content: "Urban Supply sells urban everyday goods.", score: 0.3, documentTitle: "Shipping policy", documentId: "doc_ship" }];
+    H.model.content = JSON.stringify({ answer: "We sell urban everyday goods.", covered: true, used: [1] });
+    const r = await ask("מה אתם מוכרים?");
+    expect(r.body.data.grounded).toBe(true);
+    expect(H.model.calls).toBe(1);
+  });
+
   it("★ the model saying the excerpts do not cover it is not grounded either", async () => {
     H.chunks = [{ content: "Returns within 14 days.", score: 0.7, documentTitle: "Returns", documentId: "doc_ret" }];
     // It even cites an excerpt: "covered: false" alone must make it ungrounded.

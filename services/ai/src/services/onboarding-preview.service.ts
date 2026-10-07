@@ -13,7 +13,7 @@
  *                     unanswered question, persona or skill run - only the AI
  *                     usage record (generateResponse) and an audit row.
  */
-import { prisma, writeAudit, LOW_CONFIDENCE_SCORE } from "@chatcenter/shared";
+import { prisma, writeAudit } from "@chatcenter/shared";
 import { retrieveRelevantChunks } from "./knowledge.service";
 import { generateResponse, getDefaultModel } from "./ai.service";
 import { withoutWideDashes } from "./business-discovery.service";
@@ -21,6 +21,14 @@ import { withoutWideDashes } from "./business-discovery.service";
 export type PreviewLocale = "he" | "en";
 export const QUESTION_MAX = 300;
 export const PREVIEW_STATUSES = new Set(["PENDING_ONBOARDING", "PENDING_ADMIN_SETUP", "ACTIVE"]);
+/**
+ * Below this, an excerpt is not worth asking the model about. Deliberately
+ * lower than the gap-recording threshold (0.35): short Hebrew questions score
+ * 0.27-0.35 against the very document that answers them (measured on dev).
+ * Grounding itself is decided by the model's covered:true plus the excerpts
+ * it cites - this floor only saves a call on clearly unrelated questions.
+ */
+export const RELEVANCE_FLOOR = 0.2;
 
 // ── Questions (pure + reads) ───────────────────────────────────────────────
 
@@ -121,7 +129,7 @@ export async function previewAnswer(input: { tenantId: string; userId: string | 
   const question = input.question.trim();
   // The same retrieval as the bot and the test chat; never records a gap.
   const chunks = (await retrieveRelevantChunks(input.tenantId, question, 5, null, { record: false }))
-    .filter((c: any) => (c.score ?? 0) >= LOW_CONFIDENCE_SCORE);
+    .filter((c: any) => (c.score ?? 0) >= RELEVANCE_FLOOR);
 
   let answer = NOT_LEARNED[input.locale];
   let grounded = false;
