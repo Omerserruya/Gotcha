@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Capability, ToolUsage } from '@/api/contracts/capabilities';
 import { integrationSchema } from '@/api/contracts/integrations';
 import messages from '@/i18n/messages/en/capabilities.json';
+import commonMessages from '@/i18n/messages/en/common.json';
 
 import { CapabilityScreen } from './CapabilityScreen';
 
@@ -22,7 +23,11 @@ import { CapabilityScreen } from './CapabilityScreen';
 
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'capabilities') =>
-    createTranslator({ locale: 'en', messages: { capabilities: messages }, namespace }),
+    createTranslator({
+      locale: 'en',
+      messages: { capabilities: messages, common: commonMessages },
+      namespace,
+    }),
 }));
 
 const capability = (over: Partial<Capability> = {}): Capability => ({
@@ -103,6 +108,14 @@ describe('the uniform facts are stated only when they are uniform', () => {
     await renderScreen([capability({ toolName: 'a' }), capability({ toolName: 'b' })]);
     expect(screen.getByTestId('all-default')).toBeInTheDocument();
     expect(screen.getByTestId('expiry')).toHaveTextContent(/30 minutes/);
+  });
+
+  it('★ a day reads as a day, not "1440 minutes"', async () => {
+    await renderScreen([
+      capability({ toolName: 'a', expiresAfterMin: 1440 }),
+      capability({ toolName: 'b', expiresAfterMin: 1440 }),
+    ]);
+    expect(screen.getByTestId('expiry')).toHaveTextContent('expires after 1 day.');
   });
 
   it('withholds a claim the rows do not support', async () => {

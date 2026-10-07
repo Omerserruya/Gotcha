@@ -295,8 +295,8 @@
     "unread": "לא הצלחנו לקרוא את האוטומציה כרגע. כדאי לנסות שוב בעוד רגע.",
     "card": {
       "empty": "עוד לא הוגדר",
-      "wait": "{minutes, plural, =1 {דקה אחת} other {# דקות}}",
-      "upTo": "עד {minutes, plural, =1 {דקה אחת} other {# דקות}}",
+      "wait": "{duration}",
+      "upTo": "עד {duration}",
       "split": "{a}% / {b}%",
       "toFill": "למלא"
     },

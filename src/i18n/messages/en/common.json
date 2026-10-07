@@ -22,5 +22,10 @@
     "label": "Language"
   },
   "productDescription": "The Customer Operations OS. Conversations, actions, approvals and AI in one place.",
-  "loading": "Loading"
+  "loading": "Loading",
+  "duration": {
+    "minutes": "{count, plural, =1 {1 minute} other {# minutes}}",
+    "hours": "{count, plural, =1 {1 hour} other {# hours}}",
+    "days": "{count, plural, =1 {1 day} other {# days}}"
+  }
 }

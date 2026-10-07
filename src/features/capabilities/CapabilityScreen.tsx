@@ -1,5 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
+import { wholeUnit } from '@/lib/duration';
+
 import {
   automationCeiling,
   capabilityStance,
@@ -50,6 +52,7 @@ export async function CapabilityScreen({
   readonly usage: readonly ToolUsage[] | null;
 }) {
   const t = await getTranslations('capabilities');
+  const td = await getTranslations('common.duration');
 
   /*
     Built-in rows group by their stored category; an integration's by what
@@ -252,7 +255,13 @@ export async function CapabilityScreen({
         {allDefault ? <li data-testid="all-default">{t('uniform.allDefault')}</li> : null}
         {noEditing ? <li data-testid="no-editing">{t('uniform.noEditing')}</li> : null}
         {sameExpiry !== null ? (
-          <li data-testid="expiry">{t('uniform.expiry', { minutes: sameExpiry })}</li>
+          <li data-testid="expiry">
+            {t('uniform.expiry', {
+              duration: td(wholeUnit(sameExpiry * 60_000).unit, {
+                count: wholeUnit(sameExpiry * 60_000).count,
+              }),
+            })}
+          </li>
         ) : null}
         {noApprover ? <li data-testid="no-approver">{t('uniform.noApprover')}</li> : null}
       </ul>

@@ -2,6 +2,8 @@
 
 import { useTranslations } from 'next-intl';
 
+import { wholeUnit } from '@/lib/duration';
+
 import type { AutomationNode, Trigger } from '@/api/contracts/automations';
 
 import { TRIGGER_NODE } from './graph';
@@ -54,6 +56,7 @@ export function NodeCard({
   readonly onSelect: () => void;
 }) {
   const t = useTranslations('automations');
+  const td = useTranslations('common.duration');
   const kind =
     node.type === TRIGGER_NODE
       ? t(`nodes.trigger.${trigger.type ?? 'unknown'}` as 'nodes.trigger.webhook')
@@ -99,7 +102,7 @@ export function NodeCard({
         <span className={styles.cardLine}>
           {node.type === TRIGGER_NODE
             ? t(`lines.trigger.${trigger.type ?? 'unknown'}` as 'lines.trigger.webhook')
-            : summary(node, t)}
+            : summary(node, t, td)}
         </span>
       )}
       {issue ? (
@@ -123,18 +126,23 @@ export function NodeCard({
 function summary(
   node: AutomationNode,
   t: ReturnType<typeof useTranslations<'automations'>>,
+  td: ReturnType<typeof useTranslations<'common.duration'>>,
 ): string {
   const d = node.data;
-  const minutes = (ms: unknown) =>
-    typeof ms === 'number' && ms > 0 ? Math.round(ms / 60000) : null;
+  // In the largest unit it fills whole: "1 day", never "1,440 minutes".
+  const duration = (ms: unknown) => {
+    if (typeof ms !== 'number' || ms <= 0) return null;
+    const { unit, count } = wholeUnit(ms);
+    return td(unit, { count });
+  };
   switch (node.type) {
     case 'wait': {
-      const m = minutes(d.durationMs);
-      return m === null ? t('builder.card.empty') : t('builder.card.wait', { minutes: m });
+      const span = duration(d.durationMs);
+      return span === null ? t('builder.card.empty') : t('builder.card.wait', { duration: span });
     }
     case 'wait_for_reply': {
-      const m = minutes(d.timeoutMs);
-      return m === null ? t('builder.card.empty') : t('builder.card.upTo', { minutes: m });
+      const span = duration(d.timeoutMs);
+      return span === null ? t('builder.card.empty') : t('builder.card.upTo', { duration: span });
     }
     case 'add_tag':
       return str(d.tag) || t('builder.card.empty');

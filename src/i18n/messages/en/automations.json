@@ -295,8 +295,8 @@
     "unread": "Couldn't read this automation just now. Try again in a moment.",
     "card": {
       "empty": "Not set up yet",
-      "wait": "{minutes, plural, =1 {1 minute} other {# minutes}}",
-      "upTo": "Up to {minutes, plural, =1 {1 minute} other {# minutes}}",
+      "wait": "{duration}",
+      "upTo": "Up to {duration}",
       "split": "{a}% / {b}%",
       "toFill": "To fill in"
     },

@@ -11,6 +11,7 @@ import {
   type Catalog,
 } from '@/api/contracts/automations';
 import automationsMessages from '@/i18n/messages/en/automations.json';
+import commonMessages from '@/i18n/messages/en/common.json';
 
 const push = vi.hoisted(() => vi.fn());
 const replace = vi.hoisted(() => vi.fn());
@@ -48,7 +49,7 @@ const wrap = (node: ReactNode) =>
       locale="en"
       timeZone="Asia/Jerusalem"
       now={NOW}
-      messages={{ automations: automationsMessages }}
+      messages={{ automations: automationsMessages, common: commonMessages }}
     >
       {node}
     </NextIntlClientProvider>,
@@ -599,5 +600,30 @@ describe('★★ the new triggers and steps (Backend 972ae66d), edited where the
       'outside the 24-hour window: use a template',
     );
     expect(screen.getByTestId('node-m')).toHaveAttribute('data-marked');
+  });
+});
+
+describe('★★ a duration in the largest unit it fills whole (dev: "1,440 minutes")', () => {
+  const card = (type: string, data: Record<string, unknown>) =>
+    wrap(
+      <NodeCard
+        node={{ id: 'n', type, position: { x: 0, y: 0 }, data }}
+        trigger={{ type: 'message_received', config: {} } as never}
+        selected={false}
+        marked={false}
+        onSelect={vi.fn()}
+      />,
+    );
+
+  it.each([
+    ['wait', { durationMs: 24 * 60 * 60_000 }, '1 day'],
+    ['wait', { durationMs: 2 * 60 * 60_000 }, '2 hours'],
+    ['wait', { durationMs: 90 * 60_000 }, '90 minutes'],
+    ['wait_for_reply', { timeoutMs: 30 * 60_000 }, 'Up to 30 minutes'],
+    ['wait_for_reply', { timeoutMs: 2 * 24 * 60 * 60_000 }, 'Up to 2 days'],
+  ])('%s %o reads "%s"', (type, data, words) => {
+    card(type, data);
+    expect(screen.getByTestId('node-n')).toHaveTextContent(words);
+    expect(screen.getByTestId('node-n')).not.toHaveTextContent(/1,440|minutes.*minutes/);
   });
 });

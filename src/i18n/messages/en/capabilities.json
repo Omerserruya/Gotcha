@@ -8,7 +8,7 @@
   "uniform": {
     "allDefault": "Nothing here has been customised - every action is on the setting GOTCHA shipped with.",
     "noEditing": "Nobody can change an action's details before approving it. You approve it as proposed, or you don't.",
-    "expiry": "An approval request expires after {minutes} minutes. After that it can't be approved, and nothing tells the customer.",
+    "expiry": "An approval request expires after {duration}. After that it can't be approved, and nothing tells the customer.",
     "noApprover": "No particular person is named as the approver - any admin can approve anything."
   },
   "stance": {
