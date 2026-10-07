@@ -11266,43 +11266,6 @@ GET /api/channels/:id/posts
       → external  outbound HTTP (axios.get)
 ```
 
-### `PATCH /api/channels/:id/response-mode`
-
-- **Purpose:** Updates the referenced response mode for the referenced channel. _(Derived from the route shape; no descriptive comment in source.)_
-- **Handler:** `services/auth/src/routes/channels.ts` line 1774
-- **Authentication / tenant resolution:** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-- **Authorization:** Permission: `channels:manage:update`
-- **Input validation:** `validate(responseModeSchema)` (Zod). Accepts: `responseMode`. Required: `responseMode`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
-- **Exposure:** Routed by the gateway (reachable from the internet).
-- **Operation type:** write
-
-#### Execution flow
-
-1. **Route registration.** `auth` service mounts this router at `/api/channels` in `services/auth/src/index.ts`; the route is declared in `services/auth/src/routes/channels.ts`.
-2. **Handler.** `services/auth/src/routes/channels.ts:1774` - inline `async (req, res)` handler.
-3. **Validation.** `validate(responseModeSchema)` (Zod). Accepts: `responseMode`. Required: `responseMode`. `validate` reassigns `req.body` to the parsed value, so any property not named by the schema is stripped before the handler runs.
-4. **Authentication / tenant resolution.** `authenticate()` (`packages/shared/src/middleware/auth.ts`) verifies the Authentik JWT against JWKS and resolves `sub` → `User.authentikSubject`. `resolveTenant` derives `req.tenantId` from the principal; it is never read from the request body.
-5. **Authorization.** Permission: `channels:manage:update`
-6. **Service calls.** None; the handler works directly against Prisma and/or the response.
-7. **Database.** Prisma models touched (source order, not guaranteed runtime order - branches may skip some):
-   _Reads:_
-   - `channelAccount.findFirst`
-   _Writes:_
-   - `channelAccount.update`
-8. **External integrations.** None detected in the handler body.
-9. **Background work, events and audit.** None triggered by this endpoint.
-10. **Response and error paths.** Success status not determinable from source. Error paths: `400`, `404`, `500`, answering `{ error: ... }`. `401` is returned by `authenticate()` before the handler runs.
-
-#### Call graph
-
-```text
-PATCH /api/channels/:id/response-mode
-  → [authenticate → resolveTenant → requirePermission(channels:manage:update) → validate(responseModeSchema)]
-  → handler  services/auth/src/routes/channels.ts:1774
-      → db read   prisma.channelAccount.findFirst
-      → db write  prisma.channelAccount.update
-```
-
 ### `GET /api/channels/:id/status`
 
 - **Purpose:** Reads a single statu for the referenced channel. _(Derived from the route shape; no descriptive comment in source.)_

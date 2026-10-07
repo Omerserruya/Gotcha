@@ -186,7 +186,6 @@ router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:
         platformMeta: true,
         createdAt: true,
         updatedAt: true,
-        responseMode: true,
         _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } },
       },
       orderBy: { createdAt: "asc" },
@@ -1736,7 +1735,6 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             isActive: true,
             lastError: null,
             displayName,
-            responseMode: "HUMAN_WITH_COPILOT",
             platformMeta: gmailPlatformMeta,
           },
         });
@@ -1753,7 +1751,6 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             connectedBy: userId,
             tokenExpiresAt,
             isActive: true,
-            responseMode: "HUMAN_WITH_COPILOT",
             platformMeta: gmailPlatformMeta,
           },
         });
@@ -1852,7 +1849,6 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             lastError: null,
             displayName,
             platformMeta: { subscriptionId },
-            responseMode: "HUMAN_WITH_COPILOT",
           },
         });
       } else {
@@ -1869,7 +1865,6 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             tokenExpiresAt,
             isActive: true,
             platformMeta: { subscriptionId },
-            responseMode: "HUMAN_WITH_COPILOT",
           },
         });
       }
@@ -1974,40 +1969,12 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
   }
 });
 
-// ─── Update Channel Response Mode ────────────────────────────
-
-const responseModeSchema = z.object({
-  responseMode: z.enum(["HUMAN_WITH_COPILOT", "AI_AUTO_REPLY"]),
-});
-
-router.patch("/:id/response-mode", authenticate, resolveTenant, requirePermission("channels:manage:update"), validate(responseModeSchema), async (req: Request, res: Response) => {
-  try {
-    const account = await prisma.channelAccount.findFirst({
-      where: { id: req.params.id as string, tenantId: req.tenantId! },
-    });
-
-    if (!account) {
-      res.status(404).json({ error: "Channel not found" });
-      return;
-    }
-
-    if (account.channel !== "GMAIL" && account.channel !== "OUTLOOK") {
-      res.status(400).json({ error: "Response mode is only configurable for Gmail and Outlook channels" });
-      return;
-    }
-
-    const updated = await prisma.channelAccount.update({
-      where: { id: account.id },
-      data: { responseMode: req.body.responseMode },
-      select: { id: true, channel: true, displayName: true, responseMode: true },
-    });
-
-    res.json({ data: updated });
-  } catch (err) {
-    console.error("Update response mode error:", err);
-    res.status(500).json({ error: "Failed to update response mode" });
-  }
-});
+// The per-channel "response mode" (AI answers / a person answers with AI
+// help) was removed 2026-10-07: nothing ever read it at runtime. Who answers
+// is decided by the playbook and automations (Conversation.handledBy), and
+// Copilot suggestions are generated per conversation, only while a person
+// owns or awaits it (ai copilot-suggestions isCopilotConversation). The column
+// stays, unread and unwritten, until its migration is approved.
 
 // ─── Disconnect Channel ──────────────────────────────────────
 

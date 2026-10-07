@@ -280,3 +280,37 @@ describe("WhatsApp: launch per onboarding choice (13c)", () => {
     expect(embeddedSignupFor(undefined, env({ WHATSAPP_ES_FEATURE_TYPE: "x" })).extras).toEqual({ featureType: "x" });
   });
 });
+
+// The per-channel response mode was removed 2026-10-07: nothing read it at
+// runtime (who answers = playbook / automations; Copilot is per conversation).
+describe("★ no per-channel response mode", () => {
+  it("PATCH /:id/response-mode is gone (404), and nothing is written", async () => {
+    const r = await request(app()).patch("/api/channels/ca_1/response-mode").send({ responseMode: "AI_AUTO_REPLY" });
+    expect(r.status).toBe(404);
+    expect(state.channelWrites).toEqual([]);
+  });
+
+  it("the channel list no longer asks for (or returns) responseMode", async () => {
+    let select: any = null;
+    mocks.prismaMock.channelAccount.findMany = async (args: any) => {
+      select = args?.select ?? null;
+      return [];
+    };
+    const r = await request(app()).get("/api/channels");
+    expect(r.status).toBe(200);
+    expect(select).not.toBeNull();
+    expect(select).not.toHaveProperty("responseMode");
+  });
+
+  it("a connect writes no response mode: a new account, nor a reconnected one", async () => {
+    await cb({ code: "c", state: st("gmail", "redesign_studio") });
+    // Reconnecting the same mailbox takes the update path.
+    const existing = { id: "ca_1", tenantId: "tenant_a", channel: "GMAIL", externalId: "support@acme.test" };
+    mocks.prismaMock.channelAccount.findFirst = async () => existing;
+    mocks.prismaMock.channelAccount.findUnique = async () => existing;
+    await cb({ code: "c", state: st("gmail", "redesign_studio") });
+    expect(state.channelWrites.length).toBeGreaterThanOrEqual(2);
+    for (const w of state.channelWrites) expect(w).not.toHaveProperty("responseMode");
+  });
+});
+
