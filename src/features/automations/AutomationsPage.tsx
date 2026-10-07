@@ -1,5 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
+import { sessionRejected } from '@/api/client/session-rejected';
+import { SessionEnded } from '@/api/client/SessionEnded';
 import { AutomationsList } from './AutomationsList';
 import styles from './Automations.module.css';
 import { loadAutomations, loadCatalog } from './load-automations';
@@ -23,6 +25,8 @@ export async function ListSection({
     loadAutomations(),
     creating ? loadCatalog() : Promise.resolve(null),
   ]);
+  // The platform refused the session during this render: sign-in, not "couldn't read".
+  if (sessionRejected()) return <SessionEnded />;
   return (
     <>
       {automations === 'forbidden' ? (

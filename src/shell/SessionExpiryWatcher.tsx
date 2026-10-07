@@ -3,12 +3,14 @@
 import { useEffect } from 'react';
 
 import { SESSION_EXPIRED_EVENT } from '@/api/client/browser-api';
-import { startSignIn } from '@/auth/sign-out';
+import { sessionEnded } from '@/auth/sign-out';
 import { BASE_PATH } from '@/lib/base-path';
 import { logger } from '@/observability/logger';
 
 /**
- * Reacts to the session ending mid-use.
+ * Reacts to the session ending mid-use - a browser read refused (the BFF's
+ * 401), or a streamed section the server found signed out (`SessionEnded`).
+ * One handler for both: our sign-in screen, "Your session ended".
  *
  * The transport layer only announces the fact; the decision of what to do
  * about it belongs here, where routing exists. Sending the user to sign-in
@@ -30,7 +32,7 @@ export function SessionExpiryWatcher() {
       const path = window.location.pathname;
       const inApp =
         BASE_PATH && path.startsWith(`${BASE_PATH}/`) ? path.slice(BASE_PATH.length) : path;
-      startSignIn(`${inApp}${window.location.search}`);
+      sessionEnded(`${inApp}${window.location.search}`);
     }
 
     window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);

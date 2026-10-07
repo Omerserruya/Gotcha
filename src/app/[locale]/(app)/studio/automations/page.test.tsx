@@ -8,6 +8,8 @@ import { PermissionsProvider } from '@/permissions/permissions-context';
 
 const loadAutomations = vi.hoisted(() => vi.fn());
 vi.mock('server-only', () => ({}));
+const rejected = vi.hoisted(() => ({ value: false }));
+vi.mock('@/api/client/session-rejected', () => ({ sessionRejected: () => rejected.value }));
 vi.mock('@/features/automations/load-automations', () => ({
   loadAutomations,
   loadCatalog: async () => null,
@@ -99,6 +101,7 @@ const wrap = (node: ReactNode, permissions: string[] = ['ai:workflows:read']) =>
 beforeEach(() => {
   loadAutomations.mockReset();
   sheetProps.length = 0;
+  rejected.value = false;
 });
 
 describe('★★ placeholders, not a blank page (Omer, 2026-10-07)', () => {
@@ -130,6 +133,14 @@ describe('★ without ai:workflows:read (Backend 5: 403 PERMISSION_DENIED)', () 
     );
     expect(screen.queryByTestId('automations-unread')).toBeNull();
     expect(screen.queryByTestId('sheet')).toBeNull();
+  });
+
+  it('★★ refused as signed out during this render: sign-in, not "couldn\'t read"', async () => {
+    loadAutomations.mockResolvedValue(null);
+    rejected.value = true;
+    wrap(await ListSection({ creating: false, fromTemplate: null }));
+    expect(screen.getByTestId('session-ended')).toBeInTheDocument();
+    expect(screen.queryByTestId('automations-unread')).toBeNull();
   });
 
   it('unread is still "couldn\'t read"', async () => {

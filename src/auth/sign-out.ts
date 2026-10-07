@@ -91,3 +91,18 @@ export function startSignIn(returnTo: string): void {
   // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   window.location.assign(`${appPath('/api/auth/login')}?returnTo=${encodeURIComponent(returnTo)}`);
 }
+
+/**
+ * The session ended mid-use: our sign-in screen, saying so ("Your session
+ * ended"), in the page's language, and back here afterwards. Not straight
+ * into the OIDC flow - the visitor would land on the identity provider's
+ * page with no word of why.
+ */
+export function sessionEnded(returnTo: string): void {
+  const locale = /^\/([a-z]{2})(?:\/|$)/.exec(returnTo)?.[1];
+  const screen = locale ? `/${locale}/sign-in` : '/sign-in';
+  const query = new URLSearchParams({ error: 'ended', returnTo });
+  // A page, but the session is gone: a full navigation, so nothing stale renders.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+  window.location.assign(`${appPath(screen as `/${string}`)}?${query.toString()}`);
+}

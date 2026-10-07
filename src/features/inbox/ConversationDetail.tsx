@@ -1,5 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
+import { sessionRejected } from '@/api/client/session-rejected';
+import { SessionEnded } from '@/api/client/SessionEnded';
 import { orderCountOf } from './ConversationHeader';
 import type { ConversationDetail } from './load-inbox';
 import { MessageStream } from './MessageStream';
@@ -37,6 +39,8 @@ export async function ConversationStream({
   readonly channel: string | null;
 }) {
   const { messages } = await detail;
+  // The platform refused the session during this render: sign-in, not "couldn't read".
+  if (sessionRejected()) return <SessionEnded />;
   return (
     <>
       <MessageStream messages={messages} channel={channel} />
@@ -55,6 +59,8 @@ export async function ConversationStream({
  */
 export async function OrdersChip({ detail }: { readonly detail: Promise<ConversationDetail> }) {
   const count = orderCountOf((await detail).orders);
+  // The platform refused the session during this render: sign-in, not "couldn't read".
+  if (sessionRejected()) return <SessionEnded />;
   if (count === null) return null;
   const t = await getTranslations('inbox');
   return (

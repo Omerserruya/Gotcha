@@ -1,5 +1,7 @@
 import type { SkillCategory } from '@/api/contracts/skills';
 
+import { sessionRejected } from '@/api/client/session-rejected';
+import { SessionEnded } from '@/api/client/SessionEnded';
 import { loadSkillEmployees, loadSkillsLibrary } from './load-skills';
 import { NewSkill } from './NewSkill';
 import { SkillsLibrary } from './SkillsLibrary';
@@ -16,6 +18,8 @@ export async function LibrarySection({
     loadSkillsLibrary(),
     creating ? loadSkillEmployees() : Promise.resolve(null),
   ]);
+  // The platform refused the session during this render: sign-in, not "couldn't read".
+  if (sessionRejected()) return <SessionEnded />;
   return (
     <>
       <SkillsLibrary skills={skills} tools={tools} category={category} />

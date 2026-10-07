@@ -8,6 +8,7 @@ import { logger } from '@/observability/logger';
 import { TENANT_HEADER } from '@/tenant/tenant-header';
 
 import { HttpClient } from './http-client';
+import { markSessionRejected } from './session-rejected';
 
 /**
  * The API client for Server Components, server actions and route handlers.
@@ -42,6 +43,10 @@ export function serverApi(): HttpClient {
         authorization: `Bearer ${session.at}`,
         ...(session.tid ? { [TENANT_HEADER]: session.tid } : {}),
       };
+    },
+    // A streamed section asks after its reads: it cannot redirect from a loader.
+    onUnauthenticated() {
+      markSessionRejected();
     },
     onError(error) {
       const level = error.kind === 'server' || error.kind === 'contract' ? 'error' : 'warn';

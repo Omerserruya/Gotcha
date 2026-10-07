@@ -1,5 +1,7 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
+import { sessionRejected } from '@/api/client/session-rejected';
+import { SessionEnded } from '@/api/client/SessionEnded';
 import { orderToExpand, type Money } from '@/api/contracts/customer-orders';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
@@ -65,6 +67,8 @@ export async function CopilotWall({
   };
 }) {
   const { timeline, orders } = await detail;
+  // The platform refused the session during this render: sign-in, not "couldn't read".
+  if (sessionRejected()) return <SessionEnded />;
   const contactId = conversation.contactId ?? timeline?.contact?.id ?? null;
   const t = await getTranslations('inbox.wall.person');
 
