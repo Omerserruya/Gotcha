@@ -166,6 +166,18 @@ describe("★ order event", () => {
     expect(runs()).toEqual([]);
   });
 
+  it("★ no conversation is opened for a customer the automation may not write to (it would only be left empty)", async () => {
+    H.db.conversation = []; H.db.contact = [];
+    H.db.chatbotFlow = [review({ triggerConfig: { statuses: ["fulfilled"], channels: ["EMAIL"] } })];
+    expect((await onOrderEvent(order())).outcome).toBe("no_reachable_customer");
+    expect(H.db.conversation).toEqual([]);
+    // With WhatsApp allowed (or no channel limit), one is opened by phone.
+    H.db.automationRun = [];
+    H.db.chatbotFlow = [review()];
+    await onOrderEvent(order({ orderId: "5009" }));
+    expect(H.db.conversation).toEqual([expect.objectContaining({ channel: "WHATSAPP", channelAccountId: "wa1" })]);
+  });
+
   it("variables", () => {
     expect(orderVariables(order({ total: null, orderUrl: null, customer: {} }))).toEqual({
       order_number: "#1042", order_total: "", order_status: "fulfilled", order_items: "Cotton Trench Coat, Socks x2", order_url: "",

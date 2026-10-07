@@ -73,6 +73,14 @@ export function cartVariables(ev: CartEventJob): Record<string, string> {
   };
 }
 
+/** Could any of these automations write on WhatsApp (no channel limit, or WHATSAPP among them)? */
+export function mayWriteWhatsApp(flows: Array<{ triggerConfig?: any }>): boolean {
+  return flows.some((f) => {
+    const ch: string[] = Array.isArray(f.triggerConfig?.channels) ? f.triggerConfig.channels.map((x: any) => String(x).toUpperCase()) : [];
+    return !ch.length || ch.includes("WHATSAPP");
+  });
+}
+
 const digits = (p: string | null | undefined) => String(p ?? "").replace(/\D/g, "");
 
 /**
@@ -81,8 +89,10 @@ const digits = (p: string | null | undefined) => String(p ?? "").replace(/\D/g, 
  * workspace - a new WhatsApp conversation. Null when nobody is reachable.
  * A call's contact (VOICE) is never a target: nothing can be written there.
  * `whatsappOnly`: only a WhatsApp conversation (a caller's number).
+ * `create: false`: never open a new conversation (no listening automation may
+ * write on WhatsApp, so a new one would only be left empty).
  */
-export async function resolveCartTarget(tenantId: string, customer: CartEventJob["customer"], opts: { whatsappOnly?: boolean } = {}) {
+export async function resolveCartTarget(tenantId: string, customer: CartEventJob["customer"], opts: { whatsappOnly?: boolean; create?: boolean } = {}) {
   const phone = digits(customer?.phone);
   const email = String(customer?.email ?? "").trim().toLowerCase();
   const or: any[] = [];
@@ -104,7 +114,7 @@ export async function resolveCartTarget(tenantId: string, customer: CartEventJob
       if (conv) return { contact: c, conversation: conv };
     }
   }
-  if (phone.length < 7) return null;
+  if (phone.length < 7 || opts.create === false) return null;
   const account = await prisma.channelAccount.findFirst({
     where: { tenantId, channel: "WHATSAPP" as any, isActive: true },
     select: { id: true },
@@ -152,12 +162,12 @@ export async function onCartCheck(job: CartCheckJob): Promise<{ outcome: string 
   if (await isCheckoutDone(job.tenantId, job.checkoutId)) return { outcome: "purchased" };
   const flow = await prisma.chatbotFlow.findFirst({
     where: { id: job.flowId, tenantId: job.tenantId, isActive: true, triggerType: "cart_abandoned" },
-    select: { id: true },
+    select: { id: true, triggerConfig: true },
   });
   if (!flow) return { outcome: "automation_inactive" };
   const eventKey = `cart:${job.checkoutId}`;
 
-  const target = await resolveCartTarget(job.tenantId, ev.customer);
+  const target = await resolveCartTarget(job.tenantId, ev.customer, { create: mayWriteWhatsApp([flow]) });
   const consent = target ? await hasMarketingConsent(job.tenantId, ev, target) : { ok: false, reason: "no_reachable_customer" };
   if (!target || !consent.ok) {
     // Recorded, so the run log says why nobody was written to.

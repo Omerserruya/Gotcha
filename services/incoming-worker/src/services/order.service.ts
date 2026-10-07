@@ -15,7 +15,7 @@
  */
 import { prisma, type OrderEventJob } from "@chatcenter/shared";
 import { runAutomationsForEvent } from "./automation-runner.service";
-import { resolveCartTarget } from "./cart.service";
+import { resolveCartTarget, mayWriteWhatsApp } from "./cart.service";
 
 /** Variables an order automation can write. */
 export function orderVariables(ev: OrderEventJob): Record<string, string> {
@@ -51,7 +51,7 @@ export async function onOrderEvent(ev: OrderEventJob): Promise<{ outcome: string
   if (!ids.length) return { outcome: "no_automation" };
   const eventKey = `order:${ev.source}:${ev.orderId}:${ev.status}`;
 
-  const target = await resolveCartTarget(ev.tenantId, ev.customer);
+  const target = await resolveCartTarget(ev.tenantId, ev.customer, { create: mayWriteWhatsApp((flows as any[]).filter((f) => ids.includes(f.id))) });
   const channel = target ? String(target.conversation.channel).toUpperCase() : null;
   const optedOut = !!target && (Array.isArray(target.contact?.optOutChannels) ? target.contact.optOutChannels : []).map((x: any) => String(x).toUpperCase()).includes(channel);
   const busy = !!target && !!(target.conversation.assignedAgentId || target.conversation.isHandedOver || target.conversation.automationRunId);
