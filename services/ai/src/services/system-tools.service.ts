@@ -13,7 +13,7 @@
  * operator-side semantics isolated.
  */
 
-import { prisma } from "@chatcenter/shared";
+import { prisma, visibilityClause, type Viewer } from "@chatcenter/shared";
 import {
   buildAgentToolsForAIAgent,
   evaluateToolGate,
@@ -254,6 +254,13 @@ export interface SystemToolDispatchCtx {
   selectedContactId?: string | null;
   /** Pass-through for downstream services (Bearer). */
   authToken?: string;
+  /** Who is asking. Conversation data follows the inbox's visibility rule. */
+  viewer?: Viewer;
+}
+
+/** The visibility OR-clause for this caller, or null when unrestricted. */
+function clauseOf(ctx: { viewer?: Viewer }): Record<string, unknown>[] | null {
+  return ctx.viewer ? visibilityClause(ctx.viewer) : null;
 }
 
 export interface SystemToolResult {
@@ -338,6 +345,8 @@ async function dispatchSystemTool(
     switch (name) {
       case "system_count_conversations": {
         const where: any = { tenantId: ctx.tenantId };
+        const clause = clauseOf(ctx);
+        if (clause) where.OR = clause;
         if (args.status && args.status !== "ANY") where.status = args.status;
         if (args.channel) where.channel = args.channel;
         if (args.sinceISO) where.createdAt = { gte: new Date(args.sinceISO) };
@@ -345,7 +354,7 @@ async function dispatchSystemTool(
         return { toolCallId, content: JSON.stringify({ ok: true, count, where }) };
       }
       case "system_get_metric": {
-        const value = await getMetric(ctx.tenantId, args.metric);
+        const value = await getMetric(ctx.tenantId, args.metric, clauseOf(ctx));
         return { toolCallId, content: JSON.stringify({ ok: true, metric: args.metric, value }) };
       }
       case "system_search_customers": {
@@ -379,6 +388,15 @@ async function dispatchSystemTool(
             }),
           };
         }
+        // Only a conversation this operator may see; another one reads as missing.
+        const clause = clauseOf(ctx);
+        const visible = await prisma.conversation.findFirst({
+          where: { id: String(cid), tenantId: ctx.tenantId, ...(clause ? { OR: clause } : {}) },
+          select: { id: true },
+        });
+        if (!visible) {
+          return { toolCallId, content: JSON.stringify({ ok: false, error: "conversation not found" }) };
+        }
         const limit = Math.min(100, Math.max(1, Number(args.limit) || 30));
         const messages = await prisma.message.findMany({
           where: { tenantId: ctx.tenantId, conversationId: cid },
@@ -403,8 +421,9 @@ async function dispatchSystemTool(
       }
       case "system_recent_activity": {
         const limit = Math.min(50, Math.max(1, Number(args.limit) || 20));
+        const clause = clauseOf(ctx);
         const rows = await prisma.message.findMany({
-          where: { tenantId: ctx.tenantId, direction: "INBOUND" },
+          where: { tenantId: ctx.tenantId, direction: "INBOUND", ...(clause ? { conversation: { OR: clause } } : {}) },
           orderBy: { createdAt: "desc" },
           take: limit,
           select: {
@@ -442,23 +461,24 @@ async function dispatchSystemTool(
   }
 }
 
-async function getMetric(tenantId: string, metric: string): Promise<number> {
+async function getMetric(tenantId: string, metric: string, clause: Record<string, unknown>[] | null = null): Promise<number> {
   const now = new Date();
+  const conv = clause ? { OR: clause } : {};
   switch (metric) {
     case "inbound_messages_24h": {
       const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       return prisma.message.count({
-        where: { tenantId, direction: "INBOUND", createdAt: { gte: since } },
+        where: { tenantId, direction: "INBOUND", createdAt: { gte: since }, ...(clause ? { conversation: conv } : {}) },
       });
     }
     case "open_conversations":
-      return prisma.conversation.count({ where: { tenantId, status: "OPEN" } });
+      return prisma.conversation.count({ where: { tenantId, status: "OPEN", ...conv } });
     case "waiting_conversations":
-      return prisma.conversation.count({ where: { tenantId, status: "WAITING" } });
+      return prisma.conversation.count({ where: { tenantId, status: "WAITING", ...conv } });
     case "closed_today": {
       const startOfDay = new Date(now); startOfDay.setUTCHours(0, 0, 0, 0);
       return prisma.conversation.count({
-        where: { tenantId, status: "CLOSED", closedAt: { gte: startOfDay } },
+        where: { tenantId, status: "CLOSED", closedAt: { gte: startOfDay }, ...conv },
       });
     }
     case "pending_approvals":

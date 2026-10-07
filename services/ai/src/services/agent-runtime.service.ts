@@ -207,6 +207,7 @@ export async function runAgent(
         selectedConversationId: ctxBuilt.resolved.conversationId,
         selectedContactId: ctxBuilt.resolved.contactId,
         authToken: input.authToken,
+        viewer: input.operator.viewer,
       });
 
       // Surface side-effects to the consumer for UI cues (toast, badge, etc).

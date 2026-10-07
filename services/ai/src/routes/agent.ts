@@ -15,6 +15,8 @@ import {
   authenticate,
   resolveTenant,
   requireActiveTenant,
+  requirePermissionOrRole,
+  viewerOf,
   prisma,
 } from "@chatcenter/shared";
 import { runAgent, AgentRuntimeEvent } from "../services/agent-runtime.service";
@@ -22,7 +24,10 @@ import { clearAgentMemory } from "../services/agent-memory.service";
 
 const router = Router();
 
-router.use(authenticate, resolveTenant, requireActiveTenant());
+// The assistant reads the workspace's conversations, so it needs the same
+// permission as reading them in the inbox; what it reads then follows the
+// inbox's visibility rule (department / assignment), via the viewer below.
+router.use(authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("conversation:messages:read", "ADMIN"));
 
 router.post("/run", async (req: Request, res: Response) => {
   const tenantId = req.tenantId!;
@@ -32,7 +37,8 @@ router.post("/run", async (req: Request, res: Response) => {
     return;
   }
 
-  const { message, sessionId, client, model, ephemeral, aiAgentId } = req.body ?? {};
+  // `model` from the client is ignored: the server picks the model (billing).
+  const { message, sessionId, client, ephemeral, aiAgentId: askedAgentId } = req.body ?? {};
   if (typeof message !== "string" || !message.trim()) {
     res.status(400).json({ error: "message (non-empty string) is required" });
     return;
@@ -52,6 +58,11 @@ router.post("/run", async (req: Request, res: Response) => {
     where: { id: tenantId },
     select: { name: true },
   }).catch(() => null);
+  // An employee id from the client only narrows the tools to that employee's
+  // grants, and only if it is one of this workspace's employees.
+  const aiAgentId = typeof askedAgentId === "string" && askedAgentId
+    ? ((await prisma.aIAgent.findFirst({ where: { id: askedAgentId, tenantId }, select: { id: true } }).catch(() => null))?.id ?? null)
+    : null;
 
   // SSE headers. `X-Accel-Buffering: no` defeats nginx's default buffering;
   // without it tokens land in the browser only after the loop finishes.
@@ -88,13 +99,13 @@ router.post("/run", async (req: Request, res: Response) => {
           userEmail: user?.email,
           userRole: user?.role,
           tenantName: tenant?.name,
+          viewer: viewerOf(req),
         },
         client: client ?? null,
         message: message.trim(),
         sessionId,
-        model,
         ephemeral: !!ephemeral,
-        aiAgentId: aiAgentId ?? null,
+        aiAgentId,
         authToken: (req.headers.authorization || "").replace(/^Bearer\s+/i, "") || undefined,
       },
       send,
