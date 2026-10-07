@@ -561,6 +561,45 @@
     cursor: default;
   }
 
+  /* Who answers, as the playbook says - read, not chosen. */
+  .assigned {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin: 0;
+    font-size: 13px;
+  }
+
+  .assignedMark {
+    display: grid;
+    flex: none;
+    place-items: center;
+    inline-size: 28px;
+    block-size: 28px;
+    border-radius: 50%;
+    background-color: var(--panel-field);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  /* On by where it runs: a status where a switch would be. */
+  .onTag {
+    flex: none;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .getCode {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    align-items: center;
+  }
+
   /* Install */
   .store {
     display: flex;

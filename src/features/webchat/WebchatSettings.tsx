@@ -6,7 +6,7 @@ import {
   useEffect,
   useRef,
   useState,
-  useSyncExternalStore,
+  useTransition,
   type PointerEvent,
   type ReactNode,
 } from 'react';
@@ -22,22 +22,33 @@ import {
   type WebchatTab,
 } from '@/api/contracts/webchat';
 import {
+  WIDGET_PATH,
+  isLive,
+  type ShopifyPlace,
+  type WebsiteWidget,
+  type WidgetInstall,
+} from '@/api/contracts/website-widget';
+import {
   UnavailableAction,
   UnavailableItem,
 } from '@/design-system/primitives/unavailable/Unavailable';
-import { embedCode } from '@/features/channels/ConnectPanel';
-import { Link } from '@/i18n/navigation';
+import { connectWebChat } from '@/features/channels/actions';
+import { ShopifyConnect } from '@/features/capabilities/ShopifyConnect';
+import type { ShopifyAvailability } from '@/features/capabilities/load-capabilities';
+import { Link, useRouter } from '@/i18n/navigation';
 
+import { automationsLink } from '@/features/employees/WhoAnswers';
 import { brandMark } from '@/lib/brand-mark';
 
 import { hexToHsv, hsvToHex } from './colour';
-import { saveWebchat } from './webchat-actions';
+import type { ShopifyData } from './load-website-widget';
+import { saveWebsiteWidget } from './website-widget-actions';
 import styles from './Webchat.module.css';
 
 /** How long the editor waits after the last change before saving it. */
 export const SAVE_AFTER_MS = 700;
 
-type Saving = 'idle' | 'saving' | 'saved' | 'failed';
+type Saving = 'idle' | 'saving' | 'saved' | 'failed' | 'nowhere';
 
 interface Setters {
   readonly colour: (hex: string) => void;
@@ -52,7 +63,11 @@ interface Setters {
 }
 
 /**
- * 13g-13j - Settings · Channels · Web chat (design 6).
+ * 13g-13j - Settings · Channels · Website widget (design 6; one widget, design 7).
+ *
+ * ★★ ONE WIDGET, MANY PLACES (Omer, 2026-10-07): the web chat and Shopify's
+ *   live chat are one embedded chat. A change is written to every place it
+ *   is installed - the code snippet and each Shopify shop - by one route.
  *
  * ★★ NO SAVE BUTTON, AS THE DESIGN HAS NONE: a change is saved a moment
  *   after it is made, to the widget's own config route, and the preview on
@@ -61,29 +76,38 @@ interface Setters {
  *   colour or an image address is saved only once it is one the route would
  *   keep - a hex, an https address - so a half-typed value never is.
  *
- * ★ What the widget cannot store yet is drawn and says why: a brand scan,
- *   image upload, Continue on WhatsApp, products / cart / deals (a website
- *   widget has no catalogue), the store installs, and which employee answers
- *   (that is routing's, not the widget's).
+ * ★ What the widget cannot do yet is drawn and says why: a brand scan,
+ *   image upload, Continue on WhatsApp (stage B), deals, and products / cart
+ *   anywhere but a Shopify shop whose catalogue answers. Who answers is read
+ *   from the playbook, never chosen here: routing decides it in one place.
  */
 export function WebchatSettings({
-  id,
   initial,
-  widget,
+  assigned,
+  install,
+  shopifyData,
+  shopifyAvailability,
   business,
   tab,
 }: {
-  readonly id: string;
   readonly initial: WebchatConfig;
-  readonly widget: {
-    readonly widgetId: string | null;
-    readonly live: boolean;
-    readonly name: string | null;
-  } | null;
+  /** Who answers the website per the playbook - read-only here. */
+  readonly assigned: WebsiteWidget['assignedEmployee'];
+  /** `null`: the installs could not be read. */
+  readonly install: WidgetInstall | null;
+  readonly shopifyData: ShopifyData | null;
+  readonly shopifyAvailability: ShopifyAvailability | null;
   readonly business: string | null;
   readonly tab: WebchatTab;
 }) {
   const t = useTranslations('channels.webchat');
+  const live = install ? isLive(install) : null;
+  // The preview's address line: a shop, else the site the code was last seen on.
+  const site = install?.shopify[0]?.shopDomain ?? install?.code?.lastHost ?? null;
+  /* Products and cart: on where a shop runs it and its catalogue answers (Backend, stage A). */
+  const selling = Boolean(
+    install?.shopify.some((shop) => shop.status === 'active') && shopifyData === 'ok',
+  );
   const [config, setConfig] = useState(initial);
   const [saving, setSaving] = useState<Saving>('idle');
   const edits = useRef(0);
@@ -104,10 +128,12 @@ export function WebchatSettings({
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       setSaving('saving');
-      void saveWebchat(id, next).then((kept) => {
+      const { displayName: _account, ...settings } = next;
+      void saveWebsiteWidget(settings).then((answer) => {
         if (mine !== edits.current) return;
-        if (kept === null) setSaving('failed');
+        if (!answer.ok) setSaving(answer.reason);
         else {
+          const kept = { ...answer.settings, displayName: '' };
           setSaving('saved');
           // What the route kept - but a question emptied to be rewritten keeps its place.
           setConfig({
@@ -161,19 +187,19 @@ export function WebchatSettings({
             <h1 className={styles.title}>{t('title')}</h1>
             <span className={styles.subtitle}>{t('subtitle')}</span>
           </span>
-          {widget ? (
+          {live === null ? null : (
             <span
               className={styles.status}
-              data-live={widget.live ? '' : undefined}
+              data-live={live ? '' : undefined}
               data-testid="webchat-status"
             >
-              {widget.live ? t('live') : t('notLive')}
+              {live ? t('live') : t('notLive')}
             </span>
-          ) : null}
-          {widget?.live ? null : (
+          )}
+          {live !== false ? null : (
             // Going live IS installing: the status turns Live on the first real visit.
             <Link
-              href={{ pathname: `/settings/channels/webchat/${id}`, query: { tab: 'install' } }}
+              href={{ pathname: WIDGET_PATH, query: { tab: 'install' } }}
               className={styles.goLive}
               data-testid="webchat-go-live"
             >
@@ -185,7 +211,7 @@ export function WebchatSettings({
           {WEBCHAT_TABS.map((name) => (
             <Link
               key={name}
-              href={{ pathname: `/settings/channels/webchat/${id}`, query: { tab: name } }}
+              href={{ pathname: WIDGET_PATH, query: { tab: name } }}
               className={styles.tab}
               aria-current={tab === name ? 'page' : undefined}
               scroll={false}
@@ -210,14 +236,18 @@ export function WebchatSettings({
           {tab === 'appearance' ? (
             <Appearance config={config} set={set} />
           ) : tab === 'conversation' ? (
-            <Conversation config={config} set={set} />
+            <Conversation config={config} set={set} assigned={assigned} />
           ) : tab === 'behaviour' ? (
-            <Behaviour config={config} set={set} />
+            <Behaviour config={config} set={set} selling={selling} />
           ) : (
-            <Install widgetId={widget?.widgetId ?? null} live={widget?.live ?? false} />
+            <Install
+              install={install}
+              shopifyData={shopifyData}
+              shopifyAvailability={shopifyAvailability}
+            />
           )}
         </div>
-        <Preview config={config} site={widget?.name ?? null} business={business} />
+        <Preview config={config} site={site} business={business} />
       </div>
     </div>
   );
@@ -501,9 +531,16 @@ function ImageRow({
   );
 }
 
-function Conversation({ config, set }: { readonly config: WebchatConfig; readonly set: Setters }) {
+function Conversation({
+  config,
+  set,
+  assigned,
+}: {
+  readonly config: WebchatConfig;
+  readonly set: Setters;
+  readonly assigned: WebsiteWidget['assignedEmployee'];
+}) {
   const t = useTranslations('channels.webchat.conversation');
-  const tw = useTranslations('channels.webchat');
   const questions = [0, 1, 2].map((i) => config.ux.welcome.suggestedQuestions[i] ?? '');
   return (
     <>
@@ -551,13 +588,25 @@ function Conversation({ config, set }: { readonly config: WebchatConfig; readonl
             {t('employee')} <span className={styles.required}>{t('required')}</span>
           </h2>
           <p className={styles.rowHint}>{t('employeeHint')}</p>
-          {/* Who answers is decided in one place, routing's (Phase 3) - a status, not radios. */}
-          <UnavailableItem
-            title={t('employeeChoose')}
-            tag={tw('notYet')}
-            why={t('employeeWhy')}
-            testid="webchat-employee-why"
-          />
+          {/*
+            Who answers is decided in one place, the playbook: read here, never
+            a second routing rule. Changing it from here waits for Omer.
+          */}
+          <p className={styles.assigned} data-testid="webchat-employee-who">
+            {assigned ? (
+              <>
+                <span className={styles.assignedMark} aria-hidden="true">
+                  {brandMark(assigned.name).logo}
+                </span>
+                <bdi dir="auto">{assigned.name}</bdi>
+              </>
+            ) : (
+              t('employeeNone')
+            )}
+          </p>
+          <p className={styles.rowHint} data-testid="webchat-employee-where">
+            {t.rich('employeeWhere', { automations: automationsLink })}
+          </p>
         </section>
         <section
           className={styles.card}
@@ -616,7 +665,16 @@ function TextField({
   );
 }
 
-function Behaviour({ config, set }: { readonly config: WebchatConfig; readonly set: Setters }) {
+function Behaviour({
+  config,
+  set,
+  selling,
+}: {
+  readonly config: WebchatConfig;
+  readonly set: Setters;
+  /** A shop runs the widget and its catalogue answers: products and cart are on there. */
+  readonly selling: boolean;
+}) {
   const t = useTranslations('channels.webchat.behaviour');
   const popup = config.ux.proactive;
   return (
@@ -661,53 +719,101 @@ function Behaviour({ config, set }: { readonly config: WebchatConfig; readonly s
         onChange={set.poweredBy}
         testid="webchat-powered"
       />
-      {(['products', 'cart', 'deals'] as const).map((k) => (
-        <Toggle
-          key={k}
-          label={t(`${k}.label`)}
-          hint={t(`${k}.hint`)}
-          on={false}
-          why={t('noCatalogue')}
-          testid={`webchat-${k}`}
-        />
-      ))}
+      {/*
+        Products and cart are on by WHERE the widget runs (Backend, stage A):
+        in a Shopify shop yes, from the code snippet no - a status, not a
+        switch. Deals have no source anywhere yet.
+      */}
+      {(['products', 'cart'] as const).map((k) =>
+        selling ? (
+          <div className={styles.toggleRow} key={k} data-testid={`webchat-${k}`}>
+            <span className={styles.toggleText}>
+              <span>{t(`${k}.label`)}</span>
+              <span className={styles.rowHint}>{t(`${k}.hint`)}</span>
+              <span className={styles.rowHint}>{t('codeNoProducts')}</span>
+            </span>
+            <span className={styles.onTag} data-testid={`webchat-${k}-on`}>
+              {t('onInShopify')}
+            </span>
+          </div>
+        ) : (
+          <Toggle
+            key={k}
+            label={t(`${k}.label`)}
+            hint={t(`${k}.hint`)}
+            on={false}
+            why={t('noCatalogue')}
+            testid={`webchat-${k}`}
+          />
+        ),
+      )}
+      <Toggle
+        label={t('deals.label')}
+        hint={t('deals.hint')}
+        on={false}
+        why={t('noDeals')}
+        testid="webchat-deals"
+      />
     </section>
   );
 }
 
-const noSubscription = () => () => {};
-
-function Install({ widgetId, live }: { readonly widgetId: string | null; readonly live: boolean }) {
+/**
+ * Install (design 7): the platform is picked by installing - Shopify in one
+ * click, WooCommerce when its plugin exists, any other site by the code.
+ *
+ * ★ "Connected to stock and orders" is the Shopify INTEGRATION's to say, not
+ *   the chat's: the chat runs in a shop with no Admin API token, and on dev
+ *   the integration is failing while the chat is live. Each shop line says
+ *   which of the two it is talking about.
+ */
+function Install({
+  install,
+  shopifyData,
+  shopifyAvailability,
+}: {
+  readonly install: WidgetInstall | null;
+  readonly shopifyData: ShopifyData | null;
+  readonly shopifyAvailability: ShopifyAvailability | null;
+}) {
   const t = useTranslations('channels.webchat.install');
   const tw = useTranslations('channels.webchat');
-  // The snippet loads from where this app is served - known in the browser, after hydration.
-  const origin = useSyncExternalStore(
-    noSubscription,
-    () => window.location.origin,
-    () => '',
-  );
-  const [copied, setCopied] = useState<boolean | null>(null);
-  const code = widgetId && origin ? embedCode(widgetId, origin) : null;
+  if (install === null) {
+    return (
+      <p className={styles.rowHint} role="status" data-testid="webchat-install-unread">
+        {t('unread')}
+      </p>
+    );
+  }
+  const code = install.code;
   return (
     <>
       <section className={styles.card}>
-        {/* No one-click installs yet: drawn, each with why (Shopify's is its own app channel). */}
-        <div className={styles.store} data-testid="webchat-shopify">
-          <span className={styles.storeMark} data-store="shopify" aria-hidden="true">
-            <ShoppingBag size={15} />
-          </span>
-          <span className={styles.toggleText}>
-            <span>{t('shopify')}</span>
-            <span className={styles.rowHint}>{t('shopifyHint')}</span>
-            <span className={styles.why}>{t('shopifyWhy')}</span>
-          </span>
-          <UnavailableAction
-            label={t('shopifyButton')}
-            tag={tw('notYet')}
-            why={t('shopifyWhy')}
-            testid="webchat-shopify-action"
-          />
-        </div>
+        {install.shopify.length > 0 ? (
+          install.shopify.map((shop) => (
+            <ShopRow
+              key={shop.channelId}
+              shop={shop}
+              shopifyData={shopifyData}
+              shopifyAvailability={shopifyAvailability}
+            />
+          ))
+        ) : (
+          <div className={styles.store} data-testid="webchat-shopify">
+            <span className={styles.storeMark} data-store="shopify" aria-hidden="true">
+              <ShoppingBag size={15} />
+            </span>
+            <span className={styles.toggleText}>
+              <span>{t('shopify')}</span>
+              <span className={styles.rowHint}>{t('shopifyHint')}</span>
+            </span>
+            {/* The existing install (10 / 00g): availability first, then Shopify picks the store. */}
+            <ShopifyConnect
+              mode={shopifyAvailability?.mode ?? null}
+              helpUrl={shopifyAvailability?.helpUrl ?? null}
+            />
+          </div>
+        )}
         <div className={styles.store} data-testid="webchat-woo">
           <span className={styles.storeMark} data-store="woo" aria-hidden="true">
             <Plug size={15} />
@@ -719,7 +825,7 @@ function Install({ widgetId, live }: { readonly widgetId: string | null; readonl
           </span>
           <UnavailableAction
             label={t('wooButton')}
-            tag={tw('notYet')}
+            tag={tw('comingSoon')}
             why={t('wooWhy')}
             testid="webchat-woo-action"
           />
@@ -727,42 +833,165 @@ function Install({ widgetId, live }: { readonly widgetId: string | null; readonl
         <div className={styles.snippetBlock} data-testid="webchat-snippet">
           <span className={styles.snippetHead}>
             <span>{t('other')}</span>
-            {code ? (
-              <button
-                type="button"
-                className={styles.secondary}
-                onClick={() =>
-                  void navigator.clipboard
-                    .writeText(code)
-                    .then(() => setCopied(true))
-                    .catch(() => setCopied(false))
-                }
-                data-testid="webchat-copy"
-              >
-                {copied === true ? t('copied') : copied === false ? t('copyFailed') : t('copy')}
-              </button>
-            ) : null}
+            {code ? <CopyCode code={code.snippet} /> : null}
           </span>
           {code ? (
-            <pre className={styles.snippet} data-testid="webchat-snippet-code">
-              {code}
+            <pre className={styles.snippet} dir="ltr" data-testid="webchat-snippet-code">
+              {code.snippet}
             </pre>
           ) : (
-            <p className={styles.rowHint}>{widgetId ? t('reading') : t('noWidget')}</p>
+            <GetTheCode />
           )}
           <span className={styles.rowHint}>{t('otherHint')}</span>
         </div>
       </section>
-      <p
-        className={styles.strip}
-        data-live={live ? '' : undefined}
-        role="status"
-        data-testid="webchat-install-status"
-      >
-        <span className={styles.stripDot} aria-hidden="true" />
-        {live ? t('liveNow') : t('waiting')}
-      </p>
+      {code ? (
+        <p
+          className={styles.strip}
+          data-live={code.status === 'live' ? '' : undefined}
+          role="status"
+          data-testid="webchat-install-status"
+        >
+          <span className={styles.stripDot} aria-hidden="true" />
+          {code.status === 'live'
+            ? code.lastHost
+              ? t('liveOn', { host: code.lastHost })
+              : t('liveNow')
+            : t('waiting')}
+        </p>
+      ) : null}
     </>
+  );
+}
+
+/** One shop the widget was installed on: the chat's state, then the data connection's. */
+function ShopRow({
+  shop,
+  shopifyData,
+  shopifyAvailability,
+}: {
+  readonly shop: ShopifyPlace;
+  readonly shopifyData: ShopifyData | null;
+  readonly shopifyAvailability: ShopifyAvailability | null;
+}) {
+  const t = useTranslations('channels.webchat.install');
+  const state =
+    shop.status === 'uninstalled'
+      ? 'removed'
+      : shop.status === 'not_enabled'
+        ? 'off'
+        : shop.embedLive
+          ? 'active'
+          : 'quiet';
+  const integrationsLink = (chunks: ReactNode) => <Link href="/studio/capabilities">{chunks}</Link>;
+  return (
+    <div className={styles.store} data-testid={`webchat-shop-${shop.channelId}`} data-state={state}>
+      <span className={styles.storeMark} data-store="shopify" aria-hidden="true">
+        <ShoppingBag size={15} />
+      </span>
+      <span className={styles.toggleText}>
+        <span>{t('shopify')}</span>
+        <span className={styles.rowHint} data-testid="webchat-shop-line">
+          <bdi dir="ltr">{shop.shopDomain}</bdi> · {t(`shop.${state}`)}
+        </span>
+        {state === 'active' || state === 'quiet' ? (
+          <span className={styles.rowHint} data-testid="webchat-shop-data">
+            {shopifyData === 'ok'
+              ? t('data.ok')
+              : shopifyData === 'failing'
+                ? t.rich('data.failing', { integrations: integrationsLink })
+                : shopifyData === 'none'
+                  ? t.rich('data.none', { integrations: integrationsLink })
+                  : t('data.unread')}
+          </span>
+        ) : null}
+        {(state === 'off' || state === 'quiet') && shop.themeEditorUrl ? (
+          <a
+            className={styles.textButton}
+            href={shop.themeEditorUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="webchat-shop-theme"
+          >
+            {t('themeEditor')}
+          </a>
+        ) : null}
+      </span>
+      {state === 'removed' ? (
+        <ShopifyConnect
+          mode={shopifyAvailability?.mode ?? null}
+          helpUrl={shopifyAvailability?.helpUrl ?? null}
+        />
+      ) : (
+        <span
+          className={styles.status}
+          data-live={state === 'active' ? '' : undefined}
+          data-testid="webchat-shop-status"
+        >
+          {t(`shopTag.${state}`)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function CopyCode({ code }: { readonly code: string }) {
+  const t = useTranslations('channels.webchat.install');
+  const [copied, setCopied] = useState<boolean | null>(null);
+  return (
+    <button
+      type="button"
+      className={styles.secondary}
+      onClick={() =>
+        void navigator.clipboard
+          .writeText(code)
+          .then(() => setCopied(true))
+          .catch(() => setCopied(false))
+      }
+      data-testid="webchat-copy"
+    >
+      {copied === true ? t('copied') : copied === false ? t('copyFailed') : t('copy')}
+    </button>
+  );
+}
+
+/**
+ * No code yet: it is created by the web chat's own create (idempotent, and it
+ * owns the plan's channel limit) - never by a settings save.
+ */
+function GetTheCode() {
+  const t = useTranslations('channels.webchat.install');
+  const router = useRouter();
+  const [problem, setProblem] = useState<'limit' | 'forbidden' | 'failed' | null>(null);
+  const [isPending, start] = useTransition();
+  return (
+    <span className={styles.getCode}>
+      <span className={styles.rowHint}>{t('noCode')}</span>
+      <button
+        type="button"
+        className={styles.secondary}
+        disabled={isPending}
+        onClick={() =>
+          start(async () => {
+            setProblem(null);
+            const made = await connectWebChat('');
+            if (made.ok) router.refresh();
+            else
+              setProblem(
+                made.reason === 'limit' || made.reason === 'forbidden' ? made.reason : 'failed',
+              );
+          })
+        }
+        data-testid="webchat-get-code"
+      >
+        {isPending ? t('gettingCode') : t('getCode')}
+      </button>
+      {problem ? (
+        <span className={styles.why} role="alert" data-testid="webchat-get-code-problem">
+          {t(`getCodeProblem.${problem}`)}
+        </span>
+      ) : null}
+    </span>
   );
 }
 

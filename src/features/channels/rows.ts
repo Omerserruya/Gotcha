@@ -6,6 +6,7 @@ import {
   type ConnectionState,
   type VoiceChannel,
 } from '@/api/contracts/channels';
+import { WIDGET_CHANNELS } from '@/api/contracts/website-widget';
 
 /**
  * The list: what is connected, then what could be.
@@ -42,7 +43,21 @@ export interface ConnectableRow {
   readonly channel: ChannelType;
 }
 
-export type ChannelRow = ConnectedRow | ConnectableRow;
+/**
+ * The Website widget (Omer, 2026-10-07): the web chat and every Shopify live
+ * chat are ONE row - one product, set up once, installed in many places. Its
+ * parts are the accounts it is made of; none yet is a widget not installed
+ * anywhere, still a row, because its settings are where it is set up.
+ */
+export interface WidgetRow {
+  readonly kind: 'widget';
+  readonly parts: readonly ConnectedRow[];
+}
+
+export type ChannelRow = ConnectedRow | ConnectableRow | WidgetRow;
+
+const isWidgetChannel = (channel: ChannelType) =>
+  (WIDGET_CHANNELS as readonly ChannelType[]).includes(channel);
 
 /**
  * A channel is a problem when the platform says so, whatever its status says.
@@ -114,7 +129,9 @@ export function buildChannelRows(
    * ones. Otherwise by name, locale-aware.
    */
   const collator = new Intl.Collator(locale, { sensitivity: 'base' });
-  connected.sort((a, b) => {
+  const parts = connected.filter((row) => isWidgetChannel(row.channel));
+  const others = connected.filter((row) => !isWidgetChannel(row.channel));
+  others.sort((a, b) => {
     const at = isTroubled(a);
     const bt = isTroubled(b);
     if (at !== bt) return at ? -1 : 1;
@@ -134,7 +151,9 @@ export function buildChannelRows(
    * row, and `voiceOffered` carries that answer.
    *
    * `SHOPIFY_LIVE_CHAT` stays out unconditionally: it is installed from
-   * Shopify, so a Connect button would send someone to the wrong place.
+   * Shopify, so a Connect button would send someone to the wrong place. And
+   * `WEBCHAT` now too: the widget's row is always there, and its Install tab
+   * is where the code is made.
    */
   const already = new Set<ChannelType>(channels.map((c) => c.channel));
   if (voice.length > 0) already.add('VOICE');
@@ -144,8 +163,14 @@ export function buildChannelRows(
     : CONNECTABLE_CHANNELS;
 
   const connectable: ConnectableRow[] = offerable
-    .filter((type) => !already.has(type))
+    .filter((type) => !already.has(type) && !isWidgetChannel(type))
     .map((type) => ({ kind: 'connectable', channel: type }));
 
-  return [...connected, ...connectable];
+  // Troubled first, as every row: a shop the app was removed from heads the list.
+  const widget: WidgetRow = { kind: 'widget', parts };
+  const troubled = others.filter(isTroubled);
+  const healthy = others.filter((row) => !isTroubled(row));
+  return parts.some(isTroubled)
+    ? [widget, ...troubled, ...healthy, ...connectable]
+    : [...troubled, ...healthy, widget, ...connectable];
 }

@@ -99,7 +99,11 @@ describe('★★ web chat: after Create, the code to paste - in the same panel',
     connectWebChat.mockResolvedValue({ ok: true, data: { id: 'ch1', externalId: 'wc_123' } });
     show('WEBCHAT');
     await userEvent.click(screen.getByTestId('connect-webchat-create'));
-    expect(push).toHaveBeenCalledWith('/settings/channels/webchat/ch1');
+    // One widget for the workspace: its Install tab, where the code is.
+    expect(push).toHaveBeenCalledWith({
+      pathname: '/settings/channels/website',
+      query: { tab: 'install' },
+    });
   });
 
   it('★★ no "who answers" choice - a line to Automations instead (Omer, 2026-10-07)', () => {

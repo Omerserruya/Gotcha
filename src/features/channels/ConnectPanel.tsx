@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import { OAUTH_PLATFORMS, type ChannelType } from '@/api/contracts/channels';
+import { WIDGET_PATH } from '@/api/contracts/website-widget';
 import { Link, useRouter } from '@/i18n/navigation';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Input } from '@/design-system/primitives/input/Input';
@@ -153,7 +154,7 @@ function WebChatStep({ onClose }: { readonly onClose: () => void }) {
                * settings, its code on the Install tab. The row's Settings
                * reopens it any time.
                */
-              router.push(`/settings/channels/webchat/${encodeURIComponent(outcome.data.id)}`);
+              router.push({ pathname: WIDGET_PATH, query: { tab: 'install' } });
             })
           }
         >

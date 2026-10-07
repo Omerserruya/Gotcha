@@ -508,12 +508,12 @@
   "webchat": {
     "crumbs": "Breadcrumbs",
     "channels": "Channels",
-    "title": "Web chat",
-    "subtitle": "The chat on your website. Set it up, preview it on the right, then install",
+    "title": "Website widget",
+    "subtitle": "One chat for your website and your Shopify store. Set it up, preview it on the right, then install",
     "live": "Live",
     "notLive": "Not live yet",
     "goLive": "Go live",
-    "tabsLabel": "Web chat settings",
+    "tabsLabel": "Website widget settings",
     "tabs": {
       "appearance": "Appearance",
       "conversation": "Conversation",
@@ -523,10 +523,10 @@
     "saving": {
       "saving": "Saving…",
       "saved": "Saved",
-      "failed": "Not saved. Change it again to retry"
+      "failed": "Not saved. Change it again to retry",
+      "nowhere": "Not saved: the widget isn't installed anywhere yet. Get the code under Install first"
     },
-    "notFound": "There is no web chat with this address in this workspace.",
-    "unread": "Couldn't read this web chat's settings. Try again in a moment.",
+    "unread": "Couldn't read the widget's settings. Try again in a moment.",
     "appearance": {
       "colour": "Main colour",
       "custom": "Your own colour",
@@ -556,7 +556,6 @@
       "employee": "Assigned AI employee",
       "required": "Required",
       "employeeHint": "What it knows, how it sounds and when it hands over are set on the employee in Studio",
-      "employeeWhy": "Choosing who answers the web chat isn't available here yet. It will be decided in one place with the rest of your routing",
       "employeesUnread": "Couldn't read your AI employees.",
       "paused": "paused",
       "language": "Language",
@@ -565,7 +564,8 @@
         "he": "Always Hebrew",
         "en": "Always English"
       },
-      "employeeChoose": "Choose who answers the web chat"
+      "employeeNone": "The playbook doesn't send website conversations to one employee",
+      "employeeWhere": "Who answers is set in <automations>Studio · Automations</automations> and the playbook, not here"
     },
     "behaviour": {
       "popup": "Pop-up message",
@@ -590,26 +590,53 @@
         "label": "Show active deals",
         "hint": "Only deals set up in your store"
       },
-      "noCatalogue": "Not available yet: the web chat isn't connected to a store catalogue"
+      "noCatalogue": "Not available yet: it needs the widget in a Shopify store with stock and orders connected",
+      "onInShopify": "On in your Shopify store",
+      "codeNoProducts": "Not on sites that use the code",
+      "noDeals": "Not available yet: GOTCHA doesn't read your store's deals"
     },
     "install": {
       "shopify": "Shopify",
       "shopifyHint": "One click, reads stock and orders",
-      "shopifyWhy": "Not available yet. Use the line of code below on your Shopify theme",
-      "shopifyButton": "Install on Shopify",
       "woo": "WooCommerce",
       "wooHint": "One plugin, no code",
-      "wooWhy": "There is no plugin yet. Use the line of code below",
-      "wooButton": "Get the plugin",
+      "wooWhy": "There is no WooCommerce plugin yet. Until there is, the code below works on a WooCommerce site",
+      "wooButton": "Connect",
       "other": "Any other site · one line of code",
       "otherHint": "Paste it before </body>. Changes in these settings reach the site without touching the code again",
       "copy": "Copy",
       "copied": "Copied",
       "copyFailed": "Couldn't copy. Select the code and copy it",
-      "reading": "Preparing the code…",
-      "noWidget": "This web chat has no widget id yet, so there is no code to install.",
       "liveNow": "Live. Visitors to your site can chat now",
-      "waiting": "Waiting for the first visit from your site. The status changes to Live on its own"
+      "waiting": "Waiting for the first visit from your site. The status changes to Live on its own",
+      "unread": "Couldn't read where the widget is installed. Try again in a moment.",
+      "shop": {
+        "active": "Installed, the chat shows in your theme",
+        "quiet": "Installed, but your theme hasn't loaded the chat in the last week",
+        "off": "Installed, but the chat is switched off in your theme",
+        "removed": "The GOTCHA app was removed from this store"
+      },
+      "shopTag": {
+        "active": "Active",
+        "quiet": "Not showing",
+        "off": "Off"
+      },
+      "data": {
+        "ok": "Connected to stock and orders",
+        "failing": "Stock and orders aren't connected: the connection is failing. Fix it in <integrations>Studio · Integrations</integrations>",
+        "none": "Stock and orders aren't connected. Connect them in <integrations>Studio · Integrations</integrations>",
+        "unread": "Couldn't check the stock and orders connection"
+      },
+      "themeEditor": "Open the theme editor",
+      "liveOn": "Live. Last seen on {host}",
+      "noCode": "There's no code yet. It's made once, and every change here reaches it",
+      "getCode": "Get the code",
+      "gettingCode": "Making the code…",
+      "getCodeProblem": {
+        "limit": "Your plan has no room for another channel",
+        "forbidden": "You don't have permission to add a channel",
+        "failed": "The code wasn't made. Try again"
+      }
     },
     "preview": {
       "label": "Preview",
@@ -617,6 +644,11 @@
       "type": "Type a message",
       "powered": "Powered by GOTCHA"
     },
-    "notYet": "Not available yet"
+    "notYet": "Not available yet",
+    "comingSoon": "Coming soon"
+  },
+  "widgetRow": {
+    "name": "Website widget",
+    "nowhere": "Not installed anywhere yet"
   }
 }

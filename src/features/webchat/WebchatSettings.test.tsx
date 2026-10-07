@@ -4,27 +4,47 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { bodyOfConfig, webchatSettingsSchema, type WebchatConfig } from '@/api/contracts/webchat';
+import {
+  bodyOfWidget,
+  widgetInstallSchema,
+  type WebsiteWidget,
+  type WidgetInstall,
+  type WidgetSettings,
+} from '@/api/contracts/website-widget';
 import channelsMessages from '@/i18n/messages/en/channels.json';
 
+const router = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
     <a href={typeof href === 'string' ? href : JSON.stringify(href)} {...rest}>
       {children}
     </a>
   ),
+  useRouter: () => router,
 }));
-const actions = vi.hoisted(() => ({ saveWebchat: vi.fn() }));
-vi.mock('./webchat-actions', () => actions);
+const actions = vi.hoisted(() => ({ saveWebsiteWidget: vi.fn() }));
+vi.mock('./website-widget-actions', () => actions);
+const channelActions = vi.hoisted(() => ({ connectWebChat: vi.fn() }));
+vi.mock('@/features/channels/actions', () => channelActions);
+// The existing install (10 / 00g), tested where it lives: here, only that it is the one used.
+vi.mock('@/features/capabilities/ShopifyConnect', () => ({
+  ShopifyConnect: ({ mode }: { mode: string | null }) => (
+    <button type="button" data-testid="shopify-connect" data-mode={mode ?? 'unread'}>
+      Connect Shopify
+    </button>
+  ),
+}));
 
 import type { WebchatTab } from '@/api/contracts/webchat';
 
 import { brandMark } from '@/lib/brand-mark';
 
+import type { ShopifyData } from './load-website-widget';
 import { SAVE_AFTER_MS, WebchatSettings } from './WebchatSettings';
 
 const config: WebchatConfig = webchatSettingsSchema.parse({
   data: {
-    displayName: 'Site',
+    displayName: '',
     appearance: {
       primaryColor: '#C96A4B',
       logoUrl: null,
@@ -40,25 +60,71 @@ const config: WebchatConfig = webchatSettingsSchema.parse({
   },
 }).data;
 
-const show = (tab: WebchatTab, live = false) =>
+const SNIPPET = '<script>window.__chatcenter = { widgetId: "widget_1" };</script>';
+
+const install = (over: Record<string, unknown> = {}): WidgetInstall =>
+  widgetInstallSchema.parse({
+    data: {
+      code: {
+        widgetId: 'widget_1',
+        snippet: SNIPPET,
+        status: 'not_seen',
+        firstSeenAt: null,
+        lastSeenAt: null,
+        lastHost: null,
+      },
+      shopify: [],
+      woocommerce: { status: 'use_code' },
+      ...over,
+    },
+  }).data;
+
+const shop = (over: Record<string, unknown> = {}) => ({
+  channelId: 'sc1',
+  shopDomain: 'lumiere.myshopify.com',
+  status: 'active',
+  embedLive: true,
+  lastHeartbeatAt: null,
+  themeEditorUrl: 'https://admin.shopify.com/store/lumiere/themes/current/editor',
+  ...over,
+});
+
+const show = (
+  tab: WebchatTab,
+  {
+    read = install(),
+    data = 'ok',
+    assigned = null,
+  }: {
+    read?: WidgetInstall | null;
+    data?: ShopifyData | null;
+    assigned?: WebsiteWidget['assignedEmployee'];
+  } = {},
+) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ channels: channelsMessages }}>
       <WebchatSettings
-        id="wc1"
         initial={config}
-        widget={{ widgetId: 'widget_1', live, name: 'avivco.il' }}
+        assigned={assigned}
+        install={read}
+        shopifyData={data}
+        shopifyAvailability={{ mode: 'listing', helpUrl: null }}
         business="Aviv & Co."
         tab={tab}
       />
     </NextIntlClientProvider>,
   );
 
+const sentAt = (i = 0) => actions.saveWebsiteWidget.mock.calls[i]?.[0] as WidgetSettings;
+
 beforeEach(() => {
   vi.useFakeTimers();
-  actions.saveWebchat.mockReset();
-  actions.saveWebchat.mockImplementation((_id: string, next: WebchatConfig) =>
-    Promise.resolve(next),
+  actions.saveWebsiteWidget.mockReset();
+  actions.saveWebsiteWidget.mockImplementation((settings: WidgetSettings) =>
+    Promise.resolve({ ok: true, settings }),
   );
+  channelActions.connectWebChat.mockReset();
+  router.refresh.mockReset();
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -70,39 +136,49 @@ const pause = () =>
   });
 
 describe('★★ no Save button: a change is saved after a pause, the last one winning', () => {
-  it('two quick changes are one save, of the last; the preview shows it at once', async () => {
+  it('two quick changes are one save, of the last, to the one widget; the preview shows it at once', async () => {
     show('appearance');
     fireEvent.click(screen.getByTestId('webchat-swatch-4F7A2E'));
     fireEvent.click(screen.getByTestId('webchat-position-left'));
     expect(screen.getByTestId('webchat-preview-launcher')).toHaveStyle({
       backgroundColor: '#4F7A2E',
     });
-    expect(actions.saveWebchat).not.toHaveBeenCalled();
+    expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
     await pause();
-    expect(actions.saveWebchat).toHaveBeenCalledTimes(1);
-    const [id, sent] = actions.saveWebchat.mock.calls[0] as [string, WebchatConfig];
-    expect(id).toBe('wc1');
-    expect(sent.appearance.primaryColor).toBe('#4F7A2E');
-    expect(sent.ux.launcher.position).toBe('left');
+    expect(actions.saveWebsiteWidget).toHaveBeenCalledTimes(1);
+    expect(sentAt().appearance.primaryColor).toBe('#4F7A2E');
+    expect(sentAt().ux.launcher.position).toBe('left');
+    // The account's name is not a widget setting: never sent.
+    expect(sentAt()).not.toHaveProperty('displayName');
     expect(screen.getByTestId('webchat-saving')).toHaveTextContent('Saved');
   });
 
   it('a failed save says so - never "Saved"', async () => {
-    actions.saveWebchat.mockResolvedValue(null);
+    actions.saveWebsiteWidget.mockResolvedValue({ ok: false, reason: 'failed' });
     show('behaviour');
     fireEvent.click(screen.getByTestId('webchat-powered-switch'));
     await pause();
     expect(screen.getByTestId('webchat-saving')).toHaveTextContent('Not saved');
+    expect(screen.getByTestId('webchat-saving')).not.toHaveTextContent(/^Saved$/);
+  });
+
+  it('★ installed nowhere yet (409 WIDGET_NOT_CREATED): says to get the code first, not "try again"', async () => {
+    actions.saveWebsiteWidget.mockResolvedValue({ ok: false, reason: 'nowhere' });
+    show('behaviour', { read: install({ code: null }) });
+    fireEvent.click(screen.getByTestId('webchat-powered-switch'));
+    await pause();
+    expect(screen.getByTestId('webchat-saving')).toHaveTextContent('Get the code under Install');
+    expect(screen.getByTestId('webchat-saving')).not.toHaveTextContent('Change it again');
   });
 
   it('a half-typed colour is never saved; a whole one is', async () => {
     show('appearance');
     fireEvent.change(screen.getByTestId('webchat-hex'), { target: { value: '#12' } });
     await pause();
-    expect(actions.saveWebchat).not.toHaveBeenCalled();
+    expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
     fireEvent.change(screen.getByTestId('webchat-hex'), { target: { value: '#123456' } });
     await pause();
-    expect(actions.saveWebchat.mock.calls[0]?.[1].appearance.primaryColor).toBe('#123456');
+    expect(sentAt().appearance.primaryColor).toBe('#123456');
   });
 
   it('an image address is saved only when it is https', async () => {
@@ -112,12 +188,11 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
     fireEvent.change(field, { target: { value: 'http://x.co/a.png' } });
     fireEvent.blur(field);
     await pause();
-    expect(actions.saveWebchat).not.toHaveBeenCalled();
+    expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
     fireEvent.change(field, { target: { value: 'https://x.co/a.png' } });
     fireEvent.blur(field);
     await pause();
-    const sent = actions.saveWebchat.mock.calls[0]?.[1] as WebchatConfig;
-    expect(bodyOfConfig(sent).ux.hero).toEqual({
+    expect(bodyOfWidget(sentAt()).ux.hero).toEqual({
       mediaType: 'image',
       mediaUrl: 'https://x.co/a.png',
     });
@@ -130,26 +205,40 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
     });
     expect(screen.getByTestId('webchat-preview-questions')).toHaveTextContent('Can I exchange?');
     await pause();
-    const sent = actions.saveWebchat.mock.calls[0]?.[1] as WebchatConfig;
-    expect(bodyOfConfig(sent).ux.welcome.suggestedQuestions).toEqual([
+    expect(bodyOfWidget(sentAt()).ux.welcome.suggestedQuestions).toEqual([
       'Where is my order?',
       'Can I exchange?',
     ]);
   });
+
+  it('★ the body is the web chat body without the account name', () => {
+    const { displayName: _name, ...settings } = config;
+    const { displayName: _sent, ...expected } = bodyOfConfig(config);
+    expect(bodyOfWidget(settings)).toEqual(expected);
+    expect(bodyOfWidget(settings)).not.toHaveProperty('displayName');
+  });
 });
 
-describe('★ what cannot be stored yet is drawn, off, and says why', () => {
-  it('the assigned employee: a status, not radios - with the reason', () => {
-    show('conversation');
-    expect(screen.getByTestId('webchat-employee-why')).toHaveTextContent(
-      "Choosing who answers the web chat isn't available here yet",
-    );
-    expect(screen.getByTestId('webchat-employee-why')).toHaveTextContent('Not available yet');
-    expect(screen.getByTestId('webchat-employee-why')).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.queryByRole('radio', { name: 'Shira' })).toBeNull();
+describe("★★ who answers is the playbook's - read here, never chosen", () => {
+  it('names the employee the playbook routes the website to, and where that is decided', () => {
+    show('conversation', { assigned: { id: 'a1', name: 'Maya' } });
+    expect(screen.getByTestId('webchat-employee-who')).toHaveTextContent('Maya');
+    const where = screen.getByTestId('webchat-employee-where');
+    expect(where).toHaveTextContent('Studio · Automations');
+    expect(where.querySelector('a')).toHaveAttribute('href', '/studio/automations');
+    expect(screen.getByTestId('webchat-employee').querySelector('button, input')).toBeNull();
   });
 
-  it('WhatsApp, products, cart and deals: statuses with a reason each - no switch to press', () => {
+  it('routes to no one employee: says so, never a name', () => {
+    show('conversation');
+    expect(screen.getByTestId('webchat-employee-who')).toHaveTextContent(
+      "The playbook doesn't send website conversations to one employee",
+    );
+  });
+});
+
+describe('★★ products and cart are on by WHERE it runs - a Shopify shop whose catalogue answers', () => {
+  it('no shop: products, cart and deals are statuses with a reason, no switch', () => {
     show('behaviour');
     for (const k of ['whatsapp', 'products', 'cart', 'deals']) {
       expect(screen.queryByTestId(`webchat-${k}-switch`)).toBeNull();
@@ -157,32 +246,171 @@ describe('★ what cannot be stored yet is drawn, off, and says why', () => {
         'aria-disabled',
         'true',
       );
-      expect(screen.getByTestId(`webchat-${k}`)).toHaveTextContent('Not available yet');
     }
+    expect(screen.getByTestId('webchat-products')).toHaveTextContent(
+      'it needs the widget in a Shopify store with stock and orders connected',
+    );
     expect(screen.getByTestId('webchat-powered-switch')).toBeEnabled();
   });
 
-  it('Shopify and WooCommerce: statuses, not buttons, and say to use the line of code', () => {
-    show('install');
-    expect(screen.getByTestId('webchat-shopify').querySelector('button')).toBeNull();
-    expect(screen.getByTestId('webchat-shopify-action')).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByTestId('webchat-woo-action')).toHaveTextContent('Not available yet');
+  it('★ an active shop whose catalogue answers: "On in your Shopify store", and not from the code', () => {
+    show('behaviour', { read: install({ shopify: [shop()] }) });
+    for (const k of ['products', 'cart']) {
+      expect(screen.getByTestId(`webchat-${k}-on`)).toHaveTextContent('On in your Shopify store');
+      expect(screen.getByTestId(`webchat-${k}`)).toHaveTextContent(
+        'Not on sites that use the code',
+      );
+      expect(screen.queryByTestId(`webchat-${k}-switch`)).toBeNull();
+    }
+    // Deals have no source anywhere.
+    expect(screen.getByTestId('webchat-deals-unavailable')).toBeInTheDocument();
+  });
+
+  it('⚠ dev: the shop runs the chat but the integration is failing - unavailable, never "On"', () => {
+    show('behaviour', { read: install({ shopify: [shop()] }), data: 'failing' });
+    expect(screen.queryByTestId('webchat-products-on')).toBeNull();
+    expect(screen.getByTestId('webchat-products-unavailable')).toBeInTheDocument();
+  });
+
+  it('a shop the app was removed from does not turn them on', () => {
+    show('behaviour', { read: install({ shopify: [shop({ status: 'uninstalled' })] }) });
+    expect(screen.queryByTestId('webchat-products-on')).toBeNull();
   });
 });
 
-describe('★ install', () => {
-  it('the snippet carries THIS widget; Copy copies exactly it', async () => {
+describe('★★ install: Shopify by the existing install, WooCommerce coming, any site by the code', () => {
+  it('no shop: "Connect Shopify" is the existing install, with its availability', () => {
+    show('install');
+    expect(screen.getByTestId('webchat-shopify')).toContainElement(
+      screen.getByTestId('shopify-connect'),
+    );
+    expect(screen.getByTestId('shopify-connect')).toHaveAttribute('data-mode', 'listing');
+  });
+
+  it('WooCommerce: Coming soon, with why - a status, not a button', () => {
+    show('install');
+    const woo = screen.getByTestId('webchat-woo-action');
+    expect(woo).toHaveAttribute('aria-disabled', 'true');
+    expect(woo).toHaveTextContent('Coming soon');
+    expect(screen.getByTestId('webchat-woo')).toHaveTextContent(
+      'There is no WooCommerce plugin yet',
+    );
+  });
+
+  it("the snippet is the route's, verbatim; Copy copies exactly it", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
     show('install');
-    const code = screen.getByTestId('webchat-snippet-code').textContent ?? '';
-    expect(code).toContain('widgetId: "widget_1"');
+    expect(screen.getByTestId('webchat-snippet-code').textContent).toBe(SNIPPET);
     await act(async () => {
       fireEvent.click(screen.getByTestId('webchat-copy'));
     });
-    expect(writeText).toHaveBeenCalledWith(code);
+    expect(writeText).toHaveBeenCalledWith(SNIPPET);
   });
 
+  it('★ no code yet: "Get the code" makes it by the web chat create, then reads again', async () => {
+    channelActions.connectWebChat.mockResolvedValue({ ok: true, data: {} });
+    show('install', { read: install({ code: null }) });
+    expect(screen.queryByTestId('webchat-snippet-code')).toBeNull();
+    expect(screen.queryByTestId('webchat-copy')).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('webchat-get-code'));
+    });
+    expect(channelActions.connectWebChat).toHaveBeenCalledTimes(1);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('the plan has no room: said, and nothing refreshed', async () => {
+    channelActions.connectWebChat.mockResolvedValue({ ok: false, reason: 'limit' });
+    show('install', { read: install({ code: null }) });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('webchat-get-code'));
+    });
+    expect(screen.getByTestId('webchat-get-code-problem')).toHaveTextContent(
+      'Your plan has no room for another channel',
+    );
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it('the installs could not be read: said, never an empty Install', () => {
+    show('install', { read: null });
+    expect(screen.getByTestId('webchat-install-unread')).toHaveTextContent(
+      "Couldn't read where the widget is installed",
+    );
+    expect(screen.queryByTestId('webchat-woo')).toBeNull();
+    // And no status in the header: unknown is not "Not live yet".
+    expect(screen.queryByTestId('webchat-status')).toBeNull();
+    expect(screen.queryByTestId('webchat-go-live')).toBeNull();
+  });
+});
+
+describe('★★ a shop says which Shopify it means: the chat in the theme, then stock and orders', () => {
+  it('active and loading, catalogue connected: Active, and connected to stock and orders', () => {
+    show('install', { read: install({ shopify: [shop()] }) });
+    const row = screen.getByTestId('webchat-shop-sc1');
+    expect(row).toHaveTextContent(
+      'lumiere.myshopify.com · Installed, the chat shows in your theme',
+    );
+    expect(screen.getByTestId('webchat-shop-status')).toHaveTextContent(/^Active$/);
+    expect(screen.getByTestId('webchat-shop-data')).toHaveTextContent(
+      'Connected to stock and orders',
+    );
+    expect(screen.queryByTestId('shopify-connect')).toBeNull();
+  });
+
+  it('★★ dev: the chat active, the integration failing - says it is failing, never "connected"', () => {
+    show('install', { read: install({ shopify: [shop()] }), data: 'failing' });
+    const data = screen.getByTestId('webchat-shop-data');
+    expect(data).toHaveTextContent("Stock and orders aren't connected: the connection is failing");
+    expect(data).not.toHaveTextContent('Connected to stock and orders');
+    expect(data.querySelector('a')).toHaveAttribute('href', '/studio/capabilities');
+  });
+
+  it('not connected / unread: each said as itself', () => {
+    const { unmount } = show('install', { read: install({ shopify: [shop()] }), data: 'none' });
+    expect(screen.getByTestId('webchat-shop-data')).toHaveTextContent(
+      "Stock and orders aren't connected. Connect them",
+    );
+    unmount();
+    show('install', { read: install({ shopify: [shop()] }), data: null });
+    expect(screen.getByTestId('webchat-shop-data')).toHaveTextContent(
+      "Couldn't check the stock and orders connection",
+    );
+  });
+
+  it('installed but the theme has not loaded it this week: Not showing, with the theme editor', () => {
+    show('install', { read: install({ shopify: [shop({ embedLive: false })] }) });
+    expect(screen.getByTestId('webchat-shop-status')).toHaveTextContent('Not showing');
+    expect(screen.getByTestId('webchat-shop-theme')).toHaveAttribute(
+      'href',
+      'https://admin.shopify.com/store/lumiere/themes/current/editor',
+    );
+  });
+
+  it('switched off in the theme: Off, with the theme editor, and no stock line', () => {
+    show('install', { read: install({ shopify: [shop({ status: 'not_enabled' })] }) });
+    expect(screen.getByTestId('webchat-shop-status')).toHaveTextContent(/^Off$/);
+    expect(screen.getByTestId('webchat-shop-theme')).toBeInTheDocument();
+    expect(screen.queryByTestId('webchat-shop-data')).toBeNull();
+  });
+
+  it('★ the app was removed: said, and the way back is the install, not a chip', () => {
+    show('install', { read: install({ shopify: [shop({ status: 'uninstalled' })] }) });
+    expect(screen.getByTestId('webchat-shop-sc1')).toHaveTextContent(
+      'The GOTCHA app was removed from this store',
+    );
+    expect(screen.queryByTestId('webchat-shop-status')).toBeNull();
+    expect(screen.getByTestId('webchat-shop-sc1')).toContainElement(
+      screen.getByTestId('shopify-connect'),
+    );
+  });
+
+  it('an unknown shop status fails the read - never guessed into "Active"', () => {
+    expect(() => install({ shopify: [shop({ status: 'paused' })] })).toThrow();
+  });
+});
+
+describe("★ live is the installs' to say: the code seen on a page, or a shop whose theme loads it", () => {
   it('not live: Go live opens Install, and the strip waits for the first visit', () => {
     show('install');
     expect(screen.getByTestId('webchat-status')).toHaveTextContent('Not live yet');
@@ -192,10 +420,30 @@ describe('★ install', () => {
     );
   });
 
-  it('live: no Go live, and the chip says Live', () => {
-    show('install', true);
+  it('the code seen on a page: Live, where it was last seen, and no Go live', () => {
+    show('install', {
+      read: install({
+        code: {
+          widgetId: 'widget_1',
+          snippet: SNIPPET,
+          status: 'live',
+          lastHost: 'avivco.il',
+        },
+      }),
+    });
     expect(screen.getByTestId('webchat-status')).toHaveTextContent('Live');
     expect(screen.queryByTestId('webchat-go-live')).toBeNull();
+    expect(screen.getByTestId('webchat-install-status')).toHaveTextContent(
+      'Live. Last seen on avivco.il',
+    );
+  });
+
+  it('a shop whose theme loads it is live; one that is only installed is not', () => {
+    const { unmount } = show('appearance', { read: install({ code: null, shopify: [shop()] }) });
+    expect(screen.getByTestId('webchat-status')).toHaveTextContent(/^Live$/);
+    unmount();
+    show('appearance', { read: install({ code: null, shopify: [shop({ embedLive: false })] }) });
+    expect(screen.getByTestId('webchat-status')).toHaveTextContent('Not live yet');
   });
 });
 

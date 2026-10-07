@@ -529,6 +529,13 @@ export const channelEndpoints = {
   createWebChat: () => endpoint('/api/channels/webchat/create'),
   /** GET / PUT - the widget's config (13g-13j); a PUT merges into what is stored. */
   webchatSettings: (id: string) => endpoint('/api/channels/webchat/{id}/settings', { id }),
+  /**
+   * GET / PUT - the Website widget (website-widget-v1): one settings object
+   * for the workspace, a PUT written to every place it is installed.
+   */
+  websiteWidget: () => endpoint('/api/website-widget'),
+  /** Where it is installed: the code snippet, each Shopify shop, WooCommerce. */
+  websiteWidgetInstall: () => endpoint('/api/website-widget/install'),
   /** SMTP/IMAP credentials. Stores real secrets; never exercised by a test. */
   connectEmail: () => endpoint('/api/channels/connect/email'),
   disconnect: (id: string) => endpoint('/api/channels/{id}/disconnect', { id }),

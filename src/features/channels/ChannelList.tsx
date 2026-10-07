@@ -11,9 +11,20 @@ import {
 import styles from './Channels.module.css';
 import { ChannelTile } from './ChannelTile';
 import { ConnectableRow } from './ConnectableRow';
-import { WebChatEmbed } from './WebChatEmbed';
-import { buildChannelRows, isTroubled, type ConnectedRow } from './rows';
+import {
+  buildChannelRows,
+  isTroubled,
+  type ChannelRow,
+  type ConnectedRow,
+  type WidgetRow,
+} from './rows';
 import { channelName } from '@/api/contracts/inbox';
+import {
+  WIDGET_CHANNELS,
+  WIDGET_PATH,
+  isLive,
+  type WidgetInstall,
+} from '@/api/contracts/website-widget';
 import { Link } from '@/i18n/navigation';
 
 /**
@@ -35,7 +46,7 @@ export async function ChannelList({
   voiceOffered,
   windowDays,
   providers = null,
-  embed = null,
+  install = null,
 }: {
   readonly channels: readonly Channel[];
   readonly voice: readonly VoiceChannel[];
@@ -43,8 +54,8 @@ export async function ChannelList({
   readonly windowDays: number;
   /** Which OAuth providers are set up (`/api/channels/config`); `null` when unread. */
   readonly providers?: Readonly<Record<string, boolean>> | null;
-  /** The web chat whose embed code is open (`?embed=<id>`). */
-  readonly embed?: string | null;
+  /** Where the Website widget is installed; `null` when unread. */
+  readonly install?: WidgetInstall | null;
 }) {
   const t = await getTranslations('channels');
   const locale = await getLocale();
@@ -80,9 +91,14 @@ export async function ChannelList({
     }
     return parts.join(' · ');
   };
-  const troubledRows = rows.filter(
-    (row): row is ConnectedRow => row.kind === 'connected' && isTroubled(row),
-  );
+  const troubledRows = rows
+    .flatMap((row): readonly ChannelRow[] => (row.kind === 'widget' ? row.parts : [row]))
+    .filter((row): row is ConnectedRow => row.kind === 'connected' && isTroubled(row));
+  /** A widget part is named as the widget: there is no "Shopify live chat" any more. */
+  const nameOf = (channel: ChannelType) =>
+    (WIDGET_CHANNELS as readonly ChannelType[]).includes(channel)
+      ? t('widgetRow.name')
+      : (channelName(channel, t) ?? t('name.other'));
 
   return (
     <>
@@ -96,9 +112,7 @@ export async function ChannelList({
           <AlertTriangle className={styles.bannerIcon} size={18} aria-hidden="true" />
           <span className={styles.bannerText}>
             <span className={styles.bannerTitle}>
-              {t('banner.title', {
-                channel: channelName(troubledRows[0].channel, t) ?? t('name.other'),
-              })}
+              {t('banner.title', { channel: nameOf(troubledRows[0].channel) })}
             </span>
             <span className={styles.bannerBody}>
               {troubledRows[0].error ?? t(`status.${troubledRows[0].status}` as 'status.CONNECTED')}
@@ -113,6 +127,18 @@ export async function ChannelList({
       ) : null}
       <ul className={styles.list} data-testid="channel-list">
         {rows.map((row) => {
+          if (row.kind === 'widget') {
+            return (
+              <WidgetListRow
+                key="widget"
+                row={row}
+                install={install}
+                t={t}
+                number={number}
+                windowDays={windowDays}
+              />
+            );
+          }
           if (row.kind === 'connectable') {
             // The one interactive row, and the only client component here.
             return (
@@ -128,11 +154,7 @@ export async function ChannelList({
           return (
             <li
               key={row.id}
-              className={
-                row.channel === 'WEBCHAT' && embed === row.id
-                  ? `${styles.row} ${styles.rowWithEmbed}`
-                  : styles.row
-              }
+              className={styles.row}
               data-testid={`channel-${row.id}`}
               data-kind="connected"
               data-troubled={troubled ? 'yes' : 'no'}
@@ -167,16 +189,7 @@ export async function ChannelList({
               </span>
 
               {/* 02's "Settings" on the row: WhatsApp's numbers, health and repairs (13b). */}
-              {row.channel === 'WEBCHAT' ? (
-                // 13g-13j: the widget's own settings - appearance to install (the code is its last tab).
-                <Link
-                  href={`/settings/channels/webchat/${row.id}`}
-                  className={styles.settingsLink}
-                  data-testid={`channel-settings-${row.id}`}
-                >
-                  {t('rowSettings')}
-                </Link>
-              ) : row.channel === 'WHATSAPP' ? (
+              {row.channel === 'WHATSAPP' ? (
                 <Link
                   href={{ pathname: '/settings/channels', query: { panel: 'whatsapp' } }}
                   className={styles.settingsLink}
@@ -195,16 +208,99 @@ export async function ChannelList({
                   {t('rowSettings')}
                 </span>
               )}
-              {row.channel === 'WEBCHAT' && row.widgetId && embed === row.id ? (
-                <div className={styles.embedRow}>
-                  <WebChatEmbed widgetId={row.widgetId} />
-                </div>
-              ) : null}
             </li>
           );
         })}
       </ul>
     </>
+  );
+}
+
+/**
+ * The Website widget's one row: where it is installed, how much it carries,
+ * and whether it is live - the installs' to say. Unread installs fall back to
+ * the accounts' own status; a troubled account is "Needs attention" in its
+ * platform's words, as any row.
+ */
+function WidgetListRow({
+  row,
+  install,
+  t,
+  number,
+  windowDays,
+}: {
+  readonly row: WidgetRow;
+  readonly install: WidgetInstall | null;
+  readonly t: Awaited<ReturnType<typeof getTranslations<'channels'>>>;
+  readonly number: Intl.NumberFormat;
+  readonly windowDays: number;
+}) {
+  const troubled = row.parts.find(isTroubled) ?? null;
+  const sum = (pick: (part: ConnectedRow) => number | null) => {
+    const known = row.parts.map(pick).filter((n): n is number => n != null);
+    return known.length > 0 ? known.reduce((a, b) => a + b, 0) : null;
+  };
+  const open = sum((part) => part.openConversations);
+  const started = sum((part) => part.windowConversations);
+  // Where it runs: each shop, then the site the code was last seen on.
+  const places = [
+    ...row.parts.filter((p) => p.channel === 'SHOPIFY_LIVE_CHAT').map((p) => p.identity),
+    install?.code?.lastHost ?? null,
+  ].filter((place): place is string => Boolean(place));
+  const detail =
+    row.parts.length === 0
+      ? t('widgetRow.nowhere')
+      : [
+          ...places,
+          ...(open != null ? [t('openNow', { count: open })] : []),
+          ...(started != null
+            ? [t('inWindow', { count: number.format(started), days: windowDays })]
+            : []),
+        ].join(' · ');
+  const live = row.parts.length === 0 ? false : install ? isLive(install) : null;
+  return (
+    <li
+      className={styles.row}
+      data-testid="channel-widget"
+      data-kind="widget"
+      data-troubled={troubled ? 'yes' : 'no'}
+    >
+      <ChannelTile channel="WEBCHAT" />
+      <div className={styles.identity}>
+        <span className={styles.name}>{t('widgetRow.name')}</span>
+        <span className={styles.detail} data-testid="channel-detail-widget">
+          {detail}
+        </span>
+      </div>
+      <span
+        className={[
+          styles.status,
+          // Not live yet is a step to take, not a fault: neither green nor alarmed.
+          troubled ? styles.statusTroubled : live === false ? '' : styles.statusGood,
+        ]
+          .join(' ')
+          .trim()}
+        data-testid="channel-status-widget"
+        title={troubled?.error ?? undefined}
+      >
+        {troubled
+          ? t('chipTrouble')
+          : live === null
+            ? t(
+                `status.${row.parts.some((p) => p.status === 'CONNECTED') ? 'CONNECTED' : (row.parts[0]?.status ?? 'PENDING')}` as 'status.CONNECTED',
+              )
+            : live
+              ? t('webchat.live')
+              : t('webchat.notLive')}
+      </span>
+      <Link
+        href={WIDGET_PATH}
+        className={styles.settingsLink}
+        data-testid="channel-settings-widget"
+      >
+        {t('rowSettings')}
+      </Link>
+    </li>
   );
 }
 

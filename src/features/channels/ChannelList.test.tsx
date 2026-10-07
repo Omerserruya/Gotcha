@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { channelSchema } from '@/api/contracts/channels';
+import { widgetInstallSchema } from '@/api/contracts/website-widget';
 import channels from '@/i18n/messages/en/channels.json';
 
 vi.mock('next-intl/server', () => ({
@@ -30,11 +31,6 @@ vi.mock('@/i18n/navigation', () => ({
     >
       {children}
     </a>
-  ),
-}));
-vi.mock('./WebChatEmbed', () => ({
-  WebChatEmbed: ({ widgetId }: { widgetId: string }) => (
-    <pre data-testid="embed-open">{widgetId}</pre>
   ),
 }));
 const rowProps = vi.hoisted(() => [] as { channel: string; notSetUp?: boolean }[]);
@@ -120,7 +116,7 @@ describe('★ 13 corrections (measurement of 9b8dd9f)', () => {
         channels: [
           channelSchema.parse({
             id: 's1',
-            channel: 'WEBCHAT',
+            channel: 'SHOPIFY_LIVE_CHAT',
             connectionStatus: 'CONNECTED',
             lastError: 'Shopify Chat app was uninstalled from the store.',
           }),
@@ -130,11 +126,19 @@ describe('★ 13 corrections (measurement of 9b8dd9f)', () => {
         windowDays: 30,
       }),
     );
-    const chip = screen.getByTestId('channel-status-s1');
+    // dev's Shopify chat: CONNECTED and uninstalled - on the widget's one row now.
+    const chip = screen.getByTestId('channel-status-widget');
     expect(chip).toHaveTextContent('Needs attention');
     expect(chip).toHaveAttribute('title', 'Shopify Chat app was uninstalled from the store.');
     // The row stays a row: the banner tells it, not a second red line.
-    expect(screen.getByTestId('channel-s1')).not.toHaveTextContent(/uninstalled/);
+    expect(screen.getByTestId('channel-widget')).not.toHaveTextContent(/uninstalled/);
+    // And the banner names the product, not a channel that is gone from the list.
+    expect(screen.getByTestId('channel-banner')).toHaveTextContent('Website widget');
+    expect(screen.getByTestId('channel-banner')).not.toHaveTextContent('Shopify live chat');
+    // Troubled heads the list.
+    expect(screen.getByTestId('channel-list').firstElementChild).toBe(
+      screen.getByTestId('channel-widget'),
+    );
   });
 
   it('every row has its tile, so the names line up', async () => {
@@ -168,42 +172,124 @@ describe('★ a provider with no app on the server is said up front, not after a
     expect(of('OUTLOOK')).toBe(true);
     expect(of('GMAIL')).toBe(false);
     expect(of('SLACK')).toBe(false); // not in the map: unknown, so live
-    expect(of('WEBCHAT')).toBe(false); // no OAuth at all
+    expect(of('EMAIL')).toBe(false); // no OAuth at all
     rowProps.length = 0;
     render(await ChannelList({ channels: [], voice: [], voiceOffered: false, windowDays: 30 }));
     expect(rowProps.every((p) => p.notSetUp === false)).toBe(true);
   });
 });
 
-describe('★★ web chat’s Settings is its own page (13g-13j) - reachable any time after Create', () => {
+describe('★★ the Website widget is ONE row: the web chat and every Shopify chat (Omer, 2026-10-07)', () => {
   const webchat = () =>
     channelSchema.parse({
       id: 'wc1',
       channel: 'WEBCHAT',
       connectionStatus: 'PENDING',
       externalId: 'widget_64aba7ec',
+      _count: { conversations: 2 },
+      conversationsInWindow: 10,
     });
-
-  it("Settings opens the widget's settings; an old ?embed= link still shows the code on the row", async () => {
-    const one = render(
-      await ChannelList({ channels: [webchat()], voice: [], voiceOffered: false, windowDays: 30 }),
-    );
-    expect(screen.getByTestId('channel-settings-wc1')).toHaveAttribute(
-      'href',
-      '/settings/channels/webchat/wc1',
-    );
-    expect(screen.queryByTestId('embed-open')).toBeNull();
-    one.unmount();
+  const shopChat = () =>
+    channelSchema.parse({
+      id: 'sc1',
+      channel: 'SHOPIFY_LIVE_CHAT',
+      connectionStatus: 'CONNECTED',
+      displayName: 'lumiere.myshopify.com',
+      _count: { conversations: 3 },
+      conversationsInWindow: 30,
+    });
+  const install = (over: Record<string, unknown> = {}) =>
+    widgetInstallSchema.parse({
+      data: {
+        code: {
+          widgetId: 'widget_64aba7ec',
+          snippet: '<script></script>',
+          status: 'not_seen',
+          lastHost: null,
+        },
+        shopify: [],
+        woocommerce: { status: 'use_code' },
+        ...over,
+      },
+    }).data;
+  const list = async (
+    rows: ReturnType<typeof webchat>[],
+    read: ReturnType<typeof install> | null,
+  ) =>
     render(
       await ChannelList({
-        channels: [webchat()],
+        channels: rows,
         voice: [],
         voiceOffered: false,
         windowDays: 30,
-        embed: 'wc1',
+        install: read,
       }),
     );
-    expect(screen.getByTestId('embed-open')).toHaveTextContent('widget_64aba7ec');
-    expect(screen.getByTestId('channel-wc1').className).toMatch(/rowWithEmbed/);
+
+  it('★★ both accounts are one row, named once, its Settings the widget’s page', async () => {
+    await list([webchat(), shopChat()], install());
+    expect(screen.getAllByTestId('channel-widget')).toHaveLength(1);
+    expect(screen.queryByTestId('channel-wc1')).toBeNull();
+    expect(screen.queryByTestId('channel-sc1')).toBeNull();
+    expect(screen.getByTestId('channel-widget')).toHaveTextContent('Website widget');
+    expect(screen.getByTestId('channel-widget')).not.toHaveTextContent(
+      /Web chat|Shopify live chat/,
+    );
+    expect(screen.getByTestId('channel-settings-widget')).toHaveAttribute(
+      'href',
+      '/settings/channels/website',
+    );
+  });
+
+  it('★ the line: where it runs, then the two measures summed over its places', async () => {
+    await list(
+      [webchat(), shopChat()],
+      install({
+        code: { widgetId: 'w', snippet: 's', status: 'live', lastHost: 'avivco.il' },
+      }),
+    );
+    expect(screen.getByTestId('channel-detail-widget')).toHaveTextContent(
+      'lumiere.myshopify.com · avivco.il · 5 open now · 40 started in the last 30 days',
+    );
+    // The widget id is not a place.
+    expect(screen.getByTestId('channel-detail-widget')).not.toHaveTextContent('widget_');
+  });
+
+  it('★★ live is the installs’ to say: the code seen, or a shop whose theme loads it', async () => {
+    const one = await list([webchat()], install());
+    expect(screen.getByTestId('channel-status-widget')).toHaveTextContent('Not live yet');
+    one.unmount();
+    await list(
+      [shopChat()],
+      install({
+        code: null,
+        shopify: [
+          {
+            channelId: 'sc1',
+            shopDomain: 'lumiere.myshopify.com',
+            status: 'active',
+            embedLive: true,
+          },
+        ],
+      }),
+    );
+    expect(screen.getByTestId('channel-status-widget')).toHaveTextContent(/^Live$/);
+  });
+
+  it('⚠ installs unread: the accounts’ own status, never a guess of "Live"', async () => {
+    await list([webchat(), shopChat()], null);
+    expect(screen.getByTestId('channel-status-widget')).toHaveTextContent('Connected');
+    expect(screen.getByTestId('channel-status-widget')).not.toHaveTextContent(/^Live$/);
+  });
+
+  it('★ installed nowhere: still the row, saying so - and no "Connect web chat" beside it', async () => {
+    rowProps.length = 0;
+    await list([], null);
+    expect(screen.getByTestId('channel-detail-widget')).toHaveTextContent(
+      'Not installed anywhere yet',
+    );
+    expect(screen.getByTestId('channel-status-widget')).toHaveTextContent('Not live yet');
+    expect(rowProps.map((p) => p.channel)).not.toContain('WEBCHAT');
+    expect(rowProps.map((p) => p.channel)).not.toContain('SHOPIFY_LIVE_CHAT');
   });
 });

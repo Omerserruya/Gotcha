@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Channel } from '@/api/contracts/channels';
+import { channelSchema, type Channel } from '@/api/contracts/channels';
 
 import { buildChannelRows, isTroubled, type ConnectedRow } from './rows';
 
@@ -141,7 +141,31 @@ describe('buildChannelRows', () => {
     // Shopify is installed from Shopify, so a Connect button here would send
     // someone to the wrong place. (Voice IS connectable - see above.)
     expect(offered).not.toContain('SHOPIFY_LIVE_CHAT');
+    // Nor the web chat: the widget's row is always there, its code on Install.
+    expect(offered).not.toContain('WEBCHAT');
     expect(offered).toContain('WHATSAPP');
+  });
+
+  it('★★ the web chat and every Shopify chat are ONE widget row, present even with neither', () => {
+    const of = (type: string, id: string) =>
+      channelSchema.parse({ id, channel: type, connectionStatus: 'CONNECTED' });
+    const rows = buildChannelRows(
+      [of('WEBCHAT', 'wc1'), of('SHOPIFY_LIVE_CHAT', 'sc1'), of('SHOPIFY_LIVE_CHAT', 'sc2')],
+      [],
+      false,
+      'en',
+    );
+    const widgets = rows.filter((r) => r.kind === 'widget');
+    expect(widgets).toHaveLength(1);
+    expect(widgets[0]?.kind === 'widget' && widgets[0].parts.map((p) => p.id)).toEqual([
+      'wc1',
+      'sc1',
+      'sc2',
+    ]);
+    expect(connectedOnly(rows)).toHaveLength(0);
+    expect(buildChannelRows([], [], false, 'en').filter((r) => r.kind === 'widget')).toHaveLength(
+      1,
+    );
   });
 
   it('does not offer to connect something already connected', () => {

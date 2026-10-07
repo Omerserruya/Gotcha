@@ -22,7 +22,13 @@ import { PermissionsProvider } from '@/permissions/permissions-context';
 const ROOT = join(process.cwd(), 'src/app/[locale]/(app)');
 
 /** Pages that only redirect: nothing to draw while they do. */
-const REDIRECTS = new Set(['notifications', 'settings/people/roles/[userId]', 'foundation']);
+const REDIRECTS = new Set([
+  'notifications',
+  'settings/people/roles/[userId]',
+  'foundation',
+  // The web chat's old address: the one Website widget now.
+  'settings/channels/webchat/[id]',
+]);
 
 function pageDirs(dir: string): string[] {
   const out: string[] = [];

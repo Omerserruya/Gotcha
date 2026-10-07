@@ -1,6 +1,7 @@
 import { MessageCircle } from 'lucide-react';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 
+import { WIDGET_PATH } from '@/api/contracts/website-widget';
 import { numberCount } from '@/api/contracts/whatsapp-numbers';
 
 import { ChannelList } from '@/features/channels/ChannelList';
@@ -22,6 +23,8 @@ import { ConnectWhatsApp } from '@/features/channels/ConnectWhatsApp';
 import { channelLandingOf } from '@/features/channels/landing';
 import { WhatsAppNumbers } from '@/features/channels/WhatsAppNumbers';
 import { WhatsAppPanel } from '@/features/channels/WhatsAppPanel';
+import { loadWidgetInstall } from '@/features/webchat/load-website-widget';
+import { redirect } from '@/i18n/navigation';
 import { pageMetadata } from '@/shell/page-metadata';
 import { Drawer } from '@/shell/Drawer';
 import { SettingsSection } from '@/shell/SettingsSection';
@@ -52,24 +55,33 @@ export default async function Page({
     readonly platform?: string;
     readonly error?: string;
     readonly tab?: string;
-    /** The web chat whose embed code is open. */
+    /** The web chat's old embed link: its code is the widget's Install tab now. */
     readonly embed?: string;
   }>;
 } = {}) {
   const t = await getTranslations('channels');
   const tw = await getTranslations('channels.whatsapp');
   const params = (await searchParams) ?? {};
+  if (params.embed) {
+    redirect({
+      href: { pathname: WIDGET_PATH, query: { tab: 'install' } },
+      locale: await getLocale(),
+    });
+  }
   const landing = channelLandingOf(params);
   const panel = params.panel === 'whatsapp';
-  const [{ channels, voice, voiceOffered, windowDays }, whatsapp, config] = await Promise.all([
-    loadChannels(),
-    // 13b's reads only when its panel is open.
-    panel
-      ? Promise.all([loadWhatsAppNumbers(), loadHistoryImport(params.import)])
-      : Promise.resolve(null),
-    // 13c's launches and which providers are set up: one read, every view.
-    loadChannelsConfig(),
-  ]);
+  const [{ channels, voice, voiceOffered, windowDays }, whatsapp, config, install] =
+    await Promise.all([
+      loadChannels(),
+      // 13b's reads only when its panel is open.
+      panel
+        ? Promise.all([loadWhatsAppNumbers(), loadHistoryImport(params.import)])
+        : Promise.resolve(null),
+      // 13c's launches and which providers are set up: one read, every view.
+      loadChannelsConfig(),
+      // The Website widget's one row: live or not is where it is installed.
+      loadWidgetInstall(),
+    ]);
   const learn = whatsapp?.[1].status ?? null;
   const first = whatsapp?.[0]?.data[0] ?? null;
   // Dev's one number is unprofiled: its name is on that list, not on `data`.
@@ -108,7 +120,7 @@ export default async function Page({
           voiceOffered={voiceOffered}
           windowDays={windowDays}
           providers={config.providers}
-          embed={params.embed ?? null}
+          install={install}
         />
       ) : (
         <p>{t('unavailable')}</p>

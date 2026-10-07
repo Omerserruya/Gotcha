@@ -41,6 +41,7 @@ const { history } = vi.hoisted(() => ({
   },
 }));
 const reads = vi.hoisted(() => ({ templates: vi.fn(), exclusions: vi.fn(), events: vi.fn() }));
+vi.mock('@/features/webchat/load-website-widget', () => ({ loadWidgetInstall: async () => null }));
 vi.mock('@/features/outreach/load-templates', () => ({ loadTemplates: reads.templates }));
 vi.mock('@/features/channels/load-whatsapp', () => ({
   loadExclusions: reads.exclusions,
@@ -55,9 +56,15 @@ vi.mock('@/features/channels/load-whatsapp', () => ({
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: string) =>
     createTranslator({ locale: 'en', messages: { channels }, namespace: namespace as 'channels' }),
+  getLocale: async () => 'he',
 }));
 vi.mock('server-only', () => ({}));
-vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
+const navRedirect = vi.hoisted(() =>
+  vi.fn(() => {
+    throw new Error('NEXT_REDIRECT');
+  }),
+);
+vi.mock('@/i18n/navigation', () => ({ Link: 'a', redirect: navRedirect }));
 
 function find<P>(node: ReactNode, type: unknown): P | null {
   if (Array.isArray(node)) {
@@ -76,6 +83,19 @@ function find<P>(node: ReactNode, type: unknown): P | null {
   }
   return null;
 }
+
+describe('★ the web chat’s old ?embed= link: its code is the widget’s Install tab now', () => {
+  it('redirects there, in the locale it came in', async () => {
+    const { default: Page } = await import('./page');
+    await expect(Page({ searchParams: Promise.resolve({ embed: 'wc1' }) })).rejects.toThrow(
+      'NEXT_REDIRECT',
+    );
+    expect(navRedirect).toHaveBeenCalledWith({
+      href: { pathname: '/settings/channels/website', query: { tab: 'install' } },
+      locale: 'he',
+    });
+  });
+});
 
 describe('★★ 13b - the head counts what the card shows', () => {
   it('dev’s one unprofiled number: "one number", and the card gets that same list', async () => {
