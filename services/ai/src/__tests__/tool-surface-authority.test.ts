@@ -16,11 +16,21 @@ vi.mock("../../../../packages/shared/src/lib/prisma", () => ({
 
 import { buildAgentToolsForAIAgent, prisma } from "@chatcenter/shared";
 
+// An HTTP-template (endpoint-backed) catalog tool: the only kind this path
+// surfaces as `integration_<slug>`. Adapter-backed tools have no endpoint and
+// are published by their adapter under their own name instead.
 const ct = (slug: string, allowedModes: string[]) => ({
   description: null,
   usageRule: null,
   tenantTool: {
-    catalogTool: { name: slug, description: `${slug} does a thing`, slug, allowedModes, inputSchema: null },
+    catalogTool: {
+      name: slug,
+      description: `${slug} does a thing`,
+      slug,
+      allowedModes,
+      inputSchema: null,
+      endpoint: `https://api.example.com/${slug}`,
+    },
   },
 });
 

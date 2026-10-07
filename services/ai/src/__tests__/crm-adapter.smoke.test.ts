@@ -38,7 +38,10 @@ const mocks = vi.hoisted(() => {
 });
 const { prismaMock, executeAdapterToolMock, maybeRefreshZohoTokenMock } = mocks;
 
-vi.mock("@chatcenter/shared", () => ({
+vi.mock("@chatcenter/shared", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return {
+  ...actual,
   // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
   // mocks of this barrel must supply them or the read path throws instead of
   // returning "not configured". Default: nothing configured.
@@ -61,7 +64,16 @@ vi.mock("@chatcenter/shared", () => ({
   decryptCredentials: (x: any) => x,
   // SSRF guard is a no-op passthrough in tests (returns the parsed URL).
   assertPublicUrl: async (u: string) => new URL(u),
-}));
+  };
+});
+
+// Shared helpers reached through the real barrel use the library's own
+// prisma, not the barrel export above. Point that at the same double so no
+// path can reach a real database.
+vi.mock("../../../../packages/shared/src/lib/prisma", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return { ...actual, prisma: mocks.prismaMock };
+});
 
 vi.mock("../services/connectors/integration-framework", async () => ({
   executeAdapterTool: mocks.executeAdapterToolMock,
@@ -120,9 +132,21 @@ beforeEach(() => {
 
 // ─── Resolver ────────────────────────────────────────────
 
+/**
+ * The resolver asks two questions of tenantIntegration.findFirst: first "is
+ * Shopify connected?" (Shopify-as-CRM), then "which CRM is connected?". The
+ * double answers each by the slug it was asked about, so a CRM row cannot be
+ * mistaken for the Shopify answer. Here Shopify is never connected.
+ */
+function crmConnected(row: Record<string, unknown> | null) {
+  prismaMock.tenantIntegration.findFirst.mockImplementation(async (args: any) =>
+    args?.where?.integration?.slug === "shopify" ? null : row,
+  );
+}
+
 describe("getCrmAdapter resolver", () => {
   it("returns ZohoCRMAdapter when slug=zoho_crm is the connected integration", async () => {
-    prismaMock.tenantIntegration.findFirst.mockResolvedValueOnce({
+    crmConnected({
       id: "ti_z",
       integration: { slug: "zoho_crm" },
     });
@@ -132,7 +156,7 @@ describe("getCrmAdapter resolver", () => {
   });
 
   it("returns HubSpotCRMAdapter when slug=hubspot", async () => {
-    prismaMock.tenantIntegration.findFirst.mockResolvedValueOnce({
+    crmConnected({
       id: "ti_h",
       integration: { slug: "hubspot" },
     });
@@ -142,7 +166,7 @@ describe("getCrmAdapter resolver", () => {
   });
 
   it("returns SalesforceCRMAdapter when slug=salesforce", async () => {
-    prismaMock.tenantIntegration.findFirst.mockResolvedValueOnce({
+    crmConnected({
       id: "ti_s",
       integration: { slug: "salesforce" },
     });
@@ -152,7 +176,7 @@ describe("getCrmAdapter resolver", () => {
   });
 
   it("returns NoOpCRMAdapter when no integration is connected", async () => {
-    prismaMock.tenantIntegration.findFirst.mockResolvedValueOnce(null);
+    crmConnected(null);
     const adapter = await getCrmAdapter("t_nox");
     expect(adapter).toBeInstanceOf(NoOpCRMAdapter);
     const r = await adapter.findCustomer({ email: "x@y" });
@@ -161,12 +185,15 @@ describe("getCrmAdapter resolver", () => {
   });
 
   it("caches resolution across calls in the same window", async () => {
-    prismaMock.tenantIntegration.findFirst.mockResolvedValueOnce({
-      id: "ti_z2", integration: { slug: "zoho_crm" },
-    });
+    crmConnected({ id: "ti_z2", integration: { slug: "zoho_crm" } });
     await getCrmAdapter("tcache");
+    // One resolve = two lookups: Shopify-as-CRM, then the CRM itself.
+    expect(prismaMock.tenantIntegration.findFirst).toHaveBeenCalledTimes(2);
+    expect(prismaMock.tenant.findUnique).toHaveBeenCalledTimes(1);
     await getCrmAdapter("tcache");
-    expect(prismaMock.tenantIntegration.findFirst).toHaveBeenCalledTimes(1);
+    // A second resolve inside the window is served from cache: no new reads.
+    expect(prismaMock.tenantIntegration.findFirst).toHaveBeenCalledTimes(2);
+    expect(prismaMock.tenant.findUnique).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -330,9 +357,9 @@ describe("ZohoCRMAdapter (live tenant CRM)", () => {
     expect(noteBody).toContain("Duration: 5m 0s");
     expect(noteBody).toContain("Messages: 12");
     expect(noteBody).toContain("Discussed pricing.");
-    expect(noteBody).toContain("Sentiment: positive");
+    expect(noteBody).toContain("Sentiment: Positive");
     expect(noteBody).toContain("Qualification: warm");
-    expect(noteBody).toContain("- Send pricing PDF");
+    expect(noteBody).toContain("• Send pricing PDF");
     expect(noteBody).toContain("[gotcha_source_interaction_id=conv_abc v=1]");
   });
 
@@ -470,10 +497,10 @@ describe("renderInteractionBody", () => {
     expect(body).toContain("Duration: 7m 30s");
     expect(body).toContain("Messages: 8");
     expect(body).toContain("Caller asked about pricing.");
-    expect(body).toContain("Sentiment: neutral");
+    expect(body).toContain("Sentiment: Neutral");
     expect(body).toContain("Qualification: hot");
-    expect(body).toContain("- Send quote");
-    expect(body).toContain("- Schedule demo");
+    expect(body).toContain("• Send quote");
+    expect(body).toContain("• Schedule demo");
     expect(body).toContain("[gotcha_source_interaction_id=conv_x]");
   });
 });

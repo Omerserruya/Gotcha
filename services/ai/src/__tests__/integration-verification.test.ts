@@ -27,8 +27,8 @@ import "../services/connectors";
 // already plain (no encryption) so the framework's typeof-string branch is
 // skipped and we skip a key-derivation pass during testing.
 
-vi.mock("@chatcenter/shared", async () => {
-  const actual = await vi.importActual<any>("@chatcenter/shared");
+vi.mock("@chatcenter/shared", async (importOriginal) => {
+  const actual: any = await importOriginal();
   return {
     ...actual,
     prisma: {
@@ -39,6 +39,8 @@ vi.mock("@chatcenter/shared", async () => {
     },
     encryptCredentials: (x: any) => JSON.stringify(x),
     decryptCredentials: (x: any) => (typeof x === "string" ? JSON.parse(x) : x),
+    // The real SSRF guard resolves DNS (shop.example.com -> ENOTFOUND).
+    assertPublicUrl: async (u: string) => new URL(u),
   };
 });
 

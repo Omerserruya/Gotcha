@@ -191,8 +191,12 @@ describe("parseItems", () => {
   it("coerces a scope value written into category instead of dropping the item", async () => {
     const { parseItems } = await import("../services/historical-intelligence/knowledge-extraction.stage");
     // The model confuses the two enums because the prompt asks for both.
-    const out = parseItems([good({ category: "PROCESS" }), good({ category: "PRODUCT" })]);
-    expect(out).toHaveLength(2);
+    // Only scope values that share no meaningful word with any category are
+    // used here: "PRODUCT"/"PRODUCT_FACT" deliberately map to PRODUCT_AND_SPECS
+    // (see category-normalization.test.ts), so they cannot show the coercion.
+    const scopes = ["PROCESS", "POLICY", "HOW_WE_WORK", "STANDING_RULE", "ONE_OFF"];
+    const out = parseItems(scopes.map((category) => good({ category })));
+    expect(out).toHaveLength(scopes.length);
     expect(out.every((i) => i.category === "OTHER")).toBe(true);
   });
 

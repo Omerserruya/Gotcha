@@ -56,7 +56,7 @@ describe("knowledge retrieval is scoped to the employee", () => {
 
   it("the bot passes its own agent id through", () => {
     const bot = read("services/ai-bot.service.ts");
-    expect(bot).toMatch(/retrieveRelevantChunks\(opts\.tenantId, opts\.incomingMessage, 5, opts\.aiAgentId\)/);
+    expect(bot).toMatch(/retrieveRelevantChunks\(\s*opts\.tenantId,\s*opts\.incomingMessage,\s*5,\s*opts\.aiAgentId\s*[,)]/);
   });
 });
 

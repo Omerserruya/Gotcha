@@ -59,38 +59,48 @@ const { prismaMock, evaluateToolGateMock, createApprovalRequestMock } = vi.hoist
   createApprovalRequestMock: vi.fn().mockResolvedValue({ id: "apr-1", expiresAt: new Date("2030-01-01") }),
 }));
 
-vi.mock("@chatcenter/shared", () => ({
-  // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
-  // mocks of this barrel must supply them or the read path throws instead of
-  // returning "not configured". Default: nothing configured.
-  readDurableSetting: async () => null,
-  writeDurableSetting: async () => undefined,
-  settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,
-  // Version pins now live in shared modules, so exhaustive mocks of this
-  // barrel must supply them. Returning the real defaults keeps any URL the
-  // code builds meaningful instead of "undefined/...".
-  shopifyApiVersion: () => "2026-07",
-  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
-  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
-  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
-  prisma: prismaMock,
-  evaluateToolGate: evaluateToolGateMock,
-  getDefaultHighRiskTools: () => [
-    "send_message", "create_broadcast", "schedule_broadcast",
-    "schedule_followup", "merge_contacts", "update_contact",
-    "update_crm", "create_ticket", "create_task",
-    "cancel_order", "issue_refund", "create_workflow",
-  ],
-  createApprovalRequest: createApprovalRequestMock,
-  findPendingByConversation: vi.fn().mockResolvedValue([]),
-  approveRequest: vi.fn(),
-  rejectRequest: vi.fn(),
-  trackAIUsage: vi.fn().mockResolvedValue(undefined),
-  publishEvent: vi.fn(),
-  decryptCredentials: vi.fn().mockReturnValue({ accessToken: "fake-token" }),
-  buildAgentTools: vi.fn().mockReturnValue([]),
-  dispatchToolCall: vi.fn(),
-}));
+vi.mock("@chatcenter/shared", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  // Workspace policy lives in shared now. The real getPolicy/setPolicy reach
+  // the DB, so they are replaced by an in-memory store; the REAL
+  // validateAgainstPolicy (from `actual`) stays, so policy checks are genuine.
+  const policyStore = new Map<string, any>();
+  return {
+    ...actual,
+    // Durable tenant settings read the DB; default: nothing configured.
+    readDurableSetting: async () => null,
+    writeDurableSetting: async () => undefined,
+    prisma: prismaMock,
+    evaluateToolGate: evaluateToolGateMock,
+    getDefaultHighRiskTools: () => [
+      "send_message", "create_broadcast", "schedule_broadcast",
+      "schedule_followup", "merge_contacts", "update_contact",
+      "update_crm", "create_ticket", "create_task",
+      "cancel_order", "issue_refund", "create_workflow",
+    ],
+    createApprovalRequest: createApprovalRequestMock,
+    findPendingByConversation: vi.fn().mockResolvedValue([]),
+    approveRequest: vi.fn(),
+    rejectRequest: vi.fn(),
+    trackAIUsage: vi.fn().mockResolvedValue(undefined),
+    publishEvent: vi.fn(),
+    decryptCredentials: vi.fn().mockReturnValue({ accessToken: "fake-token" }),
+    buildAgentTools: vi.fn().mockReturnValue([]),
+    dispatchToolCall: vi.fn(),
+    // tag_contact emits tag_added automation events onto a BullMQ queue
+    // (Redis). Same count as the real one, nothing enqueued.
+    emitTagsAdded: vi.fn(async (_t: string, _c: string, before: unknown, after: unknown) =>
+      actual.tagsAdded(before, after).length,
+    ),
+    getPolicy: async (tenantId: string) => policyStore.get(tenantId) ?? actual.DEFAULT_POLICY,
+    setPolicy: async (tenantId: string, patch: any) => {
+      const next = { ...(policyStore.get(tenantId) ?? actual.DEFAULT_POLICY), ...patch };
+      policyStore.set(tenantId, next);
+      return next;
+    },
+    getPolicyPrompt: async () => "",
+  };
+});
 
 import { executeAction, PlannedAction } from "../services/action-executor.service";
 

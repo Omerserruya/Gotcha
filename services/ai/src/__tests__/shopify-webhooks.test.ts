@@ -74,6 +74,14 @@ vi.mock("../services/shopify-chat-install.service", () => ({
   disableChatForUninstalledShop: H.disableChatOnUninstall,
 }));
 
+// app/uninstalled tells billing over HTTP. Left real, that fetch resolved
+// after its test had finished and failed the NEXT one; it is not what these
+// tests are about, and a test must not reach the network.
+vi.mock("../services/shopify-billing-bridge.service", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return { ...actual, notifyShopifyUninstalled: vi.fn(async () => {}) };
+});
+
 import router from "../routes/shopify-webhooks";
 
 function app() {
