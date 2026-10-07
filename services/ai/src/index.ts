@@ -59,6 +59,7 @@ import customerCardRoutes from "./routes/customer-card";
 import unansweredQuestionRoutes from "./routes/unanswered-questions";
 import gdprInternalRoutes from "./routes/gdpr-internal";
 import automationActionsInternalRoutes from "./routes/automation-actions-internal";
+import { startWooCartPoller } from "./services/woo-cart-poller.service";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 import { initAIService, getDefaultModel } from "./services/ai.service";
@@ -191,6 +192,9 @@ app.use("/api", customerCardRoutes);
 app.use("/api", unansweredQuestionRoutes);
 app.use("/api/gdpr-internal", gdprInternalRoutes);
 app.use("/api/internal/automation-actions", automationActionsInternalRoutes);
+// Cart left behind on WooCommerce stores (no cart webhook exists): polls only
+// workspaces that have a live cart automation.
+startWooCartPoller();
 app.use("/api/copilot", copilotOutcomesRoutes);
 app.use("/api", postCallRoutes);
 

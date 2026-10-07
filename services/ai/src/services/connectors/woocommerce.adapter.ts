@@ -31,7 +31,7 @@ const TOOLS: ToolDefinition[] = [
     parameters: {
       type: "object",
       properties: {
-        status: { type: "string", enum: ["pending", "processing", "on-hold", "completed", "cancelled", "refunded", "failed", "any"] },
+        status: { type: "string", enum: ["pending", "checkout-draft", "processing", "on-hold", "completed", "cancelled", "refunded", "failed", "any"] },
         email: { type: "string", description: "Filter by billing email." },
         per_page: { type: "number", description: "Default 10, max 100." },
       },
