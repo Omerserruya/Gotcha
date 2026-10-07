@@ -67,7 +67,13 @@ export function scopeDates(scope: ThreadScope, now = new Date()): { from: string
 export function scopeLine(scope: ThreadScope, now = new Date()): string {
   const { from, to } = scopeDates(scope, now);
   const ch = scope.channels === "all" ? "all channels" : `only these channels: ${scope.channels.join(", ")}`;
-  return `Scope of this conversation: data from ${from} to ${to} (inclusive), ${ch}. Apply it to every count and search (sinceISO=${from}T00:00:00.000Z; the channel filter when it names channels) unless the user asks about something else explicitly; then say which period you used.`;
+  return [
+    `Scope of this conversation: ${from} to ${to} (inclusive), ${ch}.`,
+    `Use the period for questions about activity over time (new conversations, messages, what was closed, trends): sinceISO=${from}T00:00:00.000Z.`,
+    `Never apply the period to the current state: "how many are open", "what is waiting for us" are about now, whenever the conversation started; omit sinceISO for them.`,
+    scope.channels === "all" ? "" : "Apply the channel filter to every count and search.",
+    "If the user asks about another period or channel explicitly, answer that and say which one you used.",
+  ].filter(Boolean).join(" ");
 }
 
 // ─── Threads ────────────────────────────────────────────────

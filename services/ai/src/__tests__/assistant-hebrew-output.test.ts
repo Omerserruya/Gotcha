@@ -81,6 +81,8 @@ describe("★ result labels follow the interface language", () => {
     const events = await run("he");
     const ends = events.filter((e) => e.type === "tool_end").map((e) => e.resultSummary);
     expect(ends).toEqual(["3 שיחות שנסגרו היום", "3 שיחות פתוחות בערוץ וואטסאפ"]);
+    // The step says what is counted, not a generic "counting conversations".
+    expect(events.filter((e) => e.type === "tool_start").map((e) => e.label)[1]).toBe("סופר שיחות פתוחות בערוץ וואטסאפ");
     const toolRows = H.memory.filter((m) => m.role === "tool").map((m) => JSON.parse(m.content).label);
     expect(toolRows).toEqual(["שיחות שנסגרו היום", "שיחות פתוחות בערוץ וואטסאפ"]);
   });

@@ -201,6 +201,8 @@ describe("★ an answer", () => {
     const sys = H.modelCalls[0].messages.filter((m: any) => m.role === "system").map((m: any) => m.content).join("\n");
     const { from } = scopeDates({ range: "last_30", channels: ["WHATSAPP"] });
     expect(sys).toContain(`sinceISO=${from}T00:00:00.000Z`);
+    // ★ The period is for activity over time, never for "open now" / "waiting for us".
+    expect(sys).toMatch(/Never apply the period to the current state/);
     expect(sys).toContain("WHATSAPP");
     expect(sys).toContain("[[suggestions]]");
 

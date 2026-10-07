@@ -37,7 +37,7 @@ const SYSTEM_COUNT_CONVERSATIONS = {
         status: {
           type: "string",
           enum: ["OPEN", "WAITING", "CLOSED", "ANY"],
-          description: "Filter by conversation status. Default: ANY.",
+          description: "Filter by conversation status. Default: ANY. WAITING means waiting for the CUSTOMER to reply. For conversations waiting for the team (\"what is waiting for us\", \"who needs an answer\"), use system_get_metric with waiting_for_person instead.",
         },
         channel: {
           type: "string",
@@ -46,7 +46,7 @@ const SYSTEM_COUNT_CONVERSATIONS = {
         },
         sinceISO: {
           type: "string",
-          description: "Lower bound for createdAt as an ISO 8601 timestamp. Omit for no lower bound.",
+          description: "Lower bound for when the conversation STARTED (createdAt), ISO 8601. Omit it for the current state (how many are open now): an open conversation may have started long ago.",
         },
       },
     },
@@ -491,6 +491,10 @@ const METRIC_STEP: Record<string, { en: string; he: string }> = {
   inbound_messages_24h: { en: "Counting today's customer messages", he: "סופר את הודעות הלקוחות מהיממה האחרונה" },
 };
 export function stepText(name: string, args: any, locale: "he" | "en" = "en"): string {
+  // "Counting open conversations on WhatsApp", not a generic "Counting conversations".
+  if (name === "system_count_conversations" && (args?.status && args.status !== "ANY" || args?.channel)) {
+    return `${locale === "he" ? "סופר" : "Counting"} ${countLabel(args, locale)}`;
+  }
   if (name === "system_get_metric") {
     const m = METRIC_ALIASES[args?.metric] ?? args?.metric;
     if (METRIC_STEP[m]) return METRIC_STEP[m][locale];
