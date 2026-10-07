@@ -9,7 +9,6 @@ const channel = (over: Partial<Channel> = {}): Channel => ({
   channel: 'WHATSAPP',
   isActive: true,
   connectionStatus: 'CONNECTED',
-  responseMode: 'HUMAN_WITH_COPILOT',
   ...over,
 });
 
@@ -114,15 +113,6 @@ describe('buildChannelRows', () => {
     );
     expect(active[0]!.status).toBe('CONNECTED');
     expect(disabled[0]!.status).toBe('DISCONNECTED');
-  });
-
-  it('gives a voice row no responseMode, because it has none', () => {
-    // Voice routes by defaultAgentId / fallbackDepartmentId on its own spine.
-    // Rendering "a person answers" would assert a field it does not have.
-    const rows = connectedOnly(
-      buildChannelRows([], [{ id: 'v1', status: 'ACTIVE', numbers: [] }], true, 'en'),
-    );
-    expect(rows[0]!.responseMode).toBeNull();
   });
 
   it('offers Phone calls only when the product offers voice to this tenant', () => {

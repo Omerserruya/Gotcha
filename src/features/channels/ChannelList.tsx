@@ -78,9 +78,6 @@ export async function ChannelList({
         t('inWindow', { count: number.format(row.windowConversations), days: windowDays }),
       );
     }
-    // Who answers it - the one routing a channel stores - at the line's end,
-    // where 02 has no column for it.
-    if (row.responseMode) parts.push(t(`mode.${row.responseMode}` as 'mode.AI_AUTO_REPLY'));
     return parts.join(' · ');
   };
   const troubledRows = rows.filter(

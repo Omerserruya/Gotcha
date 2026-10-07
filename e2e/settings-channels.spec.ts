@@ -218,8 +218,8 @@ for (const size of SIZES) {
      *
      * Two, both ruled out because nothing behind them stores a value: a
      * per-channel owner ("Customer Support AI" / "Support team") and a
-     * per-channel greeting or hours. What IS shown is `responseMode`, which is
-     * a real routing decision.
+     * per-channel greeting or hours. Nor a per-channel "who answers": that
+     * is the automations' and the playbook's to decide (Omer, 2026-10-07).
      *
      * This test used to assert that "Phone calls" was absent too, and that was
      * WRONG — voice is connectable at `POST /api/voice-channels`, on a separate
@@ -237,10 +237,8 @@ for (const size of SIZES) {
       const list = page.getByTestId('channel-list');
       await expect(list).not.toHaveText(/greeting|opening hours/i);
 
-      // The mode IS rendered, and it is the honest version of "who answers".
-      await expect(page.locator('[data-testid^="channel-mode-"]').first()).toHaveText(
-        /person answers|AI answers/i,
-      );
+      // No "who answers" on a channel: not the channel's to say.
+      await expect(list).not.toHaveText(/person answers|AI answers|with AI help/i);
 
       await shoot(page, `${size.name}-4-absent-controls`);
     });

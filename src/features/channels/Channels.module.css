@@ -206,28 +206,11 @@
     min-inline-size: 0;
   }
 
-  .whoAnswers {
-    border: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-14);
-  }
-
   .connectLegend {
     margin-block-end: var(--space-8);
     padding: 0;
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
-  }
-
-  .whoAnswersOption {
-    display: flex;
-    align-items: center;
-    gap: var(--space-6);
-    font-size: var(--font-size-meta);
   }
 
   .connectActions {
@@ -361,6 +344,13 @@
     background-color: var(--panel-well);
     font-size: var(--font-size-micro);
     color: var(--text-body);
+  }
+
+  /* Who answers is the automations' to decide: said once, quietly. */
+  .whoAnswersNote {
+    margin: var(--space-8) 0 0;
+    font-size: 12px;
+    color: var(--text-subtle);
   }
 
   /* What is configured on a number: label (130) and value, a rule between. */
@@ -790,73 +780,6 @@
     gap: var(--space-16);
     padding: var(--space-14) var(--space-26);
     border-block-start: 1px solid var(--border-subtle);
-  }
-
-  /* 13b's AI mode: 02's segmented pair on the well, the current one dark. */
-  .modeSwitch {
-    display: inline-flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-8);
-  }
-
-  .modeSegments {
-    display: inline-flex;
-    gap: 2px;
-    padding: 3px;
-    border-radius: 9px;
-    background-color: var(--table-head-surface);
-  }
-
-  .modeSegment {
-    padding: 6px 11px;
-    border: 0;
-    border-radius: 7px;
-    background: none;
-    font: inherit;
-    font-size: var(--font-size-label);
-    color: var(--intent-neutral-text);
-    white-space: nowrap;
-    cursor: pointer;
-  }
-
-  .modeSegment[aria-checked='true'] {
-    background-color: var(--action-base);
-    color: var(--action-text);
-  }
-
-  .modeAsk {
-    display: inline-flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-8);
-    font-size: var(--font-size-label);
-  }
-
-  .modeYes,
-  .modeNo {
-    padding: 5px 11px;
-    border-radius: 7px;
-    font: inherit;
-    font-size: var(--font-size-caption);
-    cursor: pointer;
-  }
-
-  .modeYes {
-    border: 0;
-    background-color: var(--action-base);
-    color: var(--action-text);
-  }
-
-  .modeNo {
-    border: 1px solid var(--border-default);
-    background: none;
-    color: var(--text-secondary);
-  }
-
-  .modeProblem {
-    font-size: var(--font-size-caption);
-    color: var(--intent-blocked-text);
   }
 
   .panelFootLink,

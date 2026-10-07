@@ -3,12 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
-import {
-  OAUTH_PLATFORMS,
-  RESPONSE_MODES,
-  type ChannelType,
-  type ResponseMode,
-} from '@/api/contracts/channels';
+import { OAUTH_PLATFORMS, type ChannelType } from '@/api/contracts/channels';
 import { Link, useRouter } from '@/i18n/navigation';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Input } from '@/design-system/primitives/input/Input';
@@ -16,7 +11,6 @@ import { Input } from '@/design-system/primitives/input/Input';
 import {
   connectEmail,
   connectWebChat,
-  setResponseMode,
   startChannelConnect,
   type ChannelWriteResult,
 } from './actions';
@@ -129,7 +123,6 @@ export function ConnectPanel({
 function WebChatStep({ onClose }: { readonly onClose: () => void }) {
   const t = useTranslations('channels');
   const [name, setName] = useState('');
-  const [mode, setMode] = useState<ResponseMode>('HUMAN_WITH_COPILOT');
   const [result, setResult] = useState<ChannelWriteResult<unknown> | null>(null);
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -143,7 +136,7 @@ function WebChatStep({ onClose }: { readonly onClose: () => void }) {
         hint={t('connect.webchatHint')}
         onChange={(e) => setName(e.target.value)}
       />
-      <WhoAnswers value={mode} onChange={setMode} />
+      <WhoAnswersNote />
       <div className={styles.connectActions}>
         <Button
           variant="primary"
@@ -155,17 +148,6 @@ function WebChatStep({ onClose }: { readonly onClose: () => void }) {
               const outcome = await connectWebChat(name);
               setResult(outcome);
               if (!outcome.ok) return;
-              /*
-               * Step 2, applied to the channel step 1 just created.
-               *
-               * Two calls, and the second can fail after the first has
-               * succeeded - which on screen 12 was the reason NOT to build a
-               * role selector. It is acceptable here because the failure is
-               * repairable: the channel exists and visibly carries the wrong
-               * mode, and the same control is on the row. Nobody has been
-               * emailed and no outside party has been told anything.
-               */
-              await setResponseMode(outcome.data.id, mode);
               /*
                * Created: 13g is "the screen after Connect" - the widget's own
                * settings, its code on the Install tab. The row's Settings
@@ -195,7 +177,6 @@ function WebChatStep({ onClose }: { readonly onClose: () => void }) {
  */
 function EmailStep({ onClose }: { readonly onClose: () => void }) {
   const t = useTranslations('channels');
-  const [mode, setMode] = useState<ResponseMode>('HUMAN_WITH_COPILOT');
   const [form, setForm] = useState({
     emailAddress: '',
     displayName: '',
@@ -255,7 +236,7 @@ function EmailStep({ onClose }: { readonly onClose: () => void }) {
         />
       </div>
 
-      <WhoAnswers value={mode} onChange={setMode} />
+      <WhoAnswersNote />
 
       <div className={styles.connectActions}>
         <Button
@@ -268,7 +249,6 @@ function EmailStep({ onClose }: { readonly onClose: () => void }) {
               const outcome = await connectEmail({ ...form, smtpPort: port });
               setResult(outcome);
               if (!outcome.ok) return;
-              await setResponseMode(outcome.data.id, mode);
               onClose();
             })
           }
@@ -285,40 +265,18 @@ function EmailStep({ onClose }: { readonly onClose: () => void }) {
 }
 
 /**
- * Step 2 - *"Who should answer it?"*
- *
- * The design offers a choice of AI employees and human teams. A
- * `ChannelAccount` stores neither: it has no `aiAgentId`, no `departmentId`
- * and no owner field of any kind. What it does store is `responseMode`, which
- * is a genuine routing decision and the one the system can act on.
- *
- * So this is not a reduced version of the design's control. It is the
- * question the product can actually answer.
+ * Who answers a channel is not chosen here (Omer, 2026-10-07): the
+ * automations and the playbook decide it. Said once, with the way there -
+ * the old "who answers" choice wrote a field nothing read.
  */
-function WhoAnswers({
-  value,
-  onChange,
-}: {
-  readonly value: ResponseMode;
-  readonly onChange: (mode: ResponseMode) => void;
-}) {
+function WhoAnswersNote() {
   const t = useTranslations('channels');
   return (
-    <fieldset className={styles.whoAnswers} data-testid="connect-who-answers">
-      <legend className={styles.connectLegend}>{t('connect.whoAnswers')}</legend>
-      {RESPONSE_MODES.map((mode) => (
-        <label key={mode} className={styles.whoAnswersOption}>
-          <input
-            type="radio"
-            name="who-answers"
-            checked={value === mode}
-            data-testid={`connect-mode-${mode}`}
-            onChange={() => onChange(mode)}
-          />
-          {t(`mode.${mode}` as 'mode.AI_AUTO_REPLY')}
-        </label>
-      ))}
-    </fieldset>
+    <p className={styles.connectThen} data-testid="connect-who-answers-note">
+      {t.rich('connect.whoAnswersNote', {
+        automations: (chunks) => <Link href="/studio/automations">{chunks}</Link>,
+      })}
+    </p>
   );
 }
 

@@ -387,8 +387,8 @@ describe('a failed read is not an empty workspace', () => {
   });
 });
 
-describe('★ 13b - what is configured on a number, in 02’s rows', () => {
-  it('AI mode comes from the channel; the rest are "-" in their shape', async () => {
+describe("★★ 13b - who answers is not the number's (Omer, 2026-10-07)", () => {
+  it('no AI mode, no "Answered by", no greeting - the hours, and one line to Automations', async () => {
     render(
       await WhatsAppNumbers({
         numbers: {
@@ -402,12 +402,18 @@ describe('★ 13b - what is configured on a number, in 02’s rows', () => {
             },
           ],
         } as never,
-        responseModes: { ca1: 'AI_AUTO_REPLY' },
       }),
     );
-    // 02's two segments, live, on the account, set to what it is now.
-    expect(screen.getByTestId('mode-switch-ca1')).toHaveAttribute('data-current', 'AI_AUTO_REPLY');
-    expect(screen.getByTestId('whatsapp-unprofiled')).toHaveTextContent(/Answered by-/);
+    const card = screen.getByTestId('whatsapp-unprofiled');
+    expect(card).not.toHaveTextContent(
+      /AI mode|Answered by|First greeting|Answers on its own|Drafts, a person sends/,
+    );
+    expect(screen.queryByTestId('number-ai-mode')).toBeNull();
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+    expect(card).toHaveTextContent('Hours');
+    const note = screen.getByTestId('number-who-answers');
+    expect(note).toHaveTextContent('Who answers here is set in Studio · Automations');
+    expect(note.querySelector('a')).toHaveAttribute('href', '/studio/automations');
   });
 });
 

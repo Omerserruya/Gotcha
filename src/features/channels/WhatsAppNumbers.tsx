@@ -16,7 +16,6 @@ import {
 } from '@/api/contracts/whatsapp-numbers';
 
 import styles from './Channels.module.css';
-import { ModeSwitch } from './ModeSwitch';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
@@ -65,14 +64,11 @@ type T = Awaited<ReturnType<typeof getTranslations<'channels.whatsapp'>>>;
  */
 export async function WhatsAppNumbers({
   numbers,
-  responseModes = {},
   connectable = false,
 }: {
   readonly numbers: NumbersResponse | null;
   /** The server can launch Meta's Embedded Signup (13c). */
   readonly connectable?: boolean;
-  /** Who answers each channel account (13b's "AI mode"), from the channel list. */
-  readonly responseModes?: Readonly<Record<string, string>>;
 }) {
   const t = await getTranslations('channels.whatsapp');
   const locale = await getLocale();
@@ -164,17 +160,12 @@ export async function WhatsAppNumbers({
       <ul className={styles.numbers} data-testid="whatsapp-numbers">
         {numbers.data.map((n) => (
           <li key={n.id}>
-            <NumberCard
-              number={n}
-              t={t}
-              locale={locale}
-              mode={n.channelAccountId ? (responseModes[n.channelAccountId] ?? null) : null}
-            />
+            <NumberCard number={n} t={t} locale={locale} />
           </li>
         ))}
         {numbers.unprofiled.map((u) => (
           <li key={u.channelAccountId}>
-            <UnprofiledCard number={u} t={t} mode={responseModes[u.channelAccountId] ?? null} />
+            <UnprofiledCard number={u} t={t} />
           </li>
         ))}
         <li>
@@ -189,12 +180,10 @@ function NumberCard({
   number,
   t,
   locale,
-  mode,
 }: {
   readonly number: WhatsAppNumber;
   readonly t: T;
   readonly locale: string;
-  readonly mode: string | null;
 }) {
   const delivery = deliveryState(number.health);
   const blocking = blockingChecks(number.health);
@@ -297,7 +286,7 @@ function NumberCard({
             })
           : t('neverChecked')}
       </p>
-      <NumberRows t={t} mode={mode} channelAccountId={number.channelAccountId} />
+      <NumberRows t={t} />
     </article>
   );
 }
@@ -338,15 +327,7 @@ function CheckList({ checks, t }: { readonly checks: readonly HealthCheck[]; rea
  *
  * **On this tenant this is the only card that renders.**
  */
-function UnprofiledCard({
-  number,
-  t,
-  mode,
-}: {
-  readonly number: UnprofiledNumber;
-  readonly t: T;
-  readonly mode: string | null;
-}) {
+function UnprofiledCard({ number, t }: { readonly number: UnprofiledNumber; readonly t: T }) {
   /*
     02's number card, in its shape: the number over its state; then what is
     configured on it. A number set up before per-number health existed has
@@ -369,55 +350,41 @@ function UnprofiledCard({
           </span>
         </span>
       </div>
-      <NumberRows t={t} mode={mode} channelAccountId={number.channelAccountId} />
+      <NumberRows t={t} />
     </article>
   );
 }
 
-/** What is configured on a number - 02's four rows; "-" where nothing stores it. */
-function NumberRows({
-  t,
-  mode,
-  channelAccountId,
-}: {
-  readonly t: T;
-  readonly mode: string | null;
-  readonly channelAccountId: string | null;
-}) {
+/**
+ * What is configured on a number: the hours (the workspace's). Who answers
+ * is not the channel's (Omer, 2026-10-07): the automations and the playbook
+ * decide it - said once, with the way there. "AI mode", "Answered by" and
+ * "First greeting" were a field nothing read and two that did not exist.
+ */
+function NumberRows({ t }: { readonly t: T }) {
   return (
-    <dl className={styles.numberRows}>
-      <div>
-        <dt>{t('rows.answeredBy')}</dt>
-        {/* A channel account has no AI employee or team of its own. */}
-        <dd>-</dd>
-      </div>
-      <div>
-        <dt>{t('rows.aiMode')}</dt>
-        <dd data-testid="number-ai-mode">
-          {/* 02's two segments, live - where the account and its mode are known. */}
-          {channelAccountId && (mode === 'AI_AUTO_REPLY' || mode === 'HUMAN_WITH_COPILOT') ? (
-            <ModeSwitch channelAccountId={channelAccountId} current={mode} />
-          ) : mode === 'AI_AUTO_REPLY' || mode === 'HUMAN_WITH_COPILOT' ? (
-            t(`rows.mode.${mode}`)
-          ) : (
-            '-'
-          )}
-        </dd>
-      </div>
-      <div>
-        <dt>{t('rows.greeting')}</dt>
-        <dd>-</dd>
-      </div>
-      <div>
-        <dt>{t('rows.hours')}</dt>
-        <dd>
-          {/* The workspace's hours apply; they are set on Workspace. */}
-          <Link href="/settings/workspace" className={styles.numberLink}>
-            {t('rows.hoursWorkspace')}
-          </Link>
-        </dd>
-      </div>
-    </dl>
+    <>
+      <dl className={styles.numberRows}>
+        <div>
+          <dt>{t('rows.hours')}</dt>
+          <dd>
+            {/* The workspace's hours apply; they are set on Workspace. */}
+            <Link href="/settings/workspace" className={styles.numberLink}>
+              {t('rows.hoursWorkspace')}
+            </Link>
+          </dd>
+        </div>
+      </dl>
+      <p className={styles.whoAnswersNote} data-testid="number-who-answers">
+        {t.rich('rows.whoAnswers', {
+          automations: (chunks) => (
+            <Link href="/studio/automations" className={styles.numberLink}>
+              {chunks}
+            </Link>
+          ),
+        })}
+      </p>
+    </>
   );
 }
 

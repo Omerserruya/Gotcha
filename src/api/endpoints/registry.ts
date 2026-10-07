@@ -531,7 +531,6 @@ export const channelEndpoints = {
   webchatSettings: (id: string) => endpoint('/api/channels/webchat/{id}/settings', { id }),
   /** SMTP/IMAP credentials. Stores real secrets; never exercised by a test. */
   connectEmail: () => endpoint('/api/channels/connect/email'),
-  responseMode: (id: string) => endpoint('/api/channels/{id}/response-mode', { id }),
   disconnect: (id: string) => endpoint('/api/channels/{id}/disconnect', { id }),
 
   /* ── Screen 13 - WhatsApp numbers ──────────────────────────────────────

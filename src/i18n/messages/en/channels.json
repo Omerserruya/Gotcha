@@ -36,14 +36,9 @@
     "ERROR": "Not working",
     "DISCONNECTED": "Disconnected"
   },
-  "mode": {
-    "HUMAN_WITH_COPILOT": "A person answers, with AI help",
-    "AI_AUTO_REPLY": "AI answers automatically"
-  },
   "connect": {
     "heading": "Connecting {channel}",
     "close": "Close",
-    "whoAnswers": "Who should answer it?",
     "then": "Conversations from this channel appear in your inbox and count towards your monthly total.",
     "webchatName": "Widget name",
     "webchatHint": "Optional. Only you see this.",
@@ -72,7 +67,8 @@
       "forbidden": "Only an admin can connect a channel.",
       "failed": "{channel} couldn't be opened - try again."
     },
-    "notSetUp": "Not set up yet"
+    "notSetUp": "Not set up yet",
+    "whoAnswersNote": "Who answers here is set in <automations>Studio · Automations</automations> and the playbook, not on the channel"
   },
   "whatsapp": {
     "title": "WhatsApp numbers",
@@ -211,22 +207,16 @@
       "disconnect": "Disconnect this number"
     },
     "rows": {
-      "answeredBy": "Answered by",
-      "aiMode": "AI mode",
-      "greeting": "First greeting",
       "hours": "Hours",
       "hoursWorkspace": "The workspace's hours",
-      "mode": {
-        "AI_AUTO_REPLY": "Answers on its own",
-        "HUMAN_WITH_COPILOT": "Drafts, a person sends"
-      },
       "modeAsk": {
         "AI_AUTO_REPLY": "Let GOTCHA answer on its own on this number?",
         "HUMAN_WITH_COPILOT": "Have GOTCHA draft and a person send on this number?"
       },
       "modeYes": "Yes, switch",
       "modeNo": "Not now",
-      "modeFailed": "That didn’t switch - nothing changed."
+      "modeFailed": "That didn’t switch - nothing changed.",
+      "whoAnswers": "Who answers here is set in <automations>Studio · Automations</automations> and the playbook"
     },
     "addNumber": "+ Add another number",
     "learn": {

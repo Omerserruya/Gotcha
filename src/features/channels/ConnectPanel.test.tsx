@@ -8,12 +8,10 @@ import messages from '@/i18n/messages/en/channels.json';
 
 const startChannelConnect = vi.hoisted(() => vi.fn());
 const connectWebChat = vi.hoisted(() => vi.fn());
-const setResponseMode = vi.hoisted(() => vi.fn());
 vi.mock('./actions', () => ({
   startChannelConnect,
   connectEmail: vi.fn(),
   connectWebChat,
-  setResponseMode,
 }));
 const replace = vi.hoisted(() => vi.fn());
 const push = vi.hoisted(() => vi.fn());
@@ -99,10 +97,18 @@ describe('★ the row itself: "Not set up yet" in place of Connect', () => {
 describe('★★ web chat: after Create, the code to paste - in the same panel', () => {
   it("★ created: 13g, the screen after Connect - the NEW widget's own settings", async () => {
     connectWebChat.mockResolvedValue({ ok: true, data: { id: 'ch1', externalId: 'wc_123' } });
-    setResponseMode.mockResolvedValue({ ok: true });
     show('WEBCHAT');
     await userEvent.click(screen.getByTestId('connect-webchat-create'));
     expect(push).toHaveBeenCalledWith('/settings/channels/webchat/ch1');
+  });
+
+  it('★★ no "who answers" choice - a line to Automations instead (Omer, 2026-10-07)', () => {
+    show('WEBCHAT');
+    expect(screen.queryByTestId('connect-who-answers')).toBeNull();
+    expect(screen.queryByRole('radio')).toBeNull();
+    const note = screen.getByTestId('connect-who-answers-note');
+    expect(note).toHaveTextContent('not on the channel');
+    expect(note.querySelector('a')).toHaveAttribute('href', '/studio/automations');
   });
 
   it('the snippet: ITS widget id; Copy copies exactly that', async () => {

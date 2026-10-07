@@ -70,11 +70,8 @@ export default async function Page({
   // Dev's one number is unprofiled: its name is on that list, not on `data`.
   const unprofiled = whatsapp?.[0]?.unprofiled[0] ?? null;
   const name = first?.name ?? unprofiled?.name ?? first?.phoneNumber ?? tw('panelTitle');
-  const mode = (channels ?? []).find((c) => c.channel === 'WHATSAPP')?.responseMode ?? null;
-  /* 02's line: "{number} · answered by …", each half only when known. */
-  const learnLine =
-    [first?.phoneNumber ?? null, mode ? t(`mode.${mode}`) : null].filter(Boolean).join(' · ') ||
-    undefined;
+  // The number. Who answers is the automations' to say, not the channel's.
+  const learnLine = first?.phoneNumber ?? undefined;
   const tile = (
     <span className={channelStyles.learnTile} aria-hidden="true">
       <MessageCircle size={20} strokeWidth={1.75} />
@@ -174,11 +171,6 @@ export default async function Page({
               config.launches.coexistence?.configured === true ||
               config.launches.newNumber?.configured === true
             }
-            responseModes={Object.fromEntries(
-              (channels ?? [])
-                .filter((channel) => channel.channel === 'WHATSAPP')
-                .map((channel) => [channel.id, channel.responseMode]),
-            )}
           />
           {/* 13e / 13f are reached from here, while there is an import. */}
           {learn ? <LearningRow status={learn} /> : null}

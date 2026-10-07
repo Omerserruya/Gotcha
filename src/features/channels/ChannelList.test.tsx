@@ -93,7 +93,7 @@ describe('★ 13 - the warning above the list, and who answers on the line', () 
     expect(banner).toHaveTextContent('No payment method on the WhatsApp Business account.');
   });
 
-  it('no trouble, no banner; who answers is the line’s end, not a column', async () => {
+  it('no trouble, no banner; and no "who answers" on the row - not the channel\'s to say', async () => {
     render(
       await ChannelList({
         channels: [
@@ -101,7 +101,6 @@ describe('★ 13 - the warning above the list, and who answers on the line', () 
             id: 'e1',
             channel: 'EMAIL',
             connectionStatus: 'CONNECTED',
-            responseMode: 'AI_AUTO_REPLY',
           }),
         ],
         voice: [],
@@ -110,7 +109,7 @@ describe('★ 13 - the warning above the list, and who answers on the line', () 
       }),
     );
     expect(screen.queryByTestId('channel-banner')).toBeNull();
-    expect(screen.getByTestId('channel-detail-e1')).toHaveTextContent('AI answers automatically');
+    expect(screen.getByTestId('channel-detail-e1')).not.toHaveTextContent(/answers|with AI help/i);
   });
 });
 

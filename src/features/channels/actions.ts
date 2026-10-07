@@ -11,7 +11,6 @@ import {
   OAUTH_PLATFORMS,
   type Channel,
   type ChannelType,
-  type ResponseMode,
 } from '@/api/contracts/channels';
 import { channelEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
@@ -140,32 +139,6 @@ export async function connectEmail(input: EmailConnectInput): Promise<ChannelWri
     // `cause` carries a status and a route. It does not carry the body, which
     // is the whole point on a call that includes two passwords.
     logger.warn('channels.email_connect_failed', { cause });
-    return classify(cause);
-  }
-}
-
-/**
- * Step 2: who answers this channel.
- *
- * The only routing a `ChannelAccount` can store. Reversible by construction -
- * it is one field with two values - which is what makes it the one part of the
- * connect flow a capture may safely exercise and put back.
- */
-export async function setResponseMode(
-  id: string,
-  mode: ResponseMode,
-): Promise<ChannelWriteResult<Channel>> {
-  try {
-    const data = await serverApi().patch({
-      endpoint: channelEndpoints.responseMode(id),
-      payload: channelSchema,
-      body: { responseMode: mode },
-    });
-    revalidatePath('/[locale]/settings/channels', 'page');
-    return { ok: true, data };
-  } catch (cause) {
-    await signInIfSignedOut(cause);
-    logger.warn('channels.response_mode_failed', { cause });
     return classify(cause);
   }
 }

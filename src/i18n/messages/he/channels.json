@@ -36,14 +36,9 @@
     "ERROR": "לא עובד",
     "DISCONNECTED": "מנותק"
   },
-  "mode": {
-    "HUMAN_WITH_COPILOT": "אדם עונה, בעזרת AI",
-    "AI_AUTO_REPLY": "ה‑AI עונה אוטומטית"
-  },
   "connect": {
     "heading": "מחברים את {channel}",
     "close": "סגירה",
-    "whoAnswers": "מי יענה על זה?",
     "then": "שיחות מהערוץ הזה מגיעות לתיבה שלכם ונספרות במכסה החודשית.",
     "webchatName": "שם הווידג'ט",
     "webchatHint": "לא חובה. רק אתם רואים את זה.",
@@ -72,7 +67,8 @@
       "forbidden": "רק מנהל יכול לחבר ערוץ.",
       "failed": "לא הצלחנו לפתוח את {channel} - אפשר לנסות שוב."
     },
-    "notSetUp": "עוד לא מוגדר"
+    "notSetUp": "עוד לא מוגדר",
+    "whoAnswersNote": "מי עונה כאן נקבע ב<automations>סטודיו · אוטומציות</automations> ובפלייבוק, לא בערוץ"
   },
   "whatsapp": {
     "title": "מספרי וואטסאפ",
@@ -211,22 +207,16 @@
       "disconnect": "ניתוק המספר הזה"
     },
     "rows": {
-      "answeredBy": "מי עונה",
-      "aiMode": "מצב AI",
-      "greeting": "ברכה ראשונה",
       "hours": "שעות",
       "hoursWorkspace": "שעות סביבת העבודה",
-      "mode": {
-        "AI_AUTO_REPLY": "עונה לבד",
-        "HUMAN_WITH_COPILOT": "מנסח, אדם שולח"
-      },
       "modeAsk": {
         "AI_AUTO_REPLY": "לתת ל-GOTCHA לענות לבד במספר הזה?",
         "HUMAN_WITH_COPILOT": "ש-GOTCHA תנסח ואדם ישלח במספר הזה?"
       },
       "modeYes": "כן, להחליף",
       "modeNo": "לא עכשיו",
-      "modeFailed": "זה לא הוחלף - שום דבר לא השתנה."
+      "modeFailed": "זה לא הוחלף - שום דבר לא השתנה.",
+      "whoAnswers": "מי עונה כאן נקבע ב<automations>סטודיו · אוטומציות</automations> ובפלייבוק"
     },
     "addNumber": "+ הוספת מספר נוסף",
     "learn": {

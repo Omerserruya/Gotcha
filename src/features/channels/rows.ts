@@ -4,7 +4,6 @@ import {
   type Channel,
   type ChannelType,
   type ConnectionState,
-  type ResponseMode,
   type VoiceChannel,
 } from '@/api/contracts/channels';
 
@@ -23,12 +22,6 @@ export interface ConnectedRow {
   /** The phone number, handle or address. Absent on a channel that has none. */
   readonly identity: string | null;
   readonly status: ConnectionState;
-  /**
-   * Null for voice, which has no `responseMode` - it routes by
-   * `defaultAgentId` and `fallbackDepartmentId` instead, on its own spine.
-   * Rendering "a person answers" for it would assert a field it does not have.
-   */
-  readonly responseMode: ResponseMode | null;
   /** The platform's own words. Present on a healthy row too - see below. */
   readonly error: string | null;
   /** Open RIGHT NOW - not CLOSED, no window. */
@@ -76,7 +69,6 @@ export function buildChannelRows(
     channel: channel.channel,
     identity: channel.displayName?.trim() || channel.externalId?.trim() || null,
     status: channel.connectionStatus,
-    responseMode: channel.responseMode,
     error: channel.lastError?.trim() || null,
     openConversations: channel._count?.conversations ?? null,
     /*
@@ -108,7 +100,6 @@ export function buildChannelRows(
         vc.friendlyName?.trim() ||
         null,
       status: voiceStateAsConnection(vc.status),
-      responseMode: null,
       // `healthStatus` is a free-form string on this spine, not an error
       // message - it is only a problem when the status already says so.
       error: null,

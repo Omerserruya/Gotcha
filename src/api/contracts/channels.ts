@@ -13,10 +13,11 @@ import { z } from 'zod';
  *
  *   - **"Who should answer it?" naming an AI employee or a team.**
  *     `ChannelAccount` has no `aiAgentId`, no `departmentId` and no owner
- *     field of any kind. This is the same missing channel↔team relation that
- *     screen 12 hit from the other side. What exists is `responseMode`, a
- *     binary, which is a real routing decision and the one the system can act
- *     on.
+ *     field of any kind. Who answers is the automation's / playbook's to
+ *     decide, not the channel's (Omer, 2026-10-07): the channel's old
+ *     answer-mode field was read by nothing at runtime and is no longer
+ *     parsed, drawn or written. (`object` strips it if the route still sends
+ *     it.)
  *   - **Per-channel greeting, hours and auto-assignment.**
  *     `autoGreetingEnabled`, `autoGreetingMessage` and `workingHours` are
  *     fields on `Department`. A channel has none of them.
@@ -78,10 +79,6 @@ export const CONNECTABLE_CHANNELS = [
 export const CONNECTION_STATES = ['PENDING', 'CONNECTED', 'ERROR', 'DISCONNECTED'] as const;
 export type ConnectionState = (typeof CONNECTION_STATES)[number];
 
-/** Who answers this channel. The only routing a channel can actually store. */
-export const RESPONSE_MODES = ['HUMAN_WITH_COPILOT', 'AI_AUTO_REPLY'] as const;
-export type ResponseMode = (typeof RESPONSE_MODES)[number];
-
 /**
  * `GET /api/channels` - enveloped in `data`, needs `channels:manage:read`.
  *
@@ -112,7 +109,6 @@ export const channelSchema = z.object({
    */
   lastError: z.string().nullable().optional(),
   lastHealthCheck: z.string().nullable().optional(),
-  responseMode: z.enum(RESPONSE_MODES).catch('HUMAN_WITH_COPILOT'),
   _count: z.object({ conversations: z.number().default(0) }).optional(),
   /**
    * Conversations that STARTED on this account inside the requested window.
