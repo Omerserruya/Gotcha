@@ -22,12 +22,12 @@
  * overrides → TenantFeature). Included credits use rolloverIncluded() (expire
  * the old period, grant the new). Purchased credits are NEVER touched here.
  */
-import { prisma, materializeEntitlements, rolloverIncluded, grantUnits, getBalance, expireDueLots, refreshUsdIlsRate } from "@chatcenter/shared";
+import { prisma, materializeEntitlements, rolloverIncluded, rolloverIncludedOnce, grantUnits, getBalance, expireDueLots, refreshUsdIlsRate } from "@chatcenter/shared";
 import type { Subscription, SubscriptionStatus } from "@prisma/client";
 import { ensureBillableEntity, getEntityIdForTenant, tenantsForEntity } from "./billable-entity.service";
 import { getPlan, getActivePlanVersion, isUpgrade, assertSelectable } from "./plan.service";
 import { quote, snapshotFor } from "./pricing.service";
-import { currentPeriod, nextPeriod, periodKeyFor } from "../lib/period";
+import { currentPeriod, nextPeriod, periodKeyFor, creditMonthOf } from "../lib/period";
 import { emitBillingEvent } from "../lib/events";
 import { chargeFor } from "./invoice.service";
 import { unsuspendTenants } from "./tenant-status.service";
@@ -557,6 +557,41 @@ async function renewInIsolation(subscriptionId: string, reason: "trial_end" | "r
   }
 }
 
+/**
+ * Reset AI credits monthly inside billing periods longer than a month.
+ *
+ * Renewal grants a period's allowance once, at the period start. A period
+ * longer than a month (an annual contract, a hand-set term) therefore stayed
+ * on its first month's allowance until renewal - the dev wallet sat at 0 from
+ * August on a one-year period. Each tick, every active subscription gets its
+ * CURRENT credit month: the previous month's included remainder expires (not
+ * carried over) and the monthly allowance is granted, once per tenant per
+ * month (rolloverIncludedOnce). Purchased and promo credits are untouched.
+ * The billing period and its charge are not changed. For a one-month period
+ * the credit month is the period itself, already granted at renewal: no-op.
+ */
+export async function rollMonthlyCredits(now = new Date()): Promise<number> {
+  const subs = await prisma.subscription.findMany({
+    where: { status: "ACTIVE", currentPeriodStart: { not: null, lte: now } },
+    select: { id: true, billableEntityId: true, planKey: true, planVersion: true, currentPeriodStart: true, currentPeriodEnd: true, snapshotIncludedCredits: true },
+  });
+  let granted = 0;
+  for (const sub of subs) {
+    try {
+      const month = creditMonthOf(sub.currentPeriodStart!, sub.currentPeriodEnd, now);
+      if (sub.currentPeriodEnd && month.start >= sub.currentPeriodEnd) continue; // the period is over; renewal owns it
+      const plan = await getPlan(sub.planKey, sub.planVersion);
+      const allowance = contractedCredits(sub, plan);
+      for (const tenantId of await tenantsForEntity(sub.billableEntityId)) {
+        if (await rolloverIncludedOnce(tenantId, month.key, allowance, month.end, `plan:${sub.planKey}:monthly`)) granted++;
+      }
+    } catch (err: any) {
+      console.error(`[billing][cycle] monthly credits failed for subscription ${sub.id}; continuing:`, err?.message ?? err);
+    }
+  }
+  return granted;
+}
+
 export async function runBillingCycle(now = new Date()): Promise<{
   trials: number;
   renewals: number;
@@ -571,6 +606,11 @@ export async function runBillingCycle(now = new Date()): Promise<{
 
   const renewals = await prisma.subscription.findMany({ where: { status: "ACTIVE", cancelAtPeriodEnd: false, currentPeriodEnd: { lte: now } } });
   for (const s of renewals) await renewInIsolation(s.id, "renewal");
+
+  // AI credits reset every month, whatever the billing period's length.
+  await rollMonthlyCredits(now).catch((err) =>
+    console.warn("[billing][cycle] monthly credit reset failed:", err?.message ?? err),
+  );
 
   // POCs never renew (cancelAtPeriodEnd=true keeps them out of the sweep
   // above); expiring them is their entire lifecycle.

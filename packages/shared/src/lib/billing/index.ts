@@ -22,6 +22,7 @@ export {
   grantUnits,
   consumeUnits,
   rolloverIncluded,
+  rolloverIncludedOnce,
   refundUnitsForReference,
   expireDueLots,
 } from "./wallet";

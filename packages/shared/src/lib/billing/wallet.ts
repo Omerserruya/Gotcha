@@ -312,6 +312,49 @@ export async function rolloverIncluded(
 }
 
 /**
+ * `rolloverIncluded`, at most ONCE per tenant per period key.
+ *
+ * The monthly credit sweep runs on every billing cycle tick, and
+ * `rolloverIncluded` on its own is not idempotent: a second call for the same
+ * key grants the allowance again (its expire step skips the key it is
+ * granting). Here a per-tenant transaction lock serialises concurrent sweeps,
+ * and an existing PLAN lot for the key means "already granted": nothing is
+ * expired or granted, and false is returned. Purchased and promo credits are
+ * never touched (only INCLUDED lots expire).
+ */
+export async function rolloverIncludedOnce(
+  tenantId: string,
+  newPeriodKey: string,
+  newAllowance: number,
+  expiresAt: Date,
+  source: string,
+  client: FullClient = prisma,
+): Promise<boolean> {
+  return client.$transaction(async (tx) => {
+    await (tx as any).$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`included:${tenantId}`}))`;
+    const already = await tx.aiUnitLot.findFirst({
+      where: { tenantId, bucket: "INCLUDED", grantType: "PLAN", periodKey: newPeriodKey },
+      select: { id: true },
+    });
+    if (already) return false;
+    const stale = await tx.aiUnitLot.findMany({
+      where: { tenantId, bucket: "INCLUDED", periodKey: { not: newPeriodKey }, unitsRemaining: { gt: 0 } },
+    });
+    for (const lot of stale) {
+      const rem = dec(lot.unitsRemaining);
+      await tx.aiUnitLot.update({ where: { id: lot.id }, data: { unitsRemaining: "0" } });
+      await tx.aiUnitLedgerEntry.create({
+        data: { tenantId, lotId: lot.id, entryType: "EXPIRE", bucket: "INCLUDED", units: (-rem).toFixed(6), periodKey: lot.periodKey, source: "period_reset" },
+      });
+    }
+    await grantUnitsInTx(tx, {
+      tenantId, bucket: "INCLUDED", grantType: "PLAN", units: newAllowance, periodKey: newPeriodKey, expiresAt, source, includedAllowance: newAllowance,
+    });
+    return true;
+  });
+}
+
+/**
  * Expire any lot whose `expiresAt` has passed, in ANY bucket.
  *
  * `rolloverIncluded` only expires the previous period's INCLUDED lots. Purchased
