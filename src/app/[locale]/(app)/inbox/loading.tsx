@@ -1,7 +1,8 @@
 import { useTranslations } from 'next-intl';
 
 import styles from '@/features/inbox/Inbox.module.css';
-import { ConversationSkeleton, QueueSkeleton } from '@/features/inbox/Skeletons';
+import { LoadingConversation } from '@/features/inbox/LoadingConversation';
+import { QueueSkeleton } from '@/features/inbox/Skeletons';
 import { PageContainer } from '@/shell/PageContainer';
 
 /**
@@ -28,7 +29,7 @@ export default function Loading() {
           <QueueSkeleton />
         </section>
         <section className={styles.conversationColumn}>
-          <ConversationSkeleton />
+          <LoadingConversation />
         </section>
       </div>
     </PageContainer>

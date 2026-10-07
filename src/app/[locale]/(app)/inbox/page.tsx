@@ -331,10 +331,14 @@ export default async function Page({
               )}
             </div>
             {/*
-              02b: on a clear queue there is no conversation and no wall - the
-              pane is the whole panel, and the wall's reads are not made.
+              ★★ THE WALL IS DRAWN ONLY BESIDE AN OPEN CONVERSATION (Omer,
+              2026-10-07): with none - nothing picked, or Esc closed it, or a
+              clear queue (02b) - there is no customer for it to know about,
+              so it is not rendered at all and the pane takes its width, as
+              WhatsApp does. A question not about a customer is the separate
+              Copilot proposal, not this panel.
             */}
-            {clear ? null : (
+            {data.open === null ? null : (
               <aside className={styles.contextColumn} aria-label={t('context.label')}>
                 {/*
                   02's wall: a fixed 45px header, the scrolling body, and the
@@ -346,24 +350,17 @@ export default async function Page({
                     this" and the body's "What it did" alike. Keyed, so the
                     next conversation starts from its own read.
                 */}
-                <ActivityProvider
-                  key={data.open?.id ?? 'none'}
-                  conversationId={data.open?.id ?? null}
-                >
+                <ActivityProvider key={data.open.id} conversationId={data.open.id}>
                   <WallHeader
-                    conversationId={data.open?.id ?? null}
+                    conversationId={data.open.id}
                     /*
                      * "stop" is Stop AI, so only where the AI answers: an AI
                      * employee bound, and no person has taken over.
                      */
-                    aiDriving={
-                      data.open !== null &&
-                      data.open.assignedAiAgentId !== null &&
-                      !data.open.isHandedOver
-                    }
+                    aiDriving={data.open.assignedAiAgentId !== null && !data.open.isHandedOver}
                   />
                   <div className={styles.copilotBody}>
-                    {data.open && data.detail ? (
+                    {data.detail ? (
                       <Suspense
                         key={data.open.id}
                         // The wall's shape, light on the dark: an answer card, then the thread.
@@ -390,17 +387,10 @@ export default async function Page({
                           }}
                         />
                       </Suspense>
-                    ) : (
-                      <p className={styles.note} data-testid="wall-nothing-open">
-                        {t('wall.nothingOpen')}
-                      </p>
-                    )}
+                    ) : null}
                   </div>
                   {/* Keyed: a question half-typed about one person is not asked about the next. */}
-                  <AskCopilot
-                    key={data.open?.id ?? 'none'}
-                    conversationId={data.open?.id ?? null}
-                  />
+                  <AskCopilot key={data.open.id} conversationId={data.open.id} />
                 </ActivityProvider>
               </aside>
             )}

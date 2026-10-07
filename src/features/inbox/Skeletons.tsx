@@ -70,8 +70,18 @@ export function QueueRowSkeleton() {
  *
  * `header` replaces the header's placeholder lines with something real - the
  * clicked row's name, which `PendingPane` already has.
+ *
+ * `wall`: the Copilot's placeholder - only where a conversation is open, as
+ * the page draws the wall only then (Omer, 2026-10-07). `PendingPane` always
+ * has one (a row was clicked); the route's loader asks the URL.
  */
-export function ConversationSkeleton({ header }: { readonly header?: ReactNode }) {
+export function ConversationSkeleton({
+  header,
+  wall = true,
+}: {
+  readonly header?: ReactNode;
+  readonly wall?: boolean;
+}) {
   return (
     <>
       <div className={styles.openBar} data-testid="header-skeleton">
@@ -90,11 +100,13 @@ export function ConversationSkeleton({ header }: { readonly header?: ReactNode }
           <StreamSkeleton />
           <ComposerSkeleton />
         </div>
-        <div className={styles.contextColumn}>
-          <div className={styles.copilotBody}>
-            <ContextSkeleton />
+        {wall ? (
+          <div className={styles.contextColumn} data-testid="wall-skeleton">
+            <div className={styles.copilotBody}>
+              <ContextSkeleton />
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </>
   );

@@ -192,11 +192,10 @@ describe('★★ four panels, and none of them inside another', () => {
     );
 
     expect(nested).toEqual([]);
-    // The queue and the context panels are still mounted; the stream is not,
-    // because there is no conversation to stream.
+    // The queue is still mounted; the stream is not, and - with no customer
+    // to know about - neither is the Copilot wall (Omer, 2026-10-07).
     expect(panels).toContain(ConversationList);
-    // The wall keeps its header with nothing open; its body has nothing to read.
-    expect(panels).toContain(WallHeader);
+    expect(panels).not.toContain(WallHeader);
     expect(panels).not.toContain(CopilotWall);
     expect(panels).not.toContain(ConversationStream);
   });
@@ -218,12 +217,14 @@ describe('★★ the Copilot wall is given the round it reads, and the handle', 
     expect(props?.conversation.id).toBe('conv1');
   });
 
-  it('★ "Ask Copilot" gets no conversation when nothing is open, so it is off rather than broken', async () => {
-    const props = propsOf<{ conversationId: string | null }>(
+  it('★ "Ask Copilot" is the open conversation\'s, and with none it is not drawn at all', async () => {
+    const open = propsOf<{ conversationId: string | null }>(await page(), AskCopilot);
+    expect(open?.conversationId).toBe('conv1');
+    const none = propsOf(
       await page({ rows: [], open: null, messages: null }, { view: 'resolved' }),
       AskCopilot,
     );
-    expect(props?.conversationId).toBeNull();
+    expect(none).toBeNull();
   });
 });
 
@@ -475,16 +476,26 @@ describe('⚠⚠ two panels, and the Copilot is the chat panel’s wall', () => 
     expect(chain.some((c) => c.includes('conversationPane'))).toBe(false);
   });
 
-  it('⚠⚠ and it is still there with nothing open', async () => {
+  it('★★ with nothing open there is no wall at all - the pane takes its width (Omer, 2026-10-07)', async () => {
     /*
-     * ★ THE BUG MY FIRST ATTEMPT INTRODUCED. The branch was two sections, and
-     *   moving the Copilot into the open one silently dropped it from the
-     *   empty one - the panel vanished exactly when somebody had nothing
-     *   selected. It is now one section with two bodies, and this is the
-     *   assertion that keeps it that way.
+     * Reversed on purpose. The wall used to stay with nothing open, as an
+     * empty "Open a conversation…" and a context-free "Ask Copilot". Omer:
+     * with no customer it has nothing to say, so it is not rendered and the
+     * middle takes its width, as WhatsApp does. A question not about a
+     * customer is the separate Copilot proposal.
      */
-    const chain = ancestorsOf(await page({ open: null }), WallHeader);
-    expect(chain.some((c) => c.includes('contextColumn'))).toBe(true);
+    expect(ancestorsOf(await page({ open: null }), WallHeader)).toEqual([]);
+    expect(ancestorsOf(await page(), WallHeader).some((c) => c.includes('contextColumn'))).toBe(
+      true,
+    );
+  });
+
+  it('★★ Esc closes the conversation and, with it, the wall', async () => {
+    // Esc replaces the URL without `c` (InboxEscape → closeTarget); that page has no wall.
+    const { closeTarget } = await import('@/features/inbox/InboxEscape');
+    const after = Object.fromEntries(new URLSearchParams(closeTarget('?c=c1&view=mine')));
+    expect(after).toEqual({ view: 'mine' });
+    expect(ancestorsOf(await page({ open: null }, after), WallHeader)).toEqual([]);
   });
 });
 
