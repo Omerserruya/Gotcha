@@ -567,7 +567,6 @@ export {
   clusterKeyFor,
   isoWeekKey,
   UNANSWERED_REASONS,
-  LOW_CONFIDENCE_SCORE,
   type UnansweredReason,
 } from "./lib/knowledge-gaps";
 export {

@@ -1,4 +1,4 @@
-import { prisma, recordUnansweredQuestion, LOW_CONFIDENCE_SCORE } from "@chatcenter/shared";
+import { prisma, recordUnansweredQuestion } from "@chatcenter/shared";
 import { isSemanticallyRetrievable } from "./behavior-engine.service";
 
 /**
@@ -37,6 +37,35 @@ export function isOnlyCourtesy(message: string): boolean {
 }
 import { generateEmbedding } from "./embedding.service";
 import { searchSimilar, SearchResult } from "./qdrant.service";
+import { translatedQuery } from "./query-translation.service";
+
+/**
+ * Below this top similarity score (the best of the direct and the translated
+ * search) a question is recorded as one the Knowledge could not answer.
+ *
+ * 0.30, measured on dev 2026-10-07 (text-embedding-3-small, two Hebrew
+ * documents): answerable questions scored 0.294-0.428 (median ~0.35), clearly
+ * unanswerable ones 0.191-0.312 (median ~0.27). The old 0.35 recorded four of
+ * six ANSWERED questions as gaps; at 0.30 one answered question (0.294) is
+ * still recorded and two unanswered ones (0.308, 0.312) are not. The ranges
+ * overlap, so no number separates them perfectly; a sample this thin should be
+ * re-measured on a tenant with richer Knowledge. (It was 0.35 in
+ * @chatcenter/shared; this service is its only reader.)
+ */
+export const KNOWLEDGE_GAP_SCORE = 0.30;
+
+/** Two result lists as one: each chunk once, at its best score, best first. */
+export function mergeByBestScore(lists: SearchResult[][], limit: number): SearchResult[] {
+  const best = new Map<string, SearchResult>();
+  for (const list of lists) {
+    for (const r of list) {
+      const key = `${r.documentId ?? r.documentTitle}#${r.chunkIndex}`;
+      const prev = best.get(key);
+      if (!prev || (r.score ?? 0) > (prev.score ?? 0)) best.set(key, r);
+    }
+  }
+  return [...best.values()].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, limit);
+}
 
 export type { SearchResult as RetrievedChunk };
 
@@ -120,7 +149,13 @@ export async function retrieveRelevantChunks(
   gap: { record?: boolean; askerKey?: string | null } = {},
 ): Promise<SearchResult[]> {
   try {
-    const queryEmbedding = await generateEmbedding(query, { tenantId });
+    // A question in another language than the Knowledge is also searched in
+    // the Knowledge's language (see query-translation.service); null = no
+    // mismatch, or the translation was refused / failed: the plain search stands.
+    const [queryEmbedding, translated] = await Promise.all([
+      generateEmbedding(query, { tenantId }),
+      translatedQuery(tenantId, query).catch(() => null),
+    ]);
 
     const activeKBIds = await readableKnowledgeBaseIds(tenantId, aiAgentId);
     if (activeKBIds.length === 0) {
@@ -133,7 +168,16 @@ export async function retrieveRelevantChunks(
       return [];
     }
 
-    const results = await searchSimilar(tenantId, queryEmbedding, limit, activeKBIds);
+    const direct = await searchSimilar(tenantId, queryEmbedding, limit, activeKBIds);
+    let results = direct;
+    if (translated) {
+      try {
+        const translatedEmbedding = await generateEmbedding(translated, { tenantId });
+        results = mergeByBestScore([direct, await searchSimilar(tenantId, translatedEmbedding, limit, activeKBIds)], limit);
+      } catch (err: any) {
+        console.warn("[Knowledge] translated search failed, using the direct one:", err?.message ?? err);
+      }
+    }
 
     // Recorded HERE, where the scores are, and never inferred later from a
     // conversation that happened to escalate. By the time anything downstream
@@ -144,7 +188,7 @@ export async function retrieveRelevantChunks(
         void recordUnansweredQuestion({
           tenantId, question: query, reason: "no_knowledge", askerKey: gap.askerKey,
         });
-      } else if (topScore < LOW_CONFIDENCE_SCORE) {
+      } else if (topScore < KNOWLEDGE_GAP_SCORE) {
         void recordUnansweredQuestion({
           tenantId, question: query, reason: "low_confidence", askerKey: gap.askerKey,
         });

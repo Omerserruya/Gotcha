@@ -30,14 +30,9 @@ import { prisma } from "./prisma";
 export const UNANSWERED_REASONS = ["no_knowledge", "low_confidence", "conflicting"] as const;
 export type UnansweredReason = (typeof UNANSWERED_REASONS)[number];
 
-/**
- * Below this top similarity score, retrieval found nothing worth quoting.
- *
- * Cosine similarity from the embedding model. Deliberately generous: the cost
- * of a false "we could not answer this" is one row an owner glances at, and the
- * cost of a false negative is a gap that never surfaces at all.
- */
-export const LOW_CONFIDENCE_SCORE = 0.35;
+// The low-confidence threshold lives with its only reader, the retrieval in
+// services/ai (KNOWLEDGE_GAP_SCORE in knowledge.service.ts), where it was
+// recalibrated against measured scores.
 
 /** Words that carry no topic. Trimmed so phrasing does not fragment a cluster. */
 const STOPWORDS = new Set([

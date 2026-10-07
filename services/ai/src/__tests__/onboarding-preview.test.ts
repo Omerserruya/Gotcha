@@ -19,7 +19,7 @@ const H = vi.hoisted(() => ({
   status: "PENDING_ONBOARDING",
   chunks: [] as any[],
   retrievalOpts: [] as any[],
-  model: { content: "", calls: 0 },
+  model: { content: "", calls: 0, messages: [] as any[] },
   audits: [] as any[],
   redis: new Map<string, number>(),
   unanswered: [] as any[],
@@ -66,8 +66,9 @@ vi.mock("../services/ai.service", async (importOriginal) => {
   return {
     ...actual,
     getDefaultModel: () => "test-model",
-    generateResponse: async () => {
+    generateResponse: async (p: any) => {
       H.model.calls++;
+      H.model.messages = p.messages;
       if (H.billingDeny) { const e: any = new Error("ai_units"); e.name = "AiUnitsExhaustedError"; e.reason = H.billingDeny; throw e; }
       return { content: H.model.content, usage: { input_tokens: 120, output_tokens: 40, total_tokens: 160 } };
     },
@@ -83,7 +84,7 @@ app.use("/api/ai-assist", router);
 const ask = (question: string, extra: any = {}) => request(app).post("/api/ai-assist/onboarding-preview-answer").send({ question, ...extra });
 
 beforeEach(() => {
-  H.role = "ADMIN"; H.status = "PENDING_ONBOARDING"; H.chunks = []; H.retrievalOpts = []; H.model = { content: "", calls: 0 };
+  H.role = "ADMIN"; H.status = "PENDING_ONBOARDING"; H.chunks = []; H.retrievalOpts = []; H.model = { content: "", calls: 0, messages: [] };
   H.audits = []; H.redis = new Map(); H.unanswered = []; H.discovery = null; H.billingDeny = null;
 });
 
@@ -117,6 +118,18 @@ describe("★ POST onboarding-preview-answer", () => {
     const r = await ask("מה אתם מוכרים?");
     expect(r.body.data.grounded).toBe(true);
     expect(H.model.calls).toBe(1);
+  });
+
+  it("★ Hebrew Knowledge, an English question: the model is told a translated, general answer is covered; it is grounded with the Hebrew source", async () => {
+    H.chunks = [{ content: "אתר חנות מקוונת למוצרים אורבניים, אופנה ואביזרים.", score: 0.32, documentTitle: "Shipping policy", documentId: "doc_ship" }];
+    H.model.content = JSON.stringify({ answer: "We are an online store for urban goods, fashion and accessories.", covered: true, used: [1] });
+    const r = await ask("What do you sell?", { locale: "en" });
+    expect(r.body.data).toMatchObject({ grounded: true, sources: [{ documentId: "doc_ship" }] });
+    const system = H.model.messages[0].content;
+    // Measured on dev: without these two rules the model refused "What do you sell?".
+    expect(system).toMatch(/another language than the question: translate/);
+    expect(system).toMatch(/general answer the excerpts support .* is covered/);
+    expect(H.model.messages[1].content).toMatch(/Question: What do you sell\?[\s\S]*אתר חנות מקוונת/);
   });
 
   it("★ the model saying the excerpts do not cover it is not grounded either", async () => {

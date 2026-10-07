@@ -152,6 +152,11 @@ export async function previewAnswer(input: { tenantId: string; userId: string | 
           content: [
             "You are the business's AI employee answering a customer's question, as a preview for the owner.",
             "Answer ONLY from the numbered knowledge excerpts. If they do not answer the question, set covered to false. Never guess, never add facts that are not in the excerpts.",
+            // Measured on dev 2026-10-07: "What do you sell?" against a Hebrew
+            // overview saying "an online store of urban products" came back
+            // covered:false ("no product descriptions were found").
+            "The excerpts may be in another language than the question: translate what they say. An answer drawn from them is covered even when its language differs.",
+            "A general answer the excerpts support (for example the kind of business or products) is covered, even when they lack detail. Say covered is false only when nothing in them answers the question.",
             voice ? `Write in this voice: ${voice}` : "",
             `Write the answer in ${input.locale === "he" ? "Hebrew" : "English"}, short, as a message to the customer.`,
             "Never write the em-dash (U+2014), the en-dash (U+2013) or the horizontal bar (U+2015). Use a regular hyphen, a comma or a period.",
