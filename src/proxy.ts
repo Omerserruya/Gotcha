@@ -13,6 +13,7 @@ import { RETURN_TO_HEADER } from '@/auth/return-to';
 import { nowInSeconds, sealSession, sessionCookieOptions, unsealSession } from '@/auth/session';
 
 import { PUBLIC_PATH_PATTERN } from './auth-surface';
+import { isLocale } from '@/i18n/locales';
 
 const intlMiddleware = createIntlMiddleware(routing);
 
@@ -227,6 +228,10 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
       [request.nextUrl.host, request.headers.get('x-forwarded-host')].filter(Boolean),
     );
     if (!hostsHere.has(moved.host)) {
+      // The same screen, in the language the URL picked: `/he/recover` stays
+      // `/he/recover` there. Only a path with no language is left to
+      // Accept-Language (dev: /v2/he/sign-in landed on /en/sign-in).
+      moved.pathname = `${mountOf(moved)}${pathname}`;
       for (const [key, value] of request.nextUrl.searchParams) {
         moved.searchParams.set(key, value);
       }
@@ -294,16 +299,14 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
        *   composing one would need the other build's mount point, which this
        *   build does not have and must not guess.
        *
-       * ── AND NO LOCALE IS CHOSEN HERE ──
-       * `/sign-in` un-prefixed, so `intlMiddleware` negotiates it into
-       * `/en/sign-in` or `/he/sign-in` on the next pass. Picking one here would
-       * override the visitor's own `Accept-Language` with a guess.
-       *
-       * ★ That applies to the same-host form only. A configured URL is used
-       *   exactly as given - the negotiation then happens on the OTHER origin,
-       *   by its own middleware, from the browser's own `Accept-Language`. So
-       *   the configured value should name the un-prefixed path for the same
-       *   reason, and this file cannot enforce that.
+       * ── ★★ THE LANGUAGE IN THE URL WINS ──
+       * It used to be dropped here on purpose - `/sign-in` un-prefixed, for
+       * `Accept-Language` to decide on the next pass. But a language in the
+       * path is one the visitor PICKED, and an en-US browser on `/he/inbox`
+       * was signed in in English (dev, 2026-10-07). So the path's language
+       * carries over - to our screen and to `SIGN_IN_URL`'s - and only a
+       * path with none is left to `Accept-Language`. `PLATFORM_LOGIN_URL`
+       * is someone else's page and is used exactly as given.
        */
       const platformLogin = process.env.PLATFORM_LOGIN_URL;
       /*
@@ -322,8 +325,8 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
       const loginUrl = platformLogin
         ? new URL(platformLogin)
         : signInElsewhere
-          ? new URL(signInElsewhere)
-          : new URL(`${mount}/sign-in`, request.url);
+          ? inLocaleOf(new URL(signInElsewhere), pathname)
+          : inLocaleOf(new URL(`${mount}/sign-in`, request.url), pathname);
       /*
        * `pathname` is already stripped of the prefix by Next, and it is stored
        * that way on purpose: the callback re-prefixes it with `appUrl` when it
@@ -516,3 +519,26 @@ export const config = {
     '/((?!api|_next|_vercel|.*\\.(?:ico|png|jpe?g|gif|svg|webp|avif|css|js|mjs|map|txt|xml|webmanifest|woff2?|ttf|otf|eot|pdf)$).*)',
   ],
 };
+
+/**
+ * Where a sign-in URL's build is mounted: its path without the screen
+ * (`https://auth-dev.gotcha.co.il/sign-in` → ``, `…/v2/sign-in` → `/v2`). A
+ * whole URL is configured so this build need not guess the other's mount;
+ * this reads it back.
+ */
+function mountOf(signIn: URL): string {
+  return signIn.pathname.replace(/\/sign-in\/?$/, '');
+}
+
+/**
+ * The sign-in URL in the language of the path being left: `/he/inbox` →
+ * `…/he/sign-in`. A language picked in the URL wins over `Accept-Language`,
+ * which decides only when the path carries none.
+ */
+export function inLocaleOf(signIn: URL, pathname: string): URL {
+  const locale = /^\/([a-z]{2})(?:\/|$)/.exec(pathname)?.[1];
+  if (!isLocale(locale)) return signIn;
+  const target = new URL(signIn);
+  target.pathname = `${mountOf(signIn)}/${locale}/sign-in`;
+  return target;
+}

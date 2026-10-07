@@ -82,14 +82,18 @@ describe('⚠⚠ an unauthenticated visitor reaches OUR sign-in screen', () => {
     expect(target.searchParams.get('returnTo')).toBe('/en/inbox?c=abc');
   });
 
-  it('★ chooses no locale, leaving negotiation to next-intl', () => {
+  it('★★ the language in the URL wins; Accept-Language decides only without one', () => {
     /*
-     * `/sign-in` un-prefixed. Picking `/en/sign-in` here would override the
-     * visitor's own `Accept-Language` with a guess, on the first page they see.
+     * It used to choose no locale, for `Accept-Language` to decide. But a
+     * language in the path is one the visitor picked: an en-US browser on
+     * `/he/...` was signed in in English (dev, 2026-10-07).
      */
-    const { location } = redirectFor('/en/home');
-    const target = new URL(location, 'https://dev.gotcha.co.il');
-    expect(target.pathname).toBe('/sign-in');
+    const he = new URL(redirectFor('/he/inbox').location, 'https://dev.gotcha.co.il');
+    expect(he.pathname).toBe('/he/sign-in');
+    const en = new URL(redirectFor('/en/home').location, 'https://dev.gotcha.co.il');
+    expect(en.pathname).toBe('/en/sign-in');
+    const none = new URL(redirectFor('/home').location, 'https://dev.gotcha.co.il');
+    expect(none.pathname).toBe('/sign-in');
   });
 
   it('★★ does not redirect the sign-in screen itself', () => {
@@ -194,7 +198,22 @@ describe('⚠⚠ the gate can send people to a sign-in screen on another origin'
     const { status, location } = await gate({ SIGN_IN_URL: AUTH_SIGN_IN });
     expect(status).toBe(307);
     expect(new URL(location).origin).toBe('https://auth-dev.gotcha.co.il');
-    expect(new URL(location).pathname).toBe('/sign-in');
+    expect(new URL(location).pathname).toBe('/en/sign-in');
+  });
+
+  it('★★ in the language the URL picked, both ways across the origin', async () => {
+    // From the product: the path's language to the sign-in origin.
+    const from = await gate({ SIGN_IN_URL: AUTH_SIGN_IN }, '/he/inbox');
+    expect(new URL(from.location).pathname).toBe('/he/sign-in');
+    // The old sign-in path on this origin: the same screen, in its language.
+    const moved = await gate({ SIGN_IN_URL: AUTH_SIGN_IN }, '/he/sign-in');
+    expect(new URL(moved.location).pathname).toBe('/he/sign-in');
+    const recover = await gate({ SIGN_IN_URL: AUTH_SIGN_IN }, '/he/recover?flow=abc');
+    expect(new URL(recover.location).pathname).toBe('/he/recover');
+    expect(new URL(recover.location).searchParams.get('flow')).toBe('abc');
+    // No language in the path: left to Accept-Language there.
+    const bare = await gate({ SIGN_IN_URL: AUTH_SIGN_IN }, '/sign-in');
+    expect(new URL(bare.location).pathname).toBe('/sign-in');
   });
 
   it('⚠⚠ carries `returnTo` across the origin, or every deep link is lost', async () => {
@@ -335,7 +354,7 @@ describe('⚠⚠ the gate can send people to a sign-in screen on another origin'
     // broken on every deployment that has none - which is all of them today.
     const { status, location } = await gate({});
     expect(status).toBe(307);
-    expect(new URL(location, 'https://dev.gotcha.co.il').pathname).toBe('/sign-in');
+    expect(new URL(location, 'https://dev.gotcha.co.il').pathname).toBe('/en/sign-in');
     expect(location).not.toContain('auth-dev');
   });
 });
