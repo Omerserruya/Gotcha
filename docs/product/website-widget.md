@@ -77,9 +77,24 @@ settings screen + Install on the contract (sent before item 2 lands).
 | 4 | Web chat visitors on the socket (signed visitor token, the relay extended to WEBCHAT) instead of 5 s polling | 8h |
 | 5 | Tests + live check | 4h |
 
-**Total ~32h (~4 days).** Needs from Omer: the handoff's wording and whether a
-handed-off conversation continues in the same thread (recommended) or opens a
-new one.
+**Total ~32h (~4 days).**
+
+### Stage B defaults (supervisor, 2026-10-07; Omer may change them)
+
+1. **Wording.** The widget's button: "המשך בוואטסאפ" / "Continue on WhatsApp".
+   The message pre-filled in WhatsApp: "היי, ממשיכים את השיחה מהאתר ({ref})" /
+   "Hi, continuing our chat from the website ({ref})", where `ref` is a short
+   code that identifies the website conversation.
+2. **A new WhatsApp conversation, the same customer.** WhatsApp is its own
+   channel, so the handoff opens a separate WhatsApp conversation, but:
+   - the customer is the same (identity merged on `ref`)
+   - the website chat's history is visible in the WhatsApp conversation, as
+     context for the bot and for a person, so the customer never repeats
+     themselves
+   - the website chat is closed as "continued on WhatsApp", linking to the new
+     conversation
+3. **No WhatsApp connected:** the widget shows no button at all; the setting
+   is unavailable with its reason (as today).
 
 **Rides the same auth rebuild (supervisor, 2026-10-07):** the grandfathered
 onboarding chat in `services/auth/src/routes/onboarding.ts` still shows model
