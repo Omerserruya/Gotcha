@@ -140,10 +140,13 @@ uses `activeRun` from `GET /threads/:id` and this route.
 
 `POST /api/assistant/threads/:id/messages/:messageId/cancel` → `202 { data: { status: "cancelling" } }`.
 
-The model call and any running tool are really stopped (not just the stream). The
-stream ends with `message.done` `{ status: "cancelled" }`; the text written so far
-is kept. Cancelling a finished message answers `200 { data: { status: "<its status>" } }`.
-Closing the browser tab does **not** cancel; use this route.
+The model call is really stopped (its request is aborted, not just the stream),
+and nothing after it runs: no further tool, no further round. A tool already
+running when the cancel lands finishes first (stage 1 tools are short reads),
+then the answer stops. The stream ends with `message.done` `{ status: "cancelled" }`
+within about half a second; the text written so far is kept. Cancelling a
+finished message answers `200 { data: { status: "<its status>" } }`. Closing the
+browser tab does **not** cancel; use this route.
 
 ---
 
@@ -172,3 +175,25 @@ The existing system tools (counts, metrics, customer search, conversation summar
 recent activity) and the workspace's connected integrations' read tools. Steps are
 worded for people ("Searching customers", "Reading your HubSpot deals"), never tool
 names.
+
+---
+
+## 8. Implementation notes (backend, 2026-10-07)
+
+- Every answer is a run of the existing assistant runtime with the thread id as
+  its memory session: the model sees the thread's earlier turns (tool calls
+  included), never another thread's. Ctrl+K's "clear" leaves threads alone;
+  deleting a thread deletes its memory.
+- The scope reaches the model as absolute dates (`last_7` = today and the six
+  days before; `this_week` starts on Sunday; UTC days).
+- Suggestions are written by the same model call after a marker line that the
+  server strips from the stream; they arrive as `suggestions` before
+  `thread.title` and `message.done`.
+- `error` codes in the stream: `AI_UNAVAILABLE` (the provider failed) and
+  `BUDGET_EXCEEDED` (default 60,000 tokens per answer, all rounds together;
+  `ASSISTANT_RUN_TOKEN_BUDGET`).
+- A message saved as `streaming` whose run no longer exists (the process
+  restarted mid-answer) is returned as `failed`.
+- Known gap: when an answer is cancelled mid-stream, the provider's usage for
+  that partial call is not reported back (it arrives only at the end of a
+  stream), so it is not metered.

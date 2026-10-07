@@ -608,7 +608,7 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
     if (params.toolChoice) (requestParams as any).tool_choice = sanitizeToolChoice(params.toolChoice);
   }
 
-  const stream = await client.chat.completions.create(requestParams);
+  const stream = await client.chat.completions.create(requestParams, params.signal ? { signal: params.signal } : undefined);
 
   let accumulatedContent = "";
   // OpenAI delivers tool_calls in deltas keyed by an `index`. We assemble

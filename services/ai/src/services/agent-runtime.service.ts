@@ -52,7 +52,8 @@ export type AgentRuntimeEvent =
   | { type: "denied"; tool: string; reason: string }
   | { type: "round_end"; round: number; hadToolCalls: boolean }
   | { type: "done"; usage: { input_tokens: number; output_tokens: number; total_tokens: number }; rounds: number }
-  | { type: "error"; message: string };
+  | { type: "cancelled" }
+  | { type: "error"; message: string; code?: "BUDGET_EXCEEDED" | "AI_UNAVAILABLE" };
 
 export interface AgentRunInput {
   operator: OperatorContext;
@@ -72,6 +73,12 @@ export interface AgentRunInput {
   aiAgentId?: string | null;
   /** Bearer token for downstream service calls dispatched by tool runs. */
   authToken?: string;
+  /** Aborting stops the model call in flight and every round/tool after it. */
+  signal?: AbortSignal;
+  /** Tokens all model calls of this run may use together; reaching it ends the run. */
+  tokenBudget?: number;
+  /** Extra system lines for this run (a thread's scope, its answer format). */
+  extraSystem?: string[];
 }
 
 export type AgentEventSink = (event: AgentRuntimeEvent) => void | Promise<void>;
@@ -108,6 +115,7 @@ export async function runAgent(
   const chatMessages: any[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "system", content: ctxBuilt.block },
+    ...(input.extraSystem ?? []).map((content) => ({ role: "system", content })),
     ...sanitizeHistoryForLLM(memoryToChatMessages(history)),
     { role: "user", content: input.message },
   ];
@@ -130,9 +138,12 @@ export async function runAgent(
 
   let totalUsage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
   let round = 0;
-  let stopReason: "final" | "max_rounds" | "error" = "final";
+  let stopReason: "final" | "max_rounds" | "error" | "cancelled" | "budget" = "final";
+  const aborted = () => !!input.signal?.aborted;
 
   for (round = 0; round < MAX_ROUNDS; round++) {
+    if (aborted()) { stopReason = "cancelled"; break; }
+    if (input.tokenBudget && totalUsage.total_tokens >= input.tokenBudget) { stopReason = "budget"; break; }
     let finalContent = "";
     let finalToolCalls: any[] | undefined;
 
@@ -145,6 +156,7 @@ export async function runAgent(
         maxTokens: 1024,
         tools,
         metadata: { type: "system_copilot", aiAgentId: input.aiAgentId ?? undefined },
+        signal: input.signal,
       })) {
         if (ev.contentDelta) await onEvent({ type: "token", text: ev.contentDelta });
         if (ev.done) {
@@ -160,8 +172,9 @@ export async function runAgent(
         }
       }
     } catch (err: any) {
+      if (aborted()) { stopReason = "cancelled"; break; }
       stopReason = "error";
-      await onEvent({ type: "error", message: err?.message || "stream failed" });
+      await onEvent({ type: "error", message: err?.message || "stream failed", code: "AI_UNAVAILABLE" });
       break;
     }
 
@@ -203,6 +216,7 @@ export async function runAgent(
     let pausedForApproval: { approvalRequestId: string; tool: string } | null = null;
 
     for (const tc of finalToolCalls) {
+      if (aborted()) break;
       let parsedArgs: unknown = {};
       try { parsedArgs = JSON.parse(tc.function?.arguments || "{}"); } catch { /* keep raw */ }
       const label = stepText(tc.function?.name || "", parsedArgs, input.operator.locale ?? "en");
@@ -284,6 +298,9 @@ export async function runAgent(
   }
 
   if (round >= MAX_ROUNDS) stopReason = "max_rounds";
+  if (stopReason !== "cancelled" && aborted()) stopReason = "cancelled";
+  if (stopReason === "cancelled") await onEvent({ type: "cancelled" });
+  if (stopReason === "budget") await onEvent({ type: "error", code: "BUDGET_EXCEEDED", message: "this answer reached its size limit" });
 
   await onEvent({ type: "done", usage: totalUsage, rounds: round });
 

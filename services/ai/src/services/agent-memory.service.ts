@@ -215,8 +215,12 @@ export function sanitizeHistoryForLLM(messages: any[]): any[] {
  * and are never cleared here (they used to be).
  */
 export async function clearAgentMemory(opts: { tenantId: string; userId: string }): Promise<number> {
-  const employees = await prisma.aIAgent.findMany({ where: { tenantId: opts.tenantId }, select: { id: true } });
-  const builderSessions = employees.map((e) => e.id);
+  const [employees, threads] = await Promise.all([
+    prisma.aIAgent.findMany({ where: { tenantId: opts.tenantId }, select: { id: true } }),
+    // Home chat threads keep their own memory; deleting a thread deletes it.
+    prisma.assistantThread.findMany({ where: { tenantId: opts.tenantId, userId: opts.userId }, select: { id: true } }),
+  ]);
+  const builderSessions = [...employees.map((e) => e.id), ...threads.map((t) => t.id)];
   const r = await (prisma as any).systemAgentMessage.deleteMany({
     where: {
       tenantId: opts.tenantId,
