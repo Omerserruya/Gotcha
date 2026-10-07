@@ -108,3 +108,33 @@ for (const size of SIZES) {
     });
   }
 }
+
+/*
+ * ★★ A WINDOW WITH MORE SAYS SO (Omer on a 14", 2026-10-07). At 1512×760 - his
+ * screen - every box that scrolls inside itself and has content below its
+ * edge carries `data-more`, the fade (ScrollFades). A Mac hides the
+ * scrollbar; a row cut through the middle with no hint read as broken.
+ */
+for (const route of ROUTES) {
+  test(`1512×760 ${route}: every window with more fades at its edge`, async ({ page }) => {
+    await page.setViewportSize({ width: 1512, height: 760 });
+    await page.goto(`${BASE.pathname.replace(/\/$/, '')}/en${route}`);
+    expect(page.url(), 'redirected to sign-in: the session is not current').not.toMatch(
+      /sign-in|api\/auth\/login/,
+    );
+    await page.waitForLoadState('networkidle');
+    const silent = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('main *, [role=dialog] *')]
+        .filter((el) => {
+          const o = getComputedStyle(el).overflowY;
+          if (o !== 'auto' && o !== 'scroll') return false;
+          if (el.getBoundingClientRect().width < 4) return false;
+          return (
+            el.scrollHeight - el.scrollTop - el.clientHeight > 4 && !el.hasAttribute('data-more')
+          );
+        })
+        .map((el) => `${el.tagName}.${el.className} ${el.clientHeight}/${el.scrollHeight}`),
+    );
+    expect(silent, 'a window with more and no fade').toEqual([]);
+  });
+}

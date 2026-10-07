@@ -856,6 +856,44 @@
     color: var(--frame-text-faint);
   }
 
+  /*
+   * ★★ A SHORT WINDOW SCROLLS THE PAGE, NOT THE CARDS (Omer on a 14",
+   * 2026-10-07). Below ~880px of height there is not room for three windows
+   * side by side: the third row of "Needs you now" and the team card were cut
+   * mid-line, with no scrollbar showing on a Mac. So here every card takes
+   * its natural height and the body below the command box scrolls as one.
+   * Above it, the windows stay - each fading at its edge when it has more.
+   */
+  @media (height < 880px) {
+    .columns,
+    .columnsQuiet {
+      grid-template-rows: auto;
+    }
+
+    /* Each column at least its content, or the row stops at the window again. */
+    .queueColumn,
+    .activityColumn,
+    .asideColumn {
+      min-block-size: auto;
+    }
+
+    .queueColumn > .queueCard,
+    .queueColumn > .workCard {
+      flex: none;
+      min-block-size: auto;
+      overflow: clip;
+    }
+
+    .asideColumn {
+      overflow: visible;
+    }
+
+    .activityColumn > * {
+      flex: none;
+      min-block-size: auto;
+    }
+  }
+
   /* Below this the two columns stop fitting side by side. */
   @media (width <= 1100px) {
     .columns {

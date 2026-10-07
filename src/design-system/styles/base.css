@@ -64,4 +64,14 @@
     overflow-y: auto;
     overscroll-behavior: contain;
   }
+
+  /*
+   * ★★ A scroll window with more below fades at its edge (Omer on a 14",
+   * 2026-10-07): a Mac hides the scrollbar, and a row cut through the middle
+   * read as a broken layout. `data-more` is set by the shell's ScrollFades
+   * while there is content past the edge; scrolled to the end, it goes.
+   */
+  [data-more] {
+    mask-image: linear-gradient(to bottom, black calc(100% - var(--space-32)), transparent);
+  }
 }

@@ -9,6 +9,7 @@ import { RealtimeProvider } from '@/realtime/realtime-provider';
 import { QueryProvider } from '@/server-state/query-provider';
 import { TenantProvider } from '@/tenant/tenant-context';
 
+import { ScrollFades } from './ScrollFades';
 import { SessionExpiryWatcher } from './SessionExpiryWatcher';
 
 /**
@@ -51,6 +52,7 @@ export function AppProviders({
             <RealtimeProvider tenantId={tenantId}>
               <TooltipProvider delayDuration={400} skipDelayDuration={200}>
                 <SessionExpiryWatcher />
+                <ScrollFades />
                 {children}
               </TooltipProvider>
             </RealtimeProvider>
