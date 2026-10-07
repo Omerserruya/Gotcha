@@ -14,7 +14,7 @@ import { loadMessages } from '@/i18n/load-messages';
 import { isLocale, DEFAULT_LOCALE } from '@/i18n/locales';
 import { AppProviders } from '@/shell/AppProviders';
 import { AppShell } from '@/shell/AppShell';
-import { paymentPath, readWorkspaceRoute } from '@/shell/load-workspace-gate';
+import { paymentPath, readWorkspaceGate } from '@/shell/load-workspace-gate';
 import { WorkspaceGate } from '@/shell/WorkspaceGate';
 import { redirect as localeRedirect } from '@/i18n/navigation';
 
@@ -52,7 +52,7 @@ export default async function AuthenticatedLayout({
     product as before. No rail and no ⌘K behind the closed door.
   */
   const resolved = isLocale(locale) ? locale : DEFAULT_LOCALE;
-  const route = await readWorkspaceRoute();
+  const { route, setupAdmin } = await readWorkspaceGate();
   if (route === 'signed_out') redirect(await signInHere());
   if (route === 'onboarding') localeRedirect({ href: '/onboarding', locale: resolved });
   if (route === 'waiting' || route === 'unavailable' || route === 'payment') {
@@ -61,6 +61,7 @@ export default async function AuthenticatedLayout({
         <WorkspaceGate
           route={route}
           paymentPath={route === 'payment' ? await paymentPath() : null}
+          setupAdmin={setupAdmin}
         />
       </NextIntlClientProvider>
     );

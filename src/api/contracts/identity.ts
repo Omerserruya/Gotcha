@@ -102,6 +102,12 @@ export const currentUserSchema = z.looseObject({
    * a second route into the same blank screen.
    */
   tenantName: z.string().nullish(),
+  /**
+   * Who is setting the workspace up - only while it is (Backend 776d2bf2),
+   * for the waiting screen. Name only. A bad shape is no name, not an
+   * unread identity.
+   */
+  setupAdmin: z.looseObject({ name: z.string() }).nullish().catch(null),
   memberships: z.array(membershipSchema).default([]),
 });
 

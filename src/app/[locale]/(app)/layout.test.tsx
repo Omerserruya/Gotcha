@@ -81,9 +81,11 @@ function gateIn(node: unknown): Record<string, unknown> | null {
 }
 
 describe("★★ onboarding is a gate (Omer, 2026-10-07) - the server's status decides", () => {
-  const me = (tenantStatus: string, role = 'ADMIN') =>
+  const me = (tenantStatus: string, role = 'ADMIN', setupAdmin?: { name: string }) =>
     get.mockImplementation(async ({ endpoint }: { endpoint: { path: string } }) => {
-      if (endpoint.path === '/api/auth/me') return { user: { id: 'u', role }, tenantStatus };
+      if (endpoint.path === '/api/auth/me') {
+        return { user: { id: 'u', role }, tenantStatus, ...(setupAdmin ? { setupAdmin } : {}) };
+      }
       if (endpoint.path === '/api/checkout/mine')
         return { data: { checkout: { reference: 'chk_1' } } };
       return { permissions: [], features: [] };
@@ -101,7 +103,12 @@ describe("★★ onboarding is a gate (Omer, 2026-10-07) - the server's status d
 
   it('a member of it: the waiting screen - no shell', async () => {
     me('PENDING_ONBOARDING', 'AGENT');
-    expect(gateIn(await render())).toMatchObject({ route: 'waiting' });
+    expect(gateIn(await render())).toMatchObject({ route: 'waiting', setupAdmin: null });
+  });
+
+  it('…naming who is setting it up, when /auth/me does (Backend 776d2bf2)', async () => {
+    me('PENDING_ONBOARDING', 'AGENT', { name: 'Maya Levi' });
+    expect(gateIn(await render())).toMatchObject({ route: 'waiting', setupAdmin: 'Maya Levi' });
   });
 
   it('unpaid: payment, at the open checkout', async () => {

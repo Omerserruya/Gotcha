@@ -209,7 +209,8 @@
   "gate": {
     "waiting": {
       "title": "Your workspace is still being set up",
-      "lead": "An admin is setting up GOTCHA for your business. You'll be able to sign in and work here as soon as they finish."
+      "lead": "An admin is setting up GOTCHA for your business. You'll be able to sign in and work here as soon as they finish.",
+      "leadBy": "<name></name> is setting up GOTCHA for your business. You'll be able to sign in and work here as soon as they finish."
     },
     "unavailable": {
       "title": "Couldn't load your workspace",

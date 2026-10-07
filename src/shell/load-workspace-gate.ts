@@ -16,15 +16,23 @@ export { paymentPath } from '@/api/client/payment-path';
  * any other failure is "unread" - the gate screen, with Retry.
  */
 export async function readWorkspaceRoute(): Promise<WorkspaceRoute | 'signed_out'> {
+  return (await readWorkspaceGate()).route;
+}
+
+/** The route, and - for the waiting screen - who is setting the workspace up. */
+export async function readWorkspaceGate(): Promise<{
+  readonly route: WorkspaceRoute | 'signed_out';
+  readonly setupAdmin: string | null;
+}> {
   try {
     const me = await serverApi().get({ endpoint: authEndpoints.me(), payload: currentUserSchema });
-    return workspaceRoute({
-      tenantStatus: me.tenantStatus ?? null,
-      role: me.user.role ?? null,
-    });
+    return {
+      route: workspaceRoute({ tenantStatus: me.tenantStatus ?? null, role: me.user.role ?? null }),
+      setupAdmin: me.setupAdmin?.name?.trim() || null,
+    };
   } catch (cause) {
-    if (isApiError(cause) && cause.status === 401) return 'signed_out';
+    if (isApiError(cause) && cause.status === 401) return { route: 'signed_out', setupAdmin: null };
     logger.warn('gate.me_failed', { status: isApiError(cause) ? cause.status : undefined });
-    return 'unavailable';
+    return { route: 'unavailable', setupAdmin: null };
   }
 }

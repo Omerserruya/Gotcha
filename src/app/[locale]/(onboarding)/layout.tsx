@@ -7,7 +7,7 @@ import { activeSession } from '@/auth/session-store';
 import { loadMessages } from '@/i18n/load-messages';
 import { isLocale, DEFAULT_LOCALE } from '@/i18n/locales';
 import { redirect as localeRedirect } from '@/i18n/navigation';
-import { paymentPath, readWorkspaceRoute } from '@/shell/load-workspace-gate';
+import { paymentPath, readWorkspaceGate } from '@/shell/load-workspace-gate';
 import { WorkspaceGate } from '@/shell/WorkspaceGate';
 
 /**
@@ -31,7 +31,7 @@ export default async function OnboardingLayout({
   const session = await activeSession();
   if (!session) redirect(await signInHere());
   const resolved = isLocale(locale) ? locale : DEFAULT_LOCALE;
-  const route = await readWorkspaceRoute();
+  const { route, setupAdmin } = await readWorkspaceGate();
   if (route === 'signed_out') redirect(await signInHere());
   if (route === 'product') localeRedirect({ href: '/home', locale: resolved });
   return (
@@ -42,6 +42,7 @@ export default async function OnboardingLayout({
         <WorkspaceGate
           route={route}
           paymentPath={route === 'payment' ? await paymentPath() : null}
+          setupAdmin={setupAdmin}
         />
       )}
     </NextIntlClientProvider>

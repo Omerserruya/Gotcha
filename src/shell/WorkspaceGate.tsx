@@ -20,9 +20,12 @@ import styles from './WorkspaceGate.module.css';
 export function WorkspaceGate({
   route,
   paymentPath = null,
+  setupAdmin = null,
 }: {
   readonly route: 'waiting' | 'unavailable' | 'payment';
   readonly paymentPath?: string | null;
+  /** Who is setting it up, when the server names them (only while it is). */
+  readonly setupAdmin?: string | null;
 }) {
   const t = useTranslations('onboarding.gate');
 
@@ -39,7 +42,11 @@ export function WorkspaceGate({
       </span>
       <div className={styles.card}>
         <h1 className={styles.title}>{t(`${route}.title`)}</h1>
-        <p className={styles.lead}>{t(`${route}.lead`)}</p>
+        <p className={styles.lead} data-testid="gate-lead">
+          {route === 'waiting' && setupAdmin
+            ? t.rich('waiting.leadBy', { name: () => <bdi dir="auto">{setupAdmin}</bdi> })
+            : t(`${route}.lead`)}
+        </p>
         {route === 'unavailable' ? (
           <button
             type="button"
