@@ -162,11 +162,11 @@ describe('★★ templates: real ones open New automation; the rest are a status
   it('one with no event source: Coming soon, aria-disabled, not a link, says why', async () => {
     loadAutomations.mockReturnValue(new Promise(() => {}));
     wrap(await Page({ searchParams: Promise.resolve({}) }));
-    const card = screen.getByTestId('automations-template-comment');
+    const card = screen.getByTestId('automations-template-review');
     expect(card.tagName).toBe('DIV');
     expect(card).toHaveAttribute('aria-disabled', 'true');
     expect(card).toHaveTextContent('Coming soon');
-    expect(card).toHaveTextContent('Needs comment events from Instagram and Facebook');
+    expect(card).toHaveTextContent('Needs order events from your store');
     expect(card.querySelector('a, button')).toBeNull();
   });
 

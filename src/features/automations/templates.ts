@@ -38,6 +38,10 @@ export interface TemplateWords {
   readonly adText: string;
   readonly prices: string;
   readonly talk: string;
+  /** Comment on a post: the public reply, the DM's question, and its one button. */
+  readonly commentReply: string;
+  readonly priceAsk: string;
+  readonly yes: string;
 }
 
 export interface TemplateGraph {
@@ -176,11 +180,62 @@ export const TEMPLATES: readonly Template[] = [
       };
     },
   },
-  // No event source yet (call_missed is not wired to voice events; order and
-  // comment events are being built).
-  { key: 'missedCall', trigger: 'call_missed', build: null },
+  {
+    // A missed call → the caller, on WhatsApp (Backend 742bb030). Outside a
+    // conversation only an approved template may go; which one is the
+    // author's. No lines chosen: every line. Without an active phone line it
+    // cannot run - the card says so, and a draft is still allowed.
+    key: 'missedCall',
+    trigger: 'call_missed',
+    build: (_words, id) => {
+      const send = id();
+      return {
+        config: {},
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(send, 'send_message_template', { templateId: '', variables: {} }),
+        ],
+        edges: [edge(id(), 'trigger', send)],
+      };
+    },
+  },
+  {
+    // Comment on a post → a public reply, then a DM with a button (Backend
+    // 612ffb17): "Yes" → the price list (the author's to write); no answer
+    // in time → an employee (the author's to choose).
+    key: 'comment',
+    trigger: 'comment_received',
+    build: (words, id) => {
+      const reply = id();
+      const ask = id();
+      const wait = id();
+      const prices = id();
+      const hand = id();
+      return {
+        config: {},
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(reply, 'send_comment_reply', { mode: 'text', text: words.commentReply }),
+          node(ask, 'send_buttons', {
+            text: words.priceAsk,
+            buttons: [{ id: 'yes', title: words.yes }],
+          }),
+          node(wait, 'wait_for_reply', { timeoutMs: 30 * 60 * 1000 }),
+          node(prices, 'send_message_text', { text: '' }),
+          node(hand, 'hand_to_ai', { aiAgentId: '' }),
+        ],
+        edges: [
+          edge(id(), 'trigger', reply),
+          edge(id(), reply, ask),
+          edge(id(), ask, wait),
+          edge(id(), wait, prices, 'btn:yes'),
+          edge(id(), wait, hand, 'timeout'),
+        ],
+      };
+    },
+  },
+  // No event source yet: order events are being built.
   { key: 'review', trigger: 'order_event', build: null },
-  { key: 'comment', trigger: 'comment_received', build: null },
 ];
 
 export function templateOf(key: string | undefined): Template | null {

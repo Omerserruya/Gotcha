@@ -88,6 +88,9 @@ export function NewAutomation({
           adText: t('templateWords.adText', { name: '{{first_name}}' }),
           prices: t('templateWords.prices'),
           talk: t('templateWords.talk'),
+          commentReply: t('templateWords.commentReply'),
+          priceAsk: t('templateWords.priceAsk'),
+          yes: t('templateWords.yes'),
         },
         () => crypto.randomUUID(),
       );

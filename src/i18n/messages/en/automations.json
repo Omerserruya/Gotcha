@@ -11,8 +11,7 @@
   "template": {
     "missedCall": {
       "name": "Missed call → WhatsApp",
-      "line": "Answer within a minute, with buttons",
-      "why": "Needs call events from your phone line"
+      "line": "A template to the caller on WhatsApp · needs a phone line"
     },
     "fileOnKeyword": {
       "name": "Send a file on a keyword",
@@ -45,8 +44,7 @@
     },
     "comment": {
       "name": "Comment on a post → DM",
-      "line": "A public reply, then a DM",
-      "why": "Needs comment events from Instagram and Facebook"
+      "line": "A public reply, then a DM with a button"
     }
   },
   "columns": {
@@ -497,7 +495,10 @@
     "welcome": "Hi {name}, thanks for writing to us. How can we help?",
     "adText": "Hi {name}, thanks for reaching out from our ad. What would you like to do?",
     "prices": "Prices",
-    "talk": "Talk to us"
+    "talk": "Talk to us",
+    "commentReply": "Sent you a DM!",
+    "priceAsk": "Want the price list?",
+    "yes": "Yes"
   },
   "notYet": "Not available yet",
   "loading": "Loading automations"

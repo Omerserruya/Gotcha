@@ -9,6 +9,9 @@ const words = {
   adText: 'Hi {{first_name}}, thanks for writing from our ad.',
   prices: 'Prices',
   talk: 'Talk to us',
+  commentReply: 'Sent you a DM!',
+  priceAsk: 'Want the price list?',
+  yes: 'Yes',
 };
 let n = 0;
 const newId = () => `id${++n}`;
@@ -31,7 +34,7 @@ function routeIssues(graph: Graph): readonly string[] {
 describe('★★ a template that runs today makes a real draft (Omer, 2026-10-07)', () => {
   const runnable = TEMPLATES.filter((t) => t.build !== null);
 
-  it('six of them, each with its trigger', () => {
+  it('eight of them, each with its trigger', () => {
     expect(runnable.map((t) => [t.key, t.trigger])).toEqual([
       ['fileOnKeyword', 'message_received'],
       ['afterHours', 'message_received'],
@@ -39,6 +42,8 @@ describe('★★ a template that runs today makes a real draft (Omer, 2026-10-07
       ['tagNotify', 'tag_added'],
       ['cart', 'cart_abandoned'],
       ['fromAd', 'message_from_ad'],
+      ['missedCall', 'call_missed'],
+      ['comment', 'comment_received'],
     ]);
   });
 
@@ -78,7 +83,7 @@ describe('★★ a template that runs today makes a real draft (Omer, 2026-10-07
 });
 
 describe('★ no event source yet: nothing to build', () => {
-  it.each(['missedCall', 'review', 'comment'])('%s', (key) => {
+  it.each(['review'])('%s', (key) => {
     expect(templateOf(key)?.build).toBeNull();
   });
 });
@@ -107,5 +112,43 @@ describe('★ the cart and the ad (Backend 972ae66d)', () => {
       { id: 'talk', title: 'Talk to us' },
     ]);
     expect(graph.edges.map((e) => e.sourceHandle)).toEqual([null, null, 'btn:talk']);
+  });
+});
+
+describe('★★ missed call and comment (Backend 742bb030, 612ffb17)', () => {
+  it("missed call: every line, one template to the caller - the template is the author's", () => {
+    const graph = templateOf('missedCall')!.build!(words, newId);
+    expect(graph.config).toEqual({});
+    expect(graph.nodes.map((x) => x.type)).toEqual(['automation_trigger', 'send_message_template']);
+    expect(graph.nodes.filter(needsFilling).map((x) => x.type)).toEqual(['send_message_template']);
+  });
+
+  it('comment: a public reply, a DM with "Yes", then the price list or an employee', () => {
+    const graph = templateOf('comment')!.build!(words, newId);
+    expect(graph.nodes.map((x) => x.type)).toEqual([
+      'automation_trigger',
+      'send_comment_reply',
+      'send_buttons',
+      'wait_for_reply',
+      'send_message_text',
+      'hand_to_ai',
+    ]);
+    expect(graph.nodes[1]!.data).toEqual({ mode: 'text', text: 'Sent you a DM!' });
+    expect(graph.nodes[2]!.data).toEqual({
+      text: 'Want the price list?',
+      buttons: [{ id: 'yes', title: 'Yes' }],
+    });
+    expect(graph.edges.map((e) => e.sourceHandle)).toEqual([
+      null,
+      null,
+      null,
+      'btn:yes',
+      'timeout',
+    ]);
+    // The price list and the employee are the author's; the rest is written.
+    expect(graph.nodes.filter(needsFilling).map((x) => x.type)).toEqual([
+      'send_message_text',
+      'hand_to_ai',
+    ]);
   });
 });
