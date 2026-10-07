@@ -6,14 +6,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { unansweredQuestionSchema } from '@/api/contracts/knowledge';
 import onboardingMessages from '@/i18n/messages/en/onboarding.json';
 
+const push = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
     <a href={href} {...rest}>
       {children}
     </a>
   ),
+  useRouter: () => ({ push }),
 }));
-const actions = vi.hoisted(() => ({ teachAnswer: vi.fn() }));
+const actions = vi.hoisted(() => ({ teachAnswer: vi.fn(), finishOnboarding: vi.fn() }));
 vi.mock('./onboarding-actions', () => actions);
 
 import { TryStep } from './TryStep';
@@ -21,15 +23,17 @@ import { TryStep } from './TryStep';
 const q = (id: string, question: string, timesAsked = 1) =>
   unansweredQuestionSchema.parse({ id, question, timesAsked });
 
-const show = (questions: Parameters<typeof TryStep>[0]['questions']) =>
+const show = (questions: Parameters<typeof TryStep>[0]['questions'], skippedCore = false) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ onboarding: onboardingMessages }}>
-      <TryStep questions={questions} />
+      <TryStep questions={questions} skippedCore={skippedCore} />
     </NextIntlClientProvider>,
   );
 
 beforeEach(() => {
   actions.teachAnswer.mockReset();
+  actions.finishOnboarding.mockReset();
+  push.mockReset();
 });
 
 describe('★★ 00h - real questions, taught once; no answer it could not have given', () => {
@@ -72,12 +76,65 @@ describe('★★ 00h - real questions, taught once; no answer it could not have 
     expect(screen.getByTestId('try-answer')).toHaveValue('Yes.');
   });
 
-  it('none yet, and unread, are different sentences; Home either way - not go-live', () => {
+  it('none yet, and unread, are different sentences', () => {
     const one = show([]);
     expect(screen.getByTestId('try-lead')).toHaveTextContent('Once customers write');
-    expect(screen.getByTestId('try-open')).toHaveAttribute('href', '/home');
     one.unmount();
     show(null);
     expect(screen.getByTestId('try-lead')).toHaveTextContent("Couldn't read");
+  });
+});
+
+describe('★★ "Open my workspace" finishes - routed on the flags, never the prose', () => {
+  const open = async () => {
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('try-open'));
+    });
+  };
+
+  it('done: Home; skipping 00g is told to the route, and only then', async () => {
+    actions.finishOnboarding.mockResolvedValue({ ok: true, payAt: null, knowledgeUsable: true });
+    show([], true);
+    await open();
+    expect(actions.finishOnboarding).toHaveBeenCalledWith({ skippedCore: true, locale: 'en' });
+    expect(push).toHaveBeenCalledWith('/home');
+  });
+
+  it('owes payment: to payment, not Home', async () => {
+    const replace = vi.fn();
+    Object.defineProperty(window, 'location', { configurable: true, value: { replace } });
+    actions.finishOnboarding.mockResolvedValue({
+      ok: true,
+      payAt: '/checkout/payment-required?ref=chk_1',
+      knowledgeUsable: true,
+    });
+    show([]);
+    await open();
+    expect(replace).toHaveBeenCalledWith('/checkout/payment-required?ref=chk_1');
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('nothing usable in Knowledge: said before the workspace, never a silent "all set"', async () => {
+    actions.finishOnboarding.mockResolvedValue({ ok: true, payAt: null, knowledgeUsable: false });
+    show([]);
+    await open();
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.getByTestId('try-no-knowledge')).toHaveTextContent('nothing to answer from');
+    expect(screen.getByTestId('try-open-anyway')).toHaveAttribute('href', '/home');
+  });
+
+  it('no core system and not skipped: why, and the way back to 00g', async () => {
+    actions.finishOnboarding.mockResolvedValue({
+      ok: false,
+      reason: 'core_system_required',
+      message: 'Connect your main business system',
+    });
+    show([]);
+    await open();
+    expect(screen.getByTestId('try-refused')).toHaveTextContent('main business system');
+    expect(screen.getByText('Back to Source of truth')).toHaveAttribute(
+      'href',
+      '/onboarding/truth',
+    );
   });
 });

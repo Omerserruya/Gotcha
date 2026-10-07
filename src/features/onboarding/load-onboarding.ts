@@ -225,3 +225,22 @@ export async function loadTry(): Promise<readonly UnansweredQuestion[] | null> {
     return null;
   }
 }
+
+/**
+ * Where an admin coming back resumes: by what exists on the server - the
+ * website read's row and whether a core system is connected. Nothing stores
+ * "the step reached", so this is read, not remembered.
+ */
+export async function loadResumeState(): Promise<{
+  readonly discovery: { readonly status: string } | null;
+  readonly coreConnected: boolean;
+}> {
+  const [discovery, status] = await Promise.all([
+    loadDiscovery(),
+    serverApi()
+      .get({ endpoint: onboardingEndpoints.status(), payload: onboardingStatusSchema, raw: true })
+      .then((r) => r.data)
+      .catch(() => null),
+  ]);
+  return { discovery, coreConnected: Boolean(status?.coreSystemConnected) };
+}

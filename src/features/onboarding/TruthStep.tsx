@@ -22,6 +22,20 @@ export const TRUTH_SYSTEMS = [
   'custom_api',
 ] as const;
 
+/**
+ * The systems `/api/onboarding/complete` counts as the core one
+ * (`CORE_SYSTEM_SLUGS`). Anything else connected here is still connected,
+ * but finishing tells the route it was skipped - or it refuses.
+ */
+const CORE_SYSTEMS = new Set([
+  'hubspot',
+  'salesforce',
+  'zoho_crm',
+  'shopify',
+  'fireberry',
+  'airtable',
+]);
+
 /** 00g's write actions - what GOTCHA may change in the store. */
 const ACTIONS = ['address', 'cancel', 'refund', 'prices'] as const;
 const STANCES = ['allowed', 'ask', 'never'] as const;
@@ -78,6 +92,10 @@ export function TruthStep({
   const standing = standingOf(integration);
   const anyConnected = (integrations ?? []).some(
     (i) => (TRUTH_SYSTEMS as readonly string[]).includes(i.slug) && standingOf(i) === 'connected',
+  );
+  // What /complete counts as a core system: of these, Shopify only (not Woo, not Wix).
+  const coreConnected = (integrations ?? []).some(
+    (i) => CORE_SYSTEMS.has(i.slug) && standingOf(i) === 'connected',
   );
 
   return (
@@ -220,7 +238,16 @@ export function TruthStep({
       </section>
 
       <span className={styles.actions}>
-        <Link href="/onboarding/try" className={styles.primary} data-testid="truth-next">
+        <Link
+          // Skipped: the finish says so to the route (`skipCoreSystem`), and only then.
+          href={
+            coreConnected
+              ? '/onboarding/try'
+              : { pathname: '/onboarding/try', query: { skipped: '1' } }
+          }
+          className={styles.primary}
+          data-testid="truth-next"
+        >
           {anyConnected ? t('next') : t('skip')}
         </Link>
       </span>

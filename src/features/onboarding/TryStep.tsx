@@ -4,9 +4,10 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import type { UnansweredQuestion } from '@/api/contracts/knowledge';
-import { Link } from '@/i18n/navigation';
+import { CenteredLoader } from '@/design-system/primitives/loader/Loader';
+import { Link, useRouter } from '@/i18n/navigation';
 
-import { teachAnswer } from './onboarding-actions';
+import { finishOnboarding, teachAnswer, type FinishResult } from './onboarding-actions';
 import styles from './Onboarding.module.css';
 
 /** The longest answer the route takes. */
@@ -22,14 +23,61 @@ const ANSWER_MAX = 20_000;
  *   it) - an answer from it would claim knowledge it never read. So the
  *   answer's place says why, and each question can be TAUGHT - the design's
  *   Fix: the answer goes into Knowledge, where every employee answers from.
- * ★ "Open my workspace" goes to Home. It does not go live.
+ * ★★ "Open my workspace" FINISHES (Omer, 2026-10-07: onboarding is a gate):
+ *   the workspace goes live - or to payment, by `paymentRequired` - and the
+ *   recommended employee is hired. Knowledge with nothing usable is said
+ *   before the workspace opens, never a silent "all set".
  */
 export function TryStep({
   questions,
+  skippedCore,
 }: {
   readonly questions: readonly UnansweredQuestion[] | null;
+  /** 00g ended in "Skip for now": finish without a core system. */
+  readonly skippedCore: boolean;
 }) {
   const t = useTranslations('onboarding.try');
+  const locale = useLocale();
+  const router = useRouter();
+  const [finishing, start] = useTransition();
+  const [result, setResult] = useState<FinishResult | null>(null);
+
+  const finish = () =>
+    start(async () => {
+      setResult(null);
+      const done = await finishOnboarding({ skippedCore, locale });
+      if (done.ok && done.payAt) {
+        // Setup is done and it owes payment: the old app's payment pages, at the root.
+        window.location.replace(done.payAt);
+        return;
+      }
+      if (done.ok && done.knowledgeUsable !== false) {
+        router.push('/home');
+        return;
+      }
+      setResult(done);
+    });
+
+  if (finishing) {
+    return <CenteredLoader label={t('finishing')} minHeight={320} />;
+  }
+  if (result?.ok) {
+    // Live, but nothing in Knowledge it can answer from: said, then the workspace.
+    return (
+      <div className={styles.try} data-testid="try-no-knowledge">
+        <h1 className={styles.title}>{t('noKnowledge.title')}</h1>
+        <p className={styles.subtitle}>{t('noKnowledge.lead')}</p>
+        <span className={styles.actions}>
+          <Link href="/studio/knowledge" className={styles.secondary}>
+            {t('noKnowledge.add')}
+          </Link>
+          <Link href="/home" className={styles.primary} data-testid="try-open-anyway">
+            {t('open')}
+          </Link>
+        </span>
+      </div>
+    );
+  }
   return (
     <div className={styles.try}>
       <h1 className={styles.title}>
@@ -50,10 +98,24 @@ export function TryStep({
           </ul>
         </>
       ) : null}
+      {result && !result.ok ? (
+        <p className={styles.problem} role="alert" data-testid="try-refused">
+          {t(`refused.${result.reason}`)}{' '}
+          {result.reason === 'core_system_required' ? (
+            <Link href="/onboarding/truth" className={styles.inlineLink}>
+              {t('refused.toTruth')}
+            </Link>
+          ) : result.reason === 'needs_profile' ? (
+            <Link href="/onboarding/website" className={styles.inlineLink}>
+              {t('refused.toWebsite')}
+            </Link>
+          ) : null}
+        </p>
+      ) : null}
       <span className={styles.actions}>
-        <Link href="/home" className={styles.primary} data-testid="try-open">
+        <button type="button" className={styles.primary} onClick={finish} data-testid="try-open">
           {t('open')}
-        </Link>
+        </button>
         <span className={styles.quiet}>{t('nextOnHome')}</span>
       </span>
     </div>

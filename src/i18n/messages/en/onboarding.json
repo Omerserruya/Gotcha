@@ -190,6 +190,36 @@
     "learned": "Learned. It's in Knowledge now, for every employee",
     "failed": "It wasn't learned. Try again in a moment",
     "open": "Open my workspace",
-    "nextOnHome": "Next on Home: connect WhatsApp and invite your team"
+    "nextOnHome": "Next on Home: connect WhatsApp and invite your team",
+    "finishing": "Opening your workspace and hiring your AI employee…",
+    "noKnowledge": {
+      "title": "Your workspace is open, but GOTCHA has nothing to answer from yet",
+      "lead": "Nothing in Knowledge is ready to use: the website read added nothing it can answer from. Until you add some, your AI employee will hand most questions to your team.",
+      "add": "Add knowledge"
+    },
+    "refused": {
+      "core_system_required": "Finishing needs your main business system connected (HubSpot, Salesforce, Zoho, Fireberry, Airtable or Shopify), or skipped on the previous step.",
+      "toTruth": "Back to Source of truth",
+      "needs_profile": "Finishing needs your business's name and a short description, and the website read didn't find them.",
+      "toWebsite": "Read your website",
+      "refused": "It couldn't finish yet. Try again in a moment, or ask GOTCHA's team.",
+      "failed": "It didn't finish. Try again in a moment."
+    }
+  },
+  "gate": {
+    "waiting": {
+      "title": "Your workspace is still being set up",
+      "lead": "An admin is setting up GOTCHA for your business. You'll be able to sign in and work here as soon as they finish."
+    },
+    "unavailable": {
+      "title": "Couldn't load your workspace",
+      "lead": "We couldn't check where your workspace stands just now. Try again in a moment.",
+      "retry": "Try again"
+    },
+    "payment": {
+      "title": "Your workspace is waiting for payment",
+      "lead": "Setup is done. The workspace opens once payment is confirmed. Taking you to payment…",
+      "go": "Go to payment"
+    }
   }
 }

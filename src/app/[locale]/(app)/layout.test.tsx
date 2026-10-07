@@ -24,6 +24,14 @@ vi.mock('next/headers', () => ({
 vi.mock('@/i18n/load-messages', () => ({ loadMessages: async () => ({}) }));
 vi.mock('@/shell/AppProviders', () => ({ AppProviders: () => null }));
 vi.mock('@/shell/AppShell', () => ({ AppShell: () => null }));
+const WorkspaceGate = vi.hoisted(() => vi.fn(() => null));
+vi.mock('@/shell/WorkspaceGate', () => ({ WorkspaceGate }));
+const localeRedirect = vi.hoisted(() =>
+  vi.fn(({ href }: { href: string }) => {
+    throw new Error(`LOCALE REDIRECT ${href}`);
+  }),
+);
+vi.mock('@/i18n/navigation', () => ({ redirect: localeRedirect }));
 
 const { default: Layout } = await import('./layout');
 const render = () => Layout({ children: null, params: Promise.resolve({ locale: 'en' }) });
@@ -58,4 +66,60 @@ describe('★★ signed out is sign-in, with the way back', () => {
       expect(redirect).not.toHaveBeenCalled();
     },
   );
+});
+
+/** The gate's props, wherever the layout put it in the tree. */
+function gateIn(node: unknown): Record<string, unknown> | null {
+  if (!node || typeof node !== 'object') return null;
+  const el = node as { type?: unknown; props?: Record<string, unknown> };
+  if (el.type === WorkspaceGate) return el.props ?? null;
+  for (const value of Object.values(el.props ?? {})) {
+    const hit = Array.isArray(value) ? value.map(gateIn).find(Boolean) : gateIn(value);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+describe("★★ onboarding is a gate (Omer, 2026-10-07) - the server's status decides", () => {
+  const me = (tenantStatus: string, role = 'ADMIN') =>
+    get.mockImplementation(async ({ endpoint }: { endpoint: { path: string } }) => {
+      if (endpoint.path === '/api/auth/me') return { user: { id: 'u', role }, tenantStatus };
+      if (endpoint.path === '/api/checkout/mine')
+        return { data: { checkout: { reference: 'chk_1' } } };
+      return { permissions: [], features: [] };
+    });
+
+  beforeEach(() => {
+    WorkspaceGate.mockClear();
+    localeRedirect.mockClear();
+  });
+
+  it('an admin of a workspace being set up: to onboarding', async () => {
+    me('PENDING_ONBOARDING');
+    await expect(render()).rejects.toThrow('LOCALE REDIRECT /onboarding');
+  });
+
+  it('a member of it: the waiting screen - no shell', async () => {
+    me('PENDING_ONBOARDING', 'AGENT');
+    expect(gateIn(await render())).toMatchObject({ route: 'waiting' });
+  });
+
+  it('unpaid: payment, at the open checkout', async () => {
+    me('PENDING_PAYMENT');
+    expect(gateIn(await render())).toMatchObject({
+      route: 'payment',
+      paymentPath: '/checkout/payment-required?ref=chk_1',
+    });
+  });
+
+  it('live: the product - no gate, no redirect', async () => {
+    me('ACTIVE');
+    expect(gateIn(await render())).toBeNull();
+    expect(localeRedirect).not.toHaveBeenCalled();
+  });
+
+  it('status unread: Retry, not the product', async () => {
+    get.mockRejectedValue(new ApiError({ kind: 'server', status: 503 }));
+    expect(gateIn(await render())).toMatchObject({ route: 'unavailable' });
+  });
 });

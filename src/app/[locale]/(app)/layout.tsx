@@ -14,6 +14,9 @@ import { loadMessages } from '@/i18n/load-messages';
 import { isLocale, DEFAULT_LOCALE } from '@/i18n/locales';
 import { AppProviders } from '@/shell/AppProviders';
 import { AppShell } from '@/shell/AppShell';
+import { paymentPath, readWorkspaceRoute } from '@/shell/load-workspace-gate';
+import { WorkspaceGate } from '@/shell/WorkspaceGate';
+import { redirect as localeRedirect } from '@/i18n/navigation';
 
 /**
  * The authenticated area.
@@ -41,6 +44,28 @@ export default async function AuthenticatedLayout({
   const session = await activeSession();
   if (!session) redirect(await signInHere());
 
+  /*
+    ★★ ONBOARDING IS A GATE (Omer, 2026-10-07). The workspace's status is the
+    server's (`/api/auth/me`): an admin of a workspace being set up goes to
+    onboarding, resumed; anyone else waits; an unpaid one goes to payment;
+    unread is a Retry - never the product. ACTIVE (and anything else) is the
+    product as before. No rail and no ⌘K behind the closed door.
+  */
+  const resolved = isLocale(locale) ? locale : DEFAULT_LOCALE;
+  const route = await readWorkspaceRoute();
+  if (route === 'signed_out') redirect(await signInHere());
+  if (route === 'onboarding') localeRedirect({ href: '/onboarding', locale: resolved });
+  if (route === 'waiting' || route === 'unavailable' || route === 'payment') {
+    return (
+      <NextIntlClientProvider messages={await loadMessages(resolved)}>
+        <WorkspaceGate
+          route={route}
+          paymentPath={route === 'payment' ? await paymentPath() : null}
+        />
+      </NextIntlClientProvider>
+    );
+  }
+
   const { permissions, roleKey, status } = await loadPermissions();
   /*
     ★★ A 401 IS "SIGN IN AGAIN", NEVER A SCREEN OF "COULDN'T READ" (Omer,
@@ -57,8 +82,6 @@ export default async function AuthenticatedLayout({
    * product's vocabulary is attached here - inside the authenticated area -
    * rather than to every page in the app including sign-in.
    */
-  const resolved = isLocale(locale) ? locale : DEFAULT_LOCALE;
-
   return (
     <NextIntlClientProvider messages={await loadMessages(resolved)}>
       <AppProviders

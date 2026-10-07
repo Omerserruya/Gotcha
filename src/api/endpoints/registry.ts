@@ -620,6 +620,13 @@ export const channelEndpoints = {
  */
 export const onboardingEndpoints = {
   status: () => endpoint('/api/onboarding/status'),
+  /**
+   * The business profile (`organizationName`, `businessDescription`, …) -
+   * required by `complete`; the old setup writes it from the confirmed read.
+   * 400 once the tenant is ACTIVE.
+   */
+  businessProfile: () => endpoint('/api/onboarding/business-profile'),
+  // Finishing is `goLiveEndpoints.complete` - one name for one route.
   discovery: () => endpoint('/api/onboarding/discovery'),
   discover: () => endpoint('/api/onboarding/discover'),
   teach: () => endpoint('/api/onboarding/teach'),
@@ -632,6 +639,14 @@ export const onboardingEndpoints = {
  * and without it the route hires ANOTHER. Refuses 400 for a missing profile,
  * admin, or `core_system_required`.
  */
+/**
+ * The payment flow the old app owns (`lib/payment-gate.ts`): the tenant's
+ * outstanding checkout, `{ data: { checkout: { reference } | null } }`.
+ */
+export const checkoutEndpoints = {
+  mine: () => endpoint('/api/checkout/mine'),
+} as const;
+
 export const goLiveEndpoints = {
   complete: () => endpoint('/api/onboarding/complete'),
 } as const;

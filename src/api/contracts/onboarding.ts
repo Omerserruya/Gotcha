@@ -108,6 +108,24 @@ export const onboardingStatusSchema = z.object({
       .catch(null)
       .default(null),
     coreSystemConnected: text,
+    businessProfileCompleted: z.boolean().catch(false).default(false),
+  }),
+});
+
+/**
+ * `POST /api/onboarding/complete`'s answer. Routed on `paymentRequired`,
+ * never on `message` (the route says so). "Already active" carries neither
+ * flag nor knowledge: read as not owing, nothing to warn about.
+ */
+export const completeSchema = z.object({
+  data: z.looseObject({
+    status: z.string().catch(''),
+    paymentRequired: z.boolean().catch(false).default(false),
+    knowledge: z
+      .looseObject({ usable: z.boolean().catch(true) })
+      .nullable()
+      .catch(null)
+      .default(null),
   }),
 });
 export type OnboardingStatus = z.infer<typeof onboardingStatusSchema>['data'];

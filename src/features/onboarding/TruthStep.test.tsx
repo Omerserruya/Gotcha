@@ -106,7 +106,8 @@ describe('★★ 00g - the store the read found, connected the way 10 connects',
     show();
     expect(screen.getByTestId('truth-next')).toHaveTextContent('Skip for now');
     expect(screen.getByTestId('truth-skip-why')).toHaveTextContent("can't check an order");
-    expect(screen.getByTestId('truth-next')).toHaveAttribute('href', '/onboarding/try');
+    // Skipped, so finishing tells the route (skipCoreSystem).
+    expect(screen.getByTestId('truth-next').getAttribute('href')).toContain('"skipped":"1"');
   });
 
   it('what it may change: drawn, every choice off, with the reason', () => {
@@ -158,5 +159,18 @@ describe('★★ a connection row is not a connection (dev: Shopify ERROR read "
   it("tiles use the design's short names", () => {
     show({ integrations: [system('shopify', 'Shopify'), system('custom_api', 'Custom API')] });
     expect(screen.getByTestId('truth-tile-custom_api')).toHaveTextContent('Your API');
+  });
+});
+
+describe('★ finishing counts what the route counts as the core system', () => {
+  it('Shopify connected: Continue, not skipped', () => {
+    show({ integrations: [system('shopify', 'Shopify', true)] });
+    expect(screen.getByTestId('truth-next')).toHaveAttribute('href', '/onboarding/try');
+  });
+
+  it('only WooCommerce connected: Continue - but told to the route as skipped (it is not a core system)', () => {
+    show({ integrations: [system('woocommerce', 'WooCommerce', true)] });
+    expect(screen.getByTestId('truth-next')).toHaveTextContent('Continue');
+    expect(screen.getByTestId('truth-next').getAttribute('href')).toContain('"skipped":"1"');
   });
 });

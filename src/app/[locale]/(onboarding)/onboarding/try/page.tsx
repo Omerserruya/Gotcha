@@ -4,11 +4,16 @@ import { TryStep } from '@/features/onboarding/TryStep';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /** 00h - Onboarding · Try it (design 6). */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  readonly searchParams?: Promise<{ readonly skipped?: string }>;
+}) {
+  const skippedCore = (await searchParams)?.skipped === '1';
   const questions = await loadTry();
   return (
     <OnboardingShell step="try">
-      <TryStep questions={questions} />
+      <TryStep questions={questions} skippedCore={skippedCore} />
     </OnboardingShell>
   );
 }

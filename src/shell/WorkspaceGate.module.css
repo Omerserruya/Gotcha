@@ -1,0 +1,63 @@
+@layer shell {
+  /* The closed door: the dark frame, the mark, one card in the middle. */
+  .gate {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    align-items: center;
+    justify-content: center;
+    min-block-size: 100dvh;
+    padding: 24px 16px;
+    background-color: var(--copilot-surface);
+    color: var(--frame-text);
+    line-height: normal;
+  }
+
+  .brand {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: var(--letter-spacing-brand);
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+    inline-size: min(440px, 100%);
+    padding: 28px;
+    border-radius: 16px;
+    background-color: var(--panel-base);
+    color: var(--text-primary);
+  }
+
+  .title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+  }
+
+  .lead {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+
+  .primary {
+    margin-block-start: 6px;
+    padding: 9px 16px;
+    border: 0;
+    border-radius: 9px;
+    background-color: var(--text-primary);
+    color: var(--frame-text);
+    font: inherit;
+    font-size: 13px;
+    text-decoration: none;
+    cursor: pointer;
+  }
+}
