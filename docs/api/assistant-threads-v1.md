@@ -37,12 +37,14 @@ Default scope: `{ "range": "last_7", "channels": "all" }`.
   "id": "cmy...",
   "threadId": "cmx...",
   "role": "user" | "assistant",
-  "text": "...",                     // user: what they wrote; assistant: the answer (markdown, no wide dashes)
+  "text": "...",                     // user: what they wrote; assistant: the answer (markdown subset, see below; no wide dashes)
   "status": "done" | "streaming" | "cancelled" | "failed",
   "steps": [                         // assistant only; what it did, in order
     { "id": "s1", "text": "Searching conversations", "status": "done", "durationMs": 840 }
     // status: "running" | "done" | "failed" | "waiting_approval"
+    // a waiting_approval step also has "approvalRequestId" (link it to Approvals)
   ],
+  "scope": { "range": "last_7", "channels": "all" },   // assistant only: the scope this answer used
   "suggestions": ["Which of them are still open?", "Show me last month instead"],  // assistant only, 0-3
   "blocks": [], "sources": [], "actions": [],   // stage 1: always []
   "runId": "run_...",                // assistant only: the run that produced it
@@ -50,6 +52,15 @@ Default scope: `{ "range": "last_7", "channels": "all" }`.
 }
 ```
 A cancelled message keeps the text written so far (`status: "cancelled"`).
+
+**Markdown in `text` (assistant):** bold, italics, bullet and numbered lists,
+inline code, and links `[label](url)`. Render a link only when its url is
+`http(s)://` or an in-app path starting with `/`; anything else as plain text.
+No raw HTML, images or tables in stage 1.
+
+**Scope:** a scope change (`PATCH`) applies to messages sent after it. Each
+assistant message records the scope it was answered under (`scope`), so an old
+answer stays readable as what it was.
 
 ---
 
@@ -73,9 +84,17 @@ logged and charged like every AI call). A title the user set is never overwritte
 
 ## 3. Sending a message: the stream
 
-`POST /api/assistant/threads/:id/messages` with `{ "text": "..." }` (1-4000 chars)
+`POST /api/assistant/threads/:id/messages` with `{ "text": "...", "locale"?: "he" | "en" }` (text 1-4000 chars)
 answers `200` with `Content-Type: text/event-stream`. **One answer at a time per
 thread**: while one is running, a second send is `409 RUN_IN_PROGRESS`.
+
+**Language:** steps, suggestions, the auto-title and the answer are written in
+`locale` when it is sent (the UI language); without it, the user's profile
+language, then the workspace's default. `locale` wins.
+
+**Errors before the stream opens** are plain JSON with a non-200 status (§6):
+400, 402 (billing refuses before any model call), 404, 409, 429. Once the
+stream is open (200), failures arrive as `error` + `message.done`.
 
 Every event has an `id:` (`<runId>:<seq>`, seq from 1, increasing). A comment
 line `: ping` is sent every 25 s.
@@ -84,15 +103,17 @@ line `: ping` is sent every 25 s.
 |---|---|---|
 | `run.start` | `{ runId, userMessageId, messageId }` | first; `messageId` is the assistant message being written |
 | `step.start` | `{ stepId, text }` | a step begins (e.g. "Looking at this week's conversations") |
-| `step.done` | `{ stepId, status, durationMs }` | `status`: `done` \| `failed` \| `waiting_approval` |
+| `step.done` | `{ stepId, status, durationMs, approvalRequestId? }` | `status`: `done` \| `failed` \| `waiting_approval` (then with `approvalRequestId`) |
 | `text.delta` | `{ text }` | a piece of the answer; append in order |
 | `suggestions` | `{ items: string[] }` | 2-3 follow-up questions, produced by the same model call (no extra call); may be absent |
+| `thread.title` | `{ title }` | the thread got its automatic title (after the first answer), before `message.done` |
 | `error` | `{ code, message }` | something went wrong; followed by `message.done` with `status: "failed"` |
 | `message.done` | `{ messageId, status, usage? }` | always last. `status`: `done` \| `cancelled` \| `failed` |
 
-Error codes inside the stream: `BUDGET_EXCEEDED` (the run used its token budget;
-the text so far is kept), `AI_UNAVAILABLE` (provider or billing refused),
-`TOOL_FAILED` is never fatal (it appears as a failed step).
+Error codes inside the stream (status 200 already sent): `BUDGET_EXCEEDED` (the
+run used its token budget; the text so far is kept), `AI_UNAVAILABLE` (the model
+provider failed, or billing refused mid-run). A failing tool is never fatal: it
+appears as a failed step.
 
 A `waiting_approval` step means the assistant proposed an action that needs
 approval; in stage 1 it is shown, not resumed in the thread.
