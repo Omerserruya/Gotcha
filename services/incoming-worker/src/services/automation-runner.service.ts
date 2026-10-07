@@ -26,7 +26,7 @@ import {
 
 export const LOOP_GUARD_PER_MIN = 5;
 
-export type AutomationTrigger = "message_received" | "new_customer" | "message_from_ad" | "button_tapped" | "tag_added" | "cart_abandoned" | "schedule" | "webhook" | "call_missed" | "call_answered";
+export type AutomationTrigger = "message_received" | "new_customer" | "message_from_ad" | "button_tapped" | "tag_added" | "cart_abandoned" | "comment_received" | "schedule" | "webhook" | "call_missed" | "call_answered";
 
 export interface TriggerEvent {
   type: AutomationTrigger;
@@ -37,6 +37,8 @@ export interface TriggerEvent {
   adId?: string | null;
   /** The tapped button / list row id of an interactive reply. */
   payload?: string | null;
+  /** The post / media a comment was left on. */
+  postId?: string | null;
 }
 
 // ── Matching (pure) ────────────────────────────────────────────────────────
@@ -49,7 +51,11 @@ export function triggerMatches(flow: { triggerType: string | null; triggerConfig
   const c = flow.triggerConfig && typeof flow.triggerConfig === "object" ? flow.triggerConfig : {};
   const channels: string[] = Array.isArray(c.channels) ? c.channels.map((x: string) => String(x).toUpperCase()) : [];
   if (channels.length && !channels.includes(String(ev.channel ?? "").toUpperCase())) return false;
-  if (ev.type === "message_received") {
+  if (ev.type === "message_received" || ev.type === "comment_received") {
+    if (ev.type === "comment_received") {
+      const posts: string[] = Array.isArray(c.postIds) ? c.postIds.map(norm).filter(Boolean) : [];
+      if (posts.length && !(ev.postId && posts.includes(norm(ev.postId)))) return false;
+    }
     const keywords: string[] = Array.isArray(c.keywords) ? c.keywords.map(norm).filter(Boolean) : [];
     if (!keywords.length) return true;
     const msg = norm(ev.message);
@@ -88,7 +94,7 @@ export function statusAfter(result: FlowExecutionResult | null, error: unknown):
   return "completed";
 }
 
-const FAILED_ACTIONS = new Set(["http_error", "task_failed", "notify_failed", "no_branch"]);
+const FAILED_ACTIONS = new Set(["http_error", "task_failed", "notify_failed", "no_branch", "send_failed"]);
 const WAITING_ACTIONS = new Set(["paused_for_reply", "sent_and_paused", "prompted_and_paused", "scheduled_resume", "waiting_on_timer"]);
 const SKIPPED_ACTIONS = new Set(["skip_noop", "skip_unknown"]);
 
@@ -377,6 +383,12 @@ export async function automationsForInbound(opts: {
   // A run is parked here: this message is its to take (or, on a timed wait,
   // nobody's, and no other automation starts beside it).
   if (c.automationRunId) {
+    // A run that began on a comment: the customer replied, so the 24 h
+    // comment-to-DM bridge no longer governs this conversation (the idle
+    // sweep would otherwise close it mid-conversation).
+    if ((c as any).flowExpiresAt) {
+      await prisma.conversation.updateMany({ where: { id: c.id, tenantId: opts.tenantId }, data: { flowExpiresAt: null } });
+    }
     const r = await resumeAutomationRun({
       tenantId: opts.tenantId, conversationId: c.id, runId: c.automationRunId,
       message: opts.message, channel: opts.channel, replyPayload: opts.replyPayload,

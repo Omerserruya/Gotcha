@@ -25,7 +25,7 @@ export type Group = "trigger" | "logic" | "send" | "do";
 // ── Triggers ───────────────────────────────────────────────────────────────
 
 export const TRIGGER_TYPES = [
-  "message_received", "new_customer", "message_from_ad", "button_tapped", "tag_added", "schedule", "webhook",
+  "message_received", "new_customer", "message_from_ad", "button_tapped", "comment_received", "tag_added", "schedule", "webhook",
   "call_missed", "call_answered",
   "order_event", "cart_abandoned", "form_submitted", "story_mention",
 ] as const;
@@ -35,7 +35,7 @@ export type TriggerType = (typeof TRIGGER_TYPES)[number];
 // call_missed / call_answered are NOT live: nothing feeds voice events to the
 // automation dispatcher yet (only the old voice_trigger nodes hear them).
 // Offering them made an automation that could never run.
-const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "message_from_ad", "button_tapped", "tag_added", "cart_abandoned", "schedule", "webhook"]);
+const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "message_from_ad", "button_tapped", "comment_received", "tag_added", "cart_abandoned", "schedule", "webhook"]);
 /**
  * Triggers that fire when the customer has not written to us: on WhatsApp the
  * 24 h service window is closed, so only an approved template can be sent.
@@ -54,6 +54,7 @@ const TRIGGERS: TriggerDef[] = [
   { type: "call_answered", label: "Call answered", description: "When it ends, with the recording", channels: ["VOICE"], synonyms: ["call", "phone", "recording"] },
   { type: "new_customer", label: "New customer", description: "First message ever", channels: ["WHATSAPP", "INSTAGRAM", "EMAIL", "WEBCHAT"], synonyms: ["new", "first", "welcome"] },
   { type: "message_from_ad", label: "Message from an ad", description: "Click-to-WhatsApp and other ads, any ad or chosen ones", channels: ["WHATSAPP", "MESSENGER", "INSTAGRAM"], synonyms: ["ad", "campaign", "click to whatsapp", "ctwa", "referral", "facebook ad"] },
+  { type: "comment_received", label: "Comment on a post", description: "Instagram or Facebook, any post or chosen ones, optional keywords", channels: ["INSTAGRAM", "MESSENGER"], synonyms: ["comment", "post", "instagram", "facebook", "dm", "comment to dm"] },
   { type: "button_tapped", label: "Button tapped", description: "A button in a template or campaign, outside a flow", channels: ["WHATSAPP", "MESSENGER", "INSTAGRAM"], synonyms: ["button", "tap", "quick reply", "template button", "postback"] },
   { type: "order_event", label: "Order event", description: "Created, paid, shipped, delivered", channels: [], synonyms: ["order", "paid", "shipped", "delivered", "store"] },
   { type: "cart_abandoned", label: "Cart left behind", description: "After a delay you set. Sends only to customers who agreed to marketing", channels: ["WHATSAPP", "EMAIL"], synonyms: ["cart", "abandoned", "checkout", "recover", "reminder"] },
@@ -102,6 +103,17 @@ export function normalizeTrigger(input: any): { type: TriggerType; config: Recor
     case "message_from_ad": {
       const ch = channels(c.channels); if (ch?.length) config.channels = ch;
       const ads = strings(c.adIds, "trigger.config.adIds", 50); if (ads?.length) config.adIds = ads.map((a) => a.slice(0, 64));
+      break;
+    }
+    case "comment_received": {
+      const ch = channels(c.channels);
+      if (ch?.some((x) => x !== "INSTAGRAM" && x !== "MESSENGER")) throw new AutomationInputError("trigger.config.channels", "comments come from INSTAGRAM or MESSENGER");
+      if (ch?.length) config.channels = ch;
+      const posts = strings(c.postIds, "trigger.config.postIds", 50); if (posts?.length) config.postIds = posts.map((x) => x.slice(0, 64));
+      const kw = strings(c.keywords, "trigger.config.keywords"); if (kw?.length) config.keywords = kw.map((k) => k.slice(0, 100));
+      const match = c.match ?? "contains";
+      if (!["contains", "exact", "any_word"].includes(match)) throw new AutomationInputError("trigger.config.match", "match must be contains, exact or any_word");
+      if (config.keywords) config.match = match;
       break;
     }
     case "button_tapped": {
@@ -180,6 +192,7 @@ const NODES: NodeDef[] = [
   { type: "send_buttons", group: "send", label: "Buttons", description: "Up to 3, each a branch", channels: ["WHATSAPP", "INSTAGRAM", "MESSENGER", "WEBCHAT"], outputs: ["next"], synonyms: ["buttons", "quick reply", "options", "menu"], sends: true, needsWindow: true, limits: { maxButtons: LIMITS.buttons, titleMax: LIMITS.buttonTitle } },
   { type: "send_list", group: "send", label: "List", description: "Up to 10 options", channels: ["WHATSAPP"], outputs: ["next"], synonyms: ["list", "menu", "options"], sends: true, needsWindow: true, limits: { maxOptions: LIMITS.listOptions, titleMax: LIMITS.listTitle } },
   { type: "ai_generate", group: "send", label: "AI writes a message", description: "One message in your employee's voice, no hand-over", channels: MESSAGING, outputs: ["next"], synonyms: ["ai", "write", "generate", "personal message", "gpt"], sends: true, needsWindow: true },
+  { type: "send_comment_reply", group: "send", label: "Reply to the comment", description: "A public reply under the post, as text or by AI", channels: ["INSTAGRAM", "MESSENGER"], outputs: ["next"], synonyms: ["reply", "comment", "public", "post"], sends: true },
   { type: "send_message_template", group: "send", label: "Template", description: "Approved, outside 24 h", channels: ["WHATSAPP"], outputs: ["next"], synonyms: ["template", "approved", "24h", "reminder"], sends: true },
   { type: "send_location", group: "send", label: "Location", description: "A branch on the map", channels: ["WHATSAPP"], outputs: ["next"], synonyms: ["location", "map", "address"], sends: true, coming: true },
   { type: "send_rating", group: "send", label: "Rating request", description: "1 to 5, saved to the card", channels: ["WHATSAPP", "INSTAGRAM", "WEBCHAT"], outputs: ["next"], synonyms: ["rating", "review", "feedback", "stars"], sends: true, coming: true },
@@ -402,8 +415,38 @@ function nodeIssues(n: ANode, trigger: { type: string; config?: any } | null, ch
     case "ai_generate":
       if (empty(d.aiAgentId)) out.push(err("missing_config", "Pick the AI employee who writes it."));
       break;
+    case "send_comment_reply":
+      // The comment walker's own fields: mode "text" (data.text) or "ai" (data.agentId, optional data.fallbackText).
+      if (d.mode === "ai" ? empty(d.agentId) : empty(d.text)) out.push(err("missing_config", d.mode === "ai" ? "Pick the AI employee who writes the reply." : "Write the reply."));
+      break;
     case "create_task": if (empty(d.title)) out.push(err("missing_config", "The task needs a title.")); break;
     case "notify_team": if (empty(d.message)) out.push(err("missing_config", "Write the notification.")); break;
+  }
+  return out;
+}
+
+/**
+ * What the comment walker runs (comment-trigger.service): everything a
+ * comment automation does BEFORE the first Wait for reply. After it the
+ * customer is in a DM and the normal walker takes over.
+ */
+const COMMENT_WALK_TYPES = new Set([
+  TRIGGER_NODE_TYPE, "condition_group", "set_variable", "send_message_text", "send_message_file", "send_message_image",
+  "send_message_interactive", "send_buttons", "wait_for_reply", "send_comment_reply",
+]);
+
+/** Node ids reachable from the trigger without passing a Wait for reply. */
+function beforeFirstWait(nodes: ANode[], edges: AEdge[]): Set<string> {
+  const start = nodes.find((n) => n.type === TRIGGER_NODE_TYPE);
+  const out = new Set<string>();
+  const stack = start ? [start.id] : [];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (out.has(id)) continue;
+    out.add(id);
+    const n = nodes.find((x) => x.id === id);
+    if (n?.type === "wait_for_reply") continue;
+    for (const e of edges) if (e.source === id) stack.push(e.target);
   }
   return out;
 }
@@ -447,6 +490,18 @@ export function validateAutomation(
       }
     }
   }
+  // A comment automation: the steps before the first Wait for reply run in
+  // the comment walker; a public comment reply exists only there.
+  const pre = trigger?.type === "comment_received" ? beforeFirstWait(nodes ?? [], edges ?? []) : null;
+  for (const n of nodes ?? []) {
+    if (pre && pre.has(n.id) && !COMMENT_WALK_TYPES.has(n.type)) {
+      errors.push({ severity: "error", code: "comment_step_unsupported", nodeId: n.id, message: `"${labelOfNode(n.type)}" cannot run on a comment before the customer replies. Put it after a Wait for reply.` });
+    }
+    if (n.type === "send_comment_reply" && !(pre && pre.has(n.id))) {
+      errors.push({ severity: "error", code: "comment_reply_misplaced", nodeId: n.id, message: "A reply to the comment only works in a Comment on a post automation, before any Wait for reply." });
+    }
+  }
+
   // wait_for_reply must follow the message it waits on
   for (const n of nodes ?? []) {
     if (n.type !== "wait_for_reply") continue;

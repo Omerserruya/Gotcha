@@ -21,6 +21,7 @@ import {
   prisma,
   decryptCredentials,
   getOutboundAdapter,
+  flowResumeQueue,
   type IncomingCommentJob,
   type ChannelCredentials,
 } from "@chatcenter/shared";
@@ -73,6 +74,13 @@ export async function processCommentTrigger(job: Job<IncomingCommentJob>): Promi
   const rawCreds = (channelAccount as any).credentials;
   const credentials =
     typeof rawCreds === "string" ? decryptCredentials(rawCreds) : ((rawCreds as any) || {});
+
+  // Automations (trigger comment_received) first. When one ran - or this
+  // exact comment already ran one (a Meta retry) - the comment is answered,
+  // and the playbook's comment_trigger nodes do not answer it again.
+  if (await runCommentAutomations({ tenantId, channel, channelAccountId, comment, channelAccount, credentials: credentials as ChannelCredentials })) {
+    return;
+  }
 
   // Comment triggers can live in two places:
   //   1) FlowCanvas - the Main Playbook (one canvas per tenant). This is where
@@ -183,6 +191,86 @@ export async function processCommentTrigger(job: Job<IncomingCommentJob>): Promi
   }
 }
 
+// ─── Automations: trigger comment_received ──────────────────
+
+/**
+ * Runs the first live comment automation that accepts this comment (in the
+ * order they went live). One run per comment (eventKey comment:<id>): a
+ * redelivered comment finds its run and does nothing. Returns true when the
+ * comment belongs to an automation (ran now, or already ran).
+ */
+export async function runCommentAutomations(opts: {
+  tenantId: string;
+  channel: "INSTAGRAM" | "MESSENGER";
+  channelAccountId: string;
+  comment: IncomingCommentJob["comment"];
+  channelAccount: { externalId: string };
+  credentials: ChannelCredentials;
+}): Promise<boolean> {
+  const { triggerMatches, stepsFromTrace } = await import("./automation-runner.service");
+  const flows = await prisma.chatbotFlow.findMany({
+    where: { tenantId: opts.tenantId, isActive: true, triggerType: "comment_received" },
+    orderBy: { activatedAt: "asc" },
+    select: { id: true, triggerType: true, triggerConfig: true, nodes: true, edges: true },
+  });
+  const flow = (flows as any[]).find((f) =>
+    triggerMatches(f, { type: "comment_received", channel: opts.channel, message: opts.comment.text, postId: opts.comment.postId }),
+  );
+  if (!flow) return false;
+
+  const eventKey = `comment:${opts.comment.commentId}`;
+  let runId: string;
+  try {
+    const row = await prisma.automationRun.create({
+      data: { tenantId: opts.tenantId, flowId: flow.id, triggerType: "comment_received", eventKey, status: "running" },
+      select: { id: true },
+    });
+    runId = row.id;
+  } catch (err: any) {
+    if (err?.code === "P2002") return true; // this comment already ran it
+    throw err;
+  }
+  const nodes = (flow.nodes as GraphNode[]) || [];
+  const edges = (flow.edges as GraphEdge[]) || [];
+  const trig = nodes.find((n) => n.type === "automation_trigger");
+  const run: CommentRunCtx = { id: runId, flowId: flow.id, trace: [], status: "completed", conversationId: null };
+  let error: string | null = null;
+  try {
+    await runCommentFlow({
+      tenantId: opts.tenantId, nodes, edges,
+      startNodeId: trig ? firstOutgoingTarget(edges, trig.id) : null,
+      comment: opts.comment,
+      sourceChatbotFlowId: flow.id,
+      send: {
+        channel: opts.channel, channelAccountId: opts.channelAccountId,
+        channelAccountExternalId: opts.channelAccount.externalId, credentials: opts.credentials,
+        commentId: opts.comment.commentId, recipientPsid: null,
+      },
+      run,
+    });
+  } catch (err: any) {
+    run.status = "failed";
+    error = `failed: ${String(err?.message ?? err).slice(0, 300)}`;
+  }
+  const steps = stepsFromTrace(run.trace);
+  if (steps.length) {
+    await prisma.automationRunStep.createMany({ data: steps.map((st) => ({ tenantId: opts.tenantId, runId, ...st })) }).catch(() => undefined);
+  }
+  const ended = run.status !== "waiting";
+  await prisma.automationRun.update({
+    where: { id: runId },
+    data: {
+      status: run.status,
+      conversationId: run.conversationId,
+      // A comment automation answers the comment by what it sends.
+      answeredInbound: steps.some((x) => x.status === "ok" && /^send_/.test(x.nodeType)),
+      ...(error ? { error } : {}),
+      ...(ended ? { endedAt: new Date() } : { currentNodeId: steps[steps.length - 1]?.nodeId ?? null }),
+    },
+  });
+  return true;
+}
+
 // ─── Trigger matching + specificity scoring ──────────────────
 
 /**
@@ -251,6 +339,16 @@ interface WalkArgs {
   // FlowCanvas (Main Playbook) - the resume path then keys off
   // conversation.chatbotNodeId without a flowId.
   sourceChatbotFlowId: string | null;
+  /** Set when this walk is an automation run (trigger comment_received). */
+  run?: CommentRunCtx;
+}
+
+export interface CommentRunCtx {
+  id: string;
+  flowId: string;
+  trace: Array<{ nodeId: string; type: string; action: string; detail?: any }>;
+  status: "completed" | "waiting" | "failed";
+  conversationId: string | null;
 }
 
 async function runCommentFlow(args: WalkArgs): Promise<void> {
@@ -284,8 +382,37 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
 
     const outgoing = args.edges.filter((e) => e.source === currentId);
     let nextId: string | null = outgoing[0]?.target || null;
+    if (node.type !== "wait_for_reply") args.run?.trace.push({ nodeId: node.id, type: node.type, action: "ok" });
 
     switch (node.type) {
+      case "automation_trigger":
+        break;
+
+      // An automation's buttons: sent like a quick reply. When the next step
+      // waits for the answer, the run moves into a real conversation (the
+      // PSID the private reply returned) parked on Wait for reply - from
+      // there the DM path and its timer resume it like any automation run.
+      case "send_buttons": {
+        const body = interpolate(String(node.data?.text || ""), vars);
+        const buttons = (Array.isArray(node.data?.buttons) ? node.data.buttons : [])
+          .slice(0, 3)
+          .map((b: any) => ({ id: String(b?.id ?? "").slice(0, 256), title: interpolate(String(b?.title ?? ""), vars).slice(0, 20) }))
+          .filter((b: any) => b.id && b.title);
+        const ok = await sendOutboundWithButtons(args.send, body, buttons);
+        if (!ok) { sendFailed(args); return; }
+        const next = args.nodes.find((n) => n.id === nextId);
+        if (next?.type === "wait_for_reply") {
+          await parkForReply(args, next, vars);
+          return;
+        }
+        break;
+      }
+
+      case "wait_for_reply": {
+        await parkForReply(args, node, vars);
+        return;
+      }
+
       // Trigger entry already consumed by caller; if we ever land on one,
       // treat it as a passthrough.
       case "comment_trigger":
@@ -306,7 +433,7 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
 
       case "send_message_text": {
         const text = interpolate(String(node.data?.text || ""), vars);
-        if (text.trim()) await sendOutbound(args.send, text);
+        if (text.trim() && !(await sendOutbound(args.send, text)) && sendFailed(args)) return;
         break;
       }
 
@@ -320,7 +447,7 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
             ? `${body}\n\n${label}: ${url}`
             : `${body}\n\n${url}`
           : body;
-        if (composed) await sendOutbound(args.send, composed);
+        if (composed && !(await sendOutbound(args.send, composed)) && sendFailed(args)) return;
         break;
       }
 
@@ -329,7 +456,7 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
         const caption = node.data?.caption != null
           ? interpolate(String(node.data.caption), vars)
           : undefined;
-        if (url.trim()) await sendOutboundMedia(args.send, url, "image", caption, undefined);
+        if (url.trim() && !(await sendOutboundMedia(args.send, url, "image", caption, undefined)) && sendFailed(args)) return;
         break;
       }
 
@@ -341,7 +468,7 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
         const filename = node.data?.filename != null
           ? interpolate(String(node.data.filename), vars)
           : undefined;
-        if (url.trim()) await sendOutboundMedia(args.send, url, "document", caption, filename);
+        if (url.trim() && !(await sendOutboundMedia(args.send, url, "document", caption, filename)) && sendFailed(args)) return;
         break;
       }
 
@@ -381,7 +508,7 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
           body = interpolate(String(node.data?.text || ""), vars).trim();
           if (!body) break;
         }
-        await sendCommentReplyOutbound(args.send, body);
+        if (!(await sendCommentReplyOutbound(args.send, body)) && sendFailed(args)) return;
         break;
       }
 
@@ -485,6 +612,16 @@ async function promoteToConversation(
   // bridge expires and we lose the right to message in that thread. Persist
   // the deadline so the inbound resume path can hard-stop after expiry.
   const flowExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  // An automation run claims the conversation for its reply and remembers
+  // the owner it found, like a run parked from a DM.
+  const automation = args.run
+    ? {
+        automationRunId: args.run.id,
+        handledBy: "flow",
+        chatbotFlowId: args.run.flowId,
+        flowVariables: { ...vars, __automationRunId: args.run.id, __automationPrevOwner: (conv as any)?.handledBy ?? null } as any,
+      }
+    : {};
   if (!conv) {
     conv = await prisma.conversation.create({
       data: {
@@ -498,6 +635,7 @@ async function promoteToConversation(
         chatbotNodeId: pausedNodeId,
         flowVariables: vars as any,
         flowExpiresAt,
+        ...automation,
       },
     });
   } else {
@@ -508,9 +646,48 @@ async function promoteToConversation(
         chatbotNodeId: pausedNodeId,
         flowVariables: vars as any,
         flowExpiresAt,
+        ...automation,
       },
     });
   }
+  if (args.run) args.run.conversationId = conv.id;
+}
+
+/**
+ * An automation run stops at a send Meta refused, and the run log shows that
+ * step as failed. (The playbook's comment_trigger walk keeps going, as before.)
+ */
+function sendFailed(args: WalkArgs): boolean {
+  if (!args.run) return false;
+  const last = args.run.trace[args.run.trace.length - 1];
+  if (last) last.action = "send_failed";
+  args.run.status = "failed";
+  return true;
+}
+
+/**
+ * Meta's comment-to-DM bridge lasts 24 h (flowExpiresAt; the idle sweep then
+ * closes the conversation). A Wait for reply on it times out inside that, so
+ * its timeout branch runs before the sweep.
+ */
+export const COMMENT_BRIDGE_WAIT_MAX_MS = 24 * 60 * 60_000 - 10 * 60_000;
+
+/** Park an automation run at Wait for reply, with its timeout timer. */
+async function parkForReply(args: WalkArgs, waitNode: GraphNode, vars: Record<string, any>): Promise<void> {
+  if (!args.run) return;
+  await promoteToConversation(args, waitNode.id, vars);
+  if (!args.run.conversationId) { args.run.status = "failed"; return; }
+  args.run.status = "waiting";
+  args.run.trace.push({ nodeId: waitNode.id, type: waitNode.type, action: "paused_for_reply" });
+  const timeoutMs = Math.min(Number(waitNode.data?.timeoutMs) > 0 ? Number(waitNode.data.timeoutMs) : 30 * 60_000, COMMENT_BRIDGE_WAIT_MAX_MS);
+  await flowResumeQueue.add(
+    "resume",
+    {
+      tenantId: args.tenantId, conversationId: args.run.conversationId, flowKind: "sub", flowId: args.run.flowId,
+      resumeNodeId: waitNode.id, channel: String(args.send.channel).toLowerCase(), message: "", timeout: true, automationRunId: args.run.id,
+    },
+    { delay: timeoutMs, removeOnComplete: true, removeOnFail: 100 },
+  );
 }
 
 // ─── Outbound: Private Reply, then DM by PSID ──────────────────────────────

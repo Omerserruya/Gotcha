@@ -462,3 +462,49 @@ describe("★ cart left behind", () => {
     expect(validateAutomation({ type: "tag_added", config: { tags: ["vip"] } }, g.nodes as any, g.edges as any).errors).toEqual([]);
   });
 });
+
+describe("★ comment on a post", () => {
+  const T = (config: any = {}) => ({ type: "comment_received", config });
+  const graph = (...chain: Array<[string, any]>) => {
+    const nodes: any[] = [{ id: "t", type: "automation_trigger", data: {} }, ...chain.map(([type, data], i) => ({ id: `n${i}`, type, data }))];
+    const edges = chain.map((_, i) => ({ id: `e${i}`, source: i ? `n${i - 1}` : "t", target: `n${i}` }));
+    return { nodes, edges };
+  };
+  const errs = (g: any, t: any = T()) => validateAutomation(t, g.nodes, g.edges).errors;
+
+  it("is live; keeps channels (Instagram / Facebook only), posts and keywords", async () => {
+    const it0 = Object.fromEntries((await request(app).get("/api/automations/catalog")).body.data.groups.flatMap((g: any) => g.items.map((i: any) => [i.type, i])));
+    expect(it0["trigger:comment_received"]).toMatchObject({ available: true });
+    expect(normalizeTrigger({ type: "comment_received", config: { channels: ["INSTAGRAM"], postIds: [" 1789 ", "1789"], keywords: ["price"], delayMinutes: 9 } }))
+      .toEqual({ type: "comment_received", config: { channels: ["INSTAGRAM"], postIds: ["1789"], keywords: ["price"], match: "contains" } });
+    expect(() => normalizeTrigger({ type: "comment_received", config: { channels: ["WHATSAPP"] } })).toThrow(/INSTAGRAM or MESSENGER/);
+  });
+
+  it("public reply, a DM with buttons, wait, then anything: valid", () => {
+    const g = graph(
+      ["send_comment_reply", { mode: "text", text: "Sent you a DM!" }],
+      ["send_buttons", { text: "Want the price list?", buttons: [{ id: "y", title: "Yes" }] }],
+      ["wait_for_reply", { timeoutMs: 3_600_000 }],
+      ["hand_to_ai", { aiAgentId: "maya" }],
+    );
+    (g.edges[3] as any).sourceHandle = "btn:y"; // the Yes button
+    expect(errs(g)).toEqual([]);
+  });
+
+  it("★ a step the comment walker cannot run, before the customer replies, is refused", () => {
+    const codes = errs(graph(["hand_to_ai", { aiAgentId: "maya" }])).map((e) => e.code);
+    expect(codes).toContain("comment_step_unsupported");
+  });
+
+  it("★ a public reply outside a comment automation, or after a wait, is refused", () => {
+    expect(errs(graph(["send_comment_reply", { text: "hi" }]), msgTrigger).map((e) => e.code)).toContain("comment_reply_misplaced");
+    const late = graph(["send_message_text", { text: "hi" }], ["wait_for_reply", { timeoutMs: 60_000 }], ["send_comment_reply", { text: "x" }]);
+    expect(errs(late).map((e) => e.code)).toContain("comment_reply_misplaced");
+  });
+
+  it("the public reply needs its text, or its AI employee", () => {
+    expect(errs(graph(["send_comment_reply", { mode: "text" }])).map((e) => e.message).join(" ")).toMatch(/Write the reply/);
+    expect(errs(graph(["send_comment_reply", { mode: "ai" }])).map((e) => e.message).join(" ")).toMatch(/AI employee/);
+    expect(errs(graph(["send_comment_reply", { mode: "ai", agentId: "maya" }]))).toEqual([]);
+  });
+});
