@@ -9,11 +9,12 @@ import {
 } from '@/observability/content-security-policy';
 
 import { refreshSession } from '@/auth/refresh';
-import { RETURN_TO_HEADER } from '@/auth/return-to';
+import { RETURN_TO_HEADER, SESSION_ENDED_HEADER } from '@/auth/return-to';
 import { nowInSeconds, sealSession, sessionCookieOptions, unsealSession } from '@/auth/session';
 
 import { PUBLIC_PATH_PATTERN } from './auth-surface';
 import { isLocale } from '@/i18n/locales';
+import { inLocaleOf, mountOf } from '@/auth/sign-in-url';
 
 const intlMiddleware = createIntlMiddleware(routing);
 
@@ -121,6 +122,10 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
    * response, and `x-nonce` is carried alongside for our own inline script.
    */
   const requestHeaders = new Headers(request.headers);
+  // Ended at the identity provider, not merely absent: a render that sends
+  // them to sign-in says so (`signInHere`). Never trusted from the browser.
+  requestHeaders.delete(SESSION_ENDED_HEADER);
+  if (renewal.kind === 'ended') requestHeaders.set(SESSION_ENDED_HEADER, '1');
   requestHeaders.set(NONCE_HEADER, nonce);
   requestHeaders.set('content-security-policy', csp);
   /*
@@ -325,8 +330,8 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
       const loginUrl = platformLogin
         ? new URL(platformLogin)
         : signInElsewhere
-          ? inLocaleOf(new URL(signInElsewhere), pathname)
-          : inLocaleOf(new URL(`${mount}/sign-in`, request.url), pathname);
+          ? inLocaleOf(new URL(signInElsewhere), pathname, isLocale)
+          : inLocaleOf(new URL(`${mount}/sign-in`, request.url), pathname, isLocale);
       /*
        * `pathname` is already stripped of the prefix by Next, and it is stored
        * that way on purpose: the callback re-prefixes it with `appUrl` when it
@@ -519,26 +524,3 @@ export const config = {
     '/((?!api|_next|_vercel|.*\\.(?:ico|png|jpe?g|gif|svg|webp|avif|css|js|mjs|map|txt|xml|webmanifest|woff2?|ttf|otf|eot|pdf)$).*)',
   ],
 };
-
-/**
- * Where a sign-in URL's build is mounted: its path without the screen
- * (`https://auth-dev.gotcha.co.il/sign-in` → ``, `…/v2/sign-in` → `/v2`). A
- * whole URL is configured so this build need not guess the other's mount;
- * this reads it back.
- */
-function mountOf(signIn: URL): string {
-  return signIn.pathname.replace(/\/sign-in\/?$/, '');
-}
-
-/**
- * The sign-in URL in the language of the path being left: `/he/inbox` →
- * `…/he/sign-in`. A language picked in the URL wins over `Accept-Language`,
- * which decides only when the path carries none.
- */
-export function inLocaleOf(signIn: URL, pathname: string): URL {
-  const locale = /^\/([a-z]{2})(?:\/|$)/.exec(pathname)?.[1];
-  if (!isLocale(locale)) return signIn;
-  const target = new URL(signIn);
-  target.pathname = `${mountOf(signIn)}/${locale}/sign-in`;
-  return target;
-}

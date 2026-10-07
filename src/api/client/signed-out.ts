@@ -4,16 +4,20 @@ import type { Route } from 'next';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { RETURN_TO_HEADER } from '@/auth/return-to';
+import { RETURN_TO_HEADER, SESSION_ENDED_HEADER } from '@/auth/return-to';
 
 import { isApiError } from './api-error';
 
 /** `/api/auth/login`, with where they were - read from the proxy's header. */
 export async function signInHere(): Promise<Route> {
-  const here = (await headers()).get(RETURN_TO_HEADER);
-  return (
-    here ? `/api/auth/login?returnTo=${encodeURIComponent(here)}` : '/api/auth/login'
-  ) as Route;
+  const all = await headers();
+  const query = new URLSearchParams();
+  const here = all.get(RETURN_TO_HEADER);
+  if (here) query.set('returnTo', here);
+  // The proxy saw the provider refuse the refresh: the screen says "ended".
+  if (all.get(SESSION_ENDED_HEADER) === '1') query.set('error', 'ended');
+  const q = query.toString();
+  return (q ? `/api/auth/login?${q}` : '/api/auth/login') as Route;
 }
 
 /**

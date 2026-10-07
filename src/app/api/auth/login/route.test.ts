@@ -111,6 +111,23 @@ describe('⚠⚠ arriving at the OIDC start without going through the panel', ()
     expect(target.searchParams.get('returnTo')).toBe('/en/inbox?c=abc');
   });
 
+  it('★★ in the language of where they were, and "ended" carried (dev: /he/ landed on /en/)', async () => {
+    vi.stubEnv('SIGN_IN_URL', AUTH);
+    const response = await get('?returnTo=%2Fhe%2Fstudio%2Fautomations&error=ended');
+    const target = new URL(response.headers.get('location') ?? '');
+    expect(target.pathname).toBe('/he/sign-in');
+    expect(target.searchParams.get('error')).toBe('ended');
+    expect(target.searchParams.get('returnTo')).toBe('/he/studio/automations');
+  });
+
+  it('only "ended" is carried; no language in returnTo is left to Accept-Language', async () => {
+    vi.stubEnv('SIGN_IN_URL', AUTH);
+    const response = await get('?returnTo=%2Fhome&error=you%20have%20been%20hacked');
+    const target = new URL(response.headers.get('location') ?? '');
+    expect(target.pathname).toBe('/sign-in');
+    expect(target.searchParams.get('error')).toBeNull();
+  });
+
   it('★ and a hostile `returnTo` is still refused on the way', async () => {
     /*
      * This branch reads the query and builds a URL from it, so it is a second

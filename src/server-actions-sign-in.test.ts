@@ -68,8 +68,9 @@ const redirect = vi.hoisted(() =>
 );
 vi.mock('server-only', () => ({}));
 vi.mock('next/navigation', () => ({ redirect }));
+const extra = vi.hoisted(() => ({ headers: {} as Record<string, string> }));
 vi.mock('next/headers', () => ({
-  headers: async () => new Headers({ 'x-gotcha-return-to': '/en/approvals' }),
+  headers: async () => new Headers({ 'x-gotcha-return-to': '/en/approvals', ...extra.headers }),
 }));
 
 describe('★★ signInIfSignedOut', () => {
@@ -82,6 +83,16 @@ describe('★★ signInIfSignedOut', () => {
     await expect(
       signInIfSignedOut(new ApiError({ kind: 'authentication', status: 401 })),
     ).rejects.toThrow(`REDIRECT /api/auth/login?returnTo=${encodeURIComponent('/en/approvals')}`);
+  });
+
+  it('★★ ended at the provider (the proxy said so): sign-in says "ended"', async () => {
+    extra.headers = { 'x-gotcha-session-ended': '1' };
+    const { signInHere } = await import('@/api/client/signed-out');
+    const to = new URL(await signInHere(), 'https://dev.gotcha.co.il');
+    extra.headers = {};
+    expect(to.pathname).toBe('/api/auth/login');
+    expect(to.searchParams.get('error')).toBe('ended');
+    expect(to.searchParams.get('returnTo')).toBe('/en/approvals');
   });
 
   it.each([

@@ -16,6 +16,8 @@ import {
   randomState,
   redirectUri,
 } from '@/auth/oidc';
+import { isLocale } from '@/i18n/locales';
+import { inLocaleOf } from '@/auth/sign-in-url';
 import { serverEnv } from '@/config/env.server';
 import { logger } from '@/observability/logger';
 import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
@@ -94,8 +96,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    */
   const signInElsewhere = process.env.SIGN_IN_URL;
   if (signInElsewhere && request.nextUrl.searchParams.get(HANDOVER_PARAM) !== '1') {
-    const panel = new URL(signInElsewhere);
+    // In the language of where they were, and saying why when it ended.
+    const panel = inLocaleOf(new URL(signInElsewhere), returnTo, isLocale);
     panel.searchParams.set('returnTo', returnTo);
+    if (request.nextUrl.searchParams.get('error') === 'ended') {
+      panel.searchParams.set('error', 'ended');
+    }
     const toThePanel = NextResponse.redirect(panel);
     toThePanel.headers.set('cache-control', 'no-store');
     return toThePanel;

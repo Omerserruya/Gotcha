@@ -93,6 +93,31 @@ describe('★★ the proxy renews the session before the render', () => {
     expect(location.searchParams.get('error')).toBe('ended');
   });
 
+  it('★★ ended, with another session cookie letting the request through: the render is told', async () => {
+    /*
+     * Dev: a /he/ page with a refused refresh landed on /en/sign-in with no
+     * reason - another `*_session` cookie passed the gate, and the layout's
+     * sign-in did not know the session had ENDED. The render now does.
+     */
+    refreshSession.mockResolvedValue(null);
+    const ended = await request(now() - 10, '/he/studio/automations');
+    ended.cookies.set('platform_session', 'other');
+    const response = await proxy(ended);
+    expect(response.headers.get('x-middleware-request-x-gotcha-session-ended')).toBe('1');
+  });
+
+  it('a browser cannot claim "ended" itself', async () => {
+    const response = await proxy(
+      new NextRequest('https://dev.gotcha.co.il/en/home', {
+        headers: {
+          cookie: `${NAME}=${await sealSession({ ...base, exp: now() + 3600 })}`,
+          'x-gotcha-session-ended': '1',
+        },
+      }),
+    );
+    expect(response.headers.get('x-middleware-request-x-gotcha-session-ended')).toBeNull();
+  });
+
   it('never signed in is not "ended": no reason on the way to sign-in', async () => {
     const response = await proxy(new NextRequest('https://dev.gotcha.co.il/en/home'));
     expect(response.status).toBe(307);
