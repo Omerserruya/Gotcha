@@ -232,3 +232,19 @@ Fixed 2026-10-07 (40a54757, test files only, real shared module + per-test overr
 - (DECIDED, Omer, 2026-10-07) Order messages: sent only to a customer who has written to the business before (an inbound message on any of their channels) or gave consent (the store's own record, else a granted marketing ConsentRecord); otherwise skipped with `no_prior_contact_or_consent`. Every order message, status updates included. An opt-out always wins. No new conversation is opened for a customer about to be skipped. (Supersedes the earlier "no consent for the customer's own order".)
 - (DECIDED, Omer, 2026-10-07) A deferral with no time ("call me tomorrow") asks what time; only a stated time schedules the follow-up. The code already did this; the tests now say so.
 - (Release note, 2026-10-07) Migration `20261007120000_drop_channel_response_mode` must run only AFTER every backend image is rebuilt with the new schema (each image bakes its Prisma client; an old client selects `response_mode` on unselected channel-account reads). Omer deferred it on dev to the next full rebuild. For production: deploy all images first, migrate last.
+
+### Assistant figures and their sources (2026-10-07)
+
+The assistant must say the number the screen in front of the owner says. Live test: "how many waiting?" answered 3 (status WAITING) while Home said 21 and the inbox queue 10.
+
+| assistant metric | means | source (same as the screen) |
+|---|---|---|
+| `waiting_for_person` | conversations waiting for someone on the team to answer | analytics `waitingForPersonWhere` via `GET /api/analytics/queue/items` (Home's "waiting on you" count and its ranked queue; unassigned, open, not answered by the AI or a flow unless handed over, not a rehearsal). Asked with the user's own token. |
+| `pending_approvals` | actions waiting for approval | `status PENDING and expiresAt > now`, as Home's metric strip (`getOverview.pendingApprovalCount`) and the Approvals list |
+| `open_conversations` | all open conversations, AI-answered included | direct count, rehearsals excluded (not shown as such on a screen) |
+| `closed_today` | conversations closed since midnight | direct count, rehearsals excluded |
+| `inbound_messages_24h` | customer messages in the last 24 h | direct count, rehearsals excluded |
+
+Fixed with it: Home's "waiting on you" (`getQueueDepth`) counted conversations the AI was answering (21) while Home's own ranked queue excluded them; both now use one predicate. The old metric `waiting_conversations` (status WAITING, which no screen shows) now maps to `waiting_for_person`. Tool results carry a plain-words `label` instead of status keys or the query; steps are human ("Counting the conversations waiting for your team"), in the interface language. The answer follows the language of the question (fallback: the interface language).
+
+Open, for Frontend: v2 uses "waiting on you" for two figures, the people queue (StatusStrip) and pending approvals (MetricStrip, `analytics.ts:436`). One of the two labels should change.

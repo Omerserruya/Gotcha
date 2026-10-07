@@ -31,6 +31,7 @@ import type { ClientContext, OperatorContext } from "./agent-context.service";
 import {
   buildSystemAgentTools,
   dispatchSystemToolCall,
+  stepText,
 } from "./system-tools.service";
 
 const MAX_ROUNDS = 5;
@@ -43,8 +44,8 @@ export type AgentRuntimeEvent =
   | { type: "ready"; sessionId: string }
   | { type: "context_attached"; resolved: { conversationId: string | null; contactId: string | null; route: string | null } }
   | { type: "token"; text: string }
-  | { type: "tool_start"; toolCallId: string; name: string; args: unknown }
-  | { type: "tool_end"; toolCallId: string; name: string; ok: boolean; resultSummary: string }
+  | { type: "tool_start"; toolCallId: string; name: string; args: unknown; label: string }
+  | { type: "tool_end"; toolCallId: string; name: string; ok: boolean; resultSummary: string; label: string }
   | { type: "plan_proposed"; approvalRequestId: string; summary: string }
   | { type: "awaiting_approval"; approvalRequestId: string; tool: string }
   | { type: "denied"; tool: string; reason: string }
@@ -199,11 +200,13 @@ export async function runAgent(
     for (const tc of finalToolCalls) {
       let parsedArgs: unknown = {};
       try { parsedArgs = JSON.parse(tc.function?.arguments || "{}"); } catch { /* keep raw */ }
+      const label = stepText(tc.function?.name || "", parsedArgs, input.operator.locale ?? "en");
       await onEvent({
         type: "tool_start",
         toolCallId: tc.id,
         name: tc.function?.name || "unknown",
         args: parsedArgs,
+        label,
       });
 
       const r = await dispatchSystemToolCall(tc, {
@@ -243,6 +246,7 @@ export async function runAgent(
         name: tc.function?.name || "unknown",
         ok,
         resultSummary: summariseToolResult(r.content),
+        label,
       });
 
       chatMessages.push({
@@ -290,8 +294,9 @@ function summariseToolResult(jsonStr: string): string {
     const parsed = JSON.parse(jsonStr);
     if (parsed?.ok === false) return `error: ${String(parsed.error || "unknown").slice(0, 120)}`;
     if (Array.isArray(parsed?.results)) return `results: ${parsed.results.length}`;
-    if (typeof parsed?.count === "number") return `count: ${parsed.count}`;
-    if (typeof parsed?.value === "number") return `value: ${parsed.value}`;
+    // "3 conversations waiting for someone on your team to answer", not "value: 3".
+    if (typeof parsed?.count === "number") return parsed.label ? `${parsed.count} ${parsed.label}` : String(parsed.count);
+    if (typeof parsed?.value === "number") return parsed.label ? `${parsed.value} ${parsed.label}` : String(parsed.value);
     if (parsed?.proposed_plan) return `plan_proposed`;
     if (parsed?.awaiting_approval) return `awaiting_approval`;
     return "ok";

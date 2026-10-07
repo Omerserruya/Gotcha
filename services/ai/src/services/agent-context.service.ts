@@ -37,6 +37,8 @@ export interface OperatorContext {
   tenantName?: string;
   /** Who is asking: conversation data follows the inbox's visibility rule. */
   viewer?: Viewer;
+  /** The interface language (the answer follows the question; this is the fallback). */
+  locale?: "he" | "en";
 }
 
 export interface BuiltAgentContext {
@@ -68,6 +70,7 @@ export async function buildAgentContext(opts: {
   // an operator" - naming them helps the model's tone.
   lines.push(`- Operator: ${op.userName || op.userEmail || op.userId}`);
   if (op.userRole) lines.push(`- Role: ${op.userRole}`);
+  if (op.locale) lines.push(`- Interface language: ${op.locale === "he" ? "Hebrew" : "English"}`);
   if (op.tenantName) lines.push(`- Workspace: ${op.tenantName}`);
   if (client.route) lines.push(`- Current route: \`${client.route}\``);
 

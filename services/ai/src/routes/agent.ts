@@ -100,6 +100,9 @@ router.post("/run", async (req: Request, res: Response) => {
           userRole: user?.role,
           tenantName: tenant?.name,
           viewer: viewerOf(req),
+          locale: req.body?.locale === "he" || req.body?.locale === "en"
+            ? req.body.locale
+            : String(req.headers["accept-language"] || "").toLowerCase().startsWith("he") ? "he" : "en",
         },
         client: client ?? null,
         message: message.trim(),

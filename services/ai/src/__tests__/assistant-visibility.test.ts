@@ -143,4 +143,13 @@ describe("★ the route", () => {
     await request(app()).post("/api/agent/run").send({ message: "hi", sessionId: "s1", aiAgentId: "ag_mine" });
     expect(H.runInput.aiAgentId).toBe("ag_mine");
   });
+
+  it("the interface language: the body's locale wins, then Accept-Language, else English", async () => {
+    await request(app()).post("/api/agent/run").set("Accept-Language", "en-US").send({ message: "hi", sessionId: "s1", locale: "he" });
+    expect(H.runInput.operator.locale).toBe("he");
+    await request(app()).post("/api/agent/run").set("Accept-Language", "he-IL,he;q=0.9").send({ message: "hi", sessionId: "s1" });
+    expect(H.runInput.operator.locale).toBe("he");
+    await request(app()).post("/api/agent/run").send({ message: "hi", sessionId: "s1" });
+    expect(H.runInput.operator.locale).toBe("en");
+  });
 });

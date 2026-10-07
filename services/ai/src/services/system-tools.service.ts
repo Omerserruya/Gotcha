@@ -58,12 +58,14 @@ const SYSTEM_GET_METRIC = {
   function: {
     name: "system_get_metric",
     description:
-      "Fetch a high-level metric for the tenant. Available metrics: " +
-      "'inbound_messages_24h' (count of inbound messages in the last 24h), " +
-      "'open_conversations' (currently OPEN), " +
-      "'waiting_conversations' (currently WAITING), " +
-      "'closed_today' (closed since 00:00 today UTC), " +
-      "'pending_approvals' (ApprovalRequest rows still PENDING).",
+      "Fetch a workspace figure, defined exactly as the screens show it. Metrics: " +
+      "'waiting_for_person' (conversations waiting for someone on the team to answer: the number on Home and the inbox queue; " +
+      "conversations the AI is answering are NOT waiting), " +
+      "'pending_approvals' (actions waiting for someone's approval, as on Home and the Approvals page), " +
+      "'open_conversations' (all conversations still open, including the ones the AI is answering), " +
+      "'closed_today' (conversations closed since midnight), " +
+      "'inbound_messages_24h' (customer messages in the last 24 hours). " +
+      "Each result has a 'label' saying what the number is: use those words, never the metric key.",
     parameters: {
       type: "object",
       required: ["metric"],
@@ -71,11 +73,11 @@ const SYSTEM_GET_METRIC = {
         metric: {
           type: "string",
           enum: [
-            "inbound_messages_24h",
-            "open_conversations",
-            "waiting_conversations",
-            "closed_today",
+            "waiting_for_person",
             "pending_approvals",
+            "open_conversations",
+            "closed_today",
+            "inbound_messages_24h",
           ],
         },
       },
@@ -344,18 +346,24 @@ async function dispatchSystemTool(
   try {
     switch (name) {
       case "system_count_conversations": {
-        const where: any = { tenantId: ctx.tenantId };
+        const where: any = { tenantId: ctx.tenantId, ...REAL_CONVERSATION };
         const clause = clauseOf(ctx);
         if (clause) where.OR = clause;
         if (args.status && args.status !== "ANY") where.status = args.status;
         if (args.channel) where.channel = args.channel;
         if (args.sinceISO) where.createdAt = { gte: new Date(args.sinceISO) };
         const count = await prisma.conversation.count({ where });
-        return { toolCallId, content: JSON.stringify({ ok: true, count, where }) };
+        // Words, not the query: the model repeats what it is given, and the
+        // owner must never read a status key ("WAITING") or a field name.
+        return { toolCallId, content: JSON.stringify({ ok: true, count, label: countLabel(args) }) };
       }
       case "system_get_metric": {
-        const value = await getMetric(ctx.tenantId, args.metric, clauseOf(ctx));
-        return { toolCallId, content: JSON.stringify({ ok: true, metric: args.metric, value }) };
+        const metric = METRIC_ALIASES[args.metric] ?? args.metric;
+        const value = await getMetric(ctx.tenantId, metric, clauseOf(ctx), ctx.authToken);
+        if (value === null) {
+          return { toolCallId, content: JSON.stringify({ ok: false, error: "this figure is not available right now" }) };
+        }
+        return { toolCallId, content: JSON.stringify({ ok: true, value, label: METRIC_LABELS[metric] ?? "figure" }) };
       }
       case "system_search_customers": {
         const limit = Math.min(20, Math.max(1, Number(args.limit) || 10));
@@ -461,30 +469,112 @@ async function dispatchSystemTool(
   }
 }
 
-async function getMetric(tenantId: string, metric: string, clause: Record<string, unknown>[] | null = null): Promise<number> {
+/**
+ * A step as a person reads it ("Counting the waiting conversations"), never
+ * the tool's name. The Home chat's step.start and Cmd-K's tool events use it.
+ */
+const STEP_TEXT: Record<string, { en: string; he: string }> = {
+  system_count_conversations: { en: "Counting conversations", he: "סופר שיחות" },
+  system_get_metric: { en: "Checking the numbers", he: "בודק את המספרים" },
+  system_search_customers: { en: "Searching customers", he: "מחפש לקוחות" },
+  system_summarize_conversation: { en: "Reading the conversation", he: "קורא את השיחה" },
+  system_recent_activity: { en: "Looking at recent messages", he: "מסתכל על ההודעות האחרונות" },
+  propose_plan: { en: "Preparing a plan for your approval", he: "מכין תוכנית לאישור שלך" },
+};
+const METRIC_STEP: Record<string, { en: string; he: string }> = {
+  waiting_for_person: { en: "Counting the conversations waiting for your team", he: "סופר את השיחות שמחכות לצוות" },
+  pending_approvals: { en: "Counting the approvals waiting for you", he: "סופר את האישורים שמחכים לך" },
+  open_conversations: { en: "Counting the open conversations", he: "סופר את השיחות הפתוחות" },
+  closed_today: { en: "Counting today's closed conversations", he: "סופר את השיחות שנסגרו היום" },
+  inbound_messages_24h: { en: "Counting today's customer messages", he: "סופר את הודעות הלקוחות מהיממה האחרונה" },
+};
+export function stepText(name: string, args: any, locale: "he" | "en" = "en"): string {
+  if (name === "system_get_metric") {
+    const m = METRIC_ALIASES[args?.metric] ?? args?.metric;
+    if (METRIC_STEP[m]) return METRIC_STEP[m][locale];
+  }
+  if (STEP_TEXT[name]) return STEP_TEXT[name][locale];
+  // An integration tool: its own action, in words.
+  const action = name.replace(/^integration_/, "").replace(/[._]+/g, " ").trim();
+  return locale === "he" ? `מריץ ${action}` : `Running ${action}`;
+}
+
+/** Not a rehearsal: the same exclusion the analytics screens apply. */
+const REAL_CONVERSATION = { isTest: false, NOT: { customerExternalId: { startsWith: "sandbox:" } } } as const;
+
+/** An old metric key still accepted, mapped to the figure the screens show. */
+const METRIC_ALIASES: Record<string, string> = { waiting_conversations: "waiting_for_person" };
+
+/** What each figure is, in the words the screens use (the model localises). */
+export const METRIC_LABELS: Record<string, string> = {
+  waiting_for_person: "conversations waiting for someone on your team to answer",
+  pending_approvals: "actions waiting for your approval",
+  open_conversations: "open conversations, including the ones the AI is answering",
+  closed_today: "conversations closed today",
+  inbound_messages_24h: "customer messages in the last 24 hours",
+};
+
+const STATUS_WORDS: Record<string, string> = {
+  OPEN: "open conversations",
+  WAITING: "conversations waiting for the customer to reply",
+  CLOSED: "closed conversations",
+};
+function countLabel(args: any): string {
+  const parts = [args?.status && args.status !== "ANY" ? (STATUS_WORDS[String(args.status)] ?? "matching conversations") : "conversations"];
+  if (args?.channel) parts.push(`on ${String(args.channel).toLowerCase().replace(/_/g, " ")}`);
+  if (args?.sinceISO) parts.push(`since ${String(args.sinceISO).slice(0, 10)}`);
+  return parts.join(" ");
+}
+
+const ANALYTICS_URL = () => process.env.ANALYTICS_SERVICE_URL || "http://analytics:4004";
+
+/**
+ * "Waiting for a person" is the analytics service's definition (Home's count
+ * and its ranked queue share it). Asked through its API with the caller's own
+ * token, never re-derived here: the assistant must say the number the screen
+ * in front of the owner says. Null when it cannot be read.
+ */
+async function waitingForPerson(authToken?: string): Promise<number | null> {
+  if (!authToken) return null;
+  try {
+    const r = await fetch(`${ANALYTICS_URL()}/api/analytics/queue/items?limit=1`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!r.ok) return null;
+    const j: any = await r.json();
+    return typeof j?.totalWaiting === "number" ? j.totalWaiting : null;
+  } catch {
+    return null;
+  }
+}
+
+async function getMetric(tenantId: string, metric: string, clause: Record<string, unknown>[] | null = null, authToken?: string): Promise<number | null> {
   const now = new Date();
   const conv = clause ? { OR: clause } : {};
   switch (metric) {
+    case "waiting_for_person":
+      return waitingForPerson(authToken);
     case "inbound_messages_24h": {
       const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       return prisma.message.count({
-        where: { tenantId, direction: "INBOUND", createdAt: { gte: since }, ...(clause ? { conversation: conv } : {}) },
+        where: { tenantId, direction: "INBOUND", createdAt: { gte: since }, conversation: { ...REAL_CONVERSATION, ...conv } },
       });
     }
     case "open_conversations":
-      return prisma.conversation.count({ where: { tenantId, status: "OPEN", ...conv } });
-    case "waiting_conversations":
-      return prisma.conversation.count({ where: { tenantId, status: "WAITING", ...conv } });
+      return prisma.conversation.count({ where: { tenantId, ...REAL_CONVERSATION, status: "OPEN", ...conv } });
     case "closed_today": {
       const startOfDay = new Date(now); startOfDay.setUTCHours(0, 0, 0, 0);
       return prisma.conversation.count({
-        where: { tenantId, status: "CLOSED", closedAt: { gte: startOfDay }, ...conv },
+        where: { tenantId, ...REAL_CONVERSATION, status: "CLOSED", closedAt: { gte: startOfDay }, ...conv },
       });
     }
     case "pending_approvals":
-      return (prisma as any).approvalRequest.count({ where: { tenantId, status: "PENDING" } });
+      // As Home and the Approvals list: still actionable, i.e. not past its expiry
+      // (the sweeper that flips PENDING to EXPIRED runs on its own schedule).
+      return (prisma as any).approvalRequest.count({ where: { tenantId, status: "PENDING", expiresAt: { gt: now } } });
     default:
-      return 0;
+      return null;
   }
 }
 
