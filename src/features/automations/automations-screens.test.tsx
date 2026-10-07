@@ -12,6 +12,8 @@ import {
 } from '@/api/contracts/automations';
 import automationsMessages from '@/i18n/messages/en/automations.json';
 import commonMessages from '@/i18n/messages/en/common.json';
+import heAutomationsMessages from '@/i18n/messages/he/automations.json';
+import heCommonMessages from '@/i18n/messages/he/common.json';
 
 const push = vi.hoisted(() => vi.fn());
 const replace = vi.hoisted(() => vi.fn());
@@ -269,6 +271,38 @@ describe('★★ New automation - a trigger, what it cannot go without, then the
       trigger: { type: 'schedule', config: { at: '08:30' } },
     });
     expect(push).toHaveBeenCalledWith('/studio/automations/new1');
+  });
+
+  it('★ in Hebrew the draft is named in Hebrew - a trigger and a template alike', async () => {
+    actions.createAutomation.mockResolvedValue({
+      ok: true,
+      automation: automation({ id: 'he1', status: 'draft' }),
+    });
+    const inHebrew = (node: ReactNode) =>
+      render(
+        <NextIntlClientProvider
+          locale="he"
+          timeZone="Asia/Jerusalem"
+          now={NOW}
+          messages={{ automations: heAutomationsMessages, common: heCommonMessages }}
+        >
+          {node}
+        </NextIntlClientProvider>,
+      );
+    const picked = inHebrew(<NewAutomation catalog={catalog(true)} />);
+    fireEvent.click(screen.getByTestId('step-trigger:schedule'));
+    expect(screen.getByTestId('new-automation-name')).toHaveValue(
+      heAutomationsMessages.nodes.trigger.schedule,
+    );
+    picked.unmount();
+    inHebrew(<NewAutomation catalog={null} templateKey="comment" />);
+    expect(screen.getByTestId('new-automation-name')).toHaveValue('תגובה על פוסט ← הודעה פרטית');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('new-automation-create'));
+    });
+    expect(actions.createAutomation).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'תגובה על פוסט ← הודעה פרטית' }),
+    );
   });
 
   it('refused: says why, stays', async () => {
