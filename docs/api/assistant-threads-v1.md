@@ -88,9 +88,11 @@ logged and charged like every AI call). A title the user set is never overwritte
 answers `200` with `Content-Type: text/event-stream`. **One answer at a time per
 thread**: while one is running, a second send is `409 RUN_IN_PROGRESS`.
 
-**Language:** steps, suggestions, the auto-title and the answer are written in
-`locale` when it is sent (the UI language); without it, the user's profile
-language, then the workspace's default. `locale` wins.
+**Language:** the answer is written in the language of the user's question
+(Omer, 2026-10-07); only when the question has no clear language (a number, a
+name) does it fall back to the interface language. Steps, suggestions and the
+auto-title follow the interface language: `locale` when sent, else the user's
+profile language, then the workspace's default.
 
 **Errors before the stream opens** are plain JSON with a non-200 status (§6):
 400, 402 (billing refuses before any model call), 404, 409, 429. Once the
