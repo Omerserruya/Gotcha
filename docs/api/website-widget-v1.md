@@ -23,7 +23,7 @@ Plan and background: `docs/product/website-widget.md`.
     "settings": WidgetSettings,
     "assignedEmployee": null | { "id": "...", "name": "Maya" },   // read-only: who answers this channel per the playbook (§4)
     "places": {
-      "code": { "channelId": "..." } | null,                       // the web chat account (null until the first save)
+      "code": { "channelId": "..." } | null,                       // the web chat account (null until it is created, §1)
       "shopify": [{ "channelId": "...", "shopDomain": "lumiere.myshopify.com" }]
     }
   }
@@ -32,8 +32,15 @@ Plan and background: `docs/product/website-widget.md`.
 
 `PUT /api/website-widget` with a partial `WidgetSettings` → `200` the same
 shape as GET. The shared settings are written to **every place** at once (the
-web chat account, created on the first save, and each Shopify chat account).
-Shopify-only settings are not touched here (§3).
+web chat account and each Shopify chat account). Shopify-only settings are not
+touched here (§3).
+
+PUT never creates a place. The web chat account is created by the existing,
+idempotent `POST /api/channels/webchat/create` (it owns the plan's channel
+limit; the Install tab's "Get the code" calls it). With no place at all (no web
+chat, no Shopify chat) PUT answers `409 { "code": "WIDGET_NOT_CREATED" }`:
+nothing to save to yet. A workspace with only a Shopify chat can PUT (its
+shop(s) get the settings) and GET reads the settings from its first shop.
 
 ### WidgetSettings
 Every field maps to a field the bundle already reads; names follow the design.
@@ -95,7 +102,7 @@ Text fields are plain text (no markup), URLs https only.
       "firstSeenAt": "..." | null,
       "lastSeenAt": "..." | null,          // the latest page load (throttled, ~hourly)
       "lastHost": "shop.example.com" | null
-    } | null,                              // null until the widget exists (first PUT)
+    } | null,                              // null until the web chat account exists (§1)
     "shopify": [{
       "channelId": "...",
       "shopDomain": "lumiere.myshopify.com",
@@ -104,11 +111,15 @@ Text fields are plain text (no markup), URLs https only.
       "lastHeartbeatAt": "..." | null,
       "themeEditorUrl": "https://admin.shopify.com/..." | null
     }],
-    "shopifyInstallUrl": "/api/connectors/shopify/install?..." | null,   // "Install on Shopify": the existing OAuth install, bound to this workspace
     "woocommerce": { "status": "use_code" }   // until the plugin (stage C): install with the code snippet
   }
 }
 ```
+"Install on Shopify" is the existing ShopifyConnect flow (availability, then
+`start?flow=...`, then claim); this endpoint does not return a URL for it.
+`lastSeenAt` / `lastHost` come from the snippet's `/bootstrap` (host from the
+page's Origin, else Referer), written at most hourly. `embedLive` means a theme
+heartbeat within the last 7 days.
 
 ---
 
@@ -133,5 +144,6 @@ editing it from this screen waits for Omer's decision (plan, "Decisions").
 ## 5. Errors
 
 `403` without the permission; `404` never for GET (an absent widget is
-`places.code: null`); `409 WIDGET_LIMIT` when the plan has no room for another
-channel (first save only); PUT never fails on a bad value (normalised).
+`places.code: null`); `409 WIDGET_NOT_CREATED` on PUT when there is no place
+yet (the plan's channel limit is answered by `POST /api/channels/webchat/create`);
+PUT never fails on a bad value (normalised).

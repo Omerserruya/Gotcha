@@ -43,6 +43,7 @@ const H = vi.hoisted(() => {
     updateConversation: v.fn().mockResolvedValue({}),
     createMessage: v.fn().mockResolvedValue({ id: "msg1" }),
     updateChannel: v.fn().mockResolvedValue({}),
+    executeRaw: v.fn(async () => 1),
     validateCartLine: v.fn(),
     createHandover: v.fn(async () => ({ id: "ho1", fromHandler: null, toHandler: "human", at: new Date() })),
   };
@@ -72,6 +73,7 @@ const prismaDouble = vi.hoisted(() => {
       create: H.createMessage,
     },
     conversationHandover: { create: H.createHandover },
+    $executeRaw: H.executeRaw,
   };
   db.$transaction = v.fn(async (fn: (tx: unknown) => unknown) => fn(db));
   return db;
@@ -304,10 +306,15 @@ describe("POST /bootstrap", () => {
     // The heartbeat is fire-and-forget by design: a storefront must never
     // wait on it. Let its microtask settle before asserting.
     await new Promise((r) => setTimeout(r, 10));
-    expect(H.updateChannel).toHaveBeenCalled();
-    const arg = H.updateChannel.mock.calls[0][0];
-    expect(arg.data.platformMeta.shopifyLiveChat.install.lastHeartbeatAt).toBeTruthy();
-    expect(arg.data.platformMeta.shopifyLiveChat.install.lastThemeId).toBe("12345");
+    // One statement that replaces only the install block on the stored row
+    // (never the whole config read at bootstrap).
+    expect(H.executeRaw).toHaveBeenCalled();
+    const [strings, ...values] = H.executeRaw.mock.calls[0];
+    expect(strings.join("?")).toContain("'install'");
+    const install = JSON.parse(values.find((x: unknown) => typeof x === "string" && x.startsWith("{")));
+    expect(install.lastHeartbeatAt).toBeTruthy();
+    expect(install.lastThemeId).toBe("12345");
+    expect(H.updateChannel).not.toHaveBeenCalled();
   });
 
   it("rate limits repeated bootstraps from one channel and ip", async () => {

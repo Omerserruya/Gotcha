@@ -33,6 +33,7 @@ import shopifyChatInstallRoutes from "./routes/shopify-chat-install";
 import shopifyInstallRoutes from "./routes/shopify-install";
 import shopifyWebhookRoutes from "./routes/shopify-webhooks";
 import shopifyLiveChatRoutes from "./routes/shopify-live-chat";
+import websiteWidgetRoutes from "./routes/website-widget";
 import actionPlannerRoutes from "./routes/action-planner";
 import toolPermissionRoutes from "./routes/tool-permissions";
 import integrationWorkspaceRoutes from "./routes/integration-workspace";
@@ -165,6 +166,7 @@ app.use("/api", shopifyChatInstallRoutes);
 app.use("/api", shopifyWebhookRoutes);
 app.use("/api/shopify-chat", shopifyChatPublicRoutes);
 app.use("/api/shopify-live-chat", shopifyLiveChatRoutes);
+app.use("/api/website-widget", websiteWidgetRoutes);
 app.use("/api/action-planner", actionPlannerRoutes);
 app.use("/api/tool-permissions", toolPermissionRoutes);
 // Integrations & Tools workspace: composed sidebar + per-integration tool policy.

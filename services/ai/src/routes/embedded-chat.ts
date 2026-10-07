@@ -12,6 +12,7 @@ import {
   evaluateBusinessHours, readDurableSetting } from "@chatcenter/shared";
 import crypto from "crypto";
 import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanitizer.service";
+import { recordWebchatSeen, hostOf } from "../services/website-widget.service";
 
 const router = Router();
 
@@ -139,6 +140,11 @@ router.post("/bootstrap", initLimiter, async (req: Request, res: Response) => {
         }),
       ).catch(() => undefined);
     }
+
+    // Last seen + host for Install (throttled to hourly inside).
+    void withCrossTenantAccess(async () =>
+      recordWebchatSeen(account.id, hostOf(req.headers.origin, req.headers.referer)),
+    ).catch(() => undefined);
 
     const config = normalizeWebchatConfig(account.credentials);
 

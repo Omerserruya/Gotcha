@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
-const H = vi.hoisted(() => ({ conversations: [] as any[], queued: [] as any[], messageReads: 0, created: [] as any[] }));
+const H = vi.hoisted(() => ({ conversations: [] as any[], queued: [] as any[], messageReads: 0, created: [] as any[], raw: [] as any[] }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -33,6 +33,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         create: async (a: any) => { const c = { id: `conv_${H.created.length + 1}`, ...a.data }; H.created.push(c); H.conversations.push(c); return c; },
       },
       message: { findMany: async () => { H.messageReads++; return [{ id: "m1", direction: "OUTBOUND", body: "hi", senderName: "AI", createdAt: new Date(0) }]; } },
+      $executeRaw: async (strings: TemplateStringsArray, ...values: any[]) => { H.raw.push({ sql: strings.join("?"), values }); return 1; },
     },
   };
 });
@@ -42,7 +43,7 @@ import router from "../routes/embedded-chat";
 const app = () => { const a = express(); a.use(express.json()); a.use("/api/embedded-chat", router); return a; };
 
 beforeEach(() => {
-  H.queued = []; H.messageReads = 0; H.created = [];
+  H.queued = []; H.messageReads = 0; H.created = []; H.raw = [];
   H.conversations = [
     { id: "conv_web", tenantId: "T", channel: "WEBCHAT", channelAccountId: "ca_web", customerExternalId: "sess_secret_abc", customerName: "Visitor", status: "OPEN" },
     { id: "conv_other", tenantId: "T", channel: "WEBCHAT", channelAccountId: "ca_web", customerExternalId: "sess_other_xyz", customerName: "Other", status: "OPEN" },
@@ -104,5 +105,22 @@ describe("/init: the token, and resuming with it", () => {
     H.conversations.push({ id: "conv_foreign", tenantId: "T", channel: "WEBCHAT", channelAccountId: "ca_other_widget", customerExternalId: "sess_foreign", status: "OPEN" });
     const r = await request(app()).post("/api/embedded-chat/init").send({ widgetId: "widget-1", sessionToken: "sess_foreign" });
     expect(r.body.data.sessionId).not.toBe("conv_foreign");
+  });
+});
+
+describe("/bootstrap records where the snippet runs (Install's last seen + host)", () => {
+  it("a page load records the page's host from Origin, on this widget's account", async () => {
+    const r = await request(app()).post("/api/embedded-chat/bootstrap").set("Origin", "https://Shop.Example.com").send({ widgetId: "widget-1" });
+    expect(r.status).toBe(200);
+    await new Promise((ok) => setImmediate(ok));
+    expect(H.raw).toHaveLength(1);
+    expect(H.raw[0].sql).toContain("last_health_check");
+    expect(H.raw[0].values).toEqual(expect.arrayContaining(["ca_web", "shop.example.com"]));
+  });
+
+  it("an unknown widget records nothing", async () => {
+    await request(app()).post("/api/embedded-chat/bootstrap").set("Origin", "https://x.com").send({ widgetId: "nope" });
+    await new Promise((ok) => setImmediate(ok));
+    expect(H.raw).toEqual([]);
   });
 });
