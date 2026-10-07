@@ -103,10 +103,12 @@ A run in a conversation the viewer may not see (department rules) is not listed,
 |---|---|---|---|
 | `message_received` | `{ channels?: Channel[], keywords?: string[], match?: "contains"\|"exact"\|"any_word" }` | every inbound message (not only the first) on those channels; with keywords, only when one matches | yes |
 | `new_customer` | `{ channels?: Channel[] }` | the first message ever from a customer | yes |
-| `tag_added` | `{ tags: string[] }` | one of the tags is added to the customer | yes **(building)** |
+| `message_from_ad` | `{ channels?: Channel[], adIds?: string[] }` | the FIRST message of a conversation that came from an ad (Click-to-WhatsApp / Meta referral); `adIds` (Meta ad ids, matched trimmed and case-insensitive) narrows it to chosen ads | yes |
+| `button_tapped` | `{ channels?: Channel[], payloads?: string[] }` | a button / list row tapped when no flow is waiting for it (e.g. a campaign template's quick reply); `payloads` narrows it to chosen button ids | yes |
+| `tag_added` | `{ tags: string[] }` | one of the tags is added to the customer | yes |
 | `schedule` | `{ at: "09:00", days?: ["sun".."sat"], timezone?: "Asia/Jerusalem" }` | at that time; there is no customer on this path (Send nodes unavailable) | yes **(building)** |
 | `webhook` | `{}` | a POST to the automation's webhook URL; the body is `{{body.*}}`. The URL and secret come from the existing `/api/webhook-triggers` (create one with `workflowId` = the automation id) | yes |
-| `call_missed` / `call_answered` | `{ lines?: string[] }` | voice call events | only with a connected voice line **(building)** |
+| `call_missed` / `call_answered` | `{ lines?: string[] }` | voice call events | **no** (`no_event_source`) until voice events feed the dispatcher (building) |
 | `order_event`, `cart_abandoned`, `form_submitted`, `story_mention` | | | **no**: `reason: "no_event_source"` (drawn dimmed) |
 
 Rules that hold for every trigger:
@@ -143,6 +145,7 @@ Variables in text: `{{first_name}}`, `{{business_name}}`, `{{opening_hours}}`, `
 | `send_message_file` | send | `{ url, fileName?, caption? }` | `next` |
 | `send_buttons` | send | `{ text, buttons: [{ id, title }] }` (max 3; title max 20) | `next` |
 | `send_list` | send | `{ text, buttonText, options: [{ id, title, description? }] }` (max 10, WhatsApp) | `next` |
+| `ai_generate` ("AI writes a message") | send | `{ prompt, aiAgentId, responseVariable?, send?: true }` - one message written by that AI employee from the instruction (and the customer's latest message), sent unless `send: false`; also kept in `{{var.<responseVariable>}}` | `next` |
 | `send_message_template` | send | existing template shape | `next` |
 | `assign` | do | `{ to: "team"\|"person", departmentId?, userId? }` | `next` |
 | `hand_to_ai` | do | `{ aiAgentId }` | none (ends the automation's ownership) |

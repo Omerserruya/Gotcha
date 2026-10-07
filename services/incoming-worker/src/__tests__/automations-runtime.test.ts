@@ -401,3 +401,52 @@ describe("customer-less runs", () => {
     expect(H.notifications[0]).toMatchObject({ type: "automation.notify_team", tenantId: T, data: { message: "daily report" } });
   });
 });
+
+describe("★ message from an ad, button tapped, AI writes a message", () => {
+  it("matching: any ad or chosen ads (lenient); a chosen button or any tap", () => {
+    const f = (type: string, c: any) => ({ triggerType: type, triggerConfig: c });
+    expect(triggerMatches(f("message_from_ad", {}), { type: "message_from_ad", adId: "120201" })).toBe(true);
+    expect(triggerMatches(f("message_from_ad", { adIds: [" 120201 "] }), { type: "message_from_ad", adId: "120201" })).toBe(true);
+    expect(triggerMatches(f("message_from_ad", { adIds: ["999"] }), { type: "message_from_ad", adId: "120201" })).toBe(false);
+    expect(triggerMatches(f("button_tapped", { payloads: ["CALL_ME"] }), { type: "button_tapped", payload: "call_me" })).toBe(true);
+    expect(triggerMatches(f("button_tapped", {}), { type: "button_tapped", payload: null })).toBe(false);
+  });
+
+  it("★ an ad conversation's FIRST message fires the ad automation; the next one does not", async () => {
+    Object.assign(conv(), { fromAdCampaign: true, referralSourceId: "120201", handledBy: null });
+    H.db.chatbotFlow.push(flow("ad", [trig, { id: "s", type: "send_message_text", data: { text: "Thanks for clicking our ad" } }], [e("t", "s")], { triggerType: "message_from_ad", triggerConfig: { adIds: ["120201"] } }));
+    H.db.message.push({ id: "in1", conversationId: CONV, direction: "INBOUND" });
+    expect(await automationsForInbound({ tenantId: T, conversation: conv(), messageId: "in1", message: "hi", channel: "whatsapp" })).toBe(true);
+    H.db.message.push({ id: "in2", conversationId: CONV, direction: "INBOUND" });
+    expect(await automationsForInbound({ tenantId: T, conversation: conv(), messageId: "in2", message: "and another", channel: "whatsapp" })).toBe(false);
+    expect(H.sent.map((s) => s.body)).toEqual(["Thanks for clicking our ad"]);
+  });
+
+  it("★ a tap with no flow waiting fires the button automation; plain text does not", async () => {
+    H.db.chatbotFlow.push(flow("btn", [trig, { id: "s", type: "send_message_text", data: { text: "We will call you" } }], [e("t", "s")], { triggerType: "button_tapped", triggerConfig: { payloads: ["call_me"] } }));
+    H.db.message.push({ id: "m1", conversationId: CONV, direction: "INBOUND" }, { id: "m0", conversationId: CONV, direction: "INBOUND" });
+    expect(await automationsForInbound({ tenantId: T, conversation: conv(), messageId: "m1", message: "Call me", channel: "whatsapp", replyPayload: "call_me" })).toBe(true);
+    expect(await automationsForInbound({ tenantId: T, conversation: conv(), messageId: "m2", message: "call_me", channel: "whatsapp" })).toBe(false);
+    // A different button than the one chosen does not fire it.
+    expect(await automationsForInbound({ tenantId: T, conversation: conv(), messageId: "m3", message: "Write here", channel: "whatsapp", replyPayload: "write" })).toBe(false);
+  });
+
+  it("★ AI writes a message: the employee's one-shot is sent; with no employee nothing is", async () => {
+    const realFetch = global.fetch;
+    const calls: any[] = [];
+    (global as any).fetch = async (url: string, init: any) => { calls.push({ url, body: JSON.parse(init.body) }); return { ok: true, json: async () => ({ reply: "Hi Dana, your order ships today." }) }; };
+    try {
+      H.db.chatbotFlow.push(flow("ai", [trig, { id: "g", type: "ai_generate", data: { prompt: "Tell them it ships today", aiAgentId: "maya" } }], [e("t", "g")]));
+      await inbound();
+      expect(calls[0]).toMatchObject({ url: expect.stringMatching(/\/api\/ai-bot\/oneshot$/), body: { tenantId: T, aiAgentId: "maya", feature: "automation_ai_generate" } });
+      expect(calls[0].body.userInput).toMatch(/Tell them it ships today[\s\S]*hello/);
+      expect(H.sent.map((s) => s.body)).toEqual(["Hi Dana, your order ships today."]);
+
+      H.sent = []; calls.length = 0;
+      H.db.chatbotFlow = [flow("ai2", [trig, { id: "g", type: "ai_generate", data: { prompt: "x" } }], [e("t", "g")])];
+      await inbound({ eventKey: "msg:other" });
+      expect(calls).toEqual([]);
+      expect(H.sent).toEqual([]);
+    } finally { (global as any).fetch = realFetch; }
+  });
+});

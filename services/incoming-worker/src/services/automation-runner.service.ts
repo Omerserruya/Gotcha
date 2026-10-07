@@ -26,13 +26,17 @@ import {
 
 export const LOOP_GUARD_PER_MIN = 5;
 
-export type AutomationTrigger = "message_received" | "new_customer" | "tag_added" | "schedule" | "webhook" | "call_missed" | "call_answered";
+export type AutomationTrigger = "message_received" | "new_customer" | "message_from_ad" | "button_tapped" | "tag_added" | "schedule" | "webhook" | "call_missed" | "call_answered";
 
 export interface TriggerEvent {
   type: AutomationTrigger;
   channel?: string | null;    // ChannelType, any case
   message?: string;
   tag?: string | null;
+  /** The ad the conversation came from (Meta referral source id). */
+  adId?: string | null;
+  /** The tapped button / list row id of an interactive reply. */
+  payload?: string | null;
 }
 
 // ── Matching (pure) ────────────────────────────────────────────────────────
@@ -57,6 +61,16 @@ export function triggerMatches(flow: { triggerType: string | null; triggerConfig
       return keywords.some((k) => words.has(k));
     }
     return keywords.some((k) => msg.includes(k));
+  }
+  if (ev.type === "message_from_ad") {
+    // Ad ids are copied by hand out of Meta's UI: trimmed, case-insensitive.
+    const ads: string[] = Array.isArray(c.adIds) ? c.adIds.map(norm).filter(Boolean) : [];
+    return !ads.length || (!!ev.adId && ads.includes(norm(ev.adId)));
+  }
+  if (ev.type === "button_tapped") {
+    if (!ev.payload) return false;
+    const payloads: string[] = Array.isArray(c.payloads) ? c.payloads.map(norm).filter(Boolean) : [];
+    return !payloads.length || payloads.includes(norm(ev.payload));
   }
   if (ev.type === "tag_added") {
     const tags: string[] = Array.isArray(c.tags) ? c.tags.map(norm) : [];
@@ -182,6 +196,7 @@ export async function runAutomationsForEvent(ev: {
   message: string;
   replyPayload?: string | null;
   tag?: string | null;
+  adId?: string | null;
 }): Promise<{ answered: boolean; runs: Array<{ id: string; flowId: string; status: string }> }> {
   const out = { answered: false, runs: [] as Array<{ id: string; flowId: string; status: string }> };
   const flows = await prisma.chatbotFlow.findMany({
@@ -189,7 +204,7 @@ export async function runAutomationsForEvent(ev: {
     orderBy: { activatedAt: "asc" },
     select: { id: true, triggerType: true, triggerConfig: true },
   });
-  const matching = flows.filter((f: any) => ev.types.some((type) => triggerMatches(f, { type, channel: ev.channel, message: ev.message, tag: ev.tag })));
+  const matching = flows.filter((f: any) => ev.types.some((type) => triggerMatches(f, { type, channel: ev.channel, message: ev.message, tag: ev.tag, adId: ev.adId, payload: ev.replyPayload })));
   if (!matching.length) return out;
 
   let prevOwner: string | null = null;
@@ -334,7 +349,10 @@ export async function resumeAutomationRun(opts: {
  */
 export async function automationsForInbound(opts: {
   tenantId: string;
-  conversation: { id: string; channel: string; customerExternalId: string; handledBy?: string | null; chatbotNodeId?: string | null; automationRunId?: string | null };
+  conversation: {
+    id: string; channel: string; customerExternalId: string; handledBy?: string | null; chatbotNodeId?: string | null; automationRunId?: string | null;
+    fromAdCampaign?: boolean | null; referralSourceId?: string | null;
+  };
   messageId: string;
   message: string;
   channel: string;          // lowercase
@@ -359,9 +377,20 @@ export async function automationsForInbound(opts: {
     prisma.conversation.count({ where: { tenantId: opts.tenantId, channel: c.channel as any, customerExternalId: c.customerExternalId, id: { not: c.id } } }),
   ]);
   const isNewCustomer = inboundCount <= 1 && otherConversations === 0;
+  // "Message from an ad": the conversation's FIRST message, when it came from
+  // an ad (Meta's referral, or a billed ad entry point). Once per conversation.
+  const fromAd = inboundCount <= 1 && (!!c.fromAdCampaign || !!c.referralSourceId);
+  const types: AutomationTrigger[] = [
+    ...(fromAd ? ["message_from_ad" as const] : []),
+    ...(isNewCustomer ? ["new_customer" as const] : []),
+    // A tap with no flow waiting for it (e.g. a campaign template's button).
+    ...(opts.replyPayload ? ["button_tapped" as const] : []),
+    "message_received",
+  ];
   const r = await runAutomationsForEvent({
     tenantId: opts.tenantId,
-    types: isNewCustomer ? ["new_customer", "message_received"] : ["message_received"],
+    types,
+    adId: c.referralSourceId ?? null,
     eventKey: `msg:${opts.messageId}`,
     conversationId: c.id,
     contactId: opts.contactId ?? null,

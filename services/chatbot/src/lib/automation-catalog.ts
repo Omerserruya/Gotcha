@@ -25,7 +25,7 @@ export type Group = "trigger" | "logic" | "send" | "do";
 // ── Triggers ───────────────────────────────────────────────────────────────
 
 export const TRIGGER_TYPES = [
-  "message_received", "new_customer", "tag_added", "schedule", "webhook",
+  "message_received", "new_customer", "message_from_ad", "button_tapped", "tag_added", "schedule", "webhook",
   "call_missed", "call_answered",
   "order_event", "cart_abandoned", "form_submitted", "story_mention",
 ] as const;
@@ -35,7 +35,7 @@ export type TriggerType = (typeof TRIGGER_TYPES)[number];
 // call_missed / call_answered are NOT live: nothing feeds voice events to the
 // automation dispatcher yet (only the old voice_trigger nodes hear them).
 // Offering them made an automation that could never run.
-const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "tag_added", "schedule", "webhook"]);
+const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "message_from_ad", "button_tapped", "tag_added", "schedule", "webhook"]);
 /** Triggers that carry no customer: their path cannot send a message. */
 const CUSTOMERLESS_TRIGGERS = new Set<TriggerType>(["schedule", "webhook"]);
 const VOICE_TRIGGERS = new Set<TriggerType>(["call_missed", "call_answered"]);
@@ -46,6 +46,8 @@ const TRIGGERS: TriggerDef[] = [
   { type: "call_missed", label: "Call missed", description: "On any of your lines", channels: ["VOICE"], synonyms: ["call", "phone", "missed"] },
   { type: "call_answered", label: "Call answered", description: "When it ends, with the recording", channels: ["VOICE"], synonyms: ["call", "phone", "recording"] },
   { type: "new_customer", label: "New customer", description: "First message ever", channels: ["WHATSAPP", "INSTAGRAM", "EMAIL", "WEBCHAT"], synonyms: ["new", "first", "welcome"] },
+  { type: "message_from_ad", label: "Message from an ad", description: "Click-to-WhatsApp and other ads, any ad or chosen ones", channels: ["WHATSAPP", "MESSENGER", "INSTAGRAM"], synonyms: ["ad", "campaign", "click to whatsapp", "ctwa", "referral", "facebook ad"] },
+  { type: "button_tapped", label: "Button tapped", description: "A button in a template or campaign, outside a flow", channels: ["WHATSAPP", "MESSENGER", "INSTAGRAM"], synonyms: ["button", "tap", "quick reply", "template button", "postback"] },
   { type: "order_event", label: "Order event", description: "Created, paid, shipped, delivered", channels: [], synonyms: ["order", "paid", "shipped", "delivered", "store"] },
   { type: "cart_abandoned", label: "Cart left behind", description: "After a delay you set", channels: [], synonyms: ["cart", "abandoned"] },
   { type: "form_submitted", label: "Form submitted", description: "Website or Instagram lead form", channels: ["WEBCHAT", "INSTAGRAM"], synonyms: ["form", "lead"] },
@@ -90,6 +92,16 @@ export function normalizeTrigger(input: any): { type: TriggerType; config: Recor
       break;
     }
     case "new_customer": { const ch = channels(c.channels); if (ch?.length) config.channels = ch; break; }
+    case "message_from_ad": {
+      const ch = channels(c.channels); if (ch?.length) config.channels = ch;
+      const ads = strings(c.adIds, "trigger.config.adIds", 50); if (ads?.length) config.adIds = ads.map((a) => a.slice(0, 64));
+      break;
+    }
+    case "button_tapped": {
+      const ch = channels(c.channels); if (ch?.length) config.channels = ch;
+      const p = strings(c.payloads, "trigger.config.payloads", 50); if (p?.length) config.payloads = p.map((x) => x.slice(0, 256));
+      break;
+    }
     case "tag_added": {
       const tags = strings(c.tags, "trigger.config.tags");
       if (!tags?.length) throw new AutomationInputError("trigger.config.tags", "pick at least one tag");
@@ -151,6 +163,7 @@ const NODES: NodeDef[] = [
   { type: "send_message_file", group: "send", label: "File", description: "PDF, image, video", channels: ["WHATSAPP", "INSTAGRAM", "MESSENGER", "EMAIL", "GMAIL", "OUTLOOK", "SLACK"], outputs: ["next"], synonyms: ["file", "pdf", "image", "video", "catalogue", "document"], sends: true, needsWindow: true },
   { type: "send_buttons", group: "send", label: "Buttons", description: "Up to 3, each a branch", channels: ["WHATSAPP", "INSTAGRAM", "MESSENGER", "WEBCHAT"], outputs: ["next"], synonyms: ["buttons", "quick reply", "options", "menu"], sends: true, needsWindow: true, limits: { maxButtons: LIMITS.buttons, titleMax: LIMITS.buttonTitle } },
   { type: "send_list", group: "send", label: "List", description: "Up to 10 options", channels: ["WHATSAPP"], outputs: ["next"], synonyms: ["list", "menu", "options"], sends: true, needsWindow: true, limits: { maxOptions: LIMITS.listOptions, titleMax: LIMITS.listTitle } },
+  { type: "ai_generate", group: "send", label: "AI writes a message", description: "One message in your employee's voice, no hand-over", channels: MESSAGING, outputs: ["next"], synonyms: ["ai", "write", "generate", "personal message", "gpt"], sends: true, needsWindow: true },
   { type: "send_message_template", group: "send", label: "Template", description: "Approved, outside 24 h", channels: ["WHATSAPP"], outputs: ["next"], synonyms: ["template", "approved", "24h", "reminder"], sends: true },
   { type: "send_location", group: "send", label: "Location", description: "A branch on the map", channels: ["WHATSAPP"], outputs: ["next"], synonyms: ["location", "map", "address"], sends: true, coming: true },
   { type: "send_rating", group: "send", label: "Rating request", description: "1 to 5, saved to the card", channels: ["WHATSAPP", "INSTAGRAM", "WEBCHAT"], outputs: ["next"], synonyms: ["rating", "review", "feedback", "stars"], sends: true, coming: true },
@@ -362,6 +375,9 @@ function nodeIssues(n: ANode, trigger: { type: string; config?: any } | null, ch
       if (empty(d.aiAgentId)) out.push(err("missing_config", "Pick the AI employee who runs it."));
       break;
     case "add_tag": if (empty(d.tag)) out.push(err("missing_config", "Write the tag.")); break;
+    case "ai_generate":
+      if (empty(d.aiAgentId)) out.push(err("missing_config", "Pick the AI employee who writes it."));
+      break;
     case "create_task": if (empty(d.title)) out.push(err("missing_config", "The task needs a title.")); break;
     case "notify_team": if (empty(d.message)) out.push(err("missing_config", "Write the notification.")); break;
   }

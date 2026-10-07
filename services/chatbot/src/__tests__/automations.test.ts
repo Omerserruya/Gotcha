@@ -411,3 +411,22 @@ describe("★ reading automations needs ai:workflows:read", () => {
     expect((await request(app).put(`/api/automations/${a.id}`).send({ name: "x" })).status).toBe(403);
   });
 });
+
+describe("message from an ad, button tapped, AI writes a message", () => {
+  it("the two triggers are live and keep only their own config", () => {
+    expect(normalizeTrigger({ type: "message_from_ad", config: { adIds: [" 120201 ", "120201"], keywords: ["x"] } })).toEqual({ type: "message_from_ad", config: { adIds: ["120201"] } });
+    expect(normalizeTrigger({ type: "button_tapped", config: { payloads: ["call_me"], channels: ["WHATSAPP"] } })).toEqual({ type: "button_tapped", config: { channels: ["WHATSAPP"], payloads: ["call_me"] } });
+    const g = goodGraph();
+    expect(validateAutomation({ type: "message_from_ad", config: {} }, g.nodes as any, g.edges as any).errors).toEqual([]);
+    expect(validateAutomation({ type: "button_tapped", config: {} }, g.nodes as any, g.edges as any).errors).toEqual([]);
+  });
+
+  it("AI writes a message needs its instruction and the employee who writes it", () => {
+    const g = goodGraph();
+    g.nodes.push({ id: "ai2", type: "ai_generate", data: {} } as any);
+    g.edges.push({ id: "e9", source: "task", target: "ai2" });
+    const codes = validateAutomation(msgTrigger, g.nodes as any, g.edges as any).errors.filter((e) => e.nodeId === "ai2").map((e) => e.message);
+    expect(codes.join(" ")).toMatch(/prompt/);
+    expect(codes.join(" ")).toMatch(/AI employee/);
+  });
+});

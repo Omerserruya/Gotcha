@@ -1142,18 +1142,23 @@ async function walk(
         break;
       }
 
-      // ─── AI Generate - single-shot LLM (author-only for now) ───
+      // ─── AI Generate - one message written by an AI employee ───
+      // Through the ai service's one-shot (the only place LLM calls happen;
+      // it logs and meters). The employee is the node's, else the
+      // conversation's; with neither, nothing is written (as before).
       case "ai_generate": {
         const prompt = interpolate(String(node.data?.prompt || ""), ctx.vars);
         const responseVar = String(node.data?.responseVariable || "ai_output").trim() || "ai_output";
-        // The ai-service internal endpoint for raw single-shot generation is
-        // not yet exposed. We log author intent, stash the prompt, and move
-        // on - wiring this to services/ai is the follow-up bug. Treat it as
-        // "returned empty string" so downstream interpolation doesn't crash.
-        ctx.vars[responseVar] = "";
+        const agentId = String(node.data?.aiAgentId || "").trim() || (await conversationAgentId(ctx));
+        let text = "";
+        if (agentId && prompt.trim()) text = await aiOneShot(ctx, agentId, prompt);
+        ctx.vars[responseVar] = text;
+        // Sends by default; `send: false` keeps it as a variable only.
+        const shouldSend = node.data?.send !== false && !!ctx.conversationId;
+        if (text && shouldSend) await sendText(text, ctx);
         ctx.trace.push({
-          nodeId: node.id, type: node.type, action: "ai_stub",
-          detail: { prompt: prompt.slice(0, 200), variable: responseVar },
+          nodeId: node.id, type: node.type, action: !agentId ? "ai_no_agent" : text ? (shouldSend ? "sent" : "generated") : "ai_empty",
+          detail: { variable: responseVar, aiAgentId: agentId || null },
         });
         currentId = outgoing[0]?.target || null;
         break;
@@ -2207,6 +2212,33 @@ async function sendList(body: string, buttonText: string, rows: Array<{ id: stri
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
 const internalKey = () => process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN || "";
+
+async function conversationAgentId(ctx: FlowExecCtx): Promise<string | null> {
+  if (!ctx.conversationId) return null;
+  const c = await prisma.conversation.findFirst({ where: { id: ctx.conversationId, tenantId: ctx.tenantId }, select: { assignedAiAgentId: true } });
+  return (c as any)?.assignedAiAgentId ?? null;
+}
+
+/** One message from an AI employee (ai service one-shot). Empty on any failure. */
+async function aiOneShot(ctx: FlowExecCtx, aiAgentId: string, prompt: string): Promise<string> {
+  const userInput = ctx.message
+    ? `${prompt}\n\nThe customer's latest message: ${ctx.message}`
+    : prompt;
+  try {
+    const r = await fetch(`${AI_SERVICE_URL}/api/ai-bot/oneshot`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Internal-Key": internalKey() },
+      body: JSON.stringify({ tenantId: ctx.tenantId, aiAgentId, userInput: userInput.slice(0, 4000), feature: "automation_ai_generate", maxTokens: 400 }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!r.ok) return "";
+    const j: any = await r.json().catch(() => ({}));
+    return typeof j?.reply === "string" ? j.reply.trim() : "";
+  } catch (err: any) {
+    console.warn("[flow-executor] ai_generate failed:", err?.message);
+    return "";
+  }
+}
 
 /** A task in the tenant's connected CRM, through the ai service (it owns the CRM connectors). */
 async function createCrmTask(
