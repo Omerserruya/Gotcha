@@ -167,9 +167,31 @@ router.post("/bootstrap", initLimiter, async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * The visitor's proof that a web chat conversation is theirs: the session
+ * token /init returned (the conversation's customerExternalId, random). Every
+ * read and write after /init must present it; a conversation id alone (it
+ * shows up in URLs and logs) is never enough, and only a WEBCHAT conversation
+ * qualifies. Anything else is a plain 404: no hint that the id exists.
+ */
+async function visitorConversation(conversationId: string, token: unknown) {
+  if (typeof token !== "string" || !token || !conversationId) return null;
+  const c = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { id: true, tenantId: true, channel: true, channelAccountId: true, customerExternalId: true, customerName: true },
+  });
+  if (!c || c.channel !== "WEBCHAT" || !c.customerExternalId) return null;
+  const a = Buffer.from(String(c.customerExternalId));
+  const b = Buffer.from(token);
+  return a.length === b.length && crypto.timingSafeEqual(a, b) ? c : null;
+}
+
 router.post("/init", initLimiter, async (req: Request, res: Response) => {
   try {
-    const { widgetId, visitorId, sessionId, visitorName, pageUrl } = req.body;
+    // `sessionToken` resumes a visitor's conversation (the token /init gave
+    // them); `sessionId` is the older name for the same thing.
+    const { widgetId, visitorId, visitorName, pageUrl } = req.body;
+    const sessionId = req.body.sessionToken || req.body.sessionId;
 
     if (!widgetId || typeof widgetId !== "string") {
       res.status(400).json({ error: "widgetId is required" });
@@ -210,9 +232,11 @@ router.post("/init", initLimiter, async (req: Request, res: Response) => {
 
     // Find conversation for THIS session first (tab-level isolation)
     // sessionId is stored as customerExternalId so each tab gets its own conversation
+    // Resume only this widget's own conversation.
     let conversation = await prisma.conversation.findFirst({
       where: {
         tenantId: channelAccount.tenantId,
+        channelAccountId: channelAccount.id,
         channel: "WEBCHAT",
         customerExternalId: finalSessionId,
         status: { in: ["OPEN", "WAITING"] },
@@ -264,7 +288,8 @@ router.post("/init", initLimiter, async (req: Request, res: Response) => {
       data: {
         sessionId: conversation.id,
         visitorId: finalVisitorId,
-        sessionToken: finalSessionId,
+        // The token for THIS conversation (what it was created or found with).
+        sessionToken: conversation.customerExternalId,
         // tenantId used to be returned here. A visitor's browser has no
         // use for it and every reason not to hold it.
       },
@@ -278,7 +303,7 @@ router.post("/init", initLimiter, async (req: Request, res: Response) => {
 // POST /api/embedded-chat/message - Send a message (public)
 router.post("/message", messageLimiter, async (req: Request, res: Response) => {
   try {
-    const { sessionId, visitorId, body } = req.body;
+    const { sessionId, visitorId, body, sessionToken } = req.body;
 
     if (!sessionId || typeof sessionId !== "string" || !body || typeof body !== "string") {
       res.status(400).json({ error: "sessionId and body are required" });
@@ -299,10 +324,7 @@ router.post("/message", messageLimiter, async (req: Request, res: Response) => {
       return;
     }
 
-    const conversation = await prisma.conversation.findUnique({
-      where: { id: sessionId },
-    });
-
+    const conversation = await visitorConversation(sessionId, sessionToken);
     if (!conversation) {
       res.status(404).json({ error: "Session not found" });
       return;
@@ -345,10 +367,7 @@ router.get("/messages/:sessionId", pollLimiter, async (req: Request, res: Respon
     const sessionId = String(req.params.sessionId ?? "");
     const after = req.query.after as string | undefined;
 
-    const conversation = await prisma.conversation.findUnique({
-      where: { id: sessionId },
-      select: { tenantId: true },
-    });
+    const conversation = await visitorConversation(sessionId, req.query.token);
     if (!conversation) {
       res.status(404).json({ error: "Session not found" });
       return;

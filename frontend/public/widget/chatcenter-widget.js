@@ -105,8 +105,11 @@
     });
   }
 
+  // The visitor's proof that the conversation is theirs (from /init): the
+  // server answers nothing for a conversation id alone.
   function loadMessages(conversationId) {
-    return request(API_PATH + "/messages/" + encodeURIComponent(conversationId), {
+    var token = store.get("token") || "";
+    return request(API_PATH + "/messages/" + encodeURIComponent(conversationId) + "?token=" + encodeURIComponent(token), {
       credentials: "omit",
     })
       .then(function (res) {
@@ -124,12 +127,15 @@
       return post(API_PATH + "/init", {
         widgetId: WIDGET_ID,
         visitorId: visitorId(),
-        sessionId: store.get("conversation") || undefined,
+        // Resume with the visitor's session token (the conversation id alone
+        // never matched, so every page load used to start a new conversation).
+        sessionToken: store.get("token") || undefined,
         pageUrl: window.location.href,
       }).then(function (res) {
         var d = (res && res.data) || {};
         if (!d.sessionId) throw new Error("unavailable");
         store.set("conversation", d.sessionId);
+        if (d.sessionToken) store.set("token", d.sessionToken);
         // The bundle treats `session` as "we are ready to talk"; on this
         // channel the conversation id IS that token.
         store.set("session", d.sessionId);
@@ -149,6 +155,7 @@
     if (path === "/message") {
       return post(API_PATH + "/message", {
         sessionId: store.get("conversation"),
+        sessionToken: store.get("token"),
         visitorId: visitorId(),
         body: body && body.body,
       });
