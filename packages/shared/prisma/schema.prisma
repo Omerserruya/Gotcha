@@ -5174,6 +5174,50 @@ model SystemAgentMessage {
   @@map("system_agent_messages")
 }
 
+/// A Home chat thread (docs/api/assistant-threads-v1.md). Its owner's only.
+/// The model's own turn memory (tool calls included) stays in
+/// system_agent_messages under sessionId = this id; the rows below are what
+/// the screen shows.
+model AssistantThread {
+  id            String    @id @default(cuid())
+  tenantId      String    @map("tenant_id")
+  userId        String    @map("user_id")
+  title         String?
+  /// "auto" | "user": a title the user set is never overwritten.
+  titleSource   String?   @map("title_source")
+  scope         Json
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastMessageAt DateTime? @map("last_message_at")
+  archivedAt    DateTime? @map("archived_at")
+
+  messages AssistantMessage[]
+
+  @@index([tenantId, userId, updatedAt(sort: Desc)])
+  @@map("assistant_threads")
+}
+
+model AssistantMessage {
+  id          String   @id @default(cuid())
+  threadId    String   @map("thread_id")
+  tenantId    String   @map("tenant_id")
+  role        String // "user" | "assistant"
+  text        String   @db.Text
+  /// "done" | "streaming" | "cancelled" | "failed"
+  status      String
+  steps       Json     @default("[]")
+  scope       Json?
+  suggestions Json     @default("[]")
+  runId       String?  @map("run_id")
+  usage       Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  thread AssistantThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+  @@map("assistant_messages")
+}
+
 // ─── Calendar Accounts (Task 3 - schedule_meeting) ───────────
 //
 // One row per (tenant × AI agent × calendar provider) connection. Stores
