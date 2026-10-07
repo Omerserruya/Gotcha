@@ -14,7 +14,7 @@ import {
   type DiscoverySignals,
 } from "../services/site-crawl.service";
 import { callDiscoverBusiness, persistCrawlReach } from "../services/business-scan.service";
-import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, projectReadinessAnswers } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, projectReadinessAnswers, withoutWideDashes } from "@chatcenter/shared";
 import { applyProjection, type SyncReport } from "../services/onboarding-knowledge.service";
 import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
 import { inviteUser, resendSetupLink } from "../services/invitation.service";
@@ -373,7 +373,8 @@ ${deptDetails}`;
       return fallbackReply(message, businessContext, chatHistory, locale);
     }
 
-    const parsed = JSON.parse(content);
+    // No wide dash in what the owner reads (the model writes them anyway).
+    const parsed = withoutWideDashes(JSON.parse(content));
     return {
       reply: parsed.reply || "I'm having trouble processing that. Could you try again?",
       readyToGenerate: !!parsed.readyToGenerate,
@@ -1697,7 +1698,7 @@ Set any field you cannot determine to an empty string. Do not invent specifics.`
 
       const content = response.choices[0]?.message?.content;
       if (content) {
-        const p = JSON.parse(content);
+        const p = withoutWideDashes(JSON.parse(content));
         const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
         const desc = str(p.description);
         if (desc.length >= 10) {

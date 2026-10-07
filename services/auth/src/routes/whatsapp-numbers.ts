@@ -546,8 +546,15 @@ router.get(
   resolveTenant,
   requirePermission("channels:manage:read"),
   async (req: Request, res: Response) => {
+    // ?channelAccountId=: one number's rules plus the legacy "every number"
+    // rules (they apply to it too). Without it, every rule of the workspace.
+    const forNumber = typeof req.query.channelAccountId === "string" && req.query.channelAccountId ? req.query.channelAccountId : null;
     const rules = await prisma.inboundExclusion.findMany({
-      where: { tenantId: req.tenantId!, channel: "WHATSAPP" },
+      where: {
+        tenantId: req.tenantId!,
+        channel: "WHATSAPP",
+        ...(forNumber ? { OR: [{ channelAccountId: forNumber }, { channelAccountId: null }] } : {}),
+      },
       orderBy: { createdAt: "desc" },
     });
     return res.json({
@@ -577,43 +584,43 @@ router.post(
       return res.status(400).json({ error: "invalid_number", message: "Enter a phone number with at least 6 digits." });
     }
 
+    // Every new rule belongs to one number: a contact private on one number
+    // is not silently dropped on another. (Rules with no number are legacy.)
     // An account id from another tenant must not scope our rule.
     const channelAccountId = req.body?.channelAccountId ? String(req.body.channelAccountId) : null;
-    if (channelAccountId) {
-      const owned = await prisma.channelAccount.findFirst({
-        where: { id: channelAccountId, tenantId: req.tenantId!, channel: "WHATSAPP" },
-        select: { id: true },
-      });
-      if (!owned) return res.status(404).json({ error: "channel_account_not_found" });
+    if (!channelAccountId) {
+      return res.status(400).json({ error: "channel_account_required", message: "Choose the WhatsApp number this contact is private on." });
     }
+    const owned = await prisma.channelAccount.findFirst({
+      where: { id: channelAccountId, tenantId: req.tenantId!, channel: "WHATSAPP" },
+      select: { id: true },
+    });
+    if (!owned) return res.status(404).json({ error: "channel_account_not_found" });
 
     const note = req.body?.note ? String(req.body.note).slice(0, 280) : null;
 
-    // Upsert, matching the unique key: re-adding a number the owner already
-    // excluded should update the note, not fail with a duplicate they cannot
-    // see or fix from the UI.
-    const rule = await prisma.inboundExclusion.upsert({
-      where: {
-        tenantId_channel_customerExternalId: {
-          tenantId: req.tenantId!,
-          channel: "WHATSAPP",
-          customerExternalId: normalized,
-        },
-      },
-      create: {
-        tenantId: req.tenantId!,
-        channel: "WHATSAPP",
-        channelAccountId,
-        customerExternalId: normalized,
-        displayValue: exclusionDisplayValue(raw),
-        note,
-        createdBy: req.user?.userId ?? null,
-      },
-      update: { channelAccountId, displayValue: exclusionDisplayValue(raw), note },
-    });
+    // Re-adding a contact already private on THIS number updates the note
+    // (not a duplicate the owner cannot see or fix). The same contact on
+    // another number is a separate rule; a rule is never moved between numbers.
+    const key = { tenantId: req.tenantId!, channel: "WHATSAPP" as const, channelAccountId, customerExternalId: normalized };
+    const data = { displayValue: exclusionDisplayValue(raw), note };
+    let existing = await prisma.inboundExclusion.findFirst({ where: key, select: { id: true } });
+    let rule;
+    if (!existing) {
+      try {
+        rule = await prisma.inboundExclusion.create({ data: { ...key, ...data, createdBy: req.user?.userId ?? null } });
+      } catch (err: any) {
+        // Two adds of the same contact at once: the unique index let one in;
+        // the other becomes an update of it.
+        if (err?.code !== "P2002") throw err;
+        existing = await prisma.inboundExclusion.findFirst({ where: key, select: { id: true } });
+        if (!existing) throw err;
+      }
+    }
+    if (existing) rule = await prisma.inboundExclusion.update({ where: { id: existing.id }, data });
 
-    return res.status(201).json({
-      data: { id: rule.id, value: rule.displayValue, normalized: rule.customerExternalId, note: rule.note },
+    return res.status(existing ? 200 : 201).json({
+      data: { id: rule!.id, value: rule!.displayValue, normalized: rule!.customerExternalId, channelAccountId: rule!.channelAccountId, note: rule!.note },
     });
   },
 );

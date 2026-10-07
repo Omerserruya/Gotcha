@@ -1216,3 +1216,6 @@ export {
   validateIntegrationAccess,
   type IntegrationAccessChoice,
 } from "./lib/integration-access";
+
+// No em/en dash or horizontal bar in operator-facing model text.
+export { withoutWideDashes } from "./lib/wide-dash";
