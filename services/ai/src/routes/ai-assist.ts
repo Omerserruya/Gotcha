@@ -37,6 +37,7 @@ import voiceRouter from "./ai-assist-voice";
 import { buildAgentPrompt } from "../services/prompt-builder.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { discoverBusiness, withoutWideDashes } from "../services/business-discovery.service";
+import { previewAnswer, previewQuestions, PREVIEW_STATUSES, QUESTION_MAX, type PreviewLocale } from "../services/onboarding-preview.service";
 import { tuneEmployeeChat } from "../services/employee-tuning.service";
 
 const router = Router();
@@ -81,6 +82,71 @@ router.post("/discover-business", authenticate, resolveTenant, requireRole("ADMI
 });
 
 // Onboarding Movement 8 - chat with the recommended employee before deploy.
+// ── Onboarding 00h preview (see onboarding-preview.service) ───────────────
+//
+// ADMIN only, in a workspace still being set up or ACTIVE. 20 a minute per
+// tenant across both routes' answers, and a question length cap: a preview,
+// not a free chat. Nothing becomes business state.
+
+const PREVIEW_PER_MINUTE = 20;
+
+async function previewTenantOk(req: Request, res: Response): Promise<boolean> {
+  const t = await prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { status: true } });
+  if (!t || !PREVIEW_STATUSES.has(String(t.status))) {
+    res.status(403).json({ error: "Not available for this workspace", code: "TENANT_STATUS" });
+    return false;
+  }
+  return true;
+}
+
+/** Seconds to wait, or null when allowed. Fixed one-minute window per tenant. */
+export async function previewRateLimit(tenantId: string, now = Date.now()): Promise<number | null> {
+  const windowStart = Math.floor(now / 60_000);
+  const key = `onboarding-preview:${tenantId}:${windowStart}`;
+  const redis = getRedis();
+  const n = await redis.incr(key);
+  if (n === 1) await redis.expire(key, 65);
+  if (n > PREVIEW_PER_MINUTE) return Math.max(1, 60 - Math.floor((now / 1000) % 60));
+  return null;
+}
+
+const previewLocale = (v: unknown): PreviewLocale => (String(v ?? "").toLowerCase().startsWith("he") ? "he" : "en");
+
+router.get("/onboarding-preview-questions", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    if (!(await previewTenantOk(req, res))) return;
+    res.json({ data: await previewQuestions(req.tenantId!, previewLocale(req.query.locale)) });
+  } catch (err) {
+    console.error("[onboarding-preview] questions failed:", err);
+    res.status(500).json({ error: "Failed to load preview questions" });
+  }
+});
+
+router.post("/onboarding-preview-answer", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const question = typeof req.body?.question === "string" ? req.body.question.trim() : "";
+    if (!question) { res.status(422).json({ error: "Write a question", code: "QUESTION_REQUIRED" }); return; }
+    if (question.length > QUESTION_MAX) { res.status(422).json({ error: "The question is too long", code: "QUESTION_TOO_LONG", max: QUESTION_MAX }); return; }
+    if (!(await previewTenantOk(req, res))) return;
+    const wait = await previewRateLimit(req.tenantId!);
+    if (wait !== null) {
+      res.setHeader("Retry-After", String(wait));
+      res.status(429).json({ error: "Too many questions. Try again in a moment.", code: "PREVIEW_RATE_LIMITED", retryAfterSeconds: wait });
+      return;
+    }
+    const locale = previewLocale(req.body?.locale ?? (/[\u0590-\u05FF]/.test(question) ? "he" : "en"));
+    const data = await previewAnswer({ tenantId: req.tenantId!, userId: (req as any).user?.userId ?? null, question, locale });
+    res.json({ data });
+  } catch (err: any) {
+    if (err?.name === "AiUnitsExhaustedError") {
+      res.status(402).json({ error: "AI is not available for this workspace right now", code: err.reason });
+      return;
+    }
+    console.error("[onboarding-preview] answer failed:", err);
+    res.status(500).json({ error: "Failed to answer" });
+  }
+});
+
 router.post("/onboarding-employee-chat", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const { name, role, locale, context, persona, messages } = req.body as {

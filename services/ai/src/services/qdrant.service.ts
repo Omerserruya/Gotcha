@@ -104,6 +104,8 @@ export interface SearchResult {
   score: number;
   documentTitle: string;
   chunkIndex: number;
+  /** The KnowledgeDocument the chunk came from (stored on every point). */
+  documentId?: string;
 }
 
 export async function searchSimilar(
@@ -138,5 +140,6 @@ export async function searchSimilar(
     score: r.score,
     documentTitle: (r.payload as any).documentTitle,
     chunkIndex: (r.payload as any).chunkIndex,
+    documentId: (r.payload as any).documentId,
   }));
 }
