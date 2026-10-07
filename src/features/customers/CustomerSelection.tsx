@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 
 import { FACTS_BATCH, TAG_MAX } from '@/api/contracts/customer-facts';
 import { Link, useRouter } from '@/i18n/navigation';
+import { typedDir } from '@/lib/typed-dir';
 
 import { tagCustomers, type TagResult } from './tag-actions';
 
@@ -156,7 +157,7 @@ function TagPicked({
         value={tag}
         maxLength={TAG_MAX}
         autoFocus
-        dir="auto"
+        dir={typedDir(tag)}
         placeholder={t('tagPlaceholder')}
         data-testid="select-tag-name"
         onChange={(event) => setTag(event.target.value)}

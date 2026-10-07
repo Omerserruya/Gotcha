@@ -17,6 +17,7 @@ import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/design-system/primitives/overlay/Menu';
 import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link } from '@/i18n/navigation';
+import { typedDir } from '@/lib/typed-dir';
 
 import { AnswerText } from './AnswerText';
 import { AskContext } from './home-ask';
@@ -154,7 +155,7 @@ function Conversation({ chat }: { readonly chat: Chat }) {
           className={styles.input}
           value={draft}
           rows={1}
-          dir="auto"
+          dir={typedDir(draft)}
           maxLength={4000}
           placeholder={t('placeholder')}
           onChange={(e) => setDraft(e.target.value)}
@@ -300,17 +301,28 @@ function ScopeChip({ chat }: { readonly chat: Chat }) {
   const format = useFormatter();
   const [failed, setFailed] = useState(false);
   const range = chat.scope.range;
+  // Date-only strings are UTC days (§8): read and written in UTC, so no day shifts.
+  const day = (iso: string) =>
+    format.dateTime(new Date(iso), { day: 'numeric', month: 'short', timeZone: 'UTC' });
   const rangeWords =
     typeof range === 'string'
       ? t(`range.${range}`)
-      : t('range.custom', {
-          from: format.dateTime(new Date(range.custom.from), { day: 'numeric', month: 'short' }),
-          to: format.dateTime(new Date(range.custom.to), { day: 'numeric', month: 'short' }),
-        });
+      : t('range.custom', { from: day(range.custom.from), to: day(range.custom.to) });
+  // The dates the answers use, from the server - never recomputed here.
+  const dates = chat.thread?.scopeDates
+    ? t('range.custom', {
+        from: day(chat.thread.scopeDates.from),
+        to: day(chat.thread.scopeDates.to),
+      })
+    : null;
   const channelWords =
     chat.scope.channels === 'all'
       ? t('channels.all')
       : t('channels.some', { count: chat.scope.channels.length });
+  // A custom range already is its dates; a named one adds them once the server gives them.
+  const shownScope = [rangeWords, typeof range === 'string' ? dates : null, channelWords]
+    .filter(Boolean)
+    .join(' · ');
   const choose = async (next: ThreadScope['range']) => {
     setFailed(!(await chat.setScope({ ...chat.scope, range: next })));
   };
@@ -321,10 +333,10 @@ function ScopeChip({ chat }: { readonly chat: Chat }) {
           <button
             type="button"
             className={styles.scopeChip}
-            aria-label={t('label', { scope: `${rangeWords} · ${channelWords}` })}
+            aria-label={t('label', { scope: shownScope })}
             data-testid="conversation-scope"
           >
-            {rangeWords} · {channelWords}
+            {shownScope}
             <ChevronDown size={11} aria-hidden="true" />
           </button>
         </MenuTrigger>

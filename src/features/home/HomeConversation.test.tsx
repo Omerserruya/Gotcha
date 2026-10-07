@@ -545,6 +545,22 @@ describe('★★ title, scope and delete - each through its route', () => {
     );
   });
 
+  it('★ the chip carries the dates the answers use - the server’s, never recomputed here', async () => {
+    api.get.mockImplementation(
+      answering({
+        thread: { ...THREAD, title: 'T', scopeDates: { from: '2026-10-01', to: '2026-10-07' } },
+        messages: [],
+        activeRun: null,
+      }),
+    );
+    nav.params = new URLSearchParams('thread=th1');
+    show();
+    await flush();
+    expect(screen.getByTestId('conversation-scope')).toHaveTextContent(
+      /^Last 7 days · Oct 1 to Oct 7 · All channels$/,
+    );
+  });
+
   it('delete, confirmed: DELETE, then the live Home; Recent reads again', async () => {
     api.delete.mockResolvedValueOnce(undefined);
     const changed = vi.fn();

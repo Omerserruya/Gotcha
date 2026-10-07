@@ -34,6 +34,12 @@ export const threadSchema = z.object({
   /** `null` until the first answer titles it. */
   title: z.string().nullable(),
   scope: scopeSchema.catch(DEFAULT_SCOPE),
+  /**
+   * The scope as the dates the assistant uses today (Backend b7f5faaf): UTC
+   * days, `YYYY-MM-DD`. Absent from an older service - then the chip says
+   * the range in words only.
+   */
+  scopeDates: z.object({ from: z.string(), to: z.string() }).nullable().catch(null).default(null),
 });
 export type Thread = z.infer<typeof threadSchema>;
 

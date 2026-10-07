@@ -12,6 +12,7 @@ import { CenteredLoader } from '@/design-system/primitives/loader/Loader';
 import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link, useRouter } from '@/i18n/navigation';
 import { safeLinkUrl } from '@/lib/safe-url';
+import { typedDir } from '@/lib/typed-dir';
 
 import {
   askPreview,
@@ -244,7 +245,7 @@ function AskYourOwn({ preview }: { readonly preview: boolean }) {
             className={styles.askOwnField}
             value={draft}
             maxLength={PREVIEW_QUESTION_MAX}
-            dir="auto"
+            dir={typedDir(draft)}
             placeholder={t('own.placeholder')}
             onChange={(e) => setDraft(e.target.value)}
             data-testid="try-own-field"

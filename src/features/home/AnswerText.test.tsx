@@ -82,6 +82,19 @@ describe('★★ the answer’s markdown subset (assistant-threads-v1 §1)', () 
     expect(box).toHaveTextContent('<img src=x onerror="alert(1)"> and <b>bold</b>');
   });
 
+  it('★ inside a word, `_` and `*` are part of it - an identifier is never italicised', () => {
+    const box = show('Channel SHOPIFY_LIVE_CHAT, file my_report_v2.csv, and 5*3*2 = 30.');
+    expect(box.querySelector('em')).toBeNull();
+    expect(box).toHaveTextContent(
+      'Channel SHOPIFY_LIVE_CHAT, file my_report_v2.csv, and 5*3*2 = 30.',
+    );
+    // A word's END is not enough: its START must be one too ("order_id_ and", "a*b* c").
+    expect(show('Keys like order_id_ and a*b* here.').querySelector('em')).toBeNull();
+    // At a word's edge it is still emphasis - in Hebrew too.
+    const he = show('זה _חשוב_ מאוד, וגם *דחוף*.');
+    expect([...he.querySelectorAll('em')].map((e) => e.textContent)).toEqual(['חשוב', 'דחוף']);
+  });
+
   it('while it streams, a mark not closed yet reads as itself', () => {
     const box = show('Returns are up **38');
     expect(box.querySelector('strong')).toBeNull();

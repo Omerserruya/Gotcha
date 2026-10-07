@@ -72,9 +72,14 @@ function renderBlock(block: Block, key: number): ReactNode {
   );
 }
 
-/** `**bold**`, `` `code` ``, `[label](url)`, `*italic*` / `_italic_` - first match wins, left to right. */
+/**
+ * `**bold**`, `` `code` ``, `[label](url)`, `*italic*` / `_italic_` - first
+ * match wins, left to right. Italics only at a word's edge: inside a word a
+ * `_` or `*` is part of it - `SHOPIFY_LIVE_CHAT` read as "SHOPIFY*LIVE*CHAT"
+ * (dev, 2026-10-07), and `5*3*2` is arithmetic.
+ */
 const INLINE =
-  /\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\(([^)\s]+)\)|\*([^*\s][^*\n]*)\*|_([^_\s][^_\n]*)_/g;
+  /\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\(([^)\s]+)\)|(?<![\p{L}\p{N}_*])\*([^*\s][^*\n]*?)\*(?![\p{L}\p{N}_*])|(?<![\p{L}\p{N}_])_([^_\s][^_\n]*?)_(?![\p{L}\p{N}_])/gu;
 
 function inline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
