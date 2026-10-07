@@ -1,9 +1,12 @@
-import { List, MessageCircle, RefreshCw, X } from 'lucide-react';
+import { List, MessageCircle, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
 
+import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link } from '@/i18n/navigation';
 
+import { PanelTabs } from './PanelTabs';
+import { WHATSAPP_TABS, type WhatsAppTab } from './whatsapp-tabs';
 import styles from './Channels.module.css';
 
 /**
@@ -11,20 +14,22 @@ import styles from './Channels.module.css';
  * the Settings frame, and a white drawer (640) at its end - the channel's
  * tile, "WhatsApp" (18/600), its line and a close; then its tabs.
  *
- * Numbers is the panel's live tab (its numbers, the history import, the
- * suggestions to review). Templates, Private contacts and Activity are drawn
- * and not live yet - said on each.
+ * Its tabs are real (Omer, 2026-10-07): Numbers (its numbers, the history
+ * import, the suggestions to review), Templates, Private contacts and
+ * Activity - `?tab=`, each read only when it is open.
  */
 export async function WhatsAppPanel({
   line,
+  tab = 'numbers',
   children,
 }: {
   /** The account in one line: how many numbers. */
   readonly line: string;
+  /** The open tab (`?tab=`); its content is `children`. */
+  readonly tab?: WhatsAppTab;
   readonly children: ReactNode;
 }) {
   const t = await getTranslations('channels.whatsapp');
-  const tabs = ['numbers', 'templates', 'contacts', 'activity'] as const;
   return (
     <div className={styles.panelLayer} data-testid="whatsapp-panel">
       {/* The scrim closes it, as the X does: both are the way back to 13. */}
@@ -53,42 +58,54 @@ export async function WhatsAppPanel({
               <X size={16} aria-hidden="true" />
             </Link>
           </div>
-          <nav className={styles.panelTabs} aria-label={t('title')}>
-            {tabs.map((tab) =>
-              tab === 'numbers' ? (
-                <span key={tab} className={styles.panelTab} aria-current="page">
-                  {t(`tab.${tab}`)}
-                </span>
-              ) : (
-                <span
-                  key={tab}
-                  className={styles.panelTab}
-                  aria-disabled="true"
-                  title={t('tabNotYet')}
-                >
-                  {t(`tab.${tab}`)}
-                </span>
-              ),
-            )}
-          </nav>
+          <PanelTabs
+            current={tab}
+            label={t('title')}
+            labels={
+              Object.fromEntries(WHATSAPP_TABS.map((x) => [x, t(`tab.${x}`)])) as Record<
+                WhatsAppTab,
+                string
+              >
+            }
+          />
         </header>
-        <div className={styles.panelBody}>{children}</div>
+        <div
+          className={styles.panelBody}
+          role="tabpanel"
+          id="whatsapp-tabpanel"
+          aria-labelledby={`whatsapp-tab-${tab}`}
+          data-testid={`whatsapp-tabpanel-${tab}`}
+        >
+          {children}
+        </div>
         {/*
           02's foot: Refresh from Meta · Activity log, and Disconnect in red.
-          None is wired from here yet - drawn, each saying so.
+          The log is the Activity tab. Refresh and Disconnect are not wired
+          from here: a status in the one look, never something to press.
         */}
         <footer className={styles.panelFoot}>
-          <span className={styles.panelFootLink} aria-disabled="true" title={t('footNotYet')}>
-            <RefreshCw size={13} aria-hidden="true" />
-            {t('foot.refresh')}
-          </span>
-          <span className={styles.panelFootLink} aria-disabled="true" title={t('footNotYet')}>
+          <UnavailableAction
+            label={t('foot.refresh')}
+            tag={t('notYet')}
+            why={t('footNotYet')}
+            testid="whatsapp-foot-refresh"
+          />
+          <Link
+            href={{ pathname: '/settings/channels', query: { panel: 'whatsapp', tab: 'activity' } }}
+            replace
+            scroll={false}
+            className={styles.panelFootLink}
+            data-testid="whatsapp-foot-activity"
+          >
             <List size={13} aria-hidden="true" />
             {t('foot.activity')}
-          </span>
-          <span className={styles.panelFootDanger} aria-disabled="true" title={t('footNotYet')}>
-            {t('foot.disconnect')}
-          </span>
+          </Link>
+          <UnavailableAction
+            label={t('foot.disconnect')}
+            tag={t('notYet')}
+            why={t('footNotYet')}
+            testid="whatsapp-foot-disconnect"
+          />
         </footer>
       </aside>
     </div>

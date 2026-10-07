@@ -2,7 +2,14 @@ import 'server-only';
 
 import { importListSchema, type ImportStatus } from '@/api/contracts/historical-import';
 import { candidateListSchema, type Candidate } from '@/api/contracts/knowledge-candidates';
-import { numbersResponseSchema, type NumbersResponse } from '@/api/contracts/whatsapp-numbers';
+import {
+  exclusionListSchema,
+  numberEventListSchema,
+  numbersResponseSchema,
+  type Exclusion,
+  type NumberEvent,
+  type NumbersResponse,
+} from '@/api/contracts/whatsapp-numbers';
 import { channelsConfigSchema, type EmbeddedSignupLaunch } from '@/api/contracts/whatsapp-connect';
 import { channelEndpoints, knowledgeEndpoints } from '@/api/endpoints/registry';
 import { serverApi } from '@/api/client/server-api';
@@ -133,4 +140,46 @@ export async function loadHistoryImport(importId?: string): Promise<HistoryImpor
     candidates: page?.candidates ?? null,
     bulkMinConfidence: page?.bulkApproveMinConfidence,
   };
+}
+
+/** 13b's Private contacts. `null`: unread. */
+export async function loadExclusions(): Promise<readonly Exclusion[] | null> {
+  try {
+    const read = await serverApi().get({
+      endpoint: channelEndpoints.whatsappExclusions(),
+      payload: exclusionListSchema,
+      raw: true,
+    });
+    return read.data;
+  } catch (cause) {
+    logger.warn('whatsapp.exclusions_failed', { cause });
+    return null;
+  }
+}
+
+/**
+ * 13b's Activity: each number's events, newest first across them. Numbers
+ * GOTCHA has no record of yet (dev's unprofiled one) have none to read.
+ * `null`: unread.
+ */
+export async function loadNumberEvents(
+  numbers: readonly { readonly id: string; readonly phoneNumber: string | null }[],
+): Promise<readonly (NumberEvent & { readonly number: string | null })[] | null> {
+  try {
+    const each = await Promise.all(
+      numbers.map((n) =>
+        serverApi()
+          .get({
+            endpoint: channelEndpoints.whatsappEvents(n.id),
+            payload: numberEventListSchema,
+            raw: true,
+          })
+          .then((read) => read.data.map((event) => ({ ...event, number: n.phoneNumber }))),
+      ),
+    );
+    return each.flat().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  } catch (cause) {
+    logger.warn('whatsapp.events_failed', { cause });
+    return null;
+  }
 }

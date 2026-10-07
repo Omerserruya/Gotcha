@@ -314,3 +314,39 @@ export function repliesStillFlow(health: HealthReport): boolean {
 export function numberCount(numbers: NumbersResponse): number {
   return numbers.data.length + numbers.unprofiled.length;
 }
+
+/**
+ * 13b's "Private contacts" (`GET /api/channels/whatsapp/exclusions`): the
+ * numbers whose inbound messages GOTCHA does not take - a person's own
+ * contacts on a shared number. `value` is what was typed, `normalized` what
+ * it matches on; both, so a rule is never shown rewritten.
+ */
+export const exclusionSchema = z.looseObject({
+  id: z.string(),
+  value: z.string(),
+  normalized: z.string().catch(''),
+  channelAccountId: z.string().nullable().catch(null).default(null),
+  note: z.string().nullable().catch(null).default(null),
+  createdAt: z.string().nullable().catch(null).default(null),
+});
+export type Exclusion = z.infer<typeof exclusionSchema>;
+export const exclusionListSchema = z.object({ data: z.array(exclusionSchema).catch([]) });
+
+/** The steps the pipeline records (`WhatsAppNumberEvent.outcome`). */
+export const EVENT_OUTCOMES = ['SUCCESS', 'FAILED', 'SKIPPED', 'ACTION_REQUIRED'] as const;
+
+/**
+ * 13b's "Activity" (`GET …/numbers/:id/events`): what happened to a number,
+ * newest first, up to 100 - connect, register, health checks, repairs. The
+ * step is the pipeline's own name; Meta's message is shown as it came.
+ */
+export const numberEventSchema = z.looseObject({
+  id: z.string(),
+  step: z.string(),
+  outcome: z.enum(EVENT_OUTCOMES).or(z.string()),
+  metaErrorCode: z.number().nullable().catch(null).default(null),
+  message: z.string().nullable().catch(null).default(null),
+  createdAt: z.string(),
+});
+export type NumberEvent = z.infer<typeof numberEventSchema>;
+export const numberEventListSchema = z.object({ data: z.array(numberEventSchema).catch([]) });

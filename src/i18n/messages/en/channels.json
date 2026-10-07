@@ -179,7 +179,6 @@
       "contacts": "Private contacts",
       "activity": "Activity"
     },
-    "tabNotYet": "This tab comes next - Numbers is ready.",
     "panelTitle": "WhatsApp",
     "footNotYet": "Not from here yet.",
     "foot": {
@@ -376,7 +375,35 @@
         "too_long": "That answer is too long to save - shorten it.",
         "failed": "That didn’t go through - try again."
       }
-    }
+    },
+    "tabs": {
+      "unread": "Couldn't read this just now. Try again in a moment.",
+      "templates": {
+        "none": "No WhatsApp templates yet.",
+        "create": "Create one in Outreach · Templates"
+      },
+      "contacts": {
+        "lead": "GOTCHA doesn't take messages from these numbers on this account: they're yours to answer.",
+        "none": "No private contacts. Every number that writes in reaches GOTCHA."
+      },
+      "activity": {
+        "none": "Nothing recorded for these numbers yet.",
+        "step": {
+          "EXCHANGE_TOKEN": "Connected to Meta",
+          "SUBSCRIBE_WEBHOOKS": "Messages turned on",
+          "REGISTER_NUMBER": "Number registered",
+          "HEALTH_CHECK": "Health check",
+          "REPAIR_WEBHOOKS": "Messages repaired"
+        },
+        "outcome": {
+          "SUCCESS": "done",
+          "FAILED": "failed",
+          "SKIPPED": "skipped",
+          "ACTION_REQUIRED": "needs you"
+        }
+      }
+    },
+    "notYet": "Not available yet"
   },
   "rowSettings": "Settings",
   "rowSettingsNotYet": "Settings for this channel come next - WhatsApp's are ready.",

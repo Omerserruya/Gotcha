@@ -8,10 +8,15 @@ import channelStyles from '@/features/channels/Channels.module.css';
 import { ImportPanel, LearningRow, ReportPanel } from '@/features/channels/LearnPanels';
 import { loadChannels } from '@/features/channels/load-channels';
 import {
+  loadExclusions,
   loadHistoryImport,
   loadChannelsConfig,
+  loadNumberEvents,
   loadWhatsAppNumbers,
 } from '@/features/channels/load-whatsapp';
+import { tabOf } from '@/features/channels/whatsapp-tabs';
+import { ActivityTab, ContactsTab, TemplatesTab } from '@/features/channels/WhatsAppTabContent';
+import { loadTemplates } from '@/features/outreach/load-templates';
 import { ChannelLanding } from '@/features/channels/ChannelLanding';
 import { ConnectWhatsApp } from '@/features/channels/ConnectWhatsApp';
 import { channelLandingOf } from '@/features/channels/landing';
@@ -89,6 +94,8 @@ export default async function Page({
         : learn && params.view === 'progress'
           ? 'progress'
           : null;
+  // 13b's open tab (`?tab=`), when 13b itself is what is open.
+  const panelTab = tabOf(view === null ? params.tab : undefined);
 
   return (
     <SettingsSection title={t('title')} description={t('description')}>
@@ -164,16 +171,27 @@ export default async function Page({
           line={
             whatsapp[0] ? tw('panelLine', { count: numberCount(whatsapp[0]) }) : tw('description')
           }
+          tab={panelTab}
         >
-          <WhatsAppNumbers
-            numbers={whatsapp[0]}
-            connectable={
-              config.launches.coexistence?.configured === true ||
-              config.launches.newNumber?.configured === true
-            }
-          />
-          {/* 13e / 13f are reached from here, while there is an import. */}
-          {learn ? <LearningRow status={learn} /> : null}
+          {panelTab === 'templates' ? (
+            <TemplatesTab templates={(await loadTemplates()).templates} />
+          ) : panelTab === 'contacts' ? (
+            <ContactsTab exclusions={await loadExclusions()} />
+          ) : panelTab === 'activity' ? (
+            <ActivityTab events={await loadNumberEvents(whatsapp[0]?.data ?? [])} />
+          ) : (
+            <>
+              <WhatsAppNumbers
+                numbers={whatsapp[0]}
+                connectable={
+                  config.launches.coexistence?.configured === true ||
+                  config.launches.newNumber?.configured === true
+                }
+              />
+              {/* 13e / 13f are reached from here, while there is an import. */}
+              {learn ? <LearningRow status={learn} /> : null}
+            </>
+          )}
         </WhatsAppPanel>
       ) : null}
     </SettingsSection>

@@ -759,20 +759,21 @@
 
   .panelTab {
     margin-block-end: -1px;
+    text-decoration: none;
     padding: var(--space-9) var(--space-10);
     border-block-end: 2px solid transparent;
     font-size: var(--font-size-meta);
     color: var(--text-muted);
   }
 
-  .panelTab[aria-current='page'] {
-    border-block-end-color: var(--action-base);
-    font-weight: var(--font-weight-medium);
+  .panelTab:hover {
     color: var(--text-primary);
   }
 
-  .panelTab[aria-disabled='true'] {
-    cursor: default;
+  .panelTab[aria-selected='true'] {
+    border-block-end-color: var(--action-base);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
   }
 
   /* 02's foot: two quiet links on the start, Disconnect in red at the end. */
@@ -1830,5 +1831,59 @@
   .footProblem {
     font-size: var(--font-size-caption);
     color: var(--alert-text);
+  }
+
+  /* 13b's tabs' content: a quiet line, and rows - name over its state. */
+  .tabNote {
+    margin: 0 0 var(--space-12);
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  .tabList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+    min-inline-size: 0;
+  }
+
+  .tabList > li + li {
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .tabRow {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: var(--space-12) var(--space-14);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  a.tabRow:hover {
+    background-color: var(--panel-quiet);
+  }
+
+  .tabRowName {
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .tabRowMeta {
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .tabRowDetail {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+  }
+
+  .tabRow[data-outcome='FAILED'] .tabRowName,
+  .tabRow[data-outcome='ACTION_REQUIRED'] .tabRowName {
+    color: var(--intent-blocked-text);
   }
 }

@@ -40,7 +40,11 @@ const { history } = vi.hoisted(() => ({
     >,
   },
 }));
+const reads = vi.hoisted(() => ({ templates: vi.fn(), exclusions: vi.fn(), events: vi.fn() }));
+vi.mock('@/features/outreach/load-templates', () => ({ loadTemplates: reads.templates }));
 vi.mock('@/features/channels/load-whatsapp', () => ({
+  loadExclusions: reads.exclusions,
+  loadNumberEvents: reads.events,
   loadWhatsAppNumbers: async () => DEV_NUMBERS,
   loadHistoryImport: async () => history.value,
   loadChannelsConfig: async () => ({
@@ -139,5 +143,43 @@ describe('★ 13e / 13f are their own panels, replacing 13b while open', () => {
     });
     expect(find(tree, ImportPanel)).toBeNull();
     expect(find(tree, WhatsAppPanel)).not.toBeNull();
+  });
+});
+
+describe('★★ 13b · ?tab= decides what is read and shown', () => {
+  const open = async (tab?: string) => {
+    for (const fn of Object.values(reads)) fn.mockReset();
+    reads.templates.mockResolvedValue({ templates: [], total: 0 });
+    reads.exclusions.mockResolvedValue([]);
+    reads.events.mockResolvedValue([]);
+    const { default: Page } = await import('./page');
+    return Page({ searchParams: Promise.resolve({ panel: 'whatsapp', ...(tab ? { tab } : {}) }) });
+  };
+
+  it('Numbers by default: the numbers, and none of the other reads', async () => {
+    const tree = await open();
+    expect(find<{ tab: string }>(tree, WhatsAppPanel)?.tab).toBe('numbers');
+    expect(find(tree, WhatsAppNumbers)).not.toBeNull();
+    expect(reads.templates).not.toHaveBeenCalled();
+    expect(reads.exclusions).not.toHaveBeenCalled();
+    expect(reads.events).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['templates', 'templates'],
+    ['contacts', 'exclusions'],
+    ['activity', 'events'],
+  ] as const)('?tab=%s reads only its own', async (tab, read) => {
+    const tree = await open(tab);
+    expect(find<{ tab: string }>(tree, WhatsAppPanel)?.tab).toBe(tab);
+    expect(find(tree, WhatsAppNumbers)).toBeNull();
+    for (const [name, fn] of Object.entries(reads)) {
+      expect(fn, name).toHaveBeenCalledTimes(name === read ? 1 : 0);
+    }
+  });
+
+  it('an unknown tab is Numbers', async () => {
+    const tree = await open('nonsense');
+    expect(find<{ tab: string }>(tree, WhatsAppPanel)?.tab).toBe('numbers');
   });
 });
