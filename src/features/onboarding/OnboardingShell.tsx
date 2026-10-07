@@ -78,9 +78,9 @@ export function OnboardingShell({
         </p>
       </aside>
       <main className={styles.surface}>
-        <div className={styles.work}>
+        <div className={styles.work} data-step={step}>
           {preview ? (
-            // One width with the step's column: the banner adds none of its own.
+            // The step's own width (--step-width), so the banner is the column's.
             <div className={styles.previewFrame}>
               <p className={styles.previewBanner} role="status" data-testid="onboarding-preview">
                 <span>{t('preview.banner')}</span>

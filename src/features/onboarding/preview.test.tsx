@@ -277,21 +277,52 @@ describe('★ sweep: every step link in the onboarding components goes through s
   });
 });
 
-describe('★ the banner adds no width of its own (dev: it reached x≈1371, the column ≈1235)', () => {
+describe("★★ the banner is exactly the step column's width - and the column keeps its own", () => {
   /*
-   * jsdom does no layout, so this reads the two values that make it so: the
-   * frame is as wide as the step, and the banner contributes nothing to that.
-   * A browser measurement is the real check.
+   * jsdom does no layout, so this reads the values that decide it. The first
+   * fix passed its own check here (fit-content + contain) while on dev it
+   * matched the banner to the column by SHRINKING the column, 1235 → 1058.
+   * So the rule now: each step's width is set once, as --step-width by step,
+   * and both the step and the preview frame read it. A browser measurement
+   * is still the real check.
    */
-  it('frame fit-content; banner contain: inline-size', async () => {
+  const css = async () => {
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
-    const css = readFileSync(
+    return readFileSync(
       join(process.cwd(), 'src/features/onboarding/Onboarding.module.css'),
       'utf8',
     );
-    const block = (name: string) => new RegExp(`\\.${name} \\{([^}]*)\\}`).exec(css)?.[1] ?? '';
-    expect(block('previewFrame')).toMatch(/inline-size:\s*fit-content/);
-    expect(block('previewBanner')).toMatch(/contain:\s*inline-size/);
+  };
+  const block = (all: string, selector: string) =>
+    new RegExp(`${selector.replace(/[.[\]'=]/g, (c) => `\\${c}`)} \\{([^}]*)\\}`).exec(all)?.[1] ??
+    '';
+
+  it('the frame takes the step width, never fit-content', async () => {
+    const all = await css();
+    expect(block(all, '.previewFrame')).toMatch(/max-inline-size:\s*var\(--step-width\)/);
+    expect(block(all, '.previewFrame')).not.toMatch(/fit-content/);
+  });
+
+  it.each([
+    ['reading', '620px'],
+    ['learned', '800px'],
+    ['truth', '680px'],
+    ['try', '660px'],
+  ])('%s: its width is set once, and the step reads it', async (step, width) => {
+    const all = await css();
+    expect(block(all, `.work[data-step='${step}']`)).toMatch(
+      new RegExp(`--step-width:\\s*${width}`),
+    );
+    expect(block(all, `.${step}`)).toMatch(/max-inline-size:\s*var\(--step-width\)/);
+  });
+
+  it('the shell names the step on the work area', () => {
+    const { container } = wrap(
+      <OnboardingShell step="try" preview>
+        <p>work</p>
+      </OnboardingShell>,
+    );
+    expect(container.querySelector('[data-step="try"]')).not.toBeNull();
   });
 });

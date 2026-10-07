@@ -233,7 +233,7 @@
   /* 00d and 00e are the design's narrower column; 00f's facts and voice use the width. */
   .website,
   .reading {
-    max-inline-size: 620px;
+    max-inline-size: var(--step-width);
   }
 
   .website {
@@ -556,7 +556,7 @@
   .learned {
     display: grid;
     grid-template-columns: 1fr 330px;
-    max-inline-size: 800px;
+    max-inline-size: var(--step-width);
     gap: 22px;
     align-items: start;
   }
@@ -747,7 +747,7 @@
   .truth {
     display: flex;
     flex-direction: column;
-    max-inline-size: 680px;
+    max-inline-size: var(--step-width);
   }
 
   .system {
@@ -940,16 +940,35 @@
   }
 
   /* ?preview=1 */
+  /*
+   * Each step's width, once: the step and the preview frame both read it, so
+   * the banner is exactly the column's width. (A fit-content frame matched
+   * the banner to the column by shrinking the column - dev, 00h: 1235 → 1058.)
+   * The website step sets none: its width is its content's.
+   */
+  .work[data-step='reading'] {
+    --step-width: 620px;
+  }
+
+  .work[data-step='learned'] {
+    --step-width: 800px;
+  }
+
+  .work[data-step='truth'] {
+    --step-width: 680px;
+  }
+
+  .work[data-step='try'] {
+    --step-width: 660px;
+  }
+
   .previewFrame {
     display: flex;
     flex-direction: column;
-    inline-size: fit-content;
-    max-inline-size: 100%;
+    max-inline-size: var(--step-width);
   }
 
   .previewBanner {
-    /* As wide as the step under it, never wider (dev: it ran past the column). */
-    contain: inline-size;
     display: flex;
     flex-wrap: wrap;
     gap: 6px 14px;
@@ -976,7 +995,7 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    max-inline-size: 660px;
+    max-inline-size: var(--step-width);
   }
 
   .try > .title,
