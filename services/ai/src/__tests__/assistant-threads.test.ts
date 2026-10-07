@@ -132,6 +132,10 @@ describe("threads", () => {
   it("create with the default scope; an invalid scope is 400", async () => {
     const t = await newThread();
     expect(t.scope).toEqual({ range: "last_7", channels: "all" });
+    // The resolved dates the assistant uses (last_7 = today and the six days before).
+    const today = new Date().toISOString().slice(0, 10);
+    const from = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
+    expect(t.scopeDates).toEqual({ from, to: today });
     expect(t.title).toBeNull();
     for (const scope of [{ range: "yesterday" }, { channels: ["FAX"] }, { range: { custom: { from: "2026-10-07", to: "2026-10-01" } } }, { channels: [] }]) {
       const r = await request(app()).post("/api/assistant/threads").send({ scope });
@@ -296,12 +300,16 @@ describe("★ limits", () => {
   });
 
   it("more than 10 messages a minute: 429 with retryAfterSeconds", async () => {
-    const t = await newThread();
-    for (let i = 0; i < 10; i++) { H.script = [say("ok")]; expect((await send(t.id, `q${i}`)).status).toBe(200); }
-    const r = await request(app()).post(`/api/assistant/threads/${t.id}/messages`).send({ text: "one more" });
-    expect(r.status).toBe(429);
-    expect(r.body.code).toBe("RATE_LIMITED");
-    expect(r.body.retryAfterSeconds).toBeGreaterThan(0);
+    // One fixed minute: under load the ten sends could cross a minute boundary.
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.UTC(2026, 9, 7, 12, 0, 30));
+    try {
+      const t = await newThread();
+      for (let i = 0; i < 10; i++) { H.script = [say("ok")]; expect((await send(t.id, `q${i}`)).status).toBe(200); }
+      const r = await request(app()).post(`/api/assistant/threads/${t.id}/messages`).send({ text: "one more" });
+      expect(r.status).toBe(429);
+      expect(r.body.code).toBe("RATE_LIMITED");
+      expect(r.body.retryAfterSeconds).toBe(30);
+    } finally { clock.mockRestore(); }
   });
 
   it("billing refuses before any model call: 402", async () => {

@@ -23,6 +23,7 @@ The old Command Center keeps `POST /api/agent/run` until it moves here.
     "range": "this_week",            // "this_week" | "last_7" | "last_30" | { "custom": { "from": "2026-10-01", "to": "2026-10-07" } }
     "channels": "all"                // "all" | ["WHATSAPP", "INSTAGRAM", ...]
   },
+  "scopeDates": { "from": "2026-10-01", "to": "2026-10-07" },   // the scope resolved to the dates the assistant uses today (UTC days)
   "createdAt": "2026-10-07T12:00:00.000Z",
   "updatedAt": "2026-10-07T12:01:10.000Z",
   "lastMessageAt": "2026-10-07T12:01:10.000Z",

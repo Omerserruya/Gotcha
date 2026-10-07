@@ -81,7 +81,10 @@ export function scopeLine(scope: ThreadScope, now = new Date()): string {
 export interface Owner { tenantId: string; userId: string }
 
 const threadOut = (t: any) => ({
-  id: t.id, title: t.title ?? null, scope: t.scope, createdAt: t.createdAt, updatedAt: t.updatedAt,
+  id: t.id, title: t.title ?? null, scope: t.scope,
+  // The scope as the dates the assistant uses today, for the chip ("1 Oct to 7 Oct").
+  scopeDates: scopeDates(normalizeScope(t.scope) ?? DEFAULT_SCOPE),
+  createdAt: t.createdAt, updatedAt: t.updatedAt,
   lastMessageAt: t.lastMessageAt ?? null, archivedAt: t.archivedAt ?? null,
 });
 
