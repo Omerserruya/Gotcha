@@ -62,3 +62,17 @@ describe('★ the page envelope itself', () => {
     expect(() => queuePageSchema.parse({ data: [], page: { limit: 50, hasMore: true } })).toThrow();
   });
 });
+
+describe('★ `viewTotal` - the whole view, absent from an older service', () => {
+  it('★ absent stays absent, never becomes 0', () => {
+    // A 0 would print "0 waiting" over a page of rows.
+    const parsed = queuePageSchema.parse(page());
+    expect(parsed.viewTotal).toBeUndefined();
+    expect(parsed).not.toHaveProperty('viewTotal', 0);
+  });
+
+  it('carries a real count, zero included', () => {
+    expect(queuePageSchema.parse(page({ viewTotal: 14 })).viewTotal).toBe(14);
+    expect(queuePageSchema.parse(page({ viewTotal: 0 })).viewTotal).toBe(0);
+  });
+});

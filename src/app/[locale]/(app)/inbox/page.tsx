@@ -140,6 +140,7 @@ export default async function Page({
             now={now}
             hasMore={data.hasMore}
             undatedCount={data.undatedCount}
+            viewTotal={data.viewTotal}
             /*
               ⚠ The row for the conversation on screen was visually identical
                 to every other row. `c` is the parameter this page already

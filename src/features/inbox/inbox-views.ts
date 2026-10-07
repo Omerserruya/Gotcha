@@ -50,9 +50,13 @@ export function parseInboxView(raw: string | undefined): InboxView {
 export function viewQuery(view: InboxView, meId: string | null): Record<string, string> | null {
   switch (view) {
     case 'queue':
-      // Unchanged: the route's default, which leaves out what an automation
-      // owns unless a human has taken it over.
-      return {};
+      /*
+       * Exactly "waiting for a person" (Backend 7b12ac06): open, unassigned,
+       * not a rehearsal, not the AI's or a flow's unless handed over - the
+       * same predicate as Home's number. A service that predates the view
+       * ignores the parameter and answers its old default, as before.
+       */
+      return { view: 'queue' };
     case 'mine':
       // Everything assigned to the viewer, whoever is driving it.
       return meId === null ? null : { assignedAgentId: meId, includeAutomated: 'true' };

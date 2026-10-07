@@ -40,8 +40,9 @@ describe('★★ each view asks the route for what its name says', () => {
     expect(viewQuery('active', null)).toEqual({ status: 'OPEN' });
   });
 
-  it('★ the default queue is the route’s own default, unchanged', () => {
-    expect(viewQuery('queue', null)).toEqual({});
+  it('★ the default queue names itself, so the route can count it (`viewTotal`)', () => {
+    // An older service ignores the parameter and answers as before.
+    expect(viewQuery('queue', null)).toEqual({ view: 'queue' });
   });
 
   it('⚠⚠ AI and Flow send `handledBy`, which the route does not read YET', () => {

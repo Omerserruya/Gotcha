@@ -89,6 +89,13 @@ const queuePageSchema = z.object({
    * older than it.
    */
   undatedCount: z.number().optional(),
+  /**
+   * The whole view's size, visibility applied, on every page (Backend
+   * 7b12ac06) - the header's number, not the rows loaded. For the queue it is
+   * Home's "waiting" number. Optional for the same reason as above: a service
+   * older than it sends none, and then the header counts what is here.
+   */
+  viewTotal: z.number().int().nonnegative().optional(),
 });
 
 /**
@@ -146,6 +153,8 @@ export interface InboxData {
    * cannot answer. Never zero by default - see the schema.
    */
   readonly undatedCount: number | undefined;
+  /** The view's size from the route; `undefined` on a service that predates it. */
+  readonly viewTotal: number | undefined;
   readonly open: ConversationRow | null;
   /**
    * `?c=` named a conversation and it could not be opened: `unavailable`
@@ -324,6 +333,7 @@ export async function loadInbox(
      * stay distinguishable from a service that looked and found none.
      */
     undatedCount: queue?.undatedCount,
+    viewTotal: queue?.viewTotal,
   };
 
   /*

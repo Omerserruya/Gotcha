@@ -846,6 +846,19 @@ describe('⚠⚠ "every thing in its own container" - the panel, and how a row i
     expect(screen.getByText(/waiting in queue/i)).toBeInTheDocument();
   });
 
+  it('★★ the route’s `viewTotal` is the count when it sends one - the whole view, not the page', async () => {
+    render(
+      await ConversationList({
+        rows: [row({ id: 'c1' }), row({ id: 'c2' }), row({ id: 'c3' })],
+        cap: 10,
+        now: NOW,
+        hasMore: true,
+        viewTotal: 14,
+      }),
+    );
+    expect(screen.getByTestId('queue-count')).toHaveTextContent(/^14$/);
+  });
+
   it('⚠ and says zero rather than nothing when the page is empty', async () => {
     /*
      * ⚠ A MUTATION SURVIVED HERE AND THE REASON IS WORTH RECORDING RATHER

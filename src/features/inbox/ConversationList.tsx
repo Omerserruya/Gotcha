@@ -60,6 +60,7 @@ export async function ConversationList({
   now,
   hasMore,
   undatedCount,
+  viewTotal,
   openId,
   meId = null,
   role = null,
@@ -125,6 +126,8 @@ export async function ConversationList({
    * zero - that is the instrument reporting all-clear because it is absent.
    */
   readonly undatedCount?: number;
+  /** The whole view's size from the route; absent on an older service. */
+  readonly viewTotal?: number;
 }) {
   const t = await getTranslations('inbox');
   /* The configured zone is `Asia/Jerusalem`; the server's is not. */
@@ -419,21 +422,22 @@ export async function ConversationList({
         ★★ THE PANEL'S OWN HEADER. 02: `padding:14px 18px`, a bottom hairline,
            "Waiting in queue" and a count.
         ════════════════════════════════════════════════════════════════════
-        ⚠ THE COUNT IS WHAT THIS PAGE HOLDS, NOT THE QUEUE'S TOTAL. The design
-          shows 14 beside the heading; we do not know the total when
-          `hasMore` is true - the route pages by keyset and reports no grand
-          count. Printing a page size as a queue size would be the cap
+        ★ THE COUNT IS THE VIEW'S TOTAL when the route sends it (`viewTotal`,
+          Backend 7b12ac06 - for the queue, Home's own number). A service that
+          predates it reports no grand count, and then the count is what this
+          page holds: printing a page size as a queue size would be the cap
           defect the footer sentence exists to prevent, moved into a number.
 
-        ★ So the header counts what is here, and the footer says what that
-          number means. Two slots, one honest fact each.
+        ★ So the header counts the view when it is told it, else what is
+          here, and the footer says what the page holds. Two slots, one honest
+          fact each.
       */}
       <header className={styles.queueHeader}>
         {/* 02: the title left, the count pushed hard right. */}
         <div className={styles.queueTitleRow}>
           <span className={styles.queueHeading}>{nav(`inbox.${view}`)}</span>
           <span className={styles.queueCount} data-testid="queue-count">
-            {rows?.length ?? 0}
+            {viewTotal ?? rows?.length ?? 0}
           </span>
         </div>
 
