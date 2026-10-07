@@ -173,21 +173,17 @@
   },
   "try": {
     "headline": "Judge it on your own questions.",
-    "lead": "Things customers asked that GOTCHA couldn't answer yet. Teach each one once, and every employee knows it",
+    "lead": "Things your customers really ask. If an answer is off, fix it once and it's fixed everywhere",
     "foot": "Setup mode: it only talks to your team until you go live",
-    "title": "Your real questions",
-    "titleNone": "No customer questions yet",
-    "leadNone": "Once customers write, what GOTCHA can't answer yet shows up here and on Home, to teach once",
-    "unread": "Couldn't read your customers' questions just now",
-    "answersWhy": "Trying GOTCHA's answers needs a live workspace: the test chat opens after you go live. Until then, teach the answers it's missing",
+    "title": "Try GOTCHA on real questions",
+    "leadNone": "No customer questions to try yet. Ask your own below",
+    "unread": "Couldn't read your customers' questions just now. You can still ask your own below",
     "asked": "{count, plural, =1 {Asked once} other {Asked # times}}",
-    "teach": "Teach the answer",
     "answerLabel": "The answer",
     "placeholder": "The answer, the way you'd give it to a customer",
     "save": "Teach it",
     "teaching": "Teaching…",
     "cancel": "Cancel",
-    "learned": "Learned. It's in Knowledge now, for every employee",
     "failed": "It wasn't learned. Try again in a moment",
     "open": "Open my workspace",
     "nextOnHome": "Next on Home: connect WhatsApp and invite your team",
@@ -204,7 +200,31 @@
       "toWebsite": "Read your website",
       "refused": "It couldn't finish yet. Try again in a moment, or ask GOTCHA's team.",
       "failed": "It didn't finish. Try again in a moment."
-    }
+    },
+    "real": "Your real questions",
+    "suggested": "Questions customers usually ask",
+    "see": "See how GOTCHA answers",
+    "answering": "GOTCHA is answering…",
+    "source": "Knowledge · {title}",
+    "notLearned": "Not in what GOTCHA learned yet",
+    "good": "Good",
+    "goodLine": "Good, this is how it'll answer",
+    "fix": "Fix",
+    "relearned": "Learned. This is how it answers now",
+    "own": {
+      "label": "Ask your own question",
+      "placeholder": "Something a customer might ask",
+      "ask": "Ask"
+    },
+    "refusedAsk": {
+      "required": "Write a question first",
+      "too_long": "That's too long. Keep the question under 300 characters",
+      "rate": "That's a lot of questions at once. Try again in {seconds, plural, =1 {a second} other {# seconds}}",
+      "no_ai": "GOTCHA can't answer right now: this workspace has no AI available (no active plan, or its units are used up)",
+      "forbidden": "Only an admin can try GOTCHA's answers",
+      "failed": "It couldn't answer just now. Try again in a moment"
+    },
+    "subtitle": "Answered from what GOTCHA just learned, with where each answer came from"
   },
   "gate": {
     "waiting": {

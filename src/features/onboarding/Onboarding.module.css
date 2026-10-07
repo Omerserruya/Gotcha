@@ -991,6 +991,96 @@
     justify-content: flex-end;
   }
 
+  .tryGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .tryGroupTitle {
+    margin: 6px 0 0;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .answerRow {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .answerAvatar {
+    flex: none;
+    inline-size: 26px;
+    block-size: 26px;
+    border-radius: 50%;
+    background-color: var(--signal-ai);
+    color: var(--text-primary);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 26px;
+    text-align: center;
+  }
+
+  .answerText {
+    flex: 1;
+    font-size: 13.5px;
+    line-height: 1.55;
+    white-space: pre-line;
+  }
+
+  .answerSources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-inline-start: 36px;
+  }
+
+  .sourceChip {
+    padding: 3px 8px;
+    border-radius: 6px;
+    background-color: var(--panel-inset);
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-decoration: none;
+  }
+
+  a.sourceChip:hover {
+    text-decoration: underline;
+  }
+
+  .notLearnedTag {
+    padding: 3px 8px;
+    border-radius: 6px;
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+    font-size: 11px;
+  }
+
+  .askOwn {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .askOwnRow {
+    display: flex;
+    gap: 8px;
+  }
+
+  .askOwnField {
+    flex: 1;
+    min-inline-size: 0;
+    padding: 9px 12px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 9px;
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 13px;
+  }
+
   .learnedLine {
     margin: 0;
     font-size: 12.5px;

@@ -4,16 +4,14 @@ import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { currentUserSchema } from '@/api/contracts/identity';
 import { integrationsSchema, type Integration } from '@/api/contracts/integrations';
-import {
-  knowledgeListSchema,
-  unansweredListSchema,
-  type UnansweredQuestion,
-} from '@/api/contracts/knowledge';
+import { knowledgeListSchema } from '@/api/contracts/knowledge';
 import { workspaceVoiceSchema, type WorkspaceVoice } from '@/api/contracts/workspace';
 import {
   discoveryReadSchema,
   scannedFacts,
   onboardingStatusSchema,
+  previewQuestionsSchema,
+  type PreviewQuestions,
   siteFromEmail,
   siteHost,
   type Discovery,
@@ -212,24 +210,21 @@ export async function loadTruth(): Promise<TruthRead> {
   };
 }
 
-/** 00h shows three. */
-export const TRY_QUESTIONS = 3;
-
 /**
- * 00h: real questions customers asked that GOTCHA could not answer -
- * the newest open ones. `null`: unread.
+ * 00h: what to try GOTCHA on - real unanswered questions, then what
+ * customers usually ask (the route chooses, up to three). `null`: unread.
  */
-export async function loadTry(): Promise<readonly UnansweredQuestion[] | null> {
+export async function loadTry(locale: string): Promise<PreviewQuestions | null> {
   try {
-    const page = await serverApi().get({
-      endpoint: knowledgeEndpoints.unanswered(),
-      payload: unansweredListSchema,
+    const read = await serverApi().get({
+      endpoint: onboardingEndpoints.previewQuestions(),
+      payload: previewQuestionsSchema,
       raw: true,
-      query: { status: 'open', limit: String(TRY_QUESTIONS) },
+      query: { locale },
     });
-    return page.data.filter((q) => q.question.trim() !== '').slice(0, TRY_QUESTIONS);
+    return read.data;
   } catch (cause) {
-    logger.warn('onboarding.questions_failed', {
+    logger.warn('onboarding.preview_questions_failed', {
       status: isApiError(cause) ? cause.status : undefined,
     });
     return null;

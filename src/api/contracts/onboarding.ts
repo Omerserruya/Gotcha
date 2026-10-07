@@ -259,3 +259,55 @@ export function languageNames(languages: readonly string[], locale: string): str
   if (names.length === 0) return null;
   return new Intl.ListFormat(locale, { type: 'conjunction' }).format(names);
 }
+
+/**
+ * 00h's questions (`GET /api/ai-assist/onboarding-preview-questions`): the
+ * real unanswered ones first ("Asked N times"), then what customers usually
+ * ask from the policies the read found - up to three in all.
+ */
+export const previewQuestionsSchema = z.object({
+  data: z.object({
+    real: z
+      .array(
+        z.looseObject({
+          id: z.string().optional(),
+          question: z.string(),
+          askCount: z.number().catch(1).default(1),
+        }),
+      )
+      .catch([])
+      .default([]),
+    suggested: z
+      .array(z.looseObject({ question: z.string(), basis: z.string().catch('') }))
+      .catch([])
+      .default([]),
+  }),
+});
+export type PreviewQuestions = z.infer<typeof previewQuestionsSchema>['data'];
+
+/**
+ * One answer from Knowledge, with its sources (`POST …/onboarding-preview-
+ * answer`). Writes nothing but usage. `grounded: false` is an honest "not in
+ * what it learned", never an invented answer. Model text: plain hyphens.
+ */
+export const previewAnswerSchema = z.object({
+  data: z.object({
+    answer: z.string().transform((s) => plainDashes(s)),
+    grounded: z.boolean(),
+    sources: z
+      .array(
+        z.looseObject({
+          documentId: z.string(),
+          title: z.string().transform((s) => plainDashes(s)),
+          sourceUrl: z.string().nullable().catch(null).default(null),
+          path: z.string().catch(''),
+        }),
+      )
+      .catch([])
+      .default([]),
+  }),
+});
+export type PreviewAnswer = z.infer<typeof previewAnswerSchema>['data'];
+
+/** The route's own cap on a question (`QUESTION_MAX`). */
+export const PREVIEW_QUESTION_MAX = 300;

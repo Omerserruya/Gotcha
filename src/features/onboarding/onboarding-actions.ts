@@ -5,7 +5,13 @@ import { z } from 'zod';
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { signInIfSignedOut } from '@/api/client/signed-out';
-import { completeSchema, onboardingStatusSchema, siteHost } from '@/api/contracts/onboarding';
+import {
+  completeSchema,
+  onboardingStatusSchema,
+  previewAnswerSchema,
+  siteHost,
+  type PreviewAnswer,
+} from '@/api/contracts/onboarding';
 import { goLiveEndpoints, onboardingEndpoints } from '@/api/endpoints/registry';
 import { paymentPath } from '@/api/client/payment-path';
 import { logger } from '@/observability/logger';
@@ -141,6 +147,48 @@ export async function finishOnboarding(input: {
       return { ok: false, reason: 'refused', message: cause.developerMessage ?? null };
     }
     logger.warn('onboarding.complete_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export type PreviewResult =
+  | { readonly ok: true; readonly answer: PreviewAnswer }
+  /** 422: next to the field. */
+  | { readonly ok: false; readonly reason: 'required' | 'too_long' }
+  /** 429: twenty a minute per workspace - how long to wait. */
+  | { readonly ok: false; readonly reason: 'rate'; readonly seconds: number }
+  /** 402: no AI for this workspace now (no subscription, units spent) - no retry. */
+  | { readonly ok: false; readonly reason: 'no_ai' | 'forbidden' | 'failed' };
+
+/**
+ * 00h: how GOTCHA answers a question - from Knowledge, with its sources -
+ * asked on request, never on arrival (it spends units). Writes nothing but
+ * usage and an audit record.
+ */
+export async function askPreview(question: string, locale: string): Promise<PreviewResult> {
+  try {
+    const answered = await serverApi().post({
+      endpoint: onboardingEndpoints.previewAnswer(),
+      body: { question: question.trim(), locale },
+      payload: previewAnswerSchema,
+      raw: true,
+    });
+    return { ok: true, answer: answered.data };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    if (isApiError(cause)) {
+      if (cause.status === 422) {
+        return { ok: false, reason: cause.code === 'QUESTION_TOO_LONG' ? 'too_long' : 'required' };
+      }
+      if (cause.status === 429) {
+        return { ok: false, reason: 'rate', seconds: cause.retryAfterSeconds ?? 60 };
+      }
+      if (cause.status === 402) return { ok: false, reason: 'no_ai' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    }
+    logger.warn('onboarding.preview_failed', {
       status: isApiError(cause) ? cause.status : undefined,
     });
     return { ok: false, reason: 'failed' };

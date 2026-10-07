@@ -1,3 +1,5 @@
+import { getLocale } from 'next-intl/server';
+
 import { loadTry } from '@/features/onboarding/load-onboarding';
 import { OnboardingShell } from '@/features/onboarding/OnboardingShell';
 import { TryStep } from '@/features/onboarding/TryStep';
@@ -10,7 +12,7 @@ export default async function Page({
   readonly searchParams?: Promise<{ readonly skipped?: string }>;
 }) {
   const skippedCore = (await searchParams)?.skipped === '1';
-  const questions = await loadTry();
+  const questions = await loadTry(await getLocale());
   return (
     <OnboardingShell step="try">
       <TryStep questions={questions} skippedCore={skippedCore} />

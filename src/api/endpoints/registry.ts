@@ -627,6 +627,10 @@ export const onboardingEndpoints = {
    */
   businessProfile: () => endpoint('/api/onboarding/business-profile'),
   // Finishing is `goLiveEndpoints.complete` - one name for one route.
+  /** 00h (Backend 77da3edd, f4057eaa): ADMIN; a workspace being set up, or ACTIVE. */
+  previewQuestions: () => endpoint('/api/ai-assist/onboarding-preview-questions'),
+  /** `{ question (1-300), locale? }`; 422 / 429 retryAfterSeconds / 402 `{ code }`. */
+  previewAnswer: () => endpoint('/api/ai-assist/onboarding-preview-answer'),
   discovery: () => endpoint('/api/onboarding/discovery'),
   discover: () => endpoint('/api/onboarding/discover'),
   teach: () => endpoint('/api/onboarding/teach'),
