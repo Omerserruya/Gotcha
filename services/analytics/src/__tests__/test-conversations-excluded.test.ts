@@ -73,8 +73,9 @@ describe("analytics never counts setup conversations", () => {
   it("the shared queue `where` carries the exclusion", () => {
     // Home's count and its ranked queue share ONE predicate, so the filter has
     // to live in it, not at each call.
-    const block = SOURCE.slice(SOURCE.indexOf("export function waitingForPersonWhere"));
-    expect(block.slice(0, 600)).toMatch(/\.\.\.REAL_CONVERSATION/);
+    // It lives in @chatcenter/shared (conversation-queue.ts), checked there to
+    // exclude rehearsals; here: imported, and used by both.
+    expect(SOURCE).toMatch(/waitingForPersonWhere \} from "@chatcenter\/shared"/);
     expect(SOURCE).toMatch(/getQueueDepth[\s\S]{0,200}waitingForPersonWhere\(tenantId\)/);
     expect(SOURCE).toMatch(/const where = waitingForPersonWhere\(tenantId\);/);
   });

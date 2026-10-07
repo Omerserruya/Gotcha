@@ -1,4 +1,4 @@
-import { getInternalServiceKey, readDurableSetting, recordHandover } from "@chatcenter/shared";
+import { getInternalServiceKey, readDurableSetting, recordHandover, waitingForPersonClause } from "@chatcenter/shared";
 import { randomUUID } from "crypto";
 import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords, notificationsQueue } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
@@ -93,6 +93,14 @@ export interface ConversationFilters {
    * is the narrower, more specific ask.
    */
   automatedOnly?: boolean;
+  /**
+   * "queue": the inbox's "Waiting in queue" view - exactly the conversations
+   * waiting for a person (the shared waitingForPersonClause, the same one Home
+   * counts), and `viewTotal` for its header. It used to be the route's default:
+   * every status (closed included) and every assignee, so it disagreed with
+   * Home (10 vs 9).
+   */
+  view?: "queue";
   // User context for scoping
   userRole?: string;
   userId?: string;
@@ -103,7 +111,7 @@ export interface ConversationFilters {
 const AUTOMATED_HANDLERS = ["ai_agent", "flow"];
 
 export async function list(tenantId: string, filters: ConversationFilters) {
-  const { status, assignedAgentId, channel, departmentId, search, page = 1, limit = 50, cursor, includeAutomated = false, automatedOnly = false, userRole, userId, userDepartmentId } = filters;
+  const { status, assignedAgentId, channel, departmentId, search, page = 1, limit = 50, cursor, includeAutomated = false, automatedOnly = false, view, userRole, userId, userDepartmentId } = filters;
   const decodedCursor = cursor ? decodeConversationCursor(cursor) : null;
   if (cursor && !decodedCursor) {
     // Refused by name rather than silently restarting from the top, which a
@@ -112,8 +120,16 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   }
   const keyset = cursor !== undefined;
   const where: any = { tenantId };
-  if (status) where.status = status;
-  if (automatedOnly) {
+  if (view === "queue") {
+    // One AND element carrying the whole definition (its own OR inside), so the
+    // visibility clause below keeps the top-level OR. Status and the
+    // automation rule come from the definition, not from the query.
+    const { AND: inner, ...flat } = waitingForPersonClause();
+    where.AND = [{ ...flat, ...inner[0] }];
+  } else if (status) where.status = status;
+  if (view === "queue") {
+    // Fully defined above.
+  } else if (automatedOnly) {
     // All three conditions are required, and each one alone is wrong:
     // `handledBy` names the driver, `isHandedOver` is the latch a takeover
     // sets, and `assignedAgentId` catches a claim that never flipped the
@@ -206,6 +222,9 @@ export async function list(tenantId: string, filters: ConversationFilters) {
    * only way to tell "we fixed it" from "we stopped looking".
    * ════════════════════════════════════════════════════════════════════════════
    */
+  // The queue view's own total, for its header: same filters and visibility,
+  // before the cursor, like undatedWhere.
+  const viewWhere = view === "queue" ? { ...where, AND: [...((where.AND as unknown[]) ?? [])] } : null;
   const undatedWhere = {
     ...where,
     // A fresh array: `where.AND` is about to be mutated by the push below, and
@@ -265,7 +284,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   // Keyset takes `limit + 1` to learn whether more exist, and counts NO total:
   // a keyset list cannot page to a known end, and the count was a second full
   // scan for a figure the caller does not need.
-  const [conversations, total, undatedCount] = await Promise.all([
+  const [conversations, total, undatedCount, viewTotal] = await Promise.all([
     prisma.conversation.findMany({
       where,
       include,
@@ -275,6 +294,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
     }),
     keyset ? Promise.resolve(null) : prisma.conversation.count({ where }),
     prisma.conversation.count({ where: undatedWhere }),
+    viewWhere ? prisma.conversation.count({ where: viewWhere }) : Promise.resolve(null),
   ]);
   const hasMore = keyset && conversations.length > limit;
   const pageRows = hasMore ? conversations.slice(0, limit) : conversations;
@@ -305,11 +325,12 @@ export async function list(tenantId: string, filters: ConversationFilters) {
       },
       // For the whole view, not this page. See undatedWhere above.
       undatedCount,
+      ...(viewTotal !== null ? { viewTotal } : {}),
     };
   }
   // Legacy offset callers keep the exact shape they had, total included.
   const t = total as number;
-  return { data, meta: { total: t, page, limit, totalPages: Math.ceil(t / limit) }, undatedCount };
+  return { data, meta: { total: t, page, limit, totalPages: Math.ceil(t / limit) }, undatedCount, ...(viewTotal !== null ? { viewTotal } : {}) };
 }
 
 export async function getById(tenantId: string, id: string) {

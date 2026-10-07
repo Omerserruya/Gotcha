@@ -12,7 +12,7 @@ function matches(r: any, w: any): boolean {
   if (r.tenantId !== w.tenantId || r.isTest !== false) return false;
   if (String(r.customerExternalId).startsWith("sandbox:")) return false;
   if (!w.status.in.includes(r.status) || r.assignedAgentId !== null) return false;
-  return w.OR.some((o: any) => Object.entries(o).every(([k, v]) => (r[k] ?? null) === v));
+  return w.AND[0].OR.some((o: any) => Object.entries(o).every(([k, v]) => (r[k] ?? null) === v));
 }
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {

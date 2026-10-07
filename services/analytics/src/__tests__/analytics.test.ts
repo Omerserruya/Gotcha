@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import express from "express";
 
-vi.mock("@chatcenter/shared", () => {
+vi.mock("@chatcenter/shared", async () => {
+  // The real "waiting for a person" definition (a pure file), not a copy.
+  const queue: any = await vi.importActual("@chatcenter/shared/src/lib/conversation-queue");
   const mockRedis = {
     hgetall: vi.fn().mockResolvedValue({ messages_total: "42", messages_inbound: "20", messages_outbound: "22", conversations_closed: "5" }),
     lrange: vi.fn().mockResolvedValue(["1000", "2000", "3000"]),
@@ -37,6 +39,7 @@ vi.mock("@chatcenter/shared", () => {
   };
 
   return {
+    waitingForPersonWhere: queue.waitingForPersonWhere,
     prisma: mockPrisma,
     getRedis: () => mockRedis,
     authenticate: (req: any, _res: any, next: any) => {
