@@ -77,7 +77,7 @@ describe("★ no internal values reach the model", () => {
       expect(o.content).not.toMatch(ENUMS);
       expect(o.content).not.toMatch(/waiting_for_person|pending_approvals|open_conversations|"where"/);
     }
-    expect(JSON.parse(outs[0].content).label).toBe("conversations waiting for the customer to reply on whatsapp");
+    expect(JSON.parse(outs[0].content).label).toBe("conversations waiting for the customer to reply on WhatsApp");
   });
 });
 

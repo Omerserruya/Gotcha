@@ -525,11 +525,26 @@ const STATUS_WORDS: Record<string, { en: string; he: string }> = {
   WAITING: { en: "conversations waiting for the customer to reply", he: "שיחות שמחכות לתשובת הלקוח" },
   CLOSED: { en: "closed conversations", he: "שיחות סגורות" },
 };
+/** The inbox's channel names (redesign i18n channels.json `name.<ENUM>`), never the enum key. */
+const CHANNEL_NAMES: Record<string, { en: string; he: string }> = {
+  WHATSAPP: { en: "WhatsApp", he: "וואטסאפ" },
+  INSTAGRAM: { en: "Instagram", he: "אינסטגרם" },
+  MESSENGER: { en: "Messenger", he: "מסנג'ר" },
+  EMAIL: { en: "Email", he: "אימייל" },
+  GMAIL: { en: "Gmail", he: "Gmail" },
+  OUTLOOK: { en: "Outlook", he: "Outlook" },
+  SLACK: { en: "Slack", he: "Slack" },
+  VOICE: { en: "Phone calls", he: "שיחות טלפון" },
+  WEBCHAT: { en: "Web chat", he: "צ'אט באתר" },
+  SHOPIFY_LIVE_CHAT: { en: "Shopify live chat", he: "צ'אט Shopify" },
+};
+const OTHER_CHANNEL = { en: "Another channel", he: "ערוץ אחר" };
+
 function countLabel(args: any, locale: "he" | "en" = "en"): string {
   const he = locale === "he";
   const status = args?.status && args.status !== "ANY" ? STATUS_WORDS[String(args.status)]?.[locale] ?? (he ? "שיחות מתאימות" : "matching conversations") : he ? "שיחות" : "conversations";
   const parts = [status];
-  const channel = args?.channel ? String(args.channel).toLowerCase().replace(/_/g, " ") : "";
+  const channel = args?.channel ? (CHANNEL_NAMES[String(args.channel).toUpperCase()] ?? OTHER_CHANNEL)[locale] : "";
   if (channel) parts.push(he ? `בערוץ ${channel}` : `on ${channel}`);
   if (args?.sinceISO) parts.push(`${he ? "מאז" : "since"} ${String(args.sinceISO).slice(0, 10)}`);
   return parts.join(" ");

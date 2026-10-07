@@ -15,6 +15,7 @@ import { Router, type Request, type Response } from "express";
 import { requireInternalKey } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { getCompanyContext } from "../services/company-context.service";
+import { humanizeReply } from "../services/reply-style";
 
 const router = Router();
 
@@ -66,7 +67,7 @@ router.post("/internal/voice-sample", requireInternalKey, async (req: Request, r
       metadata: { type: "voice_sample" },
     });
 
-    const reply = (result?.content ?? "").trim();
+    const reply = humanizeReply((result?.content ?? "").trim()) ?? "";
     if (!reply) {
       // An empty completion is a failed sample, not an empty one. Reported as
       // unavailable so the caller shows "could not generate" rather than an

@@ -17,6 +17,7 @@
  */
 
 import { generateResponse, getDefaultModel } from "./ai.service";
+import { withoutWideDashes } from "../lib/wide-dash";
 
 // ─── Contract ───────────────────────────────────────────────
 
@@ -351,24 +352,9 @@ function policy(p: any): PolicyFinding {
   return { found: null, confidence: "unknown" };
 }
 
-const WIDE_DASH_RE = /[\u2013\u2014\u2015]/g;
-
-/**
- * Every string in a value, at any depth, with the em-dash, en-dash and
- * horizontal bar replaced by a regular hyphen. Keys, numbers and booleans
- * are left alone. Omer's rule: no wide dash in anything the product shows,
- * model output included.
- */
-export function withoutWideDashes<T>(value: T): T {
-  if (typeof value === "string") return value.replace(WIDE_DASH_RE, "-") as unknown as T;
-  if (Array.isArray(value)) return value.map((v) => withoutWideDashes(v)) as unknown as T;
-  if (value && typeof value === "object" && !(value instanceof Date)) {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = withoutWideDashes(v);
-    return out as T;
-  }
-  return value;
-}
+// Moved to lib/wide-dash.ts (now used by every operator-facing model output);
+// re-exported for the existing importers.
+export { withoutWideDashes };
 
 export function normalizeReport(raw: any, input: DiscoveryInput): DiscoveryReport {
   const b = raw.brand || {};

@@ -29,6 +29,7 @@ import {
 } from "./agent-memory.service";
 import { invalidateFunnelCache } from "./funnel-config.repo";
 import { isBrandArchetype } from "./brand-archetypes";
+import { withoutWideDashes } from "../lib/wide-dash";
 
 const MAX_ROUNDS = 6;
 
@@ -570,7 +571,9 @@ function buildBuilderTools(role: string): Array<Record<string, unknown>> {
 
 // ─── The loop ───────────────────────────────────────────────
 
-export async function runBuilder(input: BuilderRunInput, onEvent: BuilderEventSink): Promise<void> {
+export async function runBuilder(input: BuilderRunInput, sink: BuilderEventSink): Promise<void> {
+  // Everything the owner sees passes here: no wide dash in any event.
+  const onEvent: BuilderEventSink = (ev) => sink(withoutWideDashes(ev));
   await onEvent({ type: "ready", sessionId: input.agentId });
 
   let snapshot = await loadDraftSnapshot(input.tenantId, input.agentId);
@@ -655,7 +658,8 @@ export async function runBuilder(input: BuilderRunInput, onEvent: BuilderEventSi
 
     for (const tc of finalToolCalls) {
       let args: any = {};
-      try { args = JSON.parse(tc.function?.arguments || "{}"); } catch { /* keep {} */ }
+      // What the model writes into the draft (persona, instructions) is shown and kept: no wide dash.
+      try { args = withoutWideDashes(JSON.parse(tc.function?.arguments || "{}")); } catch { /* keep {} */ }
       const name = tc.function?.name || "unknown";
       await onEvent({ type: "tool_start", toolCallId: tc.id, name, args });
 

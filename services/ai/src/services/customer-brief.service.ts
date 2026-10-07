@@ -30,6 +30,7 @@ import {
   renderCommerceFactsForPrompt,
   type CustomerCommerceFacts,
 } from "./customer-commerce-facts.service";
+import { withoutWideDashes } from "../lib/wide-dash";
 
 export interface CustomerBriefRecord {
   id: string;
@@ -471,7 +472,7 @@ async function generateBriefText(args: {
       metadata: { type: "customer_brief" },
     });
     if (!result.content) throw new Error("empty_llm_response");
-    const parsed = JSON.parse(result.content) as Record<string, unknown>;
+    const parsed = withoutWideDashes(JSON.parse(result.content) as Record<string, unknown>);
 
     const briefText = typeof parsed.brief === "string" ? parsed.brief.trim() : "";
     const signals = Array.isArray(parsed.signals)
@@ -521,7 +522,8 @@ function mapRow(row: any): CustomerBriefRecord {
   return {
     id: row.id,
     identityKey: row.identityKey,
-    brief: row.brief,
+    // Briefs cached before the rule still carry them.
+    brief: withoutWideDashes(row.brief),
     signals: Array.isArray(row.signals) ? row.signals : [],
     tone: row.tone ?? null,
     mood: row.mood ?? null,

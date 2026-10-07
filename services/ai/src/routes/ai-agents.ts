@@ -8,6 +8,7 @@ import { buildAgentPrompt, GENERATOR_BUILTIN_AGENT } from "../services/prompt-bu
 import { isBrandArchetype } from "../services/brand-archetypes";
 import { loadToolGrants, deriveAllowedOperations } from "../services/agent-loop/permissions-bridge";
 import { ensureCapabilitiesRegistered, describeAllWorlds } from "../services/capability-plane";
+import { withoutWideDashes } from "../lib/wide-dash";
 
 const router = Router();
 
@@ -310,7 +311,7 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
         metadata: { type: "agent_description", belMode: "generator" },
       });
       if (aiRes.content?.trim()) {
-        description = aiRes.content.trim();
+        description = withoutWideDashes(aiRes.content.trim());
       }
     } catch (err) {
       console.warn("[ai-agents] AI description generation failed, using fallback:", (err as Error).message);

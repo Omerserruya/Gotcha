@@ -26,7 +26,7 @@ import {
   memoryToChatMessages,
   sanitizeHistoryForLLM,
 } from "./agent-memory.service";
-import { withoutWideDashes } from "./business-discovery.service";
+import { withoutWideDashes } from "../lib/wide-dash";
 import { buildAgentContext } from "./agent-context.service";
 import type { ClientContext, OperatorContext } from "./agent-context.service";
 import {

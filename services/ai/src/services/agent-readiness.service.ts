@@ -13,6 +13,7 @@
 
 import { prisma } from "@chatcenter/shared";
 import { generateResponse } from "./ai.service";
+import { withoutWideDashes } from "../lib/wide-dash";
 
 export type Coverage = "full" | "partial" | "none";
 
@@ -211,7 +212,7 @@ export async function generateReadinessReport(
 
   let parsed: any;
   try {
-    parsed = JSON.parse(raw);
+    parsed = withoutWideDashes(JSON.parse(raw));
   } catch {
     return { error: "bad_model_output" };
   }

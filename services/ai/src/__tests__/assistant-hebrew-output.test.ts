@@ -80,13 +80,13 @@ describe("★ result labels follow the interface language", () => {
   it("Hebrew: the summaries and the labels the model reads are Hebrew", async () => {
     const events = await run("he");
     const ends = events.filter((e) => e.type === "tool_end").map((e) => e.resultSummary);
-    expect(ends).toEqual(["3 שיחות שנסגרו היום", "3 שיחות פתוחות בערוץ whatsapp"]);
+    expect(ends).toEqual(["3 שיחות שנסגרו היום", "3 שיחות פתוחות בערוץ וואטסאפ"]);
     const toolRows = H.memory.filter((m) => m.role === "tool").map((m) => JSON.parse(m.content).label);
-    expect(toolRows).toEqual(["שיחות שנסגרו היום", "שיחות פתוחות בערוץ whatsapp"]);
+    expect(toolRows).toEqual(["שיחות שנסגרו היום", "שיחות פתוחות בערוץ וואטסאפ"]);
   });
 
   it("English is unchanged", async () => {
     const ends = (await run("en")).filter((e) => e.type === "tool_end").map((e) => e.resultSummary);
-    expect(ends).toEqual(["3 conversations closed today", "3 open conversations on whatsapp"]);
+    expect(ends).toEqual(["3 conversations closed today", "3 open conversations on WhatsApp"]);
   });
 });

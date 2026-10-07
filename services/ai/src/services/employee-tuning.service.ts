@@ -10,6 +10,7 @@
 
 import { generateResponse, getDefaultModel } from "./ai.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
+import { withoutWideDashes } from "../lib/wide-dash";
 
 export type EmployeeTone = "professional" | "friendly" | "casual" | "formal";
 
@@ -155,7 +156,7 @@ export async function tuneEmployeeChat(input: TuneChatInput): Promise<TuneChatRe
     });
 
     let parsed: any;
-    try { parsed = JSON.parse(stripFences(resp.content ?? "")); } catch { parsed = null; }
+    try { parsed = withoutWideDashes(JSON.parse(stripFences(resp.content ?? ""))); } catch { parsed = null; }
     const rawReply = str(parsed?.reply) || (lang === "Hebrew" ? "בסדר גמור, עדכנתי את עצמי." : "Got it, I've updated myself.");
     const reply = stripOptionMenu(rawReply);
     const p = parsed?.persona || {};

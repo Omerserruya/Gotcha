@@ -13,6 +13,7 @@
 import { prisma } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel } from "./ai.service";
 import type { ExtractedField } from "./intelligence-ingest.service";
+import { withoutWideDashes } from "../lib/wide-dash";
 
 const MAX_MESSAGES = 40;
 
@@ -124,7 +125,7 @@ export async function extractFieldsLive(params: {
 
   let parsed: Record<string, unknown>;
   try {
-    parsed = JSON.parse(stripFences(content));
+    parsed = withoutWideDashes(JSON.parse(stripFences(content)));
   } catch {
     return [];
   }
