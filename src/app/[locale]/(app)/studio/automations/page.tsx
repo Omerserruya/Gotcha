@@ -46,25 +46,27 @@ export default async function Page({
       title={t('title')}
       description={t('description')}
       actions={
-        <span className={styles.headerActions}>
-          <button
-            type="button"
-            className={styles.secondary}
-            disabled
-            title={t('templatesWhy')}
-            data-testid="automations-templates"
-          >
-            {t('templates')}
-          </button>
-          <Link
-            href={{ pathname: '/studio/automations', query: { new: '1' } }}
-            className={styles.primary}
-            scroll={false}
-            data-testid="automations-new"
-          >
-            {t('create')}
-          </Link>
-        </span>
+        automations === 'forbidden' ? null : (
+          <span className={styles.headerActions}>
+            <button
+              type="button"
+              className={styles.secondary}
+              disabled
+              title={t('templatesWhy')}
+              data-testid="automations-templates"
+            >
+              {t('templates')}
+            </button>
+            <Link
+              href={{ pathname: '/studio/automations', query: { new: '1' } }}
+              className={styles.primary}
+              scroll={false}
+              data-testid="automations-new"
+            >
+              {t('create')}
+            </Link>
+          </span>
+        )
       }
     >
       <div className={styles.page}>
@@ -73,7 +75,12 @@ export default async function Page({
             {t('delete.done')}
           </p>
         ) : null}
-        {automations === null ? (
+        {automations === 'forbidden' ? (
+          <div className={styles.empty} data-testid="automations-forbidden">
+            <p className={styles.emptyLead}>{t('forbidden.title')}</p>
+            <p className={styles.quiet}>{t('forbidden.lead')}</p>
+          </div>
+        ) : automations === null ? (
           <p className={styles.quiet} role="status" data-testid="automations-unread">
             {t('unavailable')}
           </p>
@@ -86,30 +93,32 @@ export default async function Page({
           <AutomationsList automations={automations} />
         )}
 
-        <section className={styles.templates} aria-labelledby="templates-title">
-          <h2 className={styles.templatesTitle} id="templates-title">
-            {t('templateTitle')} <span className={styles.quiet}>{t('templateNote')}</span>
-          </h2>
-          <div className={styles.templateCards}>
-            {TEMPLATES.map(([key, Icon]) => (
-              <button
-                key={key}
-                type="button"
-                className={styles.template}
-                disabled
-                title={t('templatesWhy')}
-                data-testid={`automations-template-${key}`}
-              >
-                <Icon size={15} aria-hidden="true" />
-                <span className={styles.templateName}>{t(`template.${key}.name`)}</span>
-                <span className={styles.quiet}>{t(`template.${key}.line`)}</span>
-              </button>
-            ))}
-          </div>
-          <p className={styles.why}>{t('templatesWhy')}</p>
-        </section>
+        {automations === 'forbidden' ? null : (
+          <section className={styles.templates} aria-labelledby="templates-title">
+            <h2 className={styles.templatesTitle} id="templates-title">
+              {t('templateTitle')} <span className={styles.quiet}>{t('templateNote')}</span>
+            </h2>
+            <div className={styles.templateCards}>
+              {TEMPLATES.map(([key, Icon]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={styles.template}
+                  disabled
+                  title={t('templatesWhy')}
+                  data-testid={`automations-template-${key}`}
+                >
+                  <Icon size={15} aria-hidden="true" />
+                  <span className={styles.templateName}>{t(`template.${key}.name`)}</span>
+                  <span className={styles.quiet}>{t(`template.${key}.line`)}</span>
+                </button>
+              ))}
+            </div>
+            <p className={styles.why}>{t('templatesWhy')}</p>
+          </section>
+        )}
       </div>
-      {creating ? <NewAutomation catalog={catalog} /> : null}
+      {creating && automations !== 'forbidden' ? <NewAutomation catalog={catalog} /> : null}
     </PageContainer>
   );
 }

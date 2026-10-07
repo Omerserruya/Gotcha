@@ -33,7 +33,11 @@ export default async function Page({
         />
       ) : (
         <p className={styles.unread} role="status" data-testid="builder-unread">
-          {read.missing ? t('builder.notFound') : t('builder.unread')}
+          {read.forbidden
+            ? t('forbidden.title')
+            : read.missing
+              ? t('builder.notFound')
+              : t('builder.unread')}
         </p>
       )}
     </PageContainer>

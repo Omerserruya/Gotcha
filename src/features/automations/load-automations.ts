@@ -20,9 +20,11 @@ import { logger } from '@/observability/logger';
 
 /**
  * 09c's list - newest first, each with its path and this week's runs.
- * `null` is a failed read and never an empty list.
+ * `null` is a failed read and never an empty list; `'forbidden'` is no
+ * `ai:workflows:read` (Backend 5: 403 PERMISSION_DENIED) - a person without
+ * access, not a broken screen.
  */
-export async function loadAutomations(): Promise<readonly Automation[] | null> {
+export async function loadAutomations(): Promise<readonly Automation[] | null | 'forbidden'> {
   try {
     const list = await serverApi().get({
       endpoint: automationEndpoints.list(),
@@ -31,6 +33,7 @@ export async function loadAutomations(): Promise<readonly Automation[] | null> {
     });
     return list.data;
   } catch (cause) {
+    if (isApiError(cause) && cause.status === 403) return 'forbidden';
     logger.warn('automations.list_failed', { cause });
     return null;
   }
@@ -55,9 +58,10 @@ export async function loadCatalog(
 }
 
 export interface BuilderRead {
-  /** `null` with `missing`: no such automation here; without it, the read failed. */
+  /** `null` with `missing`: no such automation here; with `forbidden`: no access; else unread. */
   readonly automation: Automation | null;
   readonly missing: boolean;
+  readonly forbidden: boolean;
   /** Per step, the last 7 days. `null`: unread. */
   readonly stats: NodeStats | null;
   /** For the webhook trigger's inspector. `null`: none yet, or unread. */
@@ -75,11 +79,16 @@ export async function loadBuilder(id: string): Promise<BuilderRead> {
   const [one, stats, webhook, people, library] = await Promise.all([
     api
       .get({ endpoint: automationEndpoints.one(id), payload: automationOneSchema, raw: true })
-      .then((r) => ({ automation: r.data as Automation | null, missing: false }))
+      .then((r) => ({ automation: r.data as Automation | null, missing: false, forbidden: false }))
       .catch((cause: unknown) => {
-        if (isApiError(cause) && cause.status === 404) return { automation: null, missing: true };
+        if (isApiError(cause) && cause.status === 404) {
+          return { automation: null, missing: true, forbidden: false };
+        }
+        if (isApiError(cause) && cause.status === 403) {
+          return { automation: null, missing: false, forbidden: true };
+        }
         logger.warn('automations.one_failed', { cause });
-        return { automation: null, missing: false };
+        return { automation: null, missing: false, forbidden: false };
       }),
     api
       .get({

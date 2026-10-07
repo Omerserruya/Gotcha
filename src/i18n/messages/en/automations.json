@@ -419,5 +419,9 @@
     "form_submitted": "a form is sent",
     "story_mention": "a story mentions you",
     "unknown": "its trigger happens"
+  },
+  "forbidden": {
+    "title": "You don't have access to automations",
+    "lead": "Seeing and changing automations needs a permission your role doesn't have. An admin can give it to you in Settings · People & teams."
   }
 }
