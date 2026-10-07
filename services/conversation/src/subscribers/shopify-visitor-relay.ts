@@ -45,7 +45,8 @@ export async function relayToVisitor(event: ServiceEvent): Promise<void> {
   const message = event.data?.message;
   const conversationId = event.data?.conversationId;
   if (!message?.id || !conversationId) return;
-  if (event.data?.channel !== "SHOPIFY_LIVE_CHAT" && message.channel !== "SHOPIFY_LIVE_CHAT") {
+  const isWebchat = event.data?.channel === "WEBCHAT" || message.channel === "WEBCHAT";
+  if (!isWebchat && event.data?.channel !== "SHOPIFY_LIVE_CHAT" && message.channel !== "SHOPIFY_LIVE_CHAT") {
     return;
   }
 
@@ -57,6 +58,24 @@ export async function relayToVisitor(event: ServiceEvent): Promise<void> {
     const sockets = await getIO().in(`visitor:${conversationId}`).fetchSockets();
     if (sockets.length === 0) return;
   } catch {
+    return;
+  }
+
+  // The website widget's code snippet (web chat): the same shape its polling
+  // endpoint returns, so the widget treats a pushed message and a polled one
+  // alike. System events carry no text for a visitor.
+  if (isWebchat) {
+    if ((message.messageType ?? "text") === "system") return;
+    room.emit("visitor:message", {
+      conversationId,
+      message: {
+        id: message.id,
+        direction: message.direction,
+        body: message.body ?? "",
+        senderName: message.senderName ?? null,
+        createdAt: message.createdAt ?? new Date().toISOString(),
+      },
+    });
     return;
   }
 

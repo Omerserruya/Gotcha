@@ -1,5 +1,6 @@
 import { Server as HttpServer } from "http";
 import { Server, Socket } from "socket.io";
+import crypto from "crypto";
 import { prisma, resolvePrincipal, verifyVisitorSession, redeemRealtimeTicket } from "@chatcenter/shared";
 import { canViewConversation } from "./conversation-visibility";
 
@@ -92,6 +93,33 @@ export function initSocket(httpServer: HttpServer): Server {
       (socket as any).visitor = { ...session, conversationId };
       (socket as any).kind = "visitor";
       return next();
+    }
+
+    // ── Website widget visitor (web chat) ──────────────────
+    //
+    // The same secret the web chat's REST routes take: the session token the
+    // widget got from /init, which IS the conversation's customerExternalId.
+    // One web chat conversation, the same single room as above.
+    const webchatToken = auth.webchatToken as string | undefined;
+    if (webchatToken) {
+      const conversationId = String(auth.conversationId ?? "");
+      if (!conversationId || typeof webchatToken !== "string") return next(new Error("Conversation required"));
+      try {
+        const c = await prisma.conversation.findUnique({
+          where: { id: conversationId },
+          select: { id: true, tenantId: true, channel: true, customerExternalId: true },
+        });
+        const a = Buffer.from(String(c?.customerExternalId ?? ""));
+        const b = Buffer.from(webchatToken);
+        if (!c || c.channel !== "WEBCHAT" || !c.customerExternalId || a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+          return next(new Error("Conversation not found"));
+        }
+        (socket as any).visitor = { tenantId: c.tenantId, conversationId: c.id };
+        (socket as any).kind = "visitor";
+        return next();
+      } catch {
+        return next(new Error("Conversation lookup failed"));
+      }
     }
 
     return next(new Error("Authentication required"));
