@@ -12,26 +12,32 @@ import styles from './StepSheet.module.css';
  * Delete, confirmed - and the confirmation says what the route does: it
  * stops, it is deleted, and its run history goes with it (the runs are
  * deleted by cascade); a conversation waiting on it carries on.
+ *
+ * One or several (09c's selection): several are named by count, "Delete 3
+ * automations?". Each is deleted on its own route call; the ones that went
+ * are reported back even when another did not, and that one is said.
  */
 export function DeleteAutomation({
-  id,
-  name,
+  targets,
   onClose,
   onDeleted,
 }: {
-  readonly id: string;
-  readonly name: string;
+  readonly targets: readonly { readonly id: string; readonly name: string }[];
   readonly onClose: () => void;
-  readonly onDeleted: () => void;
+  /** The ids that were deleted. */
+  readonly onDeleted: (ids: readonly string[]) => void;
 }) {
   const t = useTranslations('automations.delete');
   const [failed, setFailed] = useState(false);
   const [isDeleting, start] = useTransition();
+  // A retry asks only for the ones still here.
+  const [left, setLeft] = useState(targets);
+  const one = left.length === 1 ? left[0]! : null;
   return (
     <Dialog open onOpenChange={(open) => (open ? null : onClose())}>
       <DialogContent
-        title={t('title', { name })}
-        description={t('what')}
+        title={one ? t('title', { name: one.name }) : t('titleMany', { count: left.length })}
+        description={one ? t('what') : t('whatMany')}
         data-testid="delete-automation"
       >
         {failed ? (
@@ -50,8 +56,14 @@ export function DeleteAutomation({
             onClick={() =>
               start(async () => {
                 setFailed(false);
-                if (await deleteAutomation(id)) onDeleted();
-                else setFailed(true);
+                const done: string[] = [];
+                for (const target of left) {
+                  if (await deleteAutomation(target.id)) done.push(target.id);
+                }
+                if (done.length > 0) onDeleted(done);
+                if (done.length === left.length) return;
+                setLeft(left.filter((target) => !done.includes(target.id)));
+                setFailed(true);
               })
             }
             data-testid="delete-automation-yes"

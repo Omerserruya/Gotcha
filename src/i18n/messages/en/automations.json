@@ -479,7 +479,9 @@
     "deleting": "Deleting…",
     "cancel": "Cancel",
     "failed": "It wasn't deleted. Try again in a moment.",
-    "done": "Automation deleted."
+    "done": "Automation deleted.",
+    "titleMany": "Delete {count, plural, one {# automation} other {# automations}}?",
+    "whatMany": "They stop running and are deleted, together with their run history. A conversation waiting on one carries on as usual."
   },
   "when": {
     "message_received": "a message comes in",
@@ -515,5 +517,16 @@
     "storyThanks": "Thank you for the mention!"
   },
   "notYet": "Not available yet",
-  "loading": "Loading automations"
+  "loading": "Loading automations",
+  "listSelect": {
+    "selected": "{count, plural, one {# selected} other {# selected}}",
+    "open": "Open",
+    "turnOn": "Turn on",
+    "pause": "Pause",
+    "turnOnMany": "Turn on {count, plural, one {#} other {all #}}",
+    "pauseMany": "Pause {count, plural, one {#} other {all #}}",
+    "delete": "Delete",
+    "deleteMany": "Delete {count, plural, one {#} other {all #}}",
+    "hint": "Click to select · {mod}-click adds · Shift-click a range · {mod}+A all · Delete removes · Right-click for more"
+  }
 }

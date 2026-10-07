@@ -592,8 +592,7 @@ export function Builder({
 
       {deleting ? (
         <DeleteAutomation
-          id={automation.id}
-          name={automation.name}
+          targets={[{ id: automation.id, name: automation.name }]}
           onClose={() => setDeleting(false)}
           onDeleted={() => router.push('/studio/automations?deleted=1')}
         />

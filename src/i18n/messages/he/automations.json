@@ -479,7 +479,9 @@
     "deleting": "מוחקים…",
     "cancel": "ביטול",
     "failed": "היא לא נמחקה. כדאי לנסות שוב בעוד רגע.",
-    "done": "האוטומציה נמחקה."
+    "done": "האוטומציה נמחקה.",
+    "titleMany": "{count, plural, one {למחוק אוטומציה אחת?} other {למחוק # אוטומציות?}}",
+    "whatMany": "הן יפסיקו לרוץ ויימחקו, יחד עם היסטוריית ההרצות שלהן. שיחה שממתינה לאחת מהן תמשיך כרגיל."
   },
   "when": {
     "message_received": "שמגיעה הודעה",
@@ -515,5 +517,16 @@
     "storyThanks": "תודה על האזכור!"
   },
   "notYet": "עוד לא זמין",
-  "loading": "טוענים אוטומציות"
+  "loading": "טוענים אוטומציות",
+  "listSelect": {
+    "selected": "{count, plural, one {נבחרה אחת} other {נבחרו #}}",
+    "open": "פתיחה",
+    "turnOn": "הפעלה",
+    "pause": "השהיה",
+    "turnOnMany": "{count, plural, one {הפעלה} other {הפעלת כל ה־#}}",
+    "pauseMany": "{count, plural, one {השהיה} other {השהיית כל ה־#}}",
+    "delete": "מחיקה",
+    "deleteMany": "{count, plural, one {מחיקה} other {מחיקת כל ה־#}}",
+    "hint": "לחיצה בוחרת · {mod}+לחיצה מוסיפה · Shift+לחיצה בוחרת טווח · {mod}+A הכול · Delete מוחק · לחיצה ימנית לעוד"
+  }
 }
