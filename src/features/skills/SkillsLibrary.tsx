@@ -1,3 +1,4 @@
+import { useTranslations } from 'next-intl';
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import {
@@ -7,6 +8,7 @@ import {
   type SkillCategory,
   type ToolChoice,
 } from '@/api/contracts/skills';
+import { Skeleton, SkeletonRows } from '@/design-system/primitives/skeleton/Skeleton';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
 
@@ -75,13 +77,7 @@ export async function SkillsLibrary({
           </p>
         ) : (
           <div className={styles.table} role="table" data-testid="skills-table">
-            <div className={styles.head} role="row">
-              <span role="columnheader">{t('columns.skill')}</span>
-              <span role="columnheader">{t('columns.steps')}</span>
-              <span role="columnheader">{t('columns.usedBy')}</span>
-              <span role="columnheader">{t('columns.week')}</span>
-              <span role="columnheader" />
-            </div>
+            <TableHead />
             {shown.map((skill) => {
               const standing = skillStanding(skill);
               const stats = skill.stats;
@@ -177,22 +173,68 @@ export async function SkillsLibrary({
         )}
       </div>
 
-      <aside className={styles.side}>
-        <section className={styles.missing} data-testid="skills-missing">
-          <h2 className={styles.missingTitle}>
-            <span className={styles.missingDot} aria-hidden="true" />
-            {t('missing.title')}
-          </h2>
-          <p className={styles.missingWhy}>{t('missing.why')}</p>
-        </section>
-        <section className={styles.explainer}>
-          <h2 className={styles.explainerTitle}>{t('explainer.title')}</h2>
-          <p className={styles.explainerBody}>{t('explainer.body')}</p>
-          <Link href="/studio/automations" className={styles.explainerLink}>
-            {t('explainer.link')}
-          </Link>
-        </section>
-      </aside>
+      <Aside />
+    </div>
+  );
+}
+
+/** The table's header: static - it draws before the skills arrive. */
+function TableHead() {
+  const t = useTranslations('skills');
+  return (
+    <div className={styles.head} role="row">
+      <span role="columnheader">{t('columns.skill')}</span>
+      <span role="columnheader">{t('columns.steps')}</span>
+      <span role="columnheader">{t('columns.usedBy')}</span>
+      <span role="columnheader">{t('columns.week')}</span>
+      <span role="columnheader" />
+    </div>
+  );
+}
+
+/** 09's side: what is missing, and skills against automations - static. */
+function Aside() {
+  const t = useTranslations('skills');
+  return (
+    <aside className={styles.side}>
+      <section className={styles.missing} data-testid="skills-missing">
+        <h2 className={styles.missingTitle}>
+          <span className={styles.missingDot} aria-hidden="true" />
+          {t('missing.title')}
+        </h2>
+        <p className={styles.missingWhy}>{t('missing.why')}</p>
+      </section>
+      <section className={styles.explainer}>
+        <h2 className={styles.explainerTitle}>{t('explainer.title')}</h2>
+        <p className={styles.explainerBody}>{t('explainer.body')}</p>
+        <Link href="/studio/automations" className={styles.explainerLink}>
+          {t('explainer.link')}
+        </Link>
+      </section>
+    </aside>
+  );
+}
+
+/**
+ * 09 while the library is read: the filters and rows as placeholders, the
+ * table's header and the side as they are (Omer, 2026-10-07).
+ */
+export function SkillsLibraryPending() {
+  const t = useTranslations('skills');
+  return (
+    <div className={styles.library} data-testid="skills-pending">
+      <div className={styles.main}>
+        <div className={styles.filters} aria-hidden="true">
+          {[72, 88, 96, 84].map((w) => (
+            <Skeleton key={w} width={`${w}px`} height="30px" />
+          ))}
+        </div>
+        <div className={styles.table} role="table">
+          <TableHead />
+          <SkeletonRows label={t('loading')} rows={5} height={62} mark={false} />
+        </div>
+      </div>
+      <Aside />
     </div>
   );
 }

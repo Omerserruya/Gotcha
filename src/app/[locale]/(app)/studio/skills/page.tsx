@@ -1,9 +1,10 @@
 import { getTranslations } from 'next-intl/server';
+import { Suspense } from 'react';
 
 import { SKILL_CATEGORIES, type SkillCategory } from '@/api/contracts/skills';
 import { loadSkillEmployees, loadSkillsLibrary } from '@/features/skills/load-skills';
 import { NewSkill } from '@/features/skills/NewSkill';
-import { SkillsLibrary } from '@/features/skills/SkillsLibrary';
+import { SkillsLibrary, SkillsLibraryPending } from '@/features/skills/SkillsLibrary';
 import styles from '@/features/skills/Skills.module.css';
 import { Link } from '@/i18n/navigation';
 import { PageContainer } from '@/shell/PageContainer';
@@ -25,10 +26,8 @@ export default async function Page({
   const category = (SKILL_CATEGORIES as readonly string[]).includes(params.category ?? '')
     ? (params.category as SkillCategory)
     : null;
-  const { skills, tools } = await loadSkillsLibrary();
   // 21 opens over 09, as `?new=1`; its employees are read only then.
   const creating = params.new === '1';
-  const employees = creating ? await loadSkillEmployees() : null;
 
   return (
     <PageContainer
@@ -64,6 +63,28 @@ export default async function Page({
           {t('editor.archive.done')}
         </p>
       ) : null}
+      {/* The header, buttons and note draw at once; the library when it is read. */}
+      <Suspense fallback={<SkillsLibraryPending />}>
+        <LibrarySection category={category} creating={creating} />
+      </Suspense>
+    </PageContainer>
+  );
+}
+
+/** 09's data: the library, and - with 21 open - who it can be given to. */
+export async function LibrarySection({
+  category,
+  creating,
+}: {
+  readonly category: SkillCategory | null;
+  readonly creating: boolean;
+}) {
+  const [{ skills, tools }, employees] = await Promise.all([
+    loadSkillsLibrary(),
+    creating ? loadSkillEmployees() : Promise.resolve(null),
+  ]);
+  return (
+    <>
       <SkillsLibrary skills={skills} tools={tools} category={category} />
       {creating ? (
         <NewSkill
@@ -74,7 +95,7 @@ export default async function Page({
             .map((s) => ({ id: s.id, name: s.name }))}
         />
       ) : null}
-    </PageContainer>
+    </>
   );
 }
 

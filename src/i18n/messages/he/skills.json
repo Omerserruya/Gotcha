@@ -267,5 +267,6 @@
     "noEmployee": "העובד הזה לא כאן.",
     "channelsLabel": "ערוצים"
   },
-  "notRunYet": "עוד לא הופעלה"
+  "notRunYet": "עוד לא הופעלה",
+  "loading": "טוענים מיומנויות"
 }
