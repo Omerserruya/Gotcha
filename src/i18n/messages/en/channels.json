@@ -533,7 +533,8 @@
       "saving": "Saving…",
       "saved": "Saved",
       "failed": "Not saved. Change it again to retry",
-      "nowhere": "Not saved: the widget isn't installed anywhere yet. Get the code under Install first"
+      "nowhere": "Not saved: the widget isn't installed anywhere yet. Get the code under Install first",
+      "number": "Not saved: that WhatsApp number isn't one of this workspace's. Choose another"
     },
     "unread": "Couldn't read the widget's settings. Try again in a moment.",
     "appearance": {
@@ -554,7 +555,14 @@
       },
       "replace": "Replace",
       "addressHint": "The image's https address. Uploading from your computer isn't available yet",
-      "addressBad": "Use an address that starts with https://"
+      "addressBad": "Use an address that starts with https://",
+      "look": "Look",
+      "lookHint": "What customers see on your site",
+      "looks": {
+        "gotcha": "GOTCHA",
+        "whatsapp": "WhatsApp"
+      },
+      "lookWhy": "Choosing the WhatsApp look isn't available yet: it comes with the next widget update"
     },
     "conversation": {
       "name": "Assistant name",
@@ -584,7 +592,7 @@
       "seconds": "{s}s",
       "whatsapp": "Continue on WhatsApp",
       "whatsappHint": "A button that continues the same conversation on your WhatsApp",
-      "whatsappWhy": "Not available yet: the widget can't hand a conversation to WhatsApp",
+      "whatsappWhy": "Not available yet: it comes with the next widget update",
       "poweredBy": "Powered by GOTCHA",
       "poweredByHint": "A small line at the bottom of the widget",
       "products": {
@@ -602,7 +610,14 @@
       "noCatalogue": "Not available yet: it needs the widget in a Shopify store with stock and orders connected",
       "onInShopify": "On in your Shopify store",
       "codeNoProducts": "Not on sites that use the code",
-      "noDeals": "Not available yet: GOTCHA doesn't read your store's deals"
+      "noDeals": "Not available yet: GOTCHA doesn't read your store's deals",
+      "whatsappNumber": "The WhatsApp number it continues on",
+      "whatsappNone": "No WhatsApp number is connected yet. Connect one in <channels>Settings · Channels</channels>.",
+      "whatsappReason": {
+        "not_connected": "This number isn't connected",
+        "number_unknown": "We don't know this number's phone yet; reconnect it in <channels>Settings · Channels</channels>"
+      },
+      "whatsappHidden": "The button won't show on your site until a number that can take it is chosen."
     },
     "install": {
       "shopify": "Shopify",
@@ -654,7 +669,10 @@
       "label": "Preview",
       "assistant": "Assistant",
       "type": "Type a message",
-      "powered": "Powered by GOTCHA"
+      "powered": "Powered by GOTCHA",
+      "waTitle": "Chat with us",
+      "waSub": "Write here and we'll continue on WhatsApp.",
+      "waContinue": "Continue on WhatsApp"
     },
     "notYet": "Not available yet",
     "comingSoon": "Coming soon"

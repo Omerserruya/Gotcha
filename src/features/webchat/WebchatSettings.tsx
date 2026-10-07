@@ -1,6 +1,15 @@
 'use client';
 
-import { ArrowRight, ArrowUp, Globe, ImageIcon, Pencil, Plug, ShoppingBag } from 'lucide-react';
+import {
+  ArrowRight,
+  ArrowUp,
+  Globe,
+  ImageIcon,
+  MessageCircle,
+  Pencil,
+  Plug,
+  ShoppingBag,
+} from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import {
   useEffect,
@@ -18,12 +27,15 @@ import {
   WEBCHAT_LANGUAGES,
   isHex,
   isHttpsUrl,
+  WIDGET_LOOKS,
   type WebchatConfig,
   type WebchatTab,
+  type WidgetLook,
 } from '@/api/contracts/webchat';
 import {
   WIDGET_PATH,
   isLive,
+  type HandoffNumber,
   type ShopifyPlace,
   type WebsiteWidget,
   type WidgetInstall,
@@ -48,7 +60,7 @@ import styles from './Webchat.module.css';
 /** How long the editor waits after the last change before saving it. */
 export const SAVE_AFTER_MS = 700;
 
-type Saving = 'idle' | 'saving' | 'saved' | 'failed' | 'nowhere';
+type Saving = 'idle' | 'saving' | 'saved' | 'failed' | 'nowhere' | 'number';
 
 interface Setters {
   readonly colour: (hex: string) => void;
@@ -60,6 +72,8 @@ interface Setters {
   readonly language: (language: WebchatConfig['appearance']['language']) => void;
   readonly poweredBy: (on: boolean) => void;
   readonly popup: (patch: Partial<WebchatConfig['ux']['proactive']>) => void;
+  readonly look: (look: WidgetLook) => void;
+  readonly whatsapp: (patch: Partial<WebchatConfig['ux']['whatsapp']>) => void;
 }
 
 /**
@@ -89,8 +103,14 @@ export function WebchatSettings({
   shopifyAvailability,
   business,
   tab,
+  handoffNumbers = null,
 }: {
   readonly initial: WebchatConfig;
+  /**
+   * Stage B's WhatsApp numbers for "Continue on WhatsApp". `null`: the service
+   * is stage A - the look and the handoff are not there yet, and are not sent.
+   */
+  readonly handoffNumbers?: readonly HandoffNumber[] | null;
   /** Who answers the website per the playbook - read-only here. */
   readonly assigned: WebsiteWidget['assignedEmployee'];
   /** `null`: the installs could not be read. */
@@ -108,6 +128,7 @@ export function WebchatSettings({
   const selling = Boolean(
     install?.shopify.some((shop) => shop.status === 'active') && shopifyData === 'ok',
   );
+  const stageB = handoffNumbers !== null;
   const [config, setConfig] = useState(initial);
   const [saving, setSaving] = useState<Saving>('idle');
   const edits = useRef(0);
@@ -129,7 +150,7 @@ export function WebchatSettings({
     timer.current = setTimeout(() => {
       setSaving('saving');
       const { displayName: _account, ...settings } = next;
-      void saveWebsiteWidget(settings).then((answer) => {
+      void saveWebsiteWidget(settings, stageB).then((answer) => {
         if (mine !== edits.current) return;
         if (!answer.ok) setSaving(answer.reason);
         else {
@@ -167,7 +188,16 @@ export function WebchatSettings({
     language: (language) => appearance({ language }),
     poweredBy: (showPoweredBy) => appearance({ showPoweredBy }),
     popup: (patch) => ux({ proactive: { ...config.ux.proactive, ...patch } }),
+    look: (look) => ux({ look }),
+    whatsapp: (patch) => ux({ whatsapp: { ...config.ux.whatsapp, ...patch } }),
   };
+  /* The number "Continue on WhatsApp" would use - the button shows only when it can take it. */
+  const handoff =
+    stageB && config.ux.whatsapp.enabled
+      ? (handoffNumbers.find(
+          (n) => n.channelId === config.ux.whatsapp.channelAccountId && n.available,
+        ) ?? null)
+      : null;
 
   return (
     <div className={styles.page}>
@@ -234,11 +264,16 @@ export function WebchatSettings({
       <div className={styles.columns}>
         <div className={styles.stack}>
           {tab === 'appearance' ? (
-            <Appearance config={config} set={set} />
+            <Appearance config={config} set={set} stageB={stageB} />
           ) : tab === 'conversation' ? (
             <Conversation config={config} set={set} assigned={assigned} />
           ) : tab === 'behaviour' ? (
-            <Behaviour config={config} set={set} selling={selling} />
+            <Behaviour
+              config={config}
+              set={set}
+              selling={selling}
+              handoffNumbers={handoffNumbers}
+            />
           ) : (
             <Install
               install={install}
@@ -247,7 +282,7 @@ export function WebchatSettings({
             />
           )}
         </div>
-        <Preview config={config} site={site} business={business} />
+        <Preview config={config} site={site} business={business} handoff={handoff !== null} />
       </div>
     </div>
   );
@@ -327,8 +362,18 @@ function Toggle({
   );
 }
 
-function Appearance({ config, set }: { readonly config: WebchatConfig; readonly set: Setters }) {
+function Appearance({
+  config,
+  set,
+  stageB,
+}: {
+  readonly config: WebchatConfig;
+  readonly set: Setters;
+  /** The service has stage B: the look can be chosen and saved. */
+  readonly stageB: boolean;
+}) {
   const t = useTranslations('channels.webchat.appearance');
+  const tw = useTranslations('channels.webchat');
   const colour = config.appearance.primaryColor;
   const custom = !PALETTE.some((p) => p.toLowerCase() === colour.toLowerCase());
   const [code, setCode] = useState(colour);
@@ -349,6 +394,35 @@ function Appearance({ config, set }: { readonly config: WebchatConfig; readonly 
 
   return (
     <section className={styles.card}>
+      {/* Stage B (design 7): what the customer sees - GOTCHA's panel, or WhatsApp's. */}
+      {stageB ? (
+        <Row label={t('look')} hint={t('lookHint')} testid="webchat-look">
+          <span className={styles.segments} role="radiogroup" aria-label={t('look')}>
+            {WIDGET_LOOKS.map((look) => (
+              <button
+                key={look}
+                type="button"
+                role="radio"
+                aria-checked={config.ux.look === look}
+                className={styles.segment}
+                onClick={() => set.look(look)}
+                data-testid={`webchat-look-${look}`}
+              >
+                {t(`looks.${look}`)}
+              </button>
+            ))}
+          </span>
+        </Row>
+      ) : (
+        <Row label={t('look')} testid="webchat-look">
+          <UnavailableItem
+            title={t('look')}
+            tag={tw('notYet')}
+            why={t('lookWhy')}
+            testid="webchat-look-unavailable"
+          />
+        </Row>
+      )}
       <Row label={t('colour')} testid="webchat-colour">
         <div className={styles.swatches} role="radiogroup" aria-label={t('colour')}>
           {PALETTE.map((p) => (
@@ -669,14 +743,21 @@ function Behaviour({
   config,
   set,
   selling,
+  handoffNumbers,
 }: {
   readonly config: WebchatConfig;
   readonly set: Setters;
   /** A shop runs the widget and its catalogue answers: products and cart are on there. */
   readonly selling: boolean;
+  /** Stage B's numbers; `null` on a stage A service. */
+  readonly handoffNumbers: readonly HandoffNumber[] | null;
 }) {
   const t = useTranslations('channels.webchat.behaviour');
   const popup = config.ux.proactive;
+  const wa = config.ux.whatsapp;
+  const usable = handoffNumbers?.filter((n) => n.available) ?? [];
+  const chosen = handoffNumbers?.find((n) => n.channelId === wa.channelAccountId) ?? null;
+  const channelsLink = (chunks: ReactNode) => <Link href="/settings/channels">{chunks}</Link>;
   return (
     <section className={styles.card}>
       <Toggle
@@ -705,13 +786,93 @@ function Behaviour({
           </span>
         </Row>
       ) : null}
-      <Toggle
-        label={t('whatsapp')}
-        hint={t('whatsappHint')}
-        on={false}
-        why={t('whatsappWhy')}
-        testid="webchat-whatsapp"
-      />
+      {handoffNumbers === null ? (
+        // A stage A service: not there yet, and nothing is sent for it.
+        <Toggle
+          label={t('whatsapp')}
+          hint={t('whatsappHint')}
+          on={false}
+          why={t('whatsappWhy')}
+          testid="webchat-whatsapp"
+        />
+      ) : (
+        /*
+          Stage B: on, and ONE of the workspace's numbers - chosen, never typed.
+          A number that cannot take it says why; the button shows on the site
+          only when its number can (Backend checks it again).
+        */
+        <Toggle
+          label={t('whatsapp')}
+          hint={t('whatsappHint')}
+          on={wa.enabled}
+          onChange={(enabled) =>
+            set.whatsapp({
+              enabled,
+              // One number that can take it: it is the one.
+              channelAccountId:
+                wa.channelAccountId ?? (usable.length === 1 ? usable[0]!.channelId : null),
+            })
+          }
+          testid="webchat-whatsapp"
+        >
+          {wa.enabled ? (
+            handoffNumbers.length === 0 ? (
+              <p className={styles.rowHint} data-testid="webchat-wa-none">
+                {t.rich('whatsappNone', { channels: channelsLink })}
+              </p>
+            ) : (
+              <>
+                <span
+                  className={styles.numbers}
+                  role="radiogroup"
+                  aria-label={t('whatsappNumber')}
+                  data-testid="webchat-wa-numbers"
+                >
+                  {handoffNumbers.map((number) => (
+                    <label
+                      key={number.channelId}
+                      className={styles.number}
+                      data-available={number.available ? '' : undefined}
+                      data-testid={`webchat-wa-${number.channelId}`}
+                    >
+                      <input
+                        type="radio"
+                        name="webchat-wa-number"
+                        checked={wa.channelAccountId === number.channelId}
+                        disabled={!number.available}
+                        onChange={() => set.whatsapp({ channelAccountId: number.channelId })}
+                      />
+                      <span className={styles.numberText}>
+                        <bdi dir="auto">{number.name}</bdi>
+                        {number.phone ? (
+                          <span className={styles.rowHint}>
+                            <bdi dir="ltr">{number.phone}</bdi>
+                          </span>
+                        ) : null}
+                        {number.available ? null : (
+                          <span
+                            className={styles.why}
+                            data-testid={`webchat-wa-${number.channelId}-why`}
+                          >
+                            {t.rich(`whatsappReason.${number.reason ?? 'not_connected'}`, {
+                              channels: channelsLink,
+                            })}
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  ))}
+                </span>
+                {chosen?.available ? null : (
+                  <p className={styles.rowHint} data-testid="webchat-wa-hidden">
+                    {t('whatsappHidden')}
+                  </p>
+                )}
+              </>
+            )
+          ) : null}
+        </Toggle>
+      )}
       <Toggle
         label={t('poweredBy')}
         hint={t('poweredByHint')}
@@ -1036,10 +1197,13 @@ function Preview({
   config,
   site,
   business,
+  handoff,
 }: {
   readonly config: WebchatConfig;
   readonly site: string | null;
   readonly business: string | null;
+  /** "Continue on WhatsApp" is on and its number can take it: the button shows. */
+  readonly handoff: boolean;
 }) {
   const t = useTranslations('channels.webchat.preview');
   const colour = isHex(config.appearance.primaryColor) ? config.appearance.primaryColor : '#121212';
@@ -1059,64 +1223,121 @@ function Preview({
         ) : null}
       </span>
       <div className={styles.stage} data-side={config.ux.launcher.position}>
-        <div className={styles.widget}>
-          <div className={styles.hero} data-testid="webchat-preview-cover">
-            {config.ux.hero.mediaUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={config.ux.hero.mediaUrl} alt="" className={styles.heroImage} />
-            ) : (
-              <ImageIcon size={16} aria-hidden="true" />
-            )}
+        {config.ux.look === 'whatsapp' ? (
+          /*
+            Design 7's WhatsApp look: WhatsApp's panel, its green launcher, and
+            "write here and we'll continue on WhatsApp". The chat shows only what
+            the business wrote (its pop-up message) - no sample greeting.
+          */
+          <div className={styles.waWidget} data-testid="webchat-preview-wa">
+            <div className={styles.waHead}>
+              <span className={styles.waAvatar} aria-hidden="true">
+                {initials(business ?? name)}
+              </span>
+              <span className={styles.waTitles}>
+                <span className={styles.waTitle}>{t('waTitle')}</span>
+                <span className={styles.waSub}>{t('waSub')}</span>
+              </span>
+            </div>
+            <div className={styles.waChat}>
+              {config.ux.proactive.message.trim() ? (
+                <span className={styles.waBubble}>
+                  <bdi dir="auto">{config.ux.proactive.message}</bdi>
+                </span>
+              ) : null}
+            </div>
+            <span className={styles.waComposer}>
+              <span className={styles.waField}>{t('type')}</span>
+              <span className={styles.waSend} aria-hidden="true">
+                <ArrowUp size={12} />
+              </span>
+            </span>
+            {config.appearance.showPoweredBy ? (
+              <span className={styles.powered} data-testid="webchat-preview-powered">
+                {t('powered')}
+              </span>
+            ) : null}
           </div>
-          <span
-            className={styles.logo}
-            data-fit={config.appearance.logoUrl ? undefined : fit}
-            data-testid="webchat-preview-logo"
-          >
-            {config.appearance.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={config.appearance.logoUrl} alt="" />
-            ) : fit === 'initials' ? (
-              initials(business ?? name)
-            ) : (
-              mark.logo
-            )}
-          </span>
-          <span className={styles.assistant} data-testid="webchat-preview-name">
-            <bdi dir="auto">{name}</bdi>
-          </span>
-          <ul className={styles.questions} data-testid="webchat-preview-questions">
-            {questions.map((q, i) => (
-              <li key={i}>
-                <bdi dir="auto">{q}</bdi>
-                <ArrowRight size={12} aria-hidden="true" />
-              </li>
-            ))}
-          </ul>
-          <span className={styles.composer}>
-            <span>{t('type')}</span>
-            <span className={styles.send} style={{ backgroundColor: colour }} aria-hidden="true">
-              <ArrowUp size={12} color="#FFFFFF" />
+        ) : (
+          <div className={styles.widget}>
+            <div className={styles.hero} data-testid="webchat-preview-cover">
+              {handoff ? (
+                // Design 7: the WhatsApp action on the cover, when the button will show.
+                <span
+                  className={styles.heroWa}
+                  title={t('waContinue')}
+                  data-testid="webchat-preview-wa-button"
+                >
+                  <MessageCircle size={13} aria-hidden="true" />
+                </span>
+              ) : null}
+              {config.ux.hero.mediaUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={config.ux.hero.mediaUrl} alt="" className={styles.heroImage} />
+              ) : (
+                <ImageIcon size={16} aria-hidden="true" />
+              )}
+            </div>
+            <span
+              className={styles.logo}
+              data-fit={config.appearance.logoUrl ? undefined : fit}
+              data-testid="webchat-preview-logo"
+            >
+              {config.appearance.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={config.appearance.logoUrl} alt="" />
+              ) : fit === 'initials' ? (
+                initials(business ?? name)
+              ) : (
+                mark.logo
+              )}
             </span>
-          </span>
-          {config.appearance.showPoweredBy ? (
-            <span className={styles.powered} data-testid="webchat-preview-powered">
-              {t('powered')}
+            <span className={styles.assistant} data-testid="webchat-preview-name">
+              <bdi dir="auto">{name}</bdi>
             </span>
-          ) : null}
-        </div>
+            <ul className={styles.questions} data-testid="webchat-preview-questions">
+              {questions.map((q, i) => (
+                <li key={i}>
+                  <bdi dir="auto">{q}</bdi>
+                  <ArrowRight size={12} aria-hidden="true" />
+                </li>
+              ))}
+            </ul>
+            <span className={styles.composer}>
+              <span>{t('type')}</span>
+              <span className={styles.send} style={{ backgroundColor: colour }} aria-hidden="true">
+                <ArrowUp size={12} color="#FFFFFF" />
+              </span>
+            </span>
+            {config.appearance.showPoweredBy ? (
+              <span className={styles.powered} data-testid="webchat-preview-powered">
+                {t('powered')}
+              </span>
+            ) : null}
+          </div>
+        )}
         {config.ux.proactive.enabled && config.ux.proactive.message.trim() ? (
           <span className={styles.bubble} data-testid="webchat-preview-bubble">
             <bdi dir="auto">{config.ux.proactive.message}</bdi>
           </span>
         ) : null}
-        <span
-          className={styles.launcher}
-          style={{ backgroundColor: colour }}
-          data-testid="webchat-preview-launcher"
-        >
-          {mark.launcher}
-        </span>
+        {config.ux.look === 'whatsapp' ? (
+          <span
+            className={styles.launcher}
+            data-look="whatsapp"
+            data-testid="webchat-preview-launcher"
+          >
+            <MessageCircle size={20} aria-hidden="true" />
+          </span>
+        ) : (
+          <span
+            className={styles.launcher}
+            style={{ backgroundColor: colour }}
+            data-testid="webchat-preview-launcher"
+          >
+            {mark.launcher}
+          </span>
+        )}
       </div>
     </aside>
   );

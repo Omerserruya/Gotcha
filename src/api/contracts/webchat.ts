@@ -14,6 +14,10 @@ export const WEBCHAT_TABS = ['appearance', 'conversation', 'behaviour', 'install
 export type WebchatTab = (typeof WEBCHAT_TABS)[number];
 
 export const WEBCHAT_LANGUAGES = ['auto', 'he', 'en'] as const;
+
+/** Stage B's two customer-side looks (website-widget-v1 §1). */
+export const WIDGET_LOOKS = ['gotcha', 'whatsapp'] as const;
+export type WidgetLook = (typeof WIDGET_LOOKS)[number];
 export type WebchatLanguage = (typeof WEBCHAT_LANGUAGES)[number];
 
 /** 13i's "When to show": right away, 5s, 15s, 30s - a time-on-page delay. */
@@ -48,6 +52,16 @@ export const webchatConfigSchema = z.object({
       delaySeconds: z.number().nonnegative().catch(15),
       message: z.string().catch(''),
     }),
+    /** Stage B: the customer-side panel style. Absent (stage A) or unknown: GOTCHA's. */
+    look: z.enum(WIDGET_LOOKS).catch('gotcha').default('gotcha'),
+    /** Stage B: "Continue on WhatsApp" - on, and the workspace's number it continues on. */
+    whatsapp: z
+      .object({
+        enabled: z.boolean().catch(false),
+        channelAccountId: z.string().nullable().catch(null),
+      })
+      .catch({ enabled: false, channelAccountId: null })
+      .default({ enabled: false, channelAccountId: null }),
   }),
 });
 export type WebchatConfig = z.infer<typeof webchatConfigSchema>;

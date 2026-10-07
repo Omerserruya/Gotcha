@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +10,7 @@ import { bodyOfConfig, webchatSettingsSchema, type WebchatConfig } from '@/api/c
 import {
   bodyOfWidget,
   widgetInstallSchema,
+  type HandoffNumber,
   type WebsiteWidget,
   type WidgetInstall,
   type WidgetSettings,
@@ -98,22 +99,28 @@ const show = (
     read = install(),
     data = 'ok',
     assigned = null,
+    numbers = null,
+    initial = config,
   }: {
     read?: WidgetInstall | null;
     data?: ShopifyData | null;
     assigned?: WebsiteWidget['assignedEmployee'];
+    /** Stage B's numbers; `null` is a stage A service. */
+    numbers?: readonly HandoffNumber[] | null;
+    initial?: WebchatConfig;
   } = {},
 ) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ channels: channelsMessages }}>
       <WebchatSettings
-        initial={config}
+        initial={initial}
         assigned={assigned}
         install={read}
         shopifyData={data}
         shopifyAvailability={{ mode: 'listing', helpUrl: null }}
         business="Aviv & Co."
         tab={tab}
+        handoffNumbers={numbers}
       />
     </NextIntlClientProvider>,
   );
@@ -537,5 +544,147 @@ describe("★ the preview's marks come from one name - the business's", () => {
     const logo = /\n {2}\.logo \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(logo).toMatch(/word-break: keep-all/);
     expect(logo).not.toMatch(/anywhere|break-all|break-word/);
+  });
+});
+
+describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v1 §1)', () => {
+  const NUMBERS: readonly HandoffNumber[] = [
+    { channelId: 'wa1', name: 'Lumière', phone: '+972 54 000 0000', available: true },
+    {
+      channelId: 'wa2',
+      name: 'Old line',
+      phone: null,
+      available: false,
+      reason: 'number_unknown',
+    },
+    {
+      channelId: 'wa3',
+      name: 'Off line',
+      phone: '+972 3 555 0000',
+      available: false,
+      reason: 'not_connected',
+    },
+  ];
+  const lastStageB = () => actions.saveWebsiteWidget.mock.calls.at(-1)?.[1];
+
+  it('★ a stage A service: both are drawn unavailable, with why - and never sent', async () => {
+    show('appearance');
+    expect(screen.getByTestId('webchat-look-unavailable')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByTestId('webchat-look-whatsapp')).toBeNull();
+    fireEvent.click(screen.getByTestId('webchat-position-left'));
+    await pause();
+    expect(lastStageB()).toBe(false);
+    expect(bodyOfWidget(sentAt())).not.toHaveProperty('ux.look');
+    expect(bodyOfWidget(sentAt())).not.toHaveProperty('ux.whatsapp');
+  });
+
+  it('★★ the look: WhatsApp’s panel and green launcher in the preview, and saved with the rest', async () => {
+    show('appearance', { numbers: NUMBERS });
+    expect(screen.getByTestId('webchat-look-gotcha')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByTestId('webchat-preview-wa')).toBeNull();
+    fireEvent.click(screen.getByTestId('webchat-look-whatsapp'));
+    const panel = screen.getByTestId('webchat-preview-wa');
+    expect(panel).toHaveTextContent('Chat with us');
+    expect(panel).toHaveTextContent("Write here and we'll continue on WhatsApp.");
+    // Only what the business wrote: its pop-up message - no sample greeting.
+    expect(panel).toHaveTextContent('Hi');
+    expect(screen.getByTestId('webchat-preview-launcher')).toHaveAttribute('data-look', 'whatsapp');
+    await pause();
+    expect(lastStageB()).toBe(true);
+    expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({ look: 'whatsapp' });
+  });
+
+  it('★★ Continue on WhatsApp: on, and the one number that can take it is the one', async () => {
+    show('behaviour', { numbers: NUMBERS });
+    fireEvent.click(screen.getByTestId('webchat-whatsapp-switch'));
+    await pause();
+    expect(sentAt().ux.whatsapp).toEqual({ enabled: true, channelAccountId: 'wa1' });
+    expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({
+      whatsapp: { enabled: true, channelAccountId: 'wa1' },
+    });
+    const one = within(screen.getByTestId('webchat-wa-wa1')).getByRole('radio');
+    expect(one).toBeChecked();
+    expect(screen.queryByTestId('webchat-wa-hidden')).toBeNull();
+  });
+
+  it('★ a number that cannot take it: not choosable, and why, in words', () => {
+    show('behaviour', { numbers: NUMBERS });
+    fireEvent.click(screen.getByTestId('webchat-whatsapp-switch'));
+    expect(within(screen.getByTestId('webchat-wa-wa2')).getByRole('radio')).toBeDisabled();
+    expect(screen.getByTestId('webchat-wa-wa2-why')).toHaveTextContent(
+      "We don't know this number's phone yet; reconnect it in Settings · Channels",
+    );
+    expect(screen.getByTestId('webchat-wa-wa2-why').querySelector('a')).toHaveAttribute(
+      'href',
+      '/settings/channels',
+    );
+    expect(screen.getByTestId('webchat-wa-wa3-why')).toHaveTextContent(
+      "This number isn't connected",
+    );
+    // The phone as it is, left to right; a number with none says nothing for it.
+    expect(screen.getByTestId('webchat-wa-wa1')).toHaveTextContent('+972 54 000 0000');
+  });
+
+  it('★★ dev: the only number’s phone is unknown - on, nothing chosen, and said that the button won’t show', async () => {
+    show('behaviour', { numbers: [NUMBERS[1]!] });
+    fireEvent.click(screen.getByTestId('webchat-whatsapp-switch'));
+    expect(screen.getByTestId('webchat-wa-hidden')).toHaveTextContent(
+      "The button won't show on your site until a number that can take it is chosen.",
+    );
+    await pause();
+    expect(sentAt().ux.whatsapp).toEqual({ enabled: true, channelAccountId: null });
+  });
+
+  it('the preview shows the WhatsApp action only when the button will show', () => {
+    const { unmount } = show('behaviour', { numbers: [NUMBERS[1]!] });
+    fireEvent.click(screen.getByTestId('webchat-whatsapp-switch'));
+    expect(screen.queryByTestId('webchat-preview-wa-button')).toBeNull();
+    unmount();
+    show('behaviour', { numbers: NUMBERS });
+    fireEvent.click(screen.getByTestId('webchat-whatsapp-switch'));
+    expect(screen.getByTestId('webchat-preview-wa-button')).toBeInTheDocument();
+  });
+
+  it('★ a stored choice of a number that cannot take it: no button in the preview, and said', () => {
+    show('behaviour', {
+      numbers: NUMBERS,
+      initial: {
+        ...config,
+        ux: { ...config.ux, whatsapp: { enabled: true, channelAccountId: 'wa2' } },
+      },
+    });
+    expect(screen.queryByTestId('webchat-preview-wa-button')).toBeNull();
+    expect(screen.getByTestId('webchat-wa-hidden')).toBeInTheDocument();
+  });
+
+  it('no WhatsApp number at all: said, with the way to connect one', () => {
+    show('behaviour', { numbers: [] });
+    fireEvent.click(screen.getByTestId('webchat-whatsapp-switch'));
+    expect(screen.getByTestId('webchat-wa-none')).toHaveTextContent(
+      'No WhatsApp number is connected yet.',
+    );
+  });
+
+  it('the route refusing the number (422): said in those words', async () => {
+    actions.saveWebsiteWidget.mockResolvedValue({ ok: false, reason: 'number' });
+    show('behaviour', { numbers: NUMBERS });
+    fireEvent.click(screen.getByTestId('webchat-whatsapp-switch'));
+    await pause();
+    expect(screen.getByTestId('webchat-saving')).toHaveTextContent(
+      "that WhatsApp number isn't one of this workspace's",
+    );
+  });
+
+  it('the contract: an unknown or absent look is GOTCHA’s; an absent handoff is off', () => {
+    const parse = (ux: Record<string, unknown>) =>
+      webchatSettingsSchema.parse({
+        data: { ...config, ux: { ...config.ux, ...ux } },
+      }).data.ux;
+    expect(parse({ look: 'neon' }).look).toBe('gotcha');
+    const { look: _l, whatsapp: _w, ...stageA } = config.ux;
+    expect(webchatSettingsSchema.parse({ data: { ...config, ux: stageA } }).data.ux).toMatchObject({
+      look: 'gotcha',
+      whatsapp: { enabled: false, channelAccountId: null },
+    });
   });
 });

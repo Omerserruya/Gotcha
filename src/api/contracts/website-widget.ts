@@ -25,11 +25,40 @@ export const WIDGET_CHANNELS = ['WEBCHAT', 'SHOPIFY_LIVE_CHAT'] as const;
 export const widgetSettingsSchema = webchatConfigSchema.omit({ displayName: true });
 export type WidgetSettings = z.infer<typeof widgetSettingsSchema>;
 
-/** The body a change sends - every edited field, merged server-side into the rest. */
-export function bodyOfWidget(settings: WidgetSettings) {
+/**
+ * The body a change sends - every edited field, merged server-side into the
+ * rest. Stage B's fields (`look`, `whatsapp`) only to a service that has
+ * them: a stage A route would drop them, and the screen would snap back.
+ */
+export function bodyOfWidget(settings: WidgetSettings, { stageB = false } = {}) {
   const { displayName: _account, ...body } = bodyOfConfig({ ...settings, displayName: '' });
-  return body;
+  if (!stageB) return body;
+  return {
+    ...body,
+    ux: {
+      ...body.ux,
+      look: settings.ux.look,
+      whatsapp: {
+        enabled: settings.ux.whatsapp.enabled,
+        channelAccountId: settings.ux.whatsapp.channelAccountId,
+      },
+    },
+  };
 }
+
+/**
+ * A WhatsApp number "Continue on WhatsApp" can use (stage B). `available`
+ * only when connected and its phone is known (wa.me needs it); otherwise
+ * the reason, said by the screen.
+ */
+export const handoffNumberSchema = z.object({
+  channelId: z.string(),
+  name: z.string(),
+  phone: z.string().nullable().catch(null).default(null),
+  available: z.boolean(),
+  reason: z.enum(['not_connected', 'number_unknown']).optional().catch(undefined),
+});
+export type HandoffNumber = z.infer<typeof handoffNumberSchema>;
 
 /** The editor's config shape, for the parts of 13g-13j that still take one. */
 export function asConfig(settings: WidgetSettings): WebchatConfig {
@@ -51,6 +80,11 @@ export const websiteWidgetSchema = z.object({
       code: z.object({ channelId: z.string() }).nullable(),
       shopify: z.array(z.object({ channelId: z.string(), shopDomain: z.string() })),
     }),
+    /**
+     * Stage B's picker for "Continue on WhatsApp". ABSENT from a stage A
+     * service - which is how the screen knows stage B is there at all.
+     */
+    whatsappNumbers: z.array(handoffNumberSchema).optional(),
   }),
 });
 export type WebsiteWidget = z.infer<typeof websiteWidgetSchema>['data'];

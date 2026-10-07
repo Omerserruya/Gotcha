@@ -16,7 +16,9 @@ import { logger } from '@/observability/logger';
 export type WidgetSave =
   | { readonly ok: true; readonly settings: WidgetSettings }
   /** `nowhere`: no place exists yet (409 WIDGET_NOT_CREATED) - the code is created first. */
-  | { readonly ok: false; readonly reason: 'nowhere' | 'failed' };
+  | { readonly ok: false; readonly reason: 'nowhere' | 'failed' }
+  /** 422 WHATSAPP_NUMBER_NOT_FOUND: the number is not one of this workspace's (stage B). */
+  | { readonly ok: false; readonly reason: 'number' };
 
 /**
  * A change to the widget, written to every place it is installed. The answer
@@ -26,11 +28,14 @@ export type WidgetSave =
  * PUT never creates a place (Backend, 2026-10-07): with none it answers 409
  * `WIDGET_NOT_CREATED`, which is "nothing to save to yet", not a failure.
  */
-export async function saveWebsiteWidget(settings: WidgetSettings): Promise<WidgetSave> {
+export async function saveWebsiteWidget(
+  settings: WidgetSettings,
+  stageB = false,
+): Promise<WidgetSave> {
   try {
     const answer = await serverApi().put({
       endpoint: channelEndpoints.websiteWidget(),
-      body: bodyOfWidget(settings),
+      body: bodyOfWidget(settings, { stageB }),
       payload: websiteWidgetSchema,
       raw: true,
     });
@@ -40,6 +45,9 @@ export async function saveWebsiteWidget(settings: WidgetSettings): Promise<Widge
     await signInIfSignedOut(cause);
     if (isApiError(cause) && cause.status === 409 && cause.code === 'WIDGET_NOT_CREATED') {
       return { ok: false, reason: 'nowhere' };
+    }
+    if (isApiError(cause) && cause.code === 'WHATSAPP_NUMBER_NOT_FOUND') {
+      return { ok: false, reason: 'number' };
     }
     logger.warn('website_widget.save_failed', {
       status: isApiError(cause) ? cause.status : undefined,

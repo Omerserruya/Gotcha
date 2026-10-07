@@ -518,6 +518,16 @@
     /* 02's filter row draws Messenger as `messages-square`, #e3e8f2 / #3e5c99. */
     --channel-messenger-surface: #e3e8f2;
     --channel-messenger-mark: #3e5c99;
+    /*
+     * The website widget's WhatsApp look (design 7, "GOTCHA Widgets on
+     * Store"): WhatsApp's own panel colours, so the preview is the look the
+     * customer will see - header, chat wallpaper, composer, send, launcher.
+     */
+    --whatsapp-look-header: #008069;
+    --whatsapp-look-chat: #efeae2;
+    --whatsapp-look-composer: #f0f2f5;
+    --whatsapp-look-send: #00a884;
+    --whatsapp-look-launcher: #25d366;
 
     /*
      * A settled conversation's avatar - quieter than a live one. 02 draws a
