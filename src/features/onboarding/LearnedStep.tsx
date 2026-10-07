@@ -7,6 +7,7 @@ import { useState, useTransition } from 'react';
 import type { Discovery, ScannedFact } from '@/api/contracts/onboarding';
 import { VOICE_MAX, VOICE_MIN, type WorkspaceVoice } from '@/api/contracts/workspace';
 import { previewVoiceSample, saveWorkspaceVoice } from '@/features/workspace/actions';
+import { UnavailableItem } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link } from '@/i18n/navigation';
 import { plainDashes } from '@/lib/plain-dashes';
 
@@ -109,6 +110,7 @@ function Voice({
   readonly brand: Discovery['brand'];
 }) {
   const t = useTranslations('onboarding.learned.voice');
+  const tn = useTranslations('onboarding');
   // A learned voice is the model's writing: plain hyphens. An edited one is the person's.
   const raw = voice?.guidance?.trim() || '';
   const stored = voice?.source === 'learned' ? plainDashes(raw) : raw;
@@ -161,16 +163,13 @@ function Voice({
           ))}
         </span>
       ) : null}
-      <label className={styles.scale}>
-        <span className={styles.scaleEnds}>
-          <span>{t('formal')}</span>
-          <span>{t('casual')}</span>
-        </span>
-        <input type="range" disabled aria-describedby="voice-scale-why" />
-        <span className={styles.quiet} id="voice-scale-why">
-          {t('scaleWhy')}
-        </span>
-      </label>
+      {/* The voice stores no scale: a status, not a slider to drag. */}
+      <UnavailableItem
+        title={`${t('formal')} ↔ ${t('casual')}`}
+        tag={tn('notYet')}
+        why={t('scaleWhy')}
+        testid="voice-scale"
+      />
       {says.length > 0 || never.length > 0 ? (
         <span className={styles.saysNever}>
           {says.length > 0 ? (

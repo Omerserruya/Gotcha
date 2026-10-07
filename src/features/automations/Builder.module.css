@@ -318,6 +318,11 @@
     cursor: default;
   }
 
+  .libItem[data-unavailable] {
+    color: var(--text-faint);
+    cursor: default;
+  }
+
   .libItem svg {
     flex: none;
     color: var(--text-subtle);

@@ -21,6 +21,10 @@ import {
   type WebchatConfig,
   type WebchatTab,
 } from '@/api/contracts/webchat';
+import {
+  UnavailableAction,
+  UnavailableItem,
+} from '@/design-system/primitives/unavailable/Unavailable';
 import { embedCode } from '@/features/channels/ConnectPanel';
 import { Link } from '@/i18n/navigation';
 
@@ -34,13 +38,6 @@ import styles from './Webchat.module.css';
 export const SAVE_AFTER_MS = 700;
 
 type Saving = 'idle' | 'saving' | 'saved' | 'failed';
-
-export interface WebchatEmployee {
-  readonly id: string;
-  readonly name: string;
-  readonly line: string | null;
-  readonly paused: boolean;
-}
 
 interface Setters {
   readonly colour: (hex: string) => void;
@@ -73,7 +70,6 @@ export function WebchatSettings({
   id,
   initial,
   widget,
-  employees,
   business,
   tab,
 }: {
@@ -84,7 +80,6 @@ export function WebchatSettings({
     readonly live: boolean;
     readonly name: string | null;
   } | null;
-  readonly employees: readonly WebchatEmployee[] | null;
   readonly business: string | null;
   readonly tab: WebchatTab;
 }) {
@@ -215,7 +210,7 @@ export function WebchatSettings({
           {tab === 'appearance' ? (
             <Appearance config={config} set={set} />
           ) : tab === 'conversation' ? (
-            <Conversation config={config} set={set} employees={employees} />
+            <Conversation config={config} set={set} />
           ) : tab === 'behaviour' ? (
             <Behaviour config={config} set={set} />
           ) : (
@@ -268,20 +263,31 @@ function Toggle({
   readonly testid: string;
   readonly children?: ReactNode;
 }) {
+  const tw = useTranslations('channels.webchat');
+  if (why !== undefined) {
+    // Cannot be done yet: a status, not a switch (Omer, 2026-10-07).
+    return (
+      <div className={styles.toggleRow} data-testid={testid}>
+        <UnavailableItem
+          title={label}
+          tag={tw('notYet')}
+          why={why}
+          testid={`${testid}-unavailable`}
+        />
+      </div>
+    );
+  }
   return (
     <div className={styles.toggleRow} data-testid={testid}>
       <span className={styles.toggleText}>
         <span>{label}</span>
         <span className={styles.rowHint}>{hint}</span>
-        {why ? <span className={styles.why}>{why}</span> : null}
       </span>
       <input
         type="checkbox"
         role="switch"
         className={styles.switch}
         checked={on}
-        disabled={why !== undefined}
-        title={why}
         aria-label={label}
         onChange={(e) => onChange?.(e.target.checked)}
         data-testid={`${testid}-switch`}
@@ -495,16 +501,9 @@ function ImageRow({
   );
 }
 
-function Conversation({
-  config,
-  set,
-  employees,
-}: {
-  readonly config: WebchatConfig;
-  readonly set: Setters;
-  readonly employees: readonly WebchatEmployee[] | null;
-}) {
+function Conversation({ config, set }: { readonly config: WebchatConfig; readonly set: Setters }) {
   const t = useTranslations('channels.webchat.conversation');
+  const tw = useTranslations('channels.webchat');
   const questions = [0, 1, 2].map((i) => config.ux.welcome.suggestedQuestions[i] ?? '');
   return (
     <>
@@ -552,38 +551,13 @@ function Conversation({
             {t('employee')} <span className={styles.required}>{t('required')}</span>
           </h2>
           <p className={styles.rowHint}>{t('employeeHint')}</p>
-          {/* Who answers is decided in one place, routing's - not by the widget. Drawn, and why. */}
-          <p className={styles.why} data-testid="webchat-employee-why">
-            {t('employeeWhy')}
-          </p>
-          {employees === null ? (
-            <p className={styles.rowHint}>{t('employeesUnread')}</p>
-          ) : (
-            <ul className={styles.choices}>
-              {employees.map((e) => (
-                <li key={e.id} className={styles.choice}>
-                  <span className={styles.initials} aria-hidden="true">
-                    {e.name.slice(0, 2).toUpperCase()}
-                  </span>
-                  <span className={styles.choiceText}>
-                    <span>{e.name}</span>
-                    <span className={styles.rowHint}>
-                      {[e.line, e.paused ? t('paused') : null].filter(Boolean).join(' · ')}
-                    </span>
-                  </span>
-                  <input
-                    type="radio"
-                    name="webchat-employee"
-                    disabled
-                    checked={false}
-                    readOnly
-                    aria-label={e.name}
-                    title={t('employeeWhy')}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
+          {/* Who answers is decided in one place, routing's (Phase 3) - a status, not radios. */}
+          <UnavailableItem
+            title={t('employeeChoose')}
+            tag={tw('notYet')}
+            why={t('employeeWhy')}
+            testid="webchat-employee-why"
+          />
         </section>
         <section
           className={styles.card}
@@ -705,6 +679,7 @@ const noSubscription = () => () => {};
 
 function Install({ widgetId, live }: { readonly widgetId: string | null; readonly live: boolean }) {
   const t = useTranslations('channels.webchat.install');
+  const tw = useTranslations('channels.webchat');
   // The snippet loads from where this app is served - known in the browser, after hydration.
   const origin = useSyncExternalStore(
     noSubscription,
@@ -726,9 +701,12 @@ function Install({ widgetId, live }: { readonly widgetId: string | null; readonl
             <span className={styles.rowHint}>{t('shopifyHint')}</span>
             <span className={styles.why}>{t('shopifyWhy')}</span>
           </span>
-          <button type="button" className={styles.primary} disabled title={t('shopifyWhy')}>
-            {t('shopifyButton')}
-          </button>
+          <UnavailableAction
+            label={t('shopifyButton')}
+            tag={tw('notYet')}
+            why={t('shopifyWhy')}
+            testid="webchat-shopify-action"
+          />
         </div>
         <div className={styles.store} data-testid="webchat-woo">
           <span className={styles.storeMark} data-store="woo" aria-hidden="true">
@@ -739,9 +717,12 @@ function Install({ widgetId, live }: { readonly widgetId: string | null; readonl
             <span className={styles.rowHint}>{t('wooHint')}</span>
             <span className={styles.why}>{t('wooWhy')}</span>
           </span>
-          <button type="button" className={styles.secondary} disabled title={t('wooWhy')}>
-            {t('wooButton')}
-          </button>
+          <UnavailableAction
+            label={t('wooButton')}
+            tag={tw('notYet')}
+            why={t('wooWhy')}
+            testid="webchat-woo-action"
+          />
         </div>
         <div className={styles.snippetBlock} data-testid="webchat-snippet">
           <span className={styles.snippetHead}>

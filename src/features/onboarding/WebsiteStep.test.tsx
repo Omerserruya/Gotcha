@@ -140,10 +140,13 @@ describe('★★ 00d - confirm, not type; nothing is read until yes', () => {
     expect(screen.queryByTestId('website-yes')).toBeNull();
   });
 
-  it('no website: the three other starts are drawn, off, with the reason', () => {
+  it('no website: the three other starts are statuses - not cards to press - with the reason', () => {
     show();
     for (const key of ['instagram', 'catalogue', 'yourself']) {
-      expect(screen.getByTestId(`website-source-${key}`)).toBeDisabled();
+      const item = screen.getByTestId(`website-source-${key}`);
+      expect(item).toHaveAttribute('aria-disabled', 'true');
+      expect(item).toHaveTextContent('Not available yet');
+      expect(item.tagName).not.toBe('BUTTON');
     }
     expect(screen.getByTestId('website-elsewhere')).toHaveTextContent(
       "Starting from these isn't available yet",

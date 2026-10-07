@@ -174,12 +174,12 @@ const fillName = () =>
 describe('★★ 21 - a new skill', () => {
   it('★ the sentence box and the test are drawn, disabled, saying why', () => {
     wrap(<NewSkill employees={employees} tools={[]} otherSkills={[]} />);
-    expect(screen.getByTestId('new-skill-write-it')).toBeDisabled();
+    expect(screen.getByTestId('new-skill-write-it')).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByTestId('new-skill-write-it')).toHaveAttribute(
       'title',
       expect.stringContaining('later'),
     );
-    expect(screen.getByTestId('new-skill-test')).toBeDisabled();
+    expect(screen.getByTestId('new-skill-test')).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByTestId('new-skill-start-watch')).toBeChecked();
   });
 

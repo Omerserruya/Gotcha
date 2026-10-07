@@ -36,7 +36,6 @@ export default async function Page({
       id={id}
       initial={read.config}
       widget={read.widget}
-      employees={read.employees}
       business={read.business}
       tab={tab}
     />

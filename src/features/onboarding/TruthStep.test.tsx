@@ -111,12 +111,12 @@ describe('★★ 00g - the store the read found, connected the way 10 connects',
     expect(screen.getByTestId('truth-next').getAttribute('href')).toContain('"skipped":"1"');
   });
 
-  it('what it may change: drawn, every choice off, with the reason', () => {
+  it('what it may change: a status per action - no choices to press - with the reason', () => {
     show();
     const may = screen.getByTestId('truth-may');
-    const choices = may.querySelectorAll('button');
-    expect(choices.length).toBe(12);
-    choices.forEach((b) => expect(b).toBeDisabled());
+    expect(may.querySelectorAll('button')).toHaveLength(0);
+    expect(may).toHaveTextContent('Change a delivery address');
+    expect(may.textContent?.match(/Not available yet/g)).toHaveLength(4);
     expect(screen.getByTestId('truth-may-why')).toHaveTextContent('once the workspace is live');
   });
 });

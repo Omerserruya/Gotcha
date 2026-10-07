@@ -17,6 +17,10 @@ import {
 } from '@/api/contracts/automations';
 import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/design-system/primitives/overlay/Menu';
+import {
+  UnavailableAction,
+  UnavailableTag,
+} from '@/design-system/primitives/unavailable/Unavailable';
 import { Link, useRouter } from '@/i18n/navigation';
 
 import { publishAutomation, readCatalog } from './automation-actions';
@@ -216,15 +220,12 @@ export function Builder({
           >
             {t('builder.runLog')}
           </button>
-          <button
-            type="button"
-            className={styles.secondary}
-            disabled
-            title={t('builder.testWhy')}
-            data-testid="builder-test"
-          >
-            {t('builder.test')}
-          </button>
+          <UnavailableAction
+            label={t('builder.test')}
+            tag={t('notYet')}
+            why={t('builder.testWhy')}
+            testid="builder-test"
+          />
           <Menu>
             <MenuTrigger asChild>
               <button
@@ -342,19 +343,34 @@ export function Builder({
                       .map((item) => {
                         const can = item.available && chosen !== null && chosenFree.length > 0;
                         const Icon = nodeIcon(item.type);
+                        if (!item.available) {
+                          // Not here yet: a status with its tag, not a step to press.
+                          return (
+                            <li key={item.type}>
+                              <span
+                                className={styles.libItem}
+                                data-unavailable=""
+                                aria-disabled="true"
+                                title={t(`reasons.${item.reason ?? 'coming_later'}`)}
+                                data-testid={`library-${item.type}`}
+                              >
+                                <Icon size={13} strokeWidth={1.75} aria-hidden="true" />
+                                {t(`nodes.${nodeKey(item.type)}` as 'nodes.wait')}
+                                {item.reason === 'coming_later' ||
+                                item.reason === 'no_event_source' ? (
+                                  <UnavailableTag label={t('comingSoon')} />
+                                ) : null}
+                              </span>
+                            </li>
+                          );
+                        }
                         return (
                           <li key={item.type}>
                             <button
                               type="button"
                               className={styles.libItem}
                               disabled={!can}
-                              title={
-                                item.available
-                                  ? can
-                                    ? undefined
-                                    : t('builder.chooseFirst')
-                                  : t(`reasons.${item.reason ?? 'coming_later'}`)
-                              }
+                              title={can ? undefined : t('builder.chooseFirst')}
                               onClick={() => chosen && add(chosen.id, chosenFree[0]!, item)}
                               data-testid={`library-${item.type}`}
                             >

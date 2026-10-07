@@ -6,6 +6,7 @@ import { useState, useTransition } from 'react';
 
 import { languageNames, siteHost, type Discovery } from '@/api/contracts/onboarding';
 import { industryReading } from '@/api/contracts/workspace';
+import { UnavailableItem } from '@/design-system/primitives/unavailable/Unavailable';
 import { InstagramGlyph } from '@/features/inbox/channel-marks';
 import { useRouter } from '@/i18n/navigation';
 import { brandMark, brandName } from '@/lib/brand-mark';
@@ -38,6 +39,7 @@ export function WebsiteStep({
   readonly discovery: Discovery | null;
 }) {
   const t = useTranslations('onboarding.website');
+  const tn = useTranslations('onboarding');
   const tIndustry = useTranslations('workspace.business.industryName');
   const locale = useLocale();
   const router = useRouter();
@@ -226,20 +228,15 @@ export function WebsiteStep({
               ['yourself', MessageCircle],
             ] as const
           ).map(([key, Icon]) => (
-            <button
+            // No route yet: a status with its tag, not a card to press (Omer, 2026-10-07).
+            <UnavailableItem
               key={key}
-              type="button"
-              className={styles.source}
-              disabled
-              title={t('elsewhereWhy')}
-              data-testid={`website-source-${key}`}
-            >
-              <Icon size={15} aria-hidden="true" />
-              <span className={styles.sourceText}>
-                <span>{t(`sources.${key}.title`)}</span>
-                <span className={styles.quiet}>{t(`sources.${key}.hint`)}</span>
-              </span>
-            </button>
+              icon={<Icon size={15} />}
+              title={t(`sources.${key}.title`)}
+              tag={tn('notYet')}
+              why={t(`sources.${key}.hint`)}
+              testid={`website-source-${key}`}
+            />
           ))}
         </span>
         <p className={styles.why}>{t('elsewhereWhy')}</p>

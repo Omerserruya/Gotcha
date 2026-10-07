@@ -268,5 +268,6 @@
     "channelsLabel": "Channels"
   },
   "notRunYet": "Not run yet",
-  "loading": "Loading skills"
+  "loading": "Loading skills",
+  "notYet": "Not available yet"
 }

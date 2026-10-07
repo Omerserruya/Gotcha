@@ -6,6 +6,7 @@ import { useState, useTransition } from 'react';
 
 import type { SkillMode, ToolChoice } from '@/api/contracts/skills';
 import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog';
+import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link, useRouter } from '@/i18n/navigation';
 
 import { giveSkill, createSkill, saveSkill, type SaveResult } from './skill-actions';
@@ -128,15 +129,12 @@ export function NewSkill({
           <div className={styles.prompt}>
             <span className={styles.promptDot} aria-hidden="true" />
             <span className={styles.promptText}>{t('new.prompt')}</span>
-            <button
-              type="button"
-              className={styles.writeIt}
-              disabled
-              title={t('new.writeItWhy')}
-              data-testid="new-skill-write-it"
-            >
-              {t('new.writeIt')}
-            </button>
+            <UnavailableAction
+              label={t('new.writeIt')}
+              tag={t('notYet')}
+              why={t('new.writeItWhy')}
+              testid="new-skill-write-it"
+            />
           </div>
 
           <div className={styles.columns}>
@@ -237,15 +235,12 @@ export function NewSkill({
               {isPending ? t('new.saving') : t('new.save')}
             </button>
           )}
-          <button
-            type="button"
-            className={styles.secondary}
-            disabled
-            title={t('new.testWhy')}
-            data-testid="new-skill-test"
-          >
-            {t('new.test')}
-          </button>
+          <UnavailableAction
+            label={t('new.test')}
+            tag={t('notYet')}
+            why={t('new.testWhy')}
+            testid="new-skill-test"
+          />
           {result && !result.ok ? (
             <p className={styles.problem} role="alert" data-testid="new-skill-problem">
               {t(`new.failed.${result.reason}`)}

@@ -8,6 +8,7 @@ import { oauthHere } from '@/features/capabilities/oauth';
 import { WooConnect } from '@/features/capabilities/WooConnect';
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import type { ShopifyAvailability } from '@/features/capabilities/load-capabilities';
+import { UnavailableTag } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link } from '@/i18n/navigation';
 
 import styles from './Onboarding.module.css';
@@ -24,7 +25,6 @@ export const TRUTH_SYSTEMS = [
 
 /** 00g's write actions - what GOTCHA may change in the store. */
 const ACTIONS = ['address', 'cancel', 'refund', 'prices'] as const;
-const STANCES = ['allowed', 'ask', 'never'] as const;
 
 export type Standing = 'connected' | 'failing' | 'none';
 
@@ -76,6 +76,7 @@ export function TruthStep({
   readonly coreSystem: string | null;
 }) {
   const t = useTranslations('onboarding.truth');
+  const tn = useTranslations('onboarding');
   const tc = useTranslations('capabilities.available');
   const known = (slug: string | null | undefined) =>
     slug ? TRUTH_SYSTEMS.find((s) => s === slug) : undefined;
@@ -208,19 +209,8 @@ export function TruthStep({
         {ACTIONS.map((action) => (
           <div key={action} className={styles.mayRow}>
             <span>{t(`may.actions.${action}`)}</span>
-            <span className={styles.stances} aria-label={t(`may.actions.${action}`)}>
-              {STANCES.map((stance) => (
-                <button
-                  key={stance}
-                  type="button"
-                  className={styles.stance}
-                  disabled
-                  title={t('may.why')}
-                >
-                  {t(`may.stances.${stance}`)}
-                </button>
-              ))}
-            </span>
+            {/* Set once live (tool permissions answer only ACTIVE): a status, not choices. */}
+            <UnavailableTag label={tn('notYet')} />
           </div>
         ))}
         <p className={styles.mayWhy} data-testid="truth-may-why">

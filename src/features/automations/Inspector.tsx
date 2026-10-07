@@ -11,6 +11,8 @@ import type {
   WebhookTrigger,
 } from '@/api/contracts/automations';
 
+import { UnavailableItem } from '@/design-system/primitives/unavailable/Unavailable';
+
 import { provisionWebhook } from './automation-actions';
 import { TRIGGER_NODE, onlyThrough, removeStep, type Graph } from './graph';
 import styles from './Builder.module.css';
@@ -601,22 +603,7 @@ function StepFields({
 /** A setting the design draws and the route does not store: off, saying so. */
 function Off({ label }: { readonly label: string }) {
   const t = useTranslations('automations');
-  return (
-    <label className={styles.offRow}>
-      <span>
-        {label}
-        <span className={styles.quiet}>{t('inspector.notYet')}</span>
-      </span>
-      <input
-        type="checkbox"
-        role="switch"
-        className={styles.switch}
-        disabled
-        checked={false}
-        readOnly
-      />
-    </label>
-  );
+  return <UnavailableItem title={label} tag={t('notYet')} why={t('inspector.notStored')} />;
 }
 
 function TriggerFields({

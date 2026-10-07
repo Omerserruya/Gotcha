@@ -383,7 +383,8 @@
     "webhookNone": "This automation has no address yet.",
     "webhookMake": "Create the address",
     "webhookFailed": "It wasn't created. Try again in a moment.",
-    "triggerAsIs": "This trigger has nothing to set."
+    "triggerAsIs": "This trigger has nothing to set.",
+    "notStored": "Automations can't store this setting yet"
   },
   "runLog": {
     "reading": "Reading…",
@@ -444,5 +445,6 @@
   "templateWords": {
     "keyword": "catalogue",
     "welcome": "Hi {name}, thanks for writing to us. How can we help?"
-  }
+  },
+  "notYet": "Not available yet"
 }

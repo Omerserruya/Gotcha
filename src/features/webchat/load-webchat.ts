@@ -6,8 +6,6 @@ import { webchatSettingsSchema, type WebchatConfig } from '@/api/contracts/webch
 import { currentUserSchema } from '@/api/contracts/identity';
 import { authEndpoints, channelEndpoints } from '@/api/endpoints/registry';
 import { loadChannels } from '@/features/channels/load-channels';
-import { loadEmployees } from '@/features/employees/load-employees';
-import { responsibilityOf } from '@/api/contracts/employees';
 import { logger } from '@/observability/logger';
 
 export interface WebchatRead {
@@ -22,19 +20,10 @@ export interface WebchatRead {
   } | null;
   /** The business's name - the preview's logo and launcher, as the design draws them. */
   readonly business: string | null;
-  /** For 13h's list - who could answer it. `null`: unread. */
-  readonly employees:
-    | readonly {
-        readonly id: string;
-        readonly name: string;
-        readonly line: string | null;
-        readonly paused: boolean;
-      }[]
-    | null;
 }
 
 export async function loadWebchat(id: string): Promise<WebchatRead> {
-  const [settings, channels, employees, business] = await Promise.all([
+  const [settings, channels, business] = await Promise.all([
     serverApi()
       .get({
         endpoint: channelEndpoints.webchatSettings(id),
@@ -48,7 +37,6 @@ export async function loadWebchat(id: string): Promise<WebchatRead> {
         return { config: null, missing: false };
       }),
     loadChannels(),
-    loadEmployees(),
     serverApi()
       .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
       .then((me) => me.tenantName?.trim() || null)
@@ -66,14 +54,5 @@ export async function loadWebchat(id: string): Promise<WebchatRead> {
           name: row.displayName ?? null,
         }
       : null,
-    employees:
-      employees
-        ?.filter((e) => e.status !== 'DRAFT')
-        .map((e) => ({
-          id: e.id,
-          name: e.name,
-          line: responsibilityOf(e),
-          paused: e.status === 'PAUSED',
-        })) ?? null,
   };
 }

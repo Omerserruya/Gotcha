@@ -509,7 +509,8 @@
         "auto": "In the customer's language",
         "he": "Always Hebrew",
         "en": "Always English"
-      }
+      },
+      "employeeChoose": "Choose who answers the web chat"
     },
     "behaviour": {
       "popup": "Pop-up message",
@@ -560,6 +561,7 @@
       "assistant": "Assistant",
       "type": "Type a message",
       "powered": "Powered by GOTCHA"
-    }
+    },
+    "notYet": "Not available yet"
   }
 }

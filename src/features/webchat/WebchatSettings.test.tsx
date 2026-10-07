@@ -47,7 +47,6 @@ const show = (tab: WebchatTab, live = false) =>
         id="wc1"
         initial={config}
         widget={{ widgetId: 'widget_1', live, name: 'avivco.il' }}
-        employees={[{ id: 'e1', name: 'Shira', line: 'Sales', paused: false }]}
         business="Aviv & Co."
         tab={tab}
       />
@@ -140,27 +139,34 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
 });
 
 describe('★ what cannot be stored yet is drawn, off, and says why', () => {
-  it('the assigned employee: listed, not choosable, with the reason', () => {
+  it('the assigned employee: a status, not radios - with the reason', () => {
     show('conversation');
     expect(screen.getByTestId('webchat-employee-why')).toHaveTextContent(
       "Choosing who answers the web chat isn't available here yet",
     );
-    expect(screen.getByRole('radio', { name: 'Shira' })).toBeDisabled();
+    expect(screen.getByTestId('webchat-employee-why')).toHaveTextContent('Not available yet');
+    expect(screen.getByTestId('webchat-employee-why')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByRole('radio', { name: 'Shira' })).toBeNull();
   });
 
-  it('WhatsApp, products, cart and deals: disabled switches with a reason each', () => {
+  it('WhatsApp, products, cart and deals: statuses with a reason each - no switch to press', () => {
     show('behaviour');
     for (const k of ['whatsapp', 'products', 'cart', 'deals']) {
-      expect(screen.getByTestId(`webchat-${k}-switch`)).toBeDisabled();
+      expect(screen.queryByTestId(`webchat-${k}-switch`)).toBeNull();
+      expect(screen.getByTestId(`webchat-${k}-unavailable`)).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
       expect(screen.getByTestId(`webchat-${k}`)).toHaveTextContent('Not available yet');
     }
     expect(screen.getByTestId('webchat-powered-switch')).toBeEnabled();
   });
 
-  it('Shopify and WooCommerce: disabled, and say to use the line of code', () => {
+  it('Shopify and WooCommerce: statuses, not buttons, and say to use the line of code', () => {
     show('install');
-    expect(screen.getByTestId('webchat-shopify').querySelector('button')).toBeDisabled();
-    expect(screen.getByTestId('webchat-woo').querySelector('button')).toBeDisabled();
+    expect(screen.getByTestId('webchat-shopify').querySelector('button')).toBeNull();
+    expect(screen.getByTestId('webchat-shopify-action')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('webchat-woo-action')).toHaveTextContent('Not available yet');
   });
 });
 

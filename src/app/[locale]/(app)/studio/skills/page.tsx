@@ -6,6 +6,7 @@ import { loadSkillEmployees, loadSkillsLibrary } from '@/features/skills/load-sk
 import { NewSkill } from '@/features/skills/NewSkill';
 import { SkillsLibrary, SkillsLibraryPending } from '@/features/skills/SkillsLibrary';
 import styles from '@/features/skills/Skills.module.css';
+import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link } from '@/i18n/navigation';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -38,15 +39,12 @@ export default async function Page({
       actions={
         <span className={styles.headerActions}>
           {/* Templates are the next phase of skills: drawn, and saying so. */}
-          <button
-            type="button"
-            className={styles.secondary}
-            disabled
-            title={t('fromTemplateWhy')}
-            data-testid="skills-from-template"
-          >
-            {t('fromTemplate')}
-          </button>
+          <UnavailableAction
+            label={t('fromTemplate')}
+            tag={t('notYet')}
+            why={t('fromTemplateWhy')}
+            testid="skills-from-template"
+          />
           <Link
             href={{ pathname: '/studio/skills', query: { new: '1' } }}
             className={styles.primary}

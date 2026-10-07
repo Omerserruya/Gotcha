@@ -171,15 +171,19 @@
     cursor: pointer;
   }
 
-  .item:hover:not(:disabled),
-  .item:focus-visible {
+  button.item:hover,
+  button.item:focus-visible {
     border-color: var(--border-default);
     background-color: var(--panel-field);
   }
 
-  .item:disabled {
-    opacity: 0.45;
+  .item[data-unavailable] {
+    color: var(--text-faint);
     cursor: default;
+  }
+
+  .item[data-unavailable] .itemName {
+    color: var(--text-muted);
   }
 
   .itemText {
@@ -229,7 +233,7 @@
     color: var(--channel-messenger-mark);
   }
 
-  .item:disabled .channel {
+  .item[data-unavailable] .channel {
     color: var(--text-faint);
   }
 

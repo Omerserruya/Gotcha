@@ -222,5 +222,6 @@
       "lead": "Setup is done. The workspace opens once payment is confirmed. Taking you to payment…",
       "go": "Go to payment"
     }
-  }
+  },
+  "notYet": "Not available yet"
 }

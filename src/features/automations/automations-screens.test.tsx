@@ -223,9 +223,12 @@ describe('★★ 09e - every step, dimmed where it cannot run, with why', () => 
     wrap(
       <StepSheet catalog={catalog(false)} context="After x" onPick={vi.fn()} onClose={vi.fn()} />,
     );
-    expect(screen.getByTestId('step-trigger:schedule')).toBeDisabled();
+    expect(screen.getByTestId('step-trigger:schedule')).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByTestId('step-trigger:schedule')).toHaveTextContent('Daily, weekly, a date');
     expect(screen.getByTestId('step-send_location')).toHaveTextContent('Coming later');
+    // Being built: tagged, and not a button.
+    expect(screen.getByTestId('step-send_location')).toHaveTextContent('Coming soon');
+    expect(screen.getByTestId('step-send_location').tagName).toBe('DIV');
     expect(screen.getByTestId('step-send_buttons')).toBeEnabled();
   });
 
@@ -251,7 +254,7 @@ describe('★★ New automation - a trigger, what it cannot go without, then the
       automation: automation({ id: 'new1', status: 'draft' }),
     });
     wrap(<NewAutomation catalog={catalog(true)} />);
-    expect(screen.getByTestId('step-add_tag')).toBeDisabled();
+    expect(screen.getByTestId('step-add_tag')).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(screen.getByTestId('step-trigger:schedule'));
     expect(screen.getByTestId('new-automation-name')).toHaveValue('On a schedule');
     fireEvent.change(screen.getByTestId('new-automation-at'), { target: { value: '08:30' } });
@@ -345,7 +348,8 @@ describe('★★ 09d - the builder', () => {
 
   it('Test is drawn, off, saying why; never run says so', () => {
     show();
-    expect(screen.getByTestId('builder-test')).toBeDisabled();
+    expect(screen.getByTestId('builder-test')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('builder-test').tagName).not.toBe('BUTTON');
     expect(screen.getByTestId('inspector-stats')).toHaveTextContent('No runs yet');
   });
 

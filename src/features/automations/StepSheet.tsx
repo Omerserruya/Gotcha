@@ -6,9 +6,13 @@ import { useState } from 'react';
 
 import type { Catalog, CatalogItem } from '@/api/contracts/automations';
 import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog';
+import { UnavailableTag } from '@/design-system/primitives/unavailable/Unavailable';
 import { channelMark } from '@/features/inbox/channel-marks';
 
 import styles from './StepSheet.module.css';
+
+/** Not here yet, anywhere: tagged "Coming soon". Every other reason is this path's. */
+const BEING_BUILT = new Set(['coming_later', 'no_event_source']);
 
 /** The catalogue's group order, as the design draws its four columns. */
 const GROUPS = ['trigger', 'logic', 'send', 'do'] as const;
@@ -131,29 +135,49 @@ export function StepSheet({
                       const why = item.available
                         ? undefined
                         : t(`reasons.${item.reason ?? 'coming_later'}`);
+                      const body = (
+                        <>
+                          <span className={styles.itemText}>
+                            <span className={styles.itemName}>
+                              {t(`nodes.${key}` as 'nodes.wait')}
+                            </span>
+                            <span className={styles.itemLine}>
+                              {/* "First step only" is the column's own note; any other reason is the line. */}
+                              {why && item.reason !== 'first_step_only'
+                                ? why
+                                : t(`lines.${key}` as 'lines.wait')}
+                            </span>
+                          </span>
+                          {item.reason && BEING_BUILT.has(item.reason) ? (
+                            <UnavailableTag label={t('comingSoon')} />
+                          ) : (
+                            <Channels channels={item.channels} />
+                          )}
+                        </>
+                      );
                       return (
                         <li key={item.type}>
-                          <button
-                            type="button"
-                            className={styles.item}
-                            disabled={!item.available}
-                            title={why}
-                            onClick={() => onPick(item)}
-                            data-testid={`step-${item.type}`}
-                          >
-                            <span className={styles.itemText}>
-                              <span className={styles.itemName}>
-                                {t(`nodes.${key}` as 'nodes.wait')}
-                              </span>
-                              <span className={styles.itemLine}>
-                                {/* "First step only" is the column's own note; any other reason is the line. */}
-                                {why && item.reason !== 'first_step_only'
-                                  ? why
-                                  : t(`lines.${key}` as 'lines.wait')}
-                              </span>
-                            </span>
-                            <Channels channels={item.channels} />
-                          </button>
+                          {item.available ? (
+                            <button
+                              type="button"
+                              className={styles.item}
+                              onClick={() => onPick(item)}
+                              data-testid={`step-${item.type}`}
+                            >
+                              {body}
+                            </button>
+                          ) : (
+                            // Cannot be added here: a status, not a button (Omer, 2026-10-07).
+                            <div
+                              className={styles.item}
+                              data-unavailable=""
+                              aria-disabled="true"
+                              title={why}
+                              data-testid={`step-${item.type}`}
+                            >
+                              {body}
+                            </div>
+                          )}
                         </li>
                       );
                     })}
