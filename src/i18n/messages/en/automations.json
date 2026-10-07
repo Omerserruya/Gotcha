@@ -37,8 +37,16 @@
     },
     "cart": {
       "name": "Cart left behind",
-      "line": "A template message after 2 hours",
-      "why": "Needs cart events from your store"
+      "line": "A template after 2 hours, another a day later · needs Shopify or WooCommerce"
+    },
+    "fromAd": {
+      "name": "From an ad → reply",
+      "line": "Thanks by name, then buttons to choose"
+    },
+    "comment": {
+      "name": "Comment on a post → DM",
+      "line": "A public reply, then a DM",
+      "why": "Needs comment events from Instagram and Facebook"
     }
   },
   "columns": {
@@ -81,7 +89,10 @@
     "no_output": "a step has nothing after it",
     "cycle": "the steps loop back on themselves",
     "broken_edge": "a connection points to a missing step",
-    "invalid_delay": "a wait has no valid time"
+    "invalid_delay": "a wait has no valid time",
+    "needs_24h_window": "a step sends a free message outside the 24-hour window: use a template",
+    "after_customer_replies": "a step comes before the customer replies: add it after Wait for reply",
+    "comment_automation_only": "a comment reply is only for automations that start from a comment"
   },
   "nodes": {
     "trigger": {
@@ -96,7 +107,10 @@
       "tag_added": "Tag added",
       "schedule": "On a schedule",
       "webhook": "Webhook received",
-      "unknown": "Trigger"
+      "unknown": "Trigger",
+      "message_from_ad": "Message from an ad",
+      "button_tapped": "Button tapped",
+      "comment_received": "Comment on a post"
     },
     "condition_group": "Condition",
     "opening_hours": "Opening hours",
@@ -123,7 +137,9 @@
     "notify_team": "Notify team",
     "close_conversation": "Close conversation",
     "add_sheet_row": "Add row to Sheets",
-    "http_request": "HTTP request"
+    "http_request": "HTTP request",
+    "ai_generate": "AI writes a message",
+    "send_comment_reply": "Reply to the comment"
   },
   "sheet": {
     "title": "Add a step",
@@ -155,7 +171,10 @@
       "tag_added": "On a customer or conversation",
       "schedule": "Daily, weekly, a date",
       "webhook": "From any system",
-      "unknown": ""
+      "unknown": "",
+      "message_from_ad": "Click-to-WhatsApp and other ads",
+      "button_tapped": "A button in a template or campaign",
+      "comment_received": "Instagram or Facebook, any post or chosen ones"
     },
     "condition_group": "If, else if, else",
     "opening_hours": "Open, closed, holiday",
@@ -182,7 +201,9 @@
     "notify_team": "In-app",
     "close_conversation": "With or without a message",
     "add_sheet_row": "Google Sheets",
-    "http_request": "Call any API"
+    "http_request": "Call any API",
+    "ai_generate": "One message in your employee's voice",
+    "send_comment_reply": "A public reply under the post"
   },
   "reasons": {
     "first_step_only": "Only as the first step",
@@ -191,7 +212,9 @@
     "needs_24h_window": "Needs the 24-hour window: use a template",
     "no_event_source": "Nothing sends this event yet",
     "not_connected": "Connect a phone line first",
-    "coming_later": "Coming later"
+    "coming_later": "Coming later",
+    "after_customer_replies": "Add it after Wait for reply",
+    "comment_automation_only": "Only in an automation that starts from a comment"
   },
   "channels": {
     "WHATSAPP": "WhatsApp",
@@ -384,7 +407,31 @@
     "webhookMake": "Create the address",
     "webhookFailed": "It wasn't created. Try again in a moment.",
     "triggerAsIs": "This trigger has nothing to set.",
-    "notStored": "Automations can't store this setting yet"
+    "notStored": "Automations can't store this setting yet",
+    "prompt": "What to write",
+    "promptHint": "Tell the customer their cart is waiting, warmly, in one line",
+    "writer": "AI employee who writes it",
+    "sendIt": "Send it",
+    "keepAs": "Keep it as a variable",
+    "template": "Template",
+    "noTemplates": "No approved WhatsApp templates yet. Create one in Outreach · Templates.",
+    "templateVar": "{key}",
+    "templateVarsHint": "You can use {list}",
+    "replyAs": "Reply as",
+    "replyMode": {
+      "text": "Text",
+      "ai": "Written by AI"
+    },
+    "reply": "Reply",
+    "adIds": "Ads",
+    "adIdsHint": "Meta ad ids, separated by commas. None: any ad",
+    "payloads": "Buttons",
+    "payloadsHint": "The buttons' payloads, separated by commas. None: any button",
+    "postIds": "Posts",
+    "postIdsHint": "Post ids, separated by commas. None: any post",
+    "cartDelay": "Send after",
+    "cartDelayRange": "15 minutes to 2 days",
+    "cartConsent": "Sends only to customers who agreed to marketing"
   },
   "runLog": {
     "reading": "Reading…",
@@ -435,7 +482,10 @@
     "cart_abandoned": "a cart is left behind",
     "form_submitted": "a form is sent",
     "story_mention": "a story mentions you",
-    "unknown": "its trigger happens"
+    "unknown": "its trigger happens",
+    "message_from_ad": "someone writes from one of your ads",
+    "button_tapped": "a customer taps one of its buttons",
+    "comment_received": "someone comments on one of its posts"
   },
   "forbidden": {
     "title": "You don't have access to automations",
@@ -444,7 +494,10 @@
   "comingSoon": "Coming soon",
   "templateWords": {
     "keyword": "catalogue",
-    "welcome": "Hi {name}, thanks for writing to us. How can we help?"
+    "welcome": "Hi {name}, thanks for writing to us. How can we help?",
+    "adText": "Hi {name}, thanks for reaching out from our ad. What would you like to do?",
+    "prices": "Prices",
+    "talk": "Talk to us"
   },
   "notYet": "Not available yet",
   "loading": "Loading automations"

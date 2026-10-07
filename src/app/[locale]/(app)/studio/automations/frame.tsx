@@ -1,6 +1,8 @@
 import {
   Bell,
   FileText,
+  Megaphone,
+  MessagesSquare,
   Moon,
   PhoneMissed,
   ShoppingCart,
@@ -26,6 +28,8 @@ const TEMPLATE_ICON: Readonly<Record<TemplateKey, LucideIcon>> = {
   missedCall: PhoneMissed,
   review: Star,
   cart: ShoppingCart,
+  fromAd: Megaphone,
+  comment: MessagesSquare,
 };
 
 /**

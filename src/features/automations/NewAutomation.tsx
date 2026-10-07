@@ -79,6 +79,9 @@ export function NewAutomation({
           keyword: t('templateWords.keyword'),
           // The variable goes in as itself; the words around it are the author's language.
           welcome: t('templateWords.welcome', { name: '{{first_name}}' }),
+          adText: t('templateWords.adText', { name: '{{first_name}}' }),
+          prices: t('templateWords.prices'),
+          talk: t('templateWords.talk'),
         },
         () => crypto.randomUUID(),
       );

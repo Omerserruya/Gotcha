@@ -41,6 +41,7 @@ export function NodeCard({
   trigger,
   selected,
   marked,
+  issue = null,
   onSelect,
 }: {
   readonly node: AutomationNode;
@@ -48,6 +49,8 @@ export function NodeCard({
   readonly selected: boolean;
   /** Named by the last refusal. */
   readonly marked: boolean;
+  /** The route's reason this step cannot run here, in our words. */
+  readonly issue?: string | null;
   readonly onSelect: () => void;
 }) {
   const t = useTranslations('automations');
@@ -99,6 +102,11 @@ export function NodeCard({
             : summary(node, t)}
         </span>
       )}
+      {issue ? (
+        <span className={styles.cardIssue} data-testid={`issue-${node.id}`}>
+          {issue}
+        </span>
+      ) : null}
       {buttons.length > 0 ? (
         <span className={styles.cardButtons}>
           {buttons.map((b, i) => (

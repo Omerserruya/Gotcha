@@ -31,6 +31,7 @@ const actions = vi.hoisted(() => ({
   readRun: vi.fn(),
   provisionWebhook: vi.fn(),
   deleteAutomation: vi.fn(),
+  checkGraph: vi.fn(),
 }));
 vi.mock('./automation-actions', () => actions);
 
@@ -130,6 +131,7 @@ const catalog = (firstStep: boolean): Catalog =>
 
 beforeEach(() => {
   for (const fn of Object.values(actions)) fn.mockReset();
+  actions.checkGraph.mockResolvedValue(null);
   push.mockReset();
   replace.mockReset();
 });
@@ -480,5 +482,124 @@ describe('★★ a template creates a real draft - its graph sent, never turned 
     expect(screen.getByTestId('new-automation-create')).toBeDisabled();
     fireEvent.change(screen.getByTestId('new-automation-tags'), { target: { value: 'vip' } });
     expect(screen.getByTestId('new-automation-create')).toBeEnabled();
+  });
+});
+
+describe('★★ the new triggers and steps (Backend 972ae66d), edited where they are set', () => {
+  const draftOf = (
+    trigger: Record<string, unknown>,
+    nodes: unknown[] = [{ id: 't', type: 'automation_trigger', data: {} }],
+    edges: unknown[] = [],
+  ) =>
+    automation({
+      status: 'draft',
+      trigger,
+      nodes,
+      edges,
+      stats: { runsThisWeek: 0, lastRunAt: null, lastRunStatus: null },
+    });
+  const showBuilder = (
+    a: Automation,
+    templates: { id: string; name: string; variables: string[] }[] = [],
+  ) =>
+    wrap(
+      <Builder
+        automation={a}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={{
+          employees: [{ id: 'e1', name: 'Shira' }],
+          teams: [],
+          members: [],
+          skills: [],
+          templates,
+        }}
+      />,
+    );
+
+  it('cart left behind: its channels, the delay in hours, and who it sends to', () => {
+    showBuilder(draftOf({ type: 'cart_abandoned', config: { delayMinutes: 120 } }));
+    expect(screen.getByTestId('inspector-channel-WHATSAPP')).toBeInTheDocument();
+    expect(screen.getByTestId('inspector-channel-EMAIL')).toBeInTheDocument();
+    expect(screen.queryByTestId('inspector-channel-WEBCHAT')).toBeNull();
+    expect(screen.getByTestId('inspector-cart-delay')).toHaveValue(2);
+    expect(screen.getByTestId('inspector-cart-consent')).toHaveTextContent('agreed to marketing');
+  });
+
+  it('message from an ad: the ads as a list, saved as items', () => {
+    showBuilder(draftOf({ type: 'message_from_ad', config: {} }));
+    fireEvent.change(screen.getByTestId('inspector-ad-ids'), { target: { value: '123, 456' } });
+    expect(screen.getByTestId('builder-unsaved')).toBeInTheDocument();
+  });
+
+  it('send template: an approved one, and a field per variable', () => {
+    showBuilder(
+      draftOf(
+        { type: 'cart_abandoned', config: {} },
+        [
+          { id: 't', type: 'automation_trigger', data: {} },
+          { id: 's', type: 'send_message_template', data: { templateId: '', variables: {} } },
+        ],
+        [{ id: 'e', source: 't', target: 's', sourceHandle: null }],
+      ),
+      [{ id: 'tpl1', name: 'Cart reminder', variables: ['1', '2'] }],
+    );
+    expect(screen.getByTestId('to-fill-s')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('node-s'));
+    fireEvent.change(screen.getByTestId('inspector-template'), { target: { value: 'tpl1' } });
+    expect(screen.getByTestId('inspector-template-var-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('to-fill-s')).toBeNull();
+  });
+
+  it('AI writes a message: what, who, and send it (on by default)', () => {
+    showBuilder(
+      draftOf(
+        { type: 'message_received', config: {} },
+        [
+          { id: 't', type: 'automation_trigger', data: {} },
+          { id: 'a', type: 'ai_generate', data: { prompt: '', aiAgentId: '', send: true } },
+        ],
+        [{ id: 'e', source: 't', target: 'a', sourceHandle: null }],
+      ),
+    );
+    fireEvent.click(screen.getByTestId('node-a'));
+    expect(screen.getByTestId('inspector-send')).toBeChecked();
+    expect(screen.getByTestId('to-fill-a')).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId('inspector-writer'), { target: { value: 'e1' } });
+    expect(screen.queryByTestId('to-fill-a')).toBeNull();
+  });
+
+  it('the route refuses a step here: the reason on the step, in our words', async () => {
+    vi.useFakeTimers();
+    actions.checkGraph.mockResolvedValue({
+      errors: [
+        issueSchema.parse({
+          severity: 'error',
+          code: 'needs_24h_window',
+          nodeId: 'm',
+          message: 'x',
+        }),
+      ],
+      warnings: [],
+    });
+    showBuilder(
+      draftOf(
+        { type: 'cart_abandoned', config: {} },
+        [
+          { id: 't', type: 'automation_trigger', data: {} },
+          { id: 'm', type: 'send_message_text', data: { text: 'Hi' } },
+        ],
+        [{ id: 'e', source: 't', target: 'm', sourceHandle: null }],
+      ),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+    });
+    vi.useRealTimers();
+    expect(screen.getByTestId('issue-m')).toHaveTextContent(
+      'outside the 24-hour window: use a template',
+    );
+    expect(screen.getByTestId('node-m')).toHaveAttribute('data-marked');
   });
 });

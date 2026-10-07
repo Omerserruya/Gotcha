@@ -13,9 +13,11 @@ export const TEMPLATE_KEYS = [
   'afterHours',
   'welcome',
   'tagNotify',
+  'cart',
+  'fromAd',
   'missedCall',
   'review',
-  'cart',
+  'comment',
 ] as const;
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
 
@@ -32,6 +34,10 @@ export interface TemplateWords {
   readonly keyword: string;
   /** The welcome, with {{first_name}}. */
   readonly welcome: string;
+  /** From an ad: the opening, with {{first_name}}, and its two buttons. */
+  readonly adText: string;
+  readonly prices: string;
+  readonly talk: string;
 }
 
 export interface TemplateGraph {
@@ -117,10 +123,64 @@ export const TEMPLATES: readonly Template[] = [
       };
     },
   },
-  // No event source yet (catalogue: no_event_source; call_missed is not wired to voice events).
+  {
+    // Cart left behind (Backend 972ae66d): after 2 hours a template - outside
+    // the 24-hour window only an approved template may go - then a day later
+    // a second one. Both templates are the author's to choose.
+    key: 'cart',
+    trigger: 'cart_abandoned',
+    build: (_words, id) => {
+      const first = id();
+      const wait = id();
+      const second = id();
+      return {
+        config: { delayMinutes: 120 },
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(first, 'send_message_template', { templateId: '', variables: {} }),
+          node(wait, 'wait', { durationMs: 24 * 60 * 60 * 1000 }),
+          node(second, 'send_message_template', { templateId: '', variables: {} }),
+        ],
+        edges: [edge(id(), 'trigger', first), edge(id(), first, wait), edge(id(), wait, second)],
+      };
+    },
+  },
+  {
+    // From an ad → reply: thanks by name, two buttons; "Talk to us" goes to an
+    // employee (the author chooses who); "Prices" is theirs to fill.
+    key: 'fromAd',
+    trigger: 'message_from_ad',
+    build: (words, id) => {
+      const ask = id();
+      const wait = id();
+      const hand = id();
+      return {
+        config: {},
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(ask, 'send_buttons', {
+            text: words.adText,
+            buttons: [
+              { id: 'prices', title: words.prices },
+              { id: 'talk', title: words.talk },
+            ],
+          }),
+          node(wait, 'wait_for_reply', { timeoutMs: 30 * 60 * 1000 }),
+          node(hand, 'hand_to_ai', { aiAgentId: '' }),
+        ],
+        edges: [
+          edge(id(), 'trigger', ask),
+          edge(id(), ask, wait),
+          edge(id(), wait, hand, 'btn:talk'),
+        ],
+      };
+    },
+  },
+  // No event source yet (call_missed is not wired to voice events; order and
+  // comment events are being built).
   { key: 'missedCall', trigger: 'call_missed', build: null },
   { key: 'review', trigger: 'order_event', build: null },
-  { key: 'cart', trigger: 'cart_abandoned', build: null },
+  { key: 'comment', trigger: 'comment_received', build: null },
 ];
 
 export function templateOf(key: string | undefined): Template | null {
@@ -158,6 +218,12 @@ export function needsFilling(node: AutomationNode): boolean {
       return empty(d.aiAgentId);
     case 'run_skill':
       return empty(d.skillId) || empty(d.aiAgentId);
+    case 'ai_generate':
+      return empty(d.aiAgentId);
+    case 'send_message_template':
+      return empty(d.templateId);
+    case 'send_comment_reply':
+      return d.mode === 'ai' ? empty(d.agentId) : empty(d.text);
     default:
       return false;
   }

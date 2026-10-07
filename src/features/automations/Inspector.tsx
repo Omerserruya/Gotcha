@@ -20,19 +20,33 @@ import styles from './Builder.module.css';
 /** The route's limits (`LIMITS`): enforced here, where they are typed. */
 const LIMITS = { buttons: 3, buttonTitle: 20, listOptions: 10, listTitle: 24 } as const;
 const TRIGGER_CHANNELS = ['WHATSAPP', 'INSTAGRAM', 'MESSENGER', 'EMAIL', 'WEBCHAT'] as const;
+/** Each trigger's channels, as the route accepts them (`normalizeTrigger`). */
+const CHANNELS_OF: Readonly<Record<string, readonly string[]>> = {
+  message_received: TRIGGER_CHANNELS,
+  new_customer: TRIGGER_CHANNELS,
+  message_from_ad: ['WHATSAPP', 'MESSENGER', 'INSTAGRAM'],
+  button_tapped: ['WHATSAPP', 'MESSENGER', 'INSTAGRAM'],
+  comment_received: ['INSTAGRAM', 'MESSENGER'],
+  cart_abandoned: ['WHATSAPP', 'EMAIL'],
+};
+/** The cart's delay, as the route bounds it. */
+const CART_DELAY = { min: 15, max: 2880 } as const;
 const LANGUAGES = ['he', 'en', 'ar', 'ru', 'fr', 'es'] as const;
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 const UNITS = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 } as const;
 /** Steps whose settings are "the existing shape" in the contract: not editable here yet. */
-const NOT_HERE = new Set([
-  'condition_group',
-  'update_customer',
-  'http_request',
-  'send_message_template',
-]);
+const NOT_HERE = new Set(['condition_group', 'update_customer', 'http_request']);
 
 type Named = { readonly id: string; readonly name: string };
 export interface Choices {
+  /** Approved WhatsApp templates, with their variables. `null`: unread. */
+  readonly templates?:
+    | readonly {
+        readonly id: string;
+        readonly name: string;
+        readonly variables: readonly string[];
+      }[]
+    | null;
   readonly employees: readonly Named[] | null;
   readonly teams: readonly Named[] | null;
   readonly members: readonly Named[] | null;
@@ -523,6 +537,118 @@ function StepFields({
           />
         </>
       );
+    case 'ai_generate':
+      return (
+        <>
+          <Field label={t('inspector.prompt')}>
+            <textarea
+              value={str(d.prompt)}
+              rows={4}
+              onChange={(e) => set({ prompt: e.target.value })}
+              placeholder={t('inspector.promptHint')}
+              dir="auto"
+              data-testid="inspector-prompt"
+            />
+          </Field>
+          <Pick
+            label={t('inspector.writer')}
+            value={str(d.aiAgentId)}
+            options={choices.employees}
+            onChange={(aiAgentId) => set({ aiAgentId })}
+            testid="inspector-writer"
+          />
+          <label className={styles.check}>
+            <input
+              type="checkbox"
+              checked={d.send !== false}
+              onChange={(e) => set({ send: e.target.checked })}
+              data-testid="inspector-send"
+            />
+            {t('inspector.sendIt')}
+          </label>
+          {d.send === false ? (
+            <Field label={t('inspector.keepAs')}>
+              <input
+                value={str(d.responseVariable)}
+                onChange={(e) => set({ responseVariable: e.target.value })}
+                dir="ltr"
+              />
+            </Field>
+          ) : null}
+        </>
+      );
+    case 'send_message_template': {
+      const template = choices.templates?.find((x) => x.id === str(d.templateId)) ?? null;
+      const values =
+        d.variables && typeof d.variables === 'object'
+          ? (d.variables as Record<string, string>)
+          : {};
+      return (
+        <>
+          <Pick
+            label={t('inspector.template')}
+            value={str(d.templateId)}
+            options={choices.templates ?? null}
+            onChange={(templateId) => set({ templateId, variables: {} })}
+            testid="inspector-template"
+          />
+          {choices.templates && choices.templates.length === 0 ? (
+            <p className={styles.quiet}>{t('inspector.noTemplates')}</p>
+          ) : null}
+          {template?.variables.map((key) => (
+            <Field key={key} label={t('inspector.templateVar', { key })}>
+              <input
+                value={values[key] ?? ''}
+                onChange={(e) => set({ variables: { ...values, [key]: e.target.value } })}
+                dir="auto"
+                data-testid={`inspector-template-var-${key}`}
+              />
+            </Field>
+          ))}
+          {template && variables.length > 0 ? (
+            <p className={styles.quiet}>
+              {t('inspector.templateVarsHint', {
+                list: variables.map((v) => `{{${v}}}`).join(' '),
+              })}
+            </p>
+          ) : null}
+        </>
+      );
+    }
+    case 'send_comment_reply':
+      return (
+        <>
+          <div className={styles.checks} role="radiogroup" aria-label={t('inspector.replyAs')}>
+            {(['text', 'ai'] as const).map((mode) => (
+              <label key={mode} className={styles.check}>
+                <input
+                  type="radio"
+                  checked={(str(d.mode) || 'text') === mode}
+                  onChange={() => set({ mode })}
+                />
+                {t(`inspector.replyMode.${mode}`)}
+              </label>
+            ))}
+          </div>
+          {d.mode === 'ai' ? (
+            <Pick
+              label={t('inspector.writer')}
+              value={str(d.agentId)}
+              options={choices.employees}
+              onChange={(agentId) => set({ agentId })}
+              testid="inspector-reply-writer"
+            />
+          ) : (
+            <Field label={t('inspector.reply')}>
+              <input
+                value={str(d.text)}
+                onChange={(e) => set({ text: e.target.value })}
+                dir="auto"
+              />
+            </Field>
+          )}
+        </>
+      );
     case 'add_tag':
       return (
         <Field label={t('inspector.tag')}>
@@ -622,7 +748,7 @@ function TriggerFields({
   const set = (patch: Record<string, unknown>) =>
     onTrigger({ ...trigger, config: { ...c, ...patch } });
   const channels = strs(c.channels);
-  const [keywords, setKeywords] = useState(strs(c.keywords).join(', '));
+  const [lists, setLists] = useState<Record<string, string>>({});
   const [tags, setTags] = useState(strs(c.tags).join(', '));
   const [webhook, setWebhook] = useState(initialWebhook);
   const [failed, setFailed] = useState(false);
@@ -638,63 +764,136 @@ function TriggerFields({
       .map((x) => x.trim())
       .filter(Boolean);
 
+  const channelList = trigger.type ? CHANNELS_OF[trigger.type] : undefined;
+  const channelPicker = channelList ? (
+    <div className={styles.checks} role="group" aria-label={t('inspector.channels')}>
+      <span className={styles.fieldLabel}>{t('inspector.channels')}</span>
+      {channelList.map((ch) => (
+        <label key={ch} className={styles.check}>
+          <input
+            type="checkbox"
+            checked={channels.includes(ch)}
+            onChange={(e) =>
+              set({
+                channels: e.target.checked ? [...channels, ch] : channels.filter((x) => x !== ch),
+              })
+            }
+            data-testid={`inspector-channel-${ch}`}
+          />
+          {t(`channels.${ch}` as 'channels.WHATSAPP')}
+        </label>
+      ))}
+      <span className={styles.quiet}>{t('inspector.anyChannel')}</span>
+    </div>
+  ) : null;
+  /** A list typed with commas, kept as written while typing and saved as its items. */
+  const listField = (key: string, label: string, hint: string, testid: string) => (
+    <Field label={label}>
+      <input
+        value={lists[key] ?? strs(c[key]).join(', ')}
+        onChange={(e) => {
+          setLists({ ...lists, [key]: e.target.value });
+          set({ [key]: split(e.target.value) });
+        }}
+        placeholder={hint}
+        dir="auto"
+        data-testid={testid}
+      />
+    </Field>
+  );
+  const matchField =
+    strs(c.keywords).length > 0 ? (
+      <Field label={t('inspector.match')}>
+        <select value={str(c.match) || 'contains'} onChange={(e) => set({ match: e.target.value })}>
+          {(['contains', 'exact', 'any_word'] as const).map((m) => (
+            <option key={m} value={m}>
+              {t(`inspector.matches.${m}`)}
+            </option>
+          ))}
+        </select>
+      </Field>
+    ) : null;
+
   switch (trigger.type) {
     case 'message_received':
-    case 'new_customer':
       return (
         <>
-          <div className={styles.checks} role="group" aria-label={t('inspector.channels')}>
-            <span className={styles.fieldLabel}>{t('inspector.channels')}</span>
-            {TRIGGER_CHANNELS.map((ch) => (
-              <label key={ch} className={styles.check}>
-                <input
-                  type="checkbox"
-                  checked={channels.includes(ch)}
-                  onChange={(e) =>
-                    set({
-                      channels: e.target.checked
-                        ? [...channels, ch]
-                        : channels.filter((x) => x !== ch),
-                    })
-                  }
-                />
-                {t(`channels.${ch}`)}
-              </label>
-            ))}
-            <span className={styles.quiet}>{t('inspector.anyChannel')}</span>
-          </div>
-          {trigger.type === 'message_received' ? (
-            <>
-              <Field label={t('inspector.keywords')}>
-                <input
-                  value={keywords}
-                  onChange={(e) => {
-                    setKeywords(e.target.value);
-                    set({ keywords: split(e.target.value) });
-                  }}
-                  placeholder={t('inspector.keywordsHint')}
-                  dir="auto"
-                  data-testid="inspector-keywords"
-                />
-              </Field>
-              {split(keywords).length > 0 ? (
-                <Field label={t('inspector.match')}>
-                  <select
-                    value={str(c.match) || 'contains'}
-                    onChange={(e) => set({ match: e.target.value })}
-                  >
-                    {(['contains', 'exact', 'any_word'] as const).map((m) => (
-                      <option key={m} value={m}>
-                        {t(`inspector.matches.${m}`)}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              ) : null}
-            </>
-          ) : null}
+          {channelPicker}
+          {listField(
+            'keywords',
+            t('inspector.keywords'),
+            t('inspector.keywordsHint'),
+            'inspector-keywords',
+          )}
+          {matchField}
         </>
       );
+    case 'new_customer':
+      return channelPicker;
+    case 'message_from_ad':
+      return (
+        <>
+          {channelPicker}
+          {listField('adIds', t('inspector.adIds'), t('inspector.adIdsHint'), 'inspector-ad-ids')}
+        </>
+      );
+    case 'button_tapped':
+      return (
+        <>
+          {channelPicker}
+          {listField(
+            'payloads',
+            t('inspector.payloads'),
+            t('inspector.payloadsHint'),
+            'inspector-payloads',
+          )}
+        </>
+      );
+    case 'comment_received':
+      return (
+        <>
+          {channelPicker}
+          {listField(
+            'postIds',
+            t('inspector.postIds'),
+            t('inspector.postIdsHint'),
+            'inspector-post-ids',
+          )}
+          {listField(
+            'keywords',
+            t('inspector.keywords'),
+            t('inspector.keywordsHint'),
+            'inspector-keywords',
+          )}
+          {matchField}
+        </>
+      );
+    case 'cart_abandoned': {
+      const minutes = typeof c.delayMinutes === 'number' ? c.delayMinutes : 120;
+      return (
+        <>
+          {channelPicker}
+          <Duration
+            label={t('inspector.cartDelay')}
+            ms={minutes * 60_000}
+            onChange={(ms) =>
+              set({
+                delayMinutes: Math.min(
+                  CART_DELAY.max,
+                  Math.max(CART_DELAY.min, Math.round(ms / 60_000)),
+                ),
+              })
+            }
+            testid="inspector-cart-delay"
+          />
+          <p className={styles.quiet}>{t('inspector.cartDelayRange')}</p>
+          {/* The route's own rule, said where the trigger is set. */}
+          <p className={styles.why} data-testid="inspector-cart-consent">
+            {t('inspector.cartConsent')}
+          </p>
+        </>
+      );
+    }
     case 'tag_added':
       return (
         <Field label={t('new.tags')}>

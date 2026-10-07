@@ -22,6 +22,9 @@ import { plainDashes } from '@/lib/plain-dashes';
 export const TRIGGER_TYPES = [
   'message_received',
   'new_customer',
+  'message_from_ad',
+  'button_tapped',
+  'comment_received',
   'tag_added',
   'schedule',
   'webhook',
@@ -64,6 +67,10 @@ export const CATALOG_REASONS = [
   'no_event_source',
   'not_connected',
   'coming_later',
+  /** A comment automation: only the comment's own steps run before the customer replies. */
+  'after_customer_replies',
+  /** The public comment reply exists only in a comment automation. */
+  'comment_automation_only',
 ] as const;
 export type CatalogReason = (typeof CATALOG_REASONS)[number];
 
@@ -160,6 +167,9 @@ export const ISSUE_CODES = [
   'cycle',
   'broken_edge',
   'invalid_delay',
+  'needs_24h_window',
+  'after_customer_replies',
+  'comment_automation_only',
 ] as const;
 
 export const issueSchema = z.looseObject({
@@ -172,6 +182,12 @@ export const issueSchema = z.looseObject({
     .catch(''),
 });
 export type Issue = z.infer<typeof issueSchema>;
+
+/** POST /:id/validate: `{ errors, warnings }` for a canvas as it is. */
+export const validationSchema = z.object({
+  errors: z.array(issueSchema).catch([]).default([]),
+  warnings: z.array(issueSchema).catch([]).default([]),
+});
 
 /** Activate's answer: live, with what it warned about. */
 export const activatedSchema = z.object({
@@ -281,6 +297,9 @@ export type Catalog = z.infer<typeof catalogSchema>['data'];
  */
 export const CATALOG_NAMES: Readonly<Record<string, string>> = {
   'trigger:message_received': 'Message received',
+  'trigger:message_from_ad': 'Message from an ad',
+  'trigger:button_tapped': 'Button tapped',
+  'trigger:comment_received': 'Comment on a post',
   'trigger:call_missed': 'Call missed',
   'trigger:call_answered': 'Call answered',
   'trigger:new_customer': 'New customer',
@@ -299,6 +318,8 @@ export const CATALOG_NAMES: Readonly<Record<string, string>> = {
   language: 'Language',
   segment: 'Customer segment',
   ab_split: 'A/B split',
+  ai_generate: 'AI writes a message',
+  send_comment_reply: 'Reply to the comment',
   send_message_text: 'Message',
   send_message_file: 'File',
   send_buttons: 'Buttons',

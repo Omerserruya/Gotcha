@@ -13,7 +13,8 @@ import {
   type NodeStats,
   type WebhookTrigger,
 } from '@/api/contracts/automations';
-import { automationEndpoints } from '@/api/endpoints/registry';
+import { templateListSchema } from '@/api/contracts/templates';
+import { automationEndpoints, templateEndpoints } from '@/api/endpoints/registry';
 import { loadPeople } from '@/features/people/load-people';
 import { loadSkillsLibrary } from '@/features/skills/load-skills';
 import { logger } from '@/observability/logger';
@@ -71,12 +72,20 @@ export interface BuilderRead {
   readonly teams: readonly { readonly id: string; readonly name: string }[] | null;
   readonly members: readonly { readonly id: string; readonly name: string }[] | null;
   readonly skills: readonly { readonly id: string; readonly name: string }[] | null;
+  /** Approved WhatsApp templates, for "Send template". */
+  readonly templates:
+    | readonly {
+        readonly id: string;
+        readonly name: string;
+        readonly variables: readonly string[];
+      }[]
+    | null;
 }
 
 /** 09d: the automation with its graph, its step stats, and who and what its steps can name. */
 export async function loadBuilder(id: string): Promise<BuilderRead> {
   const api = serverApi();
-  const [one, stats, webhook, people, library] = await Promise.all([
+  const [one, stats, webhook, people, library, templates] = await Promise.all([
     api
       .get({ endpoint: automationEndpoints.one(id), payload: automationOneSchema, raw: true })
       .then((r) => ({ automation: r.data as Automation | null, missing: false, forbidden: false }))
@@ -110,6 +119,17 @@ export async function loadBuilder(id: string): Promise<BuilderRead> {
       .catch(() => null),
     loadPeople(),
     loadSkillsLibrary(),
+    api
+      .get({ endpoint: templateEndpoints.list(), payload: templateListSchema, raw: true })
+      .then((r) =>
+        r.data
+          // Only one Meta has approved can be sent; WhatsApp's or every channel's.
+          .filter(
+            (t) => t.status === 'APPROVED' && (t.channel === null || t.channel === 'WHATSAPP'),
+          )
+          .map((t) => ({ id: t.id, name: t.name, variables: t.variables.map((v) => v.key) })),
+      )
+      .catch(() => null),
   ]);
   const named = <T extends { id: string }>(rows: readonly T[] | null, name: (row: T) => string) =>
     rows?.map((r) => ({ id: r.id, name: name(r) })).filter((r) => r.name.trim() !== '') ?? null;
@@ -120,6 +140,7 @@ export async function loadBuilder(id: string): Promise<BuilderRead> {
     employees: named(people.aiEmployees, (e) => e.name),
     teams: named(people.teams, (t) => t.name),
     members: named(people.members, (m) => m.name || m.email || ''),
+    templates,
     skills: library.skills
       ? library.skills
           .filter((s) => s.status !== 'archived')

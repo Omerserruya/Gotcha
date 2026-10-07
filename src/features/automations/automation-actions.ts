@@ -13,6 +13,7 @@ import {
   refusalSchema,
   runListSchema,
   runOneSchema,
+  validationSchema,
   webhookTriggerSchema,
   type Automation,
   type AutomationRun,
@@ -289,5 +290,33 @@ export async function deleteAutomation(id: string): Promise<boolean> {
       status: isApiError(cause) ? cause.status : undefined,
     });
     return false;
+  }
+}
+
+/**
+ * The canvas, checked as it is - unsaved - by the route's own validator
+ * (POST /:id/validate). `null`: not checked this time.
+ */
+export async function checkGraph(
+  id: string,
+  body: {
+    readonly trigger: { readonly type: string; readonly config: Record<string, unknown> };
+    readonly nodes: readonly unknown[];
+    readonly edges: readonly unknown[];
+  },
+): Promise<{ readonly errors: readonly Issue[]; readonly warnings: readonly Issue[] } | null> {
+  try {
+    return await serverApi().post({
+      endpoint: automationEndpoints.validate(id),
+      body,
+      payload: validationSchema,
+      raw: true,
+    });
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('automations.validate_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    return null;
   }
 }

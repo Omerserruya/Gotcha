@@ -119,6 +119,13 @@ export function defaultData(type: string, newId: () => string): Record<string, u
       return { languages: ['he', 'en'] };
     case 'assign':
       return { to: 'team' };
+    case 'ai_generate':
+      // Sends by default; the employee who writes it is the author's to choose.
+      return { prompt: '', aiAgentId: '', send: true };
+    case 'send_message_template':
+      return { templateId: '', variables: {} };
+    case 'send_comment_reply':
+      return { mode: 'text', text: '' };
     default:
       return {};
   }

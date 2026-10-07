@@ -11,7 +11,10 @@ import {
   List,
   ListChecks,
   MapPin,
+  Megaphone,
   MessageSquare,
+  MessagesSquare,
+  Reply,
   MessageSquareReply,
   MousePointerClick,
   PhoneIncoming,
@@ -38,6 +41,11 @@ import {
 /** One mark per step, as 09d's library draws them. */
 export const NODE_ICON: Readonly<Record<string, LucideIcon>> = {
   'trigger:message_received': MessageSquare,
+  'trigger:message_from_ad': Megaphone,
+  'trigger:button_tapped': MousePointerClick,
+  'trigger:comment_received': MessagesSquare,
+  ai_generate: Sparkles,
+  send_comment_reply: Reply,
   'trigger:new_customer': UserPlus,
   'trigger:tag_added': Tag,
   'trigger:schedule': Clock,

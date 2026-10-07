@@ -444,6 +444,11 @@
     background-color: var(--intent-blocked-text);
   }
 
+  .cardIssue {
+    font-size: 11px;
+    color: var(--intent-urgent-text);
+  }
+
   .toFill {
     align-self: flex-start;
     padding: 1px 7px;

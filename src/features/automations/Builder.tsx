@@ -23,7 +23,7 @@ import {
 } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link, useRouter } from '@/i18n/navigation';
 
-import { publishAutomation, readCatalog } from './automation-actions';
+import { checkGraph, publishAutomation, readCatalog } from './automation-actions';
 import {
   NODE_W,
   TRIGGER_NODE,
@@ -42,6 +42,8 @@ import { StepSheet, nodeKey } from './StepSheet';
 import styles from './Builder.module.css';
 
 const ZOOMS = [0.6, 0.75, 0.9, 1] as const;
+/** How long the canvas rests before the route checks it. */
+export const CHECK_AFTER_MS = 800;
 const CARD_H = 112;
 
 /**
@@ -112,6 +114,33 @@ export function Builder({
     JSON.stringify(graph) !==
       JSON.stringify({ nodes: automation.nodes ?? [], edges: automation.edges ?? [] });
   const { at, width, height } = layout(graph);
+
+  /*
+   * The route's own validator, on the canvas as it is (debounced): a step it
+   * would refuse says why on the step - the 24-hour window after a cart, a
+   * comment step before the customer replies. Not filled in yet is the
+   * card's "To fill in", not an error.
+   */
+  const [checked, setChecked] = useState<ReadonlyMap<string, Issue>>(new Map());
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void checkGraph(automation.id, {
+        trigger: { type: trigger.type ?? '', config: trigger.config },
+        nodes: graph.nodes,
+        edges: graph.edges,
+      }).then((result) => {
+        if (!result) return;
+        const byNode = new Map<string, Issue>();
+        for (const issue of result.errors) {
+          if (issue.nodeId && issue.code !== 'missing_config' && !byNode.has(issue.nodeId)) {
+            byNode.set(issue.nodeId, issue);
+          }
+        }
+        setChecked(byNode);
+      });
+    }, CHECK_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [automation.id, graph, trigger]);
 
   // Closing the tab with changes not yet published asks first.
   useEffect(() => {
@@ -463,7 +492,8 @@ export function Builder({
                         node={node}
                         trigger={trigger}
                         selected={node.id === selected}
-                        marked={marked.has(node.id)}
+                        marked={marked.has(node.id) || checked.has(node.id)}
+                        issue={checked.has(node.id) ? issueText(checked.get(node.id)!) : null}
                         onSelect={() => {
                           setSelected(node.id);
                           setPanel('inspector');

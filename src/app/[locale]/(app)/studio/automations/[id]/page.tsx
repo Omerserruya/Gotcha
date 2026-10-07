@@ -29,6 +29,7 @@ export default async function Page({
             teams: read.teams,
             members: read.members,
             skills: read.skills,
+            templates: read.templates,
           }}
         />
       ) : (
