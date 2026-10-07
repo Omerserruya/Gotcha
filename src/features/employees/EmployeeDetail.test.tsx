@@ -42,11 +42,16 @@ const employee = (over: Record<string, unknown> = {}) =>
 
 const show = async (
   over: Record<string, unknown> = {},
-  extra: { capabilities?: unknown[] | null; integrations?: unknown[] | null } = {},
+  extra: {
+    capabilities?: unknown[] | null;
+    integrations?: unknown[] | null;
+    reach?: { channel: string; name: string; when: string }[] | null;
+  } = {},
 ) =>
   render(
     await EmployeeDetail({
       employee: employee(over),
+      reach: extra.reach ?? null,
       capabilities:
         extra.capabilities === null
           ? null
@@ -95,6 +100,34 @@ describe('★★ 07’s detail - what it is, from what the route already sends',
     expect(card).not.toHaveTextContent(/nothing reaches it/i);
     expect(card).toHaveTextContent('set in Studio · Automations and the playbook');
     expect(card.querySelector('a')).toHaveAttribute('href', '/studio/automations');
+  });
+
+  it('★★ with the playbook’s read: each channel, its mark, always or sometimes - and where it is decided', async () => {
+    await show(
+      {},
+      {
+        reach: [
+          { channel: 'WHATSAPP', name: 'WhatsApp', when: 'Always' },
+          { channel: 'WEBCHAT', name: 'Web chat', when: 'Sometimes (by the playbook)' },
+        ],
+      },
+    );
+    const card = screen.getByTestId('card-answers-on');
+    expect(screen.getByTestId('reach-WHATSAPP')).toHaveTextContent('WhatsAppAlways');
+    expect(screen.getByTestId('reach-WEBCHAT')).toHaveTextContent(
+      'Web chatSometimes (by the playbook)',
+    );
+    expect(card).toHaveTextContent('Decided by the playbook in Studio · Automations.');
+    expect(card.querySelector('a')).toHaveAttribute('href', '/studio/automations');
+    // The read replaces the line that said only where it is decided.
+    expect(card).not.toHaveTextContent('not on the employee');
+  });
+
+  it('★ the playbook routes no channel to it: said, with the way to route one', async () => {
+    await show({}, { reach: [] });
+    expect(screen.getByTestId('who-answers-nowhere')).toHaveTextContent(
+      'No channel reaches it in the playbook today.',
+    );
   });
 
   it('how it answers: the tone and the languages it is switched on for', async () => {

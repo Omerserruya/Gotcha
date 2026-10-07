@@ -16,7 +16,7 @@ import { Link } from '@/i18n/navigation';
 
 import hire from '../hire/Hire.module.css';
 import { changesIn, draftOf, EDIT_LANGUAGES, type EditDraft } from './edit-plan';
-import { automationsLink, WhoAnswers } from '../WhoAnswers';
+import { automationsLink, WhoAnswers, type ReachItem } from '../WhoAnswers';
 import styles from './Edit.module.css';
 
 export type EditMayDo = {
@@ -55,6 +55,7 @@ export function EditSheet({
   tools,
   mayDo,
   access = null,
+  reach = null,
 }: {
   readonly employee: Employee;
   /** Connected systems, named; `null` when the read failed. */
@@ -63,6 +64,8 @@ export function EditSheet({
   readonly mayDo: readonly EditMayDo[] | null;
   /** The business systems it may use, and every one set up; `null` when unread. */
   readonly access?: IntegrationAccess | null;
+  /** Where it answers, by the playbook; `null` when unread. */
+  readonly reach?: readonly ReachItem[] | null;
 }) {
   const t = useTranslations('employees.edit');
   const td = useTranslations('employees.detail');
@@ -333,6 +336,9 @@ export function EditSheet({
               <WhoAnswers
                 className={styles.none}
                 text={te.rich('whoAnswers', { automations: automationsLink })}
+                reach={reach}
+                where={te.rich('reach.where', { automations: automationsLink })}
+                nowhere={te.rich('reach.nowhere', { automations: automationsLink })}
               />
             </section>
 

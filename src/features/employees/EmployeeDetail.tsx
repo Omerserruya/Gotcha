@@ -20,7 +20,7 @@ import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
 
 import { DeleteEmployee } from './DeleteEmployee';
-import { automationsLink, WhoAnswers } from './WhoAnswers';
+import { automationsLink, WhoAnswers, type ReachItem } from './WhoAnswers';
 import styles from './EmployeeDetail.module.css';
 import { PauseEmployee } from './PauseEmployee';
 
@@ -56,8 +56,11 @@ export async function EmployeeDetail({
   employee,
   capabilities,
   integrations,
+  reach = null,
 }: {
   readonly employee: Employee;
+  /** Where it answers, by the playbook; `null` when unread. */
+  readonly reach?: readonly ReachItem[] | null;
   /** `null`: the permissions read failed. */
   readonly capabilities: readonly Capability[] | null;
   /** `null`: the systems read failed. */
@@ -153,6 +156,9 @@ export async function EmployeeDetail({
             <WhoAnswers
               className={styles.none}
               text={t.rich('whoAnswers', { automations: automationsLink })}
+              reach={reach}
+              where={t.rich('reach.where', { automations: automationsLink })}
+              nowhere={t.rich('reach.nowhere', { automations: automationsLink })}
             />
           </section>
 

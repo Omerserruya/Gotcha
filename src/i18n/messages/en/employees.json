@@ -315,5 +315,11 @@
     "resolve": "Resolve it",
     "see": "See it in Studio"
   },
-  "whoAnswers": "Who it answers is set in <automations>Studio · Automations</automations> and the playbook, not on the employee."
+  "whoAnswers": "Who it answers is set in <automations>Studio · Automations</automations> and the playbook, not on the employee.",
+  "reach": {
+    "always": "Always",
+    "sometimes": "Sometimes (by the playbook)",
+    "where": "Decided by the playbook in <automations>Studio · Automations</automations>.",
+    "nowhere": "No channel reaches it in the playbook today. Route one to it in <automations>Studio · Automations</automations>."
+  }
 }

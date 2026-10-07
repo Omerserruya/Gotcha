@@ -7,7 +7,7 @@ import { Link } from '@/i18n/navigation';
 
 import hire from '../hire/Hire.module.css';
 import { PauseEmployee } from '../PauseEmployee';
-import { automationsLink, WhoAnswers } from '../WhoAnswers';
+import { automationsLink, WhoAnswers, type ReachItem } from '../WhoAnswers';
 import styles from './Hired.module.css';
 
 /** Where each kind of readiness recommendation is resolved. */
@@ -38,9 +38,11 @@ const RESOLVE_AT: Record<string, '/studio/knowledge' | '/settings/systems'> = {
  */
 export async function HiredDialog({
   employee,
+  reach = null,
 }: {
   readonly employee: Employee;
-  /** Where it answers, named. */
+  /** Where it answers, by the playbook; `null` when unread. */
+  readonly reach?: readonly ReachItem[] | null;
 }) {
   const t = await getTranslations('employees.hired');
   const te = await getTranslations('employees');
@@ -107,6 +109,9 @@ export async function HiredDialog({
                 <WhoAnswers
                   className={styles.rowSub}
                   text={te.rich('whoAnswers', { automations: automationsLink })}
+                  reach={reach}
+                  where={te.rich('reach.where', { automations: automationsLink })}
+                  nowhere={te.rich('reach.nowhere', { automations: automationsLink })}
                 />
               </div>
               <Link href={edit} className={styles.small} scroll={false} data-testid="hired-change">

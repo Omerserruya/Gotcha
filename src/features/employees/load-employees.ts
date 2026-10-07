@@ -4,8 +4,10 @@ import { serverApi } from '@/api/client/server-api';
 import {
   employeeListSchema,
   integrationAccessSchema,
+  reachabilitySchema,
   type Employee,
   type IntegrationAccess,
+  type Reachability,
 } from '@/api/contracts/employees';
 import { employeeEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
@@ -41,6 +43,26 @@ export async function loadIntegrationAccess(id: string): Promise<IntegrationAcce
     });
   } catch (cause) {
     logger.warn('employees.integration_access_failed', { cause });
+    return null;
+  }
+}
+
+/**
+ * Where this employee answers, by the playbook. `null` when the read failed
+ * or the service is older than its `channels` - the screen then says where
+ * it is decided instead.
+ */
+export async function loadReachability(
+  id: string,
+): Promise<Required<Pick<Reachability, 'channels'>>['channels'] | null> {
+  try {
+    const read = await serverApi().get({
+      endpoint: employeeEndpoints.reachability(id),
+      payload: reachabilitySchema,
+    });
+    return read.channels ?? null;
+  } catch (cause) {
+    logger.warn('employees.reachability_failed', { cause });
     return null;
   }
 }

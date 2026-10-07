@@ -315,3 +315,21 @@ export function accessState(choice: AccessChoice): 'working' | 'failing' | 'off'
       return 'waiting';
   }
 }
+
+/* ── Where an employee answers (Backend f79f1e6c + 9fd222d3) ── */
+
+/**
+ * `GET /api/ai-agents/:id/reachability`: per active channel of the
+ * workspace, whether the playbook reaches this employee - `always` (the
+ * single path) or `sometimes` (behind a branch: hours, a condition). A
+ * channel where it never answers is absent. An older service sends no
+ * `channels`: then it is unknown, never "nowhere".
+ */
+export const reachabilitySchema = z.object({
+  hasCanvas: z.boolean().catch(false),
+  reachable: z.boolean().catch(false),
+  channels: z
+    .array(z.object({ channel: z.string(), reach: z.enum(['always', 'sometimes']) }))
+    .optional(),
+});
+export type Reachability = z.infer<typeof reachabilitySchema>;

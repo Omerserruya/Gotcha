@@ -13,7 +13,14 @@ import { PageContainer } from '@/shell/PageContainer';
 
 const loadEmployees = vi.hoisted(() => vi.fn());
 const loadIntegrationAccess = vi.hoisted(() => vi.fn(async () => null));
-vi.mock('@/features/employees/load-employees', () => ({ loadEmployees, loadIntegrationAccess }));
+const loadReachability = vi.hoisted(() =>
+  vi.fn(async (): Promise<{ channel: string; reach: string }[] | null> => null),
+);
+vi.mock('@/features/employees/load-employees', () => ({
+  loadEmployees,
+  loadIntegrationAccess,
+  loadReachability,
+}));
 const caps = vi.hoisted(() => ({ value: [] as unknown[] }));
 vi.mock('@/features/capabilities/load-capabilities', () => ({
   loadCapabilities: async () => ({ capabilities: caps.value, usage: null, integrations: [] }),
@@ -131,6 +138,27 @@ describe('★ 07e / 07f - the dialog and the sheet, by query', () => {
     expect(find<{ employee: { id: string } }>(tree, EditSheet)?.employee.id).toBe('b');
     // Its business systems are read for THAT employee, and only when editing.
     expect(loadIntegrationAccess).toHaveBeenLastCalledWith('b');
+  });
+
+  it('★ where it answers is read for the SELECTED employee, named, and given to 07 and 07f', async () => {
+    loadReachability.mockResolvedValueOnce([
+      { channel: 'WHATSAPP', reach: 'always' },
+      { channel: 'WEBCHAT', reach: 'sometimes' },
+    ]);
+    const tree = await page([employee('a'), employee('b')], { employee: 'b', edit: '1' });
+    expect(loadReachability).toHaveBeenLastCalledWith('b');
+    const reach = [
+      { channel: 'WHATSAPP', name: 'name.WHATSAPP', when: 'reach.always' },
+      { channel: 'WEBCHAT', name: 'name.WEBCHAT', when: 'reach.sometimes' },
+    ];
+    expect(find<{ reach: unknown }>(tree, EmployeeDetail)?.reach).toEqual(reach);
+    expect(find<{ reach: unknown }>(tree, EditSheet)?.reach).toEqual(reach);
+  });
+
+  it('unread: null all the way down - the screens keep the line that says where it is decided', async () => {
+    loadReachability.mockResolvedValueOnce(null);
+    const tree = await page([employee('a')], {});
+    expect(find<{ reach: unknown }>(tree, EmployeeDetail)?.reach).toBeNull();
   });
 
   it('?hired=<id> is that employee; an unknown id opens nothing', async () => {

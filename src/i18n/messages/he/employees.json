@@ -315,5 +315,11 @@
     "resolve": "לטפל בזה",
     "see": "לראות בסטודיו"
   },
-  "whoAnswers": "מי שהוא עונה לו נקבע ב<automations>סטודיו · אוטומציות</automations> ובפלייבוק, לא אצל העובד."
+  "whoAnswers": "מי שהוא עונה לו נקבע ב<automations>סטודיו · אוטומציות</automations> ובפלייבוק, לא אצל העובד.",
+  "reach": {
+    "always": "תמיד",
+    "sometimes": "לפעמים (לפי הפלייבוק)",
+    "where": "נקבע בפלייבוק ב<automations>סטודיו · אוטומציות</automations>.",
+    "nowhere": "אף ערוץ לא מגיע אליו בפלייבוק היום. אפשר לנתב אליו ערוץ ב<automations>סטודיו · אוטומציות</automations>."
+  }
 }

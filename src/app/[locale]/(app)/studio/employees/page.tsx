@@ -20,7 +20,13 @@ import { Link } from '@/i18n/navigation';
 import { EmployeeDetail } from '@/features/employees/EmployeeDetail';
 import { EmployeeRail } from '@/features/employees/EmployeeRail';
 import styles from '@/features/employees/Employees.module.css';
-import { loadEmployees, loadIntegrationAccess } from '@/features/employees/load-employees';
+import {
+  loadEmployees,
+  loadIntegrationAccess,
+  loadReachability,
+} from '@/features/employees/load-employees';
+import type { ReachItem } from '@/features/employees/WhoAnswers';
+import { channelName } from '@/api/contracts/inbox';
 import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
 import { readTools } from '@/features/skills/skill-actions';
@@ -119,6 +125,24 @@ export default async function Page({
   const hired = params.hired ? (employees?.find((e) => e.id === params.hired) ?? null) : null;
   // 07f's business systems: this employee's allowlist and every system set up.
   const access = editing ? await loadIntegrationAccess(editing.id) : null;
+  /*
+    Where it answers, by the playbook (Backend f79f1e6c): the selected
+    employee's for 07 and 07f, and 07e's when it is another one. Named here,
+    so 07's server card and the client sheets say it alike.
+  */
+  const tch = await getTranslations('channels');
+  const reachOf = async (id: string): Promise<readonly ReachItem[] | null> => {
+    const channels = await loadReachability(id);
+    return channels
+      ? channels.map((c) => ({
+          channel: c.channel,
+          name: channelName(c.channel, tch) ?? tch('name.other'),
+          when: t(`reach.${c.reach}`),
+        }))
+      : null;
+  };
+  const reach = selected ? await reachOf(selected.id) : null;
+  const hiredReach = hired ? (hired.id === selected?.id ? reach : await reachOf(hired.id)) : null;
 
   /*
     07, measured: 02's screen header - the title, a line that counts them,
@@ -172,6 +196,7 @@ export default async function Page({
               employee={selected}
               capabilities={capabilities}
               integrations={integrations}
+              reach={reach}
             />
           )
         }
@@ -180,6 +205,7 @@ export default async function Page({
         <EditSheet
           employee={editing}
           access={access}
+          reach={reach}
           tools={integrations ? integrations.filter(isConnected).map((i) => i.name) : null}
           mayDo={
             capabilities
@@ -196,7 +222,7 @@ export default async function Page({
           }
         />
       ) : null}
-      {hired ? <HiredDialog employee={hired} /> : null}
+      {hired ? <HiredDialog employee={hired} reach={hiredReach} /> : null}
       {hiring ? (
         <HireSheet
           tools={hireTools}
