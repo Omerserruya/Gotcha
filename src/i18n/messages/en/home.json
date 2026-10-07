@@ -60,7 +60,7 @@
     "allOfThem": "all of them",
     "byYourTeam": "By your team",
     "needingYou": "Needing you",
-    "waitingOnApproval": "Waiting on approval",
+    "waitingOnApproval": "Approvals waiting for you",
     "whereItCameFrom": "Where it came from · last {days} days"
   },
   "needsYou": {
@@ -432,6 +432,14 @@
       "failed": "failed",
       "denied": "not allowed",
       "seconds": "{count, plural, =0 {· under 1s} other {· #s}}"
+    },
+    "tool": {
+      "system_count_conversations": "Counting conversations",
+      "system_get_metric": "Looking up the figures",
+      "system_recent_activity": "Reading recent activity",
+      "system_search_customers": "Searching customers",
+      "system_summarize_conversation": "Summarising the conversation",
+      "other": "Checking your data"
     }
   }
 }

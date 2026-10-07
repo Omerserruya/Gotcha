@@ -209,7 +209,6 @@
       "profile": "Profile",
       "knowledge": "Knowledge",
       "skills": "Skills · {count}",
-      "channels": "Channels",
       "limits": "Limits and handover"
     },
     "status": {

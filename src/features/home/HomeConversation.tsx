@@ -173,8 +173,9 @@ function TurnView({ turn }: { readonly turn: Turn }) {
   const t = useTranslations('home.conversation');
   return (
     <li className={styles.turn} data-testid={`turn-${turn.id}`} data-status={turn.status}>
-      <p className={styles.question}>
-        <bdi dir="auto">{turn.question}</bdi>
+      {/* `dir="auto"` on the block itself: a Hebrew line is right to left, its "?" at its end. */}
+      <p className={styles.question} dir="auto">
+        {turn.question}
       </p>
       <div className={styles.answerRow}>
         <span className={styles.avatar} aria-hidden="true">
@@ -193,8 +194,8 @@ function TurnView({ turn }: { readonly turn: Turn }) {
             </p>
           ) : null}
           {turn.answer ? (
-            <p className={styles.answer} aria-live="polite" data-testid="turn-answer">
-              <bdi dir="auto">{turn.answer}</bdi>
+            <p className={styles.answer} dir="auto" aria-live="polite" data-testid="turn-answer">
+              {turn.answer}
             </p>
           ) : null}
           {turn.awaitingApproval ? (
@@ -217,9 +218,25 @@ function TurnView({ turn }: { readonly turn: Turn }) {
   );
 }
 
-/** "✓ name · 6s" - the step, its state, and the time it took as seen from here. */
+/**
+ * A step in words: the run's `label` (Backend, 2026-10-07), in the interface
+ * language. Without one, the agent's own tools by name are ours; any other -
+ * an integration's read - is "Checking your data". A result summary is shown
+ * only beside a label, where the run wrote it in words.
+ */
+const KNOWN_TOOLS = [
+  'system_count_conversations',
+  'system_get_metric',
+  'system_recent_activity',
+  'system_search_customers',
+  'system_summarize_conversation',
+] as const;
+type KnownTool = (typeof KNOWN_TOOLS)[number];
+
+/** "✓ Searching customers · done · 2s" - the step in words, its state, the time it took as seen from here. */
 function StepLine({ step }: { readonly step: AgentStep }) {
   const t = useTranslations('home.conversation.step');
+  const tt = useTranslations('home.conversation.tool');
   const seconds =
     step.startedAt !== undefined && step.endedAt !== undefined
       ? Math.max(0, Math.round((step.endedAt - step.startedAt) / 1000))
@@ -235,16 +252,22 @@ function StepLine({ step }: { readonly step: AgentStep }) {
           '×'
         )}
       </span>
-      {/* Tool names are the backend's identifiers; the state carries the meaning. */}
-      <span>{step.name}</span>
+      {/* In words, never the tool's name; one we do not know is "Checking your data". */}
+      <span>
+        {step.label ??
+          ((KNOWN_TOOLS as readonly string[]).includes(step.name)
+            ? tt(step.name as KnownTool)
+            : tt('other'))}
+      </span>
       <span className={styles.stepState}>{t(step.status)}</span>
       {seconds !== null ? (
         <span className={styles.stepTime}>{t('seconds', { count: seconds })}</span>
       ) : null}
-      {step.detail && step.status !== 'running' ? (
-        <bdi dir="auto" className={styles.stepDetail}>
+      {/* The run's own summary, in words now (Backend), and only when the step came with words. */}
+      {step.label && step.detail && step.status !== 'running' ? (
+        <span className={styles.stepDetail} dir="auto">
           {step.detail}
-        </bdi>
+        </span>
       ) : null}
     </li>
   );

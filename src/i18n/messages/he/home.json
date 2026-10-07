@@ -60,7 +60,7 @@
     "allOfThem": "כולן",
     "byYourTeam": "על ידי הצוות",
     "needingYou": "דורשות אתכם",
-    "waitingOnApproval": "ממתין לאישור",
+    "waitingOnApproval": "אישורים שמחכים לך",
     "whereItCameFrom": "מאיפה הגיעו · {days} הימים האחרונים"
   },
   "needsYou": {
@@ -432,6 +432,14 @@
       "failed": "נכשל",
       "denied": "לא מורשה",
       "seconds": "{count, plural, =0 {· פחות משנייה} other {· # שנ׳}}"
+    },
+    "tool": {
+      "system_count_conversations": "סופרים שיחות",
+      "system_get_metric": "בודקים את המספרים",
+      "system_recent_activity": "קוראים את הפעילות האחרונה",
+      "system_search_customers": "מחפשים לקוחות",
+      "system_summarize_conversation": "מסכמים את השיחה",
+      "other": "בודקים את הנתונים שלך"
     }
   }
 }

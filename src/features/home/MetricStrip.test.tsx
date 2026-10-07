@@ -44,7 +44,7 @@ describe('★ 01’s strip - no share of nothing', () => {
     expect(cell('Handled by GOTCHA')).toHaveTextContent(/-$/);
     expect(cell('By your team')).toHaveTextContent(/-$/);
     // Approvals waiting is a count of its own: a true zero.
-    expect(cell('Waiting on approval')).toHaveTextContent(/0$/);
+    expect(cell('Approvals waiting for you')).toHaveTextContent(/0$/);
   });
 
   it('with conversations, the numbers are numbers', async () => {

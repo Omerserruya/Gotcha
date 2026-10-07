@@ -179,11 +179,11 @@ function TraceStep({ step }: { step: AgentStep }) {
     <li className={[styles.step, statusClass].join(' ')}>
       <span className={styles.stepDot} aria-hidden="true" />
       {/*
-        Tool names are backend identifiers like `get_conversation`. Translating
-        each one would mean a key per tool and a gap whenever the backend adds
-        one, so the name is shown as-is and the STATUS carries the meaning.
+        The run's own words for the step (`label`, in the interface language,
+        Backend 2026-10-07); the tool's id only from an engine too old to send
+        them.
       */}
-      <span>{step.name}</span>
+      <span>{step.label ?? step.name}</span>
       <span>{t(step.status)}</span>
     </li>
   );

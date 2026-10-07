@@ -106,7 +106,10 @@ describe('★★ the first question turns Home into the conversation, in place',
     const step = screen.getByTestId('step-s1');
     expect(step).toHaveAttribute('data-status', 'succeeded');
     expect(step).toHaveTextContent(/done.*·/);
-    expect(step).toHaveTextContent('61 returns');
+    // An unknown tool is "Checking your data"; never its name, never its raw output.
+    expect(step).toHaveTextContent('Checking your data');
+    expect(step).not.toHaveTextContent('query_returns');
+    expect(step).not.toHaveTextContent('61 returns');
     expect(screen.getByTestId('turn-answer')).toHaveTextContent('Returns are up 38%.');
     await act(async () => {
       last().push(frame({ type: 'done' }));
@@ -181,5 +184,65 @@ describe('★ stage 1 draws only what exists', () => {
         .queryAllByRole('button')
         .map((b) => b.textContent),
     ).toEqual(['Home', '']);
+  });
+});
+
+describe('★★ display (dev, 4efc9d8)', () => {
+  it('a known tool in words - "system_get_metric · done · value: 3" was on screen', async () => {
+    show();
+    await ask('How many are waiting?');
+    await act(async () => {
+      last().push(frame({ type: 'tool_start', toolCallId: 'm', name: 'system_get_metric' }));
+      last().push(
+        frame({ type: 'tool_end', toolCallId: 'm', ok: true, resultSummary: 'value: 3' }),
+      );
+    });
+    const step = screen.getByTestId('step-m');
+    expect(step).toHaveTextContent('Looking up the figures');
+    expect(step).not.toHaveTextContent(/system_get_metric|value: 3/);
+  });
+
+  it('★ the question and the answer read in their own direction - a Hebrew one right to left', async () => {
+    show();
+    await ask('מה קרה עם ההחזרות האחרונות?');
+    await act(async () => {
+      last().push(frame({ type: 'token', text: 'ההחזרות עלו ב־38%.' }));
+    });
+    expect(screen.getByText('מה קרה עם ההחזרות האחרונות?', { selector: 'p' })).toHaveAttribute(
+      'dir',
+      'auto',
+    );
+    expect(screen.getByTestId('turn-answer')).toHaveAttribute('dir', 'auto');
+  });
+});
+
+describe('★★ the run speaks the interface language (Backend, 2026-10-07)', () => {
+  it("the step in the run's own words, with its summary; the locale goes with the question", async () => {
+    show();
+    await ask('How many are waiting?');
+    expect(last().body).toMatchObject({ locale: 'en' });
+    await act(async () => {
+      last().push(
+        frame({
+          type: 'tool_start',
+          toolCallId: 'w',
+          name: 'system_count_conversations',
+          label: 'Counting the conversations waiting for your team',
+        }),
+      );
+      last().push(
+        frame({
+          type: 'tool_end',
+          toolCallId: 'w',
+          ok: true,
+          label: 'Counting the conversations waiting for your team',
+          resultSummary: '9 conversations waiting for someone on your team to answer',
+        }),
+      );
+    });
+    const step = screen.getByTestId('step-w');
+    expect(step).toHaveTextContent('Counting the conversations waiting for your team');
+    expect(step).toHaveTextContent('9 conversations waiting');
+    expect(step).not.toHaveTextContent('system_count_conversations');
   });
 });

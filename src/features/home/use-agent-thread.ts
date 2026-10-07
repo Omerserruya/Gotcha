@@ -1,5 +1,6 @@
 'use client';
 
+import { useLocale } from 'next-intl';
 import { useCallback, useRef, useState } from 'react';
 
 import { streamServerSentEvents } from '@/api/client/sse-client';
@@ -30,6 +31,8 @@ export function useAgentThread() {
   const abortRef = useRef<AbortController | null>(null);
   const sessionRef = useRef<string | null>(null);
   sessionRef.current ??= globalThis.crypto.randomUUID();
+  // The interface language: the steps' words and summaries come in it (the answer follows the question).
+  const localeRef = useRef(useLocale());
 
   /** Fold into the last turn only - an earlier one is finished. */
   const onLast = (change: (turn: Turn) => Turn) =>
@@ -64,7 +67,7 @@ export function useAgentThread() {
     try {
       const stream = streamServerSentEvents({
         url: appPath(`/api/bff${agentEndpoints.run().path}` as `/${string}`),
-        body: { message: question, sessionId: sessionRef.current },
+        body: { message: question, sessionId: sessionRef.current, locale: localeRef.current },
         signal: controller.signal,
       });
       for await (const frame of stream) {

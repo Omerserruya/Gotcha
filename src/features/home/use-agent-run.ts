@@ -1,5 +1,6 @@
 'use client';
 
+import { useLocale } from 'next-intl';
 import { useCallback, useRef, useState } from 'react';
 
 import { streamServerSentEvents } from '@/api/client/sse-client';
@@ -29,6 +30,8 @@ export interface AgentStep {
   readonly name: string;
   readonly status: 'running' | 'succeeded' | 'failed' | 'denied';
   readonly detail?: string;
+  /** The step in the person's words (the run's `label`); `name` is the tool's id. */
+  readonly label?: string;
   /**
    * When its start and its end ARRIVED here (ms). The stream carries no
    * durations; the gap between the two is what the page measured - "· 6s".
@@ -63,6 +66,8 @@ export function useAgentRun() {
    */
   const sessionRef = useRef<string | null>(null);
   sessionRef.current ??= globalThis.crypto.randomUUID();
+  // The interface language: the steps' words and summaries come in it (the answer follows the question).
+  const localeRef = useRef(useLocale());
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
@@ -97,7 +102,7 @@ export function useAgentRun() {
          * path - while every other client call went to the right place.
          */
         url: appPath(`/api/bff${agentEndpoints.run().path}` as `/${string}`),
-        body: { message, sessionId: sessionRef.current },
+        body: { message, sessionId: sessionRef.current, locale: localeRef.current },
         signal: controller.signal,
       });
 
@@ -149,6 +154,7 @@ export function reduce<S extends AgentRunState>(current: S, event: AgentEvent, n
           {
             id: event.toolCallId ?? `${event.name}-${current.steps.length}`,
             name: event.name ?? 'unknown',
+            label: event.label,
             status: 'running',
             startedAt: now,
           },
@@ -164,6 +170,7 @@ export function reduce<S extends AgentRunState>(current: S, event: AgentEvent, n
                 ...step,
                 status: event.ok === false ? 'failed' : 'succeeded',
                 detail: event.resultSummary,
+                label: event.label ?? step.label,
                 endedAt: now,
               }
             : step,

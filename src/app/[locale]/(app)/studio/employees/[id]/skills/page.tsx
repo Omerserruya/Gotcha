@@ -81,9 +81,6 @@ export default async function Page({
             <span className={styles.tabLink} aria-current="page" data-testid="employee-tab-skills">
               {t('tabs.skills', { count: tab.assigned.skills.length })}
             </span>
-            <Link href="/settings/channels" className={styles.tabLink}>
-              {t('tabs.channels')}
-            </Link>
             <Link href={edit} className={styles.tabLink} scroll={false}>
               {t('tabs.limits')}
             </Link>

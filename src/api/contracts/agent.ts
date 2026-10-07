@@ -24,6 +24,8 @@ export const agentRunRequestSchema = z.object({
   model: z.string().optional(),
   /** `true` leaves no trace of the turn in memory. */
   ephemeral: z.boolean().optional(),
+  /** The interface language: steps' labels and summaries are written in it (the answer follows the question). */
+  locale: z.string().optional(),
   aiAgentId: z.string().optional(),
 });
 
@@ -54,12 +56,15 @@ export const agentEventSchema = z.discriminatedUnion('type', [
     type: z.literal('tool_start'),
     toolCallId: z.string().optional(),
     name: z.string().optional(),
+    /** The step in words, in the run's `locale` (Backend, 2026-10-07). Shown instead of `name`. */
+    label: z.string().optional(),
     args: z.unknown().optional(),
   }),
   z.looseObject({
     type: z.literal('tool_end'),
     toolCallId: z.string().optional(),
     name: z.string().optional(),
+    label: z.string().optional(),
     ok: z.boolean().optional(),
     resultSummary: z.string().optional(),
   }),
