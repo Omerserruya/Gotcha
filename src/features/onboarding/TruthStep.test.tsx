@@ -61,6 +61,7 @@ const show = (props: Partial<Parameters<typeof TruthStep>[0]> = {}) =>
         shopify={{ mode: 'listing', helpUrl: null }}
         detected={{ slug: 'shopify', host: 'avivco.il' }}
         system={null}
+        coreSystem={null}
         {...props}
       />
     </NextIntlClientProvider>,
@@ -162,14 +163,19 @@ describe('★★ a connection row is not a connection (dev: Shopify ERROR read "
   });
 });
 
-describe('★ finishing counts what the route counts as the core system', () => {
-  it('Shopify connected: Continue, not skipped', () => {
-    show({ integrations: [system('shopify', 'Shopify', true)] });
+describe('★ finishing asks the server, not a copy of its list (coreSystemConnected)', () => {
+  it('the server counts one connected: Continue, not skipped', () => {
+    show({ integrations: [system('shopify', 'Shopify', true)], coreSystem: 'shopify' });
     expect(screen.getByTestId('truth-next')).toHaveAttribute('href', '/onboarding/try');
   });
 
-  it('only WooCommerce connected: Continue - but told to the route as skipped (it is not a core system)', () => {
-    show({ integrations: [system('woocommerce', 'WooCommerce', true)] });
+  it('WooCommerce, now a core system on the server (776d2bf2): not skipped', () => {
+    show({ integrations: [system('woocommerce', 'WooCommerce', true)], coreSystem: 'woocommerce' });
+    expect(screen.getByTestId('truth-next')).toHaveAttribute('href', '/onboarding/try');
+  });
+
+  it('connected here but not counted (or unread): told to the route as skipped', () => {
+    show({ integrations: [system('woocommerce', 'WooCommerce', true)], coreSystem: null });
     expect(screen.getByTestId('truth-next')).toHaveTextContent('Continue');
     expect(screen.getByTestId('truth-next').getAttribute('href')).toContain('"skipped":"1"');
   });

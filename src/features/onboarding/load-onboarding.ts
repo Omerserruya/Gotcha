@@ -173,11 +173,16 @@ export interface TruthRead {
   readonly shopify: ShopifyAvailability | null;
   /** The store platform the website read found, and the site it found it on. */
   readonly detected: { readonly slug: string; readonly host: string | null } | null;
+  /**
+   * The core system the server counts (`coreSystemConnected`) - the one
+   * `/complete` checks. `null`: none, or unread.
+   */
+  readonly coreSystem: string | null;
 }
 
 /** 00g: what can be connected, what is, and what the read found on the site. */
 export async function loadTruth(): Promise<TruthRead> {
-  const [integrations, shopify, discovery] = await Promise.all([
+  const [integrations, shopify, discovery, status] = await Promise.all([
     serverApi()
       .get({ endpoint: integrationEndpoints.list(), payload: integrationsSchema })
       .catch((cause: unknown) => {
@@ -188,11 +193,16 @@ export async function loadTruth(): Promise<TruthRead> {
       }),
     loadShopifyAvailability(),
     loadDiscovery(),
+    serverApi()
+      .get({ endpoint: onboardingEndpoints.status(), payload: onboardingStatusSchema, raw: true })
+      .then((r) => r.data)
+      .catch(() => null),
   ]);
   const platform = discovery?.technology?.platform?.slug?.trim().toLowerCase() || null;
   return {
     integrations,
     shopify,
+    coreSystem: status?.coreSystemConnected ?? null,
     detected: platform
       ? {
           slug: platform,

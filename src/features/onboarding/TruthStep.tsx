@@ -22,20 +22,6 @@ export const TRUTH_SYSTEMS = [
   'custom_api',
 ] as const;
 
-/**
- * The systems `/api/onboarding/complete` counts as the core one
- * (`CORE_SYSTEM_SLUGS`). Anything else connected here is still connected,
- * but finishing tells the route it was skipped - or it refuses.
- */
-const CORE_SYSTEMS = new Set([
-  'hubspot',
-  'salesforce',
-  'zoho_crm',
-  'shopify',
-  'fireberry',
-  'airtable',
-]);
-
 /** 00g's write actions - what GOTCHA may change in the store. */
 const ACTIONS = ['address', 'cancel', 'refund', 'prices'] as const;
 const STANCES = ['allowed', 'ask', 'never'] as const;
@@ -74,12 +60,20 @@ export function TruthStep({
   shopify,
   detected,
   system,
+  coreSystem,
 }: {
   readonly integrations: readonly Integration[] | null;
   readonly shopify: ShopifyAvailability | null;
   readonly detected: { readonly slug: string; readonly host: string | null } | null;
   /** `?system=` - a tile chosen. */
   readonly system: string | null;
+  /**
+   * The server's own answer to "is a core system connected"
+   * (`coreSystemConnected`) - the one `/complete` checks, so 00g keeps no
+   * copy of its list. `null` (none, or unread): finishing says it was
+   * skipped, which only waives the check.
+   */
+  readonly coreSystem: string | null;
 }) {
   const t = useTranslations('onboarding.truth');
   const tc = useTranslations('capabilities.available');
@@ -93,10 +87,7 @@ export function TruthStep({
   const anyConnected = (integrations ?? []).some(
     (i) => (TRUTH_SYSTEMS as readonly string[]).includes(i.slug) && standingOf(i) === 'connected',
   );
-  // What /complete counts as a core system: of these, Shopify only (not Woo, not Wix).
-  const coreConnected = (integrations ?? []).some(
-    (i) => CORE_SYSTEMS.has(i.slug) && standingOf(i) === 'connected',
-  );
+  const coreConnected = coreSystem !== null;
 
   return (
     <div className={styles.truth}>

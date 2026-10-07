@@ -18,6 +18,7 @@ export default async function Page({
         shopify={read.shopify}
         detected={read.detected}
         system={system}
+        coreSystem={read.coreSystem}
       />
     </OnboardingShell>
   );
