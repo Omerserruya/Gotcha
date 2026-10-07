@@ -939,6 +939,12 @@ export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob 
     console.log(`[incoming-worker] cart-check checkout=${(job as any).data?.checkoutId} outcome=${r.outcome}`);
     return;
   }
+  if (job.name === "order-event") {
+    const { onOrderEvent } = await import("../services/order.service");
+    const r = await onOrderEvent((job as any).data);
+    console.log(`[incoming-worker] order-event order=${(job as any).data?.orderId} status=${(job as any).data?.status} outcome=${r.outcome}`);
+    return;
+  }
   if (job.name === "automation-event") {
     await processAutomationEvent(job as unknown as Job<AutomationEventJob>);
     return;

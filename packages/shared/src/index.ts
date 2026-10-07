@@ -14,6 +14,8 @@ export type {
   FlowResumeJob,
   AutomationEventJob,
   CartEventJob,
+  OrderEventJob,
+  OrderStatus,
   HistoricalImportChunkJob,
   HistoricalIntelligenceJob,
 } from "./lib/queue";
@@ -618,6 +620,7 @@ export {
   historicalIntelligenceQueue,
   createWorker,
   CHANNEL_RATE_LIMITS,
+  ORDER_STATUSES,
 } from "./lib/queue";
 export { publishEvent, subscribeToEvents, closeEventBus } from "./lib/event-bus";
 export { createServiceApp, startService } from "./lib/service-app";

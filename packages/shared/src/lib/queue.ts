@@ -383,6 +383,31 @@ export interface CartEventJob {
   marketingConsent?: { email?: boolean | null; sms?: boolean | null } | null;
 }
 
+/** What an order event reports (the automation's `statuses` filter). */
+export const ORDER_STATUSES = ["created", "paid", "fulfilled", "cancelled"] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+/**
+ * A store order changed (job name "order-event" on the incoming-messages
+ * queue). Shopify orders/* webhooks and the WooCommerce poller produce it;
+ * the incoming worker runs "Order event" automations from it, once per order
+ * per status.
+ */
+export interface OrderEventJob {
+  tenantId: string;
+  source: "shopify" | "woocommerce" | "test";
+  orderId: string;
+  status: OrderStatus;
+  /** What the customer sees ("#1042"). */
+  orderNumber: string;
+  total?: number | null;
+  currency?: string | null;
+  customer: { email?: string | null; phone?: string | null; firstName?: string | null };
+  items: Array<{ title: string; quantity: number }>;
+  /** The store's order status page for the customer, when it has one. */
+  orderUrl?: string | null;
+}
+
 /**
  * An event that can fire automations without an inbound message (job name
  * "automation-event" on the incoming-messages queue). `eventKey` is the

@@ -4,10 +4,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // active-tenant gate, plus createWorker (referenced by startIncomingWorker, not
 // under test here). Everything else the module imports stays real but unused.
 // `vi.hoisted` exposes these mocks to the hoisted vi.mock factories below.
-const { tenant, executeWebhookFlow, onCallEvent } = vi.hoisted(() => ({
+const { tenant, executeWebhookFlow, onCallEvent, onOrderEvent } = vi.hoisted(() => ({
   tenant: { findUnique: vi.fn() },
   executeWebhookFlow: vi.fn(),
   onCallEvent: vi.fn(async () => ({ outcome: "completed" })),
+  onOrderEvent: vi.fn(async () => ({ outcome: "completed" })),
 }));
 vi.mock("@chatcenter/shared", () => ({
   // The uploads write probe runs at module load. Stubbed as writable so these
@@ -51,6 +52,7 @@ vi.mock("../services/comment-trigger.service", () => ({
 }));
 vi.mock("../services/flow-executor.service", () => ({ executeWebhookFlow }));
 vi.mock("../services/call-automation.service", () => ({ onCallEvent }));
+vi.mock("../services/order.service", () => ({ onOrderEvent }));
 
 import { dispatch } from "../workers/incoming.worker";
 
@@ -128,5 +130,14 @@ describe("incoming worker dispatch - call automation events", () => {
     tenant.findUnique.mockResolvedValue({ status: "SUSPENDED" });
     await dispatch({ name: "automation-event", data: { tenantId: "t1", type: "call_missed", eventKey: "call:vs1", payload: { sessionId: "vs1" } } } as any);
     expect(onCallEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe("incoming worker dispatch - order events", () => {
+  it("an order-event job reaches the order automations with its data", async () => {
+    vi.clearAllMocks();
+    const data = { tenantId: "t1", source: "shopify", orderId: "5001", status: "fulfilled", orderNumber: "#1042", customer: {}, items: [] };
+    await dispatch({ name: "order-event", data } as any);
+    expect(onOrderEvent).toHaveBeenCalledWith(data);
   });
 });

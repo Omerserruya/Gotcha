@@ -26,7 +26,7 @@ import {
 
 export const LOOP_GUARD_PER_MIN = 5;
 
-export type AutomationTrigger = "message_received" | "new_customer" | "message_from_ad" | "button_tapped" | "tag_added" | "cart_abandoned" | "comment_received" | "schedule" | "webhook" | "call_missed" | "call_answered";
+export type AutomationTrigger = "message_received" | "new_customer" | "message_from_ad" | "button_tapped" | "tag_added" | "cart_abandoned" | "order_event" | "comment_received" | "schedule" | "webhook" | "call_missed" | "call_answered";
 
 export interface TriggerEvent {
   type: AutomationTrigger;

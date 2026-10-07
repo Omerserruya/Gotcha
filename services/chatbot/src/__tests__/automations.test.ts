@@ -91,6 +91,7 @@ vi.mock("@chatcenter/shared", async () => {
   const rule = await import("@chatcenter/shared/src/lib/conversation-visibility-rule");
   const pass = (_q: any, _s: any, n: any) => n();
   return {
+    ORDER_STATUSES: ["created", "paid", "fulfilled", "cancelled"],
     visibilityClause: rule.visibilityClause,
     viewerOf: (req: any) => ({ userId: req.user.userId, role: req.user.role, departmentId: req.user.departmentId }),
     authenticate: (req: any, _r: any, n: any) => { req.user = { ...H.viewer }; n(); },
@@ -296,7 +297,7 @@ describe("★ validation rules (pure)", () => {
   });
 
   it("a trigger with no event source cannot go live; a call trigger needs a line", () => {
-    expect(v({ type: "order_event", config: {} }).errors.map((e) => e.code)).toContain("trigger_no_event_source");
+    expect(v({ type: "form_submitted", config: {} }).errors.map((e) => e.code)).toContain("trigger_no_event_source");
     const tpl = { nodes: [{ id: "t", type: "automation_trigger", data: {} }, { id: "s", type: "send_message_template", data: { templateId: "tpl1" } }], edges: [{ id: "e", source: "t", target: "s" }] };
     const codes = (ctx: any) => validateAutomation({ type: "call_missed", config: {} }, tpl.nodes as any, tpl.edges as any, ctx).errors.map((e) => e.code);
     expect(codes({ voiceConnected: true })).toEqual([]);
@@ -312,10 +313,10 @@ describe("★ validation rules (pure)", () => {
 describe("the catalogue (09e)", () => {
   const items = (body: any) => Object.fromEntries(body.data.groups.flatMap((g: any) => g.items.map((i: any) => [i.type, i])));
 
-  it("first step: only triggers; order/cart/form/story have no source; calls need a line", async () => {
+  it("first step: only triggers; form/story have no source; calls need a line", async () => {
     const it0 = items((await request(app).get("/api/automations/catalog")).body);
     expect(it0["trigger:message_received"]).toMatchObject({ available: true });
-    expect(it0["trigger:order_event"]).toMatchObject({ available: false, reason: "no_event_source" });
+    expect(it0["trigger:form_submitted"]).toMatchObject({ available: false, reason: "no_event_source" });
     expect(it0["trigger:call_missed"]).toMatchObject({ available: false, reason: "not_connected" });
     expect(it0.send_buttons).toMatchObject({ available: false, reason: "first_step_only" });
   });
@@ -575,5 +576,30 @@ describe("★ call missed / call answered", () => {
     expect(items(d).send_message_text).toMatchObject({ available: false, reason: "needs_24h_window" });
     expect(items(d).send_message_template).toMatchObject({ available: true });
     expect(d.variables).toEqual(expect.arrayContaining(["caller_number", "line_name", "call_duration", "call_recording_url", "first_name"]));
+  });
+});
+
+describe("★ order event", () => {
+  const items = (d: any) => Object.fromEntries(d.groups.flatMap((x: any) => x.items.map((i: any) => [i.type, i])));
+  const g = (type: string, data: any) => ({
+    nodes: [{ id: "t", type: "automation_trigger", data: {} }, { id: "s", type, data }],
+    edges: [{ id: "e", source: "t", target: "s" }],
+  });
+
+  it("is live; keeps channels and statuses, refuses an unknown status", async () => {
+    const it0 = items((await request(app).get("/api/automations/catalog")).body.data);
+    expect(it0["trigger:order_event"]).toMatchObject({ available: true, description: expect.stringMatching(/Shopify or WooCommerce/) });
+    expect(normalizeTrigger({ type: "order_event", config: { statuses: ["fulfilled", "fulfilled"], channels: ["WHATSAPP"], delayMinutes: 5 } }))
+      .toEqual({ type: "order_event", config: { channels: ["WHATSAPP"], statuses: ["fulfilled"] } });
+    expect(() => normalizeTrigger({ type: "order_event", config: { statuses: ["delivered"] } })).toThrow(/created, paid, fulfilled, cancelled/);
+  });
+
+  it("★ WhatsApp: template only; e-mail only may be free text; the catalogue offers the order variables", async () => {
+    const plain = g("send_message_text", { text: "Your order {{order_number}} shipped" });
+    expect(validateAutomation({ type: "order_event", config: {} }, plain.nodes as any, plain.edges as any).errors.map((e) => e.code)).toContain("needs_24h_window");
+    expect(validateAutomation({ type: "order_event", config: { channels: ["EMAIL"] } }, plain.nodes as any, plain.edges as any).errors).toEqual([]);
+    const a = await create({ ...g("send_message_template", { templateId: "tpl1" }), trigger: { type: "order_event", config: { statuses: ["fulfilled"] } } });
+    const d = (await request(app).get(`/api/automations/catalog?automationId=${a.id}&after=t`)).body.data;
+    expect(d.variables).toEqual(expect.arrayContaining(["order_number", "order_total", "order_status", "order_items", "order_url", "first_name"]));
   });
 });

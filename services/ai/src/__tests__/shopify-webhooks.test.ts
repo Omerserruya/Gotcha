@@ -248,7 +248,7 @@ describe("mandatory compliance webhooks", () => {
 
 // ── Commerce events → cart left behind ─────────────────────────────────────
 
-import { cartEventFromShopifyCheckout, cartCompletionFromShopifyOrder } from "../services/shopify-cart-events";
+import { cartEventFromShopifyCheckout, cartCompletionFromShopifyOrder, orderEventFromShopifyOrder } from "../services/shopify-cart-events";
 
 const CHECKOUT = {
   token: "chk_tok_1", updated_at: "2026-10-07T10:00:00Z", completed_at: null,
@@ -298,3 +298,39 @@ describe("★ checkouts and orders → cart events", () => {
     expect(H.enqueue).not.toHaveBeenCalled();
   });
 });
+
+describe("★ orders → order events", () => {
+  const ORDER = {
+    id: 5001, name: "#1042", order_number: 1042, email: "dana@example.com", current_total_price: "590.00", currency: "ILS",
+    order_status_url: "https://my-store.myshopify.com/orders/abc", checkout_token: "chk_tok_1",
+    customer: { first_name: "Dana", phone: "+972501234567" }, line_items: [{ title: "Cotton Trench Coat", quantity: 1 }],
+  };
+
+  it("an order payload becomes the shared order event", () => {
+    expect(orderEventFromShopifyOrder("t1", ORDER, "fulfilled")).toEqual({
+      tenantId: "t1", source: "shopify", orderId: "5001", status: "fulfilled", orderNumber: "#1042", total: 590, currency: "ILS",
+      customer: { email: "dana@example.com", phone: "+972501234567", firstName: "Dana" },
+      items: [{ title: "Cotton Trench Coat", quantity: 1 }], orderUrl: "https://my-store.myshopify.com/orders/abc",
+    });
+    expect(orderEventFromShopifyOrder("t1", {}, "paid")).toBeNull();
+  });
+
+  it("★ each orders/* topic queues its status; orders/create also completes the checkout", async () => {
+    await postTopic("/api/connectors/shopify/webhooks/orders-create", "orders/create", ORDER, "o-1");
+    for (const [path, topic, id] of [["orders-paid", "orders/paid", "o-2"], ["orders-fulfilled", "orders/fulfilled", "o-3"], ["orders-cancelled", "orders/cancelled", "o-4"]]) {
+      expect((await postTopic(`/api/connectors/shopify/webhooks/${path}`, topic, ORDER, id)).status).toBe(200);
+    }
+    await postTopic("/api/connectors/shopify/webhooks/orders-paid", "orders/paid", ORDER, "o-2"); // a replay
+    await new Promise((r) => setImmediate(r));
+    expect(H.enqueue.mock.calls.map((c: any) => [c[0], c[1].status ?? (c[1].completed ? "checkout-bought" : "?")])).toEqual([
+      ["cart-event", "checkout-bought"], ["order-event", "created"], ["order-event", "paid"], ["order-event", "fulfilled"], ["order-event", "cancelled"],
+    ]);
+  });
+
+  it("a forged orders/paid is refused", async () => {
+    expect((await postTopic("/api/connectors/shopify/webhooks/orders-paid", "orders/paid", ORDER, "o-9", "wrong")).status).toBe(401);
+    await new Promise((r) => setImmediate(r));
+    expect(H.enqueue).not.toHaveBeenCalled();
+  });
+});
+

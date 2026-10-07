@@ -13,8 +13,13 @@
  *   - the first poll starts NOW: history is never replayed
  * Consent: WooCommerce stores none, so these carts reach only customers with a
  * granted ConsentRecord (the cart service decides; the trigger says so).
+ *
+ * The same read feeds "Order event" automations: a changed order with a
+ * status that means something becomes an order event (once per order per
+ * status, deduped by the incoming worker). Polling, not a Woo webhook: it
+ * needs nothing written to the customer's store.
  */
-import { prisma, getRedis, incomingMessageQueue, decryptCredentials, assertPublicUrl, type CartEventJob } from "@chatcenter/shared";
+import { prisma, getRedis, incomingMessageQueue, decryptCredentials, assertPublicUrl, type CartEventJob, type OrderEventJob, type OrderStatus } from "@chatcenter/shared";
 import { normalizeStoreUrl } from "./connectors/woocommerce.adapter";
 
 const PER_PAGE = 20;
@@ -24,6 +29,11 @@ const BACKOFF_BASE_S = 15 * 60;
 const BACKOFF_MAX_S = 6 * 3600;
 const WAITING = new Set(["pending", "checkout-draft"]);
 const PAID = new Set(["processing", "completed", "on-hold"]);
+
+/** Woo status → order event. `pending` is a checkout waiting for payment (carts), not an order event. */
+const ORDER_STATUS: Record<string, OrderStatus> = {
+  "on-hold": "created", processing: "paid", completed: "fulfilled", cancelled: "cancelled", refunded: "cancelled",
+};
 
 const cursorKey = (id: string) => `woo:cart-cursor:${id}`;
 const backoffKey = (id: string) => `woo:cart-backoff:${id}`;
@@ -48,6 +58,25 @@ export function cartEventFromWooOrder(tenantId: string, order: any): CartEventJo
     // The store's own "pay for this order" link.
     cartUrl: order.payment_url ?? null,
     marketingConsent: null,
+  };
+}
+
+/** One Woo order as an order event, or null for a status that is not one. */
+export function orderEventFromWooOrder(tenantId: string, order: any): OrderEventJob | null {
+  const status = ORDER_STATUS[String(order?.status ?? "")];
+  if (!order?.id || !status) return null;
+  const billing = order.billing ?? {};
+  return {
+    tenantId,
+    source: "woocommerce",
+    orderId: String(order.id),
+    status,
+    orderNumber: `#${order.number ?? order.id}`,
+    total: Number.isFinite(Number(order.total)) ? Number(order.total) : null,
+    currency: order.currency ?? null,
+    customer: { email: billing.email || null, phone: billing.phone || null, firstName: billing.first_name || null },
+    items: (Array.isArray(order.line_items) ? order.line_items : []).map((l: any) => ({ title: String(l?.name ?? ""), quantity: Number(l?.quantity ?? 1) || 1 })).filter((i: any) => i.title),
+    orderUrl: null,
   };
 }
 
@@ -105,6 +134,11 @@ export async function pollWooConnection(
         await incomingMessageQueue.add("cart-event", ev, { attempts: 3, removeOnComplete: true, removeOnFail: 100 });
         queued++;
       }
+      const oe = orderEventFromWooOrder(conn.tenantId, o);
+      if (oe) {
+        await incomingMessageQueue.add("order-event", oe, { attempts: 3, removeOnComplete: true, removeOnFail: 100 });
+        queued++;
+      }
       const m = String(o?.date_modified_gmt ?? "");
       if (m && m > newest) newest = m;
     }
@@ -116,12 +150,12 @@ export async function pollWooConnection(
 }
 
 /**
- * One tick over every CONNECTED WooCommerce store that has a live cart
- * automation. A workspace without one is never polled.
+ * One tick over every CONNECTED WooCommerce store that has a live cart or
+ * order automation. A workspace without one is never polled.
  */
 export async function pollWooCarts(now = new Date()): Promise<number> {
   const tenants = await prisma.chatbotFlow.findMany({
-    where: { isActive: true, triggerType: "cart_abandoned" },
+    where: { isActive: true, triggerType: { in: ["cart_abandoned", "order_event"] } },
     select: { tenantId: true },
     distinct: ["tenantId"],
   } as any);

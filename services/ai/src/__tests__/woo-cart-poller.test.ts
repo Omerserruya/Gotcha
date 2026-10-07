@@ -22,7 +22,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   };
 });
 
-import { cartEventFromWooOrder, pollWooConnection } from "../services/woo-cart-poller.service";
+import { cartEventFromWooOrder, orderEventFromWooOrder, pollWooConnection } from "../services/woo-cart-poller.service";
 
 const conn = { id: "ti1", tenantId: "T", credentials: { consumerKey: "ck", consumerSecret: "cs" }, config: { storeUrl: "https://shop.example.com" } };
 const order = (id: number, status: string, modified: string) => ({
@@ -76,3 +76,24 @@ describe("★ WooCommerce cart poller", () => {
     expect(H.redis.get("woo:cart-cursor:ti1")).toBe("2026-10-07T09:00:00"); // never moved on failure
   });
 });
+
+describe("★ WooCommerce orders → order events (same gentle read)", () => {
+  it("on-hold → created, processing → paid, completed → fulfilled, cancelled / refunded → cancelled; pending is a cart, not an order event", () => {
+    const st = (s: string) => orderEventFromWooOrder("T", { ...order(9, s, "x"), number: "1042" })?.status ?? null;
+    expect(["on-hold", "processing", "completed", "cancelled", "refunded", "pending", "checkout-draft", "failed"].map(st))
+      .toEqual(["created", "paid", "fulfilled", "cancelled", "cancelled", null, null, null]);
+    expect(orderEventFromWooOrder("T", { ...order(9, "completed", "x"), number: "1042" })).toMatchObject({
+      source: "woocommerce", orderId: "9", orderNumber: "#1042", total: 590, customer: { firstName: "Dana", phone: "0501234567" }, items: [{ title: "Coat", quantity: 1 }],
+    });
+  });
+
+  it("a poll queues the order event beside the cart event", async () => {
+    H.redis.set("woo:cart-cursor:ti1", "2026-10-07T09:00:00");
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => [order(9, "processing", "2026-10-07T09:30:00"), order(10, "completed", "2026-10-07T09:31:00")] }));
+    await pollWooConnection(conn, new Date(), fetchImpl as any);
+    expect(H.queued.map((q) => [q.name, q.data.status ?? (q.data.completed ? "bought" : "cart")])).toEqual([
+      ["cart-event", "bought"], ["order-event", "paid"], ["cart-event", "bought"], ["order-event", "fulfilled"],
+    ]);
+  });
+});
+

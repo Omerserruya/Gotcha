@@ -7,7 +7,7 @@
  * Without Protected Customer Data approval Shopify redacts the email and
  * phone, and such a checkout simply has nobody to reach.
  */
-import type { CartEventJob } from "@chatcenter/shared";
+import type { CartEventJob, OrderEventJob, OrderStatus } from "@chatcenter/shared";
 
 const num = (v: unknown): number | null => {
   const n = Number(v);
@@ -56,3 +56,34 @@ export function cartCompletionFromShopifyOrder(tenantId: string, body: any): Car
     customer: {}, items: [],
   };
 }
+
+/**
+ * An orders/* payload as an order event (Studio > Automations, "Order
+ * event"). orders/create → created, orders/paid → paid, orders/fulfilled →
+ * fulfilled (shipped), orders/cancelled → cancelled. Each topic carries the
+ * full order.
+ */
+export function orderEventFromShopifyOrder(tenantId: string, body: any, status: OrderStatus): OrderEventJob | null {
+  const orderId = String(body?.id ?? "").trim();
+  if (!orderId) return null;
+  const customer = body?.customer ?? {};
+  return {
+    tenantId,
+    source: "shopify",
+    orderId,
+    status,
+    orderNumber: String(body?.name ?? (body?.order_number != null ? `#${body.order_number}` : orderId)),
+    total: num(body?.current_total_price ?? body?.total_price),
+    currency: body?.presentment_currency ?? body?.currency ?? null,
+    customer: {
+      email: body?.email ?? body?.contact_email ?? customer?.email ?? null,
+      phone: body?.phone ?? body?.shipping_address?.phone ?? body?.billing_address?.phone ?? customer?.phone ?? null,
+      firstName: customer?.first_name ?? body?.billing_address?.first_name ?? body?.shipping_address?.first_name ?? null,
+    },
+    items: (Array.isArray(body?.line_items) ? body.line_items : []).map((l: any) => ({
+      title: String(l?.title ?? l?.name ?? ""), quantity: Number(l?.quantity ?? 1) || 1,
+    })).filter((i: any) => i.title),
+    orderUrl: body?.order_status_url ?? null,
+  };
+}
+

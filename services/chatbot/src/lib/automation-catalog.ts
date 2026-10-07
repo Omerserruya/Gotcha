@@ -11,6 +11,7 @@
  * channel) and get availability with a reason a person can act on.
  */
 import { validateGraph, type GraphIssue } from "./graph-validator";
+import { ORDER_STATUSES } from "@chatcenter/shared";
 
 export type Channel = "WHATSAPP" | "MESSENGER" | "INSTAGRAM" | "EMAIL" | "GMAIL" | "OUTLOOK" | "SLACK" | "VOICE" | "WEBCHAT" | "SHOPIFY_LIVE_CHAT";
 export const CHANNELS: Channel[] = ["WHATSAPP", "MESSENGER", "INSTAGRAM", "EMAIL", "GMAIL", "OUTLOOK", "SLACK", "VOICE", "WEBCHAT", "SHOPIFY_LIVE_CHAT"];
@@ -37,14 +38,14 @@ export type TriggerType = (typeof TRIGGER_TYPES)[number];
 /** Triggers whose events reach the dispatcher today. */
 // call_missed / call_answered: the shared call-state transition queues them
 // (inbound calls only); the reply goes to the caller on WhatsApp.
-const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "message_from_ad", "button_tapped", "comment_received", "tag_added", "cart_abandoned", "call_missed", "call_answered", "schedule", "webhook"]);
+const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "message_from_ad", "button_tapped", "comment_received", "tag_added", "cart_abandoned", "order_event", "call_missed", "call_answered", "schedule", "webhook"]);
 /**
  * Triggers that fire when the customer has not written to us: on WhatsApp the
  * 24 h service window is closed, so only an approved template can be sent.
  */
-const OUTSIDE_WINDOW_TRIGGERS = new Set<TriggerType>(["tag_added", "cart_abandoned", "call_missed", "call_answered"]);
+const OUTSIDE_WINDOW_TRIGGERS = new Set<TriggerType>(["tag_added", "cart_abandoned", "order_event", "call_missed", "call_answered"]);
 /** Of those, the ones that NEVER follow a customer message: the validator refuses a free-form WhatsApp send. */
-const WINDOW_CLOSED_TRIGGERS = new Set<TriggerType>(["cart_abandoned", "call_missed", "call_answered"]);
+const WINDOW_CLOSED_TRIGGERS = new Set<TriggerType>(["cart_abandoned", "order_event", "call_missed", "call_answered"]);
 /** Triggers that carry no customer: their path cannot send a message. */
 const CUSTOMERLESS_TRIGGERS = new Set<TriggerType>(["schedule", "webhook"]);
 const VOICE_TRIGGERS = new Set<TriggerType>(["call_missed", "call_answered"]);
@@ -58,7 +59,7 @@ const TRIGGERS: TriggerDef[] = [
   { type: "message_from_ad", label: "Message from an ad", description: "Click-to-WhatsApp and other ads, any ad or chosen ones", channels: ["WHATSAPP", "MESSENGER", "INSTAGRAM"], synonyms: ["ad", "campaign", "click to whatsapp", "ctwa", "referral", "facebook ad"] },
   { type: "comment_received", label: "Comment on a post", description: "Instagram or Facebook, any post or chosen ones, optional keywords", channels: ["INSTAGRAM", "MESSENGER"], synonyms: ["comment", "post", "instagram", "facebook", "dm", "comment to dm"] },
   { type: "button_tapped", label: "Button tapped", description: "A button in a template or campaign, outside a flow", channels: ["WHATSAPP", "MESSENGER", "INSTAGRAM"], synonyms: ["button", "tap", "quick reply", "template button", "postback"] },
-  { type: "order_event", label: "Order event", description: "Created, paid, shipped, delivered", channels: [], synonyms: ["order", "paid", "shipped", "delivered", "store"] },
+  { type: "order_event", label: "Order event", description: "A Shopify or WooCommerce order is created, paid, shipped or cancelled", channels: [], synonyms: ["order", "paid", "shipped", "delivered", "store"] },
   { type: "cart_abandoned", label: "Cart left behind", description: "After a delay you set. Sends only to customers who agreed to marketing", channels: ["WHATSAPP", "EMAIL"], synonyms: ["cart", "abandoned", "checkout", "recover", "reminder"] },
   { type: "form_submitted", label: "Form submitted", description: "Website or Instagram lead form", channels: ["WEBCHAT", "INSTAGRAM"], synonyms: ["form", "lead"] },
   { type: "story_mention", label: "Story mention", description: "Someone tags you", channels: ["INSTAGRAM"], synonyms: ["story", "mention", "instagram"] },
@@ -150,6 +151,13 @@ export function normalizeTrigger(input: any): { type: TriggerType; config: Recor
         if (!Number.isFinite(n) || n < 15 || n > 2880) throw new AutomationInputError("trigger.config.delayMinutes", "the delay is 15 minutes to 2 days");
         config.delayMinutes = Math.round(n);
       }
+      break;
+    }
+    case "order_event": {
+      const ch = channels(c.channels); if (ch?.length) config.channels = ch;
+      const st = strings(c.statuses, "trigger.config.statuses");
+      if (st?.some((x) => !(ORDER_STATUSES as readonly string[]).includes(x))) throw new AutomationInputError("trigger.config.statuses", `statuses must be from ${ORDER_STATUSES.join(", ")}`);
+      if (st?.length) config.statuses = st;
       break;
     }
     case "call_missed":
@@ -307,6 +315,7 @@ function variablesFor(ctx: CatalogContext, hasCustomer: boolean): string[] {
   const base = ["first_name", "business_name", "opening_hours"];
   if (ctx.triggerType === "comment_received") return [...base, ...COMMENT_VARIABLES];
   if (ctx.triggerType === "cart_abandoned") return [...base, "cart_url", "cart_total", "cart_items"];
+  if (ctx.triggerType === "order_event") return [...base, "order_number", "order_total", "order_status", "order_items", "order_url"];
   if (ctx.triggerType && VOICE_TRIGGERS.has(ctx.triggerType)) return [...base, "caller_number", "line_name", "call_duration", "call_recording_url"];
   return base;
 }
