@@ -22,7 +22,7 @@ import { StreamSkeleton } from '@/features/inbox/Skeletons';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 import { channelName } from '@/api/contracts/inbox';
-import { CenteredLoader } from '@/design-system/primitives/loader/Loader';
+import { SkeletonBubbles, SkeletonCards } from '@/design-system/primitives/skeleton/Skeleton';
 
 /**
  * Inbox - screen 02.
@@ -366,9 +366,18 @@ export default async function Page({
                     {data.open && data.detail ? (
                       <Suspense
                         key={data.open.id}
-                        // The panel's parts have no one shape: the loader, light on the dark wall.
+                        // The wall's shape, light on the dark: an answer card, then the thread.
                         fallback={
-                          <CenteredLoader size={32} tone="light" fill label={common('loading')} />
+                          <div data-testid="copilot-skeleton">
+                            <SkeletonCards
+                              label={common('loading')}
+                              tone="light"
+                              count={1}
+                              columns={1}
+                              height={140}
+                            />
+                            <SkeletonBubbles label={common('loading')} tone="light" count={3} />
+                          </div>
                         }
                       >
                         <CopilotWall

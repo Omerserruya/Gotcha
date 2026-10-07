@@ -11,7 +11,7 @@ import type { WallConversation, WallHistory } from './load-wall';
 import { conversationMessages } from './wall-actions';
 import { historyChannels } from './wall-model';
 import styles from './Wall.module.css';
-import { CenteredLoader } from '@/design-system/primitives/loader/Loader';
+import { SkeletonBubbles } from '@/design-system/primitives/skeleton/Skeleton';
 
 type Level =
   | { readonly at: 'wall' }
@@ -246,7 +246,7 @@ function Whole({
   const format = useFormatter();
   if (!read) {
     return pending ? (
-      <CenteredLoader size={32} tone="light" fill minHeight={160} label={t('reading')} />
+      <SkeletonBubbles label={t('reading')} tone="light" count={3} testid="wall-history-skeleton" />
     ) : (
       <p className={styles.note}>-</p>
     );

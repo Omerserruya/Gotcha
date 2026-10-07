@@ -610,6 +610,8 @@
     --action-send-text: #fff;
 
     --skeleton-base: #ede9e1;
+    /* The same placeholder on the dark wall (the Copilot panel). */
+    --skeleton-on-dark: rgb(255 255 255 / 9%);
 
     /*
      * The design is a single committed light-on-warm direction with a dark

@@ -1,6 +1,6 @@
 import { useTranslations } from 'next-intl';
 
-import { CenteredLoader } from '@/design-system/primitives/loader/Loader';
+import { SkeletonRows } from '@/design-system/primitives/skeleton/Skeleton';
 import { PageContainer } from '@/shell/PageContainer';
 
 /**
@@ -10,9 +10,10 @@ import { PageContainer } from '@/shell/PageContainer';
 export default function Loading() {
   const t = useTranslations('common');
   return (
-    // `screen` + `flush`: the body is the card's whole remaining height, and the loader fills it.
-    <PageContainer layout="screen" flush>
-      <CenteredLoader size={56} fill label={t('loading')} />
+    // Rows in the card, where a page's content will land. Its own title and
+    // buttons are the page's: they draw the moment the page answers.
+    <PageContainer layout="screen">
+      <SkeletonRows label={t('loading')} rows={8} testid="route-skeleton" />
     </PageContainer>
   );
 }

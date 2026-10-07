@@ -32,3 +32,66 @@
     border-radius: var(--radius-round);
   }
 }
+
+@layer primitives {
+  .rows {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding-inline: 16px;
+  }
+
+  .row + .row {
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .lines {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .cards {
+    display: grid;
+    gap: 12px;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px;
+    border: var(--border-width-thin) solid var(--border-subtle);
+    border-radius: 12px;
+  }
+
+  .bubbles {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .bubble {
+    display: flex;
+  }
+
+  .bubble[data-side='out'] {
+    justify-content: flex-end;
+  }
+
+  [data-tone='light'] .skeleton {
+    background-color: var(--skeleton-on-dark);
+  }
+
+  .cards[data-tone='light'] .card,
+  .rows[data-tone='light'] .row + .row {
+    border-color: var(--skeleton-on-dark);
+  }
+}

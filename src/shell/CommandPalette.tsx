@@ -18,7 +18,7 @@ import {
   type PersonHit,
 } from './command-search';
 import { ltr } from '@/lib/bidi';
-import { CenteredLoader } from '@/design-system/primitives/loader/Loader';
+import { SkeletonRows } from '@/design-system/primitives/skeleton/Skeleton';
 
 /** The rail's ⌘K button opens the palette by this event - its look unchanged. */
 export const OPEN_COMMAND_PALETTE = 'gotcha:command-palette';
@@ -310,7 +310,12 @@ export function CommandPalette() {
             );
           })}
           {query.trim().length >= 2 && answered !== query ? (
-            <CenteredLoader size={32} minHeight={72} label={common('loading')} />
+            <SkeletonRows
+              label={common('loading')}
+              rows={3}
+              height={40}
+              testid="command-skeleton"
+            />
           ) : null}
           {/* An order number that found nobody: the search ran, and says where. */}
           {orderMiss && query.trim().length >= 2 ? (
