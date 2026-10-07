@@ -446,5 +446,6 @@
     "keyword": "catalogue",
     "welcome": "Hi {name}, thanks for writing to us. How can we help?"
   },
-  "notYet": "Not available yet"
+  "notYet": "Not available yet",
+  "loading": "Loading automations"
 }

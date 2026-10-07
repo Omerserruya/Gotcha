@@ -9,13 +9,21 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
+import { Suspense } from 'react';
 
-import { AutomationsList } from '@/features/automations/AutomationsList';
+import { AutomationsList, AutomationsPending } from '@/features/automations/AutomationsList';
 import { NewAutomation } from '@/features/automations/NewAutomation';
 import styles from '@/features/automations/Automations.module.css';
 import { loadAutomations, loadCatalog } from '@/features/automations/load-automations';
-import { TEMPLATES, templateOf, type TemplateKey } from '@/features/automations/templates';
+import {
+  TEMPLATES,
+  templateOf,
+  type Template,
+  type TemplateKey,
+} from '@/features/automations/templates';
 import { Link } from '@/i18n/navigation';
+import { CanSee } from '@/permissions/CanSee';
+import { PERMISSIONS } from '@/permissions/catalogue';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -58,11 +66,6 @@ export default async function Page({
   const creating = params.new === '1';
   const chosen = templateOf(params.template);
   const fromTemplate = chosen?.build ? chosen : null;
-  // The first step's catalogue - triggers - only when the sheet is open.
-  const [automations, catalog] = await Promise.all([
-    loadAutomations(),
-    creating ? loadCatalog() : Promise.resolve(null),
-  ]);
 
   return (
     <PageContainer
@@ -71,7 +74,8 @@ export default async function Page({
       title={t('title')}
       description={t('description')}
       actions={
-        automations === 'forbidden' ? null : (
+        // Static, and only for whoever may read automations - known before any read.
+        <CanSee permission={PERMISSIONS.ai.workflows.read}>
           <span className={styles.headerActions}>
             <a href="#templates" className={styles.secondary} data-testid="automations-templates">
               {t('templates')}
@@ -85,7 +89,7 @@ export default async function Page({
               {t('create')}
             </Link>
           </span>
-        )
+        </CanSee>
       }
     >
       <div className={styles.page}>
@@ -94,25 +98,12 @@ export default async function Page({
             {t('delete.done')}
           </p>
         ) : null}
-        {automations === 'forbidden' ? (
-          <div className={styles.empty} data-testid="automations-forbidden">
-            <p className={styles.emptyLead}>{t('forbidden.title')}</p>
-            <p className={styles.quiet}>{t('forbidden.lead')}</p>
-          </div>
-        ) : automations === null ? (
-          <p className={styles.quiet} role="status" data-testid="automations-unread">
-            {t('unavailable')}
-          </p>
-        ) : automations.length === 0 ? (
-          <div className={styles.empty} data-testid="automations-empty">
-            <p className={styles.emptyLead}>{t('none')}</p>
-            <p className={styles.quiet}>{t('noneBody')}</p>
-          </div>
-        ) : (
-          <AutomationsList automations={automations} />
-        )}
+        {/* The list streams behind its placeholder; everything around it is static. */}
+        <Suspense fallback={<AutomationsPending />}>
+          <ListSection creating={creating} fromTemplate={fromTemplate} />
+        </Suspense>
 
-        {automations === 'forbidden' ? null : (
+        <CanSee permission={PERMISSIONS.ai.workflows.read}>
           <section className={styles.templates} id="templates" aria-labelledby="templates-title">
             <h2 className={styles.templatesTitle} id="templates-title">
               {t('templateTitle')} <span className={styles.quiet}>{t('templateNote')}</span>
@@ -155,14 +146,53 @@ export default async function Page({
               })}
             </div>
           </section>
-        )}
+        </CanSee>
       </div>
+    </PageContainer>
+  );
+}
+
+/**
+ * 09c's data: the list - or no access, unread, none - and, with the sheet
+ * open, the first step's catalogue. Without access nothing is offered.
+ */
+export async function ListSection({
+  creating,
+  fromTemplate,
+}: {
+  readonly creating: boolean;
+  readonly fromTemplate: Template | null;
+}) {
+  const t = await getTranslations('automations');
+  const [automations, catalog] = await Promise.all([
+    loadAutomations(),
+    creating ? loadCatalog() : Promise.resolve(null),
+  ]);
+  return (
+    <>
+      {automations === 'forbidden' ? (
+        <div className={styles.empty} data-testid="automations-forbidden">
+          <p className={styles.emptyLead}>{t('forbidden.title')}</p>
+          <p className={styles.quiet}>{t('forbidden.lead')}</p>
+        </div>
+      ) : automations === null ? (
+        <p className={styles.quiet} role="status" data-testid="automations-unread">
+          {t('unavailable')}
+        </p>
+      ) : automations.length === 0 ? (
+        <div className={styles.empty} data-testid="automations-empty">
+          <p className={styles.emptyLead}>{t('none')}</p>
+          <p className={styles.quiet}>{t('noneBody')}</p>
+        </div>
+      ) : (
+        <AutomationsList automations={automations} />
+      )}
       {automations === 'forbidden' ? null : fromTemplate ? (
         <NewAutomation catalog={null} template={fromTemplate} />
       ) : creating ? (
         <NewAutomation catalog={catalog} />
       ) : null}
-    </PageContainer>
+    </>
   );
 }
 

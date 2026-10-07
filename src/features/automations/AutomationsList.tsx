@@ -28,6 +28,7 @@ import {
 } from '@/api/contracts/automations';
 import { channelMark } from '@/features/inbox/channel-marks';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/design-system/primitives/overlay/Menu';
+import { SkeletonRows } from '@/design-system/primitives/skeleton/Skeleton';
 import { Link } from '@/i18n/navigation';
 
 import { setLive } from './automation-actions';
@@ -62,18 +63,42 @@ export function AutomationsList({ automations }: { readonly automations: readonl
   const t = useTranslations('automations');
   return (
     <div className={styles.table} role="table" aria-label={t('title')}>
-      <div className={styles.head} role="row">
-        <span role="columnheader">{t('columns.when')}</span>
-        <span role="columnheader">{t('columns.flow')}</span>
-        <span role="columnheader">{t('columns.week')}</span>
-        <span role="columnheader">{t('columns.last')}</span>
-        <span role="columnheader" className={styles.visuallyHidden}>
-          {t('columns.on')}
-        </span>
-      </div>
+      <TableHead />
       {automations.map((automation) => (
         <Row key={automation.id} initial={automation} />
       ))}
+    </div>
+  );
+}
+
+/** The table's header - static, so it draws before the automations arrive. */
+function TableHead() {
+  const t = useTranslations('automations');
+  return (
+    <div className={styles.head} role="row">
+      <span role="columnheader">{t('columns.when')}</span>
+      <span role="columnheader">{t('columns.flow')}</span>
+      <span role="columnheader">{t('columns.week')}</span>
+      <span role="columnheader">{t('columns.last')}</span>
+      <span role="columnheader" className={styles.visuallyHidden}>
+        {t('columns.on')}
+      </span>
+    </div>
+  );
+}
+
+/** 09c while the list is read: the header as it is, rows as placeholders. */
+export function AutomationsPending() {
+  const t = useTranslations('automations');
+  return (
+    <div
+      className={styles.table}
+      role="table"
+      aria-label={t('title')}
+      data-testid="automations-pending"
+    >
+      <TableHead />
+      <SkeletonRows label={t('loading')} rows={4} height={54} />
     </div>
   );
 }
