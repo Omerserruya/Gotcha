@@ -89,7 +89,8 @@ describe('★★ the away time follows the page, not the process', () => {
      */
     await show('he');
 
-    const row = screen.getByText(/חוזר ב-/);
+    // U+2011: the prefix stays on the time (hebrew-prefix-nobreak.test.ts).
+    const row = screen.getByText(/חוזר ב\u2011/);
     expect(row).toHaveTextContent(/14:30/);
     expect(row).not.toHaveTextContent(/AM|PM/);
   });

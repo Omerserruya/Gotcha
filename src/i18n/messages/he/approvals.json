@@ -23,7 +23,7 @@
     "reason": "למה: {reason}",
     "policyRule": "סומן על ידי {rule}",
     "lapsed": "המועד חלף, ולכן אי אפשר להחליט על זה כאן יותר. GOTCHA העבירה את השיחה לאדם.",
-    "outcomeUnknown": "זה אושר לפני ש-GOTCHA תיעדה מה קרה אחר כך, ולכן איננו יכולים לומר לך אם זה רץ. אי אפשר לנסות שוב - הרצה חוזרת עלולה לחזור על משהו שכבר קרה."
+    "outcomeUnknown": "זה אושר לפני ש‑GOTCHA תיעדה מה קרה אחר כך, ולכן איננו יכולים לומר לך אם זה רץ. אי אפשר לנסות שוב - הרצה חוזרת עלולה לחזור על משהו שכבר קרה."
   },
   "risk": {
     "HIGH": "סיכון גבוה",
@@ -71,15 +71,15 @@
     "heading": "מה החלטת קודם",
     "none": "עוד לא החלטת על שום דבר.",
     "unavailable": "לא הצלחנו לקרוא את ההחלטות הקודמות שלך כרגע.",
-    "approved": "אושר על ידי {who} ב-{when}",
-    "rejected": "נדחה על ידי {who} ב-{when}",
-    "lapsed": "המועד חלף ב-{when} - הועבר לאדם",
-    "cancelled": "בוטל ב-{when}",
+    "approved": "אושר על ידי {who} ב‑{when}",
+    "rejected": "נדחה על ידי {who} ב‑{when}",
+    "lapsed": "המועד חלף ב‑{when} - הועבר לאדם",
+    "cancelled": "בוטל ב‑{when}",
     "someone": "מישהו",
     "askedBy": "התבקש על ידי {who}",
     "because": "הסיבה שניתנה: {reason}",
     "didNotRun": "אישרת את זה, אבל זה לא רץ. פתח כדי לנסות שוב.",
-    "outcomeUnknown": "אושר לפני ש-GOTCHA תיעדה מה קרה אחר כך, ולכן איננו יכולים לומר אם זה רץ.",
+    "outcomeUnknown": "אושר לפני ש‑GOTCHA תיעדה מה קרה אחר כך, ולכן איננו יכולים לומר אם זה רץ.",
     "incomplete": "מוצגות ההחלטות האחרונות שלך, לא כולן - GOTCHA יכולה להחזיר רק את המאה האחרונות מכל סוג.",
     "approvedNoTime": "אושר על ידי {who}",
     "rejectedNoTime": "נדחה על ידי {who}",
@@ -127,7 +127,7 @@
         "send_invoice": "נשלחה חשבונית{order, select, none {} other { בהזמנה {order}}}{name, select, none {} other { של {name}}}",
         "add_order_note": "נוספה הערה{order, select, none {} other { בהזמנה {order}}}{name, select, none {} other { של {name}}}",
         "update_customer": "עודכן כרטיס הלקוח{name, select, none {} other { של {name}}}",
-        "add_vip_tag": "סומן כ-VIP{name, select, none {} other { של {name}}}",
+        "add_vip_tag": "סומן כ‑VIP{name, select, none {} other { של {name}}}",
         "create_task": "נוצרה משימה{name, select, none {} other { של {name}}}"
       },
       "asked": {
@@ -165,9 +165,9 @@
       "discount": "לשלוח גם הנחה"
     },
     "pattern": {
-      "title": "זו הפעם ה-{count} כזו",
+      "title": "זו הפעם ה‑{count} כזו",
       "body": "{approved} כאלה אושרו כאן, {rejected, plural, =0 {אף אחת לא} other {#}} נדחו.",
-      "handle": "ש-GOTCHA תטפל בהן",
+      "handle": "ש‑GOTCHA תטפל בהן",
       "keep": "להמשיך לשאול אותי"
     },
     "next": {
@@ -220,7 +220,7 @@
   },
   "action2": {
     "next": "{count, plural, =0 {אין דבר אחרי זה} one {עוד אחת אחרי זו · ↓ לבאה} other {עוד # אחרי זו · ↓ לבאה}}",
-    "rejectPrompt": "דוחה? ספר ל-GOTCHA למה.",
+    "rejectPrompt": "דוחה? ספר ל‑GOTCHA למה.",
     "reasons": {
       "policy": "מחוץ למדיניות",
       "myself": "אטפל בזה בעצמי",
@@ -253,9 +253,9 @@
     "orderLine": "הזמנה {order}",
     "stepRefunded": "{amount} הוחזרו",
     "stepOrderRefunded": "הזמנה {order} הוחזרה",
-    "stepShopifyRefund": "מסומן כמוחזר ב-Shopify",
+    "stepShopifyRefund": "מסומן כמוחזר ב‑Shopify",
     "stepCancelled": "הזמנה {order} בוטלה",
-    "stepCancelledShopify": "הזמנה {order} בוטלה ב-Shopify",
+    "stepCancelledShopify": "הזמנה {order} בוטלה ב‑Shopify",
     "stepRuns": "{summary}",
     "stepToldName": "{name} מקבל הודעה בשיחה",
     "stepTold": "הלקוח מקבל הודעה בשיחה"
@@ -274,19 +274,19 @@
     "title": "מה קורה אם מאשרים"
   },
   "detail3": {
-    "eyebrowAi": "התבקש על ידי עובד ה-AI שלך · {time}",
+    "eyebrowAi": "התבקש על ידי עובד ה‑AI שלך · {time}",
     "editAmount": "עריכת סכום",
     "ask": "לשאול את {who} שאלה",
-    "askAi": "לשאול את ה-AI שאלה",
+    "askAi": "לשאול את ה‑AI שאלה",
     "askNotYet": "שאלה על בקשה תגיע בהמשך.",
     "reversible": "הפיך",
     "reversibleYes": "כן",
     "reversibleNo": "לא",
     "editLabel": "סכום לאישור",
     "editInvalid": "מספר גדול מאפס.",
-    "editOver": "לא יותר מ-{amount}.",
+    "editOver": "לא יותר מ‑{amount}.",
     "editCancel": "להשאיר {amount}",
-    "editNotYet": "עריכת הסכום תגיע ברגע ש-GOTCHA תוכל לבצע אותה.",
+    "editNotYet": "עריכת הסכום תגיע ברגע ש‑GOTCHA תוכל לבצע אותה.",
     "editInvalidMinor": "מספר שלם גדול מאפס.",
     "editDiscount": "עריכת הנחה",
     "editLabelPercent": "הנחה לאישור (%)",

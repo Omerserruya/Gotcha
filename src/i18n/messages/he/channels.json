@@ -59,8 +59,8 @@
     "limit": "אין מקום בתוכנית שלכם לערוץ נוסף.",
     "forbidden": "אין לכם הרשאה לפעולה הזו.",
     "failed": "החיבור נכשל. נסו שוב.",
-    "oauthLead": "מתחברים ל-{channel}, מאשרים שם את GOTCHA, וחוזרים לכאן.",
-    "continueTo": "המשך ל-{channel}",
+    "oauthLead": "מתחברים ל‑{channel}, מאשרים שם את GOTCHA, וחוזרים לכאן.",
+    "continueTo": "המשך ל‑{channel}",
     "opening": "פותח…",
     "start": {
       "not_configured": "{channel} עוד לא מוגדר בצד של GOTCHA.",
@@ -188,7 +188,7 @@
       "adding": "מוסיף…",
       "added": "{count, plural, one {נוספה תשובה אחת} other {נוספו # תשובות}}{skipped, plural, =0 {.} other {; # דולגו - הן נשארות לבדיקה.}}",
       "refused": {
-        "forbidden": "אין לך הרשאה לשנות את מה ש-GOTCHA יודעת.",
+        "forbidden": "אין לך הרשאה לשנות את מה ש‑GOTCHA יודעת.",
         "failed": "הן לא נוספו - אפשר לנסות שוב."
       },
       "rerun": "הרצת הניתוח מחדש",
@@ -201,7 +201,7 @@
         "failed": "זה לא התחיל - אפשר לנסות שוב."
       },
       "cancel": "לא עכשיו",
-      "refresh": "רענון מ-Meta",
+      "refresh": "רענון מ‑Meta",
       "activity": "יומן פעילות",
       "disconnect": "ניתוק המספר הזה",
       "thisNumber": "המספר הזה",
@@ -229,8 +229,8 @@
       "hours": "שעות",
       "hoursWorkspace": "שעות סביבת העבודה",
       "modeAsk": {
-        "AI_AUTO_REPLY": "לתת ל-GOTCHA לענות לבד במספר הזה?",
-        "HUMAN_WITH_COPILOT": "ש-GOTCHA תנסח ואדם ישלח במספר הזה?"
+        "AI_AUTO_REPLY": "לתת ל‑GOTCHA לענות לבד במספר הזה?",
+        "HUMAN_WITH_COPILOT": "ש‑GOTCHA תנסח ואדם ישלח במספר הזה?"
       },
       "modeYes": "כן, להחליף",
       "modeNo": "לא עכשיו",
@@ -287,7 +287,7 @@
         "low": "ביטחון נמוך"
       },
       "chats": "{count, plural, one {שיחה אחת} other {# שיחות}}",
-      "use": "שימוש ב-{answer}",
+      "use": "שימוש ב‑{answer}",
       "edit": "עריכה",
       "skip": "דילוג",
       "notLive": "ההחלטה מכאן תגיע בהמשך - שום דבר לא בשימוש עד אז.",
@@ -305,8 +305,8 @@
       "qa": "שאלות ותשובות",
       "saidLead": "בתשובות שלך נאמר",
       "saidAnd": "ו",
-      "saidIn": "ב-{count, plural, one {צ׳אט אחד} other {# צ׳אטים}}",
-      "saidInShort": "ב-{count}",
+      "saidIn": "ב‑{count, plural, one {צ׳אט אחד} other {# צ׳אטים}}",
+      "saidInShort": "ב‑{count}",
       "quoted": "״{answer}״",
       "seeChats": "לצ׳אטים",
       "seeChatsNotYet": "פתיחת הצ׳אטים שמאחורי תשובה תגיע בהמשך.",
@@ -331,8 +331,8 @@
           "body": "ממשיכים להשתמש באפליקציה בטלפון - השיחות מופיעות בשני המקומות. GOTCHA יכולה לייבא עד 6 חודשים של היסטוריה כדי ללמוד ממנה."
         },
         "new": {
-          "title": "עוד לא ב-WhatsApp, או אצל ספק אחר",
-          "body": "המספר עובר במלואו ל-GOTCHA ואי אפשר להשתמש בו באפליקציה אחר כך. אין היסטוריה לייבא."
+          "title": "עוד לא ב‑WhatsApp, או אצל ספק אחר",
+          "body": "המספר עובר במלואו ל‑GOTCHA ואי אפשר להשתמש בו באפליקציה אחר כך. אין היסטוריה לייבא."
         },
         "note": "ייפתח חלון של Meta. מסיימים שם וחוזרים לכאן לבחור את המספר.",
         "continue": "המשך עם Meta",
@@ -340,7 +340,7 @@
       },
       "needs": {
         "title": "מה צריך",
-        "login": "התחברות לפייסבוק של מנהל העסק ב-Meta",
+        "login": "התחברות לפייסבוק של מנהל העסק ב‑Meta",
         "phone": "הטלפון עם המספר הזה בהישג יד, בשביל קוד",
         "payment": "אמצעי תשלום בחשבון WhatsApp - אפשר להוסיף אחר כך"
       },
@@ -354,19 +354,19 @@
         "none": "Meta לא שיתף אף מספר. שום דבר לא חובר.",
         "flow": {
           "businessApp": "באפליקציית WhatsApp Business · אפשר לייבא היסטוריה",
-          "pin": "רשום עם אימות דו-שלבי · צריך את קוד ה-PIN בן 6 הספרות",
+          "pin": "רשום עם אימות דו-שלבי · צריך את קוד ה‑PIN בן 6 הספרות",
           "new": "עוד לא רשום",
-          "connected": "כבר מחובר ל-GOTCHA",
+          "connected": "כבר מחובר ל‑GOTCHA",
           "blocked": "אי אפשר לחבר כרגע"
         },
         "pin": "קוד PIN בן 6 ספרות",
-        "pinInvalid": "קוד ה-PIN הוא שש ספרות.",
+        "pinInvalid": "קוד ה‑PIN הוא שש ספרות.",
         "owner": "מי עונה בו",
         "ownerNotYet": "מי עונה נקבע במספר אחרי שהוא מחובר.",
         "import": "ייבוא 6 החודשים האחרונים",
         "importBody": "Meta שולח את זה פעם אחת, רק בהקמה. GOTCHA לומדת ממנו את התשובות, הטון והלקוחות שלך. שום דבר לא נשלח לאף אחד.",
         "importWhy": "Meta שולח את ההיסטוריה בעצמו כשמספר מאפליקציית Business מתחבר - אין מה להדליק או לכבות.",
-        "contacts": "משפחה או חברים במספר הזה? מסמנים צ׳אטים ש-GOTCHA תתעלם מהם.",
+        "contacts": "משפחה או חברים במספר הזה? מסמנים צ׳אטים ש‑GOTCHA תתעלם מהם.",
         "contactsNotYet": "בחירת אנשי קשר לפני הייבוא תגיע בהמשך; אפשר להוסיף אנשי קשר פרטיים מהגדרות המספר.",
         "connect": "חיבור",
         "connectImport": "חיבור וייבוא",
@@ -391,7 +391,7 @@
         "already_covered": "הידע שלך כבר עונה על זה - לא נוסף דבר.",
         "no_knowledge_base": "עוד אין מאגר ידע להוסיף אליו - יוצרים אחד בסטודיו ← ידע.",
         "not_found": "ההצעה הזו כבר הוכרעה או שאינה קיימת.",
-        "forbidden": "אין לך הרשאה לשנות את מה ש-GOTCHA יודעת.",
+        "forbidden": "אין לך הרשאה לשנות את מה ש‑GOTCHA יודעת.",
         "too_long": "התשובה ארוכה מדי לשמירה - כדאי לקצר.",
         "failed": "זה לא עבר - אפשר לנסות שוב."
       }
@@ -462,9 +462,9 @@
   "landing": {
     "connected": "{channel} מחובר.",
     "connectedCount": "{count, plural, =0 {{channel} מחובר - לא הגיעו חשבונות.} one {{channel} מחובר - חשבון אחד.} other {{channel} מחובר - # חשבונות.}}",
-    "pending": "{channel} מחובר, ו-Meta צריך עוד צעד - משלימים אותו בהגדרות המספר.",
+    "pending": "{channel} מחובר, ו‑Meta צריך עוד צעד - משלימים אותו בהגדרות המספר.",
     "error": {
-      "denied": "ביטלת ב-{channel} - שום דבר לא חובר.",
+      "denied": "ביטלת ב‑{channel} - שום דבר לא חובר.",
       "token_exchange_failed": "{channel} לא אישר את החיבור. שום דבר לא חובר - אפשר לנסות שוב.",
       "state_already_used": "ההתחברות הזו כבר נוצלה. מתחילים שוב מ\"חיבור\".",
       "invalid_state": "לא הצלחנו לשייך את ההתחברות לסביבת העבודה. מתחילים שוב מ\"חיבור\".",
@@ -473,32 +473,32 @@
       "gmail_no_email": "Google לא שיתף כתובת אימייל, ולכן Gmail לא חובר.",
       "outlook_no_email": "Microsoft לא שיתף כתובת אימייל, ולכן Outlook לא חובר.",
       "no_pages": "לא הגיע עמוד פייסבוק עם ההתחברות - בוחרים עמוד שמנהלים ומנסים שוב.",
-      "no_instagram_account": "אין חשבון Instagram עסקי שמקושר לעמוד הזה. מקשרים אחד ב-Meta ומנסים שוב.",
+      "no_instagram_account": "אין חשבון Instagram עסקי שמקושר לעמוד הזה. מקשרים אחד ב‑Meta ומנסים שוב.",
       "no_whatsapp_numbers": "Meta לא שיתף מספרי WhatsApp. שום דבר לא חובר.",
       "slack_no_team": "Slack לא ציין איזו סביבת עבודה - אפשר לנסות שוב.",
-      "callback_error": "משהו השתבש בדרך חזרה מ-{channel}. שום דבר לא חובר - אפשר לנסות שוב.",
+      "callback_error": "משהו השתבש בדרך חזרה מ‑{channel}. שום דבר לא חובר - אפשר לנסות שוב.",
       "other": "{channel} לא חובר. אפשר לנסות שוב."
     }
   },
   "twilio": {
     "friendlyName": "שם",
     "accountSid": "Account SID",
-    "accountSidHint": "מהקונסולה של Twilio - מתחיל ב-AC.",
+    "accountSidHint": "מהקונסולה של Twilio - מתחיל ב‑AC.",
     "accountSidBad": "Account SID הוא AC ואחריו 32 אותיות וספרות.",
     "authToken": "Auth Token",
     "connect": "בדיקה והמשך",
     "checking": "בודק מול Twilio…",
     "later": "אחר כך",
-    "pick": "{count, plural, one {יש מספר אחד בחשבון ה-Twilio. בוחרים אותו כדי ש-GOTCHA תענה לשיחות.} other {יש # מספרים בחשבון ה-Twilio. בוחרים על אילו GOTCHA תענה.}}",
-    "noNumbers": "בחשבון ה-Twilio הזה עוד אין מספרי טלפון. קונים מספר ב-Twilio וחוזרים.",
+    "pick": "{count, plural, one {יש מספר אחד בחשבון ה‑Twilio. בוחרים אותו כדי ש‑GOTCHA תענה לשיחות.} other {יש # מספרים בחשבון ה‑Twilio. בוחרים על אילו GOTCHA תענה.}}",
+    "noNumbers": "בחשבון ה‑Twilio הזה עוד אין מספרי טלפון. קונים מספר ב‑Twilio וחוזרים.",
     "activate": "{count, plural, one {מענה לשיחות במספר אחד} other {מענה לשיחות ב-# מספרים}}",
     "activating": "מגדיר את המספרים…",
     "done": "{count, plural, one {GOTCHA עונה עכשיו לשיחות במספר אחד.} other {GOTCHA עונה עכשיו לשיחות ב-# מספרים.}}",
     "donePartly": "{done} הוגדרו; {failed} לא הצליחו - אפשר לנסות שוב משיחות טלפון.",
     "close": "סיום",
     "error": {
-      "invalid": "ממלאים את כל השדות כמו ש-Twilio נותן אותם.",
-      "twilio": "Twilio לא קיבל את הפרטים - כדאי לבדוק את ה-Account SID וה-Auth Token.",
+      "invalid": "ממלאים את כל השדות כמו ש‑Twilio נותן אותם.",
+      "twilio": "Twilio לא קיבל את הפרטים - כדאי לבדוק את ה‑Account SID וה‑Auth Token.",
       "not_offered": "שיחות טלפון עוד לא זמינות לסביבת העבודה הזו.",
       "forbidden": "רק מנהל יכול לחבר שיחות טלפון.",
       "failed": "זה לא התחבר - אפשר לנסות שוב."

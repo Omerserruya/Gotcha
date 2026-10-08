@@ -21,7 +21,7 @@
   "language": {
     "label": "שפה"
   },
-  "productDescription": "מערכת ההפעלה לתפעול לקוחות. שיחות, פעולות, אישורים ו-AI במקום אחד.",
+  "productDescription": "מערכת ההפעלה לתפעול לקוחות. שיחות, פעולות, אישורים ו‑AI במקום אחד.",
   "loading": "טוען",
   "duration": {
     "minutes": "{count, plural, =1 {דקה} other {# דקות}}",

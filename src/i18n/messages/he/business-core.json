@@ -94,7 +94,7 @@
   },
   "both": {
     "identity": "מי הלקוח הזה",
-    "identityPurpose": "המערכת הראשונה ש-GOTCHA שואלת",
+    "identityPurpose": "המערכת הראשונה ש‑GOTCHA שואלת",
     "writeback": "אחרי כל שיחה",
     "writebackPurpose": "מה נכתב בחזרה"
   },

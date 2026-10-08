@@ -124,7 +124,7 @@
     "noConversationToActThrough": "אי אפשר לפעול על ההזמנות האלה מכאן - אין שיחה עם האדם הזה שתישא את הפעולה.",
     "count": "{count, plural, one {הזמנה אחת} other {# הזמנות}}",
     "openCount": "{count} פתוחות",
-    "synced": "מ-Shopify · סונכרן {when}",
+    "synced": "מ‑Shopify · סונכרן {when}",
     "filterEmpty": "אין כאן הזמנות.",
     "moreShort": "+{count} נוספים",
     "qty": "כמות {count}",
@@ -139,7 +139,7 @@
       "carrierCase": "פנייה למוביל",
       "money": "כסף"
     },
-    "openInShopify": "פתיחה ב-Shopify",
+    "openInShopify": "פתיחה ב‑Shopify",
     "side": {
       "heading": "לאורך ההזמנות",
       "average": "הזמנה ממוצעת",
@@ -220,14 +220,14 @@
       "waiting": "ממתין לאישור",
       "waitingValue": "{count, plural, =0 {אין} one {בקשה אחת} other {# בקשות}}",
       "may": "מה GOTCHA רשאית לעשות עבורם",
-      "change": "שינוי ב-Studio · יכולות"
+      "change": "שינוי ב‑Studio · יכולות"
     },
     "dayReplied": "{count, plural, one {GOTCHA ענתה פעם אחת} other {GOTCHA ענתה # פעמים}}",
     "daySent": "{count, plural, one {הצוות שלח הודעה} other {הצוות שלח # הודעות}}",
     "budget": {
-      "turn": "GOTCHA עצרה: התשובה הגיעה לתקציב ה-AI שלה",
-      "conversation": "GOTCHA עצרה: תקציב ה-AI של השיחה נגמר",
-      "tenant_day": "GOTCHA עצרה: תקציב ה-AI היומי של סביבת העבודה נגמר",
+      "turn": "GOTCHA עצרה: התשובה הגיעה לתקציב ה‑AI שלה",
+      "conversation": "GOTCHA עצרה: תקציב ה‑AI של השיחה נגמר",
+      "tenant_day": "GOTCHA עצרה: תקציב ה‑AI היומי של סביבת העבודה נגמר",
       "other": "GOTCHA עצרה: תקציב AI נגמר"
     },
     "policy": {
@@ -279,23 +279,23 @@
     "none": "אף אחד עוד לא כתב הערה על האדם הזה.",
     "unread": "לא הצלחנו לקרוא כרגע את ההערות על האדם הזה. זה לא אומר שאין כאלה.",
     "empty": "הערה צריכה להכיל משהו.",
-    "tooLong": "זה ארוך מ-{max} תווים. קצרו ונסו שוב.",
+    "tooLong": "זה ארוך מ‑{max} תווים. קצרו ונסו שוב.",
     "notTheAuthor": "רק מי שכתב הערה יכול לשנות או למחוק אותה.",
     "writeFailed": "זה לא נשמר. נסו שוב.",
     "noReason": "לא נמסרה סיבה",
-    "yourCrm": "ה-CRM שלכם",
+    "yourCrm": "ה‑CRM שלכם",
     "aiUsable": "GOTCHA רשאית להשתמש בזה בתשובות",
-    "aiUsableOn": "זה יישלח ל-CRM שלכם ו-GOTCHA תוכל לחזור על זה מול הלקוח.",
-    "aiUsableOff": "לצוות בלבד. זה נשאר ב-GOTCHA ולא מגיע ל-CRM שלכם.",
+    "aiUsableOn": "זה יישלח ל‑CRM שלכם ו‑GOTCHA תוכל לחזור על זה מול הלקוח.",
+    "aiUsableOff": "לצוות בלבד. זה נשאר ב‑GOTCHA ולא מגיע ל‑CRM שלכם.",
     "where": {
-      "synced": "נכתב גם ל-{system}.",
-      "pending": "אנחנו עדיין שולחים את זה ל-CRM - עוד לא ידוע לנו אם הגיע.",
-      "failed": "זה לא הגיע ל-CRM שלכם. ה-CRM אמר: {reason}.",
-      "private": "נשמר ב-GOTCHA בלבד - הערה פרטית לא נשלחת ל-CRM משותף.",
-      "not_ai_usable": "נשמר ב-GOTCHA בלבד, כי זה לא סומן לשימוש של GOTCHA.",
-      "no_crm": "נשמר ב-GOTCHA בלבד - לא מחובר CRM.",
-      "not_linked": "נשמר ב-GOTCHA בלבד - ה-CRM שלכם מחובר, אבל האדם הזה לא מותאם לרשומה בו.",
-      "nothing_to_push": "נשמר ב-GOTCHA בלבד - לא היה דרך מה לשלוח את זה."
+      "synced": "נכתב גם ל‑{system}.",
+      "pending": "אנחנו עדיין שולחים את זה ל‑CRM - עוד לא ידוע לנו אם הגיע.",
+      "failed": "זה לא הגיע ל‑CRM שלכם. ה‑CRM אמר: {reason}.",
+      "private": "נשמר ב‑GOTCHA בלבד - הערה פרטית לא נשלחת ל‑CRM משותף.",
+      "not_ai_usable": "נשמר ב‑GOTCHA בלבד, כי זה לא סומן לשימוש של GOTCHA.",
+      "no_crm": "נשמר ב‑GOTCHA בלבד - לא מחובר CRM.",
+      "not_linked": "נשמר ב‑GOTCHA בלבד - ה‑CRM שלכם מחובר, אבל האדם הזה לא מותאם לרשומה בו.",
+      "nothing_to_push": "נשמר ב‑GOTCHA בלבד - לא היה דרך מה לשלוח את זה."
     },
     "teamOnly": "לצוות בלבד",
     "mayUse": "GOTCHA רשאית להשתמש",
@@ -314,7 +314,7 @@
       "teamOnly": "לצוות בלבד",
       "reads": "מה GOTCHA קוראת מכאן",
       "readsNone": "עדיין כלום.",
-      "readsCaption": "הערות לצוות בלבד לעולם לא מוצגות ל-AI ולעולם לא מגיעות ללקוח."
+      "readsCaption": "הערות לצוות בלבד לעולם לא מוצגות ל‑AI ולעולם לא מגיעות ללקוח."
     }
   },
   "titleCount": "{count, plural, =1 {לקוח אחד} other {# לקוחות}}",

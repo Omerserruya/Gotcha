@@ -500,7 +500,7 @@
       "skipped_template_not_approved": "WhatsApp עוד לא אישר את התבנית",
       "skipped_template_not_found": "התבנית כבר לא קיימת",
       "skipped_no_template": "לא נבחרה תבנית",
-      "skipped_non_whatsapp": "תבניות נשלחות רק ב-WhatsApp, והשיחה הזאת לא שם",
+      "skipped_non_whatsapp": "תבניות נשלחות רק ב‑WhatsApp, והשיחה הזאת לא שם",
       "skipped_adapter_unsupported": "הערוץ הזה לא יכול לשלוח תבנית",
       "skipped_no_send_ctx": "לא היה למי לשלוח",
       "skipped_opted_out": "הלקוח ביקש להסיר בזמן ההמתנה"
