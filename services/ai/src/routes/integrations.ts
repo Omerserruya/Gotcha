@@ -21,6 +21,8 @@ import {
   planRoleElection,
 } from "../services/connectors/business-roles";
 import { getBusinessCoreMap } from "../services/connectors/part-systems";
+import { readerLocale } from "../lib/reader-locale";
+import { catalogDescription } from "../lib/catalog-descriptions";
 
 const router = Router();
 
@@ -114,8 +116,10 @@ router.get("/", async (req: Request, res: Response) => {
       orderBy: { sortOrder: "asc" },
     });
 
+    const locale = await readerLocale(req);
     const data = catalog.map((entry) => ({
       ...entry,
+      description: catalogDescription(entry.slug, entry.description, locale),
       catalogTools: entry.catalogTools.map((ct: any) => ({
         ...ct,
         tenantTool: ct.tenantTools?.[0] || null,
@@ -762,6 +766,7 @@ router.get("/:slug", async (req: Request, res: Response) => {
     res.json({
       data: {
         ...entry,
+        description: catalogDescription(entry.slug, entry.description, await readerLocale(req)),
         authType: entry.authType,
         authSchema: entry.authSchema,
         catalogTools: entry.catalogTools,
