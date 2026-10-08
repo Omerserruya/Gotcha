@@ -899,6 +899,22 @@ describe('★★ a plan the assistant proposed (ai ccbd75b8) - who asked, what i
     expect(screen.getByTestId('plan-step-3')).toHaveAttribute('dir', 'auto');
   });
 
+  it('the eyebrow keeps "Home" as written - the plan opts out of the uppercase', () => {
+    const one = show([plan()], 'u1');
+    expect(screen.getByTestId('requested-by')).toHaveAttribute('data-plan');
+    one.unmount();
+    show([approval()], 'u1');
+    expect(screen.getByTestId('requested-by')).not.toHaveAttribute('data-plan');
+  });
+
+  it('no contactId: no customer card of dashes; with one, the card as for any request', () => {
+    const one = show([plan({ contactId: null })], 'u1');
+    expect(screen.queryByTestId('customer-card')).toBeNull();
+    one.unmount();
+    show([plan({ contactId: 'k1' })], 'u1');
+    expect(screen.getByTestId('customer-card')).toBeInTheDocument();
+  });
+
   it('if you leave it: it expires and nothing happens - no customer waiting', () => {
     show([plan()], 'u1');
     expect(screen.getByTestId('if-you-leave-it')).toHaveTextContent(

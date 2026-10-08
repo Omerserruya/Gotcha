@@ -199,6 +199,15 @@
     color: var(--text-subtle);
   }
 
+  /*
+   * A plan's eyebrow names the product ("Home"), which keeps its case; and
+   * Hebrew has no capitals, so there uppercase only shouts the Latin words.
+   */
+  .requestedBy[data-plan],
+  :root:lang(he) .requestedBy {
+    text-transform: none;
+  }
+
   /* 02: 34px/600, 12px under the eyebrow. */
   .detailSummary {
     margin: var(--space-12) 0 0;

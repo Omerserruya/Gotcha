@@ -737,7 +737,11 @@ export function ApprovalsScreen({
             */}
             <header className={styles.detailHeader}>
               <div className={styles.detailHeading}>
-                <p className={styles.requestedBy} data-testid="requested-by">
+                <p
+                  className={styles.requestedBy}
+                  data-testid="requested-by"
+                  data-plan={selected.plan ? '' : undefined}
+                >
                   {planAsked(selected)
                     ? [planAsked(selected), createdClock].filter(Boolean).join(' · ')
                     : requesterNames[selected.id]
@@ -828,6 +832,12 @@ export function ApprovalsScreen({
                       -
                     </span>
                   );
+                /*
+                  A plan names its customer only through `contactId`, which an
+                  assignment plan does not carry yet (gap with Backend): no
+                  card of dashes about nobody - none, until it does.
+                */
+                if (selected.plan && !selected.contactId) return null;
                 return (
                   <section className={styles.detailCard} data-testid="customer-card">
                     <h3 className={styles.detailCardTitle}>{t('customer.title')}</h3>
