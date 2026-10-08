@@ -13,7 +13,7 @@ import {
 import drawer from '@/design-system/styles/drawer.module.css';
 import { Link } from '@/i18n/navigation';
 
-import { ReportFoot } from './ReportFootActions';
+import { RerunFailed, ReportFoot } from './ReportFootActions';
 import { SuggestionActions } from './SuggestionActions';
 import styles from './Channels.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
@@ -278,14 +278,20 @@ export async function ImportPanel({
           {t('learn.close')}
         </Link>
         {failed ? (
-          <span
-            className={styles.learnPrimary}
-            aria-disabled="true"
-            title={t('learn.rerunNotYet')}
-            data-testid="import-rerun"
-          >
-            {t('learn.rerun')}
-          </span>
+          status.sourceCompletedAt ? (
+            // The history is all here: the analysis can be run again.
+            <RerunFailed importId={status.id} />
+          ) : (
+            // The transfer itself broke: there is nothing whole to analyse again.
+            <span
+              className={styles.learnPrimary}
+              aria-disabled="true"
+              title={t('learn.rerunNoHistory')}
+              data-testid="import-rerun"
+            >
+              {t('learn.rerun')}
+            </span>
+          )
         ) : status.stage === 'ready' ? (
           <Link
             href={href('report', status.id)}

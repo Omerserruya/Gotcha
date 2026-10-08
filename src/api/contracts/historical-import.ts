@@ -59,6 +59,13 @@ export const importStatusSchema = z.object({
   failedStage: z.string().nullable().default(null),
   failureReason: z.string().nullable().default(null),
   completedAt: z.string().nullable().default(null),
+  /**
+   * When the history finished arriving - set only once the transfer reached
+   * 100% (incoming-worker maybeCompleteSourceSync). The rerun route refuses
+   * anything else (409), so this is what makes "Run it again" offerable on
+   * a failed import: the analysis can be redone, a missing history cannot.
+   */
+  sourceCompletedAt: z.string().nullable().default(null),
   topTopics: z.array(z.unknown()).default([]),
 });
 

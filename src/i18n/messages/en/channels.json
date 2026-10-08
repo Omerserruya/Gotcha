@@ -265,7 +265,7 @@
       "review": "Review report",
       "reviewWhenReady": "The report opens when GOTCHA has finished reading.",
       "rerun": "Run the analysis again",
-      "rerunNotYet": "Running it again from here comes next.",
+      "rerunNoHistory": "The history didn't arrive in full, so there is nothing whole to analyse again.",
       "setting": "Setting up {name}",
       "learned": "What GOTCHA learned from {name}",
       "nothingUsed": "Nothing is used until you approve it.",

@@ -212,3 +212,14 @@ export function RunAgain({
     </span>
   );
 }
+
+/**
+ * 13e's "Run it again" on a FAILED import (Omer, decision 13): the same
+ * question and route as the report's. Offered only when the history arrived
+ * in full - the route answers 409 otherwise, and that is a status, not a
+ * button (LearnPanels says why).
+ */
+export function RerunFailed({ importId }: { readonly importId: string }) {
+  const [asking, setAsking] = useState(false);
+  return <RunAgain importId={importId} asking={asking} setAsking={setAsking} />;
+}

@@ -50,6 +50,9 @@ vi.mock('./ReportFootActions', () => ({
       <span data-testid="report-rerun" />
     </>
   ),
+  RerunFailed: ({ importId }: { importId: string }) => (
+    <span data-testid="rerun-failed" data-import={importId} />
+  ),
 }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'channels.whatsapp') =>
@@ -131,7 +134,22 @@ describe('★ 13e - the platform’s two stages, drawn as 02’s timeline', () =
     expect(screen.queryByTestId('import-live')).toBeNull();
   });
 
-  it('failed: the reason in words, the stopped step red, run-again drawn not live', async () => {
+  it('failed after the history arrived: Run it again is live, on this import', async () => {
+    render(
+      await ImportPanel({
+        status: status({
+          stage: 'failed',
+          failedStage: 'analyzing',
+          sourceCompletedAt: '2026-10-08T09:00:00.000Z',
+        }),
+        receiving: true,
+      }),
+    );
+    expect(screen.getByTestId('rerun-failed')).toHaveAttribute('data-import', status().id);
+    expect(screen.queryByTestId('import-rerun')).toBeNull();
+  });
+
+  it('failed: the reason in words, the stopped step red; the history never whole - run-again a status, with why', async () => {
     render(
       await ImportPanel({
         status: status({
@@ -147,6 +165,11 @@ describe('★ 13e - the platform’s two stages, drawn as 02’s timeline', () =
     );
     expect(screen.getByTestId('learn-step-learning')).toHaveAttribute('data-state', 'failed');
     expect(screen.getByTestId('import-rerun')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('import-rerun')).toHaveAttribute(
+      'title',
+      "The history didn't arrive in full, so there is nothing whole to analyse again.",
+    );
+    expect(screen.queryByTestId('rerun-failed')).toBeNull();
   });
 
   it('a reason that arrives as a code is made readable, never shown raw', async () => {

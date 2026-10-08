@@ -14,7 +14,7 @@ vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn()
 
 import { knowledgeDocumentOf } from '@/api/contracts/knowledge-candidates';
 
-import { ReportFoot } from './ReportFootActions';
+import { RerunFailed, ReportFoot } from './ReportFootActions';
 
 beforeEach(() => {
   addReadyAnswers.mockReset();
@@ -145,5 +145,18 @@ describe('★★ Run again - says it clears the report, then starts over', () =>
     await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
     expect(screen.getByTestId('report-bulk')).toHaveTextContent('Add 3');
     expect(screen.getByTestId('later')).toBeInTheDocument();
+  });
+});
+
+describe('★ Run again on a failed import - the same question, then the same route', () => {
+  it('asks first; yes runs it on this import and opens its progress', async () => {
+    rerunAnalysis.mockResolvedValue({ ok: true });
+    intl(<RerunFailed importId="i9" />);
+    await userEvent.click(screen.getByTestId('report-rerun'));
+    expect(rerunAnalysis).not.toHaveBeenCalled();
+    expect(screen.getByTestId('rerun-confirm')).toHaveTextContent('Run it again?');
+    await userEvent.click(screen.getByTestId('rerun-yes'));
+    expect(rerunAnalysis).toHaveBeenCalledWith('i9');
+    expect(push).toHaveBeenCalledWith('/settings/channels?panel=whatsapp&import=i9&view=progress');
   });
 });

@@ -265,7 +265,7 @@
       "review": "לדוח",
       "reviewWhenReady": "הדוח נפתח כש־GOTCHA מסיימת לקרוא.",
       "rerun": "להריץ את הניתוח שוב",
-      "rerunNotYet": "הרצה חוזרת מכאן תגיע בהמשך.",
+      "rerunNoHistory": "ההיסטוריה לא הגיעה במלואה, ולכן אין משהו שלם לנתח שוב.",
       "setting": "מגדירים את {name}",
       "learned": "מה GOTCHA למדה מ־{name}",
       "nothingUsed": "שום דבר לא בשימוש עד שתאשרו.",
