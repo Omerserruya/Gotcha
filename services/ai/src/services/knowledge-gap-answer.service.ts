@@ -4,7 +4,9 @@
  *
  * - The answer is stored as a question-and-answer document, the shape the
  *   onboarding /teach route writes ("**question**\n\nanswer"), in the first
- *   ACTIVE knowledge base: retrieval reads only active ones.
+ *   ACTIVE, tenant-wide (scope "all") knowledge base: retrieval reads only
+ *   active ones, and a base scoped to one agent or department is invisible
+ *   to every other employee (knowledge.service readableKnowledgeBaseIds).
  * - One document per question (`unanswered_question:<id>`): answering again
  *   REPLACES it and drops its old vectors, so the AI can never quote the
  *   answer the owner just corrected.
@@ -66,7 +68,7 @@ export async function answerUnansweredQuestion(input: {
     documentId = existing.id;
   } else {
     const kb =
-      (await prisma.knowledgeBase.findFirst({ where: { tenantId, isActive: true }, orderBy: { createdAt: "asc" }, select: { id: true } })) ??
+      (await prisma.knowledgeBase.findFirst({ where: { tenantId, isActive: true, scope: "all" }, orderBy: { createdAt: "asc" }, select: { id: true } })) ??
       (await prisma.knowledgeBase.create({ data: { tenantId, name: "Company Knowledge", description: "Answers to customer questions" }, select: { id: true } }));
     const doc = await prisma.knowledgeDocument.create({
       data: { knowledgeBaseId: kb.id, tenantId, title, content, sourceType: "text", metadata, status: "pending" },

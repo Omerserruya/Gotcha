@@ -51,7 +51,7 @@ vi.mock("@chatcenter/shared", async () => {
       },
       knowledgeBase: {
         findFirst: async (a: any) => H.kbs.filter((k) => match(k, a.where))[0] ?? null,
-        create: async (a: any) => { const k = { id: `kb_${++H.n}`, isActive: true, ...a.data }; H.kbs.push(k); return k; },
+        create: async (a: any) => { const k = { id: `kb_${++H.n}`, isActive: true, scope: "all", ...a.data }; H.kbs.push(k); return k; },
       },
       knowledgeDocument: {
         findFirst: async (a: any) => H.docs.find((d) => match(d, a.where)) ?? null,
@@ -82,7 +82,8 @@ const Q = (id: string, tenantId: string, question: string) => ({ id, tenantId, q
 beforeEach(() => {
   H.user = { userId: "owner", role: "ADMIN", perms: [] };
   H.questions = [Q("q1", "T1", "Do you ship to Eilat?"), Q("q_other", "T2", "Their question")];
-  H.kbs = [{ id: "kb_off", tenantId: "T1", isActive: false }, { id: "kb_on", tenantId: "T1", isActive: true }];
+  // An inactive base and one only an agent reads come first: neither is where every employee looks.
+  H.kbs = [{ id: "kb_off", tenantId: "T1", isActive: false, scope: "all" }, { id: "kb_agent", tenantId: "T1", isActive: true, scope: "agent" }, { id: "kb_on", tenantId: "T1", isActive: true, scope: "all" }];
   H.docs = []; H.embedFails = false; H.embedded = []; H.vectorsDropped = []; H.n = 0;
 });
 
@@ -155,10 +156,10 @@ describe("★ answering an unanswered question", () => {
     expect(H.docs).toEqual([]);
   });
 
-  it("with no active knowledge base, one is created for it", async () => {
-    H.kbs = [{ id: "kb_off", tenantId: "T1", isActive: false }];
+  it("with no active tenant-wide knowledge base, one is created for it", async () => {
+    H.kbs = [{ id: "kb_off", tenantId: "T1", isActive: false, scope: "all" }, { id: "kb_agent", tenantId: "T1", isActive: true, scope: "agent" }];
     await answer("q1", { answer: "Yes." });
-    expect(H.docs[0].knowledgeBaseId).not.toBe("kb_off");
-    expect(H.kbs.find((k) => k.id === H.docs[0].knowledgeBaseId)).toMatchObject({ tenantId: "T1", isActive: true });
+    expect(["kb_off", "kb_agent"]).not.toContain(H.docs[0].knowledgeBaseId);
+    expect(H.kbs.find((k) => k.id === H.docs[0].knowledgeBaseId)).toMatchObject({ tenantId: "T1", isActive: true, scope: "all" });
   });
 });
