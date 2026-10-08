@@ -261,6 +261,11 @@ export const billingEndpoints = {
   plans: () => endpoint('/api/billing/plans'),
   changePlan: () => endpoint('/api/billing/subscription/change-plan'),
   /**
+   * 17b: what change-plan WOULD do and charge, exactly - no write, no provider
+   * call (billing 42c52c6e). `{ ok, preview }`, a bare envelope.
+   */
+  changePlanPreview: () => endpoint('/api/billing/subscription/change-plan/preview'),
+  /**
    * Invoices - and this route was here the whole time.
    *
    * The registry used to point at `/api/billing/summary`, annotated

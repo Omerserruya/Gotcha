@@ -230,3 +230,56 @@ export function pricePer(subscription: Subscription): 'month' | 'year' | null {
   }
   return null;
 }
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ 17b's PREVIEW - THE EXACT CHARGE, STATED BY THE SERVER (billing 42c52c6e)
+ * ════════════════════════════════════════════════════════════════════════════
+ * `POST /billing/subscription/change-plan/preview` → `{ ok, preview }`.
+ * `chargeNow.gross` is exactly what leaves the card (ILS, VAT included); it is
+ * sent back on the change as `expectedChargeAmount`, with `fxRateVersion`, and
+ * a change at any other figure is refused (409 charge_amount_changed) rather
+ * than charged. `chargeNow` is null for a trial, an equal-price move up, a move
+ * down (scheduled, effectiveAt = period end) - and when refused.
+ */
+const money = z.union([z.string(), z.number()]).transform(String);
+
+export const planChangePreviewSchema = z
+  .object({
+    preview: z.object({
+      applied: z.enum(['immediate', 'scheduled']),
+      chargeNow: z
+        .object({
+          gross: money,
+          net: money,
+          tax: money,
+          taxPercent: money.nullable().catch(null).default(null),
+          chargeCurrency: z.string(),
+          vatIncluded: z.boolean().catch(true).default(true),
+          fxRateVersion: z.number().int().nullable().catch(null).default(null),
+        })
+        .nullable()
+        .default(null),
+      refused: z
+        .object({ code: z.string(), reason: z.string().nullable().catch(null).default(null) })
+        .nullable()
+        .catch(null)
+        .default(null),
+      /** `false`: the change would fail with no_payment_method - add a card first. */
+      hasPaymentMethod: z.boolean().nullable().catch(null).default(null),
+      effectiveAt: z.string().nullable().catch(null).default(null),
+      newMonthly: z
+        .object({ amount: money, currency: z.string() })
+        .nullable()
+        .catch(null)
+        .default(null),
+    }),
+  })
+  .transform(({ preview }) => preview);
+export type PlanChangePreview = z.infer<typeof planChangePreviewSchema>;
+
+/** What change-plan answers: `{ ok, applied, effectiveAt?, … }`. */
+export const planChangeResultSchema = z.object({
+  applied: z.enum(['immediate', 'scheduled']),
+  effectiveAt: z.string().nullable().catch(null).default(null),
+});

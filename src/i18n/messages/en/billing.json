@@ -361,6 +361,42 @@
       "samePrice": "The two monthly prices are the same, so nothing is charged now.",
       "thenPrice": "From then on, {price} a month, before VAT.",
       "yes": "Yes, switch to {plan}"
+    },
+    "live": {
+      "asking": "Working out exactly what this would charge…",
+      "chargeNow": "This moves you to {plan} today and charges {gross} now, including VAT ({tax}), to your card on file.",
+      "thenMonthly": "Then {price} a month.",
+      "scheduled": "Nothing is charged now. You move to {plan} on {date}.",
+      "scheduledNoDate": "Nothing is charged now. You move to {plan} at your renewal.",
+      "nothingNow": "Nothing is charged now. You move to {plan} today.",
+      "noCard": "This would charge your card now, and there's no card on file - add one first.",
+      "refused": {
+        "taxable": "The VAT can't be worked out without your billing country - add it in billing details first.",
+        "priceable": "The charge can't be priced right now, so the plan can't be changed. Try again later."
+      },
+      "yesCharge": "Yes, charge {gross}",
+      "yes": "Yes, switch to {plan}",
+      "switching": "Switching…",
+      "cancel": "Cancel",
+      "again": "Check again",
+      "moved": "The amount changed since you looked - here is the new figure. Nothing was charged.",
+      "doneNow": "You're on {plan} now.",
+      "doneScheduled": "Done: you move to {plan} on {date}.",
+      "doneScheduledNoDate": "Done: you move to {plan} at your renewal.",
+      "previewRefused": {
+        "held": "Billing in this environment uses the live payment account, so nothing is changed from here.",
+        "not_selectable": "That plan can't be chosen for this workspace.",
+        "forbidden": "You don't have permission to change the plan.",
+        "failed": "The charge couldn't be worked out just now."
+      },
+      "changeRefused": {
+        "held": "Billing in this environment uses the live payment account, so nothing is changed from here.",
+        "no_card": "There's no card on file to charge - add one first. Nothing was charged.",
+        "declined": "The card was declined. Nothing was charged, and you're still on your current plan.",
+        "unknown": "We couldn't confirm whether the charge went through. Don't try again - check your invoices first, or ask us.",
+        "not_selectable": "The plan wasn't changed. Nothing was charged.",
+        "forbidden": "You don't have permission to change the plan."
+      }
     }
   },
   "held": {
@@ -369,9 +405,7 @@
     "cancel": "Cancel",
     "addCard": "This opens the payment provider's secure page to save a card. It's kept for future charges - nothing is charged now.",
     "replaceCard": "This opens the payment provider's secure page to save a new card in place of {brand} ending {last4}; the new one is charged from then on. Nothing is charged now.",
-    "toSecurePage": "Continue to the secure page",
-    "tagNotBuilt": "Not live yet",
-    "whyNotBuilt": "Doing this from here comes next."
+    "toSecurePage": "Continue to the secure page"
   },
   "card": {
     "title": "Card",

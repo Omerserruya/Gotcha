@@ -6,6 +6,11 @@ import { z } from 'zod';
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { buyResultSchema } from '@/api/contracts/pricing';
+import {
+  planChangePreviewSchema,
+  planChangeResultSchema,
+  type PlanChangePreview,
+} from '@/api/contracts/billing';
 import { billingEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { signInIfSignedOut } from '@/api/client/signed-out';
@@ -414,5 +419,98 @@ export async function saveAutoPurchase(input: AutoPurchaseInput): Promise<AutoPu
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
     }
     return { ok: false, reason: 'failed' };
+  }
+}
+
+export type PreviewResult =
+  | { readonly ok: true; readonly preview: PlanChangePreview }
+  | { readonly ok: false; readonly reason: 'held' | 'not_selectable' | 'forbidden' | 'failed' };
+
+/**
+ * 17b: what switching to `planKey` would do and charge - the server's exact
+ * figure. No write and no provider call, but it is half of a charge, so it
+ * stays behind BILLING_WRITES with the change itself.
+ */
+export async function previewPlanChange(planKey: string): Promise<PreviewResult> {
+  if (!billingWritesEnabled()) return { ok: false, reason: 'held' };
+  try {
+    const preview = await serverApi().post({
+      endpoint: billingEndpoints.changePlanPreview(),
+      body: { planKey },
+      payload: planChangePreviewSchema,
+      raw: true,
+    });
+    return { ok: true, preview };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('billing.plan_preview_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    if (isApiError(cause)) {
+      if (cause.status === 400) return { ok: false, reason: 'not_selectable' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    }
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export type ChangePlanResult =
+  | {
+      readonly ok: true;
+      readonly applied: 'immediate' | 'scheduled';
+      readonly effectiveAt: string | null;
+    }
+  | {
+      readonly ok: false;
+      /**
+       * `moved` - the figure changed since the confirm; nothing was charged
+       * (409). `unknown` - the charge's outcome is not known, so it may have
+       * gone through: never "failed", never "try again" - the same rule as
+       * buy credits' `unsettled`. A request that never got an answer is
+       * `unknown` too. `declined` - the provider said no; nothing charged.
+       */
+      readonly reason:
+        'held' | 'moved' | 'no_card' | 'declined' | 'unknown' | 'not_selectable' | 'forbidden';
+    };
+
+/**
+ * 17b: switch plans - charging exactly the figure the person confirmed. Both
+ * expected values are always sent; null when nothing is charged now.
+ */
+export async function changePlanTo(
+  planKey: string,
+  expected: { readonly gross: string | null; readonly fxRateVersion: number | null },
+): Promise<ChangePlanResult> {
+  if (!billingWritesEnabled()) return { ok: false, reason: 'held' };
+  try {
+    const done = await serverApi().post({
+      endpoint: billingEndpoints.changePlan(),
+      body: {
+        planKey,
+        expectedChargeAmount: expected.gross,
+        expectedFxRateVersion: expected.fxRateVersion,
+      },
+      payload: planChangeResultSchema,
+      raw: true,
+    });
+    revalidatePath('/[locale]/settings/billing', 'layout');
+    return { ok: true, applied: done.applied, effectiveAt: done.effectiveAt };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('billing.change_plan_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    if (!isApiError(cause) || cause.status === undefined || cause.status >= 500) {
+      // No answer, or the service broke mid-way: whether it charged is not known.
+      return { ok: false, reason: 'unknown' };
+    }
+    const code = cause.developerMessage ?? '';
+    if (cause.status === 409 && code === 'charge_amount_changed')
+      return { ok: false, reason: 'moved' };
+    if (code === 'upgrade_payment_outcome_unknown') return { ok: false, reason: 'unknown' };
+    if (code === 'payment_method_required') return { ok: false, reason: 'no_card' };
+    if (code.startsWith('upgrade_payment_failed:')) return { ok: false, reason: 'declined' };
+    if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    return { ok: false, reason: 'not_selectable' };
   }
 }

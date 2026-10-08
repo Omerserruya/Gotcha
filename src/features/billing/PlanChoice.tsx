@@ -9,6 +9,7 @@ import { Link } from '@/i18n/navigation';
 import styles from './Billing.module.css';
 import { billingWritesEnabled } from '@/api/client/billing-writes';
 import { HeldConfirm } from './HeldConfirm';
+import { PlanSwitch } from './PlanSwitch';
 
 const FEATURES_SHOWN = 3;
 
@@ -258,7 +259,7 @@ export async function SwitchActions({
 }) {
   const t = await getTranslations('billing.choice');
   const th = await getTranslations('billing.held');
-  // Off here: the environment's reason. On: no plan change is wired yet - said so.
+  // On: the live switch (preview, then the exact charge). Off (dev): held, with why.
   const live = billingWritesEnabled();
   const locale = await getLocale();
   const card = methods && methods.length > 0 ? methods[0]! : null;
@@ -303,14 +304,22 @@ export async function SwitchActions({
 
   return (
     <div className={styles.switchActions} data-testid="switch-actions">
-      {target ? (
+      {target && live ? (
+        // Live (BILLING_WRITES=on): the server's preview, then the exact charge.
+        <PlanSwitch
+          planKey={target.key}
+          planName={nameOf(target)}
+          label={t('switchTo', { plan: nameOf(target) })}
+          className={styles.switchButton}
+        />
+      ) : target ? (
         <HeldConfirm
           label={t('switchTo', { plan: nameOf(target) })}
           className={styles.switchButton}
           sentences={sentences(target)}
           yes={t('confirm.yes', { plan: nameOf(target) })}
-          heldTag={live ? th('tagNotBuilt') : th('tag')}
-          heldWhy={live ? th('whyNotBuilt') : th('why')}
+          heldTag={th('tag')}
+          heldWhy={th('why')}
           cancel={th('cancel')}
           testid="switch-button"
         />

@@ -11,6 +11,12 @@ import messages from '@/i18n/messages/en/billing.json';
 /* The deployment's switch: off (dev - the live payment account) unless a test turns it on. */
 const writes = vi.hoisted(() => ({ on: false }));
 vi.mock('@/api/client/billing-writes', () => ({ billingWritesEnabled: () => writes.on }));
+/* The live switch is a client component with its own tests; here, when it is used and with what. */
+vi.mock('./PlanSwitch', () => ({
+  PlanSwitch: ({ planKey, planName }: { planKey: string; planName: string }) => (
+    <span data-testid="plan-switch-live" data-plan={planKey} data-name={planName} />
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'billing.choice') =>
     createTranslator({ locale: 'en', messages: { billing: messages }, namespace }),
@@ -239,17 +245,16 @@ describe('★★ 17b Switch - opens its confirm, says what changePlan would do, 
   });
 });
 
-describe('★ writes on (production): the switch is still held - no plan change is wired yet - and says that, not "this environment"', () => {
-  it('the reason follows the deployment', async () => {
+describe('★ writes on (production): the live switch - the server’s preview, then the exact charge', () => {
+  it('the target is handed to PlanSwitch; no held confirm', async () => {
     writes.on = true;
     const [foundation, , voice] = CATALOG;
     render(
       await SwitchActions({ target: voice!, current: foundation!, methods: [], subscription: SUB }),
     );
-    fireEvent.click(screen.getByTestId('switch-button'));
-    const yes = screen.getByTestId('switch-button-yes');
-    expect(yes).toHaveTextContent('Not live yet');
-    expect(yes).toHaveAttribute('title', 'Doing this from here comes next.');
+    expect(screen.getByTestId('plan-switch-live')).toHaveAttribute('data-plan', 'ai_voice');
+    expect(screen.getByTestId('plan-switch-live')).toHaveAttribute('data-name', 'AI Voice');
+    expect(screen.queryByTestId('switch-button')).toBeNull();
     writes.on = false;
   });
 });
