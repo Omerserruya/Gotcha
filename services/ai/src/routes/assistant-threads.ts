@@ -29,6 +29,7 @@ import {
   requestCancel,
   type Owner,
 } from "../services/assistant-threads.service";
+import { normalizeQuery, listConversationsForSource } from "../services/assistant-query.service";
 
 const router = Router();
 
@@ -204,6 +205,27 @@ router.get("/threads/:id/runs/:runId/events", async (req: Request, res: Response
   const fromHeader = last.startsWith(`${runId}:`) ? Number(last.slice(runId.length + 1)) : NaN;
   const after = Number.isFinite(fromHeader) ? fromHeader : Math.max(0, Number(req.query.after) || 0);
   await tail(req, res, runId, Math.max(0, Math.floor(after)));
+});
+
+/**
+ * GET /threads/:id/messages/:messageId/sources/:sourceId/records?cursor=
+ * The full list behind a source (§9.4): its saved query re-run with the
+ * caller's CURRENT visibility, 25 a page.
+ */
+router.get("/threads/:id/messages/:messageId/sources/:sourceId/records", async (req: Request, res: Response) => {
+  const o = ownerOf(req);
+  if (!o) { res.status(401).json({ error: "no user context" }); return; }
+  const thread = await ownThread(o, String(req.params.id));
+  if (!thread) { notFound(res); return; }
+  const m = await prisma.assistantMessage.findFirst({ where: { id: String(req.params.messageId), threadId: thread.id }, select: { sources: true } });
+  const source = (Array.isArray(m?.sources) ? (m!.sources as any[]) : []).find((x) => x?.id === String(req.params.sourceId));
+  if (!source) { res.status(404).json({ error: "Source not found", code: "SOURCE_NOT_FOUND" }); return; }
+  if (source.query?.tool !== "conversations") { res.status(409).json({ error: "This list can no longer be read", code: "SOURCE_UNAVAILABLE" }); return; }
+  const q = normalizeQuery(source.query.params);
+  if ("error" in q) { res.status(409).json({ error: "This list can no longer be read", code: "SOURCE_UNAVAILABLE" }); return; }
+  const cursor = typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : null;
+  const locale = await localeOf(req, o);
+  res.json(await listConversationsForSource(o.tenantId, viewerOf(req), locale, q, cursor));
 });
 
 router.post("/threads/:id/messages/:messageId/cancel", async (req: Request, res: Response) => {

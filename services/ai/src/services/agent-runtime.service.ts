@@ -53,6 +53,8 @@ export type AgentRuntimeEvent =
   | { type: "round_end"; round: number; hadToolCalls: boolean }
   | { type: "done"; usage: { input_tokens: number; output_tokens: number; total_tokens: number }; rounds: number }
   | { type: "cancelled" }
+  /** Stage 2: cards and their source, computed by a query tool (shown as they are). */
+  | { type: "artifacts"; toolCallId: string; blocks: unknown[]; source: unknown }
   | { type: "error"; message: string; code?: "BUDGET_EXCEEDED" | "AI_UNAVAILABLE" };
 
 export interface AgentRunInput {
@@ -79,6 +81,8 @@ export interface AgentRunInput {
   tokenBudget?: number;
   /** Extra system lines for this run (a thread's scope, its answer format). */
   extraSystem?: string[];
+  /** The period query tools default to (a thread's scope as workspace days). */
+  defaultPeriod?: { from: string; to: string };
 }
 
 export type AgentEventSink = (event: AgentRuntimeEvent) => void | Promise<void>;
@@ -140,6 +144,9 @@ export async function runAgent(
   let round = 0;
   let stopReason: "final" | "max_rounds" | "error" | "cancelled" | "budget" = "final";
   const aborted = () => !!input.signal?.aborted;
+  // One id space per answer: "b1", "s1"... across every query tool call.
+  const seq = { b: 0, s: 0 };
+  const nextId = (k: "b" | "s") => `${k}${++seq[k]}`;
 
   for (round = 0; round < MAX_ROUNDS; round++) {
     if (aborted()) { stopReason = "cancelled"; break; }
@@ -236,7 +243,12 @@ export async function runAgent(
         authToken: input.authToken,
         viewer: input.operator.viewer,
         locale: input.operator.locale ?? "en",
+        defaultPeriod: input.defaultPeriod,
+        nextId,
       });
+      if (r.artifacts) {
+        await onEvent({ type: "artifacts", toolCallId: tc.id, blocks: r.artifacts.blocks, source: r.artifacts.source });
+      }
 
       // Surface side-effects to the consumer for UI cues (toast, badge, etc).
       if (r.sideEffect?.kind === "proposed_plan") {

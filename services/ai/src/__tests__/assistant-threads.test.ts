@@ -391,6 +391,43 @@ describe("★ cancel and resume", () => {
   });
 });
 
+describe("★ stage 2: cards and sources from the server, never the model", () => {
+  it("a query becomes a block event and a source; an invented citation is dropped; both are saved and returned", async () => {
+    const t = await newThread();
+    H.script = [tool("system_query_conversations", { groupBy: "day" }), say("Quiet week [^s1], busier than [^s9].")];
+    const r = await send(t.id, "how was the week?");
+    const names = r.events.map((e) => e.event);
+    expect(names.indexOf("block")).toBeGreaterThan(names.indexOf("step.start"));
+    expect(names.indexOf("sources")).toBeGreaterThan(names.lastIndexOf("text.delta"));
+    expect(names.indexOf("sources")).toBeLessThan(names.indexOf("message.done"));
+    const block = r.events.find((e) => e.event === "block")!.data.block;
+    expect(block).toMatchObject({ type: "chart", id: "b1", sourceId: "s1" });
+    const sources = r.events.find((e) => e.event === "sources")!.data.items;
+    expect(sources.map((x: any) => x.id)).toEqual(["s1"]);
+    expect(sources[0].query.tool).toBe("conversations");
+    const saved = H.messages.find((m) => m.role === "assistant");
+    expect(saved.text).toBe("Quiet week [^s1], busier than .");
+    expect(saved.blocks).toHaveLength(1);
+    expect(saved.sources.map((x: any) => x.id)).toEqual(["s1"]);
+    const v = (await request(app()).get(`/api/assistant/threads/${t.id}`)).body.data;
+    expect(v.messages[1].blocks[0]).toMatchObject({ type: "chart", id: "b1" });
+    expect(v.messages[1].sources[0].id).toBe("s1");
+  });
+
+  it("the full list behind a source: re-run for the owner; another source or another user is 404", async () => {
+    const t = await newThread();
+    H.script = [tool("system_query_conversations", { mention: "small" }), say("ok [^s1]")];
+    await send(t.id, "who said small?");
+    const mid = H.messages.find((m) => m.role === "assistant").id;
+    const ok = await request(app()).get(`/api/assistant/threads/${t.id}/messages/${mid}/sources/s1/records`);
+    expect(ok.status).toBe(200);
+    expect(ok.body).toEqual({ data: [], nextCursor: null });
+    expect((await request(app()).get(`/api/assistant/threads/${t.id}/messages/${mid}/sources/s7/records`)).status).toBe(404);
+    H.user = "u2";
+    expect((await request(app()).get(`/api/assistant/threads/${t.id}/messages/${mid}/sources/s1/records`)).status).toBe(404);
+  });
+});
+
 describe("delete", () => {
   it("removes the thread, its messages and its memory, and cancels a running answer", async () => {
     const t = await newThread();

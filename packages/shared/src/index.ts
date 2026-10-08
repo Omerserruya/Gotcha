@@ -1240,3 +1240,6 @@ export {
   waMeUrl,
   type HandoffRecord,
 } from "./lib/whatsapp-handoff";
+
+// The business's real conversations (no rehearsals, no test rows): one definition.
+export { REAL_CONVERSATION } from "./lib/real-conversation";

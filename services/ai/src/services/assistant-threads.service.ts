@@ -227,9 +227,15 @@ export class SuggestionsSplitter {
 
 const LANG_NAME = { he: "Hebrew", en: "English" } as const;
 
+/** `[^s3]` stays only when s3 is a source of this answer. */
+export function withValidCitations(text: string, ids: Set<string>): string {
+  return text.replace(/\[\^([a-z]\d+)\]/g, (m, id) => (ids.has(id) ? m : ""));
+}
+
 export function threadSystemLines(scope: ThreadScope, locale: "he" | "en", now = new Date()): string[] {
   return [
     scopeLine(scope, now, locale),
+    "Numbers come from the query tools and are shown as cards. Cite the source id a tool returns right after the claim it supports, as [^s1]. Never state a number no tool returned.",
     `Answer format for this screen: markdown limited to bold, italics, bullet and numbered lists, inline code and links (http(s) or in-app paths starting with /). No tables, images or HTML. After the answer, on its own last line, write ${SUGGESTIONS_MARKER} followed by a JSON array of 2 or 3 short follow-up questions the user may ask next, written in ${LANG_NAME[locale]}. Write nothing after that array.`,
   ];
 }
@@ -290,6 +296,8 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
 
   const splitter = new SuggestionsSplitter();
   const steps = new Map<string, Step>();
+  const blocks: unknown[] = [];
+  const sources: Array<{ id: string }> = [];
   let pendingApproval: string | null = null;
   let text = "";
   let status: "done" | "cancelled" | "failed" = "done";
@@ -310,6 +318,7 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
       signal: ac.signal,
       tokenBudget: RUN_TOKEN_BUDGET(),
       extraSystem: threadSystemLines(run.scope, input.locale),
+      defaultPeriod: scopeDates(run.scope),
     }, async (ev: AgentRuntimeEvent) => {
       switch (ev.type) {
         case "token": await emitText(splitter.push(ev.text)); break;
@@ -334,6 +343,11 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
         case "round_end":
           // A round that called tools may have streamed a preamble: it is part of the answer.
           break;
+        case "artifacts":
+          // Computed by the query tool, shown exactly as computed.
+          for (const b of ev.blocks) { blocks.push(b); await emit("block", { block: b }); }
+          if (ev.source) sources.push(ev.source as { id: string });
+          break;
         case "cancelled": status = "cancelled"; break;
         case "error":
           status = "failed";
@@ -354,13 +368,16 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
   if (rest && status !== "cancelled") await emitText(rest);
   else if (rest) text += rest;
   if (suggestions.length && status === "done") await emit("suggestions", { items: suggestions });
+  // A citation must point at a source of this answer; any other is dropped.
+  text = withValidCitations(text, new Set(sources.map((x) => x.id)));
+  if (sources.length) await emit("sources", { items: sources });
 
   // Defensive: a tool always reports before the run ends, so only a crash
   // mid-tool leaves a step running; saved, it did not finish.
   const stepList = [...steps.values()].map(({ startedAt: _s, ...s }) => (s.status === "running" ? { ...s, status: "failed" as const } : s));
   await prisma.assistantMessage.update({
     where: { id: run.messageId },
-    data: { text: text.trim(), status, steps: stepList as any, suggestions: (status === "done" ? suggestions : []) as any, usage: usage ?? undefined },
+    data: { text: text.trim(), status, steps: stepList as any, suggestions: (status === "done" ? suggestions : []) as any, blocks: blocks as any, sources: sources as any, usage: usage ?? undefined },
   }).catch((err) => console.error("[assistant-threads] save failed:", err?.message));
 
   // The first answer names the thread, unless the user named it.
@@ -416,7 +433,7 @@ export async function threadView(o: Owner, id: string) {
     id: m.id, threadId: m.threadId, role: m.role, text: m.text,
     // A "streaming" row whose run is gone (the process died) did not finish.
     status: m.status === "streaming" && activeRun?.messageId !== m.id ? "failed" : m.status,
-    ...(m.role === "assistant" ? { steps: m.steps ?? [], scope: m.scope, suggestions: m.suggestions ?? [], blocks: [], sources: [], actions: [], runId: m.runId } : {}),
+    ...(m.role === "assistant" ? { steps: m.steps ?? [], scope: m.scope, suggestions: m.suggestions ?? [], blocks: m.blocks ?? [], sources: m.sources ?? [], actions: [], runId: m.runId } : {}),
     createdAt: m.createdAt,
   }));
   return { thread: threadOut(t), messages, activeRun };

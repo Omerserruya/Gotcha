@@ -13,7 +13,15 @@
  * operator-side semantics isolated.
  */
 
-import { prisma, visibilityClause, readDurableSetting, parseBusinessHours, type Viewer } from "@chatcenter/shared";
+import { prisma, visibilityClause, readDurableSetting, parseBusinessHours, REAL_CONVERSATION, type Viewer } from "@chatcenter/shared";
+import { normalizeQuery, queryConversations } from "./assistant-query.service";
+
+/** The last n days, today included (UTC days: a caller with a workspace period passes it). */
+function lastDays(n: number): { from: string; to: string } {
+  const to = new Date();
+  const from = new Date(to.getTime() - (n - 1) * 86_400_000);
+  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+}
 import {
   buildAgentToolsForAIAgent,
   evaluateToolGate,
@@ -176,6 +184,28 @@ const PROPOSE_PLAN_TOOL = {
   },
 };
 
+const SYSTEM_QUERY_CONVERSATIONS = {
+  type: "function" as const,
+  function: {
+    name: "system_query_conversations",
+    description:
+      "The business's conversations over a period: how many, by day, by channel, by status, by who handled them (GOTCHA or the team), " +
+      "by intent or sentiment (recorded only for some conversations: the result says for how many), or which conversations mention a word. " +
+      "The numbers are shown to the user as cards; you get a short summary and a source id. Cite it after the claim as [^<id>] and do not repeat every number.",
+    parameters: {
+      type: "object",
+      properties: {
+        from: { type: "string", description: "First day, YYYY-MM-DD (the workspace's days). Default: the conversation's period." },
+        to: { type: "string", description: "Last day, YYYY-MM-DD, inclusive. Default: the conversation's period." },
+        channels: { type: "array", items: { type: "string" }, description: "Channel keys (WHATSAPP, INSTAGRAM, MESSENGER, EMAIL, WEBCHAT, SHOPIFY_LIVE_CHAT, VOICE...). Omit for all." },
+        status: { type: "string", enum: ["OPEN", "WAITING", "CLOSED"], description: "Only conversations in this state. WAITING means waiting for the customer." },
+        groupBy: { type: "string", enum: ["day", "channel", "status", "handler", "intent", "sentiment"], description: "How to split the count. Default: day." },
+        mention: { type: "string", description: "Only conversations where a message in the period contains this word or phrase (any case)." },
+      },
+    },
+  },
+};
+
 // ─── Tool surface for the System Copilot ────────────────────
 
 /**
@@ -209,6 +239,7 @@ export async function buildSystemAgentTools(opts: {
     SYSTEM_SEARCH_CUSTOMERS,
     SYSTEM_SUMMARIZE_CONVERSATION,
     SYSTEM_RECENT_ACTIVITY,
+    SYSTEM_QUERY_CONVERSATIONS,
     PROPOSE_PLAN_TOOL,
   ];
 }
@@ -260,6 +291,10 @@ export interface SystemToolDispatchCtx {
   viewer?: Viewer;
   /** The interface language: result labels are written in it. */
   locale?: "he" | "en";
+  /** The period a query defaults to (a Home chat thread's scope); else the last 7 days. */
+  defaultPeriod?: { from: string; to: string };
+  /** Ids for the cards and sources of this answer ("b1", "s1"...), shared across its tool calls. */
+  nextId?: (kind: "b" | "s") => string;
 }
 
 /** The visibility OR-clause for this caller, or null when unrestricted. */
@@ -276,6 +311,8 @@ export interface SystemToolResult {
     | { kind: "proposed_plan"; approvalRequestId: string; planSummary: string }
     | { kind: "denied"; tool: string; reason: string }
     | { kind: "awaiting_approval"; approvalRequestId: string; tool: string };
+  /** Stage 2: cards and their source, computed here and shown as they are (never by the model). */
+  artifacts?: { blocks: unknown[]; source: unknown };
 }
 
 /**
@@ -439,6 +476,16 @@ async function dispatchSystemTool(
           }),
         };
       }
+      case "system_query_conversations": {
+        const locale = ctx.locale ?? "en";
+        const period = ctx.defaultPeriod ?? lastDays(7);
+        const q = normalizeQuery({ ...period, ...args, from: args.from ?? period.from, to: args.to ?? period.to });
+        if ("error" in q) return { toolCallId, content: JSON.stringify({ ok: false, error: q.error }) };
+        let seq = 0;
+        const nextId = ctx.nextId ?? ((k: "b" | "s") => `${k}${++seq}`);
+        const r = await queryConversations({ tenantId: ctx.tenantId, viewer: ctx.viewer, locale, nextId }, q);
+        return { toolCallId, content: JSON.stringify(r.summary), artifacts: { blocks: r.blocks, source: r.source } };
+      }
       case "system_recent_activity": {
         const limit = Math.min(50, Math.max(1, Number(args.limit) || 20));
         const clause = clauseOf(ctx);
@@ -499,6 +546,7 @@ const STEP_TEXT: Record<string, { en: string; he: string }> = {
   system_search_customers: { en: "Searching customers", he: "מחפש לקוחות" },
   system_summarize_conversation: { en: "Reading the conversation", he: "קורא את השיחה" },
   system_recent_activity: { en: "Looking at recent messages", he: "מסתכל על ההודעות האחרונות" },
+  system_query_conversations: { en: "Looking at the conversations", he: "בודק את השיחות" },
   propose_plan: { en: "Preparing a plan for your approval", he: "מכין תוכנית לאישור שלך" },
 };
 const METRIC_STEP: Record<string, { en: string; he: string }> = {
@@ -513,6 +561,9 @@ export function stepText(name: string, args: any, locale: "he" | "en" = "en"): s
   if (name === "system_count_conversations" && (args?.status && args.status !== "ANY" || args?.channel)) {
     return `${locale === "he" ? "סופר" : "Counting"} ${countLabel(args, locale)}`;
   }
+  if (name === "system_query_conversations" && typeof args?.mention === "string" && args.mention.trim()) {
+    return locale === "he" ? `מחפש שיחות שמזכירות “${args.mention.trim().slice(0, 40)}”` : `Finding conversations that mention “${args.mention.trim().slice(0, 40)}”`;
+  }
   if (name === "system_get_metric") {
     const m = METRIC_ALIASES[args?.metric] ?? args?.metric;
     if (METRIC_STEP[m]) return METRIC_STEP[m][locale];
@@ -523,8 +574,6 @@ export function stepText(name: string, args: any, locale: "he" | "en" = "en"): s
   return locale === "he" ? `מריץ ${action}` : `Running ${action}`;
 }
 
-/** Not a rehearsal: the same exclusion the analytics screens apply. */
-const REAL_CONVERSATION = { isTest: false, NOT: { customerExternalId: { startsWith: "sandbox:" } } } as const;
 
 /** An old metric key still accepted, mapped to the figure the screens show. */
 const METRIC_ALIASES: Record<string, string> = { waiting_conversations: "waiting_for_person" };

@@ -1,0 +1,281 @@
+/**
+ * Home chat stage 2 (docs/api/assistant-threads-v1.md §9): the query layer.
+ *
+ * A query computes numbers and turns them into BLOCKS (what the screen draws)
+ * and a SOURCE (what was asked, replayable for the full list). The model gets
+ * a short summary and the source id to cite; it never writes a number that a
+ * block shows. Everything follows the caller's visibility and counts only the
+ * business's real conversations (no rehearsals, test rows or imported history).
+ */
+import { prisma, REAL_CONVERSATION, visibilityClause, readDurableSetting, parseBusinessHours, type Viewer } from "@chatcenter/shared";
+import { channelName, whenText } from "./system-tools.service";
+
+type Locale = "he" | "en";
+
+export interface ChartBlock { type: "chart"; id: string; title: string; sourceId: string; kind: "bar" | "line"; x: { kind: "day" | "category"; values: string[] }; series: Array<{ key: string; label: string; values: number[] }>; unit: "count" | "currency" | "percent"; currency: string | null; highlight: string[]; deepLink: string | null; partial: null | { reason: string; cap?: number } }
+export interface BreakdownBlock { type: "breakdown"; id: string; title: string; sourceId: string; items: Array<{ key: string; label: string; value: number; share: number }>; total: number; unit: "count"; currency: null; other: { label: string; value: number } | null; coverage: { covered: number; of: number } | null; deepLink: string | null; partial: null }
+export interface RecordListItem { id: string; title: string; subtitle: string; meta: string; deepLink: string | null }
+export interface RecordListBlock { type: "record_list"; id: string; title: string; sourceId: string; kind: "conversation"; items: RecordListItem[]; total: number; hasMore: boolean; deepLink: null; partial: null }
+export type Block = ChartBlock | BreakdownBlock | RecordListBlock;
+export interface Source { id: string; label: string; kind: "conversations"; count: number | null; deepLink: string | null; query: { tool: "conversations"; params: ConversationQuery } }
+
+export interface ConversationQuery {
+  from: string; // YYYY-MM-DD, workspace days, inclusive
+  to: string;
+  channels?: string[];
+  status?: "OPEN" | "WAITING" | "CLOSED";
+  groupBy?: "day" | "channel" | "status" | "handler" | "intent" | "sentiment";
+  mention?: string;
+}
+
+export interface QueryCtx { tenantId: string; viewer?: Viewer; locale: Locale; nextId: (kind: "b" | "s") => string }
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_DAYS = 92;
+const MAX_ROWS = 5000;
+const LIST_FIRST_PAGE = 10;
+const LIST_PAGE = 25;
+const INBOX_CHANNELS = new Set(["WHATSAPP", "INSTAGRAM", "MESSENGER", "EMAIL", "WEBCHAT"]);
+const CHANNELS = new Set(["WHATSAPP", "INSTAGRAM", "MESSENGER", "EMAIL", "GMAIL", "OUTLOOK", "SLACK", "VOICE", "WEBCHAT", "SHOPIFY_LIVE_CHAT", "SMS", "TELEGRAM"]);
+
+/** The workspace's timezone (its business hours), else UTC. */
+export async function tenantTimeZone(tenantId: string): Promise<string> {
+  try {
+    return parseBusinessHours(await readDurableSetting(tenantId, "businessHours"))?.timezone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+/** The UTC instant a workspace day starts (00:00 there). */
+export function dayStart(day: string, tz: string): Date {
+  const utc = new Date(`${day}T00:00:00.000Z`);
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(utc);
+    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+    const asIfUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"));
+    return new Date(utc.getTime() - (asIfUtc - utc.getTime()));
+  } catch {
+    return utc;
+  }
+}
+
+/** The workspace day of an instant. */
+export function dayOf(d: Date, tz: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+  } catch {
+    return d.toISOString().slice(0, 10);
+  }
+}
+
+function daysBetween(from: string, to: string): string[] {
+  const out: string[] = [];
+  const d = new Date(`${from}T00:00:00.000Z`);
+  const end = new Date(`${to}T00:00:00.000Z`);
+  while (d <= end && out.length <= MAX_DAYS) { out.push(d.toISOString().slice(0, 10)); d.setUTCDate(d.getUTCDate() + 1); }
+  return out;
+}
+
+/** A clean query, or a reason it cannot run. */
+export function normalizeQuery(raw: any): ConversationQuery | { error: string } {
+  const from = String(raw?.from ?? ""), to = String(raw?.to ?? "");
+  if (!DAY.test(from) || !DAY.test(to) || from > to) return { error: "from and to must be YYYY-MM-DD days, from <= to" };
+  if (daysBetween(from, to).length > MAX_DAYS) return { error: `at most ${MAX_DAYS} days` };
+  const channels = Array.isArray(raw?.channels) ? [...new Set(raw.channels.map((c: unknown) => String(c).toUpperCase()).filter((c: string) => CHANNELS.has(c)))] as string[] : undefined;
+  const status = ["OPEN", "WAITING", "CLOSED"].includes(raw?.status) ? raw.status : undefined;
+  const groupBy = ["day", "channel", "status", "handler", "intent", "sentiment"].includes(raw?.groupBy) ? raw.groupBy : "day";
+  const mention = typeof raw?.mention === "string" && raw.mention.trim() ? raw.mention.trim().slice(0, 80) : undefined;
+  return { from, to, ...(channels?.length ? { channels } : {}), ...(status ? { status } : {}), groupBy, ...(mention ? { mention } : {}) };
+}
+
+/** The conversations a query counts, as a Prisma where (visibility kept in an AND). */
+async function whereOf(tenantId: string, q: ConversationQuery, viewer: Viewer | undefined, tz: string) {
+  const start = dayStart(q.from, tz);
+  const end = dayStart(nextDay(q.to), tz);
+  const and: any[] = [];
+  const clause = viewer ? visibilityClause(viewer) : null;
+  if (clause) and.push({ OR: clause });
+  const where: any = {
+    tenantId,
+    ...REAL_CONVERSATION,
+    ...(q.channels ? { channel: { in: q.channels } } : {}),
+    ...(q.status ? { status: q.status } : {}),
+  };
+  if (q.mention) {
+    // Conversations where a message in the period says it (any language, any case).
+    where.messages = { some: { createdAt: { gte: start, lt: end }, body: { contains: q.mention, mode: "insensitive" } } };
+  } else {
+    where.createdAt = { gte: start, lt: end };
+  }
+  if (and.length) where.AND = and;
+  return where;
+}
+
+function nextDay(day: string): string {
+  const d = new Date(`${day}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+const L = {
+  conversations: { he: "שיחות", en: "conversations" },
+  status: { OPEN: { he: "פתוחות", en: "Open" }, WAITING: { he: "ממתינות ללקוח", en: "Waiting for the customer" }, CLOSED: { he: "נסגרו", en: "Closed" } } as Record<string, Record<Locale, string>>,
+  handler: { gotcha: { he: "GOTCHA", en: "GOTCHA" }, team: { he: "הצוות", en: "Your team" }, none: { he: "לא טופלו", en: "Not handled" } } as Record<string, Record<Locale, string>>,
+  sentiment: { positive: { he: "חיובי", en: "Positive" }, neutral: { he: "ניטרלי", en: "Neutral" }, negative: { he: "שלילי", en: "Negative" }, mixed: { he: "מעורב", en: "Mixed" } } as Record<string, Record<Locale, string>>,
+};
+
+function handlerOf(c: { handledBy: string | null; isHandedOver: boolean }): "gotcha" | "team" | "none" {
+  if (c.handledBy === "human" || c.isHandedOver) return "team";
+  if (c.handledBy === "ai_agent" || c.handledBy === "flow") return "gotcha";
+  return "none";
+}
+
+function periodWords(q: ConversationQuery, locale: Locale): string {
+  const f = whenText(new Date(`${q.from}T12:00:00.000Z`), locale, "UTC", false);
+  const t = whenText(new Date(`${q.to}T12:00:00.000Z`), locale, "UTC", false);
+  return q.from === q.to ? f : `${f} - ${t}`;
+}
+
+/** The source's chip label: "12 שיחות שמזכירות “קטן”", "38 conversations, 1 - 7 October". */
+function sourceLabel(q: ConversationQuery, total: number, locale: Locale): string {
+  const he = locale === "he";
+  const parts = [`${total} ${L.conversations[locale]}`];
+  if (q.mention) parts.push(he ? `שמזכירות “${q.mention}”` : `mentioning “${q.mention}”`);
+  if (q.channels?.length === 1) parts.push(he ? `בערוץ ${channelName(q.channels[0], locale)}` : `on ${channelName(q.channels[0], locale)}`);
+  if (q.status) parts.push(`(${L.status[q.status]![locale]})`);
+  parts.push(`· ${periodWords(q, locale)}`);
+  return parts.join(" ");
+}
+
+function sourceLink(q: ConversationQuery): string | null {
+  if (q.channels?.length === 1 && INBOX_CHANNELS.has(q.channels[0]!)) return `/inbox?channel=${q.channels[0]}`;
+  return null;
+}
+
+async function listItems(rows: Array<{ id: string; customerName: string | null; customerExternalId: string | null; channel: string; status: string; lastMessageAt: Date | null; createdAt: Date }>, locale: Locale, tz: string): Promise<RecordListItem[]> {
+  return rows.map((c) => ({
+    id: c.id,
+    title: c.customerName || c.customerExternalId || (locale === "he" ? "לקוח" : "Customer"),
+    subtitle: `${channelName(c.channel, locale)} · ${L.status[c.status]?.[locale] ?? c.status}`,
+    meta: whenText(c.lastMessageAt ?? c.createdAt, locale, tz),
+    deepLink: `/inbox?c=${c.id}`,
+  }));
+}
+
+const LIST_SELECT = { id: true, customerName: true, customerExternalId: true, channel: true, status: true, lastMessageAt: true, createdAt: true } as const;
+
+export interface QueryResult {
+  /** For the model: the counts in words and the id to cite. Never the blocks' raw arrays. */
+  summary: Record<string, unknown>;
+  blocks: Block[];
+  source: Source;
+}
+
+/** Run a conversations query: counts, the block(s) and the source. */
+export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): Promise<QueryResult> {
+  const tz = await tenantTimeZone(ctx.tenantId);
+  const where = await whereOf(ctx.tenantId, q, ctx.viewer, tz);
+  const rows = await prisma.conversation.findMany({
+    where,
+    select: { id: true, channel: true, status: true, handledBy: true, isHandedOver: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+    take: MAX_ROWS + 1,
+  });
+  const capped = rows.length > MAX_ROWS;
+  const counted = capped ? rows.slice(0, MAX_ROWS) : rows;
+  const total = counted.length;
+  const sId = ctx.nextId("s");
+  const source: Source = { id: sId, label: sourceLabel(q, total, ctx.locale), kind: "conversations", count: total, deepLink: sourceLink(q), query: { tool: "conversations", params: q } };
+  const blocks: Block[] = [];
+  const he = ctx.locale === "he";
+  const partial = capped ? { reason: "capped", cap: MAX_ROWS } : null;
+
+  if (q.groupBy === "day") {
+    const days = daysBetween(q.from, q.to);
+    const byDay = new Map(days.map((d) => [d, 0]));
+    for (const r of counted) { const d = dayOf(r.createdAt, tz); if (byDay.has(d)) byDay.set(d, byDay.get(d)! + 1); }
+    const values = days.map((d) => byDay.get(d)!);
+    const max = Math.max(0, ...values);
+    blocks.push({
+      type: "chart", id: ctx.nextId("b"), title: he ? "שיחות לפי יום" : "Conversations by day", sourceId: sId, kind: "bar",
+      x: { kind: "day", values: days }, series: [{ key: "conversations", label: he ? "שיחות" : "Conversations", values }],
+      unit: "count", currency: null, highlight: max > 0 ? days.filter((_, i) => values[i] === max) : [], deepLink: "/analytics?tab=overview", partial,
+    });
+  } else if (q.groupBy === "intent" || q.groupBy === "sentiment") {
+    // Recorded only for some conversations: the block says for how many.
+    const intel = total
+      ? await prisma.conversationIntelligence.findMany({
+          where: { tenantId: ctx.tenantId, conversationId: { in: counted.map((r) => r.id) } },
+          select: { detectedIntent: true, sentiment: true },
+        })
+      : [];
+    const counts = new Map<string, number>();
+    let covered = 0;
+    for (const i of intel as any[]) {
+      const v = q.groupBy === "intent" ? i.detectedIntent : i.sentiment;
+      // "unknown" is what a failed analysis writes: not a recorded value.
+      if (!v || v === "unknown") continue;
+      covered++;
+      counts.set(v, (counts.get(v) ?? 0) + 1);
+    }
+    const items = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([key, value]) => ({
+      key, value, share: covered ? value / covered : 0,
+      label: q.groupBy === "sentiment" ? L.sentiment[key]?.[ctx.locale] ?? key : key.replace(/_/g, " "),
+    }));
+    blocks.push({
+      type: "breakdown", id: ctx.nextId("b"), title: q.groupBy === "intent" ? (he ? "לפי כוונה" : "By intent") : (he ? "לפי סנטימנט" : "By sentiment"), sourceId: sId,
+      items, total: covered, unit: "count", currency: null, other: null, coverage: { covered, of: total }, deepLink: "/analytics?tab=topics", partial: null,
+    });
+  } else {
+    const keyOf = (r: (typeof counted)[number]) => (q.groupBy === "channel" ? r.channel : q.groupBy === "status" ? r.status : handlerOf(r));
+    const counts = new Map<string, number>();
+    for (const r of counted) counts.set(keyOf(r), (counts.get(keyOf(r)) ?? 0) + 1);
+    const items = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([key, value]) => ({
+      key, value, share: total ? value / total : 0,
+      label: q.groupBy === "channel" ? channelName(key, ctx.locale) : q.groupBy === "status" ? L.status[key]?.[ctx.locale] ?? key : L.handler[key]![ctx.locale],
+    }));
+    blocks.push({
+      type: "breakdown", id: ctx.nextId("b"),
+      title: q.groupBy === "channel" ? (he ? "לפי ערוץ" : "By channel") : q.groupBy === "status" ? (he ? "לפי מצב" : "By status") : (he ? "מי טיפל" : "Who handled them"),
+      sourceId: sId, items, total, unit: "count", currency: null, other: null, coverage: null,
+      deepLink: q.groupBy === "channel" ? null : q.groupBy === "status" ? null : "/analytics?tab=gotcha", partial: null,
+    });
+  }
+
+  // The rows behind a mention: who said it.
+  if (q.mention && total) {
+    const first = await prisma.conversation.findMany({ where, select: LIST_SELECT, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: LIST_FIRST_PAGE });
+    blocks.push({
+      type: "record_list", id: ctx.nextId("b"), title: he ? `שיחות שמזכירות “${q.mention}”` : `Conversations mentioning “${q.mention}”`, sourceId: sId,
+      kind: "conversation", items: await listItems(first as any, ctx.locale, tz), total, hasMore: total > first.length, deepLink: null, partial: null,
+    });
+  }
+
+  const first = blocks[0]!;
+  const summary: Record<string, unknown> = {
+    ok: true,
+    cite: sId,
+    total,
+    period: periodWords(q, ctx.locale),
+    ...(first.type === "breakdown" ? { groups: first.items.map((i) => ({ label: i.label, value: i.value })), ...(first.coverage ? { recordedFor: `${first.coverage.covered} of ${first.coverage.of}` } : {}) } : {}),
+    ...(first.type === "chart" ? { busiestDays: first.highlight.map((d) => whenText(new Date(`${d}T12:00:00.000Z`), ctx.locale, "UTC", false)) } : {}),
+    ...(capped ? { note: `counted the latest ${MAX_ROWS}` } : {}),
+    shownAs: "cards the user already sees; summarise, do not repeat every number, cite the source",
+  };
+  return { summary, blocks, source };
+}
+
+/** The full list behind a conversations source, with the caller's CURRENT visibility. */
+export async function listConversationsForSource(
+  tenantId: string, viewer: Viewer | undefined, locale: Locale, params: ConversationQuery, cursor: string | null,
+): Promise<{ data: RecordListItem[]; nextCursor: string | null }> {
+  const tz = await tenantTimeZone(tenantId);
+  const where = await whereOf(tenantId, params, viewer, tz);
+  const rows = await prisma.conversation.findMany({
+    where, select: LIST_SELECT, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: LIST_PAGE + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+  });
+  const page = rows.slice(0, LIST_PAGE);
+  return { data: await listItems(page as any, locale, tz), nextCursor: rows.length > LIST_PAGE ? page[page.length - 1]!.id : null };
+}
