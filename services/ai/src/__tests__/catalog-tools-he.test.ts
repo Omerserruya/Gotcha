@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 import { CATALOG_TOOL_HE, catalogTool } from "../lib/catalog-tools-he";
+import { CATALOG_DESCRIPTION_HE } from "../lib/catalog-descriptions";
 import { hebrewHouseRuleViolations } from "./helpers/hebrew-house-rules";
 
 vi.mock("bullmq", () => ({ Queue: class { add = vi.fn(); }, Worker: class {}, Job: class {} }));
@@ -78,6 +79,11 @@ describe("★ the catalogue's actions in the reader's language", () => {
 });
 
 describe("★ the Hebrew itself keeps the house rules", () => {
+  it("every catalogue description too (the assistant there is GOTCHA, never \"ה-AI\")", () => {
+    const violations = Object.entries(CATALOG_DESCRIPTION_HE).flatMap(([k, v]) => hebrewHouseRuleViolations(`${k} description`, v));
+    expect(violations).toEqual([]);
+  });
+
   it("every one of the catalogue's actions, name and description", () => {
     const entries = Object.entries(CATALOG_TOOL_HE);
     expect(entries.length).toBe(153);
@@ -92,6 +98,9 @@ describe("★ the Hebrew itself keeps the house rules", () => {
     expect(hebrewHouseRuleViolations("t", "GOTCHA יוצר קופון")).toHaveLength(1);
     expect(hebrewHouseRuleViolations("t", "אני בודק את ההזמנה")).toHaveLength(1);
     expect(hebrewHouseRuleViolations("t", "ראה שיחות קודמות")).toHaveLength(1);
+    expect(hebrewHouseRuleViolations("t", "וה-AI קורא וכותב שם")).toHaveLength(1);
+    expect(hebrewHouseRuleViolations("t", "כל כלי חושף ל-AI קריאת API אחת")).toHaveLength(1);
+    expect(hebrewHouseRuleViolations("t", "ו-GOTCHA קוראת וכותבת שם, וכל כלי חושף ל-GOTCHA קריאה אחת.")).toEqual([]);
     expect(hebrewHouseRuleViolations("t", "GOTCHA יוצרת קופון ב-Shopify לשימוש יחיד.")).toEqual([]);
   });
 });

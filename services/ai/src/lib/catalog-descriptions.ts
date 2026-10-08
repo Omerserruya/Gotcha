@@ -22,8 +22,8 @@ export const CATALOG_DESCRIPTION_HE: Record<string, string> = {
   postgresql: "מסד נתונים רלציוני בקוד פתוח, עם תמיכה מתקדמת ב-SQL",
   mongodb: "מסד נתונים של מסמכים (NoSQL) לאפליקציות מודרניות",
   aws_rds: "שירות מסדי הנתונים הרלציוניים של Amazon: מסדי SQL מנוהלים בענן",
-  custom_api: "כלים משלך מעל HTTP, בבונה בקשות בסגנון Postman. כל כלי חושף ל-AI קריאת API אחת, בשם custom.<slug>.",
-  airtable: "בסיס Airtable כמקור האמת על הלקוחות שלך: ממפים את העמודות של טבלת אנשי הקשר, וה-AI קורא וכותב שם.",
+  custom_api: "כלים משלך מעל HTTP, בבונה בקשות בסגנון Postman. כל כלי חושף ל-GOTCHA קריאת API אחת, בשם custom.<slug>.",
+  airtable: "בסיס Airtable כמקור האמת על הלקוחות שלך: ממפים את העמודות של טבלת אנשי הקשר, ו-GOTCHA קוראת וכותבת שם.",
 };
 
 /** A catalogue entry's description in the reader's language; English when there is no Hebrew for it. */
