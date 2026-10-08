@@ -60,6 +60,7 @@ describe("an unmapped part stays unmapped", () => {
     expect(result.slug).toBeNull();
     expect(result.source).toBe("unmapped");
     expect(result.reason).toMatch(/No system has been chosen/);
+    expect(result.reasonCode).toBe("none_chosen");
   });
 
   it("resolves a part that WAS chosen", async () => {
@@ -67,7 +68,7 @@ describe("an unmapped part stays unmapped", () => {
 
     const result = await getSystemForPart("t1", "ecommerce");
 
-    expect(result).toMatchObject({ slug: "shopify", source: "elected" });
+    expect(result).toMatchObject({ slug: "shopify", source: "elected", reasonCode: "elected", reasonParams: { slug: "shopify" } });
   });
 
   it("only counts CONNECTED integrations, which the query enforces", async () => {
@@ -85,6 +86,7 @@ describe("an unmapped part stays unmapped", () => {
     // Different sentences: "nothing exists to choose" versus "nobody chose".
     expect(result.source).toBe("unavailable");
     expect(result.reason).toMatch(/No shipping integration exists/);
+    expect(result.reasonCode).toBe("no_integrations_exist");
   });
 
   it("degrades to unmapped rather than throwing", async () => {
@@ -94,6 +96,7 @@ describe("an unmapped part stays unmapped", () => {
 
     // A resolution failure must not take down a reply.
     expect(result.source).toBe("unmapped");
+    expect(result.reasonCode).toBe("read_failed");
     expect(result.slug).toBeNull();
   });
 });
@@ -125,6 +128,7 @@ describe("it delegates rather than deciding", () => {
 
     expect(result.slug).toBe("returngo");
     expect(result.source).toBe("elected");
+    expect(result.reasonCode).toBe("elected");
   });
 
   it("labels a capability-first returns answer as INFERRED, not chosen", async () => {
@@ -136,12 +140,14 @@ describe("it delegates rather than deciding", () => {
     // "Inferred" must not read as a decision somebody made - the merchant did
     // not pick this and a screen has to be able to say so.
     expect(result.source).toBe("inferred");
+    expect(result.reasonCode).toBe("inferred_capability");
   });
 
   it("reports no customer system of record rather than guessing one", async () => {
     const result = await getSystemForPart("t1", "crm");
 
     expect(result.slug).toBeNull();
+    expect(result.reasonCode).toBe("none_chosen");
     expect(result.source).toBe("unmapped");
   });
 });
@@ -156,7 +162,7 @@ describe("★ an inference never lands on a system that is not working", () => {
 
     const result = await getSystemForPart("t1", "returns");
 
-    expect(result).toMatchObject({ slug: null, source: "unmapped" });
+    expect(result).toMatchObject({ slug: null, source: "unmapped", reasonCode: "inference_not_working", reasonParams: { slug: "shopify", status: "ERROR" } });
     expect(result.reason).toMatch(/shopify would be inferred, but its connection status is ERROR/);
   });
 
@@ -194,8 +200,8 @@ describe("★ an inference never lands on a system that is not working", () => {
 describe("what the model is told", () => {
   it("★ STATES the unmapped parts instead of omitting them", async () => {
     const block = renderBusinessCoreBlock([
-      { part: "ecommerce", slug: "shopify", source: "elected", reason: "" },
-      { part: "payments", slug: null, source: "unmapped", reason: "" },
+      { part: "ecommerce", slug: "shopify", source: "elected", reason: "", reasonCode: "elected" },
+      { part: "payments", slug: null, source: "unmapped", reason: "", reasonCode: "none_chosen" },
     ]);
 
     // Listing only the mapped parts lets the model assume the rest are its
@@ -207,7 +213,7 @@ describe("what the model is told", () => {
 
   it("marks an inferred system as not chosen by the business", async () => {
     const block = renderBusinessCoreBlock([
-      { part: "returns", slug: "shopify", source: "inferred", reason: "" },
+      { part: "returns", slug: "shopify", source: "inferred", reason: "", reasonCode: "inferred_default" },
     ]);
 
     expect(block).toContain("(inferred, not chosen by the business)");
@@ -215,8 +221,8 @@ describe("what the model is told", () => {
 
   it("omits a part nothing can serve, rather than telling the model to ask about it", async () => {
     const block = renderBusinessCoreBlock([
-      { part: "shipping", slug: null, source: "unavailable", reason: "" },
-      { part: "ecommerce", slug: "shopify", source: "elected", reason: "" },
+      { part: "shipping", slug: null, source: "unavailable", reason: "", reasonCode: "no_integrations_exist" },
+      { part: "ecommerce", slug: "shopify", source: "elected", reason: "", reasonCode: "elected" },
     ]);
 
     // There is nothing to choose and nothing for the model to do about it.
@@ -225,7 +231,7 @@ describe("what the model is told", () => {
   });
 
   it("renders nothing at all when every part is unavailable", async () => {
-    expect(renderBusinessCoreBlock([{ part: "shipping", slug: null, source: "unavailable", reason: "" }])).toBe("");
+    expect(renderBusinessCoreBlock([{ part: "shipping", slug: null, source: "unavailable", reason: "", reasonCode: "no_integrations_exist" }])).toBe("");
     expect(renderBusinessCoreBlock([])).toBe("");
   });
 

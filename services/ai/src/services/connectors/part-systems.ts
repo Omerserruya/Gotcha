@@ -63,9 +63,25 @@ export interface PartSystem {
   /** The integration slug serving this part, or null when there is none. */
   slug: string | null;
   source: PartSource;
-  /** Why, in a sentence a screen or a prompt can use. */
+  /** Why, in a sentence a prompt can use (English). */
   reason: string;
+  /**
+   * The same why as a code a screen words in its own language, with the
+   * values it names. A screen matching the English sentence breaks on any
+   * rewording (2026-10-08).
+   */
+  reasonCode: PartReasonCode;
+  reasonParams?: { slug?: string; status?: string };
 }
+
+export type PartReasonCode =
+  | "elected"
+  | "inferred_default"
+  | "inferred_capability"
+  | "inference_not_working"
+  | "none_chosen"
+  | "no_integrations_exist"
+  | "read_failed";
 
 /** Elections stored on `config.roles`, read once per tenant. */
 async function rolesBackedElection(tenantId: string, part: BusinessRole): Promise<string | null> {
@@ -124,6 +140,8 @@ function unmappedInference(part: BusinessRole, slug: string, status: string | un
     slug: null,
     source: "unmapped",
     reason: `Nothing has been chosen for ${part}. ${slug} would be inferred, but ${status ? `its connection status is ${status}` : "it is not connected"}, so it does not serve this part.`,
+    reasonCode: "inference_not_working",
+    reasonParams: { slug, ...(status ? { status } : {}) },
   };
 }
 
@@ -136,7 +154,7 @@ function unmappedInference(part: BusinessRole, slug: string, status: string | un
 export async function getSystemForPart(tenantId: string, part: BusinessRole): Promise<PartSystem> {
   const availability = roleAvailability(part);
   if (!availability.available) {
-    return { part, slug: null, source: "unavailable", reason: availability.detail };
+    return { part, slug: null, source: "unavailable", reason: availability.detail, reasonCode: "no_integrations_exist" };
   }
 
   try {
@@ -145,7 +163,7 @@ export async function getSystemForPart(tenantId: string, part: BusinessRole): Pr
       // what every existing caller already uses, so this must not second-guess it.
       const vendor = await resolveCrmVendor(tenantId);
       if (!vendor) {
-        return { part, slug: null, source: "unmapped", reason: "No customer system of record is configured." };
+        return { part, slug: null, source: "unmapped", reason: "No customer system of record is configured.", reasonCode: "none_chosen" };
       }
       const slug = CRM_VENDOR_TO_SLUG[vendor] ?? vendor;
       const row = (await rowsBySlug(tenantId, [slug])).get(slug);
@@ -153,10 +171,10 @@ export async function getSystemForPart(tenantId: string, part: BusinessRole): Pr
       // resolver ALSO answers without it - first connected CRM, then Shopify by
       // default - and that answer is a resolver's pick, not a choice.
       if (row?.config.useAsCrm === true) {
-        return { part, slug, source: "elected", reason: `${slug} is the elected customer system of record.` };
+        return { part, slug, source: "elected", reason: `${slug} is the elected customer system of record.`, reasonCode: "elected", reasonParams: { slug } };
       }
       if (row?.status !== "CONNECTED") return unmappedInference(part, slug, row?.status);
-      return { part, slug, source: "inferred", reason: `${slug} is used as the customer system of record by default; nobody chose it.` };
+      return { part, slug, source: "inferred", reason: `${slug} is used as the customer system of record by default; nobody chose it.`, reasonCode: "inferred_default", reasonParams: { slug } };
     }
 
     if (part === "returns") {
@@ -165,7 +183,7 @@ export async function getSystemForPart(tenantId: string, part: BusinessRole): Pr
       // the distinction this function exists to preserve.
       const caps = await getReturnProvider(tenantId);
       if (caps.provider === "none") {
-        return { part, slug: null, source: "unmapped", reason: caps.reason };
+        return { part, slug: null, source: "unmapped", reason: caps.reason, reasonCode: "none_chosen" };
       }
       // "Elected" means the merchant's switch, `config.returnProvider`, names
       // this provider. This used to be read off the resolver's PROSE (does the
@@ -177,16 +195,16 @@ export async function getSystemForPart(tenantId: string, part: BusinessRole): Pr
         .map((r) => String(r.config.returnProvider ?? "").toLowerCase().trim())
         .find((v) => v === "shopify" || v === "returngo");
       if (explicit === caps.provider) {
-        return { part, slug: caps.provider, source: "elected", reason: caps.reason };
+        return { part, slug: caps.provider, source: "elected", reason: caps.reason, reasonCode: "elected", reasonParams: { slug: caps.provider } };
       }
       const row = rows.get(caps.provider);
       if (row?.status !== "CONNECTED") return unmappedInference(part, caps.provider, row?.status);
-      return { part, slug: caps.provider, source: "inferred", reason: caps.reason };
+      return { part, slug: caps.provider, source: "inferred", reason: caps.reason, reasonCode: "inferred_capability", reasonParams: { slug: caps.provider } };
     }
 
     const elected = await rolesBackedElection(tenantId, part);
     return elected
-      ? { part, slug: elected, source: "elected", reason: `${elected} was chosen for ${part}.` }
+      ? { part, slug: elected, source: "elected", reason: `${elected} was chosen for ${part}.`, reasonCode: "elected", reasonParams: { slug: elected } }
       : {
           part,
           slug: null,
@@ -194,10 +212,11 @@ export async function getSystemForPart(tenantId: string, part: BusinessRole): Pr
           // Deliberately not "we will use whatever is connected". That guess is
           // the behaviour screen 14 exists to replace.
           reason: `No system has been chosen for ${part}.`,
+          reasonCode: "none_chosen",
         };
   } catch (err: any) {
     console.error(`[part-systems] could not resolve ${part} for ${tenantId}:`, err?.message ?? err);
-    return { part, slug: null, source: "unmapped", reason: `Could not read the system for ${part}.` };
+    return { part, slug: null, source: "unmapped", reason: `Could not read the system for ${part}.`, reasonCode: "read_failed" };
   }
 }
 

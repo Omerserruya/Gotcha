@@ -317,6 +317,10 @@ router.get("/business-core", async (req: Request, res: Response) => {
         source: resolved.source,
         // Prose, always present. The availability CODE is `unavailableReason`.
         reason: resolved.reason,
+        // The same why as a code (and the values it names), for a screen to
+        // word in its own language. Add-only: `reason` keeps its prose.
+        reasonCode: resolved.reasonCode,
+        reasonParams: resolved.reasonParams ?? {},
         candidates,
       };
     });
@@ -331,6 +335,9 @@ router.get("/business-core", async (req: Request, res: Response) => {
           "The shipping category exists and contains no integrations, so that part cannot be offered yet.",
           "ReturnGo is stored under the ecommerce category but serves returns, and is listed under returns here.",
         ],
+        // The same two facts as codes, in the same order, for a screen to word.
+        // Beside the sentences, not instead: a strict client refuses a changed type.
+        catalogueNoteCodes: ["shipping_category_empty", "returngo_listed_under_returns"],
       },
     });
   } catch (err) {
