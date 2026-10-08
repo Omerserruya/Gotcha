@@ -120,6 +120,45 @@ function cardReturnUrl(): string | undefined {
   }
 }
 
+/**
+ * Where the new app (v2) lives under this origin. Configuration, not input:
+ * "/v2" unless V2_BASE_PATH says otherwise, and only ever a plain path.
+ */
+function v2BasePath(env: NodeJS.ProcessEnv = process.env): string {
+  const raw = env.V2_BASE_PATH === undefined ? "/v2" : String(env.V2_BASE_PATH).trim();
+  if (raw !== "" && !/^(\/[A-Za-z0-9_-]+)+$/.test(raw)) {
+    throw new Error(`V2_BASE_PATH must be a plain path like /v2, got ${JSON.stringify(raw)}`);
+  }
+  return raw;
+}
+
+/**
+ * The return targets a caller may name. A closed list of tokens, never a URL:
+ * a URL from the body would make this an open redirect off a payment page.
+ * Each resolves on this deployment's own origin (buildReturnUrl refuses any
+ * other). No locale (v2 picks it from its cookie), and never the session id
+ * or a token in the URL (v2 keeps the session id itself).
+ */
+const RETURN_TARGETS: Record<string, () => { successUrl?: string; failureUrl?: string; cancelUrl?: string }> = {
+  v2: () => {
+    try {
+      const path = `${v2BasePath()}/settings/billing/payment-method`;
+      const back = buildReturnUrl(path, { cancelled: "1" });
+      return { successUrl: buildReturnUrl(path), failureUrl: back, cancelUrl: back };
+    } catch (err) {
+      console.error("[billing] cannot build the v2 card return URL:", (err as Error).message);
+      return {};
+    }
+  },
+};
+
+/** The return URLs for this request, or null when the target is not one we know. */
+export function cardReturnUrls(returnTo: unknown): { successUrl?: string; failureUrl?: string; cancelUrl?: string } | null {
+  if (returnTo === undefined || returnTo === null) return { successUrl: cardReturnUrl() };
+  if (typeof returnTo !== "string" || !Object.prototype.hasOwnProperty.call(RETURN_TARGETS, returnTo)) return null;
+  return RETURN_TARGETS[returnTo]!();
+}
+
 router.get("/billing/payment-methods", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
   const link = await prisma.billableEntityTenant.findUnique({ where: { tenantId: req.tenantId! } });
   if (!link) return res.json({ paymentMethods: [] });
@@ -168,6 +207,9 @@ router.post(
     if (!checkoutEnabled(getCapabilities("ICOUNT"))) {
       return res.status(409).json({ error: "payment_setup_unavailable" });
     }
+    // Refused before anything is created or sent: only a known target, never a URL.
+    const returnUrls = cardReturnUrls(req.body?.returnTo);
+    if (!returnUrls) return res.status(400).json({ error: "invalid_return_target" });
     try {
       await ensureBillableEntity(req.tenantId!);
       // The identity the receipt will carry. Sent at client creation so the
@@ -181,7 +223,7 @@ router.post(
         customerVatId: identity.vatId ?? undefined,
         customerAddress: identity.billingAddress ?? undefined,
         customerEmail: identity.billingEmail ?? req.user?.email,
-        successUrl: cardReturnUrl(),
+        ...returnUrls,
       });
       return res.json({ data: { redirectUrl: saleUrl, sessionId: session.id } });
     } catch (err: any) {
