@@ -175,7 +175,15 @@ function Row({
         <span className={styles.rowTitle}>
           {notification.title ?? notification.eventType ?? '-'}
         </span>
-        {notification.body ? <span className={styles.rowBody}>{notification.body}</span> : null}
+        {/*
+          notifications 391c0a09: a body is "" when the title says it all -
+          then nothing, not a blank line; nor for one of spaces.
+        */}
+        {notification.body?.trim() ? (
+          <span className={styles.rowBody} data-testid={`notification-body-${notification.id}`}>
+            {notification.body}
+          </span>
+        ) : null}
         {href || !notification.read ? (
           <span className={styles.actions}>
             {href ? (

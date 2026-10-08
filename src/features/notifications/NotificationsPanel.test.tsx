@@ -98,6 +98,21 @@ describe('★★ 01d - a panel of decisions and failures', () => {
     expect(screen.getByText('Settings')).toHaveAttribute('href', '/settings/notifications');
   });
 
+  it('★ a body is drawn only when it says something - "" (391c0a09) and spaces are no line at all', async () => {
+    await panel({
+      items: [
+        item({ id: 'e', title: 'Campaign finished', body: '', createdAt: minutesAgo(1) }),
+        item({ id: 's', title: 'Refund needs approval', body: '   ', createdAt: minutesAgo(1) }),
+        ...ITEMS,
+      ],
+      unread: 2,
+      failed: false,
+    });
+    expect(screen.queryByTestId('notification-body-e')).toBeNull();
+    expect(screen.queryByTestId('notification-body-s')).toBeNull();
+    expect(screen.getByTestId('notification-body-a')).toHaveTextContent('11 held');
+  });
+
   it('nothing unread: no "0 new", no Mark all read', async () => {
     await panel({ items: ITEMS, unread: 0, failed: false });
     expect(screen.queryByTestId('notifications-new')).toBeNull();
