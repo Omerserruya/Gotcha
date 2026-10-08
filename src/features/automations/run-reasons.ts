@@ -13,12 +13,13 @@
  *                `conversation_busy` (call only); the runner:
  *                `automation_inactive`, `stopped: purchased`,
  *                `failed: <message>`; older rows: `no_marketing_consent`.
- *   step       - the template step's `output.action`, any `skipped_*`
- *                (status "skipped" since Backend 4e0e3ced; before it, "ok").
+ *   step       - a send step's `output.action`, any `skipped_*` (status
+ *                "skipped" since Backend 4e0e3ced; before it, "ok"). A text
+ *                step records "sent" or `skipped_opted_out` (1bfcd27d).
  *
- * ★ An unknown code is never printed: the run's reason is "other", the
- *   step's is none - the status already says it was skipped. The code
- *   stays on the element's title for whoever is debugging.
+ * ★ An unknown code is never printed: the run's reason is "other" (its code
+ *   on the reason's title, for whoever is debugging); a step's is none, and
+ *   any `skip_*` / `skipped_*` action - known or not - still reads Skipped.
  */
 export const RUN_REASONS = [
   'opted_out',
@@ -41,6 +42,8 @@ export const STEP_REASONS = [
   'skipped_non_whatsapp',
   'skipped_adapter_unsupported',
   'skipped_no_send_ctx',
+  // A text or template step after a wait, when the customer replied "הסר" meanwhile (Backend 1bfcd27d).
+  'skipped_opted_out',
 ] as const;
 export type StepReason = (typeof STEP_REASONS)[number];
 
@@ -51,6 +54,12 @@ export function runReason(error: string | null): RunReason | null {
   if (code === 'stopped: purchased') return 'purchased';
   if (code.startsWith('failed:')) return 'failed';
   return (RUN_REASONS as readonly string[]).includes(code) ? (code as RunReason) : 'other';
+}
+
+/** Did this step skip? Backend 4e0e3ced's rule: any `skip_*` / `skipped_*` action. */
+export function stepSkipped(output: Readonly<Record<string, unknown>> | null): boolean {
+  const action = output?.action;
+  return typeof action === 'string' && /^skip(ped)?_/.test(action);
 }
 
 /** A step's reason, from `output.action`; `null` when it has none we can name. */

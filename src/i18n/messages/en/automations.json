@@ -502,7 +502,8 @@
       "skipped_no_template": "no template was chosen",
       "skipped_non_whatsapp": "templates go out on WhatsApp only, and this conversation isn't there",
       "skipped_adapter_unsupported": "this channel can't send a template",
-      "skipped_no_send_ctx": "there was no one to send it to"
+      "skipped_no_send_ctx": "there was no one to send it to",
+      "skipped_opted_out": "the customer unsubscribed while it waited"
     }
   },
   "eyebrow": {

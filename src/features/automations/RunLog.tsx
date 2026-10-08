@@ -8,7 +8,7 @@ import { Link } from '@/i18n/navigation';
 
 import { readRun, readRuns } from './automation-actions';
 import styles from './Builder.module.css';
-import { runReason, stepReason } from './run-reasons';
+import { runReason, stepReason, stepSkipped } from './run-reasons';
 
 const BRANCHES = [
   'next',
@@ -156,7 +156,7 @@ export function RunLog({ automationId }: { readonly automationId: string }) {
                * before Backend 4e0e3ced the step read "ok" - a send that never
                * happened, shown as done.
                */
-              const status = why ? 'skipped' : step.status;
+              const status = stepSkipped(step.output) ? 'skipped' : step.status;
               return (
                 <li key={`${step.nodeId}-${i}`} className={styles.traceStep} data-status={status}>
                   <span>

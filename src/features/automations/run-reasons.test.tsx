@@ -36,6 +36,7 @@ describe('★★ a run says why in words, never the code', () => {
     expect(stepReason({ action: 'skipped_missing_removal_line' })).toBe(
       'skipped_missing_removal_line',
     );
+    expect(stepReason({ action: 'skipped_opted_out' })).toBe('skipped_opted_out');
     expect(stepReason({ action: 'skipped_something_new' })).toBeNull();
     expect(stepReason({ action: 3 })).toBeNull();
     expect(stepReason(null)).toBeNull();
@@ -103,6 +104,24 @@ describe('★★ the run log', () => {
     expect(step).toHaveAttribute('data-status', 'skipped');
     expect(step).toHaveTextContent('Skipped · the template has no removal line');
     expect(step).not.toHaveTextContent('Done');
+  });
+
+  it('an unknown skip still reads Skipped - with no reason, never the code', async () => {
+    await open({
+      status: 'completed',
+      steps: [
+        {
+          nodeId: 'n1',
+          nodeType: 'send_message_text',
+          status: 'ok',
+          output: { action: 'skipped_something_new' },
+        },
+      ],
+    });
+    const step = screen.getByTestId('run-trace').querySelector('li');
+    expect(step).toHaveAttribute('data-status', 'skipped');
+    expect(step?.textContent).toMatch(/Skipped$/);
+    expect(step).not.toHaveTextContent('something_new');
   });
 
   it('a step with no skip keeps its status', async () => {
