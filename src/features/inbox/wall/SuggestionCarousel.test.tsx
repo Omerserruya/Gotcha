@@ -111,6 +111,12 @@ describe('★★ three reads, each with one cause', () => {
     show();
     const retry = await screen.findByTestId('wall-suggestions-retry');
     expect(refresh).not.toHaveBeenCalled();
+    /*
+     * The first read is a transition, and Retry is disabled while it is
+     * pending - a click on a disabled button never fires, so clicking the
+     * moment it appears sometimes refreshed nothing (1 run in 3, alone).
+     */
+    await waitFor(() => expect(retry).toBeEnabled());
 
     refresh.mockResolvedValue({ state: 'rate_limited', retryAfterSeconds: 12 });
     fireEvent.click(retry);
@@ -120,6 +126,7 @@ describe('★★ three reads, each with one cause', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
 
     refresh.mockResolvedValue(ok([s('n')]));
+    await waitFor(() => expect(screen.getByTestId('wall-suggestions-retry')).toBeEnabled());
     fireEvent.click(screen.getByTestId('wall-suggestions-retry'));
     await screen.findByTestId('wall-suggestion-n');
   });
