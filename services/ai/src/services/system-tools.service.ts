@@ -145,13 +145,34 @@ const SYSTEM_RECENT_ACTIVITY = {
   },
 };
 
+/**
+ * The actions an approved plan can really carry out (action-executor). Four
+ * more names exist there (update_crm, update_contact, create_ticket,
+ * create_task) but are stubs that always fail, and offering them meant a plan
+ * the owner approved would fail on execute. A step outside this list is
+ * refused before any approval exists.
+ */
+export const PLAN_ACTIONS = [
+  "send_message",
+  "tag_contact",
+  "schedule_followup",
+  "schedule_meeting",
+  "create_broadcast",
+  "schedule_broadcast",
+  "create_workflow",
+  "resolve_identity",
+  "merge_contacts",
+  "link_customer_identifier",
+] as const;
+
 const PROPOSE_PLAN_TOOL = {
   type: "function" as const,
   function: {
     name: "propose_plan",
     description:
       "Bundle a multi-step or risky operation into an approval plan. The platform will surface it in the operator's approval queue; the operator clicks Approve to execute the steps via the action-planner runtime. " +
-      "Use this for: building/scheduling broadcasts, bulk tagging, workflow creation, refunds, anything destructive, or when you want a human to review before mutating data. " +
+      "Use this for: sending a customer a message, tagging customers, a follow-up or a meeting, building or scheduling a broadcast, creating a workflow, or linking and merging a customer's identities, when a person should review it before anything changes. " +
+      "Only the actions listed in the steps can run: refunds, assigning, closing, notes, CRM updates, tickets and tasks cannot be proposed yet. " +
       "Do NOT use this for read-only operations or single low-risk actions (those you can call directly).",
     parameters: {
       type: "object",
@@ -171,8 +192,8 @@ const PROPOSE_PLAN_TOOL = {
             properties: {
               tool: {
                 type: "string",
-                description:
-                  "An action-planner tool name (send_message, create_broadcast, update_crm, update_contact, create_ticket, create_task, schedule_followup, tag_contact, schedule_broadcast, create_workflow, merge_contacts, resolve_identity).",
+                enum: [...PLAN_ACTIONS],
+                description: "The action to carry out. Only these can run; anything else (assigning, closing, notes, CRM updates, tickets, tasks) cannot be proposed yet.",
               },
               params: { type: "object", description: "Tool-specific parameters." },
               reason: { type: "string", description: "Why this step is included." },
@@ -789,6 +810,19 @@ async function dispatchProposePlan(
     return {
       toolCallId,
       content: JSON.stringify({ ok: false, error: "summary and at least one step are required" }),
+    };
+  }
+
+  // A step that cannot run is refused now, not discovered after approval.
+  const unavailable = [...new Set(stepsRaw.map((s: any) => String(s?.tool || "")).filter((t: string) => !(PLAN_ACTIONS as readonly string[]).includes(t)))];
+  if (unavailable.length) {
+    return {
+      toolCallId,
+      content: JSON.stringify({
+        ok: false,
+        error: `these steps cannot be carried out: ${unavailable.join(", ")}`,
+        instruction: "Tell the operator plainly that this cannot be done from here yet. Do not propose it again in other words.",
+      }),
     };
   }
 
