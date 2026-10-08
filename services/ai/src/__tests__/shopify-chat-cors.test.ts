@@ -83,6 +83,9 @@ vi.mock("../services/shopify-chat-install.service", () => ({
 
 import router from "../routes/shopify-chat-public";
 
+// Long and unique: random ciphertext cannot contain it by chance (a 2-character id did).
+const TENANT_ID = "tnt_leakcheck_cmz9q3x7k2p0000";
+
 function app() {
   const a = express();
   a.use(express.json());
@@ -93,7 +96,7 @@ function app() {
 function channel(overrides: any = {}) {
   return {
     id: "c1",
-    tenantId: "t1",
+    tenantId: TENANT_ID,
     externalId: "sfy_key",
     displayName: "Shopify Live Chat",
     connectionStatus: "CONNECTED",
@@ -119,7 +122,7 @@ beforeEach(() => {
     id: "i1",
     shopDomain: SHOP,
     status: "ACTIVE",
-    tenantId: "t1",
+    tenantId: TENANT_ID,
     channelAccountId: "c1",
     verifiedDomains: [SHOP, "shop.example.com"],
   };
@@ -301,22 +304,22 @@ describe("API CORS", () => {
     for (const res of [ok, denied]) {
       // The session token is deliberately opaque ciphertext, and its
       // opacity is asserted where it is minted. Scanning random base64 for
-      // a two-character tenant id like "t1" finds one roughly 3% of runs
-      // and says nothing either way - so scan everything EXCEPT the token,
-      // and check the token by decrypting it instead.
+      // a two-character tenant id like "t1" found one by chance in some runs
+      // (a flaky "leak"), so the fixture's tenant id is long enough that no
+      // random token can contain it, and the body is scanned without the token.
       const clone = JSON.parse(JSON.stringify(res.body ?? {}));
       const token = clone?.data?.session?.token;
       if (clone?.data?.session) delete clone.data.session;
       const body = JSON.stringify(clone);
 
-      expect(body).not.toContain("t1");
+      expect(body).not.toContain(TENANT_ID);
       expect(body).not.toContain("tenantId");
       expect(body).not.toContain("accessToken");
       expect(body).not.toContain("sfy_key");
 
       if (token) {
         // Readable only with the server's key - which is the point.
-        expect(token).not.toContain("t1");
+        expect(token).not.toContain(TENANT_ID);
         expect(Buffer.from(token, "base64").toString("utf8")).not.toContain("tenantId");
       }
     }

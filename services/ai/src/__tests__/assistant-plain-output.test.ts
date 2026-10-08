@@ -88,7 +88,7 @@ describe("★ the other tools too", () => {
     // count needs prisma.conversation.count: covered through the label alone.
     const { stepText } = await import("../services/system-tools.service");
     // "since" is when the conversations STARTED, and the label says so.
-    expect(stepText("system_count_conversations", { status: "CLOSED", sinceISO: "2026-10-01T00:00:00.000Z" }, "he")).toBe("סופר שיחות שנסגרו (נפתחו מאז 1 באוקטובר)");
+    expect(stepText("system_count_conversations", { status: "CLOSED", sinceISO: "2026-10-01T00:00:00.000Z" }, "he")).toBe("סופרת שיחות שנסגרו (נפתחו מאז 1 באוקטובר)");
     expect(stepText("system_count_conversations", { status: "CLOSED", sinceISO: "2026-10-01T00:00:00.000Z" }, "en")).toBe("Counting closed conversations (started since 1 October)");
   });
 });
@@ -100,6 +100,30 @@ describe("★ no tool speaks as \"the system\"", () => {
     const text = JSON.stringify(tools.filter((t) => String(t.function?.name).startsWith("system_")).map((t) => t.function.description));
     expect(text.length).toBeGreaterThan(100);
     expect(text).not.toMatch(/\btenant\b|the system|as the screens show|report/i);
+  });
+});
+
+describe("★ GOTCHA speaks of herself in the feminine (Hebrew)", () => {
+  const MASCULINE = /^(סופר|בודק|קורא|מסתכל|מחפש|מריץ|מכין|לומד|כותב|שולח|מעביר|מנתח) /;
+  it("every Hebrew step label", async () => {
+    const { stepText } = await import("../services/system-tools.service");
+    const tools = ["system_count_conversations", "system_get_metric", "system_search_customers", "system_summarize_conversation", "system_recent_activity", "system_query_conversations", "system_query_orders", "system_product_stock", "propose_plan", "integration_hubspot_create_contact"];
+    const metrics = ["waiting_for_person", "pending_approvals", "open_conversations", "closed_today", "inbound_messages_24h"];
+    const labels = [
+      ...tools.map((t) => stepText(t, {}, "he")),
+      ...metrics.map((m) => stepText("system_get_metric", { metric: m }, "he")),
+      stepText("system_count_conversations", { status: "OPEN" }, "he"),
+      stepText("system_query_conversations", { mention: "מידה" }, "he"),
+    ];
+    for (const l of labels) expect(l, l).not.toMatch(MASCULINE);
+    expect(labels).toContain("סופרת שיחות");
+    expect(labels).toContain("מריצה hubspot create contact");
+  });
+
+  it("the prompt tells the model so", () => {
+    const prompt = readFileSync(join(__dirname, "../prompts/system-copilot.md"), "utf-8");
+    expect(prompt).toMatch(/In Hebrew you speak of yourself in the feminine/);
+    expect(prompt).toContain('"אני בודקת"');
   });
 });
 

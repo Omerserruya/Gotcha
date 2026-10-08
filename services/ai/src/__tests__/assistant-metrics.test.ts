@@ -84,7 +84,7 @@ describe("★ no internal values reach the model", () => {
 describe("steps are written for people", () => {
   it("in the interface language, never a tool name", () => {
     expect(stepText("system_get_metric", { metric: "waiting_for_person" }, "en")).toBe("Counting the conversations waiting for your team");
-    expect(stepText("system_get_metric", { metric: "waiting_for_person" }, "he")).toBe("סופר את השיחות שמחכות לצוות");
+    expect(stepText("system_get_metric", { metric: "waiting_for_person" }, "he")).toBe("סופרת את השיחות שמחכות לצוות");
     expect(stepText("system_search_customers", {}, "en")).toBe("Searching customers");
     for (const n of ["system_count_conversations", "system_get_metric", "system_recent_activity", "integration_get_order"]) {
       expect(stepText(n, {}, "en")).not.toMatch(/system_|integration_/);

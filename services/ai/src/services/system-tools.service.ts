@@ -605,30 +605,30 @@ async function dispatchSystemTool(
  * the tool's name. The Home chat's step.start and Cmd-K's tool events use it.
  */
 const STEP_TEXT: Record<string, { en: string; he: string }> = {
-  system_count_conversations: { en: "Counting conversations", he: "סופר שיחות" },
-  system_get_metric: { en: "Checking the numbers", he: "בודק את המספרים" },
-  system_search_customers: { en: "Searching customers", he: "מחפש לקוחות" },
-  system_summarize_conversation: { en: "Reading the conversation", he: "קורא את השיחה" },
-  system_recent_activity: { en: "Looking at recent messages", he: "מסתכל על ההודעות האחרונות" },
-  system_query_conversations: { en: "Looking at the conversations", he: "בודק את השיחות" },
-  system_query_orders: { en: "Reading the store's orders", he: "קורא את ההזמנות בחנות" },
-  system_product_stock: { en: "Checking the stock", he: "בודק את המלאי" },
-  propose_plan: { en: "Preparing a plan for your approval", he: "מכין תוכנית לאישור שלך" },
+  system_count_conversations: { en: "Counting conversations", he: "סופרת שיחות" },
+  system_get_metric: { en: "Checking the numbers", he: "בודקת את המספרים" },
+  system_search_customers: { en: "Searching customers", he: "מחפשת לקוחות" },
+  system_summarize_conversation: { en: "Reading the conversation", he: "קוראת את השיחה" },
+  system_recent_activity: { en: "Looking at recent messages", he: "מסתכלת על ההודעות האחרונות" },
+  system_query_conversations: { en: "Looking at the conversations", he: "בודקת את השיחות" },
+  system_query_orders: { en: "Reading the store's orders", he: "קוראת את ההזמנות בחנות" },
+  system_product_stock: { en: "Checking the stock", he: "בודקת את המלאי" },
+  propose_plan: { en: "Preparing a plan for your approval", he: "מכינה תוכנית לאישור שלך" },
 };
 const METRIC_STEP: Record<string, { en: string; he: string }> = {
-  waiting_for_person: { en: "Counting the conversations waiting for your team", he: "סופר את השיחות שמחכות לצוות" },
-  pending_approvals: { en: "Counting the approvals waiting for you", he: "סופר את האישורים שמחכים לך" },
-  open_conversations: { en: "Counting the open conversations", he: "סופר את השיחות הפתוחות" },
-  closed_today: { en: "Counting today's closed conversations", he: "סופר את השיחות שנסגרו היום" },
-  inbound_messages_24h: { en: "Counting today's customer messages", he: "סופר את הודעות הלקוחות מהיממה האחרונה" },
+  waiting_for_person: { en: "Counting the conversations waiting for your team", he: "סופרת את השיחות שמחכות לצוות" },
+  pending_approvals: { en: "Counting the approvals waiting for you", he: "סופרת את האישורים שמחכים לך" },
+  open_conversations: { en: "Counting the open conversations", he: "סופרת את השיחות הפתוחות" },
+  closed_today: { en: "Counting today's closed conversations", he: "סופרת את השיחות שנסגרו היום" },
+  inbound_messages_24h: { en: "Counting today's customer messages", he: "סופרת את הודעות הלקוחות מהיממה האחרונה" },
 };
 export function stepText(name: string, args: any, locale: "he" | "en" = "en"): string {
   // "Counting open conversations on WhatsApp", not a generic "Counting conversations".
   if (name === "system_count_conversations" && (args?.status && args.status !== "ANY" || args?.channel)) {
-    return `${locale === "he" ? "סופר" : "Counting"} ${countLabel(args, locale)}`;
+    return `${locale === "he" ? "סופרת" : "Counting"} ${countLabel(args, locale)}`;
   }
   if (name === "system_query_conversations" && typeof args?.mention === "string" && args.mention.trim()) {
-    return locale === "he" ? `מחפש שיחות שמזכירות “${args.mention.trim().slice(0, 40)}”` : `Finding conversations that mention “${args.mention.trim().slice(0, 40)}”`;
+    return locale === "he" ? `מחפשת שיחות שמזכירות “${args.mention.trim().slice(0, 40)}”` : `Finding conversations that mention “${args.mention.trim().slice(0, 40)}”`;
   }
   if (name === "system_get_metric") {
     const m = METRIC_ALIASES[args?.metric] ?? args?.metric;
@@ -637,7 +637,7 @@ export function stepText(name: string, args: any, locale: "he" | "en" = "en"): s
   if (STEP_TEXT[name]) return STEP_TEXT[name][locale];
   // An integration tool: its own action, in words.
   const action = name.replace(/^integration_/, "").replace(/[._]+/g, " ").trim();
-  return locale === "he" ? `מריץ ${action}` : `Running ${action}`;
+  return locale === "he" ? `מריצה ${action}` : `Running ${action}`;
 }
 
 
