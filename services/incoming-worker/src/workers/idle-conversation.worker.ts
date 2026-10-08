@@ -30,6 +30,68 @@ const DEFAULT_IDLE: IdleAutomationConfig = {
   autoCloseMessage: "",
 };
 
+/**
+ * PENDING approvals past their expiresAt become EXPIRED, and (for a request
+ * raised in a customer's conversation) that conversation is routed to a human
+ * so the customer isn't left hanging. A plan the team proposed in GOTCHA is
+ * expired without touching the conversation.
+ */
+export async function expireDueApprovals(): Promise<void> {
+  // ── F4 approval expiry sweep ────────────────────────────
+  // PENDING approvals past their expiresAt get EXPIRED status and the
+  // underlying conversation is routed to a human so the customer isn't
+  // left hanging. Done at the top of the cron so it runs every 5 min
+  // regardless of whether any tenants have idle config enabled.
+  try {
+    const expired = await (prisma as any).approvalRequest.findMany({
+      where: { status: "PENDING", expiresAt: { lt: new Date() } },
+      take: 100,
+    });
+    for (const ar of expired) {
+      try {
+        await (prisma as any).approvalRequest.update({
+          where: { id: ar.id },
+          data: {
+            status: "EXPIRED",
+            decidedAt: new Date(),
+            decisionReason: "auto-expired (no human decision within TTL)",
+          },
+        });
+        // A plan the team proposed in GOTCHA (Home or the command bar) never
+        // parked the customer's conversation: its expiry must not hand that
+        // conversation to a person, which stops GOTCHA answering the customer.
+        // Same rule as the conversation service's isOperatorPlan.
+        const source = (ar.params as Record<string, unknown> | null)?.source;
+        const operatorPlan = ar.tool === "propose_plan" || source === "home_assistant" || source === "command_bar";
+        if (ar.conversationId && !operatorPlan) {
+          await prisma.conversation.update({
+            where: { id: ar.conversationId },
+            data: { handledBy: "human", isHandedOver: true },
+          });
+        }
+        // (An "instant handoff summary" used to be requested here. It called
+        // an authenticated ai route without a token, always failed, and fell
+        // back to English keyword guesses; removed with the analysis on close:
+        // docs/architecture/conversation-intelligence-on-close.md, backlog.)
+        publishEvent({
+          event: "approval:expired",
+          tenantId: ar.tenantId,
+          data: {
+            approvalId: ar.id,
+            conversationId: ar.conversationId,
+            tool: ar.tool,
+          },
+        }).catch(() => {});
+        console.log(`[idle-check] Expired approval ${ar.id} - conversation ${ar.conversationId} routed to human`);
+      } catch (err: any) {
+        console.error(`[idle-check] Failed to expire approval ${ar.id}:`, err.message);
+      }
+    }
+  } catch (err: any) {
+    console.error("[idle-check] Approval expiry sweep failed:", err.message);
+  }
+}
+
 async function processIdleConversations(job: Job<IdleConversationJob>): Promise<void> {
   console.log("[idle-check] Running idle conversation check...");
 
@@ -76,51 +138,7 @@ async function processIdleConversations(job: Job<IdleConversationJob>): Promise<
     console.error("[idle-check] stranded-execution sweep failed:", err?.message);
   }
 
-  // ── F4 approval expiry sweep ────────────────────────────
-  // PENDING approvals past their expiresAt get EXPIRED status and the
-  // underlying conversation is routed to a human so the customer isn't
-  // left hanging. Done at the top of the cron so it runs every 5 min
-  // regardless of whether any tenants have idle config enabled.
-  try {
-    const expired = await (prisma as any).approvalRequest.findMany({
-      where: { status: "PENDING", expiresAt: { lt: new Date() } },
-      take: 100,
-    });
-    for (const ar of expired) {
-      try {
-        await (prisma as any).approvalRequest.update({
-          where: { id: ar.id },
-          data: {
-            status: "EXPIRED",
-            decidedAt: new Date(),
-            decisionReason: "auto-expired (no human decision within TTL)",
-          },
-        });
-        await prisma.conversation.update({
-          where: { id: ar.conversationId },
-          data: { handledBy: "human", isHandedOver: true },
-        });
-        // (An "instant handoff summary" used to be requested here. It called
-        // an authenticated ai route without a token, always failed, and fell
-        // back to English keyword guesses; removed with the analysis on close:
-        // docs/architecture/conversation-intelligence-on-close.md, backlog.)
-        publishEvent({
-          event: "approval:expired",
-          tenantId: ar.tenantId,
-          data: {
-            approvalId: ar.id,
-            conversationId: ar.conversationId,
-            tool: ar.tool,
-          },
-        }).catch(() => {});
-        console.log(`[idle-check] Expired approval ${ar.id} - conversation ${ar.conversationId} routed to human`);
-      } catch (err: any) {
-        console.error(`[idle-check] Failed to expire approval ${ar.id}:`, err.message);
-      }
-    }
-  } catch (err: any) {
-    console.error("[idle-check] Approval expiry sweep failed:", err.message);
-  }
+  await expireDueApprovals();
 
   // ── Comment→DM 24h bridge expiry sweep ─────────────────
   // Conversations promoted from a comment trigger have a flowExpiresAt set
