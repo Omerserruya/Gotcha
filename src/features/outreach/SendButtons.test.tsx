@@ -53,6 +53,16 @@ describe('★★ Send and Submit ask first - they reach outside', () => {
     expect(problem).toHaveAttribute('title', 'No recipients to send to.');
   });
 
+  it('a template without the removal line says so, and names the way out', async () => {
+    submitTemplate.mockResolvedValue({ ok: false, reason: 'removal_line' });
+    intl(<SubmitTemplate id="t1" />);
+    await userEvent.click(screen.getByTestId('submit-t1'));
+    await userEvent.click(screen.getByTestId('submit-yes-t1'));
+    expect(screen.getByTestId('submit-problem-t1')).toHaveTextContent(
+      'this one was made before that. "Duplicate and edit" it',
+    );
+  });
+
   it('Submit: asks, then submits', async () => {
     submitTemplate.mockResolvedValue({ ok: true });
     intl(<SubmitTemplate id="t1" />);

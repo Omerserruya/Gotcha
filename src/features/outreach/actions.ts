@@ -72,7 +72,16 @@ export async function stopCampaign(id: string): Promise<OutreachWriteResult> {
 export type SendResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly reason: 'refused'; readonly why: string | null }
+  /**
+   * 422 MISSING_REMOVAL_LINE (Backend 6ba6fac2): a MARKETING template made
+   * before the removal line ("Reply STOP to unsubscribe") was added on save.
+   * Trying again cannot help; a copy gets the line.
+   */
+  | { readonly ok: false; readonly reason: 'removal_line' }
   | { readonly ok: false; readonly reason: 'forbidden' | 'failed' };
+
+const missingRemovalLine = (cause: unknown) =>
+  isApiError(cause) && cause.status === 422 && cause.code === 'MISSING_REMOVAL_LINE';
 
 /** Sends a DRAFT campaign - to real people, after the owner's second press. */
 export async function sendCampaign(id: string): Promise<SendResult> {
@@ -88,6 +97,7 @@ export async function sendCampaign(id: string): Promise<SendResult> {
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('outreach.send_failed', { status: isApiError(cause) ? cause.status : undefined });
+    if (missingRemovalLine(cause)) return { ok: false, reason: 'removal_line' };
     if (isApiError(cause)) {
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
       // The route's own reason ("No recipients to send to…") is the platform's
@@ -115,6 +125,7 @@ export async function submitTemplate(id: string): Promise<SendResult> {
     logger.warn('templates.submit_failed', {
       status: isApiError(cause) ? cause.status : undefined,
     });
+    if (missingRemovalLine(cause)) return { ok: false, reason: 'removal_line' };
     if (isApiError(cause)) {
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
       if (cause.status === 400)

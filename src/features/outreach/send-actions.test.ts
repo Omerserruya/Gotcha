@@ -44,6 +44,18 @@ describe('★★ at the wire', () => {
     });
     expect(await submitTemplate('t1')).toEqual({ ok: false, reason: 'forbidden' });
   });
+
+  it('422 MISSING_REMOVAL_LINE is its own reason, on both; another 422 is not', async () => {
+    post.mockImplementation(async () => {
+      throw new ApiError({ kind: 'validation', status: 422, code: 'MISSING_REMOVAL_LINE' });
+    });
+    expect(await sendCampaign('b1')).toEqual({ ok: false, reason: 'removal_line' });
+    expect(await submitTemplate('t1')).toEqual({ ok: false, reason: 'removal_line' });
+    post.mockImplementation(async () => {
+      throw new ApiError({ kind: 'validation', status: 422, code: 'SOMETHING_ELSE' });
+    });
+    expect(await sendCampaign('b1')).toEqual({ ok: false, reason: 'failed' });
+  });
 });
 
 describe('★★ a real WhatsApp Business account', () => {

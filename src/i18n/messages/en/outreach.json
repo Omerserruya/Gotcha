@@ -180,6 +180,7 @@
       "unknown": "We couldn't check the WhatsApp account just now - try again in a moment.",
       "failed": {
         "refused": "It wasn't sent - check who it goes to and the message, then try again.",
+        "removal_line": "It wasn't sent - its template has no removal line, which every marketing message needs. \"Duplicate and edit\" the template: the copy gets the line.",
         "forbidden": "You don't have permission to send campaigns.",
         "failed": "It wasn't sent - try again."
       }
@@ -193,6 +194,7 @@
       "needsWaba": "Templates go to WhatsApp through a connected WhatsApp Business account - connect one in Settings · Channels.",
       "failed": {
         "refused": "WhatsApp didn't take it - check the template and try again.",
+        "removal_line": "It wasn't submitted - marketing templates end with a removal line, and this one was made before that. \"Duplicate and edit\" it: the copy gets the line.",
         "forbidden": "You don't have permission to submit templates.",
         "failed": "It wasn't submitted - try again."
       },
