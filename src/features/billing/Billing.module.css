@@ -1643,6 +1643,15 @@
     opacity: 0.5;
   }
 
+  .overlayFootPrimary[data-live] {
+    border: 0;
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    cursor: pointer;
+    opacity: 1;
+  }
+
   .overlayFootCancel {
     font-size: var(--font-size-body-sm);
     color: var(--text-subtle);
@@ -1669,6 +1678,29 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: var(--space-16) var(--space-12);
+  }
+
+  .detailsInput {
+    padding-block: var(--space-10);
+    padding-inline: 13px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .profileSaved {
+    margin: var(--space-8) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--signal-done-text);
+  }
+
+  .profileProblem {
+    margin: var(--space-8) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
   }
 
   .detailsField {

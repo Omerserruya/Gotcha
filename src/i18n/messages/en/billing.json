@@ -90,13 +90,20 @@
     "language": "Invoice language",
     "noField": "GOTCHA has no field for this yet.",
     "sendTo": "Send invoices and receipts to",
-    "subline": "Who the tax invoice is made out to, where it goes, and what pays it. Changing it from here comes next.",
+    "subline": "Who the tax invoice is made out to, where it goes, and what pays it.",
     "noCardRow": "No card on file",
     "addCard": "Add card",
     "save": "Save details",
     "cancel": "Cancel",
     "heldBy": "Card details are held by the payment provider.",
-    "expires": "Expires {date}"
+    "expires": "Expires {date}",
+    "saved": "Saved. New invoices carry these details.",
+    "saveRefused": {
+      "invalid_country": "The country must be two letters, like IL.",
+      "no_record": "There's no billing record to save these to yet - one is made when a card is added.",
+      "forbidden": "You don't have permission to change billing details.",
+      "failed": "Not saved. Try again."
+    }
   },
   "pricing": {
     "title": "Change plan",

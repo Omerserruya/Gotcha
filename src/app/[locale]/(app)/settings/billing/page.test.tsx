@@ -21,6 +21,8 @@ vi.mock('@/shell/SettingsSection', () => ({
     </div>
   ),
 }));
+/* The billing record, per test: none unless one says otherwise. */
+const billing = vi.hoisted(() => ({ profile: null as unknown }));
 vi.mock('@/features/billing/load-billing', () => ({
   loadBilling: async () => ({
     subscription: null,
@@ -28,7 +30,7 @@ vi.mock('@/features/billing/load-billing', () => ({
     invoices: null,
     breakdown: null,
     autoPurchase: null,
-    profile: null,
+    profile: billing.profile,
     paymentMethods: null,
     credits: null,
     // A failed read - the shape `loadBilling` returns for one: null, not [].
@@ -54,9 +56,18 @@ vi.mock('@/features/billing/BillingProfile', () => ({
   BillingProfileSection: stub('profile'),
 }));
 vi.mock('@/features/billing/BillingOverlay', () => ({
-  BillingOverlay: ({ kind, children }: { kind: string; children: ReactNode }) => (
+  BillingOverlay: ({
+    kind,
+    children,
+    footer,
+  }: {
+    kind: string;
+    children: ReactNode;
+    footer?: ReactNode;
+  }) => (
     <div data-testid="overlay" data-kind={kind}>
       {children}
+      {footer}
     </div>
   ),
 }));
@@ -100,5 +111,30 @@ describe('★ 17d - nothing to buy says why, rather than a blank dialog', () => 
     await open('buy');
     expect(screen.getByTestId('buy-unavailable')).toBeInTheDocument();
     expect(screen.queryByTestId('packages-why')).toBeNull();
+  });
+});
+
+describe('★★ 17e Save - live where there is a record to save into', () => {
+  it('a record: Save is a submit button for the details form', async () => {
+    billing.profile = { billingName: 'Aviv', state: 'present' };
+    await open('details');
+    const save = screen.getByTestId('details-save');
+    expect(save.tagName).toBe('BUTTON');
+    expect(save).toHaveAttribute('type', 'submit');
+    expect(save).toHaveAttribute('form', 'billing-profile-form');
+    billing.profile = null;
+  });
+
+  it('no record yet: Save is a status that says why - never a button that 409s', async () => {
+    billing.profile = { state: 'no_billing_profile' };
+    await open('details');
+    const save = screen.getByTestId('details-save');
+    expect(save.tagName).toBe('SPAN');
+    expect(save).toHaveAttribute('aria-disabled', 'true');
+    expect(save).toHaveAttribute(
+      'title',
+      "There's no billing record to save these to yet - one is made when a card is added.",
+    );
+    billing.profile = null;
   });
 });

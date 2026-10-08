@@ -5,6 +5,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { billingProfileSchema, type PaymentMethod } from '@/api/contracts/billing-profile';
 import messages from '@/i18n/messages/en/billing.json';
 
+/* The editable form is a client component with its own tests; here, when it is drawn and with what. */
+vi.mock('./ProfileForm', () => ({
+  ProfileForm: ({ profile }: { profile: { billingName: string | null } }) => (
+    <div data-testid="profile-form" data-name={profile.billingName ?? ''} />
+  ),
+}));
+
 import { BillingProfileSection } from './BillingProfile';
 
 /**
@@ -117,7 +124,7 @@ describe('both facts, stated together, when both were read', () => {
 });
 
 describe('★ 17e - 02’s fields, as stored', () => {
-  it('a filled profile fills 02’s boxes; PO and language have no column: "-", and why', async () => {
+  it('a filled profile is the editable form; its card is said', async () => {
     render(
       await BillingProfileSection({
         profile: billingProfileSchema.parse({
@@ -133,13 +140,9 @@ describe('★ 17e - 02’s fields, as stored', () => {
         failedInvoiceCount: 0,
       }),
     );
-    const fields = screen.getByTestId('profile-fields');
-    expect(fields).toHaveTextContent('Legal nameAviv & Co. Ltd');
-    expect(fields).toHaveTextContent('Company no. / VAT ID515234781');
-    const po = screen.getByText('Purchase order / reference').nextElementSibling;
-    expect(po).toHaveTextContent(/^-$/);
-    expect(po).toHaveAttribute('title', 'GOTCHA has no field for this yet.');
-    expect(screen.getByTestId('profile-send-to')).toHaveTextContent('finance@example.com');
+    // A record that exists is edited in place (17e's Save, database only).
+    expect(screen.getByTestId('profile-form')).toHaveAttribute('data-name', 'Aviv & Co. Ltd');
+    expect(screen.queryByTestId('profile-fields')).toBeNull();
     expect(screen.getByTestId('payment-method')).toHaveTextContent('Visa ending 4417');
     expect(screen.getByTestId('payment-method-expiry')).toHaveTextContent('Expires 08/28');
   });

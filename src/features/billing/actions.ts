@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
@@ -171,5 +172,62 @@ export async function buyCreditPack(
     }
     logger.warn('billing.buy_failed', { cause, packageKey });
     return { ok: false, kind: 'failed' };
+  }
+}
+
+export interface BillingDetails {
+  readonly billingName: string;
+  readonly vatId: string;
+  readonly billingAddress: string;
+  readonly billingCountry: string;
+  readonly billingEmail: string;
+}
+
+export type SaveDetailsResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly reason: 'invalid_country' | 'no_record' | 'forbidden' | 'failed';
+    };
+
+/**
+ * 17e's Save details - `PUT /billing/profile`, database only (no provider
+ * call; verified in the route and by Backend, 2026-10-08).
+ *
+ * ⚠ THE ROUTE REPLACES ALL FIVE: a field not sent is stored as null. So the
+ *   form always sends every field as it stands - an empty one clears it, on
+ *   purpose. 409 is "no billing record yet" (one is made when a card is
+ *   added); 400 is a country that is not two letters, which selects a tax
+ *   rate and so is checked here first.
+ */
+export async function saveBillingProfile(details: BillingDetails): Promise<SaveDetailsResult> {
+  const country = details.billingCountry.trim().toUpperCase();
+  if (country && !/^[A-Z]{2}$/.test(country)) return { ok: false, reason: 'invalid_country' };
+  try {
+    await serverApi().put({
+      endpoint: billingEndpoints.profile(),
+      body: {
+        billingName: details.billingName.trim(),
+        vatId: details.vatId.trim(),
+        billingAddress: details.billingAddress.trim(),
+        billingCountry: country,
+        billingEmail: details.billingEmail.trim(),
+      },
+      payload: z.unknown(),
+      raw: true,
+    });
+    revalidatePath('/[locale]/settings/billing', 'page');
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('billing.profile_save_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    if (isApiError(cause)) {
+      if (cause.status === 400) return { ok: false, reason: 'invalid_country' };
+      if (cause.status === 409) return { ok: false, reason: 'no_record' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    }
+    return { ok: false, reason: 'failed' };
   }
 }

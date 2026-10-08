@@ -1,3 +1,4 @@
+import { PROFILE_FORM_ID } from '@/features/billing/profile-form';
 import { getTranslations } from 'next-intl/server';
 
 import styles from '@/features/billing/Billing.module.css';
@@ -137,14 +138,30 @@ export default async function Page({
           line={t('profile.subline')}
           footer={
             <>
-              <span
-                className={styles.overlayFootPrimary}
-                aria-disabled="true"
-                title={t('profile.notYet')}
-                data-testid="details-save"
-              >
-                {t('profile.save')}
-              </span>
+              {/*
+                17e's Save (database only): it submits the details form. With
+                no billing record yet there is nothing to save into - said.
+              */}
+              {profile?.state === 'present' ? (
+                <button
+                  type="submit"
+                  form={PROFILE_FORM_ID}
+                  className={styles.overlayFootPrimary}
+                  data-live=""
+                  data-testid="details-save"
+                >
+                  {t('profile.save')}
+                </button>
+              ) : (
+                <span
+                  className={styles.overlayFootPrimary}
+                  aria-disabled="true"
+                  title={t('profile.saveRefused.no_record')}
+                  data-testid="details-save"
+                >
+                  {t('profile.save')}
+                </span>
+              )}
               <Link href="/settings/billing" className={styles.overlayFootCancel}>
                 {t('profile.cancel')}
               </Link>

@@ -9,6 +9,7 @@ import {
 } from '@/api/contracts/billing-profile';
 
 import styles from './Billing.module.css';
+import { ProfileForm } from './ProfileForm';
 
 /**
  * Screen 17e - who the bill is made out to, and what it charges.
@@ -174,32 +175,41 @@ export async function BillingProfileSection({
         </p>
       ) : null}
       {/*
-        02's boxes in every state - the values when there are any, "-" when
-        there are none. What the state IS is the one line above.
+        A billing record that exists is edited here (17e's Save, database
+        only). With none yet, the boxes show what there is, read-only - the
+        route has nothing to save into until a card is added.
       */}
-      <>
-        <div className={styles.detailsFields} data-testid="profile-fields">
-          <Field label={t('profile.legalName')} value={profile?.billingName ?? null} />
-          <Field label={t('profile.vatId')} value={profile?.vatId ?? null} />
-          <Field label={t('profile.address')} value={profile?.billingAddress ?? null} />
-          <Field label={t('profile.country')} value={profile?.billingCountry ?? null} />
-          {/* 02's two more fields have no column: "-", and why. */}
-          <Field label={t('profile.po')} value={null} none={t('profile.noField')} />
-          <Field label={t('profile.language')} value={null} none={t('profile.noField')} />
-        </div>
-        <h3 className={styles.lowHeading}>{t('profile.sendTo')}</h3>
-        <p
-          className={styles.detailsChips}
-          data-testid="profile-send-to"
-          title={t('profile.absentFields')}
-        >
-          {profile?.billingEmail ? (
-            <span className={styles.detailsChip}>{profile.billingEmail}</span>
-          ) : (
-            <span className={styles.lowNone}>-</span>
-          )}
-        </p>
-      </>
+      {profile?.state === 'present' ? (
+        <ProfileForm profile={profile} />
+      ) : (
+        <>
+          {/*
+          02's boxes in every state - the values when there are any, "-" when
+          there are none. What the state IS is the one line above.
+        */}
+          <div className={styles.detailsFields} data-testid="profile-fields">
+            <Field label={t('profile.legalName')} value={profile?.billingName ?? null} />
+            <Field label={t('profile.vatId')} value={profile?.vatId ?? null} />
+            <Field label={t('profile.address')} value={profile?.billingAddress ?? null} />
+            <Field label={t('profile.country')} value={profile?.billingCountry ?? null} />
+            {/* 02's two more fields have no column: "-", and why. */}
+            <Field label={t('profile.po')} value={null} none={t('profile.noField')} />
+            <Field label={t('profile.language')} value={null} none={t('profile.noField')} />
+          </div>
+          <h3 className={styles.lowHeading}>{t('profile.sendTo')}</h3>
+          <p
+            className={styles.detailsChips}
+            data-testid="profile-send-to"
+            title={t('profile.absentFields')}
+          >
+            {profile?.billingEmail ? (
+              <span className={styles.detailsChip}>{profile.billingEmail}</span>
+            ) : (
+              <span className={styles.lowNone}>-</span>
+            )}
+          </p>
+        </>
+      )}
 
       {/*
         Named rather than drawn, the same as the grant expiry on 12e.
