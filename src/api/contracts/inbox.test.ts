@@ -368,6 +368,22 @@ describe('★★ the contract keeps what the stream draws', () => {
   });
 });
 
+describe('★ an old row’s generic "Bot" sender is GOTCHA', () => {
+  it.each([
+    ['Bot', 'GOTCHA'],
+    ['bot', 'GOTCHA'],
+    [' Bot ', 'GOTCHA'],
+    ['Bot Smith', 'Bot Smith'],
+    ['Support AI', 'Support AI'],
+  ])('%j → %j', (senderName, expected) => {
+    expect(senderLabel({ direction: 'OUTBOUND', senderName })).toBe(expected);
+  });
+
+  it('an inbound "Bot" is still the customer - no label', () => {
+    expect(senderLabel({ direction: 'INBOUND', senderName: 'Bot' })).toBeNull();
+  });
+});
+
 describe('⚠ senderLabel - a login email is not a name', () => {
   it.each([
     ['OUTBOUND', 'Support AI', 'Support AI'],
