@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { packagesResponseSchema } from '@/api/contracts/pricing';
 import messages from '@/i18n/messages/en/billing.json';
+import heMessages from '@/i18n/messages/he/billing.json';
 
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => (
@@ -663,5 +664,25 @@ describe('★★ billing writes off (BILLING_WRITES, fail closed): no charge han
     expect(pay).toHaveAttribute('title', expect.stringContaining('uses the live payment account'));
     await userEvent.click(pay);
     expect(buyCreditPack).not.toHaveBeenCalled();
+  });
+});
+
+describe('★ Hebrew: no English pack name under a Hebrew page', () => {
+  it('a pack with no Hebrew name is its count in Hebrew', () => {
+    render(
+      <NextIntlClientProvider locale="he" messages={{ billing: heMessages }}>
+        <BuyCredits
+          packages={packagesResponseSchema.parse({
+            packages: [
+              { key: 'k', name: '1,000 credits', credits: 1000, price: '50.00', currency: 'ILS' },
+            ],
+          })}
+          billable
+          hasPaymentMethod
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('buy-packs')).toHaveTextContent('1,000 קרדיטים');
+    expect(screen.getByTestId('buy-packs')).not.toHaveTextContent('credits');
   });
 });

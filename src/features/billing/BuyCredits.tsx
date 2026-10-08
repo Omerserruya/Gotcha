@@ -1,6 +1,6 @@
 'use client';
 
-import { useFormatter, useTranslations } from 'next-intl';
+import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useRef, useState, useTransition } from 'react';
 
 import {
@@ -19,6 +19,7 @@ import type { buyCreditPack, BuyOutcome } from './actions';
 import { Link } from '@/i18n/navigation';
 
 import styles from './Billing.module.css';
+import { packName } from './pack-name';
 
 /**
  * Screen 17d - buying credits.
@@ -122,6 +123,7 @@ export function BuyCredits({
 }) {
   const t = useTranslations('billing');
   const format = useFormatter();
+  const locale = useLocale();
 
   const sellable = packages?.packages ?? [];
   const [chosen, setChosen] = useState<string>(sellable[0]?.key ?? '');
@@ -246,7 +248,11 @@ export function BuyCredits({
                   setOutcome(null);
                 }}
               />
-              <span className={styles.buyPackName}>{p.name}</span>
+              <span className={styles.buyPackName}>
+                {packName(p, locale, () =>
+                  t('pricing.packages.credits', { credits: format.number(p.credits) }),
+                )}
+              </span>
               {/*
                 ★★ THE CREDIT COUNT ONLY WHEN THE NAME DOES NOT ALREADY SAY IT.
                 The packs are named for their size on this tenant, so the tile
@@ -254,7 +260,9 @@ export function BuyCredits({
                 expire"*. The name is the tenant's and the count is ours; where
                 they are the same fact, ours goes.
               */}
-              {p.name.includes(format.number(p.credits)) ? null : (
+              {packName(p, locale, () =>
+                t('pricing.packages.credits', { credits: format.number(p.credits) }),
+              ).includes(format.number(p.credits)) ? null : (
                 <span className={styles.buyPackCredits}>
                   {t('pricing.packages.credits', { credits: format.number(p.credits) })}
                 </span>

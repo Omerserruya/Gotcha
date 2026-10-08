@@ -13,6 +13,7 @@ import {
 
 import { AutoPurchaseForm, type PackChoice } from './AutoPurchaseForm';
 import styles from './Billing.module.css';
+import { packName } from './pack-name';
 
 /**
  * Screen 17c - when credits run low, and what happens when you stop.
@@ -74,7 +75,9 @@ export async function AutoPurchase({
     const price = packagePrice(p);
     return {
       key: p.key,
-      name: locale === 'he' && p.nameHe ? p.nameHe : p.name,
+      name: packName(p, locale, () =>
+        t('pricing.packages.credits', { credits: format.number(p.credits) }),
+      ),
       price: price
         ? new Intl.NumberFormat(locale, {
             style: 'currency',
