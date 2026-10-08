@@ -162,10 +162,55 @@ Shopify place yes, the code snippet no (stage A).
 
 ## 4. "Assigned AI employee"
 
-Read-only in stage A: who answers the website channel according to the
-playbook (its route for the channel), or `null` when the playbook routes it
-nowhere specific. The playbook stays the one place that decides who answers;
-editing it from this screen waits for Omer's decision (plan, "Decisions").
+Omer's decision (2026-10-08): the widget screen may set who answers, and it
+writes THE PLAYBOOK (one source: the playbook stays the only place that
+decides who answers; nothing is stored on the widget). `assignedEmployee` in
+`GET /api/website-widget` stays as it was (web chat, read-only).
+
+Permission for both routes: role ADMIN, the same as editing the playbook
+(`PUT /api/flow-canvas`). `403` otherwise.
+
+### 4.1 Read: `GET /api/website-widget/assignment`
+
+```jsonc
+{ "data": {
+  "channels": [                         // the widget's places: the code snippet, and Shopify if any
+    { "channel": "WEBCHAT",
+      "employee": { "id": "...", "name": "Maya" } | null,
+      "how": "always" | "conditional" | "team" | "none",
+      //   always: every conversation on this channel goes to `employee`
+      //   conditional: conditions in the playbook decide (hours, a choice...): `employee` null
+      //   team: the playbook sends it to a team / department, not an employee
+      //   none: the playbook routes this channel nowhere
+      "editable": true,                 // false when "conditional": change it in the playbook editor
+      "dedicated": true }               // the playbook has an entry for this channel of its own
+  ],
+  "employees": [{ "id": "...", "name": "Maya", "active": true }]   // to choose from (active ones are choosable)
+} }
+```
+
+### 4.2 Write: `PUT /api/website-widget/assignment`
+
+Body: `{ "employeeId": "...", "channels"?: ["WEBCHAT", "SHOPIFY_LIVE_CHAT"] }`
+(`channels` omitted = every channel of the widget). For each channel:
+- its entry's path does not branch: the first route on it now goes to this
+  employee (a route to a team becomes a route to the employee);
+- the playbook has no entry for this channel: one is added (an entry for the
+  channel and a route to the employee), so this channel stops following the
+  playbook's default entry;
+- conditions decide it (`how: "conditional"`): `409 { code: "PLAYBOOK_CONDITIONAL",
+  channels: [...] }` and NOTHING is written (no channel half-changed).
+
+`422 { code: "EMPLOYEE_NOT_FOUND" }` for an id that is not an active employee of
+this workspace; `409 { code: "WIDGET_NOT_CREATED" }` when the widget has no
+place. `200` returns the read shape (§4.1) after the write, plus
+`changed: [{ channel, from: { id, name } | null, created: boolean }]`. The
+playbook's `updatedBy` is the caller and an audit entry
+`playbook.route_updated` names the channels.
+
+Note: the playbook editor saves the whole canvas. A playbook tab left open
+from before this change would overwrite it on its next save; the screen
+should say "this changes the playbook" and the editor should reload on focus.
 
 ---
 
