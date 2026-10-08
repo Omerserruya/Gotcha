@@ -571,7 +571,13 @@ export async function stopAi(tenantId: string, conversationId: string, actorUser
   return updated;
 }
 
-export async function reassign(tenantId: string, conversationId: string, newAgentId: string) {
+/**
+ * `actorUserId` is the person who moved it; without one it was GOTCHA (an AI
+ * or an automation). The notification names the ACTOR: it used to name the
+ * previous assignee ("Unknown" when there was none), so "X assigned you a
+ * conversation" could name someone who did nothing.
+ */
+export async function reassign(tenantId: string, conversationId: string, newAgentId: string, actorUserId?: string) {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
     include: { assignedAgent: { select: { name: true } } },
@@ -599,14 +605,20 @@ export async function reassign(tenantId: string, conversationId: string, newAgen
   // recipient, so the dispatcher can address the person assigned rather than
   // the tenant. Fire-and-forget - a notification outage must not undo a
   // transfer that has already happened.
-  notificationsQueue
+  // Nobody is told they assigned something to themselves. A failed name
+  // lookup must not fail a transfer that has already happened.
+  const actor = actorUserId
+    ? await prisma.user.findFirst({ where: { id: actorUserId, tenantId }, select: { name: true } }).catch(() => null)
+    : null;
+  const assignedByName = actorUserId ? (actor?.name ?? null) : "GOTCHA";
+  if (actorUserId !== newAgentId) notificationsQueue
     .add(
       "system-event",
       {
         id: randomUUID(),
         type: "conversation.assigned",
         tenantId,
-        data: { conversationId, assignedByName: fromAgentName, assignedToName: toAgentName },
+        data: { conversationId, assignedByName, assignedToName: toAgentName },
         metadata: { conversationId, userId: newAgentId, timestamp: new Date().toISOString() },
       },
       { removeOnComplete: 1000, removeOnFail: 100, attempts: 5, backoff: { type: "exponential", delay: 2_000 } },

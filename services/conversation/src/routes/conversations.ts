@@ -345,7 +345,7 @@ router.post("/:id/reassign", async (req: Request, res: Response) => {
       const conversation = await conversationService.transferToDepartment(req.tenantId!, conversationId, departmentId);
       res.json({ data: conversation });
     } else {
-      const conversation = await conversationService.reassign(req.tenantId!, conversationId, agentId);
+      const conversation = await conversationService.reassign(req.tenantId!, conversationId, agentId, userId);
       res.json({ data: conversation });
     }
   } catch (err: any) {
