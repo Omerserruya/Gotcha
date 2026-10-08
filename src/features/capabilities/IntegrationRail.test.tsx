@@ -139,6 +139,22 @@ describe('★★ the list is whatever the table holds', () => {
     expect(screen.getByTestId('available-a')).toHaveTextContent('חנות אונליין');
   });
 
+  it('★ a search finds a system by its category as the chip says it, in Hebrew', async () => {
+    render(
+      <NextIntlClientProvider locale="he" messages={{ capabilities: heMessages }}>
+        {await IntegrationRail({
+          integrations: [
+            entry({ slug: 'a', name: 'A', category: 'ECOMMERCE', description: null }),
+            entry({ slug: 'b', name: 'B', category: 'DATABASE', description: null }),
+          ],
+        })}
+      </NextIntlClientProvider>,
+    );
+    await userEvent.type(screen.getByRole('searchbox'), 'חנות');
+    expect(screen.getByTestId('available-a')).toBeInTheDocument();
+    expect(screen.queryByTestId('available-b')).toBeNull();
+  });
+
   it('★ an entry with no category is not assigned one - no chip, no label', async () => {
     // Inventing a category is how a filter starts lying about what it holds.
     await show([

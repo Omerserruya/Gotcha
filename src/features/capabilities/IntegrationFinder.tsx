@@ -69,7 +69,13 @@ export function IntegrationFinder({
   const matches = useMemo(() => {
     if (term === '') return { connected, available, filtering: false };
     const hit = (entry: Integration) =>
-      [entry.name, entry.description ?? '', entry.category ?? '']
+      [
+        entry.name,
+        entry.description ?? '',
+        entry.category ?? '',
+        // The category as its chip says it - "חנות אונליין" finds the stores.
+        entry.category ? systemCategoryName(entry.category, t) : '',
+      ]
         .join(' ')
         .toLowerCase()
         .includes(term);
@@ -78,7 +84,7 @@ export function IntegrationFinder({
       available: available.filter(hit),
       filtering: true,
     };
-  }, [connected, available, term]);
+  }, [connected, available, term, t]);
 
   const found = matches.connected.length + matches.available.length;
   // From what the search left: a chip for a category with nothing in it would
