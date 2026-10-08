@@ -236,13 +236,14 @@ export async function queryOrders(ctx: QueryCtx, q: OrderQuery): Promise<Commerc
 
   return {
     summary: {
-      ok: true, cite: sId, store, total, ...(unit === "currency" ? { currency } : {}), period,
+      ok: true, cite: sId, store, total, ...(unit === "currency" ? { totalText: money(total, currency, ctx.locale) } : {}), period,
       ...(capped ? { note: `counted the latest ${CAP} orders of the period` } : {}),
-      ...(q.measure === "refunds" ? { note2: "refunds on orders placed in the period", refundedAmount: round(sum(refunds.map((r) => r.amount))), currency } : {}),
+      ...(q.measure === "refunds" ? { note2: "refunds on orders placed in the period", refundedText: money(round(sum(refunds.map((r) => r.amount))), currency, ctx.locale) } : {}),
       ...(refundSplitMissing ? { unavailableSplit: q.groupBy === "day" ? "this store does not say when each refund was made" : "this store does not say which products were refunded" } : {}),
       ...(q.groupBy === "reason" ? { reasonGivenFor: `${refunds.filter((r) => r.reason).length} of ${refunds.length}` } : {}),
       shownAs: SHOWN_AS,
       cards: cardsOf(blocks),
+      ...(unit === "currency" || q.measure === "refunds" ? { money: "write amounts exactly as totalText / refundedText give them" } : {}),
     },
     blocks,
     source,
@@ -293,9 +294,15 @@ export async function queryProductStock(ctx: QueryCtx, query: string): Promise<C
 
 export interface OrderRow { id: string; title: string; subtitle: string; meta: string; deepLink: null }
 
-function money(n: number, currency: string | null, locale: Locale): string {
+/**
+ * Money as the user reads it, symbol first ("₪10,539.69", "$12.50") in both
+ * languages. he-IL's own format puts the symbol last behind invisible RTL marks
+ * ("\u200f329.00 \u200f₪"), which the model repeats unpredictably; the model is
+ * given this text to repeat, never a number and a currency code to format.
+ */
+export function money(n: number, currency: string | null, _locale: Locale): string {
   if (!currency) return String(round(n));
-  try { return new Intl.NumberFormat(locale === "he" ? "he-IL" : "en-US", { style: "currency", currency }).format(n); } catch { return `${round(n)} ${currency}`; }
+  try { return new Intl.NumberFormat("en-US", { style: "currency", currency, currencyDisplay: "narrowSymbol" }).format(n); } catch { return `${round(n)} ${currency}`; }
 }
 
 function orderRows(orders: NormOrder[], locale: Locale, tz: string): OrderRow[] {

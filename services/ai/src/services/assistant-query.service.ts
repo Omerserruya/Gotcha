@@ -254,7 +254,7 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
 
 /** What the model is told about the cards it produced. */
 export const SHOWN_AS =
-  "these cards are on the user's screen beside your answer: refer to them (\"the chart shows\"), never say you lack a breakdown a card shows, do not repeat every number, cite the source";
+  "the user sees these cards with your answer: refer to them (\"the chart\") without saying where they are on the screen, never say you lack a breakdown a card shows, do not repeat every number, cite the source";
 
 /** The cards in words, so the model knows what the user is looking at. */
 export function cardsOf(blocks: Array<{ type: string; title: string; x?: { values: string[] }; items?: unknown[] }>): string[] {

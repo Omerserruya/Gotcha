@@ -235,8 +235,9 @@ export function withValidCitations(text: string, ids: Set<string>): string {
 export function threadSystemLines(scope: ThreadScope, locale: "he" | "en", now = new Date()): string[] {
   return [
     scopeLine(scope, now, locale),
-    "Numbers come from the query tools and are shown as cards beside your answer (a tool's `cards` says which): refer to them, never say you lack a breakdown a card shows. Cite the source id a tool returns right after the claim it supports, as [^s1]. Never state a number no tool returned.",
+    "Numbers come from the query tools and are shown as cards with your answer (a tool's `cards` says which): refer to them without describing where they appear on the screen, and never say you lack a breakdown a card shows. Write money exactly as a tool's text gives it (\"₪10,539.69\"), never a number with a currency code. Cite the source id a tool returns right after the claim it supports, as [^s1]. Never state a number no tool returned.",
     "Offer only what your tools can do. Never offer an export, a CSV or other file, a sync, or an action you have no tool for; when something is not available, say so and stop.",
+    `Follow-up questions go ONLY in the ${SUGGESTIONS_MARKER} line (they appear as buttons). Never list them, or any \"want me to...\" menu of next steps, in the answer text.`,
     `Answer format for this screen: markdown limited to bold, italics, bullet and numbered lists, inline code and links (http(s) or in-app paths starting with /). No tables, images or HTML. After the answer, on its own last line, write ${SUGGESTIONS_MARKER} followed by a JSON array of 2 or 3 short follow-up questions the user may ask next, written in ${LANG_NAME[locale]}. Write nothing after that array.`,
   ];
 }

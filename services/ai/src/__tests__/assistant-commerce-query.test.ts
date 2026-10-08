@@ -78,7 +78,12 @@ describe("★ orders by workspace day", () => {
     const chart: any = r.blocks[0];
     expect(chart).toMatchObject({ unit: "currency", currency: "ILS", highlight: ["2026-10-03"] });
     expect(chart.series[0].values).toEqual([150, 50, 300]);
-    expect(r.summary).toMatchObject({ total: 500, currency: "ILS", cards: ["Sales by day: a bar chart over 3 days"] });
+    expect(r.summary).toMatchObject({ total: 500, cards: ["Sales by day: a bar chart over 3 days"] });
+    // ★ Money is TEXT the model repeats, symbol first, in both languages; never
+    // a number plus a code for the model to format ("10,539.69 ILS" surfaced live).
+    expect(r.summary).toMatchObject({ totalText: "₪500.00" });
+    expect((await queryOrders(ctx({ locale: "he" }), Q({ measure: "revenue" }))).summary).toMatchObject({ totalText: "₪500.00" });
+    expect(r.summary).not.toHaveProperty("currency");
     expect(r.source!.count).toBe(3); // the orders behind the sum
   });
 
@@ -98,7 +103,10 @@ describe("★ refunds", () => {
     const list: any = r.blocks.find((x) => x.type === "record_list");
     expect(list).toMatchObject({ kind: "order", total: 1, hasMore: false, sourceId: "s1" });
     expect(list.items[0]).toMatchObject({ id: "1003", title: "#1003" });
-    expect(list.items[0].subtitle).toContain("refunded");
+    expect(list.items[0].subtitle).toBe("₪300.00 · refunded ₪100.00");
+    // No invisible RTL marks (he-IL's own format hides them around the symbol).
+    const he: any = (await queryOrders(ctx({ locale: "he" }), Q({ measure: "refunds", groupBy: "product" }))).blocks.find((x) => x.type === "record_list");
+    expect(he.items[0].subtitle).toBe("₪300.00 · הוחזרו ₪100.00");
     expect(r.summary).toMatchObject({ total: 1, note2: "refunds on orders placed in the period" });
     expect(r.source).toMatchObject({ kind: "refunds", count: 1 });
   });
@@ -120,7 +128,7 @@ describe("★ refunds", () => {
     const b: any = r.blocks[0];
     expect(b).toMatchObject({ type: "breakdown", title: "Refunds by reason", total: 2, coverage: { covered: 2, of: 3 } });
     expect(b.items).toEqual([{ key: "Too small", label: "Too small", value: 2, share: 1 }]);
-    expect(r.summary).toMatchObject({ total: 3, refundedAmount: 105, currency: "ILS", reasonGivenFor: "2 of 3" });
+    expect(r.summary).toMatchObject({ total: 3, refundedText: "₪105.00", reasonGivenFor: "2 of 3" });
     const list: any = r.blocks.find((x) => x.type === "record_list");
     expect(list.items.map((i: any) => i.id)).toEqual(["1", "2"]);
   });

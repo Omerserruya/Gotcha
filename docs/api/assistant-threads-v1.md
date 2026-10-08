@@ -266,7 +266,9 @@ language), `sourceId` and optionally `deepLink` (§9.5), `partial` and
 `label`s, `title`, `subtitle`, `meta` and `fields[].value` are finished text in
 the interface language (render verbatim); raw numbers are in `series[].values`,
 `items[].value`, `total`. `unit: "percent"` values are 0-100 (38 = 38%);
-`share` is 0-1. `chart.x.values` of kind `day` are the workspace's calendar
+`share` is 0-1. Money in finished text (`subtitle`, labels) is symbol first
+in both languages ("₪10,539.69"), with no invisible direction marks; raw
+amounts stay numbers. `chart.x.values` of kind `day` are the workspace's calendar
 days: format them as dates, no timezone shift. A store read that is refused or
 unsupported produces no block; the assistant says why in one plain sentence.
 

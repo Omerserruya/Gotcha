@@ -117,6 +117,18 @@ describe("★ the thread's period and the prompt", () => {
     expect(lines).toMatch(/Never offer an export, a CSV or other file, a sync/);
   });
 
+  it("★ the supervisor's live check: no layout words, money as given, follow-ups only as buttons", () => {
+    const lines = threadSystemLines({ range: "last_7", channels: "all" }, "he").join("\n");
+    // "the breakdown is in the card on the side of the screen": the cards are below.
+    expect(lines).toMatch(/without describing where they appear on the screen/);
+    expect(lines).not.toMatch(/beside your answer/);
+    // "10,539.69 ILS"
+    expect(lines).toMatch(/Write money exactly as a tool's text gives it/);
+    // "want me to check: 1... 2... 3..." duplicated the suggestion chips.
+    expect(lines).toMatch(/Follow-up questions go ONLY in the \[\[suggestions\]\] line/);
+    expect(lines).toMatch(/Never list them, or any "want me to\.\.\." menu/);
+  });
+
   it("★ one call per split, not one per channel (it made 8 calls live)", async () => {
     const { buildSystemAgentTools } = await import("../services/system-tools.service");
     const tools: any[] = await buildSystemAgentTools({ tenantId: "T", aiAgentId: null } as any);
