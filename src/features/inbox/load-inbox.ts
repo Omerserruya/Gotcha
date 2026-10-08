@@ -270,6 +270,13 @@ export async function loadInbox(
               ...(period?.to ? { to: period.to } : {}),
               limit: QUEUE_CAP,
               cursor: cursor ?? '',
+              /*
+               * The view's whole count for the header (Backend c469c91a): a
+               * keyset request carries it only when asked, so the FIRST page -
+               * the one whose header shows it - asks; a later page does not
+               * pay a full count nobody reads.
+               */
+              ...(cursor ? {} : { total: '1' }),
             },
           })
           .catch((cause: unknown) => {

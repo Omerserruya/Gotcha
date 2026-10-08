@@ -465,8 +465,22 @@ export async function ConversationList({
         {/* 02: the title left, the count pushed hard right. */}
         <div className={styles.queueTitleRow}>
           <span className={styles.queueHeading}>{nav(`inbox.${view}`)}</span>
-          <span className={styles.queueCount} data-testid="queue-count">
-            {viewTotal ?? rows?.length ?? 0}
+          {/*
+            ⚠⚠ NEVER A PAGE'S COUNT AS A TOTAL (dev: "All conversations · 50"
+            for September's 81 - the page's cap, read as the view's size). The
+            route's total when it sends one; the page's count when the page is
+            all there is; otherwise what is shown, and that more follow.
+          */}
+          <span
+            className={styles.queueCount}
+            data-testid="queue-count"
+            data-partial={viewTotal === undefined && hasMore ? '' : undefined}
+          >
+            {viewTotal !== undefined
+              ? viewTotal
+              : hasMore
+                ? t('queue.shownMore', { count: rows?.length ?? 0 })
+                : (rows?.length ?? 0)}
           </span>
         </div>
 

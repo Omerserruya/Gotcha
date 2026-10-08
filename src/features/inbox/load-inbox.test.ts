@@ -138,6 +138,20 @@ describe('⚠⚠ the view reaches the route', () => {
     expect(queueCall()?.query).toMatchObject({ from: '2026-09-01', to: '2026-09-30' });
   });
 
+  it('★ the first page asks for the view’s total (the header’s count); a later page does not', async () => {
+    const { loadInbox } = await import('./load-inbox');
+    void loadInbox(undefined, undefined, 'all', null);
+    await settleMicrotasks();
+    expect(queueCall()?.query).toMatchObject({ total: '1' });
+  });
+
+  it('…and a page past the first, by its cursor, sends no `total`', async () => {
+    const { loadInbox } = await import('./load-inbox');
+    void loadInbox(undefined, 'k2', 'all', null);
+    await settleMicrotasks();
+    expect(queueCall()?.query).not.toHaveProperty('total');
+  });
+
   it('an open end is not sent', async () => {
     const { loadInbox } = await import('./load-inbox');
     void loadInbox(undefined, undefined, 'queue', null, { from: '2026-09-01', to: null });

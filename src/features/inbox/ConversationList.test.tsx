@@ -848,8 +848,34 @@ describe('⚠⚠ "every thing in its own container" - the panel, and how a row i
         hasMore: true,
       }),
     );
-    expect(screen.getByTestId('queue-count')).toHaveTextContent('3');
+    // What the page holds, said as that - never "3" standing for the queue.
+    expect(screen.getByTestId('queue-count')).toHaveTextContent(/^3 shown · more below$/);
     expect(screen.getByText(/waiting in queue/i)).toBeInTheDocument();
+  });
+
+  it('★★ no total from the route and more to come: what is shown, never the page as the total (dev: 50 for 81)', async () => {
+    render(
+      await ConversationList({
+        rows: [row({ id: 'c1' }), row({ id: 'c2' }), row({ id: 'c3' })],
+        cap: 3,
+        now: NOW,
+        hasMore: true,
+        view: 'all',
+      }),
+    );
+    expect(screen.getByTestId('queue-count')).toHaveTextContent(/^3 shown · more below$/);
+  });
+
+  it('no total, and the page is all there is: then its count IS the total', async () => {
+    render(
+      await ConversationList({
+        rows: [row({ id: 'c1' }), row({ id: 'c2' })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    expect(screen.getByTestId('queue-count')).toHaveTextContent(/^2$/);
   });
 
   it('★★ the route’s `viewTotal` is the count when it sends one - the whole view, not the page', async () => {
