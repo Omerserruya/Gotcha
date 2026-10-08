@@ -76,6 +76,10 @@
       "entitlement": "Templates aren't part of this plan.",
       "forbidden": "Only an admin can create templates.",
       "failed": "That didn't go through. Try again."
+    },
+    "removalLine": {
+      "label": "Last line",
+      "why": "Added to every marketing message, so a customer can reply to stop them. It can't be removed."
     }
   }
 }

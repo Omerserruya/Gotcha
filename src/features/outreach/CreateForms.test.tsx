@@ -32,6 +32,7 @@ import { CampaignForm, type SendingAccount } from './CampaignForm';
 import { DuplicateTemplate } from './DuplicateTemplate';
 import { TaskCards } from './TaskCards';
 import { TemplateForm, templateName } from './TemplateForm';
+import { removalLineFor } from './removal-line';
 
 const ACCOUNTS: SendingAccount[] = [
   { id: 'wa1', channel: 'WHATSAPP', label: 'WhatsApp · Support line' },
@@ -183,6 +184,33 @@ describe('★★ 05c - a template, as a local DRAFT', () => {
       pathname: '/outreach/templates',
       query: { template: 'tp1' },
     });
+  });
+});
+
+describe('★★ marketing ends with the removal line - drawn as the server adds it', () => {
+  it.each([
+    ['MARKETING', 'he', 'Sale', 'להסרה השיבו הסר'],
+    ['MARKETING', 'en', 'Sale', 'Reply STOP to unsubscribe'],
+    // The server's rule: Hebrew for "he…", English for every other.
+    ['MARKETING', 'ar', 'Sale', 'Reply STOP to unsubscribe'],
+    // Never twice.
+    ['MARKETING', 'he', 'Sale\n\nלהסרה  השיבו הסר', null],
+    ['MARKETING', 'he', 'Sale. reply stop to unsubscribe', null],
+    ['UTILITY', 'he', 'Your order', null],
+  ])('%s / %s / %j → %s', (category, language, body, line) => {
+    expect(removalLineFor(category, language, body)).toBe(line);
+  });
+
+  it('the form shows it for marketing, in the language chosen, and sends only what was typed', async () => {
+    wrap(<TemplateForm accounts={ACCOUNTS} />);
+    expect(screen.getByTestId('template-removal')).toHaveTextContent('להסרה השיבו הסר');
+    expect(screen.getByTestId('template-removal')).toHaveTextContent(
+      'Added to every marketing message',
+    );
+    await userEvent.selectOptions(screen.getByTestId('template-language'), 'en');
+    expect(screen.getByTestId('template-removal')).toHaveTextContent('Reply STOP to unsubscribe');
+    await userEvent.selectOptions(screen.getByTestId('template-category'), 'UTILITY');
+    expect(screen.queryByTestId('template-removal')).toBeNull();
   });
 });
 

@@ -9,6 +9,7 @@ import { Link, useRouter } from '@/i18n/navigation';
 import type { SendingAccount } from './CampaignForm';
 import { createTemplate } from './create-actions';
 import styles from './Outreach.module.css';
+import { removalLineFor } from './removal-line';
 
 export const TEMPLATE_CATEGORIES = ['MARKETING', 'UTILITY', 'AUTHENTICATION'] as const;
 
@@ -42,6 +43,7 @@ export function TemplateForm({ accounts }: { readonly accounts: readonly Sending
   const [problem, setProblem] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const ready = name !== '' && body.trim() !== '';
+  const removal = removalLineFor(category, language, body);
 
   function save() {
     setProblem(null);
@@ -136,6 +138,17 @@ export function TemplateForm({ accounts }: { readonly accounts: readonly Sending
           />
           <span className={drawer.hint}>{t('bodyHint')}</span>
         </label>
+
+        {/* Marketing: the server ends the text with this line; drawn as it will be sent. */}
+        {removal ? (
+          <div className={drawer.field} data-testid="template-removal">
+            <span className={drawer.fieldLabel}>{t('removalLine.label')}</span>
+            <p className={`${drawer.box} ${styles.fixedLine}`} dir="auto">
+              {removal}
+            </p>
+            <span className={drawer.hint}>{t('removalLine.why')}</span>
+          </div>
+        ) : null}
 
         <label className={drawer.field}>
           <span className={drawer.fieldLabel}>{t('footer')}</span>

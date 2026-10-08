@@ -1313,4 +1313,12 @@
     color: var(--text-subtle);
     cursor: not-allowed;
   }
+
+  /* A line the server adds and nobody types: read, not edited. */
+  .fixedLine {
+    margin: 0;
+    border-style: dashed;
+    color: var(--text-subtle);
+    white-space: pre-wrap;
+  }
 }
