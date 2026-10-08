@@ -3,6 +3,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import axios from "axios";
 import jwt from "jsonwebtoken";
+import { splitErrorCode } from "../lib/error-code";
 import {
   prisma,
   // The website widget shares its experience config with the Shopify
@@ -191,8 +192,10 @@ router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:
       orderBy: { createdAt: "asc" },
     });
 
+    // The code a writer stored beside the sentence (lib/error-code), served apart.
+    const withCode = <T extends { lastError: string | null }>(a: T) => ({ ...a, ...splitErrorCode(a.lastError) });
     if (!windowed) {
-      res.json({ data: accounts });
+      res.json({ data: accounts.map(withCode) });
       return;
     }
 
@@ -223,7 +226,7 @@ router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:
 
     res.json({
       data: accounts.map((a) => ({
-        ...a,
+        ...withCode(a),
         // Absent from the group-by means zero, not unknown: the query covers
         // every non-null assignment in the tenant for this window.
         conversationsInWindow: inWindow.get(a.id) ?? 0,
@@ -286,7 +289,7 @@ router.get("/state", authenticate, resolveTenant, async (req: Request, res: Resp
           // screen that collapses the two tells the owner they are live when
           // they cannot send.
           verification: readVerification(meta),
-          lastError: r.lastError ?? null,
+          ...splitErrorCode(r.lastError),
         };
       }),
     });
