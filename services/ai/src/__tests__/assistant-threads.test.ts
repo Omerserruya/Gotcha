@@ -135,7 +135,7 @@ beforeEach(() => {
   H.threads = []; H.messages = []; H.memoryDeletes = []; H.memoryAppends = []; H.kv.clear(); H.script = []; H.modelCalls = [];
   H.aiAllowed = true; H.user = "u1"; H.titleReply = "Refund questions"; H.n = 0; H.titleCalls = 0; H.titleAsks = [];
   H.convs = [];
-  H.approvals = [{ id: "apr_1", tenantId: "T", conversationId: null }, { id: "apr_other", tenantId: "OTHER", conversationId: null }];
+  H.approvals = [{ id: "apr_1", tenantId: "T", conversationId: null, summary: "לשייך אליך את השיחה של Omer Serruya (וואטסאפ)" }, { id: "apr_other", tenantId: "OTHER", conversationId: null, summary: "x" }];
 });
 const openConv = (id: string, channel = "WHATSAPP") => ({ id, channel, status: "OPEN", handledBy: "ai_agent", isHandedOver: false, customerName: `Customer ${id}`, customerExternalId: id, createdAt: new Date(), lastMessageAt: new Date() });
 /** One model turn asking for several tools at once. */
@@ -709,6 +709,20 @@ describe("★ a thread about one request (design 03)", () => {
     const sys = H.modelCalls.at(-1).messages.filter((m: any) => m.role === "system").map((m: any) => m.content).join("\n");
     expect(sys).toMatch(/You do not know the operator's gender/);
     expect(sys).not.toMatch(/addressed as they write/);
+  });
+
+  it("★ named by its request on the server, with no model call; the first answer never renames it", async () => {
+    const r = await request(app()).post("/api/assistant/threads").send({ context: { approvalId: "apr_1" }, locale: "he" });
+    expect(r.body.data.title).toBe("על הבקשה: לשייך אליך את השיחה של Omer Serruya");
+    // Stored as ours, not the user's: a rename by the user still wins.
+    expect(H.threads.find((t: any) => t.id === r.body.data.id).titleSource).toBe("auto");
+    H.script = [say("ok")];
+    const turn = await send(r.body.data.id, "למה זה צריך אישור?");
+    expect(turn.events.map((e) => e.event)).not.toContain("thread.title");
+    // One model call: the answer. None for a title.
+    expect(H.modelCalls).toHaveLength(1);
+    expect((await request(app()).get(`/api/assistant/threads/${r.body.data.id}`)).body.data.thread.title).toBe("על הבקשה: לשייך אליך את השיחה של Omer Serruya");
+    expect((await request(app()).post("/api/assistant/threads").send({ context: { approvalId: "apr_1" }, locale: "en" })).body.data.title).toBe("About the request: לשייך אליך את השיחה של Omer Serruya");
   });
 
   it("another workspace's request, or none: 404 APPROVAL_NOT_FOUND, and no thread", async () => {

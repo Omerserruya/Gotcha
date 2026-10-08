@@ -376,7 +376,10 @@ The record's fields are what, steps or action, why (the gate in words: a plan
 from Home or the command bar always waits; a tool says which approval setting;
 known tags in words, internal tags never), risk (a plan's is its highest
 step's), asked_by, customer, state, expires or created. A thread about a
-request never suggests proposing a plan.
+request never suggests proposing a plan. It is created with its title,
+"על הבקשה: <the request's summary>" ("About the request: ..." in English, by
+`locale` in the body, else the user's or workspace's), never a model's; a
+rename by the user still wins.
 
 The answer cites a source after the claim it supports with `[^s1]` in `text`.
 The client renders it as that source's chip. The server removes any `[^...]`

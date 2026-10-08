@@ -105,8 +105,10 @@ export async function ownThread(o: Owner, id: string) {
   return prisma.assistantThread.findFirst({ where: { id, tenantId: o.tenantId, userId: o.userId } });
 }
 
-export async function createThread(o: Owner, scope: ThreadScope, context: ThreadContext | null = null) {
-  const t = await prisma.assistantThread.create({ data: { tenantId: o.tenantId, userId: o.userId, scope: { ...scope, ...(context ? { context } : {}) } as any } });
+export async function createThread(o: Owner, scope: ThreadScope, context: ThreadContext | null = null, title: string | null = null) {
+  const t = await prisma.assistantThread.create({
+    data: { tenantId: o.tenantId, userId: o.userId, scope: { ...scope, ...(context ? { context } : {}) } as any, ...(title ? { title, titleSource: "auto" } : {}) },
+  });
   return threadOut(t);
 }
 
@@ -528,6 +530,14 @@ export function proposalSentence(summaries: string[], locale: "he" | "en"): stri
   return summaries.length === 1
     ? `I prepared a request to ${lower(summaries[0]!)}; it is waiting for approval on the Approvals screen.`
     : `I prepared ${summaries.length} requests: ${summaries.join("; ")}. They are waiting for approval on the Approvals screen.`;
+}
+
+/**
+ * A thread about one approval request is named by the request, on the server
+ * and with no model call: the model named one "אישור לשייכות שיחה פתוחה".
+ */
+export function approvalThreadTitle(summary: string, locale: "he" | "en"): string {
+  return `${locale === "he" ? "על הבקשה" : "About the request"}: ${withoutWideDashes(summary ?? "").replace(/\s*\([^)]*\)\s*$/, "")}`.slice(0, 80);
 }
 
 /** The thread's title when its first answer only proposed: the request, as a request. */
