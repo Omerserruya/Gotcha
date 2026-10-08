@@ -10,6 +10,7 @@ import {
   toolSubject,
   isoWeekKey,
   buildQuietDayList, waitingForPersonWhere } from "@chatcenter/shared";
+import { intentLabel } from "@chatcenter/shared/src/lib/conversation-intents";
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -369,7 +370,21 @@ export async function getOverview(tenantId: string, from?: string, to?: string) 
   };
 }
 
-const VAGUE_INTENTS = new Set(["unknown", "general"]);
+// "other" is the analysis on close's catch-all; "unknown"/"general" are what
+// older rows held.
+const VAGUE_INTENTS = new Set(["unknown", "general", "other"]);
+
+/**
+ * The rows the analysis on close wrote (docs/architecture/
+ * conversation-intelligence-on-close.md) for real conversations. Older rows
+ * came from English keyword guesses ("general" for any Hebrew text) or a
+ * failed call ("unknown"): not something a customer asked about.
+ */
+// A function: REAL_CONVERSATION is declared further down this module.
+const analysed = () => ({
+  metadata: { path: ["source"], equals: "close-analysis" },
+  conversation: REAL_CONVERSATION,
+});
 export function isVagueIntent(intent: string | null | undefined): boolean {
   return intent == null || VAGUE_INTENTS.has(String(intent).trim().toLowerCase());
 }
@@ -411,7 +426,7 @@ export async function customerQuestionExamples(
 ): Promise<Map<string, Array<{ question: string; count: number }>>> {
   const out = new Map<string, Array<{ question: string; count: number }>>();
   const rows = await prisma.conversationIntelligence.findMany({
-    where: { tenantId, analyzedAt: dateFilter, detectedIntent: { in: intents } },
+    where: { tenantId, analyzedAt: dateFilter, detectedIntent: { in: intents }, ...analysed() },
     select: { conversationId: true, detectedIntent: true },
     take: 2000,
   });
@@ -465,26 +480,27 @@ export async function customerQuestionExamples(
   return out;
 }
 
-export async function getTopQuestions(tenantId: string, from?: string, to?: string, limit = 10) {
+export async function getTopQuestions(tenantId: string, from?: string, to?: string, limit = 10, locale: "he" | "en" = "en") {
   const { fromDate, toDate } = parseDateRange(from, to);
   const dateFilter = { gte: fromDate, lte: toDate };
 
   // Group by detectedIntent from ConversationIntelligence
   const intentGroups = await prisma.conversationIntelligence.groupBy({
     by: ["detectedIntent"],
-    where: { tenantId, analyzedAt: dateFilter, detectedIntent: { not: null } },
+    where: { tenantId, analyzedAt: dateFilter, detectedIntent: { not: null }, ...analysed() },
     _count: { detectedIntent: true },
     orderBy: { _count: { detectedIntent: "desc" } },
     take: limit,
   });
 
   if (intentGroups.length > 0) {
-    const groups = intentGroups.map((g: { detectedIntent: string | null; _count: { detectedIntent: number } }) => ({
-      question: g.detectedIntent,
-      intent: g.detectedIntent,
-      count: g._count.detectedIntent,
-      automatable: g._count.detectedIntent > 5,
-    }));
+    // `key` is the stable intent; `label` (and `question`, which screens show
+    // verbatim) is its name in the reader's language, from the one shared map.
+    const groups = intentGroups.map((g: { detectedIntent: string | null; _count: { detectedIntent: number } }) => {
+      const key = String(g.detectedIntent);
+      const label = intentLabel(key, locale);
+      return { key, label, question: label, intent: key, count: g._count.detectedIntent, automatable: g._count.detectedIntent > 5 };
+    });
     // A group named "unknown" or "general" says nothing a person can read.
     // For those, add what the customers actually wrote (additive: the fields
     // above are unchanged).

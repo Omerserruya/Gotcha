@@ -183,7 +183,10 @@ router.get("/top-questions", requirePermission("analytics:dashboard:read"), asyn
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
-    const data = await analyticsService.getTopQuestions(req.tenantId!, from, to, limit);
+    // Labels in the reader's language: ?locale=, else Accept-Language.
+    const q = String(req.query.locale ?? "").toLowerCase();
+    const locale = q === "he" || q === "en" ? q : String(req.headers["accept-language"] ?? "").toLowerCase().startsWith("he") ? "he" : "en";
+    const data = await analyticsService.getTopQuestions(req.tenantId!, from, to, limit, locale);
     res.json({ data });
   } catch (err) {
     console.error("Top questions error:", err);

@@ -15,23 +15,9 @@ import { generateResponse, getMicroModel } from "./ai.service";
 
 type Locale = "he" | "en";
 
-/** The intents a conversation can have, in both languages (stable keys: a breakdown groups by them). */
-export const INTENTS = {
-  order_status: { en: "Order status", he: "סטטוס הזמנה" },
-  shipping: { en: "Shipping and delivery", he: "משלוח" },
-  returns_exchanges: { en: "Returns and exchanges", he: "החזרות והחלפות" },
-  refund: { en: "Refunds", he: "החזרים כספיים" },
-  product_question: { en: "Product questions", he: "שאלות על מוצר" },
-  pricing_purchase: { en: "Pricing and buying", he: "מחיר ורכישה" },
-  booking: { en: "Appointments", he: "תיאום פגישה" },
-  billing_payment: { en: "Billing and payment", he: "חיוב ותשלום" },
-  technical_issue: { en: "Technical issue", he: "תקלה טכנית" },
-  complaint: { en: "Complaint", he: "תלונה" },
-  account: { en: "Account", he: "חשבון" },
-  other: { en: "Other", he: "אחר" },
-} as const;
-export type Intent = keyof typeof INTENTS;
-export const intentLabel = (key: string, locale: Locale): string => (INTENTS as Record<string, { en: string; he: string }>)[key]?.[locale] ?? key;
+// The intents and their labels: one source, shared with Analytics.
+import { INTENTS, intentLabel, type Intent } from "@chatcenter/shared/src/lib/conversation-intents";
+export { INTENTS, intentLabel, type Intent };
 
 const SENTIMENTS = new Set(["positive", "neutral", "negative"]);
 const MAX_MESSAGES = 40;

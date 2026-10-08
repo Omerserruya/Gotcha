@@ -175,6 +175,17 @@ sweep analyses the last 7 days (a partial backfill):
 - **Backlog: an instant summary for the human who takes over** (approval expiry,
   escalation). Would reuse `analyzeConversationOnClose` with a `handoff` trigger on an
   open conversation, under the same cap. Not built.
+- **Before production, if the old (v1) app still serves customers:** the v1 co-pilot
+  panel (`frontend/src/components/conversations/CoPilotPanel.tsx`, the intelligence
+  block near line 373) shows `detectedIntent` as a raw key ("returns_exchanges") and,
+  when no analysis exists, shows "general / neutral" as if it were one. It must show
+  the label (`intentLabel`, packages/shared/src/lib/conversation-intents.ts) and say
+  "not analysed yet" when there is no row. A production condition, not done here.
+- **One source of intent labels:** `packages/shared/src/lib/conversation-intents.ts`
+  (12 keys, he/en). The ai analysis writes the keys; the Home chat and Analytics
+  (`/api/analytics/top-questions` returns `key` + `label`, `question` = the label, by
+  `?locale=` or Accept-Language) read the labels. A new or renamed key is announced
+  to the frontend, whose own copy is a fallback.
 - **Backlog: remove the superseded `analyzeConversation`** in
   `services/ai/src/services/conversation-intelligence.service.ts` together with its test
   (`per-message-intent.test.ts`, which holds someone else's uncommitted edits). Nothing
