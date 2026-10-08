@@ -40,6 +40,7 @@ import {
 import { canViewConversation, visibilityClause } from "../lib/conversation-visibility";
 import { activityLabelKey } from "@chatcenter/shared/src/lib/ai-activity-labels";
 import { applyApprovalEdits } from "../lib/approval-edits";
+import { approvalFor } from "../lib/plan-summary";
 
 /**
  * Dispatch an approved action by calling the AI service.
@@ -969,8 +970,10 @@ router.get("/", async (req: Request, res: Response) => {
       });
       for (const u of users) userMap.set(u.id, u.name || u.email || u.id);
     }
+    // A plan's words are the reader's: an assignment to them is "you" (lib/plan-summary).
+    const viewerId = ((req as any).user?.userId ?? (req as any).user?.id) as string | undefined;
     const enriched = rows.map((r: any) => ({
-      ...r,
+      ...approvalFor(r, viewerId),
       // The same key the inbox's live line and the timeline use for this tool.
       labelKey: activityLabelKey(String(r.tool ?? "")),
       decidedByName: r.decidedBy ? userMap.get(r.decidedBy as string) ?? null : null,
@@ -1032,7 +1035,7 @@ router.get("/:id", async (req: Request, res: Response) => {
     ]);
 
     return res.json({
-      approval: { ...row, labelKey: activityLabelKey(String(row.tool ?? "")) },
+      approval: { ...approvalFor(row, (req as any).user?.userId ?? (req as any).user?.id), labelKey: activityLabelKey(String(row.tool ?? "")) },
       conversation,
       contact,
       recentMessages: recentMessages.reverse(),
