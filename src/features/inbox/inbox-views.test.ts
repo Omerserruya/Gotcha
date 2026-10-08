@@ -159,3 +159,16 @@ describe('★★ a period over the inbox (Backend, 2026-10-08)', () => {
     });
   });
 });
+
+describe('★★ "all" - every conversation, as an assistant counts them (Backend, 2026-10-08)', () => {
+  it('open and closed, the AI’s and the flows’ too: no status, automated included', () => {
+    expect(parseInboxView('all')).toBe('all');
+    expect(viewQuery('all', null)).toEqual({ includeAutomated: 'true' });
+  });
+
+  it('★ the period link keeps it: a chip, a row, the period’s ×', () => {
+    expect(
+      inboxQuery({ view: 'all', channel: null, period: { from: '2026-09-01', to: '2026-09-30' } }),
+    ).toEqual({ view: 'all', from: '2026-09-01', to: '2026-09-30' });
+  });
+});

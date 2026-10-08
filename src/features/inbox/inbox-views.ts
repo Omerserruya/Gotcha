@@ -28,7 +28,7 @@
  *   client instead would be correct on page one and wrong on every page after.
  */
 
-export const INBOX_VIEW_IDS = ['queue', 'mine', 'active', 'ai', 'flow', 'resolved'] as const;
+export const INBOX_VIEW_IDS = ['queue', 'mine', 'active', 'ai', 'flow', 'resolved', 'all'] as const;
 export type InboxView = (typeof INBOX_VIEW_IDS)[number];
 
 /** An unknown or absent `?view=` is the default, never an error page. */
@@ -62,6 +62,13 @@ export function viewQuery(view: InboxView, meId: string | null): Record<string, 
       return meId === null ? null : { assignedAgentId: meId, includeAutomated: 'true' };
     case 'active':
       return { status: 'OPEN' };
+    case 'all':
+      /*
+       * Every conversation, open or closed, the AI's and the flows' too - what
+       * an assistant's count means ("81 conversations in September"). Reached
+       * by its links (with a period), not a rail item: 02's rail is its six.
+       */
+      return { includeAutomated: 'true' };
     case 'resolved':
       // A conversation the AI closed is still resolved.
       return { status: 'CLOSED', includeAutomated: 'true' };

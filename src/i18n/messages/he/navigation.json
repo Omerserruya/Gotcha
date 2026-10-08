@@ -29,7 +29,8 @@
     "active": "פעיל",
     "ai": "מנוהל AI",
     "flow": "מנוהל תהליך",
-    "resolved": "טופל"
+    "resolved": "טופל",
+    "all": "כל השיחות"
   },
   "studio": {
     "employees": "עובדים",

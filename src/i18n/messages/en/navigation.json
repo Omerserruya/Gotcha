@@ -29,7 +29,8 @@
     "active": "Active",
     "ai": "AI managed",
     "flow": "Flow managed",
-    "resolved": "Resolved"
+    "resolved": "Resolved",
+    "all": "All conversations"
   },
   "studio": {
     "employees": "Employees",
