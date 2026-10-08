@@ -92,7 +92,7 @@ vi.mock("@chatcenter/shared", () => ({
     },
     contact: table("contact"),
     channelAccount: table("channelAccount"), consentRecord: table("consentRecord"), tenant: table("tenant"),
-    flowCanvas: table("flowCanvas"), messageTemplate: { findFirst: async () => null },
+    flowCanvas: table("flowCanvas"), messageTemplate: table("messageTemplate"),
     voiceCallSession: {
       findFirst: async (a: any) => {
         const x = (H.db.voiceCallSession ?? []).find((r) => m(r, a.where));
@@ -110,6 +110,7 @@ vi.mock("@chatcenter/shared", () => ({
   getOutboundAdapter: () => ({
     sendTextMessage: async (_c: any, _a: any, _r: any, body: string) => { H.sent.push(body); return `ext_${++H.seq}`; },
     sendInteractiveMessage: async () => `ext_${++H.seq}`,
+    sendTemplateMessage: async (_c: any, _a: any, _r: any, name: string) => { H.sent.push(`template:${name}`); return `ext_${++H.seq}`; },
   }),
   decryptCredentials: () => ({}),
   publishEvent: async () => undefined,
@@ -118,6 +119,7 @@ vi.mock("@chatcenter/shared", () => ({
 }));
 
 import { onOrderEvent, orderVariables, forStatus } from "../services/order.service";
+import { resumeAutomationRun } from "../services/automation-runner.service";
 import type { OrderEventJob } from "@chatcenter/shared";
 
 const T = "T";
@@ -144,10 +146,61 @@ beforeEach(() => {
     conversation: [{ id: "c_wa", tenantId: T, channel: "WHATSAPP", customerExternalId: "972501234567", status: "OPEN", assignedAgentId: null, isHandedOver: false, automationRunId: null, handledBy: null, flowVariables: null, createdAt: new Date(1) }],
     channelAccount: [{ id: "wa1", tenantId: T, channel: "WHATSAPP", isActive: true }],
     tenant: [{ id: T, name: "Urban Supply", status: "ACTIVE" }],
-    consentRecord: [], automationRun: [], automationRunStep: [], flowCanvas: [],
+    consentRecord: [], automationRun: [], automationRunStep: [], flowCanvas: [], messageTemplate: [],
     // Dana has written to the business before (the prior-contact rule).
     message: [{ id: "in0", tenantId: T, conversationId: "c_wa", direction: "INBOUND", body: "hi" }],
   };
+});
+
+describe("★ a review request (a send after a wait) is marketing; a status update is not", () => {
+  const askLater = () => review({
+    nodes: [trig, { id: "w", type: "wait", data: { durationMs: 3 * 86_400_000 } }, { id: "s", type: "send_message_text", data: { text: "How was your order? Leave us a review" } }],
+    edges: [e("t", "w"), e("w", "s")],
+  });
+  const resume = () => resumeAutomationRun({ tenantId: T, conversationId: "c_wa", runId: runs()[0].id, message: "", channel: "whatsapp", fromTimer: true });
+
+  it("a send straight on the event stays transactional: no removal line", async () => {
+    await onOrderEvent(order());
+    expect(H.sent[0]).not.toMatch(/Reply STOP|להסרה/);
+  });
+
+  it("★ a send after the wait carries the removal line", async () => {
+    H.db.chatbotFlow = [askLater()];
+    await onOrderEvent(order());
+    expect(runs()[0].status).toBe("waiting");
+    expect(H.sent).toEqual([]);
+    await resume();
+    expect(H.sent).toEqual(["How was your order? Leave us a review\n\nReply STOP to unsubscribe"]);
+  });
+
+  it("★ a review TEMPLATE after the wait: sent with its line; after \"הסר\" during the wait, not sent", async () => {
+    H.db.messageTemplate = [{ id: "tpl", tenantId: T, name: "ask_review", language: "he", status: "APPROVED", category: "MARKETING", body: "איך היה?\n\nלהסרה השיבו הסר", headerType: null, headerContent: null, variables: [] }];
+    const tplFlow = () => review({
+      nodes: [trig, { id: "w", type: "wait", data: { durationMs: 3 * 86_400_000 } }, { id: "s", type: "send_message_template", data: { templateId: "tpl" } }],
+      edges: [e("t", "w"), e("w", "s")],
+    });
+    H.db.chatbotFlow = [tplFlow()];
+    await onOrderEvent(order());
+    await resume();
+    expect(H.sent).toEqual(["template:ask_review"]);
+
+    H.db.automationRun = []; H.db.automationRunStep = []; H.sent = [];
+    H.db.conversation[0].automationRunId = null; H.db.conversation[0].chatbotNodeId = null;
+    await onOrderEvent(order({ orderId: "5002" }));
+    H.db.contact[0].optOutChannels = ["WHATSAPP"];
+    await resume();
+    expect(H.sent).toEqual([]);
+    expect(H.db.automationRunStep.find((s: any) => s.nodeId === "s")).toMatchObject({ status: "skipped", output: { action: "skipped_opted_out" } });
+  });
+
+  it("★ \"הסר\" during the wait wins at send time: nothing is sent, the step says why", async () => {
+    H.db.chatbotFlow = [askLater()];
+    await onOrderEvent(order());
+    H.db.contact[0].optOutChannels = ["WHATSAPP"];
+    await resume();
+    expect(H.sent).toEqual([]);
+    expect(H.db.automationRunStep.find((s: any) => s.nodeId === "s")).toMatchObject({ status: "skipped", output: { action: "skipped_opted_out" } });
+  });
 });
 
 describe("★ order event", () => {

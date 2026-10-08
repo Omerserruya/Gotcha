@@ -21,7 +21,7 @@ import {
   executeSubFlow,
   executeWebhookFlow,
   type AutomationRunCtx,
-  MARKETING_TRIGGERS,
+  isMarketingRun,
   type FlowExecutionResult,
 } from "./flow-executor.service";
 
@@ -252,7 +252,7 @@ export async function runAutomationsForEvent(ev: {
       if (isUniqueViolation(err)) continue; // this event already ran this automation
       throw err;
     }
-    const run: AutomationRunCtx = { id: row.id, flowId: flow.id, answered: false, currentNodeId: null, prevOwner, marketing: MARKETING_TRIGGERS.has(String(flow.triggerType)) };
+    const run: AutomationRunCtx = { id: row.id, flowId: flow.id, answered: false, currentNodeId: null, prevOwner, marketing: isMarketingRun(flow.triggerType, false) };
     let result: FlowExecutionResult | null = null;
     let error: unknown = null;
     try {
@@ -295,7 +295,7 @@ export async function runContextFree(opts: {
     if (isUniqueViolation(err)) return null;
     throw err;
   }
-  const run: AutomationRunCtx = { id: row.id, flowId: opts.flowId, answered: false, currentNodeId: null, prevOwner: null, marketing: MARKETING_TRIGGERS.has(String(opts.triggerType)) };
+  const run: AutomationRunCtx = { id: row.id, flowId: opts.flowId, answered: false, currentNodeId: null, prevOwner: null, marketing: isMarketingRun(opts.triggerType, false) };
   let result: FlowExecutionResult | null = null;
   let error: unknown = null;
   try {
@@ -334,7 +334,8 @@ export async function resumeAutomationRun(opts: {
   const run: AutomationRunCtx = {
     id: opts.runId, flowId: runRow?.flowId ?? "", answered: false, currentNodeId: conv.chatbotNodeId ?? null,
     prevOwner: vars.__automationRunId === opts.runId ? vars.__automationPrevOwner ?? null : conv.handledBy ?? null,
-    marketing: MARKETING_TRIGGERS.has(String((runRow as any)?.triggerType)),
+    // A resumed walk comes after a wait: an order run's sends are marketing now.
+    marketing: isMarketingRun((runRow as any)?.triggerType, true),
   };
   if (!runRow || runRow.status !== "waiting" || !conv.chatbotNodeId) {
     // Nothing to resume: never leave the conversation pointing at it.

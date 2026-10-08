@@ -202,6 +202,20 @@ describe("★ cart left behind", () => {
     expect((await onCartCheck(checkJob())).outcome).toBe("completed");
   });
 
+  it("★ \"הסר\" between two reminders wins: the second is not sent", async () => {
+    H.db.chatbotFlow = [flow("cart1", [
+      trig, { id: "s1", type: "send_message_text", data: { text: "first reminder" } },
+      { id: "w", type: "wait", data: { durationMs: 86_400_000 } }, { id: "s2", type: "send_message_text", data: { text: "second reminder" } },
+    ], [e("t", "s1"), e("s1", "w"), e("w", "s2")], { channels: ["WEBCHAT"] })];
+    await onCartEvent(event());
+    await onCartCheck(checkJob());
+    expect(H.sent).toHaveLength(1);
+    H.db.contact[0].optOutChannels = ["WEBCHAT"];
+    await resumeAutomationRun({ tenantId: T, conversationId: "c1", runId: runs()[0].id, message: "", channel: "webchat", fromTimer: true });
+    expect(H.sent).toHaveLength(1);
+    expect(H.db.automationRunStep.find((s: any) => s.nodeId === "s2")).toMatchObject({ status: "skipped", output: { action: "skipped_opted_out" } });
+  });
+
   it("★ a run waiting to send a second reminder stops when the customer buys", async () => {
     H.db.chatbotFlow = [flow("cart1", [
       trig, { id: "s1", type: "send_message_text", data: { text: "first reminder" } },

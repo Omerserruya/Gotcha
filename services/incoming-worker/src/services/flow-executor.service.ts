@@ -29,7 +29,7 @@ import { prisma, getOutboundAdapter, decryptCredentials, publishEvent, flowResum
 import type { ChannelCredentials } from "@chatcenter/shared";
 import { processAIBot, getBusinessHoursState } from "./ai-bot.service";
 import { tryLinkIdentifierFromInbound } from "./identity-link.service";
-import { withRemovalLine, hasRemovalLine } from "@chatcenter/shared/src/lib/marketing-optout";
+import { withRemovalLine, hasRemovalLine, isOptedOutOn } from "@chatcenter/shared/src/lib/marketing-optout";
 
 // ─── Graph shapes (ReactFlow-compatible) ─────────────────────
 
@@ -105,6 +105,35 @@ export interface AutomationRunCtx {
  * A review request joins this set when it exists.
  */
 export const MARKETING_TRIGGERS = new Set(["cart_abandoned"]);
+
+/**
+ * Triggers whose messages become marketing AFTER a wait: an order's status
+ * update is transactional, but "order fulfilled → wait 3 days → ask for a
+ * review" is not (a review, an upsell, a follow-up). A send after a wait
+ * happens in a resumed walk, so `afterWait` is "this walk resumed a run".
+ */
+export const MARKETING_AFTER_WAIT = new Set(["order_event"]);
+
+export function isMarketingRun(triggerType: string | null | undefined, afterWait: boolean): boolean {
+  const t = String(triggerType ?? "");
+  return MARKETING_TRIGGERS.has(t) || (afterWait && MARKETING_AFTER_WAIT.has(t));
+}
+
+/**
+ * Has the customer opted out on this conversation's channel since the run
+ * started? The gate ran when the event arrived; a "הסר" during a wait (between
+ * two cart reminders, before a review request) must still win at send time.
+ */
+async function optedOutNow(ctx: FlowExecCtx): Promise<boolean> {
+  if (!ctx.conversationId) return false;
+  const conv = await prisma.conversation.findUnique({ where: { id: ctx.conversationId }, select: { customerExternalId: true, channel: true } }).catch(() => null);
+  if (!conv?.customerExternalId) return false;
+  const contact = await prisma.contact.findFirst({
+    where: { tenantId: ctx.tenantId, channel: conv.channel as any, externalId: conv.customerExternalId },
+    select: { optOutChannels: true },
+  }).catch(() => null);
+  return isOptedOutOn(contact?.optOutChannels, String(conv.channel));
+}
 
 export interface FlowExecutionResult {
   executed: boolean;      // true when a FlowCanvas was found and walked
@@ -875,8 +904,8 @@ async function walk(
         // webhook runs carry no sendCtx - resolve an explicit recipient from the
         // node so the text still dispatches through the existing outbound path.
         const sendCtx = ctx.sendCtx ?? (await buildExplicitSendCtx(node.data || {}, ctx));
-        await sendText(String(node.data?.text || ""), ctx, sendCtx);
-        ctx.trace.push({ nodeId: node.id, type: node.type, action: "sent" });
+        const textOutcome = await sendText(String(node.data?.text || ""), ctx, sendCtx);
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: textOutcome ?? "sent" });
         // Optional pause: when the author flipped "Wait for user reply", halt
         // here and resume on next inbound. Resume path (executeMainFlow's
         // generic branch) continues from the first outgoing edge.
@@ -1510,6 +1539,10 @@ async function sendText(
 ) {
   const interpolated = interpolate(text, ctx.vars);
   if (!interpolated || !interpolated.trim() || !sendCtx) return;
+  if (ctx.run?.marketing && (await optedOutNow(ctx))) {
+    console.warn(`[flow.text] skip opted_out conv=${ctx.conversationId}`);
+    return "skipped_opted_out";
+  }
   // A marketing message carries the removal line ("להסרה השיבו הסר").
   const resolved = ctx.run?.marketing ? withRemovalLine(interpolated) : interpolated;
   const adapter = getOutboundAdapter(sendCtx.channel as any);
@@ -1726,6 +1759,10 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
   });
   if (!tmpl) { console.warn(`${tag} skip template_not_found id=${templateId} tenant=${ctx.tenantId}`); return "skipped_template_not_found"; }
   if (tmpl.status !== "APPROVED") { console.warn(`${tag} skip template_not_approved id=${templateId} status=${tmpl.status}`); return "skipped_template_not_approved"; }
+  if (ctx.run?.marketing && (await optedOutNow(ctx))) {
+    console.warn(`${tag} skip opted_out conv=${ctx.conversationId}`);
+    return "skipped_opted_out";
+  }
   // A marketing template (by its category, or sent by a marketing run) must
   // carry the removal line in its approved text: never sent without it.
   if ((ctx.run?.marketing || String(tmpl.category ?? "").toUpperCase() === "MARKETING") && !hasRemovalLine(tmpl.body)) {
