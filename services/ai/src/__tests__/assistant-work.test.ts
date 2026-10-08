@@ -93,6 +93,13 @@ describe("★ approvals waiting for a decision", () => {
     expect(out.approvals[0]).toMatchObject({ approvalId: "refund", what: "Refund order #1016", customer: "Omer Serruya", amount: "₪250.00" });
   });
 
+  it("★ a plan is titled for the reader, with its steps' own risk", async () => {
+    H.approvals = [{ id: "plan", tenantId: "T", status: "PENDING", tool: "propose_plan", summary: "Assign Omer's WhatsApp conversation to Noa", riskLevel: "medium", expiresAt: FUTURE, conversationId: null, contactId: null, createdAt: D("2026-10-08T09:00:00Z"),
+      params: { steps: [{ riskLevel: "low", target: { assigneeId: "noa" }, summary: "Assign Omer's WhatsApp conversation to Noa", summaryForAssignee: "Assign Omer's WhatsApp conversation to you" }] } }];
+    expect((await call("system_list_approvals")).artifacts.blocks[0].items[0]).toMatchObject({ title: "Assign Omer's WhatsApp conversation to Noa", subtitle: "Low risk" });
+    expect((await call("system_list_approvals", ctx({ userId: "noa" }))).artifacts.blocks[0].items[0].title).toBe("Assign Omer's WhatsApp conversation to you");
+  });
+
   it("★ one on a private number's conversation is not shown", async () => {
     H.rules = [{ channel: "WHATSAPP", channelAccountId: null, customerExternalId: "972541111111" }];
     const { out } = await call("system_list_approvals");

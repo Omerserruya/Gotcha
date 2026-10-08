@@ -380,6 +380,11 @@ request never suggests proposing a plan. It is created with its title,
 "על הבקשה: <the request's summary>" ("About the request: ..." in English, by
 `locale` in the body, else the user's or workspace's), never a model's; a
 rename by the user still wins.
+A plan's words are the reader's everywhere it is served (system_read_approval,
+system_list_approvals, the thread title, and GET /api/approvals and
+/api/approvals/:id): a step is stored for anyone ("לשייך ל-Matan את השיחה של
+...") with `summaryForAssignee` beside it ("לשייך אליך ..."), and the
+assignee (step.target.assigneeId) reads the second.
 
 The answer cites a source after the claim it supports with `[^s1]` in `text`.
 The client renders it as that source's chip. The server removes any `[^...]`

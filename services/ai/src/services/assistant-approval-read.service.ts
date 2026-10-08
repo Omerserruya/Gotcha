@@ -13,6 +13,7 @@ import { prisma, visibilityClause, type Viewer } from "@chatcenter/shared";
 import { channelName, whenText } from "./system-tools.service";
 import { tenantTimeZone, customerDisplayName, RECORD_SHOWN_AS, cardsOf } from "./assistant-query.service";
 import { privateNumbers, conversationIsPrivate } from "../lib/private-numbers";
+import { stepSummaryFor, approvalSummaryFor } from "../lib/plan-summary";
 
 type Locale = "he" | "en";
 export interface ApprovalReadCtx { tenantId: string; viewer?: Viewer; locale: Locale; nextId: (k: "b" | "s") => string }
@@ -117,11 +118,14 @@ export async function readApprovalResult(ctx: ApprovalReadCtx, approvalId: strin
   const risk = riskOf(a as any);
   const riskWords = RISK[risk]?.[ctx.locale] ?? risk;
   const customer = c ? customerDisplayName(c.customerName, c.customerExternalId, ctx.locale) : null;
-  const steps = Array.isArray(p.steps) ? (p.steps as any[]).map((s) => String(s?.summary ?? s?.tool ?? "")).filter(Boolean) : null;
+  // Said for this reader: an assignment to them is "you", to anyone else by name.
+  const viewerId = ctx.viewer?.userId;
+  const steps = Array.isArray(p.steps) ? (p.steps as any[]).map((s) => stepSummaryFor(s ?? {}, viewerId) || String(s?.tool ?? "")).filter(Boolean) : null;
+  const what = approvalSummaryFor(a as any, viewerId);
   const sId = ctx.nextId("s");
   const deepLink = `/approvals?id=${a.id}`;
   const fields = [
-    { key: "what", label: he ? "מה" : "What", value: a.summary },
+    { key: "what", label: he ? "מה" : "What", value: what },
     ...(steps?.length ? [{ key: "steps", label: he ? "צעדים" : "Steps", value: steps.join("; ") }] : [{ key: "action", label: he ? "פעולה" : "Action", value: a.tool }]),
     { key: "why", label: he ? "למה צריך אישור" : "Why it needs approval", value: why },
     { key: "risk", label: he ? "רמת סיכון" : "Risk", value: riskWords },
@@ -131,12 +135,12 @@ export async function readApprovalResult(ctx: ApprovalReadCtx, approvalId: strin
     { key: a.status === "PENDING" ? "expires" : "created", label: a.status === "PENDING" ? (he ? "פוקעת" : "Expires") : (he ? "נוצרה" : "Created"), value: whenText(a.status === "PENDING" ? a.expiresAt : a.createdAt, ctx.locale, tz) },
   ];
   // The state and expiry as data too, so the card can say them and never offer a decided request as askable.
-  const blocks = [{ type: "record" as const, id: ctx.nextId("b"), title: a.summary.slice(0, 140), sourceId: sId, kind: "approval" as const, fields, deepLink, partial: null, state: String(a.status).toLowerCase(), expiresAt: a.expiresAt.toISOString() }];
+  const blocks = [{ type: "record" as const, id: ctx.nextId("b"), title: what.slice(0, 140), sourceId: sId, kind: "approval" as const, fields, deepLink, partial: null, state: String(a.status).toLowerCase(), expiresAt: a.expiresAt.toISOString() }];
   const source = { id: sId, kind: "approval" as const, count: null, deepLink, label: he ? "בקשת האישור" : "The approval request", query: { tool: "approval" as const, params: { approvalId: a.id } } };
   return {
     summary: {
       ok: true, cite: sId, approvalId: a.id,
-      what: a.summary, action: a.tool, parameters: shownParams(a.modifiedParams ?? a.params),
+      what, action: a.tool, parameters: shownParams(a.modifiedParams ?? a.params),
       // The gate's own words; the risk is the steps' own. Never a reason of your own.
       whyItNeedsApproval: why, risk: riskWords, askedBy,
       // What the AI employee said it was doing (a plan's is only who asked, said above).

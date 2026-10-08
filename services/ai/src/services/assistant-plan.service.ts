@@ -35,8 +35,10 @@ export interface PlanStep {
   riskLevel: "low" | "medium" | "high";
   /** What it acts on, for the approval card to link and name. */
   target: { conversationId?: string; customerId?: string; assigneeId?: string; questionId?: string };
-  /** The step in words, in the turn's language. */
+  /** The step in words, in the turn's language, for anyone: it names the assignee. */
   summary: string;
+  /** The same step said to its assignee ("...אליך" / "...to you"); see lib/plan-summary. */
+  summaryForAssignee?: string;
 }
 
 export class PlanRefused extends Error {}
@@ -99,6 +101,7 @@ export async function preparePlan(ctx: PlanCtx, raw: Array<{ tool: string; param
       const params: Record<string, unknown> = { conversationId: c.id };
       let assigneeId: string | undefined;
       let sentence: string;
+      let forAssignee: string | undefined;
       if (s.tool === "claim_conversation" || s.tool === "assign_conversation") {
         // "me" is the person asking, fixed now; never whoever approves.
         const asked = str(p.agentId) ?? str(p.assignee) ?? (s.tool === "claim_conversation" ? "me" : null);
@@ -109,9 +112,9 @@ export async function preparePlan(ctx: PlanCtx, raw: Array<{ tool: string; param
           const name = await userName(ctx.tenantId, assigneeId);
           if (!name) throw new PlanRefused("that person is not in this workspace");
           params.agentId = assigneeId;
-          sentence = assigneeId === ctx.userId
-            ? (he ? `לשייך אליך את השיחה של ${who} (${where})` : `Assign ${who}'s ${where} conversation to you`)
-            : (he ? `לשייך את השיחה של ${who} (${where}) ${heb("ל", name)}` : `Assign ${who}'s ${where} conversation to ${name}`);
+          // Stored for anyone (an approver reads it too), and to the assignee as "you".
+          sentence = he ? `לשייך ${heb("ל", name)} את השיחה של ${who} (${where})` : `Assign ${who}'s ${where} conversation to ${name}`;
+          forAssignee = he ? `לשייך אליך את השיחה של ${who} (${where})` : `Assign ${who}'s ${where} conversation to you`;
         } else {
           params.departmentId = departmentId;
           sentence = he ? `להעביר את השיחה של ${who} (${where}) למחלקה` : `Move ${who}'s ${where} conversation to a department`;
@@ -128,6 +131,7 @@ export async function preparePlan(ctx: PlanCtx, raw: Array<{ tool: string; param
         tool, params, reason: s.reason, riskLevel: s.riskLevel,
         target: { conversationId: c.id, ...(contactId ? { customerId: contactId } : {}), ...(assigneeId ? { assigneeId } : {}) },
         summary: sentence,
+        ...(forAssignee ? { summaryForAssignee: forAssignee } : {}),
       });
       continue;
     }

@@ -22,6 +22,7 @@ import { customerCardResult } from "./assistant-customer-card.service";
 import { listApprovalsResult, listKnowledgeGapsResult } from "./assistant-work.service";
 import { preparePlan, PlanRefused } from "./assistant-plan.service";
 import { readApprovalResult, whyItWaits } from "./assistant-approval-read.service";
+import { planSummaryFor } from "../lib/plan-summary";
 import { privateNumbers, privateConversationsClause } from "../lib/private-numbers";
 
 /** The last n days, today included (UTC days: a caller with a workspace period passes it). */
@@ -605,7 +606,7 @@ async function dispatchSystemTool(
         if (name === "system_list_knowledge_gaps" && !ctx.canReadKnowledge) return { toolCallId, content: JSON.stringify({ ok: false, error: "not_permitted" }) };
         let seq = 0;
         const nextId = ctx.nextId ?? ((k: "b" | "s") => `${k}${++seq}`);
-        const wctx = { tenantId: ctx.tenantId, locale: ctx.locale ?? "en", nextId };
+        const wctx = { tenantId: ctx.tenantId, locale: ctx.locale ?? "en", nextId, viewerId: ctx.viewer?.userId ?? ctx.userId };
         const r: any = name === "system_list_approvals" ? await listApprovalsResult(wctx) : await listKnowledgeGapsResult(wctx);
         return { toolCallId, content: JSON.stringify(r.summary), ...(r.source ? { artifacts: { blocks: r.blocks, source: r.source } } : {}) };
       }
@@ -935,7 +936,9 @@ async function dispatchProposePlan(
     if (err instanceof PlanRefused) return { toolCallId, content: JSON.stringify({ ok: false, error: err.message }) };
     throw err;
   }
+  // Stored for anyone (approvers read it); said to the requester as they would say it.
   const planSummary = steps.map((s) => s.summary).join("; ");
+  const forRequester = planSummaryFor(steps, ctx.userId) ?? planSummary;
   const first = steps.find((s) => s.target.conversationId || s.target.customerId)?.target;
   const source = ctx.surface === "home" ? "home_assistant" : "command_bar";
   const requester = { userId: ctx.userId, name: ctx.userName ?? null };
@@ -982,7 +985,7 @@ async function dispatchProposePlan(
       proposed_plan: true,
       approval_request_id: approval.id,
       step_count: steps.length,
-      summary: planSummary,
+      summary: forRequester,
       step_gates: stepGates,
       instruction:
         "A plan was proposed and is waiting in the operator's approval queue. Tell the operator briefly what you proposed and that they can review and approve it. Do NOT continue calling action tools for the same goal.",
@@ -990,7 +993,7 @@ async function dispatchProposePlan(
     sideEffect: {
       kind: "proposed_plan",
       approvalRequestId: approval.id,
-      planSummary,
+      planSummary: forRequester,
     },
   };
 }

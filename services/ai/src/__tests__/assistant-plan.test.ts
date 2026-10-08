@@ -78,10 +78,12 @@ describe("★ pinned at proposal", () => {
     const a = H.approvals[0];
     expect(a.params.steps).toEqual([{
       // The reason is the step's own sentence, never the model's ("לשייכי" was broken Hebrew).
-      tool: "assign_conversation", params: { conversationId: "wa_open", agentId: "matan" }, reason: "לשייך אליך את השיחה של Omer Serruya (וואטסאפ)", riskLevel: "medium",
-      target: { conversationId: "wa_open", customerId: "omer", assigneeId: "matan" }, summary: "לשייך אליך את השיחה של Omer Serruya (וואטסאפ)",
+      tool: "assign_conversation", params: { conversationId: "wa_open", agentId: "matan" }, reason: "לשייך ל-Matan את השיחה של Omer Serruya (וואטסאפ)", riskLevel: "medium",
+      target: { conversationId: "wa_open", customerId: "omer", assigneeId: "matan" },
+      // Stored for anyone (an approver reads it), and for the assignee as "you".
+      summary: "לשייך ל-Matan את השיחה של Omer Serruya (וואטסאפ)", summaryForAssignee: "לשייך אליך את השיחה של Omer Serruya (וואטסאפ)",
     }]);
-    expect(a.summary).toBe("לשייך אליך את השיחה של Omer Serruya (וואטסאפ)");
+    expect(a.summary).toBe("לשייך ל-Matan את השיחה של Omer Serruya (וואטסאפ)");
     expect(a.conversationId).toBe("wa_open");
     // The approval names the customer (its card showed "-").
     expect(a.contactId).toBe("omer");
@@ -101,7 +103,7 @@ describe("★ pinned at proposal", () => {
     expect(H.approvals[0].params.steps[0]).toMatchObject({ tool: "assign_conversation", params: { conversationId: "wa_open", agentId: "matan" } });
     const out = await propose([{ tool: "assign_conversation", params: { assignee: "noa", conversationId: "wa_open" }, reason: "" }], ctx({ locale: "en" }));
     expect(out.summary).toBe("Assign Omer Serruya's WhatsApp conversation to Noa");
-    expect((await propose([{ tool: "assign_conversation", params: { assignee: "noa", conversationId: "wa_open" }, reason: "" }])).summary).toBe("לשייך את השיחה של Omer Serruya (וואטסאפ) ל-Noa");
+    expect((await propose([{ tool: "assign_conversation", params: { assignee: "noa", conversationId: "wa_open" }, reason: "" }])).summary).toBe("לשייך ל-Noa את השיחה של Omer Serruya (וואטסאפ)");
   });
 
   it("close, return to GOTCHA, a note, an answer: said from the steps", async () => {

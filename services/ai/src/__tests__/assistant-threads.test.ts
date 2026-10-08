@@ -135,7 +135,7 @@ beforeEach(() => {
   H.threads = []; H.messages = []; H.memoryDeletes = []; H.memoryAppends = []; H.kv.clear(); H.script = []; H.modelCalls = [];
   H.aiAllowed = true; H.user = "u1"; H.titleReply = "Refund questions"; H.n = 0; H.titleCalls = 0; H.titleAsks = [];
   H.convs = [];
-  H.approvals = [{ id: "apr_1", tenantId: "T", conversationId: null, summary: "לשייך אליך את השיחה של Omer Serruya (וואטסאפ)" }, { id: "apr_other", tenantId: "OTHER", conversationId: null, summary: "x" }];
+  H.approvals = [{ id: "apr_1", tenantId: "T", conversationId: null, tool: "propose_plan", summary: "לשייך ל-Dana את השיחה של Omer Serruya (וואטסאפ)", params: { steps: [{ target: { assigneeId: "u1" }, summary: "לשייך ל-Dana את השיחה של Omer Serruya (וואטסאפ)", summaryForAssignee: "לשייך אליך את השיחה של Omer Serruya (וואטסאפ)" }] } }, { id: "apr_other", tenantId: "OTHER", conversationId: null, summary: "x" }];
 });
 const openConv = (id: string, channel = "WHATSAPP") => ({ id, channel, status: "OPEN", handledBy: "ai_agent", isHandedOver: false, customerName: `Customer ${id}`, customerExternalId: id, createdAt: new Date(), lastMessageAt: new Date() });
 /** One model turn asking for several tools at once. */
@@ -723,6 +723,9 @@ describe("★ a thread about one request (design 03)", () => {
     expect(H.modelCalls).toHaveLength(1);
     expect((await request(app()).get(`/api/assistant/threads/${r.body.data.id}`)).body.data.thread.title).toBe("על הבקשה: לשייך אליך את השיחה של Omer Serruya");
     expect((await request(app()).post("/api/assistant/threads").send({ context: { approvalId: "apr_1" }, locale: "en" })).body.data.title).toBe("About the request: לשייך אליך את השיחה של Omer Serruya");
+    // Named for its owner: someone who is not the assignee reads the assignee's name.
+    H.user = "u2";
+    expect((await request(app()).post("/api/assistant/threads").send({ context: { approvalId: "apr_1" }, locale: "he" })).body.data.title).toBe("על הבקשה: לשייך ל-Dana את השיחה של Omer Serruya");
   });
 
   it("another workspace's request, or none: 404 APPROVAL_NOT_FOUND, and no thread", async () => {

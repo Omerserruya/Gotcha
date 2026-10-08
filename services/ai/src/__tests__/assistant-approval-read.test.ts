@@ -52,7 +52,7 @@ beforeEach(() => {
   H.approvals = [
     { ...base, id: "refund", conversationId: "c_sales", tool: "issue_refund", summary: "Refund order #1016 (₪250)", params: { orderId: "1016", amount: 250, apiKey: "sk_live_x" } },
     { ...base, id: "support_one", conversationId: "c_support", tool: "send_message", summary: "Send Avi a message", params: {} },
-    { ...base, id: "plan", conversationId: null, tool: "propose_plan", summary: "לשייך אליך את השיחה של Dana Cohen (וואטסאפ)", riskLevel: "medium", riskTags: ["ASSISTANT", "PLAN"], policyRuleName: "בקשה של Matan מ-GOTCHA ב-Home", reason: "בקשה של Matan מ-GOTCHA ב-Home", requestedBy: "user:matan", params: { steps: [{ tool: "assign_conversation", riskLevel: "low", summary: "לשייך אליך את השיחה של Dana Cohen (וואטסאפ)" }], requester: { userId: "matan", name: "Matan" }, source: "home_assistant" } },
+    { ...base, id: "plan", conversationId: null, tool: "propose_plan", summary: "לשייך ל-Matan את השיחה של Dana Cohen (וואטסאפ)", riskLevel: "medium", riskTags: ["ASSISTANT", "PLAN"], policyRuleName: "בקשה של Matan מ-GOTCHA ב-Home", reason: "בקשה של Matan מ-GOTCHA ב-Home", requestedBy: "user:matan", params: { steps: [{ tool: "assign_conversation", riskLevel: "low", target: { assigneeId: "matan" }, summary: "לשייך ל-Matan את השיחה של Dana Cohen (וואטסאפ)", summaryForAssignee: "לשייך אליך את השיחה של Dana Cohen (וואטסאפ)" }], requester: { userId: "matan", name: "Matan" }, source: "home_assistant" } },
     { ...base, id: "other_ws", tenantId: "OTHER", conversationId: null, tool: "x", summary: "Not yours", params: {} },
   ];
 });
@@ -98,10 +98,17 @@ describe("★ one request, explained", () => {
     expect((await read({ approvalId: "refund" })).out.whyItNeedsApproval).toBe("לפי הגדרות האישורים, הפעולה הזו דורשת אישור תמיד · כרוך בכסף");
   });
 
-  it("a plan: its steps, and the person who asked", async () => {
-    const { out, artifacts } = await read({ approvalId: "plan" });
-    expect(out.askedBy).toBe("Matan");
-    expect(artifacts.blocks[0].fields.find((f: any) => f.key === "steps").value).toBe("לשייך אליך את השיחה של Dana Cohen (וואטסאפ)");
+  it("★ a plan's words are the reader's: an approver reads the assignee by name, the assignee reads 'you'", async () => {
+    // The approver (not the requester, not the assignee).
+    const boss = await read({ approvalId: "plan" });
+    expect(boss.out.askedBy).toBe("Matan");
+    expect(boss.out.what).toBe("לשייך ל-Matan את השיחה של Dana Cohen (וואטסאפ)");
+    expect(boss.artifacts.blocks[0].title).toBe("לשייך ל-Matan את השיחה של Dana Cohen (וואטסאפ)");
+    expect(boss.artifacts.blocks[0].fields.find((f: any) => f.key === "steps").value).toBe("לשייך ל-Matan את השיחה של Dana Cohen (וואטסאפ)");
+    // The assignee.
+    const matan = await read({ approvalId: "plan" }, ctx({ userId: "matan", viewer: { userId: "matan", role: "ADMIN" } }));
+    expect(matan.out.what).toBe("לשייך אליך את השיחה של Dana Cohen (וואטסאפ)");
+    expect(matan.artifacts.blocks[0].fields.find((f: any) => f.key === "steps").value).toBe("לשייך אליך את השיחה של Dana Cohen (וואטסאפ)");
   });
 
   it("in a thread about one request, it reads that one when nothing is named", async () => {

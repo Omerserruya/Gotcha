@@ -14,9 +14,11 @@ import { whenText } from "./system-tools.service";
 import { tenantTimeZone, LIST_SHOWN_AS, NO_CARD, cardsOf, customerDisplayName } from "./assistant-query.service";
 import { money } from "./assistant-commerce-query.service";
 import { privateNumbers, conversationIsPrivate } from "../lib/private-numbers";
+import { approvalSummaryFor } from "../lib/plan-summary";
+import { riskOf } from "./assistant-approval-read.service";
 
 type Locale = "he" | "en";
-interface WorkCtx { tenantId: string; locale: Locale; nextId: (kind: "b" | "s") => string }
+interface WorkCtx { tenantId: string; locale: Locale; nextId: (kind: "b" | "s") => string; viewerId?: string | null }
 
 const FIRST_PAGE = 10;
 const RISK: Record<string, Record<Locale, string>> = {
@@ -58,8 +60,9 @@ export async function listApprovalsResult(ctx: WorkCtx) {
     const amountText = Number.isFinite(amount) && amount > 0 ? money(amount, typeof p.currency === "string" ? p.currency : null, ctx.locale) : null;
     return {
       id: r.id,
-      title: (r.summary || r.tool).slice(0, 140),
-      subtitle: [who, amountText, RISK[String(r.riskLevel).toLowerCase()]?.[ctx.locale]].filter(Boolean).join(" · "),
+      // For this reader (an assignment to them is "you"); a plan's risk is its steps' own.
+      title: (approvalSummaryFor(r, ctx.viewerId) || r.tool).slice(0, 140),
+      subtitle: [who, amountText, RISK[riskOf(r)]?.[ctx.locale]].filter(Boolean).join(" · "),
       meta: he ? `ממתין מ-${whenText(r.createdAt, "he", tz)}` : `waiting since ${whenText(r.createdAt, "en", tz)}`,
       deepLink: `/approvals?id=${r.id}`,
       who, amountText,

@@ -17,6 +17,7 @@ import {
   assertAiAllowed,
 } from "@chatcenter/shared";
 import { principalOf, canReadContacts, canReadKnowledge } from "../services/commerce-perms";
+import { approvalSummaryFor } from "../lib/plan-summary";
 import {
   normalizeScope,
   createThread,
@@ -68,7 +69,8 @@ router.post("/threads", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Approval request not found", code: "APPROVAL_NOT_FOUND" });
       return;
     }
-    title = approvalThreadTitle(readable.approval.summary, await localeOf(req, o));
+    // Named for its owner: an assignment to them reads "אליך", to anyone else by name.
+    title = approvalThreadTitle(approvalSummaryFor(readable.approval as any, o.userId), await localeOf(req, o));
   }
   res.status(201).json({ data: await createThread(o, scope, approvalId ? { approvalId } : null, title) });
 });
