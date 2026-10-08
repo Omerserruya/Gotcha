@@ -5,6 +5,7 @@ import { humaniseCode } from '@/api/contracts/capabilities';
 import { isRunning, workDone, type ImportStatus } from '@/api/contracts/historical-import';
 import {
   groupOf,
+  knowledgeDocumentOf,
   readyToAdd,
   variantsOf,
   type Candidate,
@@ -499,7 +500,10 @@ export async function ReportPanel({
                     // Live (Omer, decision 13): approve, use a variant, edit, reject.
                     <SuggestionActions
                       id={c.id}
+                      question={c.question}
                       answer={c.answer}
+                      reasoning={c.reasoning}
+                      liveLookup={c.requiresLiveLookup}
                       variants={split ? variants.map((v) => v.answer) : []}
                       seeChats={split ? t('learn.seeChats') : null}
                     />
@@ -530,7 +534,10 @@ export async function ReportPanel({
         {/* Live (Omer): each asks first; Run again's question takes the whole row. */}
         <ReportFoot
           importId={status.id}
-          count={ready.length}
+          ready={ready.map((c) => ({
+            id: c.id,
+            document: knowledgeDocumentOf(c.question, c.answer, c.reasoning, c.requiresLiveLookup),
+          }))}
           noteClassName={drawer.drawerFootNote}
           later={
             <Link

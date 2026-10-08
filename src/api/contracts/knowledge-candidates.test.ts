@@ -8,6 +8,7 @@ import {
   groupOf,
   hasEvidence,
   inGroup,
+  knowledgeDocumentOf,
   readyToAdd,
 } from './knowledge-candidates';
 
@@ -279,5 +280,34 @@ describe('★★ 13f “Ready to add” - the server’s verdict, then its floor
     expect(readyToAdd(c({ requiresLiveLookup: true, bulkApprovable: true }), 0.8)).toBe(true);
     expect(readyToAdd(c({ requiresLiveLookup: true }), 0.8)).toBe(true);
     expect(readyToAdd(c({ status: 'APPROVED' }), 0.8)).toBe(false);
+  });
+});
+
+describe('★★ what an approve writes - the document the confirm shows, word for word', () => {
+  it('question, then answer; nothing else when there is nothing else', () => {
+    expect(knowledgeDocumentOf(' Eilat? ', ' Yes. ', null, false)).toEqual({
+      title: ' Eilat? ',
+      paragraphs: ['Eilat?', 'Yes.'],
+    });
+  });
+
+  it('the live-check sentence and the reasoning are the route’s own words (historical-import.ts, read 2026-10-08)', () => {
+    const doc = knowledgeDocumentOf('Viewings?', 'Thursday and Friday.', ' We ask first. ', true);
+    expect(doc.paragraphs).toEqual([
+      'Viewings?',
+      'Thursday and Friday.',
+      'This depends on live availability. Treat it as the usual pattern, not a commitment: check the calendar or current stock before telling a customer anything specific.',
+      'How we approach this: We ask first.',
+    ]);
+  });
+
+  it('a blank reasoning adds no line; the title is the route’s 200 characters', () => {
+    expect(knowledgeDocumentOf('q', 'a', '   ', false).paragraphs).toHaveLength(2);
+    expect(knowledgeDocumentOf('x'.repeat(250), 'a', null, false).title).toHaveLength(200);
+  });
+
+  it('the reasoning the route sends is kept, not stripped', () => {
+    expect(candidate({ reasoning: 'Because.' }).reasoning).toBe('Because.');
+    expect(candidate().reasoning).toBeNull();
   });
 });

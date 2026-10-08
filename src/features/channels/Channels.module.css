@@ -1702,6 +1702,70 @@
     color: var(--alert-text);
   }
 
+  /* An approve's "Yes?" - the document it writes, word for word, above it. */
+  .usedAsk {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin-block-start: var(--space-8);
+  }
+
+  .usedAskTitle {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .usedAskNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .usedDoc {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    margin: 0;
+    padding: var(--space-8) 10px;
+    border-radius: var(--space-8);
+    background-color: var(--panel-well);
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .usedDocQuestion,
+  .usedDocLine {
+    margin: 0;
+  }
+
+  .usedDocQuestion {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  /* Add's question takes the foot: every document, scrolling, then Yes. */
+  .footAskWide {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: var(--space-8);
+    min-inline-size: 0;
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+  }
+
+  .usedList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    max-block-size: 40vh;
+    overflow-y: auto;
+  }
+
   .twilioNumbers {
     display: flex;
     flex-direction: column;

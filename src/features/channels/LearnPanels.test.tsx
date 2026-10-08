@@ -9,15 +9,43 @@ import messages from '@/i18n/messages/en/channels.json';
 
 /* The decisions are a client component with their own tests; here, what each card is given. */
 vi.mock('./SuggestionActions', () => ({
-  SuggestionActions: ({ id, variants }: { id: string; variants: readonly string[] }) => (
-    <span data-testid={`decide-${id}`} data-variants={variants.join('|')} />
+  SuggestionActions: ({
+    id,
+    variants,
+    question,
+    reasoning,
+    liveLookup,
+  }: {
+    id: string;
+    variants: readonly string[];
+    question: string;
+    reasoning: string | null;
+    liveLookup: boolean;
+  }) => (
+    <span
+      data-testid={`decide-${id}`}
+      data-variants={variants.join('|')}
+      data-question={question}
+      data-reasoning={reasoning ?? ''}
+      data-live={String(liveLookup)}
+    />
   ),
 }));
 /* The foot's two actions reach the server; they have their own tests. */
 vi.mock('./ReportFootActions', () => ({
-  ReportFoot: ({ count, later }: { count: number; later: ReactNode }) => (
+  ReportFoot: ({
+    ready,
+    later,
+  }: {
+    ready: readonly { id: string; document: { paragraphs: readonly string[] } }[];
+    later: ReactNode;
+  }) => (
     <>
-      <span data-testid="report-bulk" data-count={count} />
+      <span
+        data-testid="report-bulk"
+        data-count={ready.length}
+        data-docs={JSON.stringify(ready.map((r) => [r.id, ...r.document.paragraphs]))}
+      />
       {later}
       <span data-testid="report-rerun" />
     </>
@@ -280,6 +308,40 @@ describe('★ 13f - the report, no paragraphs', () => {
     expect(screen.getByTestId('report-bulk')).toHaveAttribute('data-count', '3');
     // Still said on its card: it depends on something live.
     expect(screen.getByTestId('candidate-r5')).toHaveTextContent('Needs a live check');
+  });
+
+  it('★★ each decision is given what its document is made of; Add, each ready one’s document', async () => {
+    render(
+      await ReportPanel({
+        status: status({ stage: 'ready' }),
+        candidates: [
+          candidate({
+            id: 'r1',
+            question: 'Returns?',
+            answer: '14 days',
+            reasoning: 'From delivery.',
+            requiresLiveLookup: true,
+            confidence: 0.9,
+            bulkApprovable: true,
+          }),
+        ],
+        bulkMinConfidence: 0.8,
+        tab: 'ready_to_add',
+      }),
+    );
+    const decide = screen.getByTestId('decide-r1');
+    expect(decide).toHaveAttribute('data-question', 'Returns?');
+    expect(decide).toHaveAttribute('data-reasoning', 'From delivery.');
+    expect(decide).toHaveAttribute('data-live', 'true');
+    expect(JSON.parse(screen.getByTestId('report-bulk').getAttribute('data-docs')!)).toEqual([
+      [
+        'r1',
+        'Returns?',
+        '14 days',
+        expect.stringMatching(/^This depends on live availability/),
+        'How we approach this: From delivery.',
+      ],
+    ]);
   });
 
   it('the only sentence is the head’s; the body has no paragraph of prose', async () => {

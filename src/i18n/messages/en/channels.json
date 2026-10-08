@@ -184,6 +184,7 @@
     "foot": {
       "add": "{count, plural, =0 {No ready answers to add} one {Add 1 ready answer} other {Add # ready answers}}",
       "addAsk": "{count, plural, one {GOTCHA starts answering with this one. Add it?} other {GOTCHA starts answering with these #. Add them?}}",
+      "addAtMost": "The platform adds up to {most} per press, in no set order - press again for the rest.",
       "addYes": "Yes, add them",
       "adding": "Adding…",
       "added": "{count, plural, one {1 answer added} other {# answers added}}{skipped, plural, =0 {.} other {; # were skipped - they stay to review.}}",
@@ -290,7 +291,6 @@
       "use": "Use {answer}",
       "edit": "Edit",
       "skip": "Skip",
-      "notLive": "Deciding from here comes next - nothing is used until it does.",
       "readyCard": "{count, plural, one {# more is ready} other {# more are ready}} - high confidence, no conflicts",
       "addReady": "{count, plural, one {Add # ready answer} other {Add # ready answers}}",
       "later": "Finish later",
@@ -394,6 +394,13 @@
         "forbidden": "You don't have permission to change what GOTCHA knows.",
         "too_long": "That answer is too long to save - shorten it.",
         "failed": "That didn’t go through - try again."
+      },
+      "confirm": {
+        "title": "This is what GOTCHA will read, word for word",
+        "note": "It goes into your knowledge and GOTCHA answers customers with it. Nothing is used until you press Yes.",
+        "yes": "Yes, use it with customers",
+        "using": "Adding…",
+        "back": "Back"
       }
     },
     "tabs": {

@@ -3,24 +3,39 @@
 import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
+import { knowledgeDocumentOf } from '@/api/contracts/knowledge-candidates';
 import { useRouter } from '@/i18n/navigation';
 
 import { approveSuggestion, rejectSuggestion } from './candidate-actions';
 import styles from './Channels.module.css';
+import { WhatWillBeUsed } from './WhatWillBeUsed';
 
 /**
  * A suggestion's decisions on 13f - live (Omer, decision 13). A conflict
  * offers each observed answer to use; any suggestion can be edited before it
- * is approved, or set aside. Nothing is written before a press.
+ * is approved, or set aside.
+ *
+ * ★ APPROVING CHANGES WHAT THE AI TELLS REAL CUSTOMERS, SO IT ASKS FIRST, AND
+ *   SHOWS WHAT IT ASKS ABOUT (Omer): Approve, a Use, and Save each open the
+ *   document the route will write, word for word - question, answer, and the
+ *   platform's own lines - and only "Yes" sends it. Until then nothing is
+ *   written, so nothing is used. Set aside writes no knowledge; it goes at once.
  */
 export function SuggestionActions({
   id,
+  question,
   answer,
+  reasoning = null,
+  liveLookup = false,
   variants,
   seeChats = null,
 }: {
   readonly id: string;
+  readonly question: string;
   readonly answer: string;
+  /** Part of the document an approve writes; see `knowledgeDocumentOf`. */
+  readonly reasoning?: string | null;
+  readonly liveLookup?: boolean;
   /** The observed answers when they disagree; empty otherwise. */
   readonly variants: readonly string[];
   /** 02's "See the chats" on the right of a conflict - drawn: the evidence has no screen yet. */
@@ -29,6 +44,8 @@ export function SuggestionActions({
   const t = useTranslations('channels.whatsapp');
   const router = useRouter();
   const [editing, setEditing] = useState<string | null>(null);
+  /** The answer awaiting its "Yes" - shown as the document it becomes. */
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [said, setSaid] = useState<{ tone: 'ok' | 'problem'; text: string } | null>(null);
   const [isPending, startTransition] = useTransition();
   const conflict = variants.length > 1;
@@ -37,6 +54,7 @@ export function SuggestionActions({
     startTransition(async () => {
       setSaid(null);
       const result = await approveSuggestion(id, text);
+      setConfirming(null);
       if (result.ok) {
         setSaid({ tone: 'ok', text: t('decide.approved') });
         router.refresh();
@@ -65,6 +83,40 @@ export function SuggestionActions({
     );
   }
 
+  if (confirming !== null) {
+    return (
+      <div className={styles.usedAsk} data-testid={`confirm-${id}`}>
+        <p className={styles.usedAskTitle}>{t('decide.confirm.title')}</p>
+        <WhatWillBeUsed
+          document={knowledgeDocumentOf(question, confirming, reasoning, liveLookup)}
+          testid={`used-${id}`}
+        />
+        <p className={styles.usedAskNote}>{t('decide.confirm.note')}</p>
+        <p className={styles.reportActions}>
+          <button
+            type="button"
+            className={styles.reportAction}
+            data-tone="primary"
+            disabled={isPending}
+            data-testid={`confirm-yes-${id}`}
+            onClick={() => approve(confirming)}
+          >
+            {isPending ? t('decide.confirm.using') : t('decide.confirm.yes')}
+          </button>
+          <button
+            type="button"
+            className={styles.reportAction}
+            disabled={isPending}
+            data-testid={`confirm-back-${id}`}
+            onClick={() => setConfirming(null)}
+          >
+            {t('decide.confirm.back')}
+          </button>
+        </p>
+      </div>
+    );
+  }
+
   return (
     <>
       {editing !== null ? (
@@ -88,7 +140,10 @@ export function SuggestionActions({
               data-tone="primary"
               disabled={isPending || !editing.trim()}
               data-testid={`save-${id}`}
-              onClick={() => approve(editing)}
+              onClick={() => {
+                setSaid(null);
+                setConfirming(editing.trim());
+              }}
             >
               {t('decide.saveApprove')}
             </button>
@@ -113,7 +168,10 @@ export function SuggestionActions({
                   data-tone={i === 0 ? 'primary' : undefined}
                   disabled={isPending}
                   data-testid={`use-${id}-${i}`}
-                  onClick={() => approve(v)}
+                  onClick={() => {
+                    setSaid(null);
+                    setConfirming(v);
+                  }}
                 >
                   {t('learn.use', { answer: v.slice(0, 24) })}
                 </button>
@@ -125,7 +183,10 @@ export function SuggestionActions({
                 data-tone="primary"
                 disabled={isPending}
                 data-testid={`approve-${id}`}
-                onClick={() => approve(answer)}
+                onClick={() => {
+                  setSaid(null);
+                  setConfirming(answer);
+                }}
               >
                 {t('review.approve')}
               </button>

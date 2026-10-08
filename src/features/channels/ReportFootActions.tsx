@@ -4,25 +4,43 @@ import { RotateCw } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState, useTransition, type ReactNode } from 'react';
 
+import { BULK_APPROVE_AT_MOST, type KnowledgeDocument } from '@/api/contracts/knowledge-candidates';
 import { useRouter } from '@/i18n/navigation';
 
 import { addReadyAnswers, rerunAnalysis } from './candidate-actions';
 import styles from './Channels.module.css';
+import { WhatWillBeUsed } from './WhatWillBeUsed';
+
+/** A ready answer, as the document adding it writes. */
+export interface ReadyAnswer {
+  readonly id: string;
+  readonly document: KnowledgeDocument;
+}
 
 /**
  * 13f's two foot actions, live (Omer). Each changes what GOTCHA tells
- * customers in bulk, so each asks first and says exactly what it will do.
+ * customers in bulk, so each asks first and says exactly what it will do -
+ * Add lists every document it would write, word for word, before its "Yes";
+ * until then nothing is written, so nothing is used.
+ *
+ * ⚠ The route picks its own set (pending, no conflict, at its floor - the
+ *   same verdict `readyToAdd` reads) and at most 100 per press, in no set
+ *   order. Past 100 the question says so rather than implying all of them.
  */
 export function AddReady({
   importId,
-  count,
+  ready,
+  asking,
+  setAsking,
 }: {
   readonly importId: string;
-  readonly count: number;
+  readonly ready: readonly ReadyAnswer[];
+  readonly asking: boolean;
+  readonly setAsking: (asking: boolean) => void;
 }) {
   const t = useTranslations('channels.whatsapp.foot');
   const router = useRouter();
-  const [asking, setAsking] = useState(false);
+  const count = ready.length;
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -34,32 +52,47 @@ export function AddReady({
     );
   }
   return asking ? (
-    <span className={styles.footAsk} data-testid="bulk-confirm">
+    <span className={styles.footAskWide} data-testid="bulk-confirm">
       <span>{t('addAsk', { count })}</span>
-      <button
-        type="button"
-        className={styles.learnPrimaryButton}
-        disabled={isPending}
-        data-testid="bulk-yes"
-        onClick={() =>
-          startTransition(async () => {
-            const done = await addReadyAnswers(importId);
-            setAsking(false);
-            if (done.ok) {
-              setSaid({
-                ok: true,
-                text: t('added', { count: done.approved, skipped: done.skipped }),
-              });
-              router.refresh();
-            } else setSaid({ ok: false, text: t(`refused.${done.reason}`) });
-          })
-        }
-      >
-        {isPending ? t('adding') : t('addYes')}
-      </button>
-      <button type="button" className={styles.footCancel} onClick={() => setAsking(false)}>
-        {t('cancel')}
-      </button>
+      <span className={styles.usedList} data-testid="bulk-used">
+        {ready.map((r) => (
+          <WhatWillBeUsed key={r.id} document={r.document} testid={`bulk-used-${r.id}`} />
+        ))}
+      </span>
+      {count > BULK_APPROVE_AT_MOST ? (
+        <span data-testid="bulk-at-most">{t('addAtMost', { most: BULK_APPROVE_AT_MOST })}</span>
+      ) : null}
+      <span className={styles.footAsk}>
+        <button
+          type="button"
+          className={styles.learnPrimaryButton}
+          disabled={isPending}
+          data-testid="bulk-yes"
+          onClick={() =>
+            startTransition(async () => {
+              const done = await addReadyAnswers(importId);
+              setAsking(false);
+              if (done.ok) {
+                setSaid({
+                  ok: true,
+                  text: t('added', { count: done.approved, skipped: done.skipped }),
+                });
+                router.refresh();
+              } else setSaid({ ok: false, text: t(`refused.${done.reason}`) });
+            })
+          }
+        >
+          {isPending ? t('adding') : t('addYes')}
+        </button>
+        <button
+          type="button"
+          className={styles.footCancel}
+          disabled={isPending}
+          onClick={() => setAsking(false)}
+        >
+          {t('cancel')}
+        </button>
+      </span>
     </span>
   ) : (
     <span className={styles.footAsk}>
@@ -91,25 +124,30 @@ export function AddReady({
  */
 export function ReportFoot({
   importId,
-  count,
+  ready,
   later,
   noteClassName,
 }: {
   readonly importId: string;
-  readonly count: number;
+  readonly ready: readonly ReadyAnswer[];
   /** "Finish later" - a link the server renders. */
   readonly later: ReactNode;
   readonly noteClassName?: string;
 }) {
   const [rerunAsking, setRerunAsking] = useState(false);
+  const [addAsking, setAddAsking] = useState(false);
   return (
     <>
-      {/* Positions are fixed, so RunAgain keeps its state as the others leave. */}
-      {rerunAsking ? null : <AddReady importId={importId} count={count} />}
-      {rerunAsking ? null : later}
-      <span className={rerunAsking ? undefined : noteClassName}>
-        <RunAgain importId={importId} asking={rerunAsking} setAsking={setRerunAsking} />
-      </span>
+      {/* Positions are fixed, so each keeps its state as the others leave. */}
+      {rerunAsking ? null : (
+        <AddReady importId={importId} ready={ready} asking={addAsking} setAsking={setAddAsking} />
+      )}
+      {rerunAsking || addAsking ? null : later}
+      {addAsking ? null : (
+        <span className={rerunAsking ? undefined : noteClassName}>
+          <RunAgain importId={importId} asking={rerunAsking} setAsking={setRerunAsking} />
+        </span>
+      )}
     </>
   );
 }

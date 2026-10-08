@@ -137,6 +137,12 @@ export const candidateSchema = z.object({
    */
   curationVerdict: z.enum(CURATION_VERDICTS).nullable().catch(null).default(null),
   curationNote: z.string().nullable().default(null),
+  /**
+   * Why the answer is what it is - and part of the document an approve writes
+   * (`knowledgeDocumentOf`). Named so the confirm can show it: stripped, the
+   * screen would show less than the AI is given.
+   */
+  reasoning: z.string().nullable().default(null),
   /** How much evidence stands behind it. The reviewer's real decision input. */
   occurrenceCount: z.number().default(0),
   customerCount: z.number().default(0),
@@ -412,6 +418,46 @@ export const ANSWER_MAX_CHARS = 4000;
 export function answerTooLong(answer: string): boolean {
   return answer.trim().length > ANSWER_MAX_CHARS;
 }
+
+/**
+ * ★★ WHAT AN APPROVE WRITES, WORD FOR WORD - the confirm shows this.
+ *
+ * Both approve paths (`POST /candidates/:id/approve`, and each item of
+ * `bulk-approve`) create a knowledge document whose title is the question and
+ * whose body is `knowledgeDocumentBody(question, answer, reasoning,
+ * requiresLiveLookup)` (ChatCenter services/ai/src/routes/historical-import.ts).
+ * That body - not the answer alone - is what retrieval hands the AI, so the
+ * live-check sentence and the reasoning are part of what will be used.
+ *
+ * ⚠ A MIRROR: the two fixed sentences are the platform's, in its words. If the
+ * route's change and these do not, the confirm shows something other than what
+ * is written. Nothing here can see the route; knowledge-candidates.test.ts
+ * holds its text as read on 2026-10-08, so a change here is at least a choice.
+ */
+export const LIVE_LOOKUP_NOTE =
+  'This depends on live availability. Treat it as the usual pattern, not a commitment: check the calendar or current stock before telling a customer anything specific.';
+export const REASONING_LEAD = 'How we approach this: ';
+
+export interface KnowledgeDocument {
+  readonly title: string;
+  /** The body's paragraphs, in order; the route joins them with a blank line. */
+  readonly paragraphs: readonly string[];
+}
+
+export function knowledgeDocumentOf(
+  question: string,
+  answer: string,
+  reasoning: string | null,
+  requiresLiveLookup: boolean,
+): KnowledgeDocument {
+  const paragraphs = [question.trim(), answer.trim()];
+  if (requiresLiveLookup) paragraphs.push(LIVE_LOOKUP_NOTE);
+  if (reasoning && reasoning.trim()) paragraphs.push(`${REASONING_LEAD}${reasoning.trim()}`);
+  return { title: question.slice(0, 200), paragraphs };
+}
+
+/** `bulk-approve` takes at most this many per press (`take: 100`), in no set order. */
+export const BULK_APPROVE_AT_MOST = 100;
 
 /**
  * What the approve route answers on success.
