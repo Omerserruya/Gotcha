@@ -108,11 +108,37 @@ describe("★ refunds", () => {
     expect(chart.series[0].values).toEqual([0, 0, 1]);
   });
 
-  it("WooCommerce: refunds are not countable, said plainly; the store is not asked", async () => {
+  it("★ WooCommerce: refunds counted and listed; split by reason with its coverage", async () => {
     H.store = "woocommerce";
-    const r = await queryOrders(ctx(), Q({ measure: "refunds" }));
-    expect(r).toMatchObject({ blocks: [], source: null, summary: { ok: false, unavailable: "not_supported" } });
-    expect(H.calls).toHaveLength(0);
+    const woo = (id: number, refunds: any[]) => ({ id, number: String(id), date_created_gmt: "2026-10-02T08:00:00", total: "100.00", currency: "ILS", line_items: [{ product_id: 7, name: "Scarf", quantity: 1 }], refunds });
+    H.reply = () => ({ ok: true, result: [
+      woo(1, [{ id: 91, reason: "Too small", total: "-40.00" }]),
+      woo(2, [{ id: 92, reason: "Too small", total: "-60.00" }, { id: 93, reason: "", total: "-5.00" }]),
+      woo(3, []),
+    ] });
+    const r = await queryOrders(ctx(), Q({ measure: "refunds", groupBy: "reason" }));
+    const b: any = r.blocks[0];
+    expect(b).toMatchObject({ type: "breakdown", title: "Refunds by reason", total: 2, coverage: { covered: 2, of: 3 } });
+    expect(b.items).toEqual([{ key: "Too small", label: "Too small", value: 2, share: 1 }]);
+    expect(r.summary).toMatchObject({ total: 3, refundedAmount: 105, currency: "ILS", reasonGivenFor: "2 of 3" });
+    const list: any = r.blocks.find((x) => x.type === "record_list");
+    expect(list.items.map((i: any) => i.id)).toEqual(["1", "2"]);
+  });
+
+  it("★ a split the store cannot give is no card (never an empty chart that reads as none), and said", async () => {
+    H.store = "woocommerce";
+    H.reply = () => ({ ok: true, result: [{ id: 1, number: "1", date_created_gmt: "2026-10-02T08:00:00", total: "10.00", currency: "ILS", line_items: [], refunds: [{ id: 9, reason: "", total: "-10.00" }] }] });
+    for (const groupBy of ["day", "product"]) {
+      const r = await queryOrders(ctx(), Q({ measure: "refunds", groupBy }));
+      expect(r.blocks.map((x) => x.type)).toEqual(["record_list"]);
+      expect((r.summary as any).unavailableSplit).toMatch(groupBy === "day" ? /when each refund was made/ : /which products were refunded/);
+      expect(r.summary).toMatchObject({ total: 1 });
+    }
+  });
+
+  it("reason is a refund split only", () => {
+    expect(normalizeOrderQuery({ from: "2026-10-01", to: "2026-10-03", measure: "orders", groupBy: "reason" })).toMatchObject({ groupBy: "day" });
+    expect(normalizeOrderQuery({ from: "2026-10-01", to: "2026-10-03", measure: "refunds", groupBy: "reason" })).toMatchObject({ groupBy: "reason" });
   });
 });
 

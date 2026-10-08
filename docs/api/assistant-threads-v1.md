@@ -277,8 +277,11 @@ and only when a store is connected:
 - by product: `breakdown` of UNITS ("Units sold by product", "Units refunded by
   product": an order's total is not split across its lines);
 - refunds: also a `record_list` of kind `order` (the refunded orders,
-  `deepLink: null`); refunds are those on orders placed in the period, and a
-  WooCommerce store's refunds are not countable (said, no block);
+  `deepLink: null`); refunds are those on orders placed in the period;
+  `groupBy: "reason"` gives a `breakdown` "Refunds by reason" with `coverage`
+  (a reason given for N of M). WooCommerce does not say when a refund was made
+  or which lines it covered: by day / by product give no split card (never an
+  empty chart), only the list, and the answer says why;
 - a product's stock: `record` of kind `product`, fields `stock` then
   `variant:<name>` per variant (a single "Default Title" variant shows only
   `stock`; an untracked product says so in `value`).

@@ -18,7 +18,7 @@ export interface OrderQuery {
   from: string;
   to: string;
   measure: "orders" | "revenue" | "refunds";
-  groupBy: "day" | "product";
+  groupBy: "day" | "product" | "reason";
 }
 
 export interface RecordBlock { type: "record"; id: string; title: string; sourceId: string; kind: "product"; fields: Array<{ key: string; label: string; value: string }>; deepLink: null; partial: null }
@@ -27,7 +27,7 @@ export interface CommerceSource { id: string; label: string; kind: "orders" | "r
 export type Unavailable = { unavailable: "no_store" | "store_permission" | "store_error" | "not_supported"; message: string };
 
 interface Line { productId: string | null; title: string; quantity: number }
-interface NormOrder { id: string; name: string; createdAt: Date; total: number; currency: string | null; lines: Line[]; refunds: Array<{ createdAt: Date | null; amount: number; lines: Line[] }> }
+interface NormOrder { id: string; name: string; createdAt: Date; total: number; currency: string | null; lines: Line[]; refunds: Array<{ createdAt: Date | null; amount: number; lines: Line[]; reason: string | null }> }
 
 const CAP = 250;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -70,6 +70,7 @@ function fromShopify(o: any): NormOrder {
     refunds: (o.refunds ?? []).map((r: any) => ({
       createdAt: r.created_at ? new Date(r.created_at) : null,
       amount: num(r.total),
+      reason: typeof r.note === "string" && r.note.trim() ? r.note.trim().slice(0, 80) : null,
       lines: (r.refund_line_items ?? []).map((rli: any) => {
         const li = byLine.get(String(rli.line_item_id));
         return { productId: li?.product_id == null ? null : String(li.product_id), title: String(li?.title ?? ""), quantity: num(rli.quantity) };
@@ -82,9 +83,13 @@ function fromWoo(o: any): NormOrder {
   return {
     id: String(o.id), name: `#${o.number ?? o.id}`, createdAt: new Date(o.date_created_gmt ? `${o.date_created_gmt}Z` : o.date_created), total: num(o.total), currency: o.currency ?? null,
     lines: (o.line_items ?? []).map((li: any) => ({ productId: li.product_id == null ? null : String(li.product_id), title: String(li.name ?? ""), quantity: num(li.quantity) })),
-    // The order list gives refunds without a date or lines: refunds are not
-    // countable from it (the assistant says so).
-    refunds: [],
+    // The order list carries each refund's amount (negative) and reason, but
+    // not when it was made or which lines: countable, listable and split by
+    // reason, never by day or product (the summary says so).
+    refunds: (o.refunds ?? []).map((r: any) => ({
+      createdAt: null, amount: Math.abs(num(r.total)), lines: [],
+      reason: typeof r.reason === "string" && r.reason.trim() ? r.reason.trim().slice(0, 80) : null,
+    })),
   };
 }
 
@@ -126,7 +131,8 @@ export function normalizeOrderQuery(raw: any): OrderQuery | { error: string } {
   if (!DAY.test(from) || !DAY.test(to) || from > to) return { error: "from and to must be YYYY-MM-DD days, from <= to" };
   if (daysBetween(from, to).length > 92) return { error: "at most 92 days" };
   const measure = ["orders", "revenue", "refunds"].includes(raw?.measure) ? raw.measure : "orders";
-  const groupBy = raw?.groupBy === "product" ? "product" : "day";
+  // Reason is a refund's split only.
+  const groupBy = raw?.groupBy === "product" ? "product" : raw?.groupBy === "reason" && measure === "refunds" ? "reason" : "day";
   return { from, to, measure, groupBy };
 }
 
@@ -142,7 +148,6 @@ export interface CommerceResult { summary: Record<string, unknown>; blocks: Arra
 export async function queryOrders(ctx: QueryCtx, q: OrderQuery): Promise<CommerceResult> {
   const store = await connectedStore(ctx.tenantId);
   if (!store) return noCards(unavailable("no_store", ctx.locale));
-  if (q.measure === "refunds" && store === "woocommerce") return noCards(unavailable("not_supported", ctx.locale));
   const tz = await tenantTimeZone(ctx.tenantId);
   const start = dayStart(q.from, tz), end = dayStart(nextWorkspaceDay(q.to), tz);
   const got = await ordersInPeriod(ctx.tenantId, store, start, end);
@@ -165,7 +170,28 @@ export async function queryOrders(ctx: QueryCtx, q: OrderQuery): Promise<Commerc
   const unit = q.measure === "revenue" ? ("currency" as const) : ("count" as const);
   const blocks: Array<ChartBlock | BreakdownBlock | RecordListBlock> = [];
 
-  if (q.groupBy === "day") {
+  // What this store says about its refunds: a split it cannot support gives
+  // no card (an empty chart would read as "none"), and the summary says why.
+  const refundSplitMissing = q.measure === "refunds" && refunds.length > 0 && (
+    (q.groupBy === "day" && refunds.every((r) => !r.createdAt)) ||
+    (q.groupBy === "product" && refunds.every((r) => !r.lines.length)));
+
+  if (refundSplitMissing) {
+    // No split card; the refunded orders below still show.
+  } else if (q.groupBy === "reason") {
+    const by = new Map<string, number>();
+    for (const r of refunds) if (r.reason) by.set(r.reason, (by.get(r.reason) ?? 0) + 1);
+    const all = [...by.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    const covered = sum(all.map(([, v]) => v));
+    const rest = sum(all.slice(8).map(([, v]) => v));
+    blocks.push({
+      type: "breakdown", id: ctx.nextId("b"), sourceId: sId, title: he ? "החזרים לפי סיבה" : "Refunds by reason",
+      items: all.slice(0, 8).map(([key, value]) => ({ key, label: key, value, share: covered ? value / covered : 0 })),
+      total: covered, unit: "count", currency: null, other: rest ? { label: he ? "אחר" : "Other", value: rest } : null,
+      // A refund without a reason is not a reason: say for how many one was given.
+      coverage: { covered, of: refunds.length }, deepLink: null, partial: null,
+    });
+  } else if (q.groupBy === "day") {
     const days = daysBetween(q.from, q.to);
     const by = new Map(days.map((d) => [d, 0]));
     const add = (when: Date | null, v: number) => { if (!when) return; const d = dayOf(when, tz); if (by.has(d)) by.set(d, by.get(d)! + v); };
@@ -212,7 +238,9 @@ export async function queryOrders(ctx: QueryCtx, q: OrderQuery): Promise<Commerc
     summary: {
       ok: true, cite: sId, store, total, ...(unit === "currency" ? { currency } : {}), period,
       ...(capped ? { note: `counted the latest ${CAP} orders of the period` } : {}),
-      ...(q.measure === "refunds" ? { note2: "refunds on orders placed in the period" } : {}),
+      ...(q.measure === "refunds" ? { note2: "refunds on orders placed in the period", refundedAmount: round(sum(refunds.map((r) => r.amount))), currency } : {}),
+      ...(refundSplitMissing ? { unavailableSplit: q.groupBy === "day" ? "this store does not say when each refund was made" : "this store does not say which products were refunded" } : {}),
+      ...(q.groupBy === "reason" ? { reasonGivenFor: `${refunds.filter((r) => r.reason).length} of ${refunds.length}` } : {}),
       shownAs: SHOWN_AS,
       cards: cardsOf(blocks),
     },

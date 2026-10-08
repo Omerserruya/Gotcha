@@ -214,7 +214,7 @@ const SYSTEM_QUERY_ORDERS = {
     name: "system_query_orders",
     description:
       "The connected store's orders over a period, read live from the store: how many, total sales, or refunds, by day or by product " +
-      "(by product the figure is units sold or refunded). Refunds are those on orders placed in the period. " +
+      "(by product the figure is units sold or refunded), or refunds by reason. Refunds are those on orders placed in the period. " +
       "The numbers are shown to the user as cards; you get a short summary and a source id. Cite it after the claim as [^<id>]. " +
       "If the result is ok:false, say its message in your own words and do not guess figures.",
     parameters: {
@@ -223,7 +223,7 @@ const SYSTEM_QUERY_ORDERS = {
         from: { type: "string", description: "First day, YYYY-MM-DD (the workspace's days). Default: the conversation's period." },
         to: { type: "string", description: "Last day, YYYY-MM-DD, inclusive. Default: the conversation's period." },
         measure: { type: "string", enum: ["orders", "revenue", "refunds"], description: "What to count. Default: orders." },
-        groupBy: { type: "string", enum: ["day", "product"], description: "How to split it. Default: day." },
+        groupBy: { type: "string", enum: ["day", "product", "reason"], description: "How to split it. Default: day. reason: refunds only (the reason the store recorded)." },
       },
     },
   },
