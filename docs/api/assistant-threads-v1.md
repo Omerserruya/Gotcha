@@ -342,6 +342,12 @@ and `list: true` (a record_list of rows, newest activity first for the current
 state). All replay through §9.4. A customers source (`kind: "customer"`,
 `query.tool: "customers"`) lists every match in its block and has no further
 pages.
+A conversation read (`system_read_conversation`) gives a `record` of kind
+"conversation" (fields channel, state, handler, started, last, summary when
+there is one; deepLink /inbox?c=<id>) and a source `{ kind: "conversation",
+query: { tool: "conversation", params: { conversationId } } }`, which has no
+§9.4 list. Unnamed Shopify shoppers are named "קונה באתר" / "Website shopper"
+in the assistant's cards (the stored name is "Shopper on <domain>").
 
 The answer cites a source after the claim it supports with `[^s1]` in `text`.
 The client renders it as that source's chip. The server removes any `[^...]`

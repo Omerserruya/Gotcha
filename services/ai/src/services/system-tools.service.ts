@@ -17,6 +17,7 @@ import { prisma, visibilityClause, readDurableSetting, parseBusinessHours, REAL_
 import { normalizeQuery, queryConversations, sourceLabel, type ConversationQuery } from "./assistant-query.service";
 import { normalizeOrderQuery, queryOrders, queryProductStock } from "./assistant-commerce-query.service";
 import { findCustomersResult } from "./assistant-customers.service";
+import { readConversationResult } from "./assistant-conversation-read.service";
 import { privateNumbers, privateConversationsClause } from "../lib/private-numbers";
 
 /** The last n days, today included (UTC days: a caller with a workspace period passes it). */
@@ -115,18 +116,21 @@ const SYSTEM_FIND_CUSTOMERS = {
   },
 };
 
-const SYSTEM_SUMMARIZE_CONVERSATION = {
+const SYSTEM_READ_CONVERSATION = {
   type: "function" as const,
   function: {
-    name: "system_summarize_conversation",
+    name: "system_read_conversation",
     description:
-      "Fetch the last N messages of a conversation so you can summarise it. " +
-      "If `conversationId` is omitted, uses the conversation currently selected in the UI (from context).",
+      "Read one conversation: its last messages, its summary when it has one, its state and who has it, shown as a card linking to it in the inbox. " +
+      "Say which: customerId (from system_find_customers), or the customer's name as spellings (customer: as written, in the other script, the first name alone), or a conversationId. " +
+      "With a customer it reads their latest conversation the user can see, an open one first. If several customers match a name, the result lists them: ask which one. In Ctrl+K, with a conversation selected, it reads that one when nothing else is named.",
     parameters: {
       type: "object",
       properties: {
+        customerId: { type: "string", description: "A customer's id from system_find_customers." },
+        customer: { type: "array", items: { type: "string" }, maxItems: 4, description: "The customer's name, 1 to 4 spellings." },
         conversationId: { type: "string" },
-        limit: { type: "number", description: "Messages to fetch, default 30, max 100." },
+        limit: { type: "number", description: "Messages to read, default 20, max 50." },
       },
     },
   },
@@ -326,7 +330,7 @@ export async function buildSystemAgentTools(opts: {
     SYSTEM_COUNT_CONVERSATIONS,
     SYSTEM_GET_METRIC,
     SYSTEM_FIND_CUSTOMERS,
-    SYSTEM_SUMMARIZE_CONVERSATION,
+    SYSTEM_READ_CONVERSATION,
     SYSTEM_RECENT_ACTIVITY,
     SYSTEM_QUERY_CONVERSATIONS,
     SYSTEM_LIST_CONVERSATIONS,
@@ -517,50 +521,17 @@ async function dispatchSystemTool(
         const r = await findCustomersResult({ tenantId: ctx.tenantId, viewer: ctx.viewer, locale: ctx.locale ?? "en", nextId, canReadContacts: !!ctx.canReadContacts }, queries);
         return { toolCallId, content: JSON.stringify(r.summary), ...(r.source ? { artifacts: { blocks: r.blocks, source: r.source } } : {}) };
       }
-      case "system_summarize_conversation": {
-        const cid = args.conversationId || ctx.selectedConversationId;
-        if (!cid) {
-          return {
-            toolCallId,
-            content: JSON.stringify({
-              ok: false,
-              error: "no conversation selected - pass conversationId or open one in the UI",
-            }),
-          };
-        }
-        // Only a conversation this operator may see; another one reads as missing.
-        const clause = clauseOf(ctx);
-        const visible = await prisma.conversation.findFirst({
-          where: { id: String(cid), tenantId: ctx.tenantId, ...(clause ? { OR: clause } : {}) },
-          select: { id: true },
-        });
-        if (!visible) {
-          return { toolCallId, content: JSON.stringify({ ok: false, error: "conversation not found" }) };
-        }
-        const limit = Math.min(100, Math.max(1, Number(args.limit) || 30));
-        const messages = await prisma.message.findMany({
-          where: { tenantId: ctx.tenantId, conversationId: cid },
-          orderBy: { createdAt: "asc" },
-          take: limit,
-          select: { direction: true, body: true, createdAt: true, senderName: true },
-        });
-        const locale = ctx.locale ?? "en";
-        const tz = await tenantTimeZone(ctx.tenantId);
-        return {
-          toolCallId,
-          content: JSON.stringify({
-            ok: true,
-            conversationId: cid,
-            messageCount: messages.length,
-            messages: messages.map((m) => ({
-              when: whenText(m.createdAt, locale, tz),
-              role: m.direction === "INBOUND" ? "customer" : "agent",
-              by: m.senderName || null,
-              // Null, not "": no text (a photo, a voice note) is a fact to say plainly.
-              text: m.body ? m.body.slice(0, 600) : null,
-            })),
-          }),
-        };
+      // The old name, and Ctrl+K's "this conversation": the selection when nothing else is named.
+      case "system_summarize_conversation":
+      case "system_read_conversation": {
+        let seq = 0;
+        const nextId = ctx.nextId ?? ((k: "b" | "s") => `${k}${++seq}`);
+        const customer = Array.isArray(args.customer) ? args.customer.map(String) : typeof args.customer === "string" ? [args.customer] : undefined;
+        const r = await readConversationResult(
+          { tenantId: ctx.tenantId, viewer: ctx.viewer, locale: ctx.locale ?? "en", nextId, canReadContacts: !!ctx.canReadContacts, selectedConversationId: ctx.selectedConversationId },
+          { conversationId: args.conversationId, customerId: args.customerId, customer, limit: args.limit },
+        );
+        return { toolCallId, content: JSON.stringify(r.summary), ...(r.source ? { artifacts: { blocks: r.blocks ?? [], source: r.source } } : {}) };
       }
       case "system_query_conversations": {
         const locale = ctx.locale ?? "en";
@@ -677,6 +648,7 @@ const STEP_TEXT: Record<string, { en: string; he: string }> = {
   system_search_customers: { en: "Searching customers", he: "מחפשת לקוחות" },
   system_find_customers: { en: "Looking for the customer", he: "מחפשת את הלקוח" },
   system_summarize_conversation: { en: "Reading the conversation", he: "קוראת את השיחה" },
+  system_read_conversation: { en: "Reading the conversation", he: "קוראת את השיחה" },
   system_recent_activity: { en: "Looking at recent messages", he: "מסתכלת על ההודעות האחרונות" },
   system_query_conversations: { en: "Looking at the conversations", he: "בודקת את השיחות" },
   system_list_conversations: { en: "Finding the conversations", he: "מוצאת את השיחות" },

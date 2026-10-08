@@ -105,7 +105,7 @@ export function normalizeQuery(raw: any): ConversationQuery | { error: string } 
 }
 
 /** Every contact of the people these contacts belong to, as conversation keys (tenant-scoped: a foreign id matches nothing). */
-async function customerKeys(tenantId: string, contactIds: string[]): Promise<Array<{ channel: string; customerExternalId: string }>> {
+export async function customerKeys(tenantId: string, contactIds: string[]): Promise<Array<{ channel: string; customerExternalId: string }>> {
   const seeds = await prisma.contact.findMany({ where: { tenantId, id: { in: contactIds } }, select: { channel: true, externalId: true, personId: true } });
   const personIds = [...new Set(seeds.map((c) => c.personId).filter(Boolean))] as string[];
   const siblings = personIds.length ? await prisma.contact.findMany({ where: { tenantId, personId: { in: personIds } }, select: { channel: true, externalId: true, personId: true } }) : [];
@@ -246,7 +246,7 @@ async function listItems(tenantId: string, rows: ListRow[], locale: Locale, tz: 
   const preview = new Map(last.map((m) => [m.conversationId, m.body ? m.body.replace(/\s+/g, " ").trim().slice(0, 80) : null]));
   return rows.map((c) => ({
     id: c.id,
-    title: c.customerName || c.customerExternalId || (locale === "he" ? "לקוח" : "Customer"),
+    title: customerDisplayName(c.customerName, c.customerExternalId, locale),
     subtitle: `${channelName(c.channel, locale)} · ${ROW_STATUS[c.status]?.[locale] ?? c.status} · ${handlerWords(c, locale)}`,
     meta: whenText(byLastMessage ? (c.lastMessageAt ?? c.createdAt) : c.createdAt, locale, tz),
     deepLink: `/inbox?c=${c.id}`,
@@ -389,7 +389,7 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
       ? `אף אחת מהן לא התחילה ב${periodWords(q, ctx.locale)}, אבל ${inThisStateNow} במצב הזה כרגע (התחילו קודם): לומר את שניהם`
       : `0 of them STARTED in ${periodWords(q, ctx.locale)}, but ${inThisStateNow} are in this state now (they started earlier): say both` } : {}),
     ...(capped ? { note: `counted the latest ${MAX_ROWS}` } : {}),
-    shownAs: blocks.length ? SHOWN_AS : NO_CARD,
+    shownAs: !blocks.length ? NO_CARD : q.list || q.mention ? LIST_SHOWN_AS : SHOWN_AS,
     cards: cardsOf(blocks, ctx.locale),
   };
   return { summary, blocks, source };
@@ -398,6 +398,29 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
 /** What the model is told about the cards it produced. */
 export const SHOWN_AS =
   "the user sees these cards with your answer: refer to them (\"the chart\") without saying where they are on the screen, never say you lack a breakdown a card shows, do not repeat every number, cite the source";
+
+/**
+ * Rows on a card: the model repeated all ten in prose above the card
+ * ("לקוח: …, ערוץ: …", 2026-10-08). The answer is one sentence.
+ */
+export const LIST_SHOWN_AS =
+  "the user sees these rows as a card, each with a link: answer in ONE sentence (how many there are, and that the card lists them, or the latest ones with the rest behind \"show all\"); never repeat the rows, names, messages or times in your text, and never number them";
+
+/**
+ * How the assistant names a customer. An unnamed Shopify shopper is stored as
+ * "Shopper on <shop>.myshopify.com" (shopify-chat-public): long, English, and
+ * the store already shows in the channel.
+ */
+export function customerDisplayName(name: string | null | undefined, externalId: string | null | undefined, locale: Locale): string {
+  const n = (name ?? "").trim();
+  const shopper = /^(signed-in )?shopper on \S+$/i.exec(n);
+  if (shopper) {
+    return shopper[1]
+      ? (locale === "he" ? "קונה מחובר באתר" : "Signed-in website shopper")
+      : (locale === "he" ? "קונה באתר" : "Website shopper");
+  }
+  return n || externalId || (locale === "he" ? "לקוח" : "Customer");
+}
 
 /** A result with nothing to draw (0): no card goes with the answer. */
 export const NO_CARD = "no card is shown for this: say the number in words and cite the source";

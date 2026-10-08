@@ -23,7 +23,7 @@
 import { prisma, REAL_CONVERSATION, visibilityClause, type Viewer } from "@chatcenter/shared";
 import { privateNumbers, contactIsPrivate, conversationIsPrivate } from "../lib/private-numbers";
 import { channelName, whenText } from "./system-tools.service";
-import { tenantTimeZone, SHOWN_AS, NO_CARD, cardsOf, type RecordListItem } from "./assistant-query.service";
+import { tenantTimeZone, LIST_SHOWN_AS, NO_CARD, cardsOf, customerDisplayName, type RecordListItem } from "./assistant-query.service";
 
 type Locale = "he" | "en";
 
@@ -148,7 +148,7 @@ export async function findCustomers(ctx: CustomerCtx, queries: string[]): Promis
     const last = mine.reduce<Date | null>((m, v: any) => { const t = v.lastMessageAt ?? v.createdAt; return !m || t > m ? t : m; }, null);
     out.push({
       contactId: primary.id,
-      name: group.map((c) => c.displayName).find(Boolean) ?? primary.email ?? primary.phone ?? primary.externalId,
+      name: customerDisplayName(group.map((c) => c.displayName).find(Boolean) ?? primary.email ?? primary.phone ?? null, primary.externalId, ctx.locale),
       channels: [...new Set(group.map((c) => c.channel))],
       email: group.map((c) => c.email).find(Boolean) ?? null,
       phone: group.map((c) => c.phone).find(Boolean) ?? null,
@@ -214,7 +214,7 @@ export async function findCustomersResult(ctx: CustomerCtx, queries: string[]) {
         conversations: c.conversations,
         lastContact: c.lastContactAt ? whenText(c.lastContactAt, ctx.locale, tz) : null,
       })),
-      shownAs: blocks.length ? SHOWN_AS : NO_CARD,
+      shownAs: blocks.length ? LIST_SHOWN_AS : NO_CARD,
       cards: cardsOf(blocks, ctx.locale),
     },
     blocks,

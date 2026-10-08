@@ -55,6 +55,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       inboundExclusion: { findMany: async () => [] },
       conversation: table("conversation"), message: table("message"), contact: table("contact"),
       user: table("user"), tenant: table("tenant"), aIAgent: table("aIAgent"), approvalRequest: table("approvalRequest"),
+      conversationIntelligence: table("conversationIntelligence"),
     },
     authenticate: (req: any, _res: any, next: any) => { req.user = { userId: "u1", role: "AGENT", departmentId: "sales" }; next(); },
     resolveTenant: (req: any, _res: any, next: any) => { req.tenantId = "T"; next(); },

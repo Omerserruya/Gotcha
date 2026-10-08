@@ -33,6 +33,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
           : [{ direction: "INBOUND", body: null, createdAt: D("2026-10-07T11:05:00Z"), senderName: "Dana" }],
       },
       conversation: { findFirst: async () => ({ id: "c1" }), findMany: async () => [] },
+      conversationIntelligence: { findFirst: async () => null },
       contact: { findMany: async () => [{ id: "k1", displayName: "Dana", channel: "SHOPIFY_LIVE_CHAT", externalId: "k1", email: null, phone: null, personId: null, updatedAt: D("2026-10-07T11:00:00Z") }] },
       inboundExclusion: { findMany: async () => [] },
     },
@@ -75,7 +76,8 @@ describe("★ recent activity reads like a manager's report", () => {
 
 describe("★ the other tools too", () => {
   it("conversation summary: dates in words, missing text null", async () => {
-    const r = await run("system_summarize_conversation", { conversationId: "c1" });
+    // A by-id read needs a viewer (it fails closed without one): an admin here.
+    const r = JSON.parse((await dispatchSystemToolCall(call("system_summarize_conversation", { conversationId: "c1" }), { tenantId: "T", userId: "u1", locale: "he", viewer: { userId: "u1", role: "ADMIN" } } as any)).content);
     expect(JSON.stringify(r.messages)).not.toMatch(RAW);
     expect(r.messages[0]).toMatchObject({ role: "customer", text: null });
   });
