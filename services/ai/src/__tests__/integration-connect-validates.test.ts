@@ -45,7 +45,7 @@ vi.mock("@chatcenter/shared", async () => {
   };
 });
 
-import "../services/connectors/woocommerce.adapter";
+import WooCommerceAdapter from "../services/connectors/woocommerce.adapter";
 import router from "../routes/integrations";
 
 const app = express();
@@ -105,5 +105,31 @@ describe("integrations without a validate hook are unchanged", () => {
     const r = await connect("airtable", { credentials: { apiKey: "k" }, config: {} });
     expect(r.status).toBe(201);
     expect(DB.writes[0][1].status).toBe("CONNECTED");
+  });
+});
+
+describe("★ list_orders by period (the assistant's orders this week)", () => {
+  it("sends after/before as UTC, says so, and asks for the page", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => { urls.push(u); return { ok: true, status: 200, json: async () => [] }; }));
+    await (WooCommerceAdapter as any).execute({
+      toolName: "list_orders", credentials: WOO.credentials, config: WOO.config,
+      args: { status: "any", after: "2026-09-30T21:00:00.000Z", before: "2026-10-07T21:00:00.000Z", per_page: 100, page: 2 },
+    });
+    const q = new URL(urls[0]!).searchParams;
+    expect(q.get("after")).toBe("2026-09-30T21:00:00");
+    expect(q.get("before")).toBe("2026-10-07T21:00:00");
+    expect(q.get("dates_are_gmt")).toBe("true");
+    expect(q.get("page")).toBe("2");
+    expect(q.get("per_page")).toBe("100");
+    expect(q.has("status")).toBe(false);
+  });
+
+  it("no period: no date filter at all", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => { urls.push(u); return { ok: true, status: 200, json: async () => [] }; }));
+    await (WooCommerceAdapter as any).execute({ toolName: "list_orders", credentials: WOO.credentials, config: WOO.config, args: { after: "not a date" } });
+    const q = new URL(urls[0]!).searchParams;
+    expect([q.has("after"), q.has("before"), q.has("dates_are_gmt"), q.has("page")]).toEqual([false, false, false, false]);
   });
 });

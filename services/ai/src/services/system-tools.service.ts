@@ -15,6 +15,7 @@
 
 import { prisma, visibilityClause, readDurableSetting, parseBusinessHours, REAL_CONVERSATION, type Viewer } from "@chatcenter/shared";
 import { normalizeQuery, queryConversations } from "./assistant-query.service";
+import { normalizeOrderQuery, queryOrders, queryProductStock } from "./assistant-commerce-query.service";
 
 /** The last n days, today included (UTC days: a caller with a workspace period passes it). */
 function lastDays(n: number): { from: string; to: string } {
@@ -206,6 +207,41 @@ const SYSTEM_QUERY_CONVERSATIONS = {
   },
 };
 
+const SYSTEM_QUERY_ORDERS = {
+  type: "function" as const,
+  function: {
+    name: "system_query_orders",
+    description:
+      "The connected store's orders over a period, read live from the store: how many, total sales, or refunds, by day or by product " +
+      "(by product the figure is units sold or refunded). Refunds are those on orders placed in the period. " +
+      "The numbers are shown to the user as cards; you get a short summary and a source id. Cite it after the claim as [^<id>]. " +
+      "If the result is ok:false, say its message in your own words and do not guess figures.",
+    parameters: {
+      type: "object",
+      properties: {
+        from: { type: "string", description: "First day, YYYY-MM-DD (the workspace's days). Default: the conversation's period." },
+        to: { type: "string", description: "Last day, YYYY-MM-DD, inclusive. Default: the conversation's period." },
+        measure: { type: "string", enum: ["orders", "revenue", "refunds"], description: "What to count. Default: orders." },
+        groupBy: { type: "string", enum: ["day", "product"], description: "How to split it. Default: day." },
+      },
+    },
+  },
+};
+
+const SYSTEM_PRODUCT_STOCK = {
+  type: "function" as const,
+  function: {
+    name: "system_product_stock",
+    description:
+      "A product's stock in the connected store, per variant, read live. Shown to the user as a card; cite the source id as [^<id>].",
+    parameters: {
+      type: "object",
+      properties: { query: { type: "string", description: "The product's name or part of it." } },
+      required: ["query"],
+    },
+  },
+};
+
 // ─── Tool surface for the System Copilot ────────────────────
 
 /**
@@ -224,6 +260,8 @@ export async function buildSystemAgentTools(opts: {
    * fall back to "every TenantTool that's enabled and CONNECTED" so the
    * Command Center is useful out of the box on a fresh tenant. */
   aiAgentId?: string | null;
+  /** The caller may read store orders AND a store is connected. */
+  commerce?: boolean;
 }): Promise<Array<Record<string, unknown>>> {
   const integrationTools = opts.aiAgentId
     ? await buildAgentToolsForAIAgent(opts.tenantId, opts.aiAgentId, {
@@ -240,6 +278,7 @@ export async function buildSystemAgentTools(opts: {
     SYSTEM_SUMMARIZE_CONVERSATION,
     SYSTEM_RECENT_ACTIVITY,
     SYSTEM_QUERY_CONVERSATIONS,
+    ...(opts.commerce ? [SYSTEM_QUERY_ORDERS, SYSTEM_PRODUCT_STOCK] : []),
     PROPOSE_PLAN_TOOL,
   ];
 }
@@ -295,6 +334,8 @@ export interface SystemToolDispatchCtx {
   defaultPeriod?: { from: string; to: string };
   /** Ids for the cards and sources of this answer ("b1", "s1"...), shared across its tool calls. */
   nextId?: (kind: "b" | "s") => string;
+  /** The caller holds customer:commerce:read. Absent = no: the store tools refuse. */
+  canReadCommerce?: boolean;
 }
 
 /** The visibility OR-clause for this caller, or null when unrestricted. */
@@ -486,6 +527,28 @@ async function dispatchSystemTool(
         const r = await queryConversations({ tenantId: ctx.tenantId, viewer: ctx.viewer, locale, nextId }, q);
         return { toolCallId, content: JSON.stringify(r.summary), artifacts: { blocks: r.blocks, source: r.source } };
       }
+      case "system_query_orders":
+      case "system_product_stock": {
+        // The surface hides these from a caller without the permission; this
+        // is the backstop for a model that names the tool anyway.
+        if (!ctx.canReadCommerce) return { toolCallId, content: JSON.stringify({ ok: false, error: "not_permitted" }) };
+        const locale = ctx.locale ?? "en";
+        let seq = 0;
+        const nextId = ctx.nextId ?? ((k: "b" | "s") => `${k}${++seq}`);
+        const qctx = { tenantId: ctx.tenantId, viewer: ctx.viewer, locale, nextId };
+        let r;
+        if (name === "system_product_stock") {
+          const query = String(args.query ?? "").trim().slice(0, 80);
+          if (!query) return { toolCallId, content: JSON.stringify({ ok: false, error: "query is required" }) };
+          r = await queryProductStock(qctx, query);
+        } else {
+          const period = ctx.defaultPeriod ?? lastDays(7);
+          const q = normalizeOrderQuery({ ...args, from: args.from ?? period.from, to: args.to ?? period.to });
+          if ("error" in q) return { toolCallId, content: JSON.stringify({ ok: false, error: q.error }) };
+          r = await queryOrders(qctx, q);
+        }
+        return { toolCallId, content: JSON.stringify(r.summary), ...(r.source ? { artifacts: { blocks: r.blocks, source: r.source } } : {}) };
+      }
       case "system_recent_activity": {
         const limit = Math.min(50, Math.max(1, Number(args.limit) || 20));
         const clause = clauseOf(ctx);
@@ -547,6 +610,8 @@ const STEP_TEXT: Record<string, { en: string; he: string }> = {
   system_summarize_conversation: { en: "Reading the conversation", he: "קורא את השיחה" },
   system_recent_activity: { en: "Looking at recent messages", he: "מסתכל על ההודעות האחרונות" },
   system_query_conversations: { en: "Looking at the conversations", he: "בודק את השיחות" },
+  system_query_orders: { en: "Reading the store's orders", he: "קורא את ההזמנות בחנות" },
+  system_product_stock: { en: "Checking the stock", he: "בודק את המלאי" },
   propose_plan: { en: "Preparing a plan for your approval", he: "מכין תוכנית לאישור שלך" },
 };
 const METRIC_STEP: Record<string, { en: string; he: string }> = {

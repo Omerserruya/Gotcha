@@ -263,10 +263,29 @@ language), `sourceId` and optionally `deepLink` (§9.5), `partial` and
 // on any block
 "partial": { "reason": "capped", "cap": 250 } | { "reason": "store_limit" } | null
 ```
-`label`s and `fields[].value` are already in the interface language; raw
-numbers are in `series[].values`, `items[].value`, `total`. A store read that is
-refused or unsupported produces no block; the assistant says why in one plain
-sentence.
+`label`s, `title`, `subtitle`, `meta` and `fields[].value` are finished text in
+the interface language (render verbatim); raw numbers are in `series[].values`,
+`items[].value`, `total`. `unit: "percent"` values are 0-100 (38 = 38%);
+`share` is 0-1. `chart.x.values` of kind `day` are the workspace's calendar
+days: format them as dates, no timezone shift. A store read that is refused or
+unsupported produces no block; the assistant says why in one plain sentence.
+
+Store blocks (part 2), offered only to a caller with `customer:commerce:read`
+and only when a store is connected:
+- orders / sales / refunds by day: `chart`, sales with `unit: "currency"` and the
+  store's `currency`;
+- by product: `breakdown` of UNITS ("Units sold by product", "Units refunded by
+  product": an order's total is not split across its lines);
+- refunds: also a `record_list` of kind `order` (the refunded orders,
+  `deepLink: null`); refunds are those on orders placed in the period, and a
+  WooCommerce store's refunds are not countable (said, no block);
+- a product's stock: `record` of kind `product`, fields `stock` then
+  `variant:<name>` per variant (a single "Default Title" variant shows only
+  `stock`; an untracked product says so in `value`).
+Sources: `orders` / `refunds` (`query.tool: "orders"`) and `product`
+(`query.tool: "product_stock"`). The §9.4 list serves `orders` sources from a
+fresh store read; it is 409 SOURCE_UNAVAILABLE when the store refuses or the
+reader no longer holds `customer:commerce:read`.
 
 ### 9.3 Sources and citations (`message.sources`)
 
@@ -306,10 +325,12 @@ server table, never written by the model:
 
 **Asks for Frontend (found while mapping the redesign):**
 1. The inbox has no period filter: a chart's link can open the channel but not
-   "this week". Proposed: `/inbox?from=2026-10-01&to=2026-10-07` (the list API
-   can take it); the server will send it once the inbox accepts it.
+   "this week". Agreed: `/inbox?from=2026-10-01&to=2026-10-07` (workspace days,
+   `to` inclusive). The list API (`GET /api/conversations`) gains `from`/`to`
+   in this stage; the server sends these links only once that is on dev.
 2. The inbox's channel filter has no `SHOPIFY_LIVE_CHAT` (17 of 88 real
-   conversations on dev); links to it would open an unfiltered inbox.
+   conversations on dev); links to it would open an unfiltered inbox. Done in
+   the frontend (579fca8); the server will link it once that ships.
 
 ### 9.6 Stream
 

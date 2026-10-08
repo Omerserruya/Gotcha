@@ -39,6 +39,8 @@ export interface OperatorContext {
   viewer?: Viewer;
   /** The interface language (the answer follows the question; this is the fallback). */
   locale?: "he" | "en";
+  /** The caller holds customer:commerce:read (resolved by the route; absent = no). */
+  canReadCommerce?: boolean;
 }
 
 export interface BuiltAgentContext {

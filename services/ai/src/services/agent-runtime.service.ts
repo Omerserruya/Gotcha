@@ -34,6 +34,7 @@ import {
   dispatchSystemToolCall,
   stepText,
 } from "./system-tools.service";
+import { connectedStore } from "./assistant-commerce-query.service";
 
 const MAX_ROUNDS = 5;
 const PROMPTS_DIR = path.resolve(__dirname, "../prompts");
@@ -135,9 +136,12 @@ export async function runAgent(
   }
 
   // 3. Tool surface for the operator.
+  // Store tools only for a caller who may read orders, and only with a store.
+  const commerce = !!input.operator.canReadCommerce && !!(await connectedStore(input.operator.tenantId).catch(() => null));
   const tools = await buildSystemAgentTools({
     tenantId: input.operator.tenantId,
     aiAgentId: input.aiAgentId ?? null,
+    commerce,
   });
 
   let totalUsage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
@@ -245,6 +249,7 @@ export async function runAgent(
         locale: input.operator.locale ?? "en",
         defaultPeriod: input.defaultPeriod,
         nextId,
+        canReadCommerce: !!input.operator.canReadCommerce,
       });
       if (r.artifacts) {
         await onEvent({ type: "artifacts", toolCallId: tc.id, blocks: r.artifacts.blocks, source: r.artifacts.source });

@@ -12,9 +12,11 @@ import {
   requirePermissionOrRole,
   viewerOf,
   prisma,
+  hasPermission,
   getRedis,
   assertAiAllowed,
 } from "@chatcenter/shared";
+import { principalOf } from "../services/commerce-perms";
 import {
   normalizeScope,
   createThread,
@@ -30,6 +32,7 @@ import {
   type Owner,
 } from "../services/assistant-threads.service";
 import { normalizeQuery, listConversationsForSource } from "../services/assistant-query.service";
+import { normalizeOrderQuery, listOrdersForSource } from "../services/assistant-commerce-query.service";
 
 const router = Router();
 
@@ -186,7 +189,7 @@ router.post("/threads/:id/messages", async (req: Request, res: Response) => {
     thread: { id: thread.id, scope: thread.scope, title: thread.title, titleSource: thread.titleSource },
     text,
     locale: await localeOf(req, o),
-    operator: { userName: user?.name ?? undefined, userEmail: user?.email ?? undefined, userRole: user?.role ?? undefined, tenantName: tenant?.name ?? undefined, viewer: viewerOf(req) },
+    operator: { userName: user?.name ?? undefined, userEmail: user?.email ?? undefined, userRole: user?.role ?? undefined, tenantName: tenant?.name ?? undefined, viewer: viewerOf(req), canReadCommerce: await hasPermission(principalOf(req), "customer:commerce:read").catch(() => false) },
     authToken: (req.headers.authorization || "").replace(/^Bearer\s+/i, "") || undefined,
   });
   if (!started) { res.status(409).json({ error: "An answer is still being written", code: "RUN_IN_PROGRESS" }); return; }
@@ -220,7 +223,19 @@ router.get("/threads/:id/messages/:messageId/sources/:sourceId/records", async (
   const m = await prisma.assistantMessage.findFirst({ where: { id: String(req.params.messageId), threadId: thread.id }, select: { sources: true } });
   const source = (Array.isArray(m?.sources) ? (m!.sources as any[]) : []).find((x) => x?.id === String(req.params.sourceId));
   if (!source) { res.status(404).json({ error: "Source not found", code: "SOURCE_NOT_FOUND" }); return; }
-  if (source.query?.tool !== "conversations") { res.status(409).json({ error: "This list can no longer be read", code: "SOURCE_UNAVAILABLE" }); return; }
+  const unavailable = () => res.status(409).json({ error: "This list can no longer be read", code: "SOURCE_UNAVAILABLE" });
+  const cursorOf = () => (typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : null);
+  if (source.query?.tool === "orders") {
+    // Store rows follow the caller's CURRENT right to read orders.
+    if (!(await hasPermission(principalOf(req), "customer:commerce:read").catch(() => false))) { unavailable(); return; }
+    const oq = normalizeOrderQuery(source.query.params);
+    if ("error" in oq) { unavailable(); return; }
+    const page = await listOrdersForSource(o.tenantId, await localeOf(req, o), oq, cursorOf());
+    if (!page) { unavailable(); return; }
+    res.json(page);
+    return;
+  }
+  if (source.query?.tool !== "conversations") { unavailable(); return; }
   const q = normalizeQuery(source.query.params);
   if ("error" in q) { res.status(409).json({ error: "This list can no longer be read", code: "SOURCE_UNAVAILABLE" }); return; }
   const cursor = typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : null;

@@ -202,6 +202,15 @@ describe("search query building", () => {
     expect(buildOrderQuery({ limit: 2, name: "#1006" })).toBe('name:"1006"');
   });
 
+  it("★ a period is a half-open created_at window in UTC (the assistant's orders this week)", () => {
+    expect(buildOrderQuery({ limit: 250, status: "any", createdFrom: "2026-09-30T21:00:00.000Z", createdTo: "2026-10-07T21:00:00Z" }))
+      .toBe("created_at:>='2026-09-30T21:00:00.000Z' AND created_at:<'2026-10-07T21:00:00.000Z'");
+  });
+
+  it("a value that is not a date never reaches the query", () => {
+    expect(buildOrderQuery({ limit: 5, createdFrom: "' OR status:any", createdTo: "yesterday" })).toBe("");
+  });
+
   it("combines every filter REST took as a separate parameter", () => {
     expect(buildOrderQuery({ limit: 5, status: "open", email: "a@b.com", financialStatus: "paid", fulfillmentStatus: "unshipped" }))
       .toBe('status:open AND email:"a@b.com" AND financial_status:"paid" AND fulfillment_status:"unshipped"');

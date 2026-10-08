@@ -247,7 +247,7 @@ export interface StartRunInput {
   thread: { id: string; scope: unknown; title: string | null; titleSource: string | null };
   text: string;
   locale: "he" | "en";
-  operator: { userName?: string; userEmail?: string; userRole?: string; tenantName?: string; viewer?: Viewer };
+  operator: { userName?: string; userEmail?: string; userRole?: string; tenantName?: string; viewer?: Viewer; canReadCommerce?: boolean };
   authToken?: string;
 }
 

@@ -343,6 +343,10 @@ export interface OrderSearchOptions {
   fulfillmentStatus?: string;
   /** Full order bodies (line items, addresses) rather than summary rows. */
   full?: boolean;
+  /** Created on or after this instant (ISO). */
+  createdFrom?: string;
+  /** Created before this instant (ISO), exclusive. */
+  createdTo?: string;
 }
 
 /**
@@ -361,6 +365,12 @@ export function buildOrderQuery(opts: OrderSearchOptions): string {
   if (opts.name) clauses.push(`name:${escapeSearchValue(String(opts.name).replace(/^#/, ""))}`);
   if (opts.financialStatus) clauses.push(`financial_status:${escapeSearchValue(opts.financialStatus)}`);
   if (opts.fulfillmentStatus) clauses.push(`fulfillment_status:${escapeSearchValue(opts.fulfillmentStatus)}`);
+  // A period (the assistant's "orders this week"). Only real instants pass:
+  // anything else would be query syntax from somewhere it should not come.
+  const iso = (v: unknown) => (typeof v === "string" && !isNaN(Date.parse(v)) ? new Date(v).toISOString() : null);
+  const from = iso(opts.createdFrom), to = iso(opts.createdTo);
+  if (from) clauses.push(`created_at:>='${from}'`);
+  if (to) clauses.push(`created_at:<'${to}'`);
   return clauses.join(" AND ");
 }
 

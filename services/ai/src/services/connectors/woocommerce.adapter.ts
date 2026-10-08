@@ -230,6 +230,15 @@ const WooCommerceAdapter: ProviderAdapter = {
         params.set("per_page", String(Math.min(100, Number(args.per_page ?? 10))));
         if (args.status && args.status !== "any") params.set("status", String(args.status));
         if (args.email) params.set("search", String(args.email));
+        // A period (WC REST takes ISO8601 after/before) and a page, for the
+        // assistant's "orders this week".
+        const iso = (v: unknown) => (typeof v === "string" && !isNaN(Date.parse(v)) ? new Date(v).toISOString().slice(0, 19) : null);
+        const after = iso(args.after), before = iso(args.before);
+        if (after) params.set("after", after);
+        if (before) params.set("before", before);
+        // The values are UTC; without this WooCommerce reads them in the site's zone.
+        if (after || before) params.set("dates_are_gmt", "true");
+        if (Number(args.page) > 1) params.set("page", String(Math.floor(Number(args.page))));
         return await wooRequest(auth, "GET", `${base}/orders?${params}`);
       }
       case "get_order":

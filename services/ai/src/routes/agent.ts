@@ -18,7 +18,9 @@ import {
   requirePermissionOrRole,
   viewerOf,
   prisma,
+  hasPermission,
 } from "@chatcenter/shared";
+import { principalOf } from "../services/commerce-perms";
 import { runAgent, AgentRuntimeEvent } from "../services/agent-runtime.service";
 import { clearAgentMemory } from "../services/agent-memory.service";
 
@@ -100,6 +102,7 @@ router.post("/run", async (req: Request, res: Response) => {
           userRole: user?.role,
           tenantName: tenant?.name,
           viewer: viewerOf(req),
+          canReadCommerce: await hasPermission(principalOf(req), "customer:commerce:read").catch(() => false),
           locale: req.body?.locale === "he" || req.body?.locale === "en"
             ? req.body.locale
             : String(req.headers["accept-language"] || "").toLowerCase().startsWith("he") ? "he" : "en",
