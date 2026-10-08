@@ -2,6 +2,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { usageFor, type Capability, type ToolUsage } from '@/api/contracts/capabilities';
 import { isIntegrationState, type Integration } from '@/api/contracts/integrations';
+import { platformErrorReason } from '@/api/contracts/platform-errors';
 
 import { IntegrationLogo } from './IntegrationLogo';
 import styles from './Capabilities.module.css';
@@ -38,6 +39,12 @@ export async function SystemHead({
           0,
         );
   const state = integration?.tenantConnection?.status ?? null;
+  // Its last error in the reader's words (ai 272ee282) - never the platform's English.
+  const tp = await getTranslations('common.platformError');
+  const reason = platformErrorReason(
+    integration?.tenantConnection?.lastError,
+    integration?.tenantConnection?.lastErrorCode,
+  );
 
   return (
     <header className={styles.systemHead} data-testid="system-head">
@@ -49,6 +56,11 @@ export async function SystemHead({
             ? t('system.actions', { count: capabilities.length })
             : t('system.used', { count: runs, n: format.number(runs) })}
         </span>
+        {reason ? (
+          <span className={styles.systemError} role="note" data-testid="system-error">
+            {tp(reason)}
+          </span>
+        ) : null}
       </span>
       <span className={styles.systemActions}>
         {integration ? (

@@ -31,5 +31,10 @@
   "person": {
     "shopper": "Website shopper",
     "signedInShopper": "Signed-in website shopper"
+  },
+  "platformError": {
+    "shopify_chat_uninstalled": "The app was removed from the store. Install it again to bring the chat back.",
+    "shopify_app_uninstalled": "The GOTCHA app was removed from the store. Install it again to reconnect.",
+    "unknown": "Something is wrong with this channel. Open it to see what it needs."
   }
 }

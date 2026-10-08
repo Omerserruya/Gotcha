@@ -108,6 +108,8 @@ export const channelSchema = z.object({
    * platform error is a second, vaguer copy of a message it already wrote.
    */
   lastError: z.string().nullable().optional(),
+  /** The error's code (auth e28012b0): `platformErrorReason` keys on it first. */
+  lastErrorCode: z.string().nullable().optional(),
   lastHealthCheck: z.string().nullable().optional(),
   _count: z.object({ conversations: z.number().default(0) }).optional(),
   /**

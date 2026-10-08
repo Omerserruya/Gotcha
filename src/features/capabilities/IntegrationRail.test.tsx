@@ -8,6 +8,7 @@ import { capabilitySchema } from '@/api/contracts/capabilities';
 import { integrationSchema, type Integration } from '@/api/contracts/integrations';
 import messages from '@/i18n/messages/en/capabilities.json';
 import heMessages from '@/i18n/messages/he/capabilities.json';
+import heCommon from '@/i18n/messages/he/common.json';
 
 import { IntegrationRail } from './IntegrationRail';
 
@@ -381,5 +382,31 @@ describe('★★ every integration has its own screen (Omer, 2026-10-04)', () =>
     );
     expect(screen.getByTestId('available-stripe')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByTestId('available-paypal')).not.toHaveAttribute('aria-current');
+  });
+});
+
+describe('★★ a broken connection says why - its code in Hebrew words (ai 272ee282)', () => {
+  it('the state chip carries the reason on its title; never the code, never the English', async () => {
+    render(
+      <NextIntlClientProvider locale="he" messages={{ capabilities: heMessages, common: heCommon }}>
+        {await IntegrationRail({
+          integrations: [
+            entry({
+              slug: 'shopify',
+              tenantConnection: {
+                id: 'c1',
+                status: 'DISCONNECTED',
+                lastError: 'The GOTCHA Shopify app was uninstalled from this store.',
+                lastErrorCode: 'SHOPIFY_APP_UNINSTALLED',
+              },
+            }),
+          ],
+        })}
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('connected-state-shopify')).toHaveAttribute(
+      'title',
+      'האפליקציה של GOTCHA הוסרה מהחנות. מתקינים אותה מחדש כדי לחבר שוב.',
+    );
   });
 });

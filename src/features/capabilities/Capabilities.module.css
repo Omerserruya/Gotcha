@@ -78,6 +78,12 @@
     color: var(--text-muted);
   }
 
+  /* The connection's last error, in words, under its line. */
+  .systemError {
+    font-size: var(--font-size-label);
+    color: var(--alert-text);
+  }
+
   .systemActions {
     display: flex;
     flex: none;

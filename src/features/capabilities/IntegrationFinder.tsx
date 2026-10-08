@@ -8,6 +8,7 @@ import { Search } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 
 import { byCategory, isIntegrationState, type Integration } from '@/api/contracts/integrations';
+import { platformErrorReason } from '@/api/contracts/platform-errors';
 
 import { IntegrationLogo } from './IntegrationLogo';
 import { systemCategoryName } from './system-category';
@@ -62,6 +63,7 @@ export function IntegrationFinder({
   readonly selected: string | null;
 }) {
   const t = useTranslations('capabilities');
+  const tp = useTranslations('common.platformError');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string | null>(null);
 
@@ -156,6 +158,11 @@ export function IntegrationFinder({
           ) : null}
           {matches.connected.map((entry) => {
             const state = entry.tenantConnection?.status;
+            // Why it is broken, in the reader's words, on the state it explains.
+            const reason = platformErrorReason(
+              entry.tenantConnection?.lastError,
+              entry.tenantConnection?.lastErrorCode,
+            );
             return (
               <li key={entry.slug}>
                 <Link
@@ -175,6 +182,7 @@ export function IntegrationFinder({
                     <span
                       className={styles.railState}
                       data-state={state}
+                      title={reason ? tp(reason) : undefined}
                       data-testid={`connected-state-${entry.slug}`}
                     >
                       {isIntegrationState(state)

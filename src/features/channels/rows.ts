@@ -1,3 +1,4 @@
+import { platformErrorReason, type PlatformErrorReason } from '@/api/contracts/platform-errors';
 import {
   CONNECTABLE_CHANNELS,
   voiceStateAsConnection,
@@ -23,8 +24,11 @@ export interface ConnectedRow {
   /** The phone number, handle or address. Absent on a channel that has none. */
   readonly identity: string | null;
   readonly status: ConnectionState;
-  /** The platform's own words. Present on a healthy row too - see below. */
-  readonly error: string | null;
+  /**
+   * The platform's error as a reason (`platformErrorReason`), never its raw
+   * English. Present on a healthy row too - see below.
+   */
+  readonly error: PlatformErrorReason | null;
   /** Open RIGHT NOW - not CLOSED, no window. */
   readonly openConversations: number | null;
   /**
@@ -68,21 +72,6 @@ const isWidgetChannel = (channel: ChannelType) =>
  * is exactly the failure a health check exists to prevent - so an error text
  * is treated as a problem on its own.
  */
-/**
- * A channel's `lastError` in the reader's words. The platform writes it as a
- * free English sentence with no code (ai shopify-chat-install.service.ts), so
- * a known sentence is matched to its words and anything else is said
- * generically - never printed raw under a Hebrew title.
- */
-export type ChannelErrorReason = 'shopify_chat_uninstalled' | 'unknown';
-const KNOWN_ERRORS: readonly [RegExp, ChannelErrorReason][] = [
-  [/^Shopify Chat app was uninstalled from the store\.?$/i, 'shopify_chat_uninstalled'],
-];
-export function channelErrorReason(error: string | null): ChannelErrorReason | null {
-  if (!error) return null;
-  return KNOWN_ERRORS.find(([pattern]) => pattern.test(error.trim()))?.[1] ?? 'unknown';
-}
-
 export function isTroubled(row: ConnectedRow): boolean {
   return row.status === 'ERROR' || row.status === 'DISCONNECTED' || row.error != null;
 }
@@ -99,7 +88,7 @@ export function buildChannelRows(
     channel: channel.channel,
     identity: channel.displayName?.trim() || channel.externalId?.trim() || null,
     status: channel.connectionStatus,
-    error: channel.lastError?.trim() || null,
+    error: platformErrorReason(channel.lastError, channel.lastErrorCode),
     openConversations: channel._count?.conversations ?? null,
     /*
      * Checked with `typeof`, not truthiness: the route OMITS the key when no

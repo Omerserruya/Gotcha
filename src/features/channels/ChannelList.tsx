@@ -13,13 +13,13 @@ import { ChannelTile } from './ChannelTile';
 import { ConnectableRow } from './ConnectableRow';
 import {
   buildChannelRows,
-  channelErrorReason,
   isTroubled,
   type ChannelRow,
   type ConnectedRow,
   type WidgetRow,
 } from './rows';
 import { channelName } from '@/api/contracts/inbox';
+import type { PlatformErrorReason } from '@/api/contracts/platform-errors';
 import {
   WIDGET_CHANNELS,
   WIDGET_PATH,
@@ -60,7 +60,9 @@ export async function ChannelList({
   readonly install?: WidgetInstall | null;
 }) {
   const t = await getTranslations('channels');
-  const errorWords = (error: string | null) => errorWordsOf(t, error);
+  // The platform's error in the reader's words - never its raw English.
+  const tp = await getTranslations('common.platformError');
+  const errorWords = (reason: PlatformErrorReason | null) => (reason ? tp(reason) : null);
   const locale = await getLocale();
   const rows = buildChannelRows(channels, voice, voiceOffered, locale);
   const number = new Intl.NumberFormat(locale);
@@ -136,6 +138,7 @@ export async function ChannelList({
               <WidgetListRow
                 key="widget"
                 row={row}
+                errorWords={errorWords}
                 install={install}
                 t={t}
                 number={number}
@@ -231,6 +234,7 @@ export async function ChannelList({
  */
 function WidgetListRow({
   row,
+  errorWords,
   install,
   t,
   number,
@@ -239,11 +243,11 @@ function WidgetListRow({
   readonly row: WidgetRow;
   readonly install: WidgetInstall | null;
   readonly t: Awaited<ReturnType<typeof getTranslations<'channels'>>>;
+  readonly errorWords: (reason: PlatformErrorReason | null) => string | null;
   readonly number: Intl.NumberFormat;
   readonly windowDays: number;
 }) {
   const troubled = row.parts.find(isTroubled) ?? null;
-  const errorWords = (error: string | null) => errorWordsOf(t, error);
   const sum = (pick: (part: ConnectedRow) => number | null) => {
     const known = row.parts.map(pick).filter((n): n is number => n != null);
     return known.length > 0 ? known.reduce((a, b) => a + b, 0) : null;
@@ -326,13 +330,4 @@ function notSetUp(
 ): boolean {
   const platform = (OAUTH_PLATFORMS as Partial<Record<ChannelType, string>>)[channel];
   return platform !== undefined && providers?.[platform] === false;
-}
-
-/** A channel's platform error in the reader's words - never the raw English sentence. */
-function errorWordsOf(
-  t: Awaited<ReturnType<typeof getTranslations<'channels'>>>,
-  error: string | null,
-): string | null {
-  const reason = channelErrorReason(error);
-  return reason ? t(`errorReason.${reason}`) : null;
 }

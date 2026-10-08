@@ -132,6 +132,8 @@ export const connectionSchema = z
     lastTestResult: z.boolean().nullable().optional(),
     /** The platform's own words, truncated to 200 chars by the backend. */
     lastError: z.string().nullable().optional(),
+    /** The error's code (ai 272ee282): `platformErrorReason` keys on it first. */
+    lastErrorCode: z.string().nullable().optional(),
     /**
      * The connection's config. TWO fields are read from it - Shopify's
      * `shopDomain`, 14d's "avivco.myshopify.com", and WooCommerce's

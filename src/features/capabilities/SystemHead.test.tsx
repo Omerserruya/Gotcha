@@ -5,10 +5,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { capabilitySchema } from '@/api/contracts/capabilities';
 import { integrationSchema } from '@/api/contracts/integrations';
 import messages from '@/i18n/messages/en/capabilities.json';
+import common from '@/i18n/messages/en/common.json';
 
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'capabilities') =>
-    createTranslator({ locale: 'en', messages: { capabilities: messages }, namespace }),
+    createTranslator({ locale: 'en', messages: { capabilities: messages, common }, namespace }),
   getFormatter: async () => createFormatter({ locale: 'en' }),
 }));
 
@@ -71,5 +72,45 @@ describe('★ the system’s mark', () => {
     one.unmount();
     render(await SystemHead({ integration: null, capabilities: caps, usage: null }));
     expect(screen.getByTestId('system-head').querySelector('img')).toBeNull();
+  });
+});
+
+describe('★★ the connection’s last error, in words, under its line', () => {
+  const broken = (connection: Record<string, unknown>) =>
+    integrationSchema.parse({
+      id: 'i1',
+      slug: 'shopify',
+      name: 'Shopify',
+      tenantConnection: { id: 'c1', status: 'DISCONNECTED', ...connection },
+    });
+
+  it('by its code; a "[CODE] " left on the sentence is read the same and never printed', async () => {
+    const words = 'The GOTCHA app was removed from the store. Install it again to reconnect.';
+    const one = render(
+      await SystemHead({
+        integration: broken({ lastError: 'x', lastErrorCode: 'SHOPIFY_APP_UNINSTALLED' }),
+        capabilities: caps,
+        usage: null,
+      }),
+    );
+    expect(screen.getByTestId('system-error')).toHaveTextContent(words);
+    one.unmount();
+    render(
+      await SystemHead({
+        integration: broken({
+          lastError:
+            '[SHOPIFY_APP_UNINSTALLED] The GOTCHA Shopify app was uninstalled from this store.',
+        }),
+        capabilities: caps,
+        usage: null,
+      }),
+    );
+    expect(screen.getByTestId('system-error')).toHaveTextContent(words);
+    expect(screen.getByTestId('system-head')).not.toHaveTextContent('[SHOPIFY');
+  });
+
+  it('a healthy connection has no error line', async () => {
+    render(await SystemHead({ integration: shopify, capabilities: caps, usage: null }));
+    expect(screen.queryByTestId('system-error')).toBeNull();
   });
 });

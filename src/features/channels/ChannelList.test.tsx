@@ -6,10 +6,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { channelSchema } from '@/api/contracts/channels';
 import { widgetInstallSchema } from '@/api/contracts/website-widget';
 import channels from '@/i18n/messages/en/channels.json';
+import common from '@/i18n/messages/en/common.json';
+import heChannels from '@/i18n/messages/he/channels.json';
+import heCommon from '@/i18n/messages/he/common.json';
 
+/* The page's language, per test: the channel words and the shared error words. */
+const lang = vi.hoisted(() => ({ he: false }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'channels') =>
-    createTranslator({ locale: 'en', messages: { channels }, namespace }),
+    createTranslator({
+      locale: lang.he ? 'he' : 'en',
+      messages: lang.he ? { channels: heChannels, common: heCommon } : { channels, common },
+      namespace,
+    }),
   getLocale: async () => 'en',
 }));
 vi.mock('@/i18n/navigation', () => ({
@@ -317,15 +326,7 @@ describe('★★ the Website widget is ONE row: the web chat and every Shopify c
 
 describe('★★ a channel’s error in the reader’s words - the platform sends English with no code', () => {
   it('Hebrew: the uninstalled app in Hebrew; nothing English under the Hebrew title', async () => {
-    const he = (await import('@/i18n/messages/he/channels.json')).default;
-    const server = await import('next-intl/server');
-    vi.spyOn(server, 'getTranslations').mockResolvedValueOnce(
-      createTranslator({
-        locale: 'he',
-        messages: { channels: he },
-        namespace: 'channels',
-      }) as never,
-    );
+    lang.he = true;
     render(
       await ChannelList({
         channels: [
@@ -344,5 +345,38 @@ describe('★★ a channel’s error in the reader’s words - the platform send
     const banner = screen.getByTestId('channel-banner');
     expect(banner).toHaveTextContent('האפליקציה הוסרה מהחנות. מתקינים אותה מחדש כדי שהצ׳אט יחזור.');
     expect(banner).not.toHaveTextContent(/[A-Za-z]{4,} [a-z]{3,}/);
+    lang.he = false;
+  });
+
+  it('★★ the code first (auth e28012b0), and a "[CODE] " left on the sentence is read, never printed', async () => {
+    const shown = async (over: Record<string, unknown>) => {
+      const view = render(
+        await ChannelList({
+          channels: [
+            channelSchema.parse({
+              id: 's1',
+              channel: 'WHATSAPP',
+              connectionStatus: 'ERROR',
+              ...over,
+            }),
+          ],
+          voice: [],
+          voiceOffered: false,
+          windowDays: 30,
+        }),
+      );
+      const text = screen.getByTestId('channel-banner').textContent;
+      view.unmount();
+      return text;
+    };
+    const words = 'The app was removed from the store. Install it again to bring the chat back.';
+    expect(
+      await shown({ lastError: 'reworded later', lastErrorCode: 'SHOPIFY_CHAT_UNINSTALLED' }),
+    ).toContain(words);
+    const prefixed = await shown({
+      lastError: '[SHOPIFY_CHAT_UNINSTALLED] Shopify Chat app was uninstalled from the store.',
+    });
+    expect(prefixed).toContain(words);
+    expect(prefixed).not.toContain('[SHOPIFY');
   });
 });
