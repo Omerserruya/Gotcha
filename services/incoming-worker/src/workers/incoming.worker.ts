@@ -776,17 +776,12 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         }
       }
 
-      // Check if this is a new conversation needing routing
-      const messageCount = await prisma.message.count({ where: { conversationId: conversation.id } });
-
-      // The playbook routes the conversation's first message - or, when an
-      // automation answered the first ones, the first message no automation
-      // answered while the conversation is still unowned.
-      const c = conversation as any;
-      const firstUnanswered =
-        messageCount <= 1 ||
-        (!c.handledBy && !c.assignedAiAgentId && !c.chatbotNodeId && !c.automationRunId &&
-          (await automationAnsweredBefore(tenantId, conversation.id)));
+      // The playbook routes the conversation's first message - or, while it
+      // is still unowned, the first one after replies that were not an answer
+      // (an automation's, or the system's: an opt-out confirmation, the
+      // unsupported-media notice). See first-unanswered.service.
+      const { isFirstUnanswered } = await import("../services/first-unanswered.service");
+      const firstUnanswered = await isFirstUnanswered(tenantId, conversation as any, automationAnsweredBefore);
       if (firstUnanswered && !conversation.departmentId) {
         // New conversation - route via playbook rules
         const { routeConversation } = await import("../services/routing.service");
