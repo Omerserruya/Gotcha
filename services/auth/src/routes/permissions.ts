@@ -27,6 +27,14 @@ import {
   listPermissionsByDomain,
   getLastLoginBySubject,
 } from "@chatcenter/shared";
+import { changeRoles, RoleChangeRefused } from "../services/role-guard";
+
+/** A refused role change says why (409), so the screen can explain it. */
+function refused(res: Response, err: unknown): boolean {
+  if (!(err instanceof RoleChangeRefused)) return false;
+  res.status(409).json({ error: err.message, code: err.code });
+  return true;
+}
 
 /**
  * A grantable key may be either a legacy feature key OR a hierarchical
@@ -541,11 +549,17 @@ router.post(
       res.status(404).json({ error: "Role not found" });
       return;
     }
-    const assignment = await prisma.userRoleAssignment.upsert({
-      where: { userId_roleId: { userId, roleId } },
-      create: { userId, roleId, assignedBy: req.user?.userId },
-      update: {},
-    });
+    // The latest assignment is the effective role: assigning "agent" to an admin demotes them.
+    try {
+      await changeRoles({
+        tenantId, actorId: req.user?.userId, targetUserId: userId,
+        change: async (tx) => { await tx.userRoleAssignment.upsert({ where: { userId_roleId: { userId, roleId } }, create: { userId, roleId, assignedBy: req.user?.userId }, update: {} }); },
+      });
+    } catch (err) {
+      if (refused(res, err)) return;
+      throw err;
+    }
+    const assignment = await prisma.userRoleAssignment.findFirst({ where: { userId, roleId } });
     invalidatePermissionsCache({ userId });
     void writeAudit({ tenantId: assertTenantId(req), actorType: "user", actorId: req.user?.userId,
       action: AuditAction.ROLE_ASSIGNED, targetType: "user", targetId: userId, metadata: { roleId } });
@@ -564,7 +578,17 @@ router.delete(
       res.status(404).json({ error: "User not found" });
       return;
     }
-    await prisma.userRoleAssignment.deleteMany({ where: { userId, roleId } });
+    const removing = await prisma.userRoleAssignment.findFirst({ where: { userId, roleId }, select: { role: { select: { builtinKey: true } } } });
+    try {
+      await changeRoles({
+        tenantId, actorId: req.user?.userId, targetUserId: userId,
+        removedAdminRole: removing?.role.builtinKey === "owner" || removing?.role.builtinKey === "admin",
+        change: async (tx) => { await tx.userRoleAssignment.deleteMany({ where: { userId, roleId } }); },
+      });
+    } catch (err) {
+      if (refused(res, err)) return;
+      throw err;
+    }
     void writeAudit({ tenantId: assertTenantId(req), actorType: "user", actorId: req.user?.userId,
       action: AuditAction.ROLE_UNASSIGNED, targetType: "user", targetId: userId, metadata: { roleId } });
     invalidatePermissionsCache({ userId });
@@ -619,13 +643,21 @@ router.put(
       res.status(404).json({ error: "Role not found" });
       return;
     }
-    await prisma.$transaction([
-      prisma.userRoleAssignment.deleteMany({ where: { userId } }),
-      prisma.userRoleAssignment.create({
-        data: { userId, roleId, scope: scope ?? null, assignedBy: req.user?.userId },
-      }),
-    ]);
+    try {
+      await changeRoles({
+        tenantId, actorId: req.user?.userId, targetUserId: userId,
+        change: async (tx) => {
+          await tx.userRoleAssignment.deleteMany({ where: { userId } });
+          await tx.userRoleAssignment.create({ data: { userId, roleId, scope: scope ?? null, assignedBy: req.user?.userId } });
+        },
+      });
+    } catch (err) {
+      if (refused(res, err)) return;
+      throw err;
+    }
     invalidatePermissionsCache({ userId });
+    void writeAudit({ tenantId, actorType: "user", actorId: req.user?.userId,
+      action: AuditAction.ROLE_ASSIGNED, targetType: "user", targetId: userId, metadata: { roleId, replacedAll: true } });
     const assignment = await prisma.userRoleAssignment.findFirst({
       where: { userId, roleId },
       include: { role: true },
