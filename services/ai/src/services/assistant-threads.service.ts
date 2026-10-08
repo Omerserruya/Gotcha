@@ -83,8 +83,16 @@ export function scopeLine(scope: ThreadScope, now = new Date(), locale: "he" | "
 
 export interface Owner { tenantId: string; userId: string }
 
+/** What a thread is about, beyond its period: one approval request (design 03). Kept inside the scope column. */
+export interface ThreadContext { approvalId: string }
+export const contextOf = (scope: unknown): ThreadContext | null => {
+  const c = (scope as any)?.context;
+  return c && typeof c.approvalId === "string" && c.approvalId ? { approvalId: c.approvalId } : null;
+};
+
 const threadOut = (t: any) => ({
-  id: t.id, title: t.title ?? null, scope: t.scope,
+  id: t.id, title: t.title ?? null, scope: normalizeScope(t.scope) ?? DEFAULT_SCOPE,
+  context: contextOf(t.scope),
   // The scope as the dates the assistant uses today, for the chip ("1 Oct to 7 Oct").
   scopeDates: scopeDates(normalizeScope(t.scope) ?? DEFAULT_SCOPE),
   createdAt: t.createdAt, updatedAt: t.updatedAt,
@@ -97,8 +105,8 @@ export async function ownThread(o: Owner, id: string) {
   return prisma.assistantThread.findFirst({ where: { id, tenantId: o.tenantId, userId: o.userId } });
 }
 
-export async function createThread(o: Owner, scope: ThreadScope) {
-  const t = await prisma.assistantThread.create({ data: { tenantId: o.tenantId, userId: o.userId, scope: scope as any } });
+export async function createThread(o: Owner, scope: ThreadScope, context: ThreadContext | null = null) {
+  const t = await prisma.assistantThread.create({ data: { tenantId: o.tenantId, userId: o.userId, scope: { ...scope, ...(context ? { context } : {}) } as any } });
   return threadOut(t);
 }
 
@@ -112,9 +120,10 @@ export async function listThreads(o: Owner, opts: { limit?: number; cursor?: str
   }
   const rows = await prisma.assistantThread.findMany({
     where, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: limit + 1,
-    select: { id: true, title: true, updatedAt: true, lastMessageAt: true },
+    select: { id: true, title: true, updatedAt: true, lastMessageAt: true, scope: true },
   });
-  const page = rows.slice(0, limit);
+  // What each thread is about rides along (an "About: <request>" line), not its raw scope.
+  const page = rows.slice(0, limit).map(({ scope, ...t }) => ({ ...t, context: contextOf(scope) }));
   return { data: page, nextCursor: rows.length > limit ? page[page.length - 1]!.id : null };
 }
 
@@ -123,7 +132,8 @@ export async function patchThread(o: Owner, id: string, patch: { title?: string;
   if (!t) return null;
   const data: any = {};
   if (patch.title !== undefined) { data.title = withoutWideDashes(patch.title); data.titleSource = "user"; }
-  if (patch.scope !== undefined) data.scope = patch.scope;
+  // A new period keeps what the thread is about.
+  if (patch.scope !== undefined) { const ctx = contextOf(t.scope); data.scope = { ...patch.scope, ...(ctx ? { context: ctx } : {}) }; }
   if (patch.archived !== undefined) data.archivedAt = patch.archived ? (t.archivedAt ?? new Date()) : null;
   return threadOut(await prisma.assistantThread.update({ where: { id: t.id }, data }));
 }
@@ -387,9 +397,13 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
       authToken: input.authToken,
       signal: ac.signal,
       tokenBudget: RUN_TOKEN_BUDGET(),
-      extraSystem: threadSystemLines(run.scope, input.locale),
+      extraSystem: [
+        ...threadSystemLines(run.scope, input.locale),
+        ...(contextOf(input.thread.scope) ? ["This conversation is about one approval request. Read it with system_read_approval (it knows which) before answering. You can explain it; you cannot approve or reject it: that is done on the Approvals screen."] : []),
+      ],
       defaultPeriod: scopeDates(run.scope),
       onTools: (names) => { toolNames = new Set(names); },
+      contextApprovalId: contextOf(input.thread.scope)?.approvalId,
       surface: "home",
     }, async (ev: AgentRuntimeEvent) => {
       switch (ev.type) {

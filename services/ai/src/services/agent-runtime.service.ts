@@ -84,6 +84,8 @@ export interface AgentRunInput {
   extraSystem?: string[];
   /** The period query tools default to (a thread's scope as workspace days). */
   defaultPeriod?: { from: string; to: string };
+  /** The approval request a Home thread is about (design 03): the default of system_read_approval. */
+  contextApprovalId?: string;
   /** Where the user asks: a Home thread, or the Ctrl+K palette (the default). */
   surface?: "home" | "command_bar";
   /** Told the names of the tools this run may call (a Home thread keeps only suggestions one of them can answer). */
@@ -283,6 +285,7 @@ export async function runAgent(
         canReadKnowledge: !!input.operator.canReadKnowledge,
         userName: input.operator.userName,
         surface: input.surface ?? "command_bar",
+        contextApprovalId: input.contextApprovalId,
       });
       // Other words, same query (a default spelled out): the first card stands.
       const sourceKey = r.artifacts ? canonical((r.artifacts.source as any)?.query ?? null) : null;

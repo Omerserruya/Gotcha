@@ -34,6 +34,7 @@ import {
 import { normalizeQuery, listConversationsForSource } from "../services/assistant-query.service";
 import { normalizeOrderQuery, listOrdersForSource } from "../services/assistant-commerce-query.service";
 import { questionLanguage } from "../lib/reader-locale";
+import { readableApproval } from "../services/assistant-approval-read.service";
 
 const router = Router();
 
@@ -57,7 +58,15 @@ router.post("/threads", async (req: Request, res: Response) => {
   if (!o) { res.status(401).json({ error: "no user context" }); return; }
   const scope = normalizeScope(req.body?.scope);
   if (!scope) { res.status(400).json({ error: "Invalid scope", code: "INVALID_SCOPE" }); return; }
-  res.status(201).json({ data: await createThread(o, scope) });
+  // A thread about one approval request (design 03): one the caller may read, else the same 404 as a missing one.
+  const approvalId = typeof req.body?.context?.approvalId === "string" ? req.body.context.approvalId.trim() : "";
+  if (req.body?.context !== undefined && req.body?.context !== null) {
+    if (!approvalId || !(await readableApproval({ tenantId: o.tenantId, viewer: viewerOf(req) }, approvalId))) {
+      res.status(404).json({ error: "Approval request not found", code: "APPROVAL_NOT_FOUND" });
+      return;
+    }
+  }
+  res.status(201).json({ data: await createThread(o, scope, approvalId ? { approvalId } : null) });
 });
 
 router.get("/threads", async (req: Request, res: Response) => {

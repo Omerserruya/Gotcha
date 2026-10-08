@@ -21,6 +21,7 @@ import { readConversationResult } from "./assistant-conversation-read.service";
 import { customerCardResult } from "./assistant-customer-card.service";
 import { listApprovalsResult, listKnowledgeGapsResult } from "./assistant-work.service";
 import { preparePlan, PlanRefused } from "./assistant-plan.service";
+import { readApprovalResult } from "./assistant-approval-read.service";
 import { privateNumbers, privateConversationsClause } from "../lib/private-numbers";
 
 /** The last n days, today included (UTC days: a caller with a workspace period passes it). */
@@ -165,6 +166,18 @@ const SYSTEM_LIST_APPROVALS = {
     description:
       "The actions waiting for someone's approval (\"what's waiting for me?\"), as the Approvals screen lists them: what each one is, about which customer, the amount when there is one, and since when, each linking to it. Shown as a card; cite the source.",
     parameters: { type: "object", properties: {} },
+  },
+};
+
+const SYSTEM_READ_APPROVAL = {
+  type: "function" as const,
+  function: {
+    name: "system_read_approval",
+    description:
+      "One approval request: what it is, the action and its parameters, why it needs approval, who asked, the customer and conversation, its state. " +
+      "Read only: you can explain a request, never approve or reject it (that is done on the Approvals screen). " +
+      "Pass approvalId (from system_list_approvals); in a conversation about one request, call it with nothing.",
+    parameters: { type: "object", properties: { approvalId: { type: "string" } } },
   },
 };
 
@@ -356,6 +369,7 @@ export async function buildSystemAgentTools(opts: {
     SYSTEM_READ_CONVERSATION,
     SYSTEM_CUSTOMER_CARD,
     SYSTEM_LIST_APPROVALS,
+    SYSTEM_READ_APPROVAL,
     ...(opts.knowledge ? [SYSTEM_LIST_KNOWLEDGE_GAPS] : []),
     SYSTEM_RECENT_ACTIVITY,
     SYSTEM_QUERY_CONVERSATIONS,
@@ -426,6 +440,8 @@ export interface SystemToolDispatchCtx {
   userName?: string;
   /** Where they asked: a Home thread or the Ctrl+K palette. */
   surface?: "home" | "command_bar";
+  /** The approval request this thread is about, if any. */
+  contextApprovalId?: string;
 }
 
 /** The visibility OR-clause for this caller, or null when unrestricted. */
@@ -575,6 +591,14 @@ async function dispatchSystemTool(
         const r = await queryConversations({ tenantId: ctx.tenantId, viewer: ctx.viewer, locale, nextId }, q);
         return { toolCallId, content: JSON.stringify(r.summary), artifacts: { blocks: r.blocks, source: r.source } };
       }
+      case "system_read_approval": {
+        let seq = 0;
+        const nextId = ctx.nextId ?? ((k: "b" | "s") => `${k}${++seq}`);
+        const id = typeof args.approvalId === "string" && args.approvalId ? args.approvalId : ctx.contextApprovalId;
+        if (!id) return { toolCallId, content: JSON.stringify({ ok: false, error: "say which request (approvalId from system_list_approvals)" }) };
+        const r: any = await readApprovalResult({ tenantId: ctx.tenantId, viewer: ctx.viewer, locale: ctx.locale ?? "en", nextId }, id);
+        return { toolCallId, content: JSON.stringify(r.summary), ...(r.source ? { artifacts: { blocks: r.blocks, source: r.source } } : {}) };
+      }
       case "system_list_approvals":
       case "system_list_knowledge_gaps": {
         // The surface hides the gaps from a caller who may not read knowledge; this is the backstop.
@@ -703,6 +727,7 @@ const STEP_TEXT: Record<string, { en: string; he: string }> = {
   system_read_conversation: { en: "Reading the conversation", he: "קוראת את השיחה" },
   system_customer_card: { en: "Opening the customer's card", he: "פותחת את כרטיס הלקוח" },
   system_list_approvals: { en: "Checking what waits for approval", he: "בודקת מה מחכה לאישור" },
+  system_read_approval: { en: "Reading the request", he: "קוראת את הבקשה" },
   system_list_knowledge_gaps: { en: "Looking at the unanswered questions", he: "בודקת שאלות שלא נענו" },
   system_recent_activity: { en: "Looking at recent messages", he: "מסתכלת על ההודעות האחרונות" },
   system_query_conversations: { en: "Looking at the conversations", he: "בודקת את השיחות" },

@@ -31,6 +31,7 @@ const H = vi.hoisted(() => ({
   titleCalls: 0,
   titleAsks: [] as string[],
   convs: [] as any[],
+  approvals: [] as any[],
   n: 0,
 }));
 
@@ -90,7 +91,8 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       systemAgentMessage: { deleteMany: async (a: any) => { H.memoryDeletes.push(a.where); return { count: 1 }; } },
       user: { findUnique: async () => ({ name: "Omer", email: "o@x", role: "ADMIN", locale: null }) },
       tenant: { findUnique: async () => ({ name: "Lumiere", defaultLocale: "en" }) },
-      conversation: { ...t, findMany: async (a: any) => H.convs.slice(0, a.take ?? 1e9) }, message: t, contact: t, tenantTool: t, approvalRequest: t, aIAgent: t,
+      conversation: { ...t, findMany: async (a: any) => H.convs.slice(0, a.take ?? 1e9) }, message: t, contact: t, tenantTool: t, aIAgent: t,
+      approvalRequest: { ...t, findFirst: async (a: any) => H.approvals.find((r) => r.id === a.where.id && r.tenantId === a.where.tenantId) ?? null },
     },
   };
 });
@@ -133,6 +135,7 @@ beforeEach(() => {
   H.threads = []; H.messages = []; H.memoryDeletes = []; H.memoryAppends = []; H.kv.clear(); H.script = []; H.modelCalls = [];
   H.aiAllowed = true; H.user = "u1"; H.titleReply = "Refund questions"; H.n = 0; H.titleCalls = 0; H.titleAsks = [];
   H.convs = [];
+  H.approvals = [{ id: "apr_1", tenantId: "T", conversationId: null }, { id: "apr_other", tenantId: "OTHER", conversationId: null }];
 });
 const openConv = (id: string, channel = "WHATSAPP") => ({ id, channel, status: "OPEN", handledBy: "ai_agent", isHandedOver: false, customerName: `Customer ${id}`, customerExternalId: id, createdAt: new Date(), lastMessageAt: new Date() });
 /** One model turn asking for several tools at once. */
@@ -667,5 +670,34 @@ describe("★ suggestions only from tools (2026-10-08: 'List the 17 open convers
     const s = new SuggestionsSplitter();
     s.push('ok [[suggestions]] [{"text": "a?", "tool": "x"}, {"text": "b?", "tool": "y"}, "c?"]');
     expect(s.end({ tools: new Set(["x"]) }).suggestions).toEqual(["a?"]);
+  });
+});
+
+describe("★ a thread about one request (design 03)", () => {
+  it("created with the request: context on create, on the thread and in the list; a new period keeps it", async () => {
+    const r = await request(app()).post("/api/assistant/threads").send({ context: { approvalId: "apr_1" } });
+    expect(r.status).toBe(201);
+    expect(r.body.data.context).toEqual({ approvalId: "apr_1" });
+    const id = r.body.data.id;
+    expect((await request(app()).get(`/api/assistant/threads/${id}`)).body.data.thread.context).toEqual({ approvalId: "apr_1" });
+    expect((await request(app()).get("/api/assistant/threads")).body.data.find((x: any) => x.id === id).context).toEqual({ approvalId: "apr_1" });
+    await request(app()).patch(`/api/assistant/threads/${id}`).send({ scope: { range: "last_30" } });
+    expect((await request(app()).get(`/api/assistant/threads/${id}`)).body.data.thread).toMatchObject({ context: { approvalId: "apr_1" }, scope: { range: "last_30", channels: "all" } });
+    // The model is told what this thread is about, and that it cannot decide it.
+    H.script = [say("ok")];
+    await send(id, "why does this need my approval?");
+    const sys = H.modelCalls.at(-1).messages.filter((m: any) => m.role === "system").map((m: any) => m.content).join("\n");
+    expect(sys).toMatch(/about one approval request. Read it with system_read_approval .* you cannot approve or reject it/);
+  });
+
+  it("another workspace's request, or none: 404 APPROVAL_NOT_FOUND, and no thread", async () => {
+    for (const context of [{ approvalId: "apr_other" }, { approvalId: "nope" }, {}]) {
+      const r = await request(app()).post("/api/assistant/threads").send({ context });
+      expect(r.status).toBe(404);
+      expect(r.body.code).toBe("APPROVAL_NOT_FOUND");
+    }
+    expect(H.threads).toEqual([]);
+    // A plain thread has no context.
+    expect((await request(app()).post("/api/assistant/threads").send({})).body.data.context).toBeNull();
   });
 });

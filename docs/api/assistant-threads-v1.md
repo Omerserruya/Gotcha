@@ -364,6 +364,14 @@ deepLink /approvals?id=<id>; source kind "approvals", deepLink /approvals)
 and "question" (system_list_knowledge_gaps: title = the question, subtitle =
 how often and by how many, deepLink /studio/knowledge?section=gaps). Their
 sources have no §9.4 list; `hasMore` says more exist on the linked screen.
+A thread about one approval request (design 03): POST /threads accepts
+`context: { approvalId }`; the request must be the workspace's and, when it
+is tied to a conversation, one the caller can see, else 404
+{ code: "APPROVAL_NOT_FOUND" }. `context` comes back on create, GET
+/threads/:id and the list, and survives a scope PATCH. There the assistant
+reads the request (system_read_approval: a `record` of kind "approval" with
+`state` pending|approved|rejected|expired and `expiresAt` ISO, deepLink
+/approvals?id=<id>) and can only explain it: no tool approves or rejects.
 
 The answer cites a source after the claim it supports with `[^s1]` in `text`.
 The client renders it as that source's chip. The server removes any `[^...]`
