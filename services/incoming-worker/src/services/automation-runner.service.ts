@@ -98,6 +98,11 @@ export function statusAfter(result: FlowExecutionResult | null, error: unknown):
 const FAILED_ACTIONS = new Set(["http_error", "task_failed", "notify_failed", "no_branch", "send_failed"]);
 const WAITING_ACTIONS = new Set(["paused_for_reply", "sent_and_paused", "prompted_and_paused", "scheduled_resume", "waiting_on_timer"]);
 const SKIPPED_ACTIONS = new Set(["skip_noop", "skip_unknown"]);
+// The template send reports why it did not send as `skipped_<reason>`
+// (skipped_missing_removal_line, skipped_template_not_approved, ...). Any of
+// them is a skipped step: it used to read "ok" on the run log, a send that
+// never happened shown as done.
+const isSkipped = (action: string) => SKIPPED_ACTIONS.has(action) || /^skipped?_/.test(action);
 
 /** The walker's trace as run-log steps. */
 export function stepsFromTrace(trace: FlowExecutionResult["trace"]): Array<{ nodeId: string; nodeType: string; status: string; branch: string | null; output: any }> {
@@ -106,7 +111,7 @@ export function stepsFromTrace(trace: FlowExecutionResult["trace"]): Array<{ nod
     .map((t) => ({
       nodeId: t.nodeId,
       nodeType: t.type,
-      status: FAILED_ACTIONS.has(t.action) ? "failed" : WAITING_ACTIONS.has(t.action) ? "waiting" : SKIPPED_ACTIONS.has(t.action) ? "skipped" : "ok",
+      status: FAILED_ACTIONS.has(t.action) ? "failed" : WAITING_ACTIONS.has(t.action) ? "waiting" : isSkipped(t.action) ? "skipped" : "ok",
       branch: typeof t.detail?.branch === "string" ? t.detail.branch : null,
       output: { action: t.action, ...(t.detail && typeof t.detail === "object" ? t.detail : {}) },
     }));

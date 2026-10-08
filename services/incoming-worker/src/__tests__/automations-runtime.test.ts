@@ -179,6 +179,16 @@ describe("matching and scheduling (pure)", () => {
       .toMatchObject([{ nodeId: "h", status: "ok", branch: "open" }, { nodeId: "x", status: "failed", branch: null }]);
   });
 
+  it("★ a template that was not sent reads as skipped, never ok, with the reason in its output", () => {
+    const steps = stepsFromTrace([
+      { nodeId: "a", type: "send_message_template", action: "skipped_missing_removal_line" },
+      { nodeId: "b", type: "send_message_template", action: "skipped_template_not_approved" },
+      { nodeId: "c", type: "send_message_template", action: "sent" },
+    ]);
+    expect(steps.map((x) => x.status)).toEqual(["skipped", "skipped", "ok"]);
+    expect(steps[0]!.output).toEqual({ action: "skipped_missing_removal_line" });
+  });
+
   it("★ a timer acts only while the conversation is still parked on its node and run", () => {
     const job = { resumeNodeId: "w", automationRunId: "r1" };
     expect(timerIsCurrent(job, { chatbotNodeId: "w", automationRunId: "r1", status: "OPEN" })).toBe(true);
