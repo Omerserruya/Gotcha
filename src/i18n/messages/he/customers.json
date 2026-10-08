@@ -194,8 +194,8 @@
       "commerceDenied": "שינוי ברשומת הלקוח לא הותר",
       "commerceUnverified": "לא ניתן היה לאמת מול החנות שינוי ברשומת הלקוח",
       "unsupportedOutcomeClaim": "התשובה של GOTCHA טענה למשהו שאף כלי לא ביצע",
-      "unsupportedActionClaim": "התשובה של GOTCHA אמרה שהוא עושה משהו שלא עשה",
-      "exitCriteriaBlocked": "GOTCHA נעצר: חסרים עדיין פרטים שהיה צריך",
+      "unsupportedActionClaim": "התשובה של GOTCHA אמרה שהיא עושה משהו שלא עשתה",
+      "exitCriteriaBlocked": "GOTCHA נעצרה: חסרים עדיין פרטים שהיה צריך",
       "outputValidatorBlocked": "תשובה הוחלפה לפני שנשלחה: היא הפרה כלל"
     },
     "lead": "כל מה שנעשה בחשבון שלהם, מהחדש לישן",
@@ -219,16 +219,16 @@
       "discounts": "הנחות",
       "waiting": "ממתין לאישור",
       "waitingValue": "{count, plural, =0 {אין} one {בקשה אחת} other {# בקשות}}",
-      "may": "מה GOTCHA רשאי לעשות עבורם",
+      "may": "מה GOTCHA רשאית לעשות עבורם",
       "change": "שינוי ב-Studio · יכולות"
     },
-    "dayReplied": "{count, plural, one {GOTCHA ענה פעם אחת} other {GOTCHA ענה # פעמים}}",
+    "dayReplied": "{count, plural, one {GOTCHA ענתה פעם אחת} other {GOTCHA ענתה # פעמים}}",
     "daySent": "{count, plural, one {הצוות שלח הודעה} other {הצוות שלח # הודעות}}",
     "budget": {
-      "turn": "GOTCHA עצר: התשובה הגיעה לתקציב ה-AI שלה",
-      "conversation": "GOTCHA עצר: תקציב ה-AI של השיחה נגמר",
-      "tenant_day": "GOTCHA עצר: תקציב ה-AI היומי של סביבת העבודה נגמר",
-      "other": "GOTCHA עצר: תקציב AI נגמר"
+      "turn": "GOTCHA עצרה: התשובה הגיעה לתקציב ה-AI שלה",
+      "conversation": "GOTCHA עצרה: תקציב ה-AI של השיחה נגמר",
+      "tenant_day": "GOTCHA עצרה: תקציב ה-AI היומי של סביבת העבודה נגמר",
+      "other": "GOTCHA עצרה: תקציב AI נגמר"
     },
     "policy": {
       "kind": {
@@ -298,21 +298,21 @@
       "nothing_to_push": "נשמר ב-GOTCHA בלבד - לא היה דרך מה לשלוח את זה."
     },
     "teamOnly": "לצוות בלבד",
-    "mayUse": "GOTCHA רשאי להשתמש",
+    "mayUse": "GOTCHA רשאית להשתמש",
     "placeholder": "כתבו הערה על הלקוח…",
     "placeholderNamed": "כתבו הערה על {name}…",
     "filterEmpty": "אין כאן הערות.",
     "filter": {
       "all": "הכול",
-      "mayUse": "GOTCHA רשאי להשתמש",
+      "mayUse": "GOTCHA רשאית להשתמש",
       "teamOnly": "לצוות בלבד"
     },
     "side": {
       "heading": "הערות",
       "notes": "הערות",
-      "mayUse": "GOTCHA רשאי להשתמש",
+      "mayUse": "GOTCHA רשאית להשתמש",
       "teamOnly": "לצוות בלבד",
-      "reads": "מה GOTCHA קורא מכאן",
+      "reads": "מה GOTCHA קוראת מכאן",
       "readsNone": "עדיין כלום.",
       "readsCaption": "הערות לצוות בלבד לעולם לא מוצגות ל-AI ולעולם לא מגיעות ללקוח."
     }
@@ -326,7 +326,7 @@
   "card": {
     "since": "איתך מאז {when}",
     "reaches": "פונה אליך ב־{channels}",
-    "noSummary": "עדיין אין סיכום - GOTCHA יכתוב אחד כשיהיה מספיק מידע.",
+    "noSummary": "עדיין אין סיכום - GOTCHA תכתוב אחד כשיהיה מספיק מידע.",
     "addNote": "הוספת הערה",
     "message": "הודעה",
     "tabs": {
@@ -348,7 +348,7 @@
     "lifetime": "לאורך הזמן",
     "orders": "הזמנות",
     "refunds": "החזרים",
-    "remembers": "GOTCHA זוכר",
+    "remembers": "GOTCHA זוכרת",
     "remembersNone": "עדיין כלום.",
     "reach": "איך להשיג",
     "reachNone": "לא נרשם מזהה.",

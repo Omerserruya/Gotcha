@@ -22,7 +22,7 @@
   "summary": "{total, plural, =0 {עדיין לא נכנס דבר היום.} one {שיחה אחת היום, {handled} טופלו בלעדיכם.} two {# שיחות היום, {handled} טופלו בלעדיכם.} many {# שיחות היום, {handled} טופלו בלעדיכם.} other {# שיחות היום, {handled} טופלו בלעדיכם.}}",
   "summaryBacklog": "{waiting, plural, one {לא נכנס דבר היום. שיחה אחת עדיין ממתינה מקודם.} two {לא נכנס דבר היום. # שיחות עדיין ממתינות מקודם.} many {לא נכנס דבר היום. # שיחות עדיין ממתינות מקודם.} other {לא נכנס דבר היום. # שיחות עדיין ממתינות מקודם.}}",
   "command": {
-    "label": "שאלו את GOTCHA או אמרו לו מה לעשות",
+    "label": "שאלו את GOTCHA או אמרו לה מה לעשות",
     "placeholder": "שאלו כל דבר, או אמרו ל-GOTCHA מה לעשות…",
     "try": "נסו",
     "send": "שליחה",
@@ -88,7 +88,7 @@
     }
   },
   "working": {
-    "title": "GOTCHA עובד",
+    "title": "GOTCHA עובדת",
     "event": {
       "refund": {
         "completed": "בוצע החזר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
@@ -224,7 +224,7 @@
     }
   },
   "summaryUnavailable": "נתוני היום אינם זמינים כרגע.",
-  "summaryQuiet": "GOTCHA ענה על הכל עד כה. שום דבר לא ממתין לכם.",
+  "summaryQuiet": "GOTCHA ענתה על הכל עד כה. שום דבר לא ממתין לכם.",
   "quietWork": {
     "title": "שווה שעה, כל עוד שקט",
     "subtitle": "GOTCHA בחרה את אלה",
@@ -240,7 +240,7 @@
       },
       "conflicts": {
         "title": "{count, plural, one {שני מקורות עדיין חלוקים לגבי {fields}} other {מקורות חלוקים לגבי # דברים}}",
-        "body": "{count, plural, one {עד שתבחר, GOTCHA מעביר כל שאלה בנושא לאדם.} other {{fields} - עד שתבחר, GOTCHA מעביר את השאלות האלה לאדם.}}",
+        "body": "{count, plural, one {עד שתבחר, GOTCHA מעבירה כל שאלה בנושא לאדם.} other {{fields} - עד שתבחר, GOTCHA מעבירה את השאלות האלה לאדם.}}",
         "action": "לפתור"
       },
       "demandOne": {
@@ -262,7 +262,7 @@
   },
   "conflicts": {
     "title": "שני מקורות סותרים",
-    "body": "GOTCHA מצא תשובות סותרות עבור {field}. עד שתבחרו אחת, כל שאלה בנושא עוברת לאדם.",
+    "body": "GOTCHA מצאה תשובות סותרות עבור {field}. עד שתבחרו אחת, כל שאלה בנושא עוברת לאדם.",
     "accept": "השתמשו בחדש",
     "keep": "השאירו נוכחי",
     "failed": "השמירה נכשלה. הסתירה עדיין פתוחה."
@@ -343,7 +343,7 @@
         "title": "הוסיפו את מה ש-GOTCHA צריכה לדעת",
         "body": "הפנו אותה לאתר שלכם והיא תקרא את העמודים בעצמה.",
         "action": "הוסיפו ידע",
-        "after": "אחרי שתוסיף מה GOTCHA צריך לדעת."
+        "after": "אחרי שתוסיף מה GOTCHA צריכה לדעת."
       },
       "hire_employee": {
         "title": "לגייס את עובד ה־AI הראשון",
@@ -380,17 +380,17 @@
     "ingestWaiting": "{count, plural, one {אחת מחכה לאישור שלך} other {# מחכות לאישור שלך}}",
     "goLive": {
       "title": "עלייה לאוויר",
-      "body": "GOTCHA מתחיל לענות ללקוחות אמיתיים.",
+      "body": "GOTCHA מתחילה לענות ללקוחות אמיתיים.",
       "locked": "נעול",
       "go": "לעלות לאוויר",
       "lockedBy": "מחכה ל: {steps}",
-      "confirm": "GOTCHA יתחיל לענות ללקוחות אמיתיים. לעלות לאוויר?",
+      "confirm": "GOTCHA תתחיל לענות ללקוחות אמיתיים. לעלות לאוויר?",
       "yes": "כן, לעלות לאוויר",
       "going": "עולה לאוויר…",
       "cancel": "עוד לא",
       "connectStore": "לחיבור החנות",
       "failed": {
-        "store": "קודם מחברים את החנות - GOTCHA צריך אותה כדי לפעול על הזמנות.",
+        "store": "קודם מחברים את החנות - GOTCHA צריכה אותה כדי לפעול על הזמנות.",
         "profile": "קודם צריך למלא את פרופיל העסק.",
         "admin": "סביבת העבודה צריכה קודם מנהל פעיל.",
         "forbidden": "רק מנהל יכול להעלות את סביבת העבודה לאוויר.",
@@ -407,7 +407,7 @@
   "dayOne": {
     "eyebrow": "היום הראשון",
     "heading": "סביבת העבודה שלך מוכנה",
-    "read": "GOTCHA קרא {pages, plural, one {עמוד אחד} other {# עמודים}} וניסח {drafted, plural, one {תשובה אחת} other {# תשובות}}.",
+    "read": "GOTCHA קראה {pages, plural, one {עמוד אחד} other {# עמודים}} וניסחה {drafted, plural, one {תשובה אחת} other {# תשובות}}.",
     "stepsLeft": "{count, plural, one {נשאר צעד אחד לפני שאפשר לעלות לאוויר.} other {נשארו # צעדים לפני שאפשר לעלות לאוויר.}}",
     "allSteps": "כל הצעדים הושלמו.",
     "headingNamed": "סביבת העבודה שלך מוכנה, {name}"

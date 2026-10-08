@@ -59,11 +59,11 @@
     "typeToSearch": "הקלידו שם או מספר.",
     "searchFailed": "לא הצלחנו לחפש כרגע.",
     "noMatch": "אין התאמות.",
-    "lists": "או שGOTCHA יתקשר לרשימה",
+    "lists": "או ש־GOTCHA תתקשר לרשימה",
     "listsNone": "עדיין כלום.",
     "call": "להתקשר ל־{name}",
     "callSomeone": "להתקשר",
-    "letGotcha": "שGOTCHA יתקשר",
+    "letGotcha": "ש־GOTCHA תתקשר",
     "notYet": "התקשרות מכאן עדיין לא זמינה.",
     "starting": "מתקשר…",
     "ringing": "הטלפון של הקו מצלצל - ענה, והלקוח יחובר.",
@@ -84,7 +84,7 @@
   },
   "stats": {
     "week": "שיחות השבוע",
-    "gotchaAnswered": "GOTCHA ענה",
+    "gotchaAnswered": "GOTCHA ענתה",
     "average": "אורך ממוצע",
     "sale": "הסתיימו במכירה"
   },

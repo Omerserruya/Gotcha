@@ -85,7 +85,7 @@
     "channel_not_supported": "צעד לא עובד בערוץ הזה",
     "no_customer_on_path": "צעד שולח הודעה, אבל לטריגר הזה אין לקוח",
     "node_unavailable": "צעד עוד לא זמין",
-    "unknown_node": "צעד ש־GOTCHA לא מכיר",
+    "unknown_node": "צעד ש־GOTCHA לא מכירה",
     "unknown_branch": "ענף שמוביל למקום לא מוכר",
     "no_output": "אחרי צעד אין כלום",
     "cycle": "הצעדים חוזרים על עצמם בלולאה",

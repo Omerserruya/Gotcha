@@ -158,7 +158,7 @@
     "undo": "ביטול",
     "noUndo": "עדיין אין אפשרות לבטל את זה.",
     "sent": {
-      "title": "מה GOTCHA שלח להם",
+      "title": "מה GOTCHA שלחה להם",
       "delivered": "כבר נשלח",
       "notYet": "עדיין לא נשלח",
       "add": "להוסיף משהו",
@@ -167,7 +167,7 @@
     "pattern": {
       "title": "זו הפעם ה-{count} כזו",
       "body": "{approved} כאלה אושרו כאן, {rejected, plural, =0 {אף אחת לא} other {#}} נדחו.",
-      "handle": "ש-GOTCHA יטפל בהן",
+      "handle": "ש-GOTCHA תטפל בהן",
       "keep": "להמשיך לשאול אותי"
     },
     "next": {
@@ -197,8 +197,8 @@
   },
   "pending": {
     "title": "{count, select, 1 {דבר אחד מחכה להחלטה שלך} 2 {שני דברים מחכים להחלטה שלך} 3 {שלושה דברים מחכים להחלטה שלך} 4 {ארבעה דברים מחכים להחלטה שלך} 5 {חמישה דברים מחכים להחלטה שלך} 6 {שישה דברים מחכים להחלטה שלך} 7 {שבעה דברים מחכים להחלטה שלך} 8 {שמונה דברים מחכים להחלטה שלך} 9 {תשעה דברים מחכים להחלטה שלך} other {# דברים מחכים להחלטה שלך}}",
-    "description": "GOTCHA עשה את העבודה.",
-    "soonest": "GOTCHA עשה את העבודה. אחד מהם פג בעוד {in}.",
+    "description": "GOTCHA עשתה את העבודה.",
+    "soonest": "GOTCHA עשתה את העבודה. אחד מהם פג בעוד {in}.",
     "minutes": "{n, plural, one {דקה} other {# דקות}}",
     "hours": "{n, plural, one {שעה} two {שעתיים} other {# שעות}}",
     "days": "{n, plural, one {יום} two {יומיים} other {# ימים}}"
@@ -214,7 +214,7 @@
     "eyebrowAutomation": "התבקש על ידי אוטומציה · {time}"
   },
   "card": {
-    "why": "למה GOTCHA ממליץ על זה",
+    "why": "למה GOTCHA ממליצה על זה",
     "leave": "אם תשאיר את זה",
     "leaveBody": "אם אף אחד לא יחליט עד {when}, הבקשה תפוג והשיחה תעבור לאדם."
   },
@@ -286,17 +286,17 @@
     "editInvalid": "מספר גדול מאפס.",
     "editOver": "לא יותר מ-{amount}.",
     "editCancel": "להשאיר {amount}",
-    "editNotYet": "עריכת הסכום תגיע ברגע ש-GOTCHA יוכל לבצע אותה.",
+    "editNotYet": "עריכת הסכום תגיע ברגע ש-GOTCHA תוכל לבצע אותה.",
     "editInvalidMinor": "מספר שלם גדול מאפס.",
     "editDiscount": "עריכת הנחה",
     "editLabelPercent": "הנחה לאישור (%)",
     "editInvalidPercent": "אחוז גדול מאפס, עד 100."
   },
   "queueFoot": {
-    "handled": "{count, plural, one {GOTCHA טיפל היום בפעולה אחת לבד.} other {GOTCHA טיפל היום ב-# פעולות לבד.}}",
+    "handled": "{count, plural, one {GOTCHA טיפלה היום בפעולה אחת לבד.} other {GOTCHA טיפלה היום ב-# פעולות לבד.}}",
     "change": "לשנות מה דורש אישור",
     "under": "החזרים עד {limit} לא מגיעים אליך.",
-    "handledNone": "היום GOTCHA לא טיפל בשום דבר לבד."
+    "handledNone": "היום GOTCHA לא טיפלה בשום דבר לבד."
   },
   "reject3": {
     "prompt": "דוחים? למה:",
