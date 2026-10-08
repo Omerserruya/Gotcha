@@ -45,7 +45,8 @@
     "heading": "What a role can allow",
     "scopeIsPerRole": "A role has one reach, and it applies to everything the role does - not to each permission separately. Choose it once for the role.",
     "notLevels": "Each line here is its own switch. There is no \"view / edit / manage\" ladder: reading a conversation and closing one are separate permissions, and someone can have either without the other.",
-    "scopedMark": "Limited by the role’s reach"
+    "scopedMark": "Limited by the role’s reach",
+    "permissionName": "{row} · {action}"
   },
   "remove": {
     "start": "Take this away",

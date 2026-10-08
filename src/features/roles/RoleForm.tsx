@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronDown } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useMemo, useState, useTransition } from 'react';
 
 import { humaniseCode } from '@/api/contracts/capabilities';
@@ -12,6 +12,7 @@ import { Link, useRouter } from '@/i18n/navigation';
 
 import { createRole, updateRole } from './actions';
 import { gridRows, levelOf, levelsOf, rowChanged, withLevel, type GridRow } from './role-grid';
+import { permissionName } from './permission-words';
 import { roleNameOf } from './role-words';
 import styles from './Roles.module.css';
 
@@ -51,6 +52,10 @@ export function RoleForm({
   readonly editing?: Role | null;
 }) {
   const t = useTranslations('roles');
+  const locale = useLocale();
+  // The catalogue is English only: a permission's name in the role grid's own words.
+  const word = (key: string) => (t.has(key as never) ? t(key as never) : null);
+  const join = (row: string, action: string) => t('catalog.permissionName', { row, action });
   // A built-in role in the reader's words; a custom one in its owner's.
   const nameOf = (role: Role) => roleNameOf(role, (key, part) => t(`builtinRole.${key}.${part}`));
   const router = useRouter();
@@ -287,7 +292,7 @@ export function RoleForm({
                           aria-pressed={held.has(p.key)}
                           className={styles.gridAction}
                           data-testid={`role-action-${p.key}`}
-                          title={p.displayName}
+                          title={permissionName(p, locale, word, join)}
                           onClick={() => toggle(p.key)}
                         >
                           {actionName(p.action)}

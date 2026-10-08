@@ -1,8 +1,9 @@
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 
 import { humaniseCode } from '@/api/contracts/capabilities';
 import { groupByDomain, takesScope, type PermissionDef } from '@/api/contracts/permission-catalog';
 
+import { areaName, permissionDescription, permissionName } from './permission-words';
 import styles from './Roles.module.css';
 
 /**
@@ -35,7 +36,11 @@ export async function PermissionCatalog({
   readonly permissions: readonly PermissionDef[];
 }) {
   const t = await getTranslations('roles');
+  const locale = await getLocale();
   const domains = groupByDomain(permissions);
+  // The catalogue is English only: names and areas in the role grid's own words.
+  const word = (key: string) => (t.has(key as never) ? t(key as never) : null);
+  const join = (row: string, action: string) => t('catalog.permissionName', { row, action });
 
   return (
     <div className={styles.catalog} data-testid="permission-catalog">
@@ -45,7 +50,9 @@ export async function PermissionCatalog({
           className={styles.domain}
           data-testid={`domain-${group.domain}`}
         >
-          <h3 className={styles.domainHeading}>{humaniseCode(group.domain)}</h3>
+          <h3 className={styles.domainHeading}>
+            {areaName(group.domain, locale, word, humaniseCode(group.domain))}
+          </h3>
 
           <ul className={styles.permissions}>
             {group.permissions.map((permission) => (
@@ -61,10 +68,13 @@ export async function PermissionCatalog({
                   enforces against.
                 */}
                 <span className={styles.permissionName}>
-                  {permission.displayName || permission.key}
+                  {permissionName(permission, locale, word, join)}
                 </span>
-                {permission.description ? (
-                  <span className={styles.permissionWhat}>{permission.description}</span>
+                {/* English only on the platform: shown in English, never under a Hebrew name. */}
+                {permissionDescription(permission, locale) ? (
+                  <span className={styles.permissionWhat}>
+                    {permissionDescription(permission, locale)}
+                  </span>
                 ) : null}
 
                 {/*

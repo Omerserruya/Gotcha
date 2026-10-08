@@ -1,7 +1,7 @@
 'use client';
 
-import { useTimeZone, useTranslations } from 'next-intl';
-import { useMemo, useState, useTransition } from 'react';
+import { useLocale, useTimeZone, useTranslations } from 'next-intl';
+import { useState, useTransition } from 'react';
 
 import { groupByDomain, type PermissionDef } from '@/api/contracts/permission-catalog';
 import { holds, type Person } from '@/api/contracts/roles';
@@ -10,6 +10,7 @@ import { Link } from '@/i18n/navigation';
 
 import { addPermission } from './actions';
 import { dateIn, expiresAtOf, type Ends } from './grant-end';
+import { areaName, permissionName } from './permission-words';
 import styles from './Roles.module.css';
 
 /**
@@ -35,6 +36,11 @@ export function GrantPicker({
 }) {
   const t = useTranslations('roles.grant');
   const tr = useTranslations('roles');
+  const locale = useLocale();
+  // The catalogue is English only: names and areas in the role grid's own words.
+  const word = (key: string) => (tr.has(key as never) ? tr(key as never) : null);
+  const join = (row: string, action: string) => tr('catalog.permissionName', { row, action });
+  const nameOf = (p: PermissionDef) => permissionName(p, locale, word, join);
   const who = person.name ?? person.email;
   const [query, setQuery] = useState('');
   /* 02 draws checkboxes: several at once, one call each, in order. */
@@ -48,16 +54,17 @@ export function GrantPicker({
 
   const given = new Set(person.grants.filter((g) => g.granted).map((g) => g.feature));
   const named = permissions.filter((p) => p.displayName.trim() !== '');
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return groupByDomain(
-      q
-        ? named.filter(
-            (p) => p.displayName.toLowerCase().includes(q) || p.domain.toLowerCase().includes(q),
-          )
-        : named,
-    );
-  }, [named, query]);
+  // Searched in the words shown, so a Hebrew name finds its permission.
+  const q = query.trim().toLowerCase();
+  const shown = groupByDomain(
+    q
+      ? named.filter(
+          (p) =>
+            nameOf(p).toLowerCase().includes(q) ||
+            areaName(p.domain, locale, word, p.domain).toLowerCase().includes(q),
+        )
+      : named,
+  );
 
   const status = (p: PermissionDef): string | null =>
     given.has(p.key)
@@ -114,7 +121,9 @@ export function GrantPicker({
       <div className={styles.grantAreas}>
         {shown.map((group) => (
           <section key={group.domain} className={styles.grantArea}>
-            <h4 className={styles.grantAreaName}>{group.domain}</h4>
+            <h4 className={styles.grantAreaName}>
+              {areaName(group.domain, locale, word, group.domain)}
+            </h4>
             <ul className={styles.grantOptions}>
               {group.permissions.map((p) => {
                 const covered = status(p);
@@ -138,7 +147,7 @@ export function GrantPicker({
                           )
                         }
                       />
-                      <span className={styles.grantOptionName}>{p.displayName}</span>
+                      <span className={styles.grantOptionName}>{nameOf(p)}</span>
                       {covered ? <span className={styles.grantOptionNote}>{covered}</span> : null}
                     </label>
                   </li>

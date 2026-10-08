@@ -7,6 +7,7 @@ import drawer from '@/design-system/styles/drawer.module.css';
 import { Link } from '@/i18n/navigation';
 
 import { ChangeRole } from './ChangeRole';
+import { areaName, permissionName } from './permission-words';
 import { RemovePermission } from './RemovePermission';
 import { builtinRoleKey, roleDescriptionOf, roleNameOf, type BuiltinWords } from './role-words';
 import styles from './Roles.module.css';
@@ -56,11 +57,18 @@ export async function PersonPanel({
   const who = person.name ?? person.email;
 
   const byKey = new Map(permissions.map((p) => [p.key, p]));
+  // The catalogue is English only: names and areas in the role grid's own words.
+  const word = (key: string) => (t.has(key as never) ? t(key as never) : null);
+  const join = (row: string, action: string) => t('catalog.permissionName', { row, action });
   const nameOf = (feature: string) => {
-    const name = byKey.get(feature)?.displayName.trim();
-    return name ? name : null;
+    const permission = byKey.get(feature);
+    if (!permission || !permission.displayName.trim()) return null;
+    return permissionName(permission, locale, word, join);
   };
-  const areaOf = (feature: string) => byKey.get(feature)?.domain || feature.split(':')[0] || '';
+  const areaOf = (feature: string) => {
+    const domain = byKey.get(feature)?.domain || feature.split(':')[0] || '';
+    return areaName(domain, locale, word, domain);
+  };
 
   // A built-in role in the reader's words, by key; a custom one in its owner's.
   const words: BuiltinWords = (key, part) => t(`builtinRole.${key}.${part}`);

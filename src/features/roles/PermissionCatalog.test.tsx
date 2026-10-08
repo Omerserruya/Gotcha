@@ -1,9 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { permissionDefSchema } from '@/api/contracts/permission-catalog';
 import messages from '@/i18n/messages/en/roles.json';
+import heMessages from '@/i18n/messages/he/roles.json';
 
 import { PermissionCatalog } from './PermissionCatalog';
 
@@ -28,10 +29,19 @@ import { PermissionCatalog } from './PermissionCatalog';
  * `features/home/raw-values.test.ts`, beside the other disguises of this shape.
  */
 
+const intl = vi.hoisted(() => ({ locale: 'en' as 'en' | 'he' }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'roles') =>
-    createTranslator({ locale: 'en', messages: { roles: messages }, namespace }),
+    createTranslator({
+      locale: intl.locale,
+      messages: { roles: intl.locale === 'en' ? messages : heMessages },
+      namespace,
+    }),
+  getLocale: async () => intl.locale,
 }));
+beforeEach(() => {
+  intl.locale = 'en';
+});
 
 const perm = (over: Record<string, unknown>) =>
   permissionDefSchema.parse({ key: 'x:y:z', displayName: 'Something', ...over });
@@ -138,5 +148,36 @@ describe('★★ the scope note is a marker, not the explanation repeated per ro
       }),
     );
     expect(screen.queryByText(/limited by the role/i)).toBeNull();
+  });
+});
+
+describe('★ A1 - a Hebrew page names the catalogue in Hebrew', () => {
+  const reply = () =>
+    perm({
+      key: 'conversation:messages:reply',
+      domain: 'conversation',
+      feature: 'conversation',
+      subFeature: 'messages',
+      action: 'reply',
+      displayName: 'Reply to conversations',
+      description: 'Send replies in any conversation',
+    });
+
+  it('★ the heading, the name, and no English description', async () => {
+    intl.locale = 'he';
+    render(await PermissionCatalog({ permissions: [reply()] }));
+    expect(screen.getByTestId('domain-conversation')).toHaveTextContent('תיבה');
+    expect(screen.getByTestId('permission-conversation:messages:reply')).toHaveTextContent(
+      'שיחות · מענה',
+    );
+    expect(screen.getByTestId('permission-catalog')).not.toHaveTextContent(/[A-Za-z]{3}/);
+  });
+
+  it('English is unchanged: the platform’s name and description', async () => {
+    render(await PermissionCatalog({ permissions: [reply()] }));
+    expect(screen.getByTestId('permission-conversation:messages:reply')).toHaveTextContent(
+      'Reply to conversations',
+    );
+    expect(screen.getByText('Send replies in any conversation')).toBeInTheDocument();
   });
 });

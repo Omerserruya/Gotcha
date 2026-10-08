@@ -1,9 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { roleSchema, type Person } from '@/api/contracts/roles';
 import messages from '@/i18n/messages/en/roles.json';
+import heMessages from '@/i18n/messages/he/roles.json';
 
 import { PersonPanel } from './PersonPanel';
 
@@ -19,10 +20,15 @@ import { PersonPanel } from './PersonPanel';
  * exactly when it is cheapest to get right.
  */
 
+const intl = vi.hoisted(() => ({ locale: 'en' as 'en' | 'he' }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'roles') =>
-    createTranslator({ locale: 'en', messages: { roles: messages }, namespace }),
-  getLocale: async () => 'en',
+    createTranslator({
+      locale: intl.locale,
+      messages: { roles: intl.locale === 'en' ? messages : heMessages },
+      namespace,
+    }),
+  getLocale: async () => intl.locale,
   getTimeZone: async () => 'Asia/Jerusalem',
 }));
 vi.mock('@/i18n/navigation', () => ({
@@ -458,5 +464,46 @@ describe('★★ 12d’s role - in the reader’s words, and changeable (auth 00
   it('no role read, a legacy enum: still said in the reader’s words', async () => {
     render(await PersonPanel({ person: person({ role: 'ADMIN' }), permissions: CATALOG }));
     expect(screen.getByTestId('person-role')).toHaveTextContent(/^Admin/);
+  });
+});
+
+describe('★ A1 - an added permission is named in Hebrew on a Hebrew page', () => {
+  afterEach(() => {
+    intl.locale = 'en';
+  });
+
+  it('★ the grid’s words, and the area too - not the platform’s English', async () => {
+    intl.locale = 'he';
+    await renderPanel(
+      {
+        grants: [
+          {
+            feature: 'conversation:messages:reply',
+            granted: true,
+            reason: null,
+            updatedBy: null,
+            updatedAt: null,
+            expiresAt: null,
+            active: true,
+          },
+        ],
+      },
+      [
+        {
+          key: 'conversation:messages:reply',
+          domain: 'conversation',
+          feature: 'conversation',
+          subFeature: 'messages',
+          action: 'reply',
+          scoped: false,
+          displayName: 'Reply to conversations',
+          description: '',
+        },
+      ],
+    );
+    const line = screen.getByTestId('grant-conversation:messages:reply');
+    expect(line).toHaveTextContent('שיחות · מענה');
+    expect(line).toHaveTextContent('תיבה');
+    expect(line).not.toHaveTextContent('Reply to conversations');
   });
 });

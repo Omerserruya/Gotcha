@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PermissionDef } from '@/api/contracts/permission-catalog';
 import { holds, type Person } from '@/api/contracts/roles';
 import roles from '@/i18n/messages/en/roles.json';
+import heRoles from '@/i18n/messages/he/roles.json';
 
 const { addPermission } = vi.hoisted(() => ({
   addPermission: vi.fn(() => {
@@ -179,5 +180,28 @@ describe('★ 12e corrections (measurement of 9121d4f)', () => {
     await userEvent.click(screen.getByTestId('grant-add'));
     expect((addPermission.mock.calls[0] as unknown[])[3]).toMatch(/^2099-01-31T2[01]:59:59/);
     expect(await screen.findByTestId('grant-problem')).toHaveTextContent('already passed');
+  });
+});
+
+describe('★ A1 - the picker in Hebrew', () => {
+  it('★ names each option in Hebrew, and finds it by its Hebrew name', async () => {
+    const reply: PermissionDef = {
+      ...def('conversation:messages:reply', 'conversation', 'Reply, note, close'),
+      feature: 'conversation',
+      subFeature: 'messages',
+      action: 'reply',
+    };
+    render(
+      <NextIntlClientProvider locale="he" messages={{ roles: heRoles }}>
+        <GrantPicker person={TOMER} permissions={[reply, CATALOG[3]!]} roleName="Agent" />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('grant-option-conversation:messages:reply')).toHaveTextContent(
+      'שיחות · מענה',
+    );
+    expect(screen.getByTestId('grant-picker')).toHaveTextContent('תיבה');
+    await userEvent.type(screen.getByTestId('grant-search'), 'שיחות');
+    expect(screen.getByTestId('grant-option-conversation:messages:reply')).toBeInTheDocument();
+    expect(screen.queryByTestId('grant-option-customer:export:run')).toBeNull();
   });
 });
