@@ -474,6 +474,20 @@
       "credits": "Your workspace can't use AI right now: its credits have run out. See <billing>Settings · Billing</billing>.",
       "missing": "This conversation isn't here any more. It may have been deleted.",
       "failed": "It couldn't answer just now. Try again in a moment."
+    },
+    "blocks": {
+      "coverage": "Recorded for {covered} of {of} conversations",
+      "capped": "Counted from the first {cap}",
+      "storeLimit": "Part of what the store returned",
+      "open": "Open ↗",
+      "total": "{total} in all",
+      "rows": "{count, plural, one {# in all} other {# in all}}",
+      "showAll": "Show all",
+      "showMore": "Show more",
+      "reading": "Reading…",
+      "readFailed": "Couldn't read the rest. Try again in a moment.",
+      "storeGone": "The store can't be read right now, so the rest can't be shown.",
+      "sources": "What this answer is based on"
     }
   }
 }

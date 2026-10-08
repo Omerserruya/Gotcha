@@ -19,6 +19,7 @@ import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavai
 import { Link } from '@/i18n/navigation';
 import { typedDir } from '@/lib/typed-dir';
 
+import { AnswerBlocks, SourceChips } from './AnswerBlocks';
 import { AnswerText } from './AnswerText';
 import { AskContext } from './home-ask';
 import styles from './HomeConversation.module.css';
@@ -138,7 +139,7 @@ function Conversation({ chat }: { readonly chat: Chat }) {
         ) : (
           <ol className={styles.turns}>
             {chat.turns.map((turn) => (
-              <TurnView key={turn.id} turn={turn} />
+              <TurnView key={turn.id} turn={turn} threadId={chat.thread?.id ?? null} />
             ))}
           </ol>
         )}
@@ -418,7 +419,14 @@ function DeleteThread({ onDelete }: { readonly onDelete: () => Promise<boolean> 
   );
 }
 
-function TurnView({ turn }: { readonly turn: ThreadTurn }) {
+function TurnView({
+  turn,
+  threadId,
+}: {
+  readonly turn: ThreadTurn;
+  /** Where its sources' full lists are read (stage 2). */
+  readonly threadId: string | null;
+}) {
   const t = useTranslations('home.conversation');
   return (
     <li className={styles.turn} data-testid={`turn-${turn.id}`} data-status={turn.status}>
@@ -444,9 +452,12 @@ function TurnView({ turn }: { readonly turn: ThreadTurn }) {
           ) : null}
           {turn.answer ? (
             <div aria-live="polite" data-testid="turn-answer">
-              <AnswerText text={turn.answer} />
+              <AnswerText text={turn.answer} sources={turn.sources} />
             </div>
           ) : null}
+          {/* 01a: the work under the words - the server's blocks, then what it stands on. */}
+          <AnswerBlocks blocks={turn.blocks} threadId={threadId} messageId={turn.messageId} />
+          <SourceChips sources={turn.sources} />
           {turn.problem ? (
             <Problem problem={turn.problem} />
           ) : turn.status === 'failed' ? (

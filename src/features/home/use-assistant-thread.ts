@@ -240,7 +240,10 @@ export function useAssistantThread() {
     setTurns(
       running
         ? // The stored partial text is dropped: the replay below rebuilds it, once.
-          [...stored.slice(0, -1), { ...running, answer: '', steps: [], status: 'running' }]
+          [
+            ...stored.slice(0, -1),
+            { ...running, answer: '', steps: [], blocks: [], sources: [], status: 'running' },
+          ]
         : stored.map((turn) =>
             turn.status === 'running' ? { ...turn, status: 'failed' as const } : turn,
           ),

@@ -166,3 +166,63 @@ describe('the contract reads the stream by the event’s NAME', () => {
     expect(threadDetailSchema.safeParse(detail('paused')).success).toBe(false);
   });
 });
+
+describe('★★ stage 2: blocks and sources are the server’s, applied once (§9)', () => {
+  const chart = {
+    type: 'chart',
+    id: 'b1',
+    title: 'Conversations this week',
+    sourceId: 's1',
+    kind: 'bar',
+    x: { kind: 'day', values: ['2026-10-06', '2026-10-07'] },
+    series: [{ key: 'c', label: 'Conversations', values: [3, 9] }],
+    unit: 'count',
+  };
+
+  it('the run’s message id, each block once in order, the sources as given', () => {
+    const turn = play([
+      ev('run.start', { runId: 'run1', userMessageId: 'u1', messageId: 'm1' }),
+      ev('block', { block: chart }),
+      ev('block', { block: chart }),
+      ev('block', {
+        block: { type: 'record', id: 'b2', title: 'Duvet', kind: 'product', fields: [] },
+      }),
+      ev('sources', { items: [{ id: 's1', label: '12 conversations', kind: 'conversations' }] }),
+    ]);
+    expect(turn.messageId).toBe('m1');
+    expect(turn.blocks.map((b) => b.id)).toEqual(['b1', 'b2']);
+    expect(turn.sources.map((s) => s.label)).toEqual(['12 conversations']);
+  });
+
+  it('★ a block this screen cannot read is left out - the message is never rejected for it', () => {
+    const message = threadMessageSchema.parse({
+      id: 'a1',
+      role: 'assistant',
+      text: 'x',
+      status: 'done',
+      blocks: [chart, { type: 'map', id: 'b9' }, { type: 'chart', id: 'b8' }],
+      sources: [{ id: 's1', label: 'L', kind: 'k' }, { nope: true }],
+    });
+    expect(message.blocks.map((b) => b.id)).toEqual(['b1']);
+    expect(message.sources.map((s) => s.id)).toEqual(['s1']);
+  });
+
+  it('a stored answer carries its blocks, sources and message id', () => {
+    const [turn] = turnsFromMessages([
+      threadMessageSchema.parse({ id: 'u1', role: 'user', text: 'q', status: 'done' }),
+      threadMessageSchema.parse({
+        id: 'a1',
+        role: 'assistant',
+        text: 'x',
+        status: 'done',
+        blocks: [chart],
+        sources: [{ id: 's1', label: 'L', kind: 'k' }],
+      }),
+    ]);
+    expect(turn).toMatchObject({
+      messageId: 'a1',
+      blocks: [{ id: 'b1' }],
+      sources: [{ id: 's1' }],
+    });
+  });
+});

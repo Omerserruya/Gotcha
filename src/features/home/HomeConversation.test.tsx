@@ -275,6 +275,39 @@ describe('★★ the first question makes a thread, and Home becomes the convers
   });
 });
 
+describe('★★ stage 2: the work under the words, as the stream gives it (§9.6)', () => {
+  it('a block renders as it arrives; the sources come once, after the text - its chips, and its citations', async () => {
+    show();
+    await ask('How many conversations this week?');
+    await push(
+      START,
+      ev('text.delta', 2, { text: 'Up this week[^s1].' }),
+      ev('block', 3, {
+        block: {
+          type: 'breakdown',
+          id: 'b1',
+          title: 'By channel',
+          sourceId: 's1',
+          items: [{ key: 'WHATSAPP', label: 'WhatsApp', value: 23, share: 0.61 }],
+          total: 38,
+          unit: 'count',
+        },
+      }),
+    );
+    expect(screen.getByTestId('block-b1')).toHaveTextContent('By channel');
+    // The text cites a source not given yet: no marker, no chip.
+    expect(screen.getByTestId('turn-answer')).toHaveTextContent(/^Up this week\.$/);
+    await push(
+      ev('sources', 4, {
+        items: [{ id: 's1', label: '38 conversations', kind: 'conversations', deepLink: '/inbox' }],
+      }),
+      DONE(5),
+    );
+    expect(screen.getByTestId('turn-answer')).toHaveTextContent('Up this week38 conversations.');
+    expect(screen.getByTestId('turn-sources')).toHaveTextContent('38 conversations');
+  });
+});
+
 describe('★★ resume: a dropped stream is picked up where it stopped, and no word is doubled', () => {
   it('the drop: GET the run’s events after the last id seen; the replayed ones are not applied twice', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });

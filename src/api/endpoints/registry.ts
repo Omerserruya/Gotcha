@@ -442,6 +442,13 @@ export const assistantEndpoints = {
   /** POST → 202 cancelling; the stream then ends with `message.done` cancelled. */
   cancel: (id: string, messageId: string) =>
     endpoint('/api/assistant/threads/{id}/messages/{messageId}/cancel', { id, messageId }),
+  /** Stage 2: the full list behind a source, `?cursor=`, 25 a page (§9.4). */
+  sourceRecords: (id: string, messageId: string, sourceId: string) =>
+    endpoint('/api/assistant/threads/{id}/messages/{messageId}/sources/{sourceId}/records', {
+      id,
+      messageId,
+      sourceId,
+    }),
 } as const;
 
 /**

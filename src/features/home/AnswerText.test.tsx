@@ -12,6 +12,16 @@ vi.mock('@/i18n/navigation', () => ({
 
 import { AnswerText } from './AnswerText';
 
+const SOURCES = [
+  {
+    id: 's1',
+    label: '12 conversations mention “small”',
+    kind: 'conversations',
+    count: 12,
+    deepLink: '/inbox?channel=WHATSAPP',
+  },
+];
+
 const show = (text: string) => render(<AnswerText text={text} />).container;
 
 describe('★★ the answer’s markdown subset (assistant-threads-v1 §1)', () => {
@@ -99,5 +109,22 @@ describe('★★ the answer’s markdown subset (assistant-threads-v1 §1)', () 
     const box = show('Returns are up **38');
     expect(box.querySelector('strong')).toBeNull();
     expect(box).toHaveTextContent('Returns are up **38');
+  });
+
+  it('★★ a citation is its source’s chip where it stands; an unknown one shows nothing - the marker never', () => {
+    const box = render(
+      <AnswerText text={'Returns are up 38%[^s1], mostly one product[^s9].'} sources={SOURCES} />,
+    ).container;
+    expect(box).toHaveTextContent(
+      'Returns are up 38%12 conversations mention “small”, mostly one product.',
+    );
+    expect(box).not.toHaveTextContent('[^');
+    // The chip leads to the source's list (the app's own link; the mock keeps only href).
+    expect(box.querySelector('a[data-in-app]')).toHaveAttribute('href', '/inbox?channel=WHATSAPP');
+  });
+
+  it('while the text streams and the sources have not come yet: no marker, no chip', () => {
+    const box = render(<AnswerText text={'Up 38%[^s1]'} sources={[]} />).container;
+    expect(box).toHaveTextContent(/^Up 38%$/);
   });
 });

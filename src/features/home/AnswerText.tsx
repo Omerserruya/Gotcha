@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
 
+import type { AnswerSource } from '@/api/contracts/assistant-threads';
 import { Link } from '@/i18n/navigation';
 import { safeInternalPath, safeLinkUrl } from '@/lib/safe-url';
 
+import { SourceChip } from './AnswerBlocks';
 import styles from './HomeConversation.module.css';
 
 /**
@@ -16,8 +18,15 @@ import styles from './HomeConversation.module.css';
  * Each block reads in its own direction (`dir="auto"`): a Hebrew answer
  * right to left, its list markers on the right.
  */
-export function AnswerText({ text }: { readonly text: string }) {
-  return <>{blocks(text).map((block, i) => renderBlock(block, i))}</>;
+export function AnswerText({
+  text,
+  sources = [],
+}: {
+  readonly text: string;
+  /** Stage 2: what `[^sN]` cites - drawn as that source's chip where it stands. */
+  readonly sources?: readonly AnswerSource[];
+}) {
+  return <>{blocks(text).map((block, i) => renderBlock(block, i, sources))}</>;
 }
 
 type Block =
@@ -49,14 +58,14 @@ function blocks(text: string): Block[] {
   return out.filter((block) => block.kind !== 'p' || block.lines.length > 0);
 }
 
-function renderBlock(block: Block, key: number): ReactNode {
+function renderBlock(block: Block, key: number, sources: readonly AnswerSource[]): ReactNode {
   if (block.kind === 'p') {
     return (
       <p key={key} className={styles.answer} dir="auto">
         {block.lines.map((line, i) => (
           <span key={i}>
             {i > 0 ? <br /> : null}
-            {inline(line)}
+            {inline(line, sources)}
           </span>
         ))}
       </p>
@@ -66,30 +75,36 @@ function renderBlock(block: Block, key: number): ReactNode {
   return (
     <List key={key} className={styles.answerList} dir="auto">
       {block.items.map((item, i) => (
-        <li key={i}>{inline(item)}</li>
+        <li key={i}>{inline(item, sources)}</li>
       ))}
     </List>
   );
 }
 
 /**
- * `**bold**`, `` `code` ``, `[label](url)`, `*italic*` / `_italic_` - first
+ * `[^s1]` (a citation, stage 2), `**bold**`, `` `code` ``, `[label](url)`,
+ * `*italic*` / `_italic_` - first
  * match wins, left to right. Italics only at a word's edge: inside a word a
  * `_` or `*` is part of it - `SHOPIFY_LIVE_CHAT` read as "SHOPIFY*LIVE*CHAT"
  * (dev, 2026-10-07), and `5*3*2` is arithmetic.
  */
 const INLINE =
-  /\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\(([^)\s]+)\)|(?<![\p{L}\p{N}_*])\*([^*\s][^*\n]*?)\*(?![\p{L}\p{N}_*])|(?<![\p{L}\p{N}_])_([^_\s][^_\n]*?)_(?![\p{L}\p{N}_])/gu;
+  /\[\^(s\d+)\]|\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\(([^)\s]+)\)|(?<![\p{L}\p{N}_*])\*([^*\s][^*\n]*?)\*(?![\p{L}\p{N}_*])|(?<![\p{L}\p{N}_])_([^_\s][^_\n]*?)_(?![\p{L}\p{N}_])/gu;
 
-function inline(text: string): ReactNode[] {
+function inline(text: string, sources: readonly AnswerSource[] = []): ReactNode[] {
   const out: ReactNode[] = [];
   let at = 0;
   for (const match of text.matchAll(INLINE)) {
     const index = match.index ?? 0;
     if (index > at) out.push(text.slice(at, index));
-    const [whole, bold, code, label, url, italic, underscored] = match;
+    const [whole, cite, bold, code, label, url, italic, underscored] = match;
     const key = `${index}`;
-    if (bold !== undefined) out.push(<strong key={key}>{inline(bold)}</strong>);
+    if (cite !== undefined) {
+      // A citation: its source's chip. Not known yet (the sources come after
+      // the text) or never: nothing - the marker itself is never shown.
+      const source = sources.find((s) => s.id === cite);
+      if (source) out.push(<SourceChip key={key} source={source} inline />);
+    } else if (bold !== undefined) out.push(<strong key={key}>{inline(bold, sources)}</strong>);
     else if (code !== undefined) out.push(<code key={key}>{code}</code>);
     else if (label !== undefined) out.push(<AnswerLink key={key} label={label} url={url!} />);
     else out.push(<em key={key}>{italic ?? underscored}</em>);

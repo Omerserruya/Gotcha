@@ -54,6 +54,116 @@ export const threadStepSchema = z.object({
 });
 export type ThreadStep = z.infer<typeof threadStepSchema>;
 
+/* ── Stage 2 (§9): answers that come back as work. Numbers from the server, never the model. ── */
+
+const partialSchema = z
+  .union([
+    z.object({ reason: z.literal('capped'), cap: z.number() }),
+    z.object({ reason: z.literal('store_limit') }),
+  ])
+  .nullable()
+  .catch(null)
+  .default(null);
+const unitSchema = z.enum(['count', 'currency', 'percent']).catch('count').default('count');
+const link = z.string().nullable().catch(null).default(null);
+
+const blockBase = {
+  id: z.string(),
+  title: z.string(),
+  sourceId: z.string().nullable().catch(null).default(null),
+  deepLink: link,
+  partial: partialSchema,
+};
+
+export const chartBlockSchema = z.object({
+  ...blockBase,
+  type: z.literal('chart'),
+  kind: z.enum(['bar', 'line']).catch('bar'),
+  x: z.object({ kind: z.enum(['day', 'category']), values: z.array(z.string()) }),
+  series: z.array(z.object({ key: z.string(), label: z.string(), values: z.array(z.number()) })),
+  unit: unitSchema,
+  currency: z.string().nullable().catch(null).default(null),
+  highlight: z.array(z.string()).catch([]).default([]),
+});
+
+export const breakdownBlockSchema = z.object({
+  ...blockBase,
+  type: z.literal('breakdown'),
+  items: z.array(
+    z.object({ key: z.string(), label: z.string(), value: z.number(), share: z.number() }),
+  ),
+  total: z.number().nullable().catch(null).default(null),
+  unit: unitSchema,
+  currency: z.string().nullable().catch(null).default(null),
+  other: z.object({ label: z.string(), value: z.number() }).nullable().catch(null).default(null),
+  /** Intent / sentiment: recorded for `covered` of `of` - never a distribution over all. */
+  coverage: z.object({ covered: z.number(), of: z.number() }).nullable().catch(null).default(null),
+});
+
+export const recordItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  subtitle: z.string().nullable().catch(null).default(null),
+  meta: z.string().nullable().catch(null).default(null),
+  deepLink: link,
+});
+export type RecordItem = z.infer<typeof recordItemSchema>;
+
+export const recordListBlockSchema = z.object({
+  ...blockBase,
+  type: z.literal('record_list'),
+  kind: z.string(),
+  items: z.array(recordItemSchema),
+  total: z.number().nullable().catch(null).default(null),
+  hasMore: z.boolean().catch(false).default(false),
+});
+
+export const recordBlockSchema = z.object({
+  ...blockBase,
+  type: z.literal('record'),
+  kind: z.string(),
+  fields: z.array(z.object({ key: z.string(), label: z.string(), value: z.string() })),
+});
+
+export const blockSchema = z.discriminatedUnion('type', [
+  chartBlockSchema,
+  breakdownBlockSchema,
+  recordListBlockSchema,
+  recordBlockSchema,
+]);
+export type AnswerBlock = z.infer<typeof blockSchema>;
+
+export const sourceSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  kind: z.string(),
+  count: z.number().nullable().catch(null).default(null),
+  deepLink: link,
+});
+export type AnswerSource = z.infer<typeof sourceSchema>;
+
+/**
+ * Each block read on its own: one this screen does not know (a type added
+ * later) or cannot read is left out - never the whole message rejected.
+ */
+const eachOf = <T>(schema: z.ZodType<T>) =>
+  z
+    .array(z.unknown())
+    .catch([])
+    .default([])
+    .transform((items) =>
+      items.flatMap((item) => {
+        const parsed = schema.safeParse(item);
+        return parsed.success ? [parsed.data] : [];
+      }),
+    );
+
+/** `GET …/sources/:sourceId/records?cursor=` - 25 a page, the caller's current visibility. */
+export const sourceRecordsSchema = z.object({
+  data: z.array(recordItemSchema),
+  nextCursor: z.string().nullable().catch(null).default(null),
+});
+
 export const MESSAGE_STATES = ['done', 'streaming', 'cancelled', 'failed'] as const;
 
 export const threadMessageSchema = z.object({
@@ -64,6 +174,8 @@ export const threadMessageSchema = z.object({
   steps: z.array(threadStepSchema).catch([]).default([]),
   suggestions: z.array(z.string()).catch([]).default([]),
   runId: z.string().nullable().catch(null).default(null),
+  blocks: eachOf(blockSchema),
+  sources: eachOf(sourceSchema),
 });
 export type ThreadMessage = z.infer<typeof threadMessageSchema>;
 
@@ -99,6 +211,8 @@ const EVENT_SCHEMAS = {
   suggestions: z.object({ items: z.array(z.string()) }),
   'thread.title': z.object({ title: z.string() }),
   error: z.object({ code: z.string(), message: z.string().optional() }),
+  block: z.object({ block: blockSchema }),
+  sources: z.object({ items: eachOf(sourceSchema) }),
   'message.done': z.object({
     messageId: z.string(),
     status: z.enum(['done', 'cancelled', 'failed']),

@@ -1,5 +1,11 @@
 import { isApiError } from '@/api/client/api-error';
-import type { ThreadEvent, ThreadMessage, ThreadStep } from '@/api/contracts/assistant-threads';
+import type {
+  AnswerBlock,
+  AnswerSource,
+  ThreadEvent,
+  ThreadMessage,
+  ThreadStep,
+} from '@/api/contracts/assistant-threads';
 
 /**
  * Why a turn has no (whole) answer, in the terms the screen words it:
@@ -24,6 +30,12 @@ export interface ThreadTurn {
   readonly answer: string;
   readonly steps: readonly ThreadStep[];
   readonly suggestions: readonly string[];
+  /** Stage 2: the server's blocks, in order, each final as it arrives. */
+  readonly blocks: readonly AnswerBlock[];
+  /** Stage 2: what the answer stands on - its chips, and what `[^sN]` cites. */
+  readonly sources: readonly AnswerSource[];
+  /** The answer's message - what its sources' full lists are read through. */
+  readonly messageId: string | null;
   readonly status: 'running' | 'done' | 'cancelled' | 'failed';
   /** Stop was pressed; the stream has not said `cancelled` yet. */
   readonly cancelling: boolean;
@@ -39,6 +51,9 @@ export function newTurn(id: string, question: string): ThreadTurn {
     answer: '',
     steps: [],
     suggestions: [],
+    blocks: [],
+    sources: [],
+    messageId: null,
     status: 'running',
     cancelling: false,
     problem: null,
@@ -89,6 +104,15 @@ export function applyEvent(turn: ThreadTurn, event: ThreadEvent, seq: number | n
       return { ...next, answer: next.answer + event.data.text };
     case 'suggestions':
       return { ...next, suggestions: event.data.items.slice(0, 3) };
+    case 'run.start':
+      return { ...next, messageId: event.data.messageId };
+    case 'block':
+      // Final as it arrives; one id once.
+      return next.blocks.some((b) => b.id === event.data.block.id)
+        ? next
+        : { ...next, blocks: [...next.blocks, event.data.block] };
+    case 'sources':
+      return { ...next, sources: event.data.items };
     case 'error':
       return {
         ...next,
@@ -103,7 +127,7 @@ export function applyEvent(turn: ThreadTurn, event: ThreadEvent, seq: number | n
       };
     case 'message.done':
       return { ...next, status: event.data.status, cancelling: false };
-    // `run.start` and `thread.title` belong to the thread, not to the turn's words.
+    // `thread.title` belongs to the thread, not to the turn.
     default:
       return next;
   }
@@ -148,6 +172,9 @@ export function turnsFromMessages(messages: readonly ThreadMessage[]): ThreadTur
       answer: message.text,
       steps: message.steps,
       suggestions: message.suggestions.slice(0, 3),
+      blocks: message.blocks,
+      sources: message.sources,
+      messageId: message.id,
       status: message.status === 'streaming' ? 'running' : message.status,
     };
   }
