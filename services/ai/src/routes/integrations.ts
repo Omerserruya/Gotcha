@@ -23,6 +23,7 @@ import {
 import { getBusinessCoreMap } from "../services/connectors/part-systems";
 import { readerLocale } from "../lib/reader-locale";
 import { catalogDescription } from "../lib/catalog-descriptions";
+import { catalogTool } from "../lib/catalog-tools-he";
 import { splitErrorCode } from "../lib/error-code";
 
 const router = Router();
@@ -124,7 +125,7 @@ router.get("/", async (req: Request, res: Response) => {
       ...entry,
       description: catalogDescription(entry.slug, entry.description, locale),
       catalogTools: entry.catalogTools.map((ct: any) => ({
-        ...ct,
+        ...catalogTool(entry.slug, ct, locale),
         tenantTool: ct.tenantTools?.[0] || null,
         tenantTools: undefined,
       })),
@@ -772,14 +773,15 @@ router.get("/:slug", async (req: Request, res: Response) => {
     }
 
     const tenantConnection = boundConnection(entry.tenantConnections[0]);
+    const locale = await readerLocale(req);
 
     res.json({
       data: {
         ...entry,
-        description: catalogDescription(entry.slug, entry.description, await readerLocale(req)),
+        description: catalogDescription(entry.slug, entry.description, locale),
         authType: entry.authType,
         authSchema: entry.authSchema,
-        catalogTools: entry.catalogTools,
+        catalogTools: entry.catalogTools.map((ct: any) => catalogTool(entry.slug, ct, locale)),
         tenantConnection,
         tenantConnections: undefined,
       },
