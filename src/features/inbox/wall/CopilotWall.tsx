@@ -15,6 +15,7 @@ import { SuggestionCarousel } from './SuggestionCarousel';
 import { WallBody } from './WallBody';
 import { factLabel, firstOrder, ordersView, refundCount } from './wall-model';
 import styles from './Wall.module.css';
+import { PersonName } from '@/features/customers/PersonName';
 
 /**
  * 02 Inbox's dark right-hand wall, top to bottom (Omer, 2026-10-06):
@@ -175,7 +176,7 @@ async function PersonBlock({
           {initials(name)}
         </span>
         <span className={styles.personName}>
-          <span>{name?.trim() ? <UserText>{name}</UserText> : t('unnamed')}</span>
+          <span>{name?.trim() ? <PersonName name={name} /> : t('unnamed')}</span>
           <span className={styles.meta} data-testid="wall-person-since">
             {since ? (
               t('since', {

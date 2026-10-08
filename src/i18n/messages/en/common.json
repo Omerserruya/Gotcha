@@ -27,5 +27,9 @@
     "minutes": "{count, plural, =1 {1 minute} other {# minutes}}",
     "hours": "{count, plural, =1 {1 hour} other {# hours}}",
     "days": "{count, plural, =1 {1 day} other {# days}}"
+  },
+  "person": {
+    "shopper": "Website shopper",
+    "signedInShopper": "Signed-in website shopper"
   }
 }

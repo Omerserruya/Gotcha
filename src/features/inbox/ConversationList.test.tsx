@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { conversationRowSchema, queueOrder, type ConversationRow } from '@/api/contracts/inbox';
 import channels from '@/i18n/messages/en/channels.json';
+import common from '@/i18n/messages/en/common.json';
 import navigation from '@/i18n/messages/en/navigation.json';
 import messages from '@/i18n/messages/en/inbox.json';
 
@@ -31,7 +32,7 @@ import { QUEUE_CHANNEL_FILTERS } from './inbox-views';
 const render = (ui: ReactNode) =>
   rtlRender(ui, {
     wrapper: ({ children }) => (
-      <NextIntlClientProvider locale="en" messages={{ inbox: messages }}>
+      <NextIntlClientProvider locale="en" messages={{ inbox: messages, common }}>
         {children}
       </NextIntlClientProvider>
     ),
@@ -564,8 +565,11 @@ describe('⚠⚠ the row the design draws, and the line it exists for', () => {
     );
     const circles = rowLinks().map((r) => r.firstElementChild?.textContent);
     expect(circles[0]).toBe('DC');
-    expect(circles[1]).toBe('SO');
-    expect(circles[1]).not.toContain('myshopify');
+    // A stored shopper is no one's initials: the neutral, empty mark - not "SO".
+    expect(circles[1]).toBe('');
+    // And their name is our words, never the stored "Shopper on <shop>" (shopper-name.ts).
+    expect(rowLinks()[1]).toHaveTextContent('Website shopper');
+    expect(rowLinks()[1]).not.toHaveTextContent('myshopify');
   });
 
   it('⚠ an unnamed row gets an empty circle, not a placeholder glyph', async () => {

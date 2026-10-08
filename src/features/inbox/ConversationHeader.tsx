@@ -8,11 +8,11 @@ import {
   type ConversationRow,
 } from '@/api/contracts/inbox';
 import type { CommerceContextResponse } from '@/api/contracts/customer-orders';
-import { UserText } from '@/design-system/primitives/text/UserText';
 
 import { initials } from './initials';
 import styles from './Inbox.module.css';
 import { ltr } from '@/lib/bidi';
+import { PersonName } from '@/features/customers/PersonName';
 
 /**
  * How many orders this customer has, or `null` when we cannot say.
@@ -80,7 +80,7 @@ export async function ConversationHeader({
           */}
           <h2 className={styles.openName} data-testid="conversation-who">
             {conversation.customerName?.trim() ? (
-              <UserText>{conversation.customerName}</UserText>
+              <PersonName name={conversation.customerName} />
             ) : (
               /*
                * ★★ NOT `identity.unnamed`, WHICH IS THE STRING "Someone".

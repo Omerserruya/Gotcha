@@ -27,5 +27,9 @@
     "minutes": "{count, plural, =1 {דקה} other {# דקות}}",
     "hours": "{count, plural, =1 {שעה} =2 {שעתיים} other {# שעות}}",
     "days": "{count, plural, =1 {יום} =2 {יומיים} other {# ימים}}"
+  },
+  "person": {
+    "shopper": "קונה באתר",
+    "signedInShopper": "קונה מחובר באתר"
   }
 }

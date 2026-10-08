@@ -1,3 +1,5 @@
+import { storedShopper } from '@/lib/shopper-name';
+
 /**
  * Up to two initials for the avatar, from whatever the name turns out to be.
  *
@@ -11,7 +13,8 @@
  *   decorative, `aria-hidden`, and the name beside it already says "Someone".
  */
 export function initials(name: string | null): string {
-  if (name === null) return '';
+  // A stored "Shopper on <shop>" is no one's initials: the neutral, empty mark (shopper-name.ts).
+  if (name === null || storedShopper(name)) return '';
   return name
     .split(/\s+/)
     .filter(Boolean)

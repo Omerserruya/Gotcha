@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { getTranslations } from 'next-intl/server';
 import { z } from 'zod';
 
 import type { Approval } from '@/api/contracts/approvals';
@@ -7,6 +8,7 @@ import { briefSchema } from '@/api/contracts/customer-detail';
 import { commerceContextSchema } from '@/api/contracts/customer-orders';
 import { serverApi } from '@/api/client/server-api';
 import { customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
+import { personNameLater } from '@/lib/shopper-name';
 import { logger } from '@/observability/logger';
 
 /**
@@ -89,7 +91,11 @@ export async function loadApprovalCustomers(
       const summary = commerce?.summary ?? commerce?.data?.summary ?? null;
       const total = summary?.shopCurrencyTotal;
       const customer: ApprovalCustomer = {
-        name: contact?.displayName?.trim() || conversation?.customerName?.trim() || null,
+        // A stored "Shopper on <shop>" in the reader's words (shopper-name.ts).
+        name: await personNameLater(
+          contact?.displayName?.trim() || conversation?.customerName?.trim() || null,
+          () => getTranslations('common.person'),
+        ),
         since: contact?.createdAt ?? null,
         lifetime:
           total && typeof total.amount === 'number' && total.currency

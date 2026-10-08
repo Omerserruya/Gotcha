@@ -11,6 +11,8 @@ import type { CustomerDetail } from './load-customer';
 import styles from './Customers.module.css';
 import { displayHandle } from './phone';
 import { UserText } from '@/design-system/primitives/text/UserText';
+import { PersonName } from './PersonName';
+import { storedShopper } from '@/lib/shopper-name';
 
 /**
  * 04b - a person with a history, not a record.
@@ -44,6 +46,8 @@ export function parseCustomerTab(raw: string | undefined): Tab {
 
 /** Up to two initials, from words that have letters. */
 export function initialsOf(name: string | null): string {
+  // A stored "Shopper on <shop>": the neutral, empty mark (shopper-name.ts).
+  if (storedShopper(name)) return '';
   if (!name) return '';
   return name
     .split(/\s+/)
@@ -126,9 +130,7 @@ export async function CustomerHeader({
       </span>
       <div className={styles.cardWho}>
         {/* A name, or a handle standing in for one: isolated, so a phone reads left to right. */}
-        <h1 className={styles.cardName}>
-          {name ? <UserText>{name}</UserText> : t('list.unnamed')}
-        </h1>
+        <h1 className={styles.cardName}>{name ? <PersonName name={name} /> : t('list.unnamed')}</h1>
         <p className={styles.cardFacts}>{facts.length > 0 ? facts.join(' · ') : '-'}</p>
         {/* The one place in the product that is serif italic: the character summary. */}
         <p

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import channels from '@/i18n/messages/en/channels.json';
 import navigation from '@/i18n/messages/en/navigation.json';
+import common from '@/i18n/messages/en/common.json';
 
 const push = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ push }) }));
@@ -19,7 +20,7 @@ import { CommandPalette, OPEN_COMMAND_PALETTE } from './CommandPalette';
 
 const mount = () =>
   render(
-    <NextIntlClientProvider locale="en" messages={{ navigation, channels }}>
+    <NextIntlClientProvider locale="en" messages={{ navigation, channels, common }}>
       <CommandPalette />
     </NextIntlClientProvider>,
   );
@@ -101,6 +102,26 @@ describe('★★ 19 - ⌘K from anywhere', () => {
     expect(action).toHaveTextContent('Needs approval');
     await userEvent.click(action);
     expect(push).toHaveBeenCalledWith('/approvals');
+  });
+
+  it('★ a Shopify visitor stored as "Shopper on <shop>" is found as a website shopper - never the stored string', async () => {
+    searchConversations.mockResolvedValue({
+      ok: true,
+      hits: [
+        {
+          id: 'c9',
+          name: 'Shopper on urban-supply-gotcha-demo.myshopify.com',
+          handle: null,
+          channel: 'SHOPIFY_LIVE_CHAT',
+        },
+      ],
+    });
+    mount();
+    openWithKeys();
+    await userEvent.type(screen.getByTestId('command-input'), 'shop');
+    const hit = await screen.findByTestId('command-item-conversation-c9');
+    expect(hit).toHaveTextContent('Website shopper');
+    expect(hit).not.toHaveTextContent('myshopify');
   });
 
   it('★ GO TO a customer - by name, or by an order number', async () => {

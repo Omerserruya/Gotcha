@@ -25,6 +25,7 @@ import {
   type InboxView,
   type QueueChannelFilter,
 } from './inbox-views';
+import { PersonName } from '@/features/customers/PersonName';
 
 /**
  * Screen 02's queue.
@@ -299,7 +300,7 @@ export async function ConversationList({
                   t('queue.unnamed')
                 ) : (
                   /* A name is the data's direction, not the layout's. */
-                  <UserText>{conversation.customerName}</UserText>
+                  <PersonName name={conversation.customerName} />
                 )}
               </span>
 

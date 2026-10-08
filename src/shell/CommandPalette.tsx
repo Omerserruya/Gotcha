@@ -19,6 +19,7 @@ import {
 } from './command-search';
 import { ltr } from '@/lib/bidi';
 import { SkeletonRows } from '@/design-system/primitives/skeleton/Skeleton';
+import { personName } from '@/lib/shopper-name';
 
 /** The rail's ⌘K button opens the palette by this event - its look unchanged. */
 export const OPEN_COMMAND_PALETTE = 'gotcha:command-palette';
@@ -63,6 +64,9 @@ export function CommandPalette() {
   const tp = useTranslations('navigation.palette');
   const common = useTranslations('common');
   const tch = useTranslations('channels');
+  // A stored "Shopper on <shop>" in the reader's words (shopper-name.ts).
+  const shown = (name: string | null | undefined) =>
+    personName(name, (kind) => common(`person.${kind}`));
   const router = useRouter();
   const locale = useLocale();
   const { canSee } = usePermissions();
@@ -154,17 +158,17 @@ export function CommandPalette() {
         group: 'go' as const,
         label: person.byOrder
           ? tp('order', { number: person.byOrder.replace(/^#/, '') })
-          : (person.name ?? ltr(person.handle) ?? tp('someone')),
+          : (shown(person.name) ?? ltr(person.handle) ?? tp('someone')),
         // A handle is an LTR island: a phone in a Hebrew line lays out backwards otherwise.
         meta: person.byOrder
-          ? (person.name ?? ltr(person.handle) ?? tp('customer'))
+          ? (shown(person.name) ?? ltr(person.handle) ?? tp('customer'))
           : [tp('customer'), ltr(person.handle)].filter(Boolean).join(' · '),
         href: `/customers/${encodeURIComponent(person.id)}`,
       })),
       ...(searchable ? hits : []).map((hit) => ({
         key: `conversation-${hit.id}`,
         group: 'go' as const,
-        label: hit.name ?? ltr(hit.handle) ?? tp('someone'),
+        label: shown(hit.name) ?? ltr(hit.handle) ?? tp('someone'),
         meta: [
           hit.channel ? (channelName(hit.channel, tch) ?? tch('name.other')) : null,
           tp('conversation'),

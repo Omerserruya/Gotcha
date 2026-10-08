@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { getTranslations } from 'next-intl/server';
 import { z } from 'zod';
 
 import { approvalsSchema, aiEmployeeIdOf, type Approval } from '@/api/contracts/approvals';
@@ -16,6 +17,7 @@ import {
 } from '@/api/endpoints/registry';
 
 import { startOfToday } from './handled';
+import { personNameLater } from '@/lib/shopper-name';
 import { logger } from '@/observability/logger';
 
 /**
@@ -209,7 +211,10 @@ async function customerNames(decided: readonly Approval[]): Promise<Record<strin
             endpoint: inboxEndpoints.conversation(id),
             payload: z.object({ customerName: z.string().nullable().catch(null).default(null) }),
           })
-          .then((c) => c.customerName?.trim() || null)
+          // A stored "Shopper on <shop>" in the reader's words (shopper-name.ts).
+          .then((c) =>
+            personNameLater(c.customerName?.trim() || null, () => getTranslations('common.person')),
+          )
           .catch(() => null);
         return [id, name] as const;
       }),

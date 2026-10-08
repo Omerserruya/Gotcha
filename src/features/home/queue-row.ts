@@ -1,3 +1,5 @@
+import { storedShopper } from '@/lib/shopper-name';
+
 /**
  * The pure parts of a queue row.
  *
@@ -47,7 +49,8 @@ export function waitLabel(
  * identifier would read as a name the product does not actually know.
  */
 export function initials(name: string | null | undefined): string {
-  if (!name) return '';
+  // A stored "Shopper on <shop>": the neutral, empty mark - never "SO" (shopper-name.ts).
+  if (!name || storedShopper(name)) return '';
   return name
     .split(/\s+/)
     .filter(Boolean)

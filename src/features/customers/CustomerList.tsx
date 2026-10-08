@@ -14,7 +14,8 @@ import { sinceWords, type PersonToday, type Segment } from './people-today';
 import { chipOf, insightOf, money, reasonKey, situationLine, valueCell } from './row-facts';
 import styles from './Customers.module.css';
 import { ltr } from '@/lib/bidi';
-import { UserText } from '@/design-system/primitives/text/UserText';
+import { PersonName } from './PersonName';
+import { storedShopper } from '@/lib/shopper-name';
 
 /**
  * Screen 04 - the customer list.
@@ -161,7 +162,7 @@ export async function CustomerList({
                   <span className={styles.rowBody}>
                     <span className={styles.rowTop}>
                       <span className={styles.rowName}>
-                        {label ? <UserText>{label}</UserText> : t('list.unnamed')}
+                        {label ? <PersonName name={label} /> : t('list.unnamed')}
                       </span>
                       {/*
                         02's state chip: a mood when the AI read one in their
@@ -428,6 +429,8 @@ export async function WhoTheyAre({
 }
 
 function initialsOf(label: string | null): string {
+  // A stored "Shopper on <shop>": the neutral, empty mark (shopper-name.ts).
+  if (storedShopper(label)) return '';
   if (!label) return '';
   return label
     .split(/\s+/)
