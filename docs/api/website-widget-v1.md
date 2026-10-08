@@ -177,13 +177,15 @@ Permission for both routes: role ADMIN, the same as editing the playbook
   "channels": [                         // the widget's places: the code snippet, and Shopify if any
     { "channel": "WEBCHAT",
       "employee": { "id": "...", "name": "Maya" } | null,
-      "how": "always" | "conditional" | "team" | "none",
+      "how": "always" | "conditional" | "team" | "flow" | "none",
       //   always: every conversation on this channel goes to `employee`
       //   conditional: conditions in the playbook decide (hours, a choice...): `employee` null
       //   team: the playbook sends it to a team / department, not an employee
+      //   flow: the playbook sends it to a chatbot flow
       //   none: the playbook routes this channel nowhere
       "editable": true,                 // false when "conditional": change it in the playbook editor
-      "dedicated": true }               // the playbook has an entry for this channel of its own
+      "dedicated": true,                // the playbook has an entry for this channel of its own
+      "sharedWith": ["WHATSAPP"] }      // other channels that reach the SAME route: changing it changes them too
   ],
   "employees": [{ "id": "...", "name": "Maya", "active": true }]   // to choose from (active ones are choosable)
 } }
@@ -191,20 +193,31 @@ Permission for both routes: role ADMIN, the same as editing the playbook
 
 ### 4.2 Write: `PUT /api/website-widget/assignment`
 
-Body: `{ "employeeId": "...", "channels"?: ["WEBCHAT", "SHOPIFY_LIVE_CHAT"] }`
+Body: `{ "employeeId": "...", "channels"?: ["WEBCHAT", "SHOPIFY_LIVE_CHAT"], "includeShared"?: boolean }`
 (`channels` omitted = every channel of the widget). For each channel:
-- its entry's path does not branch: the first route on it now goes to this
-  employee (a route to a team becomes a route to the employee);
-- the playbook has no entry for this channel: one is added (an entry for the
-  channel and a route to the employee), so this channel stops following the
-  playbook's default entry;
+- its path does not branch and its route serves only channels in the request:
+  that route now goes to this employee (a route to a team becomes a route to
+  the employee);
+- its route is shared with other channels (`sharedWith`): when the playbook
+  already has channel entries, a dedicated entry and route are added for this
+  channel (appended, so no other channel's entry changes); when it has none
+  (a single start for every channel), `409 { code: "PLAYBOOK_SHARED", channels,
+  sharedWith }`, and resending with `includeShared: true` changes the shared
+  route, for those channels too ("Maya answers the website and WhatsApp:
+  change for both?");
 - conditions decide it (`how: "conditional"`): `409 { code: "PLAYBOOK_CONDITIONAL",
-  channels: [...] }` and NOTHING is written (no channel half-changed).
+  channels: [...] }`.
+A 409 writes NOTHING (no channel half-changed). Why entries are never added to
+a playbook with none: the playbook's rule is "the channel's own entry, else the
+FIRST channel entry, else start", so a first entry for the website would carry
+every other channel with it.
 
 `422 { code: "EMPLOYEE_NOT_FOUND" }` for an id that is not an active employee of
-this workspace; `409 { code: "WIDGET_NOT_CREATED" }` when the widget has no
+this workspace; `422 { code: "NO_WIDGET_CHANNEL" }` when `channels` names none of
+the widget's; `409 { code: "WIDGET_NOT_CREATED" }` when the widget has no
 place. `200` returns the read shape (§4.1) after the write, plus
-`changed: [{ channel, from: { id, name } | null, created: boolean }]`. The
+`changed: [{ channel, from: { id, name } | null, created: boolean }]` (a shared
+route changed with `includeShared` lists every channel it serves). The
 playbook's `updatedBy` is the caller and an audit entry
 `playbook.route_updated` names the channels.
 
