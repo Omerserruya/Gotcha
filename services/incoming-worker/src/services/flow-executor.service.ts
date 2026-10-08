@@ -29,6 +29,7 @@ import { prisma, getOutboundAdapter, decryptCredentials, publishEvent, flowResum
 import type { ChannelCredentials } from "@chatcenter/shared";
 import { processAIBot, getBusinessHoursState } from "./ai-bot.service";
 import { tryLinkIdentifierFromInbound } from "./identity-link.service";
+import { withRemovalLine, hasRemovalLine } from "@chatcenter/shared/src/lib/marketing-optout";
 
 // ─── Graph shapes (ReactFlow-compatible) ─────────────────────
 
@@ -94,7 +95,16 @@ export interface AutomationRunCtx {
   currentNodeId: string | null;
   // Who owned the conversation before the run claimed it (restored at the end).
   prevOwner: string | null;
+  // A marketing run (MARKETING_TRIGGERS): its messages carry the removal line.
+  marketing?: boolean;
 }
+
+/**
+ * Triggers whose messages are marketing (opt-out model, docs/product/
+ * ai-studio-skills-automations.md §6): every message carries the removal line.
+ * A review request joins this set when it exists.
+ */
+export const MARKETING_TRIGGERS = new Set(["cart_abandoned"]);
 
 export interface FlowExecutionResult {
   executed: boolean;      // true when a FlowCanvas was found and walked
@@ -1498,8 +1508,10 @@ async function sendText(
   ctx: FlowExecCtx,
   sendCtx: ChannelSendContext | null = ctx.sendCtx,
 ) {
-  const resolved = interpolate(text, ctx.vars);
-  if (!resolved || !resolved.trim() || !sendCtx) return;
+  const interpolated = interpolate(text, ctx.vars);
+  if (!interpolated || !interpolated.trim() || !sendCtx) return;
+  // A marketing message carries the removal line ("להסרה השיבו הסר").
+  const resolved = ctx.run?.marketing ? withRemovalLine(interpolated) : interpolated;
   const adapter = getOutboundAdapter(sendCtx.channel as any);
   if (!adapter) return;
   let extId: string | null;
@@ -1714,6 +1726,12 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
   });
   if (!tmpl) { console.warn(`${tag} skip template_not_found id=${templateId} tenant=${ctx.tenantId}`); return "skipped_template_not_found"; }
   if (tmpl.status !== "APPROVED") { console.warn(`${tag} skip template_not_approved id=${templateId} status=${tmpl.status}`); return "skipped_template_not_approved"; }
+  // A marketing template (by its category, or sent by a marketing run) must
+  // carry the removal line in its approved text: never sent without it.
+  if ((ctx.run?.marketing || String(tmpl.category ?? "").toUpperCase() === "MARKETING") && !hasRemovalLine(tmpl.body)) {
+    console.warn(`${tag} skip missing_removal_line id=${templateId} conv=${ctx.conversationId}`);
+    return "skipped_missing_removal_line";
+  }
 
   const adapter = getOutboundAdapter(sendCtx.channel as any);
   if (!adapter || !adapter.sendTemplateMessage) {

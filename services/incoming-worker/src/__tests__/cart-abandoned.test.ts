@@ -2,7 +2,9 @@
  * Cart left behind, end to end over the real runner and walker:
  *   - ★ abandonment → one run, the cart's variables in the message
  *   - ★ a purchase before the delay → no run
- *   - ★ no consent (or opted out) → a SKIPPED run with the reason, nothing sent
+ *   - ★ no prior contact and no consent (or opted out) → a SKIPPED run with the
+ *     reason, nothing sent; prior contact is enough (opt-out model, §6)
+ *   - ★ every message of a cart run carries the removal line
  *   - ★ the same check twice → one run; a newer update makes the older check stale
  *   - ★ a run waiting to send a second reminder stops when the customer buys
  *   - store consent (Shopify) counts on the phone channel; each live cart
@@ -140,7 +142,7 @@ describe("★ cart left behind", () => {
   it("★ abandonment → one run, with the cart's variables", async () => {
     await onCartEvent(event());
     expect(await onCartCheck(checkJob())).toEqual({ outcome: "completed" });
-    expect(H.sent).toEqual(["Hi Dana, your Cotton Trench Coat (590.00 ILS) are waiting: https://shop.test/cart/recover/abc"]);
+    expect(H.sent).toEqual(["Hi Dana, your Cotton Trench Coat (590.00 ILS) are waiting: https://shop.test/cart/recover/abc\n\nReply STOP to unsubscribe"]);
     expect(runs()[0]).toMatchObject({ triggerType: "cart_abandoned", eventKey: "cart:chk1", status: "completed", conversationId: "c1" });
   });
 
@@ -152,11 +154,11 @@ describe("★ cart left behind", () => {
     expect(H.sent).toEqual([]);
   });
 
-  it("★ no consent → a SKIPPED run with the reason, nothing sent; an opt-out wins over consent", async () => {
+  it("★ no prior contact and no consent → a SKIPPED run with the reason, nothing sent; an opt-out wins over consent", async () => {
     H.db.consentRecord = [];
     await onCartEvent(event());
-    expect(await onCartCheck(checkJob())).toEqual({ outcome: "no_marketing_consent" });
-    expect(runs()[0]).toMatchObject({ status: "skipped", error: "no_marketing_consent", eventKey: "cart:chk1" });
+    expect(await onCartCheck(checkJob())).toEqual({ outcome: "no_prior_contact_or_consent" });
+    expect(runs()[0]).toMatchObject({ status: "skipped", error: "no_prior_contact_or_consent", eventKey: "cart:chk1" });
     expect(H.sent).toEqual([]);
 
     H.db.automationRun = [];
@@ -178,6 +180,19 @@ describe("★ cart left behind", () => {
     expect(await onCartCheck(checkJob({ checkoutId: "chk2" }))).toEqual({ outcome: "stale" });
   });
 
+  it("★ prior contact is enough (opt-out model); an opt-out still wins over it", async () => {
+    H.db.consentRecord = [];
+    H.db.message = [{ id: "m0", tenantId: T, conversationId: "c1", direction: "INBOUND", body: "hi", createdAt: new Date(1) }];
+    await onCartEvent(event());
+    expect((await onCartCheck(checkJob())).outcome).toBe("completed");
+    expect(H.sent).toHaveLength(1);
+
+    H.db.automationRun = []; H.sent = [];
+    H.db.contact[0].optOutChannels = ["webchat"]; // any case
+    expect(await onCartCheck(checkJob())).toEqual({ outcome: "opted_out" });
+    expect(H.sent).toEqual([]);
+  });
+
   it("the store's own consent counts on the phone channel (Shopify accepts SMS marketing)", async () => {
     H.db.consentRecord = [];
     H.db.contact[0].channel = "WHATSAPP";
@@ -197,7 +212,7 @@ describe("★ cart left behind", () => {
     expect(runs()[0].status).toBe("waiting");
     await onCartEvent(event({ completed: true }));
     await resumeAutomationRun({ tenantId: T, conversationId: "c1", runId: runs()[0].id, message: "", channel: "webchat", fromTimer: true });
-    expect(H.sent).toEqual(["first reminder"]);
+    expect(H.sent).toEqual(["first reminder\n\nReply STOP to unsubscribe"]);
     expect(runs()[0]).toMatchObject({ status: "completed", error: "stopped: purchased" });
     expect(H.db.conversation[0]).toMatchObject({ automationRunId: null, chatbotNodeId: null });
   });

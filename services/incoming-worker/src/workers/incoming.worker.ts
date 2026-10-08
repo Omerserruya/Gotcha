@@ -663,6 +663,19 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     timestamp: new Date().toISOString(),
   });
 
+  // A "הסר" / "STOP" reply opts the customer out of marketing on this channel
+  // (marketing works by opt-out: the customer's one control, so it is checked
+  // before anything can answer, whoever owns the conversation). Its
+  // confirmation is the only reply this message gets.
+  {
+    const { interceptOptOutReply } = await import("../services/marketing-optout.service");
+    const handled = await interceptOptOutReply({
+      tenantId, contactId: savedContact?.id ?? "", channel, conversationId: conversation.id,
+      channelAccountId, recipientExternalId: senderId, messageId: message.id, messageType, body,
+    });
+    if (handled) return;
+  }
+
   // Auto-reply for unsupported media types
   if (UNSUPPORTED_MEDIA_TYPES.includes(messageType) && channelAccountId) {
     try {

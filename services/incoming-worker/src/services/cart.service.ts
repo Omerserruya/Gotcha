@@ -16,6 +16,7 @@
 import { prisma, getRedis, incomingMessageQueue, type CartEventJob } from "@chatcenter/shared";
 import { runAutomationsForEvent } from "./automation-runner.service";
 import { ensureContactForInbound } from "./ensure-contact.service";
+import { isOptedOutOn } from "@chatcenter/shared/src/lib/marketing-optout";
 
 export const DEFAULT_CART_DELAY_MIN = 120;
 const SNAPSHOT_TTL_S = 14 * 24 * 3600;
@@ -128,16 +129,44 @@ export async function resolveCartTarget(tenantId: string, customer: CartEventJob
   return { contact: contact ? { id: contact.id, channel: "WHATSAPP", externalId: phone, optOutChannels: (contact as any).optOutChannels ?? [] } : null, conversation: conv };
 }
 
+/** Has this customer ever written to the business, on any channel? (Read-only.) */
+export async function hasPriorInbound(tenantId: string, customer: CartEventJob["customer"]): Promise<boolean> {
+  const phone = digits(customer?.phone);
+  const email = String(customer?.email ?? "").trim().toLowerCase();
+  const or: any[] = [];
+  if (phone.length >= 7) or.push({ phone: { contains: phone.slice(-9) } }, { externalId: phone });
+  if (email) or.push({ email: { equals: email, mode: "insensitive" } });
+  if (!or.length) return false;
+  const contacts = await prisma.contact.findMany({ where: { tenantId, OR: or }, select: { channel: true, externalId: true }, take: 20 });
+  if (!contacts.length) return false;
+  const n = await prisma.message.count({
+    where: {
+      tenantId, direction: "INBOUND",
+      conversation: { OR: (contacts as any[]).map((c) => ({ channel: c.channel, customerExternalId: c.externalId })) },
+    } as any,
+  });
+  return n > 0;
+}
+
 /**
- * May we send marketing to this customer on this channel? The store's own
- * record decides when it has one (Shopify: accepts email / SMS marketing);
- * otherwise only a ConsentRecord marketing_<channel> granted=true counts
- * (WooCommerce stores no consent). An opt-out always wins.
+ * May this customer get marketing (an abandoned cart, a review request, an
+ * order message) on this channel?
+ *
+ * Marketing works by OPT-OUT (Omer's decision 2026-10-08, docs/product/
+ * ai-studio-skills-automations.md §6; it replaces the explicit-consent rule
+ * on WhatsApp): allowed with prior contact (the customer wrote to the
+ * business before) OR the store's consent OR a recorded consent, every
+ * message carries the removal line, and an opt-out ALWAYS wins.
  */
-export async function hasMarketingConsent(tenantId: string, ev: CartEventJob, target: { contact: any; conversation: any }): Promise<{ ok: boolean; reason?: string }> {
+export async function marketingGate(
+  tenantId: string,
+  ev: { marketingConsent?: CartEventJob["marketingConsent"] | null },
+  target: { contact: any; conversation: any },
+  prior: boolean,
+): Promise<{ ok: boolean; reason?: string }> {
   const channel = String(target.conversation.channel).toUpperCase();
-  const optedOut = Array.isArray(target.contact?.optOutChannels) ? target.contact.optOutChannels.map((x: any) => String(x).toUpperCase()) : [];
-  if (optedOut.includes(channel)) return { ok: false, reason: "opted_out" };
+  if (isOptedOutOn(target.contact?.optOutChannels, channel)) return { ok: false, reason: "opted_out" };
+  if (prior) return { ok: true };
   const store = ev.marketingConsent;
   // A WhatsApp or SMS message is a phone channel; email is email.
   const storeSays = channel === "EMAIL" || channel === "GMAIL" || channel === "OUTLOOK" ? store?.email : store?.sms ?? null;
@@ -150,7 +179,7 @@ export async function hasMarketingConsent(tenantId: string, ev: CartEventJob, ta
     }).catch(() => null);
     if (rec?.granted === true) return { ok: true };
   }
-  return { ok: false, reason: "no_marketing_consent" };
+  return { ok: false, reason: "no_prior_contact_or_consent" };
 }
 
 /** The delayed check: is this checkout abandoned, and may we act on it? */
@@ -167,8 +196,11 @@ export async function onCartCheck(job: CartCheckJob): Promise<{ outcome: string 
   if (!flow) return { outcome: "automation_inactive" };
   const eventKey = `cart:${job.checkoutId}`;
 
-  const target = await resolveCartTarget(job.tenantId, ev.customer, { create: mayWriteWhatsApp([flow]) });
-  const consent = target ? await hasMarketingConsent(job.tenantId, ev, target) : { ok: false, reason: "no_reachable_customer" };
+  // A new WhatsApp conversation is opened only for a customer who may be
+  // written to (prior contact or the store's consent for the phone).
+  const prior = await hasPriorInbound(job.tenantId, ev.customer);
+  const target = await resolveCartTarget(job.tenantId, ev.customer, { create: (prior || ev.marketingConsent?.sms === true) && mayWriteWhatsApp([flow]) });
+  const consent = target ? await marketingGate(job.tenantId, ev, target, prior) : { ok: false, reason: "no_reachable_customer" };
   if (!target || !consent.ok) {
     // Recorded, so the run log says why nobody was written to.
     await prisma.automationRun.create({

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, decryptCredentials, assertPublicUrl, metaGraphBaseUrl } from "@chatcenter/shared";
+import { REMOVAL_LINE, hasRemovalLine } from "@chatcenter/shared/src/lib/marketing-optout";
 
 const router = Router();
 
@@ -301,11 +302,23 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRo
   }
 });
 
+/**
+ * A marketing template carries the removal line in its text (opt-out model,
+ * docs/product/ai-studio-skills-automations.md §6): on WhatsApp it is part of
+ * the approved text, not a button, so the customer's reply "הסר" opts out.
+ * Added once, in the template's language, when it is missing.
+ */
+export function withMarketingRemovalLine(category: unknown, body: string, language: unknown): string {
+  if (String(category ?? "").toUpperCase() !== "MARKETING" || hasRemovalLine(body)) return body;
+  const line = String(language ?? "").toLowerCase().startsWith("he") ? REMOVAL_LINE.he : REMOVAL_LINE.en;
+  return `${String(body).replace(/\s+$/, "")}\n\n${line}`;
+}
+
 router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const {
       name,
-      body,
+      body: rawBody,
       category = "general",
       language = "en",
       channel,
@@ -318,10 +331,11 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
       status = "DRAFT",
     } = req.body;
 
-    if (!name || !body) {
+    if (!name || !rawBody) {
       res.status(400).json({ error: "name and body are required" });
       return;
     }
+    const body = withMarketingRemovalLine(category, String(rawBody), language);
 
     let resolvedChannel: string | null = channel ?? null;
     if (channelAccountId) {
@@ -400,6 +414,12 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       data.channel = account.channel;
     }
 
+    // The category or the body may change on their own: the result decides.
+    if ("body" in data || "category" in data || "language" in data) {
+      const nextBody = withMarketingRemovalLine(data.category ?? existing.category, String(data.body ?? existing.body), data.language ?? existing.language);
+      if (nextBody !== (data.body ?? existing.body)) data.body = nextBody;
+    }
+
     const template = await prisma.messageTemplate.update({
       where: { id: existing.id },
       data,
@@ -473,7 +493,7 @@ router.post("/:id/duplicate", authenticate, resolveTenant, requireActiveTenant()
       data: {
         tenantId: req.tenantId! as string,
         name: `${original.name} (Copy)`,
-        body: original.body,
+        body: withMarketingRemovalLine(original.category, original.body, original.language),
         category: original.category,
         language: original.language,
         channel: original.channel ?? null,
@@ -508,6 +528,13 @@ router.post("/:id/submit-to-meta", authenticate, resolveTenant, requireActiveTen
 
     if (template.channel !== "WHATSAPP") {
       res.status(400).json({ error: "Only WhatsApp templates can be submitted to Meta" });
+      return;
+    }
+
+    // An older marketing template saved before the rule: not submitted
+    // without its removal line (an approved text cannot gain it later).
+    if (String(template.category ?? "").toUpperCase() === "MARKETING" && !hasRemovalLine(template.body)) {
+      res.status(422).json({ error: "A marketing template must end with the removal line (להסרה השיבו הסר / Reply STOP to unsubscribe)", code: "MISSING_REMOVAL_LINE" });
       return;
     }
 

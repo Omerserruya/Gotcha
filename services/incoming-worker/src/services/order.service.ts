@@ -19,28 +19,10 @@
  */
 import { prisma, type OrderEventJob } from "@chatcenter/shared";
 import { runAutomationsForEvent } from "./automation-runner.service";
-import { resolveCartTarget, mayWriteWhatsApp, hasMarketingConsent } from "./cart.service";
+import { resolveCartTarget, mayWriteWhatsApp, marketingGate, hasPriorInbound } from "./cart.service";
 
-const digits = (p: string | null | undefined) => String(p ?? "").replace(/\D/g, "");
-
-/** Has this customer ever written to the business, on any channel? (Read-only.) */
-export async function hasPriorInbound(tenantId: string, customer: OrderEventJob["customer"]): Promise<boolean> {
-  const phone = digits(customer?.phone);
-  const email = String(customer?.email ?? "").trim().toLowerCase();
-  const or: any[] = [];
-  if (phone.length >= 7) or.push({ phone: { contains: phone.slice(-9) } }, { externalId: phone });
-  if (email) or.push({ email: { equals: email, mode: "insensitive" } });
-  if (!or.length) return false;
-  const contacts = await prisma.contact.findMany({ where: { tenantId, OR: or }, select: { channel: true, externalId: true }, take: 20 });
-  if (!contacts.length) return false;
-  const n = await prisma.message.count({
-    where: {
-      tenantId, direction: "INBOUND",
-      conversation: { OR: (contacts as any[]).map((c) => ({ channel: c.channel, customerExternalId: c.externalId })) },
-    } as any,
-  });
-  return n > 0;
-}
+// Prior contact lives with the shared marketing gate (cart.service).
+export { hasPriorInbound };
 
 /** Variables an order automation can write. */
 export function orderVariables(ev: OrderEventJob): Record<string, string> {
@@ -85,8 +67,9 @@ export async function onOrderEvent(ev: OrderEventJob): Promise<{ outcome: string
     create: (prior || storeSaysPhone) && mayWriteWhatsApp((flows as any[]).filter((f) => ids.includes(f.id))),
   });
   const channel = target ? String(target.conversation.channel).toUpperCase() : null;
-  const optedOut = !!target && (Array.isArray(target.contact?.optOutChannels) ? target.contact.optOutChannels : []).map((x: any) => String(x).toUpperCase()).includes(channel);
-  const allowed = !!target && !optedOut && (prior || (await hasMarketingConsent(ev.tenantId, { marketingConsent: ev.marketingConsent ?? null } as any, target)).ok);
+  const gate = target ? await marketingGate(ev.tenantId, { marketingConsent: ev.marketingConsent ?? null }, target, prior) : null;
+  const optedOut = gate?.reason === "opted_out";
+  const allowed = !!gate?.ok;
   const busy = !!target && !!(target.conversation.assignedAgentId || target.conversation.isHandedOver || target.conversation.automationRunId);
   const skip = !target ? (prior || storeSaysPhone ? "no_reachable_customer" : "no_prior_contact_or_consent")
     : optedOut ? "opted_out" : !allowed ? "no_prior_contact_or_consent" : busy ? "conversation_busy" : null;

@@ -14,6 +14,7 @@ import {
 } from "@chatcenter/shared";
 import type { BroadcastJob, AudienceDefinition } from "@chatcenter/shared";
 import { Prisma } from "@prisma/client";
+import { hasRemovalLine, withRemovalLine } from "@chatcenter/shared/src/lib/marketing-optout";
 
 async function publishBroadcastUpdate(broadcastId: string, tenantId: string) {
   try {
@@ -568,6 +569,18 @@ router.post("/:id/send", async (req: Request, res: Response) => {
       return;
     }
 
+    // A campaign is marketing: its text carries the removal line ("להסרה
+    // השיבו הסר"; opt-out model, docs/product/ai-studio-skills-automations.md
+    // §6). An approved template cannot be changed at send time, so one without
+    // the line is refused before anything is queued; a text gets it appended.
+    if (broadcast.templateId) {
+      const tmpl = await prisma.messageTemplate.findFirst({ where: { id: broadcast.templateId, tenantId: req.tenantId! }, select: { body: true } });
+      if (tmpl && !hasRemovalLine(tmpl.body)) {
+        res.status(422).json({ error: "The template must end with the removal line (להסרה השיבו הסר / Reply STOP to unsubscribe)", code: "MISSING_REMOVAL_LINE" });
+        return;
+      }
+    }
+
     // Materialize from audience definition if no rows have been added
     // explicitly. Lets the new wizard ship a saved audience and fan out
     // recipients only when the operator hits Send.
@@ -653,7 +666,7 @@ router.post("/:id/send", async (req: Request, res: Response) => {
           channel: broadcast.channel as BroadcastJob["channel"],
           channelAccountId: broadcast.channelAccountId,
           templateId: broadcast.templateId ?? undefined,
-          body: broadcast.body ?? "",
+          body: broadcast.templateId ? broadcast.body ?? "" : withRemovalLine(broadcast.body ?? ""),
           messageType: broadcast.templateId ? "template" : "text",
           recipientId: recipient.id,
           recipientExternalId: recipient.externalId,

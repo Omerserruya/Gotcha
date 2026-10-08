@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { prisma, createWorker, outgoingMessageQueue, publishEvent, broadcastQueue, notificationsQueue } from "@chatcenter/shared";
 import type { BroadcastJob } from "@chatcenter/shared";
+import { isOptedOutOn } from "@chatcenter/shared/src/lib/marketing-optout";
 
 /** Extract `{{var}}` placeholder keys from a string, preserving order of
  *  appearance. Used to know which variable values to send to Meta. */
@@ -118,8 +119,8 @@ async function processBroadcastMessage(job: any) {
   if (recipient.contactId) {
     const contact = await prisma.contact.findUnique({ where: { id: recipient.contactId } });
     if (contact) {
-      const optOutChannels = ((contact as any).optOutChannels as string[]) || [];
-      if (optOutChannels.includes(channel)) {
+      // Compared without case: opt-outs written by a "STOP" reply are uppercase.
+      if (isOptedOutOn((contact as any).optOutChannels, channel)) {
         await prisma.broadcastRecipient.update({
           where: { id: recipientId },
           data: { status: "skipped", error: "Contact opted out" },
