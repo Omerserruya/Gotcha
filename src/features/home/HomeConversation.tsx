@@ -354,7 +354,7 @@ function ScopeChip({ chat }: { readonly chat: Chat }) {
             aria-label={t('label', { scope: shownScope })}
             data-testid="conversation-scope"
           >
-            {shownScope}
+            <span className={styles.scopeText}>{shownScope}</span>
             <ChevronDown size={11} aria-hidden="true" />
           </button>
         </MenuTrigger>

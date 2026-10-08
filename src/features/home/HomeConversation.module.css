@@ -23,7 +23,16 @@
     border-block-end: 1px solid var(--border-subtle);
   }
 
+  /*
+   * ★ NOTHING IN THE BAR OVERLAPS, AT ANY WIDTH (supervisor, dev at 700px:
+   * the title shrank to nothing and the pencil sat on the scope). The title
+   * row grows and keeps a minimum (its title ellipsed inside it); the scope
+   * gives way first, ellipsing its words; Home, the rule and the end keep
+   * their size.
+   */
   .back {
+    flex: none;
+    white-space: nowrap;
     display: inline-flex;
     align-items: center;
     gap: 7px;
@@ -41,6 +50,7 @@
   }
 
   .rule {
+    flex: none;
     inline-size: 1px;
     block-size: 14px;
     background-color: var(--border-default);
@@ -57,22 +67,27 @@
   }
 
   .barEnd {
+    flex: none;
     display: inline-flex;
     gap: var(--space-10);
     align-items: center;
     margin-inline-start: auto;
   }
 
+  /* The title (or its field) grows into the room left, and never below 120px. */
   .titleRow,
   .titleEdit {
     display: inline-flex;
+    flex: 1 1 auto;
     gap: 6px;
     align-items: center;
-    min-inline-size: 0;
+    min-inline-size: 120px;
   }
 
   .titleInput {
-    inline-size: min(420px, 40vw);
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    max-inline-size: 420px;
     padding: 4px 8px;
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: 7px;
@@ -112,7 +127,15 @@
     display: inline-flex;
     gap: 8px;
     align-items: center;
-    flex: none;
+    flex: 0 1 auto;
+    min-inline-size: 0;
+  }
+
+  .scopeText {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .scopeChip {
@@ -130,6 +153,12 @@
     text-transform: uppercase;
     color: var(--text-subtle);
     cursor: pointer;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+
+  .scopeChip svg {
+    flex: none;
   }
 
   .scopeChip:hover {
