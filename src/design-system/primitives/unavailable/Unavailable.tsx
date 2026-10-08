@@ -15,6 +15,34 @@ export function UnavailableTag({ label }: { readonly label: string }) {
   return <span className={styles.tag}>{label}</span>;
 }
 
+/**
+ * The status alone, where there is no room for a button's label (a table's
+ * column head): the tag, wrapping if it must, the reason on hover and for a
+ * screen reader. Same look, same semantics.
+ */
+export function UnavailableStatus({
+  tag,
+  why,
+  testid,
+}: {
+  readonly tag: string;
+  readonly why: string;
+  readonly testid?: string;
+}) {
+  return (
+    <span
+      className={styles.status}
+      aria-disabled="true"
+      title={why}
+      data-unavailable=""
+      data-testid={testid}
+    >
+      <span className={styles.tag}>{tag}</span>
+      <span className={styles.srOnly}>{` ${why}`}</span>
+    </span>
+  );
+}
+
 /** In place of a button: its label, the tag, the reason on hover and for a screen reader. */
 export function UnavailableAction({
   label,

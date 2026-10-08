@@ -66,7 +66,7 @@ describe('★ 15 - "Tell me when" × the channels', () => {
     render(
       await PreferenceMatrix({ preferences: prefs(), volume: null, whatsappDestination: null }),
     );
-    const row = screen.getByTestId('pref-row-actionFailed');
+    const row = screen.getByTestId('pref-row-employeeDown');
     expect(row).toHaveTextContent('Nothing sends this yet');
     expect(row.querySelectorAll('[role="img"]')).toHaveLength(0);
     expect(row.textContent?.match(/-/g)).toHaveLength(3);
@@ -131,7 +131,12 @@ describe('★ 15 corrections (measurement of 204d715)', () => {
     expect(screen.getByTestId('pref-about-systemDown')).toHaveTextContent('Shopify, CRM, returns');
     // No count behind approvals, so no "3 so far today".
     expect(screen.getByTestId('pref-row-approval')).not.toHaveTextContent(/today/);
-    expect(screen.getByTestId('pref-row-actionFailed')).toHaveTextContent('Nothing sends this yet');
+    expect(screen.getByTestId('pref-row-employeeDown')).toHaveTextContent('Nothing sends this yet');
+    // tool.action_failed is emitted (refund, discount, meeting errors): its marks, like the others.
+    expect(screen.getByTestId('pref-row-actionFailed')).not.toHaveTextContent(
+      'Nothing sends this yet',
+    );
+    expect(screen.getByTestId('pref-actionFailed-email')).toHaveAttribute('role', 'img');
   });
 
   it('the foot leads to the workspace’s rules', async () => {
@@ -162,7 +167,6 @@ describe('★★ 15 - the switches the platform has: a channel for everything, a
     await show({ approvals: false });
     expect(screen.getByTestId('pref-switch-inApp')).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByTestId('pref-switch-email')).toHaveAttribute('aria-checked', 'false');
-    expect(screen.getByTestId('pref-switch-whatsapp')).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByTestId('pref-switch-approvals')).toHaveAttribute('aria-checked', 'false');
     expect(screen.getByTestId('pref-switch-email')).toHaveAccessibleName(
       'Email, for everything below',
@@ -203,14 +207,21 @@ describe('★★ 15 - the switches the platform has: a channel for everything, a
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it('★ WhatsApp with no number: turning it on is a status saying why - turning it off stays possible', async () => {
-    await show({ whatsapp: false }, null);
-    expect(screen.queryByTestId('pref-switch-whatsapp')).toBeNull();
-    const status = screen.getByTestId('pref-switch-whatsapp-unavailable');
-    expect(status).toHaveAttribute('aria-disabled', 'true');
-    expect(status).toHaveTextContent('Needs your number');
-    await show({ whatsapp: true }, null);
-    expect(screen.getByTestId('pref-switch-whatsapp')).toHaveAttribute('aria-checked', 'true');
+  it('★ WhatsApp alerts to a person do not exist: a status, with or without a number - its cells "-"', async () => {
+    for (const [stored, number] of [
+      [true, '+972 54 220 8814'],
+      [false, null],
+    ] as const) {
+      const { unmount } = await show({ whatsapp: stored }, number);
+      expect(screen.queryByTestId('pref-switch-whatsapp')).toBeNull();
+      const status = screen.getByTestId('pref-switch-whatsapp-unavailable');
+      expect(status).toHaveAttribute('aria-disabled', 'true');
+      expect(status).toHaveTextContent('Not available yet');
+      // Never a mark saying WhatsApp reaches you.
+      expect(screen.queryByTestId('pref-campaign-whatsapp')).toBeNull();
+      expect(screen.getByTestId('pref-row-campaign')).toHaveTextContent('-');
+      unmount();
+    }
   });
 
   it('preferences not read: no switches at all - never a guess to save over', async () => {

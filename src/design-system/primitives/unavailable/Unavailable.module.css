@@ -11,6 +11,20 @@
     color: var(--text-muted);
   }
 
+  /* The tag alone: in its container's width, its words wrapping if they must. */
+  .status {
+    display: inline-flex;
+    max-inline-size: 100%;
+    font-family: var(--font-sans);
+    text-transform: none;
+    letter-spacing: normal;
+    cursor: default;
+  }
+
+  .status .tag {
+    white-space: normal;
+  }
+
   .action {
     display: inline-flex;
     gap: 8px;

@@ -1,7 +1,7 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import type { NotificationPreferences } from '@/api/contracts/notifications';
-import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
+import { UnavailableStatus } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link } from '@/i18n/navigation';
 
 import styles from './Notifications.module.css';
@@ -16,7 +16,8 @@ import type { ObservedVolume } from './volume';
  */
 const ROWS = [
   { key: 'approval', event: 'tool.approval_required', approvals: true },
-  { key: 'actionFailed', event: null, about: true },
+  // Refund, discount and meeting errors (Backend, 2026-10-08).
+  { key: 'actionFailed', event: 'tool.action_failed', about: true },
   { key: 'systemDown', event: 'integration.check_failed', about: true },
   { key: 'employeeDown', event: null },
   { key: 'complaints', event: null, about: true },
@@ -42,8 +43,13 @@ const CHANNELS = ['inApp', 'email', 'whatsapp'] as const;
  *   column's head ("Email, for everything below"), and approvals on its row.
  *   A switch in every cell would flip a whole column from one cell - the
  *   cells show what reaches you, and change when their switch does.
- *   WhatsApp alerts go to the person's own number: with none, turning it on
- *   is a status saying so, never a switch that sends nowhere.
+ *
+ * ⚠ WHATSAPP TO A PERSON DOES NOT EXIST (Backend, 2026-10-08): no number to
+ *   send from, no templates. Its column is a status, and its cells "-" -
+ *   never a mark saying something reaches you that nothing sends.
+ * ⚠ AND TODAY NOTHING READS THESE SWITCHES: the fan-out reads only the
+ *   workspace's routing (the rules). They save; obeying them is Backend's
+ *   Step 0, with Omer.
  */
 export async function PreferenceMatrix({
   preferences,
@@ -72,13 +78,10 @@ export async function PreferenceMatrix({
           {CHANNELS.map((channel) => (
             <span key={channel} className={styles.matrixHeadCell}>
               <span>{t(`channel.${channel}`)}</span>
-              {preferences === null ? null : channel === 'whatsapp' &&
-                !whatsappDestination &&
-                !preferences.whatsapp ? (
-                <UnavailableAction
-                  label={t('noNumber.label')}
-                  tag={t('noNumber.tag')}
-                  why={t('noNumber.why')}
+              {preferences === null ? null : channel === 'whatsapp' ? (
+                <UnavailableStatus
+                  tag={t('whatsappUnavailable.tag')}
+                  why={t('whatsappUnavailable.why')}
                   testid="pref-switch-whatsapp-unavailable"
                 />
               ) : (
@@ -126,7 +129,7 @@ export async function PreferenceMatrix({
               </span>
               {CHANNELS.map((channel) => (
                 <span key={channel} className={styles.matrixCell}>
-                  {row.event === null || preferences === null ? (
+                  {row.event === null || preferences === null || channel === 'whatsapp' ? (
                     <span className={styles.matrixNone}>-</span>
                   ) : (
                     <span
