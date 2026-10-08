@@ -534,7 +534,9 @@ export type QuotedState = 'resolved' | 'unresolved' | 'none';
  * Outbound only: an inbound sender is the customer, whom the header names.
  *
  * ★ An old row's generic "Bot" is GOTCHA (the 14" sweep: "Bot" ×6 on a
- *   Hebrew conversation). Nothing writes it today; stored rows still say it.
+ *   Hebrew conversation), and so is "AI Bot" - the rerun found that one: 9
+ *   rows Backend's approval-rejection path wrote (being fixed at the source;
+ *   stored rows keep it). Exact names only, any case: "Bot Smith" is a name.
  *   GOTCHA is the brand in every language, so it needs no catalogue.
  */
 export function senderLabel(message: {
@@ -543,7 +545,7 @@ export function senderLabel(message: {
 }): string | null {
   if (message.direction !== 'OUTBOUND') return null;
   const name = message.senderName?.trim() ?? '';
-  if (/^bot$/i.test(name)) return 'GOTCHA';
+  if (/^(ai )?bot$/i.test(name)) return 'GOTCHA';
   return name === '' || name.includes('@') ? null : name;
 }
 

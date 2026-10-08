@@ -368,12 +368,16 @@ describe('★★ the contract keeps what the stream draws', () => {
   });
 });
 
-describe('★ an old row’s generic "Bot" sender is GOTCHA', () => {
+describe('★ an old row’s generic "Bot" or "AI Bot" sender is GOTCHA', () => {
   it.each([
     ['Bot', 'GOTCHA'],
     ['bot', 'GOTCHA'],
     [' Bot ', 'GOTCHA'],
+    ['AI Bot', 'GOTCHA'],
+    ['ai bot', 'GOTCHA'],
     ['Bot Smith', 'Bot Smith'],
+    ['AI Botanist', 'AI Botanist'],
+    ['My AI Bot', 'My AI Bot'],
     ['Support AI', 'Support AI'],
   ])('%j → %j', (senderName, expected) => {
     expect(senderLabel({ direction: 'OUTBOUND', senderName })).toBe(expected);
