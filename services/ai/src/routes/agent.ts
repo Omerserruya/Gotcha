@@ -20,6 +20,7 @@ import {
   prisma,
   hasPermission,
 } from "@chatcenter/shared";
+import { readerLocale } from "../lib/reader-locale";
 import { principalOf } from "../services/commerce-perms";
 import { runAgent, AgentRuntimeEvent } from "../services/agent-runtime.service";
 import { clearAgentMemory } from "../services/agent-memory.service";
@@ -103,9 +104,8 @@ router.post("/run", async (req: Request, res: Response) => {
           tenantName: tenant?.name,
           viewer: viewerOf(req),
           canReadCommerce: await hasPermission(principalOf(req), "customer:commerce:read").catch(() => false),
-          locale: req.body?.locale === "he" || req.body?.locale === "en"
-            ? req.body.locale
-            : String(req.headers["accept-language"] || "").toLowerCase().startsWith("he") ? "he" : "en",
+          // Explicit, else the user's / workspace's language (lib/reader-locale).
+          locale: await readerLocale(req),
         },
         client: client ?? null,
         message: message.trim(),

@@ -23,6 +23,7 @@ import {
 import { buildCommerceContextResponse } from "../services/commerce-context.service";
 import { principalOf, commercePerms } from "../services/commerce-perms";
 import { executeCommerceAction } from "../services/commerce-actions.service";
+import { readerLocale } from "../lib/reader-locale";
 
 const router = Router();
 
@@ -38,11 +39,8 @@ const PERMISSION_FOR: Record<string, "canCancel" | "canRefund" | "canReturn" | "
   add_note: "canNote",
 };
 
-function localeOf(req: Request): string | undefined {
-  const q = typeof req.query.locale === "string" ? req.query.locale : undefined;
-  const b = typeof (req.body as any)?.locale === "string" ? (req.body as any).locale : undefined;
-  return q || b || (req.headers["accept-language"] as string | undefined);
-}
+// The reader's language: explicit, else the user's / workspace's (lib/reader-locale).
+const localeOf = (req: Request) => readerLocale(req);
 
 // ── GET commerce context for a conversation ────────────────────────────────
 router.get(
@@ -66,7 +64,7 @@ router.get(
       const result = await buildCommerceContextResponse({
         tenantId,
         conversationId,
-        locale: localeOf(req),
+        locale: await localeOf(req),
         perms,
         recentLimit: Number.isFinite(limitRaw) ? limitRaw : undefined,
         forceRefresh: req.query.refresh === "1" || req.query.refresh === "true",
@@ -156,7 +154,7 @@ router.post(
           idempotencyKey,
           params: body.params ?? {},
         },
-        locale: localeOf(req),
+        locale: await localeOf(req),
         correlationId,
       });
 

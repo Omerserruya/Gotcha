@@ -1,5 +1,23 @@
 import { Router, Request, Response } from "express";
-import { authenticate, resolveTenant, requireRole, requirePermission } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireRole, requirePermission, resolveEffectiveLocale } from "@chatcenter/shared";
+
+/**
+ * The reader's language for text this service writes (intent labels): an
+ * explicit ?locale= wins; otherwise the user's interface language, then the
+ * workspace's. Never the request's Accept-Language: the v2 app calls from its
+ * server, whose header says nothing about the screen (Hebrew screens got
+ * English labels).
+ */
+export async function readerLocale(req: Request): Promise<"he" | "en"> {
+  const q = String(req.query.locale ?? "").toLowerCase();
+  if (q === "he" || q === "en") return q;
+  try {
+    const r = await resolveEffectiveLocale({ tenantId: (req as any).tenantId, userId: (req as any).user?.userId ?? null });
+    return String(r.effective).toLowerCase().startsWith("he") ? "he" : "en";
+  } catch {
+    return "en";
+  }
+}
 import * as analyticsService from "../services/analytics.service";
 
 const router = Router();
@@ -183,10 +201,7 @@ router.get("/top-questions", requirePermission("analytics:dashboard:read"), asyn
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
-    // Labels in the reader's language: ?locale=, else Accept-Language.
-    const q = String(req.query.locale ?? "").toLowerCase();
-    const locale = q === "he" || q === "en" ? q : String(req.headers["accept-language"] ?? "").toLowerCase().startsWith("he") ? "he" : "en";
-    const data = await analyticsService.getTopQuestions(req.tenantId!, from, to, limit, locale);
+    const data = await analyticsService.getTopQuestions(req.tenantId!, from, to, limit, await readerLocale(req));
     res.json({ data });
   } catch (err) {
     console.error("Top questions error:", err);

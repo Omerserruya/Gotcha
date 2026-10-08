@@ -19,6 +19,7 @@ const H = vi.hoisted(() => ({
   allowed: true,
   permArgs: [] as any[],
   runInput: null as any,
+  workspaceLocale: "he" as string,
   agents: [] as any[],
 }));
 
@@ -49,6 +50,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   });
   return {
     ...actual,
+    resolveEffectiveLocale: async () => ({ effective: H.workspaceLocale }),
     prisma: {
       conversation: table("conversation"), message: table("message"), contact: table("contact"),
       user: table("user"), tenant: table("tenant"), aIAgent: table("aIAgent"), approvalRequest: table("approvalRequest"),
@@ -144,12 +146,16 @@ describe("★ the route", () => {
     expect(H.runInput.aiAgentId).toBe("ag_mine");
   });
 
-  it("the interface language: the body's locale wins, then Accept-Language, else English", async () => {
+  it("★ the interface language: the body's locale wins, then the user's / workspace's, never Accept-Language", async () => {
+    H.workspaceLocale = "en";
     await request(app()).post("/api/agent/run").set("Accept-Language", "en-US").send({ message: "hi", sessionId: "s1", locale: "he" });
     expect(H.runInput.operator.locale).toBe("he");
-    await request(app()).post("/api/agent/run").set("Accept-Language", "he-IL,he;q=0.9").send({ message: "hi", sessionId: "s1" });
+    // A server-side caller's header says nothing about the screen.
+    H.workspaceLocale = "he";
+    await request(app()).post("/api/agent/run").set("Accept-Language", "en-US").send({ message: "hi", sessionId: "s1" });
     expect(H.runInput.operator.locale).toBe("he");
-    await request(app()).post("/api/agent/run").send({ message: "hi", sessionId: "s1" });
+    H.workspaceLocale = "en";
+    await request(app()).post("/api/agent/run").set("Accept-Language", "he-IL,he;q=0.9").send({ message: "hi", sessionId: "s1" });
     expect(H.runInput.operator.locale).toBe("en");
   });
 });

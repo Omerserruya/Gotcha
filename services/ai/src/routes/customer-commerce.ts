@@ -13,6 +13,7 @@ import { authenticate, resolveTenant, requireActiveTenant, requirePermission } f
 import { commerceSummaries, segmentCounts, contactByOrderNumber } from "../services/customer-commerce.service";
 import { getCustomerOrders } from "../services/customer-orders.service";
 import { principalOf, commercePerms } from "../services/commerce-perms";
+import { readerLocale } from "../lib/reader-locale";
 
 const router = Router();
 const MAX_IDS = 100;
@@ -45,7 +46,7 @@ router.get("/:contactId/orders", async (req: Request, res: Response) => {
     const out = await getCustomerOrders({
       tenantId: req.tenantId!,
       contactId: String(req.params.contactId),
-      locale: (req.query.locale as string) || (req.headers["accept-language"] as string | undefined),
+      locale: await readerLocale(req),
       limit: Number(req.query.limit) || undefined,
       perms,
     });
