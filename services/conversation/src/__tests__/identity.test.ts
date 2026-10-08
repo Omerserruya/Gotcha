@@ -25,7 +25,9 @@ vi.mock("@chatcenter/shared", () => {
     },
   };
   return {
+    requirePermissionOrRole: () => (_q: any, _s: any, n: any) => n(),
     prisma: {
+      tenantSetting: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
       contact: {
         findFirst: vi.fn(async ({ where }: any) => {
           if (where.id) return state.contacts.get(where.id) ?? null;

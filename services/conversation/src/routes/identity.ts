@@ -1,7 +1,8 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole } from "@chatcenter/shared";
 import { visibilityClause } from "../lib/conversation-visibility";
 import { situationOf } from "../lib/situation";
+import { NOT_SAME, notSameKey, marksNaming } from "../lib/not-same";
 import { activityLabelKey } from "@chatcenter/shared/src/lib/ai-activity-labels";
 
 const router = Router();
@@ -13,6 +14,59 @@ const viewerOfReq = (req: Request) => ({
   departmentId: (req as any).user?.departmentId as string | undefined,
 });
 router.use(authenticate, resolveTenant, requireActiveTenant());
+
+// ─── "These two are not the same person" (design 04) ─────────────────
+//
+// One TenantSetting row per pair (no migration): key
+// identity:not-same:<a>:<b>, ids sorted, unique per workspace, so marking is
+// idempotent and two marks cannot race. Not an IdentityLinkSuggestion: those
+// need an identifier (EMAIL / PHONE) and count against a contact's
+// link-rate limit. v2 reads the list so it never suggests the pair again; a
+// later merge of the pair clears the mark.
+
+router.get("/not-same", requirePermissionOrRole("crm:contacts:read", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const rows = await prisma.tenantSetting.findMany({ where: { tenantId, key: { startsWith: NOT_SAME } }, select: { key: true, value: true } });
+    // Only pairs whose two customers still exist, unmerged: a dead id is never returned, and its mark goes.
+    const ids = [...new Set(rows.flatMap((r) => ((r.value as any)?.contactIds ?? []) as string[]))];
+    const alive = new Set((ids.length ? await prisma.contact.findMany({ where: { tenantId, id: { in: ids }, mergedIntoId: null }, select: { id: true } }) : []).map((c) => c.id));
+    const live = rows.filter((r) => { const p = ((r.value as any)?.contactIds ?? []) as string[]; return p.length === 2 && p.every((id) => alive.has(id)); });
+    const stale = rows.filter((r) => !live.includes(r)).map((r) => r.key);
+    if (stale.length) await prisma.tenantSetting.deleteMany({ where: { tenantId, key: { in: stale } } }).catch(() => undefined);
+    return res.json({ data: live.map((r) => r.value) });
+  } catch (err) {
+    console.error("not-same list error:", err);
+    return res.status(500).json({ error: "Failed to list" });
+  }
+});
+
+router.post("/not-same", requirePermissionOrRole("crm:contacts:update", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const ids = Array.isArray(req.body?.contactIds) ? [...new Set((req.body.contactIds as unknown[]).map(String).filter(Boolean))] : [];
+    if (ids.length !== 2) return res.status(400).json({ error: "contactIds must be two different customers", code: "TWO_CONTACTS_REQUIRED" });
+    const contacts = await prisma.contact.findMany({ where: { tenantId, id: { in: ids } }, select: { id: true, personId: true } });
+    if (contacts.length !== 2) return res.status(404).json({ error: "Contact not found", code: "CONTACT_NOT_FOUND" });
+    if (contacts[0]!.personId && contacts[0]!.personId === contacts[1]!.personId) {
+      return res.status(409).json({ error: "These are already linked as one person", code: "ALREADY_SAME_PERSON" });
+    }
+    const [x, y] = [...ids].sort();
+    const value = { contactIds: [x, y], markedAt: new Date().toISOString(), markedBy: (req as any).user?.userId ?? null };
+    const key = notSameKey(x!, y!);
+    // Idempotent: a second mark keeps the first one's time and author.
+    const row = await prisma.tenantSetting.upsert({
+      where: { tenantId_key: { tenantId, key } },
+      create: { tenantId, key, value: value as any, updatedBy: value.markedBy },
+      update: {},
+      select: { value: true },
+    });
+    return res.json({ data: row.value });
+  } catch (err) {
+    console.error("not-same mark error:", err);
+    return res.status(500).json({ error: "Failed to mark" });
+  }
+});
 
 // POST /resolve - find existing contact by email/phone or heuristic metadata match
 router.post("/resolve", async (req: Request, res: Response) => {
@@ -197,6 +251,11 @@ router.post("/merge", async (req: Request, res: Response) => {
       return updated;
     });
 
+    // Merged after all: the pair is no longer "not the same person", and the
+    // merged-away customer's other marks go with it.
+    await Promise.resolve()
+      .then(() => prisma.tenantSetting.deleteMany({ where: { OR: [{ tenantId, key: notSameKey(targetId, sourceId) }, marksNaming(tenantId, [sourceId])] } }))
+      .catch((err) => console.warn("[identity] not-same cleanup after merge failed:", err?.message));
     return res.json({ merged: true, contact: result });
   } catch (err: any) {
     // P2025 = record not found (source already merged by a concurrent caller)
