@@ -41,6 +41,8 @@ export interface OperatorContext {
   locale?: "he" | "en";
   /** The caller holds customer:commerce:read (resolved by the route; absent = no). */
   canReadCommerce?: boolean;
+  /** The caller holds crm:contacts:read or is ADMIN (resolved by the route; absent = no). */
+  canReadContacts?: boolean;
 }
 
 export interface BuiltAgentContext {

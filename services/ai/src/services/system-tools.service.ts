@@ -16,6 +16,7 @@
 import { prisma, visibilityClause, readDurableSetting, parseBusinessHours, REAL_CONVERSATION, type Viewer } from "@chatcenter/shared";
 import { normalizeQuery, queryConversations, sourceLabel, type ConversationQuery } from "./assistant-query.service";
 import { normalizeOrderQuery, queryOrders, queryProductStock } from "./assistant-commerce-query.service";
+import { findCustomersResult } from "./assistant-customers.service";
 
 /** The last n days, today included (UTC days: a caller with a workspace period passes it). */
 function lastDays(n: number): { from: string; to: string } {
@@ -94,19 +95,20 @@ const SYSTEM_GET_METRIC = {
   },
 };
 
-const SYSTEM_SEARCH_CUSTOMERS = {
+const SYSTEM_FIND_CUSTOMERS = {
   type: "function" as const,
   function: {
-    name: "system_search_customers",
+    name: "system_find_customers",
     description:
-      "Search the business's customers by name, email, or phone substring. Returns up to 20 matches with id, displayName, channel, email, phone. " +
-      "Use to look up a customer the operator referenced by name.",
+      "Find the business's customers by name, email or phone, the way the operator wrote it. Every word must match (any order, any case); phones match whatever their format. " +
+      "Names are often stored in another script: ALWAYS pass several spellings in one call: as written, in the other script (Hebrew or Latin letters, e.g. \"עומר צרויה\" and \"Omer Serruya\"), and the first name alone. " +
+      "Each match comes with its channels, how many open conversations it has and the last contact, shown to the user as a card with a link to the customer. " +
+      "Never say a customer was not found before searching all those spellings.",
     parameters: {
       type: "object",
-      required: ["query"],
+      required: ["queries"],
       properties: {
-        query: { type: "string", description: "Substring to match against displayName, email, or phone." },
-        limit: { type: "number", description: "Cap on results (1-20). Default 10." },
+        queries: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 4, description: "1 to 4 spellings of the same customer (name, email or phone)." },
       },
     },
   },
@@ -298,7 +300,7 @@ export async function buildSystemAgentTools(opts: {
     ...integrationTools,
     SYSTEM_COUNT_CONVERSATIONS,
     SYSTEM_GET_METRIC,
-    SYSTEM_SEARCH_CUSTOMERS,
+    SYSTEM_FIND_CUSTOMERS,
     SYSTEM_SUMMARIZE_CONVERSATION,
     SYSTEM_RECENT_ACTIVITY,
     SYSTEM_QUERY_CONVERSATIONS,
@@ -360,6 +362,8 @@ export interface SystemToolDispatchCtx {
   nextId?: (kind: "b" | "s") => string;
   /** The caller holds customer:commerce:read. Absent = no: the store tools refuse. */
   canReadCommerce?: boolean;
+  /** The caller holds crm:contacts:read (or is ADMIN): every customer, as on the customers screen. */
+  canReadContacts?: boolean;
 }
 
 /** The visibility OR-clause for this caller, or null when unrestricted. */
@@ -478,32 +482,14 @@ async function dispatchSystemTool(
         }
         return { toolCallId, content: JSON.stringify({ ok: true, value, label }) };
       }
-      case "system_search_customers": {
-        const limit = Math.min(20, Math.max(1, Number(args.limit) || 10));
-        const q = String(args.query || "").trim();
-        if (!q) {
-          return { toolCallId, content: JSON.stringify({ ok: false, error: "query is required" }) };
-        }
-        const rows = await prisma.contact.findMany({
-          where: {
-            tenantId: ctx.tenantId,
-            OR: [
-              { displayName: { contains: q, mode: "insensitive" } },
-              { email: { contains: q, mode: "insensitive" } },
-              { phone: { contains: q } },
-            ],
-          },
-          take: limit,
-          select: { id: true, displayName: true, channel: true, email: true, phone: true },
-        });
-        const locale = ctx.locale ?? "en";
-        return {
-          toolCallId,
-          content: JSON.stringify({
-            ok: true,
-            results: rows.map((r: any) => ({ id: r.id, name: r.displayName, channel: channelName(r.channel, locale), email: r.email, phone: r.phone })),
-          }),
-        };
+      // The old name: memory of earlier turns may still call it.
+      case "system_search_customers":
+      case "system_find_customers": {
+        const queries: string[] = Array.isArray(args.queries) ? args.queries.map(String) : args.query ? [String(args.query)] : [];
+        let seq = 0;
+        const nextId = ctx.nextId ?? ((k: "b" | "s") => `${k}${++seq}`);
+        const r = await findCustomersResult({ tenantId: ctx.tenantId, viewer: ctx.viewer, locale: ctx.locale ?? "en", nextId, canReadContacts: !!ctx.canReadContacts }, queries);
+        return { toolCallId, content: JSON.stringify(r.summary), ...(r.source ? { artifacts: { blocks: r.blocks, source: r.source } } : {}) };
       }
       case "system_summarize_conversation": {
         const cid = args.conversationId || ctx.selectedConversationId;
@@ -640,6 +626,7 @@ const STEP_TEXT: Record<string, { en: string; he: string }> = {
   system_count_conversations: { en: "Counting conversations", he: "סופרת שיחות" },
   system_get_metric: { en: "Checking the numbers", he: "בודקת את המספרים" },
   system_search_customers: { en: "Searching customers", he: "מחפשת לקוחות" },
+  system_find_customers: { en: "Looking for the customer", he: "מחפשת את הלקוח" },
   system_summarize_conversation: { en: "Reading the conversation", he: "קוראת את השיחה" },
   system_recent_activity: { en: "Looking at recent messages", he: "מסתכלת על ההודעות האחרונות" },
   system_query_conversations: { en: "Looking at the conversations", he: "בודקת את השיחות" },

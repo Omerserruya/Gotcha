@@ -16,7 +16,7 @@ type Locale = "he" | "en";
 export interface ChartBlock { type: "chart"; id: string; title: string; sourceId: string; kind: "bar" | "line"; x: { kind: "day" | "category"; values: string[] }; series: Array<{ key: string; label: string; values: number[] }>; unit: "count" | "currency" | "percent"; currency: string | null; highlight: string[]; deepLink: string | null; partial: null | { reason: string; cap?: number } }
 export interface BreakdownBlock { type: "breakdown"; id: string; title: string; sourceId: string; items: Array<{ key: string; label: string; value: number; share: number }>; total: number; unit: "count"; currency: null; other: { label: string; value: number } | null; coverage: { covered: number; of: number } | null; deepLink: string | null; partial: null }
 export interface RecordListItem { id: string; title: string; subtitle: string; meta: string; deepLink: string | null }
-export interface RecordListBlock { type: "record_list"; id: string; title: string; sourceId: string; kind: "conversation" | "order"; items: RecordListItem[]; total: number; hasMore: boolean; deepLink: null; partial: null }
+export interface RecordListBlock { type: "record_list"; id: string; title: string; sourceId: string; kind: "conversation" | "order" | "customer"; items: RecordListItem[]; total: number; hasMore: boolean; deepLink: null; partial: null }
 export type Block = ChartBlock | BreakdownBlock | RecordListBlock;
 export interface Source { id: string; label: string; kind: "conversations"; count: number | null; deepLink: string | null; query: { tool: "conversations"; params: ConversationQuery } }
 

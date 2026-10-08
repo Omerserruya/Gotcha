@@ -273,6 +273,7 @@ export async function runAgent(
         defaultPeriod: input.defaultPeriod,
         nextId,
         canReadCommerce: !!input.operator.canReadCommerce,
+        canReadContacts: !!input.operator.canReadContacts,
       });
       // Other words, same query (a default spelled out): the first card stands.
       const sourceKey = r.artifacts ? canonical((r.artifacts.source as any)?.query ?? null) : null;

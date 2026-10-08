@@ -31,3 +31,13 @@ export async function commercePerms(p: PermissionPrincipal) {
   ]);
   return { canRead, canOpen, canCancel, canRefund, canReturn, canTag, canNote, canNotify };
 }
+
+/**
+ * May the caller see every customer, as on the customers screen
+ * (crm:contacts:read, or the ADMIN role that the screen's gate also accepts)?
+ */
+export async function canReadContacts(req: Request & { tenantId?: string }): Promise<boolean> {
+  const p = principalOf(req);
+  if (p.role === "ADMIN") return true;
+  return hasPermission(p, "crm:contacts:read").catch(() => false);
+}

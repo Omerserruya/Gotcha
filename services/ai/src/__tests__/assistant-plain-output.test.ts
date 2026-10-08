@@ -32,8 +32,9 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
             ]
           : [{ direction: "INBOUND", body: null, createdAt: D("2026-10-07T11:05:00Z"), senderName: "Dana" }],
       },
-      conversation: { findFirst: async () => ({ id: "c1" }) },
-      contact: { findMany: async () => [{ id: "k1", displayName: "Dana", channel: "SHOPIFY_LIVE_CHAT", email: null, phone: null }] },
+      conversation: { findFirst: async () => ({ id: "c1" }), findMany: async () => [] },
+      contact: { findMany: async () => [{ id: "k1", displayName: "Dana", channel: "SHOPIFY_LIVE_CHAT", externalId: "k1", email: null, phone: null, personId: null, updatedAt: D("2026-10-07T11:00:00Z") }] },
+      inboundExclusion: { findMany: async () => [] },
     },
   };
 });
@@ -80,8 +81,8 @@ describe("★ the other tools too", () => {
   });
 
   it("customer search: the channel's name", async () => {
-    const r = await run("system_search_customers", { query: "Dana" });
-    expect(r.results[0].channel).toBe("צ'אט Shopify");
+    const r = await (async () => JSON.parse((await dispatchSystemToolCall(call("system_find_customers", { queries: ["Dana"] }), { tenantId: "T", userId: "u1", locale: "he", canReadContacts: true } as any)).content))();
+    expect(r.customers[0].channels).toEqual(["צ'אט Shopify"]);
   });
 
   it("a count label's date is in words", async () => {
