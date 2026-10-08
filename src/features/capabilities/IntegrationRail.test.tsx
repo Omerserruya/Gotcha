@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { capabilitySchema } from '@/api/contracts/capabilities';
 import { integrationSchema, type Integration } from '@/api/contracts/integrations';
 import messages from '@/i18n/messages/en/capabilities.json';
+import heMessages from '@/i18n/messages/he/capabilities.json';
 
 import { IntegrationRail } from './IntegrationRail';
 
@@ -121,6 +122,21 @@ describe('★★ the list is whatever the table holds', () => {
     ]);
     expect(screen.getByTestId('rail-available')).toHaveTextContent(/Payments/);
     expect(screen.getByTestId('rail-available')).toHaveTextContent(/Shipping/);
+  });
+
+  it('★ in Hebrew, the chips and each row’s line say the category in Hebrew (dev: English on /he)', async () => {
+    render(
+      <NextIntlClientProvider locale="he" messages={{ capabilities: heMessages }}>
+        {await IntegrationRail({
+          integrations: [
+            entry({ slug: 'a', name: 'A', category: 'ECOMMERCE', description: null }),
+            entry({ slug: 'b', name: 'B', category: 'DATABASE', description: null }),
+          ],
+        })}
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('category-ECOMMERCE')).toHaveTextContent('חנות אונליין');
+    expect(screen.getByTestId('available-a')).toHaveTextContent('חנות אונליין');
   });
 
   it('★ an entry with no category is not assigned one - no chip, no label', async () => {

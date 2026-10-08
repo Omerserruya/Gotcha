@@ -1,10 +1,10 @@
 import { getTranslations } from 'next-intl/server';
 
-import { humaniseCode } from '@/api/contracts/capabilities';
 import { sentenceCase, type Integration } from '@/api/contracts/integrations';
 
 import { ConnectFor } from './ConnectFor';
 import { IntegrationLogo } from './IntegrationLogo';
+import { systemCategoryName } from './system-category';
 import styles from './Capabilities.module.css';
 
 const RISK = new Set(['LOW', 'MEDIUM', 'HIGH']);
@@ -30,7 +30,7 @@ export async function AvailableSystem({
 }) {
   const t = await getTranslations('capabilities');
   const line = [
-    integration.category ? humaniseCode(integration.category) : null,
+    integration.category ? systemCategoryName(integration.category, t) : null,
     integration.description,
   ]
     .filter(Boolean)

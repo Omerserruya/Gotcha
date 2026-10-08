@@ -239,5 +239,18 @@
         "reconnect": "צריך לחבר מחדש את Shopify לפני שאפשר לבדוק את התוכנית."
       }
     }
+  },
+  "systemCategory": {
+    "ECOMMERCE": "חנות אונליין",
+    "CRM": "CRM",
+    "PAYMENTS": "תשלומים",
+    "HELPDESK": "מוקד תמיכה",
+    "COMMUNICATION": "תקשורת",
+    "ANALYTICS": "אנליטיקה",
+    "SHIPPING": "משלוחים",
+    "PROJECT_MANAGEMENT": "ניהול פרויקטים",
+    "CALENDAR": "יומן",
+    "DATABASE": "מסד נתונים",
+    "CUSTOM": "מותאם אישית"
   }
 }

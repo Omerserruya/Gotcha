@@ -7,10 +7,10 @@ import { Search } from 'lucide-react';
 
 import { Link } from '@/i18n/navigation';
 
-import { humaniseCode } from '@/api/contracts/capabilities';
 import { byCategory, isIntegrationState, type Integration } from '@/api/contracts/integrations';
 
 import { IntegrationLogo } from './IntegrationLogo';
+import { systemCategoryName } from './system-category';
 import styles from './Capabilities.module.css';
 
 /**
@@ -229,7 +229,7 @@ export function IntegrationFinder({
                 data-testid={`category-${c}`}
                 onClick={() => setCategory(category === c ? null : c)}
               >
-                {humaniseCode(c)}
+                {systemCategoryName(c, t)}
               </button>
             ))}
           </div>
@@ -249,7 +249,10 @@ export function IntegrationFinder({
                 <span className={styles.railNameStack}>
                   <span className={styles.railName}>{entry.name}</span>
                   <span className={styles.railSub}>
-                    {[entry.category ? humaniseCode(entry.category) : null, entry.description]
+                    {[
+                      entry.category ? systemCategoryName(entry.category, t) : null,
+                      entry.description,
+                    ]
                       .filter(Boolean)
                       .join(' · ')}
                   </span>

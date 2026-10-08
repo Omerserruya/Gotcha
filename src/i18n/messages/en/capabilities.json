@@ -239,5 +239,18 @@
         "reconnect": "Shopify needs reconnecting before its plan can be checked."
       }
     }
+  },
+  "systemCategory": {
+    "ECOMMERCE": "Ecommerce",
+    "CRM": "CRM",
+    "PAYMENTS": "Payments",
+    "HELPDESK": "Helpdesk",
+    "COMMUNICATION": "Communication",
+    "ANALYTICS": "Analytics",
+    "SHIPPING": "Shipping",
+    "PROJECT_MANAGEMENT": "Project management",
+    "CALENDAR": "Calendar",
+    "DATABASE": "Database",
+    "CUSTOM": "Custom"
   }
 }
