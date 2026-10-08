@@ -150,5 +150,6 @@ export async function preparePlan(ctx: PlanCtx, raw: Array<{ tool: string; param
       summary: customer ? (he ? `${words}: ${customer.name}` : `${words}: ${customer.name}`) : words,
     });
   }
-  return out;
+  // The step's reason is its own sentence: the model's was broken Hebrew ("לשייכי").
+  return out.map((st) => ({ ...st, reason: st.summary }));
 }

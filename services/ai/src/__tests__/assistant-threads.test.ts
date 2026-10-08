@@ -701,3 +701,27 @@ describe("★ a thread about one request (design 03)", () => {
     expect((await request(app()).post("/api/assistant/threads").send({})).body.data.context).toBeNull();
   });
 });
+
+describe("★ proposed is not done (2026-10-08: \"שייכתי אליך את השיחה\" for a request that only waited)", () => {
+  const plan = tool("propose_plan", { steps: [{ tool: "create_workflow", params: {}, reason: "x" }] });
+
+  it("after a proposal, the answer is the server's sentence: the model's 'done' never streams nor is saved", async () => {
+    const t = await newThread();
+    H.script = [plan, say("יצרתי את האוטומציה ", "בשבילך. [[suggestions]] []")];
+    const r = await send(t.id, "תיצרי אוטומציה");
+    const streamed = r.events.filter((e) => e.event === "text.delta").map((e) => e.data.text).join("");
+    expect(streamed).toBe("הכנתי בקשה ליצור אוטומציה. היא מחכה לאישור במסך האישורים.");
+    expect(streamed).not.toMatch(/יצרתי/);
+    expect(H.messages.find((m) => m.role === "assistant").text).toBe(streamed);
+  });
+
+  it("the title names the request, without a model call and without a 'done' verb; in English too", async () => {
+    const t = await newThread();
+    H.titleReply = "העברתי את השיחה";
+    H.script = [plan, say("Done, I created it.")];
+    const r = await send(t.id, "create an automation");
+    expect(r.events.filter((e) => e.event === "text.delta").map((e) => e.data.text).join("")).toBe("I prepared a request to create an automation; it is waiting for approval on the Approvals screen.");
+    expect(H.threads.find((x) => x.id === t.id).title).toBe("Request: Create an automation");
+    expect(H.titleCalls).toBe(0);
+  });
+});

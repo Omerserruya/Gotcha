@@ -74,7 +74,8 @@ describe("★ pinned at proposal", () => {
     expect(out).toMatchObject({ ok: true, summary: "לשייך אליך את השיחה של Omer Serruya (וואטסאפ)" });
     const a = H.approvals[0];
     expect(a.params.steps).toEqual([{
-      tool: "assign_conversation", params: { conversationId: "wa_open", agentId: "matan" }, reason: "asked", riskLevel: "medium",
+      // The reason is the step's own sentence, never the model's ("לשייכי" was broken Hebrew).
+      tool: "assign_conversation", params: { conversationId: "wa_open", agentId: "matan" }, reason: "לשייך אליך את השיחה של Omer Serruya (וואטסאפ)", riskLevel: "medium",
       target: { conversationId: "wa_open", assigneeId: "matan" }, summary: "לשייך אליך את השיחה של Omer Serruya (וואטסאפ)",
     }]);
     expect(a.summary).toBe("לשייך אליך את השיחה של Omer Serruya (וואטסאפ)");

@@ -379,6 +379,9 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
   const sources: Array<{ id: string }> = [];
   const cites = new CitationFilter(() => new Set(sources.map((x) => x.id)));
   let pendingApproval: string | null = null;
+  // What this answer proposed (server-written summaries): after a proposal the
+  // model's prose is not shown, it claimed the action was done (2026-10-08).
+  const proposed: string[] = [];
   let text = "";
   let status: "done" | "cancelled" | "failed" = "done";
   let usage: any = null;
@@ -407,12 +410,19 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
       surface: "home",
     }, async (ev: AgentRuntimeEvent) => {
       switch (ev.type) {
-        case "token": await emitText(cites.push(splitter.push(ev.text))); break;
+        case "token": {
+          const out = cites.push(splitter.push(ev.text));
+          if (!proposed.length) await emitText(out);
+          break;
+        }
         case "tool_start":
           steps.set(ev.toolCallId, { id: ev.toolCallId, text: ev.label, status: "running", startedAt: Date.now() });
           await emit("step.start", { stepId: ev.toolCallId, text: ev.label });
           break;
         case "plan_proposed":
+          proposed.push(ev.summary);
+          pendingApproval = ev.approvalRequestId;
+          break;
         case "awaiting_approval":
           pendingApproval = ev.approvalRequestId;
           break;
@@ -453,9 +463,13 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
   // Only follow-ups a tool of this answer can answer; a Home thread selects nothing.
   const { rest: unsplit, suggestions } = splitter.end({ tools: toolNames, noSelection: true });
   const rest = cites.push(unsplit) + cites.end();
-  // A held trailing space alone is not worth an event (the saved text is trimmed).
-  if (rest.trim() && status !== "cancelled") await emitText(rest);
-  else if (rest) text += rest;
+  if (proposed.length) {
+    // Proposed, not done: the answer is the server's sentence, never the model's.
+    if (status !== "cancelled") await emitText(`${text.trim() ? "\n\n" : ""}${proposalSentence(proposed, input.locale)}`);
+  } else if (rest.trim() && status !== "cancelled") {
+    // A held trailing space alone is not worth an event (the saved text is trimmed).
+    await emitText(rest);
+  } else if (rest) text += rest;
   if (suggestions.length && status === "done") await emit("suggestions", { items: suggestions });
   // A citation must point at a source of this answer; any other is dropped.
   text = withValidCitations(text, new Set(sources.map((x) => x.id)));
@@ -471,7 +485,10 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
 
   // The first answer names the thread, unless the user named it.
   if (status === "done" && !input.thread.title && input.thread.titleSource !== "user") {
-    const title = await autoTitle(input.owner.tenantId, input.text, text, input.locale).catch(() => null);
+    // A turn that only proposed is named by its request, never by a "done" verb.
+    const title = proposed.length
+      ? proposalTitle(proposed, input.locale)
+      : await autoTitle(input.owner.tenantId, input.text, text, input.locale).catch(() => null);
     if (title) {
       const written = await prisma.assistantThread.updateMany({
         where: { id: input.thread.id, titleSource: null },
@@ -491,6 +508,28 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
   ]).catch(() => undefined);
   // Release the thread only if it is still ours.
   if ((await r.get(kActive(input.thread.id)).catch(() => null)) === run.runId) await r.del(kActive(input.thread.id)).catch(() => undefined);
+}
+
+/**
+ * What a turn that proposed an action says: that a request is waiting, in
+ * the turn's language. Built from the plan's own summaries (infinitives:
+ * "לשייך אליך את השיחה של ..."), so it can never claim the action was done.
+ */
+export function proposalSentence(summaries: string[], locale: "he" | "en"): string {
+  const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+  if (locale === "he") {
+    return summaries.length === 1
+      ? `הכנתי בקשה ${summaries[0]}. היא מחכה לאישור במסך האישורים.`
+      : `הכנתי ${summaries.length} בקשות: ${summaries.join("; ")}. הן מחכות לאישור במסך האישורים.`;
+  }
+  return summaries.length === 1
+    ? `I prepared a request to ${lower(summaries[0]!)}; it is waiting for approval on the Approvals screen.`
+    : `I prepared ${summaries.length} requests: ${summaries.join("; ")}. They are waiting for approval on the Approvals screen.`;
+}
+
+/** The thread's title when its first answer only proposed: the request, as a request. */
+export function proposalTitle(summaries: string[], locale: "he" | "en"): string {
+  return `${locale === "he" ? "בקשה" : "Request"}: ${summaries[0]!.replace(/\s*\([^)]*\)\s*$/, "")}`.slice(0, 80);
 }
 
 /** One small model call (logged and charged like every call), in the interface language. */
