@@ -1406,6 +1406,15 @@ export const knowledgeEndpoints = {
     endpoint('/api/historical-imports/conversations/{conversationId}/messages', {
       conversationId,
     }),
+  /**
+   * 13f's "Preview five": the import's customers, most messages first (the
+   * route takes 100) - `{ customers: [...] }`.
+   */
+  importCustomers: (importId: string) =>
+    endpoint('/api/historical-imports/{importId}/customers', { importId }),
+  /** What was learned about one imported customer: `{ memory: { facts, summary } | null }`. */
+  importCustomerMemory: (customerId: string) =>
+    endpoint('/api/historical-imports/customers/{customerId}/memory', { customerId }),
   /** 13f's Reject / Skip: `{ ok: true }`; 404 when gone or already decided. */
   rejectCandidate: (candidateId: string) =>
     endpoint('/api/historical-imports/candidates/{candidateId}/reject', { candidateId }),

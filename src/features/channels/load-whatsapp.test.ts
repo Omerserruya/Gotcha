@@ -4,7 +4,12 @@ const get = vi.hoisted(() => vi.fn());
 vi.mock('server-only', () => ({}));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get }) }));
 
-import { loadChannelsConfig, loadEvidence, loadImportedThread } from './load-whatsapp';
+import {
+  loadChannelsConfig,
+  loadEvidence,
+  loadImportedThread,
+  loadProfilePreview,
+} from './load-whatsapp';
 
 beforeEach(() => {
   get.mockReset();
@@ -79,5 +84,41 @@ describe('★ 13f "See the chats" at the wire', () => {
     });
     get.mockRejectedValueOnce(new Error('404'));
     expect(await loadImportedThread('v1')).toBeNull();
+  });
+});
+
+describe('★ 13f "Preview five" at the wire', () => {
+  it('the five with most messages (the route’s order), each one’s memory; nothing learned is "none", a failed read null', async () => {
+    const paths: string[] = [];
+    get.mockImplementation(
+      async ({
+        endpoint,
+        payload,
+      }: {
+        endpoint: { path: string };
+        payload: { parse: (v: unknown) => unknown };
+      }) => {
+        paths.push(endpoint.path);
+        if (endpoint.path === '/api/historical-imports/i1/customers')
+          return payload.parse({
+            customers: ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({ id, messageCount: 1 })),
+          });
+        if (endpoint.path.endsWith('/a/memory'))
+          return payload.parse({ memory: { summary: 's', facts: [{ text: 't' }] } });
+        if (endpoint.path.endsWith('/b/memory')) return payload.parse({ memory: null });
+        throw new Error('down');
+      },
+    );
+    const profiles = await loadProfilePreview('i1');
+    expect(profiles?.map((p) => p.customer.id)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(paths).not.toContain('/api/historical-imports/customers/f/memory');
+    expect(profiles?.[0]?.memory).toMatchObject({ summary: 's', facts: [{ text: 't' }] });
+    expect(profiles?.[1]?.memory).toBe('none');
+    expect(profiles?.[2]?.memory).toBeNull();
+  });
+
+  it('the customers unread: null', async () => {
+    get.mockRejectedValueOnce(new Error('down'));
+    expect(await loadProfilePreview('i1')).toBeNull();
   });
 });

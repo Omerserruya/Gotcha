@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { memoryFactSchema } from './customer-detail';
+
 /**
  * The report at the end of an import - screen 13f.
  *
@@ -558,3 +560,39 @@ export const importedThreadSchema = z.object({
     .default([]),
 });
 export type ImportedThread = z.infer<typeof importedThreadSchema>;
+
+/**
+ * 13f's "Preview five" - the import's customers (`GET /:id/customers`), most
+ * messages first. A name is the one WhatsApp gave, else the phone; the
+ * contact, when the import linked one, is where the customer opens.
+ */
+export const importCustomersSchema = z.object({
+  customers: z
+    .array(
+      z.object({
+        id: z.string(),
+        displayName: z.string().nullable().catch(null).default(null),
+        normalizedPhone: z.string().nullable().catch(null).default(null),
+        contactId: z.string().nullable().catch(null).default(null),
+        messageCount: z.number().nullable().catch(null).default(null),
+      }),
+    )
+    .default([]),
+});
+export type ImportCustomer = z.infer<typeof importCustomersSchema>['customers'][number];
+
+/**
+ * What was learned about one (`GET /customers/:id/memory`): the stored row,
+ * or `null` - nothing was learned. Facts are customer-learning.stage's
+ * `{ text, category, confidence }`, read by the customer page's own schema.
+ */
+export const importMemorySchema = z.object({
+  memory: z
+    .object({
+      summary: z.string().nullable().catch(null).default(null),
+      facts: z.array(memoryFactSchema).catch([]).default([]),
+    })
+    .nullable()
+    .default(null),
+});
+export type ImportMemory = NonNullable<z.infer<typeof importMemorySchema>['memory']>;

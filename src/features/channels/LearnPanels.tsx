@@ -19,6 +19,9 @@ import { RerunFailed, ReportFoot } from './ReportFootActions';
 import { SuggestionActions } from './SuggestionActions';
 import styles from './Channels.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
+import { ltr } from '@/lib/bidi';
+
+import type { ProfilePreview } from './load-whatsapp';
 
 const href = (view: 'progress' | 'report', importId: string, tab?: string) => ({
   pathname: '/settings/channels',
@@ -422,15 +425,18 @@ export async function ReportPanel({
                 ? t('learn.customersRead', { count: n.format(status.customersAnalyzed) })
                 : '-'}
             </p>
-            {/* 02's "Preview five" - no route returns the profiles yet. */}
-            <span
+            {/* 02's "Preview five": the five most-talked-with, as GOTCHA remembers them. */}
+            <Link
+              href={{
+                pathname: '/settings/channels',
+                query: { panel: 'whatsapp', import: status.id, view: 'profiles' },
+              }}
               className={styles.reportPreview}
-              aria-disabled="true"
-              title={t('learn.previewNotYet')}
               data-testid="report-preview"
+              scroll={false}
             >
               {t('learn.previewFive')}
-            </span>
+            </Link>
           </section>
         </div>
 
@@ -715,5 +721,106 @@ export async function ChatsPanel({
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * 13f's "Preview five" (Omer, decision 13): the five customers this history
+ * talked with most (the route's order), each with what GOTCHA learned - its
+ * summary and its facts, as stored. Reading only.
+ *
+ * A private contact was never imported, and since b474d8e5 one made private
+ * later is absent here too.
+ */
+export async function ProfilesPanel({
+  status,
+  profiles,
+}: {
+  readonly status: ImportStatus;
+  /** `null`: the customers could not be read. */
+  readonly profiles: readonly ProfilePreview[] | null;
+}) {
+  const t = await getTranslations('channels.whatsapp.profiles');
+  return (
+    <div className={drawer.drawerBody} data-testid="profiles-panel">
+      <Link
+        href={href('report', status.id)}
+        className={styles.chatsBack}
+        data-testid="profiles-back"
+        scroll={false}
+      >
+        {t('back')}
+      </Link>
+      <p className={styles.timelineSub}>{t('line')}</p>
+      {profiles === null ? (
+        <p className={styles.timelineSub} data-testid="profiles-unread">
+          {t('listUnread')}
+        </p>
+      ) : profiles.length === 0 ? (
+        <p className={styles.timelineSub} data-testid="profiles-empty">
+          {t('empty')}
+        </p>
+      ) : (
+        <ul className={styles.chatsList}>
+          {profiles.map(({ customer, memory }) => {
+            const name = customer.displayName?.trim() || ltr(customer.normalizedPhone) || '-';
+            return (
+              <li
+                key={customer.id}
+                className={styles.chatsItem}
+                data-testid={`profile-${customer.id}`}
+              >
+                <span className={styles.reportQuestion}>
+                  <UserText>{name}</UserText>
+                </span>
+                {customer.messageCount !== null ? (
+                  <span className={styles.chatWho}>
+                    {t('messages', { count: customer.messageCount })}
+                  </span>
+                ) : null}
+                {memory === null ? (
+                  <span className={styles.chatWho} data-testid={`profile-unread-${customer.id}`}>
+                    {t('unread')}
+                  </span>
+                ) : memory === 'none' || (!memory.summary?.trim() && memory.facts.length === 0) ? (
+                  <span className={styles.chatWho} data-testid={`profile-none-${customer.id}`}>
+                    {t('none')}
+                  </span>
+                ) : (
+                  <>
+                    {memory.summary?.trim() ? (
+                      <span dir="auto" data-testid={`profile-summary-${customer.id}`}>
+                        {memory.summary}
+                      </span>
+                    ) : null}
+                    {memory.facts.length > 0 ? (
+                      <ul
+                        className={styles.profileFacts}
+                        data-testid={`profile-facts-${customer.id}`}
+                      >
+                        {memory.facts.map((fact, i) => (
+                          <li key={i} dir="auto">
+                            {fact.text}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </>
+                )}
+                {customer.contactId ? (
+                  <Link
+                    href={`/customers/${customer.contactId}`}
+                    className={styles.chatsOpen}
+                    data-testid={`profile-open-${customer.id}`}
+                  >
+                    {t('open')}
+                  </Link>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }

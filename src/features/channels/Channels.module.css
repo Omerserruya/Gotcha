@@ -1681,6 +1681,14 @@
     color: var(--text-subtle);
   }
 
+  .profileFacts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+    padding-inline-start: var(--space-16);
+  }
+
   .chatThread {
     display: flex;
     flex-direction: column;

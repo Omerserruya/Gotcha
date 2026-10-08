@@ -72,17 +72,20 @@ vi.mock('@/i18n/navigation', () => ({
     scroll: _scroll,
     ...rest
   }: {
-    href: { pathname: string; query?: Record<string, string> };
+    href: string | { pathname: string; query?: Record<string, string> };
     children: ReactNode;
     scroll?: boolean;
   }) => (
-    <a href={`${href.pathname}?${new URLSearchParams(href.query)}`} {...rest}>
+    <a
+      href={typeof href === 'string' ? href : `${href.pathname}?${new URLSearchParams(href.query)}`}
+      {...rest}
+    >
       {children}
     </a>
   ),
 }));
 
-import { ChatsPanel, ImportPanel, LearningRow, ReportPanel } from './LearnPanels';
+import { ChatsPanel, ImportPanel, LearningRow, ProfilesPanel, ReportPanel } from './LearnPanels';
 
 const status = (over: Record<string, unknown> = {}) =>
   importStatusSchema.parse({ id: 'i1', stage: 'analyzing', ...over });
@@ -316,7 +319,10 @@ describe('★ 13f - the report, no paragraphs', () => {
     expect(within(screen.getByTestId('candidate-c3')).getByTestId('decide-c3')).toBeInTheDocument();
     expect(screen.getByTestId('report-bulk')).toBeInTheDocument();
     expect(screen.getByTestId('report-rerun')).toBeInTheDocument();
-    expect(screen.getByTestId('report-preview')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('report-preview')).toHaveAttribute(
+      'href',
+      '/settings/channels?panel=whatsapp&import=i1&view=profiles',
+    );
   });
 
   it('★ the button counts what the tab shows - what the route takes, a live lookup included (measured on dev: 3 against 2)', async () => {
@@ -557,5 +563,66 @@ describe('★★ 13f "See the chats" - the exchanges behind an answer, each chat
       }),
     );
     expect(screen.getByTestId('chat-unread')).toHaveTextContent("This chat couldn't be opened");
+  });
+});
+
+describe('★★ 13f "Preview five" - five customers, as GOTCHA remembers them', () => {
+  const customer = (over: Record<string, unknown> = {}) => ({
+    id: 'h1',
+    displayName: 'Dana',
+    normalizedPhone: '972541234567',
+    contactId: 'k1',
+    messageCount: 42,
+    ...over,
+  });
+
+  it('each: the name (else the phone, kept left-to-right), how much was said, the summary and the facts', async () => {
+    render(
+      await ProfilesPanel({
+        status: status({ stage: 'ready' }),
+        profiles: [
+          {
+            customer: customer(),
+            memory: {
+              summary: 'Orders every month.',
+              facts: [
+                {
+                  text: 'Prefers delivery to the office',
+                  category: 'preference',
+                  confidence: 'high',
+                  evidenceConversationIds: [],
+                },
+              ],
+            },
+          },
+          { customer: customer({ id: 'h2', displayName: null, contactId: null }), memory: 'none' },
+          { customer: customer({ id: 'h3' }), memory: null },
+        ],
+      }),
+    );
+    expect(screen.getByTestId('profile-h1')).toHaveTextContent('Dana');
+    expect(screen.getByTestId('profile-h1')).toHaveTextContent('42 messages');
+    expect(screen.getByTestId('profile-summary-h1')).toHaveTextContent('Orders every month.');
+    expect(screen.getByTestId('profile-facts-h1')).toHaveTextContent(
+      'Prefers delivery to the office',
+    );
+    expect(screen.getByTestId('profile-open-h1')).toHaveAttribute('href', '/customers/k1');
+    // No name: the phone, isolated so it never reverses in Hebrew.
+    expect(screen.getByTestId('profile-h2').textContent).toContain('\u2066972541234567\u2069');
+    expect(screen.getByTestId('profile-none-h2')).toHaveTextContent('Nothing was learned');
+    expect(screen.queryByTestId('profile-open-h2')).toBeNull();
+    expect(screen.getByTestId('profile-unread-h3')).toHaveTextContent("couldn't be read");
+  });
+
+  it('the list unread, or empty: said - and the way back to the report', async () => {
+    const one = render(await ProfilesPanel({ status: status(), profiles: null }));
+    expect(screen.getByTestId('profiles-unread')).toBeInTheDocument();
+    expect(screen.getByTestId('profiles-back')).toHaveAttribute(
+      'href',
+      '/settings/channels?panel=whatsapp&import=i1&view=report',
+    );
+    one.unmount();
+    render(await ProfilesPanel({ status: status(), profiles: [] }));
+    expect(screen.getByTestId('profiles-empty')).toBeInTheDocument();
   });
 });

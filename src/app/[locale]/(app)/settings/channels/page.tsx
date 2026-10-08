@@ -6,13 +6,20 @@ import { numberCount } from '@/api/contracts/whatsapp-numbers';
 
 import { ChannelList } from '@/features/channels/ChannelList';
 import channelStyles from '@/features/channels/Channels.module.css';
-import { ChatsPanel, ImportPanel, LearningRow, ReportPanel } from '@/features/channels/LearnPanels';
+import {
+  ChatsPanel,
+  ImportPanel,
+  LearningRow,
+  ProfilesPanel,
+  ReportPanel,
+} from '@/features/channels/LearnPanels';
 import { loadChannels } from '@/features/channels/load-channels';
 import {
   loadEvidence,
   loadExclusions,
   loadHistoryImport,
   loadImportedThread,
+  loadProfilePreview,
   loadChannelsConfig,
   loadNumberEvents,
   loadWhatsAppNumbers,
@@ -113,11 +120,13 @@ export default async function Page({
       ? 'connect'
       : asked
         ? 'chats'
-        : learn && params.view === 'report' && whatsapp?.[1].candidates
-          ? 'report'
-          : learn && params.view === 'progress'
-            ? 'progress'
-            : null;
+        : learn && params.view === 'profiles'
+          ? 'profiles'
+          : learn && params.view === 'report' && whatsapp?.[1].candidates
+            ? 'report'
+            : learn && params.view === 'progress'
+              ? 'progress'
+              : null;
   // 13b's open tab (`?tab=`), when 13b itself is what is open.
   const panelTab = tabOf(view === null ? params.tab : undefined);
 
@@ -171,6 +180,17 @@ export default async function Page({
             receiving={first?.health?.receiving === true}
             coexistence={first?.usesBusinessApp === true}
           />
+        </Drawer>
+      ) : view === 'profiles' && learn ? (
+        <Drawer
+          title={tw('profiles.title')}
+          line={tw('learn.nothingUsed')}
+          lead={tile}
+          closeHref="/settings/channels?panel=whatsapp"
+          width={860}
+          testId="drawer-profiles"
+        >
+          <ProfilesPanel status={learn} profiles={await loadProfilePreview(learn.id)} />
         </Drawer>
       ) : view === 'chats' && learn && asked ? (
         <Drawer

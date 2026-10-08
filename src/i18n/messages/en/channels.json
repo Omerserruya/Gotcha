@@ -309,8 +309,7 @@
       "saidInShort": "in {count}",
       "quoted": "“{answer}”",
       "seeChats": "See the chats",
-      "previewFive": "Preview five",
-      "previewNotYet": "Previewing customer profiles comes next."
+      "previewFive": "Preview five"
     },
     "wizard": {
       "title": "Connect WhatsApp",
@@ -471,6 +470,17 @@
       "thread": "The chat",
       "threadWith": "The chat with {name}",
       "threadUnread": "This chat couldn't be opened - it may be gone."
+    },
+    "profiles": {
+      "title": "Five customers, as GOTCHA remembers them",
+      "back": "Back to the report",
+      "line": "What GOTCHA learned about the five you talked with most. Nothing here is sent to anyone.",
+      "messages": "{count, plural, one {# message} other {# messages}}",
+      "none": "Nothing was learned about this customer.",
+      "unread": "What was learned about this customer couldn't be read.",
+      "listUnread": "The customers couldn't be read just now.",
+      "empty": "No customers came in with this history.",
+      "open": "Open the customer"
     }
   },
   "rowSettings": "Settings",

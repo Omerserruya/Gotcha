@@ -3,7 +3,12 @@ import { isValidElement } from 'react';
 import { createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ChatsPanel, ImportPanel, ReportPanel } from '@/features/channels/LearnPanels';
+import {
+  ChatsPanel,
+  ImportPanel,
+  ProfilesPanel,
+  ReportPanel,
+} from '@/features/channels/LearnPanels';
 import { WhatsAppNumbers } from '@/features/channels/WhatsAppNumbers';
 import { ChannelLanding } from '@/features/channels/ChannelLanding';
 import { ConnectWhatsApp } from '@/features/channels/ConnectWhatsApp';
@@ -46,6 +51,7 @@ const reads = vi.hoisted(() => ({
   events: vi.fn(),
   evidence: vi.fn(async () => []),
   thread: vi.fn(async () => null),
+  profiles: vi.fn(async () => []),
 }));
 vi.mock('@/features/webchat/load-website-widget', () => ({ loadWidgetInstall: async () => null }));
 vi.mock('@/features/outreach/load-templates', () => ({ loadTemplates: reads.templates }));
@@ -53,6 +59,7 @@ vi.mock('@/features/channels/load-whatsapp', () => ({
   loadExclusions: reads.exclusions,
   loadEvidence: reads.evidence,
   loadImportedThread: reads.thread,
+  loadProfilePreview: reads.profiles,
   loadNumberEvents: reads.events,
   loadWhatsAppNumbers: async () => DEV_NUMBERS,
   loadHistoryImport: async () => history.value,
@@ -206,6 +213,21 @@ describe('★ 13e / 13f are their own panels, replacing 13b while open', () => {
     });
     expect(find(tree, ChatsPanel)).toBeNull();
     expect(reads.evidence).not.toHaveBeenCalled();
+  });
+
+  it('★ ?view=profiles opens "Preview five" for this import', async () => {
+    history.value = {
+      status: { ...STATUS, stage: 'ready' },
+      candidates: [],
+      bulkMinConfidence: 0.8,
+    };
+    reads.profiles.mockClear();
+    const { default: Page } = await import('./page');
+    const tree = await Page({
+      searchParams: Promise.resolve({ panel: 'whatsapp', import: 'i1', view: 'profiles' }),
+    });
+    expect(find(tree, ProfilesPanel)).not.toBeNull();
+    expect(reads.profiles).toHaveBeenCalledWith(STATUS.id);
   });
 
   it('a view with no import falls back to 13b', async () => {

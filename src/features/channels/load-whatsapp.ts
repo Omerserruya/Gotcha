@@ -4,9 +4,13 @@ import { importListSchema, type ImportStatus } from '@/api/contracts/historical-
 import {
   candidateEvidenceSchema,
   candidateListSchema,
+  importCustomersSchema,
   importedThreadSchema,
+  importMemorySchema,
   type Candidate,
   type CandidateEvidence,
+  type ImportCustomer,
+  type ImportMemory,
   type ImportedThread,
 } from '@/api/contracts/knowledge-candidates';
 import {
@@ -173,6 +177,48 @@ export async function loadImportedThread(conversationId: string): Promise<Import
       logger.warn('whatsapp.imported_thread_failed', { cause });
       return null;
     });
+}
+
+/** One customer in "Preview five", and what was learned - `null` unread, `'none'` nothing learned. */
+export interface ProfilePreview {
+  readonly customer: ImportCustomer;
+  readonly memory: ImportMemory | 'none' | null;
+}
+
+/** How many "Preview five" shows - the design's number. */
+const PREVIEWED = 5;
+
+/**
+ * 13f's "Preview five": the five customers with the most messages, each with
+ * what GOTCHA learned. `null` when the customers could not be read.
+ */
+export async function loadProfilePreview(
+  importId: string,
+): Promise<readonly ProfilePreview[] | null> {
+  const api = serverApi();
+  const customers = await api
+    .get({ endpoint: knowledgeEndpoints.importCustomers(importId), payload: importCustomersSchema })
+    .then((page) => page.customers)
+    .catch((cause: unknown) => {
+      logger.warn('whatsapp.import_customers_failed', { cause });
+      return null;
+    });
+  if (customers === null) return null;
+  return Promise.all(
+    customers.slice(0, PREVIEWED).map(async (customer) => ({
+      customer,
+      memory: await api
+        .get({
+          endpoint: knowledgeEndpoints.importCustomerMemory(customer.id),
+          payload: importMemorySchema,
+        })
+        .then((page): ImportMemory | 'none' => page.memory ?? 'none')
+        .catch((cause: unknown) => {
+          logger.warn('whatsapp.import_memory_failed', { cause });
+          return null;
+        }),
+    })),
+  );
 }
 
 /** 13b's Private contacts. `null`: unread. */
