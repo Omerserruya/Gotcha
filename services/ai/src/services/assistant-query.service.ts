@@ -35,7 +35,8 @@ const MAX_DAYS = 92;
 const MAX_ROWS = 5000;
 const LIST_FIRST_PAGE = 10;
 const LIST_PAGE = 25;
-const INBOX_CHANNELS = new Set(["WHATSAPP", "INSTAGRAM", "MESSENGER", "EMAIL", "WEBCHAT"]);
+// The inbox's channel filter (frontend 579fca8 added Shopify live chat).
+const INBOX_CHANNELS = new Set(["WHATSAPP", "INSTAGRAM", "MESSENGER", "EMAIL", "WEBCHAT", "SHOPIFY_LIVE_CHAT"]);
 const CHANNELS = new Set(["WHATSAPP", "INSTAGRAM", "MESSENGER", "EMAIL", "GMAIL", "OUTLOOK", "SLACK", "VOICE", "WEBCHAT", "SHOPIFY_LIVE_CHAT", "SMS", "TELEGRAM"]);
 
 /** The workspace's timezone (its business hours), else UTC. */
@@ -131,9 +132,17 @@ function sourceLabel(q: ConversationQuery, total: number, locale: Locale): strin
   return parts.join(" ");
 }
 
+/**
+ * The inbox showing the same rows, or null when the inbox cannot say the
+ * same thing: it filters by channel and by period (conversations STARTED in
+ * it, the same workspace days), not by a mention, a status or several
+ * channels, and a link that opens different rows is worse than none.
+ */
 function sourceLink(q: ConversationQuery): string | null {
-  if (q.channels?.length === 1 && INBOX_CHANNELS.has(q.channels[0]!)) return `/inbox?channel=${q.channels[0]}`;
-  return null;
+  if (q.mention || q.status || (q.channels && q.channels.length > 1)) return null;
+  const channel = q.channels?.[0];
+  if (channel && !INBOX_CHANNELS.has(channel)) return null;
+  return `/inbox?${channel ? `channel=${channel}&` : ""}from=${q.from}&to=${q.to}`;
 }
 
 async function listItems(rows: Array<{ id: string; customerName: string | null; customerExternalId: string | null; channel: string; status: string; lastMessageAt: Date | null; createdAt: Date }>, locale: Locale, tz: string): Promise<RecordListItem[]> {

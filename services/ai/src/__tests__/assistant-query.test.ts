@@ -166,9 +166,19 @@ describe("★ a mention: what was said in the period", () => {
 });
 
 describe("links and limits", () => {
-  it("one inbox channel links to it; Shopify live chat (not an inbox filter yet) does not", async () => {
-    expect((await queryConversations(ctx(), Q({ channels: ["WHATSAPP"] }))).source.deepLink).toBe("/inbox?channel=WHATSAPP");
-    expect((await queryConversations(ctx(), Q({ channels: ["SHOPIFY_LIVE_CHAT"] }))).source.deepLink).toBeNull();
+  it("★ a source links to the inbox showing the same rows: its period, and its one channel", async () => {
+    const link = async (o: any) => (await queryConversations(ctx(), Q(o))).source.deepLink;
+    expect(await link({})).toBe("/inbox?from=2026-10-01&to=2026-10-07");
+    expect(await link({ channels: ["WHATSAPP"] })).toBe("/inbox?channel=WHATSAPP&from=2026-10-01&to=2026-10-07");
+    expect(await link({ channels: ["SHOPIFY_LIVE_CHAT"] })).toBe("/inbox?channel=SHOPIFY_LIVE_CHAT&from=2026-10-01&to=2026-10-07");
+  });
+
+  it("★ no link when the inbox would show different rows (a mention, a status, several channels, a channel it cannot filter)", async () => {
+    const link = async (o: any) => (await queryConversations(ctx(), Q(o))).source.deepLink;
+    expect(await link({ mention: "small" })).toBeNull();
+    expect(await link({ status: "OPEN" })).toBeNull();
+    expect(await link({ channels: ["WHATSAPP", "WEBCHAT"] })).toBeNull();
+    expect(await link({ channels: ["VOICE"] })).toBeNull();
   });
 
   it("a bad period is refused, not guessed", () => {
