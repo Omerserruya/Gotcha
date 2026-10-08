@@ -1,8 +1,14 @@
 # Conversation intelligence on every close
 
-Status: BUILT, OFF until switched on (2026-10-08). Owner: backend. Design approved
-by the supervisor; switching it on, the dev backfill and the incoming-worker rebuild
-are Omer's.
+Status: LIVE ON DEV (2026-10-08, Omer approved: switched on with `intel:enabled`,
+backfilled, incoming-worker rebuilt). Not in production. Owner: backend.
+
+Dev result: the backfill analysed all 68 closed real conversations (68 calls on
+gpt-5-nano, 23k prompt + 23k completion tokens, **$0.0104**), every one with a listed
+intent. The Home chat's "by intent" now reads Returns and exchanges 18, Shipping 17,
+Refunds 12, Order status 8, ... recorded for 68 of 88 (the 20 not recorded are open).
+A live close (a fake web-chat visitor, deleted after) produced one analysis on the
+`conversation:updated` path within seconds.
 
 The Home chat answers "by intent" and "by sentiment" from `ConversationIntelligence`.
 On dev that table holds a usable answer for **0 of 88** real conversations: 14 rows,
