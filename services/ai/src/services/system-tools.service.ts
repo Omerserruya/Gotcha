@@ -20,6 +20,7 @@ import { findCustomersResult } from "./assistant-customers.service";
 import { readConversationResult } from "./assistant-conversation-read.service";
 import { customerCardResult } from "./assistant-customer-card.service";
 import { listApprovalsResult, listKnowledgeGapsResult } from "./assistant-work.service";
+import { preparePlan, PlanRefused } from "./assistant-plan.service";
 import { privateNumbers, privateConversationsClause } from "../lib/private-numbers";
 
 /** The last n days, today included (UTC days: a caller with a workspace period passes it). */
@@ -208,13 +209,8 @@ const PROPOSE_PLAN_TOOL = {
       "Do NOT use this for read-only operations or single low-risk actions (those you can call directly).",
     parameters: {
       type: "object",
-      required: ["summary", "steps"],
+      required: ["steps"],
       properties: {
-        summary: { type: "string", description: "One-sentence summary of what the plan accomplishes." },
-        requiresApproval: {
-          type: "boolean",
-          description: "Hint to the executor. Always treated as `true` if any step is high-risk.",
-        },
         steps: {
           type: "array",
           minItems: 1,
@@ -227,7 +223,7 @@ const PROPOSE_PLAN_TOOL = {
                 enum: [...PLAN_ACTIONS],
                 description: "The action to carry out. Only these can run; anything else (refunds, CRM updates, tickets, tasks) cannot be proposed yet. Conversation and note actions run as the person who approves them.",
               },
-              params: { type: "object", description: "Tool-specific parameters." },
+              params: { type: "object", description: "The action's parameters. Conversation actions take the conversation (conversationId, or customerId from system_find_customers for their open one) and, to assign, assignee: \"me\" or a person's id. add_note: contactId and body. answer_question: unansweredQuestionId and answer." },
               reason: { type: "string", description: "Why this step is included." },
               riskLevel: { type: "string", enum: ["low", "medium", "high"] },
             },
@@ -426,6 +422,10 @@ export interface SystemToolDispatchCtx {
   canReadContacts?: boolean;
   /** The caller holds ai:knowledge:read (or is ADMIN). Absent = no. */
   canReadKnowledge?: boolean;
+  /** Who is asking, by name (the requester of a proposed plan). */
+  userName?: string;
+  /** Where they asked: a Home thread or the Ctrl+K palette. */
+  surface?: "home" | "command_bar";
 }
 
 /** The visibility OR-clause for this caller, or null when unrestricted. */
@@ -871,12 +871,12 @@ async function dispatchProposePlan(
   toolCallId: string,
   ctx: SystemToolDispatchCtx,
 ): Promise<SystemToolResult> {
-  const summary = String(args?.summary || "").trim();
+  // The model's summary is not used: the words are built from the steps.
   const stepsRaw = Array.isArray(args?.steps) ? args.steps : [];
-  if (!summary || stepsRaw.length === 0) {
+  if (stepsRaw.length === 0) {
     return {
       toolCallId,
-      content: JSON.stringify({ ok: false, error: "summary and at least one step are required" }),
+      content: JSON.stringify({ ok: false, error: "at least one step is required" }),
     };
   }
 
@@ -893,15 +893,27 @@ async function dispatchProposePlan(
     };
   }
 
-  const steps = stepsRaw.map((s: any) => ({
+  const rawSteps = stepsRaw.map((s: any) => ({
     tool: String(s?.tool || ""),
     params: s?.params && typeof s.params === "object" ? s.params : {},
     reason: String(s?.reason || ""),
-    riskLevel: ["low", "medium", "high"].includes(s?.riskLevel) ? s.riskLevel : "medium",
+    riskLevel: (["low", "medium", "high"].includes(s?.riskLevel) ? s.riskLevel : "medium") as "low" | "medium" | "high",
   }));
 
-  const requiresApproval =
-    args?.requiresApproval === true || steps.some((s: any) => s.riskLevel === "high");
+  // Pinned now (lib: assistant-plan): the conversation, the assignee ("me"
+  // is the requester), what the requester may see; the words are ours.
+  const locale = ctx.locale ?? "en";
+  let steps;
+  try {
+    steps = await preparePlan({ tenantId: ctx.tenantId, userId: ctx.userId, viewer: ctx.viewer, locale, canReadContacts: !!ctx.canReadContacts }, rawSteps);
+  } catch (err) {
+    if (err instanceof PlanRefused) return { toolCallId, content: JSON.stringify({ ok: false, error: err.message }) };
+    throw err;
+  }
+  const planSummary = steps.map((s) => s.summary).join("; ");
+  const first = steps.find((s) => s.target.conversationId || s.target.customerId)?.target;
+  const source = ctx.surface === "home" ? "home_assistant" : "command_bar";
+  const requester = { userId: ctx.userId, name: ctx.userName ?? null };
 
   // Audit each step's gate decision so the operator's approval UI can show
   // an aggregate "needs approval / cleared" status. We don't actually
@@ -918,18 +930,22 @@ async function dispatchProposePlan(
     }),
   );
 
+  const asked = locale === "he"
+    ? `בקשה של ${requester.name ?? "משתמש בצוות"} מ-GOTCHA ב${source === "home_assistant" ? "-Home" : "שורת הפקודה"}`
+    : `${requester.name ?? "A user"} asked GOTCHA in ${source === "home_assistant" ? "Home" : "the command bar"}`;
   const approval = await createApprovalRequest({
     tenantId: ctx.tenantId,
-    contactId: ctx.selectedContactId ?? undefined,
-    conversationId: ctx.selectedConversationId ?? undefined,
+    contactId: first?.customerId ?? ctx.selectedContactId ?? undefined,
+    conversationId: first?.conversationId ?? ctx.selectedConversationId ?? undefined,
     tool: "propose_plan",
-    params: { summary, steps, requiresApproval, source: "system_copilot" },
-    summary,
-    reason: "Plan proposed by System Copilot",
-    riskLevel: requiresApproval ? "high" : "medium",
-    riskTags: ["SYSTEM_COPILOT", "PLAN"],
-    requestedBy: "bot",
-    gate: { decision: "REQUIRE_APPROVAL", reason: "system copilot plan" } as any,
+    // The steps carry their pinned params, their target and their words.
+    params: { summary: planSummary, steps, requester, source },
+    summary: planSummary,
+    reason: asked,
+    riskLevel: steps.some((s) => s.riskLevel === "high") ? "high" : "medium",
+    riskTags: ["ASSISTANT", "PLAN"],
+    requestedBy: `user:${ctx.userId}`,
+    gate: { decision: "REQUIRE_APPROVAL", reason: asked } as any,
   });
 
   return {
@@ -939,6 +955,7 @@ async function dispatchProposePlan(
       proposed_plan: true,
       approval_request_id: approval.id,
       step_count: steps.length,
+      summary: planSummary,
       step_gates: stepGates,
       instruction:
         "A plan was proposed and is waiting in the operator's approval queue. Tell the operator briefly what you proposed and that they can review and approve it. Do NOT continue calling action tools for the same goal.",
@@ -946,7 +963,7 @@ async function dispatchProposePlan(
     sideEffect: {
       kind: "proposed_plan",
       approvalRequestId: approval.id,
-      planSummary: summary,
+      planSummary,
     },
   };
 }

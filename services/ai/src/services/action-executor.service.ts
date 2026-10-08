@@ -124,6 +124,20 @@ async function asApprover(tenantId: string, ctx: ExecutorContext, path: string, 
 }
 
 const enc = (v: unknown) => encodeURIComponent(String(v ?? ""));
+
+/**
+ * The conversation a step was pinned to, as the approver sees it now: gone
+ * from their view, or closed since it was proposed, and the step does
+ * nothing (it would otherwise act on something else than what was approved).
+ */
+async function stillOpenForApprover(tenantId: string, ctx: ExecutorContext, conversationId: string, closing = false): Promise<void> {
+  const token = approverToken(ctx);
+  if (!token) throw new Error("this action runs as the person who approves it: approve it in GOTCHA");
+  const r = await callConversationService("GET", `/api/conversations/${enc(conversationId)}`, null, { tenantId, authToken: token });
+  if (!r.ok) throw new Error(r.status === 404 ? "not found, or not something the approver may change" : (r.error ?? `failed (${r.status})`));
+  const status = String((r.data as any)?.data?.status ?? "");
+  if (status === "CLOSED") throw new Error(closing ? "the conversation is already closed; nothing was done" : "the conversation was closed since this was proposed; nothing was done");
+}
 const need = (v: unknown, what: string): string => {
   if (typeof v !== "string" || !v.trim()) throw new Error(`${what} is required`);
   return v.trim();
@@ -314,6 +328,7 @@ export async function executeAction(
       }
       case "claim_conversation": {
         const id = need((action.params as any)?.conversationId, "conversationId");
+        await stillOpenForApprover(tenantId, ctx, id);
         output = await asApprover(tenantId, ctx, `/api/conversations/${enc(id)}/claim`, {});
         break;
       }
@@ -321,16 +336,19 @@ export async function executeAction(
         const { conversationId, agentId, departmentId } = (action.params ?? {}) as Record<string, unknown>;
         const id = need(conversationId, "conversationId");
         if (!agentId && !departmentId) throw new Error("agentId or departmentId is required");
+        await stillOpenForApprover(tenantId, ctx, id);
         output = await asApprover(tenantId, ctx, `/api/conversations/${enc(id)}/reassign`, { ...(agentId ? { agentId } : {}), ...(departmentId ? { departmentId } : {}) });
         break;
       }
       case "close_conversation": {
         const id = need((action.params as any)?.conversationId, "conversationId");
+        await stillOpenForApprover(tenantId, ctx, id, true);
         output = await asApprover(tenantId, ctx, `/api/conversations/${enc(id)}/close`, {});
         break;
       }
       case "return_to_gotcha": {
         const id = need((action.params as any)?.conversationId, "conversationId");
+        await stillOpenForApprover(tenantId, ctx, id);
         output = await asApprover(tenantId, ctx, `/api/conversations/${enc(id)}/return-to-ai`, {});
         break;
       }

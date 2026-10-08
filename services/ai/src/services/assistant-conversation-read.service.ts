@@ -36,7 +36,7 @@ const STATE: Record<string, Record<Locale, string>> = {
 };
 
 /** The conversation if this caller may open it in the inbox; else null (as if it did not exist). */
-async function visibleConversation(ctx: ReadCtx, id: string) {
+export async function visibleConversation(ctx: Pick<ReadCtx, "tenantId" | "viewer">, id: string) {
   if (!ctx.viewer?.userId) return null;
   const clause = visibilityClause(ctx.viewer);
   const c = await prisma.conversation.findFirst({
@@ -49,7 +49,7 @@ async function visibleConversation(ctx: ReadCtx, id: string) {
 }
 
 /** A customer's conversation to read: their latest the caller can see, an open one first. */
-async function customersConversation(ctx: ReadCtx, contactId: string): Promise<string | null> {
+export async function customersConversation(ctx: Pick<ReadCtx, "tenantId" | "viewer">, contactId: string): Promise<string | null> {
   const keys = await customerKeys(ctx.tenantId, [contactId]);
   if (!keys.length || !ctx.viewer?.userId) return null;
   const clause = visibilityClause(ctx.viewer);

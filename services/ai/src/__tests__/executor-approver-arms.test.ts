@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const H = vi.hoisted(() => ({ calls: [] as any[], status: {} as Record<string, number>, audits: [] as any[], contacts: [] as any[], updates: [] as any[] }));
+const H = vi.hoisted(() => ({ convStatus: {} as Record<string, string>, calls: [] as any[], status: {} as Record<string, number>, audits: [] as any[], contacts: [] as any[], updates: [] as any[] }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -37,14 +37,16 @@ const APPROVED = { approved: true, approvedBy: "noa", authToken: "Bearer approve
 const run = (tool: string, params: any, ctx: any = APPROVED, tenant = "T") => executeAction(tenant, { tool: tool as any, params, reason: "test", riskLevel: "medium" }, ctx);
 
 beforeEach(() => {
-  H.calls = []; H.status = {}; H.audits = []; H.updates = [];
+  H.calls = []; H.status = {}; H.convStatus = {}; H.audits = []; H.updates = [];
   H.contacts = [{ id: "k1", tenantId: "T", tags: [] }];
   process.env.CONVERSATION_SERVICE_URL = "http://conversation:4002";
   process.env.INTERNAL_SERVICE_TOKEN = "internal-secret";
   vi.stubGlobal("fetch", vi.fn(async (url: string, init: any) => {
     H.calls.push({ url, method: init.method, auth: init.headers.Authorization, tenant: init.headers["x-tenant-id"], body: init.body ? JSON.parse(init.body) : null });
     const status = Object.entries(H.status).find(([k]) => url.includes(k))?.[1] ?? 200;
-    return { ok: status < 400, status, text: async () => JSON.stringify(status < 400 ? { data: { ok: true } } : { error: status === 404 ? "Conversation not found" : "Forbidden" }) };
+    // GET a conversation: its state as the approver sees it.
+    const got = init.method === "GET" ? { data: { status: H.convStatus[url.split("/").pop()!] ?? "OPEN" } } : { data: { ok: true } };
+    return { ok: status < 400, status, text: async () => JSON.stringify(status < 400 ? got : { error: status === 404 ? "Conversation not found" : "Forbidden" }) };
   }));
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -73,7 +75,7 @@ describe("★ each action through the app's own route, as the approver", () => {
     expect((await run("return_to_gotcha", { conversationId: "c1" })).ok).toBe(true);
     expect((await run("add_note", { contactId: "k1", body: "Prefers evening calls" })).ok).toBe(true);
     expect((await run("answer_question", { unansweredQuestionId: "q1", answer: "Yes, to Eilat in 3 days." })).ok).toBe(true);
-    expect(H.calls.map((c) => [c.method, c.url, c.body])).toEqual([
+    expect(H.calls.filter((c) => c.method === "POST").map((c) => [c.method, c.url, c.body])).toEqual([
       ["POST", "http://conversation:4002/api/conversations/c1/claim", {}],
       ["POST", "http://conversation:4002/api/conversations/c1/reassign", { agentId: "u2" }],
       ["POST", "http://conversation:4002/api/conversations/c1/close", {}],
@@ -94,6 +96,19 @@ describe("★ each action through the app's own route, as the approver", () => {
     expect((await run("assign_conversation", { conversationId: "c_theirs", agentId: "u2" })).error).toMatch(/not allowed for the approver/);
   });
 
+  it("★ the conversation as it is at execution: closed since it was proposed, already closed, or out of the approver's view: nothing is done", async () => {
+    H.convStatus = { c1: "CLOSED" };
+    expect((await run("assign_conversation", { conversationId: "c1", agentId: "u2" })).error).toMatch(/closed since this was proposed; nothing was done/);
+    expect((await run("return_to_gotcha", { conversationId: "c1" })).error).toMatch(/closed since this was proposed/);
+    expect((await run("close_conversation", { conversationId: "c1" })).error).toMatch(/already closed; nothing was done/);
+    H.convStatus = {};
+    H.status = { "/api/conversations/c_hidden": 404 };
+    expect((await run("assign_conversation", { conversationId: "c_hidden", agentId: "u2" })).error).toBe("not found, or not something the approver may change");
+    expect(H.calls.filter((c) => c.method === "POST")).toEqual([]);
+    // The look runs as the approver too.
+    expect(new Set(H.calls.map((c) => c.auth))).toEqual(new Set(["Bearer approver-token"]));
+  });
+
   it("what an action needs is checked before any call", async () => {
     expect((await run("assign_conversation", { conversationId: "c1" })).error).toMatch(/agentId or departmentId is required/);
     expect((await run("add_note", { contactId: "k1", body: "  " })).error).toMatch(/body is required/);
@@ -111,7 +126,7 @@ describe("★ an approved plan runs its steps", () => {
     ]);
     expect(r.ok).toBe(true);
     expect(H.updates).toHaveLength(1);
-    expect(H.calls.map((c) => c.url)).toEqual(["http://conversation:4002/api/conversations/c1/close"]);
+    expect(H.calls.filter((c) => c.method === "POST").map((c) => c.url)).toEqual(["http://conversation:4002/api/conversations/c1/close"]);
   });
 
   it("stops at the first step that fails", async () => {
@@ -121,7 +136,7 @@ describe("★ an approved plan runs its steps", () => {
       { tool: "add_note", params: { contactId: "k1", body: "after" }, reason: "b" },
     ]);
     expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/^step 1 \(close_conversation\) did not run/) });
-    expect(H.calls.map((c) => c.url)).toEqual(["http://conversation:4002/api/conversations/c1/close"]);
+    expect(H.calls.filter((c) => c.method === "POST").map((c) => c.url)).toEqual(["http://conversation:4002/api/conversations/c1/close"]);
   });
 
   it("★ a plan with a step that cannot run runs nothing at all", async () => {

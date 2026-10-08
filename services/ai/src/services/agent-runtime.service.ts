@@ -84,6 +84,8 @@ export interface AgentRunInput {
   extraSystem?: string[];
   /** The period query tools default to (a thread's scope as workspace days). */
   defaultPeriod?: { from: string; to: string };
+  /** Where the user asks: a Home thread, or the Ctrl+K palette (the default). */
+  surface?: "home" | "command_bar";
   /** Told the names of the tools this run may call (a Home thread keeps only suggestions one of them can answer). */
   onTools?: (names: string[]) => void;
 }
@@ -279,6 +281,8 @@ export async function runAgent(
         canReadCommerce: !!input.operator.canReadCommerce,
         canReadContacts: !!input.operator.canReadContacts,
         canReadKnowledge: !!input.operator.canReadKnowledge,
+        userName: input.operator.userName,
+        surface: input.surface ?? "command_bar",
       });
       // Other words, same query (a default spelled out): the first card stands.
       const sourceKey = r.artifacts ? canonical((r.artifacts.source as any)?.query ?? null) : null;

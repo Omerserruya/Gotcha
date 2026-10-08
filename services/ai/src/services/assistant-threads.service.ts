@@ -390,6 +390,7 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
       extraSystem: threadSystemLines(run.scope, input.locale),
       defaultPeriod: scopeDates(run.scope),
       onTools: (names) => { toolNames = new Set(names); },
+      surface: "home",
     }, async (ev: AgentRuntimeEvent) => {
       switch (ev.type) {
         case "token": await emitText(cites.push(splitter.push(ev.text))); break;
