@@ -260,7 +260,11 @@ language), `sourceId` and optionally `deepLink` (§9.5), `partial` and
   "coverage": { "covered": 14, "of": 88 } | null,   // intent/sentiment: recorded for 14 of 88
   "deepLink": "/inbox?channel=WHATSAPP" | null }
 
-// record_list: the rows behind a number (first page)
+// record_list: the rows behind a number (first page). A conversation row's
+// subtitle is "<channel> · <state> · <who has it>", `meta` its time, `preview`
+// its last message (null for media or none; optional, additive 2026-10-08).
+// kind "customer" (system_find_customers): title = name, subtitle = channels ·
+// phone/email, meta = open conversations · last contact, deepLink /customers/<id>.
 { "type": "record_list", "id": "b3", "title": "Conversations that mention size", "sourceId": "s2",
   "kind": "conversation" | "customer" | "order" | "product",
   "items": [{ "id": "...", "title": "Dana Cohen", "subtitle": "Return #2207", "meta": "7 October", "deepLink": "/inbox?c=..." }],
@@ -330,6 +334,14 @@ the conversations that STARTED in it.
 The open-conversations figure (`system_get_metric open_conversations`) also
 has a source, with no block: `{ "now": true, "status": "OPEN" }`, label "17
 שיחות (פתוחות) · כרגע", so a metric answer has something real to cite.
+
+A conversations source may also carry `customerIds` (a customer's
+conversations on every channel of the person), `assignee` ("gotcha",
+"unassigned" or a user id), `waitingForPerson: true` (the inbox queue's rule)
+and `list: true` (a record_list of rows, newest activity first for the current
+state). All replay through §9.4. A customers source (`kind: "customer"`,
+`query.tool: "customers"`) lists every match in its block and has no further
+pages.
 
 The answer cites a source after the claim it supports with `[^s1]` in `text`.
 The client renders it as that source's chip. The server removes any `[^...]`

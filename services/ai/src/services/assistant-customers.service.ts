@@ -20,7 +20,8 @@
  *     channel-wide rule, and a conversation under any rule, are hidden, also
  *     rows that existed before the rule.
  */
-import { prisma, REAL_CONVERSATION, visibilityClause, normalizeExclusionValue, type Viewer } from "@chatcenter/shared";
+import { prisma, REAL_CONVERSATION, visibilityClause, type Viewer } from "@chatcenter/shared";
+import { privateNumbers, contactIsPrivate, conversationIsPrivate } from "../lib/private-numbers";
 import { channelName, whenText } from "./system-tools.service";
 import { tenantTimeZone, SHOWN_AS, NO_CARD, cardsOf, type RecordListItem } from "./assistant-query.service";
 
@@ -83,23 +84,6 @@ function wordClause(w: string): Record<string, unknown> {
 
 interface ContactRow { id: string; channel: string; externalId: string; displayName: string | null; email: string | null; phone: string | null; personId: string | null; updatedAt: Date }
 const CONTACT_SELECT = { id: true, channel: true, externalId: true, displayName: true, email: true, phone: true, personId: true, updatedAt: true } as const;
-
-async function privateNumbers(tenantId: string): Promise<Array<{ channel: string; channelAccountId: string | null; digits: string }>> {
-  const rules = await prisma.inboundExclusion.findMany({ where: { tenantId }, select: { channel: true, channelAccountId: true, customerExternalId: true } });
-  return rules.map((r) => ({ channel: String(r.channel), channelAccountId: r.channelAccountId, digits: r.customerExternalId }));
-}
-
-/** A contact kept out of GOTCHA on its whole channel. */
-function contactIsPrivate(c: { channel: string; externalId: string }, rules: Awaited<ReturnType<typeof privateNumbers>>): boolean {
-  const d = normalizeExclusionValue(c.externalId);
-  return !!d && rules.some((r) => r.channelAccountId === null && r.channel === c.channel && r.digits === d);
-}
-
-/** A conversation kept out of GOTCHA on its channel, or on its number. */
-export function conversationIsPrivate(c: { channel: string; customerExternalId: string; channelAccountId: string | null }, rules: Awaited<ReturnType<typeof privateNumbers>>): boolean {
-  const d = normalizeExclusionValue(c.customerExternalId);
-  return !!d && rules.some((r) => r.channel === c.channel && r.digits === d && (r.channelAccountId === null || r.channelAccountId === c.channelAccountId));
-}
 
 /**
  * The customers matching any of the spellings, as the caller may see them,
@@ -202,7 +186,7 @@ export async function findCustomersResult(ctx: CustomerCtx, queries: string[]) {
     title: c.name,
     subtitle: [c.channels.map((ch) => channelName(ch, ctx.locale)).join(", "), c.phone ?? c.email].filter(Boolean).join(" · "),
     meta: [
-      he ? `${c.openConversations} פתוחות` : `${c.openConversations} open`,
+      he ? (c.openConversations === 1 ? "שיחה פתוחה אחת" : `${c.openConversations} שיחות פתוחות`) : `${c.openConversations} open`,
       c.lastContactAt ? (he ? `קשר אחרון ${whenText(c.lastContactAt, "he", tz, false)}` : `last contact ${whenText(c.lastContactAt, "en", tz, false)}`) : null,
     ].filter(Boolean).join(" · "),
     deepLink: `/customers/${c.contactId}`,
@@ -213,7 +197,8 @@ export async function findCustomersResult(ctx: CustomerCtx, queries: string[]) {
   }];
   const source = {
     id: sId, kind: "customer" as const, count: items.length, deepLink: null,
-    label: he ? `${items.length} לקוחות: ${spellings[0]}` : `${items.length} customers: ${spellings[0]}`,
+    // What was found, never the query as typed ("1 לקוחות: מעומר צרויה").
+    label: `${he ? (items.length === 1 ? "לקוח אחד" : `${items.length} לקוחות`) : (items.length === 1 ? "1 customer" : `${items.length} customers`)}: ${found.slice(0, 2).map((c) => c.name).join(", ")}${found.length > 2 ? (he ? " ועוד" : " and more") : ""}`,
     query: { tool: "customers" as const, params: { queries: spellings } },
   };
   return {

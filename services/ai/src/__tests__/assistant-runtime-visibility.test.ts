@@ -13,7 +13,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     findFirst: async () => null, findMany: async () => [], findUnique: async () => null,
     count: async (a: any) => { H.counts.push(a.where); return 3; },
   };
-  return { ...actual, prisma: { conversation: t, message: { ...t, count: async () => 0 }, contact: t, tenantTool: t, approvalRequest: t } };
+  return { ...actual, prisma: { inboundExclusion: { findMany: async () => [] }, conversation: t, message: { ...t, count: async () => 0 }, contact: t, tenantTool: t, approvalRequest: t } };
 });
 vi.mock("../services/agent-memory.service", () => ({
   appendToMemory: async () => undefined,

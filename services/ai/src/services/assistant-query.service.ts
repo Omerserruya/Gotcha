@@ -7,7 +7,8 @@
  * block shows. Everything follows the caller's visibility and counts only the
  * business's real conversations (no rehearsals, test rows or imported history).
  */
-import { prisma, REAL_CONVERSATION, visibilityClause, readDurableSetting, parseBusinessHours, type Viewer } from "@chatcenter/shared";
+import { prisma, REAL_CONVERSATION, visibilityClause, readDurableSetting, parseBusinessHours, waitingForPersonClause, type Viewer } from "@chatcenter/shared";
+import { privateNumbers, privateConversationsClause } from "../lib/private-numbers";
 import { INTENTS, intentLabel } from "./conversation-analysis.service";
 import { channelName, whenText } from "./system-tools.service";
 
@@ -15,7 +16,7 @@ type Locale = "he" | "en";
 
 export interface ChartBlock { type: "chart"; id: string; title: string; sourceId: string; kind: "bar" | "line"; x: { kind: "day" | "category"; values: string[] }; series: Array<{ key: string; label: string; values: number[] }>; unit: "count" | "currency" | "percent"; currency: string | null; highlight: string[]; deepLink: string | null; partial: null | { reason: string; cap?: number } }
 export interface BreakdownBlock { type: "breakdown"; id: string; title: string; sourceId: string; items: Array<{ key: string; label: string; value: number; share: number }>; total: number; unit: "count"; currency: null; other: { label: string; value: number } | null; coverage: { covered: number; of: number } | null; deepLink: string | null; partial: null }
-export interface RecordListItem { id: string; title: string; subtitle: string; meta: string; deepLink: string | null }
+export interface RecordListItem { id: string; title: string; subtitle: string; meta: string; deepLink: string | null; preview?: string | null }
 export interface RecordListBlock { type: "record_list"; id: string; title: string; sourceId: string; kind: "conversation" | "order" | "customer"; items: RecordListItem[]; total: number; hasMore: boolean; deepLink: null; partial: null }
 export type Block = ChartBlock | BreakdownBlock | RecordListBlock;
 export interface Source { id: string; label: string; kind: "conversations"; count: number | null; deepLink: string | null; query: { tool: "conversations"; params: ConversationQuery } }
@@ -34,6 +35,14 @@ export interface ConversationQuery {
   status?: "OPEN" | "WAITING" | "CLOSED";
   groupBy?: "day" | "channel" | "status" | "handler" | "intent" | "sentiment";
   mention?: string;
+  /** A customer's conversations: these contacts and every other contact of the same person. */
+  customerIds?: string[];
+  /** Who handles it: "gotcha", "unassigned", or a person's user id. */
+  assignee?: string;
+  /** Waiting for a person: the one rule Home and the inbox's queue use. */
+  waitingForPerson?: true;
+  /** Rows to open (a record_list), not only counts. */
+  list?: true;
 }
 
 export interface QueryCtx { tenantId: string; viewer?: Viewer; locale: Locale; nextId: (kind: "b" | "s") => string }
@@ -75,17 +84,34 @@ export function normalizeQuery(raw: any): ConversationQuery | { error: string } 
   const status = ["OPEN", "WAITING", "CLOSED"].includes(raw?.status) ? raw.status : undefined;
   const groupBy = ["day", "channel", "status", "handler", "intent", "sentiment"].includes(raw?.groupBy) ? raw.groupBy : undefined;
   const mention = typeof raw?.mention === "string" && raw.mention.trim() ? raw.mention.trim().slice(0, 80) : undefined;
+  const ID = /^[A-Za-z0-9_-]{1,64}$/;
+  const customerIds = Array.isArray(raw?.customerIds) ? ([...new Set(raw.customerIds.map(String).filter((id: string) => ID.test(id)))] as string[]).slice(0, 20) : undefined;
+  const assignee = typeof raw?.assignee === "string" && ID.test(raw.assignee) ? raw.assignee : undefined;
+  const waitingForPerson = raw?.waitingForPerson === true || raw?.waitingForPerson === "true" ? true as const : undefined;
+  const list = raw?.list === true || raw?.list === "true" ? true as const : undefined;
+  const extra = { ...(customerIds?.length ? { customerIds } : {}), ...(assignee ? { assignee } : {}), ...(waitingForPerson ? { waitingForPerson } : {}), ...(list ? { list } : {}) };
   if (raw?.now === true || raw?.now === "true") {
-    // Closed "right now" is every conversation ever closed: not a current state.
-    if (status !== "OPEN" && status !== "WAITING") return { error: "now (the current state) needs status OPEN or WAITING" };
+    // Closed "right now" is every conversation ever closed: not a current
+    // state. A customer's conversations, or what waits for a person, are.
+    if (status !== "OPEN" && status !== "WAITING" && !customerIds?.length && !waitingForPerson) return { error: "now (the current state) needs status OPEN or WAITING, a customer, or waitingForPerson" };
     if (groupBy === "day") return { error: "the current state has no days: split it by channel, status, handler, intent or sentiment, or ask about a period" };
     if (mention) return { error: "a mention needs a period (what was said in it)" };
-    return { now: true, ...(channels?.length ? { channels } : {}), status, groupBy: groupBy ?? "channel" };
+    return { now: true, ...(channels?.length ? { channels } : {}), ...(status ? { status } : {}), groupBy: groupBy ?? "channel", ...extra };
   }
   const from = String(raw?.from ?? ""), to = String(raw?.to ?? "");
   if (!DAY.test(from) || !DAY.test(to) || from > to) return { error: "from and to must be YYYY-MM-DD days, from <= to" };
   if (daysBetween(from, to).length > MAX_DAYS) return { error: `at most ${MAX_DAYS} days` };
-  return { from, to, ...(channels?.length ? { channels } : {}), ...(status ? { status } : {}), groupBy: groupBy ?? "day", ...(mention ? { mention } : {}) };
+  return { from, to, ...(channels?.length ? { channels } : {}), ...(status ? { status } : {}), groupBy: groupBy ?? "day", ...(mention ? { mention } : {}), ...extra };
+}
+
+/** Every contact of the people these contacts belong to, as conversation keys (tenant-scoped: a foreign id matches nothing). */
+async function customerKeys(tenantId: string, contactIds: string[]): Promise<Array<{ channel: string; customerExternalId: string }>> {
+  const seeds = await prisma.contact.findMany({ where: { tenantId, id: { in: contactIds } }, select: { channel: true, externalId: true, personId: true } });
+  const personIds = [...new Set(seeds.map((c) => c.personId).filter(Boolean))] as string[];
+  const siblings = personIds.length ? await prisma.contact.findMany({ where: { tenantId, personId: { in: personIds } }, select: { channel: true, externalId: true, personId: true } }) : [];
+  const keys = new Map<string, { channel: string; customerExternalId: string }>();
+  for (const c of [...seeds, ...siblings]) keys.set(`${c.channel}:${c.externalId}`, { channel: String(c.channel), customerExternalId: c.externalId });
+  return [...keys.values()];
 }
 
 /** The conversations a query counts, as a Prisma where (visibility kept in an AND). */
@@ -93,6 +119,21 @@ async function whereOf(tenantId: string, q: ConversationQuery, viewer: Viewer | 
   const and: any[] = [];
   const clause = viewer ? visibilityClause(viewer) : null;
   if (clause) and.push({ OR: clause });
+  if (q.waitingForPerson) and.push(waitingForPersonClause());
+  if (q.customerIds?.length) {
+    const keys = await customerKeys(tenantId, q.customerIds);
+    and.push(keys.length ? { OR: keys } : { id: "__no_such_conversation__" });
+  }
+  if (q.assignee) {
+    and.push(
+      q.assignee === "unassigned" ? { assignedAgentId: null }
+      : q.assignee === "gotcha" ? { assignedAgentId: null, isHandedOver: false, handledBy: { in: ["ai_agent", "flow"] } }
+      : { assignedAgentId: q.assignee },
+    );
+  }
+  // Private numbers (lib/private-numbers): never counted, never listed.
+  const priv = privateConversationsClause(await privateNumbers(tenantId));
+  if (priv) and.push(priv);
   const where: any = {
     tenantId,
     ...REAL_CONVERSATION,
@@ -167,25 +208,58 @@ export const INBOX_VIEW_ALL_LIVE = true;
 
 export function sourceLink(q: ConversationQuery, viewAllLive = INBOX_VIEW_ALL_LIVE): string | null {
   if (!viewAllLive) return null;
-  if (q.now || q.mention || q.status || (q.channels && q.channels.length > 1)) return null;
+  if (q.now || q.mention || q.status || q.customerIds || q.assignee || q.waitingForPerson || (q.channels && q.channels.length > 1)) return null;
   const channel = q.channels?.[0];
   if (channel && !INBOX_CHANNELS.has(channel)) return null;
   return `/inbox?view=all&${channel ? `channel=${channel}&` : ""}from=${q.from}&to=${q.to}`;
 }
 
-async function listItems(rows: Array<{ id: string; customerName: string | null; customerExternalId: string | null; channel: string; status: string; lastMessageAt: Date | null; createdAt: Date }>, locale: Locale, tz: string): Promise<RecordListItem[]> {
+/** One conversation's state, as a row says it (singular: "פתוחה", not "פתוחות"). */
+const ROW_STATUS: Record<string, Record<Locale, string>> = {
+  OPEN: { he: "פתוחה", en: "Open" }, WAITING: { he: "ממתינה ללקוח", en: "Waiting for the customer" }, CLOSED: { he: "סגורה", en: "Closed" },
+};
+
+/** Who has it: the person assigned, GOTCHA, or (still open) nobody yet. */
+function handlerWords(c: ListRow, locale: Locale): string {
+  if (c.assignedAgent?.name) return c.assignedAgent.name;
+  if (!c.isHandedOver && (c.handledBy === "ai_agent" || c.handledBy === "flow")) return "GOTCHA";
+  if (c.status === "CLOSED") return locale === "he" ? "ללא שיוך" : "Unassigned";
+  return locale === "he" ? "ממתינה לאדם" : "Waiting for a person";
+}
+
+interface ListRow { id: string; customerName: string | null; customerExternalId: string | null; channel: string; status: string; lastMessageAt: Date | null; createdAt: Date; handledBy: string | null; isHandedOver: boolean; assignedAgent: { name: string | null } | null }
+
+/**
+ * Rows to open: who, where, its state, who has it, and (for the current
+ * state) the last message and when. A period's rows are dated by when they
+ * STARTED, its measure: a row dated by its last message read as outside it.
+ */
+async function listItems(tenantId: string, rows: ListRow[], locale: Locale, tz: string, byLastMessage = false): Promise<RecordListItem[]> {
+  const last = rows.length
+    ? await prisma.message.findMany({
+        where: { tenantId, conversationId: { in: rows.map((r) => r.id) } },
+        orderBy: { createdAt: "desc" },
+        distinct: ["conversationId"],
+        select: { conversationId: true, body: true },
+      })
+    : [];
+  const preview = new Map(last.map((m) => [m.conversationId, m.body ? m.body.replace(/\s+/g, " ").trim().slice(0, 80) : null]));
   return rows.map((c) => ({
     id: c.id,
     title: c.customerName || c.customerExternalId || (locale === "he" ? "לקוח" : "Customer"),
-    subtitle: `${channelName(c.channel, locale)} · ${L.status[c.status]?.[locale] ?? c.status}`,
-    // When it STARTED: the period counts conversations by their start, so a
-    // row dated by its last message read as outside the period.
-    meta: whenText(c.createdAt, locale, tz),
+    subtitle: `${channelName(c.channel, locale)} · ${ROW_STATUS[c.status]?.[locale] ?? c.status} · ${handlerWords(c, locale)}`,
+    meta: whenText(byLastMessage ? (c.lastMessageAt ?? c.createdAt) : c.createdAt, locale, tz),
     deepLink: `/inbox?c=${c.id}`,
+    preview: preview.get(c.id) ?? null,
   }));
 }
 
-const LIST_SELECT = { id: true, customerName: true, customerExternalId: true, channel: true, status: true, lastMessageAt: true, createdAt: true } as const;
+const LIST_SELECT = { id: true, customerName: true, customerExternalId: true, channel: true, status: true, lastMessageAt: true, createdAt: true, handledBy: true, isHandedOver: true, assignedAgent: { select: { name: true } } } as const;
+
+/** The current state lists the latest activity first; a period, the latest started. */
+function orderOf(q: ConversationQuery): any[] {
+  return q.now ? [{ lastMessageAt: { sort: "desc", nulls: "last" } }, { id: "desc" }] : [{ createdAt: "desc" }, { id: "desc" }];
+}
 
 export interface QueryResult {
   /** For the model: the counts in words and the id to cite. Never the blocks' raw arrays. */
@@ -216,7 +290,9 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
   // A card that shows nothing is not drawn: the answer says the 0 in words.
   let groups: Array<{ label: string; value: number }> | null = null;
   let coverage: { covered: number; of: number } | null = null;
-  if (q.groupBy === "day") {
+  if (q.list) {
+    // Rows, below: no split card.
+  } else if (q.groupBy === "day") {
     const days = daysBetween(q.from!, q.to!);
     const byDay = new Map(days.map((d) => [d, 0]));
     for (const r of counted) { const d = dayOf(r.createdAt, tz); if (byDay.has(d)) byDay.set(d, byDay.get(d)! + 1); }
@@ -275,12 +351,15 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
     });
   }
 
-  // The rows behind a mention: who said it.
-  if (q.mention && total) {
-    const first = await prisma.conversation.findMany({ where, select: LIST_SELECT, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: LIST_FIRST_PAGE });
+  // The rows: asked for (a list), or behind a mention (who said it).
+  let listed: RecordListItem[] = [];
+  if ((q.list || q.mention) && total) {
+    const first = await prisma.conversation.findMany({ where, select: LIST_SELECT, orderBy: orderOf(q), take: LIST_FIRST_PAGE });
+    listed = await listItems(ctx.tenantId, first as any, ctx.locale, tz, !!q.now);
     blocks.push({
-      type: "record_list", id: ctx.nextId("b"), title: he ? `שיחות שמזכירות “${q.mention}”` : `Conversations mentioning “${q.mention}”`, sourceId: sId,
-      kind: "conversation", items: await listItems(first as any, ctx.locale, tz), total, hasMore: total > first.length, deepLink: null, partial: null,
+      type: "record_list", id: ctx.nextId("b"),
+      title: q.mention ? (he ? `שיחות שמזכירות “${q.mention}”` : `Conversations mentioning “${q.mention}”`) : (he ? "השיחות" : "Conversations"),
+      sourceId: sId, kind: "conversation", items: listed, total, hasMore: total > first.length, deepLink: null, partial: null,
     });
   }
 
@@ -302,6 +381,8 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
     // into a Hebrew answer from English prose here, 2026-10-08).
     ...(q.now ? { counts: he ? "כל השיחות במצב הזה כרגע, לא משנה מתי התחילו" : "every conversation in this state now, whenever it started" } : {}),
     ...(groups ? { groups } : {}),
+    // The rows in words, so the model can name them (the card has the links).
+    ...(q.list && listed.length ? { rows: listed.map((r) => ({ conversationId: r.id, customer: r.title, where: r.subtitle, lastMessage: r.preview ?? null, when: r.meta })), ...(total > listed.length ? { moreRows: total - listed.length } : {}) } : {}),
     ...(coverage ? { recordedFor: `${coverage.covered} ${he ? "מתוך" : "of"} ${coverage.of}` } : {}),
     ...(chart ? { busiestDays: chart.highlight.map((d) => whenText(new Date(`${d}T12:00:00.000Z`), ctx.locale, "UTC", false)) } : {}),
     ...(inThisStateNow ? { inThisStateNow, note: he
@@ -338,9 +419,9 @@ export async function listConversationsForSource(
   const tz = await tenantTimeZone(tenantId);
   const where = await whereOf(tenantId, params, viewer, tz);
   const rows = await prisma.conversation.findMany({
-    where, select: LIST_SELECT, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: LIST_PAGE + 1,
+    where, select: LIST_SELECT, orderBy: orderOf(params), take: LIST_PAGE + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
   const page = rows.slice(0, LIST_PAGE);
-  return { data: await listItems(page as any, locale, tz), nextCursor: rows.length > LIST_PAGE ? page[page.length - 1]!.id : null };
+  return { data: await listItems(tenantId, page as any, locale, tz, !!params.now), nextCursor: rows.length > LIST_PAGE ? page[page.length - 1]!.id : null };
 }

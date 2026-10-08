@@ -72,6 +72,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     requirePermissionOrRole: () => (_q: any, _r: any, next: any) => next(),
     viewerOf: () => ({ userId: H.user, role: "ADMIN" }),
     prisma: {
+      inboundExclusion: { findMany: async () => [] },
       assistantThread: {
         create: async (a: any) => { const r = { id: `thr_${++H.n}`, title: null, titleSource: null, createdAt: new Date(), updatedAt: new Date(Date.now() + H.n), lastMessageAt: null, archivedAt: null, ...a.data }; H.threads.push(r); return r; },
         findFirst: async (a: any) => H.threads.find((r) => match(r, a.where)) ?? null,
@@ -499,7 +500,7 @@ describe("★ a turn speaks its question's language (Omer, 2026-10-08)", () => {
     // The full list behind the card: the same language as the answer it belongs to.
     const mid = H.messages.find((m) => m.role === "assistant").id;
     const list = await request(app()).get(`/api/assistant/threads/${t.id}/messages/${mid}/sources/s1/records?locale=en`);
-    expect(list.body.data[0].subtitle).toBe("וואטסאפ · פתוחות");
+    expect(list.body.data[0].subtitle).toBe("וואטסאפ · פתוחה · GOTCHA");
   });
 
   it("an English question on a Hebrew screen is answered in English; a question with no language keeps the screen's", async () => {

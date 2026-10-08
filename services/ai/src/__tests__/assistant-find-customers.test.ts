@@ -116,7 +116,11 @@ describe("★ several spellings, word by word", () => {
     const r: any = await findCustomersResult(ctx({ locale: "he" }), ["Omer Serruya"]);
     expect(r.blocks[0].title).toBe("לקוחות שנמצאו");
     expect(r.blocks[0].items[0].subtitle).toMatch(/^וואטסאפ, צ'אט באתר/);
-    expect(r.blocks[0].items[0].meta).toMatch(/^1 פתוחות · קשר אחרון 8 באוקטובר$/);
+    expect(r.blocks[0].items[0].meta).toMatch(/^שיחה פתוחה אחת · קשר אחרון 8 באוקטובר$/);
+    // The source says what was found, never the query as typed ("1 לקוחות: מעומר צרויה").
+    expect(r.source.label).toBe("לקוח אחד: Omer Serruya");
+    const two: any = await findCustomersResult(ctx({ locale: "he" }), ["עומר", "Omer"]);
+    expect(two.source.label).toBe("לקוח אחד: Omer Serruya");
   });
 });
 

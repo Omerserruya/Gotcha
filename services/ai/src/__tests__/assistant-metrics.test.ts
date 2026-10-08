@@ -17,7 +17,7 @@ const H = vi.hoisted(() => ({ wheres: [] as any[], fetches: [] as any[], totalWa
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
   const t = (model: string) => ({ count: async (a: any) => { H.wheres.push({ model, where: a.where }); return 7; } });
-  return { ...actual, prisma: { conversation: t("conversation"), message: t("message"), approvalRequest: t("approvalRequest") } };
+  return { ...actual, prisma: { inboundExclusion: { findMany: async () => [] }, conversation: t("conversation"), message: t("message"), approvalRequest: t("approvalRequest") } };
 });
 
 import { dispatchSystemToolCall, stepText, METRIC_LABELS } from "../services/system-tools.service";

@@ -52,6 +52,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     ...actual,
     resolveEffectiveLocale: async () => ({ effective: H.workspaceLocale }),
     prisma: {
+      inboundExclusion: { findMany: async () => [] },
       conversation: table("conversation"), message: table("message"), contact: table("contact"),
       user: table("user"), tenant: table("tenant"), aIAgent: table("aIAgent"), approvalRequest: table("approvalRequest"),
     },

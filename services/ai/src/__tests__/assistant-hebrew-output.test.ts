@@ -13,7 +13,7 @@ const H = vi.hoisted(() => ({ round: 0, memory: [] as any[], deltas: [] as strin
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
   const t = { findFirst: async () => null, findMany: async () => [], findUnique: async () => null, count: async () => 3 };
-  return { ...actual, prisma: { conversation: t, message: t, contact: t, tenantTool: t, approvalRequest: t } };
+  return { ...actual, prisma: { inboundExclusion: { findMany: async () => [] }, conversation: t, message: t, contact: t, tenantTool: t, approvalRequest: t } };
 });
 vi.mock("../services/agent-memory.service", () => ({
   appendToMemory: async (a: any) => { H.memory.push(a); },

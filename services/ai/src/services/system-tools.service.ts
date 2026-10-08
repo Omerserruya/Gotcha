@@ -17,6 +17,7 @@ import { prisma, visibilityClause, readDurableSetting, parseBusinessHours, REAL_
 import { normalizeQuery, queryConversations, sourceLabel, type ConversationQuery } from "./assistant-query.service";
 import { normalizeOrderQuery, queryOrders, queryProductStock } from "./assistant-commerce-query.service";
 import { findCustomersResult } from "./assistant-customers.service";
+import { privateNumbers, privateConversationsClause } from "../lib/private-numbers";
 
 /** The last n days, today included (UTC days: a caller with a workspace period passes it). */
 function lastDays(n: number): { from: string; to: string } {
@@ -233,6 +234,30 @@ const SYSTEM_QUERY_CONVERSATIONS = {
   },
 };
 
+const SYSTEM_LIST_CONVERSATIONS = {
+  type: "function" as const,
+  function: {
+    name: "system_list_conversations",
+    description:
+      "The business's conversations as rows the user can open: the customer, the channel, its state, who has it (a person, GOTCHA, or waiting for a person), the last message and when, each linking to the conversation. " +
+      "Use it to list or find conversations: \"list them\", \"show the 2 WhatsApp ones\", \"is there an open conversation with X\" (pass customerId from system_find_customers), \"what is waiting for a person\", \"what is assigned to me\". " +
+      "Without from/to it lists the current state, whenever they started (open ones unless you pass a status, a customer or waitingForPerson); with from/to, the conversations that STARTED in the period. Shown as a card; cite the source.",
+    parameters: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["OPEN", "WAITING", "CLOSED"], description: "Only conversations in this state. WAITING means waiting for the customer." },
+        channels: { type: "array", items: { type: "string" }, description: "Channel keys (WHATSAPP, INSTAGRAM, MESSENGER, EMAIL, WEBCHAT, SHOPIFY_LIVE_CHAT, VOICE...). Omit for all." },
+        customerId: { type: "string", description: "A customer's id from system_find_customers: their conversations on every channel." },
+        assignee: { type: "string", description: "Who has it: \"me\" (the user), \"gotcha\", \"unassigned\", or a person's user id." },
+        waitingForPerson: { type: "boolean", description: "Only conversations waiting for someone on the team to answer (the inbox queue, the number on Home)." },
+        mention: { type: "string", description: "Only conversations where a message in the period says this word or phrase." },
+        from: { type: "string", description: "First day, YYYY-MM-DD, for conversations that started in a period." },
+        to: { type: "string", description: "Last day, YYYY-MM-DD, inclusive." },
+      },
+    },
+  },
+};
+
 const SYSTEM_QUERY_ORDERS = {
   type: "function" as const,
   function: {
@@ -304,6 +329,7 @@ export async function buildSystemAgentTools(opts: {
     SYSTEM_SUMMARIZE_CONVERSATION,
     SYSTEM_RECENT_ACTIVITY,
     SYSTEM_QUERY_CONVERSATIONS,
+    SYSTEM_LIST_CONVERSATIONS,
     ...(opts.commerce ? [SYSTEM_QUERY_ORDERS, SYSTEM_PRODUCT_STOCK] : []),
     PROPOSE_PLAN_TOOL,
   ];
@@ -546,6 +572,29 @@ async function dispatchSystemTool(
         const r = await queryConversations({ tenantId: ctx.tenantId, viewer: ctx.viewer, locale, nextId }, q);
         return { toolCallId, content: JSON.stringify(r.summary), artifacts: { blocks: r.blocks, source: r.source } };
       }
+      case "system_list_conversations": {
+        const locale = ctx.locale ?? "en";
+        const period = ctx.defaultPeriod ?? lastDays(7);
+        const inPeriod = !!(args.from || args.to || args.mention);
+        const base = {
+          status: args.status,
+          channels: args.channels,
+          customerIds: args.customerId ? [String(args.customerId)] : undefined,
+          // "me" is the person asking, resolved here so the saved query replays the same rows.
+          assignee: args.assignee === "me" ? ctx.userId : args.assignee,
+          waitingForPerson: args.waitingForPerson === true,
+          mention: args.mention,
+          list: true,
+        };
+        let q = normalizeQuery(inPeriod ? { ...base, from: args.from ?? period.from, to: args.to ?? period.to } : { ...base, now: true });
+        // A current state needs something to be the state of: open ones unless told otherwise.
+        if ("error" in q && !inPeriod && !base.status) q = normalizeQuery({ ...base, status: "OPEN", now: true });
+        if ("error" in q) return { toolCallId, content: JSON.stringify({ ok: false, error: q.error }) };
+        let seq = 0;
+        const nextId = ctx.nextId ?? ((k: "b" | "s") => `${k}${++seq}`);
+        const r = await queryConversations({ tenantId: ctx.tenantId, viewer: ctx.viewer, locale, nextId }, q);
+        return { toolCallId, content: JSON.stringify(r.summary), artifacts: { blocks: r.blocks, source: r.source } };
+      }
       case "system_query_orders":
       case "system_product_stock": {
         // The surface hides these from a caller without the permission; this
@@ -630,6 +679,7 @@ const STEP_TEXT: Record<string, { en: string; he: string }> = {
   system_summarize_conversation: { en: "Reading the conversation", he: "קוראת את השיחה" },
   system_recent_activity: { en: "Looking at recent messages", he: "מסתכלת על ההודעות האחרונות" },
   system_query_conversations: { en: "Looking at the conversations", he: "בודקת את השיחות" },
+  system_list_conversations: { en: "Finding the conversations", he: "מוצאת את השיחות" },
   system_query_orders: { en: "Reading the store's orders", he: "קוראת את ההזמנות בחנות" },
   system_product_stock: { en: "Checking the stock", he: "בודקת את המלאי" },
   propose_plan: { en: "Preparing a plan for your approval", he: "מכינה תוכנית לאישור שלך" },
@@ -767,8 +817,11 @@ async function getMetric(tenantId: string, metric: string, clause: Record<string
         where: { tenantId, direction: "INBOUND", createdAt: { gte: since }, conversation: { ...REAL_CONVERSATION, ...conv } },
       });
     }
-    case "open_conversations":
-      return prisma.conversation.count({ where: { tenantId, ...REAL_CONVERSATION, status: "OPEN", ...conv } });
+    case "open_conversations": {
+      // Private numbers are never counted, as in every list (lib/private-numbers).
+      const priv = privateConversationsClause(await privateNumbers(tenantId));
+      return prisma.conversation.count({ where: { tenantId, ...REAL_CONVERSATION, status: "OPEN", ...conv, ...(priv ? { AND: [priv] } : {}) } });
+    }
     case "closed_today": {
       const startOfDay = new Date(now); startOfDay.setUTCHours(0, 0, 0, 0);
       return prisma.conversation.count({

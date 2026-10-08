@@ -43,6 +43,8 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     ...actual,
     readDurableSetting: async () => JSON.stringify({ timezone: "Asia/Jerusalem", schedule: {} }),
     prisma: {
+      inboundExclusion: { findMany: async () => [] },
+      message: { findMany: async () => [] },
       conversation: {
         findMany: async (a: any) => {
           H.wheres.push(a.where);
@@ -259,7 +261,7 @@ describe("★ the current state: now, whenever they started (Omer, 2026-10-08)",
     const r = await queryConversations(ctx(), N({ status: "OPEN", channels: ["WHATSAPP"] }));
     const page = await listConversationsForSource("T", undefined, "he", r.source.query.params, null);
     expect(page.data.map((i) => i.id)).toEqual(["o2", "o1"]);
-    expect(page.data[0]!.subtitle).toBe("וואטסאפ · פתוחות");
+    expect(page.data[0]!.subtitle).toBe("וואטסאפ · פתוחה · GOTCHA");
   });
 
   it("now needs a state it can mean, and has no days", () => {
