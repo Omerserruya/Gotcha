@@ -94,6 +94,9 @@ describe("★ the chart by day", () => {
     expect(chart.series[0].values).toEqual([1, 1, 0, 0, 0, 3, 0]);
     expect(chart.highlight).toEqual(["2026-10-06"]);
     expect(r.summary).toMatchObject({ ok: true, cite: "s1", total: 5 });
+    // The model is told what is on screen, so it never says it lacks the by-day split.
+    expect((r.summary as any).cards).toEqual(["Conversations by day: a bar chart over 7 days"]);
+    expect(String((r.summary as any).shownAs)).toMatch(/never say you lack a breakdown a card shows/);
     expect(r.source).toMatchObject({ id: "s1", kind: "conversations", count: 5, query: { tool: "conversations", params: { from: "2026-10-01", to: "2026-10-07", groupBy: "day" } } });
   });
 
@@ -145,6 +148,10 @@ describe("★ a mention: what was said in the period", () => {
     const list: any = r.blocks.find((b) => b.type === "record_list");
     expect(list.items.map((i: any) => i.id)).toEqual(["3", "1"]);
     expect(list.items[0]).toMatchObject({ title: "Customer 3", deepLink: "/inbox?c=3" });
+    // Dated by when it STARTED (the period's measure), not its last message.
+    H.convs[2].lastMessageAt = D("2026-10-20T10:00:00Z");
+    const again: any = (await queryConversations(ctx({ locale: "en" }), Q({ mention: "small" }))).blocks.find((b) => b.type === "record_list");
+    expect(again.items[0].meta).toContain("6 October");
     expect(list.items[0].subtitle).toContain("צ'אט Shopify");
     expect(list).toMatchObject({ total: 2, hasMore: false, sourceId: "s1" });
     expect(r.source.label).toContain("2 שיחות שמזכירות “small”");

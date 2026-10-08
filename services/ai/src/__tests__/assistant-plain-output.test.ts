@@ -109,6 +109,21 @@ describe("★ the thread's period and the prompt", () => {
     expect(scope).toContain('"1 באוקטובר - 7 באוקטובר"');
   });
 
+  it("★ the cards are on screen, and only real abilities are offered (both surfaced live)", () => {
+    const lines = threadSystemLines({ range: "last_7", channels: "all" }, "en").join("\n");
+    // It said "I don't have a day-by-day table" beside a by-day chart.
+    expect(lines).toMatch(/never say you lack a breakdown a card shows/);
+    // It offered a CSV export and a "stock sync" it has no tool for.
+    expect(lines).toMatch(/Never offer an export, a CSV or other file, a sync/);
+  });
+
+  it("★ one call per split, not one per channel (it made 8 calls live)", async () => {
+    const { buildSystemAgentTools } = await import("../services/system-tools.service");
+    const tools: any[] = await buildSystemAgentTools({ tenantId: "T", aiAgentId: null } as any);
+    const d = String(tools.find((t: any) => t.function?.name === "system_query_conversations")?.function.description);
+    expect(d).toMatch(/ONE call with groupBy channel, never one call per channel/);
+  });
+
   it("the prompt asks for a manager's voice and forbids guessing at technical causes", () => {
     const prompt = readFileSync(join(__dirname, "../prompts/system-copilot.md"), "utf-8");
     expect(prompt).toMatch(/Speak like the business's manager/);

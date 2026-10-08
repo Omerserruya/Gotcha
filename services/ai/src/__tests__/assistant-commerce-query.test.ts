@@ -78,7 +78,7 @@ describe("★ orders by workspace day", () => {
     const chart: any = r.blocks[0];
     expect(chart).toMatchObject({ unit: "currency", currency: "ILS", highlight: ["2026-10-03"] });
     expect(chart.series[0].values).toEqual([150, 50, 300]);
-    expect(r.summary).toMatchObject({ total: 500, currency: "ILS" });
+    expect(r.summary).toMatchObject({ total: 500, currency: "ILS", cards: ["Sales by day: a bar chart over 3 days"] });
     expect(r.source!.count).toBe(3); // the orders behind the sum
   });
 

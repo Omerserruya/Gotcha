@@ -141,7 +141,9 @@ async function listItems(rows: Array<{ id: string; customerName: string | null; 
     id: c.id,
     title: c.customerName || c.customerExternalId || (locale === "he" ? "לקוח" : "Customer"),
     subtitle: `${channelName(c.channel, locale)} · ${L.status[c.status]?.[locale] ?? c.status}`,
-    meta: whenText(c.lastMessageAt ?? c.createdAt, locale, tz),
+    // When it STARTED: the period counts conversations by their start, so a
+    // row dated by its last message read as outside the period.
+    meta: whenText(c.createdAt, locale, tz),
     deepLink: `/inbox?c=${c.id}`,
   }));
 }
@@ -244,9 +246,23 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
     ...(first.type === "breakdown" ? { groups: first.items.map((i) => ({ label: i.label, value: i.value })), ...(first.coverage ? { recordedFor: `${first.coverage.covered} of ${first.coverage.of}` } : {}) } : {}),
     ...(first.type === "chart" ? { busiestDays: first.highlight.map((d) => whenText(new Date(`${d}T12:00:00.000Z`), ctx.locale, "UTC", false)) } : {}),
     ...(capped ? { note: `counted the latest ${MAX_ROWS}` } : {}),
-    shownAs: "cards the user already sees; summarise, do not repeat every number, cite the source",
+    shownAs: SHOWN_AS,
+    cards: cardsOf(blocks),
   };
   return { summary, blocks, source };
+}
+
+/** What the model is told about the cards it produced. */
+export const SHOWN_AS =
+  "these cards are on the user's screen beside your answer: refer to them (\"the chart shows\"), never say you lack a breakdown a card shows, do not repeat every number, cite the source";
+
+/** The cards in words, so the model knows what the user is looking at. */
+export function cardsOf(blocks: Array<{ type: string; title: string; x?: { values: string[] }; items?: unknown[] }>): string[] {
+  return blocks.map((b) =>
+    b.type === "chart" ? `${b.title}: a bar chart over ${b.x?.values.length ?? 0} days`
+    : b.type === "breakdown" ? `${b.title}: a breakdown of ${b.items?.length ?? 0} groups`
+    : b.type === "record_list" ? `${b.title}: a list of ${b.items?.length ?? 0} rows with links`
+    : `${b.title}: a card with its details`);
 }
 
 /** The full list behind a conversations source, with the caller's CURRENT visibility. */

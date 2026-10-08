@@ -9,7 +9,7 @@
 import { prisma, nextWorkspaceDay } from "@chatcenter/shared";
 import { executeAdapterTool } from "./connectors/integration-framework";
 import { whenText } from "./system-tools.service";
-import { dayStart, dayOf, tenantTimeZone, type QueryCtx, type ChartBlock, type BreakdownBlock, type RecordListBlock } from "./assistant-query.service";
+import { dayStart, dayOf, tenantTimeZone, SHOWN_AS, cardsOf, type QueryCtx, type ChartBlock, type BreakdownBlock, type RecordListBlock } from "./assistant-query.service";
 
 type Locale = "he" | "en";
 export type Store = "shopify" | "woocommerce";
@@ -213,7 +213,8 @@ export async function queryOrders(ctx: QueryCtx, q: OrderQuery): Promise<Commerc
       ok: true, cite: sId, store, total, ...(unit === "currency" ? { currency } : {}), period,
       ...(capped ? { note: `counted the latest ${CAP} orders of the period` } : {}),
       ...(q.measure === "refunds" ? { note2: "refunds on orders placed in the period" } : {}),
-      shownAs: "cards the user already sees; summarise, do not repeat every number, cite the source",
+      shownAs: SHOWN_AS,
+      cards: cardsOf(blocks),
     },
     blocks,
     source,
@@ -256,7 +257,7 @@ export async function queryProductStock(ctx: QueryCtx, query: string): Promise<C
     });
   }
   return {
-    summary: { ok: true, cite: sId, found: blocks.length, products: blocks.map((b) => ({ title: b.title, inStock: b.fields[0]!.value })), shownAs: "cards the user already sees; cite the source" },
+    summary: { ok: true, cite: sId, found: blocks.length, products: blocks.map((b) => ({ title: b.title, inStock: b.fields[0]!.value })), shownAs: SHOWN_AS, cards: cardsOf(blocks) },
     blocks,
     source: { id: sId, kind: "product", count: blocks.length, deepLink: null, label: blocks.map((b) => b.title).join(", "), query: { tool: "product_stock", params: { query } } },
   };

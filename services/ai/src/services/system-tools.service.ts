@@ -192,7 +192,8 @@ const SYSTEM_QUERY_CONVERSATIONS = {
     description:
       "The business's conversations over a period: how many, by day, by channel, by status, by who handled them (GOTCHA or the team), " +
       "by intent or sentiment (recorded only for some conversations: the result says for how many), or which conversations mention a word. " +
-      "The numbers are shown to the user as cards; you get a short summary and a source id. Cite it after the claim as [^<id>] and do not repeat every number.",
+      "The numbers are shown to the user as cards; you get a short summary and a source id. Cite it after the claim as [^<id>] and do not repeat every number. " +
+      "One call per split: \"by channel\" is ONE call with groupBy channel, never one call per channel; \"by day and by channel\" is two calls (groupBy day, groupBy channel).",
     parameters: {
       type: "object",
       properties: {
