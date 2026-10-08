@@ -119,14 +119,17 @@ export async function RoleList({
 
             {/*
               A built-in role can be copied but never edited - the route refuses
-              it. A custom one could be edited, but nothing edits a role from
-              here yet: drawn, and it says so.
+              it. A custom one opens in the 12c form, saved over it.
             */}
             <span className={styles.colAction} data-testid={`action-${role.id}`}>
               {isEditable(role) ? (
-                <span className={styles.actionQuiet} aria-disabled="true" title={t('editNotYet')}>
+                <Link
+                  href={`/settings/people/roles/edit/${encodeURIComponent(role.id)}`}
+                  className={styles.actionLink}
+                  data-testid={`edit-${role.id}`}
+                >
                   {t('edit')}
-                </span>
+                </Link>
               ) : (
                 <Link
                   href={{ pathname: '/settings/people/roles/new', query: { from: role.id } }}

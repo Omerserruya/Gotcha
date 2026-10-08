@@ -8,9 +8,9 @@ import { humaniseCode } from '@/api/contracts/capabilities';
 import type { PermissionDef } from '@/api/contracts/permission-catalog';
 import { gridCanRepresent, holds, wildcardsIn, type Role } from '@/api/contracts/roles';
 import drawer from '@/design-system/styles/drawer.module.css';
-import { Link } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 
-import { createRole } from './actions';
+import { createRole, updateRole } from './actions';
 import { gridRows, levelOf, levelsOf, rowChanged, withLevel, type GridRow } from './role-grid';
 import styles from './Roles.module.css';
 
@@ -29,30 +29,40 @@ import styles from './Roles.module.css';
  * `conversation:messages:*`) is a standing instruction a grid cannot hold:
  * ticking what it matches today freezes it. Started from one, the table is
  * read-only and Create is unavailable, with the reason.
+ *
+ * ★ EDIT (12b's Edit, Omer 2026-10-08): the same form on one custom role -
+ *   seeded from it, compared against what it holds now, saved over it, then
+ *   back to the roles. No "Start from": the role starts from itself. A
+ *   built-in role never comes here (the route refuses it).
  */
 export function RoleForm({
   permissions,
   roles,
   initialSourceId = '',
+  editing = null,
 }: {
   readonly permissions: readonly PermissionDef[];
   /** Existing roles to start from. */
   readonly roles: readonly Role[];
   /** 12b's "Duplicate": the role this one starts from (`?from=`). */
   readonly initialSourceId?: string;
+  /** 12b's "Edit": the custom role being changed - the form saves over it. */
+  readonly editing?: Role | null;
 }) {
   const t = useTranslations('roles');
+  const router = useRouter();
   /*
    * 02 starts from Agent: "you start from an existing role and only touch
    * what's different" - so the Compared card is there from the first look.
    * 12b's Duplicate (`?from=`) wins; no Agent role, nothing.
    */
   // The platform's key is lowercase (`invite-role.service`: builtinKey "agent").
-  const startId =
-    initialSourceId || (roles.find((r) => r.builtinKey?.toLowerCase() === 'agent')?.id ?? '');
+  const startId = editing
+    ? editing.id
+    : initialSourceId || (roles.find((r) => r.builtinKey?.toLowerCase() === 'agent')?.id ?? '');
   const [sourceId, setSourceId] = useState(startId);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+  const [name, setName] = useState(editing?.name ?? '');
+  const [description, setDescription] = useState(editing?.description ?? '');
   // Seeded as `startFrom` would seed it - including its refusal of a pattern role.
   const [selected, setSelected] = useState<readonly string[]>(() => {
     const role = roles.find((r) => r.id === startId);
@@ -81,6 +91,19 @@ export function RoleForm({
 
   function submit() {
     setError(null);
+    if (editing) {
+      startTransition(async () => {
+        const result = await updateRole(editing.id, {
+          name: name.trim(),
+          description: description.trim(),
+          features: selected,
+          isSystem: editing.isSystem,
+        });
+        if (result.ok) router.push('/settings/people/roles');
+        else setError(t(`form.edit.error.${result.reason}`));
+      });
+      return;
+    }
     startTransition(async () => {
       const result = await createRole({
         name: name.trim(),
@@ -136,29 +159,33 @@ export function RoleForm({
               onChange={(e) => setName(e.target.value)}
             />
           </label>
-          <label className={drawer.field}>
-            <span className={drawer.fieldLabel}>{t('form.startFrom')}</span>
-            {/* 02's box: the role's name and a chevron, never a clipped placeholder. */}
-            <span className={styles.selectBox}>
-              <select
-                className={`${drawer.box} ${styles.selectInner}`}
-                data-testid="role-source"
-                value={sourceId}
-                title={
-                  source && !patterned ? t('form.startFromHint', { name: source.name }) : undefined
-                }
-                onChange={(e) => startFrom(e.target.value)}
-              >
-                <option value="">{t('form.startFromNone')}</option>
-                {roles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={13} className={styles.selectChevron} aria-hidden="true" />
-            </span>
-          </label>
+          {editing ? null : (
+            <label className={drawer.field}>
+              <span className={drawer.fieldLabel}>{t('form.startFrom')}</span>
+              {/* 02's box: the role's name and a chevron, never a clipped placeholder. */}
+              <span className={styles.selectBox}>
+                <select
+                  className={`${drawer.box} ${styles.selectInner}`}
+                  data-testid="role-source"
+                  value={sourceId}
+                  title={
+                    source && !patterned
+                      ? t('form.startFromHint', { name: source.name })
+                      : undefined
+                  }
+                  onChange={(e) => startFrom(e.target.value)}
+                >
+                  <option value="">{t('form.startFromNone')}</option>
+                  {roles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={13} className={styles.selectChevron} aria-hidden="true" />
+              </span>
+            </label>
+          )}
         </div>
         <label className={drawer.field}>
           <span className={drawer.fieldLabel}>{t('form.description')}</span>
@@ -299,7 +326,13 @@ export function RoleForm({
             data-testid="role-save"
             onClick={submit}
           >
-            {isPending ? t('form.saving') : t('form.save')}
+            {isPending
+              ? editing
+                ? t('form.edit.saving')
+                : t('form.saving')
+              : editing
+                ? t('form.edit.save')
+                : t('form.save')}
           </button>
           <Link href="/settings/people/roles" className={drawer.drawerCancel}>
             {t('form.cancel')}
@@ -315,7 +348,11 @@ export function RoleForm({
       <aside className={styles.newRoleSide}>
         {source && !patterned ? (
           <section className={styles.sideCard} data-testid="role-compared">
-            <h3 className={styles.sideTitle}>{t('form.comparedWith', { name: source.name })}</h3>
+            <h3 className={styles.sideTitle}>
+              {editing
+                ? t('form.edit.changes', { name: source.name })
+                : t('form.comparedWith', { name: source.name })}
+            </h3>
             {changed.length > 0 ? (
               <ul className={styles.sideList}>
                 {changed.map((row) => (
@@ -329,9 +366,13 @@ export function RoleForm({
               </ul>
             ) : null}
             <p className={styles.sideNote}>
-              {changed.length > 0
-                ? t('form.elseSame', { name: source.name })
-                : t('form.allSame', { name: source.name })}
+              {editing
+                ? changed.length > 0
+                  ? t('form.edit.elseSame')
+                  : t('form.edit.noChange')
+                : changed.length > 0
+                  ? t('form.elseSame', { name: source.name })
+                  : t('form.allSame', { name: source.name })}
             </p>
           </section>
         ) : null}

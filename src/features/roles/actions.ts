@@ -149,3 +149,66 @@ export async function createRole(input: {
     return { ok: false, reason: 'failed' };
   }
 }
+
+export type UpdateRoleResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      /**
+       * `system` - a built-in role (the route refuses to change it);
+       * `unknown_features` - the catalogue offered a key the server will not
+       * grant; `partial` - the capabilities were saved and the name or
+       * description was not; `gone` - the role is no longer there.
+       */
+      readonly reason: 'system' | 'unknown_features' | 'partial' | 'gone' | 'forbidden' | 'failed';
+    };
+
+/**
+ * Edit a custom role - 12b's Edit: its capabilities (`PUT …/features`,
+ * replacing them), then its name and description (`PATCH`). Two routes, in
+ * that order: the features are what the route validates, so a refusal there
+ * changes nothing; a failure after them is said as partly saved, never as
+ * done.
+ *
+ * ⚠ A built-in role is never sent: PATCH refuses it, and the features route
+ *   does not check - so the screen never offers it (Backend told).
+ */
+export async function updateRole(
+  roleId: string,
+  input: { name: string; description: string; features: readonly string[]; isSystem: boolean },
+): Promise<UpdateRoleResult> {
+  if (input.isSystem) return { ok: false, reason: 'system' };
+  try {
+    await serverApi().put({
+      endpoint: permissionEndpoints.roleFeatures(roleId),
+      body: { features: input.features },
+      payload: z.unknown(),
+      raw: true,
+    });
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('roles.update_features_failed', { cause });
+    if (isApiError(cause)) {
+      if (cause.status === 400) return { ok: false, reason: 'unknown_features' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+      if (cause.status === 404) return { ok: false, reason: 'gone' };
+    }
+    return { ok: false, reason: 'failed' };
+  }
+  try {
+    await serverApi().patch({
+      endpoint: permissionEndpoints.role(roleId),
+      body: { name: input.name, description: input.description || null },
+      payload: z.unknown(),
+      raw: true,
+    });
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('roles.update_name_failed', { cause });
+    revalidatePath('/[locale]/settings/people/roles', 'page');
+    if (isApiError(cause) && cause.status === 403) return { ok: false, reason: 'system' };
+    return { ok: false, reason: 'partial' };
+  }
+  revalidatePath('/[locale]/settings/people/roles', 'page');
+  return { ok: true };
+}

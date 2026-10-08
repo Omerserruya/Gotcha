@@ -8,18 +8,25 @@ import type { PermissionDef } from '@/api/contracts/permission-catalog';
 import type { Role } from '@/api/contracts/roles';
 import messages from '@/i18n/messages/en/roles.json';
 
-const { createRole } = vi.hoisted(() => ({ createRole: vi.fn() }));
-vi.mock('./actions', () => ({ createRole }));
+const { createRole, updateRole } = vi.hoisted(() => ({
+  createRole: vi.fn(),
+  updateRole: vi.fn(),
+}));
+vi.mock('./actions', () => ({ createRole, updateRole }));
+const push = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children }: { href: string; children: ReactNode }) => (
     <a href={href}>{children}</a>
   ),
+  useRouter: () => ({ push }),
 }));
 
 import { RoleForm } from './RoleForm';
 
 beforeEach(() => {
   createRole.mockReset();
+  updateRole.mockReset();
+  push.mockReset();
 });
 
 /**
@@ -197,5 +204,62 @@ describe('★ 12c - 02 starts from Agent, and says what differs from the start',
     const bar = screen.getByTestId('role-bar');
     expect(bar).toContainElement(screen.getByTestId('role-save'));
     expect(bar).toHaveTextContent('Cancel');
+  });
+});
+
+describe('★★ 12b Edit - one custom role, saved over itself', () => {
+  const FINANCE: Role = {
+    id: 'r7',
+    name: 'Finance',
+    description: 'Refunds and returns',
+    isSystem: false,
+    builtinKey: null,
+    features: ['crm:contacts:read', 'customer:commerce:refund'],
+    memberCount: 2,
+  };
+  const renderEdit = () =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ roles: messages }}>
+        <RoleForm permissions={PERMISSIONS} roles={[...ROLES, FINANCE]} editing={FINANCE} />
+      </NextIntlClientProvider>,
+    );
+
+  it('seeded from the role - its name, words and capabilities; no "Start from"', () => {
+    renderEdit();
+    expect(screen.getByTestId('role-name')).toHaveValue('Finance');
+    expect(screen.getByTestId('role-description')).toHaveValue('Refunds and returns');
+    expect(screen.getByTestId('role-action-customer:commerce:refund')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.queryByTestId('role-source')).toBeNull();
+    expect(screen.getByTestId('role-compared')).toHaveTextContent('Nothing has changed yet.');
+    expect(screen.getByTestId('role-save')).toHaveTextContent('Save changes');
+  });
+
+  it('a change is named against the role itself; Save sends it and goes back to the roles', async () => {
+    updateRole.mockResolvedValue({ ok: true });
+    renderEdit();
+    await userEvent.click(screen.getByTestId('role-action-customer:commerce:return'));
+    expect(screen.getByTestId('role-compared')).toHaveTextContent('What changes in Finance');
+    await userEvent.click(screen.getByTestId('role-save'));
+    expect(updateRole).toHaveBeenCalledWith('r7', {
+      name: 'Finance',
+      description: 'Refunds and returns',
+      features: ['crm:contacts:read', 'customer:commerce:refund', 'customer:commerce:return'],
+      isSystem: false,
+    });
+    expect(push).toHaveBeenCalledWith('/settings/people/roles');
+    expect(createRole).not.toHaveBeenCalled();
+  });
+
+  it('partly saved is said - and the form stays', async () => {
+    updateRole.mockResolvedValue({ ok: false, reason: 'partial' });
+    renderEdit();
+    await userEvent.click(screen.getByTestId('role-save'));
+    expect(screen.getByTestId('role-error')).toHaveTextContent(
+      "The capabilities were saved; the name and description weren't.",
+    );
+    expect(push).not.toHaveBeenCalled();
   });
 });

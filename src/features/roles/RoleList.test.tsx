@@ -17,10 +17,13 @@ vi.mock('@/i18n/navigation', () => ({
     children,
     ...rest
   }: {
-    href: { pathname: string; query: Record<string, string> };
+    href: string | { pathname: string; query: Record<string, string> };
     children: ReactNode;
   }) => (
-    <a href={`${href.pathname}?${new URLSearchParams(href.query)}`} {...rest}>
+    <a
+      href={typeof href === 'string' ? href : `${href.pathname}?${new URLSearchParams(href.query)}`}
+      {...rest}
+    >
       {children}
     </a>
   ),
@@ -46,13 +49,13 @@ describe('★ 12b - the roles as one table', () => {
     );
   });
 
-  it('★ a custom role: "Custom" (no creator is recorded), and Edit drawn, not live', async () => {
+  it('★ a custom role: "Custom" (no creator is recorded), and Edit opens it in the form', async () => {
     render(await RoleList({ roles: [role({ id: 'w', name: 'Wholesale rep' })] }));
     expect(screen.getByTestId('role-w')).toHaveTextContent('Custom');
     expect(screen.getByTestId('role-w')).not.toHaveTextContent(/ by /);
-    const edit = screen.getByTestId('action-w').firstElementChild!;
-    expect(edit).toHaveAttribute('aria-disabled', 'true');
-    expect(edit.tagName).not.toBe('A');
+    const edit = screen.getByTestId('edit-w');
+    expect(edit.tagName).toBe('A');
+    expect(edit).toHaveAttribute('href', '/settings/people/roles/edit/w');
   });
 
   it('★ a wildcard role says "everything", never "one thing"; nobody is "No one yet"', async () => {
