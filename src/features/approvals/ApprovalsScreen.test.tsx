@@ -29,6 +29,7 @@ import { ApprovalsScreen } from './ApprovalsScreen';
 
 const { approve, reject } = vi.hoisted(() => ({ approve: vi.fn(), reject: vi.fn() }));
 
+const { ask, push } = vi.hoisted(() => ({ ask: vi.fn(), push: vi.fn() }));
 vi.mock('@/i18n/navigation', () => ({
   Link: ({
     href,
@@ -49,10 +50,12 @@ vi.mock('@/i18n/navigation', () => ({
       {children}
     </a>
   ),
+  useRouter: () => ({ push }),
 }));
 
 vi.mock('./actions', () => ({
   approveRequest: approve,
+  askAboutRequest: ask,
   rejectRequest: reject,
   retryExecution: vi.fn(),
 }));

@@ -489,6 +489,11 @@
       "storeGone": "The store can't be read right now, so the rest can't be shown.",
       "sources": "What this answer is based on",
       "none": "None"
+    },
+    "about": {
+      "title": "About a request",
+      "line": "About a request waiting for approval. GOTCHA can explain it here; deciding it stays on its page.",
+      "open": "Open the request"
     }
   }
 }

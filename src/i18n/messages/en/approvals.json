@@ -276,9 +276,6 @@
   "detail3": {
     "eyebrowAi": "Requested by your AI employee · {time}",
     "editAmount": "Edit amount",
-    "ask": "Ask {who} a question",
-    "askAi": "Ask the AI a question",
-    "askNotYet": "Asking about a request comes next.",
     "reversible": "Reversible",
     "reversibleYes": "Yes",
     "reversibleNo": "No",
@@ -290,7 +287,13 @@
     "editInvalidMinor": "A whole number above zero.",
     "editDiscount": "Edit discount",
     "editLabelPercent": "Discount to approve (%)",
-    "editInvalidPercent": "A percentage above zero, up to 100."
+    "editInvalidPercent": "A percentage above zero, up to 100.",
+    "askGotcha": "Ask GOTCHA about this",
+    "asking": "Opening…",
+    "askRefused": {
+      "gone": "This request can't be asked about from here - it's gone, or its conversation isn't one you can see.",
+      "failed": "That didn't open. Try again."
+    }
   },
   "queueFoot": {
     "handled": "{count, plural, one {GOTCHA handled # on its own today.} other {GOTCHA handled # on its own today.}}",

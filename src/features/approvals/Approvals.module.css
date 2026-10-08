@@ -1257,6 +1257,12 @@
     color: var(--alert-text);
   }
 
+  .askProblem {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+
   .reasonChip[aria-pressed='true'] {
     background-color: var(--action-base);
     color: var(--action-text);

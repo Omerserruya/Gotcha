@@ -10,15 +10,18 @@ import messages from '@/i18n/messages/en/approvals.json';
 import type { ApprovalCustomer } from './approval-customers';
 
 const { approve, reject } = vi.hoisted(() => ({ approve: vi.fn(), reject: vi.fn() }));
+const { ask, push } = vi.hoisted(() => ({ ask: vi.fn(), push: vi.fn() }));
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
     <a href={typeof href === 'string' ? href : JSON.stringify(href)} {...rest}>
       {children}
     </a>
   ),
+  useRouter: () => ({ push }),
 }));
 vi.mock('./actions', () => ({
   approveRequest: approve,
+  askAboutRequest: ask,
   rejectRequest: reject,
   retryExecution: vi.fn(),
 }));
@@ -132,8 +135,35 @@ describe('★★ 03’s detail', () => {
   it('a named requester is named', () => {
     show([refund()], { requesterNames: { a1: 'Support AI' } });
     expect(screen.getByTestId('requested-by')).toHaveTextContent(/^Requested by Support AI · /);
-    expect(screen.getByTestId('ask-ai')).toHaveTextContent('Ask Support AI a question');
-    expect(screen.getByTestId('ask-ai')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('★★ 03’s Ask (ai 9a86bfac): GOTCHA answers, not the employee; a Home thread about it, nothing sent', async () => {
+    ask.mockReset().mockResolvedValue({ ok: true, threadId: 'th9' });
+    push.mockReset();
+    show([refund()], { requesterNames: { a1: 'Support AI' } });
+    const button = screen.getByTestId('ask-ai');
+    // GOTCHA is who answers - never "Ask Support AI", which would not be who replies.
+    expect(button).toHaveTextContent('Ask GOTCHA about this');
+    expect(button.tagName).toBe('BUTTON');
+    expect(ask).not.toHaveBeenCalled();
+    await userEvent.click(button);
+    expect(ask).toHaveBeenCalledWith('a1');
+    expect(push).toHaveBeenCalledWith({ pathname: '/home', query: { thread: 'th9' } });
+    // Asking decides nothing.
+    expect(approve).not.toHaveBeenCalled();
+    expect(reject).not.toHaveBeenCalled();
+  });
+
+  it('a request that is gone, or out of view: said in words, no thread opened', async () => {
+    ask.mockReset().mockResolvedValue({ ok: false, reason: 'gone' });
+    push.mockReset();
+    show([refund()]);
+    await userEvent.click(screen.getByTestId('ask-ai'));
+    expect(screen.getByTestId('ask-problem')).toHaveTextContent(
+      "This request can't be asked about from here",
+    );
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.getByTestId('ask-ai')).toBeEnabled();
   });
 
   it('why: one bullet a sentence', () => {

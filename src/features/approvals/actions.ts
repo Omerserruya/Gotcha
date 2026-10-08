@@ -10,7 +10,8 @@ import {
   rejectResultSchema,
   retryResultSchema,
 } from '@/api/contracts/approvals';
-import { approvalEndpoints } from '@/api/endpoints/registry';
+import { threadSchema } from '@/api/contracts/assistant-threads';
+import { approvalEndpoints, assistantEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 import { EDIT_REFUSALS, type EditRefusal } from './edit-refusals';
@@ -215,5 +216,32 @@ export async function retryExecution(id: string): Promise<ApprovalWriteResult> {
   } catch (cause) {
     await signInIfSignedOut(cause);
     return classify(cause, 'approvals.retry_failed');
+  }
+}
+
+export type AskResult =
+  | { readonly ok: true; readonly threadId: string }
+  | { readonly ok: false; readonly reason: 'gone' | 'failed' };
+
+/**
+ * 03's Ask (ai 9a86bfac): a Home thread about this request - created with
+ * `context: { approvalId }` and nothing sent. The thread knows which request;
+ * its assistant can explain it and cannot decide it. 404 APPROVAL_NOT_FOUND
+ * is the same answer for a request that is gone and for one whose
+ * conversation the caller cannot see, so the screen says both as one.
+ */
+export async function askAboutRequest(approvalId: string): Promise<AskResult> {
+  try {
+    const thread = await serverApi().post({
+      endpoint: assistantEndpoints.threads(),
+      body: { context: { approvalId } },
+      payload: threadSchema,
+    });
+    return { ok: true, threadId: thread.id };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('approvals.ask_failed', { status: isApiError(cause) ? cause.status : undefined });
+    if (isApiError(cause) && cause.status === 404) return { ok: false, reason: 'gone' };
+    return { ok: false, reason: 'failed' };
   }
 }

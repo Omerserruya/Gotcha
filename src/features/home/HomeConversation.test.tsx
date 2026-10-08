@@ -94,8 +94,22 @@ vi.mock('@/api/client/browser-api', () => ({ browserApi: api }));
 const nav = vi.hoisted(() => ({ params: new URLSearchParams() }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => nav.params }));
 vi.mock('@/i18n/navigation', () => ({
-  Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
-    <a href={href} {...rest}>
+  Link: ({
+    href,
+    children,
+    ...rest
+  }: {
+    href: string | { pathname: string; query?: Record<string, string> };
+    children: ReactNode;
+  }) => (
+    <a
+      href={
+        typeof href === 'string'
+          ? href
+          : `${href.pathname}?${new URLSearchParams(href.query ?? {})}`
+      }
+      {...rest}
+    >
       {children}
     </a>
   ),
@@ -709,5 +723,47 @@ describe('★★ title, scope and delete - each through its route', () => {
     const share = screen.getByTestId('conversation-share');
     expect(share).toHaveAttribute('aria-disabled', 'true');
     expect(share).toHaveTextContent('Next stage');
+  });
+});
+
+describe('★★ 03’s Ask lands here: a thread about one request, its box waiting (ai 9a86bfac)', () => {
+  const about = (over: Record<string, unknown> = {}) => ({
+    thread: { ...THREAD, id: 'th5', title: null, context: { approvalId: 'ap1' } },
+    messages: [],
+    activeRun: null,
+    ...over,
+  });
+
+  it('says what it is about and links back; the box is focused and nothing is sent', async () => {
+    api.get.mockImplementation(answering(about()));
+    nav.params = new URLSearchParams('thread=th5');
+    show();
+    await flush();
+    expect(screen.getByTestId('conversation-about')).toHaveTextContent(
+      'About a request waiting for approval. GOTCHA can explain it here; deciding it stays on its page.',
+    );
+    expect(screen.getByTestId('conversation-about-open')).toHaveAttribute(
+      'href',
+      '/approvals?id=ap1',
+    );
+    expect(screen.getByTestId('conversation-title')).toHaveTextContent(/^About a request$/);
+    expect(document.activeElement).toBe(screen.getByTestId('conversation-input'));
+    expect(sse.streams).toHaveLength(0);
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it('a thread with no context: no line, no focus taken', async () => {
+    api.get.mockImplementation(
+      answering({
+        thread: { ...THREAD, title: 'Open conversations' },
+        messages: [],
+        activeRun: null,
+      }),
+    );
+    nav.params = new URLSearchParams('thread=th1');
+    show();
+    await flush();
+    expect(screen.queryByTestId('conversation-about')).toBeNull();
+    expect(document.activeElement).not.toBe(screen.getByTestId('conversation-input'));
   });
 });

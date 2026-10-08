@@ -90,8 +90,20 @@ function Conversation({ chat }: { readonly chat: Chat }) {
   const t = useTranslations('home.conversation');
   const [draft, setDraft] = useState('');
   const end = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  /** 03's Ask: a thread about one approval request (ai 9a86bfac). */
+  const about = chat.thread?.context?.approvalId ?? null;
   const last = chat.turns.at(-1);
   const running = last?.status === 'running';
+
+  /*
+    Opened from a request's Ask: the box waits for the question, focused -
+    nothing is sent on anyone's behalf.
+  */
+  const fresh = about !== null && chat.opening === 'idle' && chat.turns.length === 0;
+  useEffect(() => {
+    if (fresh) input.current?.focus();
+  }, [fresh]);
 
   // The newest words in view as they arrive.
   useEffect(() => {
@@ -153,11 +165,25 @@ function Conversation({ chat }: { readonly chat: Chat }) {
             {t(chat.opening === 'missing' ? 'missing' : 'openFailed')}
           </p>
         ) : (
-          <ol className={styles.turns}>
-            {chat.turns.map((turn) => (
-              <TurnView key={turn.id} turn={turn} threadId={chat.thread?.id ?? null} />
-            ))}
-          </ol>
+          <>
+            {about ? (
+              <p className={styles.about} data-testid="conversation-about">
+                {t('about.line')}{' '}
+                <Link
+                  href={{ pathname: '/approvals', query: { id: about } }}
+                  className={styles.aboutLink}
+                  data-testid="conversation-about-open"
+                >
+                  {t('about.open')}
+                </Link>
+              </p>
+            ) : null}
+            <ol className={styles.turns}>
+              {chat.turns.map((turn) => (
+                <TurnView key={turn.id} turn={turn} threadId={chat.thread?.id ?? null} />
+              ))}
+            </ol>
+          </>
         )}
         <div ref={end} />
       </div>
@@ -168,6 +194,7 @@ function Conversation({ chat }: { readonly chat: Chat }) {
           {t('placeholder')}
         </label>
         <textarea
+          ref={input}
           id="conversation-input"
           className={styles.input}
           value={draft}
@@ -236,7 +263,12 @@ function Title({ chat }: { readonly chat: Chat }) {
   const t = useTranslations('home.conversation.title');
   const [editing, setEditing] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
-  const shown = chat.thread?.title ?? chat.turns[0]?.question ?? '';
+  const tc = useTranslations('home.conversation');
+  // Untitled until its first answer: a thread about a request says so meanwhile.
+  const shown =
+    chat.thread?.title ??
+    chat.turns[0]?.question ??
+    (chat.thread?.context ? tc('about.title') : '');
 
   if (editing !== null) {
     const save = async () => {

@@ -15,8 +15,8 @@ import {
   type PlanTarget,
 } from '@/api/contracts/approvals';
 
-import { approveRequest, rejectRequest, retryExecution } from './actions';
-import { Link } from '@/i18n/navigation';
+import { approveRequest, askAboutRequest, rejectRequest, retryExecution } from './actions';
+import { Link, useRouter } from '@/i18n/navigation';
 
 import type { ApprovalCustomer } from './approval-customers';
 import { MomentAfter, type DecidedTrace, type MomentOutcome } from './MomentAfter';
@@ -174,6 +174,22 @@ export function ApprovalsScreen({
   const [reason, setReason] = useState('');
   /** Omer, 2026-10-04: a closed choice, and "Other" to type one. */
   const [reasonChoice, setReasonChoice] = useState<RejectReason | null>(null);
+  const router = useRouter();
+  /** Ask: opening a Home thread about one request; a refusal, kept to that request. */
+  const [asking, setAsking] = useState(false);
+  const [askProblem, setAskProblem] = useState<{ id: string; text: string } | null>(null);
+  const onAsk = async (id: string) => {
+    setAsking(true);
+    setAskProblem(null);
+    const result = await askAboutRequest(id);
+    if (result.ok) {
+      // The thread knows the request; its box waits for the question - nothing is sent.
+      router.push({ pathname: '/home', query: { thread: result.threadId } });
+      return;
+    }
+    setAsking(false);
+    setAskProblem({ id, text: t(`detail3.askRefused.${result.reason}`) });
+  };
   /** The amount being edited, as typed; `null` when approving as asked. */
   const [edited, setEdited] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1008,16 +1024,20 @@ export function ApprovalsScreen({
                       {editLabel(selected)}
                     </span>
                   )}
-                  <span
+                  {/*
+                    03's Ask (ai 9a86bfac): a Home thread about this request.
+                    GOTCHA answers there - not the employee that asked - and
+                    can explain the request, never decide it.
+                  */}
+                  <button
+                    type="button"
                     className={styles.secondary}
-                    aria-disabled="true"
-                    title={t('detail3.askNotYet')}
+                    disabled={asking || busy}
                     data-testid="ask-ai"
+                    onClick={() => void onAsk(selected.id)}
                   >
-                    {requesterNames[selected.id]
-                      ? t('detail3.ask', { who: requesterNames[selected.id]! })
-                      : t('detail3.askAi')}
-                  </span>
+                    {asking ? t('detail3.asking') : t('detail3.askGotcha')}
+                  </button>
                   <button
                     type="button"
                     className={styles.reject}
@@ -1031,6 +1051,12 @@ export function ApprovalsScreen({
                     {t('action2.next', { count: after })}
                   </span>
                 </div>
+
+                {askProblem?.id === selected.id ? (
+                  <p className={styles.askProblem} role="alert" data-testid="ask-problem">
+                    {askProblem.text}
+                  </p>
+                ) : null}
 
                 {editAmountLive && edited !== null && editTarget(selected)?.original != null
                   ? (() => {

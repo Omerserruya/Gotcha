@@ -276,9 +276,6 @@
   "detail3": {
     "eyebrowAi": "התבקש על ידי עובד ה‑AI שלך · {time}",
     "editAmount": "עריכת סכום",
-    "ask": "לשאול את {who} שאלה",
-    "askAi": "לשאול את ה‑AI שאלה",
-    "askNotYet": "שאלה על בקשה תגיע בהמשך.",
     "reversible": "הפיך",
     "reversibleYes": "כן",
     "reversibleNo": "לא",
@@ -290,7 +287,13 @@
     "editInvalidMinor": "מספר שלם גדול מאפס.",
     "editDiscount": "עריכת הנחה",
     "editLabelPercent": "הנחה לאישור (%)",
-    "editInvalidPercent": "אחוז גדול מאפס, עד 100."
+    "editInvalidPercent": "אחוז גדול מאפס, עד 100.",
+    "askGotcha": "לשאול את GOTCHA על זה",
+    "asking": "פותחים…",
+    "askRefused": {
+      "gone": "אי אפשר לשאול על הבקשה הזו מכאן - היא כבר לא קיימת, או שהשיחה שלה לא גלויה לך.",
+      "failed": "זה לא נפתח. אפשר לנסות שוב."
+    }
   },
   "queueFoot": {
     "handled": "{count, plural, one {GOTCHA טיפלה היום בפעולה אחת לבד.} other {GOTCHA טיפלה היום ב-# פעולות לבד.}}",

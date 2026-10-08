@@ -202,6 +202,20 @@
     padding: var(--space-24) 40px 18px;
   }
 
+  /* 03's Ask: what this thread is about, and the way back to it. */
+  .about {
+    max-inline-size: 780px;
+    margin: 0 auto var(--space-16);
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .aboutLink {
+    color: var(--text-body);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
   .turns {
     display: flex;
     flex-direction: column;

@@ -51,6 +51,16 @@ export const threadSchema = z.object({
    * the range in words only.
    */
   scopeDates: z.object({ from: z.string(), to: z.string() }).nullable().catch(null).default(null),
+  /**
+   * A thread about one approval request (design 03, ai 9a86bfac): on create,
+   * GET and the list, and kept by a scope PATCH. The assistant there can
+   * only explain the request - no tool decides it.
+   */
+  context: z
+    .object({ approvalId: z.string().min(1) })
+    .nullable()
+    .catch(null)
+    .default(null),
 });
 export type Thread = z.infer<typeof threadSchema>;
 
