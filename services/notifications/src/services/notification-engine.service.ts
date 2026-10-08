@@ -25,6 +25,7 @@ import type { SystemEvent } from "./event-emitter.service";
 import { resolveRecipients, type RecipientSpec, type ResolvedUser } from "./recipient-resolver.service";
 import { renderTemplate } from "./templates";
 import { createInAppNotification } from "./in-app.service";
+import { loadPersonal, personalAllows, workspaceTimeZone, localTime, PERSONAL_DEFAULTS } from "./personal-preferences.service";
 import {
   getNotificationsEmailQueue,
   DEFAULT_NOTIF_JOB_OPTS,
@@ -139,13 +140,19 @@ export async function processEvent(event: SystemEvent): Promise<void> {
   }
 
   const prefs: any[] = await (prisma as any).notificationPreference.findMany({ where });
-  if (prefs.length === 0) return;
 
   // Department-scoped preferences override tenant-default ones for the same
   // event type. If both exist, drop the tenant-default - the department row
   // is more specific and the operator clearly meant to override.
   const hasDeptScoped = prefs.some((p) => p.departmentId);
-  const effective = hasDeptScoped ? prefs.filter((p) => p.departmentId) : prefs;
+  let effective = hasDeptScoped ? prefs.filter((p) => p.departmentId) : prefs;
+  // No rule for this event in the workspace: the built-in route, so it
+  // reaches someone (design 15, Step 1). It was silently dropped.
+  if (effective.length === 0) {
+    const fallback = defaultRoute(event);
+    if (!fallback) return;
+    effective = [fallback];
+  }
 
   // 2. Dedup once per event payload - even if multiple prefs would match,
   //    we don't want to re-fire identical bursts.
@@ -160,6 +167,8 @@ export async function processEvent(event: SystemEvent): Promise<void> {
   // twice if two rules overlap. Set keeps each tuple to a single delivery
   // per event.
   const delivered = new Set<string>();
+  // Each person's own switches and quiet hours (Step 0), read once per event.
+  let hhmm: string | null = null;
 
   for (const pref of effective) {
     // Conditions filter - skip the pref if any condition fails.
@@ -175,11 +184,14 @@ export async function processEvent(event: SystemEvent): Promise<void> {
       spec,
     });
     if (recipients.length === 0) continue;
+    const personal = await loadPersonal(recipients.map((u) => u.id));
+    hhmm ??= localTime(new Date(), await workspaceTimeZone(event.tenantId));
 
     for (const user of recipients) {
       for (const channel of channels) {
         const key = `${user.id}|${channel}`;
         if (delivered.has(key)) continue;
+        if (!personalAllows(personal.get(user.id) ?? PERSONAL_DEFAULTS, channel, event, hhmm)) continue;
         delivered.add(key);
         await deliverChannel({
           channel,
@@ -191,6 +203,29 @@ export async function processEvent(event: SystemEvent): Promise<void> {
       }
     }
   }
+}
+
+/**
+ * Who hears of an event when the workspace set no rule for it: the person it
+ * is about, else the workspace's admins. In-app only: email is opt-in (a
+ * routing rule), because dev sends real mail and a default would mail every
+ * admin on every event.
+ */
+const ADMINS_FOR = new Set([
+  "tool.approval_required", "tool.action_failed", "conversation.escalated", "integration.check_failed", "broadcast.completed",
+  "refund.issued", "discount.applied", "meeting.scheduled",
+  "invoice.paid", "payment.failed", "subscription.activated", "subscription.canceled", "subscription.past_due", "subscription.plan_changed",
+  "subscription.resumed", "subscription.suspended", "subscription.trial_started", "credit.threshold", "credit.exhausted",
+  "credit.auto_purchase_succeeded", "credit.auto_purchase_failed", "credit.auto_purchase_ceiling_reached",
+]);
+export function defaultRoute(event: SystemEvent): { recipients: RecipientSpec; channels: string[]; priority: string; conditions: null; departmentId: null } | null {
+  const base = { channels: ["in_app"], priority: "MEDIUM", conditions: null, departmentId: null } as const;
+  if (event.type === "conversation.assigned") {
+    const userId = event.metadata?.userId;
+    return userId ? { ...base, channels: [...base.channels], recipients: { type: "users", userIds: [userId] } as RecipientSpec } : null;
+  }
+  if (ADMINS_FOR.has(event.type)) return { ...base, channels: [...base.channels], recipients: { type: "tenant_owner" } as RecipientSpec };
+  return null;
 }
 
 export const AUTOMATION_NOTICE = "automation.notify_team";
@@ -221,7 +256,10 @@ export async function deliverAutomationNotice(event: SystemEvent): Promise<numbe
     for (const u of await resolveRecipients({ tenantId: event.tenantId, spec: { type: "tenant_owner" } as RecipientSpec })) users.set(u.id, u);
   }
   const link = typeof d.conversationId === "string" && d.conversationId ? `/inbox?conversation=${d.conversationId}` : undefined;
+  // The person's own in-app switch holds here too.
+  const personal = await loadPersonal([...users.keys()]);
   for (const user of users.values()) {
+    if (!(personal.get(user.id) ?? PERSONAL_DEFAULTS).inApp) continue;
     await deliverChannel({ channel: "in_app", user, event, tpl: { title: "Automation", body: message, ...(link ? { link } : {}) }, priority: "MEDIUM" });
   }
   return users.size;

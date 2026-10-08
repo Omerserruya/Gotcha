@@ -13,6 +13,10 @@ const { prismaMock, redisMock, emailQueueMock, publishEventMock } = vi.hoisted((
       notificationPreference: {
         findMany: vi.fn(),
       },
+      // Personal settings (design 15): none saved = the defaults.
+      userNotificationPreference: {
+        findMany: vi.fn(async () => []),
+      },
       user: {
         findMany: vi.fn(),
       },
@@ -58,6 +62,8 @@ vi.mock("@chatcenter/shared", async () => ({
   prisma: prismaMock,
   publishEvent: publishEventMock,
   getRedis: () => redisMock,
+  readDurableSetting: async () => null,
+  parseBusinessHours: () => null,
   // The queue name is declared in shared now that billing fills this queue too.
   // queues.ts imports it from there, so the mock has to carry it.
   NOTIFICATIONS_EMAIL_QUEUE_NAME: "notifications-email",
