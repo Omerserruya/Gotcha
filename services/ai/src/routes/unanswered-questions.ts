@@ -28,7 +28,7 @@
  * is the entire point of the screen: the customer's own words are what the
  * owner reads in order to answer them.
  */
-import { Router, type Request, type Response } from "express";
+import express, { Router, type Request, type Response } from "express";
 import {
   prisma,
   authenticate,
@@ -36,6 +36,7 @@ import {
   requireOnboardingOrActiveTenant,
   requirePermissionOrRole,
 } from "@chatcenter/shared";
+import { answerUnansweredQuestion, GapAnswerError, MAX_ANSWER } from "../services/knowledge-gap-answer.service";
 
 const router = Router();
 
@@ -142,5 +143,39 @@ router.get("/knowledge/unanswered-questions", async (req: Request, res: Response
     res.status(500).json({ error: "Failed to read unanswered questions" });
   }
 });
+
+/**
+ * POST /api/knowledge/unanswered-questions/:id/answer { answer }
+ * The owner answers it: the answer becomes knowledge, the question is
+ * answered (services/knowledge-gap-answer.service.ts). Writing knowledge
+ * takes the write permission on top of the read gate above.
+ */
+router.post(
+  "/knowledge/unanswered-questions/:id/answer",
+  express.json({ limit: "100kb" }),
+  requirePermissionOrRole("ai:knowledge:write", "ADMIN"),
+  async (req: Request, res: Response): Promise<void> => {
+    const raw = req.body?.answer;
+    // Kept as the owner wrote it; only the ends are trimmed.
+    const answer = typeof raw === "string" ? raw.trim() : "";
+    if (!answer) { res.status(400).json({ error: "An answer is required", code: "ANSWER_REQUIRED" }); return; }
+    if (answer.length > MAX_ANSWER) { res.status(400).json({ error: "The answer is too long", code: "ANSWER_TOO_LONG", max: MAX_ANSWER }); return; }
+    const userId = ((req as any).user?.userId ?? (req as any).user?.id) as string | undefined;
+    if (!userId) { res.status(401).json({ error: "no user context" }); return; }
+    try {
+      const r = await answerUnansweredQuestion({ tenantId: req.tenantId!, userId, questionId: String(req.params.id), answer });
+      res.json({ data: { resolvedAt: r.resolvedAt.toISOString(), documentId: r.documentId, resolvedBy: r.resolvedBy } });
+    } catch (err) {
+      if (err instanceof GapAnswerError) {
+        res.status(err.status).json(err.code === "QUESTION_NOT_FOUND"
+          ? { error: "Question not found", code: err.code }
+          : { error: "The answer was saved but could not be learned yet; try again", code: err.code });
+        return;
+      }
+      console.error("unanswered-questions answer error:", err);
+      res.status(500).json({ error: "Failed to answer the question" });
+    }
+  },
+);
 
 export default router;
