@@ -198,3 +198,19 @@ describe("★ the read card from the replay of item 4 (2026-10-08)", () => {
     expect(src).toMatch(/never \\"the agent\\", \\"the bot\\" or \\"הסוכן\\"/);
   });
 });
+
+describe("★ wording from the replay of 5ed111fc (2026-10-08)", () => {
+  it("a record card's answer says what it means, never the fields one by one", async () => {
+    const { RECORD_SHOWN_AS } = await import("../services/assistant-query.service");
+    expect(RECORD_SHOWN_AS).toMatch(/one or two sentences/);
+    expect(RECORD_SHOWN_AS).toMatch(/never read the card's fields back one by one/);
+    expect((await read({ customerId: "omer" })).out.shownAs).toBe(RECORD_SHOWN_AS);
+  });
+
+  it("Hebrew style: GOTCHA takes no ה-, a phone is טלפון, automations are אוטומציה", () => {
+    const prompt = readFileSync(join(__dirname, "../prompts/system-copilot.md"), "utf-8");
+    expect(prompt).toMatch(/GOTCHA is a name and never takes ה-/);
+    expect(prompt).toMatch(/a phone number is "טלפון", never "מכשיר"/);
+    expect(prompt).toMatch(/"אוטומציה", never "וורקפלו" or "workflow"/);
+  });
+});

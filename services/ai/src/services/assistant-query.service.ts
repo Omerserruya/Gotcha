@@ -407,6 +407,14 @@ export const LIST_SHOWN_AS =
   "the rows go with your answer, each with its link: say the finding in ONE sentence (how many, and which matter); never describe the card, its rows or its buttons (no \"the card shows\", no \"click show all\"), never repeat the rows, names, messages or times, never number them";
 
 /**
+ * One thing's details on a card (a customer, a conversation): the model read
+ * every field back in a paragraph (2026-10-08). The answer says what they
+ * mean.
+ */
+export const RECORD_SHOWN_AS =
+  "the details go with your answer as a card: say what they mean in one or two sentences (what is open, what waits, what is missing); never read the card's fields back one by one (contact details, tags, orders, the last message) and never describe the card";
+
+/**
  * How the assistant names a customer. An unnamed Shopify shopper is stored as
  * "Shopper on <shop>.myshopify.com" (shopify-chat-public): long, English, and
  * the store already shows in the channel.

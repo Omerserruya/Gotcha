@@ -15,7 +15,7 @@
 import { getCustomerMemory } from "./customer-memory.service";
 import { getCustomerOrders } from "./customer-orders.service";
 import { findCustomers, visibleCustomer, type CustomerCtx } from "./assistant-customers.service";
-import { queryConversations, normalizeQuery, tenantTimeZone, SHOWN_AS, cardsOf, type ConversationQuery } from "./assistant-query.service";
+import { queryConversations, normalizeQuery, tenantTimeZone, RECORD_SHOWN_AS, cardsOf, type ConversationQuery } from "./assistant-query.service";
 import { channelName, whenText } from "./system-tools.service";
 import { money } from "./assistant-commerce-query.service";
 
@@ -119,7 +119,7 @@ export async function customerCardResult(ctx: CardCtx, args: { customerId?: stri
       notes: notes === null ? null : notes.slice(0, 3).map((n) => ({ text: n.body.slice(0, 200), by: n.authorName, when: whenText(new Date(n.createdAt), ctx.locale, tz, false) })),
       ...(ctx.canReadCommerce ? { orders: orderRows } : {}),
       conversationRows: conversations.summary.rows ?? [],
-      shownAs: SHOWN_AS,
+      shownAs: RECORD_SHOWN_AS,
       cards: cardsOf(blocks, ctx.locale),
     },
     blocks,

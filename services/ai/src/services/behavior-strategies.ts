@@ -89,7 +89,10 @@ const QUALIFY: StrategyContract = {
     "User reveals a buying signal (asks about price, demo, plans, timeline) - strategy switches to CONVERT.",
     "Three rounds of qualification have completed without progress - strategy switches to GUIDE.",
   ],
-  knowledgeRetrieval: "skip",
+  // A customer's FIRST message runs here, and "do you ship to Eilat?" was
+  // answered without reading the knowledge, and never recorded as a gap
+  // (2026-10-08, Omer: when_relevant). A greeting still reads nothing.
+  knowledgeRetrieval: "when_relevant",
   defaultToneIntensity: "soft",
 };
 

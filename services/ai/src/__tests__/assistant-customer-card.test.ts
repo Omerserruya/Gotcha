@@ -90,6 +90,8 @@ describe("★ the customer's card", () => {
     const { out, artifacts } = await card({ customerId: "omer" });
     expect(out).toMatchObject({ ok: true, name: "Omer Serruya", channels: ["WhatsApp", "Web chat"], tags: ["vip", "returning"], openConversations: 1, conversations: 2 });
     expect(out.learned).toEqual(["size: M", "prefers: WhatsApp"]);
+    const { RECORD_SHOWN_AS } = await import("../services/assistant-query.service");
+    expect(out.shownAs).toBe(RECORD_SHOWN_AS);
     expect(out.notes).toEqual([{ text: "Prefers evening calls", by: "Noa", when: "10 September" }]);
     expect(out.orders).toEqual([{ number: "#1016", total: "₪250.00", state: "שולם · נשלח", when: "20 September" }]);
     const [profile, rows] = artifacts.blocks;

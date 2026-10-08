@@ -12,7 +12,7 @@
  */
 import { prisma, REAL_CONVERSATION, visibilityClause, type Viewer } from "@chatcenter/shared";
 import { channelName, whenText } from "./system-tools.service";
-import { tenantTimeZone, customerKeys, customerDisplayName, SHOWN_AS, cardsOf } from "./assistant-query.service";
+import { tenantTimeZone, customerKeys, customerDisplayName, RECORD_SHOWN_AS, cardsOf } from "./assistant-query.service";
 import { findCustomers } from "./assistant-customers.service";
 import { privateNumbers, conversationIsPrivate, privateConversationsClause } from "../lib/private-numbers";
 import { summaryFields } from "../lib/summary-fields";
@@ -139,7 +139,7 @@ export async function readConversationResult(ctx: ReadCtx, args: ReadArgs): Prom
         // Null, not "": no text (a photo, a voice note) is a fact to say plainly.
         text: m.body ? m.body.slice(0, 600) : null,
       })),
-      shownAs: SHOWN_AS,
+      shownAs: RECORD_SHOWN_AS,
       cards: cardsOf(blocks, ctx.locale),
     },
     blocks,

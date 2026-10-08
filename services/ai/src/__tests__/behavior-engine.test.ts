@@ -516,14 +516,17 @@ describe("BehaviorEngine - playbook selection", () => {
 });
 
 describe("BehaviorEngine - KB gating (BEL-controlled)", () => {
-  it("QUALIFY (knowledgeRetrieval=skip) → shouldRetrieveKB=false even on rich text", () => {
+  it("★ QUALIFY (knowledgeRetrieval=when_relevant, Omer 2026-10-08): a first message that asks something reads the knowledge; a greeting does not", () => {
     const s = computeBehaviorState({
       mode: "agent",
       identity: baseIdentity.newLead,
       request: { lastMessage: "tell me about your features and integrations", messageCount: 1 },
     });
     expect(s.strategy).toBe("QUALIFY");
-    expect(shouldRetrieveKB(s, "tell me about your features and integrations")).toBe(false);
+    expect(shouldRetrieveKB(s, "tell me about your features and integrations")).toBe(true);
+    expect(shouldRetrieveKB(s, "do you ship to Eilat on Fridays?")).toBe(true);
+    expect(shouldRetrieveKB(s, "hi")).toBe(false);
+    expect(shouldRetrieveKB(s, "ok")).toBe(false);
   });
 
   it("RESOLVE (knowledgeRetrieval=always) → shouldRetrieveKB=true even on bare 'ok'", () => {
