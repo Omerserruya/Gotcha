@@ -292,7 +292,12 @@ describe("adding a card sends the provider somewhere to return to", () => {
    * the checkout route next door passed one.
    */
   it("passes a successUrl when starting a tokenization session", () => {
-    expect(route).toMatch(/startTokenizationSession\(\{[\s\S]*?successUrl:/);
+    // Through the closed list of return targets (card-return-target.test.ts
+    // pins what each resolves to): every branch carries a successUrl.
+    expect(route).toMatch(/startTokenizationSession\(\{[\s\S]*?\.\.\.returnUrls/);
+    expect(route).toMatch(/const returnUrls = cardReturnUrls\(req\.body\?\.returnTo\)/);
+    expect(route).toMatch(/return \{ successUrl: cardReturnUrl\(\) \}/);
+    expect(route).toMatch(/return \{ successUrl: buildReturnUrl\(path\), failureUrl: back, cancelUrl: back \}/);
   });
 
   it("builds that URL on our own origin rather than trusting the request", () => {
