@@ -506,7 +506,8 @@ async function generateBriefText(args: {
 function fallbackBrief(locale: string, hasHistory: boolean): string {
   const fallbacks: Record<string, { returning: string; newCustomer: string }> = {
     he: {
-      returning: "לקוח חוזר - ראה שיחות קודמות להקשר.",
+      // Impersonal: the reader's gender is unknown ("ראה" spoke to a man).
+      returning: "לקוח חוזר. ההקשר נמצא בשיחות הקודמות.",
       newCustomer: "לקוח חדש - אין אינטראקציות קודמות מתועדות.",
     },
     en: {

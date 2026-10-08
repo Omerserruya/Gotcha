@@ -25,6 +25,8 @@ const state = vi.hoisted(() => ({
   seenConvWhere: null as any,
   brief: null as any,
   refreshed: [] as string[],
+  locales: [] as string[],
+  workspaceLocale: "he",
 }));
 
 vi.mock("@chatcenter/shared", () => ({
@@ -47,11 +49,13 @@ vi.mock("@chatcenter/shared", () => ({
   authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1" }; n(); },
   resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "t1"; n(); },
   requireActiveTenant: () => (_q: any, _s: any, n: any) => n(),
+  resolveEffectiveLocale: async () => ({ effective: state.workspaceLocale }),
 }));
 
 vi.mock("../services/customer-brief.service", () => ({
-  getCustomerBrief: async () => state.brief,
-  refreshCustomerBriefFromConversation: async ({ conversationId }: any) => {
+  getCustomerBrief: async ({ locale }: any) => { state.locales.push(locale); return state.brief; },
+  refreshCustomerBriefFromConversation: async ({ conversationId, locale }: any) => {
+    state.locales.push(locale);
     state.refreshed.push(conversationId);
     return state.brief;
   },
@@ -155,6 +159,17 @@ describe("the three outcomes are told apart", () => {
     expect(res.body.meta.reason).toBe("no_conversations");
     expect(res.body.meta.conversation_count).toBe(0);
     expect(res.body.signals).toEqual([]);
+  });
+
+  it("★ asked for no language: the reader's (else the workspace's), never English by default", async () => {
+    state.locales = [];
+    state.workspaceLocale = "he";
+    await request(app).post("/api/customer-summary").send({ contactId: "c1" });
+    expect(state.locales.length).toBeGreaterThan(0);
+    expect(state.locales.every((l) => l === "he")).toBe(true);
+    state.locales = [];
+    await request(app).post("/api/customer-summary").send({ contactId: "c1", locale: "en" });
+    expect(state.locales.every((l) => l === "en")).toBe(true);
   });
 
   it("answers in Hebrew when asked", async () => {

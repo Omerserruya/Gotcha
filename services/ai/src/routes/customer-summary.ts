@@ -12,7 +12,7 @@
  */
 
 import { Router, Request, Response } from "express";
-import { authenticate, resolveTenant, requireActiveTenant, prisma, canViewConversation, visibilityClause, viewerOf } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireActiveTenant, prisma, canViewConversation, visibilityClause, viewerOf, resolveEffectiveLocale } from "@chatcenter/shared";
 import {
   getCustomerBrief,
   refreshCustomerBriefFromConversation,
@@ -81,7 +81,10 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), async (req:
     // in tenant A read tenant B's customer brief by naming B's conversation id.
     const tenantId = req.tenantId || "";
     const localeRaw = typeof body.locale === "string" ? body.locale.toLowerCase().slice(0, 8) : "";
-    const locale = localeRaw || "en";
+    // Asked for none: the reader's own language, else the workspace's, never
+    // English by default (a Hebrew workspace's panel read "Returning customer -
+    // see prior conversations for context", 2026-10-08).
+    const locale = localeRaw || (await Promise.resolve().then(() => resolveEffectiveLocale({ tenantId, userId: (req as any).user?.userId })).then((r) => r.effective).catch(() => "en"));
     const forceRefresh = !!body.refresh;
 
     // ── Entering by CONTACT as well as by conversation ──
