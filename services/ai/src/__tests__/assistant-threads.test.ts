@@ -658,7 +658,7 @@ describe("★ suggestions only from tools (2026-10-08: 'List the 17 open convers
 
   it("★ an action follow-up names an action that can run, or it is dropped ('transfer it to a colleague', 2026-10-08)", () => {
     const s = new SuggestionsSplitter();
-    s.push('ok [[suggestions]] [{"text": "Transfer it to a colleague", "tool": "propose_plan"}, {"text": "Assign it to Noa", "tool": "propose_plan", "action": "assign_conversation"}, {"text": "Tag him VIP", "tool": "propose_plan", "action": "tag_contact"}]');
+    s.push('ok [[suggestions]] [{"text": "Transfer it to a colleague", "tool": "propose_plan"}, {"text": "Refund him", "tool": "propose_plan", "action": "issue_refund"}, {"text": "Tag him VIP", "tool": "propose_plan", "action": "tag_contact"}]');
     expect(s.end({ tools: new Set(["propose_plan"]), noSelection: true }).suggestions).toEqual(["Tag him VIP"]);
     expect(threadSystemLines({ range: "last_7", channels: "all" }, "en").join("\\n")).toMatch(/"tool": "propose_plan", "action": one of send_message, tag_contact/);
   });

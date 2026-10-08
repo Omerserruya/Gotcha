@@ -193,25 +193,8 @@ const SYSTEM_RECENT_ACTIVITY = {
   },
 };
 
-/**
- * The actions an approved plan can really carry out (action-executor). Four
- * more names exist there (update_crm, update_contact, create_ticket,
- * create_task) but are stubs that always fail, and offering them meant a plan
- * the owner approved would fail on execute. A step outside this list is
- * refused before any approval exists.
- */
-export const PLAN_ACTIONS = [
-  "send_message",
-  "tag_contact",
-  "schedule_followup",
-  "schedule_meeting",
-  "create_broadcast",
-  "schedule_broadcast",
-  "create_workflow",
-  "resolve_identity",
-  "merge_contacts",
-  "link_customer_identifier",
-] as const;
+import { PLAN_ACTIONS } from "../lib/plan-actions";
+export { PLAN_ACTIONS };
 
 const PROPOSE_PLAN_TOOL = {
   type: "function" as const,
@@ -220,7 +203,8 @@ const PROPOSE_PLAN_TOOL = {
     description:
       "Bundle a multi-step or risky operation into an approval plan. The platform will surface it in the operator's approval queue; the operator clicks Approve to execute the steps via the action-planner runtime. " +
       "Use this for: sending a customer a message, tagging customers, a follow-up or a meeting, building or scheduling a broadcast, creating a workflow, or linking and merging a customer's identities, when a person should review it before anything changes. " +
-      "Only the actions listed in the steps can run: refunds, assigning, closing, notes, CRM updates, tickets and tasks cannot be proposed yet. " +
+      "Also: claiming, assigning or closing a conversation, returning it to GOTCHA, adding a note to a customer, and answering a question customers asked (an unanswered question becomes knowledge). " +
+      "Only the actions listed in the steps can run: refunds, CRM updates, tickets and tasks cannot be proposed yet. " +
       "Do NOT use this for read-only operations or single low-risk actions (those you can call directly).",
     parameters: {
       type: "object",
@@ -241,7 +225,7 @@ const PROPOSE_PLAN_TOOL = {
               tool: {
                 type: "string",
                 enum: [...PLAN_ACTIONS],
-                description: "The action to carry out. Only these can run; anything else (assigning, closing, notes, CRM updates, tickets, tasks) cannot be proposed yet.",
+                description: "The action to carry out. Only these can run; anything else (refunds, CRM updates, tickets, tasks) cannot be proposed yet. Conversation and note actions run as the person who approves them.",
               },
               params: { type: "object", description: "Tool-specific parameters." },
               reason: { type: "string", description: "Why this step is included." },
