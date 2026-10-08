@@ -13,7 +13,7 @@ vi.mock('next-intl/server', () => ({
 }));
 
 const download = vi.hoisted(() => vi.fn());
-vi.mock('@/api/client/download', () => ({ downloadFromPlatform: download }));
+vi.mock('@/api/client/download', () => ({ downloadFromApp: download }));
 
 import { AuditSection } from './SecuritySections';
 
@@ -105,13 +105,13 @@ describe('★ 16 - the audit card’s head is 02’s', () => {
     expect(screen.getByTestId('audit-export').tagName).toBe('BUTTON');
   });
 
-  it('★ Export takes the whole log through the BFF; a refusal is said, never saved', async () => {
+  it('★ Export takes the readable log, in the reader’s language; a refusal is said, never saved', async () => {
     download.mockResolvedValueOnce({ ok: false, status: 403 });
     await show([entry('a', {})]);
     await act(async () => {
       fireEvent.click(screen.getByTestId('audit-export'));
     });
-    expect(download).toHaveBeenCalledWith('/api/audit-logs/export');
+    expect(download).toHaveBeenCalledWith('/api/exports/audit-log?locale=en');
     expect(screen.getByTestId('audit-export-problem')).toHaveTextContent(
       'You need permission to read the audit log',
     );

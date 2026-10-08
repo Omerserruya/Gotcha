@@ -30,31 +30,7 @@ export function serverApi(): HttpClient {
      * Server Component and a browser fetch would authenticate as different
      * principals on the same page.
      */
-    async prepareHeaders(): Promise<Record<string, string>> {
-      /*
-       * ★ THE INTERFACE LANGUAGE, ON EVERY CALL. Routes that answer in words
-       *   (analytics topics, the assistant) choose the language by `?locale=`
-       *   or Accept-Language, and a server-to-server call carried neither -
-       *   /he/analytics read its topic names in English (Backend 3343c75f).
-       *   Unknown here (outside a request): no header, never a guess.
-       */
-      const language = await interfaceLanguage();
-      const lang: Record<string, string> = language ? { 'accept-language': language } : {};
-      if (env.PLATFORM_SESSION_COOKIE) {
-        const platform = (await cookies()).get(env.PLATFORM_SESSION_COOKIE);
-        if (platform) {
-          return { cookie: `${platform.name}=${platform.value}`, ...lang };
-        }
-      }
-
-      const session = await activeSession();
-      if (!session) return lang;
-      return {
-        authorization: `Bearer ${session.at}`,
-        ...(session.tid ? { [TENANT_HEADER]: session.tid } : {}),
-        ...lang,
-      };
-    },
+    prepareHeaders: platformHeaders,
     // A streamed section asks after its reads: it cannot redirect from a loader.
     onUnauthenticated() {
       markSessionRejected();
@@ -64,6 +40,42 @@ export function serverApi(): HttpClient {
       logger[level]('api.request_failed', error.toDiagnostics());
     },
   });
+}
+
+/**
+ * The headers a call to the platform carries from this request: the
+ * platform's own session cookie if this app can see it, otherwise this app's
+ * session (bearer + tenant) - the same precedence as the BFF - and the
+ * interface language. No session: only the language.
+ *
+ * Exported for the one route that streams a platform file through a
+ * transform (the audit export); every JSON call goes through `serverApi()`.
+ */
+export async function platformHeaders(): Promise<Record<string, string>> {
+  const env = serverEnv();
+  /*
+   * ★ THE INTERFACE LANGUAGE, ON EVERY CALL. Routes that answer in words
+   *   (analytics topics, the assistant) choose the language by `?locale=`
+   *   or Accept-Language, and a server-to-server call carried neither -
+   *   /he/analytics read its topic names in English (Backend 3343c75f).
+   *   Unknown here (outside a request): no header, never a guess.
+   */
+  const language = await interfaceLanguage();
+  const lang: Record<string, string> = language ? { 'accept-language': language } : {};
+  if (env.PLATFORM_SESSION_COOKIE) {
+    const platform = (await cookies()).get(env.PLATFORM_SESSION_COOKIE);
+    if (platform) {
+      return { cookie: `${platform.name}=${platform.value}`, ...lang };
+    }
+  }
+
+  const session = await activeSession();
+  if (!session) return lang;
+  return {
+    authorization: `Bearer ${session.at}`,
+    ...(session.tid ? { [TENANT_HEADER]: session.tid } : {}),
+    ...lang,
+  };
 }
 
 /** The interface locale of this request, or `null` where there is none to read. */

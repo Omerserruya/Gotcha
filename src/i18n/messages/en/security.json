@@ -97,6 +97,19 @@
     "exportProblem": {
       "forbidden": "You need permission to read the audit log to export it.",
       "failed": "It didn't export. Try again."
+    },
+    "csv": {
+      "when": "When",
+      "what": "What happened",
+      "by": "By",
+      "about": "About",
+      "worked": "Worked",
+      "yes": "Yes",
+      "no": "No",
+      "notRecorded": "Not recorded",
+      "aboutConversation": "A conversation",
+      "aboutCustomer": "A customer",
+      "incomplete": "The export stopped here - this file is incomplete"
     }
   },
   "policy": {

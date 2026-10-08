@@ -1,19 +1,21 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useState } from 'react';
 
-import { downloadFromPlatform } from '@/api/client/download';
+import { downloadFromApp } from '@/api/client/download';
 
 import styles from './Security.module.css';
 
 /**
- * 16's Export: the whole audit log as CSV (`GET /api/audit-logs/export`).
+ * 16's Export: the whole audit log as CSV, in the reader's words
+ * (`/api/exports/audit-log`, which reads the platform's
+ * `GET /api/audit-logs/export` as it streams - see that route).
  *
- * The route: signed in, its workspace (resolveTenant; every row by tenant
- * id), and the same gate as reading the log - ADMIN, or a role with
- * `settings:workspace:update`. Through the BFF, saved under the platform's
- * own name; a refusal is said here, never saved as a file.
+ * The platform's route: signed in, its workspace (resolveTenant; every row
+ * by tenant id), and the same gate as reading the log - ADMIN, or a role
+ * with `settings:workspace:update`. A refusal is said here, never saved as
+ * a file.
  *
  * ⚠ The route streams: a failure part-way ends the file with its own line,
  *   "EXPORT FAILED - this file is incomplete", rather than a short file that
@@ -21,6 +23,7 @@ import styles from './Security.module.css';
  */
 export function ExportAuditLog() {
   const t = useTranslations('security.audit');
+  const locale = useLocale();
   const [state, setState] = useState<'idle' | 'getting' | 'forbidden' | 'failed'>('idle');
   return (
     <span className={styles.exportWrap}>
@@ -31,7 +34,8 @@ export function ExportAuditLog() {
         data-testid="audit-export"
         onClick={async () => {
           setState('getting');
-          const got = await downloadFromPlatform('/api/audit-logs/export');
+          // The readable export: the screen's words first, the platform's columns after.
+          const got = await downloadFromApp(`/api/exports/audit-log?locale=${locale}`);
           if (!got.ok) {
             setState(got.status === 403 ? 'forbidden' : 'failed');
             return;

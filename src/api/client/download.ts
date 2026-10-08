@@ -25,3 +25,22 @@ export async function downloadFromPlatform(
     return { ok: false, status: null };
   }
 }
+
+/**
+ * A file this app makes itself (an `/api/…` route of its own, such as the
+ * readable audit export) - same answer as above.
+ */
+export async function downloadFromApp(
+  path: `/api/${string}`,
+): Promise<
+  | { readonly ok: true; readonly blob: Blob }
+  | { readonly ok: false; readonly status: number | null }
+> {
+  try {
+    const response = await fetch(appPath(path), { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) return { ok: false, status: response.status };
+    return { ok: true, blob: await response.blob() };
+  } catch {
+    return { ok: false, status: null };
+  }
+}

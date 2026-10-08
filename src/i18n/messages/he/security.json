@@ -97,6 +97,19 @@
     "exportProblem": {
       "forbidden": "צריך הרשאה לקרוא את יומן הביקורת כדי לייצא אותו.",
       "failed": "הייצוא לא הצליח. אפשר לנסות שוב."
+    },
+    "csv": {
+      "when": "מתי",
+      "what": "מה קרה",
+      "by": "על ידי",
+      "about": "על מה",
+      "worked": "הצליח",
+      "yes": "כן",
+      "no": "לא",
+      "notRecorded": "לא נרשם",
+      "aboutConversation": "שיחה",
+      "aboutCustomer": "לקוח",
+      "incomplete": "הייצוא נעצר כאן - הקובץ הזה חלקי"
     }
   },
   "policy": {
