@@ -92,6 +92,33 @@ export type WebsiteWidget = z.infer<typeof websiteWidgetSchema>['data'];
 const when = z.string().nullable().catch(null).default(null);
 
 /**
+ * WooCommerce through its plugin (woocommerce-plugin-v1 §5, Backend
+ * 1e90d585): each site that connected the plugin, and the zip to install.
+ *
+ * ⚠ A site's status is not guessed: one the screen does not know fails the
+ *   read, as a shop's does - never "Connected" for a site in a state it
+ *   cannot name. `downloadUrl` absent: a service before the plugin - the
+ *   row stays a status.
+ */
+export const WOO_SITE_STATUSES = ['connected', 'deactivated', 'removed'] as const;
+const wooInstallSchema = z.object({
+  /** `use_code` until a site connects through the plugin, then `plugin`. */
+  status: z.string().catch('use_code'),
+  sites: z
+    .array(
+      z.object({
+        id: z.string(),
+        siteUrl: z.string(),
+        status: z.enum(WOO_SITE_STATUSES),
+        lastSeenAt: when,
+        pluginVersion: z.string().nullable().catch(null).default(null),
+      }),
+    )
+    .default([]),
+  downloadUrl: z.string().nullable().catch(null).default(null),
+});
+
+/**
  * Where the widget is installed, per platform.
  *
  * An unknown status is not guessed into a known one: it fails the read, and
@@ -121,11 +148,12 @@ export const widgetInstallSchema = z.object({
         themeEditorUrl: z.string().nullable().catch(null).default(null),
       }),
     ),
-    woocommerce: z.object({ status: z.string() }).catch({ status: 'use_code' }),
+    woocommerce: wooInstallSchema.default({ status: 'use_code', sites: [], downloadUrl: null }),
   }),
 });
 export type WidgetInstall = z.infer<typeof widgetInstallSchema>['data'];
 export type ShopifyPlace = WidgetInstall['shopify'][number];
+export type WooSite = WidgetInstall['woocommerce']['sites'][number];
 
 /** Where the widget answers visitors now: the code seen on a page, or a shop with its embed loading. */
 export function isLive(install: WidgetInstall): boolean {

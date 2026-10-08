@@ -698,6 +698,42 @@
         "limit": "Your plan has no room for another channel",
         "forbidden": "You don't have permission to add a channel",
         "failed": "The code wasn't made. Try again"
+      },
+      "wooPlugin": {
+        "pluginName": "GOTCHA for WooCommerce",
+        "steps": "Download \"{name}\", then in WordPress: Plugins → Add New → Upload Plugin. Turn it on, and press \"Connect to GOTCHA\" under WooCommerce → GOTCHA.",
+        "download": "Download the plugin",
+        "downloading": "Downloading…",
+        "downloadProblem": {
+          "forbidden": "You need permission to connect business systems to download it.",
+          "failed": "It didn't download. Try again."
+        },
+        "site": "WooCommerce site",
+        "tag": {
+          "connected": "Connected",
+          "deactivated": "Turned off",
+          "removed": "Removed"
+        },
+        "line": {
+          "connected": "The plugin shows the chat on this site.",
+          "deactivated": "The plugin is turned off in WordPress - turn it on there to show the chat.",
+          "removed": "The plugin was removed from this site."
+        },
+        "lastSeen": "Last heard from {when}.",
+        "version": "Plugin {version}.",
+        "remove": {
+          "button": "Disconnect",
+          "title": "Disconnect {host}?",
+          "what": "The chat stops on this site, and its plugin shows \"Not connected\". You can connect it again from WordPress.",
+          "yes": "Disconnect",
+          "keep": "Keep it",
+          "removing": "Disconnecting…",
+          "problem": {
+            "gone": "It's already gone.",
+            "forbidden": "You need permission to disconnect business systems.",
+            "failed": "It wasn't disconnected. Try again."
+          }
+        }
       }
     },
     "preview": {
@@ -716,5 +752,42 @@
   "widgetRow": {
     "name": "Website widget",
     "nowhere": "Not installed anywhere yet"
+  },
+  "wooConnect": {
+    "tabTitle": "Connect WooCommerce",
+    "incomplete": "This link is missing what WordPress sends with it. Press \"Connect to GOTCHA\" in WordPress again.",
+    "title": "Connect {site} to GOTCHA",
+    "workspace": "Workspace: {workspace}",
+    "workspaceUnread": "The workspace you're signed in to.",
+    "otherWorkspace": "To connect another workspace, sign in to it, then press \"Connect to GOTCHA\" in WordPress again.",
+    "back": {
+      "denied": "The store didn't approve GOTCHA. Approve it to continue.",
+      "insufficient_permissions": "Your WordPress user can't approve this - a store administrator must.",
+      "other": "The store's approval didn't finish. Try again."
+    },
+    "store": {
+      "this": "{site} is connected to this workspace.",
+      "other": "This workspace is connected to another store, {store}. Press Connect in that store's WordPress, or change the store in Studio · Business systems.",
+      "none": "First, {site} approves GOTCHA - you'll come back here.",
+      "unknown": "GOTCHA checks that {site} is this workspace's store."
+    },
+    "widget": {
+      "create": "The website chat is created for this workspace - the same one the code snippet loads."
+    },
+    "returnStep": "Then back to WordPress, where the plugin finishes connecting.",
+    "approve": "Approve on {site}",
+    "opening": "Opening…",
+    "connect": "Connect",
+    "connecting": "Connecting…",
+    "cancel": "Back to WordPress",
+    "problem": {
+      "store_not_connected": "This store isn't connected to the workspace yet - approve it first.",
+      "bad_return": "The plugin's page isn't on this store. Press \"Connect to GOTCHA\" in WordPress again.",
+      "bad_nonce": "This link isn't valid anymore. Press \"Connect to GOTCHA\" in WordPress again.",
+      "no_widget": "The website chat isn't there yet. Try again.",
+      "forbidden": "You need permission to connect business systems.",
+      "invalid_store": "That isn't a store address GOTCHA can open.",
+      "failed": "It didn't connect. Try again."
+    }
   }
 }

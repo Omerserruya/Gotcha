@@ -7,7 +7,6 @@ import {
   ImageIcon,
   MessageCircle,
   Pencil,
-  Plug,
   ShoppingBag,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -41,10 +40,7 @@ import {
   type WidgetAssignment,
   type WidgetInstall,
 } from '@/api/contracts/website-widget';
-import {
-  UnavailableAction,
-  UnavailableItem,
-} from '@/design-system/primitives/unavailable/Unavailable';
+import { UnavailableItem } from '@/design-system/primitives/unavailable/Unavailable';
 import { connectWebChat } from '@/features/channels/actions';
 import { ShopifyConnect } from '@/features/capabilities/ShopifyConnect';
 import type { ShopifyAvailability } from '@/features/capabilities/load-capabilities';
@@ -57,6 +53,7 @@ import type { ShopifyData } from './load-website-widget';
 import { saveWebsiteWidget } from './website-widget-actions';
 import styles from './Webchat.module.css';
 import { WidgetAssignmentCard } from './WidgetAssignment';
+import { WooPlugin } from './WooPlugin';
 
 /** How long the editor waits after the last change before saving it. */
 export const SAVE_AFTER_MS = 700;
@@ -961,7 +958,6 @@ function Install({
   readonly shopifyAvailability: ShopifyAvailability | null;
 }) {
   const t = useTranslations('channels.webchat.install');
-  const tw = useTranslations('channels.webchat');
   if (install === null) {
     return (
       <p className={styles.rowHint} role="status" data-testid="webchat-install-unread">
@@ -998,22 +994,7 @@ function Install({
             />
           </div>
         )}
-        <div className={styles.store} data-testid="webchat-woo">
-          <span className={styles.storeMark} data-store="woo" aria-hidden="true">
-            <Plug size={15} />
-          </span>
-          <span className={styles.toggleText}>
-            <span>{t('woo')}</span>
-            <span className={styles.rowHint}>{t('wooHint')}</span>
-            <span className={styles.why}>{t('wooWhy')}</span>
-          </span>
-          <UnavailableAction
-            label={t('wooButton')}
-            tag={tw('comingSoon')}
-            why={t('wooWhy')}
-            testid="webchat-woo-action"
-          />
-        </div>
+        <WooPlugin woo={install.woocommerce} />
         <div className={styles.snippetBlock} data-testid="webchat-snippet">
           <span className={styles.snippetHead}>
             <span>{t('other')}</span>

@@ -133,19 +133,23 @@ export const connectionSchema = z
     /** The platform's own words, truncated to 200 chars by the backend. */
     lastError: z.string().nullable().optional(),
     /**
-     * The connection's config. ONE field is read from it - Shopify's
-     * `shopDomain`, 14d's "avivco.myshopify.com" - and the transform drops the
-     * rest: config can hold more than a page needs, and nothing else of it
-     * leaves this contract.
+     * The connection's config. TWO fields are read from it - Shopify's
+     * `shopDomain`, 14d's "avivco.myshopify.com", and WooCommerce's
+     * `storeUrl` (the store the plugin's connect page must match) - and the
+     * transform drops the rest: config can hold more than a page needs, and
+     * nothing else of it leaves this contract.
      */
     config: z.unknown().optional(),
   })
   .transform(({ config, ...rest }) => {
-    const shop =
-      typeof config === 'object' && config !== null
-        ? (config as { shopDomain?: unknown }).shopDomain
-        : undefined;
-    return { ...rest, shopDomain: typeof shop === 'string' && shop.trim() ? shop.trim() : null };
+    const read = (key: 'shopDomain' | 'storeUrl') => {
+      const value =
+        typeof config === 'object' && config !== null
+          ? (config as Record<string, unknown>)[key]
+          : undefined;
+      return typeof value === 'string' && value.trim() ? value.trim() : null;
+    };
+    return { ...rest, shopDomain: read('shopDomain'), storeUrl: read('storeUrl') };
   });
 
 /**

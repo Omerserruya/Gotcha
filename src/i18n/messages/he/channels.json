@@ -698,6 +698,42 @@
         "limit": "בתוכנית שלך אין מקום לעוד ערוץ",
         "forbidden": "אין לך הרשאה להוסיף ערוץ",
         "failed": "הקוד לא נוצר. כדאי לנסות שוב"
+      },
+      "wooPlugin": {
+        "pluginName": "GOTCHA for WooCommerce",
+        "steps": "מורידים את \"{name}\", ואז ב-WordPress: תוספים ← הוספת תוסף ← העלאת תוסף. מפעילים אותו, ולוחצים \"Connect to GOTCHA\" תחת WooCommerce ← GOTCHA.",
+        "download": "הורדת התוסף",
+        "downloading": "מורידים…",
+        "downloadProblem": {
+          "forbidden": "צריך הרשאה לחבר מערכות עסקיות כדי להוריד אותו.",
+          "failed": "ההורדה לא הצליחה. אפשר לנסות שוב."
+        },
+        "site": "אתר WooCommerce",
+        "tag": {
+          "connected": "מחובר",
+          "deactivated": "כבוי",
+          "removed": "הוסר"
+        },
+        "line": {
+          "connected": "התוסף מציג את הצ׳אט באתר הזה.",
+          "deactivated": "התוסף כבוי ב-WordPress - מפעילים אותו שם כדי שהצ׳אט יופיע.",
+          "removed": "התוסף הוסר מהאתר הזה."
+        },
+        "lastSeen": "נשמע לאחרונה ב-{when}.",
+        "version": "גרסה {version}.",
+        "remove": {
+          "button": "ניתוק",
+          "title": "לנתק את {host}?",
+          "what": "הצ׳אט מפסיק לפעול באתר הזה, והתוסף שם יציג \"לא מחובר\". אפשר לחבר אותו שוב מ-WordPress.",
+          "yes": "ניתוק",
+          "keep": "להשאיר",
+          "removing": "מנתקים…",
+          "problem": {
+            "gone": "הוא כבר לא מחובר.",
+            "forbidden": "צריך הרשאה לנתק מערכות עסקיות.",
+            "failed": "לא נותק. אפשר לנסות שוב."
+          }
+        }
       }
     },
     "preview": {
@@ -716,5 +752,42 @@
   "widgetRow": {
     "name": "ווידג׳ט לאתר",
     "nowhere": "עוד לא מותקן באף מקום"
+  },
+  "wooConnect": {
+    "tabTitle": "חיבור WooCommerce",
+    "incomplete": "בקישור הזה חסר מה ש-WordPress שולח איתו. לוחצים שוב \"Connect to GOTCHA\" ב-WordPress.",
+    "title": "חיבור {site} ל-GOTCHA",
+    "workspace": "סביבת עבודה: {workspace}",
+    "workspaceUnread": "סביבת העבודה שמחוברים אליה.",
+    "otherWorkspace": "כדי לחבר סביבת עבודה אחרת, נכנסים אליה ולוחצים שוב \"Connect to GOTCHA\" ב-WordPress.",
+    "back": {
+      "denied": "החנות לא אישרה את GOTCHA. צריך לאשר כדי להמשיך.",
+      "insufficient_permissions": "למשתמש ה-WordPress שלך אין הרשאה לאשר את זה - צריך מנהל של החנות.",
+      "other": "האישור בחנות לא הסתיים. אפשר לנסות שוב."
+    },
+    "store": {
+      "this": "{site} מחובר לסביבת העבודה הזו.",
+      "other": "סביבת העבודה הזו מחוברת לחנות אחרת, {store}. לוחצים Connect ב-WordPress של החנות ההיא, או מחליפים את החנות בסטודיו · מערכות עסקיות.",
+      "none": "קודם {site} מאשר את GOTCHA - ואז חוזרים לכאן.",
+      "unknown": "GOTCHA בודקת ש-{site} היא החנות של סביבת העבודה הזו."
+    },
+    "widget": {
+      "create": "הצ׳אט לאתר נוצר לסביבת העבודה הזו - אותו צ׳אט שקוד ההטמעה טוען."
+    },
+    "returnStep": "ואז חוזרים ל-WordPress, והתוסף מסיים להתחבר.",
+    "approve": "אישור ב-{site}",
+    "opening": "פותחים…",
+    "connect": "חיבור",
+    "connecting": "מחברים…",
+    "cancel": "חזרה ל-WordPress",
+    "problem": {
+      "store_not_connected": "החנות הזו עוד לא מחוברת לסביבת העבודה - קודם מאשרים אותה.",
+      "bad_return": "הדף של התוסף לא נמצא בחנות הזו. לוחצים שוב \"Connect to GOTCHA\" ב-WordPress.",
+      "bad_nonce": "הקישור הזה כבר לא תקף. לוחצים שוב \"Connect to GOTCHA\" ב-WordPress.",
+      "no_widget": "הצ׳אט לאתר עוד לא קיים. אפשר לנסות שוב.",
+      "forbidden": "צריך הרשאה לחבר מערכות עסקיות.",
+      "invalid_store": "זו לא כתובת חנות ש-GOTCHA יכולה לפתוח.",
+      "failed": "החיבור לא הצליח. אפשר לנסות שוב."
+    }
   }
 }

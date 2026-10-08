@@ -568,6 +568,12 @@ export const channelEndpoints = {
    * §4, Backend 544e8b76). Role ADMIN, like the playbook editor.
    */
   websiteWidgetAssignment: () => endpoint('/api/website-widget/assignment'),
+  /**
+   * The WooCommerce plugin (woocommerce-plugin-v1, Backend 1e90d585): bind a
+   * site from the connect page, remove one from Install, the zip.
+   */
+  wooPluginBind: () => endpoint('/api/woocommerce-plugin/bind'),
+  wooPluginSite: (id: string) => endpoint('/api/woocommerce-plugin/sites/{id}', { id }),
   /** SMTP/IMAP credentials. Stores real secrets; never exercised by a test. */
   connectEmail: () => endpoint('/api/channels/connect/email'),
   disconnect: (id: string) => endpoint('/api/channels/{id}/disconnect', { id }),
@@ -780,6 +786,12 @@ export const integrationEndpoints = {
   wooOAuthInit: (storeUrl: string) =>
     endpoint(
       '/api/integrations/woocommerce/oauth/init?storeUrl={storeUrl}&flow=redesign_studio&format=json',
+      { storeUrl },
+    ),
+  /** The same key flow from the plugin's connect page: it comes back to /connect/woocommerce. */
+  wooOAuthInitPlugin: (storeUrl: string) =>
+    endpoint(
+      '/api/integrations/woocommerce/oauth/init?storeUrl={storeUrl}&flow=wp_plugin&format=json',
       { storeUrl },
     ),
   /**
