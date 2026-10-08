@@ -64,10 +64,13 @@ export function AnswerBlocks({
   blocks,
   threadId,
   messageId,
+  sources = [],
 }: {
   readonly blocks: readonly AnswerBlock[];
   readonly threadId: string | null;
   readonly messageId: string | null;
+  /** The turn's sources: whether a list's source has a full list to read (§9.4). */
+  readonly sources?: readonly AnswerSource[];
 }) {
   if (blocks.length === 0) return null;
   return (
@@ -84,7 +87,12 @@ export function AnswerBlocks({
           ) : block.type === 'breakdown' ? (
             <BreakdownBlock block={block} />
           ) : block.type === 'record_list' ? (
-            <RecordListBlock block={block} threadId={threadId} messageId={messageId} />
+            <RecordListBlock
+              block={block}
+              threadId={threadId}
+              messageId={messageId}
+              listable={listable(block.sourceId, sources)}
+            />
           ) : (
             <RecordBlock block={block} />
           )}
@@ -278,14 +286,30 @@ function BreakdownBlock({ block }: { readonly block: Breakdown }) {
  * The rows behind a number: the first page with the answer, the rest from
  * the source's own list (re-run with the reader's CURRENT visibility).
  */
+/**
+ * Sources whose kind has no full list to read (Backend, §9.2-9.4): an
+ * approvals list, the questions, one conversation, one customer. "Show all"
+ * is never offered for them - it could only fail.
+ */
+const NO_FULL_LIST = new Set(['approvals', 'questions', 'conversation', 'customer']);
+
+function listable(sourceId: string | null, sources: readonly AnswerSource[]): boolean {
+  if (sourceId === null) return false;
+  const source = sources.find((s) => s.id === sourceId);
+  return !(source && NO_FULL_LIST.has(source.kind));
+}
+
 function RecordListBlock({
   block,
   threadId,
   messageId,
+  listable: hasFullList,
 }: {
   readonly block: RecordList;
   readonly threadId: string | null;
   readonly messageId: string | null;
+  /** Its source has a full list (§9.4) - else no "Show all". */
+  readonly listable: boolean;
 }) {
   const t = useTurnTranslations('home.conversation.blocks');
   const [rows, setRows] = useState<readonly RecordItem[]>(block.items);
@@ -294,7 +318,7 @@ function RecordListBlock({
   const [loading, start] = useTransition();
   // More to read: the answer said so, and the list has not said it ended.
   const more = cursor === undefined ? block.hasMore && block.sourceId !== null : cursor !== null;
-  const canRead = threadId !== null && messageId !== null && block.sourceId !== null;
+  const canRead = threadId !== null && messageId !== null && block.sourceId !== null && hasFullList;
 
   const readMore = () =>
     start(async () => {
@@ -335,6 +359,16 @@ function RecordListBlock({
               {row.subtitle ? (
                 <bdi dir="auto" className={styles.recordSub}>
                   {row.subtitle}
+                </bdi>
+              ) : null}
+              {/* A conversation's last message - the customer's words, one line. */}
+              {row.preview ? (
+                <bdi
+                  dir="auto"
+                  className={styles.recordPreview}
+                  data-testid={`record-preview-${row.id}`}
+                >
+                  {row.preview}
                 </bdi>
               ) : null}
             </InAppLink>

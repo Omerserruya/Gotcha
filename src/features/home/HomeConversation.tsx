@@ -489,7 +489,12 @@ function TurnAnswer({
           </div>
         ) : null}
         {/* 01a: the work under the words - the server's blocks, then what it stands on. */}
-        <AnswerBlocks blocks={turn.blocks} threadId={threadId} messageId={turn.messageId} />
+        <AnswerBlocks
+          blocks={turn.blocks}
+          threadId={threadId}
+          messageId={turn.messageId}
+          sources={turn.sources}
+        />
         <SourceChips sources={turn.sources} />
         {turn.problem ? (
           <Problem problem={turn.problem} />

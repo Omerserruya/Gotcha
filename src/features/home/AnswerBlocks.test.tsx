@@ -321,3 +321,74 @@ describe('01a’s chips under the answer', () => {
     expect(screen.getByTestId('source-s2').tagName).toBe('SPAN');
   });
 });
+
+describe('★ the assistant’s newer shapes (Backend §9.2-9.3): customers, conversations, approvals, questions', () => {
+  const sourceOf = (id: string, kind: string) =>
+    sourceSchema.parse({ id, label: 'x', kind, count: 3, deepLink: null });
+  const withSources = (blocks: AnswerBlock[], sources: ReturnType<typeof sourceOf>[]) =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ home }} timeZone="UTC">
+        <AnswerBlocks blocks={blocks} threadId="th1" messageId="m1" sources={sources} />
+      </NextIntlClientProvider>,
+    );
+  const list = (kind: string, sourceId: string) =>
+    block({
+      type: 'record_list',
+      id: `l-${kind}`,
+      title: 'x',
+      sourceId,
+      kind,
+      items: [
+        {
+          id: 'r1',
+          title: 'Dana Cohen',
+          subtitle: 'WhatsApp · open · Maya',
+          preview: 'האם אפשר להחליף מידה?',
+          deepLink: kind === 'approval' ? '/approvals?id=a1' : '/inbox?c=c1',
+        },
+      ],
+      total: 9,
+      hasMore: true,
+    });
+
+  it('a conversation row shows its last message - the customer’s words, isolated', () => {
+    withSources([list('conversation', 's1')], [sourceOf('s1', 'conversations')]);
+    const preview = screen.getByTestId('record-preview-r1');
+    expect(preview).toHaveTextContent('האם אפשר להחליף מידה?');
+    expect(preview).toHaveAttribute('dir', 'auto');
+    // A source with a full list: Show all, as before.
+    expect(screen.getByTestId('records-l-conversation-more')).toBeInTheDocument();
+  });
+
+  it('★ a list whose source has no full list (approvals, questions, one customer): never a "Show all" that can only fail', () => {
+    withSources([list('approval', 's2')], [sourceOf('s2', 'approvals')]);
+    expect(screen.queryByTestId('records-l-approval-more')).toBeNull();
+    // Its row still leads where the server said: the one approval.
+    expect(within(screen.getByTestId('records-l-approval')).getByRole('link')).toHaveAttribute(
+      'href',
+      '/approvals?id=a1',
+    );
+  });
+
+  it('a customer record: its fields, and the way to the customer, query and all', () => {
+    withSources(
+      [
+        block({
+          type: 'record',
+          id: 'k1',
+          title: 'Dana Cohen',
+          kind: 'customer',
+          fields: [
+            { key: 'channels', label: 'Channels', value: 'WhatsApp, Instagram' },
+            { key: 'open', label: 'Open', value: '1' },
+          ],
+          deepLink: '/customers/k1?tab=everything',
+        }),
+      ],
+      [],
+    );
+    const card = screen.getByTestId('block-k1');
+    expect(card).toHaveTextContent('ChannelsWhatsApp, Instagram');
+    expect(within(card).getByRole('link')).toHaveAttribute('href', '/customers/k1?tab=everything');
+  });
+});

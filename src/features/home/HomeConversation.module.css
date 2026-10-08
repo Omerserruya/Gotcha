@@ -571,6 +571,14 @@
     font-weight: var(--font-weight-medium);
   }
 
+  .recordPreview {
+    overflow: hidden;
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .recordSub,
   .recordMeta {
     font-size: 11.5px;

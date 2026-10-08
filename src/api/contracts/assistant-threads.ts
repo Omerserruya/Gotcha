@@ -116,6 +116,8 @@ export const recordItemSchema = z.object({
   title: z.string(),
   subtitle: z.string().nullable().catch(null).default(null),
   meta: z.string().nullable().catch(null).default(null),
+  /** A conversation row's last message (Backend §9.2) - the customer's words. */
+  preview: z.string().nullable().catch(null).default(null),
   deepLink: link,
 });
 export type RecordItem = z.infer<typeof recordItemSchema>;
