@@ -1,7 +1,7 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { humanizeTag } from '@/api/contracts/approvals';
-import { isUnplaced, type AskedAbout } from '@/api/contracts/analytics';
+import { INTENT_KEYS, isUnplaced, type AskedAbout } from '@/api/contracts/analytics';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
 
@@ -32,6 +32,14 @@ import styles from './Analytics.module.css';
  *                how people sound: nothing counts them
  */
 
+/** The catalogue's words for a known intent (`analytics.intent.*`). */
+const intentWordsOf =
+  (t: Awaited<ReturnType<typeof getTranslations<'analytics'>>>): IntentWords =>
+  (key) =>
+    (INTENT_KEYS as readonly string[]).includes(key)
+      ? t(`intent.${key}` as 'intent.order_status')
+      : null;
+
 /** Below this many the week before, a percentage change is noise, not news. */
 export const MIN_BASE = 5;
 
@@ -43,6 +51,11 @@ export interface TopicRow {
   readonly change: number | 'new' | null;
 }
 
+export { INTENT_KEYS };
+
+/** A known intent's words, or `null` - then the label is humanised as before. */
+export type IntentWords = (key: string) => string | null;
+
 /** An intent label in words: "order_status" → "Order status"; a phrase stays itself. */
 export function topicWords(label: string): string {
   return /^[a-z0-9_.-]+$/.test(label) ? humanizeTag(label) : label;
@@ -51,6 +64,7 @@ export function topicWords(label: string): string {
 export function topicRows(
   week: readonly AskedAbout[],
   before: readonly AskedAbout[] | null,
+  intentWords: IntentWords = () => null,
 ): readonly TopicRow[] {
   const previous = new Map(
     (before ?? []).filter((row) => row.intent).map((row) => [row.intent!, row.count]),
@@ -61,7 +75,7 @@ export function topicRows(
       const was = before === null ? undefined : (previous.get(row.intent!) ?? 0);
       return {
         key: row.intent!,
-        label: topicWords(row.question ?? row.intent!),
+        label: intentWords(row.intent!) ?? topicWords(row.question ?? row.intent!),
         count: row.count,
         change:
           was === undefined
@@ -89,10 +103,11 @@ export function askedInTheirWords(
 export function biggestRise(
   week: readonly AskedAbout[],
   before: readonly AskedAbout[] | null,
+  intentWords: IntentWords = () => null,
 ): TopicRow | null {
   if (!before) return null;
   const base = new Map(before.filter((row) => row.intent).map((row) => [row.intent!, row.count]));
-  const rising = topicRows(week, before).filter(
+  const rising = topicRows(week, before, intentWords).filter(
     (row): row is TopicRow & { change: number } =>
       typeof row.change === 'number' && row.change > 0 && (base.get(row.key) ?? 0) >= MIN_BASE,
   );
@@ -101,7 +116,7 @@ export function biggestRise(
 
 export async function TopicsHero({ data }: { readonly data: TopicsData }) {
   const t = await getTranslations('analytics');
-  const rise = data.week ? biggestRise(data.week, data.before) : null;
+  const rise = data.week ? biggestRise(data.week, data.before, intentWordsOf(t)) : null;
   return (
     <section className={styles.gHero} data-testid="topics-hero">
       <p className={styles.gHeroEyebrow}>{t('topics.hero.eyebrow')}</p>
@@ -169,7 +184,7 @@ export async function UnansweredCard({ data }: { readonly data: TopicsData }) {
 export async function TopicTable({ data }: { readonly data: TopicsData }) {
   const t = await getTranslations('analytics');
   const format = await getFormatter();
-  const rows = data.week ? topicRows(data.week, data.before) : [];
+  const rows = data.week ? topicRows(data.week, data.before, intentWordsOf(t)) : [];
   const asked = data.week ? askedInTheirWords(data.week) : [];
   const unplaced = (data.week ?? []).filter(isUnplaced).reduce((sum, row) => sum + row.count, 0);
   const ungrouped =

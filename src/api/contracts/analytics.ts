@@ -777,3 +777,24 @@ export function busiestLocalHour(
   const peak = Math.max(...local);
   return peak > 0 ? local.indexOf(peak) : null;
 }
+
+/**
+ * The conversation analysis's fixed intents (Backend, 2026-10-08): a key
+ * from this list is said in the catalogue's words, in the interface
+ * language, mirroring Backend's own labels (`conversation-analysis.service`).
+ * Before, "order_status" read "Order status" in English on a Hebrew screen.
+ */
+export const INTENT_KEYS = [
+  'order_status',
+  'shipping',
+  'returns_exchanges',
+  'refund',
+  'product_question',
+  'pricing_purchase',
+  'booking',
+  'billing_payment',
+  'technical_issue',
+  'complaint',
+  'account',
+  'other',
+] as const;

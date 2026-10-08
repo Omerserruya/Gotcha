@@ -237,5 +237,19 @@
     "why": "Conversations answered each day: by GOTCHA alone, or with a reply from someone on your team. Days are UTC.",
     "dayLabel": "{day}: {dark} and {light}",
     "unread": "The days couldn’t be read."
+  },
+  "intent": {
+    "order_status": "Order status",
+    "shipping": "Shipping and delivery",
+    "returns_exchanges": "Returns and exchanges",
+    "refund": "Refunds",
+    "product_question": "Product questions",
+    "pricing_purchase": "Pricing and buying",
+    "booking": "Appointments",
+    "billing_payment": "Billing and payment",
+    "technical_issue": "Technical issue",
+    "complaint": "Complaint",
+    "account": "Account",
+    "other": "Other"
   }
 }

@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
 import type { ReactNode } from 'react';
+import enAnalytics from '@/i18n/messages/en/analytics.json';
+import heAnalytics from '@/i18n/messages/he/analytics.json';
 import { describe, expect, it, vi } from 'vitest';
 
 import { askedAboutSchema, namedTopics } from '@/api/contracts/analytics';
@@ -26,6 +28,7 @@ import {
   TopicByDay,
   TopicsHero,
   TopicTable,
+  INTENT_KEYS,
   topicRows,
   topicWords,
   UnansweredCard,
@@ -62,6 +65,7 @@ describe('★ topics against the week before', () => {
 
   it('an intent key in words; a phrase left as it is', () => {
     expect(topicWords('order_status')).toBe('Order status');
+    // ★ A known intent goes through the catalogue's words instead (below).
     expect(topicWords('Where is my order')).toBe('Where is my order');
   });
 });
@@ -205,5 +209,41 @@ describe('★★ 06e - what the classifier could not place, in the customers’ 
     expect(screen.getByTestId('asked-1').querySelector('bdi')).toHaveAttribute('dir', 'auto');
     expect(screen.getByTestId('topics-table')).not.toHaveTextContent(/^unknown$/m);
     expect(screen.queryByTestId('topic-unknown')).toBeNull();
+  });
+});
+
+describe('★★ the analysis’s fixed intents are said in the interface language (Backend, 2026-10-08)', () => {
+  const he = (key: string) =>
+    (INTENT_KEYS as readonly string[]).includes(key)
+      ? (heAnalytics.intent as Record<string, string>)[key]!
+      : null;
+
+  it('a known key in the catalogue’s words - in Hebrew, never "Order status"', () => {
+    const rows = topicRows(
+      [
+        { question: 'order_status', intent: 'order_status', count: 9 },
+        { question: 'returns_exchanges', intent: 'returns_exchanges', count: 4 },
+      ] as never,
+      null,
+      he,
+    );
+    expect(rows.map((r) => r.label)).toEqual(['סטטוס הזמנה', 'החזרות והחלפות']);
+  });
+
+  it('a key outside the list keeps the old humanising', () => {
+    const rows = topicRows(
+      [{ question: 'gift_cards', intent: 'gift_cards', count: 3 }] as never,
+      null,
+      he,
+    );
+    expect(rows[0]!.label).toBe('Gift cards');
+  });
+
+  it('★ the catalogue mirrors Backend’s twelve, in both languages', () => {
+    for (const messages of [enAnalytics, heAnalytics]) {
+      expect(Object.keys(messages.intent).sort()).toEqual([...INTENT_KEYS].sort());
+    }
+    expect(heAnalytics.intent.shipping).toBe('משלוח');
+    expect(enAnalytics.intent.booking).toBe('Appointments');
   });
 });

@@ -33,6 +33,19 @@ describe('★★ the caption is load-bearing', () => {
     expect(caption.getAttribute('title')).toMatch(/hasn't learned to merge them/i);
   });
 
+  it('★★ one of the analysis’s fixed intents is said in the catalogue’s words - never "order_status"', async () => {
+    await show([
+      topic({ question: 'order_status', intent: 'order_status', count: 9 }),
+      topic({ question: 'Where is my parcel?', count: 3 }),
+    ]);
+    expect(screen.getByTestId('asked-name-order_status')).toHaveTextContent(/^Order status$/);
+    expect(screen.getByTestId('asked-about')).not.toHaveTextContent('order_status');
+    // A model-written label is still shown as it came.
+    expect(screen.getByTestId('asked-name-Where is my parcel?')).toHaveTextContent(
+      'Where is my parcel?',
+    );
+  });
+
   it('renders the label verbatim - we did not write it', async () => {
     await show([topic({ question: 'wheres my package' })]);
     expect(screen.getByTestId('topic-wheres my package')).toHaveTextContent('wheres my package');

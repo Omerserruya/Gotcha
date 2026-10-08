@@ -1,6 +1,6 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
-import { namedTopics, type AskedAbout as Topic } from '@/api/contracts/analytics';
+import { INTENT_KEYS, namedTopics, type AskedAbout as Topic } from '@/api/contracts/analytics';
 
 import styles from './Analytics.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
@@ -73,9 +73,17 @@ export async function AskedAbout({
               className={styles.topic}
               data-testid={`topic-${topic.question}`}
             >
-              {/* Model-written, in whatever language the customer asked in. */}
-              <span className={styles.topicName}>
-                <UserText>{topic.question}</UserText>
+              {/*
+                One of the analysis's fixed intents: in the catalogue's words (it
+                read "order_status" raw). Anything else is model-written, in
+                whatever language the customer asked in - shown as it came.
+              */}
+              <span className={styles.topicName} data-testid={`asked-name-${topic.question}`}>
+                {topic.intent && (INTENT_KEYS as readonly string[]).includes(topic.intent) ? (
+                  t(`intent.${topic.intent}` as 'intent.order_status')
+                ) : (
+                  <UserText>{topic.question}</UserText>
+                )}
               </span>
               <span className={styles.topicCount}>
                 {t('asked.asked', { count: format.number(topic.count) })}

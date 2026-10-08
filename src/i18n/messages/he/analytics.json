@@ -237,5 +237,19 @@
     "why": "שיחות שנענו בכל יום: על ידי GOTCHA לבד, או עם תשובה ממישהו בצוות. הימים לפי UTC.",
     "dayLabel": "{day}: {dark} ו-{light}",
     "unread": "לא הצלחנו לקרוא את הימים."
+  },
+  "intent": {
+    "order_status": "סטטוס הזמנה",
+    "shipping": "משלוח",
+    "returns_exchanges": "החזרות והחלפות",
+    "refund": "החזרים כספיים",
+    "product_question": "שאלות על מוצר",
+    "pricing_purchase": "מחיר ורכישה",
+    "booking": "תיאום פגישה",
+    "billing_payment": "חיוב ותשלום",
+    "technical_issue": "תקלה טכנית",
+    "complaint": "תלונה",
+    "account": "חשבון",
+    "other": "אחר"
   }
 }
