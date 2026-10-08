@@ -85,7 +85,7 @@ describe("the Hebrew itself", () => {
 
   it("house rules: no wide dash; a Hebrew prefix joins a Hebrew word (a hyphen only before Latin or digits)", () => {
     for (const [slug, he] of Object.entries(CATALOG_DESCRIPTION_HE)) {
-      expect(he, slug).not.toMatch(/[–—―]/);
+      expect(he, slug).not.toMatch(/[\u2013\u2014\u2015]/);
       expect(he, slug).not.toMatch(/(^|[\s(])[מבלהושכ]-[א-ת]/);
     }
   });
