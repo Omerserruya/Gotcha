@@ -3,14 +3,19 @@ import { authenticate, resolveTenant, requireRole, requirePermission, resolveEff
 
 /**
  * The reader's language for text this service writes (intent labels): an
- * explicit ?locale= wins; otherwise the user's interface language, then the
- * workspace's. Never the request's Accept-Language: the v2 app calls from its
- * server, whose header says nothing about the screen (Hebrew screens got
- * English labels).
+ * explicit ?locale= wins; then an Accept-Language that is ONE deliberate tag
+ * ("he", "en", "he-IL": what the v2 app sends for the page, frontend 1850b9f);
+ * then the user's interface language, then the workspace's. A browser's own
+ * list ("en-US,en;q=0.9") says nothing about the page and is ignored (Hebrew
+ * screens got English labels).
  */
 export async function readerLocale(req: Request): Promise<"he" | "en"> {
   const q = String(req.query.locale ?? "").toLowerCase();
   if (q === "he" || q === "en") return q;
+  const h = String(req.headers["accept-language"] ?? "").trim().toLowerCase();
+  // Anchored: a browser's list ("en-US,en;q=0.9") never matches.
+  const one = /^(he|en)(-[a-z]{2,4})?$/.exec(h);
+  if (one) return one[1] as "he" | "en";
   try {
     const r = await resolveEffectiveLocale({ tenantId: (req as any).tenantId, userId: (req as any).user?.userId ?? null });
     return String(r.effective).toLowerCase().startsWith("he") ? "he" : "en";

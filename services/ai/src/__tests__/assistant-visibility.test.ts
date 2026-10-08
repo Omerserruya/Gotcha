@@ -146,14 +146,17 @@ describe("★ the route", () => {
     expect(H.runInput.aiAgentId).toBe("ag_mine");
   });
 
-  it("★ the interface language: the body's locale wins, then the user's / workspace's, never Accept-Language", async () => {
+  it("★ the interface language: the body's locale, then one deliberate header tag, then the user's / workspace's", async () => {
     H.workspaceLocale = "en";
     await request(app()).post("/api/agent/run").set("Accept-Language", "en-US").send({ message: "hi", sessionId: "s1", locale: "he" });
     expect(H.runInput.operator.locale).toBe("he");
-    // A server-side caller's header says nothing about the screen.
+    // A browser's list says nothing about the page.
     H.workspaceLocale = "he";
-    await request(app()).post("/api/agent/run").set("Accept-Language", "en-US").send({ message: "hi", sessionId: "s1" });
+    await request(app()).post("/api/agent/run").set("Accept-Language", "en-US,en;q=0.9").send({ message: "hi", sessionId: "s1" });
     expect(H.runInput.operator.locale).toBe("he");
+    // The v2 app's single tag is the page's language.
+    await request(app()).post("/api/agent/run").set("Accept-Language", "en").send({ message: "hi", sessionId: "s1" });
+    expect(H.runInput.operator.locale).toBe("en");
     H.workspaceLocale = "en";
     await request(app()).post("/api/agent/run").set("Accept-Language", "he-IL,he;q=0.9").send({ message: "hi", sessionId: "s1" });
     expect(H.runInput.operator.locale).toBe("en");

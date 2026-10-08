@@ -1,10 +1,13 @@
 /**
  * The language of text this service writes for a person (labels, names,
- * statuses): an explicit `locale` (query, then body) wins; otherwise the
- * user's interface language, then the workspace's; else English.
- *
- * Never Accept-Language: the v2 app calls from its server, whose header says
- * nothing about the screen, so Hebrew screens got English text.
+ * statuses), in this order:
+ *   1. an explicit `locale` (query, then body);
+ *   2. an Accept-Language that is ONE deliberate tag ("he", "en", "he-IL"):
+ *      what the v2 app sends for the page's language (frontend 1850b9f; in v2
+ *      the language in the URL wins over the user's saved one);
+ *   3. the user's interface language, then the workspace's; else English.
+ * A browser's own list ("en-US,en;q=0.9") says nothing about the page and is
+ * ignored: it made Hebrew screens English.
  */
 import type { Request } from "express";
 import { resolveEffectiveLocale } from "@chatcenter/shared";
@@ -12,6 +15,8 @@ import { resolveEffectiveLocale } from "@chatcenter/shared";
 export async function readerLocale(req: Request): Promise<"he" | "en"> {
   const asked = [(req.query as any)?.locale, (req.body as any)?.locale].map((v) => String(v ?? "").toLowerCase());
   for (const a of asked) if (a === "he" || a === "en") return a;
+  const header = deliberateLanguage(req.headers?.["accept-language"]);
+  if (header) return header;
   const user = (req as any).user ?? {};
   const tenantId = (req as any).tenantId || user.tenantId;
   if (!tenantId) return "en";
@@ -21,4 +26,12 @@ export async function readerLocale(req: Request): Promise<"he" | "en"> {
   } catch {
     return "en";
   }
+}
+
+/** "he" / "en" when the header is one tag of that language, else null. */
+export function deliberateLanguage(h: unknown): "he" | "en" | null {
+  const v = String(h ?? "").trim().toLowerCase();
+  // Anchored: a list ("en-US,en;q=0.9") or anything longer never matches.
+  const m = /^(he|en)(-[a-z]{2,4})?$/.exec(v);
+  return m ? (m[1] as "he" | "en") : null;
 }

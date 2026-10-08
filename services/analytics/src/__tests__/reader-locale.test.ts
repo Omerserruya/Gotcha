@@ -40,7 +40,7 @@ beforeEach(() => { H.userLocale = null; H.tenantLocale = "he"; H.resolveThrows =
 
 describe("★ the reader's language", () => {
   it("no locale from a server-side caller: the workspace's Hebrew, not English", async () => {
-    expect(await localeSent("", { "Accept-Language": "en-US" })).toBe("he");
+    expect(await localeSent("", { "Accept-Language": "en-US,en;q=0.9" })).toBe("he");
     expect(H.calls.find((c) => c[0] === "resolve")?.[1]).toEqual({ tenantId: "T", userId: "u1" });
   });
 
@@ -49,6 +49,15 @@ describe("★ the reader's language", () => {
     expect(await localeSent()).toBe("en");
     H.userLocale = "he-IL"; H.tenantLocale = "en";
     expect(await localeSent()).toBe("he");
+  });
+
+  it("★ one deliberate Accept-Language tag (the page's language, from the v2 app) wins over the saved one", async () => {
+    H.tenantLocale = "en";
+    expect(await localeSent("", { "Accept-Language": "he" })).toBe("he");
+    expect(await localeSent("", { "Accept-Language": "he-IL" })).toBe("he");
+    expect(await localeSent("?locale=en", { "Accept-Language": "he" })).toBe("en");
+    expect(await localeSent("", { "Accept-Language": "english" })).toBe("en");
+    expect(await localeSent("", { "Accept-Language": "hebrew" })).toBe("en");
   });
 
   it("an explicit ?locale= wins", async () => {
