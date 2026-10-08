@@ -26,6 +26,15 @@ export const browserApi = new HttpClient({
   baseUrl: appPath('/api/bff'),
   defaultTimeoutMs: 20_000,
   fetchOptions: { credentials: 'same-origin', cache: 'no-store' },
+  /*
+   * The interface language, not the browser's: a Hebrew screen in an English
+   * browser asks in Hebrew. The page's own `<html lang>`, which the locale
+   * layout sets; the BFF passes the header on.
+   */
+  prepareHeaders(): Record<string, string> {
+    const language = typeof document === 'undefined' ? '' : document.documentElement.lang;
+    return language ? { 'accept-language': language } : {};
+  },
   onError(error) {
     logger.warn('api.request_failed', error.toDiagnostics());
   },
