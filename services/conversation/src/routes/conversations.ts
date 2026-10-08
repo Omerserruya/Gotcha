@@ -72,7 +72,7 @@ router.get("/stats/workload", requireRole("ADMIN"), async (req: Request, res: Re
 
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { status, assignedAgentId, channel, departmentId, search, page, limit, cursor, includeAutomated, automatedOnly, view } = req.query;
+    const { status, assignedAgentId, channel, departmentId, search, page, limit, cursor, includeAutomated, automatedOnly, view, from, to } = req.query;
     const result = await conversationService.list(req.tenantId!, {
       status: status as string | undefined,
       assignedAgentId: assignedAgentId as string | undefined,
@@ -87,6 +87,10 @@ router.get("/", async (req: Request, res: Response) => {
       includeAutomated: includeAutomated === "true",
       automatedOnly: automatedOnly === "true",
       view: view === "queue" ? "queue" : undefined,
+      // Present-but-invalid is refused (400), not ignored: a link that says
+      // "this week" must never open every conversation.
+      from: from === undefined ? undefined : String(from),
+      to: to === undefined ? undefined : String(to),
       userRole: req.user!.role,
       userId: req.user!.userId,
       userDepartmentId: req.user!.departmentId,

@@ -1243,3 +1243,4 @@ export {
 
 // The business's real conversations (no rehearsals, no test rows): one definition.
 export { REAL_CONVERSATION } from "./lib/real-conversation";
+export { isWorkspaceDay, dayStart, dayOf, nextWorkspaceDay, workspaceDayWindow } from "./lib/workspace-days";

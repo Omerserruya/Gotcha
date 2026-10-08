@@ -1,4 +1,4 @@
-import { getInternalServiceKey, readDurableSetting, recordHandover, waitingForPersonClause } from "@chatcenter/shared";
+import { getInternalServiceKey, readDurableSetting, recordHandover, waitingForPersonClause, parseBusinessHours, isWorkspaceDay, dayStart, nextWorkspaceDay } from "@chatcenter/shared";
 import { randomUUID } from "crypto";
 import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords, notificationsQueue } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
@@ -101,17 +101,37 @@ export interface ConversationFilters {
    * Home (10 vs 9).
    */
   view?: "queue";
+  /**
+   * A period in the workspace's days (YYYY-MM-DD, `to` inclusive): the
+   * conversations STARTED in it, cut at the business-hours time zone's
+   * midnight - the same days the Home chat's charts count, so a chart's link
+   * opens the same rows. Either end may be omitted.
+   */
+  from?: string;
+  to?: string;
   // User context for scoping
   userRole?: string;
   userId?: string;
   userDepartmentId?: string;
 }
 
+/** The business-hours time zone: the workspace's days are cut there. */
+async function workspaceTimeZone(tenantId: string): Promise<string> {
+  try {
+    return parseBusinessHours(await readDurableSetting(tenantId, "businessHours"))?.timezone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
 /** What "an automation owns this" means, in one place. */
 const AUTOMATED_HANDLERS = ["ai_agent", "flow"];
 
 export async function list(tenantId: string, filters: ConversationFilters) {
-  const { status, assignedAgentId, channel, departmentId, search, page = 1, limit = 50, cursor, includeAutomated = false, automatedOnly = false, view, userRole, userId, userDepartmentId } = filters;
+  const { status, assignedAgentId, channel, departmentId, search, page = 1, limit = 50, cursor, includeAutomated = false, automatedOnly = false, view, from, to, userRole, userId, userDepartmentId } = filters;
+  if ((from !== undefined && !isWorkspaceDay(from)) || (to !== undefined && !isWorkspaceDay(to)) || (from && to && from > to)) {
+    throw Object.assign(new Error("invalid_period: from and to are YYYY-MM-DD days, from <= to"), { status: 400 });
+  }
   const decodedCursor = cursor ? decodeConversationCursor(cursor) : null;
   if (cursor && !decodedCursor) {
     // Refused by name rather than silently restarting from the top, which a
@@ -157,6 +177,11 @@ export async function list(tenantId: string, filters: ConversationFilters) {
     });
   }
   if (assignedAgentId) where.assignedAgentId = assignedAgentId;
+  if (from || to) {
+    const tz = await workspaceTimeZone(tenantId);
+    where.AND = where.AND || [];
+    where.AND.push({ createdAt: { ...(from ? { gte: dayStart(from, tz) } : {}), ...(to ? { lt: dayStart(nextWorkspaceDay(to), tz) } : {}) } });
+  }
   if (channel) where.channel = channel;
   if (departmentId) where.departmentId = departmentId;
 

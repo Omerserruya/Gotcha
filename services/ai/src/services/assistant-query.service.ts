@@ -15,7 +15,7 @@ type Locale = "he" | "en";
 export interface ChartBlock { type: "chart"; id: string; title: string; sourceId: string; kind: "bar" | "line"; x: { kind: "day" | "category"; values: string[] }; series: Array<{ key: string; label: string; values: number[] }>; unit: "count" | "currency" | "percent"; currency: string | null; highlight: string[]; deepLink: string | null; partial: null | { reason: string; cap?: number } }
 export interface BreakdownBlock { type: "breakdown"; id: string; title: string; sourceId: string; items: Array<{ key: string; label: string; value: number; share: number }>; total: number; unit: "count"; currency: null; other: { label: string; value: number } | null; coverage: { covered: number; of: number } | null; deepLink: string | null; partial: null }
 export interface RecordListItem { id: string; title: string; subtitle: string; meta: string; deepLink: string | null }
-export interface RecordListBlock { type: "record_list"; id: string; title: string; sourceId: string; kind: "conversation"; items: RecordListItem[]; total: number; hasMore: boolean; deepLink: null; partial: null }
+export interface RecordListBlock { type: "record_list"; id: string; title: string; sourceId: string; kind: "conversation" | "order"; items: RecordListItem[]; total: number; hasMore: boolean; deepLink: null; partial: null }
 export type Block = ChartBlock | BreakdownBlock | RecordListBlock;
 export interface Source { id: string; label: string; kind: "conversations"; count: number | null; deepLink: string | null; query: { tool: "conversations"; params: ConversationQuery } }
 
@@ -47,27 +47,10 @@ export async function tenantTimeZone(tenantId: string): Promise<string> {
   }
 }
 
-/** The UTC instant a workspace day starts (00:00 there). */
-export function dayStart(day: string, tz: string): Date {
-  const utc = new Date(`${day}T00:00:00.000Z`);
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(utc);
-    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
-    const asIfUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"));
-    return new Date(utc.getTime() - (asIfUtc - utc.getTime()));
-  } catch {
-    return utc;
-  }
-}
-
-/** The workspace day of an instant. */
-export function dayOf(d: Date, tz: string): string {
-  try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
-  } catch {
-    return d.toISOString().slice(0, 10);
-  }
-}
+// The workspace's days: one arithmetic for the charts here and the inbox's
+// period filter (services/conversation), so a chart's link opens its rows.
+export { dayStart, dayOf } from "@chatcenter/shared";
+import { dayStart, dayOf } from "@chatcenter/shared";
 
 function daysBetween(from: string, to: string): string[] {
   const out: string[] = [];
