@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const get = vi.hoisted(() => vi.fn());
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get }) }));
 vi.mock('server-only', () => ({}));
+vi.mock('next-intl/server', () => ({ getLocale: async () => 'he' }));
 
 import {
   lastSevenDays,
@@ -142,5 +143,18 @@ describe('★ 06e’s reads', () => {
       ['2026-09-25T12:00:00.000Z', '2026-10-02T12:00:00.000Z'],
       ['2026-09-18T12:00:00.000Z', '2026-09-25T12:00:00.000Z'],
     ]);
+  });
+
+  it('★ the topics are asked for in the reader’s language - their names come back in it', async () => {
+    get.mockImplementation(async (r: { endpoint: { path: string } }) =>
+      r.endpoint.path.endsWith('unanswered-questions') ? { data: [] } : [],
+    );
+    await loadTopics(new Date('2026-10-02T12:00:00.000Z'));
+    await loadAnalytics();
+    const asked = get.mock.calls
+      .map((c) => c[0] as { endpoint: { path: string }; query?: { locale?: string } })
+      .filter((r) => r.endpoint.path === '/api/analytics/top-questions');
+    expect(asked).toHaveLength(3);
+    expect(asked.every((r) => r.query?.locale === 'he')).toBe(true);
   });
 });

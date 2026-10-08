@@ -75,7 +75,8 @@ export function topicRows(
       const was = before === null ? undefined : (previous.get(row.intent!) ?? 0);
       return {
         key: row.intent!,
-        label: intentWords(row.intent!) ?? topicWords(row.question ?? row.intent!),
+        // The server's name first; ours for a known intent; else the label made readable.
+        label: row.label ?? intentWords(row.intent!) ?? topicWords(row.question ?? row.intent!),
         count: row.count,
         change:
           was === undefined

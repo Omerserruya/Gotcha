@@ -46,6 +46,13 @@ describe('★★ the caption is load-bearing', () => {
     );
   });
 
+  it('★ the server’s name comes first - it is in the reader’s language', async () => {
+    await show([
+      topic({ question: 'סטטוס הזמנה', label: 'סטטוס הזמנה', intent: 'order_status', count: 9 }),
+    ]);
+    expect(screen.getByTestId('asked-name-סטטוס הזמנה')).toHaveTextContent(/^סטטוס הזמנה$/);
+  });
+
   it('renders the label verbatim - we did not write it', async () => {
     await show([topic({ question: 'wheres my package' })]);
     expect(screen.getByTestId('topic-wheres my package')).toHaveTextContent('wheres my package');

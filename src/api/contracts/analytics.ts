@@ -591,6 +591,12 @@ export function humans(agents: readonly AgentLoad[]): readonly AgentLoad[] {
 export const askedAboutSchema = z.object({
   /** The model's own label. Rendered verbatim; we did not write it. */
   question: z.string().nullable().default(null),
+  /**
+   * The topic's name in the reader's language (Backend 3343c75f, by
+   * `?locale=`). Absent from an older service - then our own words for a
+   * known intent, else the label as before.
+   */
+  label: z.string().nullable().catch(null).default(null),
   count: z.number().default(0),
   /**
    * The grouped intent - or `null` when the route fell back to the most

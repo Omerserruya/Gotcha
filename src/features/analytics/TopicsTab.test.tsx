@@ -230,6 +230,15 @@ describe('★★ the analysis’s fixed intents are said in the interface langua
     expect(rows.map((r) => r.label)).toEqual(['סטטוס הזמנה', 'החזרות והחלפות']);
   });
 
+  it('★ the server’s own name (Backend 3343c75f) comes before ours', () => {
+    const rows = topicRows(
+      [{ question: 'Order status', label: 'מצב הזמנה', intent: 'order_status', count: 9 }] as never,
+      null,
+      he,
+    );
+    expect(rows[0]!.label).toBe('מצב הזמנה');
+  });
+
   it('a key outside the list keeps the old humanising', () => {
     const rows = topicRows(
       [{ question: 'gift_cards', intent: 'gift_cards', count: 3 }] as never,

@@ -79,7 +79,10 @@ export async function AskedAbout({
                 whatever language the customer asked in - shown as it came.
               */}
               <span className={styles.topicName} data-testid={`asked-name-${topic.question}`}>
-                {topic.intent && (INTENT_KEYS as readonly string[]).includes(topic.intent) ? (
+                {topic.label ? (
+                  // The server's name, in the reader's language (Backend 3343c75f).
+                  topic.label
+                ) : topic.intent && (INTENT_KEYS as readonly string[]).includes(topic.intent) ? (
                   t(`intent.${topic.intent}` as 'intent.order_status')
                 ) : (
                   <UserText>{topic.question}</UserText>

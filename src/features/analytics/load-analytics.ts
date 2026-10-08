@@ -1,3 +1,5 @@
+import { getLocale } from 'next-intl/server';
+
 import { serverApi } from '@/api/client/server-api';
 import { toolUsageListSchema, type ToolUsage } from '@/api/contracts/capabilities';
 import { integrationsSchema, type Integration } from '@/api/contracts/integrations';
@@ -79,7 +81,12 @@ export async function loadAnalytics(): Promise<AnalyticsData> {
   const week = lastSevenDays();
   const [topics, overview, timeSaved, insights] = await Promise.all([
     api
-      .get({ endpoint: analyticsEndpoints.topQuestions(), payload: askedAboutListSchema })
+      .get({
+        endpoint: analyticsEndpoints.topQuestions(),
+        payload: askedAboutListSchema,
+        // The topic names come back in the reader's language (Backend 3343c75f).
+        query: { locale: await getLocale() },
+      })
       .catch((cause: unknown) => {
         logger.warn('analytics.top_questions_failed', { cause });
         return null;
@@ -236,12 +243,14 @@ export async function loadTopics(now: Date = new Date()): Promise<TopicsData> {
       logger.warn(event, { cause });
       return null;
     };
+  // The topic names in the reader's language (Backend 3343c75f).
+  const locale = await getLocale();
   const topics = (range: { from: string; to: string }) =>
     api
       .get({
         endpoint: analyticsEndpoints.topQuestions(),
         payload: askedAboutListSchema,
-        query: { ...range, limit: 20 },
+        query: { ...range, limit: 20, locale },
       })
       .catch(failing<AskedAbout[]>('analytics.top_questions_failed'));
   const [thisWeek, weekBefore, unanswered] = await Promise.all([
