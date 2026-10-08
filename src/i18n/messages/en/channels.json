@@ -799,5 +799,9 @@
   "rowSettingsNone": {
     "tag": "Nothing to set",
     "why": "The platform has no settings for this channel yet, so there is nothing to change here."
+  },
+  "errorReason": {
+    "shopify_chat_uninstalled": "The app was removed from the store. Install it again to bring the chat back.",
+    "unknown": "Something is wrong with this channel. Open it to see what it needs."
   }
 }

@@ -71,7 +71,7 @@ describe('★ 13b is reached from its row on 13, now that it is not a section', 
 });
 
 describe('★ 13 - the warning above the list, and who answers on the line', () => {
-  it('a troubled channel raises the banner, in the platform’s own words', async () => {
+  it('a troubled channel raises the banner - an unknown reason said generically, never raw', async () => {
     render(
       await ChannelList({
         channels: [
@@ -89,7 +89,11 @@ describe('★ 13 - the warning above the list, and who answers on the line', () 
     );
     const banner = screen.getByTestId('channel-banner');
     expect(banner).toHaveTextContent('WhatsApp needs attention');
-    expect(banner).toHaveTextContent('No payment method on the WhatsApp Business account.');
+    // The platform's sentence is English with no code: never printed under a translated title.
+    expect(banner).toHaveTextContent(
+      'Something is wrong with this channel. Open it to see what it needs.',
+    );
+    expect(banner).not.toHaveTextContent('No payment method');
   });
 
   it('no trouble, no banner; and no "who answers" on the row - not the channel\'s to say', async () => {
@@ -132,7 +136,11 @@ describe('★ 13 corrections (measurement of 9b8dd9f)', () => {
     // dev's Shopify chat: CONNECTED and uninstalled - on the widget's one row now.
     const chip = screen.getByTestId('channel-status-widget');
     expect(chip).toHaveTextContent('Needs attention');
-    expect(chip).toHaveAttribute('title', 'Shopify Chat app was uninstalled from the store.');
+    // A known sentence in the reader's words (the supervisor, measured on /he).
+    expect(chip).toHaveAttribute(
+      'title',
+      'The app was removed from the store. Install it again to bring the chat back.',
+    );
     // The row stays a row: the banner tells it, not a second red line.
     expect(screen.getByTestId('channel-widget')).not.toHaveTextContent(/uninstalled/);
     // And the banner names the product, not a channel that is gone from the list.
@@ -304,5 +312,37 @@ describe('★★ the Website widget is ONE row: the web chat and every Shopify c
     expect(screen.getByTestId('channel-status-widget')).toHaveTextContent('Not live yet');
     expect(rowProps.map((p) => p.channel)).not.toContain('WEBCHAT');
     expect(rowProps.map((p) => p.channel)).not.toContain('SHOPIFY_LIVE_CHAT');
+  });
+});
+
+describe('★★ a channel’s error in the reader’s words - the platform sends English with no code', () => {
+  it('Hebrew: the uninstalled app in Hebrew; nothing English under the Hebrew title', async () => {
+    const he = (await import('@/i18n/messages/he/channels.json')).default;
+    const server = await import('next-intl/server');
+    vi.spyOn(server, 'getTranslations').mockResolvedValueOnce(
+      createTranslator({
+        locale: 'he',
+        messages: { channels: he },
+        namespace: 'channels',
+      }) as never,
+    );
+    render(
+      await ChannelList({
+        channels: [
+          channelSchema.parse({
+            id: 's1',
+            channel: 'SHOPIFY_LIVE_CHAT',
+            connectionStatus: 'CONNECTED',
+            lastError: 'Shopify Chat app was uninstalled from the store.',
+          }),
+        ],
+        voice: [],
+        voiceOffered: false,
+        windowDays: 30,
+      }),
+    );
+    const banner = screen.getByTestId('channel-banner');
+    expect(banner).toHaveTextContent('האפליקציה הוסרה מהחנות. מתקינים אותה מחדש כדי שהצ׳אט יחזור.');
+    expect(banner).not.toHaveTextContent(/[A-Za-z]{4,} [a-z]{3,}/);
   });
 });

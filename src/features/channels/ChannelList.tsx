@@ -13,6 +13,7 @@ import { ChannelTile } from './ChannelTile';
 import { ConnectableRow } from './ConnectableRow';
 import {
   buildChannelRows,
+  channelErrorReason,
   isTroubled,
   type ChannelRow,
   type ConnectedRow,
@@ -59,6 +60,7 @@ export async function ChannelList({
   readonly install?: WidgetInstall | null;
 }) {
   const t = await getTranslations('channels');
+  const errorWords = (error: string | null) => errorWordsOf(t, error);
   const locale = await getLocale();
   const rows = buildChannelRows(channels, voice, voiceOffered, locale);
   const number = new Intl.NumberFormat(locale);
@@ -116,7 +118,8 @@ export async function ChannelList({
               {t('banner.title', { channel: nameOf(troubledRows[0].channel) })}
             </span>
             <span className={styles.bannerBody}>
-              {troubledRows[0].error ?? t(`status.${troubledRows[0].status}` as 'status.CONNECTED')}
+              {errorWords(troubledRows[0].error) ??
+                t(`status.${troubledRows[0].status}` as 'status.CONNECTED')}
             </span>
           </span>
           {troubledRows.length > 1 ? (
@@ -183,7 +186,7 @@ export async function ChannelList({
                 data-testid={`channel-status-${row.id}`}
                 // The platform's own words, on the state they explain; the banner
                 // above tells the first of them out loud.
-                title={row.error ?? undefined}
+                title={errorWords(row.error) ?? undefined}
               >
                 {/* A broken connection is not "Connected", in any colour. */}
                 {troubled ? t('chipTrouble') : t(`status.${row.status}` as 'status.CONNECTED')}
@@ -240,6 +243,7 @@ function WidgetListRow({
   readonly windowDays: number;
 }) {
   const troubled = row.parts.find(isTroubled) ?? null;
+  const errorWords = (error: string | null) => errorWordsOf(t, error);
   const sum = (pick: (part: ConnectedRow) => number | null) => {
     const known = row.parts.map(pick).filter((n): n is number => n != null);
     return known.length > 0 ? known.reduce((a, b) => a + b, 0) : null;
@@ -289,7 +293,7 @@ function WidgetListRow({
           .join(' ')
           .trim()}
         data-testid="channel-status-widget"
-        title={troubled?.error ?? undefined}
+        title={errorWords(troubled?.error ?? null) ?? undefined}
       >
         {troubled
           ? t('chipTrouble')
@@ -322,4 +326,13 @@ function notSetUp(
 ): boolean {
   const platform = (OAUTH_PLATFORMS as Partial<Record<ChannelType, string>>)[channel];
   return platform !== undefined && providers?.[platform] === false;
+}
+
+/** A channel's platform error in the reader's words - never the raw English sentence. */
+function errorWordsOf(
+  t: Awaited<ReturnType<typeof getTranslations<'channels'>>>,
+  error: string | null,
+): string | null {
+  const reason = channelErrorReason(error);
+  return reason ? t(`errorReason.${reason}`) : null;
 }

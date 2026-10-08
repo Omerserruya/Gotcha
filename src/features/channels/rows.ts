@@ -68,6 +68,21 @@ const isWidgetChannel = (channel: ChannelType) =>
  * is exactly the failure a health check exists to prevent - so an error text
  * is treated as a problem on its own.
  */
+/**
+ * A channel's `lastError` in the reader's words. The platform writes it as a
+ * free English sentence with no code (ai shopify-chat-install.service.ts), so
+ * a known sentence is matched to its words and anything else is said
+ * generically - never printed raw under a Hebrew title.
+ */
+export type ChannelErrorReason = 'shopify_chat_uninstalled' | 'unknown';
+const KNOWN_ERRORS: readonly [RegExp, ChannelErrorReason][] = [
+  [/^Shopify Chat app was uninstalled from the store\.?$/i, 'shopify_chat_uninstalled'],
+];
+export function channelErrorReason(error: string | null): ChannelErrorReason | null {
+  if (!error) return null;
+  return KNOWN_ERRORS.find(([pattern]) => pattern.test(error.trim()))?.[1] ?? 'unknown';
+}
+
 export function isTroubled(row: ConnectedRow): boolean {
   return row.status === 'ERROR' || row.status === 'DISCONNECTED' || row.error != null;
 }
