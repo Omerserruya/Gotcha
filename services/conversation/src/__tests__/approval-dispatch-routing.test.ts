@@ -22,8 +22,12 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { claimForExecution, recordExecutionOutcome, claimCustomerNotification, prismaMock } = vi.hoisted(() => {
+const { claimForExecution, recordExecutionOutcome, claimCustomerNotification, recordHandover, prismaMock } = vi.hoisted(() => {
   return {
+    // The escalation writes through recordHandover (cd9c5c88). This mock had no
+    // such export, so the call threw inside a try/catch: the escalation test
+    // failed and the two "never escalates" tests passed with nothing to see.
+    recordHandover: vi.fn(),
     claimForExecution: vi.fn(),
     recordExecutionOutcome: vi.fn(),
     claimCustomerNotification: vi.fn(),
@@ -62,6 +66,7 @@ vi.mock("@chatcenter/shared", () => ({
   claimForExecution: (...a: any[]) => claimForExecution(...a),
   recordExecutionOutcome: (...a: any[]) => recordExecutionOutcome(...a),
   claimCustomerNotification: (...a: any[]) => claimCustomerNotification(...a),
+  recordHandover: (...a: any[]) => recordHandover(...a),
   linkCustomerMessage: vi.fn(),
   findPendingByConversation: vi.fn(),
   publishEvent: vi.fn().mockResolvedValue(undefined),
@@ -149,9 +154,7 @@ describe("dotted adapter tools (shopify.*)", () => {
     // customer a message - silence is what stranded the Matan cancellation.
     expect(claimCustomerNotification).toHaveBeenCalledWith(TENANT, "ap_1", "failed");
     // A first-attempt failure does NOT take the conversation from the AI.
-    expect(prismaMock.conversation.update).not.toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ isHandedOver: true }) }),
-    );
+    expect(recordHandover).not.toHaveBeenCalled();
   });
 
   it("escalates to a human only once the action has been attempted twice", async () => {
@@ -161,9 +164,10 @@ describe("dotted adapter tools (shopify.*)", () => {
     ]);
     const r = await runApprovedAction(baseOpts("shopify.cancel_order"));
     expect(r.ok).toBe(false);
-    expect(prismaMock.conversation.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ handledBy: "human", isHandedOver: true }) }),
-    );
+    expect(recordHandover).toHaveBeenCalledTimes(1);
+    expect(recordHandover).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: TENANT, to: "human", reason: "escalation", data: { isHandedOver: true, status: "WAITING" },
+    }));
   });
 
   it("an already-done outcome never escalates, however many attempts it took", async () => {
@@ -172,9 +176,7 @@ describe("dotted adapter tools (shopify.*)", () => {
       { match: "/adapter-tools/execute", body: { data: { ok: false, error: "already_cancelled" } } },
     ]);
     await runApprovedAction(baseOpts("shopify.cancel_order"));
-    expect(prismaMock.conversation.update).not.toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ isHandedOver: true }) }),
-    );
+    expect(recordHandover).not.toHaveBeenCalled();
   });
 
   it("missing envelope on HTTP 200 is a FAILURE", async () => {
