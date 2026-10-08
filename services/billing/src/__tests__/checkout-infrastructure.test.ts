@@ -67,7 +67,18 @@ describe("tokenization page validation", () => {
 // ── 4. Missing contract prevents checkout ───────────────────────────────────
 
 describe("checkout cannot be enabled without a verified token-retrieval contract", () => {
-  it("4. is enabled now that the token is pulled server-side", () => {
+  // These are about the PROVIDER's contract, so the product switch is turned on
+  // here. They read it from the ambient environment (.env) before, and failed
+  // wherever ICOUNT_CHECKOUT_ENABLED was unset, which said nothing about the code.
+  const withCheckoutSwitch = (value: string | undefined, fn: () => void) => {
+    const was = process.env.ICOUNT_CHECKOUT_ENABLED;
+    if (value === undefined) delete process.env.ICOUNT_CHECKOUT_ENABLED; else process.env.ICOUNT_CHECKOUT_ENABLED = value;
+    try { fn(); } finally {
+      if (was === undefined) delete process.env.ICOUNT_CHECKOUT_ENABLED; else process.env.ICOUNT_CHECKOUT_ENABLED = was;
+    }
+  };
+
+  it("4. is enabled now that the token is pulled server-side", () => withCheckoutSwitch("true", () => {
     // What changed: client/get_cc_tokens is confirmed, so the success signal is
     // a provider query rather than a browser redirect. The rule itself did not
     // move - checkout still requires BOTH capabilities verified.
@@ -75,13 +86,19 @@ describe("checkout cannot be enabled without a verified token-retrieval contract
     expect(ICOUNT_CAPABILITIES.tokenRetrievalContract).toBe("verified");
     expect(checkoutEnabled(ICOUNT_CAPABILITIES)).toBe(true);
     expect(() => assertCheckoutMayBeEnabled(ICOUNT_CAPABILITIES)).not.toThrow();
-  });
+  }));
 
-  it("4a. would go back to disabled the moment retrieval stopped being verified", () => {
+  it("4a. would go back to disabled the moment retrieval stopped being verified", () => withCheckoutSwitch("true", () => {
     const regressed = { ...ICOUNT_CAPABILITIES, tokenRetrievalContract: "unverified" as const };
     expect(checkoutEnabled(regressed)).toBe(false);
     expect(() => assertCheckoutMayBeEnabled(regressed)).toThrow(/checkout is disabled/);
-  });
+  }));
+
+  it("4aa. the product switch is checked first: off, it says so before any provider question", () => withCheckoutSwitch(undefined, () => {
+    const regressed = { ...ICOUNT_CAPABILITIES, tokenRetrievalContract: "unverified" as const };
+    expect(() => assertCheckoutMayBeEnabled(ICOUNT_CAPABILITIES)).toThrow(/capability is/);
+    expect(() => assertCheckoutMayBeEnabled(regressed)).toThrow(/capability is/);
+  }));
 
   it("4b. the guard is actually reached, not merely defined", () => {
     // It was defined and called by nothing but its own test - which is how its

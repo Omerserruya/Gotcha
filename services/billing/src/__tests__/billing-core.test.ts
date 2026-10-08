@@ -1,10 +1,18 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { periodKeyFor, addMonths, currentPeriod, nextPeriod } from "../lib/period";
 import { icountProvider } from "../providers/icount.provider";
 import { manualProvider } from "../providers/manual.provider";
 
+const ORIGINAL_SWITCH = process.env.ICOUNT_STORED_CARD_CHARGE_ENABLED;
 beforeAll(() => {
   process.env.ICOUNT_MODE = "mock";
+  // The stored-card-charge product switch is set here, not read from the
+  // ambient environment (.env): these tests failed wherever it was unset.
+  process.env.ICOUNT_STORED_CARD_CHARGE_ENABLED = "true";
+});
+afterAll(() => {
+  if (ORIGINAL_SWITCH === undefined) delete process.env.ICOUNT_STORED_CARD_CHARGE_ENABLED;
+  else process.env.ICOUNT_STORED_CARD_CHARGE_ENABLED = ORIGINAL_SWITCH;
 });
 
 describe("billing/period helpers", () => {
