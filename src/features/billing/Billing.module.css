@@ -1653,6 +1653,14 @@
   }
 
   /* A billing write held at its confirm: what it would do, then a status for Yes. */
+  /* The pack answer's fields, under it once it is chosen. */
+  .autoFields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-10) var(--space-12);
+    margin-block-start: var(--space-10);
+  }
+
   .heldConfirm {
     display: flex;
     flex-direction: column;

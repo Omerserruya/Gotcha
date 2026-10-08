@@ -159,3 +159,12 @@ describe('★★ the purchase reaches the dialog only where billing writes are o
     writes.on = false;
   });
 });
+
+describe('★ 17c Save opens the auto-purchase confirm (held inside the form)', () => {
+  it('a submit button for the form - not a dead span', async () => {
+    await open('low');
+    const save = screen.getByTestId('low-save');
+    expect(save.tagName).toBe('BUTTON');
+    expect(save).toHaveAttribute('form', 'auto-purchase-form');
+  });
+});

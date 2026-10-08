@@ -1,3 +1,4 @@
+import { AUTO_PURCHASE_FORM_ID } from '@/features/billing/auto-purchase-form';
 import { buyCreditPack } from '@/features/billing/actions';
 import { billingWritesEnabled } from '@/api/client/billing-writes';
 import { PROFILE_FORM_ID } from '@/features/billing/profile-form';
@@ -119,14 +120,16 @@ export default async function Page({
           line={t('autoPurchase.subline')}
           footer={
             <>
-              <span
+              {/* Opens the form's confirm (held there: it arms real charges). */}
+              <button
+                type="submit"
+                form={AUTO_PURCHASE_FORM_ID}
                 className={styles.overlayFootPrimary}
-                aria-disabled="true"
-                title={t('profile.notYet')}
+                data-live=""
                 data-testid="low-save"
               >
                 {t('autoPurchase.save')}
-              </span>
+              </button>
               <Link href="/settings/billing" className={styles.overlayFootCancel}>
                 {t('autoPurchase.cancel')}
               </Link>
@@ -137,6 +140,8 @@ export default async function Page({
             policy={autoPurchase?.policy ?? null}
             currency={autoPurchase?.currency ?? 'ILS'}
             paygRate={autoPurchase?.paygRate ?? null}
+            packages={packages}
+            methods={paymentMethods}
           />
         </BillingOverlay>
       ) : panel === 'details' ? (
