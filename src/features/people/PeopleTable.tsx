@@ -7,6 +7,7 @@ import { Link } from '@/i18n/navigation';
 
 import styles from './People.module.css';
 import { buildRoster, type RosterRow } from './roster';
+import { builtinRoleKey } from '@/features/roles/role-words';
 
 /**
  * *"Humans and AI employees in one list."*
@@ -33,6 +34,7 @@ export async function PeopleTable({
   readonly presence: readonly AgentPresence[];
 }) {
   const t = await getTranslations('people');
+  const tr = await getTranslations('roles');
   const locale = await getLocale();
   const rows = buildRoster(members, aiEmployees, presence, locale);
 
@@ -49,16 +51,15 @@ export async function PeopleTable({
   /**
    * What this row may do.
    *
-   * A built-in role is translated, so a Hebrew reader sees בעלים rather than
-   * the English word. A role the tenant invented is shown in THEIR words -
-   * translating it is not ours to do, and a custom role has no key to look up.
+   * A built-in role is said by its KEY, so a Hebrew reader sees בעלים rather
+   * than the English word - never by its name, which would translate a custom
+   * role somebody called "Admin". A role the tenant invented is shown in
+   * THEIR words: translating it is not ours to do.
    */
   const canDo = (row: RosterRow): string => {
     if (row.kind === 'ai') return t('aiEmployee');
-    const key = row.canDo?.toLowerCase().replace(/\s+/g, '_');
-    if (key && ['owner', 'admin', 'agent', 'department_manager'].includes(key)) {
-      return t(`role.${key}` as 'role.owner');
-    }
+    const key = builtinRoleKey(row.canDoKey);
+    if (key) return tr(`builtinRole.${key}.name`);
     return row.canDo ?? t('noRole');
   };
 

@@ -3,6 +3,24 @@
   "description": "The work hats. Each one is a set of permissions, and people wear one.",
   "unavailable": "We couldn't read your roles just now.",
   "builtin": "Built-in",
+  "builtinRole": {
+    "owner": {
+      "name": "Owner",
+      "description": "Full access to everything, including billing, roles and workspace lifecycle."
+    },
+    "admin": {
+      "name": "Admin",
+      "description": "Full operational and configuration access except billing, role management and API keys."
+    },
+    "department_manager": {
+      "name": "Department Manager",
+      "description": "Runs a department: full conversation/approval handling and analytics within the department scope."
+    },
+    "agent": {
+      "name": "Agent",
+      "description": "Front-line agent: handles their own conversations and views customer/CRM context."
+    }
+  },
   "allows": "{count, plural, =0 {Allows nothing yet} =1 {Allows one thing} other {Allows # things}}",
   "members": "{count, plural, =1 {One person} other {# people}}",
   "noMembers": "No one yet",
@@ -179,6 +197,7 @@
         "system": "A built-in role can't be changed - duplicate it instead.",
         "unknown_features": "One of these capabilities is no longer one a role can hold. Nothing was changed.",
         "partial": "The capabilities were saved; the name and description weren't. Try saving again.",
+        "name_taken": "A role with this name already exists. The capabilities were saved - choose another name and save again.",
         "gone": "This role isn't here any more.",
         "forbidden": "Only an admin can change a role.",
         "failed": "It wasn't saved. Try again."
@@ -200,6 +219,25 @@
     "language": "Interface language",
     "role": "Role",
     "change": "Change",
+    "changeRole": {
+      "choose": "New role",
+      "placeholder": "Choose…",
+      "ask": "{name} becomes {role}, instead of {current}.",
+      "askNone": "{name} becomes {role}.",
+      "askMany": "This replaces all {count} roles {name} holds now.",
+      "askWhen": "It takes effect within a minute.",
+      "yes": "Yes, change the role",
+      "changing": "Changing…",
+      "cancel": "Cancel",
+      "done": "{name} is now {role}. It takes effect within a minute.",
+      "refused": {
+        "self_lockout": "You can't remove your own admin access. Ask another admin.",
+        "last_admin": "This is the workspace's last admin. Make someone else an admin first.",
+        "gone": "This person or role isn't here any more.",
+        "forbidden": "Only an admin can change a person's role.",
+        "failed": "The role wasn't changed. Try again."
+      }
+    },
     "teams": "Teams",
     "addTeam": "+ Add to team",
     "onTop": "Only for {name}, on top of {role}",
@@ -215,7 +253,7 @@
     "extra": "Extra permissions",
     "save": "Save changes",
     "cancel": "Cancel",
-    "nothingToSave": "Nothing here is saved from this drawer yet - adding and removing a permission save themselves.",
+    "nothingToSave": "Nothing here waits for Save - changing the role and adding or removing a permission each save themselves.",
     "ends": "Ends {date}",
     "ended": "Ended {date}"
   },

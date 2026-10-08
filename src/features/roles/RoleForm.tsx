@@ -12,6 +12,7 @@ import { Link, useRouter } from '@/i18n/navigation';
 
 import { createRole, updateRole } from './actions';
 import { gridRows, levelOf, levelsOf, rowChanged, withLevel, type GridRow } from './role-grid';
+import { roleNameOf } from './role-words';
 import styles from './Roles.module.css';
 
 /**
@@ -50,6 +51,8 @@ export function RoleForm({
   readonly editing?: Role | null;
 }) {
   const t = useTranslations('roles');
+  // A built-in role in the reader's words; a custom one in its owner's.
+  const nameOf = (role: Role) => roleNameOf(role, (key, part) => t(`builtinRole.${key}.${part}`));
   const router = useRouter();
   /*
    * 02 starts from Agent: "you start from an existing role and only touch
@@ -170,7 +173,7 @@ export function RoleForm({
                   value={sourceId}
                   title={
                     source && !patterned
-                      ? t('form.startFromHint', { name: source.name })
+                      ? t('form.startFromHint', { name: nameOf(source) })
                       : undefined
                   }
                   onChange={(e) => startFrom(e.target.value)}
@@ -178,7 +181,7 @@ export function RoleForm({
                   <option value="">{t('form.startFromNone')}</option>
                   {roles.map((role) => (
                     <option key={role.id} value={role.id}>
-                      {role.name}
+                      {nameOf(role)}
                     </option>
                   ))}
                 </select>
@@ -200,7 +203,7 @@ export function RoleForm({
 
         {source && !patterned ? (
           <p className="srOnly" data-testid="role-source-hint">
-            {t('form.startFromHint', { name: source.name })}
+            {t('form.startFromHint', { name: nameOf(source) })}
           </p>
         ) : null}
 
@@ -308,7 +311,7 @@ export function RoleForm({
 
         {changed.length > 0 && source ? (
           <p className={styles.gridLegend} data-testid="role-legend">
-            ● {t('form.changedFrom', { name: source.name })}
+            ● {t('form.changedFrom', { name: nameOf(source) })}
           </p>
         ) : null}
 
@@ -350,8 +353,8 @@ export function RoleForm({
           <section className={styles.sideCard} data-testid="role-compared">
             <h3 className={styles.sideTitle}>
               {editing
-                ? t('form.edit.changes', { name: source.name })
-                : t('form.comparedWith', { name: source.name })}
+                ? t('form.edit.changes', { name: nameOf(source) })
+                : t('form.comparedWith', { name: nameOf(source) })}
             </h3>
             {changed.length > 0 ? (
               <ul className={styles.sideList}>
@@ -371,8 +374,8 @@ export function RoleForm({
                   ? t('form.edit.elseSame')
                   : t('form.edit.noChange')
                 : changed.length > 0
-                  ? t('form.elseSame', { name: source.name })
-                  : t('form.allSame', { name: source.name })}
+                  ? t('form.elseSame', { name: nameOf(source) })
+                  : t('form.allSame', { name: nameOf(source) })}
             </p>
           </section>
         ) : null}

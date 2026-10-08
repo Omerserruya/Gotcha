@@ -160,7 +160,8 @@ export type UpdateRoleResult =
        * grant; `partial` - the capabilities were saved and the name or
        * description was not; `gone` - the role is no longer there.
        */
-      readonly reason: 'system' | 'unknown_features' | 'partial' | 'gone' | 'forbidden' | 'failed';
+      readonly reason:
+        'system' | 'unknown_features' | 'partial' | 'name_taken' | 'gone' | 'forbidden' | 'failed';
     };
 
 /**
@@ -170,8 +171,11 @@ export type UpdateRoleResult =
  * changes nothing; a failure after them is said as partly saved, never as
  * done.
  *
- * ⚠ A built-in role is never sent: PATCH refuses it, and the features route
- *   does not check - so the screen never offers it (Backend told).
+ * ⚠ A built-in role is never sent. Both routes refuse it (403 SYSTEM_ROLE,
+ *   the features route since auth 00d669a3), and that refusal is still said
+ *   as `system` should a stale screen send one.
+ * ★ A taken name is 409 ROLE_NAME_TAKEN on the PATCH - after the capabilities
+ *   were saved, so it says so.
  */
 export async function updateRole(
   roleId: string,
@@ -190,6 +194,8 @@ export async function updateRole(
     logger.warn('roles.update_features_failed', { cause });
     if (isApiError(cause)) {
       if (cause.status === 400) return { ok: false, reason: 'unknown_features' };
+      // 00d669a3: the features route refuses a built-in role by code too.
+      if (cause.code === 'SYSTEM_ROLE') return { ok: false, reason: 'system' };
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
       if (cause.status === 404) return { ok: false, reason: 'gone' };
     }
@@ -206,9 +212,71 @@ export async function updateRole(
     await signInIfSignedOut(cause);
     logger.warn('roles.update_name_failed', { cause });
     revalidatePath('/[locale]/settings/people/roles', 'page');
-    if (isApiError(cause) && cause.status === 403) return { ok: false, reason: 'system' };
+    if (isApiError(cause)) {
+      if (cause.code === 'SYSTEM_ROLE' || cause.status === 403)
+        return { ok: false, reason: 'system' };
+      // The capabilities are saved by now; only the name was refused.
+      if (cause.code === 'ROLE_NAME_TAKEN' || cause.status === 409)
+        return { ok: false, reason: 'name_taken' };
+    }
     return { ok: false, reason: 'partial' };
   }
   revalidatePath('/[locale]/settings/people/roles', 'page');
   return { ok: true };
+}
+
+export type ChangeRoleResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      /**
+       * `self_lockout` - the caller would take away their own admin (409
+       * SELF_LOCKOUT); `last_admin` - the workspace would be left without one
+       * (409 LAST_ADMIN). Both are the server's, checked under a workspace
+       * lock (auth 00d669a3) - the screen does not pre-judge them, it says
+       * them. `gone` - the person or the role is no longer there.
+       */
+      readonly reason: 'self_lockout' | 'last_admin' | 'gone' | 'forbidden' | 'failed';
+    };
+
+const ASSIGNMENT_SCOPES = ['OWN', 'TEAM', 'DEPARTMENT', 'WORKSPACE'] as const;
+
+/**
+ * 12d's Change - a person's role, REPLACED (`PUT /users/:id/role`): every
+ * assignment they hold is removed and this one made, so the screen never
+ * shows a role they do not solely hold (the supervisor's call, 2026-10-08).
+ * The scope they hold is kept - only the role changes; one the route does not
+ * know is sent as none.
+ *
+ * Other services cache a person's role for up to 30 seconds, so success is
+ * said as "takes effect within a minute", never as done everywhere.
+ */
+export async function changeRole(
+  userId: string,
+  roleId: string,
+  scope: string | null,
+): Promise<ChangeRoleResult> {
+  const kept = (ASSIGNMENT_SCOPES as readonly string[]).includes(scope?.toUpperCase() ?? '')
+    ? scope!.toUpperCase()
+    : null;
+  try {
+    await serverApi().put({
+      endpoint: permissionEndpoints.userRole(userId),
+      body: { roleId, scope: kept },
+      payload: z.unknown(),
+      raw: true,
+    });
+    revalidatePath('/[locale]/settings/people', 'page');
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('roles.change_failed', { status: isApiError(cause) ? cause.status : undefined });
+    if (isApiError(cause)) {
+      if (cause.code === 'SELF_LOCKOUT') return { ok: false, reason: 'self_lockout' };
+      if (cause.code === 'LAST_ADMIN') return { ok: false, reason: 'last_admin' };
+      if (cause.status === 404) return { ok: false, reason: 'gone' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    }
+    return { ok: false, reason: 'failed' };
+  }
 }

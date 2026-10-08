@@ -33,6 +33,12 @@ export interface RosterRow {
    * something the backend declined to send: it is something it cannot say.
    */
   readonly canDo: string | null;
+  /**
+   * The built-in role behind `canDo`, said in the reader's words by key
+   * (roles/role-words.ts): the assigned role's `builtinKey`, or the legacy
+   * enum when no role is assigned. Null for a custom role and for an AI.
+   */
+  readonly canDoKey: string | null;
   /** Team names. Someone may belong to several; an AI to at most one. */
   readonly teams: readonly string[];
   /** Assigned and not CLOSED. `null` = not served, never coerced to 0. */
@@ -91,6 +97,9 @@ function personRow(member: Member, presence: AgentPresence | undefined): RosterR
     // used only when no role has been assigned - it is a coarser answer to the
     // same question, not a different one.
     canDo: member.roleName ?? member.legacyRole ?? null,
+    canDoKey: member.roleName
+      ? (member.roleBuiltinKey ?? null)
+      : (member.legacyRole?.toLowerCase() ?? null),
     teams: member.departments
       .map((d) => d.departmentName)
       .filter((n): n is string => typeof n === 'string' && n.length > 0),
@@ -114,6 +123,7 @@ function aiRow(ai: AiEmployee): RosterRow {
     // the list; the design's "answers, refunds up to ₪100" is the money clause
     // that does not exist.
     canDo: ai.role || null,
+    canDoKey: null,
     teams: ai.departmentName ? [ai.departmentName] : [],
     openConversations: ai.openConversations ?? null,
     presence: null,

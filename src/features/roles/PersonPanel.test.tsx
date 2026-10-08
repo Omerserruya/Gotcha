@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { Person } from '@/api/contracts/roles';
+import { roleSchema, type Person } from '@/api/contracts/roles';
 import messages from '@/i18n/messages/en/roles.json';
 
 import { PersonPanel } from './PersonPanel';
@@ -74,6 +74,16 @@ vi.mock('./RemovePermission', () => ({
       remove
     </button>
   ),
+}));
+
+/* Changing a role is a write on a real person: its own tests; here, what it is given. */
+vi.mock('./ChangeRole', () => ({
+  ChangeRole: (props: {
+    current: { id: string; name: string } | null;
+    scope: string | null;
+    held: number;
+    choices: readonly { id: string; name: string }[];
+  }) => <span data-testid="change-role-props" data-props={JSON.stringify(props)} />,
 }));
 
 /* The catalogue's own names, so a key is not what the reader sees. */
@@ -334,13 +344,18 @@ describe('★ 12d - 02’s drawer', () => {
         person: person(),
         permissions: CATALOG,
         member,
-        roleDescription: 'Answers conversations in their teams',
+        role: roleSchema.parse({
+          id: 'r1',
+          name: 'Support',
+          description: 'Answers conversations in their teams',
+          features: [],
+        }),
       }),
     );
     expect(screen.getByTestId('person-open')).toHaveTextContent('4 open');
     expect(screen.getByText('Job title').nextElementSibling).toHaveTextContent('-');
     expect(screen.getByTestId('person-role')).toHaveTextContent(
-      'AgentAnswers conversations in their teams · ',
+      'SupportAnswers conversations in their teams · ',
     );
   });
 
@@ -362,5 +377,86 @@ describe('★ 12d corrections (measurement of 9121d4f)', () => {
       'title',
       expect.stringMatching(/save themselves/i),
     );
+  });
+});
+
+describe('★★ 12d’s role - in the reader’s words, and changeable (auth 00d669a3)', () => {
+  const builtin = (key: string, name: string) =>
+    roleSchema.parse({ id: key, name, isSystem: true, builtinKey: key, features: ['*'] });
+  const props = () =>
+    JSON.parse(screen.getByTestId('change-role-props').getAttribute('data-props')!);
+
+  it('a built-in role is said by its key from the catalogue - name and description', async () => {
+    render(
+      await PersonPanel({
+        person: person({ roles: [{ roleId: 'agent', scope: 'TEAM' }] }),
+        permissions: CATALOG,
+        role: builtin('agent', 'Agent (platform)'),
+        roles: [builtin('agent', 'Agent (platform)')],
+      }),
+    );
+    expect(screen.getByTestId('person-role')).toHaveTextContent(
+      /^AgentFront-line agent: handles their own conversations/,
+    );
+    expect(screen.getByTestId('person-role')).not.toHaveTextContent('(platform)');
+  });
+
+  it('Change is given every role in those words, what they hold now, and the one scope to keep', async () => {
+    render(
+      await PersonPanel({
+        person: person({ roles: [{ roleId: 'agent', scope: 'TEAM' }] }),
+        permissions: CATALOG,
+        role: builtin('agent', 'Agent'),
+        // The platform's names differ from the catalogue's, so which one is said shows.
+        roles: [
+          builtin('admin', 'ADMIN (platform)'),
+          builtin('agent', 'AGENT (platform)'),
+          roleSchema.parse({ id: 'w', name: 'Wholesale', features: [] }),
+        ],
+      }),
+    );
+    expect(props()).toEqual({
+      userId: 'u1',
+      personName: 'Tomer Adler',
+      current: { id: 'agent', name: 'Agent' },
+      scope: 'TEAM',
+      held: 1,
+      choices: [
+        { id: 'admin', name: 'Admin' },
+        { id: 'agent', name: 'Agent' },
+        { id: 'w', name: 'Wholesale' },
+      ],
+    });
+  });
+
+  it('holding several: every one is counted (all are replaced) and no scope is carried', async () => {
+    render(
+      await PersonPanel({
+        person: person({
+          roles: [
+            { roleId: 'a', scope: 'TEAM' },
+            { roleId: 'b', scope: 'OWN' },
+          ],
+        }),
+        permissions: CATALOG,
+        roles: [],
+      }),
+    );
+    expect(props()).toMatchObject({ held: 2, scope: null });
+  });
+
+  it('the roles list unread: Change is a status with why, never a control', async () => {
+    render(await PersonPanel({ person: person(), permissions: CATALOG, roles: null }));
+    expect(screen.queryByTestId('change-role-props')).toBeNull();
+    expect(screen.getByText('Change')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByText('Change')).toHaveAttribute(
+      'title',
+      "We couldn't read your roles just now.",
+    );
+  });
+
+  it('no role read, a legacy enum: still said in the reader’s words', async () => {
+    render(await PersonPanel({ person: person({ role: 'ADMIN' }), permissions: CATALOG }));
+    expect(screen.getByTestId('person-role')).toHaveTextContent(/^Admin/);
   });
 });

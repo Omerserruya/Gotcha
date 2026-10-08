@@ -39,7 +39,7 @@ describe('★★ 12b Edit at the wire: capabilities first, then the name', () =>
     );
   });
 
-  it('★ a built-in role is never sent (the features route does not check)', async () => {
+  it('★ a built-in role is never sent (both routes refuse it; the screen does not ask)', async () => {
     expect(await updateRole('admin', { ...INPUT, isSystem: true })).toEqual({
       ok: false,
       reason: 'system',
@@ -55,5 +55,23 @@ describe('★★ 12b Edit at the wire: capabilities first, then the name', () =>
     api.put.mockResolvedValueOnce({});
     api.patch.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 500 }));
     expect(await updateRole('r7', INPUT)).toEqual({ ok: false, reason: 'partial' });
+  });
+});
+
+describe('★★ 12b Edit - the server’s refusals, by their codes (auth 00d669a3)', () => {
+  it('403 SYSTEM_ROLE on the capabilities: a built-in role, said as one - nothing renamed', async () => {
+    api.put.mockRejectedValueOnce(
+      new ApiError({ kind: 'authorization', status: 403, code: 'SYSTEM_ROLE' }),
+    );
+    expect(await updateRole('r7', INPUT)).toEqual({ ok: false, reason: 'system' });
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+
+  it('409 ROLE_NAME_TAKEN on the rename: name_taken, not "partial"', async () => {
+    api.put.mockResolvedValueOnce({});
+    api.patch.mockRejectedValueOnce(
+      new ApiError({ kind: 'conflict', status: 409, code: 'ROLE_NAME_TAKEN' }),
+    );
+    expect(await updateRole('r7', INPUT)).toEqual({ ok: false, reason: 'name_taken' });
   });
 });

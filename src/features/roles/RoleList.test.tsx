@@ -95,3 +95,36 @@ describe('★ 12b’s PEOPLE - 02’s faces, from the roster', () => {
     expect(screen.getByTestId('members-owner')).toHaveTextContent('One person');
   });
 });
+
+describe('★★ a built-in role in the reader’s words - by its key', () => {
+  it('Hebrew: the catalogue’s name and description, never the platform’s English', async () => {
+    const heRoles = (await import('@/i18n/messages/he/roles.json')).default;
+    const words = createTranslator({
+      locale: 'he',
+      messages: { roles: heRoles },
+      namespace: 'roles',
+    });
+    const server = await import('next-intl/server');
+    vi.spyOn(server, 'getTranslations').mockResolvedValueOnce(words as never);
+    render(
+      await RoleList({
+        roles: [
+          role({
+            id: 'admin',
+            name: 'Admin',
+            isSystem: true,
+            builtinKey: 'admin',
+            description: 'Full operational and configuration access…',
+          }),
+          role({ id: 'w', name: 'Admin', description: 'Ours.' }),
+        ],
+      }),
+    );
+    expect(screen.getByTestId('role-admin')).toHaveTextContent('מנהל/ת');
+    expect(screen.getByTestId('allows-admin')).toHaveTextContent(/^גישה מלאה לתפעול/);
+    expect(screen.getByTestId('role-admin')).not.toHaveTextContent('Full operational');
+    // A custom role keeps the name its owner typed - even "Admin".
+    expect(screen.getByTestId('role-w')).toHaveTextContent(/^Admin/);
+    expect(screen.getByTestId('allows-w')).toHaveTextContent('Ours.');
+  });
+});

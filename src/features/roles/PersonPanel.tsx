@@ -2,11 +2,13 @@ import { getLocale, getTimeZone, getTranslations } from 'next-intl/server';
 
 import type { PermissionDef } from '@/api/contracts/permission-catalog';
 import type { Member } from '@/api/contracts/people';
-import { additions, removals, type Person } from '@/api/contracts/roles';
+import { additions, removals, type Person, type Role } from '@/api/contracts/roles';
 import drawer from '@/design-system/styles/drawer.module.css';
 import { Link } from '@/i18n/navigation';
 
+import { ChangeRole } from './ChangeRole';
 import { RemovePermission } from './RemovePermission';
+import { builtinRoleKey, roleDescriptionOf, roleNameOf, type BuiltinWords } from './role-words';
 import styles from './Roles.module.css';
 
 /**
@@ -14,8 +16,9 @@ import styles from './Roles.module.css';
  * Role, Teams, Extra permissions, how much they take on, the account's three
  * actions.
  *
- * What is live: taking an extra permission away (RemovePermission) and
- * adding one (12e, `&grant=1`). Everything else is drawn and not live, with
+ * What is live: changing the role (ChangeRole, replaced - auth 00d669a3),
+ * taking an extra permission away (RemovePermission) and adding one (12e,
+ * `&grant=1`). Everything else is drawn and not live, with
  * why on its title: names, role and teams change through other routes; job
  * title, mobile and a workload cap have no field at all; and password and
  * sessions are the identity provider's, not ours.
@@ -24,13 +27,17 @@ export async function PersonPanel({
   person,
   permissions,
   member = null,
-  roleDescription = null,
+  role = null,
+  roles = null,
 }: {
   readonly person: Person;
   readonly permissions: readonly PermissionDef[];
   /** The roster's row for this person - teams and open conversations. */
   readonly member?: Member | null;
-  readonly roleDescription?: string | null;
+  /** The role they hold, from the roles list - for its words. */
+  readonly role?: Role | null;
+  /** Every role, to change to; null when the list could not be read. */
+  readonly roles?: readonly Role[] | null;
 }) {
   const t = await getTranslations('roles');
   const locale = await getLocale();
@@ -55,7 +62,18 @@ export async function PersonPanel({
   };
   const areaOf = (feature: string) => byKey.get(feature)?.domain || feature.split(':')[0] || '';
 
-  const roleName = member?.roleName ?? person.role ?? null;
+  // A built-in role in the reader's words, by key; a custom one in its owner's.
+  const words: BuiltinWords = (key, part) => t(`builtinRole.${key}.${part}`);
+  const legacy = builtinRoleKey(person.role.toLowerCase());
+  const roleName = role
+    ? roleNameOf(role, words)
+    : member?.roleName
+      ? roleNameOf({ name: member.roleName, builtinKey: member.roleBuiltinKey }, words)
+      : legacy
+        ? words(legacy, 'name')
+        : person.role || null;
+  const roleDescription = role ? roleDescriptionOf(role, words) : null;
+  const currentId = role?.id ?? member?.roleId ?? person.roles.at(-1)?.roleId ?? null;
   const teams = member?.departments ?? [];
   const notLive = t('person.notLive');
   const noField = t('person.noField');
@@ -121,9 +139,21 @@ export async function PersonPanel({
                 .join(' · ')}
             </span>
           </span>
-          <span className={styles.personQuiet} aria-disabled="true" title={notLive}>
-            {t('person.change')}
-          </span>
+          {roles === null ? (
+            // Nothing to offer without the list: said, never a dead button.
+            <span className={styles.personQuiet} aria-disabled="true" title={t('unavailable')}>
+              {t('person.change')}
+            </span>
+          ) : (
+            <ChangeRole
+              userId={person.id}
+              personName={who}
+              current={currentId && roleName ? { id: currentId, name: roleName } : null}
+              scope={person.roles.length === 1 ? person.roles[0]!.scope : null}
+              held={person.roles.length}
+              choices={roles.map((r) => ({ id: r.id, name: roleNameOf(r, words) }))}
+            />
+          )}
         </div>
 
         <div className={styles.personTeams}>
@@ -277,8 +307,8 @@ export async function PersonPanel({
         </p>
       </div>
       {/*
-      02's footer. Nothing in this drawer is a field you save - the two
-      writes (add, remove) save themselves - so Save is drawn and not live.
+      02's footer. Nothing in this drawer is a field you save - its writes
+      (the role, add, remove) save themselves - so Save is drawn and not live.
     */}
       <footer className={drawer.drawerFoot}>
         <span

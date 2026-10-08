@@ -129,6 +129,25 @@ describe('buildRoster', () => {
     expect(rows[0]!.canDo).toBe('ADMIN');
   });
 
+  it('★ the built-in behind the name is its KEY - never matched from the name', () => {
+    const rows = buildRoster(
+      [
+        member({ id: 'a', roleName: 'Owner', roleBuiltinKey: 'owner', legacyRole: 'ADMIN' }),
+        member({ id: 'b', roleName: 'Admin', roleBuiltinKey: null }),
+        member({ id: 'c', legacyRole: 'AGENT' }),
+      ],
+      [ai()],
+      [],
+      'en',
+    );
+    const key = (id: string) => rows.find((r) => r.id === id)!.canDoKey;
+    expect(key('a')).toBe('owner');
+    // A custom role its owner called "Admin" is not the built-in.
+    expect(key('b')).toBeNull();
+    expect(key('c')).toBe('agent');
+    expect(rows.find((r) => r.kind === 'ai')!.canDoKey).toBeNull();
+  });
+
   it('never invents a money limit', () => {
     // The policy engine scopes amounts per action kind, tenant-wide, with no
     // notion of a subject. A per-person figure is not something the backend

@@ -8,6 +8,7 @@ import { loadCatalog } from '@/features/roles/load-catalog';
 import { loadPerson } from '@/features/roles/load-person';
 import { loadRoles } from '@/features/roles/load-roles';
 import { PersonPanel } from '@/features/roles/PersonPanel';
+import { roleNameOf } from '@/features/roles/role-words';
 import { Link } from '@/i18n/navigation';
 import { loadPeople } from '@/features/people/load-people';
 import { PeopleTable } from '@/features/people/PeopleTable';
@@ -41,6 +42,7 @@ export default async function Page({
   }>;
 } = {}) {
   const t = await getTranslations('people');
+  const tr = await getTranslations('roles');
   const params = (await searchParams) ?? {};
   const [{ members, aiEmployees, teams, presence }, roles, person, catalog] = await Promise.all([
     loadPeople(),
@@ -135,13 +137,18 @@ export default async function Page({
             person={person}
             permissions={catalog?.permissions ?? []}
             member={member}
-            roleDescription={role?.description ?? null}
+            role={role}
+            roles={roles}
           />
           {params.grant === '1' ? (
             <GrantPicker
               person={person}
               permissions={catalog?.permissions ?? []}
-              roleName={member?.roleName ?? role?.name ?? null}
+              roleName={
+                role
+                  ? roleNameOf(role, (key, part) => tr(`builtinRole.${key}.${part}`))
+                  : (member?.roleName ?? null)
+              }
             />
           ) : null}
         </Drawer>

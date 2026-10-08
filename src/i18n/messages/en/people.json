@@ -15,12 +15,6 @@
   "aiEmployee": "AI employee",
   "noTeam": "No team",
   "noRole": "No role assigned",
-  "role": {
-    "owner": "Owner",
-    "admin": "Admin",
-    "agent": "Agent",
-    "department_manager": "Department manager"
-  },
   "aiRole": {
     "customer_support": "Customer support",
     "sales": "Sales",

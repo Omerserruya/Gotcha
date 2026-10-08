@@ -6,6 +6,7 @@ import type { Member } from '@/api/contracts/people';
 import { allowsEverything, isEditable, type Role } from '@/api/contracts/roles';
 import { Link } from '@/i18n/navigation';
 
+import { roleDescriptionOf, roleNameOf, type BuiltinWords } from './role-words';
 import styles from './Roles.module.css';
 
 /**
@@ -34,6 +35,8 @@ export async function RoleList({
   readonly members?: readonly Member[] | null;
 }) {
   const t = await getTranslations('roles');
+  // A built-in role in the reader's words; a custom one in its owner's.
+  const words: BuiltinWords = (key, part) => t(`builtinRole.${key}.${part}`);
   const holders = (role: Role) =>
     (members ?? []).filter(
       (m) =>
@@ -63,7 +66,7 @@ export async function RoleList({
             data-builtin={role.isSystem ? 'yes' : 'no'}
           >
             <span className={styles.colRole}>
-              <span className={styles.name}>{role.name}</span>
+              <span className={styles.name}>{roleNameOf(role, words)}</span>
               {role.isSystem ? (
                 <span className={styles.kind} data-testid={`builtin-${role.id}`}>
                   <Lock size={11} aria-hidden="true" />
@@ -82,7 +85,7 @@ export async function RoleList({
               counting it read "Allows one thing" under "everything".
             */}
             <span className={styles.colAllows} data-testid={`allows-${role.id}`}>
-              {role.description ??
+              {roleDescriptionOf(role, words) ??
                 (allowsEverything(role)
                   ? t('allowsEverything')
                   : t('allows', { count: role.features.length }))}

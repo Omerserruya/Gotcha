@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { loadCatalog } from '@/features/roles/load-catalog';
 import { loadRoles } from '@/features/roles/load-roles';
 import { RoleForm } from '@/features/roles/RoleForm';
+import { roleNameOf } from '@/features/roles/role-words';
 import { Link } from '@/i18n/navigation';
 import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
@@ -34,7 +35,9 @@ export default async function Page({
         <p data-testid="role-edit-missing">{t('form.edit.notHere')}</p>
       ) : role.isSystem ? (
         <p data-testid="role-edit-builtin">
-          {t('form.edit.builtIn', { name: role.name })}{' '}
+          {t('form.edit.builtIn', {
+            name: roleNameOf(role, (key, part) => t(`builtinRole.${key}.${part}`)),
+          })}{' '}
           <Link href={{ pathname: '/settings/people/roles/new', query: { from: role.id } }}>
             {t('duplicate')}
           </Link>
