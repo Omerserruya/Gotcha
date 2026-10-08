@@ -201,8 +201,8 @@ export function buildComponents(template: PlatformTemplate, params: string[]): a
  * `en`/`he`, so the returned value is always a language a template exists in.
  */
 export async function localeForRecipient(tenantId: string, userId: string | null): Promise<TemplateLocale> {
-  const { resolveEffectiveLocale } = await import("@chatcenter/shared");
   try {
+    const { resolveEffectiveLocale } = await import("@chatcenter/shared");
     const resolved = await resolveEffectiveLocale({ tenantId, userId: userId ?? undefined });
     return resolved.effective === "he" ? "he" : "en";
   } catch (err: any) {

@@ -24,6 +24,7 @@ import type { JobsOptions } from "bullmq";
 import type { SystemEvent } from "./event-emitter.service";
 import { resolveRecipients, type RecipientSpec, type ResolvedUser } from "./recipient-resolver.service";
 import { renderTemplate } from "./templates";
+import { localeForRecipient } from "./platform-whatsapp";
 import { createInAppNotification } from "./in-app.service";
 import { loadPersonal, personalAllows, workspaceTimeZone, localTime, PERSONAL_DEFAULTS } from "./personal-preferences.service";
 import {
@@ -159,8 +160,14 @@ export async function processEvent(event: SystemEvent): Promise<void> {
   const ok = await shouldDeliver(event.tenantId, event.type, event.data);
   if (!ok) return;
 
-  // 3. Render template once (pure function of the event).
-  const tpl = renderTemplate(event);
+  // 3. Render in each recipient's language (their own, else the workspace's),
+  //    once per language per event.
+  const rendered = new Map<string, ReturnType<typeof renderTemplate>>();
+  const tplFor = async (userId: string) => {
+    const locale = await localeForRecipient(event.tenantId, userId);
+    if (!rendered.has(locale)) rendered.set(locale, renderTemplate(event, locale));
+    return rendered.get(locale)!;
+  };
 
   // Dedup tracker: with the unique constraint dropped (per-user channel
   // routing), the same (userId, channel) tuple could otherwise be delivered
@@ -197,7 +204,7 @@ export async function processEvent(event: SystemEvent): Promise<void> {
           channel,
           user,
           event,
-          tpl,
+          tpl: await tplFor(user.id),
           priority: pref.priority || "MEDIUM",
         });
       }
@@ -260,7 +267,8 @@ export async function deliverAutomationNotice(event: SystemEvent): Promise<numbe
   const personal = await loadPersonal([...users.keys()]);
   for (const user of users.values()) {
     if (!(personal.get(user.id) ?? PERSONAL_DEFAULTS).inApp) continue;
-    await deliverChannel({ channel: "in_app", user, event, tpl: { title: "Automation", body: message, ...(link ? { link } : {}) }, priority: "MEDIUM" });
+    const title = (await localeForRecipient(event.tenantId, user.id)) === "he" ? "אוטומציה" : "Automation";
+    await deliverChannel({ channel: "in_app", user, event, tpl: { title, body: message, ...(link ? { link } : {}) }, priority: "MEDIUM" });
   }
   return users.size;
 }
