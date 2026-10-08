@@ -13,7 +13,9 @@ import {
 import { packagePrice } from '@/api/contracts/pricing';
 import { Button } from '@/design-system/primitives/button/Button';
 
-import { buyCreditPack, type BuyOutcome } from './actions';
+import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
+
+import type { buyCreditPack, BuyOutcome } from './actions';
 import { Link } from '@/i18n/navigation';
 
 import styles from './Billing.module.css';
@@ -97,6 +99,7 @@ export function BuyCredits({
   hasPaymentMethod,
   card = null,
   receiptTo = null,
+  charge = null,
 }: {
   readonly packages: PackagesResponse | null;
   /**
@@ -110,6 +113,12 @@ export function BuyCredits({
   readonly card?: { readonly brand: string | null; readonly last4: string | null } | null;
   /** 02's "Receipt to …", beside the button. */
   readonly receiptTo?: string | null;
+  /**
+   * The purchase, handed in by the page ONLY when billing writes are on for
+   * this deployment (`BILLING_WRITES=on`). `null`: the pay button is the held
+   * status, and nothing on this screen can reach the charge.
+   */
+  readonly charge?: typeof buyCreditPack | null;
 }) {
   const t = useTranslations('billing');
   const format = useFormatter();
@@ -184,7 +193,7 @@ export function BuyCredits({
   const blocked = !billable ? 'no_account' : !hasPaymentMethod ? 'no_card' : null;
 
   function buy() {
-    if (!pkg || blocked) return;
+    if (!pkg || blocked || !charge) return;
     /*
      * Minted here, in an event handler, so nothing impure runs during a
      * render - and read from the ref, so a re-render between this press and
@@ -197,7 +206,7 @@ export function BuyCredits({
 
     setOutcome(null);
     startTransition(async () => {
-      const result = await buyCreditPack(pkg!.key, quantity, intentKey);
+      const result = await charge(pkg!.key, quantity, intentKey);
       setOutcome(result);
       /*
        * ★★ THE KEY IS RELEASED ONLY BY A SETTLED OUTCOME.
@@ -209,6 +218,16 @@ export function BuyCredits({
       if (isSettled(result)) intentKeyRef.current = null;
     });
   }
+
+  const payLabel =
+    total && pkg?.taxed
+      ? pkg.taxed.exempt
+        ? t('buy.payExempt', { net: money(format, total.net, price?.currency ?? null) })
+        : t('buy.pay', {
+            net: money(format, total.net, price?.currency ?? null),
+            gross: money(format, total.gross, price?.currency ?? null),
+          })
+      : t('buy.action');
 
   return (
     <section className={styles.block} data-testid="buy-credits">
@@ -432,23 +451,24 @@ export function BuyCredits({
         ₪343.20". The net, tax and total stay above for a screen reader.
       */}
       <div className={styles.buyActions}>
-        <Button
-          variant="primary"
-          data-testid="buy-button"
-          disabled={isPending || blocked !== null || !total}
-          onClick={buy}
-        >
-          {isPending
-            ? t('buy.buying')
-            : total && pkg?.taxed
-              ? pkg.taxed.exempt
-                ? t('buy.payExempt', { net: money(format, total.net, price?.currency ?? null) })
-                : t('buy.pay', {
-                    net: money(format, total.net, price?.currency ?? null),
-                    gross: money(format, total.gross, price?.currency ?? null),
-                  })
-              : t('buy.action')}
-        </Button>
+        {charge ? (
+          <Button
+            variant="primary"
+            data-testid="buy-button"
+            disabled={isPending || blocked !== null || !total}
+            onClick={buy}
+          >
+            {isPending ? t('buy.buying') : payLabel}
+          </Button>
+        ) : (
+          // Billing writes are off here: the same words, held, with why.
+          <UnavailableAction
+            label={payLabel}
+            tag={t('held.tag')}
+            why={t('held.why')}
+            testid="buy-button"
+          />
+        )}
         <Link href="/settings/billing" className={styles.buyCancel}>
           {t('autoPurchase.cancel')}
         </Link>
@@ -533,6 +553,8 @@ function outcomeSentence(
       return t('buy.declined');
     case 'failed':
       return t('buy.failed');
+    case 'held':
+      return t('held.why');
   }
 }
 
@@ -551,7 +573,9 @@ function isSettled(outcome: BuyOutcome): boolean {
     outcome.kind === 'declined' ||
     outcome.kind === 'no_billable_entity' ||
     outcome.kind === 'too_many' ||
-    outcome.kind === 'not_purchasable'
+    outcome.kind === 'not_purchasable' ||
+    // Refused before any call: nothing was charged, so the key is free.
+    outcome.kind === 'held'
   );
 }
 

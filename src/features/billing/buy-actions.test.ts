@@ -27,6 +27,9 @@ const post = vi.hoisted(() => vi.fn());
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ post }) }));
 vi.mock('server-only', () => ({}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+/* The deployment's switch (BILLING_WRITES): on for the outcomes below, off where a test says. */
+const writes = vi.hoisted(() => ({ on: true }));
+vi.mock('@/api/client/billing-writes', () => ({ billingWritesEnabled: () => writes.on }));
 
 const refuse = (init: ConstructorParameters<typeof ApiError>[0]) =>
   post.mockRejectedValue(new ApiError(init));
@@ -42,6 +45,15 @@ const buy = async () => {
 
 beforeEach(() => {
   post.mockReset();
+  writes.on = true;
+});
+
+describe('★★ the action itself refuses when billing writes are off - not only the button', () => {
+  it('held: no call reaches the platform, and the outcome says so', async () => {
+    writes.on = false;
+    expect(await buy()).toEqual({ ok: false, kind: 'held' });
+    expect(post).not.toHaveBeenCalled();
+  });
 });
 
 describe('★★ the outcomes that could not be reached', () => {

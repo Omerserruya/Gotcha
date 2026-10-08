@@ -1,3 +1,5 @@
+import { buyCreditPack } from '@/features/billing/actions';
+import { billingWritesEnabled } from '@/api/client/billing-writes';
 import { PROFILE_FORM_ID } from '@/features/billing/profile-form';
 import { getTranslations } from 'next-intl/server';
 
@@ -93,6 +95,12 @@ export default async function Page({
             hasPaymentMethod={paymentMethods !== null && hasSomethingToCharge(paymentMethods)}
             card={paymentMethods?.[0] ?? null}
             receiptTo={profile?.billingEmail ?? null}
+            /*
+              The purchase is handed to the dialog only where billing may move
+              money (BILLING_WRITES=on, fail closed). Dev's billing is the live
+              payment account: there the pay button is the held status.
+            */
+            charge={billingWritesEnabled() ? buyCreditPack : null}
           />
           {/*
             Nothing to buy says why - the plan cannot, the shelf is empty, or

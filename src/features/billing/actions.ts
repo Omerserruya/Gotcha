@@ -10,6 +10,8 @@ import { billingEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
+import { billingWritesEnabled } from '@/api/client/billing-writes';
+
 /**
  * Screen 17d's write. It charges a card.
  *
@@ -53,7 +55,12 @@ export type BuyOutcome =
    * Telling that customer nothing was charged is the same harm `unsettled`
    * exists to prevent, arriving through the parse instead of the provider.
    */
-  | { readonly ok: false; readonly kind: 'failed' };
+  | { readonly ok: false; readonly kind: 'failed' }
+  /**
+   * Billing writes are off for this deployment (BILLING_WRITES, fail closed):
+   * refused here, before any call - nothing was charged.
+   */
+  | { readonly ok: false; readonly kind: 'held' };
 
 /**
  * Refusals that mean "not this pack, not on this plan" rather than "not now".
@@ -83,6 +90,8 @@ export async function buyCreditPack(
   quantity: number,
   intentKey: string,
 ): Promise<BuyOutcome> {
+  // The action itself refuses, not only the button: dev's billing is the live account.
+  if (!billingWritesEnabled()) return { ok: false, kind: 'held' };
   try {
     const result = await serverApi().post({
       endpoint: billingEndpoints.creditsBuy(),

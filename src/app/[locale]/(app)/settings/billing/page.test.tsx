@@ -49,7 +49,15 @@ vi.mock('@/features/billing/Overview', () => ({
   BuyUnavailable: stub('buy-unavailable'),
 }));
 vi.mock('@/features/billing/Credits', () => ({ CreditsSection: stub('credits') }));
-vi.mock('@/features/billing/BuyCredits', () => ({ BuyCredits: stub('buy') }));
+/* What the page hands the dialog: the charge only when writes are on. */
+const writes = vi.hoisted(() => ({ on: false }));
+vi.mock('@/api/client/billing-writes', () => ({ billingWritesEnabled: () => writes.on }));
+vi.mock('@/features/billing/actions', () => ({ buyCreditPack: async () => ({ ok: true }) }));
+vi.mock('@/features/billing/BuyCredits', () => ({
+  BuyCredits: ({ charge }: { charge: unknown }) => (
+    <div data-testid="buy" data-charge={charge ? 'yes' : 'no'} />
+  ),
+}));
 vi.mock('@/features/billing/Pricing', () => ({ CreditPackagesSection: stub('packages-why') }));
 vi.mock('@/features/billing/AutoPurchase', () => ({ AutoPurchase: stub('auto-purchase') }));
 vi.mock('@/features/billing/BillingProfile', () => ({
@@ -136,5 +144,18 @@ describe('★★ 17e Save - live where there is a record to save into', () => {
       "There's no billing record to save these to yet - one is made when a card is added.",
     );
     billing.profile = null;
+  });
+});
+
+describe('★★ the purchase reaches the dialog only where billing writes are on', () => {
+  it('off (dev): no charge handed in; on: the action', async () => {
+    writes.on = false;
+    const one = await open('buy');
+    expect(screen.getByTestId('buy')).toHaveAttribute('data-charge', 'no');
+    one.unmount();
+    writes.on = true;
+    await open('buy');
+    expect(screen.getByTestId('buy')).toHaveAttribute('data-charge', 'yes');
+    writes.on = false;
   });
 });

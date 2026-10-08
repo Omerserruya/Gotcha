@@ -9,6 +9,8 @@ import {
 } from '@/api/contracts/billing-profile';
 
 import styles from './Billing.module.css';
+import { billingWritesEnabled } from '@/api/client/billing-writes';
+import { HeldConfirm } from './HeldConfirm';
 import { ProfileForm } from './ProfileForm';
 
 /**
@@ -55,6 +57,8 @@ export async function BillingProfileSection({
 }) {
   const t = await getTranslations('billing');
   const reading = profileReading(profile);
+  // Off here: the environment's reason. On: no card session is wired yet - said so.
+  const live = billingWritesEnabled();
 
   const nothingToCharge = methods !== null && !hasSomethingToCharge(methods);
 
@@ -84,9 +88,21 @@ export async function BillingProfileSection({
               </span>
             ) : null}
           </span>
-          <span className={styles.detailsAction} aria-disabled="true" title={t('profile.notYet')}>
-            {t('profile.replace')}
-          </span>
+          <HeldConfirm
+            label={t('profile.replace')}
+            className={styles.detailsAction}
+            sentences={[
+              t('held.replaceCard', {
+                brand: card.brand ?? t('profile.unknownBrand'),
+                last4: card.last4 ?? '????',
+              }),
+            ]}
+            yes={t('held.toSecurePage')}
+            heldTag={live ? t('held.tagNotBuilt') : t('held.tag')}
+            heldWhy={live ? t('held.whyNotBuilt') : t('held.why')}
+            cancel={t('held.cancel')}
+            testid="replace-card"
+          />
         </div>
       ) : (
         /*
@@ -102,9 +118,16 @@ export async function BillingProfileSection({
           <span className={styles.detailsCardText}>
             {methods === null ? '-' : t('profile.noCardRow')}
           </span>
-          <span className={styles.detailsAction} aria-disabled="true" title={t('profile.notYet')}>
-            {t('profile.addCard')}
-          </span>
+          <HeldConfirm
+            label={t('profile.addCard')}
+            className={styles.detailsAction}
+            sentences={[t('held.addCard')]}
+            yes={t('held.toSecurePage')}
+            heldTag={live ? t('held.tagNotBuilt') : t('held.tag')}
+            heldWhy={live ? t('held.whyNotBuilt') : t('held.why')}
+            cancel={t('held.cancel')}
+            testid="add-card"
+          />
         </div>
       )}
 

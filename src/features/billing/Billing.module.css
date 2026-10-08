@@ -1652,6 +1652,38 @@
     opacity: 1;
   }
 
+  /* A billing write held at its confirm: what it would do, then a status for Yes. */
+  .heldConfirm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    max-inline-size: var(--size-reading);
+  }
+
+  .heldSentence {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .heldActions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
+    margin: 0;
+  }
+
+  .heldCancel {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
   .overlayFootCancel {
     font-size: var(--font-size-body-sm);
     color: var(--text-subtle);

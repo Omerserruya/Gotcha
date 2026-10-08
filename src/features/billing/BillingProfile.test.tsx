@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -26,6 +26,9 @@ import { BillingProfileSection } from './BillingProfile';
  * six that it did, it presented as a flake.
  */
 
+/* The deployment's switch: off (dev - the live payment account) unless a test turns it on. */
+const writes = vi.hoisted(() => ({ on: false }));
+vi.mock('@/api/client/billing-writes', () => ({ billingWritesEnabled: () => writes.on }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'billing') =>
     createTranslator({ locale: 'en', messages: { billing: messages }, namespace }),
@@ -178,5 +181,38 @@ describe('★ 17e - every state draws 02’s drawer', () => {
       await BillingProfileSection({ profile: NO_PROFILE, methods: null, failedInvoiceCount: 0 }),
     );
     expect(screen.getByTestId('payment-method-none')).toHaveTextContent(/^-Add card$/);
+  });
+});
+
+describe('★★ 17e card - opens its confirm and holds (the session creates a client on the live provider account)', () => {
+  it('no card: Add card says it saves one for future charges, nothing now; Yes is a status', async () => {
+    render(
+      await BillingProfileSection({ profile: NO_PROFILE, methods: [], failedInvoiceCount: 0 }),
+    );
+    fireEvent.click(screen.getByTestId('add-card'));
+    expect(screen.getByTestId('add-card-confirm')).toHaveTextContent(
+      "This opens the payment provider's secure page to save a card. It's kept for future charges - nothing is charged now.",
+    );
+    const yes = screen.getByTestId('add-card-yes');
+    expect(yes.tagName).toBe('SPAN');
+    expect(yes).toHaveAttribute('aria-disabled', 'true');
+    expect(yes).toHaveTextContent('Not available here');
+  });
+
+  it('a card: Replace names the card it replaces', async () => {
+    render(
+      await BillingProfileSection({
+        profile: NO_PROFILE,
+        methods: [
+          { id: 'pm', brand: 'Visa', last4: '4417', isDefault: true, expMonth: 8, expYear: 2028 },
+        ],
+        failedInvoiceCount: 0,
+      }),
+    );
+    fireEvent.click(screen.getByTestId('replace-card'));
+    expect(screen.getByTestId('replace-card-confirm')).toHaveTextContent(
+      'save a new card in place of Visa ending 4417; the new one is charged from then on. Nothing is charged now.',
+    );
+    expect(screen.getByTestId('replace-card-yes')).toHaveAttribute('aria-disabled', 'true');
   });
 });

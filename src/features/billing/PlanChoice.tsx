@@ -7,6 +7,8 @@ import { creditsGrantedOnUpgrade, type CatalogPlan } from '@/api/contracts/prici
 import { Link } from '@/i18n/navigation';
 
 import styles from './Billing.module.css';
+import { billingWritesEnabled } from '@/api/client/billing-writes';
+import { HeldConfirm } from './HeldConfirm';
 
 const FEATURES_SHOWN = 3;
 
@@ -231,35 +233,97 @@ export async function SwitchSummary({
 }
 
 /**
- * 02's button column. The switch is drawn and not live: nothing on this
- * screen writes a plan change yet, and the one that does moves money - it
- * waits on Omer. "Keep" is the way back.
+ * 02's button column. The switch opens its confirm - what it would do, from
+ * what `changePlan` proves - and holds there: dev's billing is the production
+ * payment account, so its Yes is a status (HeldConfirm). "Keep" is the way back.
+ *
+ * What `changePlan` does (billing subscription.service):
+ *   - moving UP charges the stored card NOW, the full difference between the
+ *     two monthly prices (not by days), before VAT - unless on a trial, when
+ *     nothing is charged and the price starts when the trial ends;
+ *   - moving DOWN charges nothing and takes effect at the period's end.
+ * No amount is printed: only the server can state the charged one (preview
+ * route asked for, held with Omer).
  */
 export async function SwitchActions({
   target,
   current,
   methods,
+  subscription = null,
 }: {
   readonly target: CatalogPlan | null;
   readonly current: CatalogPlan | null;
   readonly methods: readonly PaymentMethod[] | null;
+  readonly subscription?: Subscription | null;
 }) {
   const t = await getTranslations('billing.choice');
+  const th = await getTranslations('billing.held');
+  // Off here: the environment's reason. On: no plan change is wired yet - said so.
+  const live = billingWritesEnabled();
   const locale = await getLocale();
   const card = methods && methods.length > 0 ? methods[0]! : null;
+  const nameOf = (plan: CatalogPlan) => (locale === 'he' && plan.nameHe ? plan.nameHe : plan.name);
+
+  const sentences = (plan: CatalogPlan): string[] => {
+    const price = priceOf(plan, locale);
+    const to = amountOf(plan);
+    const from = current ? amountOf(current) : null;
+    const date = subscription?.currentPeriodEnd
+      ? new Intl.DateTimeFormat(locale, { dateStyle: 'long' }).format(
+          new Date(subscription.currentPeriodEnd),
+        )
+      : null;
+    if (to !== null && from !== null && to < from) {
+      return [
+        date
+          ? t('confirm.down', { plan: nameOf(plan), current: nameOf(current!), date })
+          : t('confirm.downNoDate', { plan: nameOf(plan), current: nameOf(current!) }),
+        ...(price ? [t('confirm.thenPrice', { price })] : []),
+      ];
+    }
+    if (to !== null && from !== null && to === from) return [t('confirm.samePrice')];
+    if (subscription?.status === 'TRIALING') {
+      return [
+        t('confirm.trial', { plan: nameOf(plan) }),
+        ...(price ? [t('confirm.thenPrice', { price })] : []),
+      ];
+    }
+    if (methods !== null && !card) return [t('confirm.upNoCard')];
+    return [
+      card
+        ? t('confirm.up', {
+            plan: nameOf(plan),
+            brand: card.brand ?? t('card'),
+            last4: card.last4 ?? '-',
+          })
+        : t('confirm.upCardUnknown', { plan: nameOf(plan) }),
+      ...(price ? [t('confirm.thenPrice', { price })] : []),
+    ];
+  };
 
   return (
     <div className={styles.switchActions} data-testid="switch-actions">
-      <span
-        className={styles.switchButton}
-        aria-disabled="true"
-        title={t('switchNotYet')}
-        data-testid="switch-button"
-      >
-        {target
-          ? t('switchTo', { plan: locale === 'he' && target.nameHe ? target.nameHe : target.name })
-          : t('switch')}
-      </span>
+      {target ? (
+        <HeldConfirm
+          label={t('switchTo', { plan: nameOf(target) })}
+          className={styles.switchButton}
+          sentences={sentences(target)}
+          yes={t('confirm.yes', { plan: nameOf(target) })}
+          heldTag={live ? th('tagNotBuilt') : th('tag')}
+          heldWhy={live ? th('whyNotBuilt') : th('why')}
+          cancel={th('cancel')}
+          testid="switch-button"
+        />
+      ) : (
+        <span
+          className={styles.switchButton}
+          aria-disabled="true"
+          title={t('summary.pick')}
+          data-testid="switch-button"
+        >
+          {t('switch')}
+        </span>
+      )}
       <Link href="/settings/billing" className={styles.switchKeep} data-testid="switch-keep">
         {current
           ? t('keep', { plan: locale === 'he' && current.nameHe ? current.nameHe : current.name })

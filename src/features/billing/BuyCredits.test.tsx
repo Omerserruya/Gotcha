@@ -73,6 +73,8 @@ function show(over: { billable?: boolean; hasPaymentMethod?: boolean; packages?:
         packages={(over.packages === undefined ? PACKS : over.packages) as typeof PACKS}
         billable={over.billable ?? true}
         hasPaymentMethod={over.hasPaymentMethod ?? true}
+        // Writes on for these: the page hands the charge in only then.
+        charge={buyCreditPack}
       />
     </NextIntlClientProvider>,
   );
@@ -594,7 +596,7 @@ const WIRE = packagesResponseSchema.parse({
 const showWire = (extra: Record<string, unknown> = {}) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ billing: messages }}>
-      <BuyCredits packages={WIRE} billable hasPaymentMethod {...extra} />
+      <BuyCredits packages={WIRE} billable hasPaymentMethod charge={buyCreditPack} {...extra} />
     </NextIntlClientProvider>,
   );
 
@@ -644,5 +646,22 @@ describe('★ 17d - 02 draws no quantity: a pack is the amount', () => {
     one.unmount();
     show();
     expect(screen.getByTestId('buy-quantity')).toBeInTheDocument();
+  });
+});
+
+describe('★★ billing writes off (BILLING_WRITES, fail closed): no charge handed in, nothing can be pressed', () => {
+  it('the pay button is the held status, with the same words and why; nothing reaches the action', async () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ billing: messages }}>
+        <BuyCredits packages={PACKS} billable hasPaymentMethod />
+      </NextIntlClientProvider>,
+    );
+    const pay = screen.getByTestId('buy-button');
+    expect(pay.tagName).toBe('SPAN');
+    expect(pay).toHaveAttribute('aria-disabled', 'true');
+    expect(pay).toHaveTextContent('Not available here');
+    expect(pay).toHaveAttribute('title', expect.stringContaining('uses the live payment account'));
+    await userEvent.click(pay);
+    expect(buyCreditPack).not.toHaveBeenCalled();
   });
 });

@@ -66,7 +66,12 @@ export default async function Page({
       <div className={styles.switchRow}>
         <SwitchSummary target={target} current={current} subscription={subscription} />
         <div className={styles.switchSide}>
-          <SwitchActions target={target} current={current} methods={paymentMethods} />
+          <SwitchActions
+            target={target}
+            current={current}
+            methods={paymentMethods}
+            subscription={subscription}
+          />
           {/*
             02's fine print is two lines (above, in SwitchActions). Everything
             else this screen must say - tax, currency, a scheduled change, the

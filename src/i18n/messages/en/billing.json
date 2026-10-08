@@ -316,16 +316,36 @@
       "fromToday": "From today",
       "perMonth": "{price} a month",
       "eachCycle": "{credits} credits each cycle",
-      "prorated": "A move up is charged now for the days left - the amount is worked out when you switch."
+      "prorated": "A move up is charged now: the full difference between the two monthly prices, before VAT, worked out when you switch."
     },
     "switch": "Switch plan",
     "switchTo": "Switch to {plan}",
-    "switchNotYet": "Changing plan from here comes next.",
     "keep": "Keep {plan}",
     "keepCurrent": "Keep your plan",
     "chargedTo": "Charged to {brand} · {last4}.",
     "card": "Card",
     "noCard": "No payment method on file - a move up would be declined.",
-    "downAtRenewal": "Moving down a plan takes effect at renewal, never mid-cycle."
+    "downAtRenewal": "Moving down a plan takes effect at renewal, never mid-cycle.",
+    "confirm": {
+      "up": "This moves you to {plan} today and charges your {brand} ending {last4} now: the difference between the two monthly prices, before VAT.",
+      "upCardUnknown": "This moves you to {plan} today and charges your card now: the difference between the two monthly prices, before VAT.",
+      "upNoCard": "A move up is charged now, and there's no card on file to charge - it would be declined. Add a card first.",
+      "trial": "Nothing is charged now - you're on a trial. {plan} starts today, and its price when the trial ends.",
+      "down": "Nothing is charged now. You keep {current} until {date}, then move to {plan}.",
+      "downNoDate": "Nothing is charged now. You keep {current} until your renewal, then move to {plan}.",
+      "samePrice": "The two monthly prices are the same, so nothing is charged now.",
+      "thenPrice": "From then on, {price} a month, before VAT.",
+      "yes": "Yes, switch to {plan}"
+    }
+  },
+  "held": {
+    "tag": "Not available here",
+    "why": "Billing in this environment uses the live payment account, so nothing is charged, saved to the provider or changed from here.",
+    "cancel": "Cancel",
+    "addCard": "This opens the payment provider's secure page to save a card. It's kept for future charges - nothing is charged now.",
+    "replaceCard": "This opens the payment provider's secure page to save a new card in place of {brand} ending {last4}; the new one is charged from then on. Nothing is charged now.",
+    "toSecurePage": "Continue to the secure page",
+    "tagNotBuilt": "Not live yet",
+    "whyNotBuilt": "Doing this from here comes next."
   }
 }

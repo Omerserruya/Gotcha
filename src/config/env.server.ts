@@ -81,6 +81,17 @@ const serverEnvSchema = z.object({
    */
   PRODUCT_LOGIN_URL: z.url().optional(),
 
+  /**
+   * ★★ WHETHER BILLING MAY MOVE MONEY FROM THIS DEPLOYMENT - FAIL CLOSED.
+   *
+   * Dev's billing service talks to the PRODUCTION payment account (Backend,
+   * 2026-10-08), so a purchase, a card session or a plan change pressed on
+   * dev is a real one. Only the exact value `on` lets a billing write run;
+   * unset, empty, `off` or a typo all mean off - the cost of forgetting to
+   * set it must be a held button, never a charge.
+   */
+  BILLING_WRITES: z.enum(['on', 'off']).catch('off').default('off'),
+
   // --- Authentik OIDC (Authorization Code + PKCE, driven by the BFF) ---
   OIDC_ISSUER: z.url(),
   OIDC_CLIENT_ID: z.string().min(1),
