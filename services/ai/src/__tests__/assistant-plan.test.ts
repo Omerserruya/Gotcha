@@ -37,7 +37,10 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         findFirst: async (a: any) => H.convs.find((c) => test(c, a.where)) ?? null,
         findMany: async (a: any) => H.convs.filter((c) => test(c, a.where)),
       },
-      contact: { findMany: async (a: any) => H.contacts.filter((c) => test(c, a.where)) },
+      contact: {
+        findMany: async (a: any) => H.contacts.filter((c) => test(c, a.where)),
+        findFirst: async (a: any) => H.contacts.find((c) => test(c, a.where)) ?? null,
+      },
       user: { findFirst: async (a: any) => H.users.find((u) => test(u, a.where)) ?? null },
       unansweredQuestion: { findFirst: async (a: any) => H.questions.find((q) => test(q, a.where)) ?? null },
       inboundExclusion: { findMany: async () => [] },
@@ -76,10 +79,12 @@ describe("★ pinned at proposal", () => {
     expect(a.params.steps).toEqual([{
       // The reason is the step's own sentence, never the model's ("לשייכי" was broken Hebrew).
       tool: "assign_conversation", params: { conversationId: "wa_open", agentId: "matan" }, reason: "לשייך אליך את השיחה של Omer Serruya (וואטסאפ)", riskLevel: "medium",
-      target: { conversationId: "wa_open", assigneeId: "matan" }, summary: "לשייך אליך את השיחה של Omer Serruya (וואטסאפ)",
+      target: { conversationId: "wa_open", customerId: "omer", assigneeId: "matan" }, summary: "לשייך אליך את השיחה של Omer Serruya (וואטסאפ)",
     }]);
     expect(a.summary).toBe("לשייך אליך את השיחה של Omer Serruya (וואטסאפ)");
     expect(a.conversationId).toBe("wa_open");
+    // The approval names the customer (its card showed "-").
+    expect(a.contactId).toBe("omer");
     // Who asked, and where; no "requiresApproval: false" on a pending plan.
     expect(a.params.requester).toEqual({ userId: "matan", name: "Matan" });
     expect(a.params.source).toBe("home_assistant");
@@ -103,7 +108,30 @@ describe("★ pinned at proposal", () => {
       { tool: "answer_question", params: { unansweredQuestionId: "q1", answer: "Yes, in 3 days" }, reason: "" },
     ]);
     expect(out.summary).toBe("להחזיר ל-GOTCHA את השיחה של Omer Serruya (וואטסאפ); להוסיף הערה ל-Omer Serruya: “Prefers evening calls”; לענות על השאלה “Do you ship to Eilat?”");
-    expect(H.approvals[0].params.steps.map((s: any) => s.target)).toEqual([{ conversationId: "wa_open" }, { customerId: "omer" }, { questionId: "q1" }]);
+    expect(H.approvals[0].params.steps.map((s: any) => s.target)).toEqual([{ conversationId: "wa_open", customerId: "omer" }, { customerId: "omer" }, { questionId: "q1" }]);
+  });
+});
+
+describe("★ the customer behind a conversation step", () => {
+  it("the contact on the conversation's channel and number; merged: the one it was merged into; another workspace's or none: no customer", async () => {
+    H.contacts.push(
+      { id: "dana_old", tenantId: "T", channel: "WEBCHAT", externalId: "wc_1", displayName: "Dana", personId: null, mergedIntoId: "dana", email: null, phone: null, tags: [], updatedAt: new Date() },
+      { id: "dana", tenantId: "T", channel: "EMAIL", externalId: "dana@x", displayName: "Dana", personId: null, mergedIntoId: null, email: null, phone: null, tags: [], updatedAt: new Date() },
+    );
+    await propose([{ tool: "close_conversation", params: { conversationId: "support_c" }, reason: "" }]);
+    expect(H.approvals[0].params.steps[0].target).toEqual({ conversationId: "support_c", customerId: "dana" });
+    expect(H.approvals[0].contactId).toBe("dana");
+    H.contacts = H.contacts.map((c) => (c.id === "dana_old" ? { ...c, tenantId: "OTHER" } : c));
+    await propose([{ tool: "close_conversation", params: { conversationId: "support_c" }, reason: "" }]);
+    expect(H.approvals[1].params.steps[0].target).toEqual({ conversationId: "support_c" });
+    expect(H.approvals[1].contactId).toBeUndefined();
+  });
+
+  it("a merge chain longer than it follows: no customer, never a merged-away one", async () => {
+    const row = (id: string, mergedIntoId: string | null, o: any = {}) => ({ id, tenantId: "T", channel: "EMAIL", externalId: id, displayName: id, personId: null, mergedIntoId, email: null, phone: null, tags: [], updatedAt: new Date(), ...o });
+    H.contacts.push(row("m0", "m1", { channel: "WEBCHAT", externalId: "wc_1" }), ...[1, 2, 3, 4, 5].map((i) => row(`m${i}`, `m${i + 1}`)), row("m6", null));
+    await propose([{ tool: "close_conversation", params: { conversationId: "support_c" }, reason: "" }]);
+    expect(H.approvals[0].params.steps[0].target).toEqual({ conversationId: "support_c" });
   });
 });
 

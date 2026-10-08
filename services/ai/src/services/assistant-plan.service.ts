@@ -66,6 +66,18 @@ async function userName(tenantId: string, userId: string): Promise<string | null
   return u ? (u.name || u.email || null) : null;
 }
 
+/**
+ * The customer behind a conversation: the contact on its (channel, external id),
+ * followed through merges to the one that stands. Read only; none is null.
+ */
+async function conversationContactId(tenantId: string, channel: unknown, externalId: string | null): Promise<string | null> {
+  if (!externalId) return null;
+  const select = { id: true, mergedIntoId: true } as const;
+  let row = await prisma.contact.findFirst({ where: { tenantId, channel: channel as any, externalId }, select });
+  for (let hop = 0; row?.mergedIntoId && hop < 5; hop++) row = await prisma.contact.findFirst({ where: { tenantId, id: row.mergedIntoId }, select });
+  return row && !row.mergedIntoId ? row.id : null;
+}
+
 /** Each step pinned, checked against what the requester sees, and said in words. */
 export async function preparePlan(ctx: PlanCtx, raw: Array<{ tool: string; params: Record<string, unknown>; reason: string; riskLevel: PlanStep["riskLevel"] }>): Promise<PlanStep[]> {
   const he = ctx.locale === "he";
@@ -110,7 +122,13 @@ export async function preparePlan(ctx: PlanCtx, raw: Array<{ tool: string; param
       } else {
         sentence = he ? `להחזיר ל-GOTCHA את השיחה של ${who} (${where})` : `Return ${who}'s ${where} conversation to GOTCHA`;
       }
-      out.push({ tool, params, reason: s.reason, riskLevel: s.riskLevel, target: { conversationId: c.id, ...(assigneeId ? { assigneeId } : {}) }, summary: sentence });
+      // The customer too, so the approval (and its card) can name them.
+      const contactId = await conversationContactId(ctx.tenantId, c.channel, c.customerExternalId);
+      out.push({
+        tool, params, reason: s.reason, riskLevel: s.riskLevel,
+        target: { conversationId: c.id, ...(contactId ? { customerId: contactId } : {}), ...(assigneeId ? { assigneeId } : {}) },
+        summary: sentence,
+      });
       continue;
     }
     if (s.tool === "add_note") {
