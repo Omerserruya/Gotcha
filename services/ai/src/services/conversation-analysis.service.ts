@@ -296,7 +296,7 @@ export async function analyzeConversationOnClose(
  * the first page of up-to-date rows). Raw SQL gets no automatic LIVE filter,
  * so origin is stated.
  */
-export async function findUnanalyzed(days = SWEEP_DAYS, limit = SWEEP_BATCH, excludeTenants: string[] = []): Promise<Array<{ id: string; tenantId: string }>> {
+export async function findUnanalyzed(days = SWEEP_DAYS, limit = SWEEP_BATCH, excludeTenants: string[] = [], excludeIds: string[] = []): Promise<Array<{ id: string; tenantId: string }>> {
   const since = new Date(Date.now() - days * 86400_000);
   const rows = await prisma.$queryRaw<Array<{ id: string; tenant_id: string }>>`
     SELECT c.id, c.tenant_id
@@ -309,6 +309,7 @@ export async function findUnanalyzed(days = SWEEP_DAYS, limit = SWEEP_BATCH, exc
        AND c.channel <> 'VOICE'
        AND c.updated_at >= ${since}
        AND NOT (c.tenant_id = ANY(${excludeTenants}::text[]))
+       AND NOT (c.id = ANY(${excludeIds}::text[]))
        AND (i.id IS NULL
             OR COALESCE(i.metadata->>'source', '') <> 'close-analysis'
             OR i.analyzed_at < COALESCE(c.last_message_at, c.updated_at))
@@ -320,14 +321,17 @@ export async function findUnanalyzed(days = SWEEP_DAYS, limit = SWEEP_BATCH, exc
 /**
  * One sweep: batches until nothing is left, a workspace over its cap leaves
  * the sweep (its conversations wait for a later day), and a sweep is bounded.
+ * What this sweep already tried is excluded IN THE QUERY: a passing failure
+ * leaves no row, so the same page came back and the sweep stopped there (the
+ * dev backfill reached 50 of 68).
  */
-export async function runSweep(days = SWEEP_DAYS, maxBatches = 10): Promise<Record<string, number>> {
+export async function runSweep(days = SWEEP_DAYS, maxBatches = 10, batchSize = SWEEP_BATCH): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
   if (!(await analysisEnabled())) return counts;
   const capped: string[] = [];
   const seen = new Set<string>();
   for (let b = 0; b < maxBatches; b++) {
-    const batch = (await findUnanalyzed(days, SWEEP_BATCH, capped)).filter((c) => !seen.has(c.id));
+    const batch = await findUnanalyzed(days, batchSize, capped, [...seen]);
     if (!batch.length) break;
     for (const c of batch) {
       seen.add(c.id);

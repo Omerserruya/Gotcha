@@ -55,9 +55,9 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       },
       toolExecution: { count: async () => 2 },
       // The sweep's query, in JS: same conditions as the SQL (the SQL itself is checked live).
-      $queryRaw: async (_s: TemplateStringsArray, since: Date, exclude: string[], limit: number) =>
+      $queryRaw: async (_s: TemplateStringsArray, since: Date, exclude: string[], excludeIds: string[], limit: number) =>
         H.convs
-          .filter((c) => c.status === "CLOSED" && c.origin === "LIVE" && !c.isTest && !String(c.customerExternalId).startsWith("sandbox:") && c.channel !== "VOICE" && c.updatedAt >= since && !exclude.includes(c.tenantId))
+          .filter((c) => c.status === "CLOSED" && c.origin === "LIVE" && !c.isTest && !String(c.customerExternalId).startsWith("sandbox:") && c.channel !== "VOICE" && c.updatedAt >= since && !exclude.includes(c.tenantId) && !excludeIds.includes(c.id))
           .filter((c) => { const i = H.intel.get(c.id); return !i || i.metadata?.source !== "close-analysis" || i.analyzedAt < (c.lastMessageAt ?? c.updatedAt); })
           .slice(0, limit)
           .map((c) => ({ id: c.id, tenant_id: c.tenantId })),
@@ -294,5 +294,17 @@ describe("★ the sweeper", () => {
     expect(H.intel.has("new1")).toBe(true);
     expect(H.intel.has("old")).toBe(false);
     expect(H.calls.map((c) => c.metadata.conversationId).sort()).toEqual(["new1", "u1"]);
+  });
+
+  it("★ a passing failure does not stall the sweep on its page (the dev backfill stopped at 50 of 68)", async () => {
+    H.convs = ["a", "b", "c", "d", "e"].map((id) => conv(id));
+    H.messages = H.convs.flatMap((c) => msgs(c.id));
+    H.reply = (a: any) => {
+      if (["a", "b"].includes(a.metadata.conversationId)) throw new Error("provider blip");
+      return { content: JSON.stringify({ intent: "refund", sentiment: "neutral", sentimentScore: 0, topics: [] }) };
+    };
+    // Pages of 2: a and b fail (no row), and the next pages still reach c, d, e.
+    const counts = await runSweep(7, 10, 2);
+    expect(counts).toEqual({ model_failed: 2, analyzed: 3 });
   });
 });
