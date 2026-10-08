@@ -271,8 +271,9 @@ function Title({ chat }: { readonly chat: Chat }) {
   }
   return (
     <span className={styles.titleRow}>
-      <h1 className={styles.title} data-testid="conversation-title">
-        <bdi dir="auto">{shown}</bdi>
+      {/* The heading itself takes the title's direction: a Hebrew title's "?" at its end. */}
+      <h1 className={styles.title} data-testid="conversation-title" dir="auto">
+        {shown}
       </h1>
       {chat.thread ? (
         <button

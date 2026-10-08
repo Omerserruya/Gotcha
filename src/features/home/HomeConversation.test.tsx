@@ -242,6 +242,8 @@ describe('★★ the first question makes a thread, and Home becomes the convers
     window.addEventListener(THREADS_CHANGED, changed);
     await push(START, ev('thread.title', 2, { title: 'Open conversations' }));
     expect(screen.getByTestId('conversation-title')).toHaveTextContent(/^Open conversations$/);
+    // The heading takes its title's direction - a Hebrew title on /en is right to left.
+    expect(screen.getByTestId('conversation-title')).toHaveAttribute('dir', 'auto');
     expect(changed).toHaveBeenCalled();
     window.removeEventListener(THREADS_CHANGED, changed);
   });
