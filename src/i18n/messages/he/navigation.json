@@ -102,5 +102,10 @@
     "orderNoStore": "אין חנות מחוברת שאפשר לחפש בה הזמנות."
   },
   "recent": "אחרונות",
-  "untitled": "שיחה חדשה"
+  "untitled": "שיחה חדשה",
+  "recentMenu": {
+    "more": "עוד עבור {title}",
+    "rename": "שינוי שם",
+    "delete": "מחיקה"
+  }
 }

@@ -102,5 +102,10 @@
     "orderNoStore": "No store is connected to search orders in."
   },
   "recent": "Recent",
-  "untitled": "New conversation"
+  "untitled": "New conversation",
+  "recentMenu": {
+    "more": "More for {title}",
+    "rename": "Rename",
+    "delete": "Delete"
+  }
 }

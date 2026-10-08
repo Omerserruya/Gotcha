@@ -222,6 +222,101 @@
     white-space: nowrap;
   }
 
+  /* A Recent row: the link, and its ⋯ over the link's end on hover or focus. */
+  .recentRow {
+    position: relative;
+  }
+
+  .recentMore {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 2px;
+    display: grid;
+    place-items: center;
+    inline-size: 24px;
+    margin-block: auto;
+    block-size: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-chip);
+    background: none;
+    color: var(--frame-text-muted);
+    cursor: pointer;
+    opacity: 0;
+  }
+
+  .recentRow:hover .recentMore,
+  .recentRow:focus-within .recentMore,
+  .recentMore[data-state='open'] {
+    opacity: 1;
+  }
+
+  .recentMore:hover {
+    color: var(--frame-text);
+  }
+
+  /* Room for ⋯ when it shows, so the title's ellipsis ends before it. */
+  .recentRow:hover .subNavLink,
+  .recentRow:focus-within .subNavLink,
+  .recentRow:has(.recentMore[data-state='open']) .subNavLink {
+    padding-inline-end: 28px;
+  }
+
+  .recentEdit {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .recentInput {
+    inline-size: 100%;
+    padding-block: 4px;
+    padding-inline: var(--space-12);
+    border: var(--border-width-thin) solid var(--frame-selected);
+    border-radius: var(--radius-chip);
+    background-color: var(--frame-subtle);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    color: var(--frame-text);
+  }
+
+  .recentProblem {
+    margin: 0;
+    padding-inline: var(--space-12);
+    font-size: 12px;
+    color: var(--intent-urgent-text);
+  }
+
+  /* The delete confirmation is Home's, in a dialog over the page. */
+  .dialogActions {
+    display: flex;
+    gap: var(--space-10);
+    justify-content: flex-end;
+  }
+
+  .dialogQuiet,
+  .dialogDanger {
+    padding: 8px 14px;
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: 9px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .dialogDanger {
+    border-color: transparent;
+    background-color: var(--intent-urgent-text);
+    color: var(--frame-text);
+  }
+
+  .dialogDanger:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
   .subNavCount {
     margin-inline-start: auto;
     font-family: var(--font-mono);

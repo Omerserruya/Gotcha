@@ -1,7 +1,7 @@
 'use client';
 
 import { useLocale } from 'next-intl';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 
 import { isApiError } from '@/api/client/api-error';
@@ -16,6 +16,7 @@ import {
   threadSchema,
   type Thread,
   type ThreadScope,
+  type ThreadsChange,
 } from '@/api/contracts/assistant-threads';
 import { assistantEndpoints } from '@/api/endpoints/registry';
 import { appPath } from '@/lib/base-path';
@@ -348,6 +349,22 @@ export function useAssistantThread() {
     reset();
     announce();
     return true;
+  }, [reset]);
+
+  /*
+   * Recent in the rail renames and deletes too. A rename of this thread is
+   * its title here; a delete of it is the live Home again.
+   */
+  useEffect(() => {
+    const follow = (event: Event) => {
+      const change = (event as CustomEvent<ThreadsChange | null>).detail;
+      const current = threadRef.current;
+      if (!change || !current || change.id !== current.id) return;
+      if (change.deleted) reset();
+      else if (change.title !== undefined) setThread({ ...current, title: change.title });
+    };
+    window.addEventListener(THREADS_CHANGED, follow);
+    return () => window.removeEventListener(THREADS_CHANGED, follow);
   }, [reset]);
 
   return {

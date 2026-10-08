@@ -628,6 +628,26 @@ describe('★★ title, scope and delete - each through its route', () => {
     expect(screen.getByTestId('home-conversation')).toBeInTheDocument();
   });
 
+  it('★ Recent renames or deletes it too: Home follows - another thread’s change leaves it be', async () => {
+    show();
+    await ask('Why?');
+    await push(START, DONE(2));
+    const change = (detail: unknown) =>
+      act(async () => {
+        window.dispatchEvent(new CustomEvent(THREADS_CHANGED, { detail }));
+      });
+    await change({ id: 'th1', title: 'Renamed in the rail' });
+    expect(screen.getByTestId('conversation-title')).toHaveTextContent('Renamed in the rail');
+    await change({ id: 'other', deleted: true });
+    expect(screen.getByTestId('home-conversation')).toBeInTheDocument();
+    await change(null);
+    expect(screen.getByTestId('home-conversation')).toBeInTheDocument();
+    await change({ id: 'th1', deleted: true });
+    expect(screen.queryByTestId('home-conversation')).toBeNull();
+    expect(screen.getByTestId('home-snapshot')).toBeInTheDocument();
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+
   it('Share is still a status ("next stage")', async () => {
     show();
     await ask('Why?');

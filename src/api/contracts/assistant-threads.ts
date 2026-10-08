@@ -12,6 +12,17 @@ import { z } from 'zod';
 /** Fired when a thread is created, titled, renamed or deleted - Recent in the rail reads again. */
 export const THREADS_CHANGED = 'gotcha:threads-changed';
 
+/**
+ * The event's detail when Recent changed one - so Home follows a rename, or
+ * a delete of the thread it is showing (back to the live Home). Home's own
+ * changes send none: it already knows.
+ */
+export interface ThreadsChange {
+  readonly id: string;
+  readonly title?: string;
+  readonly deleted?: true;
+}
+
 export const SCOPE_RANGES = ['this_week', 'last_7', 'last_30'] as const;
 export type ScopeRange = (typeof SCOPE_RANGES)[number];
 
