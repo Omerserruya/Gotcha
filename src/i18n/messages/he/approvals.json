@@ -308,5 +308,33 @@
   "asked": {
     "missing": "הבקשה הזו לא כאן. ייתכן שכבר הוחלט עליה, או שהיא שייכת לסביבת עבודה אחרת.",
     "decided": "כבר הוחלט על הבקשה הזו - היא ברשימת ההחלטות הקודמות."
+  },
+  "plan": {
+    "asked": {
+      "you": {
+        "home_assistant": "ביקשת מ‑GOTCHA ב‑Home",
+        "command_bar": "ביקשת מ‑GOTCHA בשורת הפקודה",
+        "unknown": "ביקשת מ‑GOTCHA"
+      },
+      "other": {
+        "home_assistant": "{name} ביקש/ה מ‑GOTCHA ב‑Home",
+        "command_bar": "{name} ביקש/ה מ‑GOTCHA בשורת הפקודה",
+        "unknown": "{name} ביקש/ה מ‑GOTCHA"
+      },
+      "someone": {
+        "home_assistant": "מישהו/י בצוות ביקש/ה מ‑GOTCHA ב‑Home",
+        "command_bar": "מישהו/י בצוות ביקש/ה מ‑GOTCHA בשורת הפקודה",
+        "unknown": "מישהו/י בצוות ביקש/ה מ‑GOTCHA"
+      }
+    },
+    "chip": {
+      "home_assistant": "בקשה מ‑Home",
+      "command_bar": "בקשה משורת הפקודה"
+    },
+    "leaveBody": "אם אף אחד לא יחליט עד {when}, הבקשה תפוג ושום דבר לא יקרה.",
+    "noSteps": "הבקשה לא מפרטת צעדים.",
+    "reasons": {
+      "wrong": "לא נכון"
+    }
   }
 }

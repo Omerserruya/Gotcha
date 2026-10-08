@@ -31,6 +31,7 @@ const NOW = Date.parse('2026-10-04T10:00:00.000Z');
 const refund = (over: Partial<Approval> = {}): Approval => ({
   editedAmount: null,
   editedPercentage: null,
+  plan: null,
   facts: {
     order: '#TEST-1842',
     amount: 179,

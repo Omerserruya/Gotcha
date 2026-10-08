@@ -32,6 +32,7 @@ const AN_HOUR_AGO = '2026-09-19T09:00:00.000Z';
 const approval = (over: Partial<Approval> = {}): Approval => ({
   editedAmount: null,
   editedPercentage: null,
+  plan: null,
   facts: { order: null, amount: null, currency: null, note: null, percentage: null },
   id: 'a1',
   conversationId: 'c1',
@@ -80,6 +81,66 @@ describe('the contract strips what no screen needs', () => {
     // Never parsed out of `params`: that blob is whatever the planning step
     // wanted to pass, different per tool and guaranteed by nothing.
     expect(approvalSchema.parse(approval()).summary).toBe('Refund ₪179 for order #1842');
+  });
+});
+
+describe('★★ a proposed plan (ai ccbd75b8) - who, where, and each step’s words; never a step’s params', () => {
+  const raw = (params: unknown) =>
+    approvalSchema.parse({
+      ...approval(),
+      tool: 'propose_plan',
+      riskTags: ['ASSISTANT', 'PLAN'],
+      params,
+    });
+
+  it('the source, the requester, and each step’s sentence and target ids', () => {
+    const parsed = raw({
+      summary: 'one; two',
+      source: 'home_assistant',
+      requester: { userId: 'u1', name: 'Matan' },
+      steps: [
+        {
+          tool: 'system_assign_conversation',
+          params: { conversationId: 'c9', apiKey: 'sk_live_secret' },
+          target: { conversationId: 'c9', assigneeId: 'u1' },
+          summary: 'לשייך אליך את השיחה של Omer Serruya (וואטסאפ)',
+          riskLevel: 'medium',
+        },
+        {
+          tool: 'system_add_note',
+          params: {},
+          target: { customerId: 'k2' },
+          summary: 'Add a note',
+        },
+      ],
+    });
+    expect(parsed.plan).toEqual({
+      source: 'home_assistant',
+      requester: { userId: 'u1', name: 'Matan' },
+      steps: [
+        {
+          summary: 'לשייך אליך את השיחה של Omer Serruya (וואטסאפ)',
+          target: { conversationId: 'c9', assigneeId: 'u1' },
+        },
+        { summary: 'Add a note', target: { customerId: 'k2' } },
+      ],
+    });
+    // A step's own params never leave the parse.
+    expect(JSON.stringify(parsed)).not.toContain('sk_live_secret');
+  });
+
+  it('each field degrades on its own: an unknown source, no requester, a bad step', () => {
+    const parsed = raw({ source: 'slack', requester: 'u1', steps: [{ summary: 3, target: 'x' }] });
+    expect(parsed.plan).toEqual({
+      source: null,
+      requester: null,
+      steps: [{ summary: '', target: {} }],
+    });
+    expect(raw(null).plan).toEqual({ source: null, requester: null, steps: [] });
+  });
+
+  it('any other tool has no plan', () => {
+    expect(approvalSchema.parse({ ...approval(), params: { steps: [] } }).plan).toBeNull();
   });
 });
 

@@ -35,10 +35,17 @@ vi.mock('@/i18n/navigation', () => ({
     children,
     ...rest
   }: {
-    href: { pathname: string; query?: Record<string, string> };
+    href: string | { pathname: string; query?: Record<string, string> };
     children: ReactNode;
   }) => (
-    <a href={`${href.pathname}?${new URLSearchParams(href.query ?? {})}`} {...rest}>
+    <a
+      href={
+        typeof href === 'string'
+          ? href
+          : `${href.pathname}?${new URLSearchParams(href.query ?? {})}`
+      }
+      {...rest}
+    >
       {children}
     </a>
   ),
@@ -55,6 +62,7 @@ const NOW = Date.parse('2026-09-19T10:00:00.000Z');
 const approval = (over: Partial<Approval> = {}): Approval => ({
   editedAmount: null,
   editedPercentage: null,
+  plan: null,
   facts: { order: null, amount: null, currency: null, note: null, percentage: null },
   id: 'a1',
   conversationId: 'c1',
@@ -812,5 +820,114 @@ describe('★ opened by its address (/approvals?id=)', () => {
   it('without one, the first waiting request, as before', () => {
     renderScreen([approval({ id: 'a' }), approval({ id: 'b' })]);
     expect(screen.getByTestId('queue-a')).toHaveAttribute('aria-current', 'true');
+  });
+});
+
+describe('★★ a plan the assistant proposed (ai ccbd75b8) - who asked, what it does, what waiting costs', () => {
+  const plan = (over: Partial<Approval> = {}) =>
+    approval({
+      id: 'p1',
+      tool: 'propose_plan',
+      summary: 'Assign you Omer Serruya’s conversation (WhatsApp)',
+      reason: 'Matan asked GOTCHA in Home',
+      policyRuleName: 'Matan asked GOTCHA in Home',
+      riskTags: ['ASSISTANT', 'PLAN'],
+      requestedBy: 'user:u1',
+      plan: {
+        source: 'home_assistant',
+        requester: { userId: 'u1', name: 'Matan' },
+        steps: [
+          {
+            summary: 'Assign you Omer Serruya’s conversation (WhatsApp)',
+            target: { conversationId: 'c9', assigneeId: 'u1' },
+          },
+          { summary: 'Add a note to Dana', target: { customerId: 'k2' } },
+          { summary: 'Answer the question “Eilat?”', target: { questionId: 'q1' } },
+          { summary: 'Something with no target', target: {} },
+        ],
+      },
+      ...over,
+    });
+  const show = (pending: readonly Approval[], viewerId: string | null = null) =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ approvals: messages }}>
+        <ApprovalsScreen
+          pending={pending}
+          requesterNames={{}}
+          serverNow={NOW}
+          viewerId={viewerId}
+        />
+      </NextIntlClientProvider>,
+    );
+
+  it('asked by you: "You asked GOTCHA in Home" - never "an automation"', () => {
+    show([plan()], 'u1');
+    expect(screen.getByTestId('requested-by')).toHaveTextContent(/^You asked GOTCHA in Home · /);
+    expect(screen.getByTestId('requested-by')).not.toHaveTextContent(/automation/i);
+  });
+
+  it('asked by someone else: their name; unnamed: someone on your team', () => {
+    const one = show([plan()], 'u2');
+    expect(screen.getByTestId('requested-by')).toHaveTextContent(/^Matan asked GOTCHA in Home/);
+    one.unmount();
+    show([plan({ plan: { source: 'command_bar', requester: null, steps: [] } })], 'u2');
+    expect(screen.getByTestId('requested-by')).toHaveTextContent(
+      /^Someone on your team asked GOTCHA in the command bar/,
+    );
+  });
+
+  it('the queue chip says where it was asked - never "Assistant" or "Plan"', () => {
+    show([plan()], 'u1');
+    expect(screen.getByTestId('queue-plan-p1')).toHaveTextContent('From Home');
+    expect(screen.getByTestId('queue-p1')).not.toHaveTextContent(/Assistant|Plan\b/);
+  });
+
+  it('no Why card repeating who asked; the steps are what approving does, each linked', () => {
+    show([plan()], 'u1');
+    expect(screen.queryByTestId('approval-reason')).toBeNull();
+    expect(screen.queryByTestId('policy-rule')).toBeNull();
+    const links = [0, 1, 2].map((i) => screen.getByTestId(`plan-step-${i}`).querySelector('a'));
+    expect(links.map((a) => a?.getAttribute('href'))).toEqual([
+      '/inbox?c=c9',
+      '/customers/k2',
+      '/studio/knowledge?section=gaps',
+    ]);
+    expect(screen.getByTestId('plan-step-0')).toHaveTextContent(
+      'Assign you Omer Serruya’s conversation (WhatsApp)',
+    );
+    expect(screen.getByTestId('plan-step-3').querySelector('a')).toBeNull();
+    expect(screen.getByTestId('plan-step-3')).toHaveAttribute('dir', 'auto');
+  });
+
+  it('if you leave it: it expires and nothing happens - no customer waiting', () => {
+    show([plan()], 'u1');
+    expect(screen.getByTestId('if-you-leave-it')).toHaveTextContent(
+      'it expires and nothing happens',
+    );
+    expect(screen.getByTestId('if-you-leave-it')).not.toHaveTextContent(
+      /conversation goes to a person/,
+    );
+  });
+
+  it('the reasons are a plan’s three - Not right, I’ll handle it myself, Other - and one is sent', async () => {
+    show([plan()], 'u1');
+    expect(screen.queryByTestId('reason-policy')).toBeNull();
+    expect(screen.queryByTestId('reason-wrongOrder')).toBeNull();
+    expect(screen.queryByTestId('reason-tooGenerous')).toBeNull();
+    expect(screen.getByTestId('reason-wrong')).toHaveTextContent('Not right');
+    expect(screen.getByTestId('reason-myself')).toBeInTheDocument();
+    expect(screen.getByTestId('reason-other')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('reason-wrong'));
+    await userEvent.click(screen.getByTestId('reject'));
+    expect(reject).toHaveBeenCalledWith('p1', 'Not right');
+  });
+
+  it('any other request keeps its own reasons and words', () => {
+    show([approval()], 'u1');
+    expect(screen.getByTestId('reason-policy')).toBeInTheDocument();
+    expect(screen.queryByTestId('reason-wrong')).toBeNull();
+    expect(screen.getByTestId('if-you-leave-it')).toHaveTextContent(
+      /conversation goes to a person/,
+    );
   });
 });

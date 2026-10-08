@@ -90,3 +90,28 @@ describe('★ the refund limit is an enabled REFUND policy’s approval threshol
     expect((await loadApprovals()).refundLimit).toBe(limit);
   });
 });
+
+describe('★ the viewer - so a plan they asked for says "You asked"', () => {
+  const route = (me: () => unknown) =>
+    get.mockImplementation(
+      async ({
+        endpoint,
+        payload,
+      }: {
+        endpoint: { path: string };
+        payload: { parse: (v: unknown) => unknown };
+      }) => (endpoint.path === '/api/auth/me' ? payload.parse(me()) : payload.parse([])),
+    );
+
+  it('read from /api/auth/me', async () => {
+    route(() => ({ user: { id: 'u7' } }));
+    expect((await loadApprovals()).viewerId).toBe('u7');
+  });
+
+  it('a failed read is null - never a guess', async () => {
+    route(() => {
+      throw new Error('down');
+    });
+    expect((await loadApprovals()).viewerId).toBeNull();
+  });
+});

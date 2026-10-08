@@ -143,6 +143,57 @@ export function isKnownRiskTag(tag: string): tag is KnownRiskTag {
   return (KNOWN_RISK_TAGS as readonly string[]).includes(tag);
 }
 
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ A PLAN THE ASSISTANT PROPOSED - `propose_plan` (ai ccbd75b8)
+ * ════════════════════════════════════════════════════════════════════════════
+ * Home's assistant (or the command bar) proposes; a person approves here.
+ * `params` carries `{ summary, steps, requester, source }`, and each step its
+ * pinned `params`, a `target` and its own sentence in the turn's language.
+ *
+ * Only what the card shows leaves the parse: where it was asked, who asked,
+ * and each step's sentence and target ids. A step's own `params` - whatever
+ * the tool was given - is stripped here like every other `params`.
+ * `riskTags` is `["ASSISTANT","PLAN"]` and `requestedBy` is `user:<id>`, so
+ * neither says who asked in words; `requester` does.
+ */
+export const PLAN_SOURCES = ['home_assistant', 'command_bar'] as const;
+export type PlanSource = (typeof PLAN_SOURCES)[number];
+
+const planTargetSchema = z.object({
+  conversationId: z.string().min(1).optional().catch(undefined),
+  customerId: z.string().min(1).optional().catch(undefined),
+  assigneeId: z.string().min(1).optional().catch(undefined),
+  questionId: z.string().min(1).optional().catch(undefined),
+});
+
+const planSchema = z.object({
+  source: z.enum(PLAN_SOURCES).nullable().catch(null).default(null),
+  requester: z
+    .object({ userId: z.string().min(1), name: z.string().nullable().catch(null).default(null) })
+    .nullable()
+    .catch(null)
+    .default(null),
+  steps: z
+    .array(
+      z.object({
+        summary: z.string().catch(''),
+        target: planTargetSchema.catch({}).default({}),
+      }),
+    )
+    .catch([])
+    .default([]),
+});
+export type ApprovalPlan = z.infer<typeof planSchema>;
+export type PlanTarget = z.infer<typeof planTargetSchema>;
+
+/** The plan's safe fields, for a `propose_plan` approval; null for anything else. */
+export function approvalPlan(tool: string, params: unknown): ApprovalPlan | null {
+  if (tool !== 'propose_plan') return null;
+  // Every field degrades on its own, so only a non-object can fail the parse.
+  return planSchema.parse(params !== null && typeof params === 'object' ? params : {});
+}
+
 export const approvalSchema = z
   .object({
     id: z.string().min(1),
@@ -206,6 +257,8 @@ export const approvalSchema = z
     ...approval,
     summary: approvalSummary({ summary: approval.summary, tool: approval.tool, params }),
     facts: approvalFacts(params),
+    /** A proposed plan's who, where and steps; `null` for any other tool. */
+    plan: approvalPlan(approval.tool, params),
     /** The amount that ran, when an approver edited it; `null` when nothing was. */
     editedAmount: modifiedParams != null ? approvalFacts(modifiedParams).amount : null,
     /** The percentage that ran, when an approver edited a discount. */

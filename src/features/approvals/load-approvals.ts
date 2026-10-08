@@ -8,8 +8,10 @@ import { toolUsageListSchema, type ToolUsage } from '@/api/contracts/capabilitie
 import { aiEmployeesSchema, isBuilderDraft, type AiEmployee } from '@/api/contracts/people';
 import { serverApi } from '@/api/client/server-api';
 import { businessPoliciesSchema } from '@/api/contracts/business-policies';
+import { currentUserSchema } from '@/api/contracts/identity';
 import {
   aiEmployeeEndpoints,
+  authEndpoints,
   analyticsEndpoints,
   businessPolicyEndpoints,
   approvalEndpoints,
@@ -81,6 +83,11 @@ export interface ApprovalsData {
    * there is none - dev holds no rows - or the read failed; then no number.
    */
   readonly refundLimit: number | null;
+  /**
+   * Who is reading - a plan they asked the assistant for says "You asked".
+   * `null` when the read failed: then a plan names its requester instead.
+   */
+  readonly viewerId: string | null;
 }
 
 /** 03c names the customers on the rows a person will see - not on all 200. */
@@ -100,29 +107,34 @@ export async function loadApprovals(): Promise<ApprovalsData> {
     };
 
   const now = new Date();
-  const [pending, approved, rejected, aiEmployees, usageToday, policies] = await Promise.all([
-    api
-      .get({ endpoint: approvalEndpoints.list('PENDING'), payload: approvalsSchema })
-      .catch(degrade('approvals.pending_failed', null)),
-    api
-      .get({ endpoint: approvalEndpoints.list('APPROVED'), payload: approvalsSchema })
-      .catch(degrade('approvals.approved_failed', null)),
-    api
-      .get({ endpoint: approvalEndpoints.list('REJECTED'), payload: approvalsSchema })
-      .catch(degrade('approvals.rejected_failed', null)),
-    api
-      .get({ endpoint: aiEmployeeEndpoints.list(), payload: aiEmployeesSchema })
-      .catch(degrade('approvals.ai_employees_failed', null)),
-    api
-      .get({
-        endpoint: analyticsEndpoints.toolUsageFrom(startOfToday(now).toISOString()),
-        payload: toolUsageListSchema,
-      })
-      .catch(degrade('approvals.usage_failed', null)),
-    api
-      .get({ endpoint: businessPolicyEndpoints.list(), payload: businessPoliciesSchema })
-      .catch(degrade('approvals.policies_failed', null)),
-  ]);
+  const [pending, approved, rejected, aiEmployees, usageToday, policies, viewerId] =
+    await Promise.all([
+      api
+        .get({ endpoint: approvalEndpoints.list('PENDING'), payload: approvalsSchema })
+        .catch(degrade('approvals.pending_failed', null)),
+      api
+        .get({ endpoint: approvalEndpoints.list('APPROVED'), payload: approvalsSchema })
+        .catch(degrade('approvals.approved_failed', null)),
+      api
+        .get({ endpoint: approvalEndpoints.list('REJECTED'), payload: approvalsSchema })
+        .catch(degrade('approvals.rejected_failed', null)),
+      api
+        .get({ endpoint: aiEmployeeEndpoints.list(), payload: aiEmployeesSchema })
+        .catch(degrade('approvals.ai_employees_failed', null)),
+      api
+        .get({
+          endpoint: analyticsEndpoints.toolUsageFrom(startOfToday(now).toISOString()),
+          payload: toolUsageListSchema,
+        })
+        .catch(degrade('approvals.usage_failed', null)),
+      api
+        .get({ endpoint: businessPolicyEndpoints.list(), payload: businessPoliciesSchema })
+        .catch(degrade('approvals.policies_failed', null)),
+      api
+        .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
+        .then((me): string | null => me.user.id)
+        .catch(degrade('approvals.me_failed', null)),
+    ]);
   const refund = policies?.policies.find((p) => p.actionKind === 'REFUND' && p.enabled);
 
   const decided =
@@ -136,6 +148,7 @@ export async function loadApprovals(): Promise<ApprovalsData> {
     readAt: now.getTime(),
     usageToday,
     refundLimit: refund?.config.managerApprovalAboveAmount ?? null,
+    viewerId,
     customerNames: await customerNames(decided ?? []),
     pending,
     decided,

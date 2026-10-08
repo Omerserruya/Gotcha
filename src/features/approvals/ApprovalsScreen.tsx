@@ -12,6 +12,7 @@ import {
   isOutcomeUnknown,
   isRetryable,
   type Approval,
+  type PlanTarget,
 } from '@/api/contracts/approvals';
 
 import { approveRequest, rejectRequest, retryExecution } from './actions';
@@ -74,7 +75,19 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 /** Omer, 2026-10-04: the reasons on offer, and "Other" to type one. */
 const REJECT_REASONS = ['policy', 'myself', 'wrongOrder', 'tooGenerous', 'other'] as const;
-type RejectReason = (typeof REJECT_REASONS)[number];
+/** A plan the assistant proposed has no order and no amount: Omer's three. */
+const PLAN_REJECT_REASONS = ['wrong', 'myself', 'other'] as const;
+type RejectReason = (typeof REJECT_REASONS)[number] | (typeof PLAN_REJECT_REASONS)[number];
+
+/** Where a plan step's target opens: its conversation, its customer, the open questions. */
+function stepHref(target: PlanTarget) {
+  if (target.conversationId)
+    return { pathname: '/inbox' as const, query: { c: target.conversationId } };
+  if (target.customerId) return `/customers/${target.customerId}`;
+  if (target.questionId)
+    return { pathname: '/studio/knowledge' as const, query: { section: 'gaps' } };
+  return null;
+}
 
 export function ApprovalsScreen({
   pending,
@@ -89,6 +102,7 @@ export function ApprovalsScreen({
   editAmountLive = false,
   refundLimit = null,
   initialId,
+  viewerId = null,
 }: {
   readonly pending: readonly Approval[];
   /** `/approvals?id=` - the request to open on, as a click on its row would. */
@@ -116,6 +130,8 @@ export function ApprovalsScreen({
   readonly editAmountLive?: boolean;
   /** "Refunds under N never reach you" - the REFUND policy's threshold, when set. */
   readonly refundLimit?: number | null;
+  /** Who is looking - a plan they asked for reads "You asked GOTCHA in Home". */
+  readonly viewerId?: string | null;
 }) {
   const t = useTranslations('approvals');
 
@@ -436,7 +452,25 @@ export function ApprovalsScreen({
             : {},
         ).format(approval.facts.amount);
   const reasonText = (key: RejectReason) =>
-    key === 'tooGenerous' || key === 'other' ? t(`reject3.${key}`) : t(`action2.reasons.${key}`);
+    key === 'wrong'
+      ? t('plan.reasons.wrong')
+      : key === 'tooGenerous' || key === 'other'
+        ? t(`reject3.${key}`)
+        : t(`action2.reasons.${key}`);
+  /**
+   * Who asked for a plan, and where (ai ccbd75b8): "You asked GOTCHA in
+   * Home", "Matan asked GOTCHA in Home" - never "an automation", which is
+   * what `requestedBy: user:<id>` read as. Null for anything but a plan.
+   */
+  const planAsked = (approval: Approval): string | null => {
+    const plan = approval.plan;
+    if (!plan) return null;
+    const where = plan.source ?? 'unknown';
+    const asker = plan.requester;
+    if (asker && viewerId && asker.userId === viewerId) return t(`plan.asked.you.${where}`);
+    if (asker?.name) return t(`plan.asked.other.${where}`, { name: asker.name });
+    return t(`plan.asked.someone.${where}`);
+  };
   /** "Edit amount", or "Edit discount" on a coupon. */
   const editLabel = (approval: Approval) =>
     editTarget(approval)?.field === 'percentage'
@@ -535,7 +569,11 @@ export function ApprovalsScreen({
                     const current = approval.id === selected?.id;
                     const left = Date.parse(approval.expiresAt) - now.getTime();
                     const soon = !lapsed && Number.isFinite(left) && left < SOON_MS;
-                    const tag = visibleRiskTags(approval.riskTags)[0];
+                    // A plan's tags (ASSISTANT, PLAN) are not risks: where it was asked is.
+                    const tag = approval.plan ? undefined : visibleRiskTags(approval.riskTags)[0];
+                    const planChip = approval.plan?.source
+                      ? t(`plan.chip.${approval.plan.source}`)
+                      : null;
                     return (
                       <li key={approval.id} className={styles.queueItem}>
                         <button
@@ -588,6 +626,14 @@ export function ApprovalsScreen({
                           {tag ? (
                             <span className={styles.queueTag} data-tag={tag}>
                               {riskLabel(tag)}
+                            </span>
+                          ) : planChip ? (
+                            <span
+                              className={styles.queueTag}
+                              data-tag="plan"
+                              data-testid={`queue-plan-${approval.id}`}
+                            >
+                              {planChip}
                             </span>
                           ) : null}
                         </button>
@@ -659,9 +705,10 @@ export function ApprovalsScreen({
                       })(),
                       line:
                         [
-                          requesterNames[selected.id]
-                            ? t('detail.requestedBy', { who: requesterNames[selected.id]! })
-                            : null,
+                          planAsked(selected) ??
+                            (requesterNames[selected.id]
+                              ? t('detail.requestedBy', { who: requesterNames[selected.id]! })
+                              : null),
                           clock(selected.createdAt),
                         ]
                           .filter(Boolean)
@@ -691,18 +738,20 @@ export function ApprovalsScreen({
             <header className={styles.detailHeader}>
               <div className={styles.detailHeading}>
                 <p className={styles.requestedBy} data-testid="requested-by">
-                  {requesterNames[selected.id]
-                    ? createdClock
-                      ? t('detail2.eyebrow', {
-                          who: requesterNames[selected.id]!,
-                          time: createdClock,
-                        })
-                      : t('detail.requestedBy', { who: requesterNames[selected.id]! })
-                    : createdClock
-                      ? aiAsked.includes(selected.id)
-                        ? t('detail3.eyebrowAi', { time: createdClock })
-                        : t('detail2.eyebrowAutomation', { time: createdClock })
-                      : t('detail.requestedByAutomation')}
+                  {planAsked(selected)
+                    ? [planAsked(selected), createdClock].filter(Boolean).join(' · ')
+                    : requesterNames[selected.id]
+                      ? createdClock
+                        ? t('detail2.eyebrow', {
+                            who: requesterNames[selected.id]!,
+                            time: createdClock,
+                          })
+                        : t('detail.requestedBy', { who: requesterNames[selected.id]! })
+                      : createdClock
+                        ? aiAsked.includes(selected.id)
+                          ? t('detail3.eyebrowAi', { time: createdClock })
+                          : t('detail2.eyebrowAutomation', { time: createdClock })
+                        : t('detail.requestedByAutomation')}
                 </p>
                 <h2 className={styles.detailSummary} data-testid="detail-title">
                   {say(
@@ -750,7 +799,11 @@ export function ApprovalsScreen({
               hold is "-", never a guess.
             */}
             <div className={styles.detailCards}>
-              {selected.reason || selected.policyRuleName ? (
+              {/*
+                A plan's `reason` and rule name are both "Matan asked GOTCHA in
+                Home" - the eyebrow says it; twice more read as a duplicate.
+              */}
+              {!selected.plan && (selected.reason || selected.policyRuleName) ? (
                 <section className={styles.detailCard}>
                   <h3 className={styles.detailCardTitle}>{t('card.why')}</h3>
                   {selected.reason ? (
@@ -830,27 +883,55 @@ export function ApprovalsScreen({
               })()}
               <section className={styles.detailCard} data-testid="approve-chain">
                 <h3 className={styles.detailCardTitle}>{t('chain.title')}</h3>
-                <ol className={styles.chain}>
-                  {approveChain(
-                    selected,
-                    customers[selected.id]?.name ?? null,
-                    amountOf(selected),
-                  ).map((step, i) => [
-                    i > 0 ? (
-                      <li key={`arrow-${i}`} className={styles.chainArrow} aria-hidden="true">
-                        →
-                      </li>
-                    ) : null,
-                    <li key={step.key + i} className={styles.chainStep}>
-                      {say(step, '')}
-                    </li>,
-                  ])}
-                </ol>
+                {selected.plan ? (
+                  // A plan: each step's own sentence, linked to what it acts on.
+                  selected.plan.steps.length === 0 ? (
+                    <p className={styles.reason}>{t('plan.noSteps')}</p>
+                  ) : (
+                    <ol className={styles.planSteps} data-testid="plan-steps">
+                      {selected.plan.steps.map((step, i) => {
+                        const href = stepHref(step.target);
+                        return (
+                          <li key={i} dir="auto" data-testid={`plan-step-${i}`}>
+                            {href ? (
+                              <Link href={href} className={styles.planStepLink}>
+                                {step.summary}
+                              </Link>
+                            ) : (
+                              step.summary
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )
+                ) : (
+                  <ol className={styles.chain}>
+                    {approveChain(
+                      selected,
+                      customers[selected.id]?.name ?? null,
+                      amountOf(selected),
+                    ).map((step, i) => [
+                      i > 0 ? (
+                        <li key={`arrow-${i}`} className={styles.chainArrow} aria-hidden="true">
+                          →
+                        </li>
+                      ) : null,
+                      <li key={step.key + i} className={styles.chainStep}>
+                        {say(step, '')}
+                      </li>,
+                    ])}
+                  </ol>
+                )}
               </section>
               {decidable && expiresClock ? (
                 <section className={styles.detailCard} data-testid="if-you-leave-it">
                   <h3 className={styles.detailCardTitle}>{t('card.leave')}</h3>
-                  <p className={styles.reason}>{t('card.leaveBody', { when: expiresClock })}</p>
+                  <p className={styles.reason}>
+                    {selected.plan
+                      ? t('plan.leaveBody', { when: expiresClock })
+                      : t('card.leaveBody', { when: expiresClock })}
+                  </p>
                 </section>
               ) : null}
             </div>
@@ -991,7 +1072,7 @@ export function ApprovalsScreen({
                   <span className={styles.reasonLabel} id="reject-prompt">
                     {t('reject3.prompt')}
                   </span>
-                  {REJECT_REASONS.map((key, i) => (
+                  {(selected.plan ? PLAN_REJECT_REASONS : REJECT_REASONS).map((key, i) => (
                     <button
                       key={key}
                       ref={i === 0 ? firstReasonRef : undefined}

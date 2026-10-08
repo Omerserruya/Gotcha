@@ -1187,6 +1187,28 @@
     color: var(--text-disabled);
   }
 
+  /* A plan's steps: its own sentences, numbered, each opening what it acts on. */
+  .planSteps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    margin: 0;
+    padding-inline-start: var(--space-16);
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .planStepLink {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--border-default);
+    text-underline-offset: 3px;
+  }
+
+  .planStepLink:hover {
+    text-decoration-color: currentcolor;
+  }
+
   /* 02: the key on Approve - a small mono tile beside the word. */
   .key {
     padding: 1px 5px;

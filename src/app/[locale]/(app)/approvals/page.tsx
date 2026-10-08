@@ -77,6 +77,7 @@ export default async function Page({
     usageToday,
     customerNames,
     refundLimit,
+    viewerId,
   } = await loadApprovals();
 
   const nameFor = (list: readonly Approval[] | null) =>
@@ -255,6 +256,7 @@ export default async function Page({
         /* Backend 05979604: `edits.amount` is live (Omer, 2026-10-04). */
         editAmountLive
         refundLimit={refundLimit}
+        viewerId={viewerId}
         decidedTotal={decided?.length ?? 0}
         // The moment the queue was read, not the moment this rendered -
         // and it starts the client's clock at exactly the server's value, so

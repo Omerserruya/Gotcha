@@ -308,5 +308,33 @@
   "asked": {
     "missing": "This request isn't here. It may have been decided already, or it belongs to another workspace.",
     "decided": "This request was already decided - it is in what was decided earlier."
+  },
+  "plan": {
+    "asked": {
+      "you": {
+        "home_assistant": "You asked GOTCHA in Home",
+        "command_bar": "You asked GOTCHA in the command bar",
+        "unknown": "You asked GOTCHA"
+      },
+      "other": {
+        "home_assistant": "{name} asked GOTCHA in Home",
+        "command_bar": "{name} asked GOTCHA in the command bar",
+        "unknown": "{name} asked GOTCHA"
+      },
+      "someone": {
+        "home_assistant": "Someone on your team asked GOTCHA in Home",
+        "command_bar": "Someone on your team asked GOTCHA in the command bar",
+        "unknown": "Someone on your team asked GOTCHA"
+      }
+    },
+    "chip": {
+      "home_assistant": "From Home",
+      "command_bar": "From the command bar"
+    },
+    "leaveBody": "If nobody decides by {when}, it expires and nothing happens.",
+    "noSteps": "The request names no steps.",
+    "reasons": {
+      "wrong": "Not right"
+    }
   }
 }
