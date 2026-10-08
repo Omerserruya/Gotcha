@@ -38,6 +38,7 @@ import {
   type HandoffNumber,
   type ShopifyPlace,
   type WebsiteWidget,
+  type WidgetAssignment,
   type WidgetInstall,
 } from '@/api/contracts/website-widget';
 import {
@@ -49,13 +50,13 @@ import { ShopifyConnect } from '@/features/capabilities/ShopifyConnect';
 import type { ShopifyAvailability } from '@/features/capabilities/load-capabilities';
 import { Link, useRouter } from '@/i18n/navigation';
 
-import { automationsLink } from '@/features/employees/WhoAnswers';
 import { brandMark, initials, logoFit } from '@/lib/brand-mark';
 
 import { hexToHsv, hsvToHex } from './colour';
 import type { ShopifyData } from './load-website-widget';
 import { saveWebsiteWidget } from './website-widget-actions';
 import styles from './Webchat.module.css';
+import { WidgetAssignmentCard } from './WidgetAssignment';
 
 /** How long the editor waits after the last change before saving it. */
 export const SAVE_AFTER_MS = 700;
@@ -104,8 +105,14 @@ export function WebchatSettings({
   business,
   tab,
   handoffNumbers = null,
+  assignment = null,
 }: {
   readonly initial: WebchatConfig;
+  /**
+   * Who answers, from the playbook, and whom to give it to (§4) - read on the
+   * Conversation tab. `null`: not read; `'forbidden'`: not an admin.
+   */
+  readonly assignment?: WidgetAssignment | 'forbidden' | null;
   /**
    * Stage B's WhatsApp numbers for "Continue on WhatsApp". `null`: the service
    * is stage A - the look and the handoff are not there yet, and are not sent.
@@ -266,7 +273,7 @@ export function WebchatSettings({
           {tab === 'appearance' ? (
             <Appearance config={config} set={set} stageB={stageB} />
           ) : tab === 'conversation' ? (
-            <Conversation config={config} set={set} assigned={assigned} />
+            <Conversation config={config} set={set} assigned={assigned} assignment={assignment} />
           ) : tab === 'behaviour' ? (
             <Behaviour
               config={config}
@@ -637,10 +644,12 @@ function Conversation({
   config,
   set,
   assigned,
+  assignment,
 }: {
   readonly config: WebchatConfig;
   readonly set: Setters;
   readonly assigned: WebsiteWidget['assignedEmployee'];
+  readonly assignment: WidgetAssignment | 'forbidden' | null;
 }) {
   const t = useTranslations('channels.webchat.conversation');
   const questions = [0, 1, 2].map((i) => config.ux.welcome.suggestedQuestions[i] ?? '');
@@ -691,24 +700,10 @@ function Conversation({
           </h2>
           <p className={styles.rowHint}>{t('employeeHint')}</p>
           {/*
-            Who answers is decided in one place, the playbook: read here, never
-            a second routing rule. Changing it from here waits for Omer.
+            Who answers is decided in one place, the playbook - and since Omer's
+            2026-10-08 decision, an admin can set it from here, written to it.
           */}
-          <p className={styles.assigned} data-testid="webchat-employee-who">
-            {assigned ? (
-              <>
-                <span className={styles.assignedMark} aria-hidden="true">
-                  {initials(assigned.name)}
-                </span>
-                <bdi dir="auto">{assigned.name}</bdi>
-              </>
-            ) : (
-              t('employeeNone')
-            )}
-          </p>
-          <p className={styles.rowHint} data-testid="webchat-employee-where">
-            {t.rich('employeeWhere', { automations: automationsLink })}
-          </p>
+          <WidgetAssignmentCard read={assignment} assigned={assigned} />
         </section>
         <section
           className={styles.card}

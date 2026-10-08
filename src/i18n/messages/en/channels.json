@@ -584,7 +584,40 @@
         "en": "Always English"
       },
       "employeeNone": "The playbook doesn't send website conversations to one employee",
-      "employeeWhere": "Who answers is set in <automations>Studio · Automations</automations> and the playbook, not here"
+      "employeeWhere": "Who answers is set in <automations>Studio · Automations</automations> and the playbook, not here",
+      "assign": {
+        "adminsOnly": "Only an admin can change who answers the widget.",
+        "noPlace": "Who answers can be chosen once the widget has a place - create its code on the Install tab.",
+        "how": {
+          "always": "An employee",
+          "conditional": "Conditions in the playbook decide",
+          "team": "A team, not one employee",
+          "flow": "A chatbot flow",
+          "none": "No one yet"
+        },
+        "conditional": "{channels}: conditions in the playbook decide who answers - change them in <automations>Studio · Automations</automations>.",
+        "choose": "Who answers the widget",
+        "inactive": "Not working",
+        "inactiveWhy": "Start this employee in Studio to choose them here.",
+        "playbook": "This changes the playbook: from the moment it's saved, website conversations go to this employee.",
+        "shared": {
+          "ask": "The widget shares one route in the playbook with {channels}, so this also moves {channels} to {name}.",
+          "askUnnamed": "The widget shares one route in the playbook with other channels, so this also moves them to {name}.",
+          "yes": "Move them too",
+          "no": "Cancel"
+        },
+        "save": "Save: {name}",
+        "saveNothing": "Save",
+        "saving": "Saving…",
+        "saved": "Saved. {name} answers the widget from now on.",
+        "problem": {
+          "conditional": "Conditions in the playbook decide this now - change it in Studio · Automations.",
+          "employee_gone": "That employee isn't working now. Choose another.",
+          "no_place": "The widget isn't installed anywhere yet - create its code on the Install tab first.",
+          "forbidden": "Only an admin can change who answers the widget.",
+          "failed": "Not changed. Try again."
+        }
+      }
     },
     "behaviour": {
       "popup": "Pop-up message",

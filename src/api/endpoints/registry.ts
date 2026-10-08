@@ -563,6 +563,11 @@ export const channelEndpoints = {
   websiteWidget: () => endpoint('/api/website-widget'),
   /** Where it is installed: the code snippet, each Shopify shop, WooCommerce. */
   websiteWidgetInstall: () => endpoint('/api/website-widget/install'),
+  /**
+   * GET / PUT - who answers the widget, written to THE PLAYBOOK (website-widget-v1
+   * §4, Backend 544e8b76). Role ADMIN, like the playbook editor.
+   */
+  websiteWidgetAssignment: () => endpoint('/api/website-widget/assignment'),
   /** SMTP/IMAP credentials. Stores real secrets; never exercised by a test. */
   connectEmail: () => endpoint('/api/channels/connect/email'),
   disconnect: (id: string) => endpoint('/api/channels/{id}/disconnect', { id }),

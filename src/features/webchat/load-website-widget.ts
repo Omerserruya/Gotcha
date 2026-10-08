@@ -1,12 +1,15 @@
 import 'server-only';
 
+import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { currentUserSchema } from '@/api/contracts/identity';
 import { integrationsSchema, isFailing } from '@/api/contracts/integrations';
 import {
   websiteWidgetSchema,
+  widgetAssignmentSchema,
   widgetInstallSchema,
   type WebsiteWidget,
+  type WidgetAssignment,
   type WidgetInstall,
 } from '@/api/contracts/website-widget';
 import { authEndpoints, channelEndpoints, integrationEndpoints } from '@/api/endpoints/registry';
@@ -91,4 +94,25 @@ export async function loadWidgetInstall(): Promise<WidgetInstall | null> {
       logger.warn('website_widget.install_failed', { cause });
       return null;
     });
+}
+
+/**
+ * Who answers the widget, per the playbook, and whom it can be given to
+ * (§4.1). Admins only, like the playbook editor: `'forbidden'` for anyone
+ * else - the card then reads it and says who can change it. `null`: it
+ * could not be read, and nothing is offered.
+ */
+export async function loadWidgetAssignment(): Promise<WidgetAssignment | 'forbidden' | null> {
+  try {
+    const answer = await serverApi().get({
+      endpoint: channelEndpoints.websiteWidgetAssignment(),
+      payload: widgetAssignmentSchema,
+      raw: true,
+    });
+    return answer.data;
+  } catch (cause) {
+    if (isApiError(cause) && cause.status === 403) return 'forbidden';
+    logger.warn('website_widget.assignment_read_failed', { cause });
+    return null;
+  }
 }

@@ -593,6 +593,49 @@
     font-weight: 600;
   }
 
+  /* Who answers today, a line per place, and the choice under it (§4). */
+  .assignNow {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 13px;
+  }
+
+  .assignChoices {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .assignActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .assignAsk {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background-color: var(--approval-chip-surface);
+    font-size: 12.5px;
+  }
+
+  .assignAsk p {
+    margin: 0;
+  }
+
+  .assignProblem {
+    margin: 0;
+    font-size: 12px;
+    color: var(--intent-urgent-text);
+  }
+
   /* On by where it runs: a status where a switch would be. */
   .onTag {
     flex: none;

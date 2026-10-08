@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import channels from '@/i18n/messages/en/channels.json';
 
-const load = vi.hoisted(() => ({ loadWebsiteWidget: vi.fn() }));
+const load = vi.hoisted(() => ({ loadWebsiteWidget: vi.fn(), loadWidgetAssignment: vi.fn() }));
 vi.mock('@/features/webchat/load-website-widget', () => load);
 const editor = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }));
 vi.mock('@/features/webchat/WebchatSettings', () => ({
@@ -35,6 +35,7 @@ const SETTINGS = {
 
 beforeEach(() => {
   load.loadWebsiteWidget.mockReset();
+  load.loadWidgetAssignment.mockReset();
   navigation.redirect.mockReset();
   editor.props = null;
 });
@@ -76,6 +77,12 @@ describe('★ 13g-13j at its one address - the workspace’s widget', () => {
     });
     await Page({ searchParams: Promise.resolve({ tab: 'nonsense' }) });
     expect(load.loadWebsiteWidget).toHaveBeenLastCalledWith({ installTab: false });
+    // Who answers (§4) is the Conversation tab's: not read on the others.
+    expect(load.loadWidgetAssignment).not.toHaveBeenCalled();
+    load.loadWidgetAssignment.mockResolvedValue('forbidden');
+    render(await Page({ searchParams: Promise.resolve({ tab: 'conversation' }) }));
+    expect(load.loadWidgetAssignment).toHaveBeenCalledTimes(1);
+    expect(editor.props).toMatchObject({ tab: 'conversation', assignment: 'forbidden' });
   });
 
   it('★ the web chat’s old address opens the widget, on the tab it asked for', async () => {

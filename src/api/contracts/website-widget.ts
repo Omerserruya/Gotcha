@@ -139,3 +139,63 @@ export function isLive(install: WidgetInstall): boolean {
 export function troubledShops(install: WidgetInstall): readonly ShopifyPlace[] {
   return install.shopify.filter((shop) => shop.status === 'uninstalled');
 }
+
+/* ── Who answers the widget: the playbook, written from here (§4) ───────── */
+
+/**
+ * How the playbook routes one of the widget's channels.
+ *
+ * ⚠ The whole domain, from §4.1: always | conditional | team | flow | none.
+ *   One the route adds later is read as `conditional` - not editable here,
+ *   "decided in the playbook" - never as a route this screen would rewrite.
+ */
+export const ASSIGNMENT_HOWS = ['always', 'conditional', 'team', 'flow', 'none'] as const;
+export type AssignmentHow = (typeof ASSIGNMENT_HOWS)[number];
+
+const assignmentChannelSchema = z.object({
+  channel: z.string(),
+  /** Set only when `how` is `always`. */
+  employee: z.object({ id: z.string(), name: z.string() }).nullable().catch(null).default(null),
+  how: z.enum(ASSIGNMENT_HOWS).catch('conditional'),
+  /** `false` when conditions decide it: changed in the playbook, not here. */
+  editable: z.boolean().catch(false),
+  /** The playbook has an entry of its own for this channel. */
+  dedicated: z.boolean().catch(false).default(false),
+  /** Other channels on the SAME route. */
+  sharedWith: z.array(z.string()).catch([]).default([]),
+  /**
+   * Exactly what a change from the widget would ALSO move (Backend a9c26456):
+   * `[]` when the channel would get its own entry or nothing shares its
+   * route. Absent from an older service - then only the PUT's 409 says.
+   */
+  movesWith: z.array(z.string()).optional().catch(undefined),
+});
+export type AssignmentChannel = z.infer<typeof assignmentChannelSchema>;
+
+const assignmentShape = z.object({
+  channels: z.array(assignmentChannelSchema),
+  /** To choose from; only active ones are choosable. */
+  employees: z.array(
+    z.object({ id: z.string(), name: z.string(), active: z.boolean().catch(false) }),
+  ),
+});
+export type WidgetAssignment = z.infer<typeof assignmentShape>;
+
+/** `GET /api/website-widget/assignment`. */
+export const widgetAssignmentSchema = z.object({ data: assignmentShape });
+
+/** `PUT` answers the read shape after the write, and what changed. */
+export const widgetAssignmentWriteSchema = z.object({
+  data: assignmentShape.extend({
+    changed: z
+      .array(
+        z.object({
+          channel: z.string(),
+          from: z.object({ id: z.string(), name: z.string() }).nullable().catch(null),
+          created: z.boolean().catch(false),
+        }),
+      )
+      .catch([])
+      .default([]),
+  }),
+});
