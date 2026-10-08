@@ -93,6 +93,13 @@
       "clearSelection": "Clear the selection",
       "stopAi": "Stop AI",
       "backToAi": "Back to the AI"
+    },
+    "period": {
+      "range": "{from} to {to}",
+      "from": "From {from}",
+      "to": "Until {to}",
+      "clear": "{period} - show every date",
+      "invalid": "This link's period couldn't be read, so conversations from every date are shown."
     }
   },
   "identity": {

@@ -123,10 +123,50 @@ export function inboxQuery(state: {
   readonly view: InboxView;
   readonly channel: QueueChannelFilter | null;
   readonly c?: string | null;
+  /** The period the list is narrowed to; kept by every link, like the channel. */
+  readonly period?: InboxPeriod | null;
 }): Record<string, string> {
   return {
     ...(state.view === 'queue' ? {} : { view: state.view }),
     ...(state.channel === null ? {} : { channel: state.channel }),
+    ...(state.period?.from ? { from: state.period.from } : {}),
+    ...(state.period?.to ? { to: state.period.to } : {}),
     ...(state.c ? { c: state.c } : {}),
   };
+}
+
+/**
+ * A period over the inbox (Backend, 2026-10-08): `from` / `to` as
+ * YYYY-MM-DD in the workspace's days, `to` inclusive, either end open. The
+ * assistant's sources link here ("Conversations in September").
+ */
+export interface InboxPeriod {
+  readonly from: string | null;
+  readonly to: string | null;
+}
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const isDay = (value: string) => {
+  if (!DAY.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  // A real calendar day: 2026-02-30 parses, and is not one.
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+};
+
+/**
+ * `?from=&to=`: none - `null`; a period the route will take - it; anything
+ * else - `'invalid'`. Never quietly "all": a link that asked for September
+ * and showed everything would answer a question nobody asked (the route
+ * itself answers 400 invalid_period, never all).
+ */
+export function parsePeriod(
+  from: string | undefined,
+  to: string | undefined,
+): InboxPeriod | 'invalid' | null {
+  const f = from?.trim() || null;
+  const t = to?.trim() || null;
+  if (f === null && t === null) return null;
+  if ((f !== null && !isDay(f)) || (t !== null && !isDay(t))) return 'invalid';
+  if (f !== null && t !== null && f > t) return 'invalid';
+  return { from: f, to: t };
 }

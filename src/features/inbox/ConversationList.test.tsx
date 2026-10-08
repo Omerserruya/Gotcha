@@ -1043,6 +1043,86 @@ describe('⚠⚠ the heading names the view it is heading', () => {
   });
 });
 
+describe('★★ a period over the list - an assistant source’s link (Backend, 2026-10-08)', () => {
+  const period = { from: '2026-09-01', to: '2026-09-30' };
+  const params = (el: Element) =>
+    new URL(el.getAttribute('href') ?? '', 'https://x.test').searchParams;
+
+  it('said as a chip; its × clears the period only - the view and the channel stay', async () => {
+    render(
+      await ConversationList({
+        rows: [row({ id: 'c1' })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        view: 'resolved',
+        channel: 'WHATSAPP',
+        period,
+      }),
+    );
+    const chip = screen.getByTestId('queue-period');
+    expect(chip).toHaveTextContent('Sep 1 to Sep 30');
+    expect(chip).toHaveAccessibleName('Sep 1 to Sep 30 - show every date');
+    expect(params(chip).get('from')).toBeNull();
+    expect(params(chip).get('view')).toBe('resolved');
+    expect(params(chip).get('channel')).toBe('WHATSAPP');
+  });
+
+  it('★ every link keeps it: a row, a channel chip, "All"', async () => {
+    render(
+      await ConversationList({
+        rows: [row({ id: 'c1' })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        period,
+      }),
+    );
+    for (const link of [
+      rowLinks()[0]!,
+      screen.getByTestId('filter-EMAIL'),
+      screen.getByTestId('filter-all'),
+    ]) {
+      expect(params(link).get('from')).toBe('2026-09-01');
+      expect(params(link).get('to')).toBe('2026-09-30');
+    }
+  });
+
+  it('one end open, and a single day, each in words', async () => {
+    const { unmount } = render(
+      await ConversationList({
+        rows: [],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        period: { from: '2026-09-01', to: null },
+      }),
+    );
+    expect(screen.getByTestId('queue-period')).toHaveTextContent('From Sep 1');
+    unmount();
+    render(
+      await ConversationList({
+        rows: [],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        period: { from: '2026-09-07', to: '2026-09-07' },
+      }),
+    );
+    expect(screen.getByTestId('queue-period')).toHaveTextContent(/^Sep 7×$/);
+  });
+
+  it('★ a period the link could not give: said, never quietly "all"', async () => {
+    render(
+      await ConversationList({ rows: [], cap: 10, now: NOW, hasMore: false, periodInvalid: true }),
+    );
+    expect(screen.getByTestId('queue-period-invalid')).toHaveTextContent(
+      "This link's period couldn't be read, so conversations from every date are shown.",
+    );
+    expect(screen.queryByTestId('queue-period')).toBeNull();
+  });
+});
+
 describe("★★ Wave 2 - 02's filter row, and every chip in it filters", () => {
   const queue = () => [row({ id: 'c1' }), row({ id: 'c2' })];
   const chips = () => within(screen.getByTestId('queue-filters')).getAllByRole('link');

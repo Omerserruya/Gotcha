@@ -6,6 +6,7 @@ import {
   parseChannelFilter,
   parseInboxView,
   QUEUE_CHANNEL_FILTERS,
+  parsePeriod,
   viewQuery,
 } from './inbox-views';
 
@@ -112,5 +113,49 @@ describe('⚠⚠ an inbox link keeps where the reader is', () => {
   it('leaves out what is already the default, and never a cursor', () => {
     expect(inboxQuery({ view: 'queue', channel: null })).toEqual({});
     expect(inboxQuery({ view: 'queue', channel: null, c: null })).toEqual({});
+  });
+});
+
+describe('★★ a period over the inbox (Backend, 2026-10-08)', () => {
+  it('none: null; a real one, either end open: kept as given', () => {
+    expect(parsePeriod(undefined, undefined)).toBeNull();
+    expect(parsePeriod('', ' ')).toBeNull();
+    expect(parsePeriod('2026-09-01', '2026-09-30')).toEqual({
+      from: '2026-09-01',
+      to: '2026-09-30',
+    });
+    expect(parsePeriod('2026-09-01', undefined)).toEqual({ from: '2026-09-01', to: null });
+    expect(parsePeriod(undefined, '2026-09-30')).toEqual({ from: null, to: '2026-09-30' });
+    expect(parsePeriod('2026-09-01', '2026-09-01')).toEqual({
+      from: '2026-09-01',
+      to: '2026-09-01',
+    });
+  });
+
+  it('★ anything the route would refuse is invalid - never quietly "all"', () => {
+    for (const [from, to] of [
+      ['2026-09-30', '2026-09-01'],
+      ['2026-02-30', undefined],
+      ['2026-9-1', undefined],
+      ['yesterday', undefined],
+      [undefined, '2026-13-01'],
+    ] as const) {
+      expect(parsePeriod(from, to), `${from}..${to}`).toBe('invalid');
+    }
+  });
+
+  it('every link keeps it, like the channel; clearing it keeps the rest', () => {
+    const period = { from: '2026-09-01', to: '2026-09-30' };
+    expect(inboxQuery({ view: 'resolved', channel: 'WHATSAPP', period, c: 'c1' })).toEqual({
+      view: 'resolved',
+      channel: 'WHATSAPP',
+      from: '2026-09-01',
+      to: '2026-09-30',
+      c: 'c1',
+    });
+    expect(inboxQuery({ view: 'resolved', channel: 'WHATSAPP', period: null })).toEqual({
+      view: 'resolved',
+      channel: 'WHATSAPP',
+    });
   });
 });

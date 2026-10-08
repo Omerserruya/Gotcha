@@ -487,7 +487,8 @@
       "reading": "Reading…",
       "readFailed": "Couldn't read the rest. Try again in a moment.",
       "storeGone": "The store can't be read right now, so the rest can't be shown.",
-      "sources": "What this answer is based on"
+      "sources": "What this answer is based on",
+      "none": "None"
     }
   }
 }

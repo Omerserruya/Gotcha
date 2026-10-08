@@ -516,7 +516,7 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
 
   it('★★ passes the view to the loader', async () => {
     await withView('resolved');
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'resolved', null);
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'resolved', null, null);
   });
 
   it('★★ and to the list, so its heading names the view', async () => {
@@ -526,7 +526,7 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
 
   it('⚠ an invented view falls back to the queue rather than an error', async () => {
     await withView('../../admin');
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'queue', null);
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'queue', null, null);
   });
 
   it('★★ reads `channel` too, and hands it to the loader and the list', async () => {
@@ -535,7 +535,7 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
     const tree = await Page({
       searchParams: Promise.resolve({ view: 'active', channel: 'MESSENGER' }),
     });
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'active', 'MESSENGER');
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'active', 'MESSENGER', null);
     expect(propsOf<{ channel?: string | null }>(tree, ConversationList)?.channel).toBe('MESSENGER');
   });
 
@@ -550,11 +550,33 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
     expect(propsOf<{ detail?: unknown }>(chip, OrdersChip)?.detail).toBe(shell.detail);
   });
 
+  it('★★ a period (an assistant source’s link) goes to the loader and the list', async () => {
+    loadInbox.mockResolvedValue(data());
+    const { default: Page } = await import('./page');
+    const tree = await Page({
+      searchParams: Promise.resolve({ from: '2026-09-01', to: '2026-09-30' }),
+    });
+    const period = { from: '2026-09-01', to: '2026-09-30' };
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'queue', null, period);
+    const props = propsOf<{ period?: unknown; periodInvalid?: boolean }>(tree, ConversationList);
+    expect(props).toMatchObject({ period, periodInvalid: false });
+  });
+
+  it('★ a period that is not one is not sent - and the list is told, never quietly "all"', async () => {
+    loadInbox.mockResolvedValue(data());
+    const { default: Page } = await import('./page');
+    const tree = await Page({
+      searchParams: Promise.resolve({ from: '2026-09-30', to: '2026-09-01' }),
+    });
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'queue', null, null);
+    expect(propsOf<{ periodInvalid?: boolean }>(tree, ConversationList)?.periodInvalid).toBe(true);
+  });
+
   it('⚠ a channel with no chip is "All"', async () => {
     loadInbox.mockResolvedValue(data());
     const { default: Page } = await import('./page');
     await Page({ searchParams: Promise.resolve({ channel: 'GMAIL' }) });
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'queue', null);
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'queue', null, null);
   });
 });
 

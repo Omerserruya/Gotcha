@@ -118,6 +118,26 @@ describe('★★ a breakdown: each part’s bar is the share the server gave', (
   });
 });
 
+describe('★ an empty breakdown is said, not an empty frame (Backend: refunds by reason, none)', () => {
+  it('"None" - and no "0 in all", no "Recorded for 0 of 0"', () => {
+    show([
+      block({
+        type: 'breakdown',
+        id: 'b6',
+        title: 'Refunds by reason',
+        sourceId: 's1',
+        items: [],
+        total: 0,
+        unit: 'count',
+        coverage: { covered: 0, of: 0 },
+      }),
+    ]);
+    expect(screen.getByTestId('block-b6-none')).toHaveTextContent(/^None$/);
+    expect(screen.getByTestId('block-b6')).not.toHaveTextContent('in all');
+    expect(screen.queryByTestId('block-b6-coverage')).toBeNull();
+  });
+});
+
 describe('a block that is not the whole story says so', () => {
   it('capped: counted from the first N; the store’s limit: part of what it returned', () => {
     show([

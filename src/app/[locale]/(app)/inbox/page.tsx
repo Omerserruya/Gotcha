@@ -14,7 +14,7 @@ import { ActivityProvider } from '@/features/inbox/wall/Activity';
 import { AskCopilot } from '@/features/inbox/wall/AskCopilot';
 import { CopilotWall, WallHeader } from '@/features/inbox/wall/CopilotWall';
 import styles from '@/features/inbox/Inbox.module.css';
-import { parseChannelFilter, parseInboxView } from '@/features/inbox/inbox-views';
+import { parseChannelFilter, parseInboxView, parsePeriod } from '@/features/inbox/inbox-views';
 import { loadClearQueue } from '@/features/inbox/load-clear-queue';
 import { loadInbox, QUEUE_CAP } from '@/features/inbox/load-inbox';
 import { PendingPane } from '@/features/inbox/PendingPane';
@@ -68,15 +68,21 @@ export default async function Page({
     readonly cursor?: string;
     readonly view?: string;
     readonly channel?: string;
+    /** A period (workspace days, `to` inclusive) - the assistant's sources link here. */
+    readonly from?: string;
+    readonly to?: string;
   }>;
 }) {
   const t = await getTranslations('inbox');
   const channelNames = await getTranslations('channels');
   const common = await getTranslations('common');
-  const { c, cursor, view: rawView, channel: rawChannel } = await searchParams;
+  const { c, cursor, view: rawView, channel: rawChannel, from, to } = await searchParams;
   const view = parseInboxView(rawView);
   const channel = parseChannelFilter(rawChannel);
-  const data = await loadInbox(c, cursor, view, channel);
+  const asked = parsePeriod(from, to);
+  // A period the route would refuse is not sent - and the list says it is not applied.
+  const period = asked === 'invalid' ? null : asked;
+  const data = await loadInbox(c, cursor, view, channel, period);
   /*
     02b: the queue is clear - the default view, unfiltered, read and empty.
     Its own reads only then, so a busy inbox pays for nothing.
@@ -159,6 +165,8 @@ export default async function Page({
             greeting={data.greeting}
             view={view}
             channel={channel}
+            period={period}
+            periodInvalid={asked === 'invalid'}
             clear={clear ? <ClearQueueList clear={clear} /> : null}
           />
         </section>

@@ -93,6 +93,13 @@
       "clearSelection": "ניקוי הבחירה",
       "stopAi": "עצירת ה-AI",
       "backToAi": "החזרה ל-AI"
+    },
+    "period": {
+      "range": "{from} עד {to}",
+      "from": "מ־{from}",
+      "to": "עד {to}",
+      "clear": "{period} - להצגת כל התאריכים",
+      "invalid": "לא הצלחנו לקרוא את התקופה בקישור, ולכן מוצגות שיחות מכל התאריכים."
     }
   },
   "identity": {

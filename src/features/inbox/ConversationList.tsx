@@ -21,6 +21,7 @@ import { Link } from '@/i18n/navigation';
 import {
   inboxQuery,
   QUEUE_CHANNEL_FILTERS,
+  type InboxPeriod,
   type InboxView,
   type QueueChannelFilter,
 } from './inbox-views';
@@ -68,6 +69,8 @@ export async function ConversationList({
   greeting = null,
   view = 'queue',
   channel = null,
+  period = null,
+  periodInvalid = false,
   clear = null,
 }: {
   /** 02b: drawn in place of the empty note when the queue is clear. */
@@ -107,6 +110,10 @@ export async function ConversationList({
   readonly view?: InboxView;
   /** The channel filter in force; `null` is "All". */
   readonly channel?: QueueChannelFilter | null;
+  /** The period the list is narrowed to (`?from=&to=`); kept by every link here. */
+  readonly period?: InboxPeriod | null;
+  /** The link asked for a period that is not one: said, never quietly "all". */
+  readonly periodInvalid?: boolean;
   /** How many the page holds. Stated on screen, not implied. */
   readonly cap: number;
   readonly now: Date;
@@ -137,6 +144,21 @@ export async function ConversationList({
    * highlighted rail item cannot disagree about what this list is.
    */
   const nav = await getTranslations('navigation');
+  // A period in the reader's words: days as days (the route's are workspace days - no shift).
+  const day = (iso: string) =>
+    format.dateTime(new Date(`${iso}T00:00:00Z`), {
+      day: 'numeric',
+      month: 'short',
+      timeZone: 'UTC',
+    });
+  const periodWords = (p: InboxPeriod) =>
+    p.from && p.to
+      ? p.from === p.to
+        ? day(p.from)
+        : t('queue.period.range', { from: day(p.from), to: day(p.to) })
+      : p.from
+        ? t('queue.period.from', { from: day(p.from) })
+        : t('queue.period.to', { to: day(p.to!) });
   /*
    * The channel labels live in `channels`, where screen 13 already maintains
    * them in both languages. Reading them from there rather than copying ten
@@ -192,7 +214,10 @@ export async function ConversationList({
             `?conversation=` and it was the harness's, not ours.
         */}
         <QueueRowLink
-          href={{ pathname: '/inbox', query: inboxQuery({ view, channel, c: conversation.id }) }}
+          href={{
+            pathname: '/inbox',
+            query: inboxQuery({ view, channel, period, c: conversation.id }),
+          }}
           className={styles.queueRow}
           data-testid={testid}
           /*
@@ -461,7 +486,7 @@ export async function ConversationList({
           data-testid="queue-filters"
         >
           <Link
-            href={{ pathname: '/inbox', query: inboxQuery({ view, channel: null }) }}
+            href={{ pathname: '/inbox', query: inboxQuery({ view, channel: null, period }) }}
             className={styles.filterAll}
             aria-current={channel === null ? 'true' : undefined}
             data-testid="filter-all"
@@ -473,7 +498,7 @@ export async function ConversationList({
             return (
               <Link
                 key={filter}
-                href={{ pathname: '/inbox', query: inboxQuery({ view, channel: filter }) }}
+                href={{ pathname: '/inbox', query: inboxQuery({ view, channel: filter, period }) }}
                 className={styles.filterChannel}
                 data-tone={mark.tone}
                 aria-current={channel === filter ? 'true' : undefined}
@@ -487,6 +512,27 @@ export async function ConversationList({
             );
           })}
         </nav>
+        {/*
+          The period the list is narrowed to (an assistant's source links here,
+          "Conversations in September") - said, with the way out of it. The ×
+          clears the period only; the view and the channel stay.
+        */}
+        {period ? (
+          <Link
+            href={{ pathname: '/inbox', query: inboxQuery({ view, channel, period: null }) }}
+            className={styles.periodChip}
+            aria-label={t('queue.period.clear', { period: periodWords(period) })}
+            data-testid="queue-period"
+          >
+            <span>{periodWords(period)}</span>
+            <span aria-hidden="true">×</span>
+          </Link>
+        ) : null}
+        {periodInvalid ? (
+          <p className={styles.periodNote} role="status" data-testid="queue-period-invalid">
+            {t('queue.period.invalid')}
+          </p>
+        ) : null}
       </header>
 
       {/*

@@ -98,7 +98,8 @@ export function AnswerBlocks({
 function BlockFoot({ block }: { readonly block: AnswerBlock }) {
   const t = useTranslations('home.conversation.blocks');
   const partial = block.partial;
-  const coverage = block.type === 'breakdown' ? block.coverage : null;
+  // "Recorded for 0 of 0" says nothing: coverage only when there was something to cover.
+  const coverage = block.type === 'breakdown' && block.coverage?.of ? block.coverage : null;
   if (!partial && !coverage && !block.deepLink) return null;
   return (
     <div className={styles.blockFoot}>
@@ -208,6 +209,19 @@ function ChartBlock({ block }: { readonly block: Chart }) {
 function BreakdownBlock({ block }: { readonly block: Breakdown }) {
   const value = useValue();
   const t = useTranslations('home.conversation.blocks');
+  // Nothing to break down (Backend: "Refunds by reason" with no refunds) - said, not an empty frame.
+  if (block.items.length === 0 && !block.other) {
+    return (
+      <>
+        <div className={styles.blockHead}>
+          <h3 className={styles.blockTitle}>{block.title}</h3>
+        </div>
+        <p className={styles.blockNote} data-testid={`block-${block.id}-none`}>
+          {t('none')}
+        </p>
+      </>
+    );
+  }
   return (
     <>
       <div className={styles.blockHead}>

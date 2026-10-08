@@ -130,6 +130,21 @@ describe('⚠⚠ the view reaches the route', () => {
     await settleMicrotasks();
     expect(queueCall()?.query).not.toHaveProperty('channel');
   });
+
+  it('★ a period reaches the route as its own `from` / `to`', async () => {
+    const { loadInbox } = await import('./load-inbox');
+    void loadInbox(undefined, undefined, 'queue', null, { from: '2026-09-01', to: '2026-09-30' });
+    await settleMicrotasks();
+    expect(queueCall()?.query).toMatchObject({ from: '2026-09-01', to: '2026-09-30' });
+  });
+
+  it('an open end is not sent', async () => {
+    const { loadInbox } = await import('./load-inbox');
+    void loadInbox(undefined, undefined, 'queue', null, { from: '2026-09-01', to: null });
+    await settleMicrotasks();
+    expect(queueCall()?.query).toMatchObject({ from: '2026-09-01' });
+    expect(queueCall()?.query).not.toHaveProperty('to');
+  });
 });
 
 describe('★★ the page does not wait for the conversation - the second round is a promise', () => {

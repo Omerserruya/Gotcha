@@ -1,6 +1,11 @@
 import 'server-only';
 
-import { viewQuery, type InboxView, type QueueChannelFilter } from './inbox-views';
+import {
+  viewQuery,
+  type InboxView,
+  type QueueChannelFilter,
+  type InboxPeriod,
+} from './inbox-views';
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import {
@@ -183,6 +188,8 @@ export async function loadInbox(
   view: InboxView = 'queue',
   /** `null` is "All". Sent as the route's own `channel` filter. */
   channel: QueueChannelFilter | null = null,
+  /** The period, as the route's own `from` / `to` (workspace days, `to` inclusive). */
+  period: InboxPeriod | null = null,
 ): Promise<InboxData> {
   const api = serverApi();
 
@@ -259,6 +266,8 @@ export async function loadInbox(
             query: {
               ...query,
               ...(channel === null ? {} : { channel }),
+              ...(period?.from ? { from: period.from } : {}),
+              ...(period?.to ? { to: period.to } : {}),
               limit: QUEUE_CAP,
               cursor: cursor ?? '',
             },
