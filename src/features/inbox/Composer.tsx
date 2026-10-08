@@ -450,7 +450,15 @@ export function Composer({
           Where this goes, named. An agent with four conversations open should
           not have to infer the channel from the thread above.
         */}
-        {channelName ? <span className={styles.composerChannel}>{channelName}</span> : null}
+        {channelName ? (
+          <span
+            className={styles.composerChannel}
+            title={channelName}
+            data-testid="composer-channel"
+          >
+            {channelName}
+          </span>
+        ) : null}
 
         {/*
           Disabled on empty rather than sending and being refused: the route

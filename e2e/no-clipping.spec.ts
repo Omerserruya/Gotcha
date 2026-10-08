@@ -16,6 +16,9 @@ import { expect, test } from '@playwright/test';
  *   content is reachable. A box INSIDE one still is: scrolling its parent
  *   never shows what the box itself cuts (Employees' strip was exactly that).
  * ★ Text cut on purpose (a line clamp, an ellipsis) does not count.
+ * ★ Both axes, both languages (B11, the 14" Hebrew sweep, 2026-10-08): the
+ *   inbox composer clipped its Send button SIDEWAYS, only in Hebrew, at 1280.
+ *   This scan read height alone and only /en, so it could not have seen it.
  *
  * Run (needs a session, like every spec here):
  *   GOTCHA_SESSION='<cookie>' [E2E_CONVERSATION_ID=…] [E2E_EMPLOYEE_ID=…] \
@@ -71,41 +74,50 @@ test.beforeEach(async ({ context }) => {
   ]);
 });
 
-for (const size of SIZES) {
-  for (const route of ROUTES) {
-    test(`${size.width}×${size.height} ${route}: nothing cut, no sideways scroll`, async ({
-      page,
-    }) => {
-      await page.setViewportSize(size);
-      await page.goto(`${BASE.pathname.replace(/\/$/, '')}/en${route}`);
-      expect(page.url(), 'redirected to sign-in: the session is not current').not.toMatch(
-        /sign-in|api\/auth\/login/,
-      );
-      // The streamed sections land, as the supervisor's scan waited for them.
-      await page.waitForLoadState('networkidle');
+const LOCALES = ['en', 'he'] as const;
 
-      const found = await page.evaluate(() => {
-        const cut: string[] = [];
-        const hides = (v: string) => v === 'hidden' || v === 'clip';
-        for (const el of document.querySelectorAll<HTMLElement>('main *, [role=dialog] *')) {
-          const cs = getComputedStyle(el);
-          const box = el.getBoundingClientRect();
-          // Width only: a box squeezed to 0px tall is the worst cut, not nothing.
-          if (box.width < 4) continue;
-          if (!hides(cs.overflowY)) continue;
-          if (el.scrollHeight <= el.clientHeight + 2) continue;
-          if (!el.innerText?.trim()) continue;
-          if (cs.webkitLineClamp !== 'none' || cs.textOverflow === 'ellipsis') continue;
-          cut.push(`${el.tagName}.${el.className} ${el.clientHeight}/${el.scrollHeight}`);
-        }
-        const sideways =
-          document.documentElement.scrollWidth > document.documentElement.clientWidth + 1;
-        return { cut, sideways };
+for (const locale of LOCALES) {
+  for (const size of SIZES) {
+    for (const route of ROUTES) {
+      test(`${locale} ${size.width}×${size.height} ${route}: nothing cut, no sideways scroll`, async ({
+        page,
+      }) => {
+        await page.setViewportSize(size);
+        await page.goto(`${BASE.pathname.replace(/\/$/, '')}/${locale}${route}`);
+        expect(page.url(), 'redirected to sign-in: the session is not current').not.toMatch(
+          /sign-in|api\/auth\/login/,
+        );
+        // The streamed sections land, as the supervisor's scan waited for them.
+        await page.waitForLoadState('networkidle');
+
+        const found = await page.evaluate(() => {
+          const cut: string[] = [];
+          const hides = (v: string) => v === 'hidden' || v === 'clip';
+          for (const el of document.querySelectorAll<HTMLElement>('main *, [role=dialog] *')) {
+            const cs = getComputedStyle(el);
+            const box = el.getBoundingClientRect();
+            // Width only: a box squeezed to 0px tall is the worst cut, not nothing.
+            if (box.width < 4) continue;
+            const tall = hides(cs.overflowY) && el.scrollHeight > el.clientHeight + 2;
+            const wide = hides(cs.overflowX) && el.scrollWidth > el.clientWidth + 2;
+            if (!tall && !wide) continue;
+            if (!el.innerText?.trim()) continue;
+            if (cs.webkitLineClamp !== 'none' || cs.textOverflow === 'ellipsis') continue;
+            cut.push(
+              tall
+                ? `${el.tagName}.${el.className} ${el.clientHeight}/${el.scrollHeight}`
+                : `${el.tagName}.${el.className} wide ${el.clientWidth}/${el.scrollWidth}`,
+            );
+          }
+          const sideways =
+            document.documentElement.scrollWidth > document.documentElement.clientWidth + 1;
+          return { cut, sideways };
+        });
+
+        expect(found.cut, 'content cut by its own box').toEqual([]);
+        expect(found.sideways, 'the page scrolls sideways').toBe(false);
       });
-
-      expect(found.cut, 'content cut by its own box').toEqual([]);
-      expect(found.sideways, 'the page scrolls sideways').toBe(false);
-    });
+    }
   }
 }
 

@@ -1155,9 +1155,18 @@
     color: var(--text-faint);
   }
 
-  /* 02: `display:flex; align-items:center; gap:4px; padding:0 12px 11px`. */
+  /*
+   * 02: `display:flex; align-items:center; gap:4px; padding:0 12px 11px`.
+   *
+   * ★ It wraps (B11, 14" sweep). The card clips (`.composer` is `hidden`), and
+   *   at 1280 the pane leaves it 320px: the Hebrew chips and the channel did
+   *   not fit, and Send was drawn outside the card. Measured in Chromium at
+   *   320px: the channel and Send take a second row, the chips stay whole;
+   *   from 480px it is 02's single row, unchanged.
+   */
   .composerBar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-4);
     padding: 0 var(--space-12) 11px;
@@ -1192,10 +1201,13 @@
     background-color: var(--border-subtle);
   }
 
+  /* With Undo, the chips alone can be wider than the bar: they wrap too. */
   .composerChips {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-4);
+    min-inline-size: 0;
   }
 
   /* 02: `padding:6px 11px; #F3F0EA; radius 7px; 11.5px #55524C`. */
@@ -1322,9 +1334,13 @@
 
   /* 02: 11px `#8C887F`, 9px before the send button, pushed right. */
   .composerChannel {
+    min-inline-size: 0;
     margin-inline: auto 9px;
+    overflow: hidden;
     font-size: 11px;
     color: var(--text-subtle);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* 02: a 30px violet square at radius 9px, a white arrow. */
