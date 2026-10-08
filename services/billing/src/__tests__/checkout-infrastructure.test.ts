@@ -493,8 +493,12 @@ describe("tax reaches the card and the document", () => {
   it("taxes the CONVERTED amount, so the three figures reconcile", () => {
     // Taxing before conversion rounds twice, and net + tax stops equalling
     // gross - which is a document whose own numbers disagree.
-    expect(inv).toMatch(/const netAmount = quote\.chargeAmount/);
-    expect(inv).toMatch(/taxForProfile\(netAmount/);
+    // Through the helpers the preview shares (chargeFigures), so what a customer
+    // is shown is the same computation as what they are charged.
+    expect(inv).toMatch(/const netAmount = netText\(quote\.chargeAmount\)/);
+    expect(inv).toMatch(/taxed = await taxedCharge\(netAmount/);
+    expect(inv).toMatch(/function netText\([^)]*\): string \{\s*return chargeAmount\.toFixed\(2\);/);
+    expect(inv).toMatch(/function taxedCharge\([^)]*\) \{\s*return taxForProfile\(net, \{ billingCountry \}\);/);
   });
 
   it("records what the charge was made of", () => {

@@ -9,7 +9,7 @@ import { taxForProfile } from "./tax.service";
 import { issueTaxDocument } from "./tax-document.service";
 import type { BillingProvider, InvoiceType } from "@prisma/client";
 import { getProvider } from "../providers";
-import { assertChargeable, consumeQuote, createPaymentQuote, type QuotePurpose } from "./payment-quote.service";
+import { assertChargeable, consumeQuote, createPaymentQuote, convertForCharge, CHARGE_CURRENCY, type QuotePurpose } from "./payment-quote.service";
 import { emitBillingEvent } from "../lib/events";
 
 export interface ChargeForInput {
@@ -30,6 +30,12 @@ export interface ChargeForInput {
    * year later, can see the discount rather than a mysteriously small charge.
    */
   discount?: { listAmount: number; discountAmount: number; couponCode: string };
+  /**
+   * The exact gross the customer was shown (chargeFigures). When given, a
+   * charge that comes to anything else is refused before the provider is
+   * asked: a charge must never differ from what the confirm said.
+   */
+  expectedGross?: string;
 }
 
 export interface ChargeForResult {
@@ -89,6 +95,71 @@ async function paymentContext(entityId: string): Promise<{
  * + Charge and (on success) the iCount tax-doc reference. Idempotent on
  * `idempotencyKey` (a duplicate returns the prior Charge's outcome).
  */
+// ─── One computation for what is charged ───────────────────────────────────
+//
+// chargeFor and chargeFigures (the preview) both go through these three, so
+// the figure a customer confirms and the figure their card is charged are the
+// same computation, not two that happen to agree.
+
+/** The commercial amount as the quote takes it. */
+export function commercialAmountText(amount: number): string {
+  return amount.toFixed(2);
+}
+
+/** The converted net as tax is computed on it. */
+type Fixable = { toFixed(dp: number): string };
+function netText(chargeAmount: Fixable): string {
+  return chargeAmount.toFixed(2);
+}
+
+/** Tax on the converted net, for the declared country (refuses with none). */
+function taxedCharge(net: string, billingCountry: string | null) {
+  return taxForProfile(net, { billingCountry });
+}
+
+export interface ChargeFigures {
+  commercialAmount: string;
+  commercialCurrency: string;
+  net: string;
+  tax: string;
+  gross: string;
+  taxPercent: number;
+  chargeCurrency: typeof CHARGE_CURRENCY;
+  fxRateVersion: number;
+  /** Whether a card is on file; without one the charge fails no_payment_method. */
+  hasPaymentMethod: boolean;
+}
+
+/**
+ * Exactly what chargeFor would charge for this amount right now, with no
+ * record and no provider call. Throws what the charge would fail with:
+ * a QuoteRefused / ExchangeRateUnavailable (charge_not_priceable) or
+ * TaxCountryUndeclared (charge_not_taxable), each with its `code`.
+ */
+export async function chargeFigures(input: { entityId: string; amount: number; currency?: string; now?: Date }): Promise<ChargeFigures> {
+  const ctx = await paymentContext(input.entityId);
+  const currency = input.currency || ctx?.currency || "ILS";
+  const converted = await convertForCharge({ commercialAmount: commercialAmountText(input.amount), commercialCurrency: currency, now: input.now });
+  const taxed = await taxedCharge(netText(converted.chargeAmount), ctx?.identity.billingCountry ?? null);
+  return {
+    commercialAmount: commercialAmountText(input.amount),
+    commercialCurrency: converted.commercialCurrency,
+    net: taxed.net,
+    tax: taxed.tax,
+    gross: taxed.gross,
+    taxPercent: taxed.percent,
+    chargeCurrency: CHARGE_CURRENCY,
+    fxRateVersion: converted.rate ? converted.rate.version : 0,
+    hasPaymentMethod: !!ctx?.token,
+  };
+}
+
+/** The failure code a charge would record for an error chargeFigures threw. */
+export function chargeRefusal(err: any): { code: "charge_not_priceable" | "charge_not_taxable"; reason: string } {
+  const reason = String(err?.code ?? err?.message ?? "unknown");
+  return { code: err?.name === "TaxCountryUndeclared" || reason === "tax_country_undeclared" ? "charge_not_taxable" : "charge_not_priceable", reason };
+}
+
 export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult> {
   const ctx = await paymentContext(input.entityId);
   const currency = input.currency || ctx?.currency || "ILS";
@@ -177,7 +248,7 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
   try {
     quote = await createPaymentQuote({
       purpose: quotePurposeFor(input.type),
-      commercialAmount: input.amount.toFixed(2),
+      commercialAmount: commercialAmountText(input.amount),
       commercialCurrency: currency,
       tenantId: input.tenantId ?? null,
       now: new Date(),
@@ -197,7 +268,7 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
     return { success: false, invoiceId: invoice.id, failureCode: code };
   }
 
-  const netAmount = quote.chargeAmount.toFixed(2);
+  const netAmount = netText(quote.chargeAmount);
 
   // Tax is computed in the currency it is owed in, on the CONVERTED net. Doing
   // it before conversion would leave net + tax failing to equal the gross after
@@ -205,7 +276,7 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
   // than no document.
   let taxed;
   try {
-    taxed = await taxForProfile(netAmount, { billingCountry: ctx.identity.billingCountry });
+    taxed = await taxedCharge(netAmount, ctx.identity.billingCountry);
   } catch (err: any) {
     // No declared country means no defensible tax figure. Refusing is the
     // point: charging net would leave an Israeli customer owing VAT nobody
@@ -223,6 +294,14 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
 
   // What actually leaves the card.
   const chargeAmount = taxed.gross;
+
+  // Shown one figure, charged another: refused, the provider never asked.
+  if (input.expectedGross !== undefined && chargeAmount !== input.expectedGross) {
+    const code = "charge_amount_changed";
+    await prisma.charge.update({ where: { id: chargeId }, data: { status: "FAILED", failureCode: code } });
+    await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "FAILED" } });
+    return { success: false, invoiceId: invoice.id, failureCode: code };
+  }
 
   // Recorded BEFORE the request, so a crash mid-flight leaves a row saying what
   // was going to be submitted.

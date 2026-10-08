@@ -67,7 +67,13 @@ export interface CreateQuoteInput {
  * of the design: until a Sysadmin configures and approves a rate, nothing can be
  * charged, because there is no defensible number to charge.
  */
-export async function createPaymentQuote(input: CreateQuoteInput): Promise<PaymentQuote> {
+/**
+ * The conversion itself, with no record of it: what a commercial amount comes
+ * to in the charge currency at the rate in force now. createPaymentQuote
+ * freezes exactly this; a preview shows exactly this (invoice.chargeFigures),
+ * so what a customer is shown and what they are charged cannot drift.
+ */
+export async function convertForCharge(input: { commercialAmount: Prisma.Decimal.Value; commercialCurrency: string; now?: Date }) {
   const now = input.now ?? new Date();
   const commercialCurrency = input.commercialCurrency.toUpperCase();
 
@@ -84,6 +90,11 @@ export async function createPaymentQuote(input: CreateQuoteInput): Promise<Payme
     ? amount.toDecimalPlaces(2)
     : convert(amount, rate!.rate);
   if (chargeAmount.lte(0)) throw new QuoteRefused("charge_amount_not_positive");
+  return { now, commercialCurrency, amount, rate, chargeAmount };
+}
+
+export async function createPaymentQuote(input: CreateQuoteInput): Promise<PaymentQuote> {
+  const { now, commercialCurrency, amount, rate, chargeAmount } = await convertForCharge(input);
 
   // Supersede any live quote for the same checkout. Two ACTIVE quotes would mean
   // two different truthful answers to "what will I be charged".

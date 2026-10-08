@@ -5,7 +5,7 @@
 import { Router } from "express";
 import { authenticate, resolveTenant, requirePermission } from "@chatcenter/shared";
 import { getSubscriptionForTenant } from "../services/billable-entity.service";
-import { changePlan, changeVolume, cancelSubscription, resumeSubscription } from "../services/subscription.service";
+import { changePlan, changeVolume, cancelSubscription, resumeSubscription, previewPlanChange } from "../services/subscription.service";
 import { listActivePlans } from "../services/plan.service";
 import { migrateFromGrandfathered } from "../services/grandfather.service";
 
@@ -22,21 +22,47 @@ router.get("/billing/subscription", authenticate, resolveTenant, async (req, res
   res.json({ subscription: sub });
 });
 
-router.post("/billing/subscription/change-plan", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
-  const { planKey, chatVolumeOptionKey, voiceVolumeOptionKey } = req.body ?? {};
-  if (!planKey) return res.status(400).json({ error: "planKey required" });
-  try {
+/** The same body for the preview and the change: keys only, never prices. */
+function changeInput(req: any) {
+  const { planKey, chatVolumeOptionKey, voiceVolumeOptionKey, expectedChargeAmount, expectedFxRateVersion } = req.body ?? {};
+  return {
+    tenantId: req.tenantId!,
+    targetPlanKey: planKey,
     // Volume selectors are passed through as KEYS. `undefined` means "leave the
     // current selection alone"; an explicit null means "clear it".
-    const result = await changePlan({
-      tenantId: req.tenantId!,
-      targetPlanKey: planKey,
-      chatVolumeOptionKey: chatVolumeOptionKey === undefined ? undefined : chatVolumeOptionKey,
-      voiceVolumeOptionKey: voiceVolumeOptionKey === undefined ? undefined : voiceVolumeOptionKey,
-      actor: req.user?.userId,
-    });
+    chatVolumeOptionKey: chatVolumeOptionKey === undefined ? undefined : chatVolumeOptionKey,
+    voiceVolumeOptionKey: voiceVolumeOptionKey === undefined ? undefined : voiceVolumeOptionKey,
+    actor: req.user?.userId,
+    ...(expectedChargeAmount !== undefined && expectedChargeAmount !== null ? { expectedChargeAmount: String(expectedChargeAmount) } : {}),
+    ...(Number.isInteger(expectedFxRateVersion) ? { expectedFxRateVersion } : {}),
+  };
+}
+
+/**
+ * What change-plan would do and charge, exactly, with no side effect: the
+ * confirm shows this figure and sends it back as expectedChargeAmount.
+ */
+router.post("/billing/subscription/change-plan/preview", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
+  if (!req.body?.planKey) return res.status(400).json({ error: "planKey required" });
+  try {
+    return res.json({ ok: true, preview: await previewPlanChange(changeInput(req)) });
+  } catch (err: any) {
+    return res.status(400).json({ error: err?.message ?? "preview_failed" });
+  }
+});
+
+router.post("/billing/subscription/change-plan", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
+  if (!req.body?.planKey) return res.status(400).json({ error: "planKey required" });
+  try {
+    const result = await changePlan(changeInput(req));
     return res.json({ ok: true, ...result });
   } catch (err: any) {
+    // The charge moved since the confirm: nothing was charged; the screen
+    // shows the new figure and asks again.
+    if (err?.message === "charge_amount_changed" || err?.message === "upgrade_payment_failed:charge_amount_changed") {
+      const preview = await previewPlanChange(changeInput(req)).catch(() => null);
+      return res.status(409).json({ error: "charge_amount_changed", preview });
+    }
     return res.status(400).json({ error: err?.message ?? "change_plan_failed" });
   }
 });
