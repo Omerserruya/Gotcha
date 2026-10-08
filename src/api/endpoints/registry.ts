@@ -287,6 +287,19 @@ export const billingEndpoints = {
   /** What it charges against. Answers `{ paymentMethods }` - a sixth shape. */
   paymentMethods: () => endpoint('/api/billing/payment-methods'),
   /**
+   * 17e's Add / Replace card: `{ returnTo: "v2" }` → `{ data: { redirectUrl, sessionId } }` - the
+   * provider's hosted page. Creates a client at the provider: behind
+   * BILLING_WRITES. 409 `{ error }`: payment_setup_unavailable,
+   * payment_page_*, no_billable_entity.
+   */
+  paymentMethodSession: () => endpoint('/api/billing/payment-methods/session'),
+  /**
+   * After the hosted page: `{ sessionId }` → `{ data: { status: "STORED",
+   * paymentMethod } | { status: "PENDING", reason } }`. Asks the provider;
+   * a stored card replaces every other (one active card per tenant).
+   */
+  paymentMethodConfirm: () => endpoint('/api/billing/payment-methods/confirm'),
+  /**
    * Credits, and what happens to them - screen 17c.
    *
    * Carries TWO estimates of what the balance buys: `estimatedRemaining` from

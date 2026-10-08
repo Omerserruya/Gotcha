@@ -364,5 +364,32 @@
     "toSecurePage": "Continue to the secure page",
     "tagNotBuilt": "Not live yet",
     "whyNotBuilt": "Doing this from here comes next."
+  },
+  "card": {
+    "title": "Card",
+    "opening": "Opening the secure page…",
+    "noStorage": "This browser won't keep the session while you're on the secure page, so the card couldn't be confirmed when you return. Allow site storage and try again.",
+    "checking": "Checking with the payment provider…",
+    "cancelled": "You left the secure page without saving a card. Nothing changed.",
+    "nothingToCheck": "There's no card being added from this browser to check.",
+    "stored": "Saved: {brand} ending {last4}. It's the card charged from now on.",
+    "aCard": "Card",
+    "pending": {
+      "no_new_card_yet": "The provider hasn't reported a new card yet. If you've just finished, check again in a moment.",
+      "expired": "This attempt expired. Start again from Billing.",
+      "exhausted": "This attempt was checked too many times without a card. Start again from Billing.",
+      "already_failed": "This attempt ended without a card. Start again from Billing.",
+      "unknown": "The provider's answer wasn't one we know. Check again, or start again from Billing."
+    },
+    "refused": {
+      "held": "Billing in this environment uses the live payment account, so nothing is saved to the provider from here.",
+      "unavailable": "Adding a card isn't available right now - the payment page isn't set up.",
+      "no_account": "There's no billing account to add a card to yet.",
+      "not_found": "This attempt isn't one this workspace started.",
+      "forbidden": "You don't have permission to change the payment method.",
+      "failed": "That didn't go through. Try again."
+    },
+    "checkAgain": "Check again",
+    "back": "Back to billing details"
   }
 }

@@ -240,3 +240,119 @@ export async function saveBillingProfile(details: BillingDetails): Promise<SaveD
     return { ok: false, reason: 'failed' };
   }
 }
+
+export type CardSessionResult =
+  | { readonly ok: true; readonly redirectUrl: string; readonly sessionId: string }
+  | {
+      readonly ok: false;
+      readonly reason: 'held' | 'unavailable' | 'no_account' | 'forbidden' | 'failed';
+    };
+
+/**
+ * 17e's Add / Replace card: a session on the provider's hosted page. It
+ * creates a client at the provider - so it refuses first when billing writes
+ * are off (BILLING_WRITES, fail closed), before any request.
+ */
+export async function startCardSession(): Promise<CardSessionResult> {
+  if (!billingWritesEnabled()) return { ok: false, reason: 'held' };
+  try {
+    const page = await serverApi().post({
+      endpoint: billingEndpoints.paymentMethodSession(),
+      /*
+       * Back to v2 (billing d0824153): success to <origin>/v2/settings/billing/
+       * payment-method, failure and cancel to the same with ?cancelled=1 - no
+       * locale (v2's routing adds the reader's), no id in the URL.
+       */
+      body: { returnTo: 'v2' },
+      payload: z.object({ redirectUrl: z.string().min(1), sessionId: z.string().min(1) }),
+    });
+    // Only ever a secure page: anything else is not where a card is typed.
+    if (!URL.canParse(page.redirectUrl) || new URL(page.redirectUrl).protocol !== 'https:') {
+      logger.warn('billing.card_session_bad_url');
+      return { ok: false, reason: 'failed' };
+    }
+    return { ok: true, redirectUrl: page.redirectUrl, sessionId: page.sessionId };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('billing.card_session_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    if (isApiError(cause)) {
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+      if (cause.status === 409)
+        return {
+          ok: false,
+          reason: cause.developerMessage === 'no_billable_entity' ? 'no_account' : 'unavailable',
+        };
+    }
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export type CardConfirmResult =
+  | {
+      readonly ok: true;
+      readonly status: 'STORED';
+      readonly card: { readonly brand: string | null; readonly last4: string | null };
+    }
+  | {
+      readonly ok: true;
+      readonly status: 'PENDING';
+      readonly reason: 'no_new_card_yet' | 'expired' | 'exhausted' | 'already_failed' | 'unknown';
+    }
+  | {
+      readonly ok: false;
+      readonly reason: 'held' | 'not_found' | 'unavailable' | 'forbidden' | 'failed';
+    };
+
+const PENDING_REASONS = ['no_new_card_yet', 'expired', 'exhausted', 'already_failed'] as const;
+
+/**
+ * Back from the hosted page: did a card arrive? The provider is asked, so
+ * this too refuses first when billing writes are off.
+ */
+export async function confirmCardSession(sessionId: string): Promise<CardConfirmResult> {
+  if (!billingWritesEnabled()) return { ok: false, reason: 'held' };
+  if (!sessionId) return { ok: false, reason: 'not_found' };
+  try {
+    const answer = await serverApi().post({
+      endpoint: billingEndpoints.paymentMethodConfirm(),
+      body: { sessionId },
+      payload: z.object({
+        status: z.string(),
+        reason: z.string().nullable().catch(null).default(null),
+        paymentMethod: z
+          .object({
+            brand: z.string().nullable().catch(null).default(null),
+            last4: z.string().nullable().catch(null).default(null),
+          })
+          .nullable()
+          .catch(null)
+          .default(null),
+      }),
+    });
+    if (answer.status === 'STORED') {
+      revalidatePath('/[locale]/settings/billing', 'page');
+      return {
+        ok: true,
+        status: 'STORED',
+        card: answer.paymentMethod ?? { brand: null, last4: null },
+      };
+    }
+    const reason = (PENDING_REASONS as readonly string[]).includes(answer.reason ?? '')
+      ? (answer.reason as (typeof PENDING_REASONS)[number])
+      : 'unknown';
+    return { ok: true, status: 'PENDING', reason };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('billing.card_confirm_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    if (isApiError(cause)) {
+      if (cause.status === 404) return { ok: false, reason: 'not_found' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+      if (cause.status === 409) return { ok: false, reason: 'unavailable' };
+    }
+    return { ok: false, reason: 'failed' };
+  }
+}

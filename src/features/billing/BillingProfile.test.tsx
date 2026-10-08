@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { createTranslator } from 'next-intl';
+import { fireEvent, render as rtlRender, screen } from '@testing-library/react';
+import { createTranslator, NextIntlClientProvider } from 'next-intl';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { billingProfileSchema, type PaymentMethod } from '@/api/contracts/billing-profile';
@@ -12,7 +13,19 @@ vi.mock('./ProfileForm', () => ({
   ),
 }));
 
+/* A card session reaches the provider: a spy, and never reached in these tests (writes off). */
+const startCardSession = vi.hoisted(() => vi.fn());
+vi.mock('./actions', () => ({ startCardSession }));
+
 import { BillingProfileSection } from './BillingProfile';
+
+/* The card controls are client components: they read their words from the provider. */
+const render = (node: ReactNode) =>
+  rtlRender(
+    <NextIntlClientProvider locale="en" messages={{ billing: messages }}>
+      {node}
+    </NextIntlClientProvider>,
+  );
 
 /**
  * The warning that used to vanish.

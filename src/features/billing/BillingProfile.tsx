@@ -10,7 +10,7 @@ import {
 
 import styles from './Billing.module.css';
 import { billingWritesEnabled } from '@/api/client/billing-writes';
-import { HeldConfirm } from './HeldConfirm';
+import { CardSession } from './CardSession';
 import { ProfileForm } from './ProfileForm';
 
 /**
@@ -57,7 +57,7 @@ export async function BillingProfileSection({
 }) {
   const t = await getTranslations('billing');
   const reading = profileReading(profile);
-  // Off here: the environment's reason. On: no card session is wired yet - said so.
+  // On: the card session is live; off (dev - the live payment account): held, with why.
   const live = billingWritesEnabled();
 
   const nothingToCharge = methods !== null && !hasSomethingToCharge(methods);
@@ -88,19 +88,16 @@ export async function BillingProfileSection({
               </span>
             ) : null}
           </span>
-          <HeldConfirm
+          <CardSession
+            live={live}
             label={t('profile.replace')}
             className={styles.detailsAction}
-            sentences={[
-              t('held.replaceCard', {
-                brand: card.brand ?? t('profile.unknownBrand'),
-                last4: card.last4 ?? '????',
-              }),
-            ]}
-            yes={t('held.toSecurePage')}
-            heldTag={live ? t('held.tagNotBuilt') : t('held.tag')}
-            heldWhy={live ? t('held.whyNotBuilt') : t('held.why')}
-            cancel={t('held.cancel')}
+            sentence={t('held.replaceCard', {
+              brand: card.brand ?? t('profile.unknownBrand'),
+              last4: card.last4 ?? '????',
+            })}
+            heldTag={t('held.tag')}
+            heldWhy={t('held.why')}
             testid="replace-card"
           />
         </div>
@@ -118,14 +115,13 @@ export async function BillingProfileSection({
           <span className={styles.detailsCardText}>
             {methods === null ? '-' : t('profile.noCardRow')}
           </span>
-          <HeldConfirm
+          <CardSession
+            live={live}
             label={t('profile.addCard')}
             className={styles.detailsAction}
-            sentences={[t('held.addCard')]}
-            yes={t('held.toSecurePage')}
-            heldTag={live ? t('held.tagNotBuilt') : t('held.tag')}
-            heldWhy={live ? t('held.whyNotBuilt') : t('held.why')}
-            cancel={t('held.cancel')}
+            sentence={t('held.addCard')}
+            heldTag={t('held.tag')}
+            heldWhy={t('held.why')}
             testid="add-card"
           />
         </div>

@@ -1670,6 +1670,31 @@
     color: var(--alert-text);
   }
 
+  /* A card session's live Yes, and the page it returns to. */
+  .cardGo {
+    padding-block: var(--space-6);
+    padding-inline: var(--space-14);
+    border: none;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--action-text);
+    cursor: pointer;
+  }
+
+  .cardGo:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .cardReturn {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    max-inline-size: var(--size-reading);
+  }
+
   .heldConfirm {
     display: flex;
     flex-direction: column;
