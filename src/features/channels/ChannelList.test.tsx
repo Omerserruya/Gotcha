@@ -60,10 +60,13 @@ describe('★ 13b is reached from its row on 13, now that it is not a section', 
       'href',
       '/settings/channels?panel=whatsapp',
     );
+    // The platform has no settings for email: a status saying so, never a panel.
     const email = screen.getByTestId('channel-settings-e1');
     expect(email).not.toHaveAttribute('href');
+    expect(email.closest('a,button')).toBeNull();
     expect(email).toHaveAttribute('aria-disabled', 'true');
-    expect(email).toHaveAttribute('title', expect.stringMatching(/come next/i));
+    expect(email).toHaveTextContent('Nothing to set');
+    expect(email).toHaveAttribute('title', expect.stringMatching(/no settings for this channel/));
   });
 });
 

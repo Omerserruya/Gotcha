@@ -25,6 +25,7 @@ import {
   isLive,
   type WidgetInstall,
 } from '@/api/contracts/website-widget';
+import { UnavailableStatus } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link } from '@/i18n/navigation';
 
 /**
@@ -198,15 +199,18 @@ export async function ChannelList({
                   {t('rowSettings')}
                 </Link>
               ) : (
-                // Only WhatsApp has a settings panel (13b) yet: drawn, and it says so.
-                <span
-                  className={styles.settingsLink}
-                  aria-disabled="true"
-                  title={t('rowSettingsNotYet')}
-                  data-testid={`channel-settings-${row.id}`}
-                >
-                  {t('rowSettings')}
-                </span>
+                /*
+                  Nothing to set (checked 2026-10-08): the platform's only
+                  channel settings are WhatsApp's numbers and the web chat's
+                  widget - for Instagram, Messenger, email and the rest it has
+                  connect, disconnect and a status read, no setting. A status,
+                  saying so - never a panel of things that write nowhere.
+                */
+                <UnavailableStatus
+                  tag={t('rowSettingsNone.tag')}
+                  why={t('rowSettingsNone.why')}
+                  testid={`channel-settings-${row.id}`}
+                />
               )}
             </li>
           );

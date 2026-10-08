@@ -453,7 +453,6 @@
     "aNumber": "A WhatsApp number"
   },
   "rowSettings": "Settings",
-  "rowSettingsNotYet": "Settings for this channel come next - WhatsApp's are ready.",
   "banner": {
     "title": "{channel} needs attention",
     "more": "{count, plural, one {and one more channel} other {and # more channels}}"
@@ -789,5 +788,9 @@
       "invalid_store": "That isn't a store address GOTCHA can open.",
       "failed": "It didn't connect. Try again."
     }
+  },
+  "rowSettingsNone": {
+    "tag": "Nothing to set",
+    "why": "The platform has no settings for this channel yet, so there is nothing to change here."
   }
 }
