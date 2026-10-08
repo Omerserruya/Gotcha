@@ -562,7 +562,9 @@
         "gotcha": "GOTCHA",
         "whatsapp": "WhatsApp"
       },
-      "lookWhy": "Choosing the WhatsApp look isn't available yet: it comes with the next widget update"
+      "lookWhy": "Choosing the WhatsApp look isn't available yet: it comes with the next widget update",
+      "colourWaLook": "The WhatsApp look uses WhatsApp's colours. Your main colour is used in the GOTCHA look",
+      "coverWaLook": "The WhatsApp look shows no cover image. Yours is used in the GOTCHA look"
     },
     "conversation": {
       "name": "Assistant name",
@@ -675,7 +677,8 @@
       "waContinue": "Continue on WhatsApp"
     },
     "notYet": "Not available yet",
-    "comingSoon": "Coming soon"
+    "comingSoon": "Coming soon",
+    "notInLook": "Not in this look"
   },
   "widgetRow": {
     "name": "Website widget",

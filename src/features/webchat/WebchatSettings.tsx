@@ -423,85 +423,101 @@ function Appearance({
           />
         </Row>
       )}
-      <Row label={t('colour')} testid="webchat-colour">
-        <div className={styles.swatches} role="radiogroup" aria-label={t('colour')}>
-          {PALETTE.map((p) => (
-            <button
-              key={p}
-              type="button"
-              role="radio"
-              aria-checked={p.toLowerCase() === colour.toLowerCase()}
-              aria-label={p}
-              className={styles.swatch}
-              style={{ backgroundColor: p }}
-              onClick={() => choose(p)}
-              data-testid={`webchat-swatch-${p.slice(1)}`}
-            />
-          ))}
-          <span
-            className={styles.swatch}
-            data-custom=""
-            data-checked={custom ? '' : undefined}
-            title={t('custom')}
-            aria-hidden="true"
+      {config.ux.look === 'whatsapp' ? (
+        /*
+          The WhatsApp look wears WhatsApp's own colours (Backend 09a1105b: a
+          fixed green header, send and launcher) - the main colour does nothing
+          there, so it is a status, not a picker that changes nothing.
+        */
+        <Row label={t('colour')} testid="webchat-colour">
+          <UnavailableItem
+            title={t('colour')}
+            tag={tw('notInLook')}
+            why={t('colourWaLook')}
+            testid="webchat-colour-wa-look"
           />
-        </div>
-        <div className={styles.picker}>
-          <div className={styles.pickerArea}>
-            <div
-              ref={square}
-              className={styles.square}
-              style={{ backgroundColor: hsvToHex({ h: hsv.h, s: 1, v: 1 }) }}
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture?.(e.pointerId);
-                pick(e);
-              }}
-              onPointerMove={pick}
-              aria-hidden="true"
-            >
-              <span
-                className={styles.knob}
-                style={{
-                  insetInlineStart: `${hsv.s * 100}%`,
-                  insetBlockStart: `${(1 - hsv.v) * 100}%`,
-                }}
+        </Row>
+      ) : (
+        <Row label={t('colour')} testid="webchat-colour">
+          <div className={styles.swatches} role="radiogroup" aria-label={t('colour')}>
+            {PALETTE.map((p) => (
+              <button
+                key={p}
+                type="button"
+                role="radio"
+                aria-checked={p.toLowerCase() === colour.toLowerCase()}
+                aria-label={p}
+                className={styles.swatch}
+                style={{ backgroundColor: p }}
+                onClick={() => choose(p)}
+                data-testid={`webchat-swatch-${p.slice(1)}`}
               />
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={359}
-              value={Math.round(hsv.h)}
-              onChange={(e) =>
-                choose(hsvToHex({ h: Number(e.target.value), s: hsv.s || 0.6, v: hsv.v || 0.8 }))
-              }
-              className={styles.hue}
-              aria-label={t('hue')}
+            ))}
+            <span
+              className={styles.swatch}
+              data-custom=""
+              data-checked={custom ? '' : undefined}
+              title={t('custom')}
+              aria-hidden="true"
             />
           </div>
-          <label className={styles.code}>
-            <span className={styles.rowHint}>{t('code')}</span>
-            <span className={styles.codeField}>
-              <span
-                className={styles.codeChip}
-                style={{ backgroundColor: isHex(code) ? code : colour }}
-              />
-              <input
-                value={code}
-                onChange={(e) => {
-                  setCode(e.target.value);
-                  if (isHex(e.target.value)) set.colour(e.target.value.toUpperCase());
+          <div className={styles.picker}>
+            <div className={styles.pickerArea}>
+              <div
+                ref={square}
+                className={styles.square}
+                style={{ backgroundColor: hsvToHex({ h: hsv.h, s: 1, v: 1 }) }}
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture?.(e.pointerId);
+                  pick(e);
                 }}
-                aria-invalid={!isHex(code)}
-                spellCheck={false}
-                data-testid="webchat-hex"
+                onPointerMove={pick}
+                aria-hidden="true"
+              >
+                <span
+                  className={styles.knob}
+                  style={{
+                    insetInlineStart: `${hsv.s * 100}%`,
+                    insetBlockStart: `${(1 - hsv.v) * 100}%`,
+                  }}
+                />
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={359}
+                value={Math.round(hsv.h)}
+                onChange={(e) =>
+                  choose(hsvToHex({ h: Number(e.target.value), s: hsv.s || 0.6, v: hsv.v || 0.8 }))
+                }
+                className={styles.hue}
+                aria-label={t('hue')}
               />
-              <Pencil size={13} aria-hidden="true" />
-            </span>
-            <span className={styles.rowHint}>{isHex(code) ? t('codeHint') : t('codeBad')}</span>
-          </label>
-        </div>
-      </Row>
+            </div>
+            <label className={styles.code}>
+              <span className={styles.rowHint}>{t('code')}</span>
+              <span className={styles.codeField}>
+                <span
+                  className={styles.codeChip}
+                  style={{ backgroundColor: isHex(code) ? code : colour }}
+                />
+                <input
+                  value={code}
+                  onChange={(e) => {
+                    setCode(e.target.value);
+                    if (isHex(e.target.value)) set.colour(e.target.value.toUpperCase());
+                  }}
+                  aria-invalid={!isHex(code)}
+                  spellCheck={false}
+                  data-testid="webchat-hex"
+                />
+                <Pencil size={13} aria-hidden="true" />
+              </span>
+              <span className={styles.rowHint}>{isHex(code) ? t('codeHint') : t('codeBad')}</span>
+            </label>
+          </div>
+        </Row>
+      )}
 
       <ImageRow
         label={t('logo')}
@@ -510,13 +526,25 @@ function Appearance({
         onSave={set.logo}
         testid="webchat-logo"
       />
-      <ImageRow
-        label={t('cover')}
-        hint={t('coverHint')}
-        value={config.ux.hero.mediaUrl}
-        onSave={set.cover}
-        testid="webchat-cover"
-      />
+      {config.ux.look === 'whatsapp' ? (
+        // The WhatsApp look shows no cover (the bundle hides it).
+        <Row label={t('cover')} testid="webchat-cover">
+          <UnavailableItem
+            title={t('cover')}
+            tag={tw('notInLook')}
+            why={t('coverWaLook')}
+            testid="webchat-cover-wa-look"
+          />
+        </Row>
+      ) : (
+        <ImageRow
+          label={t('cover')}
+          hint={t('coverHint')}
+          value={config.ux.hero.mediaUrl}
+          onSave={set.cover}
+          testid="webchat-cover"
+        />
+      )}
 
       <Row label={t('position')} testid="webchat-position">
         <span className={styles.segments} role="radiogroup" aria-label={t('position')}>

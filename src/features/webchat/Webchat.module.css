@@ -522,6 +522,15 @@
     padding: 14px 18px;
   }
 
+  /*
+   * A status where a switch would be fills its row: in a wrapping flex it sized
+   * to its words, so a shorter reason drew a narrower box ("Show active deals",
+   * ~960 against ~1012 for the rows above it, dev).
+   */
+  .toggleRow > [data-unavailable] {
+    flex: 1 1 100%;
+  }
+
   .toggleMore {
     flex-basis: 100%;
   }
@@ -794,6 +803,13 @@
   }
 
   .logo {
+    /*
+     * Above the cover it overlaps (-32px): the cover is positioned (for its
+     * WhatsApp chip), and a positioned box paints over an unpositioned one -
+     * dev showed "SUPPLY" with "URBAN" under the cover (4cbbcc0).
+     */
+    position: relative;
+    z-index: 1;
     display: grid;
     place-items: center;
     padding: 6px;

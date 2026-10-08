@@ -539,6 +539,19 @@ describe("★ the preview's marks come from one name - the business's", () => {
     expect(screen.getByTestId('webchat-preview-logo')).toHaveTextContent(/^LU$/);
   });
 
+  it('★ the mark sits ABOVE the cover it overlaps (dev: "URBAN" was under the cover, 4cbbcc0)', () => {
+    // jsdom does no layout; Chromium measured it - this holds the rule that fixed it.
+    const css = readFileSync(join(__dirname, 'Webchat.module.css'), 'utf8');
+    const logo = /\n {2}\.logo \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(logo).toMatch(/position: relative/);
+    expect(logo).toMatch(/z-index: [1-9]/);
+  });
+
+  it('★ a status where a switch would be fills its row (dev: "Show active deals" was narrower)', () => {
+    const css = readFileSync(join(__dirname, 'Webchat.module.css'), 'utf8');
+    expect(css).toMatch(/\.toggleRow > \[data-unavailable\] \{\s*flex: 1 1 100%;/);
+  });
+
   it('★ the mark’s CSS lets no word break - the sizes above are what keep it inside', () => {
     const css = readFileSync(join(__dirname, 'Webchat.module.css'), 'utf8');
     const logo = /\n {2}\.logo \{([^}]*)\}/.exec(css)?.[1] ?? '';
@@ -592,6 +605,25 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     await pause();
     expect(lastStageB()).toBe(true);
     expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({ look: 'whatsapp' });
+  });
+
+  it('★ in the WhatsApp look the main colour and the cover say they are not used - no picker that changes nothing', () => {
+    const wa = { ...config, ux: { ...config.ux, look: 'whatsapp' as const } };
+    const { unmount } = show('appearance', { numbers: NUMBERS, initial: wa });
+    expect(screen.getByTestId('webchat-colour-wa-look')).toHaveTextContent(
+      "The WhatsApp look uses WhatsApp's colours",
+    );
+    expect(screen.getByTestId('webchat-colour-wa-look')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByTestId('webchat-hex')).toBeNull();
+    expect(screen.queryAllByRole('radio', { name: /^#/ })).toHaveLength(0);
+    expect(screen.getByTestId('webchat-cover-wa-look')).toHaveTextContent(
+      'The WhatsApp look shows no cover image',
+    );
+    unmount();
+    // Back in GOTCHA's look, both are what they were.
+    show('appearance', { numbers: NUMBERS });
+    expect(screen.getByTestId('webchat-hex')).toBeInTheDocument();
+    expect(screen.getByTestId('webchat-cover-replace')).toBeInTheDocument();
   });
 
   it('★★ Continue on WhatsApp: on, and the one number that can take it is the one', async () => {
