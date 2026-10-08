@@ -78,7 +78,15 @@
       "pickPack": "Choose the pack to buy - none is on sale to choose from.",
       "badThreshold": "The level must be a whole number from 1 to 100.",
       "badCap": "The monthly limit must be an amount above zero, or empty for no limit.",
-      "paygNotSettable": "Pay-as-you-go is set up by GOTCHA for you and can't be chosen here."
+      "paygNotSettable": "Pay-as-you-go is set up by GOTCHA for you and can't be chosen here.",
+      "saved": "Saved. This is what happens when credits run low from now on.",
+      "refused": {
+        "held": "Billing in this environment uses the live payment account, so nothing is saved from here.",
+        "plan": "Your plan doesn't include automatic purchases - change plan to turn them on.",
+        "invalid": "That setting wasn't accepted. Check the level and the limit.",
+        "forbidden": "You don't have permission to change billing settings.",
+        "failed": "Not saved. Try again."
+      }
     }
   },
   "profile": {

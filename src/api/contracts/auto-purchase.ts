@@ -90,6 +90,23 @@ export const autoPurchaseSchema = z.object({
   monthSpentAmount: z.string().default('0'),
   limitBehavior: z.enum(LIMIT_BEHAVIORS).catch('STOP_AI'),
   lastTriggeredAt: z.string().nullable().default(null),
+  /*
+   * ★ NAMED SO A SAVE CAN SEND THEM BACK. `PUT /billing/auto-purchase` writes
+   *   every field and defaults the ones it is not sent - a missing
+   *   `incrementCredits` or `pricePerCredit` is stored as null, which would
+   *   wipe a pay-as-you-go setup the form does not even show. Stripped here,
+   *   they could not be preserved.
+   */
+  /** The pack an automatic purchase buys. */
+  packageKey: z.string().nullable().catch(null).default(null),
+  incrementCredits: z.number().nullable().catch(null).default(null),
+  /** A Decimal on the wire - kept as its string, never re-rounded here. */
+  pricePerCredit: z
+    .union([z.string(), z.number()])
+    .transform(String)
+    .nullable()
+    .catch(null)
+    .default(null),
 });
 
 export type AutoPurchase = z.infer<typeof autoPurchaseSchema>;

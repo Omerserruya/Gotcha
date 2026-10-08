@@ -356,3 +356,63 @@ export async function confirmCardSession(sessionId: string): Promise<CardConfirm
     return { ok: false, reason: 'failed' };
   }
 }
+
+export interface AutoPurchaseInput {
+  readonly enabled: boolean;
+  readonly thresholdPct: number;
+  readonly packageKey: string | null;
+  /** A decimal string; null is "no monthly limit" - said so, never by omission. */
+  readonly maxMonthlySpend: string | null;
+  readonly limitBehavior: 'STOP_AI' | 'HUMAN_ONLY' | 'REQUIRE_APPROVAL' | 'PREPAID_ONLY';
+  /* Sent back as stored - the route writes every field and nulls what it is not sent. */
+  readonly warningThresholdPct: number;
+  readonly incrementCredits: number | null;
+  readonly pricePerCredit: string | null;
+}
+
+export type AutoPurchaseResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly reason: 'held' | 'plan' | 'invalid' | 'forbidden' | 'failed';
+    };
+
+/**
+ * 17c's Save - `PUT /billing/auto-purchase`. Database only, but turning it
+ * on ARMS charges on the stored card, so it refuses first when billing writes
+ * are off (BILLING_WRITES, fail closed), before any request. 402 is a plan
+ * that does not allow automatic purchases (PLAN_FEATURE_REQUIRED).
+ */
+export async function saveAutoPurchase(input: AutoPurchaseInput): Promise<AutoPurchaseResult> {
+  if (!billingWritesEnabled()) return { ok: false, reason: 'held' };
+  try {
+    await serverApi().put({
+      endpoint: billingEndpoints.autoPurchase(),
+      body: {
+        enabled: input.enabled,
+        thresholdPct: input.thresholdPct,
+        packageKey: input.packageKey,
+        maxMonthlySpend: input.maxMonthlySpend,
+        limitBehavior: input.limitBehavior,
+        warningThresholdPct: input.warningThresholdPct,
+        incrementCredits: input.incrementCredits,
+        pricePerCredit: input.pricePerCredit,
+      },
+      payload: z.unknown(),
+      raw: true,
+    });
+    revalidatePath('/[locale]/settings/billing', 'page');
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('billing.auto_purchase_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    if (isApiError(cause)) {
+      if (cause.status === 402) return { ok: false, reason: 'plan' };
+      if (cause.status === 400) return { ok: false, reason: 'invalid' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    }
+    return { ok: false, reason: 'failed' };
+  }
+}

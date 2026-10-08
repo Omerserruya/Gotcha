@@ -1,11 +1,13 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useState, type ReactNode } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
 
 import { SETTABLE_BEHAVIORS, type LimitBehavior } from '@/api/contracts/auto-purchase';
 import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
+import { useRouter } from '@/i18n/navigation';
 
+import { saveAutoPurchase } from './actions';
 import { AUTO_PURCHASE_FORM_ID } from './auto-purchase-form';
 import styles from './Billing.module.css';
 
@@ -41,6 +43,13 @@ export function AutoPurchaseForm({
   current,
   heldTag,
   heldWhy,
+  live = false,
+  stored = {
+    packageKey: null,
+    warningThresholdPct: 80,
+    incrementCredits: null,
+    pricePerCredit: null,
+  },
 }: {
   readonly initialOption: Option;
   readonly initialThreshold: number;
@@ -58,10 +67,28 @@ export function AutoPurchaseForm({
   };
   readonly heldTag: string;
   readonly heldWhy: string;
+  /** BILLING_WRITES=on for this deployment - decided on the server. Off: Yes is held. */
+  readonly live?: boolean;
+  /**
+   * What the policy holds that this form does not edit - sent back as it is,
+   * because the route writes every field and nulls what it is not sent.
+   */
+  readonly stored?: {
+    readonly packageKey: string | null;
+    readonly warningThresholdPct: number;
+    readonly incrementCredits: number | null;
+    readonly pricePerCredit: string | null;
+  };
 }) {
   const t = useTranslations('billing.autoPurchase');
   const [option, setOption] = useState<Option>(initialOption);
-  const [packKey, setPackKey] = useState(packs[0]?.key ?? '');
+  const router = useRouter();
+  const [saved, setSaved] = useState<{ ok: boolean; text: string } | null>(null);
+  const [isPending, startTransition] = useTransition();
+  // The stored pack when it is still on sale; else the first one.
+  const [packKey, setPackKey] = useState(
+    packs.some((p) => p.key === stored.packageKey) ? stored.packageKey! : (packs[0]?.key ?? ''),
+  );
   const [threshold, setThreshold] = useState(String(initialThreshold));
   const [cap, setCap] = useState(initialCap ?? '');
   const [behavior, setBehavior] = useState<Settable>(
@@ -211,6 +238,15 @@ export function AutoPurchaseForm({
         ))}
       </select>
 
+      {saved ? (
+        <p
+          className={saved.ok ? styles.profileSaved : styles.profileProblem}
+          role={saved.ok ? 'status' : 'alert'}
+          data-testid={saved.ok ? 'auto-saved' : 'auto-refused'}
+        >
+          {saved.text}
+        </p>
+      ) : null}
       {problem ? (
         <p className={styles.profileProblem} role="alert" data-testid="auto-problem">
           {problem}
@@ -224,12 +260,44 @@ export function AutoPurchaseForm({
             </p>
           ))}
           <p className={styles.heldActions}>
-            <UnavailableAction
-              label={t('edit.yes')}
-              tag={heldTag}
-              why={heldWhy}
-              testid="auto-yes"
-            />
+            {live ? (
+              <button
+                type="button"
+                className={styles.cardGo}
+                disabled={isPending}
+                data-testid="auto-yes"
+                onClick={() =>
+                  startTransition(async () => {
+                    const done = await saveAutoPurchase({
+                      enabled: option === 'pack',
+                      thresholdPct: Number(threshold),
+                      packageKey: option === 'pack' ? packKey : stored.packageKey,
+                      maxMonthlySpend: option === 'pack' && cap.trim() ? cap.trim() : null,
+                      limitBehavior: behavior,
+                      warningThresholdPct: stored.warningThresholdPct,
+                      incrementCredits: stored.incrementCredits,
+                      pricePerCredit: stored.pricePerCredit,
+                    });
+                    if (done.ok) {
+                      setConfirming(null);
+                      setSaved({ ok: true, text: t('edit.saved') });
+                      router.refresh();
+                    } else {
+                      setSaved({ ok: false, text: t(`edit.refused.${done.reason}`) });
+                    }
+                  })
+                }
+              >
+                {t('edit.yes')}
+              </button>
+            ) : (
+              <UnavailableAction
+                label={t('edit.yes')}
+                tag={heldTag}
+                why={heldWhy}
+                testid="auto-yes"
+              />
+            )}
             <button
               type="button"
               className={styles.heldCancel}

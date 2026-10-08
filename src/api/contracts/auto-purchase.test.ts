@@ -135,3 +135,17 @@ describe('what the settings API will actually accept', () => {
     for (const b of SETTABLE_BEHAVIORS) expect(isSettable(b), b).toBe(true);
   });
 });
+
+describe('★ the fields a save must send back are kept, not stripped', () => {
+  it('packageKey, incrementCredits and pricePerCredit survive the parse (a Decimal as its string)', () => {
+    const policy = autoPurchaseSchema.parse({
+      packageKey: 'p5000',
+      incrementCredits: 500,
+      pricePerCredit: 0.012,
+    });
+    expect(policy.packageKey).toBe('p5000');
+    expect(policy.incrementCredits).toBe(500);
+    expect(policy.pricePerCredit).toBe('0.012');
+    expect(autoPurchaseSchema.parse({}).pricePerCredit).toBeNull();
+  });
+});

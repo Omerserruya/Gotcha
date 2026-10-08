@@ -1,9 +1,20 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import messages from '@/i18n/messages/en/billing.json';
+
+/* Saving arms real charges: the action is a spy, always. */
+const saveAutoPurchase = vi.hoisted(() => vi.fn());
+vi.mock('./actions', () => ({ saveAutoPurchase }));
+const refresh = vi.hoisted(() => vi.fn());
+vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh }) }));
+
+beforeEach(() => {
+  saveAutoPurchase.mockReset();
+  refresh.mockReset();
+});
 
 import { AUTO_PURCHASE_FORM_ID } from './auto-purchase-form';
 import { AutoPurchaseForm } from './AutoPurchaseForm';
@@ -121,5 +132,57 @@ describe('★★ 17c auto-purchase - chosen, said in full, and held (it arms rea
       'REQUIRE_APPROVAL',
       'PREPAID_ONLY',
     ]);
+  });
+});
+
+describe('★★ live (BILLING_WRITES=on): Yes saves - and sends back what the form does not show', () => {
+  const STORED = {
+    packageKey: 'p5000',
+    warningThresholdPct: 70,
+    incrementCredits: 500,
+    pricePerCredit: '0.012000',
+  };
+
+  it('the stored pack is preselected; Yes sends every field, the untouched ones as stored', async () => {
+    saveAutoPurchase.mockResolvedValue({ ok: true });
+    show({ initialOption: 'pack', live: true, stored: STORED });
+    expect(screen.getByTestId('auto-pack')).toHaveValue('p5000');
+    await userEvent.type(screen.getByTestId('auto-cap-input'), '2400');
+    await userEvent.click(screen.getByTestId('footer-save'));
+    expect(saveAutoPurchase).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId('auto-yes'));
+    expect(saveAutoPurchase).toHaveBeenCalledWith({
+      enabled: true,
+      thresholdPct: 10,
+      packageKey: 'p5000',
+      maxMonthlySpend: '2400',
+      limitBehavior: 'STOP_AI',
+      warningThresholdPct: 70,
+      incrementCredits: 500,
+      pricePerCredit: '0.012000',
+    });
+    expect(screen.getByTestId('auto-saved')).toHaveTextContent('Saved.');
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it('stop: off, no limit, the stored pack kept rather than cleared', async () => {
+    saveAutoPurchase.mockResolvedValue({ ok: true });
+    show({ live: true, stored: STORED });
+    await userEvent.click(screen.getByTestId('footer-save'));
+    await userEvent.click(screen.getByTestId('auto-yes'));
+    expect(saveAutoPurchase).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false, packageKey: 'p5000', maxMonthlySpend: null }),
+    );
+  });
+
+  it('a plan without automatic purchases (402) is said; nothing claims it saved', async () => {
+    saveAutoPurchase.mockResolvedValue({ ok: false, reason: 'plan' });
+    show({ initialOption: 'pack', live: true });
+    await userEvent.click(screen.getByTestId('footer-save'));
+    await userEvent.click(screen.getByTestId('auto-yes'));
+    expect(screen.getByTestId('auto-refused')).toHaveTextContent(
+      "Your plan doesn't include automatic purchases",
+    );
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

@@ -14,6 +14,8 @@ vi.mock('next-intl/server', () => ({
 }));
 /* The deployment's switch: off (dev - the live payment account). */
 vi.mock('@/api/client/billing-writes', () => ({ billingWritesEnabled: () => false }));
+vi.mock('./actions', () => ({ saveAutoPurchase: vi.fn() }));
+vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 import { AutoPurchase, optionOf } from './AutoPurchase';
 

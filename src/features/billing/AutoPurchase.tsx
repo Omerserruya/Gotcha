@@ -94,10 +94,10 @@ export async function AutoPurchase({
             last4: first.last4 ?? '????',
           })
         : null;
-  // Off here: the environment's reason. On: the save is not wired yet - said so.
+  // On: Save is live. Off (dev - the live payment account): held, with why.
   const live = billingWritesEnabled();
-  const heldTag = live ? t('held.tagNotBuilt') : t('held.tag');
-  const heldWhy = live ? t('held.whyNotBuilt') : t('held.why');
+  const heldTag = t('held.tag');
+  const heldWhy = t('held.why');
 
   /*
     02 draws the three answers in every state. Nothing set is "Stop at my
@@ -136,6 +136,13 @@ export async function AutoPurchase({
         card={card}
         heldTag={heldTag}
         heldWhy={heldWhy}
+        live={live}
+        stored={{
+          packageKey: policy?.packageKey ?? null,
+          warningThresholdPct: policy?.warningThresholdPct ?? 80,
+          incrementCredits: policy?.incrementCredits ?? null,
+          pricePerCredit: policy?.pricePerCredit ?? null,
+        }}
         current={{
           pack: (
             <>
