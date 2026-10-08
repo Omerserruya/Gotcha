@@ -2,6 +2,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 
 import type { AuditEntry, AuditFacet, LoginEvent } from '@/api/contracts/security';
 
+import { ExportAuditLog } from './ExportAuditLog';
 import styles from './Security.module.css';
 import { shortWhen } from './when';
 import { auditVerdict, describeAuditAction } from '@/api/contracts/security';
@@ -141,7 +142,7 @@ export async function AuditSection({
 
   return (
     <>
-      <AuditHead facets={facets} truncated={facetsTruncated} t={t} />
+      <AuditHead facets={facets} truncated={facetsTruncated} exportable t={t} />
 
       {/*
         02's row: the time (mono), what happened, and its kind at the end -
@@ -212,10 +213,13 @@ const HEAD_FACETS = 4;
 function AuditHead({
   facets,
   truncated,
+  exportable = false,
   t,
 }: {
   readonly facets: readonly AuditFacet[];
   readonly truncated: boolean;
+  /** The log was read and has rows - there is something to export. */
+  readonly exportable?: boolean;
   readonly t: Awaited<ReturnType<typeof getTranslations<'security'>>>;
 }) {
   /*
@@ -264,10 +268,8 @@ function AuditHead({
           ) : null}
         </div>
       ) : null}
-      {/* Nothing exports the log from here yet. */}
-      <span className={styles.export} aria-disabled="true" title={t('audit.exportNotYet')}>
-        {t('audit.export')}
-      </span>
+      {/* The whole log as CSV - once it was read and holds something. */}
+      {exportable ? <ExportAuditLog /> : null}
     </header>
   );
 }

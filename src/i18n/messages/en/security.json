@@ -58,7 +58,6 @@
     "didNotWork": "didn't work",
     "moreActions": "More kinds of activity exist than shown here.",
     "export": "Export",
-    "exportNotYet": "Exporting the log from here comes next.",
     "failure": "Failure",
     "yesterday": "Yesterday",
     "all": "All",
@@ -93,6 +92,11 @@
       "approvals": "Asked for approval",
       "handovers": "Handed to your team",
       "billingSetup": "Billing setup"
+    },
+    "exporting": "Exporting…",
+    "exportProblem": {
+      "forbidden": "You need permission to read the audit log to export it.",
+      "failed": "It didn't export. Try again."
     }
   },
   "policy": {

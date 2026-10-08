@@ -1,5 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
-import { createTranslator } from 'next-intl';
+import { act, fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
+import { createTranslator, NextIntlClientProvider } from 'next-intl';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { auditEntrySchema } from '@/api/contracts/security';
@@ -11,7 +12,18 @@ vi.mock('next-intl/server', () => ({
   getLocale: async () => 'en',
 }));
 
+const download = vi.hoisted(() => vi.fn());
+vi.mock('@/api/client/download', () => ({ downloadFromPlatform: download }));
+
 import { AuditSection } from './SecuritySections';
+
+// Export is a client component: it reads its words from the provider.
+const render = (ui: ReactNode) =>
+  rtlRender(
+    <NextIntlClientProvider locale="en" messages={{ security }}>
+      {ui}
+    </NextIntlClientProvider>,
+  );
 
 const entry = (id: string, over: Record<string, unknown>) =>
   auditEntrySchema.parse({
@@ -78,13 +90,31 @@ describe('★ 16 - the audit card’s head is 02’s', () => {
     expect(screen.getByTestId('audit-facets-more')).toBeInTheDocument();
   });
 
-  it('Export is drawn and is not live - whether or not the log could be read', async () => {
-    render(
+  it('★ Export: only for a log that was read and holds something - nothing to export otherwise', async () => {
+    const { unmount } = render(
       await AuditSection({ entries: [], available: false, facets: [], facetsTruncated: false }),
     );
-    const exp = screen.getByText('Export');
-    expect(exp).toHaveAttribute('aria-disabled', 'true');
-    expect(exp.closest('a,button')).toBeNull();
+    expect(screen.queryByTestId('audit-export')).toBeNull();
+    unmount();
+    const empty = render(
+      await AuditSection({ entries: [], available: true, facets: [], facetsTruncated: false }),
+    );
+    expect(screen.queryByTestId('audit-export')).toBeNull();
+    empty.unmount();
+    await show([entry('a', {})]);
+    expect(screen.getByTestId('audit-export').tagName).toBe('BUTTON');
+  });
+
+  it('★ Export takes the whole log through the BFF; a refusal is said, never saved', async () => {
+    download.mockResolvedValueOnce({ ok: false, status: 403 });
+    await show([entry('a', {})]);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('audit-export'));
+    });
+    expect(download).toHaveBeenCalledWith('/api/audit-logs/export');
+    expect(screen.getByTestId('audit-export-problem')).toHaveTextContent(
+      'You need permission to read the audit log',
+    );
   });
 
   it('yesterday’s row says "Yesterday"', async () => {

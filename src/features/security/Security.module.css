@@ -415,11 +415,36 @@
     border-radius: var(--radius-item);
   }
 
+  .exportWrap {
+    display: inline-flex;
+    flex: none;
+    gap: var(--space-8);
+    align-items: center;
+  }
+
   .export {
     flex: none;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
     font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .export:hover {
+    color: var(--text-primary);
+  }
+
+  .export:disabled {
     color: var(--text-subtle);
-    cursor: not-allowed;
+    cursor: default;
+  }
+
+  .exportProblem {
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
   }
 
   .auditCard > :not(.auditHead, .auditRows) {
