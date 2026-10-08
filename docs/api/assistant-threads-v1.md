@@ -5,7 +5,8 @@ Base path: `/api/assistant`. All routes need a signed-in user of the workspace.
 
 **Stage 1** gives threads, history, streaming with steps, follow-up suggestions,
 cancel and resume. `blocks`, `sources` and `actions` exist in the message shape
-and are always `[]` in stage 1 (stage 2: query layer, blocks, sources; stage 3:
+and are always `[]` in stage 1. **Stage 2 (§9) fills `blocks` and `sources`**
+(stage 3:
 actions and undo).
 
 The old Command Center keeps `POST /api/agent/run` until it moves here.
@@ -198,3 +199,127 @@ names.
 - Known gap: when an answer is cancelled mid-stream, the provider's usage for
   that partial call is not reported back (it arrives only at the end of a
   stream), so it is not metered.
+
+---
+
+## 9. Stage 2: answers that come back as work (design 01a) - CONTRACT, not built yet
+
+Numbers in an answer come from the server, never from the model. A query tool
+computes them; the server turns its result into **blocks** and **sources**;
+the model writes only the prose around them. A block or a source is never
+generated, edited or rounded by the model.
+
+Everything below follows the caller's visibility (the inbox's rule) and
+excludes rehearsals (sandbox), test rows and imported history, like Home. Days
+are the workspace's days (its business-hours timezone).
+
+### 9.1 What the assistant can be asked, and how honestly
+
+| Ask | Status | Blocks it produces |
+|---|---|---|
+| Conversations over a period by **day**, **channel**, **status**, **who handled them** (GOTCHA / team / waiting) | available | `chart` (by day), `breakdown`, `record_list` |
+| Conversations that **mention** a word or phrase ("small", "late") in the period | available | `breakdown` (by channel) + `record_list` |
+| Conversations by **intent** / **sentiment** | partial: recorded only for some conversations; the block says for how many (`coverage`). Never a distribution over all conversations | `breakdown` with `coverage` |
+| **Orders** / **refunds** over a period by day or by product | depends on the store: a live read, capped (`partial`); Shopify needs Protected Customer Data approval (today: refused, the answer says so); WooCommerce from stage 2's own date filter | `chart`, `breakdown`, `record_list` (kind `order`) |
+| A **product's stock** (per variant) | available (Shopify; WooCommerce where the store returns it) | `record` |
+| Return **reasons** across the store, a product's **return rate** | **not available** (no store-wide source; stage 3 with return-reason classification). The assistant says so plainly | none |
+
+### 9.2 Blocks (`message.blocks`, in order)
+
+Every block has `id` ("b1", "b2"... per message), `type`, `title` (interface
+language), `sourceId` and optionally `deepLink` (§9.5), `partial` and
+`coverage`.
+
+```jsonc
+// chart: a series over days or categories
+{ "type": "chart", "id": "b1", "title": "Conversations this week", "sourceId": "s1",
+  "kind": "bar" | "line",
+  "x": { "kind": "day" | "category", "values": ["2026-10-01", "...", "2026-10-07"] },  // days ISO: format them in the UI language
+  "series": [{ "key": "conversations", "label": "Conversations", "values": [3, 4, 2, 5, 3, 9, 12] }],
+  "unit": "count" | "currency" | "percent", "currency": "ILS" | null,
+  "highlight": ["2026-10-06", "2026-10-07"],
+  "deepLink": "/analytics?tab=overview" | null }
+
+// breakdown: parts of a whole (bar length = share)
+{ "type": "breakdown", "id": "b2", "title": "By channel", "sourceId": "s1",
+  "items": [{ "key": "WHATSAPP", "label": "וואטסאפ", "value": 23, "share": 0.61 }],
+  "total": 38, "unit": "count" | "currency" | "percent", "currency": null,
+  "other": { "label": "Other", "value": 2 } | null,
+  "coverage": { "covered": 14, "of": 88 } | null,   // intent/sentiment: recorded for 14 of 88
+  "deepLink": "/inbox?channel=WHATSAPP" | null }
+
+// record_list: the rows behind a number (first page)
+{ "type": "record_list", "id": "b3", "title": "Conversations that mention size", "sourceId": "s2",
+  "kind": "conversation" | "customer" | "order" | "product",
+  "items": [{ "id": "...", "title": "Dana Cohen", "subtitle": "Return #2207", "meta": "7 October", "deepLink": "/inbox?c=..." }],
+  "total": 12, "hasMore": true }                     // the rest: §9.4
+
+// record: one thing and its facts
+{ "type": "record", "id": "b4", "title": "Linen Duvet Set · King", "sourceId": "s3",
+  "kind": "product" | "order" | "customer" | "conversation",
+  "fields": [{ "key": "stock", "label": "In stock", "value": "14" }],
+  "deepLink": null }
+
+// on any block
+"partial": { "reason": "capped", "cap": 250 } | { "reason": "store_limit" } | null
+```
+`label`s and `fields[].value` are already in the interface language; raw
+numbers are in `series[].values`, `items[].value`, `total`. A store read that is
+refused or unsupported produces no block; the assistant says why in one plain
+sentence.
+
+### 9.3 Sources and citations (`message.sources`)
+
+```jsonc
+{ "id": "s1", "label": "12 שיחות שמזכירות “קטן”",
+  "kind": "conversations" | "orders" | "refunds" | "product" | "order" | "customer" | "conversation",
+  "count": 12 | null,
+  "deepLink": "/inbox?channel=WHATSAPP" | null,
+  "query": { "tool": "conversations", "params": { "mention": "קטן", "from": "2026-10-01", "to": "2026-10-07", "channels": "all" } } }
+```
+The answer cites a source after the claim it supports with `[^s1]` in `text`.
+The client renders it as that source's chip. The server removes a citation
+whose source does not exist in the message. The chips under the answer
+(design 01a) are `sources`, in order.
+
+### 9.4 The full list behind a source
+
+`GET /api/assistant/threads/:id/messages/:messageId/sources/:sourceId/records?cursor=`
+→ `200 { data: RecordListItem[], nextCursor }` (25 a page). Re-runs the saved
+`query` with the caller's CURRENT visibility (a list never shows what the user
+may no longer see). `404` when the thread is not theirs or the source does not
+exist; `409 { code: "SOURCE_UNAVAILABLE" }` when the store can no longer be read.
+
+### 9.5 Deep links
+
+In-app paths without the locale prefix (the client adds it), from a fixed
+server table, never written by the model:
+
+| Target | Path |
+|---|---|
+| a conversation | `/inbox?c=<conversationId>` |
+| conversations on a channel | `/inbox?channel=<CHANNEL>` |
+| waiting for the team | `/inbox?view=queue` |
+| a customer | `/customers/<contactId>` |
+| a customer's orders / returns | `/customers/<contactId>?tab=orders` (`&filter=returns`) |
+| analytics | `/analytics?tab=overview` (`gotcha`, `team`, `sales`, `topics`) |
+
+**Asks for Frontend (found while mapping the redesign):**
+1. The inbox has no period filter: a chart's link can open the channel but not
+   "this week". Proposed: `/inbox?from=2026-10-01&to=2026-10-07` (the list API
+   can take it); the server will send it once the inbox accepts it.
+2. The inbox's channel filter has no `SHOPIFY_LIVE_CHAT` (17 of 88 real
+   conversations on dev); links to it would open an unfiltered inbox.
+
+### 9.6 Stream
+
+Two new events, both before `message.done`:
+
+| event | data | when |
+|---|---|---|
+| `block` | `{ block }` | a query tool finished; the block is final (render it as it arrives) |
+| `sources` | `{ items: Source[] }` | once, after the text: every source the text cites or a block uses |
+
+`text.delta` may contain `[^sN]` markers. `GET /threads/:id` returns
+`blocks` and `sources` on each assistant message.
+
