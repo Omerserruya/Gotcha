@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -51,15 +51,10 @@ describe("analytics never counts setup conversations", () => {
       // The shared "waiting for a person" predicate (Home's count and queue):
       // it carries REAL_CONVERSATION itself, checked by the next test.
       if (/where:\s*waitingForPersonWhere\(|=\s*waitingForPersonWhere\(/.test(window)) return false;
-      // The incomplete form, still accepted because 21 sites use it.
-      //
-      // ⚠ `isTest: false` ALONE DOES NOT EXCLUDE SANDBOX CONVERSATIONS. They are
-      // written with `isTest = false`, so every site matched by this line counts
-      // the team's setup rehearsals as business - the defect fixed in billing as
-      // bd1ddf0a and still live here. This branch is what makes those sites pass,
-      // so it is the reason the guard reads as settled while the question is
-      // open. Removing it is the real fix, and it requires changing all 21.
-      if (/isTest:\s*false/.test(window)) return false;
+      // A message read through its conversation: the same constant.
+      if (/conversation:\s*REAL_CONVERSATION/.test(window)) return false;
+      // NOT accepted any more: `isTest: false` alone. Sandbox rehearsals are
+      // written with isTest = false, so that form counted them as business.
       if (/where[,:]\s*$|where\s*\}|\(\{ where \}\)|where,\n/.test(window)) return false;
       if (/conversationId: \{ in: convIds \}/.test(window)) return false;
       return true;
@@ -78,5 +73,21 @@ describe("analytics never counts setup conversations", () => {
     expect(SOURCE).toMatch(/waitingForPersonWhere \} from "@chatcenter\/shared"/);
     expect(SOURCE).toMatch(/getQueueDepth[\s\S]{0,200}waitingForPersonWhere\(tenantId\)/);
     expect(SOURCE).toMatch(/const where = waitingForPersonWhere\(tenantId\);/);
+  });
+});
+
+describe("★ one definition of a real conversation", () => {
+  it("no query filters on isTest alone (code, not comments)", () => {
+    const code = LINES.map((l, i) => ({ l, i: i + 1 })).filter(({ l }) => !/^\s*(\/\/|\*|\/\*)/.test(l));
+    const alone = code.filter(({ l }) => /isTest:\s*false/.test(l));
+    // The one allowed place is the constant itself.
+    expect(alone.map(({ l }) => l.trim())).toEqual(["isTest: false,"]);
+    expect(SOURCE).toMatch(/export const REAL_CONVERSATION = \{\n  isTest: false,\n  NOT: \{ customerExternalId: \{ startsWith: "sandbox:" \} \},\n\}/);
+  });
+
+  it("is the same predicate as @chatcenter/shared's (Home chat, billing, the inbox)", async () => {
+    const shared: any = await vi.importActual("@chatcenter/shared");
+    const { REAL_CONVERSATION } = await import("../services/analytics.service");
+    expect(REAL_CONVERSATION).toEqual(shared.REAL_CONVERSATION);
   });
 });

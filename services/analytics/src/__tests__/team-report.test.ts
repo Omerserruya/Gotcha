@@ -29,6 +29,10 @@ vi.mock("@chatcenter/shared", () => ({
 
 import { getTeamReport } from "../services/analytics.service";
 
+// Noon UTC: the fixture's "today at 09:00" must already have happened (before
+// 09:00 UTC it was in the future and these tests failed by time of day).
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-10-08T12:00:00Z"));
 const now = new Date();
 const at = (dayAgo: number, h: number, min = 0) =>
   new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dayAgo, h, min));

@@ -113,8 +113,8 @@ export async function getDashboardStats(tenantId: string) {
   const redis = getRedis();
   const today = new Date().toISOString().slice(0, 10);
   const [activeConversations, waitingConversations, dailyData, resolutionTimes, firstReply] = await Promise.all([
-    prisma.conversation.count({ where: { tenantId, isTest: false, status: "OPEN" } }),
-    prisma.conversation.count({ where: { tenantId, isTest: false, status: "WAITING" } }),
+    prisma.conversation.count({ where: { tenantId, ...REAL_CONVERSATION, status: "OPEN" } }),
+    prisma.conversation.count({ where: { tenantId, ...REAL_CONVERSATION, status: "WAITING" } }),
     redis.hgetall(`analytics:${tenantId}:${today}`),
     redis.lrange(`analytics:${tenantId}:resolution_times:${today}`, 0, -1),
     // Replaces the claim-based figure. Same field name because the NAME was
@@ -183,10 +183,9 @@ export async function getAgentStats(tenantId: string) {
       by: ["assignedAiAgentId"],
       where: {
         tenantId,
-        isTest: false,
         // Sandbox rehearsals carry isTest=false, and they are exactly the
         // conversations an AI employee is tried out on.
-        NOT: { customerExternalId: { startsWith: "sandbox:" } },
+        ...REAL_CONVERSATION,
         status: { not: "CLOSED" },
         assignedAiAgentId: { in: aiAgents.map((a) => a.id) },
       },
@@ -276,16 +275,16 @@ export async function getOverview(tenantId: string, from?: string, to?: string) 
     priorMessages,
     pendingApprovalCount,
   ] = await Promise.all([
-    prisma.conversation.count({ where: { tenantId, isTest: false, createdAt: dateFilter } }),
-    prisma.conversation.count({ where: { tenantId, isTest: false, status: "CLOSED", createdAt: dateFilter } }),
-    prisma.message.count({ where: { tenantId, conversation: { isTest: false }, createdAt: dateFilter } }),
+    prisma.conversation.count({ where: { tenantId, ...REAL_CONVERSATION, createdAt: dateFilter } }),
+    prisma.conversation.count({ where: { tenantId, ...REAL_CONVERSATION, status: "CLOSED", createdAt: dateFilter } }),
+    prisma.message.count({ where: { tenantId, conversation: REAL_CONVERSATION, createdAt: dateFilter } }),
     prisma.conversation.findMany({
       where: { tenantId, status: "CLOSED", closedAt: dateFilter },
       select: { createdAt: true, closedAt: true, assignedAgentId: true, messages: { select: { metadata: true }, take: 1, where: { direction: "OUTBOUND" } } },
     }),
-    prisma.conversation.count({ where: { tenantId, isTest: false, createdAt: priorFilter } }),
-    prisma.conversation.count({ where: { tenantId, isTest: false, status: "CLOSED", createdAt: priorFilter } }),
-    prisma.message.count({ where: { tenantId, conversation: { isTest: false }, createdAt: priorFilter } }),
+    prisma.conversation.count({ where: { tenantId, ...REAL_CONVERSATION, createdAt: priorFilter } }),
+    prisma.conversation.count({ where: { tenantId, ...REAL_CONVERSATION, status: "CLOSED", createdAt: priorFilter } }),
+    prisma.message.count({ where: { tenantId, conversation: REAL_CONVERSATION, createdAt: priorFilter } }),
     // Deliberately NOT filtered by the date range. Every other figure here
     // describes a period; this one answers "how many actions are waiting on a
     // human right now", and an approval raised before `from` is still waiting.
@@ -319,7 +318,7 @@ export async function getOverview(tenantId: string, from?: string, to?: string) 
     const aiConvs = await prisma.message.findMany({
       where: {
         tenantId,
-        conversation: { isTest: false },
+        conversation: REAL_CONVERSATION,
         conversationId: { in: convIds },
         direction: "OUTBOUND",
         metadata: { path: ["source"], equals: "ai_bot" },
@@ -424,7 +423,7 @@ export async function customerQuestionExamples(
       tenantId,
       direction: "INBOUND",
       conversationId: { in: [...intentByConversation.keys()] },
-      conversation: { isTest: false, NOT: { customerExternalId: { startsWith: "sandbox:" } } },
+      conversation: REAL_CONVERSATION,
     },
     select: { conversationId: true, body: true, createdAt: true },
     orderBy: { createdAt: "asc" },
@@ -497,7 +496,7 @@ export async function getTopQuestions(tenantId: string, from?: string, to?: stri
 
   // Fallback: analyze inbound message bodies
   const messages = await prisma.message.findMany({
-    where: { tenantId, direction: "INBOUND", createdAt: dateFilter, conversation: { isTest: false } },
+    where: { tenantId, direction: "INBOUND", createdAt: dateFilter, conversation: REAL_CONVERSATION },
     select: { body: true },
     take: 1000,
   });
@@ -635,7 +634,7 @@ export async function getChannelPerformance(tenantId: string, from?: string, to?
   const dateFilter = { gte: fromDate, lte: toDate };
 
   const conversations = await prisma.conversation.findMany({
-    where: { tenantId, isTest: false, createdAt: dateFilter },
+    where: { tenantId, ...REAL_CONVERSATION, createdAt: dateFilter },
     select: { id: true, channel: true, status: true, createdAt: true, closedAt: true },
   });
 
@@ -701,7 +700,7 @@ export async function getDepartmentPerformance(tenantId: string, from?: string, 
       select: { id: true, name: true, members: { select: { userId: true } } },
     }),
     prisma.conversation.findMany({
-      where: { tenantId, isTest: false, createdAt: dateFilter, departmentId: { not: null } },
+      where: { tenantId, ...REAL_CONVERSATION, createdAt: dateFilter, departmentId: { not: null } },
       select: { departmentId: true, status: true, assignedAgentId: true, createdAt: true, lastMessageAt: true },
     }),
   ]);
@@ -758,7 +757,7 @@ export async function getAIPerformance(tenantId: string, from?: string, to?: str
     prisma.message.count({
       where: { tenantId, direction: "OUTBOUND", createdAt: dateFilter, metadata: { path: ["source"], equals: "ai_bot" } },
     }),
-    prisma.message.count({ where: { tenantId, conversation: { isTest: false }, direction: "OUTBOUND", createdAt: dateFilter } }),
+    prisma.message.count({ where: { tenantId, conversation: REAL_CONVERSATION, direction: "OUTBOUND", createdAt: dateFilter } }),
     prisma.conversationIntelligence.findMany({
       where: { tenantId, analyzedAt: dateFilter },
       select: { aiConfidence: true, resolutionOutcome: true },
@@ -845,14 +844,14 @@ export async function getAIInsights(tenantId: string) {
     }),
     prisma.conversation.groupBy({
       by: ["departmentId"],
-      where: { tenantId, isTest: false, createdAt: dateFilter, departmentId: { not: null } },
+      where: { tenantId, ...REAL_CONVERSATION, createdAt: dateFilter, departmentId: { not: null } },
       _count: { id: true },
       orderBy: { _count: { id: "desc" } },
       take: 3,
     }),
     prisma.conversation.groupBy({
       by: ["channel"],
-      where: { tenantId, isTest: false, createdAt: dateFilter },
+      where: { tenantId, ...REAL_CONVERSATION, createdAt: dateFilter },
       _count: { id: true },
       orderBy: { _count: { id: "desc" } },
       take: 1,
@@ -1331,7 +1330,7 @@ export async function getTimeSaved(tenantId: string, from?: string, to?: string)
       tenantId,
       // Sandbox rehearsals carry isTest=false; the sandbox prefix is the marker
       // (same exclusion as /daily and /team, so the three count the same set).
-      conversation: { isTest: false, NOT: { customerExternalId: { startsWith: "sandbox:" } } },
+      conversation: REAL_CONVERSATION,
       direction: "OUTBOUND",
       metadata: { path: ["source"], equals: "ai_bot" },
       createdAt: dateFilter,
@@ -1347,8 +1346,7 @@ export async function getTimeSaved(tenantId: string, from?: string, to?: string)
   const humanHandled = await prisma.conversation.findMany({
     where: {
       tenantId,
-      isTest: false,
-      NOT: { customerExternalId: { startsWith: "sandbox:" } },
+      ...REAL_CONVERSATION,
       createdAt: dateFilter,
       assignedAgentId: { not: null },
       OR: [{ handledBy: "human" }, { isHandedOver: true }],
@@ -1446,13 +1444,13 @@ export async function getDailySeries(tenantId: string, days = 7) {
         direction: "OUTBOUND",
         messageType: { not: "system" },
         createdAt: { gte: start, lte: end },
-        conversation: { isTest: false, NOT: { customerExternalId: { startsWith: "sandbox:" } } },
+        conversation: REAL_CONVERSATION,
       },
       select: { conversationId: true, createdAt: true, metadata: true, senderName: true },
       take: 50_000,
     }),
     prisma.conversation.findMany({
-      where: { tenantId, isTest: false, NOT: { customerExternalId: { startsWith: "sandbox:" } }, createdAt: { gte: start, lte: end } },
+      where: { tenantId, ...REAL_CONVERSATION, createdAt: { gte: start, lte: end } },
       select: { createdAt: true, isHandedOver: true, assignedAgentId: true, handledBy: true },
       take: 50_000,
     }),
@@ -1538,7 +1536,7 @@ export async function getTeamReport(tenantId: string, days = 7) {
         tenantId,
         createdAt: window,
         messageType: { not: "system" },
-        conversation: { isTest: false, NOT: { customerExternalId: { startsWith: "sandbox:" } } },
+        conversation: REAL_CONVERSATION,
       },
       select: {
         conversationId: true, direction: true, createdAt: true, metadata: true, senderName: true,
@@ -1831,7 +1829,7 @@ export async function getDormantCustomers(
   // same string on two channels is not the same person.
   const grouped = await prisma.conversation.groupBy({
     by: ["customerExternalId", "channel"],
-    where: { tenantId, isTest: false },
+    where: { tenantId, ...REAL_CONVERSATION },
     _count: { _all: true },
     _max: { lastMessageAt: true, customerName: true },
   });
@@ -1897,7 +1895,7 @@ export async function getInFlight(tenantId: string) {
     prisma.conversation.count({
       where: {
         tenantId,
-        isTest: false,
+        ...REAL_CONVERSATION,
         status: { in: ["OPEN", "WAITING"] as ("OPEN" | "WAITING")[] },
         handledBy: { in: ["ai_agent", "flow"] },
         isHandedOver: false,
@@ -2030,12 +2028,12 @@ export async function getQuietDayList(
  * `usage-allowance.ts` (fixed in bd1ddf0a) and in billing's observed-usage
  * measurement, so "what counts as a conversation" has ONE definition.
  *
- * ⚠ THE 21 OTHER QUERIES IN THIS FILE STILL USE `isTest: false` ALONE, so every
- * other figure here counts setup rehearsals as business. That is a separate,
- * unfixed defect - and `__tests__/test-conversations-excluded.test.ts` asserts
- * the incomplete predicate is present, so it passes while the guard is half
- * missing. Anything new should use this constant; the existing sites need a
- * deliberate pass with that test rewritten.
+ * Every conversation and message query in this file uses it (the 21 that read
+ * `isTest: false` alone were moved in one pass, and
+ * `__tests__/test-conversations-excluded.test.ts` no longer accepts the
+ * incomplete form). It is the same definition as @chatcenter/shared's
+ * REAL_CONVERSATION (pinned by that test); it is declared here because this
+ * service's tests mock the shared barrel wholesale.
  */
 export const REAL_CONVERSATION = {
   isTest: false,
