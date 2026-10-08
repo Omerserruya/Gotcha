@@ -5217,6 +5217,10 @@ model AssistantMessage {
   steps       Json     @default("[]")
   scope       Json?
   suggestions Json     @default("[]")
+  /// Stage 2: cards computed by the server (chart, breakdown, record_list, record).
+  blocks      Json     @default("[]")
+  /// Stage 2: what each claim and card was computed from (replayable query).
+  sources     Json     @default("[]")
   runId       String?  @map("run_id")
   usage       Json?
   createdAt   DateTime @default(now()) @map("created_at")
