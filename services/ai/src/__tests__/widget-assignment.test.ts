@@ -70,7 +70,7 @@ describe("★ read", () => {
   it("who answers, how, and which other channels share the route", async () => {
     const r = await get();
     expect(r.status).toBe(200);
-    expect(r.body.data.channels).toEqual([{ channel: "WEBCHAT", employee: { id: "maya", name: "Maya" }, how: "always", editable: true, dedicated: false, sharedWith: ["WHATSAPP"] }]);
+    expect(r.body.data.channels).toEqual([{ channel: "WEBCHAT", employee: { id: "maya", name: "Maya" }, how: "always", editable: true, dedicated: false, sharedWith: ["WHATSAPP"], movesWith: ["WHATSAPP"] }]);
     expect(r.body.data.employees).toEqual([{ id: "maya", name: "Maya", active: true }, { id: "noa", name: "Noa", active: true }, { id: "draft", name: "Draft", active: false }]);
   });
 
@@ -108,6 +108,8 @@ describe("★ a playbook with channel entries", () => {
   });
 
   it("web chat (falling back to WhatsApp's entry) gets its own entry, APPENDED; WhatsApp keeps Maya", async () => {
+    // The read says so before any write: shared, but nothing else would move.
+    expect((await get()).body.data.channels[0]).toMatchObject({ sharedWith: ["WHATSAPP"], movesWith: [] });
     const r = await put({ employeeId: "noa" });
     expect(r.status).toBe(200);
     expect(r.body.data.changed).toEqual([{ channel: "WEBCHAT", from: { id: "maya", name: "Maya" }, created: true }]);
@@ -122,7 +124,7 @@ describe("★ a playbook with channel entries", () => {
   it("a dedicated web chat entry: only its route changes; a team route becomes an employee route", async () => {
     H.canvas.nodes.push(entry("ec", "webchat"), route("rc", null, "human"));
     H.canvas.edges.push(edge("ec", "rc"));
-    expect((await get()).body.data.channels[0]).toMatchObject({ how: "team", employee: null, dedicated: true, sharedWith: [] });
+    expect((await get()).body.data.channels[0]).toMatchObject({ how: "team", employee: null, dedicated: true, sharedWith: [], movesWith: [] });
     const r = await put({ employeeId: "noa" });
     expect(r.status).toBe(200);
     expect(H.canvas.nodes.find((n: any) => n.id === "rc").data).toEqual({ routeType: "agent", targetId: "noa" });

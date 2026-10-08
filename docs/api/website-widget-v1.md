@@ -185,7 +185,9 @@ Permission for both routes: role ADMIN, the same as editing the playbook
       //   none: the playbook routes this channel nowhere
       "editable": true,                 // false when "conditional": change it in the playbook editor
       "dedicated": true,                // the playbook has an entry for this channel of its own
-      "sharedWith": ["WHATSAPP"] }      // other channels that reach the SAME route: changing it changes them too
+      "sharedWith": ["WHATSAPP"],       // other channels that reach the SAME route
+      "movesWith": ["WHATSAPP"] }       // what a change made here would ALSO move: [] when the channel would get
+                                        // an entry of its own; ask the person first, then PUT with includeShared
   ],
   "employees": [{ "id": "...", "name": "Maya", "active": true }]   // to choose from (active ones are choosable)
 } }

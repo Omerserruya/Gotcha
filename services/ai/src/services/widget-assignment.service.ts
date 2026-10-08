@@ -124,18 +124,27 @@ function sharedWith(paths: Map<string, ChannelPath>, p: ChannelPath): string[] {
 export async function readAssignment(tenantId: string) {
   const { nodes, edges, widget, all, employees } = await load(tenantId);
   const paths = new Map(all.map((c) => [c, pathFor(nodes, edges, c)]));
+  const hasEntries = nodes.some((n) => n.type === "channel_entry");
   const name = (id: string | null) => employees.find((e) => e.id === id);
+  const widgetNames = widget.map((w) => w.channel);
   return {
     channels: widget.map(({ channel }) => {
       const p = paths.get(channel)!;
       const emp = p.how === "always" ? name(p.employeeId) : undefined;
+      const shared = sharedWith(paths, p);
+      // What a change made here (for the widget's channels) would also move:
+      // nothing when the channel gets an entry of its own (the playbook
+      // already has entries), else the other channels on the shared route.
+      const outside = shared.filter((c) => !widgetNames.includes(c));
+      const movesWith = p.how === "conditional" || outside.length === 0 || (!p.dedicated && hasEntries) ? [] : outside;
       return {
         channel,
         employee: emp ? { id: emp.id, name: emp.name } : null,
         how: p.how,
         editable: p.how !== "conditional",
         dedicated: p.dedicated,
-        sharedWith: sharedWith(paths, p),
+        sharedWith: shared,
+        movesWith,
       };
     }),
     employees: employees.map((e) => ({ id: e.id, name: e.name, active: e.status === "ACTIVE" })),
