@@ -64,9 +64,6 @@ export function CommandPalette() {
   const tp = useTranslations('navigation.palette');
   const common = useTranslations('common');
   const tch = useTranslations('channels');
-  // A stored "Shopper on <shop>" in the reader's words (shopper-name.ts).
-  const shown = (name: string | null | undefined) =>
-    personName(name, (kind) => common(`person.${kind}`));
   const router = useRouter();
   const locale = useLocale();
   const { canSee } = usePermissions();
@@ -150,6 +147,9 @@ export function CommandPalette() {
   );
 
   const items: readonly Item[] = useMemo(() => {
+    // A stored "Shopper on <shop>" in the reader's words (shopper-name.ts).
+    const shown = (name: string | null | undefined) =>
+      personName(name, (kind) => common(`person.${kind}`));
     const typed = query.trim();
     const searchable = typed.length >= 2;
     const go: Item[] = [
@@ -203,7 +203,7 @@ export function CommandPalette() {
         href: `/home?ask=${encodeURIComponent(typed)}`,
       },
     ];
-  }, [actions, hits, locale, people, query, screens, tch, tp]);
+  }, [actions, common, hits, locale, people, query, screens, tch, tp]);
 
   if (!open) return null;
 
