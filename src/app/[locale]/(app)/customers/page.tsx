@@ -14,6 +14,7 @@ import {
 import styles from '@/features/customers/Customers.module.css';
 import { loadCommerce, loadInsights, loadSegments } from '@/features/customers/load-customer-facts';
 import { loadCustomers } from '@/features/customers/load-customers';
+import { loadNotSame } from '@/features/customers/load-not-same';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -57,8 +58,11 @@ export default async function Page({
   const { q, segment: rawSegment } = await searchParams;
   const query = q?.trim() ?? '';
   const segment = segmentOf(rawSegment);
-  const [{ rows, total, truncated, searchedField, orderSearched, conversations, quiet }, segments] =
-    await Promise.all([loadCustomers(query, { today: true }), loadSegments()]);
+  const [
+    { rows, total, truncated, searchedField, orderSearched, conversations, quiet },
+    segments,
+    notSame,
+  ] = await Promise.all([loadCustomers(query, { today: true }), loadSegments(), loadNotSame()]);
   const now = new Date();
   const everyone = rows === null ? [] : peopleToday(rows, conversations, quiet?.ids ?? null, now);
   const shown = everyone.filter((person) => inSegment(person, segment));
@@ -122,7 +126,11 @@ export default async function Page({
               <ReachOut
                 quiet={quiet === null ? null : { count: quiet.count, capped: quiet.capped }}
               />
-              <DuplicateCard pair={duplicateSuggestion(rows)} />
+              {/* A pair marked "not the same" is never suggested; unread marks, none is. */}
+              <DuplicateCard
+                pair={notSame === null ? null : duplicateSuggestion(rows, notSame)}
+                unchecked={notSame === null}
+              />
               <WhoTheyAre segments={segments} />
             </aside>
           </div>

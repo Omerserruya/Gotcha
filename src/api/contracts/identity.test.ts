@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { currentUserSchema, membershipSchema } from './identity';
+import { currentUserSchema, membershipSchema, notSamePairsSchema, pairKey } from './identity';
 
 /**
  * `GET /api/auth/me`.
@@ -102,5 +102,18 @@ describe('★★ the shape the route actually sends', () => {
     // The fix must not become "accept anything". `user.id` is what both
     // callers came for, and a response without it is not usable.
     expect(() => currentUserSchema.parse({ ...ME, user: { email: 'x@example.com' } })).toThrow();
+  });
+});
+
+describe('★ 04’s marked pairs - one key whichever way round, a bad row left out', () => {
+  it('reads each pair to its key; a malformed row is dropped, not the read', () => {
+    expect(
+      notSamePairsSchema.parse([
+        { contactIds: ['k2', 'k1'], markedAt: '2026-10-08T10:00:00Z', markedBy: 'u1' },
+        { contactIds: ['k3'] },
+        'nonsense',
+      ]),
+    ).toEqual(['k1|k2']);
+    expect(pairKey('a', 'b')).toBe(pairKey('b', 'a'));
   });
 });

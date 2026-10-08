@@ -14,8 +14,13 @@ vi.mock('next-intl/server', () => ({
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
+const loadNotSame = vi.hoisted(() =>
+  vi.fn(async (): Promise<ReadonlySet<string> | null> => new Set()),
+);
+vi.mock('@/features/customers/load-not-same', () => ({ loadNotSame }));
 
 import { CustomerList, Segments } from '@/features/customers/CustomerList';
+import { DuplicateCard } from '@/features/customers/DuplicateCard';
 import { PageContainer } from '@/shell/PageContainer';
 
 const propsOf = <T,>(tree: ReactNode, type: unknown): T | null => {
@@ -110,5 +115,49 @@ describe('★★ 04 - the segment is in the URL, and the counts are live', () =>
     const tree = await page(today, { segment });
     const people = propsOf<{ people: { primary: { id: string } }[] }>(tree, CustomerList)?.people;
     expect(people?.map((p) => p.primary.id)).toEqual(ids);
+  });
+});
+
+describe('★★ 04 - the suggestion skips what was marked; unread marks, it suggests none', () => {
+  const twins = [
+    {
+      id: 'k1',
+      personId: null,
+      channel: 'WHATSAPP',
+      displayName: 'Yael',
+      externalId: 'a',
+      phone: '0500000009',
+      tags: [],
+    },
+    {
+      id: 'k2',
+      personId: null,
+      channel: 'SMS',
+      displayName: 'yael.b',
+      externalId: 'b',
+      phone: '+972500000009',
+      tags: [],
+    },
+  ];
+  type Card = { pair: readonly { id: string }[] | null; unchecked?: boolean };
+
+  it('a marked pair is not offered', async () => {
+    loadNotSame.mockResolvedValueOnce(new Set(['k1|k2']));
+    const card = propsOf<Card>(await page({ rows: twins, total: 2 }), DuplicateCard);
+    expect(card?.pair).toBeNull();
+    expect(card?.unchecked).toBe(false);
+  });
+
+  it('unmarked: offered', async () => {
+    loadNotSame.mockResolvedValueOnce(new Set());
+    const card = propsOf<Card>(await page({ rows: twins, total: 2 }), DuplicateCard);
+    expect(card?.pair?.map((r) => r.id)).toEqual(['k1', 'k2']);
+  });
+
+  it('the marks unread: none offered, and the card says why', async () => {
+    loadNotSame.mockResolvedValueOnce(null);
+    const card = propsOf<Card>(await page({ rows: twins, total: 2 }), DuplicateCard);
+    expect(card?.pair).toBeNull();
+    expect(card?.unchecked).toBe(true);
   });
 });

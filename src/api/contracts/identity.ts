@@ -131,3 +131,24 @@ export const effectivePermissionsSchema = z.looseObject({
 });
 
 export type EffectivePermissions = z.infer<typeof effectivePermissionsSchema>;
+
+/**
+ * 04's pairs marked "not the same person" (conversation e5a56fd3). The route
+ * sends them sorted and drops a pair whose customers were erased or merged
+ * away. Compared as an unordered pair - `pairKey` sorts - and a malformed
+ * row is left out rather than failing the read.
+ */
+const notSamePairSchema = z.object({
+  contactIds: z.tuple([z.string().min(1), z.string().min(1)]),
+});
+export const notSamePairsSchema = z.array(z.unknown()).transform((rows) =>
+  rows.flatMap((row) => {
+    const pair = notSamePairSchema.safeParse(row);
+    return pair.success ? [pairKey(...pair.data.contactIds)] : [];
+  }),
+);
+
+/** One key for a pair, whichever way round it is named. */
+export function pairKey(a: string, b: string): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}

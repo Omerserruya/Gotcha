@@ -10,7 +10,8 @@ const refresh = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh }) }));
 /* Merging rewrites who owns every message: the action is a spy. */
 const mergeContacts = vi.hoisted(() => vi.fn());
-vi.mock('./identity-actions', () => ({ mergeContacts }));
+const markNotSame = vi.hoisted(() => vi.fn());
+vi.mock('./identity-actions', () => ({ mergeContacts, markNotSame }));
 
 import { DuplicateCard } from './DuplicateCard';
 
@@ -26,15 +27,16 @@ const yaelB = customerRowSchema.parse({
   phone: '0500000009',
   channel: 'INSTAGRAM',
 });
-const show = (pair: Parameters<typeof DuplicateCard>[0]['pair']) =>
+const show = (pair: Parameters<typeof DuplicateCard>[0]['pair'], unchecked = false) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ customers: messages }}>
-      <DuplicateCard pair={pair} />
+      <DuplicateCard pair={pair} unchecked={unchecked} />
     </NextIntlClientProvider>,
   );
 
 beforeEach(() => {
   mergeContacts.mockReset();
+  markNotSame.mockReset();
   refresh.mockReset();
 });
 
@@ -63,11 +65,42 @@ describe('★★ suggested, never silent', () => {
     expect(screen.getByTestId('merge-problem')).toHaveTextContent("These two can't be merged");
   });
 
-  it('"Not the same" is drawn - nothing remembers it yet; no pair: said', () => {
-    const one = show([yael, yaelB]);
-    expect(screen.getByTestId('not-same')).toHaveAttribute('aria-disabled', 'true');
-    one.unmount();
-    show(null);
+  it('no pair: said; marks unread: said as that - never "no duplicates"', () => {
+    const one = show(null);
     expect(screen.getByTestId('duplicates')).toHaveTextContent('No duplicates found.');
+    one.unmount();
+    show(null, true);
+    expect(screen.getByTestId('duplicates-unchecked')).toHaveTextContent(
+      "Couldn't check which accounts were marked as different people",
+    );
+    expect(screen.getByTestId('duplicates')).not.toHaveTextContent('No duplicates found.');
+  });
+});
+
+describe('★★ 04’s "Not the same" (conversation e5a56fd3) - remembered, never suggested again', () => {
+  it('one press marks the pair, merges nothing, says so, and reads the list again', async () => {
+    markNotSame.mockResolvedValue({ ok: true });
+    show([yael, yaelB]);
+    await userEvent.click(screen.getByTestId('not-same'));
+    expect(markNotSame).toHaveBeenCalledWith('k1', 'k2');
+    expect(mergeContacts).not.toHaveBeenCalled();
+    expect(screen.getByTestId('not-same-done')).toHaveTextContent(
+      "Marked as two people. GOTCHA won't suggest them together again.",
+    );
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['already_same', 'These two are already one person.'],
+    ['gone', 'One of them no longer exists.'],
+    ['forbidden', "You don't have permission to change customers."],
+    ['failed', "That wasn't saved - try again."],
+  ])('%s: said in words; nothing claims it was marked', async (reason, words) => {
+    markNotSame.mockResolvedValue({ ok: false, reason });
+    show([yael, yaelB]);
+    await userEvent.click(screen.getByTestId('not-same'));
+    expect(screen.getByTestId('not-same-problem')).toHaveTextContent(words);
+    expect(screen.queryByTestId('not-same-done')).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

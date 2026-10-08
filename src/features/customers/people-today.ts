@@ -1,4 +1,5 @@
 import { collapseToPeople, type CustomerRow } from '@/api/contracts/customers';
+import { pairKey } from '@/api/contracts/identity';
 
 /**
  * 04's rows as 02 writes them - "what is true about that person today" -
@@ -105,11 +106,13 @@ export function sinceWords(iso: string, now: Date): { key: string; n?: number } 
 
 /**
  * "Two accounts look like one person" - matched on a shared phone or email,
- * as the design says, between rows the unifier has NOT already joined. A
- * suggestion only: merging is a person's call.
+ * as the design says, between rows the unifier has NOT already joined, and
+ * never a pair somebody marked "not the same" (04, `pairKey`). A suggestion
+ * only: merging is a person's call.
  */
 export function duplicateSuggestion(
   rows: readonly CustomerRow[],
+  notSame: ReadonlySet<string> = new Set(),
 ): readonly [CustomerRow, CustomerRow] | null {
   const seen = new Map<string, CustomerRow>();
   const keyOf = (row: CustomerRow): string[] => [
@@ -122,7 +125,8 @@ export function duplicateSuggestion(
       if (key.length < 6) continue;
       const other = seen.get(key);
       const samePerson = other && other.personId !== null && other.personId === row.personId;
-      if (other && !samePerson && other.id !== row.id) return [other, row];
+      const turnedDown = other && notSame.has(pairKey(other.id, row.id));
+      if (other && !samePerson && !turnedDown && other.id !== row.id) return [other, row];
       if (!other) seen.set(key, row);
     }
   }

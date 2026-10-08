@@ -1116,6 +1116,13 @@ export const customerEndpoints = {
 export const identityEndpoints = {
   resolve: () => endpoint('/api/identity/resolve'),
   merge: () => endpoint('/api/identity/merge'),
+  /**
+   * 04's "Not the same" (conversation e5a56fd3): GET the marked pairs
+   * (`crm:contacts:read`), POST `{ contactIds: [a, b] }` to mark one
+   * (`crm:contacts:update`; idempotent; 404 CONTACT_NOT_FOUND, 409
+   * ALREADY_SAME_PERSON). A later merge of the pair clears the mark.
+   */
+  notSame: () => endpoint('/api/identity/not-same'),
   timeline: (id: string) => endpoint('/api/identity/{id}/timeline', { id }),
 } as const;
 

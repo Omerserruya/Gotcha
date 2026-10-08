@@ -469,7 +469,6 @@
     "confirmYes": "Yes, merge",
     "cancel": "Cancel",
     "notSame": "Not the same",
-    "notSameNotYet": "Saying two accounts aren't one person comes next.",
     "none": "No duplicates found.",
     "done": "Merged.",
     "failed": {
@@ -477,6 +476,14 @@
       "conflict": "These two can't be merged - one was already merged elsewhere.",
       "forbidden": "You don't have permission to merge customers.",
       "failed": "They weren't merged - try again."
+    },
+    "notSameDone": "Marked as two people. GOTCHA won't suggest them together again.",
+    "unchecked": "Couldn't check which accounts were marked as different people, so none is suggested just now.",
+    "notSameFailed": {
+      "gone": "One of them no longer exists.",
+      "already_same": "These two are already one person.",
+      "forbidden": "You don't have permission to change customers.",
+      "failed": "That wasn't saved - try again."
     }
   },
   "who": {

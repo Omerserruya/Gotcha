@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { CommerceSummary, Insight } from '@/api/contracts/customer-facts';
 import { customerRowSchema, type CustomerRow } from '@/api/contracts/customers';
+import { pairKey } from '@/api/contracts/identity';
 import messages from '@/i18n/messages/en/customers.json';
 import inboxMessages from '@/i18n/messages/en/inbox.json';
 
@@ -330,6 +331,22 @@ describe('★★ the join that makes a row "today"', () => {
       namespace: 'customers',
     });
     expect(t(`since.${key}` as 'since.days', { n: n ?? 0 })).toBe(words);
+  });
+
+  it('★★ 04: a pair marked "not the same" is never suggested - either way round - and the next one is', () => {
+    const rows = [
+      row({ id: 'a', phone: '0500000001', personId: null }),
+      row({ id: 'b', phone: '+972500000001', personId: null }),
+      row({ id: 'c', phone: '0500000002', personId: null }),
+      row({ id: 'd', phone: '0500000002', personId: null }),
+    ];
+    expect(duplicateSuggestion(rows, new Set(['a|b']))?.map((r) => r.id)).toEqual(['c', 'd']);
+    // The route sorts; a key made the other way round is the same pair.
+    expect(duplicateSuggestion(rows, new Set([pairKey('b', 'a')]))?.map((r) => r.id)).toEqual([
+      'c',
+      'd',
+    ]);
+    expect(duplicateSuggestion(rows, new Set(['a|b', 'c|d']))).toBeNull();
   });
 
   it('★ duplicates: a shared phone or email between people not already joined', () => {
