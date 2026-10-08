@@ -28,6 +28,8 @@ import {
   getLastLoginBySubject,
 } from "@chatcenter/shared";
 import { changeRoles, RoleChangeRefused } from "../services/role-guard";
+import { readerLocale } from "../lib/reader-locale";
+import { permissionFor, roleFor } from "../lib/permission-catalog-he";
 
 /** A refused role change says why (409), so the screen can explain it. */
 function refused(res: Response, err: unknown): boolean {
@@ -619,12 +621,18 @@ router.get("/features", ...ANY_USER, (_req: Request, res: Response): void => {
 // ─── Permission catalog (read-only) - single source of truth ────
 // Drives the User Management UI: the permission picker + built-in roles +
 // scope options. Hierarchical (feature:sub-feature:action), grouped by domain.
-router.get("/catalog", ...ANY_USER, (_req: Request, res: Response): void => {
+// In the reader's language (the request's, else their own, else the
+// workspace's); a string with no Hebrew keeps its English.
+router.get("/catalog", ...ANY_USER, async (req: Request, res: Response): Promise<void> => {
+  const locale = await readerLocale(req);
+  const byDomain = Object.fromEntries(
+    Object.entries(listPermissionsByDomain()).map(([domain, list]) => [domain, list.map((p) => permissionFor(p, locale))]),
+  );
   res.json({
     data: {
-      permissions: PERMISSIONS,
-      byDomain: listPermissionsByDomain(),
-      builtinRoles: BUILTIN_ROLE_ORDER.map((k) => BUILTIN_ROLES[k]),
+      permissions: PERMISSIONS.map((p) => permissionFor(p, locale)),
+      byDomain,
+      builtinRoles: BUILTIN_ROLE_ORDER.map((k) => roleFor(BUILTIN_ROLES[k], locale)),
       scopes: SCOPE_ORDER,
     },
   });
