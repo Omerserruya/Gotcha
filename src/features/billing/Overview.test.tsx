@@ -142,6 +142,25 @@ describe('★ 17 - the Billing card', () => {
       issuedAt: '2026-09-07T00:00:00Z',
     });
 
+  it('★ paid is the amount alone; anything else carries its state', async () => {
+    render(
+      await BillingCard({
+        profile: billingProfileSchema.parse({ state: 'present' }),
+        methods: [],
+        invoices: [
+          invoiceSchema.parse({ ...failed('p'), status: 'PAID' }),
+          failed('f'),
+          invoiceSchema.parse({ ...failed('i'), status: 'ISSUED' }),
+        ],
+      }),
+    );
+    expect(screen.getByTestId('billing-invoice-p')).toHaveTextContent(/^Sep \$1,499$/);
+    expect(
+      screen.getByTestId('billing-invoice-f').querySelector('[data-status="FAILED"]'),
+    ).not.toBeNull();
+    expect(screen.getByTestId('billing-invoice-i')).toHaveTextContent('Issued');
+  });
+
   it('the measured tenant: no card and four failed charges, said once, in red', async () => {
     render(
       await BillingCard({
@@ -154,8 +173,9 @@ describe('★ 17 - the Billing card', () => {
     expect(screen.getByTestId('billing-alert')).toHaveTextContent(
       'No payment method on file, and 4 charges have already failed.',
     );
+    // A failed renewal says it failed - never a bare amount that reads as paid.
     expect(screen.getByTestId('billing-row-invoices')).toHaveTextContent(
-      'Sep $1,499 · Sep $1,499 · Sep $1,499',
+      "Sep $1,499 Didn't go through · Sep $1,499 Didn't go through · Sep $1,499 Didn't go through",
     );
     expect(screen.getByTestId('billing-invoices-all')).toHaveAttribute(
       'href',

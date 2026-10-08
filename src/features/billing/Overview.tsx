@@ -287,6 +287,12 @@ export async function BillingCard({
     ? [profile?.billingName, profile?.vatId].filter(Boolean).join(' · ') || null
     : null;
 
+  /*
+    Each recent invoice with its state when it is not paid: a failed renewal
+    shown as "Sep $1,499" reads as a paid one (measured on dev: three failed
+    ai_voice renewals). Paid is the amount alone.
+  */
+  const invoiceState = await getTranslations('billing.invoices.status');
   const recent = (invoices ?? []).slice(0, 3).map((invoice) => {
     const when = invoice.issuedAt ?? invoice.createdAt;
     const amount = new Intl.NumberFormat(locale, {
@@ -294,7 +300,11 @@ export async function BillingCard({
       currency: invoice.currency,
       maximumFractionDigits: 0,
     }).format(Number(invoice.amount));
-    return when ? `${month.format(new Date(when))} ${amount}` : amount;
+    return {
+      id: invoice.id,
+      text: when ? `${month.format(new Date(when))} ${amount}` : amount,
+      status: invoice.status === 'PAID' ? null : invoice.status,
+    };
   });
 
   /*
@@ -348,7 +358,22 @@ export async function BillingCard({
         <div className={styles.billingRow} data-testid="billing-row-invoices">
           <dt>{t('billing.invoices')}</dt>
           <dd title={invoices === null ? t('billing.invoicesUnread') : undefined}>
-            {invoices === null ? '-' : recent.length > 0 ? recent.join(' · ') : t('billing.none')}
+            {invoices === null
+              ? '-'
+              : recent.length > 0
+                ? recent.map((item, i) => (
+                    <span key={item.id} data-testid={`billing-invoice-${item.id}`}>
+                      {i > 0 ? ' · ' : ''}
+                      {item.text}
+                      {item.status ? (
+                        <span
+                          className={styles.invoiceState}
+                          data-status={item.status}
+                        >{` ${invoiceState(item.status)}`}</span>
+                      ) : null}
+                    </span>
+                  ))
+                : t('billing.none')}
           </dd>
           {invoices !== null && invoices.length > 0 ? (
             <Link

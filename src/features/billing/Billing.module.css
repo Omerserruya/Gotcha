@@ -1661,6 +1661,15 @@
     margin-block-start: var(--space-10);
   }
 
+  /* A recent invoice that is not paid says so - failed in the alert colour. */
+  .invoiceState {
+    color: var(--text-subtle);
+  }
+
+  .invoiceState[data-status='FAILED'] {
+    color: var(--alert-text);
+  }
+
   .heldConfirm {
     display: flex;
     flex-direction: column;
