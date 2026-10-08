@@ -3,7 +3,7 @@ import { isValidElement } from 'react';
 import { createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ImportPanel, ReportPanel } from '@/features/channels/LearnPanels';
+import { ChatsPanel, ImportPanel, ReportPanel } from '@/features/channels/LearnPanels';
 import { WhatsAppNumbers } from '@/features/channels/WhatsAppNumbers';
 import { ChannelLanding } from '@/features/channels/ChannelLanding';
 import { ConnectWhatsApp } from '@/features/channels/ConnectWhatsApp';
@@ -40,11 +40,19 @@ const { history } = vi.hoisted(() => ({
     >,
   },
 }));
-const reads = vi.hoisted(() => ({ templates: vi.fn(), exclusions: vi.fn(), events: vi.fn() }));
+const reads = vi.hoisted(() => ({
+  templates: vi.fn(),
+  exclusions: vi.fn(),
+  events: vi.fn(),
+  evidence: vi.fn(async () => []),
+  thread: vi.fn(async () => null),
+}));
 vi.mock('@/features/webchat/load-website-widget', () => ({ loadWidgetInstall: async () => null }));
 vi.mock('@/features/outreach/load-templates', () => ({ loadTemplates: reads.templates }));
 vi.mock('@/features/channels/load-whatsapp', () => ({
   loadExclusions: reads.exclusions,
+  loadEvidence: reads.evidence,
+  loadImportedThread: reads.thread,
   loadNumberEvents: reads.events,
   loadWhatsAppNumbers: async () => DEV_NUMBERS,
   loadHistoryImport: async () => history.value,
@@ -153,6 +161,51 @@ describe('★ 13e / 13f are their own panels, replacing 13b while open', () => {
       searchParams: Promise.resolve({ panel: 'whatsapp', import: 'i1', view: 'report' }),
     });
     expect(find(tree, ReportPanel)).not.toBeNull();
+  });
+
+  it('★ ?view=chats opens "See the chats" for a suggestion of THIS import, and reads its chat when one is open', async () => {
+    history.value = {
+      status: { ...STATUS, stage: 'ready' },
+      candidates: [{ id: 'c7', question: 'q', answer: 'a', status: 'PENDING' }],
+      bulkMinConfidence: 0.8,
+    };
+    reads.evidence.mockClear();
+    reads.thread.mockClear();
+    const { default: Page } = await import('./page');
+    const tree = await Page({
+      searchParams: Promise.resolve({
+        panel: 'whatsapp',
+        import: 'i1',
+        view: 'chats',
+        candidate: 'c7',
+        conversation: 'v1',
+      }),
+    });
+    const props = find<{ open: string | null; candidate: { id: string } }>(tree, ChatsPanel);
+    expect(props?.candidate.id).toBe('c7');
+    expect(props?.open).toBe('v1');
+    expect(reads.evidence).toHaveBeenCalledWith('c7');
+    expect(reads.thread).toHaveBeenCalledWith('v1');
+  });
+
+  it('a suggestion that is not this import’s opens nothing of it - 13b instead, nothing read', async () => {
+    history.value = {
+      status: { ...STATUS, stage: 'ready' },
+      candidates: [{ id: 'c7', question: 'q', answer: 'a', status: 'PENDING' }],
+      bulkMinConfidence: 0.8,
+    };
+    reads.evidence.mockClear();
+    const { default: Page } = await import('./page');
+    const tree = await Page({
+      searchParams: Promise.resolve({
+        panel: 'whatsapp',
+        import: 'i1',
+        view: 'chats',
+        candidate: 'zz',
+      }),
+    });
+    expect(find(tree, ChatsPanel)).toBeNull();
+    expect(reads.evidence).not.toHaveBeenCalled();
   });
 
   it('a view with no import falls back to 13b', async () => {

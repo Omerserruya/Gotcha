@@ -12,6 +12,7 @@ vi.mock('./SuggestionActions', () => ({
   SuggestionActions: ({
     id,
     variants,
+    seeChats,
     question,
     reasoning,
     liveLookup,
@@ -21,8 +22,12 @@ vi.mock('./SuggestionActions', () => ({
     question: string;
     reasoning: string | null;
     liveLookup: boolean;
+    seeChats: { label: string; href: { pathname: string; query: Record<string, string> } } | null;
   }) => (
     <span
+      data-see-chats={
+        seeChats ? `${seeChats.href.pathname}?${new URLSearchParams(seeChats.href.query)}` : ''
+      }
       data-testid={`decide-${id}`}
       data-variants={variants.join('|')}
       data-question={question}
@@ -58,6 +63,7 @@ vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'channels.whatsapp') =>
     createTranslator({ locale: 'en', messages: { channels: messages }, namespace }),
   getLocale: async () => 'en',
+  getTimeZone: async () => 'Asia/Jerusalem',
 }));
 vi.mock('@/i18n/navigation', () => ({
   Link: ({
@@ -76,7 +82,7 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-import { ImportPanel, LearningRow, ReportPanel } from './LearnPanels';
+import { ChatsPanel, ImportPanel, LearningRow, ReportPanel } from './LearnPanels';
 
 const status = (over: Record<string, unknown> = {}) =>
   importStatusSchema.parse({ id: 'i1', stage: 'analyzing', ...over });
@@ -410,5 +416,146 @@ describe('★ 13f corrections (measurement of 9b474ed)', () => {
     );
     expect(within(screen.getByTestId('candidate-z')).getAllByText('92%')).toHaveLength(1);
     expect(screen.getByTestId('candidate-z')).not.toHaveTextContent(/chats?/);
+  });
+});
+
+describe('★★ 13f "See the chats" - the exchanges behind an answer, each chat openable', () => {
+  const conflict = candidate({
+    id: 'c7',
+    question: 'How long do returns take?',
+    conflict: true,
+    variants: [
+      { key: '14', answer: '14 days', occurrenceCount: 6 },
+      { key: '30', answer: '30 days', occurrenceCount: 2 },
+    ],
+  });
+  const evidence = [
+    {
+      question: 'can I return it?',
+      answer: '14 days',
+      occurredAt: '2026-09-01T09:00:00.000Z',
+      variantKey: '14',
+      conversationId: 'v1',
+    },
+    {
+      question: 'returns?',
+      answer: '30 days',
+      occurredAt: null,
+      variantKey: '30',
+      conversationId: null,
+    },
+  ];
+
+  it('a conflict’s "See the chats" opens its chats, on this import', async () => {
+    render(
+      await ReportPanel({
+        status: status({ stage: 'ready' }),
+        candidates: [conflict],
+        bulkMinConfidence: 0.8,
+        tab: undefined,
+      }),
+    );
+    expect(screen.getByTestId('decide-c7')).toHaveAttribute(
+      'data-see-chats',
+      '/settings/channels?panel=whatsapp&import=i1&view=chats&candidate=c7',
+    );
+  });
+
+  it('each exchange: when, the customer, the reply; one with a chat opens it; one without is not linked', async () => {
+    render(
+      await ChatsPanel({
+        status: status({ stage: 'ready' }),
+        candidate: conflict,
+        evidence,
+        open: null,
+        thread: null,
+      }),
+    );
+    expect(screen.getByTestId('chats-count')).toHaveTextContent('2 chats behind this answer');
+    expect(screen.getByTestId('chats-item-0')).toHaveTextContent('Customer: can I return it?');
+    expect(screen.getByTestId('chats-item-0')).toHaveTextContent('Your reply: 14 days');
+    expect(screen.getByTestId('chats-open-0')).toHaveAttribute(
+      'href',
+      '/settings/channels?panel=whatsapp&import=i1&view=chats&candidate=c7&conversation=v1',
+    );
+    expect(screen.queryByTestId('chats-open-1')).toBeNull();
+    expect(screen.getByTestId('chats-back')).toHaveAttribute(
+      'href',
+      '/settings/channels?panel=whatsapp&import=i1&view=report',
+    );
+  });
+
+  it('unread is said as unread; none as none', async () => {
+    const one = render(
+      await ChatsPanel({
+        status: status(),
+        candidate: conflict,
+        evidence: null,
+        open: null,
+        thread: null,
+      }),
+    );
+    expect(screen.getByTestId('chats-unread')).toHaveTextContent("couldn't be read");
+    one.unmount();
+    render(
+      await ChatsPanel({
+        status: status(),
+        candidate: conflict,
+        evidence: [],
+        open: null,
+        thread: null,
+      }),
+    );
+    expect(screen.getByTestId('chats-none')).toBeInTheDocument();
+  });
+
+  it('a chat open: who said what, in order; an empty message is not a bubble; the way back', async () => {
+    render(
+      await ChatsPanel({
+        status: status(),
+        candidate: conflict,
+        evidence,
+        open: 'v1',
+        thread: {
+          conversation: { id: 'v1', customerName: 'Dana' },
+          messages: [
+            {
+              id: 'm1',
+              direction: 'INBOUND',
+              body: 'can I return it?',
+              createdAt: '2026-09-01T09:00:00.000Z',
+            },
+            {
+              id: 'm2',
+              direction: 'OUTBOUND',
+              body: '14 days',
+              createdAt: '2026-09-01T09:05:00.000Z',
+            },
+            { id: 'm3', direction: 'OUTBOUND', body: ' ', createdAt: '2026-09-01T09:06:00.000Z' },
+          ],
+        },
+      }),
+    );
+    expect(screen.getByTestId('chat-thread')).toHaveTextContent('The chat with Dana');
+    expect(screen.getByTestId('chat-message-m1')).toHaveAttribute('data-from', 'customer');
+    expect(screen.getByTestId('chat-message-m2')).toHaveAttribute('data-from', 'team');
+    expect(screen.queryByTestId('chat-message-m3')).toBeNull();
+    expect(screen.getByTestId('chat-close')).toHaveAttribute(
+      'href',
+      '/settings/channels?panel=whatsapp&import=i1&view=chats&candidate=c7',
+    );
+  });
+
+  it('a chat that cannot be read is said so', async () => {
+    render(
+      await ChatsPanel({
+        status: status(),
+        candidate: conflict,
+        evidence,
+        open: 'gone',
+        thread: null,
+      }),
+    );
+    expect(screen.getByTestId('chat-unread')).toHaveTextContent("This chat couldn't be opened");
   });
 });

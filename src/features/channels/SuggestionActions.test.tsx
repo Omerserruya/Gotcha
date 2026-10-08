@@ -10,7 +10,23 @@ const approveSuggestion = vi.hoisted(() => vi.fn());
 const rejectSuggestion = vi.hoisted(() => vi.fn());
 vi.mock('./candidate-actions', () => ({ approveSuggestion, rejectSuggestion }));
 const refresh = vi.hoisted(() => vi.fn());
-vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh }) }));
+vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ refresh }),
+  Link: ({
+    href,
+    children,
+    scroll: _scroll,
+    ...rest
+  }: {
+    href: { pathname: string; query: Record<string, string> };
+    children: React.ReactNode;
+    scroll?: boolean;
+  }) => (
+    <a href={`${href.pathname}?${new URLSearchParams(href.query)}`} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 import { SuggestionActions } from './SuggestionActions';
 
@@ -122,7 +138,7 @@ describe('★★ 13f - a suggestion decided only on a press, after what it write
 });
 
 describe('★ 02’s pills: the answer to use leads, black; the rest bordered', () => {
-  it('only the first variant is primary; "See the chats" is drawn, with why', () => {
+  it('only the first variant is primary; "See the chats" opens this suggestion’s chats', () => {
     render(
       <NextIntlClientProvider locale="en" messages={{ channels: messages }}>
         <SuggestionActions
@@ -130,14 +146,23 @@ describe('★ 02’s pills: the answer to use leads, black; the rest bordered', 
           question="q"
           answer="x"
           variants={['14 days', '30 days']}
-          seeChats="See the chats"
+          seeChats={{
+            label: 'See the chats',
+            href: {
+              pathname: '/settings/channels',
+              query: { panel: 'whatsapp', import: 'i1', view: 'chats', candidate: 'c1' },
+            },
+          }}
         />
       </NextIntlClientProvider>,
     );
     expect(screen.getByTestId('use-c1-0')).toHaveAttribute('data-tone', 'primary');
     expect(screen.getByTestId('use-c1-0')).toHaveTextContent(/^Use 14 days$/);
     expect(screen.getByTestId('use-c1-1')).not.toHaveAttribute('data-tone');
-    expect(screen.getByTestId('see-chats-c1')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('see-chats-c1')).toHaveAttribute(
+      'href',
+      '/settings/channels?panel=whatsapp&import=i1&view=chats&candidate=c1',
+    );
     // 02: a conflict is Use, Use, Skip - no Edit.
     expect(screen.queryByTestId('edit-open-c1')).toBeNull();
   });

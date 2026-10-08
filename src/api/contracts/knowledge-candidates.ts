@@ -516,3 +516,45 @@ export function documentUseOf(status: string | null | undefined): DocumentUse {
   if (status === 'error') return 'not_retrievable';
   return 'unknown';
 }
+
+/**
+ * 13f's "See the chats" - the exchanges behind one suggestion
+ * (`GET /candidates/:id/evidence`). `conversationId` is what opens the
+ * imported chat itself; an exchange without one is listed, not linked.
+ */
+export const candidateEvidenceSchema = z.object({
+  evidence: z
+    .array(
+      z.object({
+        question: z.string().catch('').default(''),
+        answer: z.string().catch('').default(''),
+        occurredAt: z.string().nullable().catch(null).default(null),
+        variantKey: z.string().nullable().catch(null).default(null),
+        conversationId: z.string().nullable().catch(null).default(null),
+      }),
+    )
+    .default([]),
+});
+export type CandidateEvidence = z.infer<typeof candidateEvidenceSchema>['evidence'][number];
+
+/**
+ * One imported chat (`GET /conversations/:id/messages`). `direction` is the
+ * Prisma enum MessageDirection - INBOUND is the customer, OUTBOUND the team.
+ */
+export const importedThreadSchema = z.object({
+  conversation: z.object({
+    id: z.string(),
+    customerName: z.string().nullable().catch(null).default(null),
+  }),
+  messages: z
+    .array(
+      z.object({
+        id: z.string(),
+        direction: z.enum(['INBOUND', 'OUTBOUND']),
+        body: z.string().nullable().catch(null).default(null),
+        createdAt: z.string(),
+      }),
+    )
+    .default([]),
+});
+export type ImportedThread = z.infer<typeof importedThreadSchema>;

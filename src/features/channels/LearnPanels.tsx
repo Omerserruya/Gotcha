@@ -1,5 +1,5 @@
 import { Bell } from 'lucide-react';
-import { getLocale, getTranslations } from 'next-intl/server';
+import { getLocale, getTimeZone, getTranslations } from 'next-intl/server';
 
 import { humaniseCode } from '@/api/contracts/capabilities';
 import { isRunning, workDone, type ImportStatus } from '@/api/contracts/historical-import';
@@ -9,6 +9,8 @@ import {
   readyToAdd,
   variantsOf,
   type Candidate,
+  type CandidateEvidence,
+  type ImportedThread,
 } from '@/api/contracts/knowledge-candidates';
 import drawer from '@/design-system/styles/drawer.module.css';
 import { Link } from '@/i18n/navigation';
@@ -21,6 +23,18 @@ import { UserText } from '@/design-system/primitives/text/UserText';
 const href = (view: 'progress' | 'report', importId: string, tab?: string) => ({
   pathname: '/settings/channels',
   query: { panel: 'whatsapp', import: importId, view, ...(tab ? { tab } : {}) },
+});
+
+/** 13f's "See the chats" for one suggestion - and, with `conversation`, one chat open. */
+export const chatsHref = (importId: string, candidateId: string, conversation?: string) => ({
+  pathname: '/settings/channels' as const,
+  query: {
+    panel: 'whatsapp',
+    import: importId,
+    view: 'chats',
+    candidate: candidateId,
+    ...(conversation ? { conversation } : {}),
+  },
 });
 
 /** A failure reason in words: the platform's sentence, or a code made readable. */
@@ -511,7 +525,11 @@ export async function ReportPanel({
                       reasoning={c.reasoning}
                       liveLookup={c.requiresLiveLookup}
                       variants={split ? variants.map((v) => v.answer) : []}
-                      seeChats={split ? t('learn.seeChats') : null}
+                      seeChats={
+                        split
+                          ? { label: t('learn.seeChats'), href: chatsHref(status.id, c.id) }
+                          : null
+                      }
                     />
                   ) : null}
                 </li>
@@ -556,6 +574,146 @@ export async function ReportPanel({
           }
         />
       </footer>
+    </>
+  );
+}
+
+/**
+ * 13f's "See the chats" (Omer, decision 13): the real exchanges behind one
+ * suggestion, newest first (the route keeps up to 50), each opening its
+ * imported chat in place - for the reviewer who wants to check rather than
+ * trust. Reading only: nothing here decides or sends.
+ *
+ * Private contacts were never imported (`isInboundExcluded` at ingest), so
+ * none of their chats can appear.
+ */
+export async function ChatsPanel({
+  status,
+  candidate,
+  evidence,
+  open,
+  thread,
+}: {
+  readonly status: ImportStatus;
+  readonly candidate: Candidate;
+  /** `null`: the evidence could not be read. */
+  readonly evidence: readonly CandidateEvidence[] | null;
+  /** The chat asked for (`?conversation=`), if any. */
+  readonly open: string | null;
+  /** That chat's messages; `null` when it could not be read. */
+  readonly thread: ImportedThread | null;
+}) {
+  const t = await getTranslations('channels.whatsapp.chats');
+  const locale = await getLocale();
+  const timeZone = await getTimeZone();
+  const when = new Intl.DateTimeFormat(locale, { timeZone, dateStyle: 'medium' });
+  const at = new Intl.DateTimeFormat(locale, {
+    timeZone,
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    hourCycle: 'h23',
+  });
+
+  return (
+    <>
+      <div className={drawer.drawerBody} data-testid="chats-panel">
+        <Link
+          href={href('report', status.id)}
+          className={styles.chatsBack}
+          data-testid="chats-back"
+          scroll={false}
+        >
+          {t('back')}
+        </Link>
+        <p className={styles.reportQuestion}>
+          <UserText>{candidate.question}</UserText>
+        </p>
+
+        {open ? (
+          <section className={styles.chatThread} data-testid="chat-thread">
+            <header className={styles.chatThreadHead}>
+              <h3 className={styles.soFarTitle}>
+                {thread?.conversation.customerName
+                  ? t('threadWith', { name: thread.conversation.customerName })
+                  : t('thread')}
+              </h3>
+              <Link
+                href={chatsHref(status.id, candidate.id)}
+                className={styles.chatsBack}
+                data-testid="chat-close"
+                scroll={false}
+              >
+                {t('close')}
+              </Link>
+            </header>
+            {thread === null ? (
+              <p className={styles.timelineSub} data-testid="chat-unread">
+                {t('threadUnread')}
+              </p>
+            ) : (
+              <ol className={styles.chatMessages}>
+                {thread.messages
+                  .filter((m) => m.body?.trim())
+                  .map((m) => (
+                    <li
+                      key={m.id}
+                      className={styles.chatMessage}
+                      data-from={m.direction === 'INBOUND' ? 'customer' : 'team'}
+                      data-testid={`chat-message-${m.id}`}
+                    >
+                      <span className={styles.chatWho}>
+                        {m.direction === 'INBOUND' ? t('customer') : t('team')} ·{' '}
+                        {at.format(new Date(m.createdAt))}
+                      </span>
+                      <span dir="auto">{m.body}</span>
+                    </li>
+                  ))}
+              </ol>
+            )}
+          </section>
+        ) : evidence === null ? (
+          <p className={styles.timelineSub} data-testid="chats-unread">
+            {t('unread')}
+          </p>
+        ) : evidence.length === 0 ? (
+          <p className={styles.timelineSub} data-testid="chats-none">
+            {t('none')}
+          </p>
+        ) : (
+          <>
+            <p className={styles.timelineSub} data-testid="chats-count">
+              {t('count', { count: evidence.length })}
+            </p>
+            <ul className={styles.chatsList}>
+              {evidence.map((e, i) => (
+                <li key={i} className={styles.chatsItem} data-testid={`chats-item-${i}`}>
+                  <span className={styles.chatWho}>
+                    {e.occurredAt ? when.format(new Date(e.occurredAt)) : '-'}
+                  </span>
+                  <span>
+                    <span className={styles.chatWho}>{t('customer')}: </span>
+                    <UserText>{e.question}</UserText>
+                  </span>
+                  <span>
+                    <span className={styles.chatWho}>{t('reply')}: </span>
+                    <UserText>{e.answer}</UserText>
+                  </span>
+                  {e.conversationId ? (
+                    <Link
+                      href={chatsHref(status.id, candidate.id, e.conversationId)}
+                      className={styles.chatsOpen}
+                      data-testid={`chats-open-${i}`}
+                      scroll={false}
+                    >
+                      {t('open')}
+                    </Link>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
     </>
   );
 }

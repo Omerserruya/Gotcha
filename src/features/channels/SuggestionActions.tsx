@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react';
 
 import { knowledgeDocumentOf } from '@/api/contracts/knowledge-candidates';
 import { WhatWillBeUsed } from '@/features/knowledge/WhatWillBeUsed';
-import { useRouter } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 
 import { approveSuggestion, rejectSuggestion } from './candidate-actions';
 import styles from './Channels.module.css';
@@ -38,8 +38,14 @@ export function SuggestionActions({
   readonly liveLookup?: boolean;
   /** The observed answers when they disagree; empty otherwise. */
   readonly variants: readonly string[];
-  /** 02's "See the chats" on the right of a conflict - drawn: the evidence has no screen yet. */
-  readonly seeChats?: string | null;
+  /** 02's "See the chats" on the right of a conflict: its words and where it opens. */
+  readonly seeChats?: {
+    readonly label: string;
+    readonly href: {
+      readonly pathname: '/settings/channels';
+      readonly query: Record<string, string>;
+    };
+  } | null;
 }) {
   const t = useTranslations('channels.whatsapp');
   const router = useRouter();
@@ -213,14 +219,14 @@ export function SuggestionActions({
               {conflict ? t('learn.skip') : t('review.reject')}
             </button>
             {seeChats ? (
-              <span
+              <Link
+                href={seeChats.href}
                 className={styles.reportSeeChats}
-                aria-disabled="true"
-                title={t('learn.seeChatsNotYet')}
                 data-testid={`see-chats-${id}`}
+                scroll={false}
               >
-                {seeChats}
-              </span>
+                {seeChats.label}
+              </Link>
             ) : null}
           </>
         )}

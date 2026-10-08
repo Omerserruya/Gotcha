@@ -1390,6 +1390,22 @@ export const knowledgeEndpoints = {
    */
   rerun: (importId: string) =>
     endpoint('/api/historical-imports/{importId}/rerun-intelligence', { importId }),
+  /**
+   * 13f's "See the chats": every exchange behind one suggestion, newest first,
+   * at most 50 - `{ evidence: [{ question, answer, occurredAt, variantKey,
+   * conversationId }] }`. Reads need `ai:knowledge:read` (or ADMIN).
+   */
+  evidence: (candidateId: string) =>
+    endpoint('/api/historical-imports/candidates/{candidateId}/evidence', { candidateId }),
+  /**
+   * One imported thread (origin HISTORICAL_IMPORT only; 404 otherwise), its
+   * first 500 messages. Private contacts were never imported
+   * (`isInboundExcluded` at ingest), so none can be opened here.
+   */
+  importedThread: (conversationId: string) =>
+    endpoint('/api/historical-imports/conversations/{conversationId}/messages', {
+      conversationId,
+    }),
   /** 13f's Reject / Skip: `{ ok: true }`; 404 when gone or already decided. */
   rejectCandidate: (candidateId: string) =>
     endpoint('/api/historical-imports/candidates/{candidateId}/reject', { candidateId }),

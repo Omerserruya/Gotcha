@@ -1,7 +1,14 @@
 import 'server-only';
 
 import { importListSchema, type ImportStatus } from '@/api/contracts/historical-import';
-import { candidateListSchema, type Candidate } from '@/api/contracts/knowledge-candidates';
+import {
+  candidateEvidenceSchema,
+  candidateListSchema,
+  importedThreadSchema,
+  type Candidate,
+  type CandidateEvidence,
+  type ImportedThread,
+} from '@/api/contracts/knowledge-candidates';
 import {
   exclusionListSchema,
   numberEventListSchema,
@@ -140,6 +147,32 @@ export async function loadHistoryImport(importId?: string): Promise<HistoryImpor
     candidates: page?.candidates ?? null,
     bulkMinConfidence: page?.bulkApproveMinConfidence,
   };
+}
+
+/** 13f's "See the chats": the exchanges behind one suggestion. `null`: unread. */
+export async function loadEvidence(
+  candidateId: string,
+): Promise<readonly CandidateEvidence[] | null> {
+  return serverApi()
+    .get({ endpoint: knowledgeEndpoints.evidence(candidateId), payload: candidateEvidenceSchema })
+    .then((page) => page.evidence)
+    .catch((cause: unknown) => {
+      logger.warn('whatsapp.evidence_failed', { cause });
+      return null;
+    });
+}
+
+/** One imported chat, opened from "See the chats". `null`: unread or gone. */
+export async function loadImportedThread(conversationId: string): Promise<ImportedThread | null> {
+  return serverApi()
+    .get({
+      endpoint: knowledgeEndpoints.importedThread(conversationId),
+      payload: importedThreadSchema,
+    })
+    .catch((cause: unknown) => {
+      logger.warn('whatsapp.imported_thread_failed', { cause });
+      return null;
+    });
 }
 
 /** 13b's Private contacts. `null`: unread. */

@@ -309,7 +309,6 @@
       "saidInShort": "in {count}",
       "quoted": "“{answer}”",
       "seeChats": "See the chats",
-      "seeChatsNotYet": "Opening the chats behind an answer comes next.",
       "previewFive": "Preview five",
       "previewNotYet": "Previewing customer profiles comes next."
     },
@@ -457,7 +456,22 @@
       }
     },
     "notYet": "Not available yet",
-    "aNumber": "A WhatsApp number"
+    "aNumber": "A WhatsApp number",
+    "chats": {
+      "title": "The chats behind an answer",
+      "back": "Back to the report",
+      "count": "{count, plural, one {# chat} other {# chats}} behind this answer, newest first.",
+      "none": "No chats are kept for this answer.",
+      "unread": "The chats couldn't be read just now.",
+      "customer": "Customer",
+      "reply": "Your reply",
+      "team": "Your team",
+      "open": "Open the chat",
+      "close": "Back to the chats",
+      "thread": "The chat",
+      "threadWith": "The chat with {name}",
+      "threadUnread": "This chat couldn't be opened - it may be gone."
+    }
   },
   "rowSettings": "Settings",
   "banner": {

@@ -6,11 +6,13 @@ import { numberCount } from '@/api/contracts/whatsapp-numbers';
 
 import { ChannelList } from '@/features/channels/ChannelList';
 import channelStyles from '@/features/channels/Channels.module.css';
-import { ImportPanel, LearningRow, ReportPanel } from '@/features/channels/LearnPanels';
+import { ChatsPanel, ImportPanel, LearningRow, ReportPanel } from '@/features/channels/LearnPanels';
 import { loadChannels } from '@/features/channels/load-channels';
 import {
+  loadEvidence,
   loadExclusions,
   loadHistoryImport,
+  loadImportedThread,
   loadChannelsConfig,
   loadNumberEvents,
   loadWhatsAppNumbers,
@@ -48,6 +50,9 @@ export default async function Page({
     /** 13e / 13f: which import, and which view of it. */
     readonly import?: string;
     readonly view?: string;
+    /** 13f's "See the chats": which suggestion, and which of its chats is open. */
+    readonly candidate?: string;
+    readonly conversation?: string;
     /** The way back from a channel's provider (backend ecd64c4d). */
     readonly connected?: string;
     readonly count?: string;
@@ -98,14 +103,21 @@ export default async function Page({
     13e / 13f replace 13b while one is open - the same drawer shell, their
     own head. A view with no import to show falls back to 13b.
   */
+  // 13f's "See the chats": the suggestion must be one of this import's.
+  const asked =
+    learn && params.view === 'chats' && params.candidate
+      ? (whatsapp?.[1].candidates?.find((c) => c.id === params.candidate) ?? null)
+      : null;
   const view =
     params.view === 'connect' && whatsapp
       ? 'connect'
-      : learn && params.view === 'report' && whatsapp?.[1].candidates
-        ? 'report'
-        : learn && params.view === 'progress'
-          ? 'progress'
-          : null;
+      : asked
+        ? 'chats'
+        : learn && params.view === 'report' && whatsapp?.[1].candidates
+          ? 'report'
+          : learn && params.view === 'progress'
+            ? 'progress'
+            : null;
   // 13b's open tab (`?tab=`), when 13b itself is what is open.
   const panelTab = tabOf(view === null ? params.tab : undefined);
 
@@ -158,6 +170,23 @@ export default async function Page({
             status={learn}
             receiving={first?.health?.receiving === true}
             coexistence={first?.usesBusinessApp === true}
+          />
+        </Drawer>
+      ) : view === 'chats' && learn && asked ? (
+        <Drawer
+          title={tw('chats.title')}
+          line={tw('learn.nothingUsed')}
+          lead={tile}
+          closeHref="/settings/channels?panel=whatsapp"
+          width={860}
+          testId="drawer-chats"
+        >
+          <ChatsPanel
+            status={learn}
+            candidate={asked}
+            evidence={await loadEvidence(asked.id)}
+            open={params.conversation ?? null}
+            thread={params.conversation ? await loadImportedThread(params.conversation) : null}
           />
         </Drawer>
       ) : view === 'report' && learn && whatsapp?.[1].candidates ? (
