@@ -102,10 +102,12 @@ describe("★ view=queue is 'waiting for a person'", () => {
     expect(open.data.map((x: any) => x.id)).toContain("waiting");
   });
 
-  it("without view=queue, the default is unchanged (closed and assigned still listed) and there is no viewTotal", async () => {
+  it("without view=queue, the default is unchanged (closed and assigned still listed); its viewTotal when asked", async () => {
     S.rows = fixture();
     const r: any = await list("T", { cursor: "", ...admin });
     expect(r.data.map((x: any) => x.id)).toEqual(expect.arrayContaining(["closed", "assigned"]));
     expect(r.viewTotal).toBeUndefined();
+    const asked: any = await list("T", { cursor: "", withTotal: true, ...admin });
+    expect(asked.viewTotal).toBe(asked.data.length);
   });
 });

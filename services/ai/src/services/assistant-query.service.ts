@@ -142,10 +142,10 @@ function sourceLabel(q: ConversationQuery, total: number, locale: Locale): strin
 /**
  * The inbox's "All conversations" view (frontend 542e695): every conversation,
  * open or closed, automated included. Without it a period link opens the
- * default "Waiting in queue" view, far fewer rows than the chart counted, so
- * the links stay off until that view is on dev. Flip when it is.
+ * default "Waiting in queue" view, far fewer rows than the chart counted.
+ * On dev since frontend 1850b9f (2026-10-08).
  */
-export const INBOX_VIEW_ALL_LIVE = false;
+export const INBOX_VIEW_ALL_LIVE = true;
 
 export function sourceLink(q: ConversationQuery, viewAllLive = INBOX_VIEW_ALL_LIVE): string | null {
   if (!viewAllLive) return null;

@@ -112,6 +112,27 @@ describe("★ the period is the workspace's days", () => {
   });
 });
 
+describe("★ the header's total is the whole match, not the page", () => {
+  it("a page of 2 from a period of 3 still says 3 (keyset with total=1, and offset)", async () => {
+    const k = await request(app).get("/api/conversations?from=2026-10-01&to=2026-10-07&includeAutomated=true&limit=2&cursor=&total=1");
+    expect(k.body.data).toHaveLength(2);
+    expect(k.body.viewTotal).toBe(3);
+    const o = await request(app).get("/api/conversations?from=2026-10-01&to=2026-10-07&includeAutomated=true&limit=2");
+    expect(o.body.viewTotal).toBe(3);
+  });
+
+  it("with a channel, the same filters as the rows", async () => {
+    H.convs[2].channel = "WEBCHAT";
+    const r = await request(app).get("/api/conversations?from=2026-10-01&to=2026-10-07&channel=WEBCHAT&includeAutomated=true&cursor=&total=1");
+    expect(r.body.viewTotal).toBe(1);
+  });
+
+  it("a keyset page that does not ask pays no count (scrolling)", async () => {
+    const r = await request(app).get("/api/conversations?from=2026-10-01&to=2026-10-07&includeAutomated=true&limit=2&cursor=");
+    expect(r.body.viewTotal).toBeUndefined();
+  });
+});
+
 describe("refused, never widened", () => {
   it.each([
     ["from=yesterday"],

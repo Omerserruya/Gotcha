@@ -109,6 +109,8 @@ export interface ConversationFilters {
    */
   from?: string;
   to?: string;
+  /** Keyset callers that show a header total ask for it (offset requests always have it). */
+  withTotal?: boolean;
   // User context for scoping
   userRole?: string;
   userId?: string;
@@ -128,7 +130,7 @@ async function workspaceTimeZone(tenantId: string): Promise<string> {
 const AUTOMATED_HANDLERS = ["ai_agent", "flow"];
 
 export async function list(tenantId: string, filters: ConversationFilters) {
-  const { status, assignedAgentId, channel, departmentId, search, page = 1, limit = 50, cursor, includeAutomated = false, automatedOnly = false, view, from, to, userRole, userId, userDepartmentId } = filters;
+  const { status, assignedAgentId, channel, departmentId, search, page = 1, limit = 50, cursor, includeAutomated = false, automatedOnly = false, view, from, to, withTotal = false, userRole, userId, userDepartmentId } = filters;
   if ((from !== undefined && !isWorkspaceDay(from)) || (to !== undefined && !isWorkspaceDay(to)) || (from && to && from > to)) {
     throw Object.assign(new Error("invalid_period: from and to are YYYY-MM-DD days, from <= to"), { status: 400 });
   }
@@ -247,9 +249,14 @@ export async function list(tenantId: string, filters: ConversationFilters) {
    * only way to tell "we fixed it" from "we stopped looking".
    * ════════════════════════════════════════════════════════════════════════════
    */
-  // The queue view's own total, for its header: same filters and visibility,
-  // before the cursor, like undatedWhere.
-  const viewWhere = view === "queue" ? { ...where, AND: [...((where.AND as unknown[]) ?? [])] } : null;
+  // The view's own total, for its header (the queue, "All conversations", a
+  // status, an assignee, automatedOnly, a period, a channel): same filters and
+  // visibility as the rows, before the cursor, like undatedWhere. Without it a
+  // keyset page's header could only print the page (the Home chat counted 81
+  // for September, the inbox said 50). Offset requests already count `total`
+  // on these filters, so it is reused; a keyset request counts only when asked
+  // (`withTotal`, or the queue view), so scrolling pays no full scan nobody reads.
+  const viewWhere = keyset && (view === "queue" || withTotal) ? { ...where, AND: [...((where.AND as unknown[]) ?? [])] } : null;
   const undatedWhere = {
     ...where,
     // A fresh array: `where.AND` is about to be mutated by the push below, and
@@ -355,7 +362,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   }
   // Legacy offset callers keep the exact shape they had, total included.
   const t = total as number;
-  return { data, meta: { total: t, page, limit, totalPages: Math.ceil(t / limit) }, undatedCount, ...(viewTotal !== null ? { viewTotal } : {}) };
+  return { data, meta: { total: t, page, limit, totalPages: Math.ceil(t / limit) }, undatedCount, viewTotal: t };
 }
 
 export async function getById(tenantId: string, id: string) {

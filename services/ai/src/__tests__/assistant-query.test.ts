@@ -170,10 +170,14 @@ describe("★ a mention: what was said in the period", () => {
 });
 
 describe("links and limits", () => {
-  it("★ until the inbox's All view is on dev, no period link (the default queue view shows far fewer rows)", async () => {
-    expect(INBOX_VIEW_ALL_LIVE).toBe(false);
-    expect((await queryConversations(ctx(), Q({ channels: ["WHATSAPP"] }))).source.deepLink).toBeNull();
-    expect((await queryConversations(ctx(), Q({}))).source.deepLink).toBeNull();
+  it("★ the inbox's All view is live: a source links to it with its period", async () => {
+    expect(INBOX_VIEW_ALL_LIVE).toBe(true);
+    expect((await queryConversations(ctx(), Q({ channels: ["WHATSAPP"] }))).source.deepLink).toBe("/inbox?view=all&channel=WHATSAPP&from=2026-10-01&to=2026-10-07");
+    expect((await queryConversations(ctx(), Q({}))).source.deepLink).toBe("/inbox?view=all&from=2026-10-01&to=2026-10-07");
+  });
+
+  it("without the All view, no link (the default queue view shows far fewer rows)", () => {
+    expect(sourceLink(Q({ channels: ["WHATSAPP"] }), false)).toBeNull();
   });
 
   it("★ with it: the All view, the period, and one channel (the inbox shows the same rows)", () => {
