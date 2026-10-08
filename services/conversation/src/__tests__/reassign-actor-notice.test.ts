@@ -72,7 +72,7 @@ beforeEach(() => {
     { id: "dana", tenantId: "T", name: "Dana" },
     { id: "matan", tenantId: "T", name: "Matan" },
   ];
-  H.convs = [{ id: "c1", tenantId: "T", channel: "WEBCHAT", assignedAgentId: "dana", status: "OPEN" }];
+  H.convs = [{ id: "c1", tenantId: "T", channel: "WEBCHAT", customerName: "Omer Serruya", customerExternalId: "wc_1", assignedAgentId: "dana", status: "OPEN" }];
 });
 
 describe("★ the assignment notice names who moved it", () => {
@@ -80,7 +80,7 @@ describe("★ the assignment notice names who moved it", () => {
     const r = await reassign("matan");
     expect(r.status).toBe(200);
     expect(H.notices).toHaveLength(1);
-    expect(H.notices[0]).toMatchObject({ type: "conversation.assigned", data: { assignedByName: "Noa", assignedToName: "Matan" }, metadata: { userId: "matan" } });
+    expect(H.notices[0]).toMatchObject({ type: "conversation.assigned", data: { assignedByName: "Noa", assignedToName: "Matan", customerName: "Omer Serruya", channel: "WEBCHAT" }, metadata: { userId: "matan" } });
   });
 
   it("a conversation nobody held: still the actor, never 'Unknown'", async () => {
@@ -94,6 +94,12 @@ describe("★ the assignment notice names who moved it", () => {
     H.viewer = { userId: "outsider", role: "ADMIN" };
     await reassign("matan");
     expect(H.notices[0].data.assignedByName).toBeNull();
+  });
+
+  it("a customer with no name: their handle", async () => {
+    H.convs[0].customerName = null;
+    await reassign("matan");
+    expect(H.notices[0].data).toMatchObject({ customerName: "wc_1", channel: "WEBCHAT" });
   });
 
   it("assigning to yourself tells nobody", async () => {

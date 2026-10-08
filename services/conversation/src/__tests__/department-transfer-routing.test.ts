@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     department: { findFirst: vi.fn() },
     message: { create: vi.fn() },
   } as any,
+  notices: [] as any[],
 }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
@@ -24,6 +25,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     ...actual,
     prisma: mocks.prismaMock,
     outgoingMessageQueue: { add: vi.fn() },
+    notificationsQueue: { add: async (_n: string, job: any) => { mocks.notices.push(job); return { id: "j" }; } },
     getRedis: () => null,
   };
 });
@@ -38,7 +40,8 @@ function member(userId: string, active: boolean, openConvs: number) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  prismaMock.conversation.findFirst.mockResolvedValue({ id: "c1", tenantId: "t1" });
+  mocks.notices.length = 0;
+  prismaMock.conversation.findFirst.mockResolvedValue({ id: "c1", tenantId: "t1", channel: "WHATSAPP", customerName: "Omer Serruya", customerExternalId: "972500000000" });
   prismaMock.conversation.update.mockImplementation(async (args: any) => ({
     ...args.data,
     id: "c1",
@@ -58,6 +61,20 @@ describe("transferToDepartment", () => {
     const write = prismaMock.conversation.update.mock.calls[0][0].data;
     expect(write.assignedAgentId).toBe("idle"); // least busy, never the inactive one
     expect(write.status).toBe("OPEN");
+  });
+
+  it("the routed person's notice names the department, the customer and the channel", async () => {
+    prismaMock.department.findFirst.mockResolvedValue({
+      id: "d1", name: "Support", queueMode: "ROUND_ROBIN",
+      members: [member("idle", true, 1)],
+    });
+    await transferToDepartment("t1", "c1", "d1");
+    expect(mocks.notices).toHaveLength(1);
+    expect(mocks.notices[0]).toMatchObject({
+      type: "conversation.assigned",
+      data: { departmentName: "Support", customerName: "Omer Serruya", channel: "WHATSAPP" },
+      metadata: { userId: "idle" },
+    });
   });
 
   it("CLAIM leaves the conversation unassigned and WAITING", async () => {

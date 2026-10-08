@@ -380,6 +380,11 @@ export async function getById(tenantId: string, id: string) {
   return { ...conversation, contactId: contactIdOf(contactMap, conversation as any) };
 }
 
+/** The customer and channel an assignment notice names ("the conversation with Dana on WhatsApp"). */
+function whoAndWhere(c: { customerName?: string | null; customerExternalId?: string | null; channel?: unknown }) {
+  return { customerName: c.customerName || c.customerExternalId || null, channel: c.channel ? String(c.channel) : null };
+}
+
 export async function transferToDepartment(tenantId: string, conversationId: string, departmentId: string) {
   const conversation = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId } });
   if (!conversation) throw Object.assign(new Error("Conversation not found"), { status: 404 });
@@ -442,7 +447,7 @@ export async function transferToDepartment(tenantId: string, conversationId: str
           id: randomUUID(),
           type: "conversation.assigned",
           tenantId,
-          data: { conversationId, departmentName: department.name, assignedToName: agentName ?? null },
+          data: { conversationId, departmentName: department.name, assignedToName: agentName ?? null, ...whoAndWhere(conversation) },
           metadata: { conversationId, userId: assignedAgentId, timestamp: new Date().toISOString() },
         },
         { removeOnComplete: 1000, removeOnFail: 100, attempts: 5, backoff: { type: "exponential", delay: 2_000 } },
@@ -618,7 +623,7 @@ export async function reassign(tenantId: string, conversationId: string, newAgen
         id: randomUUID(),
         type: "conversation.assigned",
         tenantId,
-        data: { conversationId, assignedByName, assignedToName: toAgentName },
+        data: { conversationId, assignedByName, assignedToName: toAgentName, ...whoAndWhere(conversation) },
         metadata: { conversationId, userId: newAgentId, timestamp: new Date().toISOString() },
       },
       { removeOnComplete: 1000, removeOnFail: 100, attempts: 5, backoff: { type: "exponential", delay: 2_000 } },
