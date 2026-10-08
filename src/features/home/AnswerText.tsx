@@ -91,7 +91,15 @@ function renderBlock(block: Block, key: number, sources: readonly AnswerSource[]
 const INLINE =
   /\[\^(s\d+)\]|\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\(([^)\s]+)\)|(?<![\p{L}\p{N}_*])\*([^*\s][^*\n]*?)\*(?![\p{L}\p{N}_*])|(?<![\p{L}\p{N}_])_([^_\s][^_\n]*?)_(?![\p{L}\p{N}_])/gu;
 
+/**
+ * Citations, then the sentence's punctuation ("…Shopify[^s1].") - the
+ * punctuation goes first, so the chip follows the full stop instead of the
+ * stop falling alone onto the next line after the chip (dev, he).
+ */
+const CITES_THEN_PUNCTUATION = /((?:\[\^s\d+\])+)([.,;:!?]+)/g;
+
 function inline(text: string, sources: readonly AnswerSource[] = []): ReactNode[] {
+  text = text.replace(CITES_THEN_PUNCTUATION, '$2$1');
   const out: ReactNode[] = [];
   let at = 0;
   for (const match of text.matchAll(INLINE)) {

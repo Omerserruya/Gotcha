@@ -303,7 +303,7 @@ describe('★★ stage 2: the work under the words, as the stream gives it (§9.
       }),
       DONE(5),
     );
-    expect(screen.getByTestId('turn-answer')).toHaveTextContent('Up this week38 conversations.');
+    expect(screen.getByTestId('turn-answer')).toHaveTextContent('Up this week.38 conversations');
     expect(screen.getByTestId('turn-sources')).toHaveTextContent('38 conversations');
   });
 });

@@ -604,6 +604,7 @@
 
   /* A citation where it stands in the text: the same chip, smaller. */
   .sourceInline {
+    margin-inline-start: 4px;
     padding: 1px 7px;
     font-size: 11px;
     vertical-align: 1px;

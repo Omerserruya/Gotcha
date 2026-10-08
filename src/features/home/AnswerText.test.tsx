@@ -116,11 +116,24 @@ describe('★★ the answer’s markdown subset (assistant-threads-v1 §1)', () 
       <AnswerText text={'Returns are up 38%[^s1], mostly one product[^s9].'} sources={SOURCES} />,
     ).container;
     expect(box).toHaveTextContent(
-      'Returns are up 38%12 conversations mention “small”, mostly one product.',
+      'Returns are up 38%,12 conversations mention “small” mostly one product.',
     );
     expect(box).not.toHaveTextContent('[^');
     // The chip leads to the source's list (the app's own link; the mock keeps only href).
     expect(box.querySelector('a[data-in-app]')).toHaveAttribute('href', '/inbox?channel=WHATSAPP');
+  });
+
+  it('★ a citation before the full stop: the stop stays with its words, the chip comes after it', () => {
+    const box = render(
+      <AnswerText text={"11 בצ'אט של Shopify[^s1]. ועוד[^s1][^s1]!? סוף"} sources={SOURCES} />,
+    ).container;
+    const p = box.querySelector('p')!;
+    // The stop is the last thing before the chip, never the first thing after it.
+    expect(p.textContent).toBe(
+      "11 בצ'אט של Shopify.12 conversations mention “small” ועוד!?12 conversations mention “small”12 conversations mention “small” סוף",
+    );
+    const chip = p.querySelector('a')!;
+    expect(chip.previousSibling?.textContent).toMatch(/Shopify\.$/);
   });
 
   it('while the text streams and the sources have not come yet: no marker, no chip', () => {
