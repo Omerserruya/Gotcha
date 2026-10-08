@@ -429,4 +429,68 @@
       grid-template-columns: minmax(0, 1fr);
     }
   }
+
+  /* Quiet hours, edited where they are read. */
+  .quietForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .quietFields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-12);
+  }
+
+  .quietField {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .quietField input {
+    padding: 4px 6px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 7px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .quietActions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+
+  .quietPrimary,
+  .quietSecondary {
+    padding: 5px 11px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: var(--font-size-label);
+    cursor: pointer;
+  }
+
+  .quietPrimary {
+    border: 0;
+    background-color: var(--action-base);
+    color: var(--frame-text);
+  }
+
+  .quietSecondary {
+    border: var(--border-width-thin) solid var(--border-default);
+    background-color: transparent;
+    color: var(--text-secondary);
+  }
+
+  .quietPrimary:disabled,
+  .quietSecondary:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
 }

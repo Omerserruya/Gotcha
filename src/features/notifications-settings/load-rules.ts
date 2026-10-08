@@ -32,9 +32,9 @@ import { logger } from '@/observability/logger';
  * screen says that rather than inventing a name or hiding the rule.
  *
  * `rules: null` means the read failed, and is never conflated with an empty
- * list. The difference is the whole day-one state: no rules means GOTCHA is
- * telling nobody about anything, which is a real configuration an admin must
- * be able to see; a failed read means they learned nothing at all.
+ * list. The difference is the whole day-one state: no rules means GOTCHA's
+ * own route (in-app, no email - notifications 9164a058), a real configuration
+ * an admin must be able to see; a failed read means they learned nothing.
  */
 export interface RulesData {
   readonly rules: readonly NotificationRule[] | null;

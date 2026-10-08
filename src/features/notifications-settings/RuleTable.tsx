@@ -13,12 +13,10 @@ import styles from './Notifications.module.css';
  *
  * ── WHAT THIS SCREEN IS, AFTER THE RULING ──
  * The design drew a personal matrix: *"tell me when"*, eight events by three
- * channels, per user. That store exists and **nothing reads it** - the whole
- * `UserNotificationPreference` table has two references in the repository and
- * both are its own route. Four switches and a quiet-hours window that no
- * dispatcher consults.
+ * channels, per user. It is the main page now, and the fan-out obeys it
+ * (notifications 9164a058) - but it only FILTERS what a person is sent.
  *
- * What the dispatcher does read is `NotificationPreference`: a TENANT rule -
+ * Who is sent anything is `NotificationPreference`: a TENANT rule -
  * *"when X happens, notify these people, on these channels"* - scoped to a
  * department, with conditions and a priority. Omer chose to build the one that
  * works, so the screen's subject changed from a preference to a rule.
@@ -33,10 +31,10 @@ import styles from './Notifications.module.css';
  * empty table, and it is designed as the primary state rather than as the
  * degraded one - the mistake we nearly made with screen 12's roster.
  *
- * An empty rule table is not a failure and must not read as one. It means
- * GOTCHA is currently telling nobody about anything, which is a real and
- * consequential state, and the screen says so plainly rather than showing a
- * blank with a button in it.
+ * An empty rule table is not a failure and must not read as one. Since
+ * 9164a058 it means GOTCHA's own route: in-app only, the assignee for an
+ * assignment and the admins for the rest, and no email - a real and
+ * consequential state, said plainly rather than a blank with a button in it.
  */
 export async function RuleTable({
   rules,
@@ -69,8 +67,8 @@ export async function RuleTable({
       <div className={styles.dayOne} data-testid="rules-empty">
         {/*
           What is true right now, stated first. "No rules yet" describes the
-          table; "GOTCHA is telling nobody about anything" describes the
-          consequence, and the consequence is what an admin needs.
+          table; who GOTCHA tells instead, and that email waits for a rule,
+          is the consequence - and the consequence is what an admin needs.
         */}
         <p className={styles.dayOneLead}>{t('rules.noneLead')}</p>
         <p className={styles.dayOneBody}>{t('rules.noneBody')}</p>

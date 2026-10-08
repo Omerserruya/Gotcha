@@ -11,15 +11,15 @@ import { SettingsSection } from '@/shell/SettingsSection';
  * *"GOTCHA never pings you for an incoming message - that's what the inbox is
  * for. It tells you when something needs a decision or something broke."*
  *
- * The design drew a personal matrix. That store exists and nothing reads it:
- * `UserNotificationPreference` has two references in the whole repository and
- * both are its own route. What the dispatcher reads is the TENANT rule table,
- * so that is configured on its own page (`./rules`) - a different question,
- * and the one with an answer.
+ * The design drew a personal matrix, and since notifications 9164a058 the
+ * fan-out obeys it: each person's channel switches, approvals, and quiet
+ * hours (see PreferenceMatrix). Who is told at all is the TENANT rule table,
+ * configured on its own page (`./rules`); with no rule for an event, GOTCHA's
+ * own route (in-app: the assignee, else the admins).
  *
- * Absent, and not softened: quiet hours (enforced by nothing), the WhatsApp
- * destination (approval authority on `ApprovalRecipient`, not a contact
- * detail), and any per-user switch.
+ * Absent, and not softened: the WhatsApp destination (approval authority on
+ * `ApprovalRecipient`, not a contact detail) - WhatsApp to a person is not
+ * deliverable.
  */
 export default async function Page() {
   const t = await getTranslations('notifications-settings');

@@ -10,7 +10,7 @@
   },
   "rules": {
     "unavailable": "We couldn't read your notification rules just now.",
-    "noneLead": "No rules yet, so GOTCHA is telling nobody about anything.",
+    "noneLead": "No rules yet, so GOTCHA uses its own: an assignment reaches the person assigned; approvals, failures, campaigns and billing reach admins. In the app only - email goes only where a rule sends it.",
     "noneBody": "A rule says who hears about an event, and on which channels. Here's everything GOTCHA can tell you about."
   },
   "event": {
@@ -90,7 +90,7 @@
     "only": "Only when {conditions}"
   },
   "flag": {
-    "disabled": "Switched off, so nobody is told.",
+    "disabled": "Switched off. With no other rule for this event, GOTCHA's own route applies - in the app only.",
     "shadowed": "Not used for a team that has its own rule for this event. GOTCHA uses the team's rule instead of this one - never both.",
     "unfiring": "GOTCHA never raises this event, so this rule can never fire.",
     "unknownEvent": "GOTCHA doesn't raise an event by this name. It was accepted when it was saved, and it will never match anything.",
@@ -117,12 +117,26 @@
     "nothingSends": "Nothing sends this yet",
     "on": "on",
     "off": "off",
-    "foot": "Your channels filter what reaches you. Who is told at all is <rules>the workspace's rules</rules>",
+    "foot": "Your switches filter what reaches you. Who is told at all is <rules>the workspace's rules</rules>. With no rule for an event, an assignment reaches the person assigned and the rest above reach admins, in the app. Email goes only where a rule sends it.",
     "quiet": {
       "title": "Quiet hours",
       "window": "{from} - {to}",
       "none": "None set",
-      "note": "One window, every day - no exceptions or days of the week."
+      "note": "One window, every day, in the workspace's time zone. Inside it no email is sent - in-app still arrives, quietly - except for a refund or discount that failed.",
+      "from": "From",
+      "to": "To",
+      "same": "From and to can't be the same time.",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "change": "Change",
+      "set": "Set quiet hours",
+      "off": "Turn off",
+      "problem": {
+        "invalid": "That window isn't one the platform keeps - 24-hour times, and not the same twice.",
+        "forbidden": "This account has no preferences of its own.",
+        "failed": "Not saved. Try again."
+      }
     },
     "whatsapp": {
       "title": "Where WhatsApp alerts go",

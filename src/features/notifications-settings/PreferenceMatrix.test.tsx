@@ -27,7 +27,8 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 /* A real write to the person's own row: a spy, always. */
 const save = vi.hoisted(() => vi.fn());
-vi.mock('./preference-actions', () => ({ savePreferenceSwitch: save }));
+const saveQuiet = vi.hoisted(() => vi.fn());
+vi.mock('./preference-actions', () => ({ savePreferenceSwitch: save, saveQuietHours: saveQuiet }));
 
 import { PreferenceMatrix } from './PreferenceMatrix';
 
@@ -227,5 +228,74 @@ describe('★★ 15 - the switches the platform has: a channel for everything, a
   it('preferences not read: no switches at all - never a guess to save over', async () => {
     render(await PreferenceMatrix({ preferences: null, volume: null, whatsappDestination: null }));
     expect(screen.queryByRole('switch')).toBeNull();
+  });
+});
+
+describe('★★ quiet hours, edited where they are read (notifications 9164a058)', () => {
+  beforeEach(() => {
+    saveQuiet.mockReset();
+    refresh.mockReset();
+  });
+  const show = async (quietHours: { from: string; to: string } | null) =>
+    render(
+      await PreferenceMatrix({
+        preferences: prefs({ quietHours }),
+        volume: null,
+        whatsappDestination: null,
+      }),
+    );
+
+  it('the card says what quiet hours do: no email inside them, in-app still, failed money still emails', async () => {
+    await show(null);
+    expect(screen.getByTestId('pref-quiet')).toHaveTextContent(
+      "in the workspace's time zone. Inside it no email is sent - in-app still arrives, quietly - except for a refund or discount that failed.",
+    );
+  });
+
+  it('none set: "Set quiet hours" opens empty fields - never a window it invented; Save waits for both', async () => {
+    await show(null);
+    fireEvent.click(screen.getByTestId('pref-quiet-edit'));
+    expect(screen.getByTestId('pref-quiet-from')).toHaveValue('');
+    expect(screen.getByTestId('pref-quiet-save')).toBeDisabled();
+    fireEvent.change(screen.getByTestId('pref-quiet-from'), { target: { value: '22:00' } });
+    fireEvent.change(screen.getByTestId('pref-quiet-to'), { target: { value: '22:00' } });
+    expect(screen.getByTestId('pref-quiet-same')).toHaveTextContent("can't be the same time");
+    expect(screen.getByTestId('pref-quiet-save')).toBeDisabled();
+    expect(saveQuiet).not.toHaveBeenCalled();
+  });
+
+  it('a window past midnight is saved as it is; the stored answer is shown', async () => {
+    saveQuiet.mockResolvedValue({
+      ok: true,
+      preferences: prefs({ quietHours: { from: '22:00', to: '07:00' } }),
+    });
+    await show(null);
+    fireEvent.click(screen.getByTestId('pref-quiet-edit'));
+    fireEvent.change(screen.getByTestId('pref-quiet-from'), { target: { value: '22:00' } });
+    fireEvent.change(screen.getByTestId('pref-quiet-to'), { target: { value: '07:00' } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('pref-quiet-save'));
+    });
+    expect(saveQuiet).toHaveBeenCalledWith({ from: '22:00', to: '07:00' });
+    expect(screen.getByTestId('pref-quiet-value')).toHaveTextContent('22:00 - 07:00');
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it('Turn off clears it (null); a refusal is said, and the window stays', async () => {
+    saveQuiet.mockResolvedValueOnce({ ok: false, reason: 'failed' });
+    await show({ from: '21:00', to: '08:00' });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('pref-quiet-off'));
+    });
+    expect(saveQuiet).toHaveBeenCalledWith(null);
+    expect(screen.getByTestId('pref-quiet-problem')).toHaveTextContent('Not saved');
+    expect(screen.getByTestId('pref-quiet-value')).toHaveTextContent('21:00 - 08:00');
+  });
+
+  it('the foot says who is told with no rule, and that email needs one', async () => {
+    await show(null);
+    expect(screen.getByTestId('pref-matrix')).toHaveTextContent(
+      'With no rule for an event, an assignment reaches the person assigned and the rest above reach admins, in the app. Email goes only where a rule sends it.',
+    );
   });
 });

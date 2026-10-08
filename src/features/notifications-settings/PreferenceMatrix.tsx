@@ -6,6 +6,7 @@ import { Link } from '@/i18n/navigation';
 
 import styles from './Notifications.module.css';
 import { PreferenceSwitch } from './PreferenceSwitch';
+import { QuietHours } from './QuietHours';
 import type { ObservedVolume } from './volume';
 
 /** 02's rows, each tied to the event that sends it - or to none. */
@@ -47,9 +48,13 @@ const CHANNELS = ['inApp', 'email', 'whatsapp'] as const;
  * ⚠ WHATSAPP TO A PERSON DOES NOT EXIST (Backend, 2026-10-08): no number to
  *   send from, no templates. Its column is a status, and its cells "-" -
  *   never a mark saying something reaches you that nothing sends.
- * ⚠ AND TODAY NOTHING READS THESE SWITCHES: the fan-out reads only the
- *   workspace's routing (the rules). They save; obeying them is Backend's
- *   Step 0, with Omer.
+ * ★ THE FAN-OUT OBEYS THEM (notifications 9164a058): per recipient and
+ *   channel - the channel's switch, approvals off on every channel, and
+ *   quiet hours (the workspace's time zone): inside them no email is sent
+ *   (not held - dropped), the in-app row is still written, and a refund or
+ *   discount that failed still emails. With no workspace rule, approvals,
+ *   failures and billing reach admins in-app and an assignment its assignee
+ *   in-app; email goes only where a rule sends it - the foot says so.
  */
 export async function PreferenceMatrix({
   preferences,
@@ -165,13 +170,11 @@ export async function PreferenceMatrix({
       <div className={styles.prefCards}>
         <section className={styles.prefCard} data-testid="pref-quiet">
           <h2 className={styles.prefTitle}>{t('quiet.title')}</h2>
-          <p className={styles.prefValue}>
-            {preferences === null
-              ? '-'
-              : preferences.quietHours
-                ? t('quiet.window', preferences.quietHours)
-                : t('quiet.none')}
-          </p>
+          {preferences === null ? (
+            <p className={styles.prefValue}>-</p>
+          ) : (
+            <QuietHours initial={preferences.quietHours} />
+          )}
           <p className={styles.prefNote}>{t('quiet.note')}</p>
         </section>
         <section className={styles.prefCard} data-testid="pref-whatsapp">

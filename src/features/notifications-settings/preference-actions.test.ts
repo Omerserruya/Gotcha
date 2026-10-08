@@ -8,7 +8,11 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ patch }) }));
 vi.mock('@/api/client/signed-out', () => ({ signInIfSignedOut: async () => {} }));
 
-import { savePreferenceSwitch, type PreferenceSwitchKey } from './preference-actions';
+import {
+  savePreferenceSwitch,
+  saveQuietHours,
+  type PreferenceSwitchKey,
+} from './preference-actions';
 
 beforeEach(() => {
   patch.mockReset();
@@ -40,5 +44,64 @@ describe('★★ a switch writes the person’s own row, one key at a time', () 
     expect(await savePreferenceSwitch('inApp', true)).toEqual({ ok: false, reason: 'forbidden' });
     patch.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 500 }));
     expect(await savePreferenceSwitch('inApp', true)).toEqual({ ok: false, reason: 'failed' });
+  });
+});
+
+describe('★★ quiet hours - one window or none, checked as the route checks it', () => {
+  const stored = (quietHours: unknown) =>
+    patch.mockImplementation(async ({ payload }: { payload: { parse: (v: unknown) => unknown } }) =>
+      payload.parse({ inApp: true, email: true, whatsapp: false, approvals: true, quietHours }),
+    );
+
+  it('PATCH { quietHours: { from, to } } - a window past midnight is the common case', async () => {
+    stored({ from: '22:00', to: '07:00' });
+    const done = await saveQuietHours({ from: '22:00', to: '07:00' });
+    expect((patch.mock.calls[0]![0] as { body: object }).body).toEqual({
+      quietHours: { from: '22:00', to: '07:00' },
+    });
+    expect(done).toMatchObject({
+      ok: true,
+      preferences: { quietHours: { from: '22:00', to: '07:00' } },
+    });
+  });
+
+  it('off is null - both ends together', async () => {
+    stored(null);
+    await saveQuietHours(null);
+    expect((patch.mock.calls[0]![0] as { body: object }).body).toEqual({ quietHours: null });
+  });
+
+  it('not 24-hour, or the same time twice: refused before any call', async () => {
+    expect(await saveQuietHours({ from: '9:00', to: '17:00' })).toEqual({
+      ok: false,
+      reason: 'invalid',
+    });
+    expect(await saveQuietHours({ from: '24:00', to: '07:00' })).toEqual({
+      ok: false,
+      reason: 'invalid',
+    });
+    expect(await saveQuietHours({ from: '08:00', to: '08:00' })).toEqual({
+      ok: false,
+      reason: 'invalid',
+    });
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('the route’s 400 is invalid; 403 forbidden; else failed', async () => {
+    patch.mockRejectedValueOnce(new ApiError({ kind: 'validation', status: 400 }));
+    expect(await saveQuietHours({ from: '22:00', to: '07:00' })).toEqual({
+      ok: false,
+      reason: 'invalid',
+    });
+    patch.mockRejectedValueOnce(new ApiError({ kind: 'authorization', status: 403 }));
+    expect(await saveQuietHours({ from: '22:00', to: '07:00' })).toEqual({
+      ok: false,
+      reason: 'forbidden',
+    });
+    patch.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 500 }));
+    expect(await saveQuietHours({ from: '22:00', to: '07:00' })).toEqual({
+      ok: false,
+      reason: 'failed',
+    });
   });
 });
