@@ -404,7 +404,7 @@ router.post(
       res.status(201).json({ data: role });
     } catch (err: unknown) {
       if (err && typeof err === "object" && "code" in err && (err as { code: string }).code === "P2002") {
-        res.status(409).json({ error: "Role with this name already exists" });
+        res.status(409).json({ error: "Role with this name already exists", code: "ROLE_NAME_TAKEN" });
         return;
       }
       throw err;
@@ -430,7 +430,7 @@ router.patch(
       return;
     }
     if (role.isSystem) {
-      res.status(403).json({ error: "System roles cannot be modified" });
+      res.status(403).json({ error: "System roles cannot be modified", code: "SYSTEM_ROLE" });
       return;
     }
     // Explicit allowlist (updateRoleSchema fields). isSystem, tenantId, and
@@ -439,10 +439,17 @@ router.patch(
     const data: Record<string, unknown> = {};
     if (name !== undefined) data.name = name;
     if (description !== undefined) data.description = description;
-    const updated = await prisma.tenantRole.update({
-      where: { id: roleId },
-      data,
-    });
+    let updated;
+    try {
+      updated = await prisma.tenantRole.update({ where: { id: roleId }, data });
+    } catch (err: unknown) {
+      // A name another role of the workspace already has (unique per tenant): it was a 500.
+      if (err && typeof err === "object" && "code" in err && (err as { code: string }).code === "P2002") {
+        res.status(409).json({ error: "Role with this name already exists", code: "ROLE_NAME_TAKEN" });
+        return;
+      }
+      throw err;
+    }
     void writeAudit({ tenantId, actorType: "user", actorId: req.user?.userId,
       action: AuditAction.ROLE_UPDATED, targetType: "role", targetId: roleId, metadata: { fields: Object.keys(data) } });
     res.json({ data: updated });
@@ -461,7 +468,7 @@ router.delete(
       return;
     }
     if (role.isSystem) {
-      res.status(403).json({ error: "System roles cannot be deleted" });
+      res.status(403).json({ error: "System roles cannot be deleted", code: "SYSTEM_ROLE" });
       return;
     }
     // Counted BEFORE the delete, and the delete is NOT blocked by it.
@@ -507,6 +514,12 @@ router.put(
     const role = await ensureRoleBelongsToTenant(roleId, tenantId);
     if (!role) {
       res.status(404).json({ error: "Role not found" });
+      return;
+    }
+    // A built-in role's capabilities are the product's definition, not this
+    // workspace's: PATCH and DELETE already refused them, this did not.
+    if (role.isSystem) {
+      res.status(403).json({ error: "System roles cannot be modified", code: "SYSTEM_ROLE" });
       return;
     }
     const { features } = req.body as { features: string[] };
