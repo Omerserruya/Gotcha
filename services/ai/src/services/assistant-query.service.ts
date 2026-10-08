@@ -397,14 +397,14 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
 
 /** What the model is told about the cards it produced. */
 export const SHOWN_AS =
-  "the user sees these cards with your answer: refer to them (\"the chart\") without saying where they are on the screen, never say you lack a breakdown a card shows, do not repeat every number, cite the source";
+  "the numbers go with your answer as cards: say the finding in words; never describe the card or the screen, never say you lack a breakdown a card shows, do not repeat every number, cite the source";
 
 /**
  * Rows on a card: the model repeated all ten in prose above the card
  * ("לקוח: …, ערוץ: …", 2026-10-08). The answer is one sentence.
  */
 export const LIST_SHOWN_AS =
-  "the user sees these rows as a card, each with a link: answer in ONE sentence (how many there are, and that the card lists them, or the latest ones with the rest behind \"show all\"); never repeat the rows, names, messages or times in your text, and never number them";
+  "the rows go with your answer, each with its link: say the finding in ONE sentence (how many, and which matter); never describe the card, its rows or its buttons (no \"the card shows\", no \"click show all\"), never repeat the rows, names, messages or times, never number them";
 
 /**
  * How the assistant names a customer. An unnamed Shopify shopper is stored as

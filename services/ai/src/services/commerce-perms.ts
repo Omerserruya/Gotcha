@@ -41,3 +41,10 @@ export async function canReadContacts(req: Request & { tenantId?: string }): Pro
   if (p.role === "ADMIN") return true;
   return hasPermission(p, "crm:contacts:read").catch(() => false);
 }
+
+/** May the caller read the knowledge screen (ai:knowledge:read, or ADMIN)? */
+export async function canReadKnowledge(req: Request & { tenantId?: string }): Promise<boolean> {
+  const p = principalOf(req);
+  if (p.role === "ADMIN") return true;
+  return hasPermission(p, "ai:knowledge:read").catch(() => false);
+}

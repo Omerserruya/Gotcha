@@ -19,6 +19,7 @@ import { normalizeOrderQuery, queryOrders, queryProductStock } from "./assistant
 import { findCustomersResult } from "./assistant-customers.service";
 import { readConversationResult } from "./assistant-conversation-read.service";
 import { customerCardResult } from "./assistant-customer-card.service";
+import { listApprovalsResult, listKnowledgeGapsResult } from "./assistant-work.service";
 import { privateNumbers, privateConversationsClause } from "../lib/private-numbers";
 
 /** The last n days, today included (UTC days: a caller with a workspace period passes it). */
@@ -103,7 +104,8 @@ const SYSTEM_FIND_CUSTOMERS = {
   function: {
     name: "system_find_customers",
     description:
-      "Find the business's customers by name, email or phone, the way the operator wrote it. Every word must match (any order, any case); phones match whatever their format. " +
+      "Find whether the business has a customer, by name, email or phone (\"is there\", \"do we have\", \"find\"). For \"tell me about X\", \"what do we know about X\" or \"who is X\", call system_customer_card directly with the name instead: it finds them itself. " +
+      "Every word must match (any order, any case); phones match whatever their format. " +
       "Names are often stored in another script: ALWAYS pass several spellings in one call: as written, in the other script (Hebrew or Latin letters, e.g. \"עומר צרויה\" and \"Omer Serruya\"), and the first name alone. " +
       "Each match comes with its channels, how many open conversations it has and the last contact, shown to the user as a card with a link to the customer. " +
       "Never say a customer was not found before searching all those spellings.",
@@ -143,6 +145,7 @@ const SYSTEM_CUSTOMER_CARD = {
     name: "system_customer_card",
     description:
       "Everything about one customer, as their customer page shows it: channels and how to reach them, tags, what GOTCHA learned about them, the team's notes, their conversations on every channel, and their latest orders when a store is connected. " +
+      "Use it for \"tell me about X\", \"what do we know about X\", \"who is X\": call it directly with the name (customer), without searching first. " +
       "Shown as a card linking to the customer, with their conversations under it. Pass customerId from system_find_customers, or their name as spellings (customer); a name matching several people returns them to choose from.",
     parameters: {
       type: "object",
@@ -151,6 +154,26 @@ const SYSTEM_CUSTOMER_CARD = {
         customer: { type: "array", items: { type: "string" }, maxItems: 4, description: "The customer's name, 1 to 4 spellings." },
       },
     },
+  },
+};
+
+const SYSTEM_LIST_APPROVALS = {
+  type: "function" as const,
+  function: {
+    name: "system_list_approvals",
+    description:
+      "The actions waiting for someone's approval (\"what's waiting for me?\"), as the Approvals screen lists them: what each one is, about which customer, the amount when there is one, and since when, each linking to it. Shown as a card; cite the source.",
+    parameters: { type: "object", properties: {} },
+  },
+};
+
+const SYSTEM_LIST_KNOWLEDGE_GAPS = {
+  type: "function" as const,
+  function: {
+    name: "system_list_knowledge_gaps",
+    description:
+      "The questions customers asked that the AI could not answer yet, latest first, with how often and by how many people, each linking to where the owner answers them (the answer becomes knowledge). Shown as a card; cite the source.",
+    parameters: { type: "object", properties: {} },
   },
 };
 
@@ -335,6 +358,8 @@ export async function buildSystemAgentTools(opts: {
   aiAgentId?: string | null;
   /** The caller may read store orders AND a store is connected. */
   commerce?: boolean;
+  /** The caller may read the knowledge screen. */
+  knowledge?: boolean;
 }): Promise<Array<Record<string, unknown>>> {
   const integrationTools = opts.aiAgentId
     ? await buildAgentToolsForAIAgent(opts.tenantId, opts.aiAgentId, {
@@ -350,6 +375,8 @@ export async function buildSystemAgentTools(opts: {
     SYSTEM_FIND_CUSTOMERS,
     SYSTEM_READ_CONVERSATION,
     SYSTEM_CUSTOMER_CARD,
+    SYSTEM_LIST_APPROVALS,
+    ...(opts.knowledge ? [SYSTEM_LIST_KNOWLEDGE_GAPS] : []),
     SYSTEM_RECENT_ACTIVITY,
     SYSTEM_QUERY_CONVERSATIONS,
     SYSTEM_LIST_CONVERSATIONS,
@@ -413,6 +440,8 @@ export interface SystemToolDispatchCtx {
   canReadCommerce?: boolean;
   /** The caller holds crm:contacts:read (or is ADMIN): every customer, as on the customers screen. */
   canReadContacts?: boolean;
+  /** The caller holds ai:knowledge:read (or is ADMIN). Absent = no. */
+  canReadKnowledge?: boolean;
 }
 
 /** The visibility OR-clause for this caller, or null when unrestricted. */
@@ -562,6 +591,16 @@ async function dispatchSystemTool(
         const r = await queryConversations({ tenantId: ctx.tenantId, viewer: ctx.viewer, locale, nextId }, q);
         return { toolCallId, content: JSON.stringify(r.summary), artifacts: { blocks: r.blocks, source: r.source } };
       }
+      case "system_list_approvals":
+      case "system_list_knowledge_gaps": {
+        // The surface hides the gaps from a caller who may not read knowledge; this is the backstop.
+        if (name === "system_list_knowledge_gaps" && !ctx.canReadKnowledge) return { toolCallId, content: JSON.stringify({ ok: false, error: "not_permitted" }) };
+        let seq = 0;
+        const nextId = ctx.nextId ?? ((k: "b" | "s") => `${k}${++seq}`);
+        const wctx = { tenantId: ctx.tenantId, locale: ctx.locale ?? "en", nextId };
+        const r: any = name === "system_list_approvals" ? await listApprovalsResult(wctx) : await listKnowledgeGapsResult(wctx);
+        return { toolCallId, content: JSON.stringify(r.summary), ...(r.source ? { artifacts: { blocks: r.blocks, source: r.source } } : {}) };
+      }
       case "system_customer_card": {
         let seq = 0;
         const nextId = ctx.nextId ?? ((k: "b" | "s") => `${k}${++seq}`);
@@ -679,6 +718,8 @@ const STEP_TEXT: Record<string, { en: string; he: string }> = {
   system_summarize_conversation: { en: "Reading the conversation", he: "קוראת את השיחה" },
   system_read_conversation: { en: "Reading the conversation", he: "קוראת את השיחה" },
   system_customer_card: { en: "Opening the customer's card", he: "פותחת את כרטיס הלקוח" },
+  system_list_approvals: { en: "Checking what waits for approval", he: "בודקת מה מחכה לאישור" },
+  system_list_knowledge_gaps: { en: "Looking at the unanswered questions", he: "בודקת שאלות שלא נענו" },
   system_recent_activity: { en: "Looking at recent messages", he: "מסתכלת על ההודעות האחרונות" },
   system_query_conversations: { en: "Looking at the conversations", he: "בודקת את השיחות" },
   system_list_conversations: { en: "Finding the conversations", he: "מוצאת את השיחות" },

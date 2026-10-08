@@ -16,7 +16,7 @@ import {
   getRedis,
   assertAiAllowed,
 } from "@chatcenter/shared";
-import { principalOf, canReadContacts } from "../services/commerce-perms";
+import { principalOf, canReadContacts, canReadKnowledge } from "../services/commerce-perms";
 import {
   normalizeScope,
   createThread,
@@ -199,7 +199,7 @@ router.post("/threads/:id/messages", async (req: Request, res: Response) => {
     thread: { id: thread.id, scope: thread.scope, title: thread.title, titleSource: thread.titleSource },
     text,
     locale: await turnLocale(req, o, text),
-    operator: { userName: user?.name ?? undefined, userEmail: user?.email ?? undefined, userRole: user?.role ?? undefined, tenantName: tenant?.name ?? undefined, viewer: viewerOf(req), canReadCommerce: await hasPermission(principalOf(req), "customer:commerce:read").catch(() => false), canReadContacts: await canReadContacts(req) },
+    operator: { userName: user?.name ?? undefined, userEmail: user?.email ?? undefined, userRole: user?.role ?? undefined, tenantName: tenant?.name ?? undefined, viewer: viewerOf(req), canReadCommerce: await hasPermission(principalOf(req), "customer:commerce:read").catch(() => false), canReadContacts: await canReadContacts(req), canReadKnowledge: await canReadKnowledge(req) },
     authToken: (req.headers.authorization || "").replace(/^Bearer\s+/i, "") || undefined,
   });
   if (!started) { res.status(409).json({ error: "An answer is still being written", code: "RUN_IN_PROGRESS" }); return; }

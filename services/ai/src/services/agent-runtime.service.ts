@@ -144,6 +144,7 @@ export async function runAgent(
     tenantId: input.operator.tenantId,
     aiAgentId: input.aiAgentId ?? null,
     commerce,
+    knowledge: !!input.operator.canReadKnowledge,
   });
   input.onTools?.(tools.map((t: any) => String(t?.function?.name ?? "")).filter(Boolean));
 
@@ -277,6 +278,7 @@ export async function runAgent(
         nextId,
         canReadCommerce: !!input.operator.canReadCommerce,
         canReadContacts: !!input.operator.canReadContacts,
+        canReadKnowledge: !!input.operator.canReadKnowledge,
       });
       // Other words, same query (a default spelled out): the first card stands.
       const sourceKey = r.artifacts ? canonical((r.artifacts.source as any)?.query ?? null) : null;

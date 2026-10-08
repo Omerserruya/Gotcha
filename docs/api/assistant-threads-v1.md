@@ -358,6 +358,12 @@ A customer card (`system_customer_card`) is a `record` of kind "customer"
 deepLink /customers/<id>?tab=everything) followed by the record_list of their
 conversations; both cite one source, the customer's conversations (§9.4
 replays it).
+Two more record_list kinds (2026-10-08): "approval" (system_list_approvals:
+title = what, subtitle = customer · amount · risk, meta = since when,
+deepLink /approvals?id=<id>; source kind "approvals", deepLink /approvals)
+and "question" (system_list_knowledge_gaps: title = the question, subtitle =
+how often and by how many, deepLink /studio/knowledge?section=gaps). Their
+sources have no §9.4 list; `hasMore` says more exist on the linked screen.
 
 The answer cites a source after the claim it supports with `[^s1]` in `text`.
 The client renders it as that source's chip. The server removes any `[^...]`

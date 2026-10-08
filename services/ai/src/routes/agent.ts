@@ -21,7 +21,7 @@ import {
   hasPermission,
 } from "@chatcenter/shared";
 import { readerLocale } from "../lib/reader-locale";
-import { principalOf, canReadContacts } from "../services/commerce-perms";
+import { principalOf, canReadContacts, canReadKnowledge } from "../services/commerce-perms";
 import { runAgent, AgentRuntimeEvent } from "../services/agent-runtime.service";
 import { clearAgentMemory } from "../services/agent-memory.service";
 
@@ -105,6 +105,7 @@ router.post("/run", async (req: Request, res: Response) => {
           viewer: viewerOf(req),
           canReadCommerce: await hasPermission(principalOf(req), "customer:commerce:read").catch(() => false),
           canReadContacts: await canReadContacts(req),
+          canReadKnowledge: await canReadKnowledge(req),
           // Explicit, else the user's / workspace's language (lib/reader-locale).
           locale: await readerLocale(req),
         },

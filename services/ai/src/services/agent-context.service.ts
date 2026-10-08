@@ -43,6 +43,8 @@ export interface OperatorContext {
   canReadCommerce?: boolean;
   /** The caller holds crm:contacts:read or is ADMIN (resolved by the route; absent = no). */
   canReadContacts?: boolean;
+  /** The caller holds ai:knowledge:read or is ADMIN (absent = no). */
+  canReadKnowledge?: boolean;
 }
 
 export interface BuiltAgentContext {
