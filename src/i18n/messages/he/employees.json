@@ -73,7 +73,6 @@
   },
   "summary": "{working, plural, =0 {אף אחד לא עובד} one {אחד עובד} other {# עובדים}}{paused, plural, =0 {} one {, אחד בהשהיה} other {, # בהשהיה}}.",
   "hire": "גיוס עובד",
-  "hireNotYet": "גיוס מכאן יגיע בהמשך.",
   "detail": {
     "edit": "עריכה",
     "strip": {

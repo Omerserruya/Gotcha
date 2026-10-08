@@ -1,9 +1,11 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import type { NotificationPreferences } from '@/api/contracts/notifications';
+import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link } from '@/i18n/navigation';
 
 import styles from './Notifications.module.css';
+import { PreferenceSwitch } from './PreferenceSwitch';
 import type { ObservedVolume } from './volume';
 
 /** 02's rows, each tied to the event that sends it - or to none. */
@@ -34,9 +36,14 @@ const CHANNELS = ['inApp', 'email', 'whatsapp'] as const;
  * A row with no event behind it ("an action failed", "an AI employee stops
  * working", "complaints spike") sends nothing: its cells are "-", not off.
  * Who is told at all is the workspace's rules (their own page, linked from the
- * foot); these only filter what
- * reaches you. Nothing writes preferences from here yet: the switches show
- * the state and say so.
+ * foot); these only filter what reaches you.
+ *
+ * ★ THE SWITCHES ARE WHERE THE PLATFORM HAS THEM: one per channel, in its
+ *   column's head ("Email, for everything below"), and approvals on its row.
+ *   A switch in every cell would flip a whole column from one cell - the
+ *   cells show what reaches you, and change when their switch does.
+ *   WhatsApp alerts go to the person's own number: with none, turning it on
+ *   is a status saying so, never a switch that sends nowhere.
  */
 export async function PreferenceMatrix({
   preferences,
@@ -60,11 +67,27 @@ export async function PreferenceMatrix({
   return (
     <>
       <section className={styles.matrix} data-testid="pref-matrix">
-        <div className={styles.matrixHead} aria-hidden="true">
+        <div className={styles.matrixHead}>
           <span className={styles.matrixEvent}>{t('when')}</span>
           {CHANNELS.map((channel) => (
-            <span key={channel} className={styles.matrixCell}>
-              {t(`channel.${channel}`)}
+            <span key={channel} className={styles.matrixHeadCell}>
+              <span>{t(`channel.${channel}`)}</span>
+              {preferences === null ? null : channel === 'whatsapp' &&
+                !whatsappDestination &&
+                !preferences.whatsapp ? (
+                <UnavailableAction
+                  label={t('noNumber.label')}
+                  tag={t('noNumber.tag')}
+                  why={t('noNumber.why')}
+                  testid="pref-switch-whatsapp-unavailable"
+                />
+              ) : (
+                <PreferenceSwitch
+                  field={channel}
+                  on={preferences[channel]}
+                  label={t('channelSwitch', { channel: t(`channel.${channel}`) })}
+                />
+              )}
             </span>
           ))}
         </div>
@@ -89,6 +112,17 @@ export async function PreferenceMatrix({
                     {t(`about.${row.key}`)}
                   </span>
                 ) : null}
+                {/* The one event the platform lets you switch on its own. */}
+                {'approvals' in row && preferences !== null ? (
+                  <span className={styles.matrixRowSwitch}>
+                    <PreferenceSwitch
+                      field="approvals"
+                      on={preferences.approvals}
+                      label={t('approvalsSwitch')}
+                    />
+                    <span className={styles.matrixSub}>{t('approvalsSwitch')}</span>
+                  </span>
+                ) : null}
               </span>
               {CHANNELS.map((channel) => (
                 <span key={channel} className={styles.matrixCell}>
@@ -96,11 +130,11 @@ export async function PreferenceMatrix({
                     <span className={styles.matrixNone}>-</span>
                   ) : (
                     <span
-                      className={styles.switch}
+                      className={styles.cellState}
                       role="img"
                       data-on={on(row, channel) ? 'yes' : 'no'}
                       aria-label={`${t(`channel.${channel}`)}: ${on(row, channel) ? t('on') : t('off')}`}
-                      title={t('switchNotYet')}
+                      title={t('cellWhy')}
                       data-testid={`pref-${row.key}-${channel}`}
                     />
                   )}

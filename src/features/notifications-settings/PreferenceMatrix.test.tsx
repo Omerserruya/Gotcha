@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react';
-import { createFormatter, createTranslator } from 'next-intl';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render as rtlRender, screen } from '@testing-library/react';
+import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-intl';
+import type { ReactNode } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { notificationPreferencesSchema } from '@/api/contracts/notifications';
 import messages from '@/i18n/messages/en/notifications-settings.json';
@@ -15,15 +16,33 @@ vi.mock('next-intl/server', () => ({
   getFormatter: async () => createFormatter({ locale: 'en' }),
 }));
 
+const refresh = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...rest}>
       {children}
     </a>
   ),
+  useRouter: () => ({ refresh }),
 }));
+/* A real write to the person's own row: a spy, always. */
+const save = vi.hoisted(() => vi.fn());
+vi.mock('./preference-actions', () => ({ savePreferenceSwitch: save }));
 
 import { PreferenceMatrix } from './PreferenceMatrix';
+
+// The switches are client components: they read their words from the provider.
+const render = (ui: ReactNode) =>
+  rtlRender(
+    <NextIntlClientProvider locale="en" messages={{ 'notifications-settings': messages }}>
+      {ui}
+    </NextIntlClientProvider>,
+  );
+
+beforeEach(() => {
+  save.mockReset();
+  refresh.mockReset();
+});
 
 const prefs = (over: Record<string, unknown> = {}) =>
   notificationPreferencesSchema.parse({ inApp: true, email: false, whatsapp: true, ...over });
@@ -123,5 +142,79 @@ describe('★ 15 corrections (measurement of 204d715)', () => {
       'href',
       '/settings/notifications/rules',
     );
+  });
+});
+
+describe('★★ 15 - the switches the platform has: a channel for everything, and approvals', () => {
+  const show = async (
+    over: Record<string, unknown> = {},
+    number: string | null = '+972 54 220 8814',
+  ) =>
+    render(
+      await PreferenceMatrix({
+        preferences: prefs(over),
+        volume: null,
+        whatsappDestination: number,
+      }),
+    );
+
+  it('one switch per channel, in its column’s head, set as stored; approvals on its row', async () => {
+    await show({ approvals: false });
+    expect(screen.getByTestId('pref-switch-inApp')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('pref-switch-email')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByTestId('pref-switch-whatsapp')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('pref-switch-approvals')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByTestId('pref-switch-email')).toHaveAccessibleName(
+      'Email, for everything below',
+    );
+    expect(screen.getByTestId('pref-row-approval')).toContainElement(
+      screen.getByTestId('pref-switch-approvals'),
+    );
+  });
+
+  it('★ a cell is what reaches you - a mark, never a control', async () => {
+    await show();
+    const cell = screen.getByTestId('pref-campaign-email');
+    expect(cell.tagName).not.toBe('BUTTON');
+    expect(cell).not.toHaveAttribute('role', 'switch');
+    expect(screen.getByTestId('pref-row-campaign').querySelectorAll('button')).toHaveLength(0);
+  });
+
+  it('a switch saves only its own key; the page reads again', async () => {
+    save.mockResolvedValueOnce({ ok: true, preferences: prefs({ email: true }) });
+    await show();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('pref-switch-email'));
+    });
+    expect(save).toHaveBeenCalledWith('email', true);
+    expect(screen.getByTestId('pref-switch-email')).toHaveAttribute('aria-checked', 'true');
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it('a refused save goes back, and says so', async () => {
+    save.mockResolvedValueOnce({ ok: false, reason: 'failed' });
+    await show();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('pref-switch-inApp'));
+    });
+    expect(save).toHaveBeenCalledWith('inApp', false);
+    expect(screen.getByTestId('pref-switch-inApp')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('pref-switch-inApp-problem')).toHaveTextContent('Not saved');
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('★ WhatsApp with no number: turning it on is a status saying why - turning it off stays possible', async () => {
+    await show({ whatsapp: false }, null);
+    expect(screen.queryByTestId('pref-switch-whatsapp')).toBeNull();
+    const status = screen.getByTestId('pref-switch-whatsapp-unavailable');
+    expect(status).toHaveAttribute('aria-disabled', 'true');
+    expect(status).toHaveTextContent('Needs your number');
+    await show({ whatsapp: true }, null);
+    expect(screen.getByTestId('pref-switch-whatsapp')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('preferences not read: no switches at all - never a guess to save over', async () => {
+    render(await PreferenceMatrix({ preferences: null, volume: null, whatsappDestination: null }));
+    expect(screen.queryByRole('switch')).toBeNull();
   });
 });

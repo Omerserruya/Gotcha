@@ -266,15 +266,93 @@
    * 02's toggle: a plain pill, 34 × 18, no knob - on is ink, off is the
    * hairline colour. It shows a state; nothing slides.
    */
+  /* A channel's head: its name, and its switch under it. */
+  .matrixHeadCell {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+    inline-size: 90px;
+  }
+
+  .matrixHeadCell:last-child {
+    inline-size: 110px;
+  }
+
+  .switchWrap {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  /* A real switch: a button, with its knob at the end it is set to. */
   .switch {
+    position: relative;
     display: block;
     inline-size: 34px;
     block-size: 18px;
+    padding: 0;
+    border: 0;
     border-radius: 9px;
     background-color: var(--border-default);
+    cursor: pointer;
+  }
+
+  .switch::after {
+    content: '';
+    position: absolute;
+    inset-block-start: 2px;
+    inset-inline-start: 2px;
+    inline-size: 14px;
+    block-size: 14px;
+    border-radius: 50%;
+    background-color: var(--panel-field);
   }
 
   .switch[data-on='yes'] {
+    background-color: var(--action-base);
+  }
+
+  .switch[data-on='yes']::after {
+    inset-inline-start: 18px;
+  }
+
+  .switch:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .switch:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .switchProblem {
+    font-size: var(--font-size-caption);
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--intent-urgent-text);
+  }
+
+  .matrixRowSwitch {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    margin-block-start: 6px;
+  }
+
+  /* What reaches you, per cell: a mark, not a control - its switch is the column's. */
+  .cellState {
+    display: block;
+    inline-size: 9px;
+    block-size: 9px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 50%;
+  }
+
+  .cellState[data-on='yes'] {
+    border-color: var(--action-base);
     background-color: var(--action-base);
   }
 

@@ -117,7 +117,6 @@
     "nothingSends": "Nothing sends this yet",
     "on": "on",
     "off": "off",
-    "switchNotYet": "Changing this from here comes next.",
     "foot": "Your channels filter what reaches you. Who is told at all is <rules>the workspace's rules</rules>",
     "quiet": {
       "title": "Quiet hours",
@@ -141,6 +140,18 @@
       "actionFailed": "A refund or cancellation didn't go through",
       "systemDown": "Shopify, CRM, returns",
       "complaints": "Compared with a normal week"
+    },
+    "channelSwitch": "{channel}, for everything below",
+    "approvalsSwitch": "Approvals reach me",
+    "cellWhy": "Set by the switch at the top of its column",
+    "noNumber": {
+      "label": "Turn on",
+      "tag": "Needs your number",
+      "why": "WhatsApp alerts go to your own phone number, and your profile has none."
+    },
+    "saveProblem": {
+      "forbidden": "This account has no preferences of its own.",
+      "failed": "Not saved. Try again."
     }
   },
   "rulesPage": {

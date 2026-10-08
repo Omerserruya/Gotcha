@@ -73,7 +73,6 @@
   },
   "summary": "{working, plural, =0 {None working} one {One working} other {# working}}{paused, plural, =0 {} one {, one paused} other {, # paused}}.",
   "hire": "Hire an employee",
-  "hireNotYet": "Hiring from here comes next.",
   "detail": {
     "edit": "Edit",
     "strip": {
