@@ -231,5 +231,6 @@
   "timezone": "Time zone",
   "typeCity": "Type a city",
   "currencyHint": "The currency the AI quotes prices in, and the clock opening hours run on.",
-  "zoneUnknown": "Pick a city from the list."
+  "zoneUnknown": "Pick a city from the list.",
+  "zoneDefault": "{zone} (default)"
 }

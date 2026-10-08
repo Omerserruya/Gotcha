@@ -171,16 +171,13 @@ describe('★ the From website badge is inline, and only where it is true', () =
 });
 
 describe('★ 11e · the single value edits in place, with the keyboard', () => {
-  it('saves on Enter', async () => {
+  it('Enter with nothing changed closes and sends nothing - never a zone nobody chose', async () => {
     saveWorkspace.mockResolvedValue({ ok: true, data: {} });
     renderRows();
     await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
-    // Shown by city, saved as IANA.
     await userEvent.type(screen.getByTestId('timezone-input'), '{Enter}');
-    expect(saveWorkspace).toHaveBeenCalledWith(
-      { currency: 'USD', timezone: 'Europe/London' },
-      null,
-    );
+    expect(saveWorkspace).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('fact-save-currencyTimezone')).toBeNull();
   });
 
   it('cancels on Escape without saving', async () => {
@@ -222,10 +219,8 @@ describe('★ 11e · the time zone picker is searchable', () => {
     expect(screen.getByTestId('fact-note-currencyTimezone')).toHaveTextContent(/pick a city/i);
     await userEvent.clear(input);
     await userEvent.type(input, 'Asia/Jerusalem{Enter}');
-    expect(saveWorkspace).toHaveBeenCalledWith(
-      { currency: 'USD', timezone: 'Asia/Jerusalem' },
-      null,
-    );
+    // Only what changed: the zone - the currency was left as it was.
+    expect(saveWorkspace).toHaveBeenCalledWith({ timezone: 'Asia/Jerusalem' }, null);
   });
 
   it('the read row says it the same way', () => {
@@ -284,5 +279,36 @@ describe('★ the hours row says "Set" only when there is a week', () => {
       },
     });
     expect(screen.getByTestId('fact-value-hours')).toHaveTextContent(/switched off/i);
+  });
+});
+
+describe('★★ the time zone in the reader’s words, and only ever the one chosen (14" sweep, A9)', () => {
+  it('Hebrew: the zone’s Hebrew name and its offset - never "London"', async () => {
+    const he = (await import('@/i18n/messages/he/workspace.json')).default;
+    render(
+      <NextIntlClientProvider locale="he" messages={{ workspace: he }}>
+        <FactRows workspace={ws()} />
+      </NextIntlClientProvider>,
+    );
+    const row = screen.getByTestId('fact-value-currencyTimezone');
+    expect(row).toHaveTextContent('שעון בריטניה (GMT');
+    expect(row).not.toHaveTextContent('London');
+  });
+
+  it('none stored: the platform’s default is said as the default', () => {
+    renderRows({ timezone: null });
+    expect(screen.getByTestId('fact-value-currencyTimezone')).toHaveTextContent(
+      /Jerusalem \(GMT.*\) \(default\)/,
+    );
+  });
+
+  it('none stored: changing the currency sends the currency alone - no zone', async () => {
+    saveWorkspace.mockResolvedValue({ ok: true, data: {} });
+    renderRows({ timezone: null });
+    await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
+    expect(screen.getByTestId('timezone-input')).toHaveValue('');
+    await userEvent.selectOptions(screen.getByTestId('currency-select'), 'ILS');
+    await userEvent.click(screen.getByTestId('fact-save-currencyTimezone'));
+    expect(saveWorkspace).toHaveBeenCalledWith({ currency: 'ILS' }, null);
   });
 });

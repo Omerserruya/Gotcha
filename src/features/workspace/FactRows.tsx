@@ -10,7 +10,14 @@ import { Link } from '@/i18n/navigation';
 import { saveWorkspaceFacts, type WriteResult } from './actions';
 import { summariseWeek, weekOf } from './hours';
 import styles from './Workspace.module.css';
-import { COMMON_CURRENCIES, currencyLabel, zoneFromInput, zoneLabel, zoneOptions } from './zones';
+import {
+  COMMON_CURRENCIES,
+  currencyLabel,
+  SERVER_DEFAULT_ZONE,
+  zoneFromInput,
+  zoneLabel,
+  zoneOptions,
+} from './zones';
 
 /**
  * The facts an AI employee quotes to a customer, as 11's table.
@@ -54,18 +61,34 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
     return field ? fieldOrigin(workspace, field) : 'unknown';
   };
 
+  /*
+   * ★ ONLY WHAT CHANGED IS SENT. dev's Europe/London was saved by a request,
+   *   not defaulted (Backend, 2026-10-08) - so a save never carries a zone the
+   *   person did not choose: an untouched or unchanged zone is left out, and
+   *   with nothing stored an empty field sends none (the server's default
+   *   stands). An unknown entry is refused, never guessed.
+   */
   function saveCurrencyTimezone() {
     setNote(null);
-    const zone = zoneFromInput(timezone, zones);
-    if (zone === null) {
+    const text = timezone.trim();
+    const zone = text === '' && !workspace.timezone ? null : zoneFromInput(text, zones);
+    if (text !== '' && zone === null) {
       setNote({ text: t('zoneUnknown') });
       return;
     }
+    if (text === '' && workspace.timezone) {
+      setNote({ text: t('zoneUnknown') });
+      return;
+    }
+    const patch: Record<string, string | null> = {};
+    if ((currency || null) !== (workspace.currency ?? null)) patch.currency = currency || null;
+    if (zone !== null && zone !== workspace.timezone) patch.timezone = zone;
+    if (Object.keys(patch).length === 0) {
+      setEditing(false);
+      return;
+    }
     startTransition(async () => {
-      const result = await saveWorkspaceFacts(
-        { currency: currency || null, timezone: zone },
-        workspace.updatedAt ?? null,
-      );
+      const result = await saveWorkspaceFacts(patch, workspace.updatedAt ?? null);
       if (result.ok) {
         setEditing(false);
         setNote({ text: t('saved'), quiet: true });
@@ -299,7 +322,10 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
                   workspace.currency
                     ? currencyLabel(workspace.currency, locale)
                     : t('currencyUnset'),
-                  workspace.timezone ? zoneLabel(workspace.timezone, locale) : null,
+                  workspace.timezone
+                    ? zoneLabel(workspace.timezone, locale)
+                    : // None stored: the zone the platform actually uses, said as its default.
+                      t('zoneDefault', { zone: zoneLabel(SERVER_DEFAULT_ZONE, locale) }),
                 ]
                   .filter(Boolean)
                   .join(' · ')
@@ -322,7 +348,13 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
               setEditing(true);
               setNote(null);
               setCurrency(workspace.currency ?? '');
-              setTimezone(workspace.timezone ? zoneLabel(workspace.timezone, locale) : '');
+              // The option's own label (a shared Hebrew name carries its city), so an unchanged zone matches.
+              setTimezone(
+                workspace.timezone
+                  ? (zones.find((z) => z.iana === workspace.timezone)?.label ??
+                      zoneLabel(workspace.timezone, locale))
+                  : '',
+              );
             }}
           >
             {t('edit')}
