@@ -49,6 +49,47 @@ export async function setEmployeeStatus(
 }
 
 /**
+ * 07f's Save (Omer, 2026-10-08: editing a working employee is approved).
+ * One PATCH with only what changed, each field under the route's own name
+ * (`editPatch`): it applies from the employee's next reply, in the
+ * conversations open now too - the confirmation says so before this runs.
+ *
+ * `invalid_access`: 422 INVALID_INTEGRATION_ACCESS - a system in the list
+ * that is not one of the workspace's (disconnected meanwhile).
+ */
+export type EmployeeEditResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly reason: 'forbidden' | 'gone' | 'invalid_access' | 'failed';
+    };
+
+export async function saveEmployeeEdits(
+  id: string,
+  patch: Readonly<Record<string, unknown>>,
+): Promise<EmployeeEditResult> {
+  try {
+    await serverApi().patch({
+      endpoint: employeeEndpoints.update(id),
+      payload: employeeSchema,
+      body: patch,
+    });
+    revalidatePath('/[locale]/(app)/studio/employees', 'page');
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    if (isApiError(cause)) {
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+      if (cause.status === 404) return { ok: false, reason: 'gone' };
+      if (cause.code === 'INVALID_INTEGRATION_ACCESS')
+        return { ok: false, reason: 'invalid_access' };
+    }
+    logger.warn('employees.edit_failed', { status: isApiError(cause) ? cause.status : undefined });
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+/**
  * Deletes an AI employee, and reports what that actually did.
  *
  * The route runs one transaction: it neutralises the routing node that pointed

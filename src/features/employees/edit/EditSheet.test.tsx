@@ -22,8 +22,11 @@ vi.mock('@/i18n/navigation', () => ({
       {children}
     </a>
   ),
+  useRouter: () => router,
 }));
-// No test may write: anything that reaches the actions fails loudly.
+const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
+const save = vi.hoisted(() => vi.fn());
+// Pause and delete may not run here: they fail loudly. Save is the one under test.
 vi.mock('../actions', () => ({
   setEmployeeStatus: () => {
     throw new Error('write');
@@ -31,6 +34,7 @@ vi.mock('../actions', () => ({
   deleteEmployee: () => {
     throw new Error('write');
   },
+  saveEmployeeEdits: save,
 }));
 
 import { EditSheet } from './EditSheet';
@@ -93,13 +97,50 @@ describe('★★ 07f - the profile’s sentences, editable; Save drawn, not live
     expect(changes).toHaveTextContent('2 changes');
   });
 
-  it('★ Save is drawn, not live, and says why', async () => {
+  it('★★ Save is live (Omer, 2026-10-08) - and asks first, naming what changes and that it is live', async () => {
+    save.mockReset();
+    sheet();
+    expect(screen.getByTestId('edit-save')).toBeDisabled();
+    await userEvent.click(screen.getByTestId('edit-tone-formal'));
+    await userEvent.click(screen.getByTestId('edit-save'));
+    const confirm = screen.getByTestId('edit-confirm');
+    expect(confirm).toHaveTextContent('Save changes to Maya?');
+    expect(confirm).toHaveTextContent('from its next reply - in its 3 open conversations too');
+    expect(screen.getByTestId('edit-confirm-changes')).toHaveTextContent(/^Its tone$/);
+    // Asked, not done: nothing is sent until the confirmation says so.
+    expect(save).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByText('Keep editing'));
+    expect(screen.queryByTestId('edit-confirm')).toBeNull();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('★★ confirmed: one PATCH with only what changed; then back to the employee, read again', async () => {
+    save.mockReset();
+    save.mockResolvedValue({ ok: true });
+    router.replace.mockReset();
+    router.refresh.mockReset();
     sheet();
     await userEvent.click(screen.getByTestId('edit-tone-formal'));
-    const save = screen.getByTestId('edit-save');
-    expect(save).toHaveAttribute('aria-disabled', 'true');
-    expect(save).toHaveAttribute('title', expect.stringMatching(/waiting for approval/));
-    await userEvent.click(save);
+    await userEvent.click(screen.getByTestId('edit-save'));
+    await userEvent.click(screen.getByTestId('edit-confirm-save'));
+    expect(save).toHaveBeenCalledWith('a', { tone: 'formal' });
+    expect(router.replace).toHaveBeenCalledWith(
+      { pathname: '/studio/employees', query: { employee: 'a' } },
+      { scroll: false },
+    );
+    expect(router.refresh).toHaveBeenCalled();
+    expect(screen.queryByTestId('edit-confirm')).toBeNull();
+  });
+
+  it('a refusal is said in the confirmation, which stays - nothing is lost', async () => {
+    save.mockReset();
+    save.mockResolvedValue({ ok: false, reason: 'failed' });
+    sheet();
+    await userEvent.click(screen.getByTestId('edit-tone-formal'));
+    await userEvent.click(screen.getByTestId('edit-save'));
+    await userEvent.click(screen.getByTestId('edit-confirm-save'));
+    expect(screen.getByTestId('edit-save-failed')).toHaveTextContent('Not saved');
+    expect(screen.getByTestId('edit-confirm')).toBeInTheDocument();
   });
 
   it('what it may do is the business’s: the current stance marked, none of them a control', () => {
@@ -177,17 +218,39 @@ describe('★★ 07f - the business systems it may use (Backend 00c6c229; ruling
     sheet({}, { access: ACCESS });
     expect(screen.getByTestId('edit-system-shopify')).toHaveTextContent('Shopify');
     expect(screen.getByTestId('edit-system-shopify')).toHaveTextContent('Connected, but failing');
-    expect(screen.getByTestId('edit-system-shopify-on')).toHaveTextContent(/^On$/);
+    expect(screen.getByTestId('edit-system-shopify-on')).toBeChecked();
     expect(screen.getByTestId('edit-system-woocommerce')).toHaveTextContent('Connected');
-    expect(screen.getByTestId('edit-system-woocommerce-on')).toHaveTextContent(/^Off$/);
+    expect(screen.getByTestId('edit-system-woocommerce-on')).not.toBeChecked();
     expect(screen.getByTestId('edit-system-custom:t1')).toHaveTextContent('Switched off');
   });
 
-  it('★ a status, not a switch: nothing to press until saving a working employee is approved', () => {
+  it('★★ a switch now: turning one on is a change, and Save sends the WHOLE list it may use', async () => {
+    save.mockReset();
+    save.mockResolvedValue({ ok: true });
     sheet({}, { access: ACCESS });
-    const card = screen.getByTestId('edit-systems');
-    expect(card.querySelector('input, button')).toBeNull();
-    expect(screen.getByTestId('edit-system-shopify-on')).toHaveAttribute('aria-disabled', 'true');
+    const woo = screen.getByTestId('edit-system-woocommerce-on');
+    expect(woo).toHaveAttribute('role', 'switch');
+    expect(woo).toHaveAccessibleName('This employee may use WooCommerce');
+    await userEvent.click(woo);
+    expect(screen.getByTestId('edit-changes')).toHaveTextContent('1 change');
+    await userEvent.click(screen.getByTestId('edit-save'));
+    expect(screen.getByTestId('edit-confirm-changes')).toHaveTextContent(
+      'The business systems it may use',
+    );
+    await userEvent.click(screen.getByTestId('edit-confirm-save'));
+    expect(save).toHaveBeenCalledWith('a', { integrationAccess: ['shopify', 'woocommerce'] });
+  });
+
+  it('a system that went away meanwhile (422): said in those words', async () => {
+    save.mockReset();
+    save.mockResolvedValue({ ok: false, reason: 'invalid_access' });
+    sheet({}, { access: ACCESS });
+    await userEvent.click(screen.getByTestId('edit-system-woocommerce-on'));
+    await userEvent.click(screen.getByTestId('edit-save'));
+    await userEvent.click(screen.getByTestId('edit-confirm-save'));
+    expect(screen.getByTestId('edit-save-failed')).toHaveTextContent(
+      "One of the business systems isn't connected here any more",
+    );
   });
 
   it('★ the rule for systems connected later is said', () => {

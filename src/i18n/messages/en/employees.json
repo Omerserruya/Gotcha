@@ -268,7 +268,6 @@
     "preview": "Preview with these rules",
     "previewNone": "Nothing replays a conversation under new rules yet.",
     "save": "Save changes",
-    "saveNotYet": "Saving changes how a working employee answers customers - waiting for approval.",
     "cancel": "Cancel",
     "changes": "{count, plural, one {# change} other {# changes}}",
     "noChanges": "No changes",
@@ -277,15 +276,35 @@
       "title": "Business systems it may use",
       "unread": "Couldn't read which systems it may use.",
       "none": "No business system is set up in this workspace yet.",
-      "on": "On",
-      "off": "Off",
       "later": "A system you connect later is off for every employee until you turn it on here.",
       "state": {
         "working": "Connected",
         "failing": "Connected, but failing",
         "off": "Switched off",
         "waiting": "Not connected yet"
-      }
+      },
+      "mayUse": "This employee may use {name}"
+    },
+    "confirm": {
+      "title": "Save changes to {name}?",
+      "live": "It answers customers with these from its next reply.",
+      "liveOpen": "It answers customers with these from its next reply - in {count, plural, one {its # open conversation} other {its # open conversations}} too.",
+      "keep": "Keep editing",
+      "save": "Save",
+      "saving": "Saving…"
+    },
+    "field": {
+      "responsibility": "What it is responsible for",
+      "tone": "Its tone",
+      "languages": "Its languages",
+      "handover": "When it hands over",
+      "access": "The business systems it may use"
+    },
+    "saveProblem": {
+      "forbidden": "You don't have permission to change AI employees.",
+      "gone": "This employee isn't here any more.",
+      "invalid_access": "One of the business systems isn't connected here any more. Reload and choose again.",
+      "failed": "Not saved. Try again in a moment."
     }
   },
   "hired": {

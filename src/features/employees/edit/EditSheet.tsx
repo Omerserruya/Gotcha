@@ -2,7 +2,7 @@
 
 import { X } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 
 import { humaniseCode, type CapabilityStance } from '@/api/contracts/capabilities';
 import {
@@ -11,11 +11,14 @@ import {
   type Employee,
   type IntegrationAccess,
 } from '@/api/contracts/employees';
+import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog';
 import { UserText } from '@/design-system/primitives/text/UserText';
-import { Link } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
+
+import { saveEmployeeEdits, type EmployeeEditResult } from '../actions';
 
 import hire from '../hire/Hire.module.css';
-import { changesIn, draftOf, EDIT_LANGUAGES, type EditDraft } from './edit-plan';
+import { changesIn, draftOf, EDIT_LANGUAGES, editPatch, type EditDraft } from './edit-plan';
 import { automationsLink, WhoAnswers, type ReachItem } from '../WhoAnswers';
 import styles from './Edit.module.css';
 
@@ -32,8 +35,10 @@ const STANCES = ['on_its_own', 'ask_first', 'never'] as const;
  * sentences as the profile, now editable, with a dark column on the right
  * and Save at its foot.
  *
- * ── EDITS HERE (locally; Save is not live) ──
- *   Responsible for, Tone, Languages, the handover rules' boxes
+ * ── EDITS HERE, SAVED (Omer, 2026-10-08) ──
+ *   Responsible for, Tone, Languages, the handover rules' boxes, and the
+ *   business systems it may use. Save asks first - naming what changes, and
+ *   that it reaches live customers from the next reply - then one PATCH.
  *
  * ── DRAWN, AND WHY ──
  *   What it handles       nothing groups conversations by topic
@@ -43,7 +48,6 @@ const STANCES = ['on_its_own', 'ask_first', 'never'] as const;
  *                         in Integrations, not here
  *   Hands to              no handover target is stored
  *   Preview               nothing replays a conversation under new rules
- *   Save changes          changes how a working employee answers: Omer's call
  *
  * ★ The head says when changes apply because the runtime reads the employee
  * on every reply (`ai-bot.service.ts`, `findUnique` per message): open
@@ -75,6 +79,28 @@ export function EditSheet({
   const set = (patch: Partial<EditDraft>) => setDraft((d) => ({ ...d, ...patch }));
   const changes = changesIn(employee, draft, access?.allowed ?? null);
   const back = { pathname: '/studio/employees', query: { employee: employee.id } } as const;
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [problem, setProblem] = useState<
+    Exclude<EmployeeEditResult, { ok: true }>['reason'] | null
+  >(null);
+  const [saving, startSave] = useTransition();
+  const save = () =>
+    startSave(async () => {
+      setProblem(null);
+      const result = await saveEmployeeEdits(
+        employee.id,
+        editPatch(employee, draft, access?.allowed ?? null),
+      );
+      if (!result.ok) {
+        setProblem(result.reason);
+        return;
+      }
+      setConfirming(false);
+      // Back to the employee, read again: what is shown is what was stored.
+      router.replace(back, { scroll: false });
+      router.refresh();
+    });
 
   const toneName = (tone: string) =>
     (EMPLOYEE_TONES as readonly string[]).includes(tone)
@@ -277,15 +303,20 @@ export function EditSheet({
                             {t(`systems.state.${accessState(choice)}`)}
                           </span>
                         </span>
-                        <span
-                          className={styles.stance}
-                          data-current={on ? 'yes' : 'no'}
-                          aria-disabled="true"
-                          title={t('saveNotYet')}
+                        <input
+                          type="checkbox"
+                          role="switch"
+                          className={hire.switch}
+                          checked={on}
+                          aria-label={t('systems.mayUse', { name: choice.name })}
                           data-testid={`edit-system-${choice.key}-on`}
-                        >
-                          {t(on ? 'systems.on' : 'systems.off')}
-                        </span>
+                          onChange={(e) => {
+                            const rest = (draft.access ?? access.allowed).filter(
+                              (key) => key !== choice.key,
+                            );
+                            set({ access: e.target.checked ? [...rest, choice.key] : rest });
+                          }}
+                        />
                       </li>
                     );
                   })}
@@ -372,15 +403,18 @@ export function EditSheet({
               -
             </p>
             <div className={styles.sideFoot}>
-              <span
-                role="button"
+              <button
+                type="button"
                 className={styles.save}
-                aria-disabled="true"
-                title={t('saveNotYet')}
+                disabled={changes.length === 0 || saving}
+                onClick={() => {
+                  setProblem(null);
+                  setConfirming(true);
+                }}
                 data-testid="edit-save"
               >
                 {t('save')}
-              </span>
+              </button>
               <Link href={back} className={styles.cancel} scroll={false}>
                 {t('cancel')}
               </Link>
@@ -389,6 +423,53 @@ export function EditSheet({
               </p>
             </div>
           </aside>
+          {confirming ? (
+            /*
+              Before a working employee changes: what changes, in words, and
+              that it reaches customers from its next reply - in the
+              conversations open now too.
+            */
+            <Dialog open onOpenChange={(open) => (open ? null : setConfirming(false))}>
+              <DialogContent
+                title={t('confirm.title', { name: employee.name })}
+                description={
+                  employee.openConversations > 0
+                    ? t('confirm.liveOpen', { count: employee.openConversations })
+                    : t('confirm.live')
+                }
+                data-testid="edit-confirm"
+              >
+                <ul className={styles.confirmList} data-testid="edit-confirm-changes">
+                  {changes.map((field) => (
+                    <li key={field}>{t(`field.${field}`)}</li>
+                  ))}
+                </ul>
+                {problem ? (
+                  <p className={styles.confirmProblem} role="alert" data-testid="edit-save-failed">
+                    {t(`saveProblem.${problem}`)}
+                  </p>
+                ) : null}
+                <span className={styles.confirmActions}>
+                  <button
+                    type="button"
+                    className={styles.confirmKeep}
+                    onClick={() => setConfirming(false)}
+                  >
+                    {t('confirm.keep')}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.confirmSave}
+                    disabled={saving}
+                    onClick={save}
+                    data-testid="edit-confirm-save"
+                  >
+                    {saving ? t('confirm.saving') : t('confirm.save')}
+                  </button>
+                </span>
+              </DialogContent>
+            </Dialog>
+          ) : null}
         </div>
       </section>
     </div>

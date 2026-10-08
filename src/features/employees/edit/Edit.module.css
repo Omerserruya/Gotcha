@@ -283,15 +283,61 @@
   }
 
   .save {
+    border: 0;
     background-color: var(--frame-text);
+    font-family: inherit;
     font-size: 13.5px;
     font-weight: 500;
     color: var(--text-primary);
+    cursor: pointer;
   }
 
-  .save[aria-disabled='true'] {
+  .save:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  /* The confirmation before a working employee changes. */
+  .confirmList {
+    margin: 0;
+    padding-inline-start: 1.2em;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .confirmProblem {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--intent-urgent-text);
+  }
+
+  .confirmActions {
+    display: flex;
+    gap: var(--space-10);
+    justify-content: flex-end;
+  }
+
+  .confirmKeep,
+  .confirmSave {
+    padding: 8px 14px;
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: 9px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .confirmSave {
+    border-color: transparent;
+    background-color: var(--text-primary);
+    color: var(--frame-text);
+  }
+
+  .confirmSave:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 
   .cancel {
