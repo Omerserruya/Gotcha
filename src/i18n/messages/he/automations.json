@@ -483,7 +483,27 @@
       "skipped": "דולג",
       "waiting": "ממתין"
     },
-    "openConversation": "פתיחת השיחה"
+    "openConversation": "פתיחת השיחה",
+    "reason": {
+      "opted_out": "לא נשלח: הלקוח ביקש לא לקבל הודעות שיווקיות בערוץ הזה.",
+      "no_prior_contact_or_consent": "לא נשלח: הלקוח לא פנה אליכם מעולם ולא הסכים לקבל הודעות שיווקיות.",
+      "no_marketing_consent": "לא נשלח: הלקוח לא הסכים לקבל הודעות שיווקיות.",
+      "no_reachable_customer": "לא נשלח: אין דרך להגיע ללקוח הזה.",
+      "conversation_busy": "לא התחילה: מישהו מהצוות, או אוטומציה אחרת, כבר טיפלו בשיחה.",
+      "automation_inactive": "לא רצה: האוטומציה הייתה כבויה.",
+      "purchased": "נעצרה: הלקוח קנה.",
+      "failed": "ההרצה הזאת נכשלה.",
+      "other": "ההרצה הזאת נעצרה מסיבה שעוד אין לנו דרך להציג."
+    },
+    "stepReason": {
+      "skipped_missing_removal_line": "בתבנית אין שורת הסרה",
+      "skipped_template_not_approved": "WhatsApp עוד לא אישר את התבנית",
+      "skipped_template_not_found": "התבנית כבר לא קיימת",
+      "skipped_no_template": "לא נבחרה תבנית",
+      "skipped_non_whatsapp": "תבניות נשלחות רק ב-WhatsApp, והשיחה הזאת לא שם",
+      "skipped_adapter_unsupported": "הערוץ הזה לא יכול לשלוח תבנית",
+      "skipped_no_send_ctx": "לא היה למי לשלוח"
+    }
   },
   "eyebrow": {
     "trigger": "טריגר",

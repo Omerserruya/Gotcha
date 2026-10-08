@@ -483,7 +483,27 @@
       "skipped": "Skipped",
       "waiting": "Waiting"
     },
-    "openConversation": "Open the conversation"
+    "openConversation": "Open the conversation",
+    "reason": {
+      "opted_out": "Not sent: the customer asked not to get marketing messages on this channel.",
+      "no_prior_contact_or_consent": "Not sent: the customer never wrote to you and didn't agree to marketing messages.",
+      "no_marketing_consent": "Not sent: the customer didn't agree to marketing messages.",
+      "no_reachable_customer": "Not sent: there's no way to reach this customer.",
+      "conversation_busy": "Not started: someone on your team, or another automation, was already handling the conversation.",
+      "automation_inactive": "Not run: the automation was off.",
+      "purchased": "Stopped: the customer bought.",
+      "failed": "This run failed.",
+      "other": "This run stopped for a reason we can't show yet."
+    },
+    "stepReason": {
+      "skipped_missing_removal_line": "the template has no removal line",
+      "skipped_template_not_approved": "WhatsApp hasn't approved the template yet",
+      "skipped_template_not_found": "the template no longer exists",
+      "skipped_no_template": "no template was chosen",
+      "skipped_non_whatsapp": "templates go out on WhatsApp only, and this conversation isn't there",
+      "skipped_adapter_unsupported": "this channel can't send a template",
+      "skipped_no_send_ctx": "there was no one to send it to"
+    }
   },
   "eyebrow": {
     "trigger": "Trigger",

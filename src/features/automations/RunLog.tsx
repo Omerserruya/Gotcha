@@ -8,6 +8,7 @@ import { Link } from '@/i18n/navigation';
 
 import { readRun, readRuns } from './automation-actions';
 import styles from './Builder.module.css';
+import { runReason, stepReason } from './run-reasons';
 
 const BRANCHES = [
   'next',
@@ -86,6 +87,8 @@ export function RunLog({ automationId }: { readonly automationId: string }) {
         })
       : '';
 
+  const openReason = open && typeof open === 'object' ? runReason(open.error) : null;
+
   return (
     <section className={styles.runLog} aria-labelledby="run-log-title" data-testid="run-log">
       <h2 className={styles.inspectorTitle} id="run-log-title">
@@ -139,25 +142,36 @@ export function RunLog({ automationId }: { readonly automationId: string }) {
         <p className={styles.quiet}>{t('runLog.runUnread')}</p>
       ) : open ? (
         <div className={styles.trace} data-testid="run-trace">
-          {open.error ? <p className={styles.problem}>{open.error}</p> : null}
+          {/* The run's reason in words; the platform's code on the title only. */}
+          {openReason ? (
+            <p className={styles.problem} title={open.error ?? undefined} data-testid="run-reason">
+              {t(`runLog.reason.${openReason}`)}
+            </p>
+          ) : null}
           <ol className={styles.steps}>
-            {open.steps.map((step, i) => (
-              <li
-                key={`${step.nodeId}-${i}`}
-                className={styles.traceStep}
-                data-status={step.status}
-              >
-                <span>
-                  {step.nodeType === 'automation_trigger'
-                    ? t('groups.trigger')
-                    : t(`nodes.${step.nodeType}` as 'nodes.wait')}
-                </span>
-                <span className={styles.quiet}>
-                  {t(`runLog.stepStatus.${step.status}`)}
-                  {step.branch ? ` · ${branchWords(step.branch)}` : ''}
-                </span>
-              </li>
-            ))}
+            {open.steps.map((step, i) => {
+              const why = stepReason(step.output);
+              /*
+               * A `skipped_*` action is a skip, whatever the status says:
+               * before Backend 4e0e3ced the step read "ok" - a send that never
+               * happened, shown as done.
+               */
+              const status = why ? 'skipped' : step.status;
+              return (
+                <li key={`${step.nodeId}-${i}`} className={styles.traceStep} data-status={status}>
+                  <span>
+                    {step.nodeType === 'automation_trigger'
+                      ? t('groups.trigger')
+                      : t(`nodes.${step.nodeType}` as 'nodes.wait')}
+                  </span>
+                  <span className={styles.quiet}>
+                    {t(`runLog.stepStatus.${status}`)}
+                    {why ? ` · ${t(`runLog.stepReason.${why}`)}` : ''}
+                    {step.branch ? ` · ${branchWords(step.branch)}` : ''}
+                  </span>
+                </li>
+              );
+            })}
           </ol>
           {open.conversationId ? (
             <Link
