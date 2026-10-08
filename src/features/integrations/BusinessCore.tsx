@@ -1,4 +1,4 @@
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 
 import { Link } from '@/i18n/navigation';
 
@@ -62,6 +62,12 @@ const PART_GROUPS = [
 
 export async function BusinessCore({ core }: { readonly core: Core | null }) {
   const t = await getTranslations('business-core');
+  /*
+   * The platform's prose here (catalogueNotes, a part's `reason`) is English
+   * only, with no code to say it by (gap sent 2026-10-08): printed in English,
+   * never under a Hebrew page - our own state sentence already says each part.
+   */
+  const platformProse = (await getLocale()) === 'en';
   const crm = core?.roles.find((part) => part.role === 'crm') ?? null;
 
   if (core === null) {
@@ -107,7 +113,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
               >
                 {parts.map((part) => (
                   <li key={part.role}>
-                    <Part part={part} t={t} />
+                    <Part platformProse={platformProse} part={part} t={t} />
                   </li>
                 ))}
               </ul>
@@ -375,7 +381,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
         Two facts the catalogue cannot express, written once server-side so
         each client does not rediscover them. Rendered verbatim.
       */}
-      {core.catalogueNotes.length > 0 ? (
+      {platformProse && core.catalogueNotes.length > 0 ? (
         <section className="srOnly" data-testid="core-notes">
           <h3 className={styles.notesHeading}>{t('notesHeading')}</h3>
           <ul className={styles.notes}>
@@ -404,16 +410,21 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
 function Part({
   part,
   t,
+  platformProse,
 }: {
   readonly part: RolePart;
   readonly t: Awaited<ReturnType<typeof getTranslations<'business-core'>>>;
+  /** The platform's English `reason` may be printed (an English page only). */
+  readonly platformProse: boolean;
 }) {
   const state = partState(part);
   const failing = part.candidates.find((c) => connectedButFailing(c));
   const elsewhere = electedElsewhere(part);
   // Backend d569e0de: nothing could be inferred, and says why (e.g. Shopify is in ERROR).
   const unmappedWhy =
-    part.available && part.source === 'unmapped' && part.reason ? part.reason : null;
+    platformProse && part.available && part.source === 'unmapped' && part.reason
+      ? part.reason
+      : null;
 
   /*
     The three-state sentence - what the state IS and where its repair lives -

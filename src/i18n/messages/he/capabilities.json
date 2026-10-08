@@ -82,7 +82,7 @@
   },
   "choice": {
     "label": "מה GOTCHA רשאית לעשות עם זה",
-    "do_it": "שתעשה",
+    "do_it": "לבצע",
     "ask_me": "לשאול אותי",
     "never": "אף פעם",
     "noAutomation": {

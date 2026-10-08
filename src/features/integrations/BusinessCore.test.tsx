@@ -16,9 +16,12 @@ vi.mock('@/i18n/navigation', () => ({
     </a>
   ),
 }));
+/* The page's language, per test: English unless one says Hebrew. */
+const page = vi.hoisted(() => ({ locale: 'en' }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'business-core') =>
     createTranslator({ locale: 'en', messages: { 'business-core': messages }, namespace }),
+  getLocale: async () => page.locale,
 }));
 
 /** The estate as measured. */
@@ -491,5 +494,26 @@ describe('★★ measured on dev (business-core read): Woo works, Shopify is in 
     expect(screen.getByTestId('core-chip-returns').getAttribute('title')).toContain(
       'its connection status is ERROR',
     );
+  });
+});
+
+describe('★ Hebrew: the platform’s English prose is not printed under a Hebrew page (14" sweep, A3)', () => {
+  it('no catalogue notes, and the unmapped reason does not ride on the chip', async () => {
+    page.locale = 'he';
+    await render14({
+      roles: [
+        {
+          role: 'returns',
+          source: 'unmapped',
+          reason: 'returngo would be inferred, but its connection status is ERROR.',
+          candidates: [{ slug: 'returngo', name: 'ReturnGO', connected: false, status: 'ERROR' }],
+        },
+      ],
+    });
+    expect(screen.queryByTestId('core-notes')).toBeNull();
+    expect(screen.getByTestId('core-chip-returns').getAttribute('title') ?? '').not.toContain(
+      'connection status is ERROR',
+    );
+    page.locale = 'en';
   });
 });
