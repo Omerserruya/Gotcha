@@ -5,11 +5,11 @@ import { useTranslations } from 'next-intl';
 import { useState, useTransition, type ReactNode } from 'react';
 
 import { BULK_APPROVE_AT_MOST, type KnowledgeDocument } from '@/api/contracts/knowledge-candidates';
+import { WhatWillBeUsed } from '@/features/knowledge/WhatWillBeUsed';
 import { useRouter } from '@/i18n/navigation';
 
 import { addReadyAnswers, rerunAnalysis } from './candidate-actions';
 import styles from './Channels.module.css';
-import { WhatWillBeUsed } from './WhatWillBeUsed';
 
 /** A ready answer, as the document adding it writes. */
 export interface ReadyAnswer {

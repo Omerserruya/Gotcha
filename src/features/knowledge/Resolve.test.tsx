@@ -53,7 +53,12 @@ const two = [variant(), variant({ key: 'k550', answer: '₪550', occurrenceCount
 const show = (variants: readonly Variant[] = two) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ knowledge: en }}>
-      <ResolveConflict candidateId="c1" variants={variants} />
+      <ResolveConflict
+        candidateId="c1"
+        question="What is the cancellation fee?"
+        reasoning="Waived for members."
+        variants={variants}
+      />
     </NextIntlClientProvider>,
   );
 
@@ -61,6 +66,28 @@ beforeEach(() => {
   resolveConflict.mockReset();
   resolveConflict.mockImplementation(async () => {
     throw new Error('a test must never call resolveConflict');
+  });
+});
+
+describe('★★ armed, the whole document GOTCHA will read is shown - word for word (Omer)', () => {
+  it('the chosen answer, never the other; the question and the platform’s lines; nothing written', async () => {
+    show();
+    expect(screen.queryByTestId('resolve-used-c1')).toBeNull();
+    await userEvent.click(screen.getByTestId('resolve-c1-k550'));
+    const used = screen.getByTestId('resolve-used-c1');
+    expect([...used.querySelectorAll('p')].map((p) => p.textContent)).toEqual([
+      'What is the cancellation fee?',
+      '₪550',
+      'How we approach this: Waived for members.',
+    ]);
+    expect(screen.getByTestId('resolve-armed-c1')).toHaveTextContent(
+      'Above is what GOTCHA will read, word for word - nothing is used until you do.',
+    );
+    expect(resolveConflict).not.toHaveBeenCalled();
+    // Arming the other answer shows the other document.
+    await userEvent.click(screen.getByTestId('resolve-c1-k850'));
+    expect(screen.getByTestId('resolve-used-c1')).toHaveTextContent('₪850');
+    expect(screen.getByTestId('resolve-used-c1')).not.toHaveTextContent('₪550');
   });
 });
 

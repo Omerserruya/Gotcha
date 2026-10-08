@@ -4,11 +4,11 @@ import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import { knowledgeDocumentOf } from '@/api/contracts/knowledge-candidates';
+import { WhatWillBeUsed } from '@/features/knowledge/WhatWillBeUsed';
 import { useRouter } from '@/i18n/navigation';
 
 import { approveSuggestion, rejectSuggestion } from './candidate-actions';
 import styles from './Channels.module.css';
-import { WhatWillBeUsed } from './WhatWillBeUsed';
 
 /**
  * A suggestion's decisions on 13f - live (Omer, decision 13). A conflict

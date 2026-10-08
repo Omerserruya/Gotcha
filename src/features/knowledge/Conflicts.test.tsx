@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -293,5 +293,20 @@ describe('★ with nothing to show, the card keeps its shape and loses its alarm
     await show();
     expect(screen.getByTestId('conflicts-section')).toHaveAttribute('data-state', 'found');
     expect(screen.getByTestId('conflicts-coverage')).toBeInTheDocument();
+  });
+});
+
+describe('★★ 08 arms with the whole document - what this candidate is made of', () => {
+  it('its question and its reasoning reach the confirm, with the answer armed', async () => {
+    await show({
+      conflicts: [candidate({ reasoning: 'Below it, delivery costs more than the order.' })],
+    });
+    fireEvent.click(screen.getByTestId('resolve-c1-k550'));
+    const used = screen.getByTestId('resolve-used-c1');
+    expect([...used.querySelectorAll('p')].map((p) => p.textContent)).toEqual([
+      'What is the minimum order?',
+      'Minimum order is ₪550',
+      'How we approach this: Below it, delivery costs more than the order.',
+    ]);
   });
 });

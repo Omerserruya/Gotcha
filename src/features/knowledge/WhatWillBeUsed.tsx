@@ -1,10 +1,11 @@
 import type { KnowledgeDocument } from '@/api/contracts/knowledge-candidates';
 
-import styles from './Channels.module.css';
+import styles from './WhatWillBeUsed.module.css';
 
 /**
  * The document an approve writes, word for word (`knowledgeDocumentOf`) - shown
- * before the confirm, so what the AI will be given is read before it is.
+ * before the confirm, so what the AI will be given is read before it is. One
+ * way to write knowledge, one look: 13f's decide and add, and 08's resolve.
  * Each paragraph finds its own direction: a Hebrew answer sits beside the
  * platform's English sentences.
  */

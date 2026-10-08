@@ -3,11 +3,16 @@
 import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
-import { answerTooLong, type Variant } from '@/api/contracts/knowledge-candidates';
+import {
+  answerTooLong,
+  knowledgeDocumentOf,
+  type Variant,
+} from '@/api/contracts/knowledge-candidates';
 import { Button } from '@/design-system/primitives/button/Button';
 
 import styles from './Knowledge.module.css';
 import { resolveConflict, type ResolveResult } from './resolve-actions';
+import { WhatWillBeUsed } from './WhatWillBeUsed';
 
 /**
  * "This one is right" - screen 08's resolve, one button per observed answer.
@@ -30,12 +35,24 @@ import { resolveConflict, type ResolveResult } from './resolve-actions';
  * So the second press echoes **the answer itself**, not the word "confirm".
  * The reader has to look at the text they chose, which is the only check that
  * catches picking the wrong one of two things that look alike.
+ *
+ * ★ AND WHILE ARMED, THE WHOLE DOCUMENT (Omer: one way to write knowledge,
+ *   always shown word for word before its Yes): the question, the chosen
+ *   answer and the platform's own lines, as `knowledgeDocumentOf` - the same
+ *   view as 13f's decide.
  */
 export function ResolveConflict({
   candidateId,
+  question,
+  reasoning = null,
+  liveLookup = false,
   variants,
 }: {
   readonly candidateId: string;
+  readonly question: string;
+  /** Part of the document the approve writes; see `knowledgeDocumentOf`. */
+  readonly reasoning?: string | null;
+  readonly liveLookup?: boolean;
   readonly variants: readonly Variant[];
 }) {
   const t = useTranslations('knowledge.conflicts.resolve');
@@ -110,9 +127,20 @@ export function ResolveConflict({
       ) : null}
 
       {armed !== null ? (
-        <p className={styles.resolveNote} data-testid={`resolve-armed-${candidateId}`}>
-          {t('armed')}
-        </p>
+        <>
+          <WhatWillBeUsed
+            document={knowledgeDocumentOf(
+              question,
+              variants.find((v) => v.key === armed)?.answer ?? '',
+              reasoning,
+              liveLookup,
+            )}
+            testid={`resolve-used-${candidateId}`}
+          />
+          <p className={styles.resolveNote} data-testid={`resolve-armed-${candidateId}`}>
+            {t('armed')}
+          </p>
+        </>
       ) : null}
 
       {variants.some((v) => answerTooLong(v.answer)) ? (

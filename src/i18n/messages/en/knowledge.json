@@ -19,7 +19,7 @@
     "resolve": {
       "choose": "This one is right",
       "confirm": "Save “{answer}” as the answer?",
-      "armed": "Press again to save it. GOTCHA will answer customers with the text above.",
+      "armed": "Press again to save it. Above is what GOTCHA will read, word for word - nothing is used until you do.",
       "alreadyApproved": "This was already approved, so nothing was written twice.",
       "use": {
         "in_use": "Saved. GOTCHA answers with this from now on.",

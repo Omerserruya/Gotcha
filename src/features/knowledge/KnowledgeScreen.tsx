@@ -225,7 +225,13 @@ export async function KnowledgeScreen({
                     answer to choose between.
                   */}
                   {variants.length > 1 ? (
-                    <ResolveConflict candidateId={candidate.id} variants={variants} />
+                    <ResolveConflict
+                      candidateId={candidate.id}
+                      question={candidate.question}
+                      reasoning={candidate.reasoning}
+                      liveLookup={candidate.requiresLiveLookup}
+                      variants={variants}
+                    />
                   ) : null}
 
                   {/* What is true until somebody decides, said before it is decided. */}
