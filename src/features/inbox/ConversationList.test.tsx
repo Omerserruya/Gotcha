@@ -1061,8 +1061,8 @@ describe('★★ a period over the list - an assistant source’s link (Backend,
       }),
     );
     const chip = screen.getByTestId('queue-period');
-    expect(chip).toHaveTextContent('Sep 1 to Sep 30');
-    expect(chip).toHaveAccessibleName('Sep 1 to Sep 30 - show every date');
+    expect(chip).toHaveTextContent(/^Started Sep 1 to Sep 30×$/);
+    expect(chip).toHaveAccessibleName('Started Sep 1 to Sep 30 - show every date');
     expect(params(chip).get('from')).toBeNull();
     expect(params(chip).get('view')).toBe('resolved');
     expect(params(chip).get('channel')).toBe('WHATSAPP');
@@ -1098,7 +1098,7 @@ describe('★★ a period over the list - an assistant source’s link (Backend,
         period: { from: '2026-09-01', to: null },
       }),
     );
-    expect(screen.getByTestId('queue-period')).toHaveTextContent('From Sep 1');
+    expect(screen.getByTestId('queue-period')).toHaveTextContent('Started from Sep 1');
     unmount();
     render(
       await ConversationList({
@@ -1109,7 +1109,7 @@ describe('★★ a period over the list - an assistant source’s link (Backend,
         period: { from: '2026-09-07', to: '2026-09-07' },
       }),
     );
-    expect(screen.getByTestId('queue-period')).toHaveTextContent(/^Sep 7×$/);
+    expect(screen.getByTestId('queue-period')).toHaveTextContent(/^Started Sep 7×$/);
   });
 
   it('★ a period the link could not give: said, never quietly "all"', async () => {

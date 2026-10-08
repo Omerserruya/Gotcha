@@ -95,11 +95,12 @@
       "backToAi": "Back to the AI"
     },
     "period": {
-      "range": "{from} to {to}",
-      "from": "From {from}",
-      "to": "Until {to}",
+      "range": "Started {from} to {to}",
+      "from": "Started from {from}",
+      "to": "Started until {to}",
       "clear": "{period} - show every date",
-      "invalid": "This link's period couldn't be read, so conversations from every date are shown."
+      "invalid": "This link's period couldn't be read, so conversations from every date are shown.",
+      "day": "Started {day}"
     }
   },
   "identity": {

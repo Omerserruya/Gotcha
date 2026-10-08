@@ -144,7 +144,11 @@ export async function ConversationList({
    * highlighted rail item cannot disagree about what this list is.
    */
   const nav = await getTranslations('navigation');
-  // A period in the reader's words: days as days (the route's are workspace days - no shift).
+  /*
+    A period in the reader's words: days as days (the route's are workspace days - no
+    shift), and said as WHEN THEY STARTED - the route filters on createdAt, so a
+    September conversation with a message today is in "Started Sep 1 to Sep 30".
+  */
   const day = (iso: string) =>
     format.dateTime(new Date(`${iso}T00:00:00Z`), {
       day: 'numeric',
@@ -154,7 +158,7 @@ export async function ConversationList({
   const periodWords = (p: InboxPeriod) =>
     p.from && p.to
       ? p.from === p.to
-        ? day(p.from)
+        ? t('queue.period.day', { day: day(p.from) })
         : t('queue.period.range', { from: day(p.from), to: day(p.to) })
       : p.from
         ? t('queue.period.from', { from: day(p.from) })
