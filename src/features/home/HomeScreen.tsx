@@ -6,6 +6,7 @@ import { TenantGateNotice } from '@/features/tenant-gate/TenantGateNotice';
 import { ActivityCard } from './ActivityCard';
 import { CommandSurface } from './CommandSurface';
 import { HomeConversation } from './HomeConversation';
+import { loadAnswerWords } from './load-answer-words';
 import { FirstSteps } from './FirstSteps';
 import { homeFace } from './first-steps';
 import { QueueList } from './QueueList';
@@ -84,13 +85,13 @@ export async function HomeScreen({
 
   const now = new Date();
   // 02: "Good morning, Maya" - the name on every face, not only day one's.
-  const firstName = await loadViewerFirstName();
+  const [firstName, answerWords] = await Promise.all([loadViewerFirstName(), loadAnswerWords()]);
   // From the viewer's clock: "good morning" at 9pm is worse than no greeting.
   const partOfDay = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening';
 
   return (
     // The first question turns this page into the conversation, in place (01a).
-    <HomeConversation>
+    <HomeConversation answerWords={answerWords}>
       <div className={styles.page}>
         <StatusStrip
           waiting={queue?.waiting ?? null}

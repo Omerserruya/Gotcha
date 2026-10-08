@@ -610,6 +610,11 @@
     vertical-align: 1px;
   }
 
+  /* The word before a citation, its chips and the punctuation after: one unbreakable group. */
+  .citeGroup {
+    white-space: nowrap;
+  }
+
   .sourceDot {
     flex: none;
     inline-size: 5px;

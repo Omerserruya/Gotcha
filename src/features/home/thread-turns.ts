@@ -5,6 +5,7 @@ import type {
   ThreadEvent,
   ThreadMessage,
   ThreadStep,
+  TurnLang,
 } from '@/api/contracts/assistant-threads';
 
 /**
@@ -36,6 +37,8 @@ export interface ThreadTurn {
   readonly sources: readonly AnswerSource[];
   /** The answer's message - what its sources' full lists are read through. */
   readonly messageId: string | null;
+  /** The language the turn is written in; `null`: the interface's. */
+  readonly lang: TurnLang | null;
   readonly status: 'running' | 'done' | 'cancelled' | 'failed';
   /** Stop was pressed; the stream has not said `cancelled` yet. */
   readonly cancelling: boolean;
@@ -54,6 +57,7 @@ export function newTurn(id: string, question: string): ThreadTurn {
     blocks: [],
     sources: [],
     messageId: null,
+    lang: null,
     status: 'running',
     cancelling: false,
     problem: null,
@@ -105,7 +109,7 @@ export function applyEvent(turn: ThreadTurn, event: ThreadEvent, seq: number | n
     case 'suggestions':
       return { ...next, suggestions: event.data.items.slice(0, 3) };
     case 'run.start':
-      return { ...next, messageId: event.data.messageId };
+      return { ...next, messageId: event.data.messageId, lang: event.data.lang ?? next.lang };
     case 'block':
       // Final as it arrives; one id once.
       return next.blocks.some((b) => b.id === event.data.block.id)
@@ -175,6 +179,7 @@ export function turnsFromMessages(messages: readonly ThreadMessage[]): ThreadTur
       blocks: message.blocks,
       sources: message.sources,
       messageId: message.id,
+      lang: message.lang ?? null,
       status: message.status === 'streaming' ? 'running' : message.status,
     };
   }

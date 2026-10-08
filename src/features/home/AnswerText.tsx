@@ -89,33 +89,52 @@ function renderBlock(block: Block, key: number, sources: readonly AnswerSource[]
  * (dev, 2026-10-07), and `5*3*2` is arithmetic.
  */
 const INLINE =
-  /\[\^(s\d+)\]|\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\(([^)\s]+)\)|(?<![\p{L}\p{N}_*])\*([^*\s][^*\n]*?)\*(?![\p{L}\p{N}_*])|(?<![\p{L}\p{N}_])_([^_\s][^_\n]*?)_(?![\p{L}\p{N}_])/gu;
+  /\s*((?:\[\^s\d+\])+)([.,;:!?]*)|\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\(([^)\s]+)\)|(?<![\p{L}\p{N}_*])\*([^*\s][^*\n]*?)\*(?![\p{L}\p{N}_*])|(?<![\p{L}\p{N}_])_([^_\s][^_\n]*?)_(?![\p{L}\p{N}_])/gu;
 
 /**
- * Citations, then the sentence's punctuation ("…Shopify[^s1].") - the
- * punctuation goes first, so the chip follows the full stop instead of the
- * stop falling alone onto the next line after the chip (dev, he).
+ * ★★ A CITATION NEVER WRAPS ALONE (supervisor, measured on dev, he at 1440):
+ * "…(Shopify)" ended one line and the chip started the next, its full stop
+ * beside it. One group - the word before it, its chips, the punctuation
+ * after - that does not break (`white-space: nowrap`); the space before the
+ * chips is not drawn (the chip's own margin stands for it).
+ *
+ * ⚠ Measured in Chromium: a chip is an inline box, and the line may break
+ *   right before it whatever joins the text - a word joiner did not hold it.
+ *   Only the word inside the group does.
  */
-const CITES_THEN_PUNCTUATION = /((?:\[\^s\d+\])+)([.,;:!?]+)/g;
-
 function inline(text: string, sources: readonly AnswerSource[] = []): ReactNode[] {
-  text = text.replace(CITES_THEN_PUNCTUATION, '$2$1');
   const out: ReactNode[] = [];
   let at = 0;
   for (const match of text.matchAll(INLINE)) {
     const index = match.index ?? 0;
-    if (index > at) out.push(text.slice(at, index));
-    const [whole, cite, bold, code, label, url, italic, underscored] = match;
+    const before = index > at ? text.slice(at, index) : '';
+    const [whole, cites, punctuation, bold, code, label, url, italic, underscored] = match;
     const key = `${index}`;
-    if (cite !== undefined) {
-      // A citation: its source's chip. Not known yet (the sources come after
-      // the text) or never: nothing - the marker itself is never shown.
-      const source = sources.find((s) => s.id === cite);
-      if (source) out.push(<SourceChip key={key} source={source} inline />);
-    } else if (bold !== undefined) out.push(<strong key={key}>{inline(bold, sources)}</strong>);
-    else if (code !== undefined) out.push(<code key={key}>{code}</code>);
-    else if (label !== undefined) out.push(<AnswerLink key={key} label={label} url={url!} />);
-    else out.push(<em key={key}>{italic ?? underscored}</em>);
+    if (cites !== undefined) {
+      // Its sources' chips. Not known yet (the sources come after the text)
+      // or never: nothing - the marker itself is never shown.
+      const chips = [...cites.matchAll(/\[\^(s\d+)\]/g)].flatMap(([, id], i) => {
+        const source = sources.find((s) => s.id === id);
+        return source ? [<SourceChip key={i} source={source} inline />] : [];
+      });
+      // The last word of the text before goes into the group with them.
+      const cut = before.search(/\S+$/);
+      const word = cut === -1 ? '' : before.slice(cut);
+      if (cut > 0) out.push(before.slice(0, cut));
+      out.push(
+        <span key={key} className={styles.citeGroup}>
+          {word}
+          {chips}
+          {punctuation}
+        </span>,
+      );
+    } else {
+      if (before) out.push(before);
+      if (bold !== undefined) out.push(<strong key={key}>{inline(bold, sources)}</strong>);
+      else if (code !== undefined) out.push(<code key={key}>{code}</code>);
+      else if (label !== undefined) out.push(<AnswerLink key={key} label={label} url={url!} />);
+      else out.push(<em key={key}>{italic ?? underscored}</em>);
+    }
     at = index + whole.length;
   }
   if (at < text.length) out.push(text.slice(at));

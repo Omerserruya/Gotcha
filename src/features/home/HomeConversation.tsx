@@ -24,6 +24,13 @@ import { AnswerText } from './AnswerText';
 import { AskContext } from './home-ask';
 import styles from './HomeConversation.module.css';
 import type { ThreadTurn, TurnProblem } from './thread-turns';
+import {
+  AnswerWordsProvider,
+  TurnWords,
+  useTurnLang,
+  useTurnTranslations,
+  type AnswerWords,
+} from './turn-words';
 import { useAssistantThread } from './use-assistant-thread';
 
 /** A title the route keeps: 1-120 characters (§2). */
@@ -44,7 +51,14 @@ const TITLE_MAX = 120;
  * scope, and Delete. Share is a status ("next stage"); blocks, sources and
  * actions are stages 2-3.
  */
-export function HomeConversation({ children }: { readonly children: ReactNode }) {
+export function HomeConversation({
+  children,
+  answerWords = {},
+}: {
+  readonly children: ReactNode;
+  /** `home.conversation` in each language - a turn's own words (turn-words.tsx). */
+  readonly answerWords?: AnswerWords;
+}) {
   const chat = useAssistantThread();
   const asked = useSearchParams()?.get('thread') ?? null;
   const shown = chat.thread?.id ?? null;
@@ -62,9 +76,11 @@ export function HomeConversation({ children }: { readonly children: ReactNode })
 
   const inConversation = chat.turns.length > 0 || chat.opening !== 'idle' || shown !== null;
   return (
-    <AskContext.Provider value={(question) => void chat.ask(question)}>
-      {inConversation ? <Conversation chat={chat} /> : children}
-    </AskContext.Provider>
+    <AnswerWordsProvider words={answerWords}>
+      <AskContext.Provider value={(question) => void chat.ask(question)}>
+        {inConversation ? <Conversation chat={chat} /> : children}
+      </AskContext.Provider>
+    </AnswerWordsProvider>
   );
 }
 
@@ -428,57 +444,72 @@ function TurnView({
   /** Where its sources' full lists are read (stage 2). */
   readonly threadId: string | null;
 }) {
-  const t = useTranslations('home.conversation');
   return (
     <li className={styles.turn} data-testid={`turn-${turn.id}`} data-status={turn.status}>
       {/* `dir="auto"` on the block itself: a Hebrew line is right to left, its "?" at its end. */}
       <p className={styles.question} dir="auto">
         {turn.question}
       </p>
-      <div className={styles.answerRow}>
-        <span className={styles.avatar} aria-hidden="true">
-          <span />
-        </span>
-        <div className={styles.answerBody}>
-          {turn.steps.length > 0 ? (
-            <ol className={styles.steps} data-testid="turn-steps">
-              {turn.steps.map((step) => (
-                <StepLine key={step.id} step={step} />
-              ))}
-            </ol>
-          ) : turn.status === 'running' && !turn.answer ? (
-            <p className={styles.working} role="status">
-              {t('working')}
-            </p>
-          ) : null}
-          {turn.answer ? (
-            <div aria-live="polite" data-testid="turn-answer">
-              <AnswerText text={turn.answer} sources={turn.sources} />
-            </div>
-          ) : null}
-          {/* 01a: the work under the words - the server's blocks, then what it stands on. */}
-          <AnswerBlocks blocks={turn.blocks} threadId={threadId} messageId={turn.messageId} />
-          <SourceChips sources={turn.sources} />
-          {turn.problem ? (
-            <Problem problem={turn.problem} />
-          ) : turn.status === 'failed' ? (
-            <p className={styles.problem} role="alert" data-testid="turn-failed">
-              {t('failed')}
-            </p>
-          ) : turn.status === 'cancelled' ? (
-            <p className={styles.note} data-testid="turn-stopped">
-              {t('stopped')}
-            </p>
-          ) : null}
-        </div>
-      </div>
+      {/* The answer's own words in the turn's language (turn-words.tsx). */}
+      <TurnWords lang={turn.lang}>
+        <TurnAnswer turn={turn} threadId={threadId} />
+      </TurnWords>
     </li>
+  );
+}
+
+function TurnAnswer({
+  turn,
+  threadId,
+}: {
+  readonly turn: ThreadTurn;
+  readonly threadId: string | null;
+}) {
+  const t = useTurnTranslations('home.conversation');
+  return (
+    <div className={styles.answerRow} lang={useTurnLang()} data-testid={`turn-${turn.id}-answer`}>
+      <span className={styles.avatar} aria-hidden="true">
+        <span />
+      </span>
+      <div className={styles.answerBody}>
+        {turn.steps.length > 0 ? (
+          <ol className={styles.steps} data-testid="turn-steps">
+            {turn.steps.map((step) => (
+              <StepLine key={step.id} step={step} />
+            ))}
+          </ol>
+        ) : turn.status === 'running' && !turn.answer ? (
+          <p className={styles.working} role="status">
+            {t('working')}
+          </p>
+        ) : null}
+        {turn.answer ? (
+          <div aria-live="polite" data-testid="turn-answer">
+            <AnswerText text={turn.answer} sources={turn.sources} />
+          </div>
+        ) : null}
+        {/* 01a: the work under the words - the server's blocks, then what it stands on. */}
+        <AnswerBlocks blocks={turn.blocks} threadId={threadId} messageId={turn.messageId} />
+        <SourceChips sources={turn.sources} />
+        {turn.problem ? (
+          <Problem problem={turn.problem} />
+        ) : turn.status === 'failed' ? (
+          <p className={styles.problem} role="alert" data-testid="turn-failed">
+            {t('failed')}
+          </p>
+        ) : turn.status === 'cancelled' ? (
+          <p className={styles.note} data-testid="turn-stopped">
+            {t('stopped')}
+          </p>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
 /** Why there is no (whole) answer, honestly: each refusal in its own words. */
 function Problem({ problem }: { readonly problem: TurnProblem }) {
-  const t = useTranslations('home.conversation.problem');
+  const t = useTurnTranslations('home.conversation.problem');
   const billing = (chunks: ReactNode) => <Link href="/settings/billing">{chunks}</Link>;
   return (
     <p
@@ -500,7 +531,7 @@ function Problem({ problem }: { readonly problem: TurnProblem }) {
 
 /** "✓ Counting open WhatsApp conversations · done · 2s" - in the run's words and the interface language. */
 function StepLine({ step }: { readonly step: ThreadStep }) {
-  const t = useTranslations('home.conversation.step');
+  const t = useTurnTranslations('home.conversation.step');
   return (
     <li className={styles.step} data-status={step.status} data-testid={`step-${step.id}`}>
       <span className={styles.stepMark} aria-hidden="true">

@@ -177,6 +177,16 @@ export const sourceRecordsSchema = z.object({
 
 export const MESSAGE_STATES = ['done', 'streaming', 'cancelled', 'failed'] as const;
 
+/**
+ * The language a turn was written in (Backend d43ba57c): the question's, or
+ * the request's when the question had none. Its own chrome follows it - the
+ * page's stays the interface's. One this screen has no words for is read as
+ * absent: the interface's language, as before.
+ */
+export const TURN_LANGS = ['he', 'en'] as const;
+export type TurnLang = (typeof TURN_LANGS)[number];
+const turnLang = z.enum(TURN_LANGS).optional().catch(undefined);
+
 export const threadMessageSchema = z.object({
   id: z.string(),
   role: z.enum(['user', 'assistant']),
@@ -187,6 +197,8 @@ export const threadMessageSchema = z.object({
   runId: z.string().nullable().catch(null).default(null),
   blocks: eachOf(blockSchema),
   sources: eachOf(sourceSchema),
+  /** On an assistant message; absent when its question had no clear language. */
+  lang: turnLang,
 });
 export type ThreadMessage = z.infer<typeof threadMessageSchema>;
 
@@ -210,7 +222,12 @@ export type ThreadDetail = z.infer<typeof threadDetailSchema>;
 /* ── The stream (§3): the event's NAME says what it is; `data` has no type field. ── */
 
 const EVENT_SCHEMAS = {
-  'run.start': z.object({ runId: z.string(), userMessageId: z.string(), messageId: z.string() }),
+  'run.start': z.object({
+    runId: z.string(),
+    userMessageId: z.string(),
+    messageId: z.string(),
+    lang: turnLang,
+  }),
   'step.start': z.object({ stepId: z.string(), text: z.string() }),
   'step.done': z.object({
     stepId: z.string(),

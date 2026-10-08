@@ -134,6 +134,18 @@ describe('the stored thread as turns', () => {
     ]);
     expect(turns[0]!.suggestions).toEqual(['More?']);
   });
+
+  it('each answer keeps its language (Backend d43ba57c); none, or one with no words here: the interface’s', () => {
+    const turns = turnsFromMessages([
+      message({ id: 'u1', text: 'כמה?' }),
+      message({ id: 'a1', role: 'assistant', text: '17.', lang: 'he' }),
+      message({ id: 'u2', text: '17?' }),
+      message({ id: 'a2', role: 'assistant', text: 'Yes.' }),
+      message({ id: 'u3', text: 'Combien?' }),
+      message({ id: 'a3', role: 'assistant', text: '17.', lang: 'fr' }),
+    ]);
+    expect(turns.map((t) => t.lang)).toEqual(['he', null, null]);
+  });
 });
 
 describe('the contract reads the stream by the event’s NAME', () => {

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/api/client/api-error';
 import { THREADS_CHANGED } from '@/api/contracts/assistant-threads';
 import home from '@/i18n/messages/en/home.json';
+import heHome from '@/i18n/messages/he/home.json';
 
 /**
  * ★★ Home · in conversation (design 7, 01a) on `/api/assistant/threads`.
@@ -105,9 +106,11 @@ const { CommandSurface } = await import('./CommandSurface');
 
 const THREAD = { id: 'th1', title: null, scope: { range: 'last_7', channels: 'all' } };
 
+/** Each language's answer chrome, as the page sends it (load-answer-words.ts). */
+const WORDS = { en: home.conversation, he: heHome.conversation };
 const tree = () => (
   <NextIntlClientProvider locale="en" messages={{ home }} timeZone="UTC">
-    <HomeConversation>
+    <HomeConversation answerWords={WORDS}>
       <div data-testid="home-snapshot">
         <p>Good morning, Maya</p>
         <CommandSurface />
@@ -305,7 +308,8 @@ describe('★★ stage 2: the work under the words, as the stream gives it (§9.
       }),
       DONE(5),
     );
-    expect(screen.getByTestId('turn-answer')).toHaveTextContent('Up this week.38 conversations');
+    // The chip, then the stop - one group with the word before it (AnswerText).
+    expect(screen.getByTestId('turn-answer')).toHaveTextContent('Up this week38 conversations.');
     expect(screen.getByTestId('turn-sources')).toHaveTextContent('38 conversations');
   });
 });
@@ -433,6 +437,55 @@ describe('★★ refusals, each in honest words (§6)', () => {
     );
     expect(screen.getByTestId('turn-answer')).toHaveTextContent('Returns are');
     expect(screen.getByTestId('turn-failed')).toHaveTextContent('it reached the most it can write');
+  });
+});
+
+describe('★★ an answer’s own chrome is in the turn’s language; the page’s stays the page’s', () => {
+  const hebrewTurn = async (lang: string | undefined) => {
+    show();
+    await ask('כמה שיחות וואטסאפ פתוחות כרגע?');
+    await push(
+      ev('run.start', 1, {
+        runId: 'run1',
+        userMessageId: 'u1',
+        messageId: 'm1',
+        ...(lang ? { lang } : {}),
+      }),
+      ev('step.start', 2, { stepId: 's1', text: 'סופרת שיחות פתוחות' }),
+      ev('step.done', 3, { stepId: 's1', status: 'done', durationMs: 200 }),
+      ev('block', 4, {
+        block: {
+          type: 'breakdown',
+          id: 'b1',
+          title: 'לפי ערוץ',
+          sourceId: 's1',
+          items: [{ key: 'WHATSAPP', label: 'וואטסאפ', value: 2, share: 0.12 }],
+          total: 17,
+          unit: 'count',
+          coverage: { covered: 14, of: 17 },
+        },
+      }),
+      DONE(5, 'cancelled'),
+    );
+  };
+
+  it('★ a Hebrew turn on /en: its step, its total and "Stopped" in Hebrew - the header in English', async () => {
+    await hebrewTurn('he');
+    expect(screen.getByTestId('step-s1')).toHaveTextContent('הסתיים');
+    expect(screen.getByTestId('step-s1')).toHaveTextContent('פחות משנייה');
+    expect(screen.getByTestId('block-b1')).toHaveTextContent('17 בסך הכל');
+    expect(screen.getByTestId('block-b1')).toHaveTextContent('נרשם עבור 14 מתוך 17 שיחות');
+    expect(screen.getByTestId('turn-stopped')).toHaveTextContent('נעצר');
+    expect(screen.getByTestId(/^turn-.+-answer$/)).toHaveAttribute('lang', 'he');
+    // The page's own words stay the interface's.
+    expect(screen.getByTestId('conversation-home')).toHaveTextContent(home.conversation.home);
+  });
+
+  it('no language on the turn (an older service, or "17?"): the interface’s, as before', async () => {
+    await hebrewTurn(undefined);
+    expect(screen.getByTestId('step-s1')).toHaveTextContent('done');
+    expect(screen.getByTestId('block-b1')).toHaveTextContent('17 in all');
+    expect(screen.getByTestId(/^turn-.+-answer$/)).not.toHaveAttribute('lang');
   });
 });
 

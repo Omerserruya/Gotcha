@@ -1,6 +1,5 @@
 'use client';
 
-import { useFormatter, useTranslations } from 'next-intl';
 import { useState, useTransition, type ReactNode } from 'react';
 
 import { isApiError } from '@/api/client/api-error';
@@ -17,6 +16,7 @@ import { safeInternalPath } from '@/lib/safe-url';
 import { logger } from '@/observability/logger';
 
 import styles from './HomeConversation.module.css';
+import { useTurnFormatter, useTurnTranslations } from './turn-words';
 
 type Chart = Extract<AnswerBlock, { type: 'chart' }>;
 type Breakdown = Extract<AnswerBlock, { type: 'breakdown' }>;
@@ -96,7 +96,7 @@ export function AnswerBlocks({
 }
 
 function BlockFoot({ block }: { readonly block: AnswerBlock }) {
-  const t = useTranslations('home.conversation.blocks');
+  const t = useTurnTranslations('home.conversation.blocks');
   const partial = block.partial;
   // "Recorded for 0 of 0" says nothing: coverage only when there was something to cover.
   const coverage = block.type === 'breakdown' && block.coverage?.of ? block.coverage : null;
@@ -128,7 +128,7 @@ function BlockFoot({ block }: { readonly block: AnswerBlock }) {
 
 /** A value in its unit: a count, an amount in its currency, a percentage (0-100). */
 function useValue() {
-  const format = useFormatter();
+  const format = useTurnFormatter();
   return (value: number, unit: 'count' | 'currency' | 'percent', currency: string | null) =>
     unit === 'currency' && currency
       ? format.number(value, { style: 'currency', currency, maximumFractionDigits: 0 })
@@ -138,7 +138,7 @@ function useValue() {
 }
 
 function ChartBlock({ block }: { readonly block: Chart }) {
-  const format = useFormatter();
+  const format = useTurnFormatter();
   const value = useValue();
   const series = block.series.slice(0, 3);
   const max = Math.max(1, ...series.flatMap((s) => s.values));
@@ -210,7 +210,7 @@ function ChartBlock({ block }: { readonly block: Chart }) {
 
 function BreakdownBlock({ block }: { readonly block: Breakdown }) {
   const value = useValue();
-  const t = useTranslations('home.conversation.blocks');
+  const t = useTurnTranslations('home.conversation.blocks');
   // Nothing to break down (Backend: "Refunds by reason" with no refunds) - said, not an empty frame.
   if (block.items.length === 0 && !block.other) {
     return (
@@ -287,7 +287,7 @@ function RecordListBlock({
   readonly threadId: string | null;
   readonly messageId: string | null;
 }) {
-  const t = useTranslations('home.conversation.blocks');
+  const t = useTurnTranslations('home.conversation.blocks');
   const [rows, setRows] = useState<readonly RecordItem[]>(block.items);
   const [cursor, setCursor] = useState<string | null | undefined>(undefined);
   const [failed, setFailed] = useState<'gone' | 'failed' | null>(null);
@@ -386,7 +386,7 @@ function RecordBlock({ block }: { readonly block: Record_ }) {
 
 /** 01a's chips under the answer: what it stands on, each to its list when it has one. */
 export function SourceChips({ sources }: { readonly sources: readonly AnswerSource[] }) {
-  const t = useTranslations('home.conversation.blocks');
+  const t = useTurnTranslations('home.conversation.blocks');
   if (sources.length === 0) return null;
   return (
     <ul className={styles.sources} aria-label={t('sources')} data-testid="turn-sources">
