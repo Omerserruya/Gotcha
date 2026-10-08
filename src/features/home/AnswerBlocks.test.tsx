@@ -221,6 +221,58 @@ describe('★★ the rows behind a number: the first page, then the source’s o
   });
 });
 
+describe('★ the store’s blocks (Backend, part 2): money in its currency, orders with no link, a product’s stock', () => {
+  it('a sales chart reads each bar in its currency; refunded orders are rows, not links; a product’s variants as fields', () => {
+    show([
+      block({
+        type: 'chart',
+        id: 'b1',
+        title: 'Sales this week',
+        sourceId: 's1',
+        kind: 'bar',
+        x: { kind: 'day', values: ['2026-10-07'] },
+        series: [{ key: 'sales', label: 'Sales', values: [1250] }],
+        unit: 'currency',
+        currency: 'ILS',
+      }),
+      block({
+        type: 'record_list',
+        id: 'b2',
+        title: 'Refunded orders',
+        sourceId: 's2',
+        kind: 'order',
+        items: [
+          {
+            id: 'o1',
+            title: 'Order #2207',
+            subtitle: 'Dana Cohen',
+            meta: '7 October',
+            deepLink: null,
+          },
+        ],
+        total: 1,
+        hasMore: false,
+      }),
+      block({
+        type: 'record',
+        id: 'b3',
+        title: 'Linen Duvet Set',
+        kind: 'product',
+        fields: [
+          { key: 'stock', label: 'In stock', value: '14' },
+          { key: 'variant:King', label: 'King', value: '3' },
+        ],
+      }),
+    ]);
+    const bar = screen.getByTestId('bar-b1-2026-10-07').querySelector('[data-series="0"]')!;
+    expect(bar.getAttribute('aria-label')).toMatch(/Sales: ₪1,250$/);
+    const row = within(screen.getByTestId('records-b2')).getByRole('listitem');
+    expect(row).toHaveTextContent('Order #2207Dana Cohen7 October');
+    expect(row.querySelector('a')).toBeNull();
+    expect(screen.getByTestId('block-b3')).toHaveTextContent('In stock14King3');
+  });
+});
+
 describe('01a’s chips under the answer', () => {
   it('each source, to its list when it has one', () => {
     render(
