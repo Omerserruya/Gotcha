@@ -46,6 +46,29 @@ export function optOutReply(text: string | null | undefined): "he" | "en" | null
   return HEBREW.test(n) ? "he" : "en";
 }
 
+/**
+ * Opting back in ("START" / "הצטרף"): the whole message, like an opt-out. It
+ * counts only for a customer who is opted out on that channel (a "start" from
+ * anyone else is an ordinary message).
+ */
+const OPT_IN_KEYWORDS = new Set([
+  "הצטרף", "הצטרפי", "הצטרפו", "להצטרף", "הצטרפות", "החזירו אותי", "תחזירו אותי",
+  "start", "unstop", "subscribe", "resubscribe",
+]);
+
+export const OPT_IN_CONFIRMATION = {
+  he: "חזרת לרשימת התפוצה. אפשר להסיר בכל עת: השיבו הסר.",
+  en: "You're subscribed again. Reply STOP at any time to unsubscribe.",
+} as const;
+
+/** The language of an opt-in reply ("he" / "en"), or null when the message is not one. */
+export function optInReply(text: string | null | undefined): "he" | "en" | null {
+  if (!text) return null;
+  const n = normalize(text);
+  if (!n || n.length > 40 || !OPT_IN_KEYWORDS.has(n)) return null;
+  return HEBREW.test(n) ? "he" : "en";
+}
+
 /** Does this text already carry a removal line (either language)? */
 export function hasRemovalLine(text: string | null | undefined): boolean {
   const n = normalize(String(text ?? ""));

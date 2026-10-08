@@ -31,7 +31,7 @@ vi.mock("@chatcenter/shared", () => ({
   outgoingMessageQueue: { add: async (_n: string, d: any) => { H.queued.push(d); } },
   publishEvent: async (e: any) => { H.published.push(e); },
   auditSystem: async (...a: any[]) => { H.audits.push(a); },
-  AuditAction: { CONSENT_WITHDRAWN: "gdpr.consent_withdrawn" },
+  AuditAction: { CONSENT_WITHDRAWN: "gdpr.consent_withdrawn", CONSENT_GRANTED: "gdpr.consent_granted" },
 }));
 
 import { interceptOptOutReply } from "../services/marketing-optout.service";
@@ -95,6 +95,41 @@ describe("★ the reply opts the customer out", () => {
     await reply("הסר");
     expect(isOptedOutOn(H.contacts[0].optOutChannels, "whatsapp")).toBe(true);
     expect(isOptedOutOn(H.contacts[0].optOutChannels, "EMAIL")).toBe(false);
+  });
+});
+
+describe("★ opting back in: START / הצטרף", () => {
+  it("an opted-out customer is back on that channel, with a granted consent, an audit entry and a confirmation", async () => {
+    H.contacts[0].optOutChannels = ["WHATSAPP", "EMAIL"];
+    expect(await reply("הצטרף")).toBe(true);
+    expect(H.contacts[0].optOutChannels).toEqual(["EMAIL"]);
+    expect(H.consent).toEqual([expect.objectContaining({ purpose: "marketing_whatsapp", granted: true, source: "reply_keyword" })]);
+    expect(H.audits[0]![1]).toBe("gdpr.consent_granted");
+    expect(H.queued[0].body).toBe("חזרת לרשימת התפוצה. אפשר להסיר בכל עת: השיבו הסר.");
+    expect(H.messages[0].metadata).toEqual({ systemEvent: "marketing_opt_in_confirmation" });
+  });
+
+  it("the last opt-out removed clears its date; English START, English confirmation", async () => {
+    H.contacts[0].optOutChannels = ["whatsapp"];
+    H.contacts[0].optedOutAt = new Date(1);
+    expect(await reply("START")).toBe(true);
+    expect(H.contacts[0]).toMatchObject({ optOutChannels: [], optedOutAt: null });
+    expect(H.queued[0].body).toBe("You're subscribed again. Reply STOP at any time to unsubscribe.");
+  });
+
+  it("★ from a customer who is not opted out, 'start' is an ordinary message: nothing written, it goes on to be answered", async () => {
+    expect(await reply("start")).toBe(false);
+    H.contacts[0].optOutChannels = ["EMAIL"];
+    expect(await reply("הצטרף")).toBe(false);
+    expect([H.consent.length, H.queued.length, H.audits.length]).toEqual([0, 0, 0]);
+  });
+
+  it("a sentence is not an opt-in", async () => {
+    H.contacts[0].optOutChannels = ["WHATSAPP"];
+    expect(await reply("איך מצטרפים למועדון?")).toBe(false);
+    expect(await reply("how do I start a return?")).toBe(false);
+    expect(await reply("אני רוצה להצטרף למועדון הלקוחות")).toBe(false);
+    expect(H.contacts[0].optOutChannels).toEqual(["WHATSAPP"]);
   });
 });
 

@@ -11,6 +11,8 @@ import {
   searchContacts as crmSearchContacts,
   getConnectedCrm,
   type CrmRecord,
+  auditUser,
+  AuditAction,
 } from "@chatcenter/shared";
 
 const router = Router();
@@ -457,8 +459,10 @@ router.post("/:id/opt-out", async (req: Request, res: Response) => {
     });
     if (!contact) { res.status(404).json({ error: "Contact not found" }); return; }
 
-    const { channel, optOut } = req.body; // channel: string, optOut: boolean
-    const currentOptOut = (contact.optOutChannels as string[]) || [];
+    const { optOut } = req.body; // channel: string, optOut: boolean
+    const channel = String(req.body?.channel ?? "").trim().toUpperCase();
+    if (!channel) { res.status(400).json({ error: "channel is required" }); return; }
+    const currentOptOut = ((contact.optOutChannels as string[]) || []).map((c) => String(c).toUpperCase());
 
     let newOptOut: string[];
     if (optOut) {
@@ -473,6 +477,20 @@ router.post("/:id/opt-out", async (req: Request, res: Response) => {
         optOutChannels: newOptOut,
         optedOutAt: newOptOut.length > 0 ? (contact.optedOutAt || new Date()) : null,
       },
+    });
+
+    // One record wherever the change came from (a customer's "הסר" / "START"
+    // reply writes the same): the consent ledger and the audit log.
+    const userId = (req as any).user?.userId ?? null;
+    await prisma.consentRecord.create({
+      data: {
+        tenantId: req.tenantId!, subjectType: "contact", subjectId: contact.id,
+        purpose: `marketing_${channel.toLowerCase()}`, granted: !optOut, source: "admin",
+        evidence: { channel, userId },
+      },
+    }).catch((err: any) => console.warn(`[opt-out] consent record failed contact=${contact.id}: ${err?.message}`));
+    await auditUser(req.tenantId!, userId, optOut ? AuditAction.CONSENT_WITHDRAWN : AuditAction.CONSENT_GRANTED, { type: "contact", id: contact.id }, {
+      purpose: `marketing_${channel.toLowerCase()}`, source: "admin", channel,
     });
 
     res.json({ data: updated });
