@@ -392,17 +392,19 @@ function localFallbackMessage(tool: string, outcome: ContinuationOutcome, he: bo
   const isCancel = /cancel/.test(tool);
   const isRefund = /refund/.test(tool);
   const actHe = isCancel ? "הביטול" : isRefund ? "ההחזר" : "הפעולה";
+  // The verb agrees with the noun: "הביטול בוצע", "הפעולה בוצעה".
+  const doneHe = isCancel || isRefund ? "בוצע" : "בוצעה";
   const actEn = isCancel ? "the cancellation" : isRefund ? "the refund" : "the action";
   if (outcome === "succeeded") {
-    return he ? `${actHe} בוצע בהצלחה.` : `${actEn[0].toUpperCase()}${actEn.slice(1)} was completed successfully.`;
+    return he ? `${actHe} ${doneHe} בהצלחה.` : `${actEn[0].toUpperCase()}${actEn.slice(1)} was completed successfully.`;
   }
   if (outcome === "rejected") {
     return he
-      ? `הבקשה לא אושרה ולכן ${actHe} לא בוצע. אפשר לבדוק יחד אפשרות אחרת.`
+      ? `הבקשה לא אושרה ולכן ${actHe} לא ${doneHe}. אפשר לבדוק יחד אפשרות אחרת.`
       : `The request was not approved, so ${actEn} did not go through. We can look at another option together.`;
   }
   return he
-    ? `הבקשה אושרה, אבל לא הצלחתי להשלים את ${actHe} כרגע. אני בודק את האפשרויות.`
+    ? `הבקשה אושרה, אבל לא הצלחתי להשלים את ${actHe} כרגע. אני בודקת את האפשרויות.`
     : `The request was approved, but I could not complete ${actEn} right now. I am checking the options.`;
 }
 
@@ -422,6 +424,21 @@ function orderNameFromParams(params: Record<string, unknown> | undefined): strin
     return t.startsWith("#") ? t : `#${t}`;
   }
   return undefined;
+}
+
+/**
+ * A plan an operator proposed in GOTCHA (Home or the command bar) is internal
+ * to the team: the customer never asked for it and is not waiting on it.
+ * Deciding it (approve, reject, expire) must never message the customer, nor
+ * touch who handles their conversation. The first Home plans to be rejected
+ * sent the customer "the request was not approved" nine times on 2026-10-08
+ * (undelivered only because Meta's 24h window had closed).
+ */
+const OPERATOR_SOURCES = new Set(["home_assistant", "command_bar"]);
+export function isOperatorPlan(tool: unknown, params: unknown): boolean {
+  if (tool === "propose_plan") return true;
+  const source = (params as Record<string, unknown> | null | undefined)?.source;
+  return typeof source === "string" && OPERATOR_SOURCES.has(source);
 }
 
 /**
@@ -449,6 +466,8 @@ async function sendApprovalContinuation(args: {
 }): Promise<{ sent: boolean; reason?: string }> {
   const { tenantId, approvalId, conversationId, tool, outcome } = args;
   if (!conversationId) return { sent: false, reason: "no_conversation" };
+  // The team's own plan: nobody on the customer's side is waiting for it.
+  if (isOperatorPlan(tool, args.params)) return { sent: false, reason: "operator_plan" };
 
   // Claim FIRST. Everything below is delivery; the claim is the thing that
   // makes "exactly one" true across retries, sweepers and both decision
@@ -816,7 +835,9 @@ export async function runApprovedAction(opts: {
   // cannot be cancelled takes a return plus a refund). Escalate only once the
   // action has genuinely been attempted more than once without success.
   let escalated = false;
-  if (!dispatch.ok) {
+  // A team's plan leaves the customer's conversation exactly as it was.
+  const operatorPlan = isOperatorPlan(tool, effectiveParams);
+  if (!dispatch.ok && !operatorPlan) {
     ({ escalated } = await recordFailureAndMaybeEscalate({
       tenantId,
       approvalId,
@@ -834,7 +855,7 @@ export async function runApprovedAction(opts: {
   // incoming-worker does not treat as bot-owned, and the customer's NEXT
   // message got no reply at all. Restoring it here means every decision
   // channel converges on the same end state.
-  if (!escalated) await restoreAiOwnership(tenantId, conversationId);
+  if (!escalated && !operatorPlan) await restoreAiOwnership(tenantId, conversationId);
   return { ok: dispatch.ok, error: dispatch.error };
 }
 
@@ -918,7 +939,7 @@ router.post("/:id/dispatch-rejected", requireInternalKey, async (req: Request, r
       outcome: "rejected",
       params: (row.modifiedParams ?? row.params) as Record<string, unknown>,
     });
-    await restoreAiOwnership(tenantId, row.conversationId);
+    if (!isOperatorPlan(row.tool, row.params)) await restoreAiOwnership(tenantId, row.conversationId);
 
     return res.json({ data: { approvalId: row.id, notified: sent.sent, reason: sent.reason ?? null } });
   } catch (err: any) {
@@ -1190,7 +1211,8 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
     // action must NOT silently re-activate the bot on a human-owned
     // conversation - execute the action, keep the human in charge.
     try {
-      const conv = await prisma.conversation.findFirst({
+      // A team's plan never parked the conversation, so there is nothing to un-park.
+      const conv = isOperatorPlan(row.tool, row.params) ? null : await prisma.conversation.findFirst({
         where: { id: row.conversationId, tenantId },
         select: { isHandedOver: true, assignedAgentId: true },
       });
@@ -1342,7 +1364,8 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
     // supported. Routing every "no" to a person was the reason a declined
     // cancellation looked, to the customer, exactly like being ignored.
     try {
-      const conv = await prisma.conversation.findFirst({
+      // A team's plan never parked the conversation: nothing to resume.
+      const conv = isOperatorPlan(row.tool, row.params) ? null : await prisma.conversation.findFirst({
         where: { id: row.conversationId, tenantId },
         select: { isHandedOver: true, assignedAgentId: true },
       });
