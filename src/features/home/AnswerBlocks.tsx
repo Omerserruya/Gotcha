@@ -162,11 +162,13 @@ function ChartBlock({ block }: { readonly block: Chart }) {
   return (
     <>
       <div className={styles.blockHead}>
-        <h3 className={styles.blockTitle}>{block.title}</h3>
+        <h3 className={styles.blockTitle} dir="auto">
+          {block.title}
+        </h3>
         {series.length > 1 ? (
           <span className={styles.legend}>
             {series.map((s, i) => (
-              <span key={s.key} className={styles.legendItem} data-series={i}>
+              <span key={s.key} className={styles.legendItem} data-series={i} dir="auto">
                 {s.label}
               </span>
             ))}
@@ -214,7 +216,9 @@ function BreakdownBlock({ block }: { readonly block: Breakdown }) {
     return (
       <>
         <div className={styles.blockHead}>
-          <h3 className={styles.blockTitle}>{block.title}</h3>
+          <h3 className={styles.blockTitle} dir="auto">
+            {block.title}
+          </h3>
         </div>
         <p className={styles.blockNote} data-testid={`block-${block.id}-none`}>
           {t('none')}
@@ -225,7 +229,9 @@ function BreakdownBlock({ block }: { readonly block: Breakdown }) {
   return (
     <>
       <div className={styles.blockHead}>
-        <h3 className={styles.blockTitle}>{block.title}</h3>
+        <h3 className={styles.blockTitle} dir="auto">
+          {block.title}
+        </h3>
         {block.total !== null ? (
           <span className={styles.blockMeta}>
             {t('total', { total: value(block.total, block.unit, block.currency) })}
@@ -312,7 +318,9 @@ function RecordListBlock({
   return (
     <>
       <div className={styles.blockHead}>
-        <h3 className={styles.blockTitle}>{block.title}</h3>
+        <h3 className={styles.blockTitle} dir="auto">
+          {block.title}
+        </h3>
         {block.total !== null ? (
           <span className={styles.blockMeta}>{t('rows', { count: block.total })}</span>
         ) : null}

@@ -102,6 +102,13 @@ describe('★★ a breakdown: each part’s bar is the share the server gave', (
     expect(screen.getByTestId('block-b2')).toHaveTextContent('38 in all');
   });
 
+  it('★ a turn in the question’s language (Backend: Hebrew in an English screen) reads in its own direction', () => {
+    show([{ ...parts(), title: 'שיחות לפי ערוץ' }]);
+    const title = screen.getByText('שיחות לפי ערוץ');
+    expect(title.tagName).toBe('H3');
+    expect(title).toHaveAttribute('dir', 'auto');
+  });
+
   it('★ recorded for only some: said - never a distribution over everything', () => {
     show([parts()]);
     expect(screen.getByTestId('block-b2-coverage')).toHaveTextContent(
