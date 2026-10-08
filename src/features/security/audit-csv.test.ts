@@ -141,3 +141,55 @@ describe('★★ 16’s export, readable: the screen’s words first, the platfo
     expect(csvCell('Maya')).toBe('"Maya"');
   });
 });
+
+describe('★★ Hebrew: GOTCHA is feminine, the system too; a person keeps the slash; objects in Hebrew', () => {
+  const what = (action: string, actorType = 'ai') =>
+    cells(make('he').row(['2026-10-08T09:00:00Z', action, actorType, '', '', '', '']))[1];
+
+  it('GOTCHA ענתה, חיפשה לקוח לפי טלפון - never "ענה/תה", "חיפש/ה"', () => {
+    expect(what('ai.responded')).toBe('GOTCHA ענתה ללקוח');
+    expect(what('adapter.err.shopify.get_customer_by_phone')).toBe(
+      'GOTCHA חיפשה לקוח לפי טלפון ב־Shopify',
+    );
+    expect(what('adapter.ok.shopify.get_customer_orders')).toBe(
+      'GOTCHA חיפשה הזמנות של לקוח ב־Shopify',
+    );
+    expect(what('adapter.ok.shopify.list_products')).toBe('GOTCHA הציגה מוצרים ב־Shopify');
+    expect(what('ai.paused_for_approval')).toBe('GOTCHA עצרה וביקשה אישור');
+  });
+
+  it('the system is feminine; someone on the team keeps the slash', () => {
+    expect(what('message.sent', 'system')).toBe('המערכת שלחה הודעה');
+    expect(what('message.sent', 'user')).toBe('מישהו בצוות שלח/ה הודעה');
+  });
+
+  it('an operation the catalogue does not know is its own words - never raw', () => {
+    expect(what('adapter.ok.shopify.get_loyalty_points')).toBe(
+      'GOTCHA חיפשה loyalty points ב־Shopify',
+    );
+  });
+
+  it('★ every sentence with GOTCHA as the actor: no slash anywhere', () => {
+    const actions = [
+      'ai.responded',
+      'message.sent',
+      'ai.bot_turn',
+      'ai.paused_for_approval',
+      'ai.tool_call.escalate_to_human',
+      'billing.provisioning_attempted',
+      'billing.provisioning_request_created',
+      ...[
+        'get',
+        'search',
+        'update',
+        'process',
+        'summarize',
+        'create',
+        'cancel',
+        'list',
+        'export',
+      ].map((verb) => `adapter.ok.shopify.${verb}_order`),
+    ];
+    for (const action of actions) expect(what(action), action).not.toMatch(/\//);
+  });
+});

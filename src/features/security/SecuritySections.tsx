@@ -326,21 +326,51 @@ export function auditSentence(
   const actor = ACTORS.includes(entry.actorType as Actor)
     ? t(`audit.who.${entry.actorType as Actor}`)
     : t('audit.who.unknown');
+  /*
+   * ★ WHO, FOR THE VERB'S GENDER (Omer): GOTCHA is feminine, and so is
+   *   "the system" (המערכת) - "GOTCHA ענתה", never "ענה/תה"; a person of
+   *   unknown gender keeps the slash; "something" is masculine. English
+   *   ignores it.
+   */
+  const who = ACTORS.includes(entry.actorType as Actor) ? entry.actorType : 'other';
   const adapter = /^adapter\.(?:ok|err)\.([a-z0-9]+)\.([a-z0-9_]+)$/.exec(entry.action);
   if (adapter) {
     const [verb, ...rest] = adapter[2]!.split('_');
     const system = adapter[1]!.charAt(0).toUpperCase() + adapter[1]!.slice(1);
     return VERBS.includes(verb!)
-      ? t('audit.sentence.connector', { actor, verb: verb!, object: rest.join(' '), system })
+      ? t('audit.sentence.connector', {
+          actor,
+          who,
+          verb: verb!,
+          object: objectWords(rest, t),
+          system,
+        })
       : t('audit.sentence.connectorOther', {
           actor,
+          who,
           operation: adapter[2]!.replaceAll('_', ' '),
           system,
         });
   }
   const known = KNOWN[entry.action as keyof typeof KNOWN];
-  if (known) return t(`audit.sentence.${known}`, { actor });
+  if (known) return t(`audit.sentence.${known}`, { actor, who });
   return t('audit.sentence.other', { actor, action: describeAuditAction(entry.action).name });
+}
+
+/**
+ * What a connector operation acts on, in the reader's words: "customer by
+ * phone" is "לקוח לפי טלפון", "customer orders" "הזמנות של לקוח" - phrases,
+ * not words, because Hebrew does not keep English's order. The catalogue
+ * holds the platform's operation names (services/ai connectors); one it does
+ * not know is the operation's own words, underscores gone - never raw.
+ */
+function objectWords(
+  parts: readonly string[],
+  t: Awaited<ReturnType<typeof getTranslations<'security'>>>,
+): string {
+  const key = parts.join('_');
+  const path = `audit.object.${key}` as 'audit.object.order';
+  return key && t.has(path) ? t(path) : parts.join(' ');
 }
 
 /** Chip words for the known actions - the rows' sentences, short. */
@@ -371,7 +401,7 @@ export function auditChipLabel(
     const [verb, ...rest] = adapter[1]!.split('_');
     const words = rest[0] === 'customer' && rest.length > 1 ? rest.slice(1) : rest;
     return VERBS.includes(verb!)
-      ? t('audit.chip.connector', { verb: verb!, object: words.join(' ') })
+      ? t('audit.chip.connector', { verb: verb!, object: objectWords(words, t) })
       : describeAuditAction(action).name;
   }
   const known = CHIPS[action as keyof typeof KNOWN];
