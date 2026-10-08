@@ -264,7 +264,7 @@ export function buildFallbackMessage(facts: ExecutionFacts, inboundSample: strin
   if (facts.outcome === "failed") {
     const why = reasonPhrase(facts.errorReason, he);
     return he
-      ? `הבקשה אושרה, אבל לא הצלחתי להשלים את ${actionHe} כרגע${why ? ` כי ${why}` : ""}. אני בודק את האפשרויות ואם לא אצליח אעביר אותך לנציג.`
+      ? `הבקשה אושרה, אבל לא הצלחתי להשלים את ${actionHe} כרגע${why ? ` כי ${why}` : ""}. אני בודקת את האפשרויות ואם לא אצליח אעביר אותך לנציג.`
       : `Your request was approved, but I was not able to complete ${actionEn} right now${why ? ` because ${why}` : ""}. I am checking the options, and if I cannot resolve it I will pass you to a colleague.`;
   }
 
