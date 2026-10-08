@@ -690,6 +690,27 @@ describe("★ a thread about one request (design 03)", () => {
     expect(sys).toMatch(/about one approval request. Read it with system_read_approval .* you cannot approve or reject it/);
   });
 
+  it("★ never offers to propose the request again; a plain thread still may", async () => {
+    const line = ' [[suggestions]] [{"text": "Propose assigning it to me", "tool": "propose_plan", "action": "assign_conversation"}, {"text": "Who asked?", "tool": "system_read_approval"}]';
+    const about = (await request(app()).post("/api/assistant/threads").send({ context: { approvalId: "apr_1" } })).body.data.id;
+    H.script = [say("ok", line)];
+    const r = await send(about, "why does this need approval?");
+    expect(r.events.find((e) => e.event === "suggestions")!.data.items).toEqual(["Who asked?"]);
+    const plain = await newThread();
+    H.script = [say("ok", line)];
+    const p = await send(plain.id, "why does this need approval?");
+    expect(p.events.find((e) => e.event === "suggestions")!.data.items).toContain("Propose assigning it to me");
+  });
+
+  it("the operator is never addressed in a gender (Hebrew)", async () => {
+    const t = await newThread();
+    H.script = [say("ok")];
+    await send(t.id, "מה קורה?");
+    const sys = H.modelCalls.at(-1).messages.filter((m: any) => m.role === "system").map((m: any) => m.content).join("\n");
+    expect(sys).toMatch(/You do not know the operator's gender/);
+    expect(sys).not.toMatch(/addressed as they write/);
+  });
+
   it("another workspace's request, or none: 404 APPROVAL_NOT_FOUND, and no thread", async () => {
     for (const context of [{ approvalId: "apr_other" }, { approvalId: "nope" }, {}]) {
       const r = await request(app()).post("/api/assistant/threads").send({ context });

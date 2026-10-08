@@ -227,7 +227,7 @@ export class SuggestionsSplitter {
    * selection the screen does not have: the buttons offered "List the 17
    * open conversations" when no tool could list (2026-10-08).
    */
-  end(allowed?: { tools: Set<string>; noSelection?: boolean }): { rest: string; suggestions: string[] } {
+  end(allowed?: { tools: Set<string>; noSelection?: boolean; noPlan?: boolean }): { rest: string; suggestions: string[] } {
     const rest = this.buf;
     this.buf = "";
     if (this.tail === null) return { rest, suggestions: [] };
@@ -243,6 +243,9 @@ export class SuggestionsSplitter {
         // An action is proposed only when it can run: "transfer it to a
         // colleague" was offered with no assign action (2026-10-08).
         if (tool === "propose_plan" && !(PLAN_ACTIONS as readonly string[]).includes(String(x?.action ?? ""))) return null;
+        // A thread about an approval request never offers to propose it again:
+        // it offered "propose a plan to assign it to me" beside the pending one.
+        if (tool === "propose_plan" && allowed.noPlan) return null;
         return x.text;
       })
       .filter((x): x is string => typeof x === "string" && !!x.trim())
@@ -313,7 +316,7 @@ export function threadSystemLines(scope: ThreadScope, locale: "he" | "en", now =
     "Never describe the screen, a card or a button (no \"the card shows\", \"in the list below\", \"click show all\"): say what the data means.",
     "No screen is attached to this conversation: you see nothing of what the user has open. Never mention their screen, a selected conversation or \"context\" as a reason; find what they mean with your tools, and if no tool can answer, say which information you cannot reach, and stop.",
     `Follow-up questions go ONLY in the ${SUGGESTIONS_MARKER} line (they appear as buttons). Never list them, or any \"want me to...\" menu of next steps, in the answer text.`,
-    `Answer format for this screen: markdown limited to bold, italics, bullet and numbered lists, inline code and links (http(s) or in-app paths starting with /). No tables, images or HTML. After the answer, on its own last line, write ${SUGGESTIONS_MARKER} followed by a JSON array of 2 or 3 follow-ups the user may ask next, each {"text": a short question written in ${LANG_NAME[locale]}, "tool": the name of the ONE tool of yours that would answer it}, e.g. [{"text": "...", "tool": "system_list_conversations"}]. An action goes through propose_plan and also names it: {"text": ..., "tool": "propose_plan", "action": one of ${PLAN_ACTIONS.join(", ")}}; nothing else can be proposed (assigning, closing, notes cannot). Suggest only what one of your tools can do; a follow-up without such a tool is not shown. Write nothing after that array.`,
+    `Answer format for this screen: markdown limited to bold, italics, bullet and numbered lists, inline code and links (http(s) or in-app paths starting with /). No tables, images or HTML. After the answer, on its own last line, write ${SUGGESTIONS_MARKER} followed by a JSON array of 2 or 3 follow-ups the user may ask next, each {"text": a short question written in ${LANG_NAME[locale]}, "tool": the name of the ONE tool of yours that would answer it}, e.g. [{"text": "...", "tool": "system_list_conversations"}]. An action goes through propose_plan and also names it: {"text": ..., "tool": "propose_plan", "action": one of ${PLAN_ACTIONS.join(", ")}}; nothing else can be proposed. Suggest only what one of your tools can do; a follow-up without such a tool is not shown. Write nothing after that array.`,
   ];
 }
 
@@ -461,7 +464,7 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
   if (ac.signal.aborted) status = "cancelled";
 
   // Only follow-ups a tool of this answer can answer; a Home thread selects nothing.
-  const { rest: unsplit, suggestions } = splitter.end({ tools: toolNames, noSelection: true });
+  const { rest: unsplit, suggestions } = splitter.end({ tools: toolNames, noSelection: true, noPlan: !!contextOf(input.thread.scope) });
   const rest = cites.push(unsplit) + cites.end();
   if (proposed.length) {
     // Proposed, not done: the answer is the server's sentence, never the model's.

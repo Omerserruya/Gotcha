@@ -52,7 +52,7 @@ beforeEach(() => {
   H.approvals = [
     { ...base, id: "refund", conversationId: "c_sales", tool: "issue_refund", summary: "Refund order #1016 (₪250)", params: { orderId: "1016", amount: 250, apiKey: "sk_live_x" } },
     { ...base, id: "support_one", conversationId: "c_support", tool: "send_message", summary: "Send Avi a message", params: {} },
-    { ...base, id: "plan", conversationId: null, tool: "propose_plan", summary: "לשייך אליך את השיחה של Dana Cohen (וואטסאפ)", riskLevel: "medium", riskTags: ["ASSISTANT", "PLAN"], policyRuleName: null, requestedBy: "user:matan", params: { steps: [{ tool: "assign_conversation", summary: "לשייך אליך את השיחה של Dana Cohen (וואטסאפ)" }], requester: { userId: "matan", name: "Matan" }, source: "home_assistant" } },
+    { ...base, id: "plan", conversationId: null, tool: "propose_plan", summary: "לשייך אליך את השיחה של Dana Cohen (וואטסאפ)", riskLevel: "medium", riskTags: ["ASSISTANT", "PLAN"], policyRuleName: "בקשה של Matan מ-GOTCHA ב-Home", reason: "בקשה של Matan מ-GOTCHA ב-Home", requestedBy: "user:matan", params: { steps: [{ tool: "assign_conversation", riskLevel: "low", summary: "לשייך אליך את השיחה של Dana Cohen (וואטסאפ)" }], requester: { userId: "matan", name: "Matan" }, source: "home_assistant" } },
     { ...base, id: "other_ws", tenantId: "OTHER", conversationId: null, tool: "x", summary: "Not yours", params: {} },
   ];
 });
@@ -62,14 +62,40 @@ describe("★ one request, explained", () => {
     const { out, artifacts } = await read({ approvalId: "refund" });
     expect(out).toMatchObject({
       ok: true, approvalId: "refund", what: "Refund order #1016 (₪250)", action: "issue_refund",
-      whyItNeedsApproval: "כלל: Refunds over ₪200 · סיכון: גבוה · FINANCIAL, IRREVERSIBLE",
+      // The rule's name, and the tags in words; raw tags never.
+      whyItNeedsApproval: "כלל: Refunds over ₪200 · כרוך בכסף, אי אפשר לבטל אחרי שמבוצע",
+      risk: "גבוה", whyTheActionWasRequested: "Customer asked for a refund",
       askedBy: "GOTCHA", customer: "Dana Cohen", conversationLink: "/inbox?c=c_sales", state: "ממתינה להחלטה",
     });
     expect(out.parameters).toEqual({ orderId: "1016", amount: 250, apiKey: "[hidden]" });
     expect(out.readOnly).toMatch(/לאשר או לדחות אותה עושים במסך האישורים/);
     const card = artifacts.blocks[0];
     expect(card).toMatchObject({ type: "record", kind: "approval", deepLink: "/approvals?id=refund", state: "pending", expiresAt: "2026-10-08T09:30:00.000Z" });
-    expect(card.fields.map((f: any) => f.key)).toEqual(["what", "action", "why", "asked_by", "customer", "state", "expires"]);
+    expect(card.fields.map((f: any) => f.key)).toEqual(["what", "action", "why", "risk", "asked_by", "customer", "state", "expires"]);
+  });
+
+  it("★ a plan waits because every Home proposal waits: said so, with its steps' own risk, no requester as a rule, no raw tags", async () => {
+    const { out, artifacts } = await read({ approvalId: "plan" });
+    expect(out.whyItNeedsApproval).toBe("כל פעולה ש-GOTCHA מציעה מ-Home מחכה לאישור");
+    expect(out.risk).toBe("נמוך");
+    expect(out).not.toHaveProperty("whyTheActionWasRequested");
+    const shown = JSON.stringify(artifacts.blocks[0].fields);
+    expect(shown).not.toMatch(/ASSISTANT|PLAN|בקשה של|בינוני/);
+    // From the command bar, in English.
+    H.approvals.find((x: any) => x.id === "plan").params.source = "command_bar";
+    expect((await read({ approvalId: "plan" }, ctx({ locale: "en" }))).out.whyItNeedsApproval).toBe("Every action GOTCHA proposes from the command bar waits for approval");
+  });
+
+  it("a tool gated by the approval settings says which setting, in words", async () => {
+    const refund = H.approvals.find((x: any) => x.id === "refund");
+    refund.riskTags = [];
+    refund.policyRuleName = "condition matched: amount > 200";
+    expect((await read({ approvalId: "refund" })).out.whyItNeedsApproval).toBe("לפי הגדרות האישורים, הפעולה הזו דורשת אישור כש: amount > 200");
+    refund.policyRuleName = "policy requires approval (catalog=always, tenant=always)";
+    expect((await read({ approvalId: "refund" })).out.whyItNeedsApproval).toBe("לפי הגדרות האישורים, הפעולה הזו דורשת אישור תמיד");
+    // Internal tags are never shown; the known ones in words.
+    refund.riskTags = ["commerce", "issue_refund", "human_initiated", "FINANCIAL"];
+    expect((await read({ approvalId: "refund" })).out.whyItNeedsApproval).toBe("לפי הגדרות האישורים, הפעולה הזו דורשת אישור תמיד · כרוך בכסף");
   });
 
   it("a plan: its steps, and the person who asked", async () => {

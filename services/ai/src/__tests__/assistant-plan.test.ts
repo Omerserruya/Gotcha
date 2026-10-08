@@ -91,6 +91,9 @@ describe("★ pinned at proposal", () => {
     expect(a.params).not.toHaveProperty("requiresApproval");
     expect(a.requestedBy).toBe("user:matan");
     expect(a.reason).toBe("בקשה של Matan מ-GOTCHA ב-Home");
+    // The gate is the design, never the requester; the risk is the steps' own.
+    expect(a.gate.reason).toBe("כל פעולה ש-GOTCHA מציעה מ-Home מחכה לאישור");
+    expect(a.riskLevel).toBe("medium");
   });
 
   it("claim is assign-to-the-requester; another person by name; in English", async () => {
@@ -109,6 +112,15 @@ describe("★ pinned at proposal", () => {
     ]);
     expect(out.summary).toBe("להחזיר ל-GOTCHA את השיחה של Omer Serruya (וואטסאפ); להוסיף הערה ל-Omer Serruya: “Prefers evening calls”; לענות על השאלה “Do you ship to Eilat?”");
     expect(H.approvals[0].params.steps.map((s: any) => s.target)).toEqual([{ conversationId: "wa_open", customerId: "omer" }, { customerId: "omer" }, { questionId: "q1" }]);
+  });
+});
+
+describe("★ the approval's risk is the steps' own", () => {
+  it("all low: low; one high: high", async () => {
+    await propose([{ tool: "close_conversation", params: { conversationId: "wa_open" }, reason: "", riskLevel: "low" }]);
+    expect(H.approvals[0].riskLevel).toBe("low");
+    await propose([{ tool: "close_conversation", params: { conversationId: "wa_open" }, reason: "", riskLevel: "low" }, { tool: "add_note", params: { contactId: "omer", body: "x" }, reason: "", riskLevel: "high" }]);
+    expect(H.approvals[1].riskLevel).toBe("high");
   });
 });
 

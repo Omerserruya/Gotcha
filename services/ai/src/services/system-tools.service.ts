@@ -21,7 +21,7 @@ import { readConversationResult } from "./assistant-conversation-read.service";
 import { customerCardResult } from "./assistant-customer-card.service";
 import { listApprovalsResult, listKnowledgeGapsResult } from "./assistant-work.service";
 import { preparePlan, PlanRefused } from "./assistant-plan.service";
-import { readApprovalResult } from "./assistant-approval-read.service";
+import { readApprovalResult, whyItWaits } from "./assistant-approval-read.service";
 import { privateNumbers, privateConversationsClause } from "../lib/private-numbers";
 
 /** The last n days, today included (UTC days: a caller with a workspace period passes it). */
@@ -967,10 +967,12 @@ async function dispatchProposePlan(
     params: { summary: planSummary, steps, requester, source },
     summary: planSummary,
     reason: asked,
-    riskLevel: steps.some((s) => s.riskLevel === "high") ? "high" : "medium",
+    // The steps' own risk, never another; the gate is the design (every plan
+    // from GOTCHA waits), never the requester sentence (that is `reason`).
+    riskLevel: steps.some((s) => s.riskLevel === "high") ? "high" : steps.some((s) => s.riskLevel === "medium") ? "medium" : "low",
     riskTags: ["ASSISTANT", "PLAN"],
     requestedBy: `user:${ctx.userId}`,
-    gate: { decision: "REQUIRE_APPROVAL", reason: asked } as any,
+    gate: { decision: "REQUIRE_APPROVAL", reason: whyItWaits({ tool: "propose_plan", params: { source }, policyRuleName: null, riskLevel: "", riskTags: [] }, locale) } as any,
   });
 
   return {

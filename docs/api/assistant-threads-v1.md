@@ -372,6 +372,11 @@ is tied to a conversation, one the caller can see, else 404
 reads the request (system_read_approval: a `record` of kind "approval" with
 `state` pending|approved|rejected|expired and `expiresAt` ISO, deepLink
 /approvals?id=<id>) and can only explain it: no tool approves or rejects.
+The record's fields are what, steps or action, why (the gate in words: a plan
+from Home or the command bar always waits; a tool says which approval setting;
+known tags in words, internal tags never), risk (a plan's is its highest
+step's), asked_by, customer, state, expires or created. A thread about a
+request never suggests proposing a plan.
 
 The answer cites a source after the claim it supports with `[^s1]` in `text`.
 The client renders it as that source's chip. The server removes any `[^...]`
