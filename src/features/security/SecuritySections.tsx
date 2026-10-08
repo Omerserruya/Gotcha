@@ -297,10 +297,49 @@ export function mergeFacets(
   return [...byName].map(([name, v]) => ({ name, ...v }));
 }
 
-/** The connector operations with a verb; any other runs as "ran …". */
-const VERBS = ['get', 'search', 'update', 'process', 'summarize', 'create', 'cancel', 'list'];
+/**
+ * The connector operations' verbs, read from the platform's operation names
+ * (services/ai connectors, and dev's export of 2026-10-08); any other runs as
+ * "ran …".
+ */
+const VERBS = [
+  'get',
+  'search',
+  'update',
+  'process',
+  'summarize',
+  'create',
+  'cancel',
+  'list',
+  'add',
+  'check',
+  'track',
+  'exchange',
+  'find',
+  'reconcile',
+  'resend',
+  'send',
+  'edit',
+  'link',
+];
 
-/** Actions whose sentence is known word for word. */
+/** Operations whose name does not lead with a verb, read as one that does. */
+const OPERATION_ALIAS: Readonly<Record<string, readonly string[]>> = {
+  order_lookup: ['get', 'order'],
+  integration_order_lookup: ['get', 'order'],
+  variant_information: ['get', 'variant', 'information'],
+};
+
+/** A system's name as it writes itself. */
+const SYSTEM_NAMES: Readonly<Record<string, string>> = {
+  shopify: 'Shopify',
+  woocommerce: 'WooCommerce',
+  hubspot: 'HubSpot',
+  salesforce: 'Salesforce',
+  monday: 'monday.com',
+};
+
+/** Actions whose sentence is known word for word (dev's export, 2026-10-08). */
 const KNOWN = {
   'ai.responded': 'responded',
   'message.sent': 'messageSent',
@@ -311,7 +350,54 @@ const KNOWN = {
   'billing.provisioning_request_created': 'provisioningRequested',
   'billing.provisioning_failed': 'provisioningFailed',
   'billing.provisioning_completed': 'provisioningCompleted',
+  'ai.unsupported_outcome_claim': 'unsupportedOutcomeClaim',
+  'ai.unsupported_action_claim': 'unsupportedActionClaim',
+  'ai.output_validator.blocked': 'outputBlocked',
+  'ai.skill_selected': 'skillSelected',
+  'ai.skill_step': 'skillStep',
+  'ai.skill_completed': 'skillCompleted',
+  'ai.skill_handed_over': 'skillHandedOver',
+  'ai.budget.aborted.turn': 'budgetTurn',
+  'ai.budget.aborted.tenant_day': 'budgetDay',
+  'ai.onboarding_preview_answer': 'previewAnswer',
+  'integration.dispatch_decision': 'dispatchDecision',
+  'integration.disconnected': 'integrationDisconnected',
+  'permission.changed': 'permissionChanged',
+  'permission.revoked': 'permissionRevoked',
+  'feature_grant.changed': 'featureGrantChanged',
+  'auth.all_sessions_terminated': 'sessionsTerminated',
+  'commerce.order_action_executed': 'orderActionExecuted',
+  'commerce.order_action_failed': 'orderActionFailed',
+  'security.cross_customer_access_denied': 'crossCustomerDenied',
+  'action.create_task': 'taskCreated',
+  'action.d49_probe_tool': 'probeTool',
+  'crm.create_lead.error': 'crmLeadFailed',
+  'crm.link.linked': 'crmLinked',
+  'gdpr.erasure_completed': 'erasureCompleted',
+  'shopify.chat.webhook.app_uninstalled': 'shopifyAppRemoved',
+  'billing.payment_continuation_link_created': 'paymentLinkCreated',
+  'billing.pending_checkout_created': 'checkoutStarted',
+  'billing.paid_tenant_created': 'paidWorkspaceCreated',
+  'user.created': 'userCreated',
+  'tenant.created': 'tenantCreated',
 } as const;
+
+/**
+ * An operation on a business system: the connector's own row
+ * (`adapter.ok|err.<system>.<op>`) or the AI calling it
+ * (`ai.tool_call[.<system>].<op>`) - the same words for both.
+ */
+function operationOf(action: string): { system: string | null; parts: string[] } | null {
+  const adapter = /^adapter\.(?:ok|err)\.([a-z0-9]+)\.([a-z0-9_]+)$/.exec(action);
+  const tool = adapter ? null : /^ai\.tool_call\.(?:([a-z0-9]+)\.)?([a-z0-9_]+)$/.exec(action);
+  const match = adapter ?? tool;
+  if (!match) return null;
+  const op = match[2]!;
+  const system = match[1]
+    ? (SYSTEM_NAMES[match[1]] ?? match[1].charAt(0).toUpperCase() + match[1].slice(1))
+    : null;
+  return { system, parts: [...(OPERATION_ALIAS[op] ?? op.split('_'))] };
+}
 
 /**
  * 02's row is a sentence - who did what. The log carries the actor and the
@@ -333,27 +419,23 @@ export function auditSentence(
    *   ignores it.
    */
   const who = ACTORS.includes(entry.actorType as Actor) ? entry.actorType : 'other';
-  const adapter = /^adapter\.(?:ok|err)\.([a-z0-9]+)\.([a-z0-9_]+)$/.exec(entry.action);
-  if (adapter) {
-    const [verb, ...rest] = adapter[2]!.split('_');
-    const system = adapter[1]!.charAt(0).toUpperCase() + adapter[1]!.slice(1);
-    return VERBS.includes(verb!)
-      ? t('audit.sentence.connector', {
-          actor,
-          who,
-          verb: verb!,
-          object: objectWords(rest, t),
-          system,
-        })
-      : t('audit.sentence.connectorOther', {
-          actor,
-          who,
-          operation: adapter[2]!.replaceAll('_', ' '),
-          system,
-        });
-  }
   const known = KNOWN[entry.action as keyof typeof KNOWN];
   if (known) return t(`audit.sentence.${known}`, { actor, who });
+  const operation = operationOf(entry.action);
+  if (operation) {
+    const [verb, ...rest] = operation.parts;
+    const { system } = operation;
+    if (VERBS.includes(verb!)) {
+      const values = { actor, who, verb: verb!, object: objectWords(rest, t) };
+      return system
+        ? t('audit.sentence.connector', { ...values, system })
+        : t('audit.sentence.connectorAnywhere', values);
+    }
+    const words = objectWords(operation.parts, t);
+    return system
+      ? t('audit.sentence.connectorOther', { actor, who, operation: words, system })
+      : t('audit.sentence.connectorOtherAnywhere', { actor, who, operation: words });
+  }
   return t('audit.sentence.other', { actor, action: describeAuditAction(entry.action).name });
 }
 
@@ -390,21 +472,27 @@ const CHIPS: Partial<Record<keyof typeof KNOWN, string>> = {
  * A facet's chip: the row's sentence without its actor, short enough that
  * four sit in the head uncut - "Looked up by phone", "Searched products",
  * "AI replies". A leading "customer" is the connector's subject on every
- * lookup and is dropped when something follows it.
+ * lookup and is dropped when something follows it. A known action with no
+ * chip of its own is its sentence, its actor left out.
  */
 export function auditChipLabel(
   action: string,
   t: Awaited<ReturnType<typeof getTranslations<'security'>>>,
 ): string {
-  const adapter = /^adapter\.(?:ok|err)\.[a-z0-9]+\.([a-z0-9_]+)$/.exec(action);
-  if (adapter) {
-    const [verb, ...rest] = adapter[1]!.split('_');
+  const known = KNOWN[action as keyof typeof KNOWN];
+  const chip = CHIPS[action as keyof typeof KNOWN];
+  if (chip) return t(`audit.chip.${chip}`);
+  if (known) {
+    const words = t(`audit.sentence.${known}`, { actor: '', who: 'ai' }).trim();
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  }
+  const operation = operationOf(action);
+  if (operation) {
+    const [verb, ...rest] = operation.parts;
     const words = rest[0] === 'customer' && rest.length > 1 ? rest.slice(1) : rest;
     return VERBS.includes(verb!)
       ? t('audit.chip.connector', { verb: verb!, object: objectWords(words, t) })
-      : describeAuditAction(action).name;
+      : objectWords(operation.parts, t);
   }
-  const known = CHIPS[action as keyof typeof KNOWN];
-  if (known) return t(`audit.chip.${known}`);
   return describeAuditAction(action).name;
 }
