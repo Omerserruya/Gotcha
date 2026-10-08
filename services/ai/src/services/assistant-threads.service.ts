@@ -463,12 +463,45 @@ export async function autoTitle(tenantId: string, question: string, answer: stri
     maxTokens: 40,
     metadata: { type: "assistant_thread_title" },
     messages: [
-      { role: "system", content: `Write a short title (at most 6 words) for this conversation, in ${LANG_NAME[locale]}. Plain text only: no quotes, no markdown, no final punctuation.` },
+      { role: "system", content: `Write a short title (2 to 6 words) for this conversation, in ${LANG_NAME[locale]}, taken from the user's question where you can. Plain text only: no quotes, no markdown, no final punctuation.${locale === "he" ? " Plain modern Hebrew as people type it, without niqqud (vowel marks)." : ""}` },
       { role: "user", content: `Question: ${question.slice(0, 500)}\n\nAnswer: ${answer.slice(0, 800)}` },
     ],
   });
-  const t = withoutWideDashes(String(res.content ?? "").split("\n")[0]!.replace(/^["'\s*#]+|["'\s*.]+$/g, "").trim()).slice(0, 120);
-  return t || null;
+  return usableTitle(String(res.content ?? ""), question, locale);
+}
+
+// Niqqud and cantillation marks; the maqaf (U+05BE, a Hebrew hyphen) is kept as "-".
+const NIQQUD = /[\u0591-\u05BD\u05BF-\u05C7]/g;
+const HAS_NIQQUD = /[\u0591-\u05BD\u05BF-\u05C7]/;
+const GREETING = /^(היי|הי|שלום|hi|hey|hello)[\s,!.]+/i;
+const wordsOf = (t: string) => t.toLowerCase().match(/[a-z0-9\u05D0-\u05EA]{2,}/g) ?? [];
+/** A word with a one-letter Hebrew prefix also counts without it ("מהשיחות" is "השיחות"). */
+const formsOf = (w: string) => (/^[\u05D5\u05D1\u05DC\u05D4\u05DE\u05E9\u05DB]/.test(w) && w.length > 3 ? [w, w.slice(1)] : [w]);
+
+/**
+ * The thread's title as the model wrote it, cleaned; or the question's own
+ * first words when the model's is not usable: empty, not in the turn's
+ * language, or written with niqqud and mostly not from the question (the
+ * small title model then invents words: "מָהָם שִׁיחות עִכשִיוֹת" for "היי, כמה
+ * שיחות יש לנו ?", 2026-10-08). A paraphrase without niqqud is kept: good
+ * titles often use other words than the question.
+ */
+export function usableTitle(raw: string, question: string, locale: "he" | "en"): string | null {
+  const line = raw.split("\n")[0] ?? "";
+  const vowelled = HAS_NIQQUD.test(line);
+  const t = withoutWideDashes(line.replace(/\u05BE/g, "-").replace(NIQQUD, "").replace(/^["'\s*#]+|["'\s*.]+$/g, "").trim()).slice(0, 120);
+  const asked = new Set(wordsOf(question.replace(NIQQUD, "")).flatMap(formsOf));
+  const words = wordsOf(t);
+  const fromQuestion = words.filter((w) => formsOf(w).some((f) => asked.has(f))).length;
+  const usable = !!t && (locale !== "he" || /[\u05D0-\u05EA]/.test(t)) && (!vowelled || fromQuestion * 2 >= words.length);
+  return usable ? t : titleFromQuestion(question);
+}
+
+/** The question's first words, as a title: no greeting, no final punctuation, at most 6 words. */
+export function titleFromQuestion(question: string): string | null {
+  const t = withoutWideDashes(question.replace(NIQQUD, "").replace(/\s+/g, " ").trim().replace(GREETING, "").replace(/[\s?!.,:;]+$/g, ""));
+  const words = t.split(" ").filter(Boolean).slice(0, 6).join(" ").slice(0, 60).trim();
+  return words || null;
 }
 
 /** The screen's view of a thread: messages, and the answer still being written. */

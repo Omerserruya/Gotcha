@@ -109,7 +109,7 @@ vi.mock("../services/ai.service", async (importOriginal) => {
 });
 
 import router from "../routes/assistant-threads";
-import { SuggestionsSplitter, scopeDates, withValidCitations, CitationFilter } from "../services/assistant-threads.service";
+import { SuggestionsSplitter, scopeDates, withValidCitations, CitationFilter, usableTitle, titleFromQuestion } from "../services/assistant-threads.service";
 
 const app = () => { const a = express(); a.use(express.json()); a.use("/api/assistant", router); return a; };
 const sse = (r: request.Test) => r.buffer(true).parse((res, cb) => { let d = ""; res.on("data", (c: Buffer) => { d += c.toString(); }); res.on("end", () => cb(null, d)); });
@@ -601,5 +601,42 @@ describe("★ citations: only a source of this answer (2026-10-08: \"[^שיחו�
     const r = await send(t.id, "how many open, by channel?");
     expect(r.events.filter((e) => e.event === "block")).toHaveLength(1);
     expect(r.events.find((e) => e.event === "sources")!.data.items.map((x: any) => x.id)).toEqual(["s1", "s2"]);
+  });
+});
+
+describe("★ the thread's title (2026-10-08: \"מָהָם שִׁיחות עִכשִיוֹת\" for \"היי, כמה שיחות יש לנו ?\")", () => {
+  it("through the route: a title with niqqud is stored without it; an invented one falls back to the question's words", async () => {
+    const t = await newThread();
+    H.titleReply = "שִׁיחות פְּתוּחות";
+    H.script = [say("17.")];
+    await send(t.id, "כמה שיחות פתוחות יש?", { locale: "en" });
+    expect(H.threads.find((x) => x.id === t.id)).toMatchObject({ title: "שיחות פתוחות", titleSource: "auto" });
+    // The title model is told: modern Hebrew without niqqud, 2 to 6 words, from the question.
+    expect(H.titleAsks[0]).toMatch(/without niqqud/);
+    expect(H.titleAsks[0]).toMatch(/2 to 6 words.*taken from the user's question/);
+
+    const u = await newThread();
+    H.titleReply = "מָהָם שִׁיחות עִכשִיוֹת";
+    H.script = [say("17.")];
+    await send(u.id, "היי, כמה שיחות יש לנו ?");
+    expect(H.threads.find((x) => x.id === u.id)!.title).toBe("כמה שיחות יש לנו");
+  });
+
+  it("usable: in the turn's language, and with niqqud only when mostly from the question; a paraphrase is kept", () => {
+    expect(usableTitle("Open conversations", "כמה שיחות פתוחות יש?", "he")).toBe("כמה שיחות פתוחות יש");
+    expect(usableTitle("", "how was the week?", "en")).toBe("how was the week");
+    expect(usableTitle("Weekly conversation trend", "how was the week?", "en")).toBe("Weekly conversation trend");
+    expect(usableTitle("שיחות פתוחות עכשיו", "היי, כמה שיחות יש לנו ?", "he")).toBe("שיחות פתוחות עכשיו");
+    // A one-letter prefix still counts as the question's word; the maqaf becomes a hyphen.
+    expect(usableTitle("מֵהַשִּׂיחוֹת בְּוואטסאפ", "כמה מהשיחות בוואטסאפ?", "he")).toBe("מהשיחות בוואטסאפ");
+    // "וואטסאפ" is the question's "בוואטסאפ" without its prefix: half the words, kept.
+    expect(usableTitle("שִׂיחוֹת וואטסאפ", "כמה מהשיחות בוואטסאפ?", "he")).toBe("שיחות וואטסאפ");
+    expect(usableTitle("שִׂיחוֹת ב\u05BEWhatsApp", "כמה שיחות ב-WhatsApp?", "he")).toBe("שיחות ב-WhatsApp");
+  });
+
+  it("from the question: no greeting, no final punctuation, at most 6 words", () => {
+    expect(titleFromQuestion("היי, כמה שיחות יש לנו ?")).toBe("כמה שיחות יש לנו");
+    expect(titleFromQuestion("Hello! how many open conversations do we have this week on WhatsApp?")).toBe("how many open conversations do we");
+    expect(titleFromQuestion("  ?? ")).toBeNull();
   });
 });
