@@ -34,6 +34,34 @@ const safe = (v: unknown, fallback = "n/a"): string => {
   try { return JSON.stringify(v); } catch { return fallback; }
 };
 const convLink = (e: SystemEvent) => (e.metadata.conversationId ? `/conversations/${e.metadata.conversationId}` : undefined);
+/** "on WhatsApp" / "בוואטסאפ": the channel as a place, with its preposition. */
+const ON_CHANNEL: Record<string, { en: string; he: string }> = {
+  WHATSAPP: { en: "on WhatsApp", he: "בוואטסאפ" },
+  INSTAGRAM: { en: "on Instagram", he: "באינסטגרם" },
+  MESSENGER: { en: "on Messenger", he: "במסנג'ר" },
+  EMAIL: { en: "by email", he: "באימייל" },
+  GMAIL: { en: "on Gmail", he: "ב-Gmail" },
+  OUTLOOK: { en: "on Outlook", he: "ב-Outlook" },
+  SLACK: { en: "on Slack", he: "ב-Slack" },
+  VOICE: { en: "by phone", he: "בטלפון" },
+  WEBCHAT: { en: "on the website chat", he: "בצ'אט באתר" },
+  SHOPIFY_LIVE_CHAT: { en: "on the Shopify chat", he: "בצ'אט של Shopify" },
+};
+/** A storefront visitor's placeholder name ("Shopper on x.myshopify.com") said as people say it. */
+const customerName = (raw: string, locale: TemplateLocale): string => {
+  const shopper = /^(signed-in )?shopper on \S+$/i.exec(raw.trim());
+  if (!shopper) return raw.trim();
+  return shopper[1] ? (locale === "he" ? "קונה מחובר באתר" : "a signed-in website shopper") : (locale === "he" ? "קונה באתר" : "a website shopper");
+};
+/** "The conversation with Dana on WhatsApp"; empty when the event names neither. */
+function whichConversation(e: SystemEvent, locale: TemplateLocale): string {
+  const name = safe(e.data.customerName, "");
+  const on = ON_CHANNEL[safe(e.data.channel, "").toUpperCase()]?.[locale] ?? "";
+  if (!name && !on) return "";
+  if (locale === "he") return `השיחה${name ? ` עם ${customerName(name, "he")}` : ""}${on ? ` ${on}` : ""}.`;
+  return `The conversation${name ? ` with ${customerName(name, "en")}` : ""}${on ? ` ${on}` : ""}.`;
+}
+
 /** GOTCHA is feminine in Hebrew; a person's gender is unknown, so "העביר/ה". */
 const isGotcha = (name: string) => /^gotcha$/i.test(name.trim());
 
@@ -68,7 +96,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
     const at = safe(e.data.startAt ?? e.data.scheduledFor, "");
     return {
       en: { title: `Meeting scheduled${at ? ` for ${at}` : ""}`, body: `A meeting was successfully scheduled${at ? ` for ${at}` : ""}.` },
-      he: { title: "נקבעה פגישה", body: `נקבעה פגישה${at ? ` ל-${at}` : ""}.` },
+      he: { title: "נקבעה פגישה", body: at ? `נקבעה פגישה ל-${at}.` : "" },
       link: convLink(e),
     };
   },
@@ -117,13 +145,14 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
     const by = rawBy === "Unknown" ? "" : rawBy;
     const dept = safe(e.data.departmentName, "");
     return {
+      // The body says which conversation; it never repeats the title. Nothing to add: empty.
       en: {
         title: by ? `${by} assigned you a conversation` : dept ? `A conversation was routed to you in ${dept}` : "A conversation was assigned to you",
-        body: by ? `${by} transferred a conversation to you.` : dept ? `A conversation was transferred to ${dept} and routed to you.` : "A conversation was transferred to you.",
+        body: whichConversation(e, "en"),
       },
       he: {
         title: by ? `${by} ${isGotcha(by) ? "העבירה" : "העביר/ה"} אליך שיחה` : dept ? `שיחה נותבה אליך במחלקת ${dept}` : "שיחה הועברה אליך",
-        body: by ? `${by} ${isGotcha(by) ? "העבירה" : "העביר/ה"} אליך שיחה.` : dept ? `שיחה הועברה למחלקת ${dept} ונותבה אליך.` : "שיחה הועברה אליך.",
+        body: whichConversation(e, "he"),
       },
       link: convLink(e),
     };
@@ -172,7 +201,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
     const amount = safe(e.data.amount, "");
     return {
       en: { title: `Refund issued${amount ? `: ${amount}` : ""}`, body: `A refund was issued.${amount ? ` Amount: ${amount}.` : ""}` },
-      he: { title: `בוצע החזר${amount ? `: ${amount}` : ""}`, body: `בוצע החזר${amount ? ` בסך ${amount}` : ""}.` },
+      he: { title: `בוצע החזר${amount ? `: ${amount}` : ""}`, body: amount ? `בוצע החזר בסך ${amount}.` : "" },
       link: convLink(e),
     };
   },

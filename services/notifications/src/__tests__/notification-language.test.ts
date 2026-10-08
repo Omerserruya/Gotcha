@@ -68,7 +68,7 @@ const ev = (type: string, data: Record<string, unknown> = {}, metadata: Record<s
   ({ id: `e${++seq}`, type, tenantId: "T", data: { n: seq, ...data }, metadata: { timestamp: new Date().toISOString(), ...metadata } }) as unknown as SystemEvent;
 // Fields a template might print, filled so no branch hides behind a fallback.
 const FULL = { tool: "refund_order", summary: "Customer asked", name: "Acme", valueEstimate: "5000", startAt: "2026-10-09 10:00", amount: "120", percent: "10",
-  sentCount: 10, failedCount: 2, assignedByName: "Dana", departmentName: "Sales", displayName: "HubSpot", reason: "401", kind: "refund", message: "boom",
+  sentCount: 10, failedCount: 2, assignedByName: "Dana", departmentName: "Sales", customerName: "Omer Serruya", channel: "WHATSAPP", displayName: "HubSpot", reason: "401", kind: "refund", message: "boom",
   trialEndsAt: "2026-10-20", planKey: "pro", to: "pro", when: "period_end", effectiveAt: "2026-11-01", last4: "4242", pct: 80, units: 500, ceiling: "200" };
 
 beforeEach(() => {
@@ -88,8 +88,12 @@ describe("★ every template, one language at a time", () => {
       const en = renderTemplate(ev(type, data), "en");
       for (const t of [he, en]) expect(`${t.title}\n${t.body}`).not.toMatch(DIVIDER);
       expect(he.title).toMatch(HEBREW);
-      expect(he.body).toMatch(HEBREW);
+      // A body may be empty when the title says it all, never with full data.
+      if (data === FULL && type === "conversation.assigned") expect(he.body).not.toBe("");
+      if (he.body) expect(he.body).toMatch(HEBREW);
       expect(`${en.title}\n${en.body}`).not.toMatch(HEBREW);
+      // A body never repeats its title.
+      for (const t of [he, en]) expect(t.body.replace(/\.$/, "")).not.toBe(t.title);
     }
   });
 
@@ -102,10 +106,36 @@ describe("★ every template, one language at a time", () => {
 describe("★ who moved the conversation", () => {
   const he = (by: unknown) => renderTemplate(ev("conversation.assigned", { assignedByName: by }), "he");
   it("a person: העביר/ה; GOTCHA: העבירה; 'Unknown' or nothing: no name at all", () => {
-    expect(he("Dana")).toMatchObject({ title: "Dana העביר/ה אליך שיחה", body: "Dana העביר/ה אליך שיחה." });
-    expect(he("GOTCHA")).toMatchObject({ title: "GOTCHA העבירה אליך שיחה", body: "GOTCHA העבירה אליך שיחה." });
-    expect(he("Unknown")).toMatchObject({ title: "שיחה הועברה אליך", body: "שיחה הועברה אליך." });
+    expect(he("Dana").title).toBe("Dana העביר/ה אליך שיחה");
+    expect(he("GOTCHA").title).toBe("GOTCHA העבירה אליך שיחה");
+    expect(he("Unknown").title).toBe("שיחה הועברה אליך");
     expect(renderTemplate(ev("conversation.assigned", { assignedByName: "Unknown" }), "en").title).toBe("A conversation was assigned to you");
+  });
+});
+
+describe("★ the body says which conversation, never the title again", () => {
+  const as = (data: any, locale: "he" | "en") => renderTemplate(ev("conversation.assigned", { assignedByName: "Dana", ...data }), locale).body;
+  it("the customer and the channel, in each language", () => {
+    expect(as({ customerName: "Omer Serruya", channel: "WHATSAPP" }, "he")).toBe("השיחה עם Omer Serruya בוואטסאפ.");
+    expect(as({ customerName: "Omer Serruya", channel: "WHATSAPP" }, "en")).toBe("The conversation with Omer Serruya on WhatsApp.");
+    expect(as({ customerName: "Noa", channel: "GMAIL" }, "he")).toBe("השיחה עם Noa ב-Gmail.");
+    expect(as({ customerName: "Shopper on acme.myshopify.com", channel: "SHOPIFY_LIVE_CHAT" }, "he")).toBe("השיחה עם קונה באתר בצ'אט של Shopify.");
+    expect(as({ customerName: "Noa" }, "he")).toBe("השיחה עם Noa.");
+  });
+
+  it("neither named: an empty body, and the email says the title instead", async () => {
+    expect(as({}, "he")).toBe("");
+    expect(as({ channel: "SOMETHING_NEW" }, "en")).toBe("");
+    // An assignment rule that emails, so the email body is visible.
+    const prefs = await import("@chatcenter/shared");
+    (prefs as any).prisma.notificationPreference.findMany = async () => [{ id: "r", tenantId: "T", departmentId: null, eventType: "conversation.assigned", enabled: true, conditions: null, recipients: { type: "users", userIds: ["john"] }, channels: ["email"], priority: "MEDIUM" }];
+    try {
+      await processEvent(ev("conversation.assigned", { assignedByName: "Dana" }, { userId: "john" }));
+    } finally {
+      (prefs as any).prisma.notificationPreference.findMany = async () => [];
+    }
+    expect(H.emails).toHaveLength(1);
+    expect(H.emails[0]).toMatchObject({ subject: "Dana assigned you a conversation", body: "Dana assigned you a conversation" });
   });
 });
 

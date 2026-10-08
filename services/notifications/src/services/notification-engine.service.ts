@@ -363,7 +363,8 @@ async function deliverChannel(opts: {
           eventId: event.id,
           priority,
           subject: tpl.title,
-          body: tpl.body,
+          // A notice whose title says it all has an empty body; an email still needs one.
+          body: tpl.body || tpl.title,
           link: tpl.link,
         },
         opts,
