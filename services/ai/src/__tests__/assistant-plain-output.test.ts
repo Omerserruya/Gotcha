@@ -125,6 +125,13 @@ describe("★ GOTCHA speaks of herself in the feminine (Hebrew)", () => {
     expect(prompt).toMatch(/In Hebrew you speak of yourself in the feminine/);
     expect(prompt).toContain('"אני בודקת"');
   });
+
+  it("a Hebrew prefix joins a Hebrew word; a hyphen only before Latin or digits (\"מ-צ'אט Shopify\" in a suggestion, 2026-10-08)", () => {
+    const prompt = readFileSync(join(__dirname, "../prompts/system-copilot.md"), "utf-8");
+    expect(prompt).toContain(`"מצ'אט Shopify"`);
+    expect(prompt).toMatch(/A hyphen only before Latin\s+letters or digits: "מ-WhatsApp"/);
+    expect(prompt).toMatch(/in the suggestions too/);
+  });
 });
 
 describe("★ the thread's period and the prompt", () => {
