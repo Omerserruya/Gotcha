@@ -109,7 +109,7 @@ vi.mock("../services/ai.service", async (importOriginal) => {
 });
 
 import router from "../routes/assistant-threads";
-import { SuggestionsSplitter, scopeDates } from "../services/assistant-threads.service";
+import { SuggestionsSplitter, scopeDates, withValidCitations, CitationFilter } from "../services/assistant-threads.service";
 
 const app = () => { const a = express(); a.use(express.json()); a.use("/api/assistant", router); return a; };
 const sse = (r: request.Test) => r.buffer(true).parse((res, cb) => { let d = ""; res.on("data", (c: Buffer) => { d += c.toString(); }); res.on("end", () => cb(null, d)); });
@@ -198,7 +198,8 @@ describe("★ an answer", () => {
     const runId = r.events[0]!.data.runId;
     expect(r.events.map((e) => e.id)).toEqual(names.map((_, i) => `${runId}:${i + 1}`));
     const text = r.events.filter((e) => e.event === "text.delta").map((e) => e.data.text).join("");
-    expect(text).toBe("There are 4 open. ");
+    // The space before the suggestions block is held (it could precede a citation) and never shown.
+    expect(text).toBe("There are 4 open.");
     expect(r.events[2]!.data).toMatchObject({ status: "done" });
     expect(r.events[1]!.data.text).not.toMatch(/system_/);
     expect(r.events[5]!.data.items).toEqual(["Which are waiting?", "Show last week"]);
@@ -548,5 +549,57 @@ describe("★ one card per question (Omer, 2026-10-08: two identical 'By channel
     H.script = [tools(["propose_plan", plan], ["propose_plan", plan]), say("ok")];
     const r = await send(t.id, "tag them");
     expect(r.events.filter((e) => e.event === "step.start")).toHaveLength(2);
+  });
+});
+
+describe("★ citations: only a source of this answer (2026-10-08: \"[^שיחות פתוחות...]\" on screen)", () => {
+  const ids = new Set(["s1"]);
+  const text = "יש 17 שיחות פתוחות [^s1], כולל אלה שה-AI עונה בהן [^שיחות פתוחות, כולל אלה שה-AI עונה בהן]. ועוד [^s9].";
+  const clean = "יש 17 שיחות פתוחות [^s1], כולל אלה שה-AI עונה בהן. ועוד.";
+
+  it("saved: free text and a source that is not there go, with the space before them; a real one stays", () => {
+    expect(withValidCitations(text, ids)).toBe(clean);
+    expect(withValidCitations("see [^S1] and [^s1x] and [^]", ids)).toBe("see and and");
+  });
+
+  it("streamed: a dropped marker never reaches the screen, however the tokens split", () => {
+    for (const size of [1, 2, 3, 5, 8, 13]) {
+      const f = new CitationFilter(() => ids);
+      const shown: string[] = [];
+      for (let i = 0; i < text.length; i += size) shown.push(f.push(text.slice(i, i + size)));
+      shown.push(f.end());
+      expect(shown.join("")).toBe(clean);
+      expect(shown.some((x) => x.includes("[^ש") || x.includes("s9"))).toBe(false);
+    }
+    // Text that only looks like a start is released: a link, a lone bracket at the end.
+    const f = new CitationFilter(() => ids);
+    expect(f.push("a [link](/x) b [") + f.end()).toBe("a [link](/x) b [");
+  });
+
+  it("★ through the route: the open count has a source to cite; a free-text marker is never streamed or saved", async () => {
+    const t = await newThread();
+    H.script = [tool("system_get_metric", { metric: "open_conversations" }), say("יש 4 שיחות פתוחות [^s1], כולל אלה שה-AI עונה בהן [^שיחות פתוחות", ", כולל אלה שה-AI עונה בהן].")];
+    const r = await send(t.id, "כמה שיחות פתוחות יש?", { locale: "en" });
+    const streamed = r.events.filter((e) => e.event === "text.delta").map((e) => e.data.text).join("");
+    expect(streamed).toBe("יש 4 שיחות פתוחות [^s1], כולל אלה שה-AI עונה בהן.");
+    const sources = r.events.find((e) => e.event === "sources")!.data.items;
+    expect(sources).toEqual([{ id: "s1", label: "4 שיחות (פתוחות) · כרגע", kind: "conversations", count: 4, deepLink: null, query: { tool: "conversations", params: { now: true, status: "OPEN" } } }]);
+    expect(r.events.filter((e) => e.event === "block")).toHaveLength(0);
+    expect(JSON.parse(H.modelCalls[1].messages.find((m: any) => m.role === "tool").content)).toMatchObject({ value: 4, cite: "s1" });
+    expect(H.messages.find((m) => m.role === "assistant").text).toBe(streamed);
+  });
+
+  // The metric's source has no groupBy and a query's always has one: never "the same query".
+  it("the open count and a split of the same rows are two answers: the split still draws its card", async () => {
+    const t = await newThread();
+    H.convs = [openConv("c1")];
+    H.script = [
+      tool("system_get_metric", { metric: "open_conversations" }),
+      tool("system_query_conversations", { now: true, status: "OPEN" }),
+      say("ok [^s1] [^s2]"),
+    ];
+    const r = await send(t.id, "how many open, by channel?");
+    expect(r.events.filter((e) => e.event === "block")).toHaveLength(1);
+    expect(r.events.find((e) => e.event === "sources")!.data.items.map((x: any) => x.id)).toEqual(["s1", "s2"]);
   });
 });

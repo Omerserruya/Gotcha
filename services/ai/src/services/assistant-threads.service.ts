@@ -228,12 +228,52 @@ export class SuggestionsSplitter {
 
 const LANG_NAME = { he: "Hebrew", en: "English" } as const;
 
+/** A citation marker and the space before it: `[^s1]`, or the model's own `[^free text]`. */
+const CITATION = /[ \t]*\[\^([^\]\n]*)\]/g;
+const isCitationOf = (ids: Set<string>, id: string) => /^[a-z]\d+$/.test(id) && ids.has(id);
+
 /**
- * `[^s3]` stays only when s3 is a source of this answer. A dropped one takes
- * the space before it ("עונה בהן [^s1]." became "עונה בהן .").
+ * `[^s3]` stays only when s3 is a source of this answer; anything else in
+ * `[^...]` goes, with the space before it (the model cited a metric by its
+ * words: "[^שיחות פתוחות...]" showed on screen, 2026-10-08).
  */
 export function withValidCitations(text: string, ids: Set<string>): string {
-  return text.replace(/[ \t]*\[\^([a-z]\d+)\]/g, (m, id) => (ids.has(id) ? m : ""));
+  return text.replace(CITATION, (m, id) => (isCitationOf(ids, id) ? m : ""));
+}
+
+/**
+ * The same rule while the answer streams: text that may be a marker (a "[",
+ * a "[^..." not closed yet, or the space before them) is held until it is
+ * known, so a dropped marker never flashes on screen. `ids` is read live: a
+ * source arrives before the text that cites it.
+ */
+export class CitationFilter {
+  private buf = "";
+  constructor(private ids: () => Set<string>) {}
+  push(delta: string): string {
+    this.buf += delta;
+    const ids = this.ids();
+    let out = "";
+    let m: RegExpExecArray | null;
+    const re = new RegExp(CITATION.source);
+    while ((m = re.exec(this.buf))) {
+      out += this.buf.slice(0, m.index) + (isCitationOf(ids, m[1]!) ? m[0] : "");
+      this.buf = this.buf.slice(m.index + m[0].length);
+    }
+    // Hold a possible start ("[", "[^שיחות" with no "]" yet, at most 120
+    // characters) and any trailing space that may precede one.
+    const open = this.buf.search(/[ \t]*\[(\^[^\]\n]{0,120})?$/);
+    const cut = open >= 0 ? open : this.buf.search(/[ \t]+$/);
+    if (cut < 0) { out += this.buf; this.buf = ""; }
+    else { out += this.buf.slice(0, cut); this.buf = this.buf.slice(cut); }
+    return out;
+  }
+  /** The held-back text, when the answer ends. */
+  end(): string {
+    const rest = this.buf;
+    this.buf = "";
+    return rest;
+  }
 }
 
 export function threadSystemLines(scope: ThreadScope, locale: "he" | "en", now = new Date()): string[] {
@@ -305,6 +345,7 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
   const steps = new Map<string, Step>();
   const blocks: unknown[] = [];
   const sources: Array<{ id: string }> = [];
+  const cites = new CitationFilter(() => new Set(sources.map((x) => x.id)));
   let pendingApproval: string | null = null;
   let text = "";
   let status: "done" | "cancelled" | "failed" = "done";
@@ -328,7 +369,7 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
       defaultPeriod: scopeDates(run.scope),
     }, async (ev: AgentRuntimeEvent) => {
       switch (ev.type) {
-        case "token": await emitText(splitter.push(ev.text)); break;
+        case "token": await emitText(cites.push(splitter.push(ev.text))); break;
         case "tool_start":
           steps.set(ev.toolCallId, { id: ev.toolCallId, text: ev.label, status: "running", startedAt: Date.now() });
           await emit("step.start", { stepId: ev.toolCallId, text: ev.label });
@@ -371,8 +412,10 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
   }
   if (ac.signal.aborted) status = "cancelled";
 
-  const { rest, suggestions } = splitter.end();
-  if (rest && status !== "cancelled") await emitText(rest);
+  const { rest: unsplit, suggestions } = splitter.end();
+  const rest = cites.push(unsplit) + cites.end();
+  // A held trailing space alone is not worth an event (the saved text is trimmed).
+  if (rest.trim() && status !== "cancelled") await emitText(rest);
   else if (rest) text += rest;
   if (suggestions.length && status === "done") await emit("suggestions", { items: suggestions });
   // A citation must point at a source of this answer; any other is dropped.

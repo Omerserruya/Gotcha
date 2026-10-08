@@ -141,7 +141,7 @@ function periodWords(q: ConversationQuery, locale: Locale): string {
 }
 
 /** The source's chip label: "12 שיחות שמזכירות “קטן”", "38 conversations, 1 - 7 October". */
-function sourceLabel(q: ConversationQuery, total: number, locale: Locale): string {
+export function sourceLabel(q: ConversationQuery, total: number, locale: Locale): string {
   const he = locale === "he";
   const parts = [`${total} ${L.conversations[locale]}`];
   if (q.mention) parts.push(he ? `שמזכירות “${q.mention}”` : `mentioning “${q.mention}”`);

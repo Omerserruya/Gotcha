@@ -327,9 +327,16 @@ conversation in that state now, whenever it started (the figure Home and
 label ends "· right now" / "· כרגע" and its `deepLink` is null. A period counts
 the conversations that STARTED in it.
 
+The open-conversations figure (`system_get_metric open_conversations`) also
+has a source, with no block: `{ "now": true, "status": "OPEN" }`, label "17
+שיחות (פתוחות) · כרגע", so a metric answer has something real to cite.
+
 The answer cites a source after the claim it supports with `[^s1]` in `text`.
-The client renders it as that source's chip. The server removes a citation
-whose source does not exist in the message. The chips under the answer
+The client renders it as that source's chip. The server removes any `[^...]`
+that is not a source of the message (`[^s9]`, or the model's own words in
+brackets), with the space before it, in the saved text AND in the stream (a
+possible marker is held back until it closes), so `text.delta` never carries
+one. The chips under the answer
 (design 01a) are `sources`, in order.
 
 ### 9.4 The full list behind a source

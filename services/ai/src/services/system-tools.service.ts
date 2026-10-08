@@ -14,7 +14,7 @@
  */
 
 import { prisma, visibilityClause, readDurableSetting, parseBusinessHours, REAL_CONVERSATION, type Viewer } from "@chatcenter/shared";
-import { normalizeQuery, queryConversations } from "./assistant-query.service";
+import { normalizeQuery, queryConversations, sourceLabel, type ConversationQuery } from "./assistant-query.service";
 import { normalizeOrderQuery, queryOrders, queryProductStock } from "./assistant-commerce-query.service";
 
 /** The last n days, today included (UTC days: a caller with a workspace period passes it). */
@@ -446,7 +446,16 @@ async function dispatchSystemTool(
         if (value === null) {
           return { toolCallId, content: JSON.stringify({ ok: false, error: "this figure is not available right now" }) };
         }
-        return { toolCallId, content: JSON.stringify({ ok: true, value, label: METRIC_LABELS[metric]?.[ctx.locale ?? "en"] ?? (ctx.locale === "he" ? "נתון" : "figure") }) };
+        const label = METRIC_LABELS[metric]?.[ctx.locale ?? "en"] ?? (ctx.locale === "he" ? "נתון" : "figure");
+        // "Open" has a list behind it (the current state): a source the
+        // answer can cite. Without one the model cited the figure by its
+        // words ("[^שיחות פתוחות...]" on screen, 2026-10-08).
+        if (metric === "open_conversations" && ctx.nextId) {
+          const params: ConversationQuery = { now: true, status: "OPEN" };
+          const source = { id: ctx.nextId("s"), label: sourceLabel(params, value, ctx.locale ?? "en"), kind: "conversations", count: value, deepLink: null, query: { tool: "conversations", params } };
+          return { toolCallId, content: JSON.stringify({ ok: true, value, label, cite: source.id }), artifacts: { blocks: [], source } };
+        }
+        return { toolCallId, content: JSON.stringify({ ok: true, value, label }) };
       }
       case "system_search_customers": {
         const limit = Math.min(20, Math.max(1, Number(args.limit) || 10));
