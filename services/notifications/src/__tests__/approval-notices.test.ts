@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const H = vi.hoisted(() => ({ users: [] as any[], inApp: [] as any[], approvals: [] as any[], dedup: new Set<string>(), onEvent: null as null | ((e: any) => void) }));
+const H = vi.hoisted(() => ({ users: [] as any[], inApp: [] as any[], approvals: [] as any[], dedup: new Set<string>(), onEvent: null as null | ((e: any) => void), pinged: [] as any[] }));
 
 vi.mock("@chatcenter/shared", async () => ({
   ...(await import("@chatcenter/shared/src/lib/notification-category")),
@@ -51,7 +51,7 @@ vi.mock("../services/queues", async () => {
   const actual = await vi.importActual<any>("../services/queues");
   return { ...actual, getNotificationsQueue: () => ({ add: async () => ({ id: "j" }) }), getNotificationsEmailQueue: () => ({ add: async () => ({ id: "e" }) }) };
 });
-vi.mock("../services/whatsapp-approval.service", () => ({ notifyManagerOfApproval: async () => undefined }));
+vi.mock("../services/whatsapp-approval.service", () => ({ notifyManagerOfApproval: async (...a: any[]) => { H.pinged.push(a); } }));
 
 import { processEvent } from "../services/notification-engine.service";
 import { planOf, resolveApprovalNotices, startNotificationEventBridge } from "../services/event-bridge";
@@ -146,5 +146,14 @@ describe("★ the bridge", () => {
     H.onEvent!({ event: "approval:created", tenantId: "T", data: { id: "a4", tool: "x", summary: "y" } });
     await flush();
     expect(H.inApp.filter((r) => r.id.startsWith("a")).map((r) => [r.targetId, r.read])).toEqual([["a1", true], ["a2", true], ["a3", true], ["a4", false]]);
+  });
+
+  it("created: the WhatsApp ping gets the plan (who asked, where, the steps), so it can skip the requester and say it in words", async () => {
+    startNotificationEventBridge();
+    H.pinged = [];
+    H.onEvent!({ event: "approval:created", tenantId: "T", data: { id: "plan", tool: "propose_plan", summary: NEUTRAL } });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(H.pinged).toHaveLength(1);
+    expect(H.pinged[0][2]).toMatchObject({ requester: { userId: "matan" }, source: "home_assistant" });
   });
 });

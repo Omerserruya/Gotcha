@@ -33,7 +33,8 @@ export function startNotificationEventBridge(): void {
         if (evt.event === "approval:created") {
           // A plan is said from its steps, for each reader, and never to the
           // person who proposed it (the event carries no params, so they are read here).
-          void planOf(evt.tenantId, evt.data?.id, evt.data?.tool).then((plan) => tryEmit({
+          const planned = planOf(evt.tenantId, evt.data?.id, evt.data?.tool);
+          void planned.then((plan) => tryEmit({
             type: "tool.approval_required",
             tenantId: evt.tenantId,
             data: {
@@ -53,7 +54,7 @@ export function startNotificationEventBridge(): void {
           // Out-of-band manager ping (opt-in per tenant). Fire-and-forget:
           // the approval already exists in the in-app inbox, so a WhatsApp
           // problem must never break the in-app notification above.
-          void notifyManagerOfApproval(evt.tenantId, evt.data ?? {}).catch((err: any) => {
+          void planned.then((plan) => notifyManagerOfApproval(evt.tenantId, evt.data ?? {}, plan)).catch((err: any) => {
             console.warn("[notifications.bridge] whatsapp approval notify failed:", err?.message);
             // The approval exists and the approver was never told. Distinct
             // from a customer completion notification: here the action is
