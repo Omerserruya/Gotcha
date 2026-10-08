@@ -21,8 +21,15 @@ export type Block = ChartBlock | BreakdownBlock | RecordListBlock;
 export interface Source { id: string; label: string; kind: "conversations"; count: number | null; deepLink: string | null; query: { tool: "conversations"; params: ConversationQuery } }
 
 export interface ConversationQuery {
-  from: string; // YYYY-MM-DD, workspace days, inclusive
-  to: string;
+  from?: string; // YYYY-MM-DD, workspace days, inclusive (absent with `now`)
+  to?: string;
+  /**
+   * The current state: every conversation in `status` right now, whenever it
+   * started (the figure Home's "open" counts). "How many are open", "how many
+   * of them are on WhatsApp" are about now; a period would count only the
+   * ones that STARTED in it, and said 0 of 17 open (Omer, 2026-10-08).
+   */
+  now?: true;
   channels?: string[];
   status?: "OPEN" | "WAITING" | "CLOSED";
   groupBy?: "day" | "channel" | "status" | "handler" | "intent" | "sentiment";
@@ -64,20 +71,25 @@ function daysBetween(from: string, to: string): string[] {
 
 /** A clean query, or a reason it cannot run. */
 export function normalizeQuery(raw: any): ConversationQuery | { error: string } {
+  const channels = Array.isArray(raw?.channels) ? [...new Set(raw.channels.map((c: unknown) => String(c).toUpperCase()).filter((c: string) => CHANNELS.has(c)))] as string[] : undefined;
+  const status = ["OPEN", "WAITING", "CLOSED"].includes(raw?.status) ? raw.status : undefined;
+  const groupBy = ["day", "channel", "status", "handler", "intent", "sentiment"].includes(raw?.groupBy) ? raw.groupBy : undefined;
+  const mention = typeof raw?.mention === "string" && raw.mention.trim() ? raw.mention.trim().slice(0, 80) : undefined;
+  if (raw?.now === true || raw?.now === "true") {
+    // Closed "right now" is every conversation ever closed: not a current state.
+    if (status !== "OPEN" && status !== "WAITING") return { error: "now (the current state) needs status OPEN or WAITING" };
+    if (groupBy === "day") return { error: "the current state has no days: split it by channel, status, handler, intent or sentiment, or ask about a period" };
+    if (mention) return { error: "a mention needs a period (what was said in it)" };
+    return { now: true, ...(channels?.length ? { channels } : {}), status, groupBy: groupBy ?? "channel" };
+  }
   const from = String(raw?.from ?? ""), to = String(raw?.to ?? "");
   if (!DAY.test(from) || !DAY.test(to) || from > to) return { error: "from and to must be YYYY-MM-DD days, from <= to" };
   if (daysBetween(from, to).length > MAX_DAYS) return { error: `at most ${MAX_DAYS} days` };
-  const channels = Array.isArray(raw?.channels) ? [...new Set(raw.channels.map((c: unknown) => String(c).toUpperCase()).filter((c: string) => CHANNELS.has(c)))] as string[] : undefined;
-  const status = ["OPEN", "WAITING", "CLOSED"].includes(raw?.status) ? raw.status : undefined;
-  const groupBy = ["day", "channel", "status", "handler", "intent", "sentiment"].includes(raw?.groupBy) ? raw.groupBy : "day";
-  const mention = typeof raw?.mention === "string" && raw.mention.trim() ? raw.mention.trim().slice(0, 80) : undefined;
-  return { from, to, ...(channels?.length ? { channels } : {}), ...(status ? { status } : {}), groupBy, ...(mention ? { mention } : {}) };
+  return { from, to, ...(channels?.length ? { channels } : {}), ...(status ? { status } : {}), groupBy: groupBy ?? "day", ...(mention ? { mention } : {}) };
 }
 
 /** The conversations a query counts, as a Prisma where (visibility kept in an AND). */
 async function whereOf(tenantId: string, q: ConversationQuery, viewer: Viewer | undefined, tz: string) {
-  const start = dayStart(q.from, tz);
-  const end = dayStart(nextDay(q.to), tz);
   const and: any[] = [];
   const clause = viewer ? visibilityClause(viewer) : null;
   if (clause) and.push({ OR: clause });
@@ -87,11 +99,16 @@ async function whereOf(tenantId: string, q: ConversationQuery, viewer: Viewer | 
     ...(q.channels ? { channel: { in: q.channels } } : {}),
     ...(q.status ? { status: q.status } : {}),
   };
-  if (q.mention) {
-    // Conversations where a message in the period says it (any language, any case).
-    where.messages = { some: { createdAt: { gte: start, lt: end }, body: { contains: q.mention, mode: "insensitive" } } };
-  } else {
-    where.createdAt = { gte: start, lt: end };
+  // The current state: whenever they started.
+  if (!q.now) {
+    const start = dayStart(q.from!, tz);
+    const end = dayStart(nextDay(q.to!), tz);
+    if (q.mention) {
+      // Conversations where a message in the period says it (any language, any case).
+      where.messages = { some: { createdAt: { gte: start, lt: end }, body: { contains: q.mention, mode: "insensitive" } } };
+    } else {
+      where.createdAt = { gte: start, lt: end };
+    }
   }
   if (and.length) where.AND = and;
   return where;
@@ -117,6 +134,7 @@ function handlerOf(c: { handledBy: string | null; isHandedOver: boolean }): "got
 }
 
 function periodWords(q: ConversationQuery, locale: Locale): string {
+  if (q.now) return locale === "he" ? "כרגע" : "right now";
   const f = whenText(new Date(`${q.from}T12:00:00.000Z`), locale, "UTC", false);
   const t = whenText(new Date(`${q.to}T12:00:00.000Z`), locale, "UTC", false);
   return q.from === q.to ? f : `${f} - ${t}`;
@@ -149,7 +167,7 @@ export const INBOX_VIEW_ALL_LIVE = true;
 
 export function sourceLink(q: ConversationQuery, viewAllLive = INBOX_VIEW_ALL_LIVE): string | null {
   if (!viewAllLive) return null;
-  if (q.mention || q.status || (q.channels && q.channels.length > 1)) return null;
+  if (q.now || q.mention || q.status || (q.channels && q.channels.length > 1)) return null;
   const channel = q.channels?.[0];
   if (channel && !INBOX_CHANNELS.has(channel)) return null;
   return `/inbox?view=all&${channel ? `channel=${channel}&` : ""}from=${q.from}&to=${q.to}`;
@@ -195,13 +213,16 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
   const he = ctx.locale === "he";
   const partial = capped ? { reason: "capped", cap: MAX_ROWS } : null;
 
+  // A card that shows nothing is not drawn: the answer says the 0 in words.
+  let groups: Array<{ label: string; value: number }> | null = null;
+  let coverage: { covered: number; of: number } | null = null;
   if (q.groupBy === "day") {
-    const days = daysBetween(q.from, q.to);
+    const days = daysBetween(q.from!, q.to!);
     const byDay = new Map(days.map((d) => [d, 0]));
     for (const r of counted) { const d = dayOf(r.createdAt, tz); if (byDay.has(d)) byDay.set(d, byDay.get(d)! + 1); }
     const values = days.map((d) => byDay.get(d)!);
     const max = Math.max(0, ...values);
-    blocks.push({
+    if (total) blocks.push({
       type: "chart", id: ctx.nextId("b"), title: he ? "שיחות לפי יום" : "Conversations by day", sourceId: sId, kind: "bar",
       x: { kind: "day", values: days }, series: [{ key: "conversations", label: he ? "שיחות" : "Conversations", values }],
       unit: "count", currency: null, highlight: max > 0 ? days.filter((_, i) => values[i] === max) : [], deepLink: "/analytics?tab=overview", partial,
@@ -231,7 +252,9 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
       key, value, share: covered ? value / covered : 0,
       label: q.groupBy === "sentiment" ? L.sentiment[key]?.[ctx.locale] ?? key : intentLabel(key, ctx.locale),
     }));
-    blocks.push({
+    groups = items.map((i) => ({ label: i.label, value: i.value }));
+    coverage = { covered, of: total };
+    if (items.length) blocks.push({
       type: "breakdown", id: ctx.nextId("b"), title: q.groupBy === "intent" ? (he ? "לפי כוונה" : "By intent") : (he ? "לפי סנטימנט" : "By sentiment"), sourceId: sId,
       items, total: covered, unit: "count", currency: null, other: null, coverage: { covered, of: total }, deepLink: "/analytics?tab=topics", partial: null,
     });
@@ -243,7 +266,8 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
       key, value, share: total ? value / total : 0,
       label: q.groupBy === "channel" ? channelName(key, ctx.locale) : q.groupBy === "status" ? L.status[key]?.[ctx.locale] ?? key : L.handler[key]![ctx.locale],
     }));
-    blocks.push({
+    groups = items.map((i) => ({ label: i.label, value: i.value }));
+    if (items.length) blocks.push({
       type: "breakdown", id: ctx.nextId("b"),
       title: q.groupBy === "channel" ? (he ? "לפי ערוץ" : "By channel") : q.groupBy === "status" ? (he ? "לפי מצב" : "By status") : (he ? "מי טיפל" : "Who handled them"),
       sourceId: sId, items, total, unit: "count", currency: null, other: null, coverage: null,
@@ -260,16 +284,27 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
     });
   }
 
-  const first = blocks[0]!;
+  // None started in the period, but some are in that state now: the period is
+  // the reason for the 0, and the answer says so ("none started this week;
+  // 17 are open").
+  let inThisStateNow: number | null = null;
+  if (!total && !q.now && !q.mention && (q.status === "OPEN" || q.status === "WAITING")) {
+    inThisStateNow = await prisma.conversation.count({ where: await whereOf(ctx.tenantId, { now: true, status: q.status, ...(q.channels ? { channels: q.channels } : {}) }, ctx.viewer, tz) });
+  }
+
+  const chart = blocks.find((b): b is ChartBlock => b.type === "chart");
   const summary: Record<string, unknown> = {
     ok: true,
     cite: sId,
     total,
     period: periodWords(q, ctx.locale),
-    ...(first.type === "breakdown" ? { groups: first.items.map((i) => ({ label: i.label, value: i.value })), ...(first.coverage ? { recordedFor: `${first.coverage.covered} of ${first.coverage.of}` } : {}) } : {}),
-    ...(first.type === "chart" ? { busiestDays: first.highlight.map((d) => whenText(new Date(`${d}T12:00:00.000Z`), ctx.locale, "UTC", false)) } : {}),
+    ...(q.now ? { counts: "every conversation in this state now, whenever it started" } : {}),
+    ...(groups ? { groups } : {}),
+    ...(coverage ? { recordedFor: `${coverage.covered} of ${coverage.of}` } : {}),
+    ...(chart ? { busiestDays: chart.highlight.map((d) => whenText(new Date(`${d}T12:00:00.000Z`), ctx.locale, "UTC", false)) } : {}),
+    ...(inThisStateNow ? { inThisStateNow, note: `0 of them STARTED in ${periodWords(q, ctx.locale)}, but ${inThisStateNow} are in this state now (they started earlier): say both` } : {}),
     ...(capped ? { note: `counted the latest ${MAX_ROWS}` } : {}),
-    shownAs: SHOWN_AS,
+    shownAs: blocks.length ? SHOWN_AS : NO_CARD,
     cards: cardsOf(blocks),
   };
   return { summary, blocks, source };
@@ -278,6 +313,9 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
 /** What the model is told about the cards it produced. */
 export const SHOWN_AS =
   "the user sees these cards with your answer: refer to them (\"the chart\") without saying where they are on the screen, never say you lack a breakdown a card shows, do not repeat every number, cite the source";
+
+/** A result with nothing to draw (0): no card goes with the answer. */
+export const NO_CARD = "no card is shown for this: say the number in words and cite the source";
 
 /** The cards in words, so the model knows what the user is looking at. */
 export function cardsOf(blocks: Array<{ type: string; title: string; x?: { values: string[] }; items?: unknown[] }>): string[] {

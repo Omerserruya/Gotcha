@@ -151,6 +151,12 @@ export async function runAgent(
   // One id space per answer: "b1", "s1"... across every query tool call.
   const seq = { b: 0, s: 0 };
   const nextId = (k: "b" | "s") => `${k}${++seq[k]}`;
+  // One answer reads each thing once. The model asks the same query twice in
+  // a turn, and the user got two identical cards and two sources
+  // (Omer, 2026-10-08): a repeat gets the first result, with no new step,
+  // card or source. Reads only (system_*); an action is never skipped here.
+  const answered = new Map<string, string>(); // a read call → its result
+  const drawn = new Map<string, string>(); // a source's query → the result that drew it
 
   for (round = 0; round < MAX_ROUNDS; round++) {
     if (aborted()) { stopReason = "cancelled"; break; }
@@ -230,6 +236,23 @@ export async function runAgent(
       if (aborted()) break;
       let parsedArgs: unknown = {};
       try { parsedArgs = JSON.parse(tc.function?.arguments || "{}"); } catch { /* keep raw */ }
+      const readKey = (tc.function?.name || "").startsWith("system_") ? `${tc.function.name}:${canonical(parsedArgs)}` : null;
+      const again = readKey ? answered.get(readKey) : undefined;
+      if (again !== undefined) {
+        chatMessages.push({ role: "tool", tool_call_id: tc.id, content: again });
+        if (!input.ephemeral) {
+          await appendToMemory({
+            tenantId: input.operator.tenantId,
+            userId: input.operator.userId,
+            sessionId: input.sessionId,
+            role: "tool",
+            content: again,
+            toolCallId: tc.id,
+            toolName: tc.function?.name || undefined,
+          });
+        }
+        continue;
+      }
       const label = stepText(tc.function?.name || "", parsedArgs, input.operator.locale ?? "en");
       await onEvent({
         type: "tool_start",
@@ -251,9 +274,16 @@ export async function runAgent(
         nextId,
         canReadCommerce: !!input.operator.canReadCommerce,
       });
-      if (r.artifacts) {
+      // Other words, same query (a default spelled out): the first card stands.
+      const sourceKey = r.artifacts ? canonical((r.artifacts.source as any)?.query ?? null) : null;
+      const sameAs = sourceKey ? drawn.get(sourceKey) : undefined;
+      if (sameAs !== undefined) {
+        r.content = sameAs;
+      } else if (r.artifacts) {
+        if (sourceKey) drawn.set(sourceKey, r.content);
         await onEvent({ type: "artifacts", toolCallId: tc.id, blocks: r.artifacts.blocks, source: r.artifacts.source });
       }
+      if (readKey) answered.set(readKey, r.content);
 
       // Surface side-effects to the consumer for UI cues (toast, badge, etc).
       if (r.sideEffect?.kind === "proposed_plan") {
@@ -326,6 +356,24 @@ export async function runAgent(
   if (stopReason === "error") {
     console.warn("[agent-runtime] run terminated with error after", round, "rounds");
   }
+}
+
+/** A value as one string, whatever the order of its keys; empty values count as absent. */
+export function canonical(v: unknown): string {
+  const norm = (x: any): any => {
+    if (Array.isArray(x)) return x.map(norm);
+    if (x && typeof x === "object") {
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(x).sort()) {
+        const val = x[k];
+        if (val === undefined || val === null || val === "") continue;
+        out[k] = norm(val);
+      }
+      return out;
+    }
+    return x;
+  };
+  return JSON.stringify(norm(v)) ?? "";
 }
 
 function summariseToolResult(jsonStr: string): string {

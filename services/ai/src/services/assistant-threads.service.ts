@@ -72,7 +72,7 @@ export function scopeLine(scope: ThreadScope, now = new Date(), locale: "he" | "
   return [
     `Scope of this conversation: ${from} to ${to} (inclusive), ${ch}. When you mention the period, say it as "${say(from)} - ${say(to)}" (never the ISO dates).`,
     `Use the period for questions about activity over time (new conversations, messages, what was closed, trends): sinceISO=${from}T00:00:00.000Z.`,
-    `Never apply the period to the current state: "how many are open", "what is waiting for us" are about now, whenever the conversation started; omit sinceISO for them.`,
+    `Never apply the period to the current state: "how many are open", "what is waiting for us" are about now, whenever the conversation started; omit sinceISO for them, and use now: true (with the status) in system_query_conversations, also for a split of them ("how many of them are on WhatsApp").`,
     scope.channels === "all" ? "" : "Apply the channel filter to every count and search.",
     "If the user asks about another period or channel explicitly, answer that and say which one you used.",
   ].filter(Boolean).join(" ");

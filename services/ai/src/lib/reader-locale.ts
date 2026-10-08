@@ -35,3 +35,18 @@ export function deliberateLanguage(h: unknown): "he" | "en" | null {
   const m = /^(he|en)(-[a-z]{2,4})?$/.exec(v);
   return m ? (m[1] as "he" | "en") : null;
 }
+
+/**
+ * The language a question is written in: Hebrew letters against Latin ones,
+ * the majority wins ("כמה מהם מ-WhatsApp?" is Hebrew). Null when it has no
+ * clear language (a number, a tie, an emoji): the caller falls back to the
+ * interface language. A Home chat turn is written in its question's language,
+ * steps, cards and suggestions included (Omer, 2026-10-08).
+ */
+export function questionLanguage(text: unknown): "he" | "en" | null {
+  const s = String(text ?? "");
+  const he = (s.match(/[א-ת]/g) ?? []).length;
+  const en = (s.match(/[A-Za-z]/g) ?? []).length;
+  if (he === en) return null;
+  return he > en ? "he" : "en";
+}

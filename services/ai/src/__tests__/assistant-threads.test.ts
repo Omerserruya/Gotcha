@@ -12,6 +12,9 @@
  *   - resume replays after Last-Event-ID; an expired run is 410
  *   - the token budget ends an answer with BUDGET_EXCEEDED
  *   - a user-set title is never overwritten; delete removes the memory too
+ *   - ★ a turn is written in its question's language (steps, cards, sources,
+ *     suggestions, the title, the full list), whatever the interface's
+ *   - ★ the same query twice in one answer: one step, one card, one source
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
@@ -26,6 +29,8 @@ const H = vi.hoisted(() => ({
   user: "u1",
   titleReply: "Refund questions",
   titleCalls: 0,
+  titleAsks: [] as string[],
+  convs: [] as any[],
   n: 0,
 }));
 
@@ -84,7 +89,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       systemAgentMessage: { deleteMany: async (a: any) => { H.memoryDeletes.push(a.where); return { count: 1 }; } },
       user: { findUnique: async () => ({ name: "Omer", email: "o@x", role: "ADMIN", locale: null }) },
       tenant: { findUnique: async () => ({ name: "Lumiere", defaultLocale: "en" }) },
-      conversation: t, message: t, contact: t, tenantTool: t, approvalRequest: t, aIAgent: t,
+      conversation: { ...t, findMany: async (a: any) => H.convs.slice(0, a.take ?? 1e9) }, message: t, contact: t, tenantTool: t, approvalRequest: t, aIAgent: t,
     },
   };
 });
@@ -99,7 +104,7 @@ vi.mock("../services/ai.service", async (importOriginal) => {
   return {
     ...actual,
     streamResponse: (p: any) => { H.modelCalls.push(p); const next = H.script.shift(); return next ? next(p) : (async function* () { yield { done: true, content: "", toolCalls: [], usage: {} }; })(); },
-    generateResponse: async () => { H.titleCalls++; return { content: H.titleReply, usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } }; },
+    generateResponse: async (p: any) => { H.titleCalls++; H.titleAsks.push(p.messages[0].content); return { content: H.titleReply, usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } }; },
   };
 });
 
@@ -125,8 +130,14 @@ async function send(threadId: string, text: string, extra: any = {}) {
 
 beforeEach(() => {
   H.threads = []; H.messages = []; H.memoryDeletes = []; H.memoryAppends = []; H.kv.clear(); H.script = []; H.modelCalls = [];
-  H.aiAllowed = true; H.user = "u1"; H.titleReply = "Refund questions"; H.n = 0; H.titleCalls = 0;
+  H.aiAllowed = true; H.user = "u1"; H.titleReply = "Refund questions"; H.n = 0; H.titleCalls = 0; H.titleAsks = [];
+  H.convs = [];
 });
+const openConv = (id: string, channel = "WHATSAPP") => ({ id, channel, status: "OPEN", handledBy: "ai_agent", isHandedOver: false, customerName: `Customer ${id}`, customerExternalId: id, createdAt: new Date(), lastMessageAt: new Date() });
+/** One model turn asking for several tools at once. */
+const tools = (...calls: Array<[string, any]>) => async function* () {
+  yield { done: true, content: "", usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 }, toolCalls: calls.map(([name, args], i) => ({ id: `tc_${i}_${name}`, type: "function", function: { name, arguments: JSON.stringify(args) } })) };
+};
 
 describe("threads", () => {
   it("create with the default scope; an invalid scope is 400", async () => {
@@ -394,6 +405,7 @@ describe("★ cancel and resume", () => {
 describe("★ stage 2: cards and sources from the server, never the model", () => {
   it("a query becomes a block event and a source; an invented citation is dropped; both are saved and returned", async () => {
     const t = await newThread();
+    H.convs = [openConv("c1")];
     H.script = [tool("system_query_conversations", { groupBy: "day" }), say("Quiet week [^s1], busier than [^s9].")];
     const r = await send(t.id, "how was the week?");
     const names = r.events.map((e) => e.event);
@@ -452,5 +464,70 @@ describe("the suggestions block never reaches the screen", () => {
     const f = new SuggestionsSplitter();
     const o2 = ["see [[", "link]] now"].map((d) => f.push(d)).join("");
     expect(o2 + f.end().rest).toBe("see [[link]] now");
+  });
+});
+
+describe("★ a turn speaks its question's language (Omer, 2026-10-08)", () => {
+  it("a Hebrew question on an English screen: steps, cards, sources, suggestions and the title in Hebrew", async () => {
+    const t = await newThread();
+    H.convs = [openConv("c1"), openConv("c2", "SHOPIFY_LIVE_CHAT")];
+    H.script = [tool("system_query_conversations", { now: true, status: "OPEN", groupBy: "channel" }), say("2 [^s1]")];
+    const r = await send(t.id, "מגניב, כמה מהם מוואטסאפ ?", { locale: "en" });
+    expect(r.events.find((e) => e.event === "step.start")!.data.text).toBe("בודקת את השיחות");
+    const block = r.events.find((e) => e.event === "block")!.data.block;
+    expect(block.title).toBe("לפי ערוץ");
+    expect(block.items.map((i: any) => i.label).sort()).toEqual(["וואטסאפ", "צ'אט Shopify"].sort());
+    expect(r.events.find((e) => e.event === "sources")!.data.items[0].label).toBe("2 שיחות (פתוחות) · כרגע");
+    expect(H.modelCalls[0].messages.some((m: any) => m.role === "system" && /written in Hebrew/.test(m.content))).toBe(true);
+    expect(H.titleAsks[0]).toMatch(/in Hebrew/);
+    // The full list behind the card: the same language as the answer it belongs to.
+    const mid = H.messages.find((m) => m.role === "assistant").id;
+    const list = await request(app()).get(`/api/assistant/threads/${t.id}/messages/${mid}/sources/s1/records?locale=en`);
+    expect(list.body.data[0].subtitle).toBe("וואטסאפ · פתוחות");
+  });
+
+  it("an English question on a Hebrew screen is answered in English; a question with no language keeps the screen's", async () => {
+    const t = await newThread();
+    H.script = [tool("system_get_metric", { metric: "open_conversations" }), say("17.")];
+    const r = await send(t.id, "how many are open? (כמה)", { locale: "he" });
+    expect(r.events.find((e) => e.event === "step.start")!.data.text).toBe("Counting the open conversations");
+    expect(H.titleAsks[0]).toMatch(/in English/);
+    H.script = [tool("system_get_metric", { metric: "open_conversations" }), say("17.")];
+    const n = await send(t.id, "17?", { locale: "he" });
+    expect(n.events.find((e) => e.event === "step.start")!.data.text).toBe("סופרת את השיחות הפתוחות");
+  });
+});
+
+describe("★ one card per question (Omer, 2026-10-08: two identical 'By channel' cards)", () => {
+  it("the same query twice in one answer runs once: one step, one card, one source; the model still gets an answer for each call", async () => {
+    const t = await newThread();
+    H.convs = [openConv("c1"), openConv("c2")];
+    const q = { now: true, status: "OPEN", groupBy: "channel" };
+    H.script = [
+      tools(["system_query_conversations", q], ["system_query_conversations", { groupBy: "channel", status: "OPEN", now: true }]),
+      // Next round: the same query with a default spelled out (other words, same rows).
+      tools(["system_query_conversations", { ...q, channels: [] }]),
+      say("2 [^s1]"),
+    ];
+    const r = await send(t.id, "how many of them on WhatsApp?");
+    expect(r.events.filter((e) => e.event === "block")).toHaveLength(1);
+    expect(r.events.find((e) => e.event === "sources")!.data.items.map((x: any) => x.id)).toEqual(["s1"]);
+    // The repeat in the same round shows no step; the respelled one does (it ran), but drew nothing.
+    expect(r.events.filter((e) => e.event === "step.start")).toHaveLength(2);
+    const toolMsgs = H.modelCalls[2].messages.filter((m: any) => m.role === "tool");
+    expect(toolMsgs).toHaveLength(3);
+    expect(new Set(toolMsgs.map((m: any) => m.content)).size).toBe(1);
+    expect(JSON.parse(toolMsgs[0].content).cite).toBe("s1");
+    const saved = H.messages.find((m) => m.role === "assistant");
+    expect(saved.blocks).toHaveLength(1);
+    expect(saved.sources).toHaveLength(1);
+  });
+
+  it("an action is never skipped as a repeat", async () => {
+    const t = await newThread();
+    const plan = { summary: "Tag them", steps: [{ tool: "tag_contact", params: {}, reason: "x" }] };
+    H.script = [tools(["propose_plan", plan], ["propose_plan", plan]), say("ok")];
+    const r = await send(t.id, "tag them");
+    expect(r.events.filter((e) => e.event === "step.start")).toHaveLength(2);
   });
 });

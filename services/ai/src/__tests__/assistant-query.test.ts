@@ -9,6 +9,11 @@
  *   - intent/sentiment only with their coverage ("unknown" is not recorded)
  *   - a mention finds conversations by what was SAID in the period, and lists
  *     them with links; the source can be replayed page by page
+ *   - ★ the current state (`now`): every open conversation whenever it
+ *     started; split by channel it adds up to EXACTLY Home's open count
+ *     (system_get_metric open_conversations), for any viewer
+ *   - ★ nothing found draws no card; a period that is the reason for a 0 says
+ *     how many are in that state now (Omer: "0 from WhatsApp" of 17 open)
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -46,13 +51,15 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
           if (a.cursor) rows = rows.slice(rows.findIndex((r) => r.id === a.cursor.id) + (a.skip ?? 0));
           return rows.slice(0, a.take ?? 1e9);
         },
+        count: async (a: any) => H.convs.filter((c) => test(c, a.where)).length,
       },
       conversationIntelligence: { findMany: async (a: any) => H.intel.filter((i) => a.where.conversationId.in.includes(i.conversationId)) },
     },
   };
 });
 
-import { queryConversations, normalizeQuery, listConversationsForSource, dayStart, dayOf, sourceLink, INBOX_VIEW_ALL_LIVE } from "../services/assistant-query.service";
+import { queryConversations, normalizeQuery, listConversationsForSource, dayStart, dayOf, sourceLink, INBOX_VIEW_ALL_LIVE, NO_CARD } from "../services/assistant-query.service";
+import { dispatchSystemToolCall } from "../services/system-tools.service";
 
 const D = (iso: string) => new Date(iso);
 const conv = (id: string, createdAt: string, o: any = {}) => ({
@@ -200,5 +207,85 @@ describe("links and limits", () => {
     expect(normalizeQuery({ from: "2026-01-01", to: "2026-10-01" })).toHaveProperty("error");
     expect(normalizeQuery({ from: "yesterday", to: "2026-10-01" })).toHaveProperty("error");
     expect(normalizeQuery({ from: "2026-10-01", to: "2026-10-07", channels: ["FAX", "whatsapp"] })).toMatchObject({ channels: ["WHATSAPP"] });
+  });
+});
+
+describe("★ the current state: now, whenever they started (Omer, 2026-10-08)", () => {
+  // Home's open count is 6 here: 1 started in the period, 5 long before it.
+  const openLongAgo = () => [
+    conv("o1", "2026-08-01T10:00:00Z", { status: "OPEN" }),
+    conv("o2", "2026-09-02T10:00:00Z", { status: "OPEN", departmentId: "sales" }),
+    conv("o3", "2026-09-03T10:00:00Z", { status: "OPEN", channel: "SHOPIFY_LIVE_CHAT", assignedAgentId: "u1" }),
+    conv("o4", "2026-09-04T10:00:00Z", { status: "OPEN", channel: "SHOPIFY_LIVE_CHAT", departmentId: "support", assignedAgentId: "u9" }),
+    conv("o5", "2026-09-05T10:00:00Z", { status: "OPEN", channel: "SHOPIFY_LIVE_CHAT" }),
+    conv("o6", "2026-09-06T10:00:00Z", { status: "WAITING" }),
+    conv("osb", "2026-09-07T10:00:00Z", { status: "OPEN", customerExternalId: "sandbox:ag:2" }),
+    conv("otest", "2026-09-07T10:00:00Z", { status: "OPEN", isTest: true }),
+  ];
+  beforeEach(() => { H.convs.push(...openLongAgo()); });
+  const N = (o: any) => normalizeQuery({ now: true, ...o }) as any;
+  const metric = async (viewer?: any) =>
+    JSON.parse((await dispatchSystemToolCall({ id: "m", function: { name: "system_get_metric", arguments: JSON.stringify({ metric: "open_conversations" }) } }, { tenantId: "T", userId: "u1", viewer })).content).value;
+
+  it("★ 'how many open' then 'how many of them on WhatsApp': every open conversation, whenever it started", async () => {
+    const r = await queryConversations(ctx(), N({ status: "OPEN", groupBy: "channel" }));
+    const b: any = r.blocks[0];
+    expect(b.items.map((i: any) => [i.key, i.value])).toEqual([["SHOPIFY_LIVE_CHAT", 4], ["WHATSAPP", 2]]);
+    expect(r.summary).toMatchObject({ total: 6, period: "right now" });
+    expect(r.source.label).toBe("6 conversations (Open) · right now");
+    expect(r.source.deepLink).toBeNull();
+    expect(r.source.query.params).toEqual({ now: true, status: "OPEN", groupBy: "channel" });
+    // The period alone found 1 of them (the bug: "0 from WhatsApp").
+    const inPeriod: any = (await queryConversations(ctx(), Q({ status: "OPEN", groupBy: "channel" }))).blocks[0];
+    expect(inPeriod.total).toBe(1);
+  });
+
+  it("★ split by channel, it adds up to exactly Home's open count, for any viewer", async () => {
+    const sums: number[] = [];
+    for (const viewer of [undefined, { userId: "u1", role: "AGENT", departmentId: "sales" }, { userId: "u1", role: "ADMIN" }]) {
+      const r = await queryConversations(ctx({ viewer }), N({ status: "OPEN", groupBy: "channel" }));
+      const sum = ((r.blocks[0] as any)?.items ?? []).reduce((a: number, i: any) => a + i.value, 0);
+      expect(sum).toBe(await metric(viewer));
+      expect(r.summary.total).toBe(sum);
+      sums.push(sum);
+    }
+    expect(await metric()).toBe(6);
+    // The agent sees fewer (another department's conversation is not theirs): the two still agree.
+    expect(sums[1]).toBeLessThan(6);
+  });
+
+  it("the source replays the current state", async () => {
+    const r = await queryConversations(ctx(), N({ status: "OPEN", channels: ["WHATSAPP"] }));
+    const page = await listConversationsForSource("T", undefined, "he", r.source.query.params, null);
+    expect(page.data.map((i) => i.id)).toEqual(["o2", "o1"]);
+    expect(page.data[0]!.subtitle).toBe("וואטסאפ · פתוחות");
+  });
+
+  it("now needs a state it can mean, and has no days", () => {
+    expect(normalizeQuery({ now: true })).toHaveProperty("error");
+    expect(normalizeQuery({ now: true, status: "CLOSED" })).toHaveProperty("error");
+    expect(normalizeQuery({ now: true, status: "OPEN", groupBy: "day" })).toHaveProperty("error");
+    expect(normalizeQuery({ now: true, status: "OPEN", mention: "small" })).toHaveProperty("error");
+    // A period passed beside it is ignored, not mixed in.
+    expect(normalizeQuery({ now: true, status: "WAITING", from: "2026-10-01", to: "2026-10-07" })).toEqual({ now: true, status: "WAITING", groupBy: "channel" });
+    expect(sourceLink(N({ status: "OPEN" }), true)).toBeNull();
+  });
+
+  it("★ nothing found: no card, and the period said as the reason when some are in that state now", async () => {
+    const r = await queryConversations(ctx({ locale: "he" }), Q({ status: "OPEN", channels: ["WHATSAPP"], groupBy: "channel" }));
+    expect(r.blocks).toEqual([]);
+    expect(r.summary).toMatchObject({ total: 0, inThisStateNow: 2, shownAs: NO_CARD, cards: [] });
+    expect(String((r.summary as any).note)).toMatch(/STARTED in .*2 are in this state now/);
+    expect(r.source).toMatchObject({ id: "s1", count: 0 });
+    // A chart of zeros is no card either.
+    H.convs = [];
+    const empty = await queryConversations(ctx(), Q({ groupBy: "day" }));
+    expect(empty.blocks).toEqual([]);
+    expect(empty.summary).not.toHaveProperty("inThisStateNow");
+    // Intent recorded for none: no card, the coverage still told.
+    H.convs = [conv("1", "2026-10-02T10:00:00Z")];
+    const intent = await queryConversations(ctx(), Q({ groupBy: "intent" }));
+    expect(intent.blocks).toEqual([]);
+    expect(intent.summary).toMatchObject({ recordedFor: "0 of 1", groups: [] });
   });
 });

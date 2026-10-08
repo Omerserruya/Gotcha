@@ -33,6 +33,7 @@ import {
 } from "../services/assistant-threads.service";
 import { normalizeQuery, listConversationsForSource } from "../services/assistant-query.service";
 import { normalizeOrderQuery, listOrdersForSource } from "../services/assistant-commerce-query.service";
+import { questionLanguage } from "../lib/reader-locale";
 
 const router = Router();
 
@@ -119,6 +120,15 @@ async function localeOf(req: Request, o: Owner): Promise<"he" | "en"> {
   return l.startsWith("he") ? "he" : "en";
 }
 
+/**
+ * The language of an answer: its question's (steps, cards, sources,
+ * suggestions and the title all follow it); a question without a clear
+ * language falls back to the interface language.
+ */
+async function turnLocale(req: Request, o: Owner, question: string): Promise<"he" | "en"> {
+  return questionLanguage(question) ?? (await localeOf(req, o));
+}
+
 /** At most RATE_PER_MIN messages a minute per user. Null when allowed, else seconds to wait. */
 async function rateLimited(o: Owner): Promise<number | null> {
   const now = Date.now();
@@ -188,7 +198,7 @@ router.post("/threads/:id/messages", async (req: Request, res: Response) => {
     owner: o,
     thread: { id: thread.id, scope: thread.scope, title: thread.title, titleSource: thread.titleSource },
     text,
-    locale: await localeOf(req, o),
+    locale: await turnLocale(req, o, text),
     operator: { userName: user?.name ?? undefined, userEmail: user?.email ?? undefined, userRole: user?.role ?? undefined, tenantName: tenant?.name ?? undefined, viewer: viewerOf(req), canReadCommerce: await hasPermission(principalOf(req), "customer:commerce:read").catch(() => false) },
     authToken: (req.headers.authorization || "").replace(/^Bearer\s+/i, "") || undefined,
   });
@@ -220,9 +230,15 @@ router.get("/threads/:id/messages/:messageId/sources/:sourceId/records", async (
   if (!o) { res.status(401).json({ error: "no user context" }); return; }
   const thread = await ownThread(o, String(req.params.id));
   if (!thread) { notFound(res); return; }
-  const m = await prisma.assistantMessage.findFirst({ where: { id: String(req.params.messageId), threadId: thread.id }, select: { sources: true } });
+  const m = await prisma.assistantMessage.findFirst({ where: { id: String(req.params.messageId), threadId: thread.id }, select: { sources: true, createdAt: true } });
   const source = (Array.isArray(m?.sources) ? (m!.sources as any[]) : []).find((x) => x?.id === String(req.params.sourceId));
   if (!source) { res.status(404).json({ error: "Source not found", code: "SOURCE_NOT_FOUND" }); return; }
+  // The rows in the language of the answer they belong to (its question's).
+  const question = await prisma.assistantMessage.findFirst({
+    where: { threadId: thread.id, role: "user", createdAt: { lt: m!.createdAt } },
+    orderBy: { createdAt: "desc" }, select: { text: true },
+  }).catch(() => null);
+  const locale = await turnLocale(req, o, question?.text ?? "");
   const unavailable = () => res.status(409).json({ error: "This list can no longer be read", code: "SOURCE_UNAVAILABLE" });
   const cursorOf = () => (typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : null);
   if (source.query?.tool === "orders") {
@@ -230,7 +246,7 @@ router.get("/threads/:id/messages/:messageId/sources/:sourceId/records", async (
     if (!(await hasPermission(principalOf(req), "customer:commerce:read").catch(() => false))) { unavailable(); return; }
     const oq = normalizeOrderQuery(source.query.params);
     if ("error" in oq) { unavailable(); return; }
-    const page = await listOrdersForSource(o.tenantId, await localeOf(req, o), oq, cursorOf());
+    const page = await listOrdersForSource(o.tenantId, locale, oq, cursorOf());
     if (!page) { unavailable(); return; }
     res.json(page);
     return;
@@ -239,7 +255,6 @@ router.get("/threads/:id/messages/:messageId/sources/:sourceId/records", async (
   const q = normalizeQuery(source.query.params);
   if ("error" in q) { res.status(409).json({ error: "This list can no longer be read", code: "SOURCE_UNAVAILABLE" }); return; }
   const cursor = typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : null;
-  const locale = await localeOf(req, o);
   res.json(await listConversationsForSource(o.tenantId, viewerOf(req), locale, q, cursor));
 });
 

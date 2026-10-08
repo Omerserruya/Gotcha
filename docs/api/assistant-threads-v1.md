@@ -90,11 +90,14 @@ logged and charged like every AI call). A title the user set is never overwritte
 answers `200` with `Content-Type: text/event-stream`. **One answer at a time per
 thread**: while one is running, a second send is `409 RUN_IN_PROGRESS`.
 
-**Language:** the answer is written in the language of the user's question
-(Omer, 2026-10-07); only when the question has no clear language (a number, a
-name) does it fall back to the interface language. Steps, suggestions and the
-auto-title follow the interface language: `locale` when sent, else the user's
-profile language, then the workspace's default.
+**Language:** a turn is written in the language of the user's question
+(Omer, 2026-10-07; extended 2026-10-08): the answer, its steps, the blocks'
+titles and labels, the sources' labels, the suggestions, the auto-title (from
+the first question) and the §9.4 full list. Hebrew letters against Latin ones,
+the majority wins. Only a question with no clear language (a number, a name, a
+tie) falls back to the interface language: `locale` when sent, else the
+user's profile language, then the workspace's default. The client's own chrome
+stays in the UI language.
 
 **Errors before the stream opens** are plain JSON with a non-200 status (§6):
 400, 402 (billing refuses before any model call), 404, 409, 429. Once the
@@ -271,6 +274,12 @@ in both languages ("₪10,539.69"), with no invisible direction marks; raw
 amounts stay numbers. `chart.x.values` of kind `day` are the workspace's calendar
 days: format them as dates, no timezone shift. A store read that is refused or
 unsupported produces no block; the assistant says why in one plain sentence.
+A query that finds nothing produces no block either (no breakdown without
+items, no chart of zeros): its source still comes, and the answer says the 0
+in words. When the period is the reason (none STARTED in it, some are in that
+state now), the answer says both ("none started this week; 17 are open").
+The same query asked twice in one answer runs once: one step, one block, one
+source.
 
 Store blocks (part 2), offered only to a caller with `customer:commerce:read`
 and only when a store is connected:
@@ -301,6 +310,14 @@ reader no longer holds `customer:commerce:read`.
   "deepLink": "/inbox?channel=WHATSAPP" | null,
   "query": { "tool": "conversations", "params": { "mention": "קטן", "from": "2026-10-01", "to": "2026-10-07", "channels": "all" } } }
 ```
+A conversations source about the CURRENT state (`"how many are open"`, `"how
+many of them are on WhatsApp"`) has `params: { "now": true, "status": "OPEN" |
+"WAITING", "groupBy": ..., "channels"?: [...] }` and no `from`/`to`: every
+conversation in that state now, whenever it started (the figure Home and
+`open_conversations` show; split by channel it adds up to exactly that). Its
+label ends "· right now" / "· כרגע" and its `deepLink` is null. A period counts
+the conversations that STARTED in it.
+
 The answer cites a source after the claim it supports with `[^s1]` in `text`.
 The client renders it as that source's chip. The server removes a citation
 whose source does not exist in the message. The chips under the answer

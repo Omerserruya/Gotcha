@@ -193,7 +193,8 @@ const SYSTEM_QUERY_CONVERSATIONS = {
       "The business's conversations over a period: how many, by day, by channel, by status, by who handled them (GOTCHA or the team), " +
       "by intent or sentiment (recorded only for some conversations: the result says for how many), or which conversations mention a word. " +
       "The numbers are shown to the user as cards; you get a short summary and a source id. Cite it after the claim as [^<id>] and do not repeat every number. " +
-      "One call per split: \"by channel\" is ONE call with groupBy channel, never one call per channel; \"by day and by channel\" is two calls (groupBy day, groupBy channel).",
+      "One call per split: \"by channel\" is ONE call with groupBy channel, never one call per channel; \"by day and by channel\" is two calls (groupBy day, groupBy channel). " +
+      "A period counts the conversations that STARTED in it. For the current state (\"how many are open\", \"how many are waiting\", \"how many of them are on WhatsApp\" after an open count) use now: true with the status: it counts every conversation in that state now, whenever it started, the same figure as system_get_metric open_conversations.",
     parameters: {
       type: "object",
       properties: {
@@ -203,6 +204,7 @@ const SYSTEM_QUERY_CONVERSATIONS = {
         status: { type: "string", enum: ["OPEN", "WAITING", "CLOSED"], description: "Only conversations in this state. WAITING means waiting for the customer." },
         groupBy: { type: "string", enum: ["day", "channel", "status", "handler", "intent", "sentiment"], description: "How to split the count. Default: day." },
         mention: { type: "string", description: "Only conversations where a message in the period contains this word or phrase (any case)." },
+        now: { type: "boolean", description: "The current state instead of a period: every conversation in `status` (OPEN or WAITING, required) right now, whenever it started. from/to are ignored; groupBy day is not possible. Default: false." },
       },
     },
   },
