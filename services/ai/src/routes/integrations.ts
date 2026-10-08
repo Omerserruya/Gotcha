@@ -23,6 +23,7 @@ import {
 import { getBusinessCoreMap } from "../services/connectors/part-systems";
 import { readerLocale } from "../lib/reader-locale";
 import { catalogDescription } from "../lib/catalog-descriptions";
+import { splitErrorCode } from "../lib/error-code";
 
 const router = Router();
 
@@ -53,10 +54,12 @@ const canReadSystems = requirePermission("integrations:connections:read", "busin
  * an ugly one.
  */
 const LAST_ERROR_MAX = 200;
-function boundConnection<T extends { lastError?: string | null }>(row: T | undefined): T | null {
+function boundConnection<T extends { lastError?: string | null }>(row: T | undefined): (T & { lastErrorCode: string | null }) | null {
   if (!row) return null;
-  if (typeof row.lastError !== "string" || row.lastError.length <= LAST_ERROR_MAX) return row;
-  return { ...row, lastError: row.lastError.slice(0, LAST_ERROR_MAX) };
+  // The code a writer stored beside the sentence (lib/error-code), served apart.
+  const { lastError, lastErrorCode } = splitErrorCode(row.lastError);
+  const bounded = typeof lastError === "string" && lastError.length > LAST_ERROR_MAX ? lastError.slice(0, LAST_ERROR_MAX) : lastError;
+  return { ...row, lastError: bounded, lastErrorCode };
 }
 const canConnectSystems = requirePermission("integrations:connections:connect", "business-systems:connections:connect");
 const canManageSystems = requirePermission("integrations:connections:disconnect", "business-systems:connections:manage");

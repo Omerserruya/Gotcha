@@ -43,6 +43,7 @@ import {
 } from "../services/shopify-chat-install.service";
 import { notifyShopifyUninstalled } from "../services/shopify-billing-bridge.service";
 import { cartEventFromShopifyCheckout, cartCompletionFromShopifyOrder, orderEventFromShopifyOrder } from "../services/shopify-cart-events";
+import { withErrorCode } from "../lib/error-code";
 
 const router = Router();
 
@@ -359,7 +360,7 @@ core.post("/app-uninstalled", async (req: Request, res: Response) => {
           // The token is revoked on Shopify's side the moment the app is
           // removed. Keeping the ciphertext would only be a liability.
           credentials: {},
-          lastError: "The GOTCHA Shopify app was uninstalled from this store.",
+          lastError: withErrorCode("SHOPIFY_APP_UNINSTALLED"),
         },
       }),
     );

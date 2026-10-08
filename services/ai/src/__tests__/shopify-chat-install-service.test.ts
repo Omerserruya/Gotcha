@@ -304,6 +304,7 @@ describe("uninstall", () => {
     const update = H.updateChannel.mock.calls[0][0].data;
     expect(update.platformMeta.shopifyLiveChat.enabled).toBe(false);
     expect(update.connectionStatus).toBe("DISCONNECTED");
+    expect(update.lastError).toBe("[SHOPIFY_CHAT_UNINSTALLED] Shopify Chat app was uninstalled from the store.");
   });
 
   it("drops token material", async () => {

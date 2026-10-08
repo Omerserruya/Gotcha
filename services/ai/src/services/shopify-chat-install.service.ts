@@ -40,6 +40,7 @@ import {
 import { SHOPIFY_LIVE_CHAT, loadChannel, type ShopifyLiveChatChannel } from "./shopify-live-chat.service";
 import { resolveShopifyStore } from "./shopify-catalog.service";
 import { executeAdapterTool, loadConnection } from "./connectors/integration-framework";
+import { withErrorCode } from "../lib/error-code";
 
 export type InstallStatus = "PENDING" | "ACTIVE" | "UNINSTALLED";
 
@@ -543,7 +544,7 @@ export async function markUninstalledByShop(shopDomain: string): Promise<ChatIns
           platformMeta: { shopifyLiveChat: next } as any,
           connectionStatus: "DISCONNECTED",
           isActive: false,
-          lastError: "Shopify Chat app was uninstalled from the store.",
+          lastError: withErrorCode("SHOPIFY_CHAT_UNINSTALLED"),
         },
       });
     }

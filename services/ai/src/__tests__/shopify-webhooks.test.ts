@@ -169,7 +169,8 @@ describe("core app/uninstalled", () => {
     expect(H.updateConnection).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "ti1" },
-        data: expect.objectContaining({ status: "DISCONNECTED", credentials: {} }),
+        // The reason carries its code, so a reader never matches the sentence.
+        data: expect.objectContaining({ status: "DISCONNECTED", credentials: {}, lastError: "[SHOPIFY_APP_UNINSTALLED] The GOTCHA Shopify app was uninstalled from this store." }),
       }),
     );
   });
