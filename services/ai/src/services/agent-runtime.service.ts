@@ -84,6 +84,8 @@ export interface AgentRunInput {
   extraSystem?: string[];
   /** The period query tools default to (a thread's scope as workspace days). */
   defaultPeriod?: { from: string; to: string };
+  /** Told the names of the tools this run may call (a Home thread keeps only suggestions one of them can answer). */
+  onTools?: (names: string[]) => void;
 }
 
 export type AgentEventSink = (event: AgentRuntimeEvent) => void | Promise<void>;
@@ -143,6 +145,7 @@ export async function runAgent(
     aiAgentId: input.aiAgentId ?? null,
     commerce,
   });
+  input.onTools?.(tools.map((t: any) => String(t?.function?.name ?? "")).filter(Boolean));
 
   let totalUsage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
   let round = 0;

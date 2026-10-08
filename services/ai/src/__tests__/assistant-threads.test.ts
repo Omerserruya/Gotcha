@@ -110,7 +110,7 @@ vi.mock("../services/ai.service", async (importOriginal) => {
 });
 
 import router from "../routes/assistant-threads";
-import { SuggestionsSplitter, scopeDates, withValidCitations, CitationFilter, usableTitle, titleFromQuestion } from "../services/assistant-threads.service";
+import { SuggestionsSplitter, scopeDates, withValidCitations, CitationFilter, usableTitle, titleFromQuestion, threadSystemLines } from "../services/assistant-threads.service";
 
 const app = () => { const a = express(); a.use(express.json()); a.use("/api/assistant", router); return a; };
 const sse = (r: request.Test) => r.buffer(true).parse((res, cb) => { let d = ""; res.on("data", (c: Buffer) => { d += c.toString(); }); res.on("end", () => cb(null, d)); });
@@ -191,7 +191,7 @@ describe("threads", () => {
 describe("★ an answer", () => {
   it("streams the events in order with increasing ids, and saves the message", async () => {
     const t = await newThread({ scope: { range: "last_30", channels: ["WHATSAPP"] } });
-    H.script = [tool("system_count_conversations", { status: "OPEN" }), say("There are ", "4 open. [[sugg", "estions]] [\"Which are waiting?\", \"Show last week\"]")];
+    H.script = [tool("system_count_conversations", { status: "OPEN" }), say("There are ", "4 open. [[sugg", "estions]] [{\"text\": \"Which are waiting?\", \"tool\": \"system_get_metric\"}, {\"text\": \"Show last week\", \"tool\": \"system_query_conversations\"}]")];
     const r = await send(t.id, "how many open?");
     expect(r.status).toBe(200);
     const names = r.events.map((e) => e.event);
@@ -639,5 +639,26 @@ describe("★ the thread's title (2026-10-08: \"מָהָם שִׁיחות עִכ
     expect(titleFromQuestion("היי, כמה שיחות יש לנו ?")).toBe("כמה שיחות יש לנו");
     expect(titleFromQuestion("Hello! how many open conversations do we have this week on WhatsApp?")).toBe("how many open conversations do we");
     expect(titleFromQuestion("  ?? ")).toBeNull();
+  });
+});
+
+describe("★ suggestions only from tools (2026-10-08: 'List the 17 open conversations' with no tool to list)", () => {
+  it("a follow-up survives only when it names a tool of this answer; none that needs a selection a Home thread lacks", async () => {
+    const t = await newThread();
+    H.script = [say("17 open.", ' [[suggestions]] [{"text": "List them", "tool": "system_list_conversations"}, {"text": "Export them to CSV", "tool": "system_export_csv"}, "Show the 2 WhatsApp ones", {"text": "Summarize the selected conversation", "tool": "system_summarize_conversation"}, {"text": "Find Omer", "tool": "system_find_customers"}]')];
+    const r = await send(t.id, "how many open?");
+    expect(r.events.find((e) => e.event === "suggestions")!.data.items).toEqual(["List them", "Find Omer"]);
+    expect(H.messages.find((m) => m.role === "assistant").suggestions).toEqual(["List them", "Find Omer"]);
+  });
+
+  it("the model is asked for the tool of each follow-up", () => {
+    const lines = threadSystemLines({ range: "last_7", channels: "all" }, "en").join("\n");
+    expect(lines).toMatch(/"tool": the name of the ONE tool of yours that would answer it/);
+  });
+
+  it("the splitter: tools checked only when given", () => {
+    const s = new SuggestionsSplitter();
+    s.push('ok [[suggestions]] [{"text": "a?", "tool": "x"}, {"text": "b?", "tool": "y"}, "c?"]');
+    expect(s.end({ tools: new Set(["x"]) }).suggestions).toEqual(["a?"]);
   });
 });
