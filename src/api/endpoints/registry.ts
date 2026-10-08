@@ -1265,6 +1265,14 @@ export const knowledgeEndpoints = {
   sources: () => endpoint('/api/knowledge-bases'),
   unanswered: () => endpoint('/api/knowledge/unanswered-questions'),
   /**
+   * 08's Answer (Backend c5c5d6ed + d645751f): `{ answer }` (1-20000, kept as
+   * typed) into the knowledge every employee answers from, and the question
+   * resolved. Waits while it is learned; 502 NOT_LEARNED leaves it open.
+   * ai:knowledge:write or ADMIN; 404 for another workspace's id.
+   */
+  answerUnanswered: (id: string) =>
+    endpoint('/api/knowledge/unanswered-questions/{id}/answer', { id }),
+  /**
    * 08b's "Add knowledge" (Omer, 2026-10-04). Writes the knowledge every AI
    * employee answers from; each document is embedded in the background.
    *

@@ -49,7 +49,21 @@
     "unavailable": "We couldn't read the unanswered questions just now.",
     "asked": "Asked {times, plural, =1 {once} other {# times}} by {people, plural, =1 {one person} other {# people}}",
     "answer": "Answer",
-    "answerNotYet": "Answering from here comes next."
+    "answerLabel": "Your answer to: {question}",
+    "placeholder": "What should GOTCHA tell a customer who asks this?",
+    "hint": "Every employee learns it, and answers it from now on.",
+    "save": "Teach it",
+    "learning": "Learning…",
+    "cancel": "Cancel",
+    "learned": "Learned - every employee answers this now.",
+    "problem": {
+      "empty": "Write an answer first.",
+      "too_long": "That's longer than GOTCHA keeps - 20,000 characters at most.",
+      "forbidden": "You need permission to change what GOTCHA knows.",
+      "gone": "This question isn't here any more.",
+      "not_learned": "Saved, but GOTCHA couldn't learn it yet - the question stays open. Try again.",
+      "failed": "It wasn't saved. Try again."
+    }
   },
   "sources": {
     "heading": "Where it learns from",

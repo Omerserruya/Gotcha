@@ -23,6 +23,7 @@ import {
   Upload,
 } from 'lucide-react';
 
+import { GapRow } from './GapRow';
 import { ResolveConflict } from './ResolveConflict';
 import styles from './Knowledge.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
@@ -351,28 +352,14 @@ export async function KnowledgeScreen({
             ) : (
               <ul className={styles.gaps}>
                 {unanswered.map((question) => (
-                  <li key={question.id} className={styles.gap} data-testid={`gap-${question.id}`}>
-                    <span className={styles.gapText}>
-                      <span className={styles.gapQuestion}>
-                        <UserText>{question.question}</UserText>
-                      </span>
-                      {/* One person twenty times ≠ twenty people once: kept apart. */}
-                      <span className={styles.gapCount}>
-                        {t('gaps.asked', {
-                          times: question.timesAsked,
-                          people: question.distinctAskers,
-                        })}
-                      </span>
-                    </span>
-                    {/* Answering writes knowledge; nothing does that from here yet. */}
-                    <span
-                      className={styles.answer}
-                      aria-disabled="true"
-                      title={t('gaps.answerNotYet')}
-                    >
-                      {t('gaps.answer')}
-                    </span>
-                  </li>
+                  <GapRow
+                    key={question.id}
+                    question={question}
+                    asked={t('gaps.asked', {
+                      times: question.timesAsked,
+                      people: question.distinctAskers,
+                    })}
+                  />
                 ))}
               </ul>
             )}

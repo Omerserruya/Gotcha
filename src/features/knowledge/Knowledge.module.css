@@ -392,8 +392,87 @@
     padding: 5px 11px;
     border: 1px solid var(--border-default);
     border-radius: 7px;
+    background: none;
+    font: inherit;
     font-size: var(--font-size-micro);
     color: var(--text-body);
+    cursor: pointer;
+  }
+
+  /* A gap with its answer open under it: the row, then the field. */
+  .gapItem {
+    border-block-end: 1px solid var(--row-divider);
+  }
+
+  .gapItem > .gap {
+    border-block-end: 0;
+  }
+
+  .gapForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: 0 18px 14px;
+  }
+
+  .gapInput {
+    inline-size: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    resize: block;
+  }
+
+  .gapHint,
+  .gapLearned {
+    margin: 0;
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .gapLearned {
+    color: var(--signal-done-text);
+  }
+
+  .gapProblem {
+    margin: 0;
+    font-size: var(--font-size-micro);
+    color: var(--intent-urgent-text);
+  }
+
+  .gapActions {
+    display: inline-flex;
+    gap: var(--space-8);
+  }
+
+  .gapSave,
+  .gapCancel {
+    padding: 5px 11px;
+    border-radius: 7px;
+    font: inherit;
+    font-size: var(--font-size-micro);
+    cursor: pointer;
+  }
+
+  .gapSave {
+    border: 0;
+    background-color: var(--action-base);
+    color: var(--frame-text);
+  }
+
+  .gapCancel {
+    border: 1px solid var(--border-default);
+    background: none;
+    color: var(--text-secondary);
+  }
+
+  .gapSave:disabled,
+  .gapCancel:disabled {
+    opacity: 0.5;
     cursor: default;
   }
 

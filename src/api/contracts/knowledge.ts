@@ -191,6 +191,9 @@ export const unansweredListSchema = z.object({
   nextCursor: z.string().nullable().default(null),
 });
 
+/** An answer to a gap is kept up to this many characters (the answer route's limit). */
+export const GAP_ANSWER_MAX = 20000;
+
 /** Still open - nobody has added an answer. */
 export function isOpen(question: UnansweredQuestion): boolean {
   return question.resolvedAt === null;
