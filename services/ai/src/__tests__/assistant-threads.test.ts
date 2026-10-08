@@ -418,7 +418,8 @@ describe("★ stage 2: cards and sources from the server, never the model", () =
     expect(sources.map((x: any) => x.id)).toEqual(["s1"]);
     expect(sources[0].query.tool).toBe("conversations");
     const saved = H.messages.find((m) => m.role === "assistant");
-    expect(saved.text).toBe("Quiet week [^s1], busier than .");
+    // A dropped citation takes its space with it.
+    expect(saved.text).toBe("Quiet week [^s1], busier than.");
     expect(saved.blocks).toHaveLength(1);
     expect(saved.sources.map((x: any) => x.id)).toEqual(["s1"]);
     const v = (await request(app()).get(`/api/assistant/threads/${t.id}`)).body.data;
@@ -480,6 +481,20 @@ describe("★ a turn speaks its question's language (Omer, 2026-10-08)", () => {
     expect(r.events.find((e) => e.event === "sources")!.data.items[0].label).toBe("2 שיחות (פתוחות) · כרגע");
     expect(H.modelCalls[0].messages.some((m: any) => m.role === "system" && /written in Hebrew/.test(m.content))).toBe(true);
     expect(H.titleAsks[0]).toMatch(/in Hebrew/);
+    // ★ What the model reads is in the turn's language too: it repeats it
+    // ("בסך הכל right now" leaked from English prose in the result, 2026-10-08).
+    const result = H.modelCalls[1].messages.find((m: any) => m.role === "tool").content;
+    expect(JSON.parse(result)).toMatchObject({ period: "כרגע", cards: ["לפי ערוץ: פילוח ל-2 קבוצות"] });
+    // Every value the model may repeat (all but the instruction): no English words, brand names aside.
+    const { shownAs: _instruction, ...words } = JSON.parse(result);
+    const texts: string[] = [];
+    const collect = (v: unknown): void => { if (typeof v === "string") texts.push(v); else if (v && typeof v === "object") Object.values(v).forEach(collect); };
+    collect(words);
+    expect(texts.join(" | ").replace(/Shopify|\bs1\b/g, "")).not.toMatch(/[A-Za-z]{3,}/);
+    // The turn's language for the answer's own chrome: live and saved.
+    expect(r.events.find((e) => e.event === "run.start")!.data.lang).toBe("he");
+    const view = (await request(app()).get(`/api/assistant/threads/${t.id}`)).body.data;
+    expect(view.messages.map((m: any) => m.lang)).toEqual([undefined, "he"]);
     // The full list behind the card: the same language as the answer it belongs to.
     const mid = H.messages.find((m) => m.role === "assistant").id;
     const list = await request(app()).get(`/api/assistant/threads/${t.id}/messages/${mid}/sources/s1/records?locale=en`);
@@ -495,6 +510,10 @@ describe("★ a turn speaks its question's language (Omer, 2026-10-08)", () => {
     H.script = [tool("system_get_metric", { metric: "open_conversations" }), say("17.")];
     const n = await send(t.id, "17?", { locale: "he" });
     expect(n.events.find((e) => e.event === "step.start")!.data.text).toBe("סופרת את השיחות הפתוחות");
+    expect(n.events.find((e) => e.event === "run.start")!.data.lang).toBe("he");
+    // Saved: the English turn says en; the one without a language says nothing (the UI's stands).
+    const view = (await request(app()).get(`/api/assistant/threads/${t.id}`)).body.data;
+    expect(view.messages.filter((m: any) => m.role === "assistant").map((m: any) => m.lang ?? null)).toEqual(["en", null]);
   });
 });
 

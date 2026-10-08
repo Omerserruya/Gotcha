@@ -144,6 +144,26 @@ describe("★ refunds", () => {
     }
   });
 
+  it("★ a Hebrew turn: every word the model may repeat is Hebrew (2026-10-08: \"right now\" leaked into a Hebrew answer)", async () => {
+    H.store = "woocommerce";
+    H.reply = () => ({ ok: true, result: [{ id: 1, number: "1", date_created_gmt: "2026-10-02T08:00:00", total: "10.00", currency: "ILS", line_items: [], refunds: [{ id: 9, reason: "", total: "-10.00" }] }] });
+    const hebrewOnly = (summary: any) => {
+      const { shownAs: _a, money: _b, store: _c, cite: _d, ...words } = summary;
+      const texts: string[] = [];
+      const collect = (v: unknown): void => { if (typeof v === "string") texts.push(v); else if (v && typeof v === "object") Object.values(v).forEach(collect); };
+      collect(words);
+      return texts.join(" | ");
+    };
+    for (const groupBy of ["day", "product", "reason"]) {
+      const r = await queryOrders(ctx({ locale: "he" }), Q({ measure: "refunds", groupBy }));
+      const said = hebrewOnly(r.summary);
+      expect(said).not.toMatch(/[A-Za-z]{3,}/);
+      expect(said).toMatch(/[א-ת]/);
+    }
+    expect((await queryOrders(ctx({ locale: "he" }), Q({ measure: "refunds", groupBy: "day" }))).summary).toMatchObject({ unavailableSplit: "החנות לא מציינת מתי בוצע כל החזר", note2: "החזרים על הזמנות שבוצעו בתקופה" });
+    expect((await queryOrders(ctx({ locale: "he" }), Q({ measure: "refunds", groupBy: "reason" }))).summary).toMatchObject({ reasonGivenFor: "0 מתוך 1" });
+  });
+
   it("reason is a refund split only", () => {
     expect(normalizeOrderQuery({ from: "2026-10-01", to: "2026-10-03", measure: "orders", groupBy: "reason" })).toMatchObject({ groupBy: "day" });
     expect(normalizeOrderQuery({ from: "2026-10-01", to: "2026-10-03", measure: "refunds", groupBy: "reason" })).toMatchObject({ groupBy: "reason" });

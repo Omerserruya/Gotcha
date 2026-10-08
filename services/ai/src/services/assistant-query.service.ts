@@ -298,14 +298,18 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
     cite: sId,
     total,
     period: periodWords(q, ctx.locale),
-    ...(q.now ? { counts: "every conversation in this state now, whenever it started" } : {}),
+    // Words the model may repeat are in the turn's language ("right now" leaked
+    // into a Hebrew answer from English prose here, 2026-10-08).
+    ...(q.now ? { counts: he ? "כל השיחות במצב הזה כרגע, לא משנה מתי התחילו" : "every conversation in this state now, whenever it started" } : {}),
     ...(groups ? { groups } : {}),
-    ...(coverage ? { recordedFor: `${coverage.covered} of ${coverage.of}` } : {}),
+    ...(coverage ? { recordedFor: `${coverage.covered} ${he ? "מתוך" : "of"} ${coverage.of}` } : {}),
     ...(chart ? { busiestDays: chart.highlight.map((d) => whenText(new Date(`${d}T12:00:00.000Z`), ctx.locale, "UTC", false)) } : {}),
-    ...(inThisStateNow ? { inThisStateNow, note: `0 of them STARTED in ${periodWords(q, ctx.locale)}, but ${inThisStateNow} are in this state now (they started earlier): say both` } : {}),
+    ...(inThisStateNow ? { inThisStateNow, note: he
+      ? `אף אחת מהן לא התחילה ב${periodWords(q, ctx.locale)}, אבל ${inThisStateNow} במצב הזה כרגע (התחילו קודם): לומר את שניהם`
+      : `0 of them STARTED in ${periodWords(q, ctx.locale)}, but ${inThisStateNow} are in this state now (they started earlier): say both` } : {}),
     ...(capped ? { note: `counted the latest ${MAX_ROWS}` } : {}),
     shownAs: blocks.length ? SHOWN_AS : NO_CARD,
-    cards: cardsOf(blocks),
+    cards: cardsOf(blocks, ctx.locale),
   };
   return { summary, blocks, source };
 }
@@ -318,12 +322,13 @@ export const SHOWN_AS =
 export const NO_CARD = "no card is shown for this: say the number in words and cite the source";
 
 /** The cards in words, so the model knows what the user is looking at. */
-export function cardsOf(blocks: Array<{ type: string; title: string; x?: { values: string[] }; items?: unknown[] }>): string[] {
+export function cardsOf(blocks: Array<{ type: string; title: string; x?: { values: string[] }; items?: unknown[] }>, locale: Locale = "en"): string[] {
+  const he = locale === "he";
   return blocks.map((b) =>
-    b.type === "chart" ? `${b.title}: a bar chart over ${b.x?.values.length ?? 0} days`
-    : b.type === "breakdown" ? `${b.title}: a breakdown of ${b.items?.length ?? 0} groups`
-    : b.type === "record_list" ? `${b.title}: a list of ${b.items?.length ?? 0} rows with links`
-    : `${b.title}: a card with its details`);
+    b.type === "chart" ? `${b.title}: ${he ? `גרף עמודות על פני ${b.x?.values.length ?? 0} ימים` : `a bar chart over ${b.x?.values.length ?? 0} days`}`
+    : b.type === "breakdown" ? `${b.title}: ${he ? `פילוח ל-${b.items?.length ?? 0} קבוצות` : `a breakdown of ${b.items?.length ?? 0} groups`}`
+    : b.type === "record_list" ? `${b.title}: ${he ? `רשימה של ${b.items?.length ?? 0} שורות עם קישורים` : `a list of ${b.items?.length ?? 0} rows with links`}`
+    : `${b.title}: ${he ? "כרטיס עם הפרטים" : "a card with its details"}`);
 }
 
 /** The full list behind a conversations source, with the caller's CURRENT visibility. */

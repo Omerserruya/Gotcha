@@ -237,12 +237,15 @@ export async function queryOrders(ctx: QueryCtx, q: OrderQuery): Promise<Commerc
   return {
     summary: {
       ok: true, cite: sId, store, total, ...(unit === "currency" ? { totalText: money(total, currency, ctx.locale) } : {}), period,
-      ...(capped ? { note: `counted the latest ${CAP} orders of the period` } : {}),
-      ...(q.measure === "refunds" ? { note2: "refunds on orders placed in the period", refundedText: money(round(sum(refunds.map((r) => r.amount))), currency, ctx.locale) } : {}),
-      ...(refundSplitMissing ? { unavailableSplit: q.groupBy === "day" ? "this store does not say when each refund was made" : "this store does not say which products were refunded" } : {}),
-      ...(q.groupBy === "reason" ? { reasonGivenFor: `${refunds.filter((r) => r.reason).length} of ${refunds.length}` } : {}),
+      // Words the model may repeat: in the turn's language.
+      ...(capped ? { note: ctx.locale === "he" ? `נספרו ${CAP} ההזמנות האחרונות של התקופה` : `counted the latest ${CAP} orders of the period` } : {}),
+      ...(q.measure === "refunds" ? { note2: ctx.locale === "he" ? "החזרים על הזמנות שבוצעו בתקופה" : "refunds on orders placed in the period", refundedText: money(round(sum(refunds.map((r) => r.amount))), currency, ctx.locale) } : {}),
+      ...(refundSplitMissing ? { unavailableSplit: ctx.locale === "he"
+        ? (q.groupBy === "day" ? "החנות לא מציינת מתי בוצע כל החזר" : "החנות לא מציינת אילו מוצרים הוחזרו")
+        : (q.groupBy === "day" ? "this store does not say when each refund was made" : "this store does not say which products were refunded") } : {}),
+      ...(q.groupBy === "reason" ? { reasonGivenFor: `${refunds.filter((r) => r.reason).length} ${ctx.locale === "he" ? "מתוך" : "of"} ${refunds.length}` } : {}),
       shownAs: SHOWN_AS,
-      cards: cardsOf(blocks),
+      cards: cardsOf(blocks, ctx.locale),
       ...(unit === "currency" || q.measure === "refunds" ? { money: "write amounts exactly as totalText / refundedText give them" } : {}),
     },
     blocks,
@@ -286,7 +289,7 @@ export async function queryProductStock(ctx: QueryCtx, query: string): Promise<C
     });
   }
   return {
-    summary: { ok: true, cite: sId, found: blocks.length, products: blocks.map((b) => ({ title: b.title, inStock: b.fields[0]!.value })), shownAs: SHOWN_AS, cards: cardsOf(blocks) },
+    summary: { ok: true, cite: sId, found: blocks.length, products: blocks.map((b) => ({ title: b.title, inStock: b.fields[0]!.value })), shownAs: SHOWN_AS, cards: cardsOf(blocks, ctx.locale) },
     blocks,
     source: { id: sId, kind: "product", count: blocks.length, deepLink: null, label: blocks.map((b) => b.title).join(", "), query: { tool: "product_stock", params: { query } } },
   };

@@ -50,6 +50,7 @@ Default scope: `{ "range": "last_7", "channels": "all" }`.
   "suggestions": ["Which of them are still open?", "Show me last month instead"],  // assistant only, 0-3
   "blocks": [], "sources": [], "actions": [],   // stage 1: always []
   "runId": "run_...",                // assistant only: the run that produced it
+  "lang": "he" | "en",               // assistant only, optional: the turn's language (its question's), see §3
   "createdAt": "..."
 }
 ```
@@ -97,7 +98,15 @@ the first question) and the §9.4 full list. Hebrew letters against Latin ones,
 the majority wins. Only a question with no clear language (a number, a name, a
 tie) falls back to the interface language: `locale` when sent, else the
 user's profile language, then the workspace's default. The client's own chrome
-stays in the UI language.
+stays in the UI language; the answer's own chrome (step status and duration,
+"N in all", coverage lines) follows `lang`: on `run.start` (always, the
+language the turn was written in) and on a saved assistant message (derived
+from its question; absent when the question had no clear language, and then
+the turn fell back to the UI language, so the client keeps its own).
+The words the model reads in a tool's result are in the turn's language too
+(it repeats them: "right now" leaked into a Hebrew answer, 2026-10-08). A
+citation the server drops (its source is not in the message) takes the space
+before it.
 
 **Errors before the stream opens** are plain JSON with a non-200 status (§6):
 400, 402 (billing refuses before any model call), 404, 409, 429. Once the
@@ -108,7 +117,7 @@ line `: ping` is sent every 25 s.
 
 | event | data | when |
 |---|---|---|
-| `run.start` | `{ runId, userMessageId, messageId }` | first; `messageId` is the assistant message being written |
+| `run.start` | `{ runId, userMessageId, messageId, lang }` | first; `messageId` is the assistant message being written; `lang` (`he` \| `en`) is the turn's language |
 | `step.start` | `{ stepId, text }` | a step begins (e.g. "Looking at this week's conversations") |
 | `step.done` | `{ stepId, status, durationMs, approvalRequestId? }` | `status`: `done` \| `failed` \| `waiting_approval` (then with `approvalRequestId`) |
 | `text.delta` | `{ text }` | a piece of the answer; append in order |

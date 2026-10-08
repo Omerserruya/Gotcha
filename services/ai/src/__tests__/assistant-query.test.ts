@@ -142,6 +142,7 @@ describe("★ breakdowns in words", () => {
     const r = await queryConversations(ctx(), Q({ groupBy: "sentiment" }));
     expect((r.blocks[0] as any).coverage).toEqual({ covered: 2, of: 5 });
     expect(r.summary).toMatchObject({ recordedFor: "2 of 5" });
+    expect((await queryConversations(ctx({ locale: "he" }), Q({ groupBy: "sentiment" }))).summary).toMatchObject({ recordedFor: "2 מתוך 5" });
   });
 });
 
@@ -275,7 +276,9 @@ describe("★ the current state: now, whenever they started (Omer, 2026-10-08)",
     const r = await queryConversations(ctx({ locale: "he" }), Q({ status: "OPEN", channels: ["WHATSAPP"], groupBy: "channel" }));
     expect(r.blocks).toEqual([]);
     expect(r.summary).toMatchObject({ total: 0, inThisStateNow: 2, shownAs: NO_CARD, cards: [] });
-    expect(String((r.summary as any).note)).toMatch(/STARTED in .*2 are in this state now/);
+    // In the turn's language: the model repeats these words.
+    expect(String((r.summary as any).note)).toMatch(/^אף אחת מהן לא התחילה ב1 באוקטובר - 7 באוקטובר, אבל 2 במצב הזה כרגע/);
+    expect(JSON.stringify(r.summary)).not.toMatch(/October|right now/);
     expect(r.source).toMatchObject({ id: "s1", count: 0 });
     // A chart of zeros is no card either.
     H.convs = [];

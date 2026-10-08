@@ -18,6 +18,7 @@ import { runAgent, type AgentRuntimeEvent } from "./agent-runtime.service";
 import { generateResponse, getMicroModel } from "./ai.service";
 import { withoutWideDashes } from "../lib/wide-dash";
 import { whenText } from "./system-tools.service";
+import { questionLanguage } from "../lib/reader-locale";
 
 // ─── Scope ──────────────────────────────────────────────────
 
@@ -227,9 +228,12 @@ export class SuggestionsSplitter {
 
 const LANG_NAME = { he: "Hebrew", en: "English" } as const;
 
-/** `[^s3]` stays only when s3 is a source of this answer. */
+/**
+ * `[^s3]` stays only when s3 is a source of this answer. A dropped one takes
+ * the space before it ("עונה בהן [^s1]." became "עונה בהן .").
+ */
 export function withValidCitations(text: string, ids: Set<string>): string {
-  return text.replace(/\[\^([a-z]\d+)\]/g, (m, id) => (ids.has(id) ? m : ""));
+  return text.replace(/[ \t]*\[\^([a-z]\d+)\]/g, (m, id) => (ids.has(id) ? m : ""));
 }
 
 export function threadSystemLines(scope: ThreadScope, locale: "he" | "en", now = new Date()): string[] {
@@ -277,7 +281,8 @@ export async function startRun(input: StartRunInput): Promise<{ runId: string; u
     await prisma.assistantThread.update({ where: { id: input.thread.id }, data: { lastMessageAt: now } });
     await r.hset(kMeta(runId), { threadId: input.thread.id, messageId: msg.id, userId: input.owner.userId, tenantId: input.owner.tenantId, status: "running" });
     await r.expire(kMeta(runId), RUN_TTL_LIVE);
-    await appendEvent(runId, "run.start", { runId, userMessageId: user.id, messageId: msg.id });
+    // The turn's language, for the answer's own chrome (step status, "N in all").
+    await appendEvent(runId, "run.start", { runId, userMessageId: user.id, messageId: msg.id, lang: input.locale });
     await r.expire(kEvents(runId), RUN_TTL_LIVE);
     void executeRun(input, { runId, messageId: msg.id, scope }).catch((err) => console.error("[assistant-threads] run crashed:", err?.message));
     return { runId, userMessageId: user.id, messageId: msg.id };
@@ -431,12 +436,21 @@ export async function threadView(o: Owner, id: string) {
     prisma.assistantMessage.findMany({ where: { threadId: t.id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
     activeRunOf(t.id),
   ]);
-  const messages = rows.map((m: any) => ({
-    id: m.id, threadId: m.threadId, role: m.role, text: m.text,
-    // A "streaming" row whose run is gone (the process died) did not finish.
-    status: m.status === "streaming" && activeRun?.messageId !== m.id ? "failed" : m.status,
-    ...(m.role === "assistant" ? { steps: m.steps ?? [], scope: m.scope, suggestions: m.suggestions ?? [], blocks: m.blocks ?? [], sources: m.sources ?? [], actions: [], runId: m.runId } : {}),
-    createdAt: m.createdAt,
-  }));
+  // An answer's language is its question's. Not stored: a question without a
+  // clear language (a number) has no `lang`, and the client keeps the UI's,
+  // which is what that turn fell back to.
+  let question = "";
+  const messages = rows.map((m: any) => {
+    if (m.role === "user") question = m.text ?? "";
+    const lang = m.role === "assistant" ? questionLanguage(question) : null;
+    return {
+      id: m.id, threadId: m.threadId, role: m.role, text: m.text,
+      // A "streaming" row whose run is gone (the process died) did not finish.
+      status: m.status === "streaming" && activeRun?.messageId !== m.id ? "failed" : m.status,
+      ...(m.role === "assistant" ? { steps: m.steps ?? [], scope: m.scope, suggestions: m.suggestions ?? [], blocks: m.blocks ?? [], sources: m.sources ?? [], actions: [], runId: m.runId } : {}),
+      ...(lang ? { lang } : {}),
+      createdAt: m.createdAt,
+    };
+  });
   return { thread: threadOut(t), messages, activeRun };
 }
