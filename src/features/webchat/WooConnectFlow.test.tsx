@@ -3,6 +3,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import channels from '@/i18n/messages/en/channels.json';
+import heChannels from '@/i18n/messages/he/channels.json';
 
 const actions = vi.hoisted(() => ({ bindWooPlugin: vi.fn(), startWooPluginStore: vi.fn() }));
 vi.mock('./woo-plugin-actions', () => actions);
@@ -126,6 +127,8 @@ describe('★★ "Connect to GOTCHA" from the WooCommerce plugin', () => {
     expect(screen.queryByTestId('woo-connect-yes')).toBeNull();
     expect(screen.queryByTestId('woo-connect-approve')).toBeNull();
     expect(screen.getByTestId('woo-connect-cancel')).toHaveAttribute('href', RETURN);
+    // Nothing will finish in WordPress.
+    expect(screen.queryByTestId('woo-connect-return')).toBeNull();
   });
 
   it('binding says the store is not connected after all: Approve takes Connect’s place', async () => {
@@ -141,5 +144,54 @@ describe('★★ "Connect to GOTCHA" from the WooCommerce plugin', () => {
       'Press "Connect to GOTCHA" in WordPress again.',
     );
     expect(screen.queryByTestId('woo-connect-yes')).toBeNull();
+  });
+});
+
+describe('★★ a kept link never answers a new one (measured on dev, 2026-10-08)', () => {
+  // A good link from an earlier visit, in the same tab.
+  beforeEach(() => {
+    window.sessionStorage.setItem(WOO_LINK_KEY, JSON.stringify(ASKED));
+  });
+
+  it.each([
+    ['a way back on another host', { ...ASKED, returnUrl: 'https://evil.example.net/wp-admin/x' }],
+    ['a javascript: site', { ...ASKED, site: 'javascript:alert(1)' }],
+  ])('%s: refused - not the kept site - and the kept link cleared', (_name, asked) => {
+    show({ asked });
+    expect(screen.getByTestId('woo-connect-incomplete')).toBeInTheDocument();
+    expect(screen.queryByTestId('woo-connect-title')).toBeNull();
+    expect(screen.queryByTestId('woo-connect-cancel')).toBeNull();
+    expect(window.sessionStorage.getItem(WOO_LINK_KEY)).toBeNull();
+  });
+
+  it('no link and not back from the approval: refused, and the kept link cleared', () => {
+    show({ asked: NONE, back: null });
+    expect(screen.getByTestId('woo-connect-incomplete')).toBeInTheDocument();
+    expect(window.sessionStorage.getItem(WOO_LINK_KEY)).toBeNull();
+  });
+
+  it('a new good link replaces the kept one', () => {
+    const other = {
+      site: 'https://other.example.com',
+      returnUrl: 'https://other.example.com/wp-admin/admin.php?page=gotcha',
+      nonce: 'another_nonce1',
+    };
+    show({ asked: other, store: 'https://other.example.com' });
+    expect(screen.getByTestId('woo-connect-title')).toHaveTextContent('other.example.com');
+    expect(JSON.parse(window.sessionStorage.getItem(WOO_LINK_KEY)!)).toEqual(other);
+  });
+});
+
+describe('Hebrew: a prefix letter stays on its word (measured on dev: "ב-" ended a line)', () => {
+  it('the connect page and Install · WooCommerce: no breakable hyphen after ב ל מ ש כ ה ו', () => {
+    const texts = (o: unknown): string[] =>
+      typeof o === 'string' ? [o] : Object.values(o as object).flatMap(texts);
+    const breakable = [
+      ...texts(heChannels.wooConnect),
+      ...texts(heChannels.webchat.install.wooPlugin),
+    ].filter((text) => /(^|[\s"(])[בלמשכהו][-\u05BE](?=[A-Za-z{])/.test(text));
+    expect(breakable).toEqual([]);
+    // The non-breaking hyphen is what holds them.
+    expect(heChannels.wooConnect.cancel).toBe('חזרה ל\u2011WordPress');
   });
 });

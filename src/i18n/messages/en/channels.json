@@ -701,7 +701,7 @@
       },
       "wooPlugin": {
         "pluginName": "GOTCHA for WooCommerce",
-        "steps": "Download \"{name}\", then in WordPress: Plugins → Add New → Upload Plugin. Turn it on, and press \"Connect to GOTCHA\" under WooCommerce → GOTCHA.",
+        "steps": "Download \"{name}\", then in WordPress: Plugins → Add New → Upload Plugin. Turn it on, and press \"Connect to GOTCHA\" under WooCommerce → GOTCHA.",
         "download": "Download the plugin",
         "downloading": "Downloading…",
         "downloadProblem": {
@@ -767,7 +767,7 @@
     },
     "store": {
       "this": "{site} is connected to this workspace.",
-      "other": "This workspace is connected to another store, {store}. Press Connect in that store's WordPress, or change the store in Studio · Business systems.",
+      "other": "This workspace is connected to another store, {store}. Press Connect in that store's WordPress, or change the store in Studio · Business systems.",
       "none": "First, {site} approves GOTCHA - you'll come back here.",
       "unknown": "GOTCHA checks that {site} is this workspace's store."
     },

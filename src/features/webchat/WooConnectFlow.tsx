@@ -114,17 +114,32 @@ export function WooConnectFlow({
   readonly back: string | null;
 }) {
   const t = useTranslations('channels.wooConnect');
-  const fromWordPress = linkOf(asked);
+  /*
+   * ★★ WHICH LINK (supervisor, measured on dev): a link in the address always
+   * wins - checked, and kept or, when it fails, the kept one cleared. The
+   * session is read only when coming BACK from the store's approval
+   * (`?connected=1` / `?error=`), whose address carries none of it. A kept
+   * link answering a new bad one showed "Connect shop.example.com" for
+   * `return=https://evil.example.net/...`, with the old way back.
+   */
+  const carries = asked.site !== null || asked.returnUrl !== null || asked.nonce !== null;
+  const fromWordPress = carries ? linkOf(asked) : null;
   // `null` on the server: the session is looked in on the client only.
   const kept = useSyncExternalStore(noSubscription, rememberedRaw, () => null);
-  const link: WooLink | null | undefined =
-    fromWordPress ?? (kept === null ? undefined : parseRemembered(kept));
+  const link: WooLink | null | undefined = carries
+    ? fromWordPress
+    : back === null
+      ? null
+      : kept === null
+        ? undefined
+        : parseRemembered(kept);
   const [store, setStore] = useState(initialStore);
   const [result, setResult] = useState<WooBind | WooStoreStart | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    if (fromWordPress) remember(fromWordPress);
+    // A link in the address replaces the kept one; a bad one, or none at all, clears it.
+    if (carries || back === null) remember(fromWordPress);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
   }, []);
 
@@ -204,7 +219,10 @@ export function WooConnectFlow({
         {hasWidget === false ? (
           <li data-testid="woo-connect-widget">{t('widget.create')}</li>
         ) : null}
-        <li>{t('returnStep')}</li>
+        {/* Another store: nothing will finish in WordPress. */}
+        {storeState === 'other' ? null : (
+          <li data-testid="woo-connect-return">{t('returnStep')}</li>
+        )}
       </ol>
 
       {result && !result.ok ? (
