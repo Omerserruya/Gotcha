@@ -70,15 +70,27 @@ router.delete("/sites/:id", ...authed, canDisconnect, async (req: Request & { te
   } catch (err) { fail(res, err, "remove"); }
 });
 
-/** The plugin's files, in its folder, as WordPress expects ("Upload Plugin"). */
-export function pluginZip(dir = PLUGIN_DIR): Buffer {
+/** Written into the plugin's PHP when it is served: the serving GOTCHA's own address. */
+export const APP_URL_PLACEHOLDER = "__GOTCHA_APP_URL__";
+
+/**
+ * The plugin's files, in its folder, as WordPress expects ("Upload Plugin"),
+ * with the serving environment's public origin as the plugin's GOTCHA (a dev
+ * install must never talk to production).
+ */
+export function pluginZip(origin: string, dir = PLUGIN_DIR): Buffer {
+  if (!/^https?:\/\/[^\s'"]+$/.test(origin)) throw new Error("plugin zip: no public origin");
   const files = fs.readdirSync(dir).filter((f) => fs.statSync(path.join(dir, f)).isFile()).sort();
-  return zipStored(files.map((f) => ({ name: `${PLUGIN_SLUG}/${f}`, data: fs.readFileSync(path.join(dir, f)) })));
+  return zipStored(files.map((f) => {
+    let data = fs.readFileSync(path.join(dir, f));
+    if (f.endsWith(".php")) data = Buffer.from(data.toString("utf8").split(APP_URL_PLACEHOLDER).join(origin.replace(/\/+$/, "")), "utf8");
+    return { name: `${PLUGIN_SLUG}/${f}`, data };
+  }));
 }
 
 router.get("/download", ...authed, canConnect, (_req: Request, res: Response) => {
   try {
-    const zip = pluginZip();
+    const zip = pluginZip(resolveAppPublicUrl(process.env));
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="${PLUGIN_SLUG}.zip"`);
     res.setHeader("Cache-Control", "no-store");

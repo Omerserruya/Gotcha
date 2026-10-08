@@ -214,7 +214,27 @@ describe("★ the zip", () => {
     }
     expect(zip.readUInt32LE(zip.length - 22)).toBe(0x06054b50);
     expect(names).toEqual(["gotcha-for-woocommerce/gotcha-for-woocommerce.php", "gotcha-for-woocommerce/readme.txt", "gotcha-for-woocommerce/uninstall.php"]);
-    expect(pluginZip().equals(zip)).toBe(true);
+    expect(pluginZip("https://app.test").equals(zip)).toBe(true);
+  });
+
+  it("★ the served plugin talks to the GOTCHA that served it (a dev install never reaches production)", () => {
+    const php = (origin: string) => {
+      const zip = pluginZip(origin);
+      const nameLen = zip.readUInt16LE(26), size = zip.readUInt32LE(18);
+      return zip.subarray(30 + nameLen, 30 + nameLen + size).toString("utf8"); // the first entry: the main PHP file
+    };
+    const dev = php("https://dev.gotcha.co.il");
+    expect(dev).toContain("define( 'GOTCHA_APP_URL', 'https://dev.gotcha.co.il' );");
+    expect(dev).not.toContain("__GOTCHA_APP_URL__");
+    expect(dev).not.toContain("app.gotcha.co.il");
+    expect(php("https://app.gotcha.co.il/")).toContain("define( 'GOTCHA_APP_URL', 'https://app.gotcha.co.il' );");
+    expect(() => pluginZip("")).toThrow();
+  });
+
+  it("\"Open in GOTCHA\" goes to the website chat settings (the page that exists)", () => {
+    const zip = pluginZip("https://dev.gotcha.co.il").toString("utf8");
+    expect(zip).toContain("'/v2/settings/channels/website'");
+    expect(zip).not.toContain("'/v2/widgets'");
   });
 
   it("crc32 is the standard one", () => {

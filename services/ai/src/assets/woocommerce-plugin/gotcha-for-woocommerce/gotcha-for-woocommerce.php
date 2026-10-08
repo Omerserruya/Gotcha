@@ -22,8 +22,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'GOTCHA_WC_VERSION', '0.1.0' );
 if ( ! defined( 'GOTCHA_APP_URL' ) ) {
-	// Overridable in wp-config.php (a test or staging GOTCHA).
-	define( 'GOTCHA_APP_URL', 'https://app.gotcha.co.il' );
+	// The GOTCHA that served this zip writes its own address here when the zip
+	// is downloaded (a dev GOTCHA gives dev, production gives production).
+	// Overridable in wp-config.php.
+	define( 'GOTCHA_APP_URL', '__GOTCHA_APP_URL__' );
 }
 
 const GOTCHA_WC_OPT_WIDGET    = 'gotcha_wc_widget_id';
@@ -237,7 +239,7 @@ function gotcha_wc_settings_page() {
 				printf( esc_html__( 'Connected to %s. The chat shows on your store.', 'gotcha-for-woocommerce' ), '<strong>' . esc_html( (string) get_option( GOTCHA_WC_OPT_WORKSPACE ) ) . '</strong>' );
 				?>
 			</p>
-			<p><a class="button button-primary" href="<?php echo esc_url( untrailingslashit( GOTCHA_APP_URL ) . '/v2/widgets' ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Open in GOTCHA', 'gotcha-for-woocommerce' ); ?></a></p>
+			<p><a class="button button-primary" href="<?php echo esc_url( untrailingslashit( GOTCHA_APP_URL ) . '/v2/settings/channels/website' ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Open in GOTCHA', 'gotcha-for-woocommerce' ); ?></a></p>
 			<form method="post">
 				<?php wp_nonce_field( 'gotcha_wc_disconnect' ); ?>
 				<p><button class="button" name="gotcha_wc_disconnect" value="1"><?php esc_html_e( 'Disconnect', 'gotcha-for-woocommerce' ); ?></button></p>
