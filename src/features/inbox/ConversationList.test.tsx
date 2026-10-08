@@ -240,7 +240,8 @@ describe('★★ what the row actually says about the customer', () => {
      *   accessible name instead - because a tint and a glyph say nothing to
      *   somebody who cannot see them.
      */
-    expect(screen.getByTitle(/shopify live chat/i)).toBeInTheDocument();
+    // The row's badge (the header's filter chip carries the same name now).
+    expect(within(rowLinks()[0]!).getByTitle(/shopify live chat/i)).toBeInTheDocument();
     expect(screen.queryByText(/SHOPIFY_LIVE_CHAT/)).toBeNull();
   });
 
@@ -260,7 +261,12 @@ describe('★★ what the row actually says about the customer', () => {
      *   guard would have stayed green while the thing it guards moved out of
      *   its view.
      */
-    expect(document.body.innerHTML).not.toMatch(/[A-Z]{2,}_[A-Z]{2,}/);
+    /*
+     * Not a test id or a link's query - neither reaches a person (a chip's
+     * `?channel=SHOPIFY_LIVE_CHAT` is the route's own value).
+     */
+    const seen = document.body.innerHTML.replace(/ (data-testid|href)="[^"]*"/g, '');
+    expect(seen).not.toMatch(/[A-Z]{2,}_[A-Z]{2,}/);
   });
 });
 
@@ -1043,7 +1049,7 @@ describe("★★ Wave 2 - 02's filter row, and every chip in it filters", () => 
   const params = (el: Element) =>
     new URL(el.getAttribute('href') ?? '', 'https://x.test').searchParams;
 
-  it('★★ "All" then the five channels, in 02\'s order, each named', async () => {
+  it('★★ "All" then the channels, in 02\'s order and Shopify chat after the web chat, each named', async () => {
     render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
     expect(chips().map((c) => c.getAttribute('aria-label') ?? c.textContent)).toEqual([
       'All',
@@ -1052,6 +1058,7 @@ describe("★★ Wave 2 - 02's filter row, and every chip in it filters", () => 
       'Messenger',
       'Email',
       'Web chat',
+      'Shopify live chat',
     ]);
   });
 

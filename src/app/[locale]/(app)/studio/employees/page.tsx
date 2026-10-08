@@ -137,7 +137,8 @@ export default async function Page({
     // The Website widget is one row, as the channel list draws it.
     return channels
       ? foldWidget(channels).map((c) => ({
-          channel: c.channel,
+          // The widget's row wears the web chat's globe, as the channel list does.
+          channel: c.widget ? 'WEBCHAT' : c.channel,
           name: c.widget
             ? tch('widgetRow.name')
             : (channelName(c.channel, tch) ?? tch('name.other')),

@@ -77,7 +77,7 @@ describe('★ an unknown view is the default, never an error page', () => {
   });
 });
 
-describe('★ the channel filter is one of the five the header draws', () => {
+describe('★ the channel filter is one of the chips the header draws', () => {
   it("accepts each of them, in 02's order", () => {
     expect(QUEUE_CHANNEL_FILTERS).toEqual([
       'WHATSAPP',
@@ -85,13 +85,14 @@ describe('★ the channel filter is one of the five the header draws', () => {
       'MESSENGER',
       'EMAIL',
       'WEBCHAT',
+      'SHOPIFY_LIVE_CHAT',
     ]);
     for (const id of QUEUE_CHANNEL_FILTERS) expect(parseChannelFilter(id)).toBe(id);
   });
 
   it('⚠ and anything else is "All" - including real channels with no chip', () => {
     // A narrowed list with no chip lit would say nothing about what narrowed it.
-    for (const raw of [undefined, '', 'GMAIL', 'whatsapp', 'SHOPIFY_LIVE_CHAT']) {
+    for (const raw of [undefined, '', 'GMAIL', 'whatsapp', 'OUTLOOK', 'shopify_live_chat']) {
       expect(parseChannelFilter(raw), String(raw)).toBeNull();
     }
   });

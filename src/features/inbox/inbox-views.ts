@@ -73,7 +73,9 @@ export function viewQuery(view: InboxView, meId: string | null): Record<string, 
 }
 
 /**
- * The queue header's channel filters, in 02's order.
+ * The queue header's channel filters, in 02's order - and Shopify's chat
+ * after the web chat (Backend, 2026-10-08: 17 of 88 real conversations on
+ * dev were out of reach of every chip).
  *
  * ★ 02's own rule: "Channel filters are icons; advanced filters (intent,
  *   team, agent, owner type, wait time, customer attributes) stay behind
@@ -90,13 +92,14 @@ export const QUEUE_CHANNEL_FILTERS = [
   'MESSENGER',
   'EMAIL',
   'WEBCHAT',
+  'SHOPIFY_LIVE_CHAT',
 ] as const;
 export type QueueChannelFilter = (typeof QUEUE_CHANNEL_FILTERS)[number];
 
 /**
  * `?channel=`, or null for "All".
  *
- * ⚠ Only the five the header draws. A filter with no chip lit would leave the
+ * ⚠ Only the ones the header draws. A filter with no chip lit would leave the
  *   reader looking at a narrowed list with "All" unselected and nothing
  *   saying what narrowed it.
  */
