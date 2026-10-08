@@ -86,7 +86,7 @@ describe("★ the Hebrew itself keeps the house rules", () => {
   });
 
   it("the sweep itself catches what it is for", () => {
-    expect(hebrewHouseRuleViolations("t", "יצירת קופון — חדש")).toHaveLength(1);
+    expect(hebrewHouseRuleViolations("t", "יצירת קופון \u2014 חדש")).toHaveLength(1);
     expect(hebrewHouseRuleViolations("t", "שליחה ב-חנות")).toHaveLength(1);
     expect(hebrewHouseRuleViolations("t", "שליחה בShopify")).toHaveLength(1);
     expect(hebrewHouseRuleViolations("t", "GOTCHA יוצר קופון")).toHaveLength(1);
