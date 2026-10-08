@@ -16,6 +16,7 @@ import { runPostChatPipeline } from "../../services/post-chat-pipeline.service";
 import { refreshCustomerBriefFromConversation } from "../../services/customer-brief.service";
 import { resolveEffectiveLocale } from "@chatcenter/shared";
 import { syncCloseToCrm } from "../../routes/crm-panel";
+import { analyzeConversationOnClose } from "../../services/conversation-analysis.service";
 
 let _sub: ReturnType<typeof subscribeToEvents> | null = null;
 let _started = false;
@@ -25,9 +26,37 @@ interface ClosedEventData {
   conversationId?: string;
   channel?: string;
   tenantId?: string;
+  status?: string;
+}
+
+/**
+ * Conversation intelligence (intent, sentiment, topics) for a close. Never
+ * blocks or fails the close; the sweeper retries what this misses.
+ */
+function analyze(tenantId: string, conversationId: string, trigger: "closed" | "updated"): void {
+  analyzeConversationOnClose(tenantId, conversationId, { trigger })
+    .then((out) => { if (out !== "up_to_date" && out !== "locked") console.log(`[conversation-analysis] conv=${conversationId} ${trigger}: ${out}`); })
+    .catch((err) => console.warn(`[conversation-analysis] conv=${conversationId} failed:`, (err as { message?: string })?.message ?? err));
+}
+
+/**
+ * Two close paths announce only `conversation:updated` with status CLOSED (the
+ * flow builder's close node, an expired comment-DM bridge). They get the
+ * analysis, not the post-chat pipeline: its CRM writes for those paths would
+ * be a new behaviour, decided separately.
+ */
+async function handleUpdatedClosed(evt: ServiceEvent): Promise<void> {
+  if (evt.event !== "conversation:updated") return;
+  const data = (evt.data ?? {}) as ClosedEventData;
+  if (data.status !== "CLOSED") return;
+  const conversationId = data.id ?? data.conversationId;
+  const tenantId = evt.tenantId ?? data.tenantId;
+  if (!conversationId || !tenantId) return;
+  analyze(String(tenantId), String(conversationId), "updated");
 }
 
 async function handleClosed(evt: ServiceEvent): Promise<void> {
+  if (evt.event === "conversation:updated") return handleUpdatedClosed(evt);
   if (evt.event !== "conversation:closed") return;
   const data = (evt.data ?? {}) as ClosedEventData;
   const conversationId = data.id ?? data.conversationId;
@@ -54,6 +83,9 @@ async function handleClosed(evt: ServiceEvent): Promise<void> {
   console.log(
     `[post-chat] conv=${conversationId} ok=${out.ok} summ=${out.summarized} crm=${out.crmWritten} tasks=${out.tasksCreated} fup=${out.followupScheduled} notes=${out.notes.join(",")}`,
   );
+
+  // After the pipeline: its summary is on the conversation and is reused.
+  analyze(String(tenantId), String(conversationId), "closed");
 
   // Refresh the persistent customer brief AFTER the per-conversation
   // summary is on disk - that way loadCustomerContext sees this

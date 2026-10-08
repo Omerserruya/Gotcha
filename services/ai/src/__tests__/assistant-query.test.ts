@@ -52,7 +52,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   };
 });
 
-import { queryConversations, normalizeQuery, listConversationsForSource, dayStart, dayOf } from "../services/assistant-query.service";
+import { queryConversations, normalizeQuery, listConversationsForSource, dayStart, dayOf, sourceLink, INBOX_VIEW_ALL_LIVE } from "../services/assistant-query.service";
 
 const D = (iso: string) => new Date(iso);
 const conv = (id: string, createdAt: string, o: any = {}) => ({
@@ -118,15 +118,19 @@ describe("★ breakdowns in words", () => {
     expect(Object.fromEntries(who.items.map((i: any) => [i.key, [i.label, i.value]]))).toEqual({ gotcha: ["GOTCHA", 2], team: ["הצוות", 2], none: ["לא טופלו", 1] });
   });
 
-  it("★ intent with its coverage; a failed analysis ('unknown') is not a recorded intent", async () => {
+  it("★ intent with its coverage, in words; only the close analysis counts", async () => {
+    const ours = { source: "close-analysis" };
     H.intel = [
-      { conversationId: "1", detectedIntent: "billing", sentiment: "negative" },
-      { conversationId: "2", detectedIntent: "unknown", sentiment: "neutral" },
-      { conversationId: "3", detectedIntent: "billing", sentiment: null },
-      { conversationId: "old", detectedIntent: "billing", sentiment: "negative" },
+      { conversationId: "1", detectedIntent: "billing_payment", sentiment: "negative", metadata: ours },
+      { conversationId: "2", detectedIntent: "unknown", sentiment: "neutral", metadata: ours },
+      { conversationId: "3", detectedIntent: "billing_payment", sentiment: null, metadata: ours },
+      // The old keyword heuristics ("general" for any Hebrew text): not a recorded value.
+      { conversationId: "4", detectedIntent: "general", sentiment: "neutral", metadata: null },
+      { conversationId: "old", detectedIntent: "billing_payment", sentiment: "negative", metadata: ours },
     ];
     const b: any = (await queryConversations(ctx(), Q({ groupBy: "intent" }))).blocks[0];
-    expect(b.items).toEqual([{ key: "billing", label: "billing", value: 2, share: 1 }]);
+    expect(b.items).toEqual([{ key: "billing_payment", label: "Billing and payment", value: 2, share: 1 }]);
+    expect((await queryConversations(ctx({ locale: "he" }), Q({ groupBy: "intent" }))).blocks[0]).toMatchObject({ items: [{ label: "חיוב ותשלום" }] });
     expect(b.coverage).toEqual({ covered: 2, of: 5 });
     const r = await queryConversations(ctx(), Q({ groupBy: "sentiment" }));
     expect((r.blocks[0] as any).coverage).toEqual({ covered: 2, of: 5 });
@@ -166,19 +170,25 @@ describe("★ a mention: what was said in the period", () => {
 });
 
 describe("links and limits", () => {
-  it("★ a source links to the inbox showing the same rows: its period, and its one channel", async () => {
-    const link = async (o: any) => (await queryConversations(ctx(), Q(o))).source.deepLink;
-    expect(await link({})).toBe("/inbox?from=2026-10-01&to=2026-10-07");
-    expect(await link({ channels: ["WHATSAPP"] })).toBe("/inbox?channel=WHATSAPP&from=2026-10-01&to=2026-10-07");
-    expect(await link({ channels: ["SHOPIFY_LIVE_CHAT"] })).toBe("/inbox?channel=SHOPIFY_LIVE_CHAT&from=2026-10-01&to=2026-10-07");
+  it("★ until the inbox's All view is on dev, no period link (the default queue view shows far fewer rows)", async () => {
+    expect(INBOX_VIEW_ALL_LIVE).toBe(false);
+    expect((await queryConversations(ctx(), Q({ channels: ["WHATSAPP"] }))).source.deepLink).toBeNull();
+    expect((await queryConversations(ctx(), Q({}))).source.deepLink).toBeNull();
   });
 
-  it("★ no link when the inbox would show different rows (a mention, a status, several channels, a channel it cannot filter)", async () => {
-    const link = async (o: any) => (await queryConversations(ctx(), Q(o))).source.deepLink;
-    expect(await link({ mention: "small" })).toBeNull();
-    expect(await link({ status: "OPEN" })).toBeNull();
-    expect(await link({ channels: ["WHATSAPP", "WEBCHAT"] })).toBeNull();
-    expect(await link({ channels: ["VOICE"] })).toBeNull();
+  it("★ with it: the All view, the period, and one channel (the inbox shows the same rows)", () => {
+    const link = (o: any) => sourceLink(Q(o), true);
+    expect(link({})).toBe("/inbox?view=all&from=2026-10-01&to=2026-10-07");
+    expect(link({ channels: ["WHATSAPP"] })).toBe("/inbox?view=all&channel=WHATSAPP&from=2026-10-01&to=2026-10-07");
+    expect(link({ channels: ["SHOPIFY_LIVE_CHAT"] })).toBe("/inbox?view=all&channel=SHOPIFY_LIVE_CHAT&from=2026-10-01&to=2026-10-07");
+  });
+
+  it("★ no link when the inbox would show different rows (a mention, a status, several channels, a channel it cannot filter)", () => {
+    const link = (o: any) => sourceLink(Q(o), true);
+    expect(link({ mention: "small" })).toBeNull();
+    expect(link({ status: "OPEN" })).toBeNull();
+    expect(link({ channels: ["WHATSAPP", "WEBCHAT"] })).toBeNull();
+    expect(link({ channels: ["VOICE"] })).toBeNull();
   });
 
   it("a bad period is refused, not guessed", () => {

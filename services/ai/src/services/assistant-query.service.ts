@@ -8,6 +8,7 @@
  * business's real conversations (no rehearsals, test rows or imported history).
  */
 import { prisma, REAL_CONVERSATION, visibilityClause, readDurableSetting, parseBusinessHours, type Viewer } from "@chatcenter/shared";
+import { INTENTS, intentLabel } from "./conversation-analysis.service";
 import { channelName, whenText } from "./system-tools.service";
 
 type Locale = "he" | "en";
@@ -138,11 +139,20 @@ function sourceLabel(q: ConversationQuery, total: number, locale: Locale): strin
  * it, the same workspace days), not by a mention, a status or several
  * channels, and a link that opens different rows is worse than none.
  */
-function sourceLink(q: ConversationQuery): string | null {
+/**
+ * The inbox's "All conversations" view (frontend 542e695): every conversation,
+ * open or closed, automated included. Without it a period link opens the
+ * default "Waiting in queue" view, far fewer rows than the chart counted, so
+ * the links stay off until that view is on dev. Flip when it is.
+ */
+export const INBOX_VIEW_ALL_LIVE = false;
+
+export function sourceLink(q: ConversationQuery, viewAllLive = INBOX_VIEW_ALL_LIVE): string | null {
+  if (!viewAllLive) return null;
   if (q.mention || q.status || (q.channels && q.channels.length > 1)) return null;
   const channel = q.channels?.[0];
   if (channel && !INBOX_CHANNELS.has(channel)) return null;
-  return `/inbox?${channel ? `channel=${channel}&` : ""}from=${q.from}&to=${q.to}`;
+  return `/inbox?view=all&${channel ? `channel=${channel}&` : ""}from=${q.from}&to=${q.to}`;
 }
 
 async function listItems(rows: Array<{ id: string; customerName: string | null; customerExternalId: string | null; channel: string; status: string; lastMessageAt: Date | null; createdAt: Date }>, locale: Locale, tz: string): Promise<RecordListItem[]> {
@@ -201,21 +211,25 @@ export async function queryConversations(ctx: QueryCtx, q: ConversationQuery): P
     const intel = total
       ? await prisma.conversationIntelligence.findMany({
           where: { tenantId: ctx.tenantId, conversationId: { in: counted.map((r) => r.id) } },
-          select: { detectedIntent: true, sentiment: true },
+          select: { detectedIntent: true, sentiment: true, metadata: true },
         })
       : [];
     const counts = new Map<string, number>();
     let covered = 0;
     for (const i of intel as any[]) {
+      // Only the close analysis counts: rows from the old keyword heuristics
+      // ("general" for any Hebrew text) or a failed call ("unknown") are not
+      // recorded values, and a settled row without an intent is "looked at,
+      // nothing to record".
+      if ((i.metadata as any)?.source !== "close-analysis") continue;
       const v = q.groupBy === "intent" ? i.detectedIntent : i.sentiment;
-      // "unknown" is what a failed analysis writes: not a recorded value.
-      if (!v || v === "unknown") continue;
+      if (!v || (q.groupBy === "intent" && !(v in INTENTS))) continue;
       covered++;
       counts.set(v, (counts.get(v) ?? 0) + 1);
     }
     const items = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([key, value]) => ({
       key, value, share: covered ? value / covered : 0,
-      label: q.groupBy === "sentiment" ? L.sentiment[key]?.[ctx.locale] ?? key : key.replace(/_/g, " "),
+      label: q.groupBy === "sentiment" ? L.sentiment[key]?.[ctx.locale] ?? key : intentLabel(key, ctx.locale),
     }));
     blocks.push({
       type: "breakdown", id: ctx.nextId("b"), title: q.groupBy === "intent" ? (he ? "לפי כוונה" : "By intent") : (he ? "לפי סנטימנט" : "By sentiment"), sourceId: sId,

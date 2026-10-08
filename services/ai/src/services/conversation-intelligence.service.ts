@@ -1,6 +1,12 @@
 import { prisma, resolveEffectiveLocale } from "@chatcenter/shared";
 import { getProvider, summarizeConversation, classifyMessage, classifySentiment, ConversationContext } from "./ai-assist.service";
 
+/**
+ * SUPERSEDED by conversation-analysis.service (analyzeConversationOnClose):
+ * nothing calls this any more. It stays only because its test
+ * (__tests__/per-message-intent.test.ts) holds someone else's uncommitted
+ * edits; remove both together once that file is free.
+ */
 export async function analyzeConversation(tenantId: string, conversationId: string) {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },

@@ -1,6 +1,8 @@
 # Conversation intelligence on every close
 
-Status: DESIGN (2026-10-08). Owner: backend. Nothing here is built yet.
+Status: BUILT, OFF until switched on (2026-10-08). Owner: backend. Design approved
+by the supervisor; switching it on, the dev backfill and the incoming-worker rebuild
+are Omer's.
 
 The Home chat answers "by intent" and "by sentiment" from `ConversationIntelligence`.
 On dev that table holds a usable answer for **0 of 88** real conversations: 14 rows,
@@ -114,6 +116,15 @@ The Home chat's intent breakdown shows these labels (today it shows the raw key)
   the 7-day window. The Home chat's coverage shows the gap honestly.
 - At most 2 analyses at once per ai process (a burst of closes queues, not fans out).
 - Bounded input (§3.3) bounds the price of one analysis.
+- **How a capped day reads.** A conversation over the cap gets no row. The Home chat's
+  intent and sentiment breakdowns say "recorded for N of M": on a capped day N is lower
+  than M by the conversations still waiting, and N catches up as the sweeper analyses
+  them on later days (within 7 days of the close). A gap is therefore "not analysed
+  yet", never "no intent": the breakdown never fills it with a guess.
+- **What else is "not recorded".** A conversation with no customer text, an answer the
+  model gave outside the list, and three failed calls each leave a row WITHOUT an
+  intent (`metadata.outcome` says which). They count in M, not in N, and are not tried
+  again until the conversation has new messages.
 
 Price of one analysis, at gpt-5-mini prices (the repo's documented basis, $0.25 / 1M
 input, $2 / 1M output; nano is cheaper): about 450 prompt tokens + the transcript
@@ -129,7 +140,16 @@ total (worst case, every one at the cut: $0.07), well under 10 AI units. The bac
 the sweeper run once with the 7-day window lifted, by hand, in the ai container. It
 overwrites the 14 existing junk rows.
 
-## 7. What changes where
+## 7. Switching it on
+
+Automatic analyses are OFF until switched on, because they spend money and the first
+sweep analyses the last 7 days (a partial backfill):
+- `CONVERSATION_ANALYSIS=on|off` in the ai service's environment decides when set;
+- otherwise the Redis key `intel:enabled` = `"1"` switches it on (and deleting it
+  switches it off) with no rebuild and no compose change.
+- A person asking (`POST /api/ai-assist/:id/analyze`) is never switched off.
+
+## 8. What changes where
 
 | Service | Change | Needs |
 |---|---|---|
@@ -137,12 +157,22 @@ overwrites the 14 existing junk rows.
 | incoming-worker | remove the heuristic analyser and its 2 callers | image rebuild |
 | shared | nothing (no migration: `ConversationIntelligence` already has every field) | none |
 
-## 8. Decisions taken (assumptions, per "decide and document")
+## 9. Decisions taken (assumptions, per "decide and document")
 
-- **Handoff summary (F7).** The approval-expiry handoff was meant to give the incoming
-  human an instant analysis; it never worked (401). It is removed, not rebuilt: the
-  human sees the conversation itself, and the post-chat summary arrives at close.
-  Rebuilding it is a separate ask.
+- **Handoff summary (F7): removed, on the backlog.** The approval-expiry handoff was
+  meant to give the incoming human an instant analysis; it never worked (401, then
+  English keyword guesses). Removed, not rebuilt. No screen presents it as working: the
+  only reader of a conversation's intelligence is the old (v1) co-pilot panel
+  (`frontend/src/components/conversations/CoPilotPanel.tsx`), which shows whatever row
+  exists and falls back to "general / neutral" when there is none (a guess on screen:
+  reported, not changed here). The redesign does not read it.
+- **Backlog: an instant summary for the human who takes over** (approval expiry,
+  escalation). Would reuse `analyzeConversationOnClose` with a `handoff` trigger on an
+  open conversation, under the same cap. Not built.
+- **Backlog: remove the superseded `analyzeConversation`** in
+  `services/ai/src/services/conversation-intelligence.service.ts` together with its test
+  (`per-message-intent.test.ts`, which holds someone else's uncommitted edits). Nothing
+  calls it.
 - **Flow close sets no `closedAt`.** Not changed here (it is incoming-worker behaviour
   with its own readers); the sweeper keys on status and `updatedAt`, so it does not need
   it.
@@ -150,7 +180,7 @@ overwrites the 14 existing junk rows.
   workspace's own topics live in `topics`.
 - **Sentiment of the customer's side only**, as today.
 
-## 9. Tests and live check
+## 10. Tests and live check
 
 - Through the subscriber with a fake bus event: each close path's event shape analyses
   once; `updated` without CLOSED does nothing; a rehearsal, a test row, VOICE and a

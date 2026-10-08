@@ -100,15 +100,10 @@ async function processIdleConversations(job: Job<IdleConversationJob>): Promise<
           where: { id: ar.conversationId },
           data: { handledBy: "human", isHandedOver: true },
         });
-        // F7 handoff trigger: fire analysis so the incoming human has an
-        // instant summary + intent + sentiment of the stalled thread.
-        import("../services/intelligence.service")
-          .then(({ analyzeConversation }) =>
-            analyzeConversation(ar.tenantId, ar.conversationId, "handoff"),
-          )
-          .catch((err: any) =>
-            console.error(`[idle-check] analyzeConversation failed for ${ar.conversationId}:`, err?.message),
-          );
+        // (An "instant handoff summary" used to be requested here. It called
+        // an authenticated ai route without a token, always failed, and fell
+        // back to English keyword guesses; removed with the analysis on close:
+        // docs/architecture/conversation-intelligence-on-close.md, backlog.)
         publishEvent({
           event: "approval:expired",
           tenantId: ar.tenantId,
@@ -281,12 +276,8 @@ async function processIdleConversations(job: Job<IdleConversationJob>): Promise<
                 data: { id: conv.id, status: "CLOSED" },
               }).catch(() => {});
 
-              // Analyze the closed conversation for intelligence
-              import("../services/intelligence.service").then(({ analyzeClosedConversation }) => {
-                analyzeClosedConversation(tenant.id, conv.id).catch((err: any) =>
-                  console.error(`[idle-check] Intelligence analysis failed for ${conv.id}:`, err.message)
-                );
-              }).catch(() => {});
+              // Intelligence: the ai service analyses it on the
+              // conversation:closed event above.
 
               closes++;
               console.log(`[idle-check] Auto-closed conversation ${conv.id} (idle ${Math.round(elapsedMinutes)}m)`);

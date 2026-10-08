@@ -223,6 +223,8 @@ startVoiceCopilotSubscriber();
 startCopilotSuggestionsSubscriber();
 startVoicePostCallWorker();
 startPostChatSubscriber();
+import { startConversationAnalysisSweeper } from "./services/conversation-analysis.service";
+startConversationAnalysisSweeper().catch((err) => console.error("[conversation-analysis] sweeper failed to start:", err?.message));
 startIntelligenceLiveSubscriber();
 startCommerceCacheSubscriber();
 startLiveRunnerSupervisor();

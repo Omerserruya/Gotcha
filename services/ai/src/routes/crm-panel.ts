@@ -17,10 +17,8 @@
 import { Router, type Request, type Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, resolveEffectiveLocale } from "@chatcenter/shared";
 import { getCrmAdapter } from "../services/connectors/crm-adapter-resolver";
-import {
-  analyzeConversation,
-  getConversationIntelligence,
-} from "../services/conversation-intelligence.service";
+import { getConversationIntelligence } from "../services/conversation-intelligence.service";
+import { analyzeConversationOnClose } from "../services/conversation-analysis.service";
 import type { CrmObjectKind } from "../services/connectors/crm-adapter.types";
 import {
   linkOrCreateCrmContact,
@@ -847,8 +845,8 @@ export async function syncCloseToCrm(
 
   let intel = await getConversationIntelligence(tenantId, conversationId).catch(() => null);
   if (!intel) {
-    try { await analyzeConversation(tenantId, conversationId); }
-    catch (err: any) { console.warn("[crm-panel] analyzeConversation failed:", err?.message); }
+    try { await analyzeConversationOnClose(tenantId, conversationId, { trigger: "closed" }); }
+    catch (err: any) { console.warn("[crm-panel] conversation analysis failed:", err?.message); }
     intel = await getConversationIntelligence(tenantId, conversationId).catch(() => null);
   }
 

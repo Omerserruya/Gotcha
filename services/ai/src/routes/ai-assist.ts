@@ -25,7 +25,8 @@ import { getCustomerMemory } from "../services/customer-memory.service";
 import { getAiActivity } from "../services/ai-activity.service";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { generateAllAgentConfigs, generateAgentConfig } from "../services/agent-config-generator";
-import { analyzeConversation, getConversationIntelligence, getConversationReplay } from "../services/conversation-intelligence.service";
+import { getConversationIntelligence, getConversationReplay } from "../services/conversation-intelligence.service";
+import { analyzeConversationOnClose } from "../services/conversation-analysis.service";
 import { getToolsForTenant, executeTool, getToolExecutions } from "../services/tool-execution.service";
 import { executeAdapterTool } from "../services/connectors/integration-framework";
 import { getCrmAdapter } from "../services/connectors/crm-adapter-resolver";
@@ -793,8 +794,12 @@ router.get("/:conversationId/intelligence", async (req: Request, res: Response) 
 router.post("/:conversationId/analyze", async (req: Request, res: Response) => {
   try {
     const convId = req.params.conversationId as string;
-    const intelligence = await analyzeConversation(req.tenantId!, convId);
-    res.json({ data: intelligence });
+    // A person asked: analysed now (the cap and the up-to-date check do not
+    // apply; the real-conversation rule does).
+    const outcome = await analyzeConversationOnClose(req.tenantId!, convId, { trigger: "manual", force: true });
+    if (outcome === "not_found") { res.status(404).json({ error: "Conversation not found" }); return; }
+    const intelligence = await getConversationIntelligence(req.tenantId!, convId);
+    res.json({ data: intelligence, outcome });
   } catch (err) { console.error("Analyze error:", err); res.status(500).json({ error: "Failed to analyze conversation" }); }
 });
 

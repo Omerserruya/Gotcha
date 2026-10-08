@@ -322,8 +322,8 @@ server table, never written by the model:
 | Target | Path |
 |---|---|
 | a conversation | `/inbox?c=<conversationId>` |
-| conversations in a period | `/inbox?from=<YYYY-MM-DD>&to=<YYYY-MM-DD>` (started in it, workspace days) |
-| conversations on a channel in a period | `/inbox?channel=<CHANNEL>&from=...&to=...` (WHATSAPP, INSTAGRAM, MESSENGER, EMAIL, WEBCHAT, SHOPIFY_LIVE_CHAT) |
+| conversations in a period | `/inbox?view=all&from=<YYYY-MM-DD>&to=<YYYY-MM-DD>` (started in it, workspace days) |
+| conversations on a channel in a period | `/inbox?view=all&channel=<CHANNEL>&from=...&to=...` (WHATSAPP, INSTAGRAM, MESSENGER, EMAIL, WEBCHAT, SHOPIFY_LIVE_CHAT) |
 | waiting for the team | `/inbox?view=queue` |
 | a customer | `/customers/<contactId>` |
 | a customer's orders / returns | `/customers/<contactId>?tab=orders` (`&filter=returns`) |
@@ -331,7 +331,10 @@ server table, never written by the model:
 
 **Asks for Frontend (found while mapping the redesign):**
 Both former asks are done and live on dev (frontend d197839 and 579fca8 in
-961f886; `GET /api/conversations?from&to`). A conversations source links to
+961f886; `GET /api/conversations?from&to`). `view=all` (frontend 542e695: every
+conversation, automated included) is required: without it the link opens the default
+"Waiting in queue" view, far fewer rows than the chart. Until 542e695 is on dev the
+server sends NO period link. A conversations source links to
 the inbox only when the inbox shows the same rows: no link for a mention, a
 status, several channels, or a channel the inbox cannot filter (VOICE...).
 

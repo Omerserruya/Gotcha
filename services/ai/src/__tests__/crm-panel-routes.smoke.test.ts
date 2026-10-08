@@ -66,9 +66,12 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
 });
 
 vi.mock("../services/conversation-intelligence.service", () => ({
-  analyzeConversation: mocks.analyzeConversationMock,
   getConversationIntelligence: mocks.getConversationIntelligenceMock,
   getConversationReplay: mocks.getConversationReplayMock,
+}));
+// The analysis on close (conversation-analysis.service) replaced the old analyser.
+vi.mock("../services/conversation-analysis.service", () => ({
+  analyzeConversationOnClose: mocks.analyzeConversationMock,
 }));
 
 vi.mock("../services/zoho.service", () => ({
@@ -342,7 +345,7 @@ describe("POST /api/crm/conversation/:id/sync-close", () => {
     expect(body).toContain(`[gotcha_source_interaction_id=${mocks.conversationId} v=1]`);
   });
 
-  it("invokes analyzeConversation when intelligence is missing", async () => {
+  it("runs the close analysis when intelligence is missing", async () => {
     setupZohoConnected();
     setupConversation({ crmContactId: "lead_a", crmObjectKind: "lead" });
     mocks.prismaMock.message.count.mockResolvedValue(2);
@@ -356,7 +359,7 @@ describe("POST /api/crm/conversation/:id/sync-close", () => {
       .post(`/api/crm/conversation/${mocks.conversationId}/sync-close`)
       .send({});
     expect(res.status).toBe(200);
-    expect(mocks.analyzeConversationMock).toHaveBeenCalledWith(mocks.tenantId, mocks.conversationId);
+    expect(mocks.analyzeConversationMock).toHaveBeenCalledWith(mocks.tenantId, mocks.conversationId, { trigger: "closed" });
   });
 
   it("returns synced=false reason=no_crm_link when conversation isn't linked", async () => {
