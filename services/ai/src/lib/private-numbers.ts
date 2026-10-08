@@ -7,7 +7,7 @@
  * surface them either: a contact under a channel-wide rule, and a conversation
  * under any rule, are hidden.
  */
-import { prisma, normalizeExclusionValue } from "@chatcenter/shared";
+import { prisma, normalizeExclusionValue, withHistoricalRecords } from "@chatcenter/shared";
 
 export interface PrivateNumber { channel: string; channelAccountId: string | null; digits: string }
 
@@ -44,4 +44,25 @@ export function privateConversationsClause(rules: PrivateNumber[]): Record<strin
       })),
     },
   };
+}
+
+/**
+ * Which of these conversations are a private number's, live or imported
+ * (imported history is excluded only at ingest, so a rule made after an
+ * import must still hide what it brought in). Read in SQL, one query.
+ */
+export async function privateConversationIds(tenantId: string, ids: string[], rules?: PrivateNumber[]): Promise<Set<string>> {
+  const r = rules ?? (await privateNumbers(tenantId));
+  const clause = privateConversationsClause(r) as { NOT: { OR: unknown[] } } | null;
+  if (!clause || !ids.length) return new Set();
+  const rows = await withHistoricalRecords(() =>
+    prisma.conversation.findMany({ where: { tenantId, id: { in: ids }, OR: clause.NOT.OR as any }, select: { id: true } }),
+  );
+  return new Set(rows.map((c) => c.id));
+}
+
+/** A customer's number under any rule, whatever the channel: for reads that know only the number. */
+export function numberIsPrivate(externalId: string | null | undefined, rules: PrivateNumber[]): boolean {
+  const d = normalizeExclusionValue(String(externalId ?? ""));
+  return !!d && rules.some((r) => r.digits === d);
 }

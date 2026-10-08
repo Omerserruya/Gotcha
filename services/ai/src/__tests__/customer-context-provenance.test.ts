@@ -27,8 +27,11 @@ vi.mock("@chatcenter/shared", () => ({
     // Present only so the shadowing test can prove WHICH handler answered:
     // `/:id` reads this one, `/customer-context` never touches it.
     historicalImport: { findFirst: async () => null },
+    // No private numbers here (the private-number reads have their own test).
+    inboundExclusion: { findMany: async () => [] },
   },
   normalizePhone: (p: string) => p.replace(/[^\d+]/g, ""),
+  normalizeExclusionValue: (raw: string) => (raw || "").replace(/\D/g, ""),
   authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1" }; n(); },
   resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "t1"; n(); },
   requireOnboardingOrActiveTenant: () => (_q: any, _s: any, n: any) => n(),

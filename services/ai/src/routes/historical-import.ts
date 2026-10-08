@@ -21,6 +21,7 @@ import { processDocument } from "../services/embedding.service";
 import { findExistingKnowledge } from "../services/historical-intelligence/candidate-index";
 import { BULK_APPROVE_MIN_CONFIDENCE } from "../services/historical-intelligence/knowledge-clustering.stage";
 import { rerunIntelligence } from "../services/historical-intelligence";
+import { privateNumbers, privateConversationIds, conversationIsPrivate, numberIsPrivate } from "../lib/private-numbers";
 
 /**
  * The read and review surface for Historical Intelligence Import.
@@ -104,6 +105,8 @@ router.get("/customer-context", async (req: Request, res: Response) => {
     // whatever the channel handed us, the memory row is keyed normalized.
     const normalized = normalizePhone(raw);
     const keys = Array.from(new Set([raw, normalized].filter(Boolean) as string[]));
+    // A private number's history is not read, whenever the rule was made.
+    if (numberIsPrivate(raw, await privateNumbers(req.tenantId!))) return res.json({ context: null });
 
     const memory = await prisma.customerHistoricalMemory.findFirst({
       where: { tenantId: req.tenantId!, customerExternalId: { in: keys } },
@@ -328,8 +331,20 @@ router.get("/candidates/:candidateId/evidence", async (req: Request, res: Respon
       res.status(404).json({ error: "Suggestion not found" });
       return;
     }
+    // A private number's exchanges are not shown, even when the rule came
+    // after the import (ingest only stopped new ones). Excluded in the query,
+    // before the cap, so the cap still counts shown examples.
+    const linked = await prisma.knowledgeCandidateEvidence.findMany({
+      where: { candidateId: candidate.id, tenantId: req.tenantId!, conversationId: { not: null } },
+      select: { conversationId: true },
+      distinct: ["conversationId"],
+    });
+    const hidden = await privateConversationIds(req.tenantId!, linked.map((e) => e.conversationId!).filter(Boolean));
     const evidence = await prisma.knowledgeCandidateEvidence.findMany({
-      where: { candidateId: candidate.id, tenantId: req.tenantId! },
+      where: {
+        candidateId: candidate.id, tenantId: req.tenantId!,
+        ...(hidden.size ? { OR: [{ conversationId: null }, { conversationId: { notIn: [...hidden] } }] } : {}),
+      },
       orderBy: { occurredAt: "desc" },
       take: 50,
     });
@@ -611,8 +626,17 @@ router.post("/:id/rerun-intelligence", writeGuard, async (req: Request, res: Res
  */
 router.get("/:id/customers", async (req: Request, res: Response) => {
   try {
+    // Customers whose conversation is a private number's are left out (rule made after the import included).
+    const linked = await prisma.historicalCustomer.findMany({
+      where: { tenantId: req.tenantId!, importId: req.params.id as string, conversationId: { not: null } },
+      select: { conversationId: true },
+    });
+    const hidden = await privateConversationIds(req.tenantId!, linked.map((c) => c.conversationId!).filter(Boolean));
     const customers = await prisma.historicalCustomer.findMany({
-      where: { tenantId: req.tenantId!, importId: req.params.id as string },
+      where: {
+        tenantId: req.tenantId!, importId: req.params.id as string,
+        ...(hidden.size ? { OR: [{ conversationId: null }, { conversationId: { notIn: [...hidden] } }] } : {}),
+      },
       orderBy: { messageCount: "desc" },
       take: 100,
       select: {
@@ -650,9 +674,15 @@ router.get("/customers/:customerId/memory", async (req: Request, res: Response) 
   try {
     const customer = await prisma.historicalCustomer.findFirst({
       where: { id: req.params.customerId as string, tenantId: req.tenantId! },
-      select: { externalId: true, normalizedPhone: true },
+      select: { externalId: true, normalizedPhone: true, conversationId: true },
     });
-    if (!customer) {
+    // A private number's memory reads as not found, like a missing customer.
+    const rules = customer ? await privateNumbers(req.tenantId!) : [];
+    const isPrivate = !!customer && (
+      numberIsPrivate(customer.normalizedPhone || customer.externalId, rules) ||
+      (!!customer.conversationId && (await privateConversationIds(req.tenantId!, [customer.conversationId], rules)).size > 0)
+    );
+    if (!customer || isPrivate) {
       res.status(404).json({ error: "Customer not found" });
       return;
     }
@@ -684,9 +714,10 @@ router.get("/conversations/:conversationId/messages", async (req: Request, res: 
           tenantId: req.tenantId!,
           origin: "HISTORICAL_IMPORT",
         },
-        select: { id: true, customerExternalId: true, customerName: true },
+        select: { id: true, customerExternalId: true, customerName: true, channel: true, channelAccountId: true },
       });
-      if (!conversation) return null;
+      // A private number's thread reads as not found, whenever the rule was made.
+      if (!conversation || conversationIsPrivate(conversation as any, await privateNumbers(req.tenantId!))) return null;
       const messages = await prisma.message.findMany({
         where: { tenantId: req.tenantId!, conversationId: conversation.id },
         orderBy: { createdAt: "asc" },
@@ -699,7 +730,7 @@ router.get("/conversations/:conversationId/messages", async (req: Request, res: 
           createdAt: true,
         },
       });
-      return { conversation, messages };
+      return { conversation: { id: conversation.id, customerExternalId: conversation.customerExternalId, customerName: conversation.customerName }, messages };
     });
 
     if (!result) {
