@@ -348,6 +348,16 @@ there is one; deepLink /inbox?c=<id>) and a source `{ kind: "conversation",
 query: { tool: "conversation", params: { conversationId } } }`, which has no
 §9.4 list. Unnamed Shopify shoppers are named "קונה באתר" / "Website shopper"
 in the assistant's cards (the stored name is "Shopper on <domain>").
+A conversation record's summary comes as labelled fields (summary_reason,
+summary_asked, summary_status, summary_opportunity; labels in the turn's
+language, content as stored, no markdown), or one "summary" field when the
+stored text is not in that shape; "started" is the earlier of the row's
+creation and its first message.
+A customer card (`system_customer_card`) is a `record` of kind "customer"
+(fields channels, phone, email, tags, open, last, learned, notes, orders;
+deepLink /customers/<id>?tab=everything) followed by the record_list of their
+conversations; both cite one source, the customer's conversations (§9.4
+replays it).
 
 The answer cites a source after the claim it supports with `[^s1]` in `text`.
 The client renders it as that source's chip. The server removes any `[^...]`

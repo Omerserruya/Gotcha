@@ -15,6 +15,7 @@ import { channelName, whenText } from "./system-tools.service";
 import { tenantTimeZone, customerKeys, customerDisplayName, SHOWN_AS, cardsOf } from "./assistant-query.service";
 import { findCustomers } from "./assistant-customers.service";
 import { privateNumbers, conversationIsPrivate, privateConversationsClause } from "../lib/private-numbers";
+import { summaryFields } from "../lib/summary-fields";
 
 type Locale = "he" | "en";
 
@@ -93,7 +94,7 @@ export async function readConversationResult(ctx: ReadCtx, args: ReadArgs): Prom
 
   const limit = Math.min(50, Math.max(1, Number(args.limit) || 20));
   const tz = await tenantTimeZone(ctx.tenantId);
-  const [messages, intel] = await Promise.all([
+  const [messages, intel, first] = await Promise.all([
     prisma.message.findMany({
       where: { tenantId: ctx.tenantId, conversationId: c.id, NOT: { messageType: "system" } },
       orderBy: { createdAt: "desc" },
@@ -101,7 +102,11 @@ export async function readConversationResult(ctx: ReadCtx, args: ReadArgs): Prom
       select: { direction: true, body: true, createdAt: true, senderName: true },
     }),
     prisma.conversationIntelligence.findFirst({ where: { tenantId: ctx.tenantId, conversationId: c.id }, select: { summary: true } }),
+    // An imported conversation's row is created after its first message: it started at the earlier one.
+    prisma.message.findFirst({ where: { tenantId: ctx.tenantId, conversationId: c.id }, orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
   ]);
+  const started = first?.createdAt && first.createdAt < c.createdAt ? first.createdAt : c.createdAt;
+  const summaryParts = intel?.summary ? summaryFields(intel.summary, ctx.locale) : [];
   const ordered = [...messages].reverse();
   const customer = customerDisplayName(c.customerName, c.customerExternalId, ctx.locale);
   const who = c.assignedAgent?.name ?? (!c.isHandedOver && (c.handledBy === "ai_agent" || c.handledBy === "flow") ? "GOTCHA" : c.status === "CLOSED" ? (he ? "ללא שיוך" : "Unassigned") : (he ? "ממתינה לאדם" : "Waiting for a person"));
@@ -111,9 +116,9 @@ export async function readConversationResult(ctx: ReadCtx, args: ReadArgs): Prom
     { key: "channel", label: he ? "ערוץ" : "Channel", value: channelName(c.channel, ctx.locale) },
     { key: "state", label: he ? "מצב" : "State", value: STATE[c.status]?.[ctx.locale] ?? c.status },
     { key: "handler", label: he ? "מטפל" : "Who has it", value: who },
-    { key: "started", label: he ? "התחילה" : "Started", value: whenText(c.createdAt, ctx.locale, tz) },
+    { key: "started", label: he ? "התחילה" : "Started", value: whenText(started, ctx.locale, tz) },
     ...(c.lastMessageAt ? [{ key: "last", label: he ? "הודעה אחרונה" : "Last message", value: whenText(c.lastMessageAt, ctx.locale, tz) }] : []),
-    ...(intel?.summary ? [{ key: "summary", label: he ? "סיכום" : "Summary", value: intel.summary.slice(0, 600) }] : []),
+    ...summaryParts,
   ];
   const blocks = [{ type: "record" as const, id: ctx.nextId("b"), title: customer, sourceId: sId, kind: "conversation" as const, fields, deepLink, partial: null }];
   const source = {
@@ -125,7 +130,7 @@ export async function readConversationResult(ctx: ReadCtx, args: ReadArgs): Prom
     summary: {
       ok: true, cite: sId, conversationId: c.id, customer,
       channel: channelName(c.channel, ctx.locale), state: STATE[c.status]?.[ctx.locale] ?? c.status, whoHasIt: who,
-      ...(intel?.summary ? { summary: intel.summary.slice(0, 600) } : {}),
+      ...(summaryParts.length ? { summary: Object.fromEntries(summaryParts.map((f) => [f.label, f.value])) } : {}),
       messageCount: ordered.length,
       messages: ordered.map((m) => ({
         when: whenText(m.createdAt, ctx.locale, tz),

@@ -46,7 +46,10 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         findMany: async (a: any) => H.convs.filter((c) => test(c, a.where)).sort((x, y) => t(y.lastMessageAt) - t(x.lastMessageAt)).slice(0, a.take ?? 1e9),
       },
       contact: { findMany: async (a: any) => H.contacts.filter((c) => test(c, a.where)) },
-      message: { findMany: async (a: any) => { H.reads.push(a.where.conversationId); return H.messages.filter((m) => test(m, a.where)).sort((x, y) => t(y.createdAt) - t(x.createdAt)).slice(0, a.take); } },
+      message: {
+        findMany: async (a: any) => { H.reads.push(a.where.conversationId); return H.messages.filter((m) => test(m, a.where)).sort((x, y) => t(y.createdAt) - t(x.createdAt)).slice(0, a.take); },
+        findFirst: async (a: any) => H.messages.filter((m) => test(m, a.where)).sort((x, y) => t(x.createdAt) - t(y.createdAt))[0] ?? null,
+      },
       conversationIntelligence: { findFirst: async (a: any) => H.intel.find((i) => test(i, a.where)) ?? null },
       inboundExclusion: { findMany: async () => H.rules },
     },
@@ -92,7 +95,7 @@ beforeEach(() => {
 describe("★ by a customer", () => {
   it("their latest conversation the caller can see, an open one first: a card linking to it, the messages in order, the summary", async () => {
     const { out, artifacts } = await read({ customerId: "omer" });
-    expect(out).toMatchObject({ ok: true, conversationId: "wa_omer", customer: "Omer Serruya", channel: "WhatsApp", state: "Open", whoHasIt: "GOTCHA", summary: "Omer asked about his order." });
+    expect(out).toMatchObject({ ok: true, conversationId: "wa_omer", customer: "Omer Serruya", channel: "WhatsApp", state: "Open", whoHasIt: "GOTCHA", summary: { Summary: "Omer asked about his order." } });
     // System lines are not part of the conversation.
     expect(out.messages.map((m: any) => [m.role, m.text])).toEqual([["customer", "היי"], ["business", "Hi Omer, how can I help?"]]);
     const card = artifacts.blocks[0];
@@ -165,5 +168,33 @@ describe("★ from the list's replay (2026-10-08)", () => {
     const prompt = readFileSync(join(__dirname, "../prompts/system-copilot.md"), "utf-8");
     for (const f of ["מפרטת", "מציגה", "רואה", "מוצאת"]) expect(prompt).toContain(`"${f}"`);
     expect(prompt).toMatch(/Never "בודק", "יכול", "מוכן", "מפרט", "מציג", "מוצא"/);
+  });
+});
+
+describe("★ the read card from the replay of item 4 (2026-10-08)", () => {
+  // Omer's stored summary on dev, as the summarizer wrote it.
+  const STORED = "• **Why they reached out**: ברכה/פתיחה בלבד \u2014 לא ברור שהמשתמש חיפש מידע.  \n• **What they asked**: אין שאלות, רק \"היי\".  \n• **Status**: הלקוח עדיין בעמדה של פתיחה.  \n• **Opportunity**: אין אות מובהק.";
+
+  it("the summary's sections in the turn's words, as stored, no markdown, no long dash", async () => {
+    H.intel = [{ tenantId: "T", conversationId: "wa_omer", summary: STORED }];
+    const { out, artifacts } = await read({ conversationId: "wa_omer" }, ctx({ locale: "he" }));
+    const fields = artifacts.blocks[0].fields.filter((f: any) => f.key.startsWith("summary"));
+    expect(fields.map((f: any) => [f.key, f.label])).toEqual([["summary_reason", "למה פנו"], ["summary_asked", "מה שאלו"], ["summary_status", "איפה זה עומד"], ["summary_opportunity", "הזדמנות"]]);
+    expect(fields[0].value).toBe("ברכה/פתיחה בלבד - לא ברור שהמשתמש חיפש מידע.");
+    expect(JSON.stringify(fields)).not.toMatch(/\*\*|\u2014|Why they reached out/);
+    expect(out.summary).toMatchObject({ "מה שאלו": "אין שאלות, רק \"היי\"." });
+  });
+
+  it("an imported conversation started at its first message, not when its row was created", async () => {
+    H.convs[0].createdAt = D("2026-08-31T10:00:00Z");
+    H.messages.push({ tenantId: "T", conversationId: "wa_omer", direction: "INBOUND", body: "first", messageType: "text", senderName: null, createdAt: D("2026-07-30T09:00:00Z") });
+    const { artifacts } = await read({ conversationId: "wa_omer" });
+    expect(artifacts.blocks[0].fields.find((f: any) => f.key === "started").value).toMatch(/^30 July/);
+  });
+
+  it("the summarizer calls the AI GOTCHA and people the team, never 'the agent'", () => {
+    const src = readFileSync(join(__dirname, "../services/openai.provider.ts"), "utf-8");
+    expect(src).toMatch(/Call the AI that answers customers GOTCHA and the business's people \\"the team\\"/);
+    expect(src).toMatch(/never \\"the agent\\", \\"the bot\\" or \\"הסוכן\\"/);
   });
 });

@@ -17,7 +17,7 @@ import { prisma, getRedis, type Viewer } from "@chatcenter/shared";
 import { runAgent, type AgentRuntimeEvent } from "./agent-runtime.service";
 import { generateResponse, getMicroModel } from "./ai.service";
 import { withoutWideDashes } from "../lib/wide-dash";
-import { whenText } from "./system-tools.service";
+import { whenText, PLAN_ACTIONS } from "./system-tools.service";
 import { questionLanguage } from "../lib/reader-locale";
 
 // ─── Scope ──────────────────────────────────────────────────
@@ -230,6 +230,9 @@ export class SuggestionsSplitter {
         const tool = typeof x?.tool === "string" ? x.tool : "";
         if (typeof x?.text !== "string" || !allowed.tools.has(tool)) return null;
         if (allowed.noSelection && NEEDS_SELECTION.has(tool)) return null;
+        // An action is proposed only when it can run: "transfer it to a
+        // colleague" was offered with no assign action (2026-10-08).
+        if (tool === "propose_plan" && !(PLAN_ACTIONS as readonly string[]).includes(String(x?.action ?? ""))) return null;
         return x.text;
       })
       .filter((x): x is string => typeof x === "string" && !!x.trim())
@@ -299,7 +302,7 @@ export function threadSystemLines(scope: ThreadScope, locale: "he" | "en", now =
     "Offer only what your tools can do. Never offer an export, a CSV or other file, a sync, or an action you have no tool for; when something is not available, say so and stop.",
     "No screen is attached to this conversation: you see nothing of what the user has open. Never mention their screen, a selected conversation or \"context\" as a reason; find what they mean with your tools, and if no tool can answer, say which information you cannot reach, and stop.",
     `Follow-up questions go ONLY in the ${SUGGESTIONS_MARKER} line (they appear as buttons). Never list them, or any \"want me to...\" menu of next steps, in the answer text.`,
-    `Answer format for this screen: markdown limited to bold, italics, bullet and numbered lists, inline code and links (http(s) or in-app paths starting with /). No tables, images or HTML. After the answer, on its own last line, write ${SUGGESTIONS_MARKER} followed by a JSON array of 2 or 3 follow-ups the user may ask next, each {"text": a short question written in ${LANG_NAME[locale]}, "tool": the name of the ONE tool of yours that would answer it}, e.g. [{"text": "...", "tool": "system_list_conversations"}]. Suggest only what one of your tools can answer; a follow-up without such a tool is not shown. Write nothing after that array.`,
+    `Answer format for this screen: markdown limited to bold, italics, bullet and numbered lists, inline code and links (http(s) or in-app paths starting with /). No tables, images or HTML. After the answer, on its own last line, write ${SUGGESTIONS_MARKER} followed by a JSON array of 2 or 3 follow-ups the user may ask next, each {"text": a short question written in ${LANG_NAME[locale]}, "tool": the name of the ONE tool of yours that would answer it}, e.g. [{"text": "...", "tool": "system_list_conversations"}]. An action goes through propose_plan and also names it: {"text": ..., "tool": "propose_plan", "action": one of ${PLAN_ACTIONS.join(", ")}}; nothing else can be proposed (assigning, closing, notes cannot). Suggest only what one of your tools can do; a follow-up without such a tool is not shown. Write nothing after that array.`,
   ];
 }
 

@@ -24,6 +24,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     readDurableSetting: async () => JSON.stringify({ timezone: "Asia/Jerusalem", schedule: {} }),
     prisma: {
       message: {
+        findFirst: async () => null,
         findMany: async (a: any) => a.where.direction === "INBOUND"
           ? [
               { conversationId: "c1", body: "Is the lamp in stock?", createdAt: D("2026-10-07T11:05:00Z"), conversation: conv("WEBCHAT", "2026-10-07T11:00:00Z", "Dana") },

@@ -18,6 +18,7 @@ import { normalizeQuery, queryConversations, sourceLabel, type ConversationQuery
 import { normalizeOrderQuery, queryOrders, queryProductStock } from "./assistant-commerce-query.service";
 import { findCustomersResult } from "./assistant-customers.service";
 import { readConversationResult } from "./assistant-conversation-read.service";
+import { customerCardResult } from "./assistant-customer-card.service";
 import { privateNumbers, privateConversationsClause } from "../lib/private-numbers";
 
 /** The last n days, today included (UTC days: a caller with a workspace period passes it). */
@@ -131,6 +132,23 @@ const SYSTEM_READ_CONVERSATION = {
         customer: { type: "array", items: { type: "string" }, maxItems: 4, description: "The customer's name, 1 to 4 spellings." },
         conversationId: { type: "string" },
         limit: { type: "number", description: "Messages to read, default 20, max 50." },
+      },
+    },
+  },
+};
+
+const SYSTEM_CUSTOMER_CARD = {
+  type: "function" as const,
+  function: {
+    name: "system_customer_card",
+    description:
+      "Everything about one customer, as their customer page shows it: channels and how to reach them, tags, what GOTCHA learned about them, the team's notes, their conversations on every channel, and their latest orders when a store is connected. " +
+      "Shown as a card linking to the customer, with their conversations under it. Pass customerId from system_find_customers, or their name as spellings (customer); a name matching several people returns them to choose from.",
+    parameters: {
+      type: "object",
+      properties: {
+        customerId: { type: "string", description: "A customer's id from system_find_customers." },
+        customer: { type: "array", items: { type: "string" }, maxItems: 4, description: "The customer's name, 1 to 4 spellings." },
       },
     },
   },
@@ -331,6 +349,7 @@ export async function buildSystemAgentTools(opts: {
     SYSTEM_GET_METRIC,
     SYSTEM_FIND_CUSTOMERS,
     SYSTEM_READ_CONVERSATION,
+    SYSTEM_CUSTOMER_CARD,
     SYSTEM_RECENT_ACTIVITY,
     SYSTEM_QUERY_CONVERSATIONS,
     SYSTEM_LIST_CONVERSATIONS,
@@ -543,6 +562,16 @@ async function dispatchSystemTool(
         const r = await queryConversations({ tenantId: ctx.tenantId, viewer: ctx.viewer, locale, nextId }, q);
         return { toolCallId, content: JSON.stringify(r.summary), artifacts: { blocks: r.blocks, source: r.source } };
       }
+      case "system_customer_card": {
+        let seq = 0;
+        const nextId = ctx.nextId ?? ((k: "b" | "s") => `${k}${++seq}`);
+        const customer = Array.isArray(args.customer) ? args.customer.map(String) : typeof args.customer === "string" ? [args.customer] : undefined;
+        const r = await customerCardResult(
+          { tenantId: ctx.tenantId, viewer: ctx.viewer, locale: ctx.locale ?? "en", nextId, canReadContacts: !!ctx.canReadContacts, canReadCommerce: !!ctx.canReadCommerce, authToken: ctx.authToken },
+          { customerId: args.customerId, customer },
+        );
+        return { toolCallId, content: JSON.stringify(r.summary), ...(r.source ? { artifacts: { blocks: r.blocks ?? [], source: r.source } } : {}) };
+      }
       case "system_list_conversations": {
         const locale = ctx.locale ?? "en";
         const period = ctx.defaultPeriod ?? lastDays(7);
@@ -649,6 +678,7 @@ const STEP_TEXT: Record<string, { en: string; he: string }> = {
   system_find_customers: { en: "Looking for the customer", he: "מחפשת את הלקוח" },
   system_summarize_conversation: { en: "Reading the conversation", he: "קוראת את השיחה" },
   system_read_conversation: { en: "Reading the conversation", he: "קוראת את השיחה" },
+  system_customer_card: { en: "Opening the customer's card", he: "פותחת את כרטיס הלקוח" },
   system_recent_activity: { en: "Looking at recent messages", he: "מסתכלת על ההודעות האחרונות" },
   system_query_conversations: { en: "Looking at the conversations", he: "בודקת את השיחות" },
   system_list_conversations: { en: "Finding the conversations", he: "מוצאת את השיחות" },

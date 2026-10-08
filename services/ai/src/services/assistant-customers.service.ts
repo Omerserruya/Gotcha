@@ -48,6 +48,7 @@ export interface FoundCustomer {
   lastContactAt: Date | null;
   /** Every contact of the person (personId), for the tools that follow. */
   contactIds: string[];
+  tags: string[];
 }
 
 const MAX_VARIANTS = 4;
@@ -82,8 +83,8 @@ function wordClause(w: string): Record<string, unknown> {
   return { OR: or };
 }
 
-interface ContactRow { id: string; channel: string; externalId: string; displayName: string | null; email: string | null; phone: string | null; personId: string | null; updatedAt: Date }
-const CONTACT_SELECT = { id: true, channel: true, externalId: true, displayName: true, email: true, phone: true, personId: true, updatedAt: true } as const;
+interface ContactRow { id: string; channel: string; externalId: string; displayName: string | null; email: string | null; phone: string | null; personId: string | null; updatedAt: Date; tags?: unknown }
+const CONTACT_SELECT = { id: true, channel: true, externalId: true, displayName: true, email: true, phone: true, personId: true, updatedAt: true, tags: true } as const;
 
 /**
  * The customers matching any of the spellings, as the caller may see them,
@@ -111,14 +112,30 @@ export async function findCustomers(ctx: CustomerCtx, queries: string[]): Promis
     }
   }
   if (!rows.size) return [];
+  return (await describeCustomers(ctx, [...rows.values()], rules, score)).slice(0, MAX_RESULTS);
+}
 
+/**
+ * One customer by a contact id, as this caller may see them (the same rules as
+ * the search), or null: missing, another workspace's, private, or (without
+ * the contacts permission) without a conversation the caller can see.
+ */
+export async function visibleCustomer(ctx: CustomerCtx, contactId: string): Promise<FoundCustomer | null> {
+  const rules = await privateNumbers(ctx.tenantId);
+  const rows = ((await prisma.contact.findMany({ where: { tenantId: ctx.tenantId, id: contactId, mergedIntoId: null } as any, select: CONTACT_SELECT })) as ContactRow[]).filter((c) => !contactIsPrivate(c, rules));
+  if (!rows.length) return null;
+  return (await describeCustomers(ctx, rows, rules, new Map()))[0] ?? null;
+}
+
+/** Contacts as customers: one per person, their visible conversations counted, best first. */
+async function describeCustomers(ctx: CustomerCtx, rows: ContactRow[], rules: Awaited<ReturnType<typeof privateNumbers>>, score: Map<string, number>): Promise<FoundCustomer[]> {
   // One row per person: the contacts sharing a personId are one customer.
-  const personIds = [...new Set([...rows.values()].map((c) => c.personId).filter(Boolean))] as string[];
+  const personIds = [...new Set(rows.map((c) => c.personId).filter(Boolean))] as string[];
   const siblings = personIds.length
     ? ((await prisma.contact.findMany({ where: { tenantId: ctx.tenantId, mergedIntoId: null, personId: { in: personIds } } as any, select: CONTACT_SELECT })) as ContactRow[]).filter((c) => !contactIsPrivate(c, rules))
     : [];
   const groups = new Map<string, ContactRow[]>();
-  for (const c of [...rows.values(), ...siblings]) {
+  for (const c of [...rows, ...siblings]) {
     const key = c.personId ?? c.id;
     const g = groups.get(key) ?? [];
     if (!g.some((x) => x.id === c.id)) g.push(c);
@@ -156,12 +173,12 @@ export async function findCustomers(ctx: CustomerCtx, queries: string[]): Promis
       conversations: mine.length,
       lastContactAt: last,
       contactIds: group.map((c) => c.id),
+      tags: [...new Set(group.flatMap((c) => (Array.isArray(c.tags) ? c.tags : []).map(String)))].slice(0, 20),
       rank: Math.max(...group.map((c) => score.get(c.id) ?? 0)),
     });
   }
   return out
     .sort((a, b) => b.rank - a.rank || (b.lastContactAt?.getTime() ?? 0) - (a.lastContactAt?.getTime() ?? 0))
-    .slice(0, MAX_RESULTS)
     .map(({ rank: _r, ...c }) => c);
 }
 
