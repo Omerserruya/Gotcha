@@ -1243,4 +1243,14 @@
     text-decoration: underline;
     text-underline-offset: 3px;
   }
+
+  /* `?id=` for a request that is not waiting: said above the page. */
+  .askedNotice {
+    margin: 0 0 var(--space-12);
+    padding: 10px 14px;
+    border-radius: 10px;
+    background-color: var(--panel-inset);
+    font-size: var(--font-size-meta);
+    color: var(--text-secondary);
+  }
 }

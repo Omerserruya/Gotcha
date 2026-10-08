@@ -65,6 +65,11 @@ export default async function Page({
    */
   readonly searchParams: Promise<{
     readonly c?: string;
+    /**
+     * The same as `c`, for a link written before Home's queue was fixed
+     * (it sent `?conversation=` and the inbox read only `?c=`). `c` wins.
+     */
+    readonly conversation?: string;
     readonly cursor?: string;
     readonly view?: string;
     readonly channel?: string;
@@ -76,7 +81,9 @@ export default async function Page({
   const t = await getTranslations('inbox');
   const channelNames = await getTranslations('channels');
   const common = await getTranslations('common');
-  const { c, cursor, view: rawView, channel: rawChannel, from, to } = await searchParams;
+  const params = await searchParams;
+  const { cursor, view: rawView, channel: rawChannel, from, to } = params;
+  const c = params.c ?? params.conversation;
   const view = parseInboxView(rawView);
   const channel = parseChannelFilter(rawChannel);
   const asked = parsePeriod(from, to);

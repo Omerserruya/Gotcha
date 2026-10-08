@@ -335,9 +335,17 @@ export async function KnowledgeScreen({
         </section>
 
         {/* ── What it could not answer ─────────────────────────────────── */}
-        <section className={styles.gapsCard} data-testid="gaps-section">
+        {/* `tabIndex` -1: an address can send focus here (`?section=gaps`), a Tab cannot. */}
+        <section
+          className={styles.gapsCard}
+          data-testid="gaps-section"
+          tabIndex={-1}
+          aria-labelledby="knowledge-gaps-heading"
+        >
           <header className={styles.cardHead}>
-            <h2 className={styles.cardTitle}>{t('gaps.heading')}</h2>
+            <h2 className={styles.cardTitle} id="knowledge-gaps-heading">
+              {t('gaps.heading')}
+            </h2>
           </header>
 
           <div className={styles.cardBody}>

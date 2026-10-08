@@ -88,8 +88,11 @@ export function ApprovalsScreen({
   decidedTotal = 0,
   editAmountLive = false,
   refundLimit = null,
+  initialId,
 }: {
   readonly pending: readonly Approval[];
+  /** `/approvals?id=` - the request to open on, as a click on its row would. */
+  readonly initialId?: string;
   /** `id → who asked`, resolved server-side so no cuid reaches the browser. */
   readonly requesterNames: Readonly<Record<string, string>>;
   /** Epoch ms from the server, so the first client render matches the server's. */
@@ -136,7 +139,22 @@ export function ApprovalsScreen({
   }, []);
   const now = useMemo(() => new Date(nowMs), [nowMs]);
 
-  const [selectedId, setSelectedId] = useState<string | null>(pending[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    initialId && pending.some((a) => a.id === initialId) ? initialId : (pending[0]?.id ?? null),
+  );
+  /*
+   * Opened by its address: its row brought into view and focused - the same
+   * place a click leaves you. Once, on arrival.
+   */
+  useEffect(() => {
+    if (!initialId) return;
+    const row = [...document.querySelectorAll<HTMLElement>('[data-id]')].find(
+      (el) => el.dataset.id === initialId,
+    );
+    row?.scrollIntoView?.({ block: 'nearest' });
+    row?.focus({ preventScroll: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
+  }, []);
   const [reason, setReason] = useState('');
   /** Omer, 2026-10-04: a closed choice, and "Other" to type one. */
   const [reasonChoice, setReasonChoice] = useState<RejectReason | null>(null);

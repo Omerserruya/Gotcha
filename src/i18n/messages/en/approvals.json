@@ -304,5 +304,9 @@
     "other": "Other",
     "otherLabel": "Why not?"
   },
-  "keysEdit": "A approve · R reject · E edit"
+  "keysEdit": "A approve · R reject · E edit",
+  "asked": {
+    "missing": "This request isn't here. It may have been decided already, or it belongs to another workspace.",
+    "decided": "This request was already decided - it is in what was decided earlier."
+  }
 }

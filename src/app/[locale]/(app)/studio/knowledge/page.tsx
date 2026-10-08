@@ -8,6 +8,7 @@ import {
   type KnowledgeLanding,
 } from '@/features/knowledge/add/add-way';
 import { AddKnowledge } from '@/features/knowledge/add/AddKnowledge';
+import { FocusSection } from '@/features/knowledge/FocusSection';
 import { KnowledgeScreen, knowledgeSummary } from '@/features/knowledge/KnowledgeScreen';
 import { loadKnowledge } from '@/features/knowledge/load-knowledge';
 import styles from '@/features/knowledge/Knowledge.module.css';
@@ -48,6 +49,8 @@ export default async function Page({
     /** The way back from Google or Atlassian (backend df9ee4cd). */
     readonly connected?: string;
     readonly error?: string;
+    /** `gaps`: open on the questions GOTCHA could not answer (the assistant links here). */
+    readonly section?: string;
   }>;
 } = {}) {
   const params = (await searchParams) ?? {};
@@ -105,6 +108,8 @@ export default async function Page({
         Both halves failed: that is a read failure, not a knowledge base with
         nothing in it, and the two must never look the same.
       */}
+      {/* `?section=gaps`: the unanswered questions, brought into view and focused. */}
+      {params.section === 'gaps' ? <FocusSection testid="gaps-section" /> : null}
       {sources === null && unanswered === null ? (
         <p data-testid="knowledge-unavailable">{t('unavailable')}</p>
       ) : (

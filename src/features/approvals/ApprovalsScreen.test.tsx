@@ -788,3 +788,29 @@ describe('★★ 03b, measured on dev - a failure said in words, retry on the di
     expect(await screen.findByTestId('moment-undo')).toBeInTheDocument();
   });
 });
+
+describe('★ opened by its address (/approvals?id=)', () => {
+  it('opens on that request - selected and focused, as a click on its row leaves it', () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    render(
+      <NextIntlClientProvider locale="en" messages={{ approvals: messages }}>
+        <ApprovalsScreen
+          pending={[approval({ id: 'a' }), approval({ id: 'b', summary: 'second' })]}
+          requesterNames={{}}
+          serverNow={NOW}
+          initialId="b"
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('queue-b')).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByTestId('queue-a')).not.toHaveAttribute('aria-current');
+    expect(document.activeElement).toBe(screen.getByTestId('queue-b'));
+    expect(scroll).toHaveBeenCalled();
+  });
+
+  it('without one, the first waiting request, as before', () => {
+    renderScreen([approval({ id: 'a' }), approval({ id: 'b' })]);
+    expect(screen.getByTestId('queue-a')).toHaveAttribute('aria-current', 'true');
+  });
+});

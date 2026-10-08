@@ -60,11 +60,14 @@ import { pageMetadata } from '@/shell/page-metadata';
 export default async function Page({
   searchParams,
 }: {
-  /** `?view=decided` - the history, reachable while items are pending too. */
-  readonly searchParams?: Promise<{ readonly view?: string }>;
+  /**
+   * `?view=decided` - the history, reachable while items are pending too.
+   * `?id=` - one request, opened as a click would (the assistant links here).
+   */
+  readonly searchParams?: Promise<{ readonly view?: string; readonly id?: string }>;
 } = {}) {
   const t = await getTranslations('approvals');
-  const { view } = (await searchParams) ?? {};
+  const { view, id: askedId } = (await searchParams) ?? {};
   const {
     pending,
     decided,
@@ -94,6 +97,25 @@ export default async function Page({
   }
 
   /*
+   * ★ `?id=`: one request. Waiting - the queue opens on it. Decided already,
+   *   or not in this workspace's queue at all - said, in the words Home uses
+   *   for a thread that is not there; never another request in its place.
+   */
+  const asked = !askedId
+    ? null
+    : pending.some((a) => a.id === askedId)
+      ? 'pending'
+      : (decided ?? []).some((a) => a.id === askedId)
+        ? 'decided'
+        : 'missing';
+  const askedNotice =
+    asked === 'decided' || asked === 'missing' ? (
+      <p className={styles.askedNotice} role="status" data-testid="approval-asked-notice">
+        {t(`asked.${asked}`)}
+      </p>
+    ) : null;
+
+  /*
    * The history, asked for from the queue's "Decided earlier today" row.
    * The same card as 03c, with the way back to what is waiting.
    */
@@ -110,6 +132,7 @@ export default async function Page({
           </Link>
         }
       >
+        {askedNotice}
         <NothingWaiting
           decided={decided}
           mayBeIncomplete={decidedMayBeIncomplete}
@@ -152,6 +175,7 @@ export default async function Page({
       >
         <div className={styles.rest}>
           <HandledCard handled={handled} refundLimit={refundLimit} />
+          {askedNotice}
           <NothingWaiting
             decided={decided}
             mayBeIncomplete={decidedMayBeIncomplete}
@@ -220,8 +244,10 @@ export default async function Page({
         </>
       }
     >
+      {askedNotice}
       <ApprovalsScreen
         pending={pending}
+        initialId={asked === 'pending' ? askedId : undefined}
         requesterNames={requesters}
         aiAsked={aiAsked}
         customers={customers}

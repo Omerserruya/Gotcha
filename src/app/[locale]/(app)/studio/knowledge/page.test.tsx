@@ -3,6 +3,7 @@ import { isValidElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AddKnowledge } from '@/features/knowledge/add/AddKnowledge';
+import { FocusSection } from '@/features/knowledge/FocusSection';
 
 const sources = vi.hoisted(() => ({ value: [] as unknown[] | null }));
 vi.mock('@/features/knowledge/load-knowledge', () => ({
@@ -126,5 +127,15 @@ describe('★★ the way back from Google or Atlassian opens the sheet on its ca
     const p = await props(query);
     expect(p?.initialWay).toBe(way);
     expect(p?.landing).toEqual(landing);
+  });
+});
+
+describe('★ /studio/knowledge?section=gaps - the assistant links to the unanswered questions', () => {
+  it('focuses the gaps section; without it, nothing moves', async () => {
+    expect(find<{ testid: string }>(await page({ section: 'gaps' }), FocusSection)?.testid).toBe(
+      'gaps-section',
+    );
+    expect(find(await page(), FocusSection)).toBeNull();
+    expect(find(await page({ section: 'other' }), FocusSection)).toBeNull();
   });
 });

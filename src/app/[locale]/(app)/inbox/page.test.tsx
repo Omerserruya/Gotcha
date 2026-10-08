@@ -301,6 +301,15 @@ describe('⚠⚠ the queue is told which conversation is open', () => {
     expect(props?.openId).toBe('c7');
   });
 
+  it('★ `?conversation=` opens it too (links written before Home’s queue said `?c=`); `c` wins', async () => {
+    loadInbox.mockResolvedValue(data({ open: row({ id: 'c9' }) }));
+    const { default: Page } = await import('./page');
+    await Page({ searchParams: Promise.resolve({ conversation: 'c9' }) });
+    expect(loadInbox.mock.calls.at(-1)![0]).toBe('c9');
+    await Page({ searchParams: Promise.resolve({ c: 'c7', conversation: 'c9' }) });
+    expect(loadInbox.mock.calls.at(-1)![0]).toBe('c7');
+  });
+
   it('⚠⚠ and with no `?c=` it is the one the loader opened - not nothing', async () => {
     /*
      * Measured on the deployed build: the first conversation open in the

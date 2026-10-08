@@ -237,3 +237,67 @@ describe('★ "Requested by Support AI" - named only where one employee could ha
     expect(props?.aiAsked).toEqual(['p1']);
   });
 });
+
+describe('★ /approvals?id= - one request, by its address (the assistant links here)', () => {
+  const byTestId = (tree: ReactNode, id: string): ReactElement | null => {
+    let found: ReactElement | null = null;
+    const visit = (node: ReactNode): void => {
+      if (Array.isArray(node)) return node.forEach(visit);
+      if (!isValidElement(node)) return;
+      const element = node as ReactElement<{ children?: ReactNode; 'data-testid'?: string }>;
+      if (element.props['data-testid'] === id) found = element;
+      visit(element.props.children);
+    };
+    visit(tree);
+    return found;
+  };
+  const open = async (id: string, pending: string[], decided: string[] = []) => {
+    const request = (rid: string) => ({
+      id: rid,
+      summary: 'x',
+      tool: 't',
+      expiresAt: '2026-09-19T12:00:00.000Z',
+      createdAt: '2026-09-19T09:00:00.000Z',
+      riskTags: [],
+      requestedBy: 'bot',
+    });
+    loadApprovals.mockResolvedValue({
+      pending: pending.map(request),
+      decided: decided.map((rid) => ({
+        ...request(rid),
+        status: 'APPROVED',
+        decidedAt: '2026-09-19T09:30:00.000Z',
+      })),
+      decidedMayBeIncomplete: false,
+      aiEmployees: [],
+      usageToday: null,
+      customerNames: {},
+      readAt: Date.parse('2026-09-19T10:00:00.000Z'),
+    });
+    const { default: Page } = await import('./page');
+    return Page({ searchParams: Promise.resolve({ id }) });
+  };
+
+  it('waiting: the queue opens on it - as a click on its row would', async () => {
+    const tree = await open('b', ['a', 'b']);
+    expect(propsOf<{ initialId?: string }>(tree, ApprovalsScreen)?.initialId).toBe('b');
+    expect(byTestId(tree, 'approval-asked-notice')).toBeNull();
+  });
+
+  it('decided already: said - and the queue opens as it would, never on another request', async () => {
+    const tree = await open('d', ['a'], ['d']);
+    expect(byTestId(tree, 'approval-asked-notice')?.props).toMatchObject({
+      children: 'asked.decided',
+    });
+    expect(propsOf<{ initialId?: string }>(tree, ApprovalsScreen)?.initialId).toBeUndefined();
+  });
+
+  it('not here (another workspace’s, or none): said, with nothing waiting too', async () => {
+    expect(byTestId(await open('zzz', ['a']), 'approval-asked-notice')?.props).toMatchObject({
+      children: 'asked.missing',
+    });
+    expect(byTestId(await open('zzz', []), 'approval-asked-notice')?.props).toMatchObject({
+      children: 'asked.missing',
+    });
+  });
+});

@@ -87,7 +87,8 @@ export async function QueueList({
         return (
           <Link
             key={item.conversationId}
-            href={`/inbox?conversation=${encodeURIComponent(item.conversationId)}`}
+            // The inbox opens a conversation by `?c=` (it read nothing else, and these opened nothing).
+            href={{ pathname: '/inbox', query: { c: item.conversationId } }}
             className={[styles.queueRow, tone ? ROW_TONE_CLASS[tone] : ''].join(' ').trim()}
           >
             <span className={styles.queueAvatar} aria-hidden="true">
