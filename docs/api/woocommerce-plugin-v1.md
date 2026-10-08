@@ -27,14 +27,17 @@ through the Store API) is C2, with its own contract.
 
 ## 2. Connect
 
-1. The plugin stores a random `nonce` (option, 15 minutes) and opens
-   `{app}/connect/woocommerce?site=<home_url>&return=<settings page url>&nonce=<nonce>`.
+1. The plugin stores a random `nonce` (transient, 15 minutes) and opens
+   `{app}/v2/connect/woocommerce?site=<home_url>&return=<settings page url>&nonce=<nonce>`.
+   The key flow (step 2) comes back to the same page with `?connected=1` or
+   `?error=<code>`; the page keeps `site` / `return` / `nonce` itself (e.g.
+   sessionStorage) across that round-trip.
 2. On GOTCHA (frontend page): the owner signs in and picks the workspace. If
    the workspace has no WooCommerce connection for this store, the page runs
    the existing key flow first (`GET /api/integrations/woocommerce/oauth/init?
    storeUrl=<site>&flow=wp_plugin&format=json`), which comes back to the page.
 3. The page calls `POST /api/woocommerce-plugin/bind` (authenticated,
-   permission `integrations:manage:update`) with `{ siteUrl, returnUrl, nonce }`.
+   permission `integrations:connections:connect`) with `{ siteUrl, returnUrl, nonce }`.
    - `siteUrl` must be the store the workspace is connected to (same host as the
      WooCommerce connection's storeUrl): else `409 { code: "STORE_NOT_CONNECTED" }`.
    - `returnUrl` must be on the same host as `siteUrl` and under `/wp-admin/`:
@@ -62,7 +65,7 @@ revoked. At most one heartbeat a day is recorded.
 
 From WP Admin: the plugin sends `uninstalled`-like `event: "disconnected"`
 (same endpoint) and forgets its key. From GOTCHA: `DELETE
-/api/woocommerce-plugin/sites/:id` (permission `integrations:manage:update`)
+/api/woocommerce-plugin/sites/:id` (permission `integrations:connections:disconnect`)
 revokes the key; the plugin's next signal gets `401` and shows "Not connected".
 
 ## 5. Where GOTCHA keeps it
@@ -73,16 +76,20 @@ connectedAt, lastSeenAt, pluginVersion, wpVersion, wcVersion }]`. A site key
 maps to its tenant through a Redis index `wcplugin:key:<sha256>` → tenantId
 (rebuilt from the setting when missing).
 
-`GET /api/website-widget/install` gains `woocommerce: [{ id, siteUrl, status,
-lastSeenAt, pluginVersion }]` for the Install screen, and `downloadUrl` for
-the zip (§6).
+`GET /api/website-widget/install`: its `woocommerce` object keeps `status`
+(`"use_code"` until a site is connected through the plugin, then `"plugin"`)
+and gains `sites: [{ id, siteUrl, status, lastSeenAt, pluginVersion }]` and
+`downloadUrl` (the zip, §6).
 
 ## 6. The zip
 
 `GET /api/woocommerce-plugin/download` (authenticated): the current plugin as
 `gotcha-for-woocommerce.zip`. The plugin source lives in the repository
-(`integrations/woocommerce-plugin/gotcha-for-woocommerce/`), GPL-2.0-or-later
-(a WordPress requirement).
+(`services/ai/src/assets/woocommerce-plugin/gotcha-for-woocommerce/`, so it
+ships with the ai image), GPL-2.0-or-later (a WordPress requirement). Bind,
+download: permission `integrations:connections:connect`; removing a site:
+`integrations:connections:disconnect` (the same as connecting / disconnecting
+a business system).
 
 ## 7. Needed from Omer (for the zip now and the WordPress.org listing later)
 

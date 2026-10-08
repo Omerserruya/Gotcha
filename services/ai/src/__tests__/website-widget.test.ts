@@ -248,7 +248,8 @@ describe("/install", () => {
     expect(by.ca_gone.status).toBe("uninstalled");
     expect(by.ca_gone.themeEditorUrl).toContain("gone.myshopify.com");
     expect(d.code).toBeNull();
-    expect(d.woocommerce).toEqual({ status: "use_code" });
+    // The plugin's sites (none here) and its download (docs/api/woocommerce-plugin-v1.md §5).
+    expect(d.woocommerce).toEqual({ status: "use_code", sites: [], downloadUrl: "/api/woocommerce-plugin/download" });
     expect(d).not.toHaveProperty("shopifyInstallUrl");
   });
 });

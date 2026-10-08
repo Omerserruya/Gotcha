@@ -276,7 +276,9 @@ export async function installOf(tenantId: string, now = new Date()) {
         }
       : null,
     shopify,
-    woocommerce: { status: "use_code" as const },
+    // The plugin's sites (docs/api/woocommerce-plugin-v1.md §5); the code
+    // snippet stays the way until one is connected.
+    woocommerce: await woocommerceInstall(tenantId),
   };
 }
 
@@ -309,4 +311,14 @@ export function hostOf(origin: unknown, referer: unknown): string | null {
     } catch { /* not a URL */ }
   }
   return null;
+}
+
+async function woocommerceInstall(tenantId: string) {
+  const { sitesForInstall } = await import("./woocommerce-plugin.service");
+  const sites = await sitesForInstall(tenantId).catch(() => []);
+  return {
+    status: sites.some((s) => s.status === "connected") ? ("plugin" as const) : ("use_code" as const),
+    sites,
+    downloadUrl: "/api/woocommerce-plugin/download",
+  };
 }

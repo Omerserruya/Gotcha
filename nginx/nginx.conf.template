@@ -1366,6 +1366,18 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # ─── GOTCHA for WooCommerce plugin (docs/api/woocommerce-plugin-v1.md):
+        #     bind / download / remove are authenticated; exchange and signal
+        #     are called by the store's server (a one-time code / a site key) ───
+        location /api/woocommerce-plugin {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # ─── Shopify Live Chat (authenticated merchant admin) ───
         location /api/shopify-live-chat {
             limit_req zone=api burst=20 nodelay;

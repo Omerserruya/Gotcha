@@ -49,7 +49,9 @@ const STATE_TTL_SECONDS = 1800;
 const RESULT_TTL_SECONDS = 1800;
 const resultKey = (jti: string) => `woo_oauth:result:${jti}`;
 
-const WOO_FLOWS = new Set(["redesign_studio"]);
+// wp_plugin: the "GOTCHA for WooCommerce" plugin's Connect page (docs/api/
+// woocommerce-plugin-v1.md §2) runs the key flow first and comes back to it.
+const WOO_FLOWS = new Set(["redesign_studio", "wp_plugin"]);
 function parseWooFlow(raw: unknown): string | undefined {
   return typeof raw === "string" && WOO_FLOWS.has(raw) ? raw : undefined;
 }
@@ -74,6 +76,10 @@ function publicApiBase(): string {
 /** Where the browser lands. Fixed paths; nothing from the request. */
 export function wooReturnUrl(flow: string | undefined, result: { error?: string }): string {
   const origin = resolveAppPublicUrl(process.env);
+  if (flow === "wp_plugin") {
+    const p = new URLSearchParams(result.error ? { error: WOO_ERROR_CODES.has(result.error) ? result.error : "callback_error" } : { connected: "1" });
+    return `${origin}/v2/connect/woocommerce?${p.toString()}`;
+  }
   if (flow === "redesign_studio") {
     const p = new URLSearchParams({ system: PROVIDER });
     if (result.error) p.set("error", WOO_ERROR_CODES.has(result.error) ? result.error : "callback_error");
