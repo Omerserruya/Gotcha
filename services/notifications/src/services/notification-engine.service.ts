@@ -160,14 +160,16 @@ export async function processEvent(event: SystemEvent): Promise<void> {
   const ok = await shouldDeliver(event.tenantId, event.type, event.data);
   if (!ok) return;
 
-  // 3. Render in each recipient's language (their own, else the workspace's),
-  //    once per language per event.
+  // 3. Render for each recipient: their language (their own, else the
+  //    workspace's), and for a plan their words ("you" when it is theirs).
   const rendered = new Map<string, ReturnType<typeof renderTemplate>>();
   const tplFor = async (userId: string) => {
     const locale = await localeForRecipient(event.tenantId, userId);
-    if (!rendered.has(locale)) rendered.set(locale, renderTemplate(event, locale));
-    return rendered.get(locale)!;
+    const key = `${locale}|${userId}`;
+    if (!rendered.has(key)) rendered.set(key, renderTemplate(event, locale, userId));
+    return rendered.get(key)!;
   };
+  const skip = notToldOf(event);
 
   // Dedup tracker: with the unique constraint dropped (per-user channel
   // routing), the same (userId, channel) tuple could otherwise be delivered
@@ -195,6 +197,7 @@ export async function processEvent(event: SystemEvent): Promise<void> {
     hhmm ??= localTime(new Date(), await workspaceTimeZone(event.tenantId));
 
     for (const user of recipients) {
+      if (user.id === skip) continue;
       for (const channel of channels) {
         const key = `${user.id}|${channel}`;
         if (delivered.has(key)) continue;
@@ -233,6 +236,18 @@ export function defaultRoute(event: SystemEvent): { recipients: RecipientSpec; c
   }
   if (ADMINS_FOR.has(event.type)) return { ...base, channels: [...base.channels], recipients: { type: "tenant_owner" } as RecipientSpec };
   return null;
+}
+
+/**
+ * The one person an event is NOT told to: whoever proposed a plan in Home or
+ * the command bar is looking at it, and the answer already says it waits.
+ */
+export function notToldOf(event: SystemEvent): string | null {
+  if (event.type !== "tool.approval_required") return null;
+  const plan = (event.data as any)?.plan;
+  const from = plan?.source;
+  const who = plan?.requester?.userId;
+  return (from === "home_assistant" || from === "command_bar") && typeof who === "string" && who ? who : null;
 }
 
 export const AUTOMATION_NOTICE = "automation.notify_team";
@@ -350,6 +365,9 @@ async function deliverChannel(opts: {
         body: tpl.body,
         link: tpl.link,
         priority: priority as any,
+        // What it is about (an approval request, a conversation...), typed:
+        // without it every row was "none", and nothing could be resolved later.
+        metadata: { ...(event.data ?? {}), ...(event.metadata ?? {}) },
       });
     } else if (channel === "email") {
       const opts: JobsOptions = { ...DEFAULT_NOTIF_JOB_OPTS };

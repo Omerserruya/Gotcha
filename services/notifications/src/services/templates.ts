@@ -26,7 +26,7 @@ export interface RenderedTemplate {
 
 interface Text { title: string; body: string }
 interface Bilingual { en: Text; he: Text; link?: string }
-type TemplateFn = (event: SystemEvent) => Bilingual;
+type TemplateFn = (event: SystemEvent, viewerId?: string) => Bilingual;
 
 const safe = (v: unknown, fallback = "n/a"): string => {
   if (v === undefined || v === null || v === "") return fallback;
@@ -66,19 +66,32 @@ function whichConversation(e: SystemEvent, locale: TemplateLocale): string {
 const isGotcha = (name: string) => /^gotcha$/i.test(name.trim());
 
 const TEMPLATES: Record<SystemEventType, TemplateFn> = {
-  "tool.approval_required": (e) => {
-    const tool = safe(e.data.tool, "");
+  // Never a tool's raw name: the request is said by its own summary. A plan
+  // proposed in Home is said as who asked, in the reader's words ("you" when
+  // it assigns to them); "GOTCHA asks to run propose_plan" was wrong twice.
+  "tool.approval_required": (e, viewerId) => {
+    const id = safe(e.data.approvalRequestId, "");
+    const link = id ? `/approvals?id=${id}` : e.metadata.conversationId ? `/conversations/${e.metadata.conversationId}` : "/approvals";
+    const plan = e.data.plan as { steps?: unknown; requester?: { userId?: string; name?: string } | null; source?: string | null } | undefined;
+    if (plan) {
+      const said = planSummaryFor(plan.steps, viewerId) ?? safe(e.data.summary, "");
+      const mine = !!viewerId && plan.requester?.userId === viewerId;
+      const name = safe(plan.requester?.name, "");
+      const bar = plan.source === "command_bar";
+      const heWhere = bar ? "בשורת הפקודה" : "ב-Home";
+      const enWhere = bar ? "in the command bar" : "in Home";
+      return {
+        en: { title: "Approval needed", body: `${mine ? "You asked" : name ? `${name} asked` : "Someone on the team asked"} GOTCHA ${enWhere}${said ? `: ${said}` : ""}` },
+        he: { title: "נדרש אישור", body: `${mine ? "ביקשת" : name ? `${name} ביקש/ה` : "מישהו מהצוות ביקש/ה"} מ-GOTCHA ${heWhere}${said ? `: ${said}` : ""}` },
+        link,
+      };
+    }
     const summary = safe(e.data.summary, "");
+    const flow = safe(e.data.requestedBy, "").startsWith("flow:");
     return {
-      en: {
-        title: `Approval needed${tool ? `: ${tool}` : ""}`,
-        body: `An AI agent is requesting approval to run ${tool || "a tool"}.` + (summary ? `\nReason: ${summary}` : ""),
-      },
-      he: {
-        title: "נדרש אישור",
-        body: `GOTCHA מבקשת אישור להפעלת ${tool ? `הכלי ${tool}` : "כלי"}.` + (summary ? ` סיבה: ${summary}` : ""),
-      },
-      link: e.metadata.conversationId ? `/conversations/${e.metadata.conversationId}` : "/approvals",
+      en: { title: "Approval needed", body: `${flow ? "An automation" : "GOTCHA"} is asking for approval${summary ? `: ${summary}` : " for an action"}` },
+      he: { title: "נדרש אישור", body: `${flow ? "אוטומציה מבקשת" : "GOTCHA מבקשת"} אישור${summary ? `: ${summary}` : " לפעולה"}` },
+      link,
     };
   },
 
@@ -371,17 +384,30 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
 };
 
 /** One language: the recipient's. English when the locale is anything else. */
-export function renderTemplate(event: SystemEvent, locale: TemplateLocale = "en"): RenderedTemplate {
+export function renderTemplate(event: SystemEvent, locale: TemplateLocale = "en", viewerId?: string): RenderedTemplate {
   const fn = TEMPLATES[event.type];
-  // Fallback for unknown event types - shouldn't happen but stay safe.
+  // Fallback for unknown event types - shouldn't happen but stay safe. No raw
+  // event name or data: those are internal, and the title says it all.
   const t: Bilingual = fn
-    ? fn(event)
-    : {
-        en: { title: `Notification: ${event.type}`, body: `Event ${event.type} fired.\nData: ${safe(event.data, "{}")}.` },
-        he: { title: "התראה", body: `התקבלה התראה: ${event.type}.` },
-      };
+    ? fn(event, viewerId)
+    : { en: { title: "New notification", body: "" }, he: { title: "התראה חדשה", body: "" } };
   const text = locale === "he" ? t.he : t.en;
   return { title: text.title, body: text.body, ...(t.link ? { link: t.link } : {}) };
+}
+
+/**
+ * A plan's steps for this reader: an assignment to them is "you", to anyone
+ * else by name (the third twin of lib/plan-summary in ai and conversation;
+ * keep them in step).
+ */
+function planSummaryFor(steps: unknown, viewerId: string | undefined): string | null {
+  if (!Array.isArray(steps) || !steps.length) return null;
+  const said = (steps as any[]).map((st) => {
+    const forAssignee = typeof st?.summaryForAssignee === "string" ? st.summaryForAssignee : null;
+    if (forAssignee && viewerId && st?.target?.assigneeId === viewerId) return forAssignee;
+    return typeof st?.summary === "string" ? st.summary : "";
+  }).filter(Boolean);
+  return said.length ? said.join("; ") : null;
 }
 
 /** The old divider: rows written before 2026-10-08 hold both languages in one body. */

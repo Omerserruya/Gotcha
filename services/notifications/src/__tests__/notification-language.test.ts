@@ -98,7 +98,7 @@ describe("★ every template, one language at a time", () => {
   });
 
   it("an unknown event type is still one language", () => {
-    expect(renderTemplate(ev("made.up"), "he").title).toBe("התראה");
+    expect(renderTemplate(ev("made.up"), "he").title).toBe("התראה חדשה");
     expect(renderTemplate(ev("made.up"), "en").body).not.toMatch(HEBREW);
   });
 });
@@ -146,14 +146,16 @@ describe("★ through the fan-out: each recipient in their own language", () => 
     expect(row("dana")).toMatchObject({ title: "נדרש אישור" });
     expect(row("dana").body).toMatch(HEBREW);
     expect(row("dana").body).not.toMatch(/approval/i);
-    expect(row("john")).toMatchObject({ title: "Approval needed: refund_order" });
+    expect(row("john")).toMatchObject({ title: "Approval needed" });
     expect(row("john").body).not.toMatch(HEBREW);
+    // Never the tool's raw name.
+    expect(JSON.stringify([row("dana"), row("john")])).not.toMatch(/refund_order/);
   });
 
   it("a locale lookup that fails is English, never a lost notification", async () => {
     H.locales = new Proxy({}, { get: () => { throw new Error("db down"); } }) as any;
     await processEvent(ev("tool.approval_required", { tool: "x" }));
-    expect(H.inApp.map((r) => r.title)).toEqual(["Approval needed: x", "Approval needed: x"]);
+    expect(H.inApp.map((r) => r.title)).toEqual(["Approval needed", "Approval needed"]);
   });
 });
 
