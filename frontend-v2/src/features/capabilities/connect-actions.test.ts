@@ -166,6 +166,9 @@ describe('★★ OAuth start at the wire (backend 381a5d1b)', () => {
     [409, undefined, 'needs_store'],
     [403, undefined, 'forbidden'],
     [500, 'hubspot_oauth_not_configured', 'not_configured'],
+    // The legacy routes (crm-oauth, calendar-oauth) say it with a space.
+    [500, 'Zoho OAuth not configured (set ZOHO_CLIENT_ID + ZOHO_REDIRECT_URI)', 'not_configured'],
+    [500, 'Google Calendar OAuth not configured', 'not_configured'],
     [500, 'boom', 'failed'],
   ] as const)('%i %s → %s', async (status, message, reason) => {
     get.mockImplementation(async () => {
@@ -276,5 +279,14 @@ describe('★★ Disconnect at the wire', () => {
   ] as const)('%i → %s → said as %s', async (status, kind, reason) => {
     post.mockRejectedValueOnce(new ApiError({ kind, status }));
     expect(await disconnectSystem('pipedrive')).toEqual({ ok: false, reason });
+  });
+});
+
+describe('★ NOT_CONFIGURED by its code, whatever the words', () => {
+  it('a start refused with code NOT_CONFIGURED is "not set up here"', async () => {
+    get.mockImplementation(async () => {
+      throw new ApiError({ kind: 'server', status: 500, code: 'NOT_CONFIGURED' });
+    });
+    expect(await startOAuth('zoho_crm')).toEqual({ ok: false, reason: 'not_configured' });
   });
 });

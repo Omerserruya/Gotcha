@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { isApiError } from '@/api/client/api-error';
+import { isNotConfigured } from '@/api/client/not-configured';
 import { browserApi } from '@/api/client/browser-api';
 import { knowledgeDocumentSchema } from '@/api/contracts/knowledge';
 import { knowledgeEndpoints } from '@/api/endpoints/registry';
@@ -174,10 +175,8 @@ export async function startKnowledgeConnect(
     });
     if (isApiError(cause)) {
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
-      if (cause.status === 500 && /not configured/i.test(cause.developerMessage ?? '')) {
-        return { ok: false, reason: 'not_configured' };
-      }
     }
+    if (isNotConfigured(cause)) return { ok: false, reason: 'not_configured' };
     return { ok: false, reason: 'failed' };
   }
 }

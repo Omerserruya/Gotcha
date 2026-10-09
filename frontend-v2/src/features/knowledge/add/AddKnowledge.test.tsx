@@ -229,6 +229,15 @@ describe('★★ Drive and Confluence - at the provider, and back here (backend 
     expect(assign).not.toHaveBeenCalled();
   });
 
+  it('★ not set up in this environment: said as that - never a generic failure', async () => {
+    startKnowledgeConnect.mockResolvedValue({ ok: false, reason: 'not_configured' });
+    render(drive());
+    await userEvent.click(screen.getByTestId('add-connect-google_drive'));
+    expect(screen.getByTestId('add-connect-problem')).toHaveTextContent(
+      "This connection isn't set up in this environment yet.",
+    );
+  });
+
   it('each source carries its mark (Omer, 10): Drive’s logo; Confluence, which has none, the plug', () => {
     render(drive());
     const row = (id: string) => screen.getByTestId(id).closest('li')!;

@@ -165,5 +165,12 @@ describe('★★ Drive and Confluence at the wire', () => {
       ok: false,
       reason: 'not_configured',
     });
+    get.mockImplementation(async () => {
+      throw new ApiError({ kind: 'server', status: 500, code: 'NOT_CONFIGURED' });
+    });
+    expect(await startKnowledgeConnect({ id: 'kb1' }, 'confluence', 'K')).toEqual({
+      ok: false,
+      reason: 'not_configured',
+    });
   });
 });

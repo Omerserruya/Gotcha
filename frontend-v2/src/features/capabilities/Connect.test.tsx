@@ -262,7 +262,7 @@ describe('★★ 10 for a system that is not connected - its own screen', () => 
     await userEvent.click(screen.getByTestId('oauth-start'));
     expect(startOAuth).toHaveBeenCalledWith('salesforce', 'https://test.salesforce.com');
     expect(screen.getByTestId('oauth-problem')).toHaveTextContent(
-      "Salesforce is not set up on GOTCHA's side yet.",
+      "This connection isn't set up in this environment yet.",
     );
     expect(assign).not.toHaveBeenCalled();
   });

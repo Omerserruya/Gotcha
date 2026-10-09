@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { isApiError } from '@/api/client/api-error';
+import { isNotConfigured } from '@/api/client/not-configured';
 import { serverApi } from '@/api/client/server-api';
 import { integrationsSchema } from '@/api/contracts/integrations';
 import { integrationEndpoints } from '@/api/endpoints/registry';
@@ -81,7 +82,7 @@ export type OAuthStart =
       readonly ok: false;
       /**
        * `not_here` - this system does not come back here; `not_configured`
-       * - the provider's app is not set up (500 *_not_configured);
+       * - the provider's app is not set up in this environment (`isNotConfigured`);
        * `needs_store` - Shopify with no store connected yet (409);
        * `forbidden` · `failed`.
        */
@@ -115,10 +116,8 @@ export async function startOAuth(slug: string, loginHost?: string): Promise<OAut
     if (isApiError(cause)) {
       if (cause.status === 409) return { ok: false, reason: 'needs_store' };
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
-      if (cause.status === 500 && /not_configured/.test(cause.developerMessage ?? '')) {
-        return { ok: false, reason: 'not_configured' };
-      }
     }
+    if (isNotConfigured(cause)) return { ok: false, reason: 'not_configured' };
     return { ok: false, reason: 'failed' };
   }
 }
