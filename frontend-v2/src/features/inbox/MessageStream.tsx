@@ -14,7 +14,7 @@ import {
 
 import styles from './Inbox.module.css';
 import { ContactCards, LocationCard, MessageMedia } from './MessageMedia';
-import { isLocationMessage, isPlaceholderCaption, mediaKind } from './media';
+import { isLocationMessage, isPlaceholderCaption, mediaKind, quoteOf } from './media';
 import { ReplyButton } from './ReplyButton';
 import { STREAM_SCROLLER } from './stream-scroller';
 import { plainDashes } from '@/lib/plain-dashes';
@@ -212,11 +212,17 @@ export async function MessageStream({
                       : (senderLabel(message.replyTo) ?? t('stream.quote.team'))}
                   </span>
                   <span className={styles.quoteText}>
-                    {message.replyTo.body.trim() !== '' ? (
-                      <UserText>{message.replyTo.body}</UserText>
-                    ) : (
-                      t('stream.quote.noText')
-                    )}
+                    {(() => {
+                      // The adapter's filler ("[Image]") is not what they wrote: say what it was.
+                      const quoted = quoteOf(message.replyTo);
+                      return quoted === null ? (
+                        t('stream.quote.noText')
+                      ) : 'text' in quoted ? (
+                        <UserText>{quoted.text}</UserText>
+                      ) : (
+                        t(`stream.quote.kind.${quoted.kind}`)
+                      );
+                    })()}
                   </span>
                 </div>
               ) : null}
@@ -356,10 +362,14 @@ export async function MessageStream({
                   message.direction === 'INBOUND'
                     ? t('stream.quote.customer')
                     : (senderLabel(message) ?? t('stream.quote.team')),
-                preview:
-                  message.body.trim() !== ''
-                    ? message.body.trim().slice(0, 140)
-                    : t('stream.quote.noText'),
+                preview: (() => {
+                  const quoted = quoteOf(message);
+                  return quoted === null
+                    ? t('stream.quote.noText')
+                    : 'text' in quoted
+                      ? quoted.text.slice(0, 140)
+                      : t(`stream.quote.kind.${quoted.kind}`);
+                })(),
               }}
               label={t('stream.reply')}
               description={t('stream.replyTo')}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { safeMediaUrl } from './media';
+import { quoteOf, safeMediaUrl } from './media';
 
 describe('★★ a media address is followed only over https or on this host', () => {
   it.each([
@@ -15,5 +15,22 @@ describe('★★ a media address is followed only over https or on this host', (
     [null, null],
   ])('%j → %j', (raw, url) => {
     expect(safeMediaUrl(raw)).toBe(url);
+  });
+});
+
+describe('★ a quote or a reply preview says what a media message was - never its filler', () => {
+  it.each([
+    [{ body: '[Image]', messageType: 'image' }, { kind: 'photo' }],
+    [{ body: '', messageType: 'video' }, { kind: 'video' }],
+    [{ body: '[Voice message]', messageType: 'audio' }, { kind: 'voice' }],
+    [{ body: '[Document]', messageType: 'document' }, { kind: 'file' }],
+    [{ body: '[Location: 32.08, 34.78]', messageType: 'text' }, { kind: 'location' }],
+    [{ body: '[Sticker]', messageType: 'image' }, { kind: 'sticker' }],
+    [{ body: '', messageType: 'contacts' }, { kind: 'contact' }],
+    [{ body: 'see this', messageType: 'image' }, { text: 'see this' }],
+    [{ body: '[my own brackets]', messageType: 'text' }, { text: '[my own brackets]' }],
+    [{ body: '', messageType: 'text' }, null],
+  ])('%o', (message, said) => {
+    expect(quoteOf(message)).toEqual(said);
   });
 });

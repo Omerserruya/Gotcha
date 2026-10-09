@@ -277,9 +277,29 @@ describe('★★ the quote travels with the reply - drawn even when it is not on
     expect(screen.getByTestId('quote-m1').textContent).not.toContain('@');
   });
 
-  it('★ a quoted photo with no text says so rather than drawing an empty line', async () => {
+  it('★ a quoted photo with no text says it was a photo, rather than drawing an empty line', async () => {
     await show([replying({ direction: 'INBOUND', body: null, messageType: 'image' })]);
-    expect(screen.getByTestId('quote-m1')).toHaveTextContent('A message with no text');
+    expect(screen.getByTestId('quote-m1')).toHaveTextContent('Photo');
+  });
+
+  it('★★ the adapter’s filler is never quoted as words: "[Image]", "[Voice message]", a location', async () => {
+    for (const [body, messageType, said] of [
+      ['[Image]', 'image', 'Photo'],
+      ['[Voice message]', 'audio', 'Voice message'],
+      ['[Shared location: Sarona (32.07, 34.78)]', 'location', 'Location'],
+      ['[Sticker]', 'image', 'Sticker'],
+    ] as const) {
+      const { unmount } = await show([replying({ direction: 'INBOUND', body, messageType })]);
+      const quote = screen.getByTestId('quote-m1');
+      expect(quote).toHaveTextContent(said);
+      expect(quote).not.toHaveTextContent('[');
+      unmount();
+    }
+  });
+
+  it('a quoted photo with a caption quotes the caption', async () => {
+    await show([replying({ direction: 'INBOUND', body: 'this one', messageType: 'image' })]);
+    expect(screen.getByTestId('quote-m1')).toHaveTextContent('this one');
   });
 });
 
@@ -323,6 +343,23 @@ describe('★ every message offers Reply, describing itself to the composer', ()
     screen.getByTestId('reply-m1').click();
     window.removeEventListener('gotcha:reply-to', listen);
     expect(heard).toEqual([{ id: 'm1', who: 'Customer', preview: 'Where is my parcel?' }]);
+  });
+
+  it('★ a photo describes itself as a photo - never "[Image]" in the composer', async () => {
+    await show([
+      message({
+        direction: 'INBOUND',
+        body: '[Image]',
+        messageType: 'image',
+        mediaUrl: '/api/uploads/a.jpg',
+      }),
+    ]);
+    const heard: unknown[] = [];
+    const listen = (event: Event) => heard.push((event as CustomEvent).detail);
+    window.addEventListener('gotcha:reply-to', listen);
+    screen.getByTestId('reply-m1').click();
+    window.removeEventListener('gotcha:reply-to', listen);
+    expect(heard).toEqual([{ id: 'm1', who: 'Customer', preview: 'Photo' }]);
   });
 
   it('⚠ and our own reply is attributed without a colleague’s email', async () => {

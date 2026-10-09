@@ -34,7 +34,16 @@
     "quote": {
       "customer": "Customer",
       "team": "Your team",
-      "noText": "A message with no text"
+      "noText": "A message with no text",
+      "kind": {
+        "photo": "Photo",
+        "sticker": "Sticker",
+        "video": "Video",
+        "voice": "Voice message",
+        "file": "File",
+        "location": "Location",
+        "contact": "Contact"
+      }
     },
     "reply": "Reply",
     "replyTo": "Reply to this message",
