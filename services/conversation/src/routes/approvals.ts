@@ -441,6 +441,12 @@ export function isOperatorPlan(tool: unknown, params: unknown): boolean {
   return typeof source === "string" && OPERATOR_SOURCES.has(source);
 }
 
+/** The person behind requestedBy: "user:<id>" (Home) and a bare id are the same user. */
+function requesterUserId(requestedBy: unknown): string | null {
+  if (typeof requestedBy !== "string" || !requestedBy) return null;
+  return requestedBy.startsWith("user:") ? requestedBy.slice("user:".length) : requestedBy;
+}
+
 /**
  * Tell the customer what a decided approval actually did - exactly once.
  *
@@ -1114,8 +1120,10 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
       });
       return res.status(409).json({ error: "approval has expired" });
     }
-    // Same-actor defense-in-depth
-    if (row.requestedBy === actorId) {
+    // Same-actor defense-in-depth. 2026-10-09: Home writes requestedBy as
+    // "user:<id>", so the bare compare never matched and the guard never fired.
+    // An operator plan is the asker's own team decision, so they may approve it.
+    if (!isOperatorPlan(row.tool, row.params) && requesterUserId(row.requestedBy) === String(actorId)) {
       return res.status(403).json({
         error: "approver must be a different actor than the requester",
       });
