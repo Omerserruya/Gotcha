@@ -22,6 +22,9 @@ import {
 } from "@chatcenter/shared";
 
 const router = Router();
+// Every member of the workspace, on purpose: the bar on Home is the team's
+// shared headroom (a count and a date, no money and no customer data), and an
+// agent running out of conversations needs to see it coming (2026-10-09 review).
 router.use("/usage/allowance", authenticate, resolveTenant, requireActiveTenant());
 
 /** Below this many days of headroom the bar turns amber and a notice is due. */
