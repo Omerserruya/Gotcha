@@ -140,7 +140,9 @@ describe("★ in the worker: before anything that could answer", () => {
     const check = at("interceptOptOutReply(");
     expect(at("const message = await prisma.message.create(")).toBeLessThan(check);
     expect(check).toBeLessThan(at("// Process bot if no agent assigned"));
-    expect(check).toBeLessThan(at("// Auto-reply for unsupported media types"));
+    // The "unsupported media" auto-reply is gone (2026-10-09): nothing else
+    // answers a customer automatically before the bot.
+    expect(src).not.toMatch(/don't support this type of media/);
     expect(src.slice(check, check + 600)).toMatch(/if \(handled\) return;/);
   });
 });

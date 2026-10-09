@@ -67,6 +67,9 @@ describe("analyzeBrandVoice", () => {
     expect(isPlaceholder("[image message]")).toBe(true);
     expect(isPlaceholder("[media_placeholder message]")).toBe(true);
     expect(isPlaceholder("[Location: 31.812, 34.6624]")).toBe(true);
+    expect(isPlaceholder("[Shared location: Eilat Port, Derech HaNamal 1 (29.55, 34.95)]")).toBe(true);
+    expect(isPlaceholder("[Shared location]")).toBe(true);
+    expect(isPlaceholder("I shared my location with you")).toBe(false);
     // A real message that merely mentions one is not a placeholder.
     expect(isPlaceholder("שלחתי לך [image message] תראי")).toBe(false);
 

@@ -46,6 +46,43 @@ export interface InboundReferral {
   mediaUrl?: string;
 }
 
+/** A location a customer shared: coordinates plus whatever the app named it. */
+export interface SharedLocation {
+  latitude: number;
+  longitude: number;
+  /** The place's name, when the customer picked a place rather than a pin. */
+  name?: string;
+  address?: string;
+  /** A link to the place, from the provider or built from the coordinates. */
+  url: string;
+}
+
+/**
+ * A shared location as message content: the structure, and a body the inbox
+ * and the AI can both read ("[Shared location: Eilat Port, ... (29.55, 34.95)]").
+ * Null when the coordinates are not numbers (2026-10-09).
+ */
+export function sharedLocationContent(
+  lat: unknown, lng: unknown, extra: { name?: unknown; address?: unknown; url?: unknown } = {},
+): { type: "location"; text: string; location: SharedLocation } | null {
+  // A blank string is not 0: Number("") would put the customer at 0,0.
+  const num = (v: unknown) => (typeof v === "string" ? (v.trim() ? Number(v) : NaN) : v);
+  const latitude = num(lat);
+  const longitude = num(lng);
+  if (typeof latitude !== "number" || typeof longitude !== "number" || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 300) : undefined);
+  const name = text(extra.name);
+  const address = text(extra.address);
+  const provided = text(extra.url);
+  const url = provided && /^https:\/\//i.test(provided) ? provided : `https://www.google.com/maps?q=${latitude},${longitude}`;
+  const place = [name, address].filter(Boolean).join(", ");
+  return {
+    type: "location",
+    text: `[Shared location: ${place ? `${place} ` : ""}(${latitude}, ${longitude})]`,
+    location: { latitude, longitude, ...(name ? { name } : {}), ...(address ? { address } : {}), url },
+  };
+}
+
 export interface MessageContent {
   type: "text" | "image" | "document" | "audio" | "video" | "interactive" | "location" | "contact";
   text?: string;
@@ -104,6 +141,11 @@ export interface MessageContent {
    * (Meta's CDN link, which stops working when the story expires, about 24 h).
    */
   storyMention?: { url: string | null };
+  /**
+   * A location the customer shared (2026-10-09). Kept structured so the inbox
+   * can show a map link and the AI reads where it is, not "[Location]".
+   */
+  location?: SharedLocation;
   unsupported?: {
     /** The provider's own type string, e.g. "unsupported", "revoke", "edit". */
     providerType: string;

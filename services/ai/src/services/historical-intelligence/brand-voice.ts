@@ -37,7 +37,9 @@
  * closing line. Anything that is ONLY a placeholder is dropped; a caption
  * alongside one is kept, because the caption is real writing.
  */
-const PLACEHOLDER_ONLY = /^\s*\[(?:[a-z_]+ message|Location:[^\]]*)\]\s*$/i;
+// "[Shared location: ...]" is the location body since 2026-10-09; the old
+// "[Location: lat, lng]" stays recognised for messages stored before it.
+const PLACEHOLDER_ONLY = /^\s*\[(?:[a-z_]+ message|(?:Shared )?location(?::[^\]]*)?)\]\s*$/i;
 
 export function isPlaceholder(body: string): boolean {
   return PLACEHOLDER_ONLY.test(body || "");

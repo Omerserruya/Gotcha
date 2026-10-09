@@ -8,6 +8,7 @@ import type {
   NormalizedCommentEvent,
   ChannelCredentials,
 } from "./types";
+import { sharedLocationContent } from "./types";
 import { metaGraphBaseUrl } from "../lib/meta-graph-version";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
@@ -182,9 +183,13 @@ function extractMessengerContent(message: any): NormalizedInboundMessage["conten
           caption: attachment.name || "[Document]",
           fileName: attachment.name,
         };
-      case "location":
+      case "location": {
         const coords = attachment.payload?.coordinates;
-        return { type: "location", text: `[Location: ${coords?.lat}, ${coords?.long}]` };
+        return (
+          sharedLocationContent(coords?.lat, coords?.long, { name: attachment.title, url: attachment.url }) ??
+          { type: "text", text: "[Shared location]" }
+        );
+      }
       default:
         return { type: "text", text: `[${attachment.type} attachment]` };
     }

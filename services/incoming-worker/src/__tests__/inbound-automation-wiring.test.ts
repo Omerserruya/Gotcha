@@ -127,6 +127,21 @@ describe("★ one responder per inbound", () => {
     expect(mocks.automationsForInbound).toHaveBeenCalledWith(expect.objectContaining({ storyMention: null }));
   });
 
+  it("★ a shared location reaches the AI with its details, and nothing auto-replies (2026-10-09)", async () => {
+    const { outgoingMessageQueue } = await import("@chatcenter/shared");
+    (outgoingMessageQueue.add as any).mockClear();
+    prisma.message.create.mockClear();
+    S.conv = baseConv({ handledBy: "ai_agent", assignedAiAgentId: "maya" });
+    S.messageCount = 4;
+    const location = { latitude: 29.5577, longitude: 34.9519, name: "נמל אילת", url: "https://www.google.com/maps?q=29.5577,34.9519" };
+    const body = "[Shared location: נמל אילת (29.5577, 34.9519)]";
+    await dispatch({ ...JOB, data: { ...JOB.data, normalizedMessage: { ...JOB.data.normalizedMessage, contentType: "location", messageType: "location", body, metadata: { location } } } });
+    expect(mocks.processAIBot).toHaveBeenCalledWith("t1", "c1", body);
+    expect(outgoingMessageQueue.add).not.toHaveBeenCalled();
+    expect(prisma.message.create).toHaveBeenCalledTimes(1);
+    expect(prisma.message.create.mock.calls[0][0].data).toMatchObject({ direction: "INBOUND", messageType: "location", body, metadata: { location } });
+  });
+
   it("no automation answered: the AI answers as before", async () => {
     S.conv = baseConv({ handledBy: "ai_agent", assignedAiAgentId: "maya" });
     S.messageCount = 4;

@@ -341,10 +341,13 @@ router.post("/", async (req: Request, res: Response) => {
             // Structured and already reduced by the adapter to name, numbers,
             // emails and organization. The worker copies producer metadata onto
             // the message row verbatim.
-            ...(msg.content.contacts?.length || msg.content.unsupported || msg.content.storyMention
+            ...(msg.content.contacts?.length || msg.content.unsupported || msg.content.storyMention || msg.content.location
               ? {
                   metadata: {
                     ...(msg.content.contacts?.length ? { contacts: msg.content.contacts } : {}),
+                    // A shared location: coordinates, the place's name and
+                    // address, and a map link, for the inbox and the AI.
+                    ...(msg.content.location ? { location: msg.content.location } : {}),
                     // An Instagram story mention: the story's link, for the
                     // inbox and for "Story mention" automations.
                     ...(msg.content.storyMention ? { storyMention: msg.content.storyMention } : {}),

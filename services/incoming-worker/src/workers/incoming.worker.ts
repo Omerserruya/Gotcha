@@ -15,16 +15,6 @@ const WA_API_URL = metaGraphBaseUrl(process.env.WHATSAPP_API_URL);
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.resolve(process.cwd(), "uploads");
 const UPLOADS_BASE_URL = process.env.UPLOADS_BASE_URL || "/api/uploads";
 
-// Media kinds we cannot turn into anything an agent or a bot can act on, and
-// which therefore get an auto-reply asking for something else.
-//
-// `audio` was on this list, which is why voice notes were answered with "we
-// don't support this type of media" and then dropped before the bot ever saw
-// them. They are received now: the recording is downloaded and playable in the
-// inbox. Sending audio is still not supported, and deliberately so - a voice
-// note costs the customer nothing and would cost us a synthesis bill.
-const UNSUPPORTED_MEDIA_TYPES = ["location"];
-
 // Prove at boot that media can actually be stored.
 //
 // This used to be a bare `fs.mkdirSync`, which succeeds against a directory
@@ -676,50 +666,11 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     if (handled) return;
   }
 
-  // Auto-reply for unsupported media types
-  if (UNSUPPORTED_MEDIA_TYPES.includes(messageType) && channelAccountId) {
-    try {
-      const autoReplyBody = "We currently don't support this type of media. Please send text, images, or documents instead.";
-      const autoReplyMsg = await prisma.message.create({
-        data: {
-          tenantId,
-          conversationId: conversation.id,
-          channel,
-          direction: "OUTBOUND",
-          body: autoReplyBody,
-          messageType: "text",
-          senderName: "System",
-          status: "PENDING",
-        },
-      });
-
-      await prisma.conversation.update({
-        where: { id: conversation.id },
-        data: { lastMessageAt: new Date() },
-      });
-
-      await outgoingMessageQueue.add("send", {
-        tenantId,
-        conversationId: conversation.id,
-        channel,
-        channelAccountId,
-        recipientExternalId: senderId,
-        body: autoReplyBody,
-        messageType: "text",
-        senderName: "System",
-        messageId: autoReplyMsg.id,
-      }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
-
-      await publishEvent({
-        event: "message:new",
-        tenantId,
-        data: { message: autoReplyMsg, conversationId: conversation.id },
-      });
-    } catch (err) {
-      console.error("[incoming-worker] Failed to send unsupported media auto-reply:", err);
-    }
-    return; // Skip bot processing for unsupported media
-  }
+  // No automatic "unsupported media" reply (2026-10-09). The only type that
+  // triggered it was a shared location, which is not unsupported: it reaches
+  // the AI as "[Shared location: ...]" with its details in metadata. Anything
+  // the AI or a person cannot use is theirs to answer, in the workspace's
+  // language, never a fixed English line.
 
   // Process bot if no agent assigned
   if (!conversation.assignedAgentId && !conversation.isHandedOver) {

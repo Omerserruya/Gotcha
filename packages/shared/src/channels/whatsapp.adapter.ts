@@ -13,7 +13,7 @@ import type {
   ChannelCredentials,
   ProviderSendError,
 } from "./types";
-import { ChannelSendError } from "./types";
+import { ChannelSendError, sharedLocationContent } from "./types";
 import { metaGraphBaseUrl } from "../lib/meta-graph-version";
 
 const WA_API_URL = metaGraphBaseUrl(process.env.WHATSAPP_API_URL);
@@ -610,7 +610,13 @@ function extractWhatsAppContent(msg: any): NormalizedInboundMessage["content"] {
       // renders instead of printing "[sticker message]" as dead text.
       return { type: "image", mediaUrl: msg.sticker?.id, caption: "[Sticker]", mimeType: msg.sticker?.mime_type };
     case "location":
-      return { type: "location", text: `[Location: ${msg.location?.latitude}, ${msg.location?.longitude}]` };
+      // Name, address and a link travel with the coordinates (2026-10-09):
+      // "[Location: lat, lng]" was all the AI and the inbox ever saw.
+      return (
+        sharedLocationContent(msg.location?.latitude, msg.location?.longitude, {
+          name: msg.location?.name, address: msg.location?.address, url: msg.location?.url,
+        }) ?? { type: "text", text: "[Shared location]" }
+      );
     case "contacts": {
       // "Send a contact" from the WhatsApp attach menu. Arrives as an array,
       // because a customer can share several at once.

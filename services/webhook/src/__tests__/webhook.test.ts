@@ -244,6 +244,36 @@ describe("Webhook Service", () => {
   });
 });
 
+describe("★ a shared location → the queued message (2026-10-09)", () => {
+  it("carries the location's structure in the message metadata, the readable body beside it", async () => {
+    vi.clearAllMocks();
+    (prisma.channelAccount.findFirst as any).mockResolvedValue({ id: "ca-wa", tenantId: "tenant-1", externalId: "pn-1" });
+    const location = { latitude: 29.5577, longitude: 34.9519, name: "נמל אילת", url: "https://www.google.com/maps?q=29.5577,34.9519" };
+    (detectInboundAdapter as any).mockReturnValue({
+      channel: "WHATSAPP",
+      getSignatureHeader: () => "x-hub-signature-256",
+      verifySignature: vi.fn().mockReturnValue(true),
+      resolveChannelAccountExternalId: vi.fn().mockReturnValue("pn-1"),
+      extractMessages: vi.fn().mockReturnValue([{
+        externalMessageId: "wamid.loc", senderId: "972552633304", timestamp: new Date(),
+        content: { type: "location", text: "[Shared location: נמל אילת (29.5577, 34.9519)]", location },
+      }]),
+      extractStatusUpdates: vi.fn().mockReturnValue([]),
+    });
+    const res = await request(createTestApp()).post("/api/webhook").send({ object: "whatsapp_business_account", entry: [{ id: "waba", changes: [{}] }] });
+    expect(res.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(incomingMessageQueue.add).toHaveBeenCalledWith(
+      "process",
+      expect.objectContaining({
+        channel: "WHATSAPP",
+        normalizedMessage: expect.objectContaining({ body: "[Shared location: נמל אילת (29.5577, 34.9519)]", metadata: { location } }),
+      }),
+      expect.any(Object),
+    );
+  });
+});
+
 describe("Instagram story mention → the queued message", () => {
   it("carries the story's link in the message metadata", async () => {
     vi.clearAllMocks();
