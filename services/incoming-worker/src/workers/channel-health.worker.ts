@@ -5,32 +5,13 @@ import {
   createWorker,
   channelHealthQueue,
   decryptCredentials,
-  encryptCredentials, metaGraphBaseUrl } from "@chatcenter/shared";
+  encryptCredentials, metaGraphBaseUrl, whatsappNumberDetails, withWhatsAppNumberDetails } from "@chatcenter/shared";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
 
-/**
- * The number as Meta shows it: display_phone_number, verified_name and
- * quality_rating, read with the account's own token. Null when the read fails
- * (logged), so the health check never fails over it.
- */
-export async function whatsappNumberDetails(phoneNumberId: string, accessToken: string): Promise<Record<string, string> | null> {
-  try {
-    const r = await axios.get(`${FB_API_URL}/${encodeURIComponent(phoneNumberId)}`, {
-      params: { fields: "display_phone_number,verified_name,quality_rating" },
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const d = r.data ?? {};
-    const out: Record<string, string> = {};
-    if (typeof d.display_phone_number === "string" && d.display_phone_number) out.displayPhoneNumber = d.display_phone_number;
-    if (typeof d.verified_name === "string" && d.verified_name) out.verifiedName = d.verified_name;
-    if (typeof d.quality_rating === "string" && d.quality_rating) out.qualityRating = d.quality_rating;
-    return Object.keys(out).length ? out : null;
-  } catch (err: any) {
-    console.warn(`[channel-health] could not read WhatsApp number ${phoneNumberId}:`, err?.response?.data?.error?.message ?? err?.message);
-    return null;
-  }
-}
+// The number as Meta shows it, read the same way auth's "refresh from Meta"
+// reads it (one shared function, 2026-10-09).
+export { whatsappNumberDetails };
 // Intentionally OUTSIDE central Meta versioning: graph.instagram.com
 // (Instagram Login) rejects version-prefixed paths. See meta-graph-version.ts.
 const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
@@ -173,7 +154,7 @@ export async function runHealthCheck(): Promise<void> {
         // never a write to Meta; a failure here changes nothing else.
         if (account.channel === "WHATSAPP") {
           const meta = await whatsappNumberDetails(account.externalId, accessToken);
-          if (meta) updateData.platformMeta = { ...(account.platformMeta && typeof account.platformMeta === "object" ? (account.platformMeta as Record<string, unknown>) : {}), ...meta };
+          if (meta) updateData.platformMeta = withWhatsAppNumberDetails(account.platformMeta, meta);
         }
         await prisma.channelAccount.update({
           where: { id: account.id },

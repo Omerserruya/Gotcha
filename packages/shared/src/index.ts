@@ -834,6 +834,10 @@ export {
 // The ONE place the Meta Graph API version is decided. Replaced eight
 // independent declarations across four services that sat on three different
 // versions at once - two of them expired.
+// A WhatsApp number's own details from Meta (the channel check and the
+// on-demand refresh read it the same way).
+export { whatsappNumberDetails, withWhatsAppNumberDetails, type WhatsAppNumberDetails } from "./lib/whatsapp-number-details";
+
 export {
   metaGraphVersion,
   metaGraphBaseUrl,

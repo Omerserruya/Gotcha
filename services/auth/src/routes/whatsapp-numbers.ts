@@ -32,6 +32,9 @@ import {
   requireCapacity,
   validate,
   decryptCredentials,
+  getRedis,
+  whatsappNumberDetails,
+  withWhatsAppNumberDetails,
   MetaWhatsAppClient,
   inspectMetaAssets,
   selectFlow,
@@ -58,9 +61,39 @@ const META_APP_SECRET = process.env.META_APP_SECRET || "";
 
 /** The phone number an unprofiled account has stored, or null. */
 export function storedPhoneNumber(meta: unknown): string | null {
-  const v = meta && typeof meta === "object" ? (meta as Record<string, unknown>).displayPhoneNumber : null;
+  return storedText(meta, "displayPhoneNumber");
+}
+
+function storedText(meta: unknown, key: string): string | null {
+  const v = meta && typeof meta === "object" ? (meta as Record<string, unknown>)[key] : null;
   return typeof v === "string" && v.trim() ? v.trim() : null;
 }
+
+const UNPROFILED_SELECT = { id: true, externalId: true, displayName: true, connectionStatus: true, platformMeta: true, lastHealthCheck: true } as const;
+
+/**
+ * One unprofiled (legacy) WhatsApp account as the numbers page shows it: the
+ * number, its verified name and quality as Meta last told us, and when we last
+ * checked. Each is null until the 6-hourly check or a refresh has read it.
+ */
+function unprofiledRow(c: { id: string; externalId: string; displayName: string | null; connectionStatus: string; platformMeta: unknown; lastHealthCheck: Date | null }) {
+  return {
+    channelAccountId: c.id,
+    phoneNumberId: c.externalId,
+    name: c.displayName,
+    // Stored at connect and refreshed by the 6-hourly channel check or
+    // "refresh from Meta"; null until one of them has read it.
+    phoneNumber: storedPhoneNumber(c.platformMeta),
+    verifiedName: storedText(c.platformMeta, "verifiedName"),
+    qualityRating: storedText(c.platformMeta, "qualityRating"),
+    lastHealthCheck: c.lastHealthCheck ? c.lastHealthCheck.toISOString() : null,
+    connectionStatus: c.connectionStatus,
+    note: "Connected before per-number health was available. Its number, name and quality are read from Meta; reconnect it for full health checks and repair.",
+  };
+}
+
+/** "Refresh from Meta" on an unprofiled account: at most once a minute each. */
+const UNPROFILED_REFRESH_EVERY_MS = 60_000;
 
 /**
  * Express types `req.params.id` as `string | string[]` in this codebase.
@@ -132,23 +165,14 @@ router.get(
     const profiledIds = new Set(numbers.map((n) => n.phoneNumberId));
     const legacy = await prisma.channelAccount.findMany({
       where: { tenantId: req.tenantId!, channel: "WHATSAPP" },
-      select: { id: true, externalId: true, displayName: true, connectionStatus: true, platformMeta: true },
+      select: UNPROFILED_SELECT,
     });
 
     return res.json({
       data,
       unprofiled: legacy
         .filter((c) => !profiledIds.has(c.externalId))
-        .map((c) => ({
-          channelAccountId: c.id,
-          phoneNumberId: c.externalId,
-          name: c.displayName,
-          // The number as Meta shows it, stored at connect and refreshed by the
-          // 6-hourly channel check; null until one of them has read it.
-          phoneNumber: storedPhoneNumber(c.platformMeta),
-          connectionStatus: c.connectionStatus,
-          note: "Connected before per-number health was available. Reconnect it to enable health checks and repair.",
-        })),
+        .map(unprofiledRow),
     });
   },
 );
@@ -487,12 +511,58 @@ router.post(
       where: { id: paramId(req), tenantId: req.tenantId! },
       select: { id: true },
     });
-    if (!owned) return res.status(404).json({ error: "Number not found." });
-
-    const report = await refreshNumberHealth(owned.id);
-    return res.json({ data: report });
+    if (owned) {
+      const report = await refreshNumberHealth(owned.id);
+      return res.json({ data: report });
+    }
+    // An unprofiled (legacy) account, by its channel account id (2026-10-09):
+    // the same read as the 6-hourly check, one Graph GET plus the platformMeta
+    // merge. Never reconnects and never writes to Meta.
+    return refreshUnprofiled(req, res);
   },
 );
+
+async function refreshUnprofiled(req: Request, res: Response) {
+  const account = await prisma.channelAccount.findFirst({
+    where: { id: paramId(req), tenantId: req.tenantId!, channel: "WHATSAPP" },
+    select: { ...UNPROFILED_SELECT, credentials: true },
+  });
+  if (!account) return res.status(404).json({ error: "Number not found." });
+  // A profiled number refreshes through its own row, above.
+  const profiled = await prisma.whatsAppNumber.findFirst({
+    where: { tenantId: req.tenantId!, phoneNumberId: account.externalId },
+    select: { id: true },
+  });
+  if (profiled) return res.status(404).json({ error: "Number not found." });
+
+  // Once a minute per account, across replicas: a key that expires on its own.
+  const slot = await getRedis().set(`wa-number-refresh:${account.id}`, "1", "PX", UNPROFILED_REFRESH_EVERY_MS, "NX");
+  if (slot !== "OK") {
+    res.setHeader("Retry-After", String(Math.ceil(UNPROFILED_REFRESH_EVERY_MS / 1000)));
+    return res.status(429).json({ error: "This number was refreshed a moment ago. Try again in a minute." });
+  }
+
+  let accessToken: string | undefined;
+  try {
+    accessToken = decryptCredentials(account.credentials as any)?.accessToken;
+  } catch {
+    accessToken = undefined;
+  }
+  if (!accessToken) {
+    return res.status(409).json({ error: "GOTCHA's access to this number has expired. Reconnect it." });
+  }
+
+  const details = await whatsappNumberDetails(account.externalId, accessToken);
+  if (!details) {
+    return res.status(502).json({ error: "Meta did not answer for this number. Nothing was changed." });
+  }
+  const updated = await prisma.channelAccount.update({
+    where: { id: account.id },
+    data: { platformMeta: withWhatsAppNumberDetails(account.platformMeta, details) as any, lastHealthCheck: new Date() },
+    select: UNPROFILED_SELECT,
+  });
+  return res.json({ data: unprofiledRow(updated) });
+}
 
 const repairSchema = z.object({
   action: z.enum(["RESUBSCRIBE_WEBHOOKS", "REFRESH_STATUS", "REQUEST_HISTORY_SYNC"]),
