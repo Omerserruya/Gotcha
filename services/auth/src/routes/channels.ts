@@ -31,6 +31,28 @@ import {
 const router = Router();
 
 /**
+ * What a WhatsApp number's account remembers about it: its WABA, and the
+ * number itself as Meta shows it. The number was fetched at connect and then
+ * dropped, so the channels screen could name the account but never show its
+ * phone number (2026-10-09). Merged into what is already there, so a
+ * reconnect never erases state another writer keeps on the same blob.
+ */
+export function whatsappMeta(
+  prev: unknown,
+  wabaId: string | undefined,
+  details: { display_phone_number?: string; verified_name?: string; quality_rating?: string },
+): Record<string, unknown> {
+  const base = prev && typeof prev === "object" && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {};
+  return {
+    ...base,
+    ...(wabaId ? { wabaId } : {}),
+    ...(details.quality_rating ? { qualityRating: details.quality_rating } : {}),
+    ...(details.display_phone_number ? { displayPhoneNumber: details.display_phone_number } : {}),
+    ...(details.verified_name ? { verifiedName: details.verified_name } : {}),
+  };
+}
+
+/**
  * Plan channel limit.
  *
  * Counts the organization's CONNECTED channel accounts, so a disconnected
@@ -622,7 +644,7 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
             isActive: true,
             lastError: honestError,
             displayName: phoneDetails.verified_name || displayPhone,
-            platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating },
+            platformMeta: whatsappMeta((existing as any).platformMeta, wabaId, phoneDetails),
           },
         });
         connectedAccounts.push(updated);
@@ -640,7 +662,7 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
             connectedBy: req.user?.userId,
             tokenExpiresAt,
             isActive: true,
-            platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating },
+            platformMeta: whatsappMeta(null, wabaId, phoneDetails),
           },
         });
         connectedAccounts.push(account);
@@ -740,12 +762,12 @@ router.post("/connect/whatsapp-session", authenticate, resolveTenant, requirePer
       if (existing) {
         const updated = await prisma.channelAccount.update({
           where: { id: existing.id },
-          data: { credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: req.user?.userId, tokenExpiresAt, isActive: true, lastError: null, displayName: phoneDetails.verified_name || displayPhone, platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating } },
+          data: { credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: req.user?.userId, tokenExpiresAt, isActive: true, lastError: null, displayName: phoneDetails.verified_name || displayPhone, platformMeta: whatsappMeta((existing as any).platformMeta, wabaId, phoneDetails) },
         });
         connectedAccounts.push(updated);
       } else {
         const account = await prisma.channelAccount.create({
-          data: { tenantId: req.tenantId!, channel: "WHATSAPP", externalId: pnId, displayName: phoneDetails.verified_name || displayPhone, credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: req.user?.userId, tokenExpiresAt, isActive: true, platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating } },
+          data: { tenantId: req.tenantId!, channel: "WHATSAPP", externalId: pnId, displayName: phoneDetails.verified_name || displayPhone, credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: req.user?.userId, tokenExpiresAt, isActive: true, platformMeta: whatsappMeta(null, wabaId, phoneDetails) },
         });
         connectedAccounts.push(account);
       }
@@ -1389,11 +1411,11 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         if (existing) {
           await prisma.channelAccount.update({
             where: { id: existing.id },
-            data: { credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: userId, tokenExpiresAt, isActive: true, lastError: null, displayName: phoneDetails.verified_name || displayPhone, platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating } },
+            data: { credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: userId, tokenExpiresAt, isActive: true, lastError: null, displayName: phoneDetails.verified_name || displayPhone, platformMeta: whatsappMeta(existing.platformMeta, wabaId, phoneDetails) },
           });
         } else {
           await prisma.channelAccount.create({
-            data: { tenantId, channel: "WHATSAPP", externalId: phoneNumberId, displayName: phoneDetails.verified_name || displayPhone, credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: userId, tokenExpiresAt, isActive: true, platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating } },
+            data: { tenantId, channel: "WHATSAPP", externalId: phoneNumberId, displayName: phoneDetails.verified_name || displayPhone, credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: userId, tokenExpiresAt, isActive: true, platformMeta: whatsappMeta(null, wabaId, phoneDetails) },
           });
         }
 

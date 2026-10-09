@@ -56,6 +56,12 @@ const router = Router();
 const META_APP_ID = process.env.META_APP_ID || "";
 const META_APP_SECRET = process.env.META_APP_SECRET || "";
 
+/** The phone number an unprofiled account has stored, or null. */
+export function storedPhoneNumber(meta: unknown): string | null {
+  const v = meta && typeof meta === "object" ? (meta as Record<string, unknown>).displayPhoneNumber : null;
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
 /**
  * Express types `req.params.id` as `string | string[]` in this codebase.
  * Narrowed in one place so every route below reads a plain id, and a caller
@@ -126,7 +132,7 @@ router.get(
     const profiledIds = new Set(numbers.map((n) => n.phoneNumberId));
     const legacy = await prisma.channelAccount.findMany({
       where: { tenantId: req.tenantId!, channel: "WHATSAPP" },
-      select: { id: true, externalId: true, displayName: true, connectionStatus: true },
+      select: { id: true, externalId: true, displayName: true, connectionStatus: true, platformMeta: true },
     });
 
     return res.json({
@@ -137,6 +143,9 @@ router.get(
           channelAccountId: c.id,
           phoneNumberId: c.externalId,
           name: c.displayName,
+          // The number as Meta shows it, stored at connect and refreshed by the
+          // 6-hourly channel check; null until one of them has read it.
+          phoneNumber: storedPhoneNumber(c.platformMeta),
           connectionStatus: c.connectionStatus,
           note: "Connected before per-number health was available. Reconnect it to enable health checks and repair.",
         })),
