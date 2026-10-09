@@ -75,9 +75,15 @@ const app = express();
 app.use("/api/analytics", router);
 
 const DASH = "analytics:dashboard:read";
-const ADMIN = { userId: "admin", role: "ADMIN", perms: [DASH] };
+// The queue and activity are inbox data: gated on the inbox read, not analytics.
+const INBOX = "conversation:messages:read";
+const ADMIN = { userId: "admin", role: "ADMIN", perms: [DASH, INBOX] };
 // A department manager: holds the dashboard permission, restricted to D1.
-const MANAGER_D1 = { userId: "m1", role: "AGENT", departmentId: "D1", perms: [DASH] };
+const MANAGER_D1 = { userId: "m1", role: "AGENT", departmentId: "D1", perms: [DASH, INBOX] };
+// A plain agent: the inbox read, no analytics permission (the built-in Agent role).
+const AGENT_D1 = { userId: "m1", role: "AGENT", departmentId: "D1", perms: [INBOX] };
+// Analytics alone does not open inbox data.
+const DASH_ONLY = { userId: "m1", role: "AGENT", departmentId: "D1", perms: [DASH] };
 const AGENT_NO_PERM = { userId: "a1", role: "AGENT", departmentId: "D1", perms: [] };
 
 const as = (u: object) => ({ "x-user": JSON.stringify(u) });
@@ -117,10 +123,19 @@ beforeEach(() => {
 });
 
 describe("GET /queue/items", () => {
-  it("403 without analytics:dashboard:read, before any read", async () => {
-    const r = await request(app).get("/api/analytics/queue/items").set(as(AGENT_NO_PERM));
-    expect(r.status).toBe(403);
+  it("403 without the inbox read, before any read; the dashboard permission alone does not open it", async () => {
+    for (const u of [AGENT_NO_PERM, DASH_ONLY]) {
+      const r = await request(app).get("/api/analytics/queue/items").set(as(u));
+      expect(r.status).toBe(403);
+    }
     expect(H.calls).toBe(0);
+  });
+
+  it("a plain agent (inbox read, no analytics) gets their own scoped queue", async () => {
+    const r = await request(app).get("/api/analytics/queue/items").set(as(AGENT_D1));
+    expect(r.status).toBe(200);
+    expect(r.body.data.map((x: any) => x.conversationId).sort()).toEqual(["d1", "nodept"]);
+    expect(r.body.totalWaiting).toBe(2);
   });
 
   it("a department-restricted viewer gets only conversations the inbox shows them, and a count to match", async () => {
@@ -138,10 +153,18 @@ describe("GET /queue/items", () => {
 });
 
 describe("GET /activity", () => {
-  it("403 without analytics:dashboard:read, before any read", async () => {
-    const r = await request(app).get("/api/analytics/activity").set(as(AGENT_NO_PERM));
-    expect(r.status).toBe(403);
+  it("403 without the inbox read, before any read; the dashboard permission alone does not open it", async () => {
+    for (const u of [AGENT_NO_PERM, DASH_ONLY]) {
+      const r = await request(app).get("/api/analytics/activity").set(as(u));
+      expect(r.status).toBe(403);
+    }
     expect(H.calls).toBe(0);
+  });
+
+  it("a plain agent (inbox read, no analytics) gets their own scoped activity", async () => {
+    const r = await request(app).get("/api/analytics/activity").set(as(AGENT_D1));
+    expect(r.status).toBe(200);
+    expect(r.body.data.map((x: any) => x.id)).toEqual(["e-d1", "e-nodept", "e-mine", "a-d1", "a-system"]);
   });
 
   it("a department-restricted viewer never sees another department's runs or approvals", async () => {

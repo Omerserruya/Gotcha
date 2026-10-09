@@ -115,11 +115,13 @@ router.get("/queue", requirePermission("analytics:workspace:read"), async (req: 
 /**
  * The ranked queue behind Home's "needs you now".
  *
- * 2026-10-09: gated like the other dashboard reads, and scoped by the inbox's
- * visibility rule: it names customers and quotes their messages, so another
- * department's queue is not this agent's to read.
+ * 2026-10-09: inbox data, so gated on the inbox read (conversation:messages:read,
+ * which agents hold) and scoped by the inbox's visibility rule: it names
+ * customers and quotes their messages, so another department's queue is not
+ * this agent's to read. Not an analytics permission: an agent keeps their own
+ * work queue while analytics stays closed to them.
  */
-router.get("/queue/items", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
+router.get("/queue/items", requirePermission("conversation:messages:read"), async (req: Request, res: Response) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
@@ -137,7 +139,7 @@ router.get("/queue/items", requirePermission("analytics:dashboard:read"), async 
  * 2026-10-09: same gate and same visibility rule as the queue: each entry is a
  * tool run or approval in one conversation, with its parameters.
  */
-router.get("/activity", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
+router.get("/activity", requirePermission("conversation:messages:read"), async (req: Request, res: Response) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
