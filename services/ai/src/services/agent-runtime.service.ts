@@ -48,7 +48,7 @@ export type AgentRuntimeEvent =
   | { type: "token"; text: string }
   | { type: "tool_start"; toolCallId: string; name: string; args: unknown; label: string }
   | { type: "tool_end"; toolCallId: string; name: string; ok: boolean; resultSummary: string; label: string }
-  | { type: "plan_proposed"; approvalRequestId: string; summary: string }
+  | { type: "plan_proposed"; approvalRequestId: string; summary: string; steps?: unknown[] }
   | { type: "awaiting_approval"; approvalRequestId: string; tool: string }
   | { type: "denied"; tool: string; reason: string }
   | { type: "round_end"; round: number; hadToolCalls: boolean }
@@ -304,6 +304,7 @@ export async function runAgent(
           type: "plan_proposed",
           approvalRequestId: r.sideEffect.approvalRequestId,
           summary: r.sideEffect.planSummary,
+          steps: r.sideEffect.steps,
         });
       } else if (r.sideEffect?.kind === "awaiting_approval") {
         await onEvent({

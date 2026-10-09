@@ -456,7 +456,7 @@ export interface SystemToolResult {
   content: string;
   /** Surfaced to the route layer for SSE event emission. */
   sideEffect?:
-    | { kind: "proposed_plan"; approvalRequestId: string; planSummary: string }
+    | { kind: "proposed_plan"; approvalRequestId: string; planSummary: string; steps?: unknown[] }
     | { kind: "denied"; tool: string; reason: string }
     | { kind: "awaiting_approval"; approvalRequestId: string; tool: string };
   /** Stage 2: cards and their source, computed here and shown as they are (never by the model). */
@@ -994,6 +994,8 @@ async function dispatchProposePlan(
       kind: "proposed_plan",
       approvalRequestId: approval.id,
       planSummary: forRequester,
+      // The stored steps, so a Home answer can carry the plan as a block (2026-10-09).
+      steps,
     },
   };
 }

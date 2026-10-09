@@ -32,6 +32,8 @@ const H = vi.hoisted(() => ({
   titleAsks: [] as string[],
   convs: [] as any[],
   approvals: [] as any[],
+  // Conversations a plan step can name (visibleConversation); empty keeps findFirst null for every other test.
+  planConvs: [] as any[],
   n: 0,
 }));
 
@@ -89,9 +91,9 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         findMany: async (a: any) => H.messages.filter((r) => match(r, a.where)),
       },
       systemAgentMessage: { deleteMany: async (a: any) => { H.memoryDeletes.push(a.where); return { count: 1 }; } },
-      user: { findUnique: async () => ({ name: "Omer", email: "o@x", role: "ADMIN", locale: null }) },
+      user: { findUnique: async () => ({ name: "Omer", email: "o@x", role: "ADMIN", locale: null }), findFirst: async () => ({ name: "Omer", email: "o@x" }) },
       tenant: { findUnique: async () => ({ name: "Lumiere", defaultLocale: "en" }) },
-      conversation: { ...t, findMany: async (a: any) => H.convs.slice(0, a.take ?? 1e9) }, message: t, contact: t, tenantTool: t, aIAgent: t,
+      conversation: { ...t, findMany: async (a: any) => H.convs.slice(0, a.take ?? 1e9), findFirst: async (a: any) => H.planConvs.find((c) => c.id === a.where?.id && c.tenantId === a.where?.tenantId) ?? null }, message: t, contact: t, tenantTool: t, aIAgent: t,
       approvalRequest: { ...t, findFirst: async (a: any) => H.approvals.find((r) => r.id === a.where.id && r.tenantId === a.where.tenantId) ?? null },
     },
   };
@@ -134,7 +136,7 @@ async function send(threadId: string, text: string, extra: any = {}) {
 beforeEach(() => {
   H.threads = []; H.messages = []; H.memoryDeletes = []; H.memoryAppends = []; H.kv.clear(); H.script = []; H.modelCalls = [];
   H.aiAllowed = true; H.user = "u1"; H.titleReply = "Refund questions"; H.n = 0; H.titleCalls = 0; H.titleAsks = [];
-  H.convs = [];
+  H.convs = []; H.planConvs = [];
   H.approvals = [{ id: "apr_1", tenantId: "T", conversationId: null, tool: "propose_plan", summary: "לשייך ל-Dana את השיחה של Omer Serruya (וואטסאפ)", params: { steps: [{ target: { assigneeId: "u1" }, summary: "לשייך ל-Dana את השיחה של Omer Serruya (וואטסאפ)", summaryForAssignee: "לשייך אליך את השיחה של Omer Serruya (וואטסאפ)" }] } }, { id: "apr_other", tenantId: "OTHER", conversationId: null, summary: "x" }];
 });
 const openConv = (id: string, channel = "WHATSAPP") => ({ id, channel, status: "OPEN", handledBy: "ai_agent", isHandedOver: false, customerName: `Customer ${id}`, customerExternalId: id, createdAt: new Date(), lastMessageAt: new Date() });
@@ -761,5 +763,93 @@ describe("★ proposed is not done (2026-10-08: \"שייכתי אליך את ה�
     expect(r.events.filter((e) => e.event === "text.delta").map((e) => e.data.text).join("")).toBe("I prepared a request to create an automation; it is waiting for approval on the Approvals screen.");
     expect(H.threads.find((x) => x.id === t.id).title).toBe("Request: Create an automation");
     expect(H.titleCalls).toBe(0);
+  });
+});
+
+describe("★ a proposed plan is a proposal block (G5, 2026-10-09)", () => {
+  const conv = { id: "c1", tenantId: "T", channel: "WHATSAPP", status: "OPEN", customerName: "Dana Levi", customerExternalId: "972500000001", channelAccountId: null };
+  const plan = tool("propose_plan", { steps: [
+    { tool: "claim_conversation", params: { conversationId: "c1" }, reason: "x" },
+    { tool: "create_workflow", params: {}, reason: "y" },
+  ] });
+  const expected = {
+    type: "proposal",
+    approvalRequestId: "apr_1",
+    // The owner is the assignee: plan-summary says it to them as "you".
+    summary: "Assign Dana Levi's WhatsApp conversation to you; Create an automation",
+    steps: [
+      { summary: "Assign Dana Levi's WhatsApp conversation to you", target: { conversationId: "c1", assigneeId: "u1" } },
+      { summary: "Create an automation", target: null },
+    ],
+    state: "pending",
+  };
+  const view = async (id: string) => (await request(app()).get(`/api/assistant/threads/${id}`)).body.data.messages.find((m: any) => m.role === "assistant");
+
+  it("streams a `proposal` event and saves the block with the answer; the text stays for older clients", async () => {
+    H.planConvs = [conv];
+    const t = await newThread();
+    H.script = [plan, say("Done, I assigned it.")];
+    const r = await send(t.id, "assign Dana's conversation to me and make an automation");
+    const ev = r.events.filter((e) => e.event === "proposal");
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.data).toEqual({ block: expected });
+    // Before the answer ends, beside the waiting step that names the same request.
+    const names = r.events.map((e) => e.event);
+    expect(names.indexOf("proposal")).toBeLessThan(names.indexOf("message.done"));
+    expect(names.indexOf("proposal")).toBeLessThan(names.indexOf("step.done"));
+    expect(r.events.find((e) => e.event === "step.done")!.data).toMatchObject({ status: "waiting_approval", approvalRequestId: "apr_1" });
+    expect(r.events.filter((e) => e.event === "text.delta").map((e) => e.data.text).join("")).toMatch(/^I prepared a request to assign Dana Levi/);
+    const saved = H.messages.find((m) => m.role === "assistant");
+    expect(saved.blocks).toEqual([expected]);
+    // The fixture approval has no status: the saved state stands.
+    expect((await view(t.id)).blocks).toEqual([expected]);
+  });
+
+  it("the state is the approval's own on every read; the saved row is not rewritten", async () => {
+    H.planConvs = [conv];
+    const t = await newThread();
+    H.script = [plan, say("ok")];
+    await send(t.id, "assign it to me");
+    const future = new Date(Date.now() + 3_600_000), past = new Date(Date.now() - 1000);
+    const cases: Array<[any, string]> = [
+      [{ status: "PENDING", expiresAt: future }, "pending"],
+      [{ status: "PENDING", expiresAt: past }, "expired"],
+      [{ status: "APPROVED", executionState: "NOT_STARTED", expiresAt: past }, "approved"],
+      [{ status: "APPROVED", executionState: "FAILED", expiresAt: past }, "approved"],
+      [{ status: "APPROVED", executionState: "SUCCEEDED", expiresAt: past }, "executed"],
+      [{ status: "REJECTED", expiresAt: future }, "rejected"],
+      [{ status: "EXPIRED", expiresAt: past }, "expired"],
+      [{ status: "CANCELLED", expiresAt: future }, "pending"],
+    ];
+    for (const [row, state] of cases) {
+      H.approvals = [{ id: "apr_1", tenantId: "T", conversationId: null, tool: "propose_plan", summary: "x", params: {}, ...row }];
+      const m = await view(t.id);
+      expect([row.status, row.executionState, m.blocks[0].state]).toEqual([row.status, row.executionState, state]);
+      expect(m.blocks[0].steps).toEqual(expected.steps);
+    }
+    expect(H.messages.find((m) => m.role === "assistant").blocks[0].state).toBe("pending");
+  });
+
+  it("matched by the tenant and read as the viewer may: another tenant's row or an unseen conversation leaves the saved state", async () => {
+    H.planConvs = [conv];
+    const t = await newThread();
+    H.script = [plan, say("ok")];
+    await send(t.id, "assign it to me");
+    H.approvals = [{ id: "apr_1", tenantId: "OTHER", conversationId: null, tool: "propose_plan", summary: "x", params: {}, status: "REJECTED" }];
+    expect((await view(t.id)).blocks[0].state).toBe("pending");
+    // Tied to a conversation this viewer cannot see (not in H.planConvs any more).
+    H.planConvs = [];
+    H.approvals = [{ id: "apr_1", tenantId: "T", conversationId: "c1", tool: "propose_plan", summary: "x", params: {}, status: "REJECTED" }];
+    expect((await view(t.id)).blocks[0].state).toBe("pending");
+    H.planConvs = [conv];
+    expect((await view(t.id)).blocks[0].state).toBe("rejected");
+  });
+
+  it("an answer without a proposal has no proposal block nor event", async () => {
+    const t = await newThread();
+    H.script = [say("hello")];
+    const r = await send(t.id, "hi");
+    expect(r.events.map((e) => e.event)).not.toContain("proposal");
+    expect(H.messages.find((m) => m.role === "assistant").blocks).toEqual([]);
   });
 });

@@ -19,6 +19,8 @@ import { generateResponse, getMicroModel } from "./ai.service";
 import { withoutWideDashes } from "../lib/wide-dash";
 import { whenText, PLAN_ACTIONS } from "./system-tools.service";
 import { questionLanguage } from "../lib/reader-locale";
+import { planSummaryFor, stepSummaryFor } from "../lib/plan-summary";
+import { readableApproval } from "./assistant-approval-read.service";
 
 // ─── Scope ──────────────────────────────────────────────────
 
@@ -322,6 +324,77 @@ export function threadSystemLines(scope: ThreadScope, locale: "he" | "en", now =
   ];
 }
 
+// ─── A proposed plan, as a block ────────────────────────────
+
+/**
+ * A plan this answer proposed (2026-10-09, G5): the text only said a request
+ * waits, so the screen could not show the request or what became of it.
+ * Saved in `blocks`, streamed as the `proposal` event:
+ *   { type: "proposal", approvalRequestId, summary, steps: [{ summary, target }], state }
+ * summary and steps[].summary: lib/plan-summary, for the thread's owner.
+ * target: the step's stored target (ids only), null when it names none.
+ * state: saved "pending"; on every thread read it is the approval's own, since
+ * the decision and the expiry happen outside ai and never call back here.
+ */
+export type ProposalState = "pending" | "approved" | "rejected" | "expired" | "executed";
+export interface ProposalTarget { conversationId?: string; customerId?: string; assigneeId?: string; questionId?: string }
+export interface ProposalBlock {
+  type: "proposal";
+  approvalRequestId: string;
+  summary: string;
+  steps: Array<{ summary: string; target: ProposalTarget | null }>;
+  state: ProposalState;
+}
+
+const TARGET_KEYS = ["conversationId", "customerId", "assigneeId", "questionId"] as const;
+function stepTarget(step: unknown): ProposalTarget | null {
+  const t = (step as any)?.target;
+  const out: ProposalTarget = {};
+  for (const k of TARGET_KEYS) if (typeof t?.[k] === "string" && t[k]) out[k] = t[k];
+  return Object.keys(out).length ? out : null;
+}
+
+export function proposalBlock(approvalRequestId: string, steps: unknown, fallbackSummary: string, ownerId: string): ProposalBlock {
+  const list = Array.isArray(steps) ? steps : [];
+  return {
+    type: "proposal",
+    approvalRequestId,
+    summary: planSummaryFor(list, ownerId) ?? fallbackSummary,
+    steps: list.map((st) => ({ summary: stepSummaryFor(st ?? {}, ownerId), target: stepTarget(st) })),
+    state: "pending",
+  };
+}
+
+/** The block's state from the approval row; null keeps the saved one. */
+export function proposalStateOf(a: { status?: unknown; executionState?: unknown; expiresAt?: unknown }, now = new Date()): ProposalState | null {
+  switch (a.status) {
+    // Past its expiry it is no longer actionable, as Home and the Approvals list count it (the sweeper runs on its own schedule).
+    case "PENDING": return a.expiresAt && new Date(a.expiresAt as any).getTime() <= now.getTime() ? "expired" : "pending";
+    // Approved is a decision; executed is the action having happened.
+    case "APPROVED": return a.executionState === "SUCCEEDED" ? "executed" : "approved";
+    case "REJECTED": return "rejected";
+    case "EXPIRED": return "expired";
+    default: return null; // CANCELLED: nothing writes it today
+  }
+}
+
+/** Each proposal's current state, by approval id, read as the Approvals screen lets this viewer read it. */
+async function proposalStates(o: Owner, viewer: Viewer | undefined, rows: any[]): Promise<Map<string, ProposalState>> {
+  const ids = new Set<string>();
+  for (const m of rows) for (const b of (Array.isArray(m.blocks) ? m.blocks : [])) if (b?.type === "proposal" && typeof b.approvalRequestId === "string") ids.add(b.approvalRequestId);
+  const out = new Map<string, ProposalState>();
+  if (!ids.size || !viewer) return out;
+  await Promise.all([...ids].map(async (id) => {
+    const r = await readableApproval({ tenantId: o.tenantId, viewer }, id).catch(() => null);
+    const st = r ? proposalStateOf(r.approval as any) : null;
+    if (st) out.set(id, st);
+  }));
+  return out;
+}
+
+const withProposalStates = (blocks: unknown, states: Map<string, ProposalState>) =>
+  (Array.isArray(blocks) ? blocks : []).map((b: any) => (b?.type === "proposal" && states.has(b.approvalRequestId) ? { ...b, state: states.get(b.approvalRequestId) } : b));
+
 // ─── Running an answer ──────────────────────────────────────
 
 export interface StartRunInput {
@@ -424,10 +497,15 @@ async function executeRun(input: StartRunInput, run: { runId: string; messageId:
           steps.set(ev.toolCallId, { id: ev.toolCallId, text: ev.label, status: "running", startedAt: Date.now() });
           await emit("step.start", { stepId: ev.toolCallId, text: ev.label });
           break;
-        case "plan_proposed":
+        case "plan_proposed": {
           proposed.push(ev.summary);
           pendingApproval = ev.approvalRequestId;
+          // The plan as data too; the text below stays for clients that only read text.
+          const b = proposalBlock(ev.approvalRequestId, ev.steps, ev.summary, input.owner.userId);
+          blocks.push(b);
+          await emit("proposal", { block: b });
           break;
+        }
         case "awaiting_approval":
           pendingApproval = ev.approvalRequestId;
           break;
@@ -596,13 +674,14 @@ export function titleFromQuestion(question: string): string | null {
 }
 
 /** The screen's view of a thread: messages, and the answer still being written. */
-export async function threadView(o: Owner, id: string) {
+export async function threadView(o: Owner, id: string, viewer?: Viewer) {
   const t = await ownThread(o, id);
   if (!t) return null;
   const [rows, activeRun] = await Promise.all([
     prisma.assistantMessage.findMany({ where: { threadId: t.id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
     activeRunOf(t.id),
   ]);
+  const states = await proposalStates(o, viewer, rows);
   // An answer's language is its question's. Not stored: a question without a
   // clear language (a number) has no `lang`, and the client keeps the UI's,
   // which is what that turn fell back to.
@@ -614,7 +693,7 @@ export async function threadView(o: Owner, id: string) {
       id: m.id, threadId: m.threadId, role: m.role, text: m.text,
       // A "streaming" row whose run is gone (the process died) did not finish.
       status: m.status === "streaming" && activeRun?.messageId !== m.id ? "failed" : m.status,
-      ...(m.role === "assistant" ? { steps: m.steps ?? [], scope: m.scope, suggestions: m.suggestions ?? [], blocks: m.blocks ?? [], sources: m.sources ?? [], actions: [], runId: m.runId } : {}),
+      ...(m.role === "assistant" ? { steps: m.steps ?? [], scope: m.scope, suggestions: m.suggestions ?? [], blocks: withProposalStates(m.blocks, states), sources: m.sources ?? [], actions: [], runId: m.runId } : {}),
       ...(lang ? { lang } : {}),
       createdAt: m.createdAt,
     };

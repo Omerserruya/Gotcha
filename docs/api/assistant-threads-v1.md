@@ -120,6 +120,7 @@ line `: ping` is sent every 25 s.
 | `run.start` | `{ runId, userMessageId, messageId, lang }` | first; `messageId` is the assistant message being written; `lang` (`he` \| `en`) is the turn's language |
 | `step.start` | `{ stepId, text }` | a step begins (e.g. "Looking at this week's conversations") |
 | `step.done` | `{ stepId, status, durationMs, approvalRequestId? }` | `status`: `done` \| `failed` \| `waiting_approval` (then with `approvalRequestId`) |
+| `proposal` | `{ block }` | the assistant proposed a plan: the `proposal` block (§9.2), state `pending`; before the `step.done` that names the same `approvalRequestId` |
 | `text.delta` | `{ text }` | a piece of the answer; append in order |
 | `suggestions` | `{ items: string[] }` | 2-3 follow-up questions, produced by the same model call (no extra call); may be absent |
 | `thread.title` | `{ title }` | the thread got its automatic title (after the first answer), before `message.done` |
@@ -278,7 +279,26 @@ language), `sourceId` and optionally `deepLink` (§9.5), `partial` and
 
 // on any block
 "partial": { "reason": "capped", "cap": 250 } | { "reason": "store_limit" } | null
+
+// proposal: a plan the assistant proposed in this answer (2026-10-09). No id,
+// title or sourceId: approvalRequestId names it.
+{ "type": "proposal", "approvalRequestId": "apr_...",
+  "summary": "Assign Dana Levi's WhatsApp conversation to you; Create an automation",
+  "steps": [{ "summary": "Assign Dana Levi's WhatsApp conversation to you",
+              "target": { "conversationId": "c1", "customerId": "...", "assigneeId": "u1" } },
+            { "summary": "Create an automation", "target": null }],
+  "state": "pending" | "approved" | "rejected" | "expired" | "executed" }
 ```
+A `proposal` block: `summary` and `steps[].summary` are the plan's own stored
+words, said to the thread's owner (an assignment to them reads "to you"), in
+the turn's language. `target` is what the step acts on, ids only
+(`conversationId`, `customerId`, `assigneeId`, `questionId`, each when present),
+or `null`. `state` streams and saves as `pending`; `GET /threads/:id` returns
+the approval's state at the time of reading (a decision or an expiry is made
+outside the assistant): `approved` is the decision, `executed` the action having
+run; a pending request past its expiry reads `expired`. A request the reader can
+no longer see keeps the saved state. The answer's text still says the request
+waits, for clients that do not render the block.
 `label`s, `title`, `subtitle`, `meta` and `fields[].value` are finished text in
 the interface language (render verbatim); raw numbers are in `series[].values`,
 `items[].value`, `total`. `unit: "percent"` values are 0-100 (38 = 38%);

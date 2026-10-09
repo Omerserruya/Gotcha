@@ -89,7 +89,8 @@ router.get("/threads", async (req: Request, res: Response) => {
 router.get("/threads/:id", async (req: Request, res: Response) => {
   const o = ownerOf(req);
   if (!o) { res.status(401).json({ error: "no user context" }); return; }
-  const v = await threadView(o, String(req.params.id));
+  // The viewer reads each proposal's current state, as the Approvals screen would show it to them.
+  const v = await threadView(o, String(req.params.id), viewerOf(req));
   if (!v) { notFound(res); return; }
   res.json({ data: v });
 });
