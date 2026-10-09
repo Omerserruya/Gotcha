@@ -415,9 +415,6 @@
   "conversation": {
     "label": "שיחה עם GOTCHA",
     "home": "בית",
-    "share": "שיתוף עם הצוות",
-    "nextStage": "בשלב הבא",
-    "shareWhy": "שיתוף שיחה עם הצוות יגיע בשלב הבא.",
     "placeholder": "אפשר להגיב, או לומר ל־GOTCHA מה לעשות עכשיו…",
     "send": "שליחה",
     "stop": "עצירה",

@@ -415,9 +415,6 @@
   "conversation": {
     "label": "Conversation with GOTCHA",
     "home": "Home",
-    "share": "Share with team",
-    "nextStage": "Next stage",
-    "shareWhy": "Sharing a conversation with your team comes in the next stage.",
     "placeholder": "Reply, or tell GOTCHA what to do next…",
     "send": "Send",
     "stop": "Stop",

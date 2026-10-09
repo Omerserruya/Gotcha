@@ -15,7 +15,6 @@ import {
 import { SCOPE_RANGES, type ThreadScope, type ThreadStep } from '@/api/contracts/assistant-threads';
 import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/design-system/primitives/overlay/Menu';
-import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link } from '@/i18n/navigation';
 import { typedDir } from '@/lib/typed-dir';
 
@@ -49,8 +48,8 @@ const TITLE_MAX = 120;
  * Drawn: the steps in the run's own words with the time each took, the
  * answer in its markdown subset, follow-up suggestions, Stop (the route's
  * cancel), the title (the server's, until the person renames it), the
- * scope, and Delete. Share is a status ("next stage"); blocks, sources and
- * actions are stages 2-3.
+ * scope, and Delete; then the server's blocks and sources (stage 2) and
+ * proposed plans to decide (stage 3). No Share: Omer declined it (2026-10-09).
  */
 export function HomeConversation({
   children,
@@ -147,12 +146,6 @@ function Conversation({ chat }: { readonly chat: Chat }) {
         {chat.opening === 'idle' ? <ScopeChip chat={chat} /> : null}
         <span className={styles.barEnd}>
           {chat.thread ? <DeleteThread onDelete={chat.remove} /> : null}
-          <UnavailableAction
-            label={t('share')}
-            tag={t('nextStage')}
-            why={t('shareWhy')}
-            testid="conversation-share"
-          />
         </span>
       </header>
 

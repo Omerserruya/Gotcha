@@ -19,7 +19,7 @@ import type { TurnLang } from '@/api/contracts/assistant-threads';
  * and "17 in all", "done · under 1s" from us. The turn's words - step status
  * and time, "N in all", coverage, "Stopped", a refusal - follow the turn
  * (`lang`, Backend d43ba57c); the page's - the header, the scope, the
- * composer, Share - stay the interface's.
+ * composer - stay the interface's.
  *
  * ⚠ Not a nested NextIntlClientProvider: `Link` takes its locale from that
  *   context, so a source chip or the billing link inside a Hebrew turn on /en

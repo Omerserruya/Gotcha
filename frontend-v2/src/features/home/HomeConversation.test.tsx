@@ -737,12 +737,11 @@ describe('★★ title, scope and delete - each through its route', () => {
     expect(api.delete).not.toHaveBeenCalled();
   });
 
-  it('Share is still a status ("next stage")', async () => {
+  it('★ no Share - Omer declined it (2026-10-09), so nothing promises it is coming', async () => {
     show();
     await ask('Why?');
-    const share = screen.getByTestId('conversation-share');
-    expect(share).toHaveAttribute('aria-disabled', 'true');
-    expect(share).toHaveTextContent('Next stage');
+    expect(screen.queryByTestId('conversation-share')).toBeNull();
+    expect(screen.getByTestId('home-conversation')).not.toHaveTextContent(/Share|Next stage/);
   });
 });
 
