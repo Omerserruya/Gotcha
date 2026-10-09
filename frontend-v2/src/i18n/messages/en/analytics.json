@@ -1,0 +1,255 @@
+{
+  "title": "Analytics",
+  "description": "What people ask about, and how the work is spread across your team.",
+  "noGotchaSection": "There is no “what GOTCHA did” section yet. It needs a breakdown of why the AI handed a conversation to a person, and the platform records the handover without recording the cause - so any chart here would be invented rather than measured.",
+  "team": {
+    "heading": "Who is holding what",
+    "today": "These are today's numbers. They reset at midnight, and they are the only period this panel covers.",
+    "person": "Person",
+    "openNow": "Open now",
+    "takenToday": "Taken today",
+    "unnamed": "Unnamed",
+    "unavailable": "We couldn't read the team's workload just now.",
+    "noSpeed": "There's no reply-speed column here. The only timing GOTCHA records measures from when a conversation was claimed to each reply in it, so it grows with how long a conversation runs - beside a name that would read as slowness.",
+    "aiEmployee": "AI employee",
+    "nullReason": {
+      "ai_does_not_claim": "AI employees don't take conversations; they're assigned.",
+      "not_measured_for_ai": "Not measured for AI employees."
+    }
+  },
+  "asked": {
+    "heading": "What people ask about",
+    "grouped": "GOTCHA grouped these questions itself. Two lines can be the same question worded differently - it hasn't learned to merge them yet.",
+    "asked": "asked {count} times",
+    "none": "Nothing has been grouped yet. This fills in as conversations are analysed.",
+    "unavailable": "We couldn't read what people are asking about just now."
+  },
+  "screenTitle": "How the operation is doing",
+  "screenSubline": "Last 7 days, compared with the week before",
+  "changed": {
+    "eyebrow": "What changed",
+    "also": "Also worth a look",
+    "none": "Nothing stands out this week.",
+    "unavailable": "We couldn't read what changed just now.",
+    "nothing": "Nothing changed enough to mention this week."
+  },
+  "kpi": {
+    "conversations": "Conversations",
+    "handledByGotcha": "Handled by GOTCHA",
+    "resolved": "Resolved",
+    "avgReply": "Average reply",
+    "timeSaved": "Time saved",
+    "delta": "{value}%",
+    "seconds": "{n}s",
+    "minutes": "{n}m",
+    "hours": "{n}h",
+    "unknown": "-",
+    "unavailable": "We couldn't read this week's figures just now.",
+    "estimate": "An estimate: {conversations, number} conversations × the platform’s average of {seconds}s each - not measured in this workspace yet."
+  },
+  "teamShort": {
+    "today": "Today's numbers - they reset at midnight.",
+    "noSpeed": "No reply-speed column",
+    "none": "No one on the team yet."
+  },
+  "askedShort": {
+    "grouped": "Grouped by GOTCHA"
+  },
+  "tabs": {
+    "label": "Analytics",
+    "overview": "Overview",
+    "gotcha": "GOTCHA",
+    "team": "Team",
+    "sales": "Sales",
+    "topics": "Topics"
+  },
+  "gotcha": {
+    "title": "What GOTCHA did",
+    "subline": "Last 7 days",
+    "hero": {
+      "eyebrow": "Where it earns its keep",
+      "title": "It answered first in <figure>{n}</figure> {count, plural, one {conversation} other {conversations}}.",
+      "hours": "That's about {hours} hours your team didn't spend typing.",
+      "passedOver": "See what it passed over",
+      "why": "Why did it escalate?",
+      "quiet": "No conversations this week, so there's nothing to credit GOTCHA with yet."
+    },
+    "stopped": {
+      "title": "Where it stopped",
+      "person": "{count} asked for a person outright.",
+      "personNone": "Asking for a person outright isn't counted yet.",
+      "unknown": "{count} it didn't know the answer to.",
+      "unknownNone": "We couldn't count what it didn't know just now.",
+      "approval": "{count} needed your approval.",
+      "approvalNone": "We couldn't count what needed your approval just now."
+    },
+    "strip": {
+      "alone": "Answered first by GOTCHA",
+      "actions": "Actions run",
+      "approval": "Needed approval",
+      "failed": "Failed",
+      "saved": "Time saved",
+      "hours": "{hours}h"
+    },
+    "alone": {
+      "title": "Alone, or with a person",
+      "legend": "alone · passed over",
+      "why": "Conversations started each day: GOTCHA alone, or passed over to a person. Days are UTC."
+    },
+    "did": {
+      "title": "What it actually did",
+      "none": "It didn't run anything this week.",
+      "unavailable": "We couldn't read what it ran just now.",
+      "foot": "{failed} failed; {refused} were stopped by a rule, which is the rule working.",
+      "footNoFailed": "{refused} were stopped by a rule, which is the rule working. Failures aren't told apart for every action yet.",
+      "allOneCause": "All {count} failures were {name} actions, and the {name} connection is down.",
+      "someOneCause": "{count} of the {total} failures were {name} actions, and the {name} connection is down.",
+      "reconnect": "Reconnect it"
+    }
+  },
+  "teamTab": {
+    "title": "How your team is doing",
+    "subline": "Last 7 days",
+    "sublineCounted": "Last 7 days · {who}",
+    "sublinePeople": "{count, plural, one {# person} other {# people}}",
+    "sublineAi": "{count, plural, one {# AI employee} other {# AI employees}}",
+    "hero": {
+      "eyebrow": "Worth a word",
+      "uneven": "{heavy} is carrying <figure>{ratio, plural, =2 {twice} other {# times}}</figure> the queue {light} is.",
+      "even": "Open conversations are spread evenly right now.",
+      "measured": "Counted as conversations open now - a queue, not a measure of anyone.",
+      "rebalance": "Rebalance the queue",
+      "week": "Look at their week",
+      "tooFew": "There aren't two people counted here to compare a queue between.",
+      "noneOpen": "No one has an open conversation right now.",
+      "oneHoldsAll": "{who} holds every open conversation right now."
+    },
+    "handover": {
+      "title": "The handover works",
+      "none": "Nothing measures yet how fast a passed-over conversation is picked up, or how often it comes back."
+    },
+    "strip": {
+      "people": "Answered first by people",
+      "firstReply": "First reply",
+      "resolved": "Resolved",
+      "handedBack": "Handed back to GOTCHA",
+      "busiest": "Busiest hour"
+    },
+    "table": {
+      "person": "Person",
+      "firstReply": "First reply",
+      "resolved": "Resolved",
+      "load": "Load through the week",
+      "aiEmployee": "AI employee",
+      "foot": "Nobody is measured on volume alone. First reply is the median wait for a first answer; AI employees have no reply target.",
+      "handled": "Handled",
+      "loadLabel": "Each day this week: {days}"
+    }
+  },
+  "sales": {
+    "title": "What conversations are worth",
+    "subline": "Last 7 days · what people asked for and didn't find",
+    "hero": {
+      "eyebrow": "The number that matters",
+      "title": "What conversations sold isn't known yet.",
+      "line": "Sales aren't tied to the conversation that led to them, so there's nothing honest to add up.",
+      "which": "See which conversations",
+      "compare": "Compare with last month"
+    },
+    "lost": {
+      "title": "What you lost",
+      "body": "{asks} {asks, plural, one {ask} other {asks}} this week for {terms, plural, one {something} other {# things}} you don't stock.",
+      "none": "Nobody asked for anything you don't stock this week.",
+      "write": "Write to them now"
+    },
+    "strip": {
+      "revenue": "Revenue from conversations",
+      "wanted": "People who wanted to buy",
+      "bought": "Of them, bought",
+      "average": "Average order",
+      "carts": "Carts recovered"
+    },
+    "sources": {
+      "title": "Where the money came from",
+      "none": "Nothing ties a sale to the conversation, recommendation or campaign behind it yet.",
+      "foot": "How reply speed affects buying isn't measured yet."
+    },
+    "asked": {
+      "title": "What people ask for and don't get",
+      "week": "this week",
+      "unavailable": "We couldn't read this week's searches just now.",
+      "none": "Nothing asked for went unfound this week.",
+      "notStocked": "not stocked",
+      "running": "asked {weeks} weeks running",
+      "asks": "{n} {count, plural, one {ask} other {asks}}",
+      "foot": "{term} was searched for {n} {count, plural, one {time} other {times}} this week and isn't in your catalogue."
+    }
+  },
+  "topics": {
+    "title": "What people are asking about",
+    "subline": "Last 7 days · GOTCHA groups questions itself, against the week before",
+    "hero": {
+      "eyebrow": "What changed",
+      "rise": "{topic} questions are up <figure>{pct}%</figure> on the week before.",
+      "steady": "No topic moved much on the week before.",
+      "update": "Send a proactive update",
+      "conversations": "See the conversations"
+    },
+    "unanswered": {
+      "title": "A question GOTCHA couldn't answer",
+      "body": "“{question}” was asked {n} {count, plural, one {time} other {times}} this week, and Knowledge doesn't cover it.",
+      "none": "Nothing went unanswered this week.",
+      "answer": "Answer it once",
+      "rename": "Rename"
+    },
+    "table": {
+      "topic": "Topic",
+      "asked": "Asked",
+      "change": "Change",
+      "alone": "GOTCHA alone",
+      "ends": "How it ends",
+      "new": "new",
+      "pct": "{pct, number, ::sign-always}%",
+      "unavailable": "We couldn't read this week's topics just now.",
+      "none": "No topics this week.",
+      "ungrouped": "Questions aren't grouped into topics yet this week.",
+      "unplaced": "{n} {count, plural, one {question} other {questions}} GOTCHA couldn't place this week.",
+      "foot": "GOTCHA groups questions itself. How each topic ends, and how much it handled alone, aren't counted yet.",
+      "question": "What people asked",
+      "footAsked": "Not grouped into topics yet this week, so these are the questions as people asked them."
+    },
+    "byDay": {
+      "title": "{topic}, by day",
+      "titleNone": "A topic, by day",
+      "none": "Topics aren't counted per day yet."
+    },
+    "sound": {
+      "title": "How people sound",
+      "fine": "Fine",
+      "impatient": "Impatient",
+      "angry": "Angry",
+      "none": "Tone isn't counted yet."
+    }
+  },
+  "daily": {
+    "title": "Conversations a day",
+    "legend": "GOTCHA · your team",
+    "why": "Conversations answered each day: by GOTCHA alone, or with a reply from someone on your team. Days are UTC.",
+    "dayLabel": "{day}: {dark} and {light}",
+    "unread": "The days couldn’t be read."
+  },
+  "intent": {
+    "order_status": "Order status",
+    "shipping": "Shipping and delivery",
+    "returns_exchanges": "Returns and exchanges",
+    "refund": "Refunds",
+    "product_question": "Product questions",
+    "pricing_purchase": "Pricing and buying",
+    "booking": "Appointments",
+    "billing_payment": "Billing and payment",
+    "technical_issue": "Technical issue",
+    "complaint": "Complaint",
+    "account": "Account",
+    "other": "Other"
+  }
+}

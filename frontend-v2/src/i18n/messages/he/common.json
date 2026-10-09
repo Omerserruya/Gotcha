@@ -1,0 +1,40 @@
+{
+  "actions": {
+    "save": "שמירה",
+    "cancel": "ביטול",
+    "close": "סגירה",
+    "retry": "נסו שוב",
+    "confirm": "אישור",
+    "discard": "ביטול שינויים",
+    "search": "חיפוש",
+    "clear": "ניקוי",
+    "more": "עוד"
+  },
+  "state": {
+    "loading": "טוען…",
+    "saving": "שומר…",
+    "saved": "נשמר",
+    "unsavedChanges": "יש לכם שינויים שלא נשמרו"
+  },
+  "count": "{count, plural, =0 {אין פריטים} one {פריט אחד} two {# פריטים} many {# פריטים} other {# פריטים}}",
+  "selectedCount": "{count, plural, =0 {לא נבחר דבר} one {פריט אחד נבחר} two {# נבחרו} many {# נבחרו} other {# נבחרו}}",
+  "language": {
+    "label": "שפה"
+  },
+  "productDescription": "מערכת ההפעלה לתפעול לקוחות. שיחות, פעולות, אישורים ו‑AI במקום אחד.",
+  "loading": "טוען",
+  "duration": {
+    "minutes": "{count, plural, =1 {דקה} other {# דקות}}",
+    "hours": "{count, plural, =1 {שעה} =2 {שעתיים} other {# שעות}}",
+    "days": "{count, plural, =1 {יום} =2 {יומיים} other {# ימים}}"
+  },
+  "person": {
+    "shopper": "קונה באתר",
+    "signedInShopper": "קונה מחובר באתר"
+  },
+  "platformError": {
+    "shopify_chat_uninstalled": "האפליקציה הוסרה מהחנות. מתקינים אותה מחדש כדי שהצ׳אט יחזור.",
+    "shopify_app_uninstalled": "האפליקציה של GOTCHA הוסרה מהחנות. מתקינים אותה מחדש כדי לחבר שוב.",
+    "unknown": "משהו לא תקין בערוץ הזה. פותחים אותו כדי לראות מה הוא צריך."
+  }
+}

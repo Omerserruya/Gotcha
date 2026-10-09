@@ -1,0 +1,31 @@
+import { describe, expect, it } from 'vitest';
+
+import { isCurrentHrefChild, PRIMARY_NAVIGATION, SETTINGS_NAVIGATION } from './navigation';
+
+const current = (pathname: string, id: string) => {
+  const parent = [...PRIMARY_NAVIGATION, SETTINGS_NAVIGATION].find((item) => item.id === id)!;
+  const children = parent.children ?? [];
+  return children.filter((c) => isCurrentHrefChild(pathname, c, children)).map((c) => c.id);
+};
+
+describe('★★ the rail marks one place, not two', () => {
+  it.each([
+    ['/outreach', ['campaigns']],
+    ['/outreach/campaigns/b1', ['campaigns']],
+    ['/outreach/calls', ['calls']],
+    ['/outreach/templates', ['templates']],
+  ])('%s → %j', (pathname, ids) => {
+    expect(current(pathname, 'outreach')).toEqual(ids);
+  });
+
+  // Every destination, so a nesting added later is held to the same rule.
+  const pages = [...PRIMARY_NAVIGATION, SETTINGS_NAVIGATION].flatMap((item) =>
+    (item.children ?? []).filter((c) => c.href).map((c) => [c.href!, item.id] as const),
+  );
+  it.each(pages)('%s marks exactly itself', (href, id) => {
+    const parent = [...PRIMARY_NAVIGATION, SETTINGS_NAVIGATION].find((item) => item.id === id)!;
+    const marked = current(href, id);
+    expect(marked).toHaveLength(1);
+    expect(parent.children!.find((c) => c.id === marked[0])!.href).toBe(href);
+  });
+});

@@ -1,0 +1,151 @@
+@layer features {
+  /*
+   * The ask box. The design draws it as a dark panel inside the light work
+   * surface - the one place on Home where the frame's ink comes inside.
+   */
+  /*
+   * `margin: 24px auto 0; width: 880px; padding: 18px 20px 16px` in the source.
+   *
+   * The 24px above it is the whole reason the greeting reads as its own
+   * moment. Without it the ask box butts straight into the sentence above and
+   * the two become one undifferentiated block - which is exactly what
+   * happened before this line existed.
+   */
+  .surface {
+    background-color: var(--frame-raised);
+    border-radius: var(--radius-panel);
+    padding: var(--space-18) var(--space-20) var(--space-16);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    inline-size: 880px;
+    max-inline-size: calc(100% - var(--space-40) * 2);
+    margin-block-start: var(--space-24);
+    margin-inline: auto;
+  }
+
+  .input {
+    inline-size: 100%;
+    min-block-size: 74px;
+    background: none;
+    border: none;
+    resize: none;
+    color: var(--frame-text);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-lead);
+    line-height: var(--line-height-snug);
+  }
+
+  .input::placeholder {
+    color: var(--frame-text-muted);
+  }
+
+  .input:focus {
+    outline: none;
+  }
+
+  .footer {
+    display: flex;
+    align-items: center;
+    gap: var(--space-9);
+  }
+
+  .tryLabel {
+    font-size: var(--font-size-caption);
+    color: var(--frame-text-faint);
+    flex: none;
+  }
+
+  /* `padding: 7px 12px; font-size: 12px` in the source. */
+  .suggestion {
+    font-size: var(--font-size-label);
+    color: var(--border-strong);
+    background-color: var(--frame-chip);
+    border: none;
+    border-radius: var(--radius-chip);
+    padding: var(--space-7) var(--space-12);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .suggestion:hover {
+    color: var(--frame-text);
+  }
+
+  .send {
+    margin-inline-start: auto;
+    inline-size: var(--size-control-sm);
+    block-size: var(--size-control-sm);
+    border-radius: var(--radius-round);
+    background-color: var(--signal-ai);
+    color: var(--frame-base);
+    border: none;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    flex: none;
+  }
+
+  .send:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  /* ── The run, once it is under way ───────────────────────────────────── */
+  .run {
+    border-block-start: var(--border-width-thin) solid var(--frame-chip);
+    padding-block-start: var(--space-14);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .answer {
+    color: var(--frame-text);
+    font-size: var(--font-size-body);
+    line-height: var(--line-height-loose);
+    white-space: pre-wrap;
+  }
+
+  .trace {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-7);
+  }
+
+  .step {
+    display: flex;
+    align-items: center;
+    gap: var(--space-9);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-caption);
+    color: var(--frame-text-muted);
+  }
+
+  .stepDot {
+    inline-size: var(--size-bullet);
+    block-size: var(--size-bullet);
+    border-radius: var(--radius-round);
+    background-color: var(--frame-text-faint);
+    flex: none;
+  }
+
+  .stepRunning .stepDot {
+    background-color: var(--signal-ai);
+  }
+
+  .stepSucceeded .stepDot {
+    background-color: var(--signal-done);
+  }
+
+  .stepFailed .stepDot,
+  .stepDenied .stepDot {
+    background-color: var(--signal-waiting);
+  }
+
+  .runFooter {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+  }
+}

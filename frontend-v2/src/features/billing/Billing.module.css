@@ -1,0 +1,1934 @@
+@layer features {
+  /*
+   * Settings · Usage & billing - screen 17.
+   *
+   * Runway first, because "how long am I good for" is the question someone
+   * opened this screen with. Then the plan, the breakdown and the invoices.
+   */
+
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-9);
+  }
+
+  .sectionHeading {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  /* ── The plan line ──────────────────────────────────────────────────── */
+  .plan {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .planLine {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+    font-size: var(--font-size-body-sm);
+  }
+
+  .planName {
+    font-weight: 600;
+  }
+
+  .planChange {
+    align-self: flex-start;
+    font-size: var(--font-size-label);
+    color: var(--text-primary);
+  }
+
+  .planPrice,
+  .planRenews {
+    color: var(--text-subtle);
+  }
+
+  .planNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  /* ── Runway ─────────────────────────────────────────────────────────── */
+  .runway {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-9);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-16);
+    padding-inline: var(--space-18);
+  }
+
+  .runwayCount {
+    margin: 0;
+    font-size: var(--font-size-heading);
+    color: var(--text-subtle);
+  }
+
+  .runwayCount strong {
+    font-size: var(--font-size-title);
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-hero);
+    color: var(--text-primary);
+  }
+
+  .runwayNote {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  /*
+   * The bar restates the two numbers above it, so it is decorative and marked
+   * `aria-hidden` in the component rather than announced twice.
+   */
+  .meter {
+    block-size: var(--size-meter);
+    background-color: var(--step-track);
+    border-radius: var(--radius-mark);
+    overflow: hidden;
+  }
+
+  .meterFill {
+    block-size: 100%;
+    background-color: var(--action-base);
+  }
+
+  /* ── Lists ──────────────────────────────────────────────────────────── */
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-11);
+  }
+
+  .card {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+    min-inline-size: 0;
+  }
+
+  .row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-12);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+    font-size: var(--font-size-meta);
+  }
+
+  .row + .row {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .rowLabel {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .rowValue {
+    flex: none;
+    font-weight: 500;
+  }
+
+  .pdf {
+    flex: none;
+    font-size: var(--font-size-caption);
+    color: var(--text-primary);
+    text-decoration: none;
+    border-block-end: var(--border-width-thin) solid var(--border-emphasis);
+  }
+
+  /* "We could not find out" - never the same as "there is nothing". */
+  .unavailable {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .empty {
+    margin: 0;
+    padding-block: var(--space-16);
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  /* ── Invoices ────────────────────────────────────────────────────────── */
+  /*
+   * Four charges that did not go through is not a row in a table. It goes
+   * above the list, because it is the reason a merchant would open this
+   * screen at all - and the screen used to say the feature did not exist.
+   */
+  .invoicesFailed {
+    margin: 0 0 var(--space-12);
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .invoiceList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .invoice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-10);
+    padding-block: var(--space-10);
+  }
+
+  .invoice + .invoice {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .invoiceWhen,
+  .invoiceStatus,
+  .invoiceNoReceipt {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .invoiceAmount {
+    font-size: var(--font-size-meta);
+  }
+
+  .invoiceStatus[data-status='FAILED'] {
+    color: var(--intent-blocked-text);
+    font-weight: 500;
+  }
+
+  .invoiceStatus[data-status='PAID'] {
+    color: var(--intent-calm-text);
+  }
+
+  /*
+   * Why there is no receipt. A blank where a link belongs reads as a
+   * document that went astray; `providerPdfUrl` is written with PAID, so a
+   * failed invoice never had one.
+   */
+  .invoiceNoReceipt {
+    max-inline-size: var(--size-reading);
+    line-height: var(--line-height-snug);
+  }
+
+  .invoiceReceipt {
+    font-size: var(--font-size-caption);
+  }
+
+  /* ── 17d · running low ───────────────────────────────────────────────── */
+  .autoState,
+  .autoWarning,
+  .autoCap,
+  .autoBehavior {
+    margin: 0 0 var(--space-6);
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+  }
+
+  .autoWarning,
+  .autoCap {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * A cap with pay-as-you-go stops the auto-purchase, not the bill. It is the
+   * one combination on this screen that looks safe and is not, so it does not
+   * read as a footnote.
+   */
+  .autoContradiction {
+    margin: var(--space-8) 0 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-14);
+  }
+
+  /*
+   * A behaviour the runtime honours and the settings API refuses. Stated
+   * rather than hidden, because the cap warning is about it.
+   */
+  .autoUnsettable {
+    margin: var(--space-6) 0 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  /* ── 17e · billing details ───────────────────────────────────────────── */
+  /*
+   * Four charges failed against an entity with nothing to charge them to.
+   * Those two facts belong in one sentence, and it is the only actionable
+   * thing on the page.
+   */
+  .noCard {
+    margin: 0 0 var(--space-10);
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .profileNone,
+  .profileAbsent {
+    margin: var(--space-8) 0 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .profileFields {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .profileField {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    font-size: var(--font-size-caption);
+  }
+
+  .profileField dt {
+    color: var(--text-subtle);
+    min-inline-size: var(--size-fact-label);
+  }
+
+  .profileField dd {
+    margin: 0;
+    font-size: var(--font-size-meta);
+  }
+
+  /* ── Screen 17b · Plan & pricing ─────────────────────────────────────── */
+
+  .pricing {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .pricingNote {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /*
+   * A scheduled change is set apart rather than being one more line, because
+   * it is the only thing on this screen that is about the FUTURE. Read as a
+   * statement of the present it would be simply wrong.
+   */
+  .pendingChange {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .pendingLine {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  /* "Nothing changes until then" - the reassurance, deliberately quieter. */
+  .pendingReassurance {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .pricingDisclaimer {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .changeNotes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .changeNote {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  .packages {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .package {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .packageName {
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+  }
+
+  .packageCredits {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* Expiry sits on the tile because after the purchase nothing can say it. */
+  .packageExpiry {
+    flex-basis: 100%;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* ── Screen 17c · Credits ────────────────────────────────────────────── */
+
+  /* 17's first card: 18 × 20, white, gap 12. */
+  .credits {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    padding-block: var(--space-18);
+    padding-inline: var(--space-20);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    line-height: normal;
+  }
+
+  .creditsHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-10);
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .creditsCycle {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+  }
+
+  .creditsFigure {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-10);
+    margin: 0;
+  }
+
+  .creditsBalance {
+    font-size: 34px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-hero);
+    color: var(--text-primary);
+  }
+
+  .creditsPending {
+    padding-block: 3px;
+    padding-inline: var(--space-8);
+    border-radius: var(--radius-badge);
+    background-color: var(--panel-inset);
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+  }
+
+  .creditsComposition {
+    font-size: var(--font-size-body-sm);
+    color: var(--text-subtle);
+  }
+
+  .creditsBar {
+    display: flex;
+    block-size: 8px;
+    border-radius: 4px;
+    background-color: var(--panel-inset);
+    overflow: hidden;
+  }
+
+  .creditsBarPlan {
+    background-color: var(--action-base);
+  }
+
+  .creditsBarBought {
+    background-color: var(--signal-ai);
+  }
+
+  .creditsLegend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-18);
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .creditsKey {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-6);
+  }
+
+  .creditsSwatchPlan,
+  .creditsSwatchBought {
+    inline-size: 8px;
+    block-size: 8px;
+    border-radius: var(--radius-mark);
+    background-color: var(--action-base);
+  }
+
+  .creditsSwatchBought {
+    background-color: var(--signal-ai);
+  }
+
+  .creditsTiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-10);
+    margin-block-start: var(--space-2);
+  }
+
+  .creditsTile {
+    padding-block: var(--space-11);
+    padding-inline: var(--space-14);
+    border-radius: var(--radius-control);
+    background-color: var(--panel-footer);
+  }
+
+  .creditsTileValue {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .creditsTileSub {
+    margin: var(--space-3) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .creditsNote {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /*
+   * What an estimate rests on, set quieter than the estimate itself - it is a
+   * qualification, not a second number. But it is never absent: the route
+   * ships two estimates from different bases and forbids substituting them,
+   * so an unlabelled figure here would be a pricing claim made out of one
+   * customer's behaviour.
+   */
+  .creditsBasis {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .creditsEstimate {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  /* Credits contracted but never granted - a state, not a shortfall. */
+  .creditsNotice {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .creditsNoticeLead {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  /* ── 17d · buying credits ─────────────────────────────────────────────── */
+
+  .buyHeading {
+    margin-block: 0 var(--space-12);
+    font-size: var(--font-size-meta);
+  }
+
+  /* 17d, measured: the packs as tiles side by side, 14 padding, radius 13. */
+  .buyPacks {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    /* 02: one row, however many packs. */
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    gap: var(--space-10);
+  }
+
+  .buyPack {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    block-size: 100%;
+    padding: var(--space-14);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 13px;
+    font-size: var(--font-size-meta);
+    cursor: pointer;
+  }
+
+  /* The radio stays for the keyboard and a screen reader; the tile shows it. */
+  .buyPack > input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .buyPack:has(input:checked) {
+    border: 2px solid var(--action-base);
+  }
+
+  .buyPack:has(input:focus-visible) {
+    outline: var(--focus-ring-width) solid var(--action-base);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .buyPackName {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .buyPackCredits {
+    color: var(--text-subtle);
+  }
+
+  /* The one place per-pack expiry ever reaches a customer. */
+  .buyPackExpiry {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .buyQuantity {
+    margin-block-start: var(--space-12);
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .buyQuantity input {
+    font: inherit;
+    inline-size: 4rem;
+    padding: var(--space-4);
+  }
+
+  .buyTotals {
+    margin-block: var(--space-12);
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .buyTotals > div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-12);
+  }
+
+  .buyTotals dt,
+  .buyTotals dd {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+    The total is the amount that leaves the account, so it is the only row at
+    full weight. The net figure above it is the one a design would emphasise
+    and the one nobody is actually charged.
+  */
+  .buyTotalRow dt,
+  .buyTotalRow dd {
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    /* The total. Bold and full contrast, since it is the number somebody is
+       agreeing to pay. */
+    color: var(--text-primary);
+  }
+
+  .buyUnknownTotal,
+  .buyBlocked {
+    margin-block: var(--space-12) 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  /*
+   * `.buyButton` is gone: the control is the `Button` primitive now, which
+   * carries its own states. What was here was ONLY a `:disabled` rule - no
+   * base style - so the button rendered as centred plain text on the screen
+   * that charges a card.
+   */
+
+  .buyPackPrice {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .buyOk {
+    margin-block: var(--space-8) 0;
+    font-size: var(--font-size-caption);
+  }
+
+  .buyError {
+    margin-block: var(--space-8) 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  /*
+    An unsettled charge is NOT an error, and must not be styled as one - the
+    reader has to finish this sentence rather than dismiss it as a failure
+    and press the button again.
+  */
+  .buyUnsettled {
+    margin-block: var(--space-8) 0;
+    padding: var(--space-8);
+    border: 1px solid var(--intent-urgent-edge);
+    background: var(--intent-urgent-surface);
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+}
+
+@layer features {
+  /*
+   * 17, measured. The plan: one dark band, 20 × 22, radius 16 - the tag, the
+   * name at 30 with its price, the facts at 12, and the two ways out.
+   */
+  .hero {
+    display: flex;
+    align-items: center;
+    gap: var(--space-24);
+    padding-block: var(--space-20);
+    padding-inline: var(--space-22);
+    border-radius: 16px;
+    background-color: var(--frame-raised);
+    line-height: normal;
+  }
+
+  .heroMain {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  .heroTagRow,
+  .heroNameRow,
+  .heroFacts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    margin: 0;
+  }
+
+  .heroTagRow {
+    gap: var(--space-10);
+    align-items: center;
+  }
+
+  .heroTag {
+    padding-block: var(--space-4);
+    padding-inline: 7px;
+    border-radius: 5px;
+    background-color: var(--signal-ai);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+    color: var(--text-primary);
+  }
+
+  .heroSince {
+    font-size: var(--font-size-label);
+    color: var(--menu-dark-icon);
+  }
+
+  .heroNameRow {
+    gap: var(--space-14);
+  }
+
+  .heroName {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-hero);
+    color: var(--frame-text);
+  }
+
+  .heroPrice {
+    font-size: 15px;
+    color: var(--frame-text-body);
+  }
+
+  .heroFacts {
+    gap: var(--space-18);
+    font-size: var(--font-size-label);
+    color: var(--frame-text-secondary);
+  }
+
+  .heroActions {
+    display: flex;
+    flex: none;
+    gap: var(--space-8);
+  }
+
+  .heroChange,
+  .heroBuy {
+    padding-block: var(--space-10);
+    padding-inline: var(--space-18);
+    border-radius: 10px;
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .heroChange {
+    background-color: var(--frame-text);
+    color: var(--text-primary);
+  }
+
+  .heroBuy {
+    background-color: var(--frame-selected);
+    color: var(--frame-text);
+  }
+
+  /* Then two columns, 507 · 375 at 896, gap 14. */
+  .overview {
+    display: grid;
+    grid-template-columns: minmax(0, 507fr) minmax(0, 375fr);
+    gap: var(--space-14);
+    align-items: start;
+    line-height: normal;
+  }
+
+  .overviewMain,
+  .overviewSide {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    min-inline-size: 0;
+  }
+
+  .cardHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-10);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .cardTitle {
+    flex: 1;
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .cardHeadNote {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .underlineLink {
+    font-size: var(--font-size-label);
+    color: var(--text-primary);
+    text-decoration: none;
+    border-block-end: var(--border-width-thin) solid var(--border-strong);
+  }
+
+  /* ── Where credits went: name · avg 90 · count 60 · credits 70 ─────── */
+  .went,
+  .billingCard {
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+    min-inline-size: 0;
+  }
+
+  .wentRows {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .wentRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-16);
+    font-size: var(--font-size-meta);
+  }
+
+  .wentRow + .wentRow {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .wentName {
+    flex: 1;
+    min-inline-size: 0;
+    color: var(--text-primary);
+  }
+
+  .wentAvg {
+    inline-size: 90px;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .wentCount {
+    inline-size: 60px;
+    text-align: end;
+    color: var(--text-secondary);
+  }
+
+  .wentCredits {
+    inline-size: 70px;
+    text-align: end;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  /* ── When credits run low ─────────────────────────────────────────── */
+  .lowCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .lowHead {
+    display: flex;
+    align-items: baseline;
+  }
+
+  .lowRule {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+    color: var(--text-body);
+  }
+
+  .lowCap {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .alertLine,
+  .billingAlert {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  /* ── Billing: label 84 · value · action ───────────────────────────── */
+  .billingRows {
+    margin: 0;
+  }
+
+  .billingRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-16);
+  }
+
+  .billingRow + .billingRow {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .billingRow > dt {
+    flex: none;
+    inline-size: 84px;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .billingRow > dd {
+    flex: 1;
+    min-inline-size: 0;
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+
+  .billingAll {
+    flex: none;
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+    text-decoration: none;
+  }
+
+  .billingAlert {
+    padding-block: var(--space-10);
+    padding-inline: var(--space-16);
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .cycleValue {
+    margin: 0;
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-footer);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+
+  .cycleValueLabel {
+    color: var(--text-subtle);
+  }
+
+  /* ── 17c · 17d · 17e over 17 ──────────────────────────────────────── */
+  .overlayLayer {
+    position: absolute;
+    inset: 0;
+    z-index: var(--z-panel);
+  }
+
+  .overlayScrim {
+    position: absolute;
+    inset: 0;
+    background-color: var(--panel-scrim);
+  }
+
+  .overlayDrawer,
+  .overlayDialog {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-field);
+    line-height: normal;
+  }
+
+  .overlayDrawer {
+    inset-block: 0;
+    inset-inline-end: 0;
+    inline-size: min(620px, 100%);
+  }
+
+  .overlayDialog {
+    inset-block-start: 50%;
+    inset-inline-start: 50%;
+    translate: -50% -50%;
+    inline-size: min(700px, calc(100% - var(--space-32)));
+    max-block-size: calc(100% - var(--space-32));
+    border-radius: var(--radius-panel);
+  }
+
+  .overlayHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: 22px var(--space-18);
+    padding-inline: var(--space-26);
+    border-block-end: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .overlayTitles {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  .overlayLine {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-muted);
+  }
+
+  .overlayTitle {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .overlayClose {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  .overlayBody {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-16);
+    min-block-size: 0;
+    overflow-y: auto;
+    padding-block: 22px;
+    padding-inline: var(--space-26);
+  }
+
+  @media (width <= 900px) {
+    .hero {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .overview {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}
+
+@layer features {
+  /*
+   * 17 in 02's frame: the two columns take the rest of its height, and
+   * "Where credits went" runs to the bottom with its rows scrolling inside.
+   */
+  @media (width > 900px) {
+    .overview {
+      flex: 1;
+      min-block-size: 0;
+      align-items: stretch;
+    }
+
+    .overviewMain {
+      min-block-size: 0;
+    }
+
+    .went {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-block-size: 0;
+    }
+
+    .wentRows {
+      flex: 1;
+      min-block-size: 0;
+      overflow-y: auto;
+    }
+  }
+}
+
+@layer features {
+  /* ── 17b · the plans, side by side (gap 14), 18 × 18 × 16, radius 16 ── */
+  .choiceCards {
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    gap: var(--space-14);
+    margin: 0;
+    padding: 0;
+    padding-block-start: var(--space-10);
+    list-style: none;
+    line-height: normal;
+  }
+
+  .choiceItem {
+    display: flex;
+  }
+
+  .choiceCard {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-12);
+    padding: var(--space-18) var(--space-18) var(--space-16);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 16px;
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .choiceCard[data-kind='current'] {
+    border-color: transparent;
+    background-color: var(--frame-raised);
+    color: var(--frame-text);
+  }
+
+  .choiceCard[data-kind='selected'] {
+    border: 2px solid var(--action-base);
+  }
+
+  .choiceTagMine,
+  .choiceTagSelected {
+    position: absolute;
+    inset-block-start: -10px;
+    inset-inline-start: var(--space-16);
+    padding-block: var(--space-4);
+    padding-inline: 7px;
+    border-radius: 5px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+  }
+
+  .choiceTagMine {
+    background-color: var(--signal-ai);
+    color: var(--text-primary);
+  }
+
+  .choiceTagSelected {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .choiceNameRow,
+  .choicePriceRow {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-10);
+  }
+
+  .choicePriceRow {
+    gap: 0;
+  }
+
+  .choiceRadio {
+    flex: none;
+    align-self: center;
+    inline-size: 18px;
+    block-size: 18px;
+    border: var(--border-width-thin) solid var(--border-strong);
+    border-radius: var(--radius-round);
+  }
+
+  .choiceCard[data-kind='selected'] .choiceRadio {
+    border: 5px solid var(--action-base);
+  }
+
+  .choiceName {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+  }
+
+  .choicePrice {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+  }
+
+  .choicePer {
+    margin-inline-start: var(--space-2);
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .choiceCard[data-kind='current'] .choicePer {
+    color: var(--frame-text-secondary);
+  }
+
+  .choiceCredits {
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+  }
+
+  .choiceFeatures {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .choiceFeature {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+  }
+
+  .choiceCard[data-kind='current'] .choiceFeature {
+    color: var(--frame-text-body);
+  }
+
+  .choiceNone {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-faint);
+  }
+
+  /* What switching would do (582) beside the button column (300). */
+  .switchRow {
+    display: grid;
+    grid-template-columns: minmax(0, 582fr) minmax(0, 300fr);
+    gap: var(--space-14);
+    align-items: start;
+    line-height: normal;
+  }
+
+  .summary {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding-block: var(--space-16);
+    padding-inline: var(--space-18);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .summaryTitle {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .summaryNone {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .summaryRow {
+    display: flex;
+    gap: var(--space-12);
+    margin: 0;
+    font-size: var(--font-size-meta);
+  }
+
+  .summaryLabel {
+    flex: none;
+    inline-size: 130px;
+    color: var(--text-subtle);
+  }
+
+  .summaryValue {
+    flex: none;
+    inline-size: 110px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .summaryNote {
+    color: var(--text-muted);
+  }
+
+  .switchSide {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  .switchActions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .switchButton {
+    display: flex;
+    justify-content: center;
+    padding-block: var(--space-12);
+    padding-inline: var(--space-18);
+    border-radius: 10px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    cursor: default;
+  }
+
+  .switchKeep {
+    align-self: center;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .switchFine {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    line-height: 1.5;
+    color: var(--text-subtle);
+  }
+
+  .switchNotes {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .switchNotesSummary {
+    cursor: pointer;
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+  }
+
+  @media (width <= 900px) {
+    .choiceCards {
+      grid-auto-flow: row;
+    }
+
+    .switchRow {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}
+
+@layer features {
+  /* ── 17c · three answers as cards, 14 × 16, radius 13 ──────────────── */
+  .lowDrawer,
+  .detailsDrawer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    line-height: normal;
+  }
+
+  .lowOption {
+    display: flex;
+    gap: 13px;
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 13px;
+  }
+
+  .lowOption[data-current='yes'] {
+    border: 2px solid var(--action-base);
+  }
+
+  .lowRadio {
+    flex: none;
+    inline-size: 18px;
+    block-size: 18px;
+    margin-block-start: var(--space-2);
+    border: var(--border-width-thin) solid var(--border-strong);
+    border-radius: var(--radius-round);
+  }
+
+  .lowOption[data-current='yes'] .lowRadio {
+    border: 5px solid var(--action-base);
+  }
+
+  .lowOptionBody {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-6);
+    min-inline-size: 0;
+  }
+
+  .lowOptionName {
+    margin: 0;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .lowOptionText {
+    margin: 0;
+    font-size: var(--font-size-label);
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+
+  .lowHeading {
+    margin: var(--space-6) 0 0;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .lowAlerts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-9);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .lowAlert {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  /* 15's pill, as 02 draws it here: on is ink, off the hairline. */
+  .lowPill {
+    flex: none;
+    inline-size: 32px;
+    block-size: 18px;
+    border-radius: 9px;
+    background-color: var(--border-default);
+  }
+
+  .lowPill[data-on='yes'] {
+    background-color: var(--action-base);
+  }
+
+  .lowNone {
+    flex: none;
+    inline-size: 32px;
+    text-align: center;
+    color: var(--text-faint);
+  }
+
+  /* ── 17e · the card row, and 02's field boxes ───────────────────────── */
+  .detailsCard {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-step);
+  }
+
+  .detailsBrand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 40px;
+    block-size: 28px;
+    border-radius: var(--radius-badge);
+    background-color: var(--panel-inset);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .detailsCardText {
+    flex: 1;
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .detailsCardSub {
+    display: block;
+    font-size: var(--font-size-caption);
+    font-weight: 400;
+    color: var(--text-subtle);
+  }
+
+  .lowUnset {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-muted);
+  }
+
+  .overlayFoot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-16);
+    padding-inline: var(--space-26);
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .overlayFootPrimary {
+    padding-block: var(--space-10);
+    padding-inline: var(--space-18);
+    border-radius: 10px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  .overlayFootPrimary[data-live] {
+    border: 0;
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    cursor: pointer;
+    opacity: 1;
+  }
+
+  /* A billing write held at its confirm: what it would do, then a status for Yes. */
+  /* The pack answer's fields, under it once it is chosen. */
+  .autoFields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-10) var(--space-12);
+    margin-block-start: var(--space-10);
+  }
+
+  /* A recent invoice that is not paid says so - failed in the alert colour. */
+  .invoiceState {
+    color: var(--text-subtle);
+  }
+
+  .invoiceState[data-status='FAILED'] {
+    color: var(--alert-text);
+  }
+
+  /* A card session's live Yes, and the page it returns to. */
+  .cardGo {
+    padding-block: var(--space-6);
+    padding-inline: var(--space-14);
+    border: none;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--action-text);
+    cursor: pointer;
+  }
+
+  .cardGo:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .cardReturn {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    max-inline-size: var(--size-reading);
+  }
+
+  .heldConfirm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    max-inline-size: var(--size-reading);
+  }
+
+  .heldSentence {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .heldActions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
+    margin: 0;
+  }
+
+  .heldCancel {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .overlayFootCancel {
+    font-size: var(--font-size-body-sm);
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .overlayFootNote {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .detailsAction {
+    padding-block: 7px;
+    padding-inline: var(--space-12);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    font-size: var(--font-size-label);
+    color: var(--text-body);
+    cursor: default;
+  }
+
+  .detailsFields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-16) var(--space-12);
+  }
+
+  .detailsInput {
+    padding-block: var(--space-10);
+    padding-inline: 13px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .profileSaved {
+    margin: var(--space-8) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--signal-done-text);
+  }
+
+  .profileProblem {
+    margin: var(--space-8) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+
+  .detailsField {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .detailsLabel {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .detailsBox {
+    padding-block: var(--space-10);
+    padding-inline: 13px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-base);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+
+  .detailsChips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-6);
+    margin: 0;
+    padding-block: 7px;
+    padding-inline: var(--space-9);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+  }
+
+  .detailsChip {
+    padding-block: var(--space-4);
+    padding-inline: var(--space-9);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 7px;
+    background-color: var(--panel-field);
+    font-size: var(--font-size-label);
+    color: var(--text-primary);
+  }
+}
+
+@layer features {
+  /* 17d's shape while its packages cannot be read. */
+  .buyShape {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    line-height: normal;
+  }
+
+  .buyShapeTiles {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-10);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .buyShapeTile {
+    block-size: 111px;
+    padding: var(--space-14);
+    border: var(--border-width-thin) dashed var(--border-default);
+    border-radius: 13px;
+    font-size: 18px;
+    color: var(--text-faint);
+  }
+
+  .buyShapePay {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    margin: 0;
+  }
+
+  .buyShapeLabel {
+    inline-size: 70px;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .buyShapeCard {
+    flex: 1;
+    padding-block: var(--space-9);
+    padding-inline: var(--space-12);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+}
+
+@layer features {
+  .buyPackEach {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .buyShared {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .buyPayWith {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    margin: 0;
+  }
+
+  .buyPayLabel {
+    flex: none;
+    inline-size: 70px;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .buyPayCard {
+    flex: 1;
+    padding-block: var(--space-9);
+    padding-inline: var(--space-12);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .buyActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .buyCancel {
+    font-size: var(--font-size-body-sm);
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .buyReceipt {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  @media (width <= 700px) {
+    .buyPacks {
+      grid-auto-flow: row;
+    }
+  }
+}

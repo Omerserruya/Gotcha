@@ -1,0 +1,641 @@
+@layer features {
+  /*
+   * Screen 10 · Studio · What GOTCHA is allowed to do - measured.
+   *
+   * Grouped by CATEGORY, which is stored, and never by `riskGroup`, which is
+   * a regex over the tool's name with a catch-all fallback - grouping by it
+   * would render "matched no pattern" as "create/update risk".
+   *
+   * 02 sets no line-height anywhere on this screen.
+   */
+
+  .screen {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    line-height: normal;
+  }
+
+  /* ── The selected system's header: a 38px tile, 16/600, state on the right ── */
+  .systemHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    line-height: normal;
+  }
+
+  .systemTile {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    flex: none;
+    inline-size: 38px;
+    block-size: 38px;
+    border-radius: 10px;
+    background-color: var(--border-subtle);
+  }
+
+  .systemTitle {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  /* A mark inside its tile; the tile's own ground shows around it. */
+  /* 14's pill tile: 26px, white, a hairline - the mark at 14px. */
+  .pillTile {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    flex: none;
+    inline-size: 26px;
+    block-size: 26px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background-color: var(--panel-field);
+  }
+
+  .logo {
+    inline-size: 72%;
+    block-size: 72%;
+    object-fit: contain;
+  }
+
+  .logoIcon {
+    color: var(--text-muted);
+  }
+
+  .systemName {
+    font-size: var(--font-size-lead);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .systemLine {
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+  }
+
+  /* The connection's last error, in words, under its line. */
+  .systemError {
+    font-size: var(--font-size-label);
+    color: var(--alert-text);
+  }
+
+  .systemActions {
+    display: flex;
+    flex: none;
+    gap: var(--space-8);
+  }
+
+  /* "Connected · …": the calm green, radius 9, `padding:8px 12px`. */
+  .systemState {
+    padding: var(--space-8) var(--space-12);
+    border-radius: var(--radius-item);
+    background-color: var(--signal-done-surface);
+    font-size: var(--font-size-label);
+    color: var(--signal-done-text);
+  }
+
+  .systemState:not([data-state='CONNECTED']) {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .systemNarrow {
+    padding: var(--space-8) var(--space-14);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-item);
+    font-size: var(--font-size-label);
+    color: var(--text-body);
+    cursor: default;
+  }
+
+  /* ── A group: one white card, its mono head on `#F5F2EC` ── */
+  .group {
+    overflow: clip;
+    min-inline-size: 0;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .groupHeading {
+    margin: 0;
+    padding: 11px 18px;
+    background-color: var(--table-head-surface);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .capabilities {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* A row: what it is over how it ran, the control on the right. */
+  .capability {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--space-16);
+    row-gap: var(--space-4);
+    align-items: center;
+    padding: 13px 18px;
+  }
+
+  .capability + .capability {
+    border-block-start: 1px solid var(--row-divider);
+  }
+
+  .what {
+    grid-column: 1;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  /* How often it has run. Quiet - evidence beside a setting, not a headline. */
+  .used {
+    grid-column: 1;
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * Do it / Ask me / Never - 02's segmented control: `#F3F0EA`, radius 8,
+   * `padding:3px`, gap 3; the stored one dark. Dark, not green: `never` is
+   * as correct a state as `do it`, and a colour would congratulate whichever
+   * one an admin happened to have.
+   */
+  .choice {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-4);
+  }
+
+  .choiceRow {
+    display: flex;
+    gap: 3px;
+    padding: 3px;
+    border-radius: var(--space-8);
+    background-color: var(--panel-inset);
+  }
+
+  .choiceButton {
+    padding: 5px 11px;
+    border-radius: 6px;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .choiceButton[data-current='yes'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  /*
+   * Blocked by the platform: it must LOOK unpressable, or a click that does
+   * nothing reads as broken. The stored one stays marked, dimmed with the rest.
+   */
+  .choice[data-blocked='yes'] .choiceRow {
+    opacity: 0.5;
+  }
+
+  .choice[data-blocked='yes'] .choiceButton {
+    cursor: not-allowed;
+  }
+
+  .choiceNote {
+    margin: 0;
+    max-inline-size: 260px;
+    font-size: var(--font-size-micro);
+    text-align: end;
+    color: var(--text-muted);
+  }
+
+  /* A stored state the ceiling would now forbid, and a failed write. */
+  .choiceWarn {
+    margin: 0;
+    max-inline-size: 260px;
+    font-size: var(--font-size-micro);
+    text-align: end;
+    color: var(--intent-urgent-text);
+  }
+
+  .ceiling {
+    margin: 0;
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  /* 02's violet card: `padding:15px 18px`, radius 14. */
+  .suggest {
+    padding: 15px 18px;
+    border: 1px solid var(--ai-card-edge);
+    border-radius: var(--radius-card);
+    background-color: var(--ai-card-surface);
+  }
+
+  .suggestBody {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--ai-card-text);
+  }
+
+  /*
+   * The facts identical on every row, said once - seventeen identical
+   * toggles would read as seventeen decisions. Not in 02: kept, quiet, at
+   * the foot.
+   */
+  .uniform {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  /* ── Nothing available ───────────────────────────────────────────────── */
+  .empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .emptyLead {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .emptyBody {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /* ── The rail (290): a search, CONNECTED, AVAILABLE ── */
+  .rail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    line-height: normal;
+  }
+
+  .railSearch {
+    position: relative;
+    margin-block-end: var(--space-14);
+  }
+
+  .railSearchIcon {
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-start: 12px;
+    transform: translateY(-50%);
+    color: var(--text-subtle);
+    pointer-events: none;
+  }
+
+  .railSearchInput {
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding: var(--space-8) 11px var(--space-8) 34px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-item);
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .railSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .railHeading,
+  .railHeadingRule {
+    display: flex;
+    justify-content: space-between;
+    margin: 0;
+    padding: 0 var(--space-10) var(--space-8);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  /* AVAILABLE starts a new block: a rule above, `padding:14px 10px 8px`. */
+  .railHeadingRule {
+    margin-block-start: var(--space-8);
+    padding-block-start: var(--space-14);
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .railList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* A connected row: radius 9, `padding:9px 11px`, gap 10; selected white. */
+  .railRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    padding: var(--space-9) 11px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-item);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* An available row is a little tighter: 02 measures it at 8px. */
+  .railRowAvailable {
+    padding-block: var(--space-8);
+  }
+
+  .railRow[aria-current='page'] {
+    border-color: var(--border-default);
+    background-color: var(--panel-field);
+  }
+
+  .railTile {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    flex: none;
+    inline-size: 22px;
+    block-size: 22px;
+    border-radius: 6px;
+    background-color: var(--border-subtle);
+  }
+
+  .railName {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-body);
+  }
+
+  .railRow[aria-current='page'] .railName {
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .railNameStack {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 1px;
+    min-inline-size: 0;
+  }
+
+  .railSub {
+    overflow: hidden;
+    font-size: var(--font-size-counter);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--text-subtle);
+  }
+
+  .railCount,
+  .railState {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-counter);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  .railState[data-state='ERROR'] {
+    color: var(--intent-urgent-text);
+  }
+
+  /* "Connect": outline, radius 7, `padding:4px 9px`, 11px. */
+  .railConnect {
+    flex: none;
+    padding: var(--space-4) var(--space-9);
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    font-size: var(--font-size-micro);
+    color: var(--text-primary);
+    cursor: inherit;
+  }
+
+  .railChips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-6);
+    padding: 0 var(--space-4) var(--space-8);
+  }
+
+  .railChip {
+    padding: var(--space-4) var(--space-9);
+    border-radius: 7px;
+    background-color: var(--panel-inset);
+    font-size: var(--font-size-micro);
+    color: var(--text-body);
+  }
+
+  .railChip[aria-pressed='true'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .railNote {
+    margin: 0;
+    padding: 0 var(--space-10);
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  /* ── 10 for a system that is not connected: its own screen ── */
+  .available {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    line-height: normal;
+  }
+
+  .connectCard {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-14);
+    padding: var(--space-18);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .connectHeading {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .connectForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    inline-size: min(420px, 100%);
+  }
+
+  .connectField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .connectLabel {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .connectBox {
+    min-block-size: 36px;
+    padding: var(--space-8) var(--space-12);
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .connectFoot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
+  .connectButton {
+    padding: var(--space-8) var(--space-16);
+    border: none;
+    border-radius: var(--radius-item);
+    background-color: var(--action-base);
+    font: inherit;
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-medium);
+    color: var(--action-text);
+    cursor: pointer;
+  }
+
+  .connectButton:disabled,
+  .connectButton[aria-disabled='true'] {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .connectNote {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .connectProblem {
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+
+  .bringsNone {
+    margin: 0;
+    padding: 13px 18px;
+    color: var(--text-subtle);
+  }
+
+  /* The catalogue's own risk level - stored, not inferred from a name. */
+  .risk {
+    margin-inline-start: var(--space-8);
+    padding: 2px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--intent-neutral-surface);
+    font-size: var(--font-size-micro);
+    color: var(--intent-neutral-text);
+    white-space: nowrap;
+  }
+
+  .risk[data-risk='MEDIUM'] {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .risk[data-risk='HIGH'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  /* One line for a connection that is down - said once, not on every row. */
+  .down {
+    margin: 0;
+    padding: var(--space-10) var(--space-14);
+    border-radius: var(--radius-item);
+    background-color: var(--intent-blocked-surface);
+    font-size: var(--font-size-label);
+    color: var(--intent-blocked-text);
+  }
+
+  .oauth {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  /* The way back from a provider: once, above the system's screen. */
+  .landing {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+    margin: 0 0 var(--space-12);
+    padding: var(--space-10) var(--space-14);
+    border-radius: var(--radius-item);
+    background-color: var(--signal-done-surface);
+    font-size: var(--font-size-label);
+    color: var(--signal-done-text);
+  }
+
+  .landing[data-outcome='problem'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .downRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
+  .landingClose {
+    display: grid;
+    place-items: center;
+    padding: 2px;
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+  }
+}

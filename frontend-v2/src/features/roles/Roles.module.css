@@ -1,0 +1,1302 @@
+@layer features {
+  /*
+   * Screen 12b · Settings · People & teams · Roles.
+   *
+   * A role is a name and a set of permission keys. The design describes each
+   * one in prose including money limits; there is no amount column anywhere,
+   * so this screen counts permissions and says outright that roles carry no
+   * limits - rather than leaving a reader to assume the cap is elsewhere.
+   */
+
+  .screen {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .name {
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+
+  /* ── 12c · the permission catalogue ──────────────────────────────────── */
+  .catalog {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  /*
+   * Said once, above the catalogue. A reader arriving from the mockup expects
+   * a None/View/Edit/Manage ladder and a scope per row; neither exists, and
+   * meeting sixty-three independent switches without warning reads as a
+   * missing feature rather than a different model.
+   */
+  .catalogNote {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .domain {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  /*
+   * ★★ NO `text-transform`. IT WAS CAPITALISING A PLATFORM IDENTIFIER.
+   * `group.domain` reached the DOM as `crm` and this rule rendered it as
+   * `Crm` - so the source was lowercase (a source sweep saw nothing), it had
+   * no underscore (a screaming-identifier probe saw nothing), and the only
+   * instrument that could see it was a person looking at the page.
+   *
+   * A presentational transform that changes what a word SAYS is not
+   * presentational. `humaniseCode` knows `crm` is CRM; CSS cannot.
+   */
+  .domainHeading {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+  }
+
+  .permissions {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+    min-inline-size: 0;
+  }
+
+  .permission {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-16);
+  }
+
+  .permission + .permission {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .permissionName {
+    font-size: var(--font-size-meta);
+  }
+
+  .permissionWhat {
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+    max-inline-size: var(--size-reading);
+  }
+
+  /*
+   * Only on permissions that declare the dimension. A disabled control on a
+   * row that has none would imply a setting exists and is turned off.
+   */
+  .permissionScoped {
+    font-size: var(--font-size-caption);
+    color: var(--intent-calm-text);
+  }
+
+  /* ── 12d · one person ────────────────────────────────────────────────── */
+  .person {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  .personHead {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .personName {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 600;
+  }
+
+  .personMeta,
+  .personScope {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .overrides {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+  }
+
+  .overridesHeading {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+  }
+
+  .overridesNone,
+  .overridesLast {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .grantList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .grant {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-6);
+    font-size: var(--font-size-caption);
+  }
+
+  .grantFeature {
+    font-weight: 500;
+  }
+
+  /*
+   * A removal must not read like an absence. "Cannot refund" and "refund
+   * taken away, by Maya, because…" are different facts, and only the second
+   * one tells a reader there is a decision behind it.
+   */
+  .grant[data-kind='removed'] .grantWhat {
+    color: var(--intent-blocked-text);
+    font-weight: 500;
+  }
+
+  .grant[data-kind='added'] .grantWhat {
+    color: var(--intent-calm-text);
+  }
+
+  .grantWhy {
+    color: var(--text-subtle);
+  }
+
+  /* Ours and not ours, told apart rather than made to look alike. */
+  .elsewhere {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /* ── 12e · taking a permission away ─────────────────────────────────── */
+  /*
+   * Deliberately NOT the same control as adding. Adding and removing have
+   * opposite visibility - an addition shows the moment it is used, a removal
+   * is invisible everywhere but the person panel - so the controls must not
+   * look comparable.
+   */
+  .removeStart {
+    align-self: flex-start;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+    background: none;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-6);
+    padding-inline: var(--space-12);
+    cursor: pointer;
+  }
+
+  .removeConfirm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+  }
+
+  .removeLead {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--intent-blocked-text);
+  }
+
+  /*
+   * The fact an admin cannot work out from the screen: after this, they are
+   * the only person who can find it.
+   */
+  .removeWhere {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  .removeReasonLabel {
+    font-size: var(--font-size-caption);
+    color: var(--text-body);
+  }
+
+  .removeReason {
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-12);
+  }
+
+  /* Required here though the endpoint allows it empty. */
+  .removeReasonWhy {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .removeError {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  .removeActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    margin-block-start: var(--space-4);
+  }
+
+  .removeGo,
+  .removeBack {
+    font: inherit;
+    font-size: var(--font-size-caption);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-14);
+    cursor: pointer;
+  }
+
+  .removeGo {
+    color: var(--panel-base);
+    background-color: var(--intent-blocked-text);
+    border: none;
+  }
+
+  .removeGo:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* The safe option is plainer, but not quieter. */
+  .removeBack {
+    color: var(--text-body);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+  }
+
+  /* ── Screen 12c · create a role ──────────────────────────────────────── */
+
+  .roleForm {
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    gap: var(--space-10);
+  }
+
+  .formHeading {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 500;
+  }
+
+  .formField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .formLabel,
+  .formLegend {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .formSelect {
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-12);
+  }
+
+  .formHint {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .formDomain {
+    margin: 0;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-14);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .formPermission {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-meta);
+  }
+
+  /* What the catalogue cannot hold, said rather than omitted. */
+  .formAbsent {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .formError {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--intent-urgent-text);
+  }
+
+  /* A role the grid cannot represent. Set apart, because it is a refusal. */
+  .formWildcard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+  }
+
+  .formWildcardLead {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--intent-blocked-text);
+  }
+
+  /* ── 12b, measured: the roles as one table ──────────────────────────── */
+  .table {
+    overflow: clip;
+    min-inline-size: 0;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+    line-height: normal;
+  }
+
+  .tableHead,
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-20);
+    padding-inline: 18px;
+  }
+
+  .tableHead {
+    padding-block: 11px;
+    background-color: var(--table-head-surface);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .rows {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .row {
+    padding-block: var(--space-16);
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .colRole {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 5px;
+    inline-size: 210px;
+  }
+
+  .colAllows {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+    color: var(--text-body);
+  }
+
+  .tableHead .colAllows {
+    font-size: inherit;
+    color: inherit;
+  }
+
+  .colPeople {
+    flex: none;
+    inline-size: 120px;
+    font-size: var(--font-size-label);
+    color: var(--text-body);
+  }
+
+  .tableHead .colPeople {
+    font-size: inherit;
+    color: inherit;
+  }
+
+  .colAction {
+    flex: none;
+    inline-size: 80px;
+    text-align: end;
+  }
+
+  .row .name {
+    font-size: var(--font-size-item);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .kind {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .nobody {
+    color: var(--text-faint);
+  }
+
+  .actionLink,
+  .actionQuiet {
+    font-size: var(--font-size-caption);
+    color: var(--text-body);
+    text-decoration: none;
+  }
+
+  .actionQuiet {
+    cursor: default;
+  }
+
+  /* The two cards under the table: `padding:16px 18px`, gap 14. */
+  /* 12b, measured: 494 · 380 across the 888. */
+  .cards {
+    display: grid;
+    grid-template-columns: minmax(0, 494fr) minmax(0, 380fr);
+    gap: var(--space-14);
+    line-height: normal;
+  }
+
+  .card {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: var(--space-14);
+    padding: var(--space-16) 18px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .cardText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 3px;
+    min-inline-size: 0;
+  }
+
+  .cardTitle {
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .cardBody {
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+    color: var(--text-body);
+  }
+
+  .cardLink {
+    flex: none;
+    border-block-end: 1px solid var(--border-strong);
+    font-size: var(--font-size-label);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .foot {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  @media (width < 64rem) {
+    .cards {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}
+
+@layer features {
+  /* ── 12d · one person, in 02's drawer ─────────────────────────────────── */
+  .personChips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-6);
+    margin: 0;
+  }
+
+  .personChip {
+    padding-block: 3px;
+    padding-inline: var(--space-8);
+    border-radius: var(--radius-badge);
+    background-color: var(--panel-inset);
+    font-size: var(--font-size-micro);
+    color: var(--text-secondary);
+  }
+
+  .personRole {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-step);
+  }
+
+  .personRoleText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-inline-size: 0;
+  }
+
+  .personRoleName {
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .personRoleSub {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .personQuiet {
+    flex: none;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    cursor: default;
+  }
+
+  .personQuiet[aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+
+  /* 12d's Change, live: quiet until pressed, then the question takes the row. */
+  .changeRoleClosed {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .personAction {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--text-body);
+    cursor: pointer;
+  }
+
+  .personAction:disabled {
+    color: var(--text-faint);
+    cursor: default;
+  }
+
+  .changeRoleDone {
+    font-size: var(--font-size-caption);
+    color: var(--signal-done-text);
+  }
+
+  .changeRole {
+    display: flex;
+    flex-basis: 100%;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .changeRoleLabel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    font-size: var(--font-size-caption);
+    color: var(--text-body);
+  }
+
+  .changeRoleSelect {
+    max-inline-size: 280px;
+    padding-block: var(--space-6);
+    padding-inline: var(--space-10);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .changeRoleAsk {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .changeRoleButtons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
+    margin: 0;
+  }
+
+  .changeRoleYes {
+    padding-block: var(--space-6);
+    padding-inline: var(--space-14);
+    border: none;
+    border-radius: var(--radius-control);
+    background-color: var(--action-base);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--action-text);
+    cursor: pointer;
+  }
+
+  .changeRoleYes:disabled {
+    background-color: var(--panel-well);
+    color: var(--text-faint);
+    cursor: default;
+  }
+
+  .changeRoleProblem {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  .personDanger {
+    margin-inline-start: auto;
+    font-size: var(--font-size-label);
+    color: var(--intent-urgent-text);
+    cursor: not-allowed;
+  }
+
+  .personTeams {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .personNone {
+    color: var(--text-faint);
+  }
+
+  .personSectionHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-10);
+  }
+
+  .personAdd {
+    margin-inline-start: auto;
+    font-size: var(--font-size-label);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .grantText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-inline-size: 0;
+  }
+
+  .personWorkload {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .personAccount {
+    display: flex;
+    align-items: center;
+    gap: var(--space-16);
+    margin: 0;
+    padding-block-start: var(--space-12);
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  /* ── 12e · the picker, over the drawer ────────────────────────────────── */
+  /*
+   * 02: a floating dialog (~470, r16) over the 12d drawer, which stays in
+   * view behind it. The list scrolls; head and foot stay put. No shadow in
+   * this system - depth is the stronger edge.
+   */
+  .grantPicker {
+    position: absolute;
+    inset-block-start: 96px;
+    inset-inline-start: 50%;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    inline-size: min(470px, calc(100% - var(--space-32)));
+    max-block-size: min(560px, calc(100% - 120px));
+    translate: -50% 0;
+    border: var(--border-width-thin) solid var(--border-strong);
+    border-radius: 16px;
+    background-color: var(--panel-field);
+    overflow: hidden;
+    line-height: normal;
+  }
+
+  .grantHead {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding: var(--space-18) var(--space-18) var(--space-10);
+  }
+
+  .grantAllCovered {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .grantFoot {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding: var(--space-12) var(--space-18) var(--space-16);
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .grantTitle {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .grantAreas {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-10);
+    min-block-size: 0;
+    overflow-y: auto;
+    padding-inline: var(--space-18);
+  }
+
+  .grantArea {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .grantAreaName {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .grantOptions {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .grantOption {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    padding-block: var(--space-8);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  .grantOption[data-covered='yes'] {
+    color: var(--text-subtle);
+    cursor: not-allowed;
+  }
+
+  .grantOptionName {
+    flex: 1;
+  }
+
+  .grantOptionNote {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .grantRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
+  .grantSegmented {
+    display: inline-flex;
+    gap: var(--space-2);
+    padding: 3px;
+    border-radius: var(--radius-item);
+    background-color: var(--panel-footer);
+  }
+
+  .grantSegment {
+    padding-block: var(--space-6);
+    padding-inline: var(--space-10);
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .grantSegment[data-current='yes'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  /* An ended permission stays listed, muted, until someone removes it. */
+  .grant[data-ended] .grantText,
+  .grant[data-ended] .personQuiet {
+    opacity: 0.55;
+  }
+
+  .grantActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .grantAdd {
+    padding-block: var(--space-10);
+    padding-inline: var(--space-18);
+    border: none;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .grantAdd:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .grantProblem {
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  .grantDone {
+    font-size: var(--font-size-caption);
+    color: var(--signal-done-text);
+  }
+}
+
+@layer features {
+  .extraSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .personSave {
+    padding-block: var(--space-10);
+    padding-inline: var(--space-18);
+    border-radius: 10px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+@layer features {
+  /* ── 12c · New role: the form and table, cards beside (888 = 624 · 24 · 240) ── */
+  .newRole {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    gap: var(--space-24);
+    /* The side column runs the table's height, so Create sits at its foot. */
+    align-items: stretch;
+    line-height: normal;
+  }
+
+  .newRoleMain {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    min-inline-size: 0;
+  }
+
+  .newRoleTop {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 200px;
+    gap: var(--space-12);
+  }
+
+  .grid {
+    display: flex;
+    flex-direction: column;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+    overflow: clip;
+    min-inline-size: 0;
+  }
+
+  .gridHead,
+  .gridRow {
+    display: grid;
+    /* The name keeps one line; eight toggles wrap within their column. */
+    grid-template-columns: 78px minmax(150px, 1fr) minmax(0, 300px) 110px;
+    align-items: center;
+    gap: var(--space-14);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-16);
+  }
+
+  .gridHead {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .gridRow + .gridRow {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .gridArea {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .gridName {
+    display: flex;
+    white-space: nowrap;
+    align-items: center;
+    gap: var(--space-6);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .gridDot {
+    font-size: 8px;
+    color: var(--signal-ai);
+  }
+
+  .gridLevel {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .segmented {
+    display: inline-flex;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    border-radius: var(--radius-chip);
+    background-color: var(--panel-footer);
+  }
+
+  .segment {
+    padding-block: 5px;
+    padding-inline: 7px;
+    border: none;
+    border-radius: var(--radius-badge);
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-micro);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .segment[data-current='yes'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .gridActions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-4);
+  }
+
+  .gridAction {
+    padding-block: var(--space-4);
+    padding-inline: var(--space-8);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-badge);
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-micro);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .gridAction[aria-pressed='true'] {
+    border-color: var(--action-base);
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .gridPattern {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .gridScope {
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+  }
+
+  .gridLegend {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .newRoleSide {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  /* 02: two white bordered cards. */
+  .sideCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding: var(--space-18);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .sideTitle {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .sideList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sideName {
+    display: block;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .sideDiff,
+  .sideNote {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .sideNote {
+    margin: 0;
+  }
+
+  .sideAdd {
+    align-self: flex-start;
+    padding-block: var(--space-6);
+    padding-inline: var(--space-10);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-chip);
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    cursor: not-allowed;
+  }
+
+  .createButton {
+    padding-block: var(--space-10);
+    padding-inline: var(--space-18);
+    border: none;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .createButton:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  @media (width <= 900px) {
+    .newRole {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .gridHead,
+    .gridRow {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}
+
+@layer features {
+  /* 12b's PEOPLE: 02's faces - 26px, warm, initials at 10/600, 4px apart. */
+  .faces {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .face {
+    display: inline-grid;
+    place-items: center;
+    inline-size: 26px;
+    block-size: 26px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    line-height: 1;
+  }
+
+  .faceMore {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+}
+
+@layer features {
+  /* 12c's Start from: 02's box - the role's name and a chevron. */
+  .selectBox {
+    position: relative;
+    display: block;
+  }
+
+  .selectInner {
+    inline-size: 100%;
+    padding-inline-end: var(--space-26);
+    appearance: none;
+    text-overflow: ellipsis;
+  }
+
+  .selectChevron {
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-end: var(--space-12);
+    translate: 0 -50%;
+    color: var(--text-subtle);
+    pointer-events: none;
+  }
+
+  /* 12c's bar at the form's end - after the grid, never over it. */
+  .formBar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-14);
+    border-block-start: 1px solid var(--border-subtle);
+    background-color: var(--panel-base);
+  }
+}

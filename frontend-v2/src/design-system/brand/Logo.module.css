@@ -1,0 +1,20 @@
+@layer primitives {
+  /*
+   * The mark is painted, not drawn.
+   *
+   * The supplied logo is a single-colour silhouette, so it is used as a CSS
+   * mask and filled with `currentColor`. That means ONE asset serves every
+   * context - light on the dark rail, dark on a light panel, inherited inside
+   * a button - instead of a white file and a black file that have to be picked
+   * between at every call site and drift apart when the logo changes.
+   */
+  .mark {
+    display: block;
+    flex: none;
+    background-color: currentcolor;
+    mask-image: var(--brand-mark);
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+  }
+}

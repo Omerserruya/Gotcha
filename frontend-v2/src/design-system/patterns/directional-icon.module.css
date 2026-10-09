@@ -1,0 +1,7 @@
+@layer patterns {
+  .mirrored {
+    display: inline-flex;
+    /* `scaleX(-1)` rather than a separate RTL icon set: one glyph, one rule. */
+    transform: scaleX(-1);
+  }
+}

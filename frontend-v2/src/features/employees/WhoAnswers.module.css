@@ -1,0 +1,68 @@
+@layer features {
+  /* Where an employee answers: a row per channel, its mark, name and how often. */
+  .reach {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .item {
+    display: flex;
+    gap: var(--space-8);
+    align-items: center;
+    font-size: var(--font-size-meta);
+  }
+
+  .mark {
+    display: grid;
+    flex: none;
+    place-items: center;
+    inline-size: 20px;
+    block-size: 20px;
+    border-radius: 6px;
+    background-color: var(--channel-web-surface);
+    color: var(--channel-web-mark);
+  }
+
+  .mark[data-tone='whatsapp'] {
+    background-color: var(--channel-whatsapp-surface);
+    color: var(--channel-whatsapp-mark);
+  }
+
+  .mark[data-tone='instagram'] {
+    background-color: var(--channel-instagram-surface);
+    color: var(--channel-instagram-mark);
+  }
+
+  .mark[data-tone='email'] {
+    background-color: var(--channel-email-surface);
+    color: var(--channel-email-mark);
+  }
+
+  .mark[data-tone='messenger'] {
+    background-color: var(--channel-messenger-surface);
+    color: var(--channel-messenger-mark);
+  }
+
+  .name {
+    color: var(--text-primary);
+  }
+
+  .when {
+    margin-inline-start: auto;
+    color: var(--text-subtle);
+  }
+
+  .where {
+    margin: 0;
+  }
+}

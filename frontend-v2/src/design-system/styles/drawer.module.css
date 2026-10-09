@@ -1,0 +1,165 @@
+@layer patterns {
+  .layer {
+    position: absolute;
+    inset: 0;
+    z-index: var(--z-panel);
+  }
+
+  .scrim {
+    position: absolute;
+    inset: 0;
+    background-color: var(--panel-scrim);
+  }
+
+  .panel {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    display: flex;
+    flex-direction: column;
+    inline-size: min(560px, 100%);
+    background-color: var(--panel-field);
+    line-height: normal;
+  }
+
+  .panel[data-width='600'] {
+    inline-size: min(600px, 100%);
+  }
+
+  .panel[data-width='620'] {
+    inline-size: min(620px, 100%);
+  }
+
+  .panel[data-width='820'] {
+    inline-size: min(820px, 100%);
+  }
+
+  .panel[data-width='860'] {
+    inline-size: min(860px, 100%);
+  }
+
+  .head {
+    display: flex;
+    gap: var(--space-12);
+    padding: 22px var(--space-26) var(--space-18);
+    border-block-end: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .titles {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  .title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .line {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-muted);
+  }
+
+  .close {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  /* The caller's: the scrolling body, and the footer pinned under it. */
+  .drawerBody {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-16);
+    min-block-size: 0;
+    overflow-y: auto;
+    padding: var(--space-20) var(--space-26);
+  }
+
+  .drawerFoot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    padding: var(--space-14) var(--space-26);
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .drawerFootNote {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .drawerCancel {
+    padding-inline: var(--space-6);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  /* ── 02's field: a label over a box ──────────────────────────────────── */
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .fieldLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .box {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    min-block-size: 36px;
+    padding: var(--space-10) 13px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .box:disabled,
+  .box[aria-disabled='true'] {
+    color: var(--text-subtle);
+    cursor: not-allowed;
+  }
+
+  textarea.box {
+    min-block-size: 70px;
+    resize: block;
+  }
+
+  .pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-12);
+  }
+
+  .hint {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .sectionTitle {
+    margin: var(--space-6) 0 0;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+}

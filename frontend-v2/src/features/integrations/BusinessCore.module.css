@@ -1,0 +1,651 @@
+@layer features {
+  /*
+   * Screens 14b/14c · Business core.
+   *
+   * Deliberately a list of sentences rather than a grid of dropdowns: on this
+   * estate four of five parts have nothing to choose from, and a row of empty
+   * selects would say "you have not finished setting up" to a merchant who
+   * has nothing to finish.
+   */
+
+  .core {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .notesHeading {
+    margin: 0 0 var(--space-6);
+    font-size: var(--font-size-caption);
+    font-weight: 500;
+    color: var(--text-subtle);
+  }
+
+  .hint {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  /* 02's header row: "Your business runs on" and a segmented control. */
+  .useCaseRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
+    line-height: normal;
+  }
+
+  .useCaseLabel {
+    margin: 0;
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-regular);
+    color: var(--text-subtle);
+  }
+
+  /* `#F5F2EC`, radius 9, `padding:3px`, gap 2; the chosen one dark. */
+  .useCases {
+    display: flex;
+    gap: 2px;
+    margin: 0;
+    padding: 3px;
+    border-radius: var(--radius-item);
+    background-color: var(--table-head-surface);
+    list-style: none;
+  }
+
+  .useCase {
+    padding: var(--space-6) 11px;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--text-body);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .useCase:disabled {
+    cursor: progress;
+  }
+
+  .useCase[data-selected='true'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  /* The parts as one white card, grouped. */
+  .table {
+    overflow: clip;
+    min-inline-size: 0;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+    line-height: normal;
+  }
+
+  /* A group's head: `#F5F2EC`, `padding:6px 16px` - a mono name and a note. */
+  .groupHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-10);
+    margin: 0;
+    padding: var(--space-6) var(--space-16);
+    background-color: var(--table-head-surface);
+  }
+
+  .groupName {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .groupNote {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .partMain {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 3px;
+    min-inline-size: 0;
+  }
+
+  .partControl {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: var(--space-4);
+    inline-size: 240px;
+  }
+
+  /* The state chip: radius 6, `padding:3px 8px`, 11px. */
+  .chip {
+    flex: none;
+    justify-self: end;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    font-size: var(--font-size-micro);
+    white-space: nowrap;
+  }
+
+  .chip[data-tone='good'] {
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+  }
+
+  /* Chosen and not working: 02's orange. */
+  .chip[data-tone='bad'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .chip[data-tone='warn'] {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .chip[data-tone='quiet'] {
+    background-color: var(--panel-well);
+    color: var(--text-body);
+  }
+
+  .parts {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* A part, as a row: `padding:6px 16px`, gap 16 - what it is, who serves it, its state. */
+  /*
+    Three fixed columns - name, the 240 tile, the chip - so every row's tile
+    starts at one x, whatever the chip says and whether there is one.
+  */
+  .part {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px 110px 16px;
+    align-items: center;
+    gap: var(--space-16);
+    padding: var(--space-8) var(--space-16);
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .partName {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+  }
+
+  .notes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .note {
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .unavailable {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  /* ── 14e · what is written back, and what is not a setting ───────────── */
+
+  /* ACROSS BOTH: what runs over both - the write-back facts. */
+  /* No gap: the two rows across both sit as the groups' rows above do. */
+  .writeback {
+    display: flex;
+    flex-direction: column;
+    padding-block-end: var(--space-12);
+  }
+
+  .writeback > :not(.groupHead, .parts) {
+    margin-inline: var(--space-16);
+  }
+
+  /*
+    Full contrast, unlike the notes below it. This paragraph is the reason
+    the list reads as a set of facts rather than as a set of blanks, and a
+    reader who skips it draws the opposite conclusion from the same words.
+  */
+  .writebackLead {
+    margin-block: var(--space-8) 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  .writebackList {
+    margin-block: var(--space-12) 0;
+    padding-inline-start: var(--space-20);
+    display: grid;
+    gap: var(--space-8);
+  }
+
+  .writebackItem {
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  /* ── 14 / 14c · the system pill and its menu ───────────────────────────── */
+
+  /* 02: 240 wide, a hairline, radius 10, `4px 10px 4px 4px` - the row's height. */
+  .pickBox {
+    position: relative;
+  }
+
+  .pill {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    inline-size: 240px;
+    padding: 4px var(--space-10) 4px 4px;
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-field);
+    font: inherit;
+    text-align: start;
+    color: var(--text-primary);
+    line-height: normal;
+    cursor: pointer;
+  }
+
+  .pill[data-static] {
+    cursor: default;
+  }
+
+  .pill[data-problem] {
+    border-color: var(--intent-blocked-text);
+  }
+
+  .pill:disabled {
+    cursor: progress;
+  }
+
+  .pillName {
+    flex: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    font-size: 12.5px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .pillChevron {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  /* 14c's menu: white, radius 13, a soft shadow, "Connected in Integrations". */
+  .pickMenu {
+    position: absolute;
+    inset-block-start: calc(100% + 6px);
+    inset-inline: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 6px;
+    border: 1px solid var(--border-default);
+    border-radius: 13px;
+    background-color: var(--panel-field);
+    box-shadow: 0 18px 44px rgb(18 18 18 / 16%);
+    line-height: normal;
+  }
+
+  .pickEyebrow {
+    margin: 0;
+    padding: var(--space-8) var(--space-10) 4px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .pickList {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .pickOption {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    inline-size: 100%;
+    padding: var(--space-8) var(--space-10);
+    border: 0;
+    border-radius: 9px;
+    background: none;
+    font: inherit;
+    text-align: start;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  .pickOption[aria-selected='true'],
+  .pickOption:hover {
+    background-color: var(--table-head-surface);
+  }
+
+  .pickOption[data-disabled] {
+    cursor: default;
+  }
+
+  .pickOption[data-disabled]:hover {
+    background: none;
+  }
+
+  .pickWho {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-inline-size: 0;
+  }
+
+  .pickWhy {
+    font-size: 11px;
+    color: var(--intent-urgent-text);
+  }
+
+  .pickFoot {
+    margin: 4px 0 0;
+    padding: var(--space-8) var(--space-10) 4px;
+    border-block-start: 1px solid var(--border-subtle);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .partPurpose {
+    margin-inline-start: var(--space-6);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-regular);
+    color: var(--text-subtle);
+  }
+
+  /* Nobody plays the part: the pill holds "-". */
+  .systemNone {
+    flex: 1;
+    padding-inline-start: 6px;
+    font-size: 12.5px;
+    color: var(--text-faint);
+  }
+
+  .foot {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .footLink {
+    color: var(--text-primary);
+  }
+}
+
+@layer features {
+  /* 02's "›": the row opens its drawer. */
+  .open {
+    justify-self: end;
+    font-size: 16px;
+    color: var(--text-faint);
+    text-decoration: none;
+  }
+
+  .open:hover {
+    color: var(--text-primary);
+  }
+}
+
+@layer features {
+  /* ── 14c / 14d · a part's drawer ──────────────────────────────────────── */
+  .drawerSystem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-step);
+  }
+
+  .drawerSystemText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-inline-size: 0;
+  }
+
+  .drawerSystemSub {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .drawerState {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-secondary);
+  }
+
+  .drawerSystemName {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .drawerGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .drawerEyebrow {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .drawerList {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .drawerListRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-block: var(--space-8);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .drawerLink {
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+    text-decoration: none;
+  }
+
+  .drawerNone {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-faint);
+  }
+
+  .drawerActions {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .drawerAction {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+    padding-block: var(--space-10);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .drawerActionName {
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .drawerFootLink {
+    margin-block-start: auto;
+    padding-block-start: var(--space-12);
+  }
+
+  /* ── 14e · across both ────────────────────────────────────────────────── */
+  .acrossChain {
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    gap: var(--space-12);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .acrossStep {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-step);
+  }
+
+  /* 14e: the system's mark beside its name; GOTCHA's own tile. */
+  .acrossWho {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .gotchaTile {
+    display: grid;
+    place-items: center;
+    inline-size: 26px;
+    block-size: 26px;
+    border-radius: 8px;
+    background-color: var(--action-base);
+    font-size: 11px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--action-text);
+  }
+
+  /* Decoration: the mark is drawn, not read. */
+  .gotchaTile::before {
+    content: 'G';
+  }
+
+  .acrossSave {
+    padding: 9px var(--space-16);
+    border-radius: 9px;
+    background-color: var(--action-base);
+    font-size: var(--font-size-label);
+    color: var(--action-text);
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .acrossNumber {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .acrossName {
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .acrossSub {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .acrossRules {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+    padding-inline-start: var(--space-16);
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+  }
+
+  .acrossRow {
+    display: grid;
+    grid-template-columns: 200px 160px minmax(0, 1fr);
+    gap: var(--space-12);
+    align-items: baseline;
+    padding-block: var(--space-12);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .acrossEvent {
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .acrossBoards {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* The catalogue's risk level beside an action's name (10's tag, smaller). */
+  .drawerRisk {
+    margin-inline-start: var(--space-8);
+    padding: 1px var(--space-6);
+    border-radius: 5px;
+    background-color: var(--intent-neutral-surface);
+    font-size: var(--font-size-micro);
+    color: var(--intent-neutral-text);
+    white-space: nowrap;
+  }
+
+  .drawerRisk[data-risk='MEDIUM'] {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .drawerRisk[data-risk='HIGH'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+}

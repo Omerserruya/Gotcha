@@ -1,0 +1,193 @@
+@layer primitives {
+  /*
+   * Floating surfaces.
+   *
+   * The design forbids shadows outright, so depth here comes from a solid
+   * white surface against the warm panel plus a definite border - not from a
+   * drop shadow. That reads as crisper and stays honest to the direction.
+   */
+  .surface {
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding: var(--space-4);
+    min-inline-size: 200px;
+    z-index: var(--z-popover);
+  }
+
+  .popoverSurface {
+    padding: var(--space-18);
+    min-inline-size: 280px;
+  }
+
+  /* A tooltip inverts: dark on light, echoing the frame. */
+  .tooltip {
+    background-color: var(--frame-base);
+    color: var(--frame-text);
+    border-radius: var(--radius-chip);
+    padding-block: var(--space-7);
+    padding-inline: var(--space-9);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    max-inline-size: 280px;
+    z-index: var(--z-popover);
+  }
+
+  .item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-9);
+    padding-block: var(--space-7);
+    padding-inline: var(--space-9);
+    border-radius: var(--radius-chip);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+    outline: none;
+  }
+
+  /* Radix sets data-highlighted for pointer and keyboard alike, so the two
+     never diverge - a common source of "keyboard shows no selection". */
+  .item[data-highlighted] {
+    background-color: var(--panel-sunken);
+    color: var(--text-primary);
+  }
+
+  .item[data-disabled] {
+    color: var(--text-disabled);
+    cursor: not-allowed;
+  }
+
+  .itemDanger[data-highlighted] {
+    background-color: var(--panel-sunken);
+    color: var(--signal-ai-strong);
+  }
+
+  .separator {
+    block-size: var(--border-width-thin);
+    background-color: var(--border-subtle);
+    margin-block: var(--space-4);
+    margin-inline: calc(var(--space-4) * -1);
+  }
+
+  .label {
+    padding-block: var(--space-7);
+    padding-inline: var(--space-9);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  /* ── Dialog ──────────────────────────────────────────────────────────── */
+  .dialogOverlay {
+    position: fixed;
+    inset: 0;
+    /* The frame's own ink, softened - not a generic black scrim. */
+    background-color: rgb(18 18 18 / 45%);
+    z-index: var(--z-overlay);
+  }
+
+  .dialogContent {
+    position: fixed;
+    inset-block-start: 50%;
+    inset-inline-start: 50%;
+    translate: -50% -50%;
+    inline-size: min(560px, calc(100vw - var(--space-40)));
+    max-block-size: calc(100dvh - var(--space-40));
+    overflow-y: auto;
+    background-color: var(--panel-base);
+    border-radius: var(--radius-panel);
+    padding: var(--space-32);
+    z-index: var(--z-dialog);
+  }
+
+  /*
+   * `translate: -50% -50%` centres correctly in both directions because
+   * `inset-inline-start` already resolves per direction. A `left: 50%` here
+   * would pin the dialog to the physical left in Hebrew.
+   */
+
+  /* ── Drawer ──────────────────────────────────────────────────────────── */
+  .drawerContent {
+    position: fixed;
+    inset-block: var(--size-frame-inset);
+    /* Anchored to the inline-end edge: right in English, left in Hebrew. */
+    inset-inline-end: var(--size-frame-inset);
+    inline-size: min(440px, calc(100vw - var(--space-24)));
+    background-color: var(--panel-base);
+    border-radius: var(--radius-panel);
+    padding: var(--space-32);
+    overflow-y: auto;
+    /* `--z-drawer` is not a token; `--z-panel` is, and it is 200 - so this
+       was right by coincidence and outside the scale. */
+    z-index: var(--z-panel);
+  }
+
+  /* The submenu's `›`, pushed to the item's end. */
+  .subArrow {
+    margin-inline-start: auto;
+    padding-inline-start: var(--space-16);
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 02's INBOX MENU - `data-appearance='dark'`
+   * ════════════════════════════════════════════════════════════════════════
+   * Measured: `[210]` at `#171717`, `padding:6px`, radius 12, no border.
+   * Items `padding:8px 11px`, 12.5px `#F7F5F1`, radius 8, the highlighted one
+   * on `#262626`; icons 13px `#8E8A83`; separators 1px `#262626` at
+   * `margin:4px 9px`; Delete in `#E4A88F`; the submenu's `›` in `#6E6A63`.
+   */
+  .surface[data-appearance='dark'] {
+    /*
+     * 02's item is 30 = 8 + 14 + 8: `line-height: normal`. Inherited 1.6 made
+     * it 36 - the queue's defect again. And items stack at 02's 1px gap.
+     */
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    line-height: normal;
+    min-inline-size: 210px;
+    padding: var(--space-6);
+    border: 0;
+    border-radius: var(--space-12);
+    background-color: var(--copilot-surface);
+  }
+
+  .surface[data-appearance='dark'] .item {
+    gap: var(--space-10);
+    padding: var(--space-8) 11px;
+    border-radius: var(--space-8);
+    font-size: 12.5px;
+    color: var(--action-text);
+  }
+
+  .surface[data-appearance='dark'] .item svg {
+    color: var(--menu-dark-icon);
+  }
+
+  .surface[data-appearance='dark'] .item[data-highlighted],
+  .surface[data-appearance='dark'] .item[data-state='open'] {
+    background-color: var(--copilot-raised);
+    color: var(--action-text);
+  }
+
+  .surface[data-appearance='dark'] .itemDanger,
+  .surface[data-appearance='dark'] .itemDanger svg,
+  .surface[data-appearance='dark'] .itemDanger[data-highlighted] {
+    color: var(--menu-dark-danger);
+  }
+
+  .surface[data-appearance='dark'] .separator {
+    margin: var(--space-4) 9px;
+    background-color: var(--copilot-raised);
+  }
+
+  .surface[data-appearance='dark'] .subArrow {
+    color: var(--menu-dark-arrow);
+  }
+}

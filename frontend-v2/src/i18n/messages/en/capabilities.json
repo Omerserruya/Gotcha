@@ -1,0 +1,256 @@
+{
+  "title": "What GOTCHA is allowed to do",
+  "description": "Three settings for everything: do it, ask me first, never. This applies to every AI employee.",
+  "unavailable": "We couldn't read what GOTCHA is allowed to do just now.",
+  "none": "GOTCHA has no actions available.",
+  "noneBody": "It can read and reply, but it cannot do anything to an order, a customer record or a calendar.",
+  "summary": "{alone, plural, =0 {Nothing here happens without you approving it first.} =1 {One of {total} actions happens without asking you. The rest wait for your approval.} other {# of {total} actions happen without asking you. The rest wait for your approval.}}",
+  "uniform": {
+    "allDefault": "Nothing here has been customised - every action is on the setting GOTCHA shipped with.",
+    "noEditing": "Nobody can change an action's details before approving it. You approve it as proposed, or you don't.",
+    "expiry": "An approval request expires after {duration}. After that it can't be approved, and nothing tells the customer.",
+    "noApprover": "No particular person is named as the approver - any admin can approve anything."
+  },
+  "stance": {
+    "on_its_own": "Does it",
+    "ask_first": "Asks you first",
+    "never": "Never"
+  },
+  "category": {
+    "messaging": "Messaging",
+    "crm": "Customer records",
+    "broadcast": "Campaigns",
+    "meta": "WhatsApp and Instagram",
+    "identity": "Identifying people",
+    "workflow": "Workflow",
+    "other": "Everything else"
+  },
+  "tool": {
+    "send_message": "Send a message to a customer",
+    "generate_followup": "Write a follow-up for a conversation that went quiet - a draft only, not sent",
+    "schedule_followup": "Send a message later, when a conversation has gone quiet",
+    "schedule_followup_template": "Send an approved WhatsApp template later, when the 24-hour window has closed",
+    "close_conversation": "Mark a conversation finished",
+    "escalate_to_human": "Hand a conversation to a person",
+    "update_contact": "Change a customer's details in your CRM",
+    "update_crm": "Change any field on a record in your CRM",
+    "create_ticket": "Open a support ticket",
+    "tag_contact": "Add a tag to a customer",
+    "create_task": "Create a task for your team to pick up",
+    "create_broadcast": "Create a campaign aimed at a group of customers",
+    "schedule_broadcast": "Schedule a campaign that already exists to go out later",
+    "create_workflow": "Create a new automation",
+    "merge_contacts": "Join two customer records into one",
+    "link_customer_identifier": "Attach another way of reaching a customer to their record"
+  },
+  "blocked": {
+    "integration_disconnected": "You can't set this until the connection is restored - reconnect it in Integrations.",
+    "missing_scope": "You can't set this until the provider grants the permission it needs.",
+    "missingScopesNamed": "You can't set this until {scopes} is granted where you connected it.",
+    "plan_not_entitled": "Your plan doesn't include this.",
+    "no_catalog_entry": "This isn't set up on GOTCHA's side yet.",
+    "ok": "You can't set this right now."
+  },
+  "used": "{count, plural, =1 {Used once} other {Used # times}}",
+  "neverFailed": "never failed",
+  "failedTimes": "{count, plural, =1 {failed once} other {failed # times}}",
+  "refusedTimes": "{count, plural, =1 {stopped once by a rule} other {stopped # times by a rule}}",
+  "rail": {
+    "noneConnected": "Nothing is connected yet.",
+    "uncategorised": "Everything else",
+    "unavailable": "We couldn't read what's connected just now.",
+    "state": {
+      "PENDING": "Not connected yet",
+      "TESTING": "Being tested",
+      "CONNECTED": "Connected",
+      "ERROR": "Needs attention",
+      "DISCONNECTED": "Disconnected"
+    },
+    "stateUnknown": "Status unknown",
+    "searchLabel": "Find a system",
+    "searchNone": "Nothing here matches “{term}”.",
+    "label": "Systems",
+    "builtIn": "Built into GOTCHA",
+    "actions": "{count, plural, one {# action} other {# actions}}",
+    "categories": "Categories",
+    "all": "All",
+    "connect": "Connect",
+    "connectedLabel": "Connected",
+    "availableLabel": "Available",
+    "countOf": "{count} of {total}",
+    "searchCount": "Search {count} integrations"
+  },
+  "choice": {
+    "label": "What GOTCHA may do with this",
+    "do_it": "Do it",
+    "ask_me": "Ask me",
+    "never": "Never",
+    "noAutomation": {
+      "changes_orders_or_money": "This one changes orders or money, so it can be asked or refused - not automated.",
+      "unclassified": "We can't tell what this one changes, so it can be asked or refused - not automated."
+    },
+    "storedAutomatic": "This is set to run on its own. You can change it to ask or refuse, but it can't be set back to automatic from here.",
+    "problem": {
+      "not_automatable": "That one can't be set to run on its own.",
+      "not_connected": "Connect the integration first - there's nothing to switch on yet.",
+      "forbidden": "You don't have permission to change what GOTCHA may do.",
+      "failed": "That didn't save. Try again."
+    },
+    "ceilingNote": "Actions that change orders or money, or that we can't classify, can be asked or refused here - not automated."
+  },
+  "system": {
+    "used": "Used {n} {count, plural, one {time} other {times}} in the last 30 days",
+    "actions": "{count, plural, one {# action} other {# actions}}",
+    "narrow": "Narrow it for one employee",
+    "narrowNotYet": "Every AI employee shares these settings; one cannot be narrowed yet."
+  },
+  "suggestNone": "Nothing to suggest changing yet.",
+  "ran": {
+    "toApprovals": "Comes to Approvals",
+    "off": "Switched off"
+  },
+  "risk": {
+    "LOW": "Low risk",
+    "MEDIUM": "Medium risk",
+    "HIGH": "High risk"
+  },
+  "available": {
+    "notConnected": "Not connected",
+    "brings": "What it brings",
+    "bringsNone": "The catalogue lists no actions for it.",
+    "connectTitle": "Connect {name}",
+    "connect": "Connect",
+    "connecting": "Connecting…",
+    "secretNote": "Kept encrypted. Never shown again.",
+    "oauthNotHere": "{name} connects at its own site, and the way back from there leads to the previous app - so it cannot be connected from here yet.",
+    "noForm": "This one is set up with GOTCHA, not from a form.",
+    "connected": "Connected.",
+    "error": {
+      "missing": "Fill in every field, as {name} gives it.",
+      "not_here": "This one cannot be connected from here.",
+      "entitlement": "Connecting systems isn't part of this plan.",
+      "forbidden": "You don't have permission to connect systems.",
+      "failed": "It didn't connect. Nothing was saved - try again.",
+      "validation": "{name} didn't accept those details. Nothing was saved - check them and try again."
+    }
+  },
+  "systemDown": "Hidden from GOTCHA while {name} needs fixing - reconnect it in Integrations.",
+  "oauth": {
+    "connect": "Connect at {name}",
+    "reconnect": "Reconnect {name}",
+    "opening": "Opening {name}…",
+    "loginHost": "Login host",
+    "note": "You approve it at {name}, then come back here.",
+    "error": {
+      "not_here": "This one can't be connected from here yet.",
+      "not_configured": "{name} is not set up on GOTCHA's side yet.",
+      "needs_store": "Connect your store from the Shopify App Store first.",
+      "forbidden": "You don't have permission to connect systems.",
+      "failed": "{name} couldn't be opened - try again."
+    }
+  },
+  "landing": {
+    "connected": "{name} is connected.",
+    "error": {
+      "denied": "You cancelled at {name} - nothing was connected.",
+      "token_exchange_failed": "{name} didn't confirm the connection. Nothing was connected - try again.",
+      "catalog_missing": "{name} isn't set up on GOTCHA's side yet. Nothing was connected.",
+      "callback_error": "Something went wrong on the way back from {name}. Nothing was connected - try again.",
+      "validation_failed": "{name} connected, but the first check against it failed.",
+      "shop_connected_elsewhere": "That store is already connected to another workspace.",
+      "link_failed": "{name} answered, but the store couldn't be linked to this workspace.",
+      "other": "{name} didn't connect. Try again.",
+      "not_configured": "{name} isn't set up on GOTCHA's side yet. Nothing was connected.",
+      "insufficient_permissions": "{name} was approved without the access GOTCHA needs. Approve again with read and write access.",
+      "callback_not_received": "{name} didn't send the keys back. Nothing was connected - try again.",
+      "invalid_state": "That approval couldn't be matched to this workspace. Start again from Connect."
+    },
+    "close": "Close"
+  },
+  "integrationCategory": {
+    "ACTION": "Actions",
+    "WRITE": "Changing things",
+    "DELETE": "Removing things",
+    "READ": "Looking things up"
+  },
+  "woo": {
+    "address": "Store address",
+    "start": "Approve at {name}",
+    "opening": "Opening your store…",
+    "note": "Your store asks you to approve GOTCHA, then brings you back here.",
+    "error": {
+      "invalid_store": "That doesn't look like a store address we can reach - try https://yourstore.com",
+      "forbidden": "You don't have permission to connect systems.",
+      "failed": "{name} couldn't be opened - try again."
+    }
+  },
+  "shopify": {
+    "connect": "Connect Shopify",
+    "opening": "Opening Shopify…",
+    "note": "Shopify asks which store, then brings you back here.",
+    "startsInShopify": "Installation starts in Shopify: add GOTCHA from your Shopify admin, and the store connects here.",
+    "help": "How to install",
+    "unread": "We couldn't check how Shopify can be connected right now - try again in a moment.",
+    "error": {
+      "forbidden": "You don't have permission to connect systems.",
+      "failed": "Shopify couldn't be opened - try again."
+    },
+    "pending": {
+      "replaceLead": "You approved {shop} in Shopify. Another store is connected here now - replacing it disconnects that one.",
+      "replace": "Replace with {shop}",
+      "finishLead": "You approved {shop} in Shopify. Connect it to this workspace?",
+      "finish": "Connect {shop}",
+      "done": "{shop} is connected.",
+      "error": {
+        "another_store_connected": "Another store is connected to this workspace - replace it to connect {shop}.",
+        "anotherNamed": "{current} is connected to this workspace - replace it to connect {shop}.",
+        "shop_connected_to_another_workspace": "{shop} is already connected to a different GOTCHA workspace.",
+        "gone": "That approval has expired or was already used - connect again from Shopify.",
+        "forbidden": "You don't have permission to connect systems.",
+        "failed": "{shop} wasn't connected - try again."
+      },
+      "conflict": "Another store is connected here. Replace it?",
+      "conflictNamed": "Another store is connected here ({current}). Replace it?",
+      "replaceIt": "Replace it",
+      "gone": "That approval has expired or was already used - install GOTCHA again from Shopify.",
+      "unread": "We couldn’t check the approval from Shopify - open GOTCHA from Shopify again.",
+      "listing": "GOTCHA in the Shopify App Store"
+    },
+    "billing": {
+      "checking": "Checking with Shopify…",
+      "connected": "Shopify is connected.",
+      "retry": "Try again",
+      "choosePlan": "Choose a plan in Shopify",
+      "state": {
+        "planNeeded": "Shopify has no plan for this store yet - choose one to switch the store features on.",
+        "declined": "No plan was approved. The store stays connected; its features stay off until a plan is.",
+        "approvalPending": "Shopify still shows the plan waiting for approval - finish approving it in Shopify.",
+        "pastDue": "Shopify reports a failed charge on this plan - settle it in Shopify to switch the store features back on.",
+        "frozen": "Shopify has frozen this store, so the plan is paused until it unfreezes.",
+        "cancelled": "The Shopify plan has ended. The store stays connected; its features are off.",
+        "other": "Shopify billing isn’t active for this workspace yet."
+      },
+      "error": {
+        "unreachable": "We couldn’t reach Shopify - nothing changed. Try again.",
+        "mismatch": "This confirmation belongs to a different store than the one connected here.",
+        "not_connected": "There’s no Shopify store connected to this workspace.",
+        "forbidden": "You don’t have permission to manage billing.",
+        "failed": "We couldn’t confirm the plan - try again.",
+        "reconnect": "Shopify needs reconnecting before its plan can be checked."
+      }
+    }
+  },
+  "systemCategory": {
+    "ECOMMERCE": "Ecommerce",
+    "CRM": "CRM",
+    "PAYMENTS": "Payments",
+    "HELPDESK": "Helpdesk",
+    "COMMUNICATION": "Communication",
+    "ANALYTICS": "Analytics",
+    "SHIPPING": "Shipping",
+    "PROJECT_MANAGEMENT": "Project management",
+    "CALENDAR": "Calendar",
+    "DATABASE": "Database",
+    "CUSTOM": "Custom"
+  }
+}

@@ -1,0 +1,138 @@
+@layer shell {
+  /*
+   * The standard page frame inside the work surface.
+   *
+   * Padding matches the design's panels - generous on the inline axis, tighter
+   * at the top, because the panel's own rounded edge already provides breathing
+   * room the way a page margin would not.
+   */
+  .container {
+    max-inline-size: 1120px;
+    margin-inline: auto;
+    padding-block: var(--space-32) var(--space-56);
+    padding-inline: var(--space-40);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-32);
+    min-inline-size: 0;
+  }
+
+  /*
+   * Columns rather than prose. The cap above is a READING measure - right for a
+   * settings page, wrong for a screen that is three panels side by side, where
+   * it left the middle one at about 500px on a 1440 display.
+   *
+   * Still capped, because a grid stretched across an ultrawide display puts the
+   * queue and the context panel a head-turn apart.
+   */
+  .wide {
+    max-inline-size: 1600px;
+  }
+
+  /* Full-bleed: for pages that manage their own scrolling, such as the Inbox. */
+  .bleed {
+    max-inline-size: none;
+    padding: 0;
+    block-size: 100%;
+  }
+
+  .header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-24);
+    flex-wrap: wrap;
+  }
+
+  .headerText {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-7);
+  }
+
+  /*
+   * `layout="screen"` - 02's page, measured on four screens. See the prop.
+   * The divider under the header was missed at first: the trees recorded only
+   * `border-top`. Measured on all four sides since.
+   */
+  .screen {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    line-height: normal;
+  }
+
+  .screenHeader {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-24);
+    flex-wrap: wrap;
+    padding: 30px var(--space-40) var(--space-20);
+    /* 02: `border-bottom: 1px #EDE9E1` on all four - measured on all four sides. */
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .screenHeader[data-pad-end='22'] {
+    padding-block-end: 22px;
+  }
+
+  .screenHeading {
+    min-inline-size: 0;
+  }
+
+  .screenTitle {
+    margin: 0;
+    font-size: var(--font-size-screen-title);
+    font-weight: var(--font-weight-semibold);
+    /* 02: `letter-spacing:-0.025em` on all 50 of its screen titles - missed until measured. */
+    letter-spacing: var(--letter-spacing-display);
+    color: var(--text-primary);
+  }
+
+  .screenDescription {
+    margin: var(--space-6) 0 0;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .screenDescription[data-narrow] {
+    max-inline-size: 720px;
+  }
+
+  .screenAside {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .screenBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-20);
+    min-inline-size: 0;
+    padding: var(--space-24) var(--space-40) 30px;
+  }
+
+  /*
+   * `fill` / `flush`: the panel's height exactly - so the header stays put
+   * and the body below it is a window, not a document that runs past the
+   * bottom of the screen.
+   */
+  .screenFill {
+    block-size: 100%;
+    min-block-size: 0;
+  }
+
+  .screenBodyFill {
+    flex: 1;
+    min-block-size: 0;
+  }
+
+  .screenBodyFlush {
+    flex: 1;
+    display: flex;
+    min-block-size: 0;
+    min-inline-size: 0;
+  }
+}

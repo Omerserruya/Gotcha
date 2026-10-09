@@ -1,0 +1,446 @@
+@layer features {
+  /* 08b, measured: 860 wide, 60 from the top, centred, over Hire's scrim. */
+  .dialog {
+    position: absolute;
+    inset-block-start: 60px;
+    inset-inline-start: 50%;
+    translate: -50% 0;
+    display: flex;
+    flex-direction: column;
+    inline-size: min(860px, calc(100% - var(--space-24)));
+    max-block-size: calc(100% - 120px);
+    border-radius: var(--radius-panel);
+    background-color: var(--panel-base);
+    overflow: hidden;
+    line-height: normal;
+  }
+
+  .head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-16);
+    padding: 22px 30px;
+    border-block-end: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .titles {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .title {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .line {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .ways {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-10);
+    padding: 26px 30px 0;
+  }
+
+  .way {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    padding: 14px var(--space-16);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 13px;
+    background-color: var(--panel-field);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .way[aria-checked='true'] {
+    border-color: var(--action-base);
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 500;
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .wayName {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .way[aria-checked='true'] .wayName {
+    font-weight: 600;
+  }
+
+  .wayText {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-block-size: 0;
+    overflow-y: auto;
+    padding: 22px 30px 26px;
+  }
+
+  .drop {
+    padding: var(--space-24);
+    border: var(--border-width-thin) dashed var(--border-strong);
+    border-radius: 14px;
+    font-size: var(--font-size-meta);
+    text-align: center;
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .drop[data-has-file='yes'] {
+    border-style: solid;
+    color: var(--text-primary);
+  }
+
+  .formRow {
+    display: flex;
+    gap: var(--space-10);
+  }
+
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .input {
+    flex: 1;
+    padding: var(--space-10) 13px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    resize: block;
+  }
+
+  .go,
+  .small,
+  .primary {
+    border: none;
+    border-radius: 10px;
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .go:disabled,
+  .primary:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .go {
+    padding: var(--space-10) var(--space-18);
+    background-color: var(--action-base);
+    font-size: 13.5px;
+    color: var(--action-text);
+  }
+
+  .connectors {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+  }
+
+  .connector {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-12) 18px;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .connector + .connector {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .small {
+    padding: var(--space-4) var(--space-9);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 6px;
+    font-size: var(--font-size-micro);
+    font-weight: 400;
+    color: var(--text-subtle);
+  }
+
+  .none {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-faint);
+  }
+
+  .learned {
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+    overflow: clip;
+    min-inline-size: 0;
+  }
+
+  .learnedHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 13px 18px;
+    border-block-end: var(--border-width-thin) solid var(--panel-well);
+  }
+
+  .learnedTitle {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .meta {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .learnedNone {
+    margin: 0;
+    padding: var(--space-12) 18px;
+    font-size: var(--font-size-meta);
+    color: var(--text-faint);
+  }
+
+  .foot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .primary {
+    padding: 11px 22px;
+    background-color: var(--action-base);
+    font-size: 13.5px;
+    color: var(--action-text);
+  }
+
+  .cancel {
+    padding: 11px var(--space-20);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    font-size: 13.5px;
+    color: var(--text-body);
+    text-decoration: none;
+  }
+
+  /* What was added: its title, and that it is being read - 02's row, `13px 18px`. */
+  .added {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-4) var(--space-12);
+    margin: 0;
+    padding: 13px 18px;
+    font-size: var(--font-size-meta);
+    overflow-wrap: anywhere;
+  }
+
+  .addedTitle {
+    color: var(--text-primary);
+  }
+
+  .problem {
+    align-self: center;
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+
+  /* The way back from Google or Atlassian, said once over the connectors. */
+  .landing {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+    margin: 0 0 var(--space-10);
+    padding: var(--space-10) var(--space-14);
+    border-radius: var(--radius-item);
+    background-color: var(--signal-done-surface);
+    font-size: var(--font-size-label);
+    color: var(--signal-done-text);
+  }
+
+  .landing[data-outcome='problem'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .landingClose {
+    border: none;
+    background: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  /* The source's mark before its name, as on 10. */
+  .connectorName {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  /* 08b after connecting: each source as a card of rows, in the sheet's shape. */
+  .sources {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    margin-block-start: var(--space-12);
+  }
+
+  .sourceCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-12) var(--space-14);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-item);
+  }
+
+  .sourceHead {
+    margin: 0;
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .sourceList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    max-block-size: 240px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow-y: auto;
+    font-size: var(--font-size-label);
+  }
+
+  .sourceList li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-10);
+  }
+
+  .sourceList label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  .sourceMeta {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .sourceDone {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--signal-done-text);
+  }
+
+  .sourceBack,
+  .sourceOpen {
+    align-self: flex-start;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .sourceActions {
+    display: flex;
+    gap: var(--space-8);
+  }
+
+  /* The source cards' buttons: one size, a pair - the dark one to act. */
+  .sourceBtn,
+  .sourceBtnPrimary {
+    align-self: flex-start;
+    padding: 7px var(--space-14);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--space-8);
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-body);
+    cursor: pointer;
+  }
+
+  .sourceBtnPrimary {
+    border-color: var(--action-base);
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .sourceBtnPrimary:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  /* Between what is synced and what can be chosen: a rule and a small head. */
+  .sourceSection {
+    margin: var(--space-4) 0 0;
+    padding-block-start: var(--space-8);
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .folderMark {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  .connectedMark {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .linkish {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+}

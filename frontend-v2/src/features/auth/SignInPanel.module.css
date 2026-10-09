@@ -1,0 +1,147 @@
+@layer features {
+  /*
+   * Screen 00a's form. The frame, the editorial panel and the footnote belong to
+   * the page; everything that changes between stages belongs here.
+   */
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .intro {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-7);
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .labelRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-8);
+  }
+
+  .label {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * ═════════════════════════════════════════════════════════════════════════
+   * ★★ THE TRAILING SLOT BOTH FIELDS HAVE IN THE MOCK
+   * ═════════════════════════════════════════════════════════════════════════
+   *     email     <span margin-left:auto;color:#4F7A2E><i data-lucide="check"
+   *                     width=15 height=15 stroke-width=2.4>
+   *     password  <span margin-left:auto;color:#A8A39A><i data-lucide="eye"
+   *                     width=15 height=15 stroke-width=2>
+   *
+   * ★ The mock makes the bordered box a flex row and lets the icon be a
+   *   sibling of the text. Here the icon is positioned over the field's
+   *   trailing edge instead, and the input keeps the border.
+   *
+   *   Not a stylistic preference: `.input` is what carries the border, the
+   *   background and - wherever the browser applies them - the focus and
+   *   invalid states. Moving the border to a wrapper would move all of those
+   *   with it and re-open every one on a screen holding a password. The
+   *   rendered result is the same box with the same icon at the same edge.
+   *
+   * ★ `--signal-done-text` IS `#4f7a2e` and `--text-faint` IS `#a8a39a` -
+   *   exactly the mock's two values. The tokens were read from this design, so
+   *   they are used rather than the literals.
+   */
+  .fieldControl {
+    position: relative;
+    display: flex;
+  }
+
+  .fieldControl .input {
+    /* Room for the 15px icon plus the mock's 15px inline padding. */
+    padding-inline-end: var(--space-32);
+  }
+
+  .fieldIcon {
+    position: absolute;
+    inset-inline-end: var(--space-15);
+    inset-block: 0;
+    display: flex;
+    align-items: center;
+    color: var(--text-faint);
+    pointer-events: none;
+  }
+
+  .fieldValid {
+    color: var(--signal-done-text);
+  }
+
+  /*
+   * The reveal is a button, so it is focusable and reachable by keyboard -
+   * the mock draws an icon, and an icon somebody cannot operate without a
+   * mouse is not the same control.
+   */
+  .reveal {
+    position: absolute;
+    inset-inline-end: var(--space-12);
+    inset-block: 0;
+    display: flex;
+    align-items: center;
+    padding-inline: var(--space-3);
+    color: var(--text-faint);
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+
+  .input {
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding-block: var(--space-12);
+    padding-inline: var(--space-12);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+  }
+
+  .forgot,
+  .recoveryInline {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .remember {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * The stage's own sentence. Never our paraphrase: Authentik does not say
+   * whether the email or the password was wrong, and a more specific message
+   * would undo that on our side.
+   */
+  .problem {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--intent-urgent-text);
+    max-inline-size: var(--size-reading);
+  }
+
+  /* Before the first stage lands. Deliberately quiet - it is usually one hop. */
+  .loading {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+}

@@ -1,0 +1,41 @@
+@layer primitives {
+  .list {
+    display: flex;
+    gap: var(--space-2);
+    border-block-end: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .trigger {
+    padding-inline: var(--space-7);
+    padding-block: var(--space-4);
+    border-block-end: var(--border-width-thick) solid transparent;
+    /* Pulls the underline onto the list's own border rather than beside it. */
+    margin-block-end: calc(var(--border-width-thin) * -1);
+    color: var(--text-secondary);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-medium);
+    background: none;
+    cursor: pointer;
+  }
+
+  .trigger:hover {
+    color: var(--text-primary);
+  }
+
+  .trigger[data-state='active'] {
+    color: var(--text-primary);
+    /*
+     * `--action-base`, the token that means "the colour of the primary
+     * action". It was `--accent-default`, which is defined nowhere - so the
+     * declaration was dropped and the underline fell back to `currentColor`.
+     * Identical value, so nothing moves on screen; the difference is that it
+     * is now the token, and a change to the action colour reaches the
+     * selected tab instead of leaving it behind.
+     */
+    border-block-end-color: var(--action-base);
+  }
+
+  .content {
+    padding-block-start: var(--space-9);
+  }
+}

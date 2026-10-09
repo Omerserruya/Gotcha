@@ -1,0 +1,84 @@
+@layer primitives {
+  /*
+   * The surface stack.
+   *
+   * The design layers four warm tones plus white on the panel ground, and the
+   * ground itself is almost never seen bare - it shows in the gaps between
+   * cards, wells and rules. Getting that stack right is what makes the work
+   * surface read as warm rather than as a large flat expanse of near-white.
+   *
+   * Depth is surface colour and a hairline, never a shadow.
+   */
+
+  /* A white card. The most forward surface; used for rows and fields. */
+  .card {
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding: var(--space-20);
+  }
+
+  /* A recessed well. Sits behind content that is grouped but not actionable. */
+  .well {
+    background-color: var(--panel-well);
+    border-radius: var(--radius-card);
+    padding: var(--space-20);
+  }
+
+  /* A quieter inset, one step warmer than the ground. */
+  .inset {
+    background-color: var(--panel-sunken);
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: var(--radius-card);
+    padding: var(--space-20);
+  }
+
+  .flush {
+    padding: 0;
+  }
+
+  /*
+   * The hairline. The single most common element in the design - it is how
+   * regions are separated, since there are no shadows to do it.
+   */
+  .divider {
+    border: none;
+    block-size: var(--border-width-thin);
+    background-color: var(--border-default);
+    inline-size: 100%;
+    margin: 0;
+  }
+
+  .dividerSubtle {
+    background-color: var(--border-subtle);
+  }
+
+  /*
+   * A row of figures divided by vertical rules, as the design draws its
+   * summary strips. The rules are inline-start borders, so the strip reads
+   * correctly in both directions with no second rule.
+   */
+  .metricRow {
+    display: flex;
+    align-items: stretch;
+    border-block: var(--border-width-thin) solid var(--border-default);
+  }
+
+  .metric {
+    padding-block: var(--space-18) var(--space-20);
+    padding-inline: var(--space-32);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  .metric + .metric {
+    border-inline-start: var(--border-width-thin) solid var(--border-default);
+  }
+
+  /* The first figure sits flush with the container's inline start. */
+  .metricRow > .metric:first-child {
+    padding-inline-start: 0;
+  }
+}

@@ -1,0 +1,117 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+
+import { isApiError } from '@/api/client/api-error';
+import { serverApi } from '@/api/client/server-api';
+import { signInIfSignedOut } from '@/api/client/signed-out';
+import {
+  bodyOfWidget,
+  websiteWidgetSchema,
+  widgetAssignmentWriteSchema,
+  type WidgetAssignment,
+  type WidgetSettings,
+} from '@/api/contracts/website-widget';
+import { channelEndpoints } from '@/api/endpoints/registry';
+import { logger } from '@/observability/logger';
+
+export type WidgetSave =
+  | { readonly ok: true; readonly settings: WidgetSettings }
+  /** `nowhere`: no place exists yet (409 WIDGET_NOT_CREATED) - the code is created first. */
+  | { readonly ok: false; readonly reason: 'nowhere' | 'failed' }
+  /** 422 WHATSAPP_NUMBER_NOT_FOUND: the number is not one of this workspace's (stage B). */
+  | { readonly ok: false; readonly reason: 'number' };
+
+/**
+ * A change to the widget, written to every place it is installed. The answer
+ * is what the route kept - it normalises (a colour that is not hex, an
+ * address that is not https) - so the screen shows the stored value.
+ *
+ * PUT never creates a place (Backend, 2026-10-07): with none it answers 409
+ * `WIDGET_NOT_CREATED`, which is "nothing to save to yet", not a failure.
+ */
+export async function saveWebsiteWidget(
+  settings: WidgetSettings,
+  stageB = false,
+): Promise<WidgetSave> {
+  try {
+    const answer = await serverApi().put({
+      endpoint: channelEndpoints.websiteWidget(),
+      body: bodyOfWidget(settings, { stageB }),
+      payload: websiteWidgetSchema,
+      raw: true,
+    });
+    revalidatePath('/[locale]/settings/channels', 'layout');
+    return { ok: true, settings: answer.data.settings };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    if (isApiError(cause) && cause.status === 409 && cause.code === 'WIDGET_NOT_CREATED') {
+      return { ok: false, reason: 'nowhere' };
+    }
+    if (isApiError(cause) && cause.code === 'WHATSAPP_NUMBER_NOT_FOUND') {
+      return { ok: false, reason: 'number' };
+    }
+    logger.warn('website_widget.save_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export type AssignmentSave =
+  | { readonly ok: true; readonly assignment: WidgetAssignment }
+  /**
+   * 409 PLAYBOOK_SHARED: the route also serves other channels; resend with
+   * `includeShared` to change them too. Which ones is the read's `sharedWith`:
+   * the error envelope keeps only the keys it declares, and this one is not.
+   */
+  | { readonly ok: false; readonly reason: 'shared' }
+  /**
+   * conditional - 409 PLAYBOOK_CONDITIONAL: conditions decide it now (the playbook changed since the read);
+   * employee_gone - 422 EMPLOYEE_NOT_FOUND: not an active employee any more;
+   * no_place - 409 WIDGET_NOT_CREATED / 422 NO_WIDGET_CHANNEL: nothing to route yet.
+   */
+  | {
+      readonly ok: false;
+      readonly reason: 'conditional' | 'employee_gone' | 'no_place' | 'forbidden' | 'failed';
+    };
+
+/**
+ * Who answers the widget's `channels` - written to THE PLAYBOOK (§4.2): it
+ * reaches live conversations at once, and the screen says so before.
+ *
+ * A 409 writes nothing - no channel half-changed - so every refusal here
+ * leaves the playbook as it was.
+ */
+export async function saveWidgetAssignment(
+  employeeId: string,
+  channels: readonly string[],
+  includeShared = false,
+): Promise<AssignmentSave> {
+  try {
+    const answer = await serverApi().put({
+      endpoint: channelEndpoints.websiteWidgetAssignment(),
+      body: { employeeId, channels, ...(includeShared ? { includeShared: true } : {}) },
+      payload: widgetAssignmentWriteSchema,
+      raw: true,
+    });
+    revalidatePath('/[locale]/settings/channels', 'layout');
+    const { changed: _changed, ...assignment } = answer.data;
+    return { ok: true, assignment };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    if (isApiError(cause)) {
+      if (cause.code === 'PLAYBOOK_SHARED') return { ok: false, reason: 'shared' };
+      if (cause.code === 'PLAYBOOK_CONDITIONAL') return { ok: false, reason: 'conditional' };
+      if (cause.code === 'EMPLOYEE_NOT_FOUND') return { ok: false, reason: 'employee_gone' };
+      if (cause.code === 'WIDGET_NOT_CREATED' || cause.code === 'NO_WIDGET_CHANNEL') {
+        return { ok: false, reason: 'no_place' };
+      }
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    }
+    logger.warn('website_widget.assignment_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    return { ok: false, reason: 'failed' };
+  }
+}

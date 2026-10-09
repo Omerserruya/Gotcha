@@ -1,0 +1,225 @@
+{
+  "title": "What GOTCHA knows about your business",
+  "description": "Where it learned about your business, and the questions it could not answer.",
+  "unavailable": "We couldn't read your knowledge just now.",
+  "counters": {
+    "sources": "{count, plural, =0 {No sources yet} =1 {One source} other {# sources}}",
+    "undated": "{count, plural, =1 {1 source has no last-read date} other {# sources have no last-read date}}",
+    "conflictsUnknown": "We couldn't check for contradictions",
+    "noConfidence": "GOTCHA doesn't record how sure it is of what it already knows - that score exists only on suggestions, before you accept them."
+  },
+  "conflicts": {
+    "heading": "Answered more than one way",
+    "asked": "{count, plural, =1 {Came up once} other {Came up # times}}",
+    "said": "{count, plural, =1 {said once} other {said # times}}",
+    "byCustomers": "{count, plural, =1 {to one customer} other {to # customers}}",
+    "lastHeard": "last on {when}",
+    "meanwhile": "Nobody has decided which of these is right, so GOTCHA has both.",
+    "coverage": "These come from reading past conversations - each answer is one your team actually gave, not something written on your website or in a document. Nothing has compared your website against your files; that check doesn't exist yet.",
+    "resolve": {
+      "choose": "This one is right",
+      "confirm": "Save “{answer}” as the answer?",
+      "armed": "Press again to save it. Above is what GOTCHA will read, word for word - nothing is used until you do.",
+      "alreadyApproved": "This was already approved, so nothing was written twice.",
+      "use": {
+        "in_use": "Saved. GOTCHA answers with this from now on.",
+        "not_retrievable": "Saved to your knowledge base, but GOTCHA cannot use it yet - preparing it for search failed. Nothing will answer with it until that is retried.",
+        "unknown": "Saved to your knowledge base. We could not confirm it is ready for GOTCHA to use yet."
+      },
+      "problem": {
+        "already_covered": "Your knowledge base already answers this, so nothing was added. This suggestion is marked as covered and will not come back as a conflict.",
+        "no_knowledge_base": "There is no knowledge base to save this into yet. Create one first, and then this will have somewhere to go.",
+        "not_found": "This suggestion is no longer there. Someone may have decided it already - reload to see where it stands.",
+        "forbidden": "You do not have permission to change the knowledge base. Whoever administers GOTCHA for you can do this or grant it.",
+        "too_long": "One of these answers is too long to save as it stands. Shorten it in the knowledge base after approving a shorter one, or edit it there directly.",
+        "failed": "We could not save that just now, and nothing was written. Try again in a moment."
+      }
+    },
+    "emptyUnavailable": "We couldn't read these just now",
+    "emptyUnavailableLine": "That isn't the same as none.",
+    "emptyNever": "Nothing has been checked for contradictions yet",
+    "emptyNeverLine": "It runs when past conversations are imported - nobody has checked.",
+    "emptyNone": "Nothing contradicted itself",
+    "emptyNoneLine": "Checked in the conversations that were imported.",
+    "emptyNoneLineWhen": "Checked in the conversations imported on {when}."
+  },
+  "gaps": {
+    "heading": "Questions it couldn't answer",
+    "none": "Nothing has been asked that GOTCHA couldn't answer.",
+    "unavailable": "We couldn't read the unanswered questions just now.",
+    "asked": "Asked {times, plural, =1 {once} other {# times}} by {people, plural, =1 {one person} other {# people}}",
+    "answer": "Answer",
+    "answerLabel": "Your answer to: {question}",
+    "placeholder": "What should GOTCHA tell a customer who asks this?",
+    "hint": "Every employee learns it, and answers it from now on.",
+    "save": "Teach it",
+    "learning": "Learning…",
+    "cancel": "Cancel",
+    "learned": "Learned - every employee answers this now.",
+    "problem": {
+      "empty": "Write an answer first.",
+      "too_long": "That's longer than GOTCHA keeps - 20,000 characters at most.",
+      "forbidden": "You need permission to change what GOTCHA knows.",
+      "gone": "This question isn't here any more.",
+      "not_learned": "Saved, but GOTCHA couldn't learn it yet - the question stays open. Try again.",
+      "failed": "It wasn't saved. Try again."
+    }
+  },
+  "sources": {
+    "heading": "Where it learns from",
+    "none": "Nothing has been added yet.",
+    "noneBody": "Until something is, GOTCHA answers only from what an AI employee was told directly.",
+    "unavailable": "We couldn't read the sources just now.",
+    "unnamed": "Unnamed source",
+    "sameName": "another source has this name too",
+    "documents": "{count, plural, =0 {Nothing in it} =1 {One document} other {# documents}}",
+    "refreshed": "last refreshed {date}",
+    "pending": "{count, plural, =1 {One document is still being read, so it isn't answering anything yet} other {# documents are still being read, so they aren't answering anything yet}}"
+  },
+  "add": "Add knowledge",
+  "strip": {
+    "confident": "Answers confidently",
+    "thin": "Thin - guesses sometimes",
+    "conflicts": "Contradicts itself",
+    "stale": "Not refreshed in {days} days"
+  },
+  "way": {
+    "website": "Your website",
+    "uploaded": "Uploaded by you",
+    "drive": "Drive folder",
+    "confluence": "Confluence",
+    "conversations": "Past conversations",
+    "answers": "Your answers during setup",
+    "mixed": "Several ways in",
+    "other": "Other",
+    "scanned": "scanned automatically"
+  },
+  "summary": {
+    "learned": "Learned {count, plural, one {one way} other {# ways}}: {ways}.",
+    "learnedNone": "Nothing learned yet.",
+    "needs": "{count, plural, =0 {Nothing needs your answer.} one {One thing needs your answer.} other {# things need your answer.}}"
+  },
+  "wayPhrase": {
+    "website": "your website",
+    "uploaded": "files you upload",
+    "drive": "a Drive folder",
+    "confluence": "Confluence",
+    "conversations": "past conversations",
+    "answers": "your answers during setup",
+    "mixed": "sources that mix several",
+    "other": "other sources"
+  },
+  "addSheet": {
+    "close": "Close",
+    "title": "Add knowledge",
+    "line": "Every AI employee learns it at the same time",
+    "eyebrow": {
+      "upload": "Upload",
+      "website": "Website",
+      "drive": "Drive sync",
+      "conversations": "Conversations"
+    },
+    "way": {
+      "document": {
+        "name": "A document",
+        "text": "PDF, Word or text · up to 10 MB"
+      },
+      "page": {
+        "name": "A page on your site",
+        "text": "Paste its address"
+      },
+      "drive": {
+        "name": "A Drive folder",
+        "text": "Google Drive or Confluence"
+      },
+      "text": {
+        "name": "Just type it",
+        "text": "One fact, one answer"
+      },
+      "conversation": {
+        "name": "From a conversation",
+        "text": "Pin a good answer"
+      }
+    },
+    "drop": "Drop a file here",
+    "urlPlaceholder": "https://",
+    "read": "Read it",
+    "connector": {
+      "google_drive": "Google Drive",
+      "confluence": "Confluence"
+    },
+    "connect": "Connect",
+    "titlePlaceholder": "What it is about",
+    "bodyPlaceholder": "The fact, or the answer, as a customer should hear it",
+    "pinNone": "Nothing pins one answer yet. Past conversations are learned through the history import in Settings · Channels.",
+    "learned": "What it learned",
+    "learnedNone": "Nothing previews what a source teaches before it is added.",
+    "teach": "Teach all of it",
+    "cancel": "Cancel",
+    "newBase": "Knowledge",
+    "fileChosen": "{name} · {size} KB",
+    "reading": "Reading…",
+    "teaching": "Teaching…",
+    "state": {
+      "reading": "Being read - it answers once it is",
+      "ready": "Learned"
+    },
+    "error": {
+      "too_large": "Up to 10 MB.",
+      "wrong_type": "PDF, Word, Markdown or text only.",
+      "bad_url": "An address starting https://",
+      "unreadable": "There was no text to read in it. Nothing was added.",
+      "entitlement": "Knowledge isn't part of this plan.",
+      "forbidden": "You don't have permission to add knowledge.",
+      "failed": "It wasn't added - try again."
+    },
+    "connectProblem": {
+      "not_configured": "{name} isn't set up on GOTCHA's side yet.",
+      "forbidden": "Only an admin can connect a knowledge source.",
+      "failed": "{name} couldn't be opened - try again."
+    },
+    "opening": "Opening…",
+    "landing": {
+      "connected": "{name} is connected.",
+      "denied": "You cancelled at {provider} - nothing was connected.",
+      "token_exchange_failed": "{provider} didn't confirm the connection. Nothing was connected - try again.",
+      "no_accessible_site": "No Confluence site you can reach was found - nothing was connected.",
+      "callback_error": "Something went wrong on the way back from {provider}. Nothing was connected - try again.",
+      "other": "{name} didn't connect. Try again.",
+      "close": "Close"
+    },
+    "provider": {
+      "google_drive": "Google",
+      "confluence": "Atlassian"
+    },
+    "sources": {
+      "drive": "{name} · connected",
+      "driveName": "Google Drive",
+      "confluence": "{name} · connected",
+      "paused": "Paused",
+      "folderSynced": "Folder · new files learned automatically",
+      "fileSynced": "File · kept in sync",
+      "choose": "Choose what to learn",
+      "root": "My Drive",
+      "open": "Open",
+      "loading": "Reading…",
+      "empty": "Nothing here.",
+      "filesUnread": "We couldn't read this Drive - try again.",
+      "spacesUnread": "We couldn't read the Confluence spaces - try again.",
+      "unread": "We couldn't read what's connected - try again.",
+      "oneKind": "Learn folders and files in separate rounds.",
+      "learn": "{count, plural, =0 {Learn these} one {Learn 1 item} other {Learn # items}}",
+      "learning": "{count, plural, one {Learning 1 item - it answers once it’s read.} other {Learning # items - they answer once they’re read.}}",
+      "learnSpaces": "{count, plural, =0 {Learn these spaces} one {Learn 1 space} other {Learn # spaces}}",
+      "learnedSpaces": "{count, plural, one {The space is being read - it answers once it is.} other {# spaces are being read - they answer once they are.}}",
+      "cancel": "Cancel",
+      "refused": {
+        "busy": "A sync is already running for this source - try again when it finishes.",
+        "mixed": "Learn folders and files in separate rounds.",
+        "failed": "That wasn't learned - try again."
+      }
+    },
+    "connectedAlready": "Connected",
+    "addAnother": "Add another account"
+  }
+}

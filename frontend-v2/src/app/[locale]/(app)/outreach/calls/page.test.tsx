@@ -1,0 +1,157 @@
+import { isValidElement, type ReactElement, type ReactNode } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { CallStats, DialerCard, RecentCalls } from '@/features/calls/CallsScreen';
+import { LiveCall } from '@/features/calls/LiveCall';
+import { OutreachTabs } from '@/features/outreach/OutreachTabs';
+
+const loadCalls = vi.hoisted(() => vi.fn());
+const loadLiveCall = vi.hoisted(() => vi.fn());
+const loadCustomers = vi.hoisted(() => vi.fn());
+const loadQuiet = vi.hoisted(() => vi.fn());
+vi.mock('@/features/calls/load-calls', () => ({ loadCalls, loadLiveCall }));
+vi.mock('@/features/customers/load-customers', () => ({ loadCustomers, loadQuiet }));
+vi.mock('next-intl/server', () => ({ getTranslations: async () => (key: string) => key }));
+vi.mock('server-only', () => ({}));
+vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
+vi.mock('@/realtime/realtime-provider', () => ({ useRealtimeEvent: () => undefined }));
+
+const find = <T,>(tree: ReactNode, type: unknown): T | null => {
+  let found: T | null = null;
+  const visit = (node: ReactNode): void => {
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (!isValidElement(node)) return;
+    if (node.type === type) found = node.props as T;
+    visit((node as ReactElement<{ children?: ReactNode }>).props.children);
+  };
+  visit(tree);
+  return found;
+};
+
+const page = async (params: Record<string, string> = {}) => {
+  const { default: Page } = await import('./page');
+  return Page({ searchParams: Promise.resolve(params) });
+};
+
+const reads = (over: Record<string, unknown> = {}) => ({
+  voiceEnabled: true,
+  hasNumber: true,
+  calls: [],
+  summary: null,
+  failed: false,
+  ...over,
+});
+
+beforeEach(() => {
+  loadCalls.mockReset().mockResolvedValue(reads());
+  loadLiveCall.mockReset().mockResolvedValue({ call: null, transcript: [], contactName: null });
+  loadQuiet.mockReset().mockResolvedValue({ count: 46, capped: false });
+  loadCustomers
+    .mockReset()
+    .mockResolvedValue({ rows: [], total: 0, truncated: false, searchedField: null });
+});
+
+describe('★★ 05d - one frame in every state', () => {
+  it.each([
+    [{ voiceEnabled: null }, 'unknown'],
+    [{ voiceEnabled: false, calls: null }, 'off'],
+    [{ calls: null, failed: true }, 'failed'],
+    [{ hasNumber: false }, 'noNumber'],
+    [{}, 'none'],
+  ] as const)(
+    '%o → the recent-calls card says %s, and the dialer and the week are still drawn',
+    async (over, state) => {
+      loadCalls.mockResolvedValue(reads(over));
+      const tree = await page();
+      expect(find<{ state: string }>(tree, RecentCalls)?.state).toBe(state);
+      expect(find(tree, DialerCard)).not.toBeNull();
+      expect(find(tree, CallStats)).not.toBeNull();
+    },
+  );
+
+  it.each([
+    [{ voiceEnabled: false, calls: null }, 'off'],
+    [{ hasNumber: false }, 'noNumber'],
+    // A number missing with calls on record still cannot place one.
+    [{ hasNumber: false, calls: [{ id: 'c1' }] }, 'noNumber'],
+    [{ hasNumber: null }, 'ok'],
+    [{}, 'ok'],
+  ] as const)('%o → the dialer is told the line is %s', async (over, line) => {
+    loadCalls.mockResolvedValue(reads(over));
+    expect(find<{ line: string }>(await page(), DialerCard)?.line).toBe(line);
+  });
+
+  it('★ the summary is the WEEK’s - the strip says "this week"', async () => {
+    await page();
+    expect(loadCalls).toHaveBeenCalledWith({ summaryDays: 7 });
+  });
+
+  it('★ ?q= searches the customers; no query, no search', async () => {
+    await page();
+    expect(loadCustomers).not.toHaveBeenCalled();
+    const tree = await page({ q: ' dana ' });
+    expect(loadCustomers).toHaveBeenCalledWith('dana');
+    expect(find<{ query: string }>(tree, DialerCard)?.query).toBe('dana');
+  });
+
+  it('⚠ a failed search is null, not "no match"', async () => {
+    loadCustomers.mockResolvedValue({
+      rows: null,
+      total: 0,
+      truncated: false,
+      searchedField: 'name',
+    });
+    const tree = await page({ q: 'dana' });
+    expect(find<{ results: unknown }>(tree, DialerCard)?.results).toBeNull();
+  });
+
+  it('?calls= filters the recent calls', async () => {
+    const tree = await page({ calls: 'missed' });
+    expect(find<{ filter: string }>(tree, RecentCalls)?.filter).toBe('missed');
+  });
+});
+
+describe('★★ 05e - a call in progress is the page', () => {
+  it('the live call, with its person, direction and start - and not 05d’s frame', async () => {
+    loadLiveCall.mockResolvedValue({
+      call: {
+        id: 'v1',
+        conversationId: 'c1',
+        customerNumber: '972524189930',
+        customerId: 'k1',
+        direction: 'inbound',
+        startedAt: '2026-10-02T09:00:00.000Z',
+        answeredAt: '2026-10-02T09:00:05.000Z',
+      },
+      transcript: [],
+      contactName: 'Dana Cohen',
+    });
+    const tree = await page();
+    const live = find<{ customerId: string; direction: string; startedAt: string }>(tree, LiveCall);
+    expect(live).toMatchObject({
+      // ★ Measured: the page had the id and never passed the name.
+      contactName: 'Dana Cohen',
+      customerId: 'k1',
+      direction: 'inbound',
+      startedAt: '2026-10-02T09:00:05.000Z',
+    });
+    expect(find(tree, DialerCard)).toBeNull();
+    expect(find(tree, RecentCalls)).toBeNull();
+  });
+});
+
+describe('★ 05d’s header and its list (measured against 02)', () => {
+  it('the outreach pills with Calls open, and "Start a call" beside them', async () => {
+    const tree = (await page()) as ReactElement<{ actions: ReactNode }>;
+    const tabs = find<{ current: string; children: ReactNode }>(tree.props.actions, OutreachTabs);
+    expect(tabs?.current).toBe('calls');
+    expect(JSON.stringify(tabs?.children)).toContain('startCall');
+  });
+
+  it('who went quiet is handed to the dialer as its list', async () => {
+    expect(find<{ quiet: unknown }>(await page(), DialerCard)?.quiet).toEqual({
+      count: 46,
+      capped: false,
+    });
+  });
+});

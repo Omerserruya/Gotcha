@@ -1,0 +1,200 @@
+@layer features {
+  /* 07e, measured: 720 wide, 120 from the top, centred, over the scrim. */
+  .dialog {
+    position: absolute;
+    inset-block-start: 120px;
+    inset-inline-start: 50%;
+    translate: -50% 0;
+    inline-size: min(720px, calc(100% - var(--space-24)));
+    border-radius: var(--radius-panel);
+    background-color: var(--panel-base);
+    overflow: hidden;
+    line-height: normal;
+  }
+
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 30px 34px 26px;
+    border-block-end: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .tile {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: 30px;
+    block-size: 30px;
+    border-radius: 9px;
+    background-color: var(--panel-well);
+  }
+
+  .tile[data-status='ACTIVE'] {
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+  }
+
+  .title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .line {
+    margin: 2px 0 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: var(--space-24) 34px;
+  }
+
+  .rows {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 13px;
+    background-color: var(--panel-field);
+    overflow: clip;
+    min-inline-size: 0;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: var(--space-12) var(--space-16);
+  }
+
+  .row + .row {
+    border-block-start: var(--border-width-thin) solid var(--panel-inset);
+  }
+
+  .rowText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 3px;
+    min-inline-size: 0;
+  }
+
+  .rowTitle {
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .rowSub {
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .pill {
+    padding: var(--space-4) var(--space-9);
+    border-radius: 6px;
+    background-color: var(--panel-well);
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .small {
+    padding: var(--space-4) var(--space-9);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 6px;
+    font-size: var(--font-size-micro);
+    color: var(--text-body);
+    text-decoration: none;
+  }
+
+  .gap,
+  .quiet {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 15px 18px;
+    border-radius: 13px;
+  }
+
+  .gap {
+    border: var(--border-width-thin) solid var(--warning-banner-edge);
+    background-color: var(--warning-banner-surface);
+  }
+
+  .quiet {
+    border: var(--border-width-thin) solid var(--border-default);
+    background-color: var(--panel-field);
+  }
+
+  .gapDot {
+    flex: none;
+    inline-size: 7px;
+    block-size: 7px;
+    border-radius: var(--radius-round);
+    background-color: var(--intent-blocked-edge);
+  }
+
+  .gapText {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .gapTitle,
+  .quietTitle {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+
+  .gapTitle {
+    color: var(--warning-banner-title);
+  }
+
+  .quietTitle {
+    font-weight: 500;
+    color: var(--text-body);
+  }
+
+  .gapBody {
+    margin: var(--space-4) 0 0;
+    font-size: var(--font-size-meta);
+    line-height: 1.55;
+    color: var(--warning-banner-text);
+  }
+
+  .resolve,
+  .primary {
+    flex: none;
+    border-radius: 9px;
+    background-color: var(--action-base);
+    font-weight: 500;
+    color: var(--action-text);
+    text-decoration: none;
+  }
+
+  .resolve {
+    padding: 9px 15px;
+    font-size: var(--font-size-label);
+  }
+
+  .foot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    padding-block-start: var(--space-6);
+  }
+
+  .primary {
+    padding: var(--space-12) var(--space-20);
+    border-radius: 10px;
+    font-size: 13.5px;
+  }
+}

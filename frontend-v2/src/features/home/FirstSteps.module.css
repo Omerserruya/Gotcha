@@ -1,0 +1,432 @@
+@layer features {
+  /*
+   * "First steps" - screen 01c.
+   *
+   * Not a separate onboarding page. It is Home in its first state: same shell,
+   * same command box, one extra block beneath it. Exactly one step is ever
+   * "next", and that one is raised out of the list; the rest stay quiet until
+   * their turn.
+   */
+  /*
+   * "One extra block beneath it" - beneath the command box, and on its measure.
+   *
+   * The same 880px centred column the command surface uses, so the two read as
+   * one stack rather than a contained box above a full-width list. Without
+   * this the rows ran the whole width of the panel and the actions sat on the
+   * frame's edge.
+   *
+   * It is also the page's flexible region on day one, the way the two columns
+   * are on every other morning: it takes what is left and scrolls inside it,
+   * so the greeting and the command box stay put.
+   */
+  /*
+   * 01c, measured: ONE white card on the command box's measure (880),
+   * `r18 · p 15px 20px 13px`. It takes what is left of the frame; the steps
+   * scroll inside it and Go live stays pinned at its foot.
+   */
+  .block {
+    display: flex;
+    flex-direction: column;
+    inline-size: 880px;
+    max-inline-size: calc(100% - var(--space-40) * 2);
+    margin-inline: auto;
+    margin-block-start: 15px;
+    flex: 1;
+    min-block-size: 0;
+    padding: 15px 20px 13px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 18px;
+    background-color: var(--panel-field);
+    overflow: hidden;
+  }
+
+  /* "Once you go live…", under the card. */
+  .foot {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-12);
+    inline-size: 880px;
+    max-inline-size: calc(100% - var(--space-40) * 2);
+    margin: var(--space-10) auto var(--space-14);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .header {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-12);
+  }
+
+  .title {
+    font-size: var(--font-size-control);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .progressText {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .hide {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    /* Quiet text, as 02's - not a link's underline. */
+    text-decoration: none;
+  }
+
+  .hide:hover {
+    color: var(--text-body);
+  }
+
+  /* One segment per step, so progress is countable rather than a percentage. */
+  .strip {
+    display: flex;
+    gap: var(--space-4);
+    margin-block-start: var(--space-9);
+  }
+
+  .segment {
+    flex: 1;
+    block-size: var(--size-meter);
+    border-radius: var(--radius-mark);
+    background-color: var(--step-track);
+  }
+
+  .segmentDone {
+    background-color: var(--signal-done);
+  }
+
+  .segmentNext {
+    background-color: var(--signal-ai);
+  }
+
+  /* The steps and Go live scroll together, so the last step is never under it. */
+  .scroller {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-block-size: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-heavy) transparent;
+  }
+
+  .list {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    margin: var(--space-11) 0 0;
+    padding: 0;
+    list-style: none;
+    border-block-start: var(--border-width-thin) solid var(--panel-well);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-heavy) transparent;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-13);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-2);
+    border-block-end: var(--border-width-thin) solid var(--panel-well);
+  }
+
+  .rowDone {
+    padding-block: var(--space-10);
+  }
+
+  /* The one step to do now, lifted out of the list. */
+  .rowNext {
+    align-items: flex-start;
+    padding-block: var(--space-11);
+    padding-inline-start: var(--space-12);
+    padding-inline-end: var(--space-14);
+    margin-block: var(--space-6);
+    background-color: var(--step-next-surface);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-inline-start: var(--space-3) solid var(--step-next);
+    border-radius: var(--radius-step);
+  }
+
+  .badge {
+    inline-size: var(--size-step-badge);
+    block-size: var(--size-step-badge);
+    border-radius: var(--radius-round);
+    border: var(--border-width-thin) solid var(--border-strong);
+    color: var(--text-subtle);
+    font-size: var(--font-size-counter);
+    font-weight: var(--font-weight-medium);
+    display: grid;
+    place-items: center;
+    flex: none;
+  }
+
+  .badgeDone {
+    background-color: var(--signal-done);
+    border-color: var(--signal-done);
+    color: var(--signal-done-contrast);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .badgeNext {
+    background-color: var(--step-next);
+    border-color: var(--step-next);
+    color: var(--panel-field);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .rowText {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  /* A finished step is one quiet line: it is history, not an instruction. */
+  .doneText {
+    overflow: hidden;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-subtle);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 02's waiting row: one line - the name, then what it is, cut if it must be. */
+  .rowLine {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  .rowLine .rowTitle {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .rowLine .rowBody {
+    min-inline-size: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .doneTime {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    color: var(--text-faint);
+    flex: none;
+  }
+
+  .rowTitle {
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .rowTitleNext {
+    font-size: var(--font-size-item);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .nextHeading {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-9);
+  }
+
+  .nextChip {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-tag);
+    font-weight: var(--font-weight-medium);
+    color: var(--step-next-chip-text);
+    background-color: var(--step-next-chip-surface);
+    border-radius: var(--radius-key);
+    padding-block: var(--space-3);
+    padding-inline: var(--space-6);
+    flex: none;
+  }
+
+  .rowBody {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    margin-block-start: var(--space-2);
+  }
+
+  .rowBodyNext {
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+    margin-block-start: var(--space-4);
+  }
+
+  .rowActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    flex: none;
+  }
+
+  .actionPrimary {
+    font-size: var(--font-size-label);
+    background-color: var(--frame-base);
+    color: var(--frame-text);
+    border-radius: var(--radius-item);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-14);
+    text-decoration: none;
+  }
+
+  .actionSecondary {
+    font-size: var(--font-size-label);
+    color: var(--text-body);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-item);
+    padding-block: var(--space-7);
+    padding-inline: var(--space-13);
+    text-decoration: none;
+    flex: none;
+  }
+
+  .estimate {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * A blocked step is dimmed but still readable, and says what is in the way.
+   * Hiding it would lose the shape of what setup involves.
+   */
+  .rowBlocked {
+    opacity: 0.55;
+  }
+
+  /* 01c's Go live: a dark row closing the block. */
+  .goLive {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-14);
+    margin-block-start: var(--space-12);
+    padding: var(--space-12) var(--space-18);
+    border-radius: 12px;
+    background-color: var(--frame-raised);
+  }
+
+  .goLiveText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .goLiveTitle {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--frame-text);
+  }
+
+  .goLiveBody {
+    font-size: var(--font-size-caption);
+    color: var(--frame-text-secondary);
+  }
+
+  .goLiveButton {
+    flex: none;
+    padding: var(--space-6) var(--space-14);
+    border: var(--border-width-thin) solid var(--frame-line);
+    border-radius: 8px;
+    font-size: var(--font-size-caption);
+    color: var(--frame-text-muted);
+    cursor: not-allowed;
+  }
+
+  /* Eligible: the button is live - light on the dark card, ready to press. */
+  button.goLiveButton {
+    border-color: transparent;
+    background-color: var(--frame-text);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    font-weight: var(--font-weight-medium);
+    color: var(--frame-raised);
+    cursor: pointer;
+  }
+
+  button.goLiveButton:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .goLiveConfirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-8);
+  }
+
+  .goLiveAsk {
+    font-size: var(--font-size-label);
+    color: var(--frame-text);
+  }
+
+  .goLiveCancel {
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--frame-text-muted);
+    cursor: pointer;
+  }
+
+  .goLiveProblem {
+    flex-basis: 100%;
+    text-align: end;
+    font-size: var(--font-size-caption);
+    color: var(--frame-text);
+  }
+
+  .goLiveProblem a {
+    color: inherit;
+  }
+
+  .footLink {
+    color: var(--text-secondary);
+    text-decoration: underline;
+    cursor: not-allowed;
+  }
+
+  .goLiveMark {
+    display: flex;
+    flex: none;
+    color: var(--frame-text-muted);
+  }
+
+  /* 02: the store and handover rows - the title, then its explanation beneath. */
+  .rowTwoLine {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .rowTwoLine .rowBody {
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  /* A step no screen completes yet: drawn, never a live-looking black button. */
+  .actionPrimary[aria-disabled='true'],
+  .actionSecondary[aria-disabled='true'] {
+    border-color: var(--border-default);
+    background-color: var(--panel-well);
+    color: var(--text-faint);
+    cursor: not-allowed;
+  }
+}

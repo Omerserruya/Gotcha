@@ -1,0 +1,438 @@
+@layer features {
+  /*
+   * 07g · an employee's Skills tab (design 6): the employee's header with
+   * Save on the right, 07f's tab row, then the ordered list (white card,
+   * rows at 14px 18px, a three-way On/Watch/Off) and "When no skill fits"
+   * beside a 340px "Add a skill" card.
+   */
+  .tab {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-block-size: 0;
+    line-height: normal;
+  }
+
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 22px 32px 12px;
+  }
+
+  .identity {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 14px;
+    min-inline-size: 0;
+  }
+
+  .bigAvatar {
+    flex: none;
+    inline-size: 46px;
+    block-size: 46px;
+    border-radius: 50%;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 46px;
+    text-align: center;
+  }
+
+  .bigAvatar[data-tone='1'] {
+    background-color: var(--employee-avatar-1);
+  }
+
+  .bigAvatar[data-tone='2'] {
+    background-color: var(--employee-avatar-2);
+  }
+
+  .bigAvatar[data-tone='3'] {
+    background-color: var(--employee-avatar-3);
+  }
+
+  .identityText {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-inline-size: 0;
+  }
+
+  .nameRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .employeeName {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+  }
+
+  .status {
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    background-color: var(--panel-inset);
+    color: var(--text-muted);
+  }
+
+  .status[data-status='ACTIVE'] {
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+  }
+
+  .said {
+    margin: 0;
+    font-size: 12px;
+    color: var(--signal-done-text);
+  }
+
+  .said[data-said='failed'],
+  .said[data-said='policyFailed'] {
+    color: var(--intent-urgent-text);
+  }
+
+  .save {
+    padding: 9px 16px;
+    border: 0;
+    border-radius: 9px;
+    background-color: var(--text-primary);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--frame-text);
+    cursor: pointer;
+  }
+
+  .save:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 24px;
+    padding: 0 32px;
+    border-block-end: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .tabLink {
+    padding: 10px 0;
+    border-block-end: 2px solid transparent;
+    font-size: 13px;
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .tabLink[aria-current='page'] {
+    border-block-end-color: var(--text-primary);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .columns {
+    display: flex;
+    flex: 1;
+    align-items: flex-start;
+    gap: 20px;
+    min-block-size: 0;
+    padding: 20px 32px;
+    overflow-y: auto;
+  }
+
+  .main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 12px;
+    min-inline-size: 0;
+  }
+
+  .list {
+    margin: 0;
+    padding: 0;
+    overflow: clip;
+    min-inline-size: 0;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+    list-style: none;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+  }
+
+  .row + .row {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .grip {
+    display: inline-flex;
+    color: var(--text-faint);
+    cursor: grab;
+  }
+
+  .index {
+    inline-size: 14px;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
+  .who {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .name {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .quiet {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
+  .runs {
+    font-size: 12px;
+    color: var(--text-subtle);
+    white-space: nowrap;
+  }
+
+  .order {
+    display: flex;
+  }
+
+  .move {
+    inline-size: 20px;
+    block-size: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    font-size: 12px;
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .move:disabled {
+    color: var(--text-disabled);
+    cursor: default;
+  }
+
+  .modes {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 9px;
+    background-color: var(--panel-inset);
+  }
+
+  .mode {
+    padding: 4px 9px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    font: inherit;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .mode[aria-checked='true'] {
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+  }
+
+  .draftNote {
+    padding: 2px 7px;
+    border-radius: 6px;
+    background-color: var(--panel-inset);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .fallback {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin: 0;
+    padding: 16px 18px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+  }
+
+  .fallbackTitle {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .radio {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 12.5px;
+  }
+
+  .radio input {
+    margin: 0;
+    accent-color: var(--text-primary);
+  }
+
+  .add {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 12px;
+    inline-size: 340px;
+    padding: 16px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+  }
+
+  .addTitle {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 9px;
+    color: var(--text-subtle);
+  }
+
+  .search input {
+    flex: 1;
+    min-inline-size: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+
+  .search input:focus {
+    outline: none;
+  }
+
+  .search:focus-within {
+    border-color: var(--border-focus);
+  }
+
+  .candidates {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .candidate {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 0;
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .candidateTop {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .candidateName {
+    font-size: 13px;
+  }
+
+  .addButton {
+    padding: 4px 10px;
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: 7px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+
+  .warning {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 6px 8px;
+    border-radius: 7px;
+    background-color: var(--approval-chip-surface);
+    font-size: 11.5px;
+    color: var(--intent-blocked-text);
+  }
+
+  .write {
+    align-self: flex-start;
+    border-block-end: var(--border-width-thin) solid var(--border-emphasis);
+    font-size: 12px;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .unread {
+    margin: 0;
+    padding: 24px 32px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  /* The handle always; the arrows on hover and on focus, so the keyboard still has them (dev). */
+  .row .order {
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--easing-standard);
+  }
+
+  .row:is(:hover, :focus-within) .order {
+    opacity: 1;
+  }
+
+  /* 07g's line under the name: one line, the channels beside it. */
+  .line {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-inline-size: 640px;
+  }
+
+  .lineText {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .channelIcons {
+    display: inline-flex;
+    flex: none;
+    gap: 4px;
+    color: var(--text-muted);
+  }
+}

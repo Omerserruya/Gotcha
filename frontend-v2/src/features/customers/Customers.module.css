@@ -1,0 +1,2615 @@
+@layer features {
+  /*
+   * Screen 04 · Customers.
+   *
+   * A list of contacts, deliberately plain. The design's row-as-a-sentence
+   * needs a "current situation" this platform does not compute, and value and
+   * order count are two live uncached Shopify calls per person - so a row here
+   * carries only what is genuinely known: who they are, and where they came in.
+   */
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 04, measured - a list card that is a window, and a 330px side column
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  .columns {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    gap: var(--space-14);
+    line-height: normal;
+  }
+
+  /* White, `1px #E6E2DA`, radius 14 - and it scrolls inside (`fillCard`). */
+  .listCard {
+    min-inline-size: 0;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+  }
+
+  .rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* 02: `#F0EDE7` under each row, none under the last. */
+  .row {
+    border-block-end: 1px solid var(--panel-well);
+  }
+
+  .row:last-child {
+    border-block-end: 0;
+  }
+
+  /* 02: `padding:13px 18px`, `gap:14px` - 67 tall. */
+  .rowLink {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    padding: 13px 18px;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .rowLink:hover {
+    background-color: var(--panel-sunken);
+  }
+
+  .rowLink:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: -2px;
+  }
+
+  /* A 40px disc with a 17px channel badge cut into its corner. */
+  .avatarStack {
+    position: relative;
+    flex: none;
+    inline-size: 40px;
+    block-size: 40px;
+  }
+
+  .avatar {
+    display: block;
+    inline-size: 40px;
+    block-size: 40px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--intent-neutral-text);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    line-height: 40px;
+    text-align: center;
+  }
+
+  .channelBadge {
+    position: absolute;
+    inset-inline-end: -3px;
+    inset-block-end: -3px;
+    inline-size: 17px;
+    block-size: 17px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--panel-field);
+    border-radius: 6px;
+  }
+
+  .channelBadge[data-tone='whatsapp'] {
+    background-color: var(--channel-whatsapp-surface);
+    color: var(--channel-whatsapp-mark);
+  }
+
+  .channelBadge[data-tone='instagram'] {
+    background-color: var(--channel-instagram-surface);
+    color: var(--channel-instagram-mark);
+  }
+
+  .channelBadge[data-tone='messenger'] {
+    background-color: var(--channel-messenger-surface);
+    color: var(--channel-messenger-mark);
+  }
+
+  .channelBadge[data-tone='email'] {
+    background-color: var(--channel-email-surface);
+    color: var(--channel-email-mark);
+  }
+
+  .channelBadge[data-tone='web'] {
+    background-color: var(--channel-web-surface);
+    color: var(--channel-web-mark);
+  }
+
+  .rowBody {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .rowTop {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-inline-size: 0;
+  }
+
+  .rowName {
+    min-inline-size: 0;
+    font-size: 14px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rowChip {
+    flex: none;
+    padding: 2px var(--space-8);
+    border-radius: 6px;
+    font-size: 10.5px;
+    background-color: var(--panel-well);
+    color: var(--intent-neutral-text);
+  }
+
+  /* 02: 12px `#6B6660`, one line - the situation is cut, "wrote N times" never is. */
+  .rowLine {
+    display: flex;
+    min-inline-size: 0;
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .rowSituation {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rowWrote {
+    flex: none;
+    white-space: pre;
+  }
+
+  /* 02's footer bar: `#F5F2EC`, `padding:11px 18px`, `#F0EDE7` above. */
+  .listFooter {
+    flex: none;
+    margin: 0;
+    padding: 11px 18px;
+    background-color: var(--panel-footer);
+    border-block-start: 1px solid var(--panel-well);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* 02's side column: 330, its cards at `gap:14px`. */
+  .side {
+    flex: none;
+    inline-size: 330px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  @media (width < 64rem) {
+    .side {
+      display: none;
+    }
+  }
+
+  .sideCard {
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .sideTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .sideNote {
+    margin: var(--space-4) 0 var(--space-12);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .bars {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .bar {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-10);
+    font-size: var(--font-size-caption);
+    color: var(--text-body);
+  }
+
+  .barTrack {
+    block-size: 6px;
+    border-radius: 3px;
+    background-color: var(--panel-well);
+    overflow: hidden;
+  }
+
+  .barFill {
+    display: block;
+    block-size: 100%;
+    background-color: var(--text-secondary);
+  }
+
+  .barCount {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-subtle);
+  }
+
+  .empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .emptyLead {
+    margin: 0;
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .emptyBody {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* 02's search: 260 wide, white, radius 9, `padding:8px 14px`, 12.5px. */
+  .search {
+    margin: 0;
+  }
+
+  .headActions {
+    display: flex;
+    gap: 10px;
+  }
+
+  /* 02: "Add a customer", outlined, radius 9, `8px 14px`. */
+  .addCustomer {
+    padding: var(--space-8) var(--space-14);
+    border: 1px solid var(--border-default);
+    border-radius: 9px;
+    background: none;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+    cursor: pointer;
+  }
+
+  .addWrap {
+    position: relative;
+  }
+
+  .addPanel {
+    position: absolute;
+    inset-block-start: calc(100% + 6px);
+    inset-inline-end: 0;
+    z-index: 5;
+    inline-size: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding: var(--space-16);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    line-height: normal;
+  }
+
+  .addField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .addField input {
+    padding: var(--space-8) 10px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+
+  .addField input[aria-invalid='true'] {
+    border-color: var(--alert-text);
+  }
+
+  .addNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .addProblem {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+
+  .addActions {
+    display: flex;
+    gap: var(--space-8);
+  }
+
+  .searchInput {
+    inline-size: 260px;
+    padding: var(--space-8) var(--space-14);
+    border: 1px solid var(--border-default);
+    border-radius: 9px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+
+  .searchField {
+    position: relative;
+    display: inline-flex;
+  }
+
+  /* A quiet mark at the field's end while the list is asked again. */
+  .searchBusy {
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-end: 10px;
+    inline-size: 10px;
+    block-size: 10px;
+    margin-block-start: -5px;
+    border: 1.5px solid var(--border-default);
+    border-block-start-color: var(--text-subtle);
+    border-radius: 50%;
+    animation: search-busy 0.8s linear infinite;
+  }
+
+  @keyframes search-busy {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .searchBusy {
+      animation: none;
+    }
+  }
+
+  .searchInput::placeholder {
+    color: var(--text-faint);
+  }
+
+  .detail {
+    display: grid;
+    gap: var(--space-24);
+  }
+
+  .detailName {
+    margin: 0;
+    font-size: var(--font-size-title);
+  }
+
+  .detailHeading {
+    margin: 0 0 var(--space-8);
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  /*
+    The one place the design asks for serif italic, and the only block on
+    this screen written ABOUT the person rather than listing what they did.
+  */
+  .briefProse {
+    margin: 0;
+    /*
+     * ★★ `--font-serif`, AND ITS STYLE TOKEN WITH IT.
+     * This said `var(--font-family-serif, Georgia, …)`. That token does not
+     * exist, so the fallback was what ran - and the fallback is the bug:
+     * **Georgia has no Hebrew glyphs**, so a Hebrew customer brief was
+     * rendered in whatever the system substituted, never in the brand serif.
+     * `--font-serif` is locale-aware by design: Instrument Serif in Latin,
+     * Frank Ruhl Libre in Hebrew.
+     *
+     * And the style follows it rather than being hardcoded, because Frank
+     * Ruhl Libre has no italic - hardcoding `italic` asks the browser to
+     * slant Hebrew synthetically, which is the thing `--font-serif-style`
+     * exists to stop. `Text.module.css` pairs the two tokens in both of its
+     * serif roles; a fallback is not a licence to do it differently.
+     */
+    font-family: var(--font-serif);
+    font-style: var(--font-serif-style);
+    font-size: var(--font-size-lead, var(--font-size-body));
+    line-height: 1.6;
+    color: var(--text-body);
+  }
+
+  .signals {
+    margin-block: var(--space-12) 0;
+    padding-inline-start: var(--space-20);
+    display: grid;
+    gap: var(--space-4);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .briefWhen,
+  .briefNone {
+    margin-block: var(--space-8) 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .facts {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: var(--space-8);
+  }
+
+  .fact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    align-items: baseline;
+    font-size: var(--font-size-meta);
+  }
+
+  .factTag {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .memorySource {
+    margin-block: var(--space-12) 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+    The limits. Deliberately NOT styled as warnings - they are properties of
+    the data, and an alarm colour would read as something being wrong rather
+    than as the screen being precise about what it holds.
+  */
+  .memoryLimit,
+  .timelineLimit,
+  .timelineScope {
+    margin-block: var(--space-8) 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .events {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: var(--space-12);
+  }
+
+  .event {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .eventMeta {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .eventBody {
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  /* Outbound sits visually apart, so a stream reads as a conversation. */
+  .event[data-direction='OUTBOUND'] .eventBody {
+    padding-inline-start: var(--space-12);
+    border-inline-start: 2px solid var(--border-subtle);
+  }
+
+  .absent {
+    border-block-start: 1px solid var(--border-subtle);
+    padding-block-start: var(--space-16);
+    display: grid;
+    gap: var(--space-8);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .absent p {
+    margin: 0;
+  }
+
+  /*
+    The never-written sentence. Full contrast: it is the explanation for four
+    sections being absent, and a subtle one would be read as a caption.
+  */
+  .neverWritten {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    /* ★ Same as `.electOk`: the comment above says full contrast, and the
+       dead token gave it none. */
+    color: var(--text-primary);
+  }
+
+  /* ── Screen 04d · her orders ──────────────────────────────────────────── */
+
+  .orderList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: var(--space-12);
+  }
+
+  .order {
+    display: grid;
+    gap: var(--space-8);
+  }
+
+  /* The troubled order is the one somebody came here about. */
+  .order[data-troubled='yes'] {
+    padding-inline-start: var(--space-12);
+    border-inline-start: 2px solid var(--intent-urgent-edge);
+  }
+
+  .orderHead {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    align-items: baseline;
+    font-size: var(--font-size-meta);
+  }
+
+  .orderNumber {
+    font-weight: 600;
+  }
+
+  .orderDate,
+  .orderTotal {
+    color: var(--text-subtle);
+  }
+
+  .orderTotal {
+    margin-inline-start: auto;
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+
+  /*
+    The tone is the PLATFORM's judgement, not ours - re-deciding it here
+    would make this screen disagree with the Inbox about the same order.
+  */
+  .chip {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .chip[data-tone='positive'] {
+    color: var(--intent-calm-text);
+  }
+
+  .chip[data-tone='warning'] {
+    color: var(--intent-urgent-text);
+  }
+
+  .chip[data-tone='danger'] {
+    color: var(--intent-blocked-text);
+  }
+
+  .orderDetail {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .orderItems {
+    margin: 0;
+    padding-inline-start: var(--space-20);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .orderMore,
+  .orderMoney,
+  .orderCan {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .orderActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    align-items: center;
+  }
+
+  .orderAction:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /*
+    Waiting on a person is NOT an error and must not be styled as one - the
+    reader has to finish this sentence rather than dismiss it and press again.
+  */
+  .orderWaiting {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  /* An unknown outcome is the loudest thing on the card, deliberately. */
+  .orderUnknown {
+    flex-basis: 100%;
+    margin: 0;
+    padding: var(--space-8);
+    border: 1px solid var(--intent-urgent-edge);
+    background: var(--intent-urgent-surface);
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  /*
+   * ── Screen 04e · what was done in this customer's context ──
+   */
+
+  /*
+   * ★ `.unavailable` WAS USED BY THREE PLACES IN `CustomerDetail` AND
+   * DEFINED BY NONE. A CSS module hands back `undefined` for a class it does
+   * not have, React drops it, and the element renders unstyled - a failure
+   * with no error anywhere. Found while adding the fourth user.
+   */
+  .unavailable {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .actionsEmpty {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  /* What the log cannot account for, said rather than left to be noticed. */
+  .actionGaps {
+    margin: 0;
+    padding-inline-start: var(--space-16);
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  /*
+   * ── Screen 04f · the team's notes about this person ──
+   *
+   * Distinct from `.notes`, which is 04b's CRM panel. Two different things
+   * that both want the word, which is also why the copy lives under
+   * `teamNotes` rather than a second `notes` block in the same namespace.
+   */
+
+  /* 04f's column: the composer, then cards 10 apart. */
+  .notesPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .notesEmpty {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  /* 02's composer: white, radius 12, a 1px dark edge. */
+  .composer {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-field);
+    border: 1px solid var(--action-base);
+    border-radius: 12px;
+  }
+
+  /* `padding:12px 15px 8px`, 13.5px; the placeholder in 02's pale stone. */
+  .composer > .composerInput {
+    padding: var(--space-12) 15px var(--space-8);
+    border: 0;
+    border-radius: 12px 12px 0 0;
+    background: transparent;
+    font-size: 13.5px;
+  }
+
+  .composerInput {
+    inline-size: 100%;
+    padding: var(--space-8);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-control);
+    font: inherit;
+    resize: block;
+  }
+
+  .composerInput::placeholder {
+    color: var(--text-disabled);
+  }
+
+  .composer > .composerInput:focus-visible {
+    outline: none;
+  }
+
+  .composer:focus-within {
+    box-shadow: 0 0 0 var(--border-width-thick) var(--border-focus);
+  }
+
+  /* The foot: `padding:0 12px 10px`, `gap:8px`. */
+  .composerBar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    padding: 0 var(--space-12) var(--space-10);
+  }
+
+  /* `padding:3px`, `gap:2px`, `#F0EDE7`, radius 8; the chosen half white. */
+  .segmented {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: var(--space-8);
+    background-color: var(--panel-well);
+    cursor: help;
+  }
+
+  .segment {
+    padding: var(--space-4) var(--space-10);
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    font: inherit;
+    font-size: 11px;
+    color: var(--intent-neutral-text);
+    cursor: pointer;
+  }
+
+  .segment[data-on] {
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+  }
+
+  .segment:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 1px;
+  }
+
+  /* "Save note": `padding:6px 13px`, dark, radius 8, 11.5px. */
+  .composerSubmit {
+    margin-inline-start: auto;
+    padding: 6px 13px;
+    border: 0;
+    border-radius: var(--space-8);
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+
+  .composerSubmit:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .composerSubmit:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .noteList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* A card: `padding:14px 16px`, `gap:12px`, white, radius 12. */
+  .note {
+    display: flex;
+    gap: var(--space-12);
+    padding: var(--space-14) var(--space-16);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+  }
+
+  /* 28px: the author in stone; a note the AI wrote in violet. */
+  .noteDisc {
+    flex: none;
+    inline-size: 28px;
+    block-size: 28px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--intent-neutral-text);
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 28px;
+    text-align: center;
+  }
+
+  .noteDisc[data-ai] {
+    background-color: var(--signal-ai);
+    color: var(--text-primary);
+  }
+
+  .noteMain {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .noteHead {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .noteAuthor {
+    font-size: 13px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .noteWhen,
+  .noteEdited {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  /* Right of the head: "Team only" in stone, "GOTCHA may use" in violet. */
+  .noteChip {
+    margin-inline-start: auto;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--panel-well);
+    font-size: 10.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .noteChip[data-ai] {
+    background-color: var(--ai-avatar-surface);
+    color: var(--ai-avatar-text);
+  }
+
+  .noteBody {
+    margin: 0;
+    white-space: pre-wrap;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+
+  /* Where the note lives: 02's 11px meta line. Quiet: for most notes this is not news. */
+  .noteDest {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  /*
+   * ★★ A FAILED PUSH IS NOT QUIET. There was a CRM to write to and it
+   * refused - the one destination a merchant may need to act on, and the
+   * whole lesson of the stub that answered 200 and wrote nothing.
+   */
+  .noteDestFailed {
+    margin: 0;
+    padding: var(--space-4) var(--space-8);
+    border: 1px solid var(--intent-urgent-edge);
+    border-radius: 6px;
+    background: var(--intent-urgent-surface);
+    font-size: 11px;
+    color: var(--intent-urgent-text);
+  }
+
+  /* 04f's side: what GOTCHA reads, one note a line, and the caption under it. */
+  .notesRead {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .notesCaption {
+    margin: var(--space-10) 0 0;
+    font-size: var(--font-size-label);
+    line-height: 1.5;
+    color: var(--text-subtle);
+  }
+
+  .noteControls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    margin-block-start: var(--space-4);
+  }
+
+  .noteAction {
+    font-size: var(--font-size-caption);
+  }
+
+  .noteProblem {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 04b, measured - the customer card
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  .cardScreen {
+    flex: 1;
+    min-block-size: 0;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: normal;
+  }
+
+  /* 02: `padding:34px 44px 26px`, `gap:22px`, `#EDE9E1` underneath. */
+  .cardHeader {
+    flex: none;
+    display: flex;
+    align-items: flex-start;
+    gap: 22px;
+    padding: var(--space-34) 44px var(--space-26);
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .cardDisc {
+    flex: none;
+    inline-size: 64px;
+    block-size: 64px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--intent-neutral-text);
+    font-size: 20px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 64px;
+    text-align: center;
+  }
+
+  .cardWho {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .cardName {
+    margin: 0;
+    font-size: var(--font-size-title);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-hero);
+    color: var(--text-primary);
+  }
+
+  .cardFacts {
+    margin: 7px 0 0;
+    font-size: 13.5px;
+    color: var(--text-muted);
+  }
+
+  /* The one serif italic in the product: 19px `#3A3833`, up to 720 wide. */
+  .cardSummary {
+    margin: var(--space-14) 0 0;
+    max-inline-size: 720px;
+    font-family: var(--font-serif);
+    font-style: var(--font-serif-style);
+    font-size: 19px;
+    line-height: 1.4;
+    color: var(--text-secondary);
+  }
+
+  .cardSummary[data-empty] {
+    color: var(--text-subtle);
+  }
+
+  .cardActions {
+    flex: none;
+    display: flex;
+    gap: var(--space-8);
+  }
+
+  /* 02: radius 9, `padding:8px 14px`, 12px. */
+  .cardButton,
+  .cardButtonPrimary {
+    padding: var(--space-8) var(--space-14);
+    border-radius: 9px;
+    font-size: var(--font-size-label);
+    text-decoration: none;
+  }
+
+  .cardButton {
+    border: 1px solid var(--border-default);
+    color: var(--intent-neutral-text);
+  }
+
+  .cardButtonPrimary {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .cardButtonPrimary[aria-disabled='true'] {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .cardButton:focus-visible,
+  .cardButtonPrimary:focus-visible,
+  .cardTab:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .cardBody {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+  }
+
+  /* 02: `padding:26px 44px`, `gap:16px`, `#EDE9E1` on its right. */
+  .cardMain {
+    flex: 1;
+    min-inline-size: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    padding: var(--space-26) 44px;
+    border-inline-end: 1px solid var(--border-subtle);
+  }
+
+  /* 02: 340, `padding:26px 30px`, `gap:16px`; the note pinned at the foot. */
+  .cardSide {
+    flex: none;
+    inline-size: 340px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    padding: var(--space-26) 30px;
+  }
+
+  @media (width < 64rem) {
+    .cardBody {
+      flex-direction: column;
+    }
+
+    .cardSide {
+      inline-size: auto;
+    }
+  }
+
+  /* 02: `gap:20px`, `padding-bottom:10px`, `#EDE9E1` under the row. */
+  .cardTabs {
+    flex: none;
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-20);
+    padding-block-end: var(--space-10);
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .cardTab {
+    padding-block-end: 9px;
+    margin-block-end: -11px;
+    border-block-end: 2px solid transparent;
+    font-size: 13px;
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .cardTab[aria-current='page'] {
+    border-block-end-color: var(--action-base);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .cardTabsAside {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* 02's stream: rows at `13px 0`, `gap:16px`, `#EDE9E1` between. */
+  .timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .timelineRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-16);
+    padding-block: 13px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .timelineRow:last-child {
+    border-block-end: 0;
+  }
+
+  .timelineDate {
+    flex: none;
+    inline-size: 62px;
+    padding-block-start: 2px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  .timelineDot {
+    flex: none;
+    inline-size: 7px;
+    block-size: 7px;
+    margin-block-start: 5px;
+    border-radius: 50%;
+    background-color: var(--channel-4);
+  }
+
+  /* 02's dots: orange when it needs you, violet for what GOTCHA did, green for an order; resolved stays grey. */
+  .timelineRow[data-tone='attention'] .timelineDot {
+    background-color: var(--intent-urgent-edge);
+  }
+
+  .timelineRow[data-tone='action'] .timelineDot {
+    background-color: var(--channel-2);
+  }
+
+  .timelineRow[data-tone='order'] .timelineDot {
+    background-color: var(--channel-3);
+  }
+
+  .timelineText {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .timelineTitle {
+    font-size: 13.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .timelineLine {
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+
+  .timelineEmpty {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  /* The side's blocks: `#EDE9E1` above each but the first, 16 over it. */
+  .sideBlock + .sideBlock {
+    padding-block-start: var(--space-16);
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .sideEyebrow {
+    margin: 0 0 var(--space-10);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-mono);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .worth {
+    display: flex;
+    gap: var(--space-26);
+    margin: 0;
+  }
+
+  .worth > div {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+
+  .worth dt {
+    margin-block-start: 2px;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .worthValue {
+    margin: 0;
+    font-size: 22px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .remembers {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+
+  .reach {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin: 0;
+  }
+
+  .reach > div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-12);
+    font-size: 12.5px;
+  }
+
+  .reach dt {
+    color: var(--intent-neutral-text);
+  }
+
+  .reach dd {
+    margin: 0;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+    text-align: end;
+  }
+
+  .sideNone {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  /* 02: white, radius 14, `padding:14px 16px`, at the column's foot. */
+  .pinnedNote {
+    margin-block-start: auto;
+    padding: var(--space-14) var(--space-16);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .pinnedTitle {
+    margin: 0;
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .pinnedBody {
+    margin: var(--space-6) 0 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--intent-neutral-text);
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 04c-04f, measured - the sub-tabs' compact shell
+   * ════════════════════════════════════════════════════════════════════════
+   */
+
+  /* 02: `padding:22px 44px 18px`, `gap:18px`, `#EDE9E1` underneath. */
+  .topBar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 22px 44px 18px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .crumb {
+    font-size: 12.5px;
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .crumbSlash {
+    font-size: 12.5px;
+    color: var(--text-disabled);
+  }
+
+  .topWho {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
+  .topWho > span:last-child {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  /* 38px, `#EFE9DF`, 12/600. */
+  .topDisc {
+    flex: none;
+    inline-size: 38px;
+    block-size: 38px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--intent-neutral-text);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    line-height: 38px;
+    text-align: center;
+  }
+
+  /* An h1 now: the page's heading is the person. */
+  .topName {
+    margin: 0;
+    font-size: 17px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .topFacts {
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  /* 02: `padding:16px 44px 0`, `gap:20px`; tabs carry 11px under them. */
+  .tabRow {
+    flex: none;
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-20);
+    padding: var(--space-16) 44px 0;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .tabRow .cardTab {
+    padding-block-end: 11px;
+    margin-block-end: -1px;
+  }
+
+  /* The open tab's filters: `gap:6px`, 9 under them. */
+  .tabFilters {
+    margin-inline-start: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-block-end: 9px;
+  }
+
+  /* "All channels": `padding:5px 11px`, radius 7, 11.5px; dark when on. */
+  .filterPill {
+    padding: 5px 11px;
+    border-radius: 7px;
+    font-size: 11.5px;
+    color: var(--intent-neutral-text);
+    background-color: var(--panel-inset);
+    text-decoration: none;
+  }
+
+  .filterPill[aria-current='true'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  /* 26×26 tinted squares, radius 7. */
+  .filterSquare {
+    inline-size: 26px;
+    block-size: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    background-color: var(--channel-web-surface);
+    color: var(--channel-web-mark);
+  }
+
+  .filterSquare[aria-current='true'] {
+    outline: 1.5px solid var(--action-base);
+    outline-offset: 1px;
+  }
+
+  .filterPill:focus-visible,
+  .filterSquare:focus-visible,
+  .crumb:focus-visible,
+  .spineOpen:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .filterSquare[data-tone='whatsapp'],
+  .spineMark[data-tone='whatsapp'] {
+    background-color: var(--channel-whatsapp-surface);
+    color: var(--channel-whatsapp-mark);
+  }
+
+  .filterSquare[data-tone='instagram'],
+  .spineMark[data-tone='instagram'] {
+    background-color: var(--channel-instagram-surface);
+    color: var(--channel-instagram-mark);
+  }
+
+  .filterSquare[data-tone='email'],
+  .spineMark[data-tone='email'] {
+    background-color: var(--channel-email-surface);
+    color: var(--channel-email-mark);
+  }
+
+  .filterSquare[data-tone='messenger'],
+  .spineMark[data-tone='messenger'] {
+    background-color: var(--channel-messenger-surface);
+    color: var(--channel-messenger-mark);
+  }
+
+  /* 02: main `padding:22px 44px`, `#EDE9E1` on its right. */
+  .subMain {
+    flex: 1;
+    min-inline-size: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    padding: 22px 44px;
+    border-inline-end: 1px solid var(--border-subtle);
+  }
+
+  /* 340, `padding:22px 30px`, `gap:16px`; the promise card at its foot. */
+  .subSide {
+    flex: none;
+    inline-size: 340px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    padding: 22px 30px;
+  }
+
+  @media (width < 64rem) {
+    .subSide {
+      inline-size: auto;
+    }
+  }
+
+  /* "24 conversations…" at 12.5 `#55524C`, the AI link at its right. */
+  .tabLead {
+    margin: 0;
+    display: flex;
+    gap: var(--space-12);
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .tabLeadLink {
+    margin-inline-start: auto;
+    font-size: 11.5px;
+    color: var(--ai-avatar-text);
+    border-block-end: 1px solid var(--ai-link-underline);
+  }
+
+  .tabLeadLink[aria-disabled='true'] {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  /* The spine: rows with 14 under them, `gap:14px`. */
+  .spine {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .spineRow {
+    display: flex;
+    gap: var(--space-14);
+    padding-block-end: var(--space-14);
+  }
+
+  /* Mono, as 04b's dates: 10.5/500, the day first. */
+  .spineWhen {
+    flex: none;
+    inline-size: 72px;
+    font-family: var(--font-mono);
+    padding-block-start: 2px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 10.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  .spineTime {
+    font-weight: var(--font-weight-regular);
+    color: var(--text-disabled);
+  }
+
+  .spineRail {
+    flex: none;
+    inline-size: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  .spineMark {
+    flex: none;
+    inline-size: 22px;
+    block-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    background-color: var(--channel-web-surface);
+    color: var(--channel-web-mark);
+  }
+
+  /* 1px `#EDE9E1`, down to the next row's mark. */
+  .spineLine {
+    flex: 1;
+    inline-size: 1px;
+    background-color: var(--border-subtle);
+  }
+
+  .spineRow:last-child .spineLine {
+    visibility: hidden;
+  }
+
+  /* White, radius 12, `padding:13px 16px`; the newest with a 3px edge. */
+  .spineCard {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 13px var(--space-16);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+  }
+
+  .spineCard[data-newest] {
+    padding-inline-start: 14px;
+    border-inline-start: 3px solid var(--intent-urgent-edge);
+  }
+
+  .spineTop {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-inline-size: 0;
+  }
+
+  .spineTitle {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .spineCard[data-newest] .spineTitle {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  /* `padding:3px 8px`, radius 6, 10.5px. */
+  .spineChip {
+    flex: none;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--panel-inset);
+    font-size: 10.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .spineMeta {
+    flex: none;
+    margin-inline-start: auto;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .spineLineText {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .spineFoot {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-block-start: 3px;
+  }
+
+  /* `padding:4px 9px`, `#F3F0EA`, radius 6, 11px. */
+  .spinePill {
+    padding: var(--space-4) 9px;
+    border-radius: 6px;
+    background-color: var(--panel-inset);
+    font-size: 11px;
+    color: var(--intent-neutral-text);
+  }
+
+  .spineOpen {
+    margin-inline-start: auto;
+    font-size: 11px;
+    color: var(--text-primary);
+    text-decoration: none;
+    border-block-end: 1px solid var(--border-emphasis);
+  }
+
+  /* 04c's stats: 22px apart, where 04b's WORTH is 26. */
+  .pattern {
+    gap: 22px;
+  }
+
+  /* 04c-04f's side strips label at 11px; 04's own "worth" strip keeps 11.5. */
+  .pattern dt {
+    font-size: 11px;
+  }
+
+  /* 02's "An open promise": radius 14, `padding:14px 16px`, at the foot. */
+  .promiseCard {
+    margin-block-start: auto;
+    padding: var(--space-14) var(--space-16);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  /* 02's foot: "19 older conversations below", under the last card. */
+  .spineOlder {
+    align-self: flex-start;
+    margin-inline-start: 110px;
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+    text-decoration: none;
+    border-block-end: 1px solid var(--border-emphasis);
+  }
+
+  p.spineOlder {
+    margin-block: 0;
+    border-block-end: 0;
+  }
+
+  .spineOlder:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 04d, measured - their orders (the tab; scoped, so the inbox's panel
+   * keeps `CustomerOrders`'s own styles)
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  /* The main column's stack: the lead, then cards 10 apart (02's `gap:10px`). */
+  .ordersTab {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .ordersTab .ordersSynced {
+    margin-inline-start: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  /* Cards 10 apart: the open one, then one line each. */
+  .ordersTab .orderList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  /* The open card: white, radius 12, `padding:16px 18px`, `gap:14px`. */
+  .ordersTab .orderCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    padding: var(--space-16) 18px;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+  }
+
+  /* The troubled order is the one somebody came here about: 02's 3px edge. */
+  .ordersTab .orderCard[data-troubled='yes'] {
+    padding-inline-start: 16px;
+    border-inline-start: 3px solid var(--intent-urgent-edge);
+  }
+
+  .ordersTab .orderHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .ordersTab .orderNumber {
+    font-size: 15px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .ordersTab .orderDate {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .ordersTab .orderTotal {
+    margin-inline-start: auto;
+    font-size: 15px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  /*
+    The tone is the PLATFORM's judgement, not ours - re-deciding it here
+    would make this screen disagree with the Inbox about the same order.
+    02: `padding:3px 8px`, radius 6, 10.5px.
+  */
+  .ordersTab .chip {
+    flex: none;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--panel-inset);
+    font-size: 10.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .ordersTab .chip[data-tone='positive'] {
+    background-color: var(--signal-done-surface-soft);
+    color: var(--signal-done-text);
+  }
+
+  .ordersTab .chip[data-tone='warning'],
+  .ordersTab .chip[data-tone='danger'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .ordersTab .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+
+  .ordersTab .orderDetail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  .ordersTab .orderItems {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .ordersTab .orderItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
+  /* 40px, radius 9 - the square stays where Shopify gave no image. */
+  .ordersTab .orderThumb {
+    flex: none;
+    inline-size: 40px;
+    block-size: 40px;
+    overflow: hidden;
+    border-radius: 9px;
+    background-color: var(--panel-inset);
+  }
+
+  .ordersTab .orderThumb img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+  }
+
+  .ordersTab .orderItemText {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .ordersTab .orderItemTitle {
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .ordersTab .orderItemQty {
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .ordersTab .orderItemPrice {
+    flex: none;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+
+  /* The tracker: 145px steps, a 10px dot and a 2px line to the next. */
+  .ordersTab .tracker {
+    margin: 0;
+    padding: var(--space-4) 0 0;
+    list-style: none;
+    display: flex;
+    gap: 6px;
+  }
+
+  .ordersTab .trackerStep {
+    flex: 1;
+    min-inline-size: 0;
+    max-inline-size: 145px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ordersTab .trackerRail {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ordersTab .trackerDot {
+    flex: none;
+    inline-size: 10px;
+    block-size: 10px;
+    box-sizing: border-box;
+    border-radius: 50%;
+    border: 2px solid var(--border-emphasis);
+    background-color: var(--panel-field);
+  }
+
+  .ordersTab .trackerStep[data-state='reached'] .trackerDot {
+    border-color: var(--signal-done-text);
+    background-color: var(--signal-done-text);
+  }
+
+  .ordersTab .trackerStep[data-state='failed'] .trackerDot {
+    border-color: var(--intent-urgent-edge);
+    background-color: var(--intent-urgent-edge);
+  }
+
+  .ordersTab .trackerLine {
+    flex: 1;
+    block-size: 2px;
+    background-color: var(--border-subtle);
+  }
+
+  .ordersTab .trackerLine[data-on] {
+    background-color: var(--signal-done-text);
+  }
+
+  .ordersTab .trackerStep:last-child .trackerLine {
+    visibility: hidden;
+  }
+
+  .ordersTab .trackerLabel {
+    font-size: 11.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-secondary);
+  }
+
+  .ordersTab .trackerStep[data-state='failed'] .trackerLabel {
+    color: var(--intent-urgent-text);
+  }
+
+  .ordersTab .trackerDate {
+    font-size: 10.5px;
+    color: var(--text-subtle);
+  }
+
+  /* `#F7F5F0`, radius 10, `padding:12px 14px`; label 90, value, twice. */
+  .ordersTab .orderFacts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px var(--space-14);
+    margin: 0;
+    padding: var(--space-12) var(--space-14);
+    border-radius: 10px;
+    background-color: var(--panel-footer);
+    font-size: var(--font-size-label);
+  }
+
+  .ordersTab .orderFacts > div {
+    display: flex;
+    gap: var(--space-14);
+    min-inline-size: 0;
+  }
+
+  .ordersTab .orderFacts dt {
+    flex: none;
+    inline-size: 90px;
+    color: var(--text-subtle);
+  }
+
+  .ordersTab .orderFacts dd {
+    margin: 0;
+    min-inline-size: 0;
+    color: var(--text-secondary);
+  }
+
+  .ordersTab .orderFacts dd[data-attention] {
+    color: var(--intent-blocked-text);
+  }
+
+  .ordersTab .orderFoot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .ordersTab .orderFoot > .spineOpen {
+    margin-inline-start: auto;
+    font-size: 11.5px;
+  }
+
+  .ordersTab .orderFoot > [aria-disabled='true'] {
+    opacity: 0.5;
+  }
+
+  /* 02's other orders: one line each, `padding:12px 16px`, `gap:14px`. */
+  .ordersTab .orderRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    padding: var(--space-12) var(--space-16);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+  }
+
+  .ordersTab .orderRowNumber {
+    flex: none;
+    inline-size: 52px;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .ordersTab .orderRowDate {
+    flex: none;
+    inline-size: 64px;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .ordersTab .orderRowItems {
+    flex: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+  }
+
+  .ordersTab .orderRowNote {
+    flex: none;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .ordersTab .orderRowTotal {
+    flex: none;
+    min-inline-size: 56px;
+    text-align: end;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .ordersTab .orderMore,
+  .ordersTab .orderMoney,
+  .ordersTab .orderCan {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .ordersTab .orderActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    align-items: center;
+  }
+
+  /* 02: outlined at `padding:7px 12px`, radius 8, 11.5px; the first one dark. */
+  .ordersTab .orderAction {
+    padding: 7px var(--space-12);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    background-color: transparent;
+    font: inherit;
+    font-size: 11.5px;
+    color: var(--intent-neutral-text);
+    cursor: pointer;
+  }
+
+  .ordersTab .orderActions > .orderAction:first-child {
+    padding-inline: 13px;
+    border-color: var(--action-base);
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .ordersTab .orderAction:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .ordersTab .orderAction:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /*
+   * 04d's "On file": label 70, value, 8 apart - one row each, as REACH THEM.
+   * Unscoped: the side column is outside `.ordersTab`, and scoped it never
+   * applied, so each label sat over its value.
+   */
+  .onFile {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin: 0;
+    font-size: 12.5px;
+  }
+
+  .onFile > div {
+    display: flex;
+    gap: var(--space-10);
+  }
+
+  .onFile dt {
+    flex: none;
+    inline-size: 70px;
+    color: var(--text-subtle);
+  }
+
+  .onFile dd {
+    margin: 0;
+    min-inline-size: 0;
+    color: var(--text-primary);
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 04e, measured - what was done on their account
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  /* 02's note slot, right of the lead: 11.5px subtle. */
+  .actionsNote {
+    margin-inline-start: auto;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+    cursor: help;
+  }
+
+  /* 22px round: GOTCHA violet with "AI", the team and automations in stone. */
+  .actorDisc {
+    flex: none;
+    inline-size: 22px;
+    block-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: var(--intent-neutral-surface);
+    color: var(--intent-neutral-text);
+    font-size: 9px;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .actorDisc[data-who='ai'] {
+    background-color: var(--ai-avatar-surface);
+    color: var(--ai-avatar-text);
+  }
+
+  .actorDisc[data-who='user'] {
+    background-color: var(--avatar-surface);
+  }
+
+  .actionTitle {
+    min-inline-size: 0;
+    font-size: 13.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .actionLine {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--intent-neutral-text);
+  }
+
+  /* The chip's tones: done green, waiting amber, failed terracotta. */
+  .spineChip[data-tone='positive'] {
+    background-color: var(--signal-done-surface-soft);
+    color: var(--signal-done-text);
+  }
+
+  .spineChip[data-tone='waiting'] {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .spineChip[data-tone='danger'],
+  .spineChip[data-tone='warning'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  /* 02's dark first control: `padding:5px 11px`, radius 7, 11px. */
+  .actionDecide {
+    padding: 5px 11px;
+    border-radius: 7px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font-size: 11px;
+    text-decoration: none;
+  }
+
+  /* 04e: decided on the row - 02's Approve (dark) · Decline · Change amount. */
+  .decideRow {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: 11.5px;
+    color: var(--text-secondary);
+  }
+
+  .decidePrimary,
+  .decideQuiet {
+    padding: 5px 11px;
+    border-radius: 7px;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .decidePrimary {
+    border: 0;
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .decideQuiet {
+    border: 1px solid var(--border-default);
+    background: none;
+    color: var(--text-secondary);
+  }
+
+  .decideSaid {
+    font-size: 11.5px;
+    color: var(--text-primary);
+  }
+
+  .decideProblem {
+    font-size: 11.5px;
+    color: var(--intent-blocked-text);
+  }
+
+  .actionDecide:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /* "Money moved": label, value at the end, 8 apart; waiting in amber. */
+  .moneyMoved {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin: 0;
+    font-size: 12.5px;
+  }
+
+  .moneyMoved > div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-10);
+    color: var(--text-primary);
+  }
+
+  .moneyMoved dd {
+    margin: 0;
+  }
+
+  .moneyMoved > [data-attention] {
+    color: var(--intent-blocked-text);
+  }
+
+  /* 02's chips over the list: Everyone dark, the rest `#F0EDE7`; sorted on the right. */
+  .segmentBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+    margin-block-end: var(--space-16);
+    line-height: normal;
+  }
+
+  .segments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+
+  .segmentChip {
+    padding: var(--space-6) var(--space-12);
+    border-radius: var(--space-8);
+    background-color: var(--panel-well);
+    font-size: var(--font-size-caption);
+    color: var(--intent-neutral-text);
+    text-decoration: none;
+  }
+
+  .segmentChip[aria-current='page'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .sorted {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* 02: worth at 13/500 over its orders at 11 muted; the last contact in mono. */
+  .rowValue {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    inline-size: 110px;
+    text-align: end;
+    line-height: normal;
+  }
+
+  .rowAmount {
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .rowOrders {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .rowWhen {
+    flex: none;
+    inline-size: 78px;
+    text-align: end;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  /* 02's "Frustrated today" and "About to buy". */
+  .rowChip[data-tone='frustrated'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .rowChip[data-tone='about_to_buy'] {
+    background-color: var(--intent-opportunity-surface);
+    color: var(--intent-opportunity-text);
+  }
+
+  /* Waiting on you - 02's warm chip. */
+  .rowChip[data-tone='waiting'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  /* 02: someone quiet for months is drawn dimmer. */
+  .row[data-faded='yes'] .rowLink {
+    opacity: 0.6;
+  }
+
+  /* 02's dark card: `#171717`, radius 14, `18px 20px`. */
+  .reachCard {
+    padding: 18px var(--space-20);
+    border-radius: var(--radius-card);
+    background-color: var(--frame-raised);
+  }
+
+  .reachEyebrow {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 1.62px;
+    text-transform: uppercase;
+    color: var(--frame-text-eyebrow);
+  }
+
+  .reachBody {
+    margin: 11px 0 0;
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: var(--frame-text);
+  }
+
+  .reachActions {
+    display: flex;
+    gap: var(--space-8);
+    margin-block-start: var(--space-14);
+  }
+
+  .reachPrimary,
+  .reachSecondary {
+    padding: 7px 13px;
+    border-radius: var(--space-8);
+    font-size: var(--font-size-caption);
+    text-decoration: none;
+  }
+
+  .reachPrimary {
+    background-color: var(--frame-text);
+    color: var(--text-primary);
+  }
+
+  .reachSecondary {
+    border: 1px solid var(--frame-selected);
+    color: var(--frame-text-secondary);
+  }
+
+  .dupeNames {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: var(--space-10) 0 0;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+
+  .dupeActions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .dupePrimary,
+  .dupeSecondary {
+    padding: var(--space-6) var(--space-12);
+    border-radius: var(--space-8);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    cursor: pointer;
+  }
+
+  .dupePrimary {
+    border: 0;
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .dupeSecondary {
+    border: 1px solid var(--border-default);
+    background: none;
+    color: var(--intent-neutral-text);
+  }
+
+  .dupeSecondary[aria-disabled='true'] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .dupeProblem {
+    margin: var(--space-8) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+
+  /* 02's "Who your customers are": label and number on one line, a 4px bar under, rows 35 apart. */
+  .whoRows {
+    list-style: none;
+    margin: var(--space-12) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .whoRow {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .whoTop {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+
+  .whoCount {
+    color: var(--text-subtle);
+  }
+
+  /* 02: a 5px track, the share filled - dark, wholesale violet, never-bought pale. */
+  .whoTrack {
+    display: block;
+    block-size: 5px;
+    border-radius: 3px;
+    background-color: var(--border-subtle);
+  }
+
+  .whoFill {
+    display: block;
+    block-size: 5px;
+    border-radius: 3px;
+    background-color: var(--channel-1);
+  }
+
+  .whoFill[data-tone='wholesale'] {
+    background-color: var(--channel-2);
+  }
+
+  .whoFill[data-tone='never'] {
+    background-color: var(--channel-4);
+  }
+
+  /* 04's selection: a picked row, and the bar that acts on the pick. */
+  .selectArea {
+    display: contents;
+  }
+
+  .row[data-selected='yes'] .rowLink {
+    background-color: var(--ai-avatar-surface);
+  }
+
+  /* The foot's sentence steps aside while the bar stands in its place. */
+  .listFooter[data-picking='yes'] .footText {
+    display: none;
+  }
+
+  /* In the list card's foot, never over it (measured on dev: it covered the sentence). */
+  .selectBar {
+    display: flex;
+    inline-size: fit-content;
+    align-items: center;
+    gap: var(--space-12);
+    padding: var(--space-8) var(--space-14);
+    border-radius: 12px;
+    background-color: var(--frame-raised);
+    font-size: var(--font-size-label);
+    color: var(--frame-text);
+    line-height: normal;
+  }
+
+  .selectPrimary {
+    padding: 5px var(--space-12);
+    border-radius: var(--space-8);
+    background-color: var(--frame-text);
+    color: var(--frame-raised);
+    text-decoration: none;
+  }
+
+  .selectSecondary {
+    padding: 5px var(--space-12);
+    border: 1px solid var(--frame-text-muted);
+    border-radius: var(--space-8);
+    background: none;
+    font: inherit;
+    color: var(--frame-text);
+    cursor: pointer;
+  }
+
+  .selectSecondary:disabled {
+    color: var(--frame-text-muted);
+    cursor: not-allowed;
+  }
+
+  .selectTag {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .selectTagInput {
+    inline-size: 140px;
+    padding: 4px var(--space-8);
+    border: 1px solid var(--frame-text-muted);
+    border-radius: var(--space-8);
+    background: none;
+    font: inherit;
+    color: var(--frame-text);
+  }
+
+  .selectClear {
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--frame-text-muted);
+    cursor: pointer;
+  }
+}

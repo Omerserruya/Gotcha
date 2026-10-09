@@ -1,0 +1,325 @@
+import type { AutomationEdge, AutomationNode, TriggerType } from '@/api/contracts/automations';
+
+import { TRIGGER_NODE } from './graph';
+
+/**
+ * 09c's templates (Omer, 2026-10-07): each creates a real draft with its
+ * graph filled in - never turned on; the author fills what is theirs (the
+ * file, the message) and publishes. Every trigger a template needs has an
+ * event source now (Backend fa1da898: order events, story mentions), so
+ * none is drawn as "Coming soon"; a new one without a source would bring
+ * that state back with its own test.
+ */
+export const TEMPLATE_KEYS = [
+  'fileOnKeyword',
+  'afterHours',
+  'welcome',
+  'tagNotify',
+  'cart',
+  'fromAd',
+  'missedCall',
+  'review',
+  'comment',
+  'storyThanks',
+] as const;
+export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
+
+export interface Template {
+  readonly key: TemplateKey;
+  readonly trigger: TriggerType;
+  readonly build: (words: TemplateWords, newId: () => string) => TemplateGraph;
+}
+
+/** The template's words in the author's language - prefilled, theirs to change. */
+export interface TemplateWords {
+  /** The example keyword ("catalogue"). */
+  readonly keyword: string;
+  /** The welcome, with {{first_name}}. */
+  readonly welcome: string;
+  /** From an ad: the opening, with {{first_name}}, and its two buttons. */
+  readonly adText: string;
+  readonly prices: string;
+  readonly talk: string;
+  /** Comment on a post: the public reply, the DM's question, and its one button. */
+  readonly commentReply: string;
+  readonly priceAsk: string;
+  readonly yes: string;
+  /** Story mention: the thank-you. */
+  readonly storyThanks: string;
+}
+
+export interface TemplateGraph {
+  readonly config: Record<string, unknown>;
+  readonly nodes: readonly AutomationNode[];
+  readonly edges: readonly AutomationEdge[];
+}
+
+const node = (id: string, type: string, data: Record<string, unknown> = {}): AutomationNode => ({
+  id,
+  type,
+  position: { x: 0, y: 0 },
+  data,
+});
+const edge = (id: string, source: string, target: string, sourceHandle: string | null = null) => ({
+  id,
+  source,
+  target,
+  sourceHandle,
+});
+
+export const TEMPLATES: readonly Template[] = [
+  {
+    // Someone writes "catalogue" → the file. The file is the author's to add.
+    key: 'fileOnKeyword',
+    trigger: 'message_received',
+    build: (words, id) => {
+      const send = id();
+      return {
+        config: { keywords: [words.keyword], match: 'contains' },
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(send, 'send_message_file', { url: '', fileName: '', caption: '' }),
+        ],
+        edges: [edge(id(), 'trigger', send)],
+      };
+    },
+  },
+  {
+    // A message after hours → the hours; while open, nothing (the employee answers).
+    key: 'afterHours',
+    trigger: 'message_received',
+    build: (_words, id) => {
+      const hours = id();
+      const reply = id();
+      return {
+        config: {},
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(hours, 'opening_hours'),
+          node(reply, 'send_message_text', { text: '' }),
+        ],
+        edges: [edge(id(), 'trigger', hours), edge(id(), hours, reply, 'closed')],
+      };
+    },
+  },
+  {
+    // The first message ever → a welcome by name.
+    key: 'welcome',
+    trigger: 'new_customer',
+    build: (words, id) => {
+      const hello = id();
+      return {
+        config: {},
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(hello, 'send_message_text', { text: words.welcome }),
+        ],
+        edges: [edge(id(), 'trigger', hello)],
+      };
+    },
+  },
+  {
+    // A tag added → the team told. The tags are asked when it is created (the route needs one).
+    key: 'tagNotify',
+    trigger: 'tag_added',
+    build: (_words, id) => {
+      const tell = id();
+      return {
+        config: {},
+        nodes: [node('trigger', TRIGGER_NODE), node(tell, 'notify_team', { message: '' })],
+        edges: [edge(id(), 'trigger', tell)],
+      };
+    },
+  },
+  {
+    // Cart left behind (Backend 972ae66d): after 2 hours a template - outside
+    // the 24-hour window only an approved template may go - then a day later
+    // a second one. Both templates are the author's to choose.
+    key: 'cart',
+    trigger: 'cart_abandoned',
+    build: (_words, id) => {
+      const first = id();
+      const wait = id();
+      const second = id();
+      return {
+        config: { delayMinutes: 120 },
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(first, 'send_message_template', { templateId: '', variables: {} }),
+          node(wait, 'wait', { durationMs: 24 * 60 * 60 * 1000 }),
+          node(second, 'send_message_template', { templateId: '', variables: {} }),
+        ],
+        edges: [edge(id(), 'trigger', first), edge(id(), first, wait), edge(id(), wait, second)],
+      };
+    },
+  },
+  {
+    // From an ad → reply: thanks by name, two buttons; "Talk to us" goes to an
+    // employee (the author chooses who); "Prices" is theirs to fill.
+    key: 'fromAd',
+    trigger: 'message_from_ad',
+    build: (words, id) => {
+      const ask = id();
+      const wait = id();
+      const hand = id();
+      return {
+        config: {},
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(ask, 'send_buttons', {
+            text: words.adText,
+            buttons: [
+              { id: 'prices', title: words.prices },
+              { id: 'talk', title: words.talk },
+            ],
+          }),
+          node(wait, 'wait_for_reply', { timeoutMs: 30 * 60 * 1000 }),
+          node(hand, 'hand_to_ai', { aiAgentId: '' }),
+        ],
+        edges: [
+          edge(id(), 'trigger', ask),
+          edge(id(), ask, wait),
+          edge(id(), wait, hand, 'btn:talk'),
+        ],
+      };
+    },
+  },
+  {
+    // A missed call → the caller, on WhatsApp (Backend 742bb030). Outside a
+    // conversation only an approved template may go; which one is the
+    // author's. No lines chosen: every line. Without an active phone line it
+    // cannot run - the card says so, and a draft is still allowed.
+    key: 'missedCall',
+    trigger: 'call_missed',
+    build: (_words, id) => {
+      const send = id();
+      return {
+        config: {},
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(send, 'send_message_template', { templateId: '', variables: {} }),
+        ],
+        edges: [edge(id(), 'trigger', send)],
+      };
+    },
+  },
+  {
+    // Comment on a post → a public reply, then a DM with a button (Backend
+    // 612ffb17): "Yes" → the price list (the author's to write); a typed
+    // reply - the most interested commenter - → an employee (the author's to
+    // choose); no answer in time → the run ends, nobody is handed over.
+    key: 'comment',
+    trigger: 'comment_received',
+    build: (words, id) => {
+      const reply = id();
+      const ask = id();
+      const wait = id();
+      const prices = id();
+      const hand = id();
+      return {
+        config: {},
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(reply, 'send_comment_reply', { mode: 'text', text: words.commentReply }),
+          node(ask, 'send_buttons', {
+            text: words.priceAsk,
+            buttons: [{ id: 'yes', title: words.yes }],
+          }),
+          node(wait, 'wait_for_reply', { timeoutMs: 30 * 60 * 1000 }),
+          node(prices, 'send_message_text', { text: '' }),
+          node(hand, 'hand_to_ai', { aiAgentId: '' }),
+        ],
+        edges: [
+          edge(id(), 'trigger', reply),
+          edge(id(), reply, ask),
+          edge(id(), ask, wait),
+          edge(id(), wait, prices, 'btn:yes'),
+          edge(id(), wait, hand, 'reply'),
+        ],
+      };
+    },
+  },
+  {
+    // Ask for a review (Backend fa1da898): an order shipped → 3 days → a
+    // template. Outside a conversation only an approved template may go on
+    // WhatsApp (the route enforces it); which one is the author's.
+    key: 'review',
+    trigger: 'order_event',
+    build: (_words, id) => {
+      const wait = id();
+      const ask = id();
+      return {
+        config: { statuses: ['fulfilled'] },
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(wait, 'wait', { durationMs: 3 * 24 * 60 * 60 * 1000 }),
+          node(ask, 'send_message_template', { templateId: '', variables: {} }),
+        ],
+        edges: [edge(id(), 'trigger', wait), edge(id(), wait, ask)],
+      };
+    },
+  },
+  {
+    // Someone mentions you in their Instagram story → thank them. The DM
+    // window is open, so free text may go; the words are theirs to change.
+    key: 'storyThanks',
+    trigger: 'story_mention',
+    build: (words, id) => {
+      const thanks = id();
+      return {
+        config: {},
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(thanks, 'send_message_text', { text: words.storyThanks }),
+        ],
+        edges: [edge(id(), 'trigger', thanks)],
+      };
+    },
+  },
+];
+
+export function templateOf(key: string | undefined): Template | null {
+  return TEMPLATES.find((t) => t.key === key) ?? null;
+}
+
+/**
+ * What the author still has to fill in, per step - drawn "to fill in" on the
+ * canvas, not as an error. A message with no text, a file with no address,
+ * a notification with nothing to say, a tag with no name, a task with no
+ * title, a hand-over to nobody.
+ */
+export function needsFilling(node: AutomationNode): boolean {
+  const d = node.data;
+  const empty = (v: unknown) => typeof v !== 'string' || v.trim() === '';
+  switch (node.type) {
+    case 'send_message_text':
+      return empty(d.text);
+    case 'send_message_file':
+      return empty(d.url);
+    case 'send_buttons':
+      return (
+        empty(d.text) ||
+        !Array.isArray(d.buttons) ||
+        d.buttons.length === 0 ||
+        (d.buttons as { title?: unknown }[]).some((b) => empty(b?.title))
+      );
+    case 'notify_team':
+      return empty(d.message);
+    case 'add_tag':
+      return empty(d.tag);
+    case 'create_task':
+      return empty(d.title);
+    case 'hand_to_ai':
+      return empty(d.aiAgentId);
+    case 'run_skill':
+      return empty(d.skillId) || empty(d.aiAgentId);
+    case 'ai_generate':
+      return empty(d.aiAgentId);
+    case 'send_message_template':
+      return empty(d.templateId);
+    case 'send_comment_reply':
+      return d.mode === 'ai' ? empty(d.agentId) : empty(d.text);
+    default:
+      return false;
+  }
+}

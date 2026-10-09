@@ -1,0 +1,212 @@
+{
+  "title": "Outreach",
+  "description": "Everything going out, and what it did when it arrived.",
+  "unavailable": "We couldn't read your campaigns just now.",
+  "none": "Nothing has gone out yet.",
+  "noneBody": "When you send a campaign it shows up here while it's sending, and stays afterwards with what it did.",
+  "heading": {
+    "inFlight": "Going out now",
+    "finished": "Already sent"
+  },
+  "status": {
+    "DRAFT": "Draft",
+    "SCHEDULED": "Scheduled",
+    "SENDING": "Sending",
+    "COMPLETED": "Finished",
+    "FAILED": "Stopped by a problem",
+    "CANCELLED": "Stopped by you"
+  },
+  "counter": {
+    "sent": "Sent",
+    "failed": "Didn't arrive",
+    "deliveredPending": "Delivered and opened aren't shown yet. The delivery receipts do arrive - they just aren't counted against a campaign yet, so a number here would be wrong rather than incomplete.",
+    "repliedAbsent": "We can't yet tell you who replied. A reply isn't linked back to the campaign that prompted it, so there's nothing to count."
+  },
+  "card": {
+    "halted": "It stopped: {reason}"
+  },
+  "action": {
+    "stop": "Stop sending",
+    "stopConfirm": "Stop it",
+    "keepSending": "Keep sending"
+  },
+  "stop": {
+    "lead": "Stop sending \"{name}\"?",
+    "skipped": "Everyone still waiting will be skipped - they won't get the message.",
+    "terminal": "It can't be restarted afterwards. You'd have to send it again from the beginning."
+  },
+  "error": {
+    "not_stoppable": "It already finished, so there's nothing left to stop.",
+    "forbidden": "You can't stop this one.",
+    "failed": "That didn't go through."
+  },
+  "screenTitle": "Reaching out",
+  "statusLine": "{running, plural, =0 {Nothing is sending} one {One campaign is sending} other {# campaigns are sending}}{scheduled, plural, =0 {} one {, and one is scheduled} other {, and # are scheduled}}.",
+  "list": {
+    "heading": "In flight",
+    "people": "{count, plural, one {# person} other {# people}}",
+    "sentOf": "{sent} of {total} sent",
+    "didntArrive": "{count} didn’t arrive",
+    "scheduledFor": "Scheduled for {when}",
+    "finishedOn": "Finished {when}",
+    "startedOn": "Sending since {when}",
+    "sentShort": "{sent} / {total} sent",
+    "failedShort": "{count} failed"
+  },
+  "month": {
+    "heading": "This month",
+    "reached": "Reached",
+    "campaigns": "Campaigns",
+    "didntArrive": "Didn’t arrive"
+  },
+  "detail": {
+    "eyebrow": "Campaign · {name}",
+    "who": "Who",
+    "where": "Where",
+    "when": "When",
+    "delivery": "Delivery",
+    "deliveredShort": "Delivered and opened aren’t counted yet.",
+    "repliedShort": "Replies can’t be traced back to a campaign yet.",
+    "audience": {
+      "direct": "People added to it directly",
+      "saved": "A saved audience",
+      "everyone": "All your customers",
+      "everyoneOn": "All your customers on {channel}",
+      "picked": "{count, plural, one {# person you picked} other {# people you picked}}"
+    }
+  },
+  "results": {
+    "finished": "Finished {when}",
+    "brought": {
+      "eyebrow": "What it brought in",
+      "from": "from {count} messages",
+      "none": "Sales aren't tied to campaigns yet, so what it brought in isn't known.",
+      "pause": "Pause the rest",
+      "again": "Send this again in a month"
+    },
+    "quiet": {
+      "title": "Who read it and said nothing",
+      "none": "Reads aren't recorded for campaigns yet, so the quiet ones can't be picked out.",
+      "follow": "Let it follow up",
+      "leave": "Leave them"
+    },
+    "strip": {
+      "sent": "Sent",
+      "delivered": "Delivered",
+      "opened": "Opened",
+      "replied": "Replied",
+      "bought": "Bought",
+      "optedOut": "Opted out",
+      "failed": "{count} didn't arrive"
+    },
+    "hours": {
+      "title": "When people replied",
+      "span": "sent over {count, plural, one {one hour} other {# hours}} from {from}",
+      "none": "Replies aren't linked to campaigns yet."
+    },
+    "replies": {
+      "title": "What they wrote back",
+      "none": "Nothing recorded yet.",
+      "foot": "Replies aren't grouped by what they asked for yet."
+    },
+    "back": "All outreach",
+    "unavailable": "We couldn't read this campaign just now.",
+    "missing": "There's no such campaign here.",
+    "seeResults": "See what it did"
+  },
+  "createOutreach": "Create outreach",
+  "tasks": {
+    "message": {
+      "name": "Message",
+      "text": "One-off to a person or small list",
+      "none": "A one-off message is written from the conversation, in the Inbox."
+    },
+    "campaign": {
+      "name": "Campaign",
+      "text": "A group, on a schedule"
+    },
+    "email": {
+      "name": "Email",
+      "text": "Longer, with layout",
+      "none": "No email account is connected to send from."
+    },
+    "call": {
+      "name": "Phone call",
+      "text": "Call someone from the dialer"
+    }
+  },
+  "create": {
+    "title": "New campaign",
+    "line": "Saved as a draft. Nothing is sent until you send it.",
+    "from": "From",
+    "template": "Template",
+    "pickTemplate": "Choose an approved template",
+    "templateHint": "WhatsApp sends only templates it has approved.",
+    "noTemplate": "No approved template for this number yet.",
+    "newTemplate": "New template",
+    "message": "Message",
+    "name": "Name",
+    "namePlaceholder": "Autumn restock",
+    "when": "When",
+    "day": "Day",
+    "time": "Time",
+    "dayFormat": "dd/mm/yyyy",
+    "clockFormat": "HH:mm",
+    "whenBoth": "Give both a day and a time, or leave both empty.",
+    "whenHint": "Leave empty to send it when you choose.",
+    "save": "Save draft",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "draftNote": "A draft: nothing goes out.",
+    "noAccount": "No connected account to send from.",
+    "connect": "Connect a channel",
+    "error": {
+      "missing": "Fill in where it goes from, what it says, and its name.",
+      "entitlement": "Campaigns aren't part of this plan.",
+      "forbidden": "You don't have permission to create campaigns.",
+      "failed": "The draft wasn't saved. Try again."
+    },
+    "picked": "{count, plural, one {To the 1 person you picked on Customers.} other {To the # people you picked on Customers.}}"
+  },
+  "go": {
+    "cancel": "Not yet",
+    "send": {
+      "label": "Send now",
+      "ask": "{count, plural, =0 {This goes to everyone in the audience. Send it now?} one {This goes to 1 person. Send it now?} other {This goes to # people. Send it now?}}",
+      "yes": "Yes, send it",
+      "going": "Sending…",
+      "done": "Sending - it goes out over the next few minutes.",
+      "needsWaba": "A WhatsApp campaign sends only through a connected WhatsApp Business account - connect one in Settings · Channels.",
+      "unknown": "We couldn't check the WhatsApp account just now - try again in a moment.",
+      "failed": {
+        "refused": "It wasn't sent - check who it goes to and the message, then try again.",
+        "removal_line": "It wasn't sent - its template has no removal line, which every marketing message needs. \"Duplicate and edit\" the template: the copy gets the line.",
+        "forbidden": "You don't have permission to send campaigns.",
+        "failed": "It wasn't sent - try again."
+      }
+    },
+    "submit": {
+      "label": "Submit to WhatsApp",
+      "ask": "WhatsApp reviews it, usually within a day. Submit it?",
+      "yes": "Yes, submit",
+      "going": "Submitting…",
+      "done": "Submitted - WhatsApp is reviewing it.",
+      "needsWaba": "Templates go to WhatsApp through a connected WhatsApp Business account - connect one in Settings · Channels.",
+      "failed": {
+        "refused": "WhatsApp didn't take it - check the template and try again.",
+        "removal_line": "It wasn't submitted - marketing templates end with a removal line, and this one was made before that. \"Duplicate and edit\" it: the copy gets the line.",
+        "forbidden": "You don't have permission to submit templates.",
+        "failed": "It wasn't submitted - try again."
+      },
+      "whatsappOnly": "Only a WhatsApp template goes to WhatsApp for review."
+    }
+  },
+  "tabs": {
+    "label": "Outreach",
+    "inFlight": "In flight",
+    "templates": "Templates",
+    "calls": "Calls",
+    "finished": "Finished",
+    "finishedWhere": "Finished campaigns are listed after the ones going out."
+  }
+}

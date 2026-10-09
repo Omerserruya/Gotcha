@@ -1,0 +1,111 @@
+@layer shell {
+  /*
+   * Settings' own sidebar, inside the work surface.
+   *
+   * Not the rail. Inbox and Studio reveal their sections in the dark rail
+   * because those are filters over one page; a Settings section is a page of
+   * its own, and eight more entries under the seven destinations would read as
+   * fifteen destinations. Screens 11-18 draw it this way.
+   */
+  .sidebar {
+    inline-size: var(--size-settings-nav);
+    flex: none;
+    border-inline-end: var(--border-width-thin) solid var(--border-subtle);
+    padding-block: var(--space-26);
+    padding-inline: var(--space-22);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-block-size: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-heavy) transparent;
+  }
+
+  /* 02 sets no line-height: the heading is 21 tall and each row 32 (34 selected). */
+  .heading {
+    line-height: normal;
+    font-size: var(--font-size-heading);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
+    margin-block-end: var(--space-16);
+    padding-inline: var(--space-10);
+  }
+
+  .link {
+    display: flex;
+    align-items: center;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-body);
+    padding-block: var(--space-9);
+    padding-inline: var(--space-11);
+    border-radius: var(--radius-item);
+    text-decoration: none;
+    line-height: normal;
+  }
+
+  .link:hover {
+    background-color: var(--panel-inset);
+  }
+
+  /* 02 draws the border on the selected row only, which is 2px taller for it. */
+  .link[aria-current='page'] {
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    color: var(--text-primary);
+    font-weight: var(--font-weight-medium);
+  }
+
+  /*
+   * Something in that section needs attention - a channel that stopped
+   * responding, a system that is not answering. Never the only carrier: the
+   * section's own page says what it is.
+   */
+  .alert {
+    margin-inline-start: auto;
+    inline-size: var(--size-dot);
+    block-size: var(--size-dot);
+    border-radius: var(--radius-round);
+    background-color: var(--intent-urgent-edge);
+    flex: none;
+  }
+
+  /*
+   * ── Narrow: a strip, not a column ──────────────────────────────────────
+   *
+   * Eight sections stacked vertically fill a phone viewport on their own, so
+   * the page a person actually asked for would start below the fold. As one
+   * scrollable row the whole list stays reachable in about the height of a
+   * single link, and the content starts at the top of the screen where it
+   * belongs.
+   *
+   * The heading goes: `Settings` above a list of Settings sections is a label
+   * for something the page already says, and here it costs a line of a phone.
+   */
+  @media (width <= 900px) {
+    .sidebar {
+      inline-size: auto;
+      flex-direction: row;
+      align-items: center;
+      gap: var(--space-6);
+      padding-block: var(--space-10);
+      padding-inline: var(--space-16);
+      border-inline-end: none;
+      border-block-end: var(--border-width-thin) solid var(--border-subtle);
+      overflow-x: auto;
+      overflow-y: hidden;
+      /* The strip scrolls; the page underneath must not scroll with it. */
+      overscroll-behavior-inline: contain;
+      scrollbar-width: none;
+    }
+
+    .heading {
+      display: none;
+    }
+
+    .link {
+      flex: none;
+      white-space: nowrap;
+    }
+  }
+}

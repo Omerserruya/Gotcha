@@ -1,0 +1,672 @@
+@layer features {
+  /*
+   * Settings · Security - screen 16.
+   *
+   * Four sections, each with its own heading and its own failure state. One
+   * section failing must not blank the others: the reader came to check
+   * something specific, and the rest of the screen is still true.
+   */
+
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-9);
+  }
+
+  .sectionHeading {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-11);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+  }
+
+  .rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+    min-inline-size: 0;
+  }
+
+  /* Inside `.block` the list is already framed by the block itself. */
+  .block .rows {
+    background: none;
+    border: none;
+    border-radius: 0;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .block .row {
+    padding-inline: 0;
+  }
+
+  .row + .row {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .identity {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .name {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-8);
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    /* A user agent is a long unbroken string; it must not widen the panel. */
+    overflow-wrap: anywhere;
+  }
+
+  /* A failed sign-in is the row that matters most in this list. */
+  .failed {
+    color: var(--intent-urgent-text);
+  }
+
+  .thisDevice {
+    flex: none;
+    font-size: var(--font-size-eyebrow);
+    font-weight: 500;
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--intent-opportunity-text);
+  }
+
+  .detail {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+    overflow-wrap: anywhere;
+  }
+
+  .when {
+    flex: none;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .blockActions {
+    display: flex;
+    gap: var(--space-8);
+  }
+
+  /*
+   * "We could not find out" - NOT "there is nothing".
+   *
+   * Given its own tone precisely because the difference matters here: an empty
+   * list is reassuring and an unreadable one is not, and they must never look
+   * alike on a security screen.
+   */
+  .unavailable {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .empty {
+    margin: 0;
+    padding-block: var(--space-16);
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  /* ── The action vocabulary ──────────────────────────────────────────── */
+  .facets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+
+  .facet {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-6);
+    font-size: var(--font-size-caption);
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-chip);
+    padding-block: var(--space-4);
+    padding-inline: var(--space-8);
+  }
+
+  .facetName {
+    font-family: var(--font-mono);
+    color: var(--text-body);
+    overflow-wrap: anywhere;
+  }
+
+  .facetCount {
+    color: var(--text-subtle);
+  }
+
+  .facetNote {
+    align-self: center;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .problem {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  @media (width <= 600px) {
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: var(--space-4) var(--space-11);
+      align-items: start;
+    }
+
+    .identity {
+      grid-column: 1 / -1;
+    }
+
+    .when {
+      grid-column: 2;
+      text-align: end;
+    }
+  }
+}
+
+@layer features {
+  /*
+   * The count of what a collapsed list is holding back, beside the control that
+   * reveals it. Without it the first five rows read as all of them.
+   */
+  .hiddenNote {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    align-self: center;
+  }
+
+  /*
+   * The confirm for "sign out every other device". Inline rather than an
+   * overlay: the action is recoverable, so the guard only has to stop a stray
+   * click, and an inline panel cannot be dismissed by one.
+   */
+  /*
+   * `.blockActions` lays its children in a row, which is right for buttons and
+   * wrong for a sentence above them.
+   */
+  .confirmBlock {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    align-items: flex-start;
+  }
+
+  .confirmNote {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    max-inline-size: var(--size-reading);
+  }
+
+  .confirmActions {
+    display: flex;
+    gap: var(--space-8);
+    flex-wrap: wrap;
+  }
+}
+
+@layer features {
+  /*
+   * The outcome on a facet, as a word rather than an `err` buried in a key.
+   * Only on failures: marking the successes too would be noise on six of seven
+   * rows and would make the one that matters harder to see.
+   */
+  .facetOutcome {
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+}
+
+@layer features {
+  /*
+   * 16, measured: two cards side by side (474 · 400 at 888, gap 14), then the
+   * audit card full width. Each card is white, 14px radius, one hairline.
+   */
+  .topRow {
+    display: grid;
+    grid-template-columns: minmax(0, 474fr) minmax(0, 400fr);
+    gap: var(--space-14);
+    /* 02: both cards one height, their rows at the top. */
+    align-items: stretch;
+    line-height: normal;
+  }
+
+  .card,
+  .auditCard {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    line-height: normal;
+  }
+
+  .cardTitle {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  /* A card whose first child is its title gets 02's header strip. */
+  .card > .cardTitle {
+    padding-block: var(--space-13);
+    padding-inline: var(--space-18);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .card > .block,
+  .card > .rows,
+  .card > .unavailable,
+  .card > .empty {
+    border: none;
+    border-radius: 0;
+    background: none;
+  }
+
+  /* ── 02's policy rows: name over a muted line, the state at the end ── */
+  .policyRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-18);
+  }
+
+  .policyRow + .policyRow,
+  .block + .policyRow {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .policyText {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .policyName {
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .policySub {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .policyNone {
+    flex: none;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .auditHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-18);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  /* The title never wraps; the chips take what is left. */
+  .auditHead > .cardTitle {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  /* 02's chips: one row, 11.5 on the inset, the current one dark. */
+  .auditChips {
+    display: flex;
+    flex: 1;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-6);
+    min-inline-size: 0;
+  }
+
+  /* A facet chip gives way before the title does; "All" and More never. */
+  .auditChip {
+    flex: 0 1 auto;
+    min-inline-size: 0;
+    overflow: clip;
+    text-overflow: ellipsis;
+    padding-block: 5px;
+    padding-inline: var(--space-11);
+    border-radius: 7px;
+    background-color: var(--panel-inset);
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    list-style: none;
+  }
+
+  .auditChip[data-current='yes'],
+  .auditMore {
+    flex: none;
+  }
+
+  .auditChip[data-current='yes'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .auditMore {
+    position: relative;
+  }
+
+  .auditMore > summary {
+    cursor: pointer;
+  }
+
+  .auditMore > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .auditMoreList {
+    position: absolute;
+    inset-block-start: calc(100% + var(--space-6));
+    inset-inline-end: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-6);
+    padding: var(--space-10);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-item);
+  }
+
+  .exportWrap {
+    display: inline-flex;
+    flex: none;
+    gap: var(--space-8);
+    align-items: center;
+  }
+
+  .export {
+    flex: none;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .export:hover {
+    color: var(--text-primary);
+  }
+
+  .export:disabled {
+    color: var(--text-subtle);
+    cursor: default;
+  }
+
+  .exportProblem {
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  .auditCard > :not(.auditHead, .auditRows) {
+    padding-inline: var(--space-18);
+  }
+
+  @media (width <= 900px) {
+    .topRow {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}
+
+@layer features {
+  .mfa {
+    display: flex;
+    flex-direction: column;
+    padding-block-end: var(--space-12);
+  }
+
+  .mfa > .problem {
+    padding-inline: var(--space-18);
+  }
+
+  .mfa + .policyRow,
+  .unavailable + .policyRow {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+}
+
+@layer features {
+  .cardHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-12);
+    padding-block: var(--space-13);
+    padding-inline: var(--space-18);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .cardHead > .cardTitle {
+    flex: 1;
+  }
+
+  .cardCount {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* 16's device rows: 12.5 over 11, 12 × 18, a hairline between. */
+  .card .block {
+    gap: 0;
+    padding: 0;
+  }
+
+  .card .row {
+    padding-block: var(--space-12);
+    padding-inline: var(--space-18);
+  }
+
+  .card .name {
+    font-size: var(--font-size-meta);
+    font-weight: 400;
+    color: var(--text-primary);
+  }
+
+  .card .detail {
+    font-size: var(--font-size-micro);
+  }
+
+  .card .blockActions,
+  .card .confirmBlock {
+    padding-block: var(--space-12);
+    padding-inline: var(--space-18);
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .textAction {
+    flex: none;
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .textAction:disabled {
+    cursor: wait;
+  }
+
+  /* ── 16's audit rows: time · what happened · its kind ─────────────── */
+  .auditRows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .auditCard > .auditRows {
+    padding-inline: 0;
+  }
+
+  .auditRow {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-14);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-18);
+  }
+
+  .auditRow + .auditRow {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .auditTime {
+    flex: none;
+    inline-size: 96px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-counter);
+    font-weight: 500;
+    color: var(--text-subtle);
+  }
+
+  .auditText {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+
+  .auditKind {
+    flex: none;
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+}
+
+@layer features {
+  /* 16: the two-step level, at the row's end; the stored one is dark. */
+  .segmented {
+    flex: none;
+    display: inline-flex;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    border-radius: var(--radius-chip);
+    background-color: var(--panel-inset);
+  }
+
+  .segment {
+    border: none;
+    border-radius: var(--radius-badge);
+    background: none;
+    padding-block: var(--space-4);
+    padding-inline: var(--space-9);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .segment[data-current='yes'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+    cursor: default;
+  }
+
+  .segment:disabled {
+    cursor: wait;
+  }
+}
+
+@layer features {
+  /*
+   * 16 in 02's frame: the audit card runs to the frame's bottom and its rows
+   * scroll inside. Recent sign-ins (not in 02) stay last, kept short with
+   * their own scroll, so they never push the audit off the frame.
+   */
+  @media (width > 900px) {
+    .auditCard {
+      flex: 1;
+      min-block-size: 240px;
+    }
+
+    .auditCard > .auditRows {
+      flex: 1;
+      min-block-size: 0;
+      overflow-y: auto;
+    }
+
+    .loginsCard {
+      flex: none;
+      max-block-size: 180px;
+    }
+
+    .loginsCard > :not(.cardTitle) {
+      overflow-y: auto;
+    }
+  }
+
+  .loginsCard {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    line-height: normal;
+  }
+
+  .loginsCard > .cardTitle {
+    padding-block: var(--space-13);
+    padding-inline: var(--space-18);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .loginsCard > .rows,
+  .loginsCard > .unavailable,
+  .loginsCard > .empty {
+    border: none;
+    border-radius: 0;
+    background: none;
+  }
+}

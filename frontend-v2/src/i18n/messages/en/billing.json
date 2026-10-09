@@ -1,0 +1,437 @@
+{
+  "title": "Usage & billing",
+  "description": "Everything GOTCHA does uses credits. You see what's left, and how far it goes.",
+  "plan": {
+    "unavailable": "We couldn't read your plan just now.",
+    "renewsOn": "renews {date}",
+    "endsOn": "ends {date}",
+    "changesAtRenewal": "Changes to {plan} at renewal.",
+    "change": "Change plan"
+  },
+  "invoices": {
+    "unavailable": "We couldn't read your invoices just now.",
+    "empty": "No invoices yet.",
+    "undated": "No date",
+    "receipt": "Receipt",
+    "failedSummary": "{count, plural, =1 {One charge didn't go through - {total} {currency}. Nothing has been paid for it.} other {# charges didn't go through - {total} {currency} in total. Nothing has been paid for them.}}",
+    "status": {
+      "DRAFT": "Not issued yet",
+      "ISSUED": "Issued",
+      "PAID": "Paid",
+      "FAILED": "Didn't go through",
+      "VOID": "Cancelled"
+    },
+    "noReceipt": {
+      "not_paid": "No receipt - a receipt is issued when a charge is paid, and this one wasn't.",
+      "missing": "Paid, but the receipt hasn't arrived from the payment provider.",
+      "unusable": "Paid, and a receipt arrived - but not in a form we could open. Ask support to re-send it."
+    }
+  },
+  "autoPurchase": {
+    "unset": "Nothing is set up for running low. GOTCHA will use the default: when the credit runs out, the AI stops answering.",
+    "on": "Buys more automatically when credit drops to {threshold}%.",
+    "off": "Doesn't buy more automatically.",
+    "warnsFirst": "You're told at {warn}% - before anything is bought, so there's time to decide.",
+    "noCap": "No monthly limit on automatic purchases.",
+    "cap": "Up to {cap} {currency} a month on automatic purchases. {spent} {currency} so far this cycle - {used}.",
+    "behavior": {
+      "STOP_AI": "When it runs out: the AI stops answering. People can still work.",
+      "HUMAN_ONLY": "When it runs out: the AI stops and your team carries on as normal.",
+      "REQUIRE_APPROVAL": "When it runs out: the AI keeps working, and every action waits for someone to approve it.",
+      "PREPAID_ONLY": "Never buys more. GOTCHA runs on what you bought in advance and stops when it's gone.",
+      "PAYG": "When it runs out: GOTCHA keeps working and the extra usage is billed at the end of the cycle."
+    },
+    "capIsNotACap": "Note: with pay-as-you-go, the monthly limit stops automatic purchases - it doesn't stop the bill. Usage past zero is still charged at the end of the cycle.",
+    "unsettable": "Pay-as-you-go can't be switched on or off from here - it's set up by GOTCHA for you. The other options on this page can be changed.",
+    "option": {
+      "pack": "Buy a pack automatically",
+      "payg": "Pay as you go, up to a limit",
+      "stop": "Stop at my plan"
+    },
+    "paygRate": "Past your plan, extra use is billed at {rate} {currency} per credit at the end of the cycle.",
+    "stopText": "Nothing extra is charged. When credits run out, the rule under “If the limit is reached” takes over.",
+    "ifReached": "If the limit is reached",
+    "alerts": "Alerts",
+    "warnAt": "At {warn}% of plan credits",
+    "alertPurchase": "Every automatic purchase",
+    "alertLimit": "When the monthly limit is hit",
+    "alertNone": "Nothing sends this alert yet.",
+    "subline": "Which one is set, and what happens when credits run out.",
+    "unsetShort": "Nothing set yet - by default, the AI stops answering when credits run out.",
+    "mostYouCould": "Most you could spend this month:",
+    "alertWarning": "Before credits run low",
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": {
+      "pack": "Pack to buy",
+      "threshold": "Buy when credit drops to (%)",
+      "cap": "Monthly limit ({currency})",
+      "capNone": "No limit",
+      "yes": "Yes, save this",
+      "back": "Back",
+      "confirmPack": "This buys {pack} ({price}) automatically each time credit drops to {threshold}%, charged to {card}.",
+      "confirmPackCardUnknown": "This buys {pack} ({price}) automatically each time credit drops to {threshold}%, charged to your card on file.",
+      "confirmCap": "At most {cap} {currency} a month on automatic purchases.",
+      "confirmNoCap": "There's no monthly limit - it buys every time credit drops that low.",
+      "confirmNoCard": "There's no card on file, so every automatic purchase would fail - add a card first.",
+      "confirmStop": "Nothing is bought automatically.",
+      "pickPack": "Choose the pack to buy - none is on sale to choose from.",
+      "badThreshold": "The level must be a whole number from 1 to 100.",
+      "badCap": "The monthly limit must be an amount above zero, or empty for no limit.",
+      "paygNotSettable": "Pay-as-you-go is set up by GOTCHA for you and can't be chosen here.",
+      "saved": "Saved. This is what happens when credits run low from now on.",
+      "refused": {
+        "held": "Billing in this environment uses the live payment account, so nothing is saved from here.",
+        "plan": "Your plan doesn't include automatic purchases - change plan to turn them on.",
+        "invalid": "That setting wasn't accepted. Check the level and the limit.",
+        "forbidden": "You don't have permission to change billing settings.",
+        "failed": "Not saved. Try again."
+      }
+    }
+  },
+  "profile": {
+    "noCard": "There's no payment method on file, so there's nothing for GOTCHA to charge.",
+    "noCardWithFailures": "{count, plural, =1 {There's no payment method on file, so there's nothing for GOTCHA to charge - and one charge has already failed.} other {There's no payment method on file, so there's nothing for GOTCHA to charge - and # charges have already failed.}}",
+    "card": "{brand} ending {last4}",
+    "unknownBrand": "Card",
+    "none": "No billing details on file yet.",
+    "blank": "A billing record exists but nothing has been filled in.",
+    "name": "Billed to",
+    "email": "Invoices go to",
+    "vatId": "Company no. / VAT ID",
+    "address": "Address",
+    "absentFields": "GOTCHA holds one invoice email address, not a list - and it has no field for a PO number or a separate language for invoices.",
+    "noAccount": "This workspace has no billing account, so there is nowhere to put billing details yet. One is created with your first subscription.",
+    "neverEntered": "No billing details have been entered yet.",
+    "emptied": "Billing details were entered and have since been cleared. Invoices will be issued without a name, address or tax ID until they are filled in again.",
+    "methodsUnknown": "We couldn't check whether you have a payment method just now. If there isn't one, charges will fail - reload to try again.",
+    "failuresUnknown": "There's no payment method on file, so there's nothing for GOTCHA to charge. We couldn't load your invoices just now, so we can't say whether any charges have already failed.",
+    "paymentMethod": "Payment method",
+    "replace": "Replace card",
+    "invoiceTo": "Tax invoice made out to",
+    "legalName": "Legal name",
+    "country": "Country",
+    "po": "Purchase order / reference",
+    "language": "Invoice language",
+    "noField": "GOTCHA has no field for this yet.",
+    "sendTo": "Send invoices and receipts to",
+    "subline": "Who the tax invoice is made out to, where it goes, and what pays it.",
+    "noCardRow": "No card on file",
+    "addCard": "Add card",
+    "save": "Save details",
+    "cancel": "Cancel",
+    "heldBy": "Card details are held by the payment provider.",
+    "expires": "Expires {date}",
+    "saved": "Saved. New invoices carry these details.",
+    "saveRefused": {
+      "invalid_country": "The country must be two letters, like IL.",
+      "no_record": "There's no billing record to save these to yet - one is made when a card is added.",
+      "forbidden": "You don't have permission to change billing details.",
+      "failed": "Not saved. Try again."
+    }
+  },
+  "pricing": {
+    "title": "Change plan",
+    "description": "What you are on, what it costs, and what changing it would do.",
+    "unavailable": "We could not load your plan just now. Nothing has changed.",
+    "heading": {
+      "current": "Your plan",
+      "packages": "Credit packages",
+      "change": "Changing plan"
+    },
+    "listPrice": "{price} per {interval}",
+    "interval": {
+      "MONTH": "month",
+      "YEAR": "year"
+    },
+    "netOfTax": "Prices are before VAT.",
+    "netOfTaxRate": "Prices are before VAT ({rate}%).",
+    "converted": "Shown in {display}. You are charged in {charged}.",
+    "convertedFallback": "Shown in {display}, converted at a fallback rate. You are charged in {charged}, and that amount is the one that will match your statement.",
+    "discount": "{label}: you pay {payable} while it lasts. The plan's price is {list}.",
+    "pending": {
+      "DOWNGRADE": "Changes to {plan} on {date}.",
+      "UPGRADE": "Changes to {plan} on {date}.",
+      "VOLUME_CHANGE": "Your volume changes on {date}.",
+      "CANCEL": "Your subscription ends on {date}.",
+      "nothingChangesYet": "Until then your plan, its features, its limits and its credits all stay exactly as they are."
+    },
+    "change": {
+      "deferred": "A change to a cheaper plan takes effect at the end of your billing period, on {date}. Nothing changes before then.",
+      "irreversible": "Once a change is scheduled, it cannot be called off here. Choosing a different plan replaces it, but there is no way back to no change at all - only a cancellation can be reversed from this screen, and a plan change cannot.",
+      "needsPermission": "Changing the plan needs the Manage billing permission. Ask whoever administers your workspace.",
+      "noCard": "There is no payment method on file, so an upgrade would be declined before anything changed. Add a card first - the upgrade will work straight afterwards.",
+      "addCard": "Add a payment method"
+    },
+    "packages": {
+      "unavailable": "We could not load credit packages just now.",
+      "ineligible": "Your plan does not include buying extra credit packages.",
+      "none": "There are no credit packages on sale right now.",
+      "credits": "{credits} credits",
+      "expiry": {
+        "NEVER": "These credits do not expire.",
+        "PERIOD_END": "These credits expire at the end of your billing period.",
+        "DAYS_AFTER_PURCHASE": "These credits expire {days} days after you buy them."
+      }
+    },
+    "details": "Details"
+  },
+  "credits": {
+    "unavailable": "We could not load your credits just now.",
+    "split": {
+      "expiring": "Plan {credits} · expire {date}",
+      "expiringNoDate": "Plan {credits} · expire at renewal",
+      "purchased": "Bought separately {credits}"
+    },
+    "awaitingGrant": {
+      "lead": "No credits have been issued for this billing period yet.",
+      "body": "Your plan is contracted for {included} credits a period. The period that began on {date} has not had its credits granted, so the balance is zero - this is not credits you have spent.",
+      "short": "Not granted yet for this period"
+    },
+    "consumption": {
+      "withheld": "We are not showing a usage figure for this period. The number the system reports counts expired credits as if they had been spent, so it would overstate what you actually used."
+    },
+    "estimate": {
+      "observedBasis": "Measured from your own usage over the last {days} days.",
+      "planBasis": "Based on your plan's published rate, not on your own usage.",
+      "partiallyAttributed": "Only {pct}% of that usage was tied to a conversation - the rest was other AI work - so a per-conversation figure describes less of it than it looks.",
+      "awaitingGrant": "Comes back once this period's credits are granted.",
+      "conversations": "≈ {chats} conversations",
+      "observedAverage": "At your average of {avg} credits per conversation - your own usage, last {days} days"
+    },
+    "observed": {
+      "noMetering": "You have had {conversations} conversations in the last {days} days and no credits were recorded against them, so we cannot measure your own rate. That is about what has been metered, not about how much you have used GOTCHA.",
+      "tooFewConversations": "{conversations} conversations in the last {days} days is too few to measure a reliable rate from, so the estimate above uses your plan's published rate instead."
+    },
+    "cycle": "This cycle · {from} - {to}",
+    "cycleEnds": "This cycle ends {to}.",
+    "composition": "{plan} of {included} plan credits + {purchased} bought separately",
+    "compositionPlanOnly": "{plan} of {included} plan credits",
+    "compositionPurchasedOnly": "{purchased} bought separately",
+    "left": "Credits left",
+    "runout": {
+      "label": "Until renewal",
+      "none": "Nothing yet projects when credits run out against the renewal date."
+    }
+  },
+  "buy": {
+    "heading": "Buy credits",
+    "quantity": "How many",
+    "net": "Before VAT",
+    "total": "Total to pay",
+    "exempt": "Not liable for VAT",
+    "taxFallback": "VAT {pct}%",
+    "totalUnknown": "We can't show a total yet. VAT depends on the country on your billing details, and there isn't one on file - so the amount you'd be charged isn't something we can state.",
+    "action": "Buy",
+    "buying": "Buying…",
+    "bought": "Done - {credits} credits added.",
+    "blocked": {
+      "noAccount": "There's nobody to invoice yet. Add your billing details first, and this becomes available.",
+      "noCard": "There's no payment method on file, so there's nothing to charge. Add a card first."
+    },
+    "tooMany": "That's more than this pack allows in one purchase. Nothing was charged.",
+    "declined": "The payment didn't go through, and nothing was charged. You can try again.",
+    "unsettled": "We don't yet know whether that payment went through. Please do NOT try again - you may already have been charged. Check your invoices in a few minutes, and contact us if nothing appears.",
+    "tooManyMax": "This pack allows at most {max} in one purchase. Nothing was charged.",
+    "notPurchasable": "This pack isn't available on your plan, or is no longer sold. Nothing was charged, and trying again won't change it - the list you're looking at may be out of date.",
+    "failed": "We couldn't complete that, and we can't tell you whether your card was charged. Check your invoices before trying again, and contact us if something appears that shouldn't have.",
+    "each": "{price} each",
+    "payWith": "Pay with",
+    "pay": "Pay {net} · incl. VAT {gross}",
+    "payExempt": "Pay {net}",
+    "receiptTo": "Receipt to {email}",
+    "subline": "Added straight away."
+  },
+  "overview": {
+    "yourPlan": "Your plan",
+    "since": "since {date}",
+    "per": {
+      "month": "{price} a month",
+      "year": "{price} a year"
+    },
+    "included": "{credits, number} credits included",
+    "renews": "Renews {date}",
+    "ends": "Ends {date}",
+    "changes": "Changes to {plan} at renewal",
+    "planUnread": "We couldn't read your plan just now.",
+    "changePlan": "Change plan",
+    "buyCredits": "Buy credits",
+    "change": "Change",
+    "went": {
+      "title": "Where credits went",
+      "columns": "Avg · count · credits",
+      "kind": {
+        "ai": "AI conversations",
+        "team": "Team conversations, AI assist",
+        "outbound": "Outbound messages",
+        "voice": "Phone minutes"
+      },
+      "noCredits": "Nothing counts credits by kind of work yet."
+    },
+    "low": {
+      "title": "When credits run low",
+      "unset": "Not set up - when credits run out, the AI stops answering.",
+      "buys": "Buys more automatically when credit drops to {threshold}%.",
+      "off": "Doesn't buy more automatically.",
+      "cap": "Most you could spend this month: {cap}",
+      "notACap": "With pay-as-you-go, this limit stops automatic purchases - not the bill."
+    },
+    "billing": {
+      "title": "Billing",
+      "edit": "Edit details",
+      "cardLabel": "Card",
+      "invoicedTo": "Invoiced to",
+      "receiptsTo": "Receipts to",
+      "invoices": "Invoices",
+      "all": "All",
+      "card": "{brand} · {last4}",
+      "cardBrand": "Card",
+      "noCard": "None on file",
+      "cardUnread": "We couldn't check for a payment method just now.",
+      "invoicesUnread": "We couldn't read your invoices just now.",
+      "none": "None yet",
+      "reading": {
+        "no_account": "This workspace has no billing account yet.",
+        "never_entered": "No billing details have been entered yet.",
+        "emptied": "Billing details were entered and have since been cleared.",
+        "filled": "Not filled in."
+      },
+      "noCardFailed": "{count, plural, one {No payment method on file, and one charge has already failed.} other {No payment method on file, and # charges have already failed.}}",
+      "failed": "{count, plural, one {One charge didn't go through - {total} {currency}.} other {# charges didn't go through - {total} {currency}.}}"
+    },
+    "value": {
+      "label": "This cycle so far",
+      "none": "Nothing computes the hours your team didn't spend, or revenue from outreach, yet."
+    },
+    "overlay": {
+      "close": "Close",
+      "low": "When credits run low",
+      "buy": "Buy credits",
+      "details": "Billing details"
+    },
+    "invoicesPage": {
+      "title": "Invoices",
+      "description": "Every charge, and its receipt when there is one."
+    },
+    "buyShape": {
+      "unread": "We could not load credit packages just now.",
+      "payWith": "Pay with",
+      "card": "Card",
+      "noCard": "No card on file",
+      "pay": "Pay"
+    }
+  },
+  "choice": {
+    "yours": "Your plan",
+    "selected": "Selected",
+    "perMonth": "/ month",
+    "credits": "{credits} credits",
+    "creditsAndChats": "{credits} credits · ≈ {chats} conversations",
+    "noCatalog": "We couldn't read the plans on offer just now.",
+    "summary": {
+      "title": "What happens if you switch today",
+      "pick": "Pick a plan to see what changes.",
+      "chargedNow": "Charged now",
+      "nothing": "Nothing",
+      "downNote": "moving down takes effect at renewal",
+      "creditsNow": "Credits added now",
+      "none": "None",
+      "from": "From {date}",
+      "atRenewal": "At renewal",
+      "fromToday": "From today",
+      "perMonth": "{price} a month",
+      "eachCycle": "{credits} credits each cycle",
+      "prorated": "A move up is charged now: the full difference between the two monthly prices, before VAT, worked out when you switch."
+    },
+    "switch": "Switch plan",
+    "switchTo": "Switch to {plan}",
+    "keep": "Keep {plan}",
+    "keepCurrent": "Keep your plan",
+    "chargedTo": "Charged to {brand} · {last4}.",
+    "card": "Card",
+    "noCard": "No payment method on file - a move up would be declined.",
+    "downAtRenewal": "Moving down a plan takes effect at renewal, never mid-cycle.",
+    "confirm": {
+      "up": "This moves you to {plan} today and charges your {brand} ending {last4} now: the difference between the two monthly prices, before VAT.",
+      "upCardUnknown": "This moves you to {plan} today and charges your card now: the difference between the two monthly prices, before VAT.",
+      "upNoCard": "A move up is charged now, and there's no card on file to charge - it would be declined. Add a card first.",
+      "trial": "Nothing is charged now - you're on a trial. {plan} starts today, and its price when the trial ends.",
+      "down": "Nothing is charged now. You keep {current} until {date}, then move to {plan}.",
+      "downNoDate": "Nothing is charged now. You keep {current} until your renewal, then move to {plan}.",
+      "samePrice": "The two monthly prices are the same, so nothing is charged now.",
+      "thenPrice": "From then on, {price} a month, before VAT.",
+      "yes": "Yes, switch to {plan}"
+    },
+    "live": {
+      "asking": "Working out exactly what this would charge…",
+      "chargeNow": "This moves you to {plan} today and charges {gross} now, including VAT ({tax}), to your card on file.",
+      "thenMonthly": "Then {price} a month.",
+      "scheduled": "Nothing is charged now. You move to {plan} on {date}.",
+      "scheduledNoDate": "Nothing is charged now. You move to {plan} at your renewal.",
+      "nothingNow": "Nothing is charged now. You move to {plan} today.",
+      "noCard": "This would charge your card now, and there's no card on file - add one first.",
+      "refused": {
+        "taxable": "The VAT can't be worked out without your billing country - add it in billing details first.",
+        "priceable": "The charge can't be priced right now, so the plan can't be changed. Try again later."
+      },
+      "yesCharge": "Yes, charge {gross}",
+      "yes": "Yes, switch to {plan}",
+      "switching": "Switching…",
+      "cancel": "Cancel",
+      "again": "Check again",
+      "moved": "The amount changed since you looked - here is the new figure. Nothing was charged.",
+      "doneNow": "You're on {plan} now.",
+      "doneScheduled": "Done: you move to {plan} on {date}.",
+      "doneScheduledNoDate": "Done: you move to {plan} at your renewal.",
+      "previewRefused": {
+        "held": "Billing in this environment uses the live payment account, so nothing is changed from here.",
+        "not_selectable": "That plan can't be chosen for this workspace.",
+        "forbidden": "You don't have permission to change the plan.",
+        "failed": "The charge couldn't be worked out just now."
+      },
+      "changeRefused": {
+        "held": "Billing in this environment uses the live payment account, so nothing is changed from here.",
+        "no_card": "There's no card on file to charge - add one first. Nothing was charged.",
+        "declined": "The card was declined. Nothing was charged, and you're still on your current plan.",
+        "unknown": "We couldn't confirm whether the charge went through. Don't try again - check your invoices first, or ask us.",
+        "not_selectable": "The plan wasn't changed. Nothing was charged.",
+        "forbidden": "You don't have permission to change the plan."
+      }
+    }
+  },
+  "held": {
+    "tag": "Not available here",
+    "why": "Billing in this environment uses the live payment account, so nothing is charged, saved to the provider or changed from here.",
+    "cancel": "Cancel",
+    "addCard": "This opens the payment provider's secure page to save a card. It's kept for future charges - nothing is charged now.",
+    "replaceCard": "This opens the payment provider's secure page to save a new card in place of {brand} ending {last4}; the new one is charged from then on. Nothing is charged now.",
+    "toSecurePage": "Continue to the secure page"
+  },
+  "card": {
+    "title": "Card",
+    "opening": "Opening the secure page…",
+    "noStorage": "This browser won't keep the session while you're on the secure page, so the card couldn't be confirmed when you return. Allow site storage and try again.",
+    "checking": "Checking with the payment provider…",
+    "cancelled": "You left the secure page without saving a card. Nothing changed.",
+    "nothingToCheck": "There's no card being added from this browser to check.",
+    "stored": "Saved: {brand} ending {last4}. It's the card charged from now on.",
+    "aCard": "Card",
+    "pending": {
+      "no_new_card_yet": "The provider hasn't reported a new card yet. If you've just finished, check again in a moment.",
+      "expired": "This attempt expired. Start again from Billing.",
+      "exhausted": "This attempt was checked too many times without a card. Start again from Billing.",
+      "already_failed": "This attempt ended without a card. Start again from Billing.",
+      "unknown": "The provider's answer wasn't one we know. Check again, or start again from Billing."
+    },
+    "refused": {
+      "held": "Billing in this environment uses the live payment account, so nothing is saved to the provider from here.",
+      "unavailable": "Adding a card isn't available right now - the payment page isn't set up.",
+      "no_account": "There's no billing account to add a card to yet.",
+      "not_found": "This attempt isn't one this workspace started.",
+      "forbidden": "You don't have permission to change the payment method.",
+      "failed": "That didn't go through. Try again."
+    },
+    "checkAgain": "Check again",
+    "back": "Back to billing details"
+  }
+}

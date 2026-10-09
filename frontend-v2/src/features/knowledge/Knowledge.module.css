@@ -1,0 +1,530 @@
+@layer features {
+  /*
+   * Screen 08 · Studio · What GOTCHA knows - measured. 02 sets no
+   * line-height on any of it.
+   */
+
+  /* 02's header action: dark, radius 9, `padding:9px 16px`, 12.5px. */
+  .add {
+    padding: var(--space-9) var(--space-16);
+    border-radius: var(--radius-item);
+    background-color: var(--action-base);
+    font-size: var(--font-size-meta);
+    color: var(--action-text);
+    line-height: normal;
+    /* A link drawn as a button. */
+    text-decoration: none;
+  }
+
+  .add[aria-disabled='true'] {
+    cursor: default;
+  }
+
+  /* The body's column; the bottom row takes what is left of the frame. */
+  .screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    min-block-size: 0;
+    line-height: normal;
+  }
+
+  /* ── The strip: four cells in one white card, `padding:15px 18px` ── */
+  .strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0;
+    overflow: clip;
+    min-inline-size: 0;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .cell {
+    padding: 15px 18px;
+  }
+
+  .cell + .cell {
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+
+  .cell dt {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .cell dd {
+    margin: 3px 0 0;
+    font-size: 25px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .cell dd[data-tone='urgent'] {
+    color: var(--intent-urgent-text);
+  }
+
+  /* ── The conflict card: white, the alert edge, `padding:18px 20px` ── */
+  .conflictCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    padding: 18px var(--space-20);
+    border: 1px solid var(--alert-edge);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  /* No conflict: the card's shape, neutral - no alert edge. */
+  .conflictCard[data-state='empty'] {
+    border-color: var(--border-default);
+  }
+
+  .conflictEmpty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .conflictEmptyTitle {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .conflictEmptyTitle::before {
+    content: '';
+    flex: none;
+    inline-size: 7px;
+    block-size: 7px;
+    border-radius: 50%;
+    background-color: var(--text-disabled);
+  }
+
+  .conflictEmptyLine {
+    margin: 0;
+    padding-inline-start: 16px;
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+  }
+
+  .conflicts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .conflict {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .conflictHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-12);
+  }
+
+  .conflictQuestion {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .conflictAsked {
+    flex: none;
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* Both answers side by side: `#FAF8F4`, radius 12, `padding:14px 16px`. */
+  .variants {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--space-12);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .variant {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    padding: var(--space-14) var(--space-16);
+    border-radius: 12px;
+    background-color: var(--panel-base);
+  }
+
+  /* A sentence somebody wrote: reading size, not 02's 22px figure. */
+  .variantAnswer {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    line-height: 1.45;
+    color: var(--text-primary);
+  }
+
+  .variantMeta {
+    margin: 0;
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+  }
+
+  .conflictMeanwhile,
+  .coverage {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    line-height: 1.45;
+    color: var(--text-subtle);
+  }
+
+  .resolve {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .resolveRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+
+  .resolveNote,
+  .resolveDone,
+  .resolveWarn {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+  }
+
+  .resolveNote {
+    color: var(--text-muted);
+  }
+
+  .resolveDone {
+    color: var(--text-body);
+  }
+
+  .resolveWarn {
+    color: var(--intent-urgent-text);
+  }
+
+  /* ── The bottom row: the sources (the rest) beside the questions (400) ── */
+  .bottom {
+    flex: 1;
+    display: flex;
+    gap: var(--space-14);
+    min-block-size: 280px;
+  }
+
+  .sourcesCard,
+  .gapsCard {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    overflow: clip;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .sourcesCard {
+    flex: 1;
+  }
+
+  .gapsCard {
+    flex: none;
+    inline-size: 400px;
+  }
+
+  .cardHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-12);
+    padding: var(--space-14) 18px;
+    border-block-end: 1px solid var(--panel-well);
+  }
+
+  .cardTitle {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .cardMeta {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .cardBody {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .cardFoot {
+    margin: 0;
+    padding: var(--space-14) 18px;
+    background-color: var(--table-head-surface);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* A way in: `#FAF8F4`, `padding:6px 18px 2px`, mono 10px. */
+  .wayHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    margin: 0;
+    padding: var(--space-6) 18px 2px;
+    background-color: var(--panel-base);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-timestamp);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .wayIcon {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  .wayName {
+    flex: 1;
+  }
+
+  .wayNote {
+    font-family: var(--font-sans);
+    font-size: var(--font-size-micro);
+    letter-spacing: normal;
+    text-transform: none;
+  }
+
+  .sources,
+  .gaps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .source {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: var(--space-6) 18px;
+    border-block-end: 1px solid var(--row-divider);
+  }
+
+  .sourceText,
+  .gapText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .sourceName {
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .sourceMeta {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .disambiguate {
+    margin-inline-start: var(--space-6);
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .pending {
+    flex: none;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--intent-blocked-surface);
+    font-size: var(--font-size-micro);
+    color: var(--intent-blocked-text);
+  }
+
+  .gap {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: 13px 18px;
+    border-block-end: 1px solid var(--row-divider);
+  }
+
+  .gapQuestion {
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .gapCount {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  /* "Answer": outline, radius 7, `padding:5px 11px`, 11px. */
+  .answer {
+    flex: none;
+    padding: 5px 11px;
+    border: 1px solid var(--border-default);
+    border-radius: 7px;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-micro);
+    color: var(--text-body);
+    cursor: pointer;
+  }
+
+  /* A gap with its answer open under it: the row, then the field. */
+  .gapItem {
+    border-block-end: 1px solid var(--row-divider);
+  }
+
+  .gapItem > .gap {
+    border-block-end: 0;
+  }
+
+  .gapForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: 0 18px 14px;
+  }
+
+  .gapInput {
+    inline-size: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    resize: block;
+  }
+
+  .gapHint,
+  .gapLearned {
+    margin: 0;
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .gapLearned {
+    color: var(--signal-done-text);
+  }
+
+  .gapProblem {
+    margin: 0;
+    font-size: var(--font-size-micro);
+    color: var(--intent-urgent-text);
+  }
+
+  .gapActions {
+    display: inline-flex;
+    gap: var(--space-8);
+  }
+
+  .gapSave,
+  .gapCancel {
+    padding: 5px 11px;
+    border-radius: 7px;
+    font: inherit;
+    font-size: var(--font-size-micro);
+    cursor: pointer;
+  }
+
+  .gapSave {
+    border: 0;
+    background-color: var(--action-base);
+    color: var(--frame-text);
+  }
+
+  .gapCancel {
+    border: 1px solid var(--border-default);
+    background: none;
+    color: var(--text-secondary);
+  }
+
+  .gapSave:disabled,
+  .gapCancel:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .none,
+  .degraded {
+    margin: 0;
+    padding: var(--space-12) 18px;
+    font-size: var(--font-size-label);
+    line-height: 1.45;
+    color: var(--text-subtle);
+  }
+
+  .conflictCard .none,
+  .conflictCard .degraded {
+    padding: 0;
+  }
+
+  .degraded {
+    color: var(--text-muted);
+  }
+
+  .empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-14) 18px;
+  }
+
+  .emptyLead {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .emptyBody {
+    margin: 0;
+    font-size: var(--font-size-label);
+    line-height: 1.45;
+    color: var(--text-body);
+  }
+
+  @media (width < 64rem) {
+    .strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .bottom {
+      flex-direction: column;
+    }
+
+    .gapsCard {
+      inline-size: auto;
+    }
+  }
+}

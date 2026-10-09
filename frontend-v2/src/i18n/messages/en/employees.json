@@ -1,0 +1,343 @@
+{
+  "title": "Your AI employees",
+  "description": "What each one is responsible for, and how much of it they finish on their own.",
+  "unavailable": "We couldn't read your AI employees just now.",
+  "none": "No AI employees yet.",
+  "noneBody": "Until one exists, nobody is answering automatically - every message waits for a person.",
+  "status": {
+    "ACTIVE": "Working",
+    "PAUSED": "Paused",
+    "DRAFT": "Not started yet"
+  },
+  "count": {
+    "open": "Open right now",
+    "handled": "Handled in total",
+    "alone": "Finished alone",
+    "nothingYet": "Nothing routed here yet",
+    "ofHandled": "of {count}"
+  },
+  "action": {
+    "pause": "Pause",
+    "pauseIt": "Pause it",
+    "pauseConfirm": "Pause anyway",
+    "keepRunning": "Keep it working",
+    "resume": "Start it again",
+    "delete": "Delete",
+    "deleteConfirm": "Delete it",
+    "keepIt": "Keep it"
+  },
+  "pause": {
+    "lead": "Pause {name}?",
+    "midConversation": "{count, plural, =1 {One person is mid-conversation with it right now. They will simply stop getting replies - nobody is told, and the conversation is not passed to anyone.} other {# people are mid-conversation with it right now. They will simply stop getting replies - nobody is told, and the conversations are not passed to anyone.}}",
+    "noneOpen": "Nobody is mid-conversation right now. If someone writes in while it's paused, they'll get no reply and nobody will be told."
+  },
+  "error": {
+    "forbidden": "You don't have permission to change this.",
+    "gone": "This employee no longer exists.",
+    "failed": "That didn't go through."
+  },
+  "delete": {
+    "lead": "Delete {name}?",
+    "live": "{count, plural, =1 {One person is mid-conversation with it. They will stop getting replies and will wait unassigned until someone claims them.} other {# people are mid-conversation with it. They will stop getting replies and will wait unassigned until someone claims them.}}",
+    "noneLive": "Nobody is mid-conversation with it right now.",
+    "historyKept": "{count, plural, =1 {The one conversation it already finished keeps its record - deleting it doesn't unmake the work it did.} other {The # conversations it already finished keep their record - deleting it doesn't unmake the work it did.}}",
+    "routing": "New conversations will stop being sent to it."
+  },
+  "deleted": {
+    "done": "{name} is gone. {released, plural, =0 {No conversation needed releasing.} =1 {One conversation was released and is waiting for someone to claim it.} other {# conversations were released and are waiting for someone to claim them.}}"
+  },
+  "role": {
+    "label": "Responsible for",
+    "customer_support": "Customer support",
+    "sales": "Sales",
+    "booking": "Bookings",
+    "billing": "Billing",
+    "custom": "Something of its own",
+    "unset": "Nobody has said what this one is for."
+  },
+  "knowledge": {
+    "label": "Reads from",
+    "none": "Nothing attached. It answers from its instructions and nothing else.",
+    "inactive": "turned off",
+    "someInactive": "{count, plural, one {One of these is turned off, so it cannot read it.} other {# of these are turned off, so it cannot read them.}}"
+  },
+  "tested": {
+    "label": "Test chat",
+    "never": "Nobody has opened the test chat for this one.",
+    "at": "Last opened {when}"
+  },
+  "rail": {
+    "open": "{n} open",
+    "label": "Your AI employees",
+    "foot": "Employees learn from Knowledge. Change something there once, and every employee that reads it learns it."
+  },
+  "summary": "{working, plural, =0 {None working} one {One working} other {# working}}{paused, plural, =0 {} one {, one paused} other {, # paused}}.",
+  "hire": "Hire an employee",
+  "detail": {
+    "edit": "Edit",
+    "strip": {
+      "handled": "Handled in all",
+      "alone": "Resolved alone",
+      "passed": "Passed to a person",
+      "rating": "Customer rating"
+    },
+    "answersOn": {
+      "title": "Answers on"
+    },
+    "how": {
+      "title": "How it answers",
+      "sample": "A reply from today",
+      "sampleNone": "No reply is picked out yet."
+    },
+    "tone": {
+      "professional": "Professional",
+      "friendly": "Friendly",
+      "casual": "Casual",
+      "formal": "Formal"
+    },
+    "language": {
+      "english": "English",
+      "hebrew": "Hebrew",
+      "arabic": "Arabic"
+    },
+    "handles": {
+      "title": "What it handles",
+      "none": "Its conversations aren't grouped by topic yet"
+    },
+    "mayDo": {
+      "title": "What it may do on its own",
+      "on_its_own": "Allowed",
+      "ask_first": "Ask first",
+      "never": "Never",
+      "everyone": "The same for every AI employee - set in Integrations.",
+      "none": "Nothing it can do yet.",
+      "unavailable": "We couldn't read what it may do just now."
+    },
+    "knows": {
+      "title": "What it knows",
+      "on": "Reads it",
+      "off": "Switched off"
+    },
+    "tools": {
+      "title": "Connected tools",
+      "meta": "Business core",
+      "none": "Nothing connected yet.",
+      "unavailable": "We couldn't read the connected systems just now."
+    },
+    "handover": {
+      "title": "When it hands over to you",
+      "none": "No handover rules are set."
+    },
+    "worth": {
+      "title": "Worth changing",
+      "none": "Nothing to suggest yet."
+    },
+    "skills": "Skills"
+  },
+  "hireFlow": {
+    "title": "Hire an AI employee",
+    "line": "You can change any of this later",
+    "steps": "Steps",
+    "close": "Close",
+    "step": {
+      "1": "Responsibility",
+      "2": "Limits",
+      "3": "Try it"
+    },
+    "job": {
+      "customer_support": {
+        "name": "Customer support",
+        "text": "Orders, delivery, returns and the questions customers ask most.",
+        "dayOne": "Answer customers about their orders, delivery and returns, from what GOTCHA already knows about your business."
+      },
+      "sales": {
+        "name": "Sales",
+        "text": "Answers questions before a purchase and helps people choose.",
+        "dayOne": "Answer questions before a purchase and help customers choose, from your catalogue and knowledge."
+      },
+      "booking": {
+        "name": "Bookings",
+        "text": "Visits and appointments, straight into your calendar.",
+        "dayOne": "Take booking requests and answer questions about availability."
+      },
+      "custom": {
+        "name": "Something else",
+        "text": "Describe the job in your own words.",
+        "dayOne": "The job you describe."
+      }
+    },
+    "one": {
+      "title": "What should it be responsible for?",
+      "sub": "Pick the closest job. You can sharpen it later.",
+      "goal": "The job, in your own words",
+      "callIt": "Call it"
+    },
+    "channel": {
+      "WHATSAPP": "WhatsApp",
+      "EMAIL": "Email",
+      "INSTAGRAM": "Instagram",
+      "MESSENGER": "Messenger",
+      "WEBCHAT": "Web chat",
+      "TELEGRAM": "Telegram",
+      "SMS": "SMS",
+      "VOICE": "Phone"
+    },
+    "two": {
+      "title": "What may it settle on its own?",
+      "sub": "Your business's actions, as they are set today. Change any of them for this employee.",
+      "noTools": "No connected system offers actions yet.",
+      "choice": {
+        "do_it": "Do it",
+        "ask_me": "Ask me",
+        "never": "Never"
+      },
+      "ceiling": "This changes orders or money, so it always asks first.",
+      "handover": "Always hand over to a person when…",
+      "when": {
+        "askPerson": "they ask for a person",
+        "annoyed": "they sound annoyed",
+        "vip": "a VIP writes",
+        "askedTwice": "someone asks twice about the same thing"
+      },
+      "addAnother": "add another",
+      "own": "GOTCHA's own actions",
+      "mayUse": "This employee may use {name}",
+      "later": "A system you connect later is off for every employee until you turn it on for them.",
+      "failing": "{name} is connected but failing right now, so nothing here can use it until it's fixed in Studio · Integrations.",
+      "offForIt": "Off: this employee won't use {name} at all, whatever is set below."
+    },
+    "three": {
+      "title": "See it answer eight real ones",
+      "sub": "A test before anything goes live.",
+      "stat": {
+        "reviewed": "Reviewed",
+        "better": "You preferred its reply",
+        "same": "Just as good",
+        "worse": "Worse"
+      },
+      "case": "Case {n} / 8",
+      "notRun": "The test runs once you're allowed to create the employee.",
+      "run": "Run the test",
+      "hire": "Hire it",
+      "watch": "Hire in watch-only mode"
+    },
+    "side": {
+      "dayOne": "What it will do on day one",
+      "knows": "It already knows",
+      "knowsNone": "No knowledge source could be read.",
+      "cost": "What these limits cost you",
+      "costNone": "Not enough history to estimate yet.",
+      "soFar": "So far",
+      "next": {
+        "1": "Next: how much it may decide alone, and when it should hand over.",
+        "2": "Next: you see it answer before anything is created.",
+        "3": "Hiring from here comes next - nothing is created until it does."
+      }
+    },
+    "continue": "Continue",
+    "cancel": "Cancel",
+    "back": "Back",
+    "notYet": "Hiring from here comes next - nothing is created until it does.",
+    "note": {
+      "1": "Nothing goes live until you've tried it in step 3",
+      "2": "Nothing is live until you have seen step 3",
+      "3": "Nothing is created yet"
+    }
+  },
+  "edit": {
+    "title": "Edit {name}",
+    "close": "Close",
+    "apply": "Changes apply from its next reply",
+    "applyOpen": "Changes apply from its next reply - in {count, plural, one {its # open conversation} other {its # open conversations}} too",
+    "edited": "Last edited {when}",
+    "responsible": "Responsible for",
+    "handles": "What it handles",
+    "handlesNone": "Its conversations aren't grouped by topic yet.",
+    "add": "+ Add",
+    "how": "How it answers",
+    "tone": "Tone",
+    "languages": "Languages",
+    "signsOff": "Signs off as",
+    "signsOffNone": "No sign-off is stored for an employee.",
+    "saysAi": "Says it is AI when asked",
+    "saysAiNone": "No disclosure rule is stored for an employee.",
+    "handsTo": "Hands to:",
+    "handsToNone": "No handover target is stored for an employee.",
+    "setInCore": "Set in Settings · Business core",
+    "preview": "Preview with these rules",
+    "previewNone": "Nothing replays a conversation under new rules yet.",
+    "save": "Save changes",
+    "cancel": "Cancel",
+    "changes": "{count, plural, one {# change} other {# changes}}",
+    "noChanges": "No changes",
+    "responsiblePlaceholder": "What this employee is responsible for - e.g. questions after a purchase",
+    "systems": {
+      "title": "Business systems it may use",
+      "unread": "Couldn't read which systems it may use.",
+      "none": "No business system is set up in this workspace yet.",
+      "later": "A system you connect later is off for every employee until you turn it on here.",
+      "state": {
+        "working": "Connected",
+        "failing": "Connected, but failing",
+        "off": "Switched off",
+        "waiting": "Not connected yet"
+      },
+      "mayUse": "This employee may use {name}"
+    },
+    "confirm": {
+      "title": "Save changes to {name}?",
+      "live": "It answers customers with these from its next reply.",
+      "liveOpen": "It answers customers with these from its next reply - in {count, plural, one {its # open conversation} other {its # open conversations}} too.",
+      "keep": "Keep editing",
+      "save": "Save",
+      "saving": "Saving…"
+    },
+    "field": {
+      "responsibility": "What it is responsible for",
+      "tone": "Its tone",
+      "languages": "Its languages",
+      "handover": "When it hands over",
+      "access": "The business systems it may use"
+    },
+    "saveProblem": {
+      "forbidden": "You don't have permission to change AI employees.",
+      "gone": "This employee isn't here any more.",
+      "invalid_access": "One of the business systems isn't connected here any more. Reload and choose again.",
+      "failed": "Not saved. Try again in a moment."
+    }
+  },
+  "hired": {
+    "close": "Close",
+    "title": {
+      "ACTIVE": "{name} is working",
+      "PAUSED": "{name} is paused",
+      "DRAFT": "{name} is a draft"
+    },
+    "created": "Created {when}",
+    "watch": "Drafts first, and tells you",
+    "watchNone": "There is no watch-only mode: an active employee answers on its own.",
+    "answers": {
+      "ACTIVE": "It answers on its own",
+      "PAUSED": "It does not answer while paused",
+      "DRAFT": "It does not answer yet"
+    },
+    "change": "Change",
+    "rules": "{count, plural, one {# handover rule} other {# handover rules}}",
+    "noRules": "No handover rules",
+    "reachNone": "Nothing estimates how much will reach you.",
+    "adjust": "Adjust",
+    "gaps": "The readiness test found {count, plural, one {one gap} other {# gaps}}",
+    "testedOn": "Readiness test of {when}",
+    "noGaps": "The readiness test found no gaps",
+    "notTested": "No readiness test yet",
+    "resolve": "Resolve it",
+    "see": "See it in Studio"
+  },
+  "whoAnswers": "Who it answers is set in <automations>Studio · Automations</automations> and the playbook, not on the employee.",
+  "reach": {
+    "always": "Always",
+    "sometimes": "Sometimes (by the playbook)",
+    "where": "Decided by the playbook in <automations>Studio · Automations</automations>.",
+    "nowhere": "No channel reaches it in the playbook today. Route one to it in <automations>Studio · Automations</automations>."
+  }
+}

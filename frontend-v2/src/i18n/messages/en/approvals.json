@@ -1,0 +1,343 @@
+{
+  "title": "Approvals",
+  "description": "GOTCHA has done the work. These are the decisions it can't take on its own.",
+  "unavailable": "We couldn't read your approvals just now.",
+  "keys": "A approve · R reject",
+  "queue": {
+    "label": "Waiting for a decision",
+    "awaiting": "Waiting on you",
+    "lapsed": "Deadline passed",
+    "waiting": "{count, plural, one {# request waiting} other {# requests waiting}}",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "dayUnknown": "Date not recorded",
+    "decidedToday": "Decided earlier today",
+    "decidedEarlier": "Decided earlier",
+    "backToQueue": "{count, plural, one {Back to the one waiting} other {Back to the # waiting}}",
+    "done": "done",
+    "didntRun": "didn't run"
+  },
+  "detail": {
+    "requestedBy": "Requested by {who}",
+    "requestedByAutomation": "Requested by an automation",
+    "reason": "Why: {reason}",
+    "policyRule": "Flagged by {rule}",
+    "lapsed": "The deadline passed, so this can no longer be decided here. GOTCHA has handed the conversation to a person.",
+    "outcomeUnknown": "This was approved before GOTCHA recorded what happened next, so we can't tell you whether it ran. It can't be retried - re-running it could repeat something that already happened."
+  },
+  "risk": {
+    "HIGH": "High risk",
+    "IRREVERSIBLE": "Can't be taken back",
+    "FINANCIAL": "Moves money",
+    "commerce": "Store order",
+    "human_initiated": "Asked for by a person",
+    "SYSTEM_COPILOT": "Changes your workspace",
+    "PLAN": "A plan",
+    "REQUIRES_APPROVAL": "Needs a decision"
+  },
+  "action": {
+    "approve": "Approve",
+    "reject": "Reject",
+    "rejectReasonLabel": "Why not?",
+    "retry": "Try running it again"
+  },
+  "announce": {
+    "approvedAndRan": "Approved: {summary}. It ran.",
+    "approvedButFailed": "Approved: {summary}. It did not run - you can try again.",
+    "rejected": "Rejected: {summary}.",
+    "retryWorked": "It ran this time.",
+    "retryFailedAgain": "It failed again."
+  },
+  "error": {
+    "stale": "Someone else decided this, or its deadline passed. Reloading to show where it stands.",
+    "reason_required": "Say why before rejecting.",
+    "forbidden": "You can't decide this one.",
+    "failed": "That didn't go through.",
+    "edit_not_allowed": "This action can't be approved with a different amount.",
+    "amount_above_original": "An edited amount has to be less than what was asked.",
+    "invalid_amount": "That amount can't be sent - check it and try again.",
+    "edit_requires_original_amount": "This is a full refund with no amount to edit. Approve it as it is, or reject it.",
+    "percentage_above_original": "An edited discount has to be less than what was asked.",
+    "invalid_percentage": "That discount can't be sent - check it and try again.",
+    "edit_requires_original_percentage": "This discount carries no percentage to edit. Approve it as it is, or reject it."
+  },
+  "rest": {
+    "lead": "Nothing needs a decision from you.",
+    "body": "Everything that came up was inside the limits you set. GOTCHA handled it and kept going.",
+    "title": "Nothing waiting on you",
+    "busy": "Everything that came up today was inside the limits you set."
+  },
+  "decided": {
+    "heading": "What you decided earlier",
+    "none": "You haven't decided anything yet.",
+    "unavailable": "We couldn't read your past decisions just now.",
+    "approved": "Approved by {who} at {when}",
+    "rejected": "Rejected by {who} at {when}",
+    "lapsed": "Deadline passed at {when} - handed to a person",
+    "cancelled": "Cancelled at {when}",
+    "someone": "someone",
+    "askedBy": "asked by {who}",
+    "because": "Reason given: {reason}",
+    "didNotRun": "You approved this, but it didn't run. Open it to try again.",
+    "outcomeUnknown": "Approved before GOTCHA recorded what happened next, so we can't say whether it ran.",
+    "incomplete": "This shows your most recent decisions, not all of them - GOTCHA can only hand back the last hundred of each kind.",
+    "approvedNoTime": "Approved by {who}",
+    "rejectedNoTime": "Rejected by {who}",
+    "lapsedNoTime": "Deadline passed - handed to a person",
+    "cancelledNoTime": "Cancelled",
+    "count": "{count, plural, one {# decision} other {# decisions}}",
+    "latest": "Your latest {count}",
+    "by": "Decided by {who}",
+    "status": {
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "rejectedBecause": "Rejected · {reason}",
+      "lapsed": "Deadline passed",
+      "cancelled": "Cancelled",
+      "didNotRun": "Approved · didn’t run",
+      "outcomeUnknown": "Approved · outcome unknown",
+      "edited": "Edited",
+      "editedPercent": "Edited · {was}% → {now}%"
+    },
+    "incompleteShort": "Your most recent decisions - the list holds the last hundred of each kind.",
+    "byVia": "Decided by {who} via {channel}",
+    "channel": {
+      "whatsapp": "WhatsApp",
+      "web": "the app"
+    },
+    "sentence": {
+      "refunded": "Refunded {amount} to {name}",
+      "refundedOn": "Refunded {amount} on order {order}",
+      "refundedOrder": "Refunded order {order}",
+      "refundedOrderFor": "Refunded order {order} for {name}",
+      "refundAsked": "{amount} refund for {name}",
+      "refundAskedOn": "{amount} refund on order {order}",
+      "refundAskedOrder": "Refund on order {order}",
+      "refundAskedOrderFor": "Refund on order {order} for {name}",
+      "cancelled": "Cancelled order {order} for {name}",
+      "cancelledOrder": "Cancelled order {order}",
+      "cancelAsked": "Cancelling order {order} for {name}",
+      "cancelAskedOrder": "Cancelling order {order}",
+      "withName": "{summary} · {name}",
+      "done": {
+        "update_order_shipping_address": "Updated the shipping address{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "resend_confirmation": "Resent the confirmation{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "create_return": "Opened a return{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "exchange_order_item": "Exchanged an item{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "send_invoice": "Sent the invoice{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "add_order_note": "Added a note{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "update_customer": "Updated the customer record{name, select, none {} other { for {name}}}",
+        "add_vip_tag": "Tagged as VIP{name, select, none {} other { for {name}}}",
+        "create_task": "Created a task{name, select, none {} other { for {name}}}"
+      },
+      "asked": {
+        "update_order_shipping_address": "Shipping address change{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "resend_confirmation": "Resending the confirmation{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "create_return": "A return{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "exchange_order_item": "An item exchange{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "send_invoice": "Sending the invoice{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "add_order_note": "A note{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "update_customer": "A customer record change{name, select, none {} other { for {name}}}",
+        "add_vip_tag": "A VIP tag{name, select, none {} other { for {name}}}",
+        "create_task": "A task{name, select, none {} other { for {name}}}"
+      }
+    },
+    "yesterday": "Yesterday",
+    "today": "{count} today",
+    "kept": "A reason you give is kept with the decision.",
+    "shown": "{count, plural, one {# decision} other {# decisions}}",
+    "wasAmount": "{now} (was {was})"
+  },
+  "moment": {
+    "decided": "{summary}",
+    "factDecision": "Your decision is recorded.",
+    "factExecutionRan": "GOTCHA carried it out.",
+    "factExecutionFailed": "GOTCHA could not carry it out.",
+    "factCustomerTold": "The customer has been told.",
+    "factCustomerNotYet": "The customer hasn't been told yet.",
+    "undo": "Undo",
+    "noUndo": "There's no undo for this yet.",
+    "sent": {
+      "title": "What GOTCHA sent them",
+      "delivered": "Already sent",
+      "notYet": "Not sent yet",
+      "add": "Add something",
+      "discount": "Send them a discount too"
+    },
+    "pattern": {
+      "title": "That's the {count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} like it",
+      "body": "{approved} approved like this here, {rejected, plural, =0 {none} other {#}} rejected.",
+      "handle": "Let GOTCHA handle them",
+      "keep": "Keep asking me"
+    },
+    "next": {
+      "eyebrow": "Up next",
+      "eyebrowExpires": "Up next · expires in {in}",
+      "open": "Open it",
+      "none": "Nothing else is waiting."
+    },
+    "failure": {
+      "theStore": "the store",
+      "connection": "The store connection needs reconnecting - {provider} refused GOTCHA's access.",
+      "reconnect": "Reconnect the store, then retry.",
+      "already_done": "It had already been done, so nothing changed.",
+      "after_shipping": "It can't be done once the order has shipped.",
+      "not_permitted": "A permission or a rule stopped it.",
+      "provider_unavailable": "{provider} didn't answer. This usually passes - try again.",
+      "exceeds_limit": "It's over a limit - the amount or count is too high.",
+      "unknown": "{provider} didn't say why in words we can show."
+    }
+  },
+  "stats": {
+    "approvedWeek": "Approved this week",
+    "avgDecision": "Avg decision",
+    "seconds": "{n}s",
+    "minutes": "{n}m",
+    "hours": "{n}h"
+  },
+  "pending": {
+    "title": "{count, select, 1 {One thing needs your decision} 2 {Two things need your decision} 3 {Three things need your decision} 4 {Four things need your decision} 5 {Five things need your decision} 6 {Six things need your decision} 7 {Seven things need your decision} 8 {Eight things need your decision} 9 {Nine things need your decision} other {# things need your decision}}",
+    "description": "GOTCHA has done the work.",
+    "soonest": "GOTCHA has done the work. One of them expires in {in}.",
+    "minutes": "{n, plural, one {# minute} other {# minutes}}",
+    "hours": "{n, plural, one {an hour} other {# hours}}",
+    "days": "{n, plural, one {a day} other {# days}}"
+  },
+  "time": {
+    "minutes": "{n}m",
+    "hours": "{n}h",
+    "days": "{n}d",
+    "left": "{in} left"
+  },
+  "detail2": {
+    "eyebrow": "Requested by {who} · {time}",
+    "eyebrowAutomation": "Requested by an automation · {time}"
+  },
+  "card": {
+    "why": "Why GOTCHA recommends it",
+    "leave": "If you leave it",
+    "leaveBody": "If nobody decides by {when}, it lapses and the conversation goes to a person."
+  },
+  "action2": {
+    "next": "{count, plural, =0 {Nothing after this} one {One more after this · ↓ for the next} other {# more after this · ↓ for the next}}",
+    "rejectPrompt": "Rejecting? Tell GOTCHA why.",
+    "reasons": {
+      "policy": "Outside policy",
+      "myself": "I’ll handle it myself",
+      "wrongOrder": "Wrong order"
+    }
+  },
+  "handled": {
+    "eyebrow": "Handled without asking you · today",
+    "actions": "{count, plural, one {action} other {actions}}",
+    "none": "Nothing ran on its own today.",
+    "unread": "We couldn't count today's actions.",
+    "refunds": "Refunds",
+    "lookups": "Orders looked up",
+    "returns": "Returns opened",
+    "refundsUnder": "Refunds under {limit}",
+    "failedOne": "{count, plural, one {# tried and failed} other {# tried and failed}} - {system} needs fixing.",
+    "failedMany": "{count, plural, one {# tried and failed} other {# tried and failed}} - a connection needs fixing.",
+    "reconnect": "Reconnect it"
+  },
+  "request": {
+    "queueRefund": "Refund {amount}",
+    "queueRefundOrder": "Refund on order {order}",
+    "queueCancel": "Cancel order {order}",
+    "refundTo": "Refund {amount} to {name}",
+    "refundOn": "Refund {amount} on order {order}",
+    "refundOrderFor": "Refund on order {order} for {name}",
+    "cancelFor": "Cancel order {order} for {name}",
+    "summaryFor": "{summary} · {name}",
+    "order": "order {order}",
+    "orderLine": "Order {order}",
+    "stepRefunded": "{amount} refunded",
+    "stepOrderRefunded": "Order {order} refunded",
+    "stepShopifyRefund": "Marked refunded in Shopify",
+    "stepCancelled": "Order {order} cancelled",
+    "stepCancelledShopify": "Order {order} cancelled in Shopify",
+    "stepRuns": "{summary}",
+    "stepToldName": "{name} told in the conversation",
+    "stepTold": "The customer told in the conversation"
+  },
+  "customer": {
+    "title": "The customer",
+    "since": "With you since",
+    "orders": "Orders",
+    "lifetime": "{amount} lifetime",
+    "refunds": "Previous refunds",
+    "refundsNone": "None",
+    "mood": "Mood",
+    "unread": "Not known for this request"
+  },
+  "chain": {
+    "title": "What happens if you approve"
+  },
+  "detail3": {
+    "eyebrowAi": "Requested by your AI employee · {time}",
+    "editAmount": "Edit amount",
+    "reversible": "Reversible",
+    "reversibleYes": "Yes",
+    "reversibleNo": "No",
+    "editLabel": "Amount to approve",
+    "editInvalid": "A number above zero.",
+    "editOver": "No more than {amount}.",
+    "editCancel": "Keep {amount}",
+    "editNotYet": "Editing the amount comes as soon as GOTCHA can carry it out.",
+    "editInvalidMinor": "A whole number above zero.",
+    "editDiscount": "Edit discount",
+    "editLabelPercent": "Discount to approve (%)",
+    "editInvalidPercent": "A percentage above zero, up to 100.",
+    "askGotcha": "Ask GOTCHA about this",
+    "asking": "Opening…",
+    "askRefused": {
+      "gone": "This request can't be asked about from here - it's gone, or its conversation isn't one you can see.",
+      "failed": "That didn't open. Try again."
+    }
+  },
+  "queueFoot": {
+    "handled": "{count, plural, one {GOTCHA handled # on its own today.} other {GOTCHA handled # on its own today.}}",
+    "change": "Change what needs asking",
+    "under": "Refunds under {limit} never reach you.",
+    "handledNone": "GOTCHA handled nothing on its own today."
+  },
+  "reject3": {
+    "prompt": "Rejecting? Say why:",
+    "tooGenerous": "Too generous",
+    "other": "Other",
+    "otherLabel": "Why not?"
+  },
+  "keysEdit": "A approve · R reject · E edit",
+  "asked": {
+    "missing": "This request isn't here. It may have been decided already, or it belongs to another workspace.",
+    "decided": "This request was already decided - it is in what was decided earlier."
+  },
+  "plan": {
+    "asked": {
+      "you": {
+        "home_assistant": "You asked GOTCHA in Home",
+        "command_bar": "You asked GOTCHA in the command bar",
+        "unknown": "You asked GOTCHA"
+      },
+      "other": {
+        "home_assistant": "{name} asked GOTCHA in Home",
+        "command_bar": "{name} asked GOTCHA in the command bar",
+        "unknown": "{name} asked GOTCHA"
+      },
+      "someone": {
+        "home_assistant": "Someone on your team asked GOTCHA in Home",
+        "command_bar": "Someone on your team asked GOTCHA in the command bar",
+        "unknown": "Someone on your team asked GOTCHA"
+      }
+    },
+    "chip": {
+      "home_assistant": "From Home",
+      "command_bar": "From the command bar"
+    },
+    "leaveBody": "If nobody decides by {when}, it expires and nothing happens.",
+    "noSteps": "The request names no steps.",
+    "reasons": {
+      "wrong": "Not right"
+    }
+  }
+}

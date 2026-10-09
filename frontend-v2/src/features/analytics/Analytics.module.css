@@ -1,0 +1,1130 @@
+@layer features {
+  /*
+   * Screen 06 · Analytics.
+   *
+   * 06c ships without the outcome column the design pairs load with, on the
+   * owner's decision. Nothing here styles volume as achievement: no bars, no
+   * ranking colour, no emphasis that would turn a count into a verdict.
+   */
+
+  /* 02's cards: white, `1px #E6E2DA`, radius 14, `padding:18px 20px`. */
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    min-inline-size: 0;
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .panelHeading,
+  .cardTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .note {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .table {
+    inline-size: 100%;
+    border-collapse: collapse;
+    text-align: start;
+  }
+
+  .table th,
+  .table td {
+    padding: var(--space-8);
+    /* `--row-divider` is named for exactly this and is lighter than a card
+       border, which is what a dense table wants. */
+    border-block-end: 1px solid var(--row-divider);
+    text-align: start;
+    /* Tabular figures so columns line up without implying a ranking. */
+    font-variant-numeric: tabular-nums;
+  }
+
+  .table thead th {
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+
+  /* What people ask about - a list, never a ranking with a verdict. */
+
+  .topicList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .topic {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-8);
+    padding: var(--space-4) 0;
+  }
+
+  .topicCount {
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * Screen 06, measured - the statement, the strip, two cards
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  /*
+   * The body is a window (`PageContainer fill`): this column takes its height,
+   * and its last row takes what is left, down to the frame's bottom - 02's
+   * footers sit at the bottom of their cards, not under the content.
+   */
+  .screen {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    line-height: normal;
+  }
+
+  .changedRow {
+    display: flex;
+    gap: var(--space-14);
+  }
+
+  /* 02's statement: `#171717`, radius 14, `padding:18px 20px`. */
+  .changed {
+    flex: 1;
+    min-inline-size: 0;
+    padding: 18px var(--space-20);
+    background-color: var(--copilot-surface);
+    border-radius: var(--radius-card);
+  }
+
+  .changedEyebrow {
+    margin: 0 0 var(--space-12);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-mono);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--menu-dark-icon);
+  }
+
+  .changedStatement {
+    margin: 0;
+    font-size: 17px;
+    line-height: 1.45;
+    color: var(--copilot-text-strong);
+  }
+
+  /* 02 lifts the number in a warm sand: `#E8D9A8`. */
+  .changedStatement b {
+    font-weight: var(--font-weight-regular);
+    color: var(--copilot-highlight);
+  }
+
+  /* With no statement beside it, the list takes the row. */
+  /* Nothing changed: the same card, its line quieter. */
+  .changed[data-empty] .changedStatement {
+    color: var(--copilot-text-muted);
+  }
+
+  .alsoNone {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .also {
+    flex: none;
+    inline-size: 300px;
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .alsoList {
+    list-style: none;
+    margin: var(--space-12) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .alsoItem {
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--text-body);
+  }
+
+  .alsoItem b {
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  /* 02's strip: one card, five cells at `15px 18px`, `#EDE9E1` between. */
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    margin: 0;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+    min-inline-size: 0;
+  }
+
+  .kpi {
+    padding: 15px 18px;
+  }
+
+  .kpi + .kpi {
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+
+  .kpi dt {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .kpi dd {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    margin: var(--space-4) 0 0;
+  }
+
+  .kpiValue {
+    font-size: 25px;
+    font-weight: var(--font-weight-semibold);
+    /* 02: `-0.02em` on every 25px/600 figure, without exception. */
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .kpiDelta {
+    font-size: 11px;
+    color: var(--signal-done-text);
+  }
+
+  .kpiDelta[data-direction='down'] {
+    color: var(--text-subtle);
+  }
+
+  /* 02's bottom row: a wide card and a 330px one. */
+  .bottomRow {
+    flex: 1;
+    min-block-size: 240px;
+    display: flex;
+    gap: var(--space-14);
+  }
+
+  .bottomRow > :first-child {
+    flex: 1;
+  }
+
+  .bottomRow > :last-child {
+    flex: none;
+    inline-size: 330px;
+  }
+
+  @media (width < 64rem) {
+    .changedRow,
+    .bottomRow {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .also,
+    .bottomRow > :last-child {
+      inline-size: auto;
+    }
+
+    .kpis {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  /* 02's tabs: pills `padding:6px 12px`, radius 7, 11.5px; the open one dark. */
+  .tabs {
+    display: flex;
+    gap: 6px;
+  }
+
+  .tab {
+    padding: 6px var(--space-12);
+    border-radius: 7px;
+    background-color: var(--panel-well);
+    font-size: 11.5px;
+    color: var(--intent-neutral-text);
+    text-decoration: none;
+  }
+
+  .tab[aria-current='page'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .tab:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 06b, measured - what GOTCHA did
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  .gScreen {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    line-height: normal;
+  }
+
+  .gTop,
+  .gBottom {
+    display: flex;
+    gap: var(--space-14);
+  }
+
+  .gBottom {
+    flex: 1;
+    min-block-size: 300px;
+  }
+
+  /* The dark card: `#171717`, radius 14, `padding:18px 20px`. */
+  .gHero {
+    flex: 1;
+    min-inline-size: 0;
+    padding: 18px var(--space-20);
+    border-radius: var(--radius-card);
+    background-color: var(--frame-raised);
+  }
+
+  .gHeroEyebrow {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--menu-dark-icon);
+  }
+
+  .gHeroTitle {
+    margin: var(--space-10) 0 0;
+    font-size: 17px;
+    color: var(--frame-text);
+  }
+
+  .gHeroFigure {
+    color: var(--signal-done);
+  }
+
+  .gHeroLine {
+    margin: var(--space-10) 0 0;
+    font-size: 12.5px;
+    color: var(--frame-text-secondary);
+  }
+
+  .gActions {
+    display: flex;
+    gap: var(--space-8);
+    margin-block-start: var(--space-14);
+  }
+
+  .gLight,
+  .gDarkOutline {
+    padding: 6px var(--space-12);
+    border-radius: var(--space-8);
+    font-size: 11.5px;
+  }
+
+  .gLight {
+    background-color: var(--frame-text);
+    color: var(--text-primary);
+  }
+
+  .gDarkOutline {
+    border: 1px solid var(--frame-line);
+    color: var(--frame-text-body);
+  }
+
+  .gActions > [aria-disabled='true'] {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* "Where it stopped": white, radius 14, 300 wide; a dot before each cause. */
+  .gStopped {
+    flex: none;
+    inline-size: 300px;
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .gCardTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .gCardMeta {
+    margin-inline-start: auto;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .gCardFoot,
+  .gNone {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .gStoppedList {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    margin: var(--space-12) 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .gStoppedList > li {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .gStoppedList > li::before {
+    content: '';
+    flex: none;
+    inline-size: 5px;
+    block-size: 5px;
+    border-radius: 50%;
+    background-color: var(--intent-blocked-edge);
+  }
+
+  .gStoppedList > li[data-tone='red']::before {
+    background-color: var(--intent-urgent-edge);
+  }
+
+  .gStoppedList > li[data-tone='violet']::before {
+    background-color: var(--step-next);
+  }
+
+  /* Five cells at `padding:15px 18px`; figures 25/600. */
+  .gStrip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    margin: 0;
+    overflow: clip;
+    min-inline-size: 0;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .gCell {
+    padding: 15px 18px;
+  }
+
+  .gCell + .gCell {
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+
+  .gCell dt {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .gCell dd {
+    margin: var(--space-4) 0 0;
+    font-size: 25px;
+    font-weight: var(--font-weight-semibold);
+    /* 02: `-0.02em` on every 25px/600 figure, without exception. */
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  /* "Alone, or with a person": white, radius 14, `padding:18px 20px`; a bar a day, 12 apart. */
+  .gChart {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  /* 06's "Conversations a day": a white card, seven stacked columns - team light over GOTCHA dark. */
+  .dChart {
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    line-height: normal;
+  }
+
+  .dBars {
+    flex: 1;
+    min-block-size: 140px;
+    display: flex;
+    gap: var(--space-12);
+    margin: 18px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .dBar {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .dStack {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 3px;
+  }
+
+  .dLight {
+    border-radius: 3px 3px 0 0;
+    background-color: var(--channel-4);
+  }
+
+  .dDark {
+    border-radius: 0 0 3px 3px;
+    background-color: var(--channel-1);
+  }
+
+  .gChartHead {
+    display: flex;
+    align-items: baseline;
+  }
+
+  .gBars {
+    flex: 1;
+    min-block-size: 140px;
+    display: flex;
+    gap: var(--space-12);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* As 05b's: a day with no data is a 3px baseline, never a full grey bar. */
+  .gBar {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .gBarTrack {
+    flex: none;
+    block-size: 3px;
+    border-radius: 2px;
+    background-color: var(--border-emphasis);
+  }
+
+  .gBarLabel {
+    font-size: 10.5px;
+    text-align: center;
+    color: var(--text-subtle);
+  }
+
+  /* "What it actually did": 330 wide; a row per tool, its bar `4px` on `#EDE9E1`. */
+  .gDid {
+    flex: none;
+    inline-size: 330px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .gDidList {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .gDidRow {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .gDidTop {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-12);
+    font-size: 12.5px;
+  }
+
+  .gDidName {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+  }
+
+  .gDidCount {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  .gDidTrack {
+    block-size: 4px;
+    border-radius: 2px;
+    background-color: var(--border-subtle);
+  }
+
+  .gDidFill {
+    display: block;
+    block-size: 100%;
+    border-radius: 2px;
+    background-color: var(--action-base);
+  }
+
+  .gFix {
+    color: var(--text-primary);
+    text-decoration: none;
+    border-block-end: 1px solid var(--border-emphasis);
+  }
+
+  .gFix:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .gDidFoot {
+    margin: 0;
+    padding-block-start: var(--space-12);
+    border-block-start: 1px solid var(--border-subtle);
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  @media (width < 64rem) {
+    .gTop,
+    .gBottom {
+      flex-direction: column;
+    }
+
+    .gStopped,
+    .gDid {
+      inline-size: auto;
+    }
+
+    .gStrip {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 06c, measured - the team, one table
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  .gHeroAmber {
+    color: var(--copilot-highlight);
+  }
+
+  .gCardBody {
+    margin: var(--space-10) 0 0;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--intent-neutral-text);
+  }
+
+  .tTable {
+    flex: 1;
+    min-block-size: 260px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  /* Columns: the person, then 105 · 105 · 105 · 105 · 170 - 02's 130 · 130 · 130 · 150 with "Taken today" added, rebalanced so the last head is one line. */
+  .tHead,
+  .tRow {
+    display: grid;
+    /* 02: Person · Handled · First reply · Resolved at 130 · the week at 150. */
+    grid-template-columns: minmax(0, 1fr) 130px 130px 130px 150px;
+    align-items: center;
+  }
+
+  /* One line each: "Load through the week" wrapped at 150 (02's single line). */
+  .tHead > span {
+    white-space: nowrap;
+  }
+
+  .tHead {
+    padding: 11px 18px;
+    background-color: var(--table-head-surface);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-mono);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .tRows {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  /* An empty table says so in the shape of a row: 02's `padding:13px 18px`. */
+  .tRows > .gNone {
+    padding: 13px 18px;
+  }
+
+  .tList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .tRow {
+    padding: var(--space-14) 18px;
+    border-block-end: 1px solid var(--row-divider);
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .tRow[data-ai] {
+    background-color: var(--panel-quiet);
+  }
+
+  .tWho {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-inline-size: 0;
+  }
+
+  .tDisc {
+    flex: none;
+    inline-size: 30px;
+    block-size: 30px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--intent-neutral-text);
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 30px;
+    text-align: center;
+  }
+
+  .tDisc[data-ai] {
+    border-radius: 9px;
+    background-color: var(--ai-avatar-surface);
+    color: var(--ai-avatar-text);
+    font-size: 9px;
+  }
+
+  .tNameStack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .tName {
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  /* 06: an AI employee in the workload table, under its name. */
+  .aiMark {
+    display: block;
+    font-size: var(--font-size-micro);
+    font-weight: 400;
+    color: var(--text-subtle);
+  }
+
+  .tRole {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  /* The week's load: seven 8px bars, 3 apart - a 3px baseline while nothing measures it. */
+  .tLoad {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    block-size: 26px;
+  }
+
+  .tLoadDay {
+    inline-size: 8px;
+    block-size: 3px;
+    border-radius: 2px;
+    background-color: var(--border-emphasis);
+  }
+
+  /* 02: a person's week in green, an AI employee's in violet; a quiet day keeps the baseline. */
+  .tLoadDay[data-load] {
+    background-color: var(--channel-3);
+  }
+
+  .tLoadDay[data-load][data-ai] {
+    background-color: var(--signal-ai);
+  }
+
+  .tFoot {
+    margin: 0;
+    padding: var(--space-12) 18px;
+    background-color: var(--table-head-surface);
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 06d, measured - what conversations are worth
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  /* "What you lost": the alert card, 300 wide, `padding:18px 20px`. */
+  .sLost {
+    flex: none;
+    inline-size: 300px;
+    padding: 18px var(--space-20);
+    background-color: var(--alert-surface);
+    border: 1px solid var(--alert-edge);
+    border-radius: var(--radius-card);
+  }
+
+  .sLostTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--alert-title);
+  }
+
+  .sLostBody {
+    margin: var(--space-10) 0 0;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--alert-text);
+  }
+
+  .sLostLink {
+    display: inline-block;
+    margin-block-start: var(--space-10);
+    font-size: 11.5px;
+    color: var(--alert-text);
+    border-block-end: 1px solid var(--alert-control-edge);
+  }
+
+  .sLostLink[aria-disabled='true'] {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  /* "Where the money came from": 724, white, radius 14, `padding:18px 20px`. */
+  .sSources {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .sSources > .gNone {
+    flex: 1;
+  }
+
+  /* "What people ask for and don't get": 400, head `13px 18px`, foot `#F5F2EC`. */
+  .sAsked {
+    flex: none;
+    inline-size: 400px;
+    display: flex;
+    flex-direction: column;
+    overflow: clip;
+    min-inline-size: 0;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .sAskedHead {
+    display: flex;
+    align-items: baseline;
+    padding: 13px 18px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  /* "this week" in this head is 11.5px; 06b's chart legend stays 11. */
+  .sAskedHead > .gCardMeta {
+    font-size: 11.5px;
+  }
+
+  .sAskedBody {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .sAskedNone {
+    margin: 0;
+    padding: var(--space-12) 18px;
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  .sAskedList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sAskedRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: var(--space-12) 18px;
+    border-block-end: 1px solid var(--row-divider);
+  }
+
+  .sAskedText {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sAskedTerm {
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .sAskedSub {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .sAskedCount {
+    flex: none;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .sAskedValue {
+    flex: none;
+    min-inline-size: 64px;
+    text-align: end;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .sAskedFoot {
+    margin: 0;
+    padding: var(--space-12) 18px;
+    background-color: var(--table-head-surface);
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  @media (width < 64rem) {
+    .sLost,
+    .sAsked {
+      inline-size: auto;
+    }
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 06e, measured - what people are asking about
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  .gCardActions {
+    display: flex;
+    gap: var(--space-8);
+    margin-block-start: var(--space-12);
+  }
+
+  .gCardPrimary,
+  .gCardSecondary {
+    padding: 6px var(--space-12);
+    border-radius: var(--space-8);
+    font-size: 11.5px;
+    text-decoration: none;
+  }
+
+  .gCardPrimary {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .gCardPrimary:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .gCardSecondary {
+    border: 1px solid var(--border-default);
+    color: var(--intent-neutral-text);
+  }
+
+  .gCardSecondary[aria-disabled='true'] {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* The topic table: 306 · 100 · 110 · 130 · 110. */
+  .eHead,
+  .eRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 100px 110px 130px 110px;
+    align-items: center;
+  }
+
+  .eHead {
+    padding: 11px 18px;
+    background-color: var(--table-head-surface);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-mono);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .eRow {
+    padding: 13px 18px;
+    border-block-end: 1px solid var(--row-divider);
+  }
+
+  .eTopic {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .eCount {
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .eChange {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .eChange[data-tone='up'] {
+    color: var(--intent-urgent-text);
+  }
+
+  .eChange[data-tone='new'] {
+    color: var(--signal-done-text);
+  }
+
+  .eMuted {
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  /* The 330 column: "by day" and "How people sound", 14 apart. */
+  .eColumn {
+    flex: none;
+    inline-size: 330px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  .eSide,
+  .eSideTall {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .eSideTall {
+    flex: 1;
+  }
+
+  .eBars {
+    display: flex;
+    gap: var(--space-8);
+    block-size: 96px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  @media (width < 64rem) {
+    .eColumn {
+      inline-size: auto;
+    }
+  }
+}

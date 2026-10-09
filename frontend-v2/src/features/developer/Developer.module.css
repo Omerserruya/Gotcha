@@ -1,0 +1,106 @@
+@layer features {
+  /* 18, measured: white cards (radius 14, one hairline), a 13 × 18 head. */
+  .card {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+    min-inline-size: 0;
+    line-height: normal;
+  }
+
+  .head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-13);
+    padding-inline: var(--space-18);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .title {
+    flex: 1;
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .primary,
+  .outline {
+    flex: none;
+    padding-block: var(--space-6);
+    padding-inline: var(--space-12);
+    border-radius: 7px;
+    font-size: var(--font-size-caption);
+    cursor: default;
+  }
+
+  .primary {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .outline {
+    border: var(--border-width-thin) solid var(--border-default);
+    color: var(--text-secondary);
+  }
+
+  .none {
+    margin: 0;
+    padding-block: var(--space-14);
+    padding-inline: var(--space-18);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-faint);
+  }
+
+  /* Webhooks (474) beside the dark access card (400), gap 14. */
+  .row {
+    display: grid;
+    grid-template-columns: minmax(0, 474fr) minmax(0, 400fr);
+    gap: var(--space-14);
+    align-items: stretch;
+  }
+
+  .access {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    padding-block: var(--space-20);
+    padding-inline: var(--space-22);
+    border-radius: var(--radius-card);
+    background-color: var(--frame-raised);
+    line-height: normal;
+  }
+
+  .accessTitle {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--frame-text);
+  }
+
+  .accessNone {
+    margin: 0;
+    padding-block-start: var(--space-14);
+    border-block-start: var(--border-width-thin) solid var(--frame-selected);
+    font-size: var(--font-size-body-sm);
+    color: var(--frame-text-secondary);
+  }
+
+  @media (width <= 900px) {
+    .row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* 18 in 02's frame: the bottom row runs to its bottom, "-" at the top. */
+  @media (width > 900px) {
+    .row {
+      flex: 1;
+      min-block-size: 0;
+    }
+  }
+}

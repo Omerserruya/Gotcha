@@ -1,0 +1,34 @@
+{
+  "title": "Notifications",
+  "markAllRead": "Mark all read",
+  "empty": {
+    "title": "Nothing to tell you",
+    "body": "Notifications appear here when something needs a decision, or when something failed."
+  },
+  "failed": {
+    "title": "Notifications couldn't load",
+    "body": "The rest of the app is working. Reload to try again."
+  },
+  "close": "Close",
+  "new": "{count} new",
+  "settings": "Settings",
+  "filters": "Show",
+  "filter": {
+    "all": "Everything",
+    "decision": "Needs a decision",
+    "broken": "Broken",
+    "counted": "{name} · {count}"
+  },
+  "emptyKind": {
+    "decision": "Nothing needs a decision",
+    "broken": "Nothing is broken"
+  },
+  "group": {
+    "now": "Now",
+    "today": "Earlier today",
+    "earlier": "Earlier"
+  },
+  "open": "Open it",
+  "markRead": "Mark read",
+  "foot": "You are never told about an incoming message - that is what the inbox is for. Only decisions, failures and things that changed."
+}

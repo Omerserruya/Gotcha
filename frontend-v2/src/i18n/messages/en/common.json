@@ -1,0 +1,40 @@
+{
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "retry": "Try again",
+    "confirm": "Confirm",
+    "discard": "Discard",
+    "search": "Search",
+    "clear": "Clear",
+    "more": "More"
+  },
+  "state": {
+    "loading": "Loading…",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "unsavedChanges": "You have unsaved changes"
+  },
+  "count": "{count, plural, =0 {No items} one {# item} other {# items}}",
+  "selectedCount": "{count, plural, =0 {Nothing selected} one {# selected} other {# selected}}",
+  "language": {
+    "label": "Language"
+  },
+  "productDescription": "The Customer Operations OS. Conversations, actions, approvals and AI in one place.",
+  "loading": "Loading",
+  "duration": {
+    "minutes": "{count, plural, =1 {1 minute} other {# minutes}}",
+    "hours": "{count, plural, =1 {1 hour} other {# hours}}",
+    "days": "{count, plural, =1 {1 day} other {# days}}"
+  },
+  "person": {
+    "shopper": "Website shopper",
+    "signedInShopper": "Signed-in website shopper"
+  },
+  "platformError": {
+    "shopify_chat_uninstalled": "The app was removed from the store. Install it again to bring the chat back.",
+    "shopify_app_uninstalled": "The GOTCHA app was removed from the store. Install it again to reconnect.",
+    "unknown": "Something is wrong with this channel. Open it to see what it needs."
+  }
+}

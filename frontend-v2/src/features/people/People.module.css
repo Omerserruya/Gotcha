@@ -1,0 +1,541 @@
+@layer features {
+  /*
+   * Settings · People & teams - screen 12.
+   *
+   * `padding: 13px 18px` on a row, `11px 18px` on the headings, columns of
+   * 150/150/120 beside a flexible name, and one card with a hairline between
+   * rows rather than a card each - so the roster reads as one list.
+   *
+   * Every inline direction is logical. In Hebrew the avatar sits on the right
+   * and "Right now" ends the row on the left, with no component branching on
+   * language.
+   */
+
+  .table {
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+    min-inline-size: 0;
+  }
+
+  .head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-11);
+    padding-block: var(--space-11);
+    padding-inline: var(--space-18);
+    background-color: var(--table-head-surface);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    font-weight: 500;
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-11);
+    padding-block: var(--space-13);
+    padding-inline: var(--space-18);
+  }
+
+  .row + .row {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  /* An AI employee. A tint, not a separate list - they are one roster. */
+  .rowAi {
+    background-color: var(--row-ai-surface);
+  }
+
+  /*
+   * A deactivated colleague, or a paused employee.
+   *
+   * Dimmed rather than hidden: someone who was deactivated is still a fact
+   * about the team, and a row that vanishes is a row nobody can reactivate.
+   */
+  .rowDormant {
+    opacity: 0.6;
+  }
+
+  /* ── Columns ────────────────────────────────────────────────────────── */
+  /* The head reuses the columns' widths, not their type: 9px mono, all four. */
+  .head > span {
+    font-size: inherit;
+    color: inherit;
+  }
+
+  .colPerson {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-11);
+  }
+
+  .colRole,
+  .colTeam {
+    inline-size: var(--size-people-column);
+    flex: none;
+    font-size: var(--font-size-meta);
+  }
+
+  .colTeam {
+    color: var(--text-body);
+  }
+
+  .colNow {
+    inline-size: var(--size-people-now);
+    flex: none;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  /* ── Identity ───────────────────────────────────────────────────────── */
+  .avatar,
+  .avatarAi {
+    inline-size: var(--size-avatar-lg);
+    block-size: var(--size-avatar-lg);
+    flex: none;
+    text-align: center;
+    line-height: var(--size-avatar-lg);
+    font-weight: 600;
+  }
+
+  .avatar {
+    /* A person: a circle. */
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--text-body);
+    font-size: var(--font-size-timestamp);
+  }
+
+  .avatarAi {
+    /*
+     * An AI employee: a rounded square.
+     *
+     * The shape is the discriminator, not the colour - so the two kinds stay
+     * tellable apart in greyscale, and for a reader who cannot separate the
+     * hues.
+     */
+    border-radius: var(--radius-item);
+    background-color: var(--ai-avatar-surface);
+    color: var(--ai-avatar-text);
+    font-size: var(--font-size-eyebrow);
+  }
+
+  .identity {
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .name {
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+  }
+
+  .sub {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  /* A fact the tenant has not set. Absent, never an empty string. */
+  .unset {
+    color: var(--text-faint);
+  }
+
+  /* ── "Right now" tones ──────────────────────────────────────────────── */
+  .toneGood {
+    color: var(--intent-opportunity-text);
+  }
+
+  .toneBusy {
+    color: var(--intent-blocked-text);
+  }
+
+  .toneMuted {
+    color: var(--text-subtle);
+  }
+
+  .empty {
+    padding-block: var(--space-20);
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  /* ── Teams ──────────────────────────────────────────────────────────── */
+  .teams {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-11);
+  }
+
+  .teamsHeading {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .teamList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-14);
+  }
+
+  .teamCard {
+    /*
+     * Grows to share the row, and wraps rather than shrinking past readable.
+     * One team on this tenant means one full-width card, which is correct:
+     * a lone card padded out to a third of the row would imply two missing
+     * siblings.
+     */
+    flex: 1 1 var(--size-reading);
+    min-inline-size: 0;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-16);
+    padding-inline: var(--space-18);
+  }
+
+  .teamHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-11);
+    margin-block-end: var(--space-11);
+  }
+
+  .teamName {
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+  }
+
+  .teamMeta {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .teamBody {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+    line-height: 1.5;
+  }
+
+  /* ── Invite ─────────────────────────────────────────────────────────── */
+  /* 02's inline invite row: white, a violet edge, `padding:16px 18px`. */
+  .invite {
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--signal-ai);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-16);
+    padding-inline: var(--space-18);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .inviteFields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-12);
+  }
+
+  .inviteFields > * {
+    flex: 1 1 var(--size-invite-field);
+    min-inline-size: 0;
+  }
+
+  /* 02's row: the fields `#FAF8F4`, radius 10, `padding:10px 13px`, 13px. */
+  .inviteRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .inviteEmail,
+  .inviteInput,
+  .inviteSelect {
+    min-inline-size: 0;
+    padding: var(--space-10) 13px;
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .inviteEmail {
+    flex: 1;
+    min-inline-size: 180px;
+  }
+
+  .inviteInput {
+    inline-size: 150px;
+  }
+
+  .inviteSelect:disabled {
+    color: var(--text-primary);
+    cursor: default;
+  }
+
+  .inviteActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    flex-wrap: wrap;
+  }
+
+  .inviteCancel {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .inviteCancel:hover {
+    color: var(--text-primary);
+  }
+
+  /* 02's header action: dark, radius 9, `padding:9px 16px`, 12.5px. */
+  .headerAction {
+    padding: var(--space-9) var(--space-16);
+    border-radius: var(--radius-item);
+    background-color: var(--action-base);
+    font-size: var(--font-size-meta);
+    color: var(--action-text);
+    text-decoration: none;
+    line-height: normal;
+  }
+
+  /* People · Roles · Teams: `padding:9px 12px`, gap 6, a rule under the row;
+     the open one has a 2px dark edge. */
+  .tabs {
+    display: flex;
+    gap: var(--space-6);
+    border-block-end: 1px solid var(--border-default);
+    line-height: normal;
+  }
+
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-block-end: -1px;
+    padding: var(--space-9) var(--space-12);
+    border-block-end: 2px solid transparent;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-body);
+    text-decoration: none;
+  }
+
+  .tab[aria-current='page'] {
+    border-block-end-color: var(--action-base);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .tabCount {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-counter);
+    color: var(--text-subtle);
+  }
+
+  .inviteNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  .inviteNote[data-note-kind='success'] {
+    color: var(--text-body);
+  }
+
+  .inviteLinkLabel {
+    margin-block: var(--space-6) 0;
+    color: var(--text-subtle);
+  }
+
+  /*
+   * The setup link, for copying to someone else.
+   *
+   * `overflow-wrap: anywhere` because a URL has no spaces to break at and
+   * would otherwise push the panel wider than the page. `user-select: all`
+   * so one click takes the whole link rather than a word of it.
+   */
+  .inviteLink {
+    display: block;
+    margin-block-start: var(--space-4);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    color: var(--text-primary);
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-badge);
+    padding-block: var(--space-6);
+    padding-inline: var(--space-8);
+    overflow-wrap: anywhere;
+    user-select: all;
+  }
+
+  /* Shares the team cards' row, and wraps with them. */
+  .addTeamItem {
+    flex: 1 1 var(--size-invite-field);
+    min-inline-size: 0;
+    display: flex;
+  }
+
+  .addTeamItem > * {
+    flex: 1;
+  }
+
+  /* Dashed, because it is an invitation to make something, not a thing. */
+  .addTeam {
+    flex: 1 1 var(--size-invite-field);
+    min-block-size: var(--size-control);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) dashed var(--border-strong);
+    border-radius: var(--radius-card);
+    color: var(--text-faint);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    cursor: pointer;
+  }
+
+  .addTeam:hover {
+    color: var(--text-body);
+    border-color: var(--border-heavy);
+  }
+
+  /* ── Narrow ─────────────────────────────────────────────────────────── */
+  @media (width < 768px) {
+    /*
+     * The fixed columns stop being columns.
+     *
+     * At this width 150 + 150 + 120 leaves nothing for a name, and the
+     * headings stop describing what is under them - so they go, and each row
+     * becomes the person with their facts beneath. Truncating four columns
+     * into a phone would keep the shape and lose the content.
+     */
+    .head {
+      display: none;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: var(--space-4) var(--space-11);
+      align-items: start;
+    }
+
+    .colPerson {
+      grid-column: 1 / -1;
+    }
+
+    .colRole,
+    .colTeam,
+    .colNow {
+      inline-size: auto;
+    }
+
+    .colNow {
+      text-align: end;
+    }
+  }
+}
+
+@layer features {
+  /* 12d: the name opens the person's drawer; it reads as the name it was. */
+  .nameLink {
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .nameLink:hover {
+    text-decoration: underline;
+  }
+}
+
+@layer features {
+  /* 12d's head: the 44px disc beside the name, the roster's initials. */
+  .drawerDisc {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: 44px;
+    block-size: 44px;
+    border-radius: var(--radius-round);
+    background-color: var(--panel-inset);
+    font-size: var(--font-size-body-sm);
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  /* 02's team dropdown, holding a checkbox per team. */
+  .inviteTeams {
+    position: relative;
+  }
+
+  .inviteTeams > summary {
+    display: inline-flex;
+    align-items: center;
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .inviteTeams > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .inviteTeamList {
+    position: absolute;
+    inset-block-start: calc(100% + 4px);
+    inset-inline-start: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    min-inline-size: 180px;
+    margin: 0;
+    padding: var(--space-10) var(--space-12);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    background-color: var(--panel-field);
+  }
+
+  .inviteTeamOption {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-label);
+    white-space: nowrap;
+  }
+
+  /* The pills' chevron sits after their words. */
+  .inviteChevron {
+    order: 2;
+    margin-inline-start: var(--space-6);
+  }
+
+  span.inviteSelect[aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+}

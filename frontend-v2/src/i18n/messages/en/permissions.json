@@ -1,0 +1,14 @@
+{
+  "reason": {
+    "missing_permission": "You don't have permission for this.",
+    "requires_approval": "This needs approval before it runs.",
+    "integration_disconnected": "{integration} isn't connected.",
+    "integration_unsupported": "{channel} doesn't support this.",
+    "invalid_state": "Not possible in the current state.",
+    "plan_limit_reached": "Your plan's limit has been reached.",
+    "read_only_mode": "This workspace is read-only.",
+    "not_assigned": "Assign this to yourself first.",
+    "unknown": "This isn't available right now."
+  },
+  "approvalBadge": "Needs approval"
+}
