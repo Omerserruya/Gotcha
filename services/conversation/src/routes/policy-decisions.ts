@@ -34,6 +34,7 @@ import {
   requireActiveTenant,
   requirePermissionOrRole,
 } from "@chatcenter/shared";
+import { visibilityClause } from "../lib/conversation-visibility";
 
 const router = Router();
 
@@ -77,6 +78,53 @@ function buildWhere(req: Request, tenantId: string, opts: { includeFacets: boole
   return { where, from, to };
 }
 
+/**
+ * The inbox's visibility rule, applied to decisions (2026-10-09).
+ *
+ * A decision about a conversation the viewer may not see is not theirs to
+ * count or read: the rows carry the conversation id, tool and reason codes,
+ * and the summary counts them. So it is filtered in the WHERE, and the list
+ * and the summary share it, rather than dropped after the query (which would
+ * break the cursor and leave the totals counting what the list hides).
+ *
+ * PolicyDecision has no relation to Conversation, so the visible ids are
+ * resolved first: only among the conversations these decisions name, which
+ * keeps the IN list bounded by the window rather than by the tenant. A
+ * decision with no conversation (a broadcast, a tenant-level check) is about
+ * no thread and stays visible, as an approval with none does.
+ *
+ * Null for an unrestricted viewer: the where is exactly what it was.
+ */
+async function visibleDecisionsWhere(
+  req: Request,
+  tenantId: string,
+  where: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  const clause = visibilityClause({
+    userId: (req as any).user?.userId as string,
+    role: (req as any).user?.role as string | undefined,
+    departmentId: (req as any).user?.departmentId as string | undefined,
+  });
+  if (!clause) return null;
+  const named = await prisma.policyDecision.findMany({
+    where: { ...where, conversationId: { not: null } } as never,
+    distinct: ["conversationId"],
+    select: { conversationId: true },
+  });
+  const ids = named.map((r) => r.conversationId).filter((id): id is string => !!id);
+  const visible = ids.length === 0 ? [] : await prisma.conversation.findMany({
+    where: { tenantId, id: { in: ids }, OR: clause },
+    select: { id: true },
+  });
+  return { OR: [{ conversationId: null }, { conversationId: { in: visible.map((c) => c.id) } }] };
+}
+
+/** `where` narrowed to what this viewer may see; unchanged for an unrestricted one. */
+async function scopedWhere(req: Request, tenantId: string, where: Record<string, unknown>) {
+  const visible = await visibleDecisionsWhere(req, tenantId, where);
+  return visible ? { ...where, AND: [visible] } : where;
+}
+
 // ─── Summary · the counts screen 03c renders ──────────────────
 //
 // Mounted above the list for the usual reason: a later `/:id` would capture
@@ -93,7 +141,9 @@ router.get("/summary", canRead, async (req: Request, res: Response): Promise<voi
     return;
   }
   try {
-    const { where, from, to } = buildWhere(req, tenantId, { includeFacets: false });
+    const built = buildWhere(req, tenantId, { includeFacets: false });
+    const { from, to } = built;
+    const where = await scopedWhere(req, tenantId, built.where);
     const [total, byDecision, byActionKind] = await Promise.all([
       prisma.policyDecision.count({ where: where as never }),
       prisma.policyDecision.groupBy({
@@ -142,7 +192,9 @@ router.get("/", canRead, async (req: Request, res: Response): Promise<void> => {
   const cursor = typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : null;
 
   try {
-    const { where, from, to } = buildWhere(req, tenantId, { includeFacets: true });
+    const built = buildWhere(req, tenantId, { includeFacets: true });
+    const { from, to } = built;
+    const where = await scopedWhere(req, tenantId, built.where);
     const rows = await prisma.policyDecision.findMany({
       where: where as never,
       select: {

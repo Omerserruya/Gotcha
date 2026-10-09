@@ -31,6 +31,7 @@ import {
   isFrustrated,
   normalizeConversationIntent,
 } from "@chatcenter/shared";
+import { visibilityClause } from "../lib/conversation-visibility";
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
@@ -65,6 +66,15 @@ router.get("/insights", requirePermissionOrRole("crm:contacts:read", "ADMIN"), a
   if (ids.length === 0) { res.status(400).json({ error: "ids_required" }); return; }
   if (ids.length > MAX_IDS) { res.status(400).json({ error: "too_many_ids", max: MAX_IDS }); return; }
   const tenantId = req.tenantId!;
+  // The viewer's inbox visibility (2026-10-09). The row names a conversation id
+  // and its summary, so "latest" has to mean the latest one THIS viewer may
+  // see; a newer thread in another department used to win and leak its story.
+  // Null for an unrestricted viewer, whose where stays exactly as it was.
+  const visibility = visibilityClause({
+    userId: (req as any).user?.userId as string,
+    role: (req as any).user?.role as string | undefined,
+    departmentId: (req as any).user?.departmentId as string | undefined,
+  });
   try {
     const contacts = await prisma.contact.findMany({
       where: { tenantId, id: { in: ids } },
@@ -74,7 +84,10 @@ router.get("/insights", requirePermissionOrRole("crm:contacts:read", "ADMIN"), a
     for (const c of contacts) {
       // The customer's latest conversation that is still going.
       const conv = await prisma.conversation.findFirst({
-        where: { tenantId, channel: c.channel as any, customerExternalId: c.externalId, status: { not: "CLOSED" } },
+        where: {
+          tenantId, channel: c.channel as any, customerExternalId: c.externalId, status: { not: "CLOSED" },
+          ...(visibility ? { OR: visibility } : {}),
+        },
         orderBy: { lastMessageAt: "desc" },
         select: { id: true },
       });

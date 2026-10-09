@@ -17,7 +17,7 @@
  * `customer-notes.service.ts` for why it mirrors rather than routes.
  */
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole } from "@chatcenter/shared";
 import {
   listNotes, createNote, updateNote, deleteNote, decideSuggestion,
   mirrorToElectedSystem, NoteError, type NoteVisibility, type NoteAuthor,
@@ -25,6 +25,13 @@ import {
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
+
+// A note is part of the contact record, so it takes the contact keys the
+// neighbouring contact routes use (contact-insights, contacts). Before
+// 2026-10-09 any member of the tenant could read and write every customer's
+// notes, whatever their role granted on contacts.
+const canRead = requirePermissionOrRole("crm:contacts:read", "ADMIN");
+const canWrite = requirePermissionOrRole("crm:contacts:update", "ADMIN");
 
 /**
  * The surviving contact and its cross-channel identity.
@@ -86,7 +93,7 @@ const asVisibility = (v: unknown): NoteVisibility | undefined =>
 const asMentions = (m: unknown): string[] | undefined =>
   Array.isArray(m) ? m.filter((x): x is string => typeof x === "string") : undefined;
 
-router.get("/:contactId/notes", async (req: Request, res: Response) => {
+router.get("/:contactId/notes", canRead, async (req: Request, res: Response) => {
   try {
     const contact = await resolveContact(req.tenantId!, String(req.params.contactId));
     if (!contact) return res.status(404).json({ error: "contact_not_found" });
@@ -106,7 +113,7 @@ router.get("/:contactId/notes", async (req: Request, res: Response) => {
   }
 });
 
-router.post("/:contactId/notes", async (req: Request, res: Response) => {
+router.post("/:contactId/notes", canWrite, async (req: Request, res: Response) => {
   try {
     const contact = await resolveContact(req.tenantId!, String(req.params.contactId));
     if (!contact) return res.status(404).json({ error: "contact_not_found" });
@@ -152,7 +159,7 @@ router.post("/:contactId/notes", async (req: Request, res: Response) => {
   }
 });
 
-router.patch("/:contactId/notes/:noteId", async (req: Request, res: Response) => {
+router.patch("/:contactId/notes/:noteId", canWrite, async (req: Request, res: Response) => {
   try {
     const note = await updateNote({
       tenantId: req.tenantId!,
@@ -169,7 +176,7 @@ router.patch("/:contactId/notes/:noteId", async (req: Request, res: Response) =>
   }
 });
 
-router.delete("/:contactId/notes/:noteId", async (req: Request, res: Response) => {
+router.delete("/:contactId/notes/:noteId", canWrite, async (req: Request, res: Response) => {
   try {
     const note = await deleteNote(
       req.tenantId!,
@@ -185,7 +192,7 @@ router.delete("/:contactId/notes/:noteId", async (req: Request, res: Response) =
 });
 
 for (const decision of ["accept", "reject"] as const) {
-  router.post(`/:contactId/notes/:noteId/${decision}`, async (req: Request, res: Response) => {
+  router.post(`/:contactId/notes/:noteId/${decision}`, canWrite, async (req: Request, res: Response) => {
     try {
       const note = await decideSuggestion(
         req.tenantId!,

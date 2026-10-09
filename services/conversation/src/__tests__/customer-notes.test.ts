@@ -97,6 +97,9 @@ vi.mock("@chatcenter/shared", () => ({
   authenticate: (req: any, _r: any, n: any) => { req.user = { userId: state.viewer, role: "AGENT", email: state.viewerEmail }; n(); },
   resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "t1"; n(); },
   requireActiveTenant: () => (_q: any, _s: any, n: any) => n(),
+  // Pass-through here: the permission gate is proved with an honouring double
+  // in customer-notes-authz.test.ts.
+  requirePermissionOrRole: () => (_q: any, _s: any, n: any) => n(),
 }));
 
 import notesRouter from "../routes/customer-notes";

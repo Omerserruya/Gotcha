@@ -33,6 +33,7 @@ import {
   type CallState,
 } from "@chatcenter/shared";
 import { getHistoryByCustomerExternalId } from "../services/conversation.service";
+import { canViewConversation, visibilityClause } from "../lib/conversation-visibility";
 
 const router = Router();
 
@@ -62,6 +63,46 @@ async function voiceCopilotGate(req: Request, res: Response, next: NextFunction)
   }
 }
 router.use(voiceCopilotGate);
+
+/**
+ * A call is a conversation, and answers only for a viewer who may see that
+ * conversation: the inbox rule, as on approvals/:id (2026-10-09). Every route
+ * addressed by a session id (including /missed/:id/*) goes through here, so a
+ * hidden call is a 404 identical to a missing one, before its transcript,
+ * contact, recording or controls are reached. A session that does not exist is
+ * left to the handler, which already 404s it.
+ */
+router.param("id", async (req: Request, res: Response, next: NextFunction, id: string) => {
+  try {
+    const viewer = viewerOf(req);
+    // An unrestricted viewer (admin, or no department) has nothing to check
+    // and keeps the exact behaviour, with no extra query.
+    if (!visibilityClause(viewer)) return next();
+    const session = await prisma.voiceCallSession.findFirst({
+      where: { id: String(id), tenantId: req.tenantId! },
+      select: { conversationId: true },
+    });
+    if (!session) return next();
+    if (!(await canViewConversation(req.tenantId!, session.conversationId, viewer))) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * The same rule for the lists and counts: a call on a conversation the viewer
+ * may not see is absent from history, the summary, /active and /missed, rather
+ * than filtered after the LIMIT. Empty for an unrestricted viewer, whose where
+ * stays exactly as it was.
+ */
+function visibleSessions(req: Request): Record<string, unknown> {
+  const clause = visibilityClause(viewerOf(req));
+  return clause ? { conversation: { OR: clause } } : {};
+}
 
 // Ensure the session exists and belongs to the agent's tenant.
 async function loadSessionForTenant(sessionId: string, tenantId: string) {
@@ -116,7 +157,7 @@ router.get("/", async (req: Request, res: Response) => {
     return;
   }
 
-  const where: any = { tenantId };
+  const where: any = { tenantId, ...visibleSessions(req) };
   const direction = typeof req.query.direction === "string" ? req.query.direction.trim() : "";
   if (direction) where.direction = direction;
   const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
@@ -183,7 +224,7 @@ router.get("/summary", async (req: Request, res: Response) => {
     res.status(422).json({ error: "Invalid call filter", details: [{ field: "from|to", message: "must be ISO-8601" }] });
     return;
   }
-  const where: any = { tenantId };
+  const where: any = { tenantId, ...visibleSessions(req) };
   if (from || to) where.startedAt = { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) };
 
   try {
@@ -219,7 +260,7 @@ router.get("/active", async (req: Request, res: Response) => {
   try {
     const states: CallState[] = ["RINGING", ...Array.from(LIVE_STATES) as CallState[]];
     const sessions = await prisma.voiceCallSession.findMany({
-      where: { tenantId: req.tenantId!, state: { in: states } },
+      where: { tenantId: req.tenantId!, state: { in: states }, ...visibleSessions(req) },
       orderBy: { startedAt: "desc" },
       select: {
         id: true,
@@ -264,6 +305,7 @@ router.get("/missed", async (req: Request, res: Response) => {
         // Keeps the inbox cleared once the loop is closed, even when
         // the callback came from the WhatsApp template button.
         handledAt: null,
+        ...visibleSessions(req),
       },
       orderBy: { startedAt: "desc" },
       take: limit,
@@ -385,6 +427,10 @@ router.post("/missed/:id/handle", async (req: Request, res: Response) => {
         ...(session.customerNumber
           ? { customerNumber: session.customerNumber }
           : { id: session.id }),
+        // The cascade stops at what this viewer may see: handling a call must
+        // not clear (or count) another department's missed calls from the
+        // same number.
+        ...visibleSessions(req),
       },
       data: { handledAt: now },
     });
@@ -959,8 +1005,12 @@ router.post("/start-outbound", requirePermissionOrRole("outbound:calls:create", 
     // it and let voice-copilot mint a new one.
     let forwardedConversationId: string | undefined = undefined;
     if (conversationId) {
+      // A conversation the caller may not see is treated as unknown, exactly
+      // like a missing id: dropped, and voice-copilot mints a fresh one, so a
+      // call cannot be written into a hidden thread (2026-10-09).
+      const clause = visibilityClause(viewerOf(req));
       const existing = await prisma.conversation.findFirst({
-        where: { id: conversationId, tenantId: req.tenantId! },
+        where: { id: conversationId, tenantId: req.tenantId!, ...(clause ? { OR: clause } : {}) },
         select: { id: true },
       });
       if (existing) forwardedConversationId = existing.id;
