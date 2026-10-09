@@ -16,6 +16,18 @@ import styles from './Channels.module.css';
  * state from the first render, then the URL is tidied; WhatsApp's way back
  * keeps its panel open, as 13b is its designed place.
  */
+/** The failures whose sentence names the channel - each has one that does not. */
+const UNNAMED_OUTCOMES = [
+  'denied',
+  'token_exchange_failed',
+  'not_configured',
+  'already_connected',
+  'callback_error',
+  'other',
+] as const;
+type Unnamed = (typeof UNNAMED_OUTCOMES)[number];
+const UNNAMED: ReadonlySet<string> = new Set(UNNAMED_OUTCOMES);
+
 export function ChannelLanding({
   landing,
 }: {
@@ -40,8 +52,9 @@ export function ChannelLanding({
   }, [landing, router]);
 
   if (!said) return null;
-  const name = channelName(said.channel, t) ?? t('name.other');
   const ok = said.outcome === 'connected';
+  const name = said.channel ? (channelName(said.channel, t) ?? t('name.other')) : null;
+  const label = name ?? t('name.other');
   return (
     <p
       className={styles.landing}
@@ -52,11 +65,14 @@ export function ChannelLanding({
       <span>
         {said.outcome === 'connected'
           ? said.pending
-            ? t('landing.pending', { channel: name })
+            ? t('landing.pending', { channel: label })
             : said.count === null
-              ? t('landing.connected', { channel: name })
-              : t('landing.connectedCount', { channel: name, count: said.count })
-          : t(`landing.error.${said.outcome}`, { channel: name })}
+              ? t('landing.connected', { channel: label })
+              : t('landing.connectedCount', { channel: label, count: said.count })
+          : name === null && UNNAMED.has(said.outcome)
+            ? // v1's way back with no channel: the sentence that does not need one.
+              t(`landing.unnamed.${said.outcome as Unnamed}`)
+            : t(`landing.error.${said.outcome}`, { channel: label })}
       </span>
       <button
         type="button"

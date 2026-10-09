@@ -520,6 +520,14 @@
       "slack_no_team": "Slack didn't say which workspace - try again.",
       "callback_error": "Something went wrong on the way back from {channel}. Nothing was connected - try again.",
       "other": "{channel} didn't connect. Try again."
+    },
+    "unnamed": {
+      "denied": "You cancelled - nothing was connected.",
+      "token_exchange_failed": "The connection wasn't confirmed. Nothing was connected - try again.",
+      "not_configured": "That channel isn't set up on GOTCHA's side yet.",
+      "already_connected": "That account is already connected to this workspace.",
+      "callback_error": "Something went wrong on the way back. Nothing was connected - try again.",
+      "other": "The connection didn't go through. Try again."
     }
   },
   "twilio": {

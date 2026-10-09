@@ -49,6 +49,19 @@ describe('★★ the way back, read off the URL', () => {
     [{ connected: 'myspace' }, null],
     [{ platform: 'gmail' }, null],
     [{}, null],
+    // ★ v1's way back (dev's v1 paths 302 here since 2026-10-09)
+    [
+      { connected: 'whatsapp', pending: 'true' },
+      { channel: 'WHATSAPP', outcome: 'connected', count: null, pending: true },
+    ],
+    [{ error: 'no_whatsapp_numbers' }, { channel: 'WHATSAPP', outcome: 'no_whatsapp_numbers' }],
+    [{ error: 'gmail_already_connected' }, { channel: 'GMAIL', outcome: 'already_connected' }],
+    [{ error: 'slack_token_failed' }, { channel: 'SLACK', outcome: 'token_exchange_failed' }],
+    [{ error: 'connection_failed' }, { channel: null, outcome: 'callback_error' }],
+    [{ error: 'access_denied' }, { channel: null, outcome: 'denied' }],
+    [{ error: 'invalid_state' }, { channel: null, outcome: 'invalid_state' }],
+    // A provider's own words: never shown - "didn't connect".
+    [{ error: 'The user denied your request.' }, { channel: null, outcome: 'other' }],
   ])('%o', (params, landing) => {
     expect(channelLandingOf(params)).toEqual(landing);
   });
@@ -97,6 +110,24 @@ describe('★★ said once, and the URL tidied', () => {
       // A missing message renders its key path: assert the sentence, not a length.
       expect(screen.getByTestId('channel-landing').textContent).not.toMatch(/landing\.|error\./);
       expect(messages.landing.error).toHaveProperty(code);
+      unmount();
+    }
+  });
+});
+
+describe('★★ v1’s way back with no channel: said, in a sentence that needs none', () => {
+  it('★ a raw provider text is never printed; the sentence names no channel', () => {
+    show(channelLandingOf({ error: 'Error validating verification code <script>' })!);
+    const said = screen.getByTestId('channel-landing');
+    expect(said).toHaveTextContent("The connection didn't go through. Try again.");
+    expect(said).not.toHaveTextContent(/verification|script|Another channel/);
+  });
+
+  it('every failure with no channel reads without one', () => {
+    for (const code of [...CHANNEL_CONNECT_FAILURES, 'other'] as const) {
+      const { unmount } = show({ channel: null, outcome: code });
+      const text = screen.getByTestId('channel-landing').textContent ?? '';
+      expect(text).not.toMatch(/landing\.|error\.|unnamed\.|Another channel/);
       unmount();
     }
   });
