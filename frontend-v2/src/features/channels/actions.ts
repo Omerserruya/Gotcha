@@ -102,6 +102,22 @@ export interface EmailConnectInput {
 }
 
 /**
+ * What `POST /api/channels/connect/email` answers: `{ data: [account] }` - an
+ * ARRAY of one (services/auth routes/channels.ts), which the client unwraps to
+ * the array. Read as `channelSchema` alone, every successful connect failed
+ * the contract and read as "failed", and the retry then said "already
+ * connected". A bare account is still accepted, should the route ever answer
+ * the way the widget's does.
+ */
+const emailConnectPayload = z.union([
+  z
+    .array(channelSchema)
+    .min(1)
+    .transform((accounts) => accounts[0]!),
+  channelSchema,
+]);
+
+/**
  * Connects a mailbox over SMTP/IMAP.
  *
  * Credentials, not OAuth - the backend stores them and uses them to send and
@@ -118,7 +134,7 @@ export async function connectEmail(input: EmailConnectInput): Promise<ChannelWri
   try {
     const data = await serverApi().post({
       endpoint: channelEndpoints.connectEmail(),
-      payload: channelSchema,
+      payload: emailConnectPayload,
       body: {
         emailAddress: input.emailAddress.trim(),
         displayName: input.displayName.trim(),
