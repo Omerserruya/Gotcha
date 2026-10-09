@@ -33,6 +33,8 @@ vi.mock("@chatcenter/shared", async () => {
     requirePermissionOrRole: () => (_q: any, _s: any, n: any) => n(),
     requireCapacity: () => (_q: any, _s: any, n: any) => n(),
     validate: () => (_q: any, _s: any, n: any) => n(),
+    // The reader manages channels; channels-state-visibility pins the rest.
+    hasPermission: async () => true,
   };
 });
 

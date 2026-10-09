@@ -26,6 +26,7 @@ import {
   embeddedSignupDialogUrl,
   EMBEDDED_SIGNUP_DIALOG_VERSION,
   resolveAppPublicUrl,
+  hasPermission,
 } from "@chatcenter/shared";
 
 const router = Router();
@@ -273,11 +274,18 @@ router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:
  * channel and cannot distinguish connected-but-unverified from connected, and
  * those are the two states the setup screen exists to tell apart.
  *
- * Any tenant member. It carries no credentials and no customer data - the
- * channel's own identifier and its state, which is what the screen renders.
+ * Any tenant member sees each channel and its state. The channel's identifier
+ * (a phone number id, a page id) and its last error are for people who manage
+ * channels (channels:manage:read): an agent's empty inbox needs to know a
+ * channel is broken, not the provider's message about why (2026-10-09 review).
  */
 router.get("/state", authenticate, resolveTenant, async (req: Request, res: Response) => {
   try {
+    const u = (req as any).user ?? {};
+    const manages = await hasPermission(
+      { userId: u.userId, tenantId: req.tenantId!, role: u.role, departmentRole: u.departmentRole },
+      "channels:manage:read",
+    ).catch(() => false);
     const rows = await prisma.channelAccount.findMany({
       where: { tenantId: req.tenantId! },
       select: {
@@ -303,7 +311,7 @@ router.get("/state", authenticate, resolveTenant, async (req: Request, res: Resp
           // What the owner calls it - a page name or a number - so the screen
           // can say WHICH WhatsApp when there are three.
           displayName: r.displayName ?? null,
-          identifier: r.externalId ?? null,
+          identifier: manages ? r.externalId ?? null : null,
           connectionStatus: r.connectionStatus,
           isActive: r.isActive,
           // Verification is a SEPARATE axis from connection: Meta hands back a
@@ -311,7 +319,7 @@ router.get("/state", authenticate, resolveTenant, async (req: Request, res: Resp
           // screen that collapses the two tells the owner they are live when
           // they cannot send.
           verification: readVerification(meta),
-          ...splitErrorCode(r.lastError),
+          ...splitErrorCode(manages ? r.lastError : null),
         };
       }),
     });
@@ -342,6 +350,8 @@ function readVerification(meta: Record<string, unknown>): string {
   return "UNKNOWN";
 }
 
+// Any tenant member, on purpose: counts only, no names, ids or errors, so an
+// agent's empty Inbox can say "no channel connected" (2026-10-09 review).
 router.get("/summary", authenticate, resolveTenant, async (req: Request, res: Response) => {
   try {
     const rows = await prisma.channelAccount.findMany({
