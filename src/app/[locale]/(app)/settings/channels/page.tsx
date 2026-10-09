@@ -100,7 +100,7 @@ export default async function Page({
   const unprofiled = whatsapp?.[0]?.unprofiled[0] ?? null;
   const name = first?.name ?? unprofiled?.name ?? first?.phoneNumber ?? tw('panelTitle');
   // The number. Who answers is the automations' to say, not the channel's.
-  const learnLine = first?.phoneNumber ?? undefined;
+  const learnLine = first?.phoneNumber ?? unprofiled?.phoneNumber ?? undefined;
   const tile = (
     <span className={channelStyles.learnTile} aria-hidden="true">
       <MessageCircle size={20} strokeWidth={1.75} />
@@ -250,7 +250,7 @@ export default async function Page({
                 ),
                 ...(whatsapp[0]?.unprofiled ?? []).map((u) => ({
                   id: u.channelAccountId,
-                  label: u.name ?? tw('aNumber'),
+                  label: u.phoneNumber ?? u.name ?? tw('aNumber'),
                 })),
               ]}
             />

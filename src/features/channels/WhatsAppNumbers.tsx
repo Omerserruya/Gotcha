@@ -192,10 +192,7 @@ function NumberCard({
   return (
     <article className={styles.number} data-testid="whatsapp-number" data-delivery={delivery}>
       <p className={styles.numberLine}>
-        <span className={styles.numberPhone}>
-          <bdi dir="ltr">{number.phoneNumber ?? number.id}</bdi>
-        </span>
-        {number.name ? <span className={styles.numberName}>{number.name}</span> : null}
+        <NumberIdentity phone={number.phoneNumber} name={number.name} t={t} />
       </p>
 
       {/*
@@ -327,6 +324,48 @@ function CheckList({ checks, t }: { readonly checks: readonly HealthCheck[]; rea
  *
  * **On this tenant this is the only card that renders.**
  */
+/**
+ * The number, then its name - or, while Meta's number has not been read, the
+ * name and a muted line saying so. Never the raw id: a sixteen-digit Meta id
+ * reads as a broken phone number.
+ */
+function NumberIdentity({
+  phone,
+  name,
+  t,
+}: {
+  readonly phone: string | null;
+  readonly name: string | null;
+  readonly t: T;
+}) {
+  if (phone) {
+    return (
+      <>
+        <span className={styles.numberPhone}>
+          <bdi dir="ltr">{phone}</bdi>
+        </span>
+        {name ? (
+          <span className={styles.numberName}>
+            <UserText>{name}</UserText>
+          </span>
+        ) : null}
+      </>
+    );
+  }
+  return (
+    <>
+      {name ? (
+        <span className={styles.numberPhone}>
+          <UserText>{name}</UserText>
+        </span>
+      ) : null}
+      <span className={styles.numberName} data-testid="number-not-read">
+        {t('phoneNotRead')}
+      </span>
+    </>
+  );
+}
+
 function UnprofiledCard({ number, t }: { readonly number: UnprofiledNumber; readonly t: T }) {
   /*
     02's number card, in its shape: the number over its state; then what is
@@ -337,12 +376,8 @@ function UnprofiledCard({ number, t }: { readonly number: UnprofiledNumber; read
   return (
     <article className={styles.number} data-testid="whatsapp-unprofiled">
       <div className={styles.numberHead}>
-        <span className={styles.numberPhone}>
-          {number.name ? (
-            <UserText>{number.name}</UserText>
-          ) : (
-            <bdi dir="ltr">{number.phoneNumberId}</bdi>
-          )}
+        <span className={styles.numberLine}>
+          <NumberIdentity phone={number.phoneNumber} name={number.name} t={t} />
         </span>
         <span className={styles.numberChips}>
           <span className={styles.chipQuiet} title={t('unprofiled.body')}>

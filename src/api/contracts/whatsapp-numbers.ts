@@ -152,9 +152,21 @@ export const healthReportSchema = z.object({
 
 export type HealthReport = z.infer<typeof healthReportSchema>;
 
+/**
+ * The number as Meta displays it, or null - an empty string is not a number.
+ * When it is null the card says it has not been read from Meta yet; the raw
+ * id is never shown in its place.
+ */
+const displayPhone = z
+  .string()
+  .nullable()
+  .catch(null)
+  .default(null)
+  .transform((v) => v?.trim() || null);
+
 export const numberSchema = z.object({
   id: z.string(),
-  phoneNumber: z.string().nullable().default(null),
+  phoneNumber: displayPhone,
   name: z.string().nullable().default(null),
   state: z.enum(NUMBER_STATES),
   pendingAction: z.string().nullable().default(null),
@@ -180,6 +192,8 @@ export type WhatsAppNumber = z.infer<typeof numberSchema>;
 export const unprofiledSchema = z.object({
   channelAccountId: z.string(),
   phoneNumberId: z.string(),
+  /** Backend adds it (2026-10-09); dev's account has none stored. */
+  phoneNumber: displayPhone,
   name: z.string().nullable().default(null),
   connectionStatus: z.string(),
   /**

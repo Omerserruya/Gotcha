@@ -481,7 +481,8 @@
       "listUnread": "The customers couldn't be read just now.",
       "empty": "No customers came in with this history.",
       "open": "Open the customer"
-    }
+    },
+    "phoneNotRead": "Number not read from Meta yet"
   },
   "rowSettings": "Settings",
   "banner": {

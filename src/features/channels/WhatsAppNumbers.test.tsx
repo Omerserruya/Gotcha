@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -443,5 +443,46 @@ describe('★★ 13c - "Add another number" opens the Connect WhatsApp sheet, no
     const add = screen.getByTestId('whatsapp-add-number');
     expect(add.tagName).toBe('A');
     expect(add).toHaveAttribute('href', '/settings/channels?panel=whatsapp&view=connect');
+  });
+});
+
+describe('★ a number Meta has not given us yet (Omer, 2026-10-09)', () => {
+  const legacy = (over: Record<string, unknown> = {}) => ({
+    channelAccountId: 'ca1',
+    phoneNumberId: '1010938148762991',
+    name: 'Demo WhatsApp',
+    connectionStatus: 'CONNECTED',
+    ...over,
+  });
+
+  it('★ the name and a muted "not read" - never the raw id, never the name alone', async () => {
+    await renderNumbers({ data: [], unprofiled: [legacy()] });
+    const card = screen.getByTestId('whatsapp-unprofiled');
+    expect(card).toHaveTextContent('Demo WhatsApp');
+    expect(within(card).getByTestId('number-not-read')).toHaveTextContent(
+      /^Number not read from Meta yet$/,
+    );
+    expect(card).not.toHaveTextContent('1010938148762991');
+  });
+
+  it('an empty number is not a number', async () => {
+    await renderNumbers({ data: [], unprofiled: [legacy({ phoneNumber: '  ' })] });
+    expect(screen.getByTestId('number-not-read')).toBeInTheDocument();
+  });
+
+  it('★ once Backend sends it: the number, then the name, and no note', async () => {
+    await renderNumbers({ data: [], unprofiled: [legacy({ phoneNumber: '+972 50 123 4567' })] });
+    const card = screen.getByTestId('whatsapp-unprofiled');
+    expect(card).toHaveTextContent('+972 50 123 4567');
+    expect(card).toHaveTextContent('Demo WhatsApp');
+    expect(screen.queryByTestId('number-not-read')).toBeNull();
+  });
+
+  it('a profiled number without one says the same, not its record id', async () => {
+    await renderNumbers({ data: [{ ...number(), id: 'rec_9f2c', phoneNumber: null }] });
+    const card = screen.getByTestId('whatsapp-number');
+    expect(card).toHaveTextContent('Support');
+    expect(within(card).getByTestId('number-not-read')).toBeInTheDocument();
+    expect(card).not.toHaveTextContent('rec_9f2c');
   });
 });
