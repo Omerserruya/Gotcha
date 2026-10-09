@@ -173,9 +173,26 @@ export async function pollWooCarts(now = new Date()): Promise<number> {
   return total;
 }
 
+/**
+ * One poll per tick across every replica (2026-10-09 review: each replica ran
+ * its own setInterval, so every one of them polled every store). The first
+ * replica to take the tick's Redis lock polls; the others skip it. The lock is
+ * NOT released after the poll: releasing early would let a replica whose timer
+ * fires a minute later poll the same window again. It expires a minute before
+ * the next tick, so a replica that died holding it costs one tick at most.
+ */
+export const WOO_TICK_LOCK_KEY = "woo-carts:tick-lock";
+const TICK_LOCK_MS = TICK_MS - 60_000;
+
+export async function pollWooCartsIfLeader(now = new Date(), owner = `${process.pid}:${Math.random().toString(36).slice(2)}`): Promise<number | null> {
+  const won = await getRedis().set(WOO_TICK_LOCK_KEY, owner, "PX", TICK_LOCK_MS, "NX");
+  if (won !== "OK") return null;
+  return pollWooCarts(now);
+}
+
 let timer: NodeJS.Timeout | null = null;
 export function startWooCartPoller(): void {
   if (timer) return;
-  timer = setInterval(() => { pollWooCarts().catch((err) => console.warn("[woo-carts] tick failed:", err?.message)); }, TICK_MS);
+  timer = setInterval(() => { pollWooCartsIfLeader().catch((err) => console.warn("[woo-carts] tick failed:", err?.message)); }, TICK_MS);
   timer.unref?.();
 }
