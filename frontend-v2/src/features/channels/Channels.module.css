@@ -157,6 +157,19 @@
     cursor: default;
   }
 
+  /* A connected row's Disconnect: 02's row button, as a button. */
+  .rowDisconnect {
+    flex: none;
+    padding: var(--space-6) var(--space-12);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--space-8);
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-body);
+    cursor: pointer;
+  }
+
   /* ── Connect ────────────────────────────────────────────────────────── */
   .connect {
     grid-column: 1 / -1;

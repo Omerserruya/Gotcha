@@ -11,8 +11,10 @@ import {
 import styles from './Channels.module.css';
 import { ChannelTile } from './ChannelTile';
 import { ConnectableRow } from './ConnectableRow';
+import { DisconnectChannel } from './DisconnectChannel';
 import {
   buildChannelRows,
+  canDisconnect,
   isTroubled,
   type ChannelRow,
   type ConnectedRow,
@@ -204,6 +206,16 @@ export async function ChannelList({
                 >
                   {t('rowSettings')}
                 </Link>
+              ) : canDisconnect(row) ? (
+                /*
+                  Disconnect, after a confirmation in the channel's name
+                  (POST /api/channels/:id/disconnect; conversations are kept).
+                */
+                <DisconnectChannel
+                  id={row.id}
+                  name={channelName(row.channel, t) ?? t('name.other')}
+                  identity={row.identity}
+                />
               ) : (
                 /*
                   Nothing to set (checked 2026-10-08): the platform's only

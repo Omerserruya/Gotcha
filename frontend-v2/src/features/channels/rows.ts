@@ -81,6 +81,35 @@ export function isTroubled(row: ConnectedRow): boolean {
   return row.status === 'ERROR' || row.status === 'DISCONNECTED' || row.error != null;
 }
 
+/**
+ * The channels a row can disconnect, by `POST /api/channels/:id/disconnect`
+ * (services/auth routes/channels.ts): the route works on any channel account
+ * of the workspace, and these are the ones it was checked for - it stops the
+ * platform's own delivery for Instagram, Messenger, Gmail, Outlook and Slack,
+ * and for email the inbound route only takes active accounts.
+ *
+ * Not here: WhatsApp (its numbers are disconnected one by one, in 13b), voice
+ * (another spine - its rows are not channel accounts), and the Website widget
+ * (the route would wipe its settings, stored as its credentials, and the
+ * widget has no way back from DISCONNECTED).
+ */
+export const DISCONNECTABLE_CHANNELS = [
+  'INSTAGRAM',
+  'MESSENGER',
+  'GMAIL',
+  'OUTLOOK',
+  'SLACK',
+  'EMAIL',
+] as const satisfies readonly ChannelType[];
+
+/** A Disconnect on this row - never on one that is disconnected already. */
+export function canDisconnect(row: ConnectedRow): boolean {
+  return (
+    (DISCONNECTABLE_CHANNELS as readonly ChannelType[]).includes(row.channel) &&
+    row.status !== 'DISCONNECTED'
+  );
+}
+
 export function buildChannelRows(
   channels: readonly Channel[],
   voice: readonly VoiceChannel[],

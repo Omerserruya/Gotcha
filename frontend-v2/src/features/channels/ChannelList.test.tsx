@@ -51,16 +51,26 @@ vi.mock('./ConnectableRow', () => ({
   },
 }));
 
+/* The row's Disconnect is a client component with its own test (ChannelList.disconnect). */
+vi.mock('./DisconnectChannel', () => ({
+  DisconnectChannel: ({ id }: { id: string }) => (
+    <button data-testid={`channel-disconnect-${id}`} />
+  ),
+}));
+
 import { ChannelList } from './ChannelList';
 
 const channel = (id: string, type: string) =>
   channelSchema.parse({ id, channel: type, connectionStatus: 'CONNECTED' });
 
 describe('★ 13b is reached from its row on 13, now that it is not a section', () => {
-  it('every row has 02’s "Settings"; only WhatsApp’s leads anywhere (13b)', async () => {
+  it('WhatsApp’s "Settings" leads to 13b; a row with nothing to set says so', async () => {
     render(
       await ChannelList({
-        channels: [channel('w1', 'WHATSAPP'), channel('e1', 'EMAIL')],
+        channels: [
+          channel('w1', 'WHATSAPP'),
+          channelSchema.parse({ id: 'e1', channel: 'EMAIL', connectionStatus: 'DISCONNECTED' }),
+        ],
         voice: [],
         voiceOffered: false,
         windowDays: 30,
@@ -70,7 +80,9 @@ describe('★ 13b is reached from its row on 13, now that it is not a section', 
       'href',
       '/settings/channels?panel=whatsapp',
     );
-    // The platform has no settings for email: a status saying so, never a panel.
+    // A disconnected mailbox has nothing to set and nothing to disconnect:
+    // a status saying so, never a panel.
+    expect(screen.queryByTestId('channel-disconnect-e1')).toBeNull();
     const email = screen.getByTestId('channel-settings-e1');
     expect(email).not.toHaveAttribute('href');
     expect(email.closest('a,button')).toBeNull();
