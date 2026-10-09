@@ -154,3 +154,19 @@ describe("nothing internal, and nothing unbacked", () => {
     expect(prompt).toMatch(/Offering is fine/i);
   });
 });
+
+describe("★ a shared location is a place, not coordinates (2026-10-09)", () => {
+  // Live on dev: Maya answered a pin with "ראיתי את המיקום ששלחת, אילת
+  // (29.5577, 34.9519)", reading the raw coordinates back to the customer.
+  const prompt = promptFor(MAYA);
+
+  it("names the rule and its placeholder shape", () => {
+    expect(prompt).toMatch(/A shared location is a place, not coordinates/);
+    expect(prompt).toContain("[Shared location: <name>, <address> (lat, lng)]");
+  });
+
+  it("carries the real sentence as the counter-example, and the right one", () => {
+    expect(prompt).toContain("ראיתי את המיקום ששלחת, אילת (29.5577, 34.9519)");
+    expect(prompt).toContain("ראיתי שמדובר באילת.");
+  });
+});
