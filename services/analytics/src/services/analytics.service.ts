@@ -9,6 +9,7 @@ import {
   approvalToActivityEvent,
   toolSubject,
   isoWeekKey,
+  visibilityClause, type Viewer,
   buildQuietDayList, waitingForPersonWhere } from "@chatcenter/shared";
 import { intentLabel } from "@chatcenter/shared/src/lib/conversation-intents";
 
@@ -1059,7 +1060,7 @@ const QUEUE_CANDIDATE_CAP = 500;
 
 export async function getQueueItems(
   tenantId: string,
-  opts: { limit?: number; cursor?: string } = {},
+  opts: { limit?: number; cursor?: string; viewer?: Viewer } = {},
 ) {
   const limit = Math.min(Math.max(opts.limit ?? 20, 1), 100);
   // The cursor is an offset into a deterministic ordering, not a row id: the
@@ -1073,6 +1074,10 @@ export async function getQueueItems(
 
   // The same "waiting for a person" as Home's count (see waitingForPersonWhere).
   const where = waitingForPersonWhere(tenantId);
+  // 2026-10-09: the inbox's rule, kept in AND (its OR is the visibility
+  // clause's own). The count reads the same `where`, so it cannot leak a total.
+  const clause = opts.viewer ? visibilityClause(opts.viewer) : null;
+  if (clause) (where.AND as unknown[]).push({ OR: clause });
 
   const [candidates, totalWaiting] = await Promise.all([
     prisma.conversation.findMany({
@@ -1212,7 +1217,7 @@ export async function getQueueItems(
  */
 export async function getActivity(
   tenantId: string,
-  opts: { limit?: number; cursor?: string } = {},
+  opts: { limit?: number; cursor?: string; viewer?: Viewer } = {},
 ) {
   const limit = Math.min(Math.max(opts.limit ?? 20, 1), 100);
   // The cursor is a timestamp: the merged stream has no single id sequence to
@@ -1224,35 +1229,65 @@ export async function getActivity(
   })();
   const timeFilter = before ? { lt: before } : undefined;
 
-  // Over-fetch from each source: the merge keeps only the newest `limit` of the
-  // combined set, and taking exactly `limit` from each would drop older rows
-  // from one source that belong on this page.
-  const [executions, approvals] = await Promise.all([
-    prisma.toolExecution.findMany({
-      where: { tenantId, ...(timeFilter ? { createdAt: timeFilter } : {}) },
-      orderBy: { createdAt: "desc" },
-      take: limit + 1,
-      select: {
-        id: true, toolName: true, input: true, output: true,
-        success: true, createdAt: true, conversationId: true,
-      },
-    }),
-    prisma.approvalRequest.findMany({
-      where: {
-        tenantId,
-        status: "PENDING",
-        // Same actionability rule as the overview's count, so the card and the
-        // metric strip cannot disagree about what is still pending.
-        expiresAt: { gt: new Date() },
-        ...(timeFilter ? { createdAt: timeFilter } : {}),
-      },
-      orderBy: { createdAt: "desc" },
-      take: limit + 1,
-      select: { id: true, tool: true, params: true, createdAt: true, conversationId: true },
-    }),
-  ]);
+  const executionWhere = { tenantId, ...(timeFilter ? { createdAt: timeFilter } : {}) };
+  const executionSelect = {
+    id: true, toolName: true, input: true, output: true,
+    success: true, createdAt: true, conversationId: true,
+  } as const;
+  const approvalWhere = {
+    tenantId,
+    status: "PENDING" as const,
+    // Same actionability rule as the overview's count, so the card and the
+    // metric strip cannot disagree about what is still pending.
+    expiresAt: { gt: new Date() },
+    ...(timeFilter ? { createdAt: timeFilter } : {}),
+  };
+  const approvalSelect = { id: true, tool: true, params: true, createdAt: true, conversationId: true } as const;
 
-  const merged = [
+  // 2026-10-09: a restricted viewer (department agent) sees only rows from
+  // conversations the inbox shows them. `null` = unrestricted, unchanged path.
+  const clause = opts.viewer ? visibilityClause(opts.viewer) : null;
+  let floor: Date | null = null;
+  let executions;
+  let approvals;
+  if (!clause) {
+    // Over-fetch from each source: the merge keeps only the newest `limit` of the
+    // combined set, and taking exactly `limit` from each would drop older rows
+    // from one source that belong on this page.
+    [executions, approvals] = await Promise.all([
+      prisma.toolExecution.findMany({
+        where: executionWhere,
+        orderBy: { createdAt: "desc" },
+        take: limit + 1,
+        select: executionSelect,
+      }),
+      prisma.approvalRequest.findMany({
+        where: approvalWhere,
+        orderBy: { createdAt: "desc" },
+        take: limit + 1,
+        select: approvalSelect,
+      }),
+    ]);
+  } else {
+    const order = [{ createdAt: "desc" as const }, { id: "desc" as const }];
+    const [e, a] = await Promise.all([
+      scanVisible(
+        (skip, take) => prisma.toolExecution.findMany({ where: executionWhere, orderBy: order, skip, take, select: executionSelect }),
+        tenantId, clause, limit + 1,
+      ),
+      scanVisible(
+        (skip, take) => prisma.approvalRequest.findMany({ where: approvalWhere, orderBy: order, skip, take, select: approvalSelect }),
+        tenantId, clause, limit + 1,
+      ),
+    ]);
+    executions = e.rows;
+    approvals = a.rows;
+    // A source that hit the scan cap was not read below its floor, so the
+    // other source's older rows would jump that gap: nothing below it here.
+    floor = [e.floor, a.floor].reduce<Date | null>((x, y) => (y && (!x || y > x) ? y : x), null);
+  }
+
+  let merged = [
     ...executions.map((e) => ({
       at: e.createdAt,
       event: toActivityEvent({ ...e, conversationId: e.conversationId ?? null }),
@@ -1262,17 +1297,70 @@ export async function getActivity(
       event: approvalToActivityEvent({ ...a, conversationId: a.conversationId ?? null }),
     })),
   ].sort((x, y) => y.at.getTime() - x.at.getTime() || x.event.id.localeCompare(y.event.id));
+  if (floor) merged = merged.filter((m) => m.at >= floor!);
 
   const page = merged.slice(0, limit);
   // Only claim another page when a source actually had more to give. Saying so
   // on a short merge would hand the client a cursor that returns nothing.
   const hasMore =
-    merged.length > limit || executions.length > limit || approvals.length > limit;
+    merged.length > limit || executions.length > limit || approvals.length > limit || floor !== null;
+  const last = page.length > 0 ? page[page.length - 1]!.at : floor;
 
   return {
     data: page.map((p) => p.event),
-    nextCursor: hasMore && page.length > 0 ? page[page.length - 1]!.at.toISOString() : null,
+    nextCursor: hasMore && last ? last.toISOString() : null,
   };
+}
+
+/**
+ * How far a restricted viewer's activity read scans before it stops (2026-10-09).
+ * Filtering in batches rather than after one LIMIT, so hidden rows never leave
+ * a short page with no next cursor; the cap bounds the cost when most are hidden.
+ */
+const ACTIVITY_SCAN_BATCH = 200;
+const ACTIVITY_SCAN_CAP = 2000;
+
+/** Which of these conversations the viewer's clause lets them see. */
+async function visibleConversationIds(
+  tenantId: string,
+  ids: string[],
+  clause: Record<string, unknown>[],
+): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const where = { tenantId, id: { in: ids }, OR: clause };
+  const rows = await prisma.conversation.findMany({
+    where,
+    select: { id: true },
+  });
+  return new Set(rows.map((r) => r.id));
+}
+
+/**
+ * Newest rows of one source the viewer may see, up to `want`. A row with no
+ * conversation is not hidden by the rule (no conversation to hide it behind).
+ * `floor` is set only when the cap stopped the scan: the oldest row read.
+ */
+async function scanVisible<T extends { createdAt: Date; conversationId: string | null }>(
+  fetchPage: (skip: number, take: number) => Promise<T[]>,
+  tenantId: string,
+  clause: Record<string, unknown>[],
+  want: number,
+): Promise<{ rows: T[]; floor: Date | null }> {
+  const rows: T[] = [];
+  let oldest: Date | null = null;
+  for (let skip = 0; skip < ACTIVITY_SCAN_CAP; skip += ACTIVITY_SCAN_BATCH) {
+    const batch = await fetchPage(skip, ACTIVITY_SCAN_BATCH);
+    const ids = [...new Set(batch.map((r) => r.conversationId).filter((x): x is string => !!x))];
+    const visible = await visibleConversationIds(tenantId, ids, clause);
+    for (const r of batch) {
+      if (r.conversationId && !visible.has(r.conversationId)) continue;
+      rows.push(r);
+      if (rows.length >= want) return { rows, floor: null };
+    }
+    if (batch.length < ACTIVITY_SCAN_BATCH) return { rows, floor: null };
+    oldest = batch[batch.length - 1]!.createdAt;
+  }
+  return { rows, floor: oldest };
 }
 
 // ─── Home: time saved ─────────────────────────────────────────

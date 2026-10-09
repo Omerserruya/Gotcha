@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { authenticate, resolveTenant, requireRole, requirePermission, resolveEffectiveLocale } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireRole, requirePermission, resolveEffectiveLocale, viewerOf } from "@chatcenter/shared";
 
 /**
  * The reader's language for text this service writes (intent labels): an
@@ -115,15 +115,15 @@ router.get("/queue", requirePermission("analytics:workspace:read"), async (req: 
 /**
  * The ranked queue behind Home's "needs you now".
  *
- * NOT requireRole("ADMIN"): this is the list an agent works from, and the
- * conversations in it are unassigned ones any member could pick up. Every
- * other route here is a management report, which is why they are admin-gated.
+ * 2026-10-09: gated like the other dashboard reads, and scoped by the inbox's
+ * visibility rule: it names customers and quotes their messages, so another
+ * department's queue is not this agent's to read.
  */
-router.get("/queue/items", async (req: Request, res: Response) => {
+router.get("/queue/items", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
-    const result = await analyticsService.getQueueItems(req.tenantId!, { limit, cursor });
+    const result = await analyticsService.getQueueItems(req.tenantId!, { limit, cursor, viewer: viewerOf(req) });
     res.json(result);
   } catch (err) {
     console.error("Queue items error:", err);
@@ -134,14 +134,14 @@ router.get("/queue/items", async (req: Request, res: Response) => {
 /**
  * The time-ordered activity stream behind Home's activity card.
  *
- * Open to every tenant member for the same reason as the queue: an agent needs
- * to see that a refund is awaiting approval before they promise one.
+ * 2026-10-09: same gate and same visibility rule as the queue: each entry is a
+ * tool run or approval in one conversation, with its parameters.
  */
-router.get("/activity", async (req: Request, res: Response) => {
+router.get("/activity", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
-    const result = await analyticsService.getActivity(req.tenantId!, { limit, cursor });
+    const result = await analyticsService.getActivity(req.tenantId!, { limit, cursor, viewer: viewerOf(req) });
     res.json(result);
   } catch (err) {
     console.error("Activity stream error:", err);
@@ -304,10 +304,10 @@ router.get("/insights", requirePermission("analytics:workspace:read"), async (re
  * insight belongs in Outreach, behind broadcast validation, template approval
  * and audience preview, not behind a second send path with none of them.
  *
- * ADMIN, unlike the queue and the activity stream: dismissing hides the card
- * for everyone in the tenant, so it is not one agent's call.
+ * ADMIN: dismissing hides the card for everyone in the tenant, so it is not
+ * one agent's call. 2026-10-09: the role gate this said it had, now applied.
  */
-router.post("/insights/:id/dismiss", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
+router.post("/insights/:id/dismiss", requirePermission("analytics:dashboard:read"), requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const insightId = String(req.params.id ?? "").trim();
     if (!insightId || insightId.length > 128) {
