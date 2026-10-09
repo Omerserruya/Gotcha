@@ -1,9 +1,10 @@
 import { getTranslations } from 'next-intl/server';
 
-import { isConnected } from '@/api/contracts/integrations';
+import { isConnected, needsReconnect } from '@/api/contracts/integrations';
 import { AvailableSystem } from '@/features/capabilities/AvailableSystem';
 import { oauthFailure } from '@/features/capabilities/oauth';
 import { OAuthLanding } from '@/features/capabilities/OAuthLanding';
+import { ReconnectSystem } from '@/features/capabilities/ReconnectSystem';
 import {
   ShopifyBillingVerify,
   ShopifyPending,
@@ -141,6 +142,14 @@ export default async function Page({
                   helpUrl={shopifyAvailability?.helpUrl ?? null}
                 />
               )
+            ) : null}
+            {/* Connected and broken (ERROR): what that means, and the way back. */}
+            {integration !== null && needsReconnect(integration) ? (
+              <ReconnectSystem
+                integration={integration}
+                // The header carries the reason; without it, the card does.
+                showReason={capabilities === null || capabilities.length === 0}
+              />
             ) : null}
             {integration !== null && !isConnected(integration) ? (
               <AvailableSystem integration={integration} shopify={shopifyAvailability} />

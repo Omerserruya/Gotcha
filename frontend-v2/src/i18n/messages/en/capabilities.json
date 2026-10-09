@@ -252,5 +252,11 @@
     "CALENDAR": "Calendar",
     "DATABASE": "Database",
     "CUSTOM": "Custom"
+  },
+  "reconnect": {
+    "title": "Reconnect {name}",
+    "paused": "The connection to {name} stopped working, so its actions are paused until it is reconnected.",
+    "checkFailed": "The last check against {name} failed. Its actions still run - reconnecting replaces how GOTCHA signs in to it.",
+    "unknown": "Something went wrong with the connection to {name}."
   }
 }

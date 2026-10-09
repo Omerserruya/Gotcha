@@ -496,6 +496,13 @@
     color: var(--text-primary);
   }
 
+  .connectLead {
+    margin: 0;
+    line-height: normal;
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+  }
+
   .connectForm {
     display: flex;
     flex-direction: column;

@@ -395,7 +395,7 @@ describe('★★ a broken connection says why - its code in Hebrew words (ai 272
               slug: 'shopify',
               tenantConnection: {
                 id: 'c1',
-                status: 'DISCONNECTED',
+                status: 'ERROR',
                 lastError: 'The GOTCHA Shopify app was uninstalled from this store.',
                 lastErrorCode: 'SHOPIFY_APP_UNINSTALLED',
               },
@@ -407,6 +407,34 @@ describe('★★ a broken connection says why - its code in Hebrew words (ai 272
     expect(screen.getByTestId('connected-state-shopify')).toHaveAttribute(
       'title',
       'האפליקציה של GOTCHA הוסרה מהחנות. מתקינים אותה מחדש כדי לחבר שוב.',
+    );
+  });
+});
+
+describe('★★ a DISCONNECTED row is available again - a disconnect or an uninstall keeps the row', () => {
+  it('listed under Available with its Connect, never under Connected', async () => {
+    await show([entry({ tenantConnection: { id: 'c1', status: 'DISCONNECTED' } })]);
+    expect(screen.getByTestId('available-shopify')).toBeInTheDocument();
+    expect(screen.queryByTestId('connected-shopify')).toBeNull();
+  });
+});
+
+describe('★ an unrecognised error names the system on the chip - never "this channel", never the text', () => {
+  it('a raw HTML 401 reads as the system’s own sentence', async () => {
+    render(
+      <NextIntlClientProvider locale="he" messages={{ capabilities: heMessages, common: heCommon }}>
+        {await IntegrationRail({
+          integrations: [
+            entry({
+              tenantConnection: { id: 'c1', status: 'ERROR', lastError: '<!DOCTYPE html>401' },
+            }),
+          ],
+        })}
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('connected-state-shopify')).toHaveAttribute(
+      'title',
+      'משהו השתבש בחיבור ל\u2011Shopify.',
     );
   });
 });

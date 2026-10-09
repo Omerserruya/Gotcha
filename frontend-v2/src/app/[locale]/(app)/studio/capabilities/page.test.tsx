@@ -6,6 +6,7 @@ import { integrationSchema } from '@/api/contracts/integrations';
 import { AvailableSystem } from '@/features/capabilities/AvailableSystem';
 import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
 import { OAuthLanding } from '@/features/capabilities/OAuthLanding';
+import { ReconnectSystem } from '@/features/capabilities/ReconnectSystem';
 import { SystemHead } from '@/features/capabilities/SystemHead';
 
 const loadCapabilities = vi.hoisted(() => vi.fn());
@@ -109,5 +110,43 @@ describe('★★ the way back from a provider', () => {
     expect(
       find<{ outcome: string | null }>(await page({ system: 'shopify' }), OAuthLanding)?.outcome,
     ).toBeNull();
+  });
+});
+
+describe('★★ a broken connection has a way back on its screen', () => {
+  const withHubspot = (connection: Record<string, unknown> | null) =>
+    loadCapabilities.mockResolvedValue({
+      capabilities: [],
+      usage: null,
+      integrations: [
+        integrationSchema.parse({
+          id: 'i1',
+          slug: 'hubspot',
+          name: 'HubSpot',
+          tenantConnection: connection,
+        }),
+      ],
+    });
+
+  it('ERROR: the Reconnect card - carrying the reason when the header is not drawn', async () => {
+    withHubspot({ id: 'c1', status: 'ERROR' });
+    const tree = await page({ system: 'hubspot' });
+    expect(find<{ showReason: boolean }>(tree, ReconnectSystem)?.showReason).toBe(true);
+    expect(find(tree, AvailableSystem)).toBeNull();
+  });
+
+  it('CONNECTED: no Reconnect', async () => {
+    withHubspot({ id: 'c1', status: 'CONNECTED' });
+    expect(find(await page({ system: 'hubspot' }), ReconnectSystem)).toBeNull();
+  });
+
+  it.each([
+    ['DISCONNECTED', { id: 'c1', status: 'DISCONNECTED' }],
+    ['no row', null],
+  ])('%s: its Connect, not a Reconnect', async (_, connection) => {
+    withHubspot(connection);
+    const tree = await page({ system: 'hubspot' });
+    expect(find(tree, ReconnectSystem)).toBeNull();
+    expect(find(tree, AvailableSystem)).not.toBeNull();
   });
 });

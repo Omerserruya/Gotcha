@@ -58,7 +58,9 @@ export async function SystemHead({
         </span>
         {reason ? (
           <span className={styles.systemError} role="note" data-testid="system-error">
-            {tp(reason)}
+            {reason === 'unknown'
+              ? t('reconnect.unknown', { name: integration?.name ?? '' })
+              : tp(reason)}
           </span>
         ) : null}
       </span>

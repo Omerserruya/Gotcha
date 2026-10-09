@@ -328,15 +328,29 @@ export function resolveStance(
 /* ── Screen 10's left rail: what is connected, and what could be ─────────── */
 
 /**
- * Connected means there is a tenant connection row, whatever state it is in.
+ * Connected means there is a tenant connection row that is not DISCONNECTED.
  *
  * ★ A BROKEN CONNECTION IS STILL CONNECTED. `status: "ERROR"` belongs in the
- * connected list with its error showing - moving it to "available" would
- * offer a Connect button for something already connected, which is the
- * distinction 14c, 04d and 05d each had to make separately.
+ * connected list with its error showing and a Reconnect - moving it to
+ * "available" would offer a plain Connect for something already connected,
+ * which is the distinction 14c, 04d and 05d each had to make separately.
+ *
+ * ★ A DISCONNECTED ROW IS NOT. Both disconnect routes and Shopify's uninstall
+ * webhook KEEP the row and set `DISCONNECTED` (credentials emptied), so "a row
+ * exists" read a disconnected system as connected and offered no way back.
+ * It is available again, with its last reason beside its Connect.
  */
 export function isConnected(entry: Integration): boolean {
-  return Boolean(entry.tenantConnection);
+  return Boolean(entry.tenantConnection) && entry.tenantConnection?.status !== 'DISCONNECTED';
+}
+
+/**
+ * A connected system whose connection is broken: it needs a Reconnect, not a
+ * Connect. `ERROR` pauses its actions (the AI's tools are read only from
+ * `CONNECTED` rows); a failed last check on a `CONNECTED` row does not.
+ */
+export function needsReconnect(entry: Integration | null): boolean {
+  return entry !== null && isConnected(entry) && isFailing(entry.tenantConnection);
 }
 
 /**

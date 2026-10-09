@@ -109,6 +109,20 @@ describe('★★ the connection’s last error, in words, under its line', () =>
     expect(screen.getByTestId('system-head')).not.toHaveTextContent('[SHOPIFY');
   });
 
+  it('★ an unrecognised error (dev: a raw HTML 401) names the system - never "this channel", never the text', async () => {
+    render(
+      await SystemHead({
+        integration: broken({ status: 'ERROR', lastError: '<!DOCTYPE html><title>401</title>' }),
+        capabilities: caps,
+        usage: null,
+      }),
+    );
+    expect(screen.getByTestId('system-error')).toHaveTextContent(
+      'Something went wrong with the connection to Shopify.',
+    );
+    expect(screen.getByTestId('system-head')).not.toHaveTextContent(/channel|DOCTYPE|401/);
+  });
+
   it('a healthy connection has no error line', async () => {
     render(await SystemHead({ integration: shopify, capabilities: caps, usage: null }));
     expect(screen.queryByTestId('system-error')).toBeNull();

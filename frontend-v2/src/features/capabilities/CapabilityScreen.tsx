@@ -18,7 +18,12 @@ import {
   type Capability,
   type ToolUsage,
 } from '@/api/contracts/capabilities';
-import { catalogName, toolSlugOf, type Integration } from '@/api/contracts/integrations';
+import {
+  catalogName,
+  needsReconnect,
+  toolSlugOf,
+  type Integration,
+} from '@/api/contracts/integrations';
 
 import { OAuthButton } from './OAuthButton';
 import { oauthHere } from './oauth';
@@ -88,7 +93,8 @@ export async function CapabilityScreen({
           <p className={styles.down} data-testid="system-down">
             {t('systemDown', { name: integration.name })}
           </p>
-          {oauthHere(integration.slug, true) ? (
+          {/* The page's Reconnect card has the button when the connection is broken. */}
+          {oauthHere(integration.slug, true) && !needsReconnect(integration) ? (
             <OAuthButton slug={integration.slug} name={integration.name} mode="reconnect" />
           ) : null}
         </div>

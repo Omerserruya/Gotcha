@@ -182,7 +182,13 @@ export function IntegrationFinder({
                     <span
                       className={styles.railState}
                       data-state={state}
-                      title={reason ? tp(reason) : undefined}
+                      title={
+                        reason === 'unknown'
+                          ? t('reconnect.unknown', { name: entry.name })
+                          : reason
+                            ? tp(reason)
+                            : undefined
+                      }
                       data-testid={`connected-state-${entry.slug}`}
                     >
                       {isIntegrationState(state)

@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import { sentenceCase, type Integration } from '@/api/contracts/integrations';
+import { platformErrorReason } from '@/api/contracts/platform-errors';
 
 import { ConnectFor } from './ConnectFor';
 import { IntegrationLogo } from './IntegrationLogo';
@@ -29,6 +30,15 @@ export async function AvailableSystem({
   readonly shopify?: { readonly mode: string; readonly helpUrl: string | null } | null;
 }) {
   const t = await getTranslations('capabilities');
+  const tp = await getTranslations('common.platformError');
+  // A row left DISCONNECTED (a disconnect, or Shopify's uninstall) says so, and why - in words.
+  const left = integration.tenantConnection?.status === 'DISCONNECTED';
+  const reason = left
+    ? platformErrorReason(
+        integration.tenantConnection?.lastError,
+        integration.tenantConnection?.lastErrorCode,
+      )
+    : null;
   const line = [
     integration.category ? systemCategoryName(integration.category, t) : null,
     integration.description,
@@ -47,10 +57,17 @@ export async function AvailableSystem({
               {line}
             </span>
           ) : null}
+          {reason ? (
+            <span className={styles.systemError} role="note" data-testid="system-error">
+              {reason === 'unknown'
+                ? t('reconnect.unknown', { name: integration.name })
+                : tp(reason)}
+            </span>
+          ) : null}
         </span>
         <span className={styles.systemActions}>
           <span className={styles.systemState} data-state="DISCONNECTED" data-testid="system-state">
-            {t('available.notConnected')}
+            {left ? t('rail.state.DISCONNECTED') : t('available.notConnected')}
           </span>
         </span>
       </header>
