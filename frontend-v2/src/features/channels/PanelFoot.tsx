@@ -8,10 +8,16 @@ import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog
 import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link, useRouter } from '@/i18n/navigation';
 
-import { disconnectNumber, refreshNumber, type WriteResult } from './number-actions';
+import {
+  disconnectNumber,
+  refreshNumber,
+  refreshUnprofiled,
+  type UnprofiledRefreshResult,
+  type WriteResult,
+} from './number-actions';
 import styles from './Channels.module.css';
 
-type Refresh = 'idle' | 'done' | Exclude<WriteResult, { ok: true }>['reason'];
+type Refresh = 'idle' | 'done' | Exclude<UnprofiledRefreshResult, { ok: true }>['reason'];
 
 /**
  * 13b's foot, live where a route is (Omer, 2026-10-07: no dead buttons).
@@ -28,9 +34,15 @@ type Refresh = 'idle' | 'done' | Exclude<WriteResult, { ok: true }>['reason'];
  */
 export function PanelFoot({
   numbers,
+  unprofiled = [],
 }: {
   /** Numbers with a record here: the ones refresh and disconnect can act on. */
   readonly numbers: readonly { readonly id: string; readonly phoneNumber: string | null }[];
+  /**
+   * Channel accounts with no number record (dev's one): Refresh reads them
+   * from Meta too (Backend 7131f530); Disconnect still cannot name them.
+   */
+  readonly unprofiled?: readonly string[];
 }) {
   const t = useTranslations('channels.whatsapp');
   const router = useRouter();
@@ -50,13 +62,17 @@ export function PanelFoot({
         const result = await refreshNumber(n.id);
         if (!result.ok) outcome = result.reason;
       }
+      for (const id of unprofiled) {
+        const result = await refreshUnprofiled(id);
+        if (!result.ok) outcome = result.reason;
+      }
       setRefresh(outcome);
       router.refresh();
     });
 
   return (
     <footer className={styles.panelFoot}>
-      {numbers.length === 0 ? (
+      {numbers.length === 0 && unprofiled.length === 0 ? (
         <UnavailableAction
           label={t('foot.refresh')}
           tag={t('notYet')}
@@ -117,7 +133,13 @@ export function PanelFoot({
         <UnavailableAction
           label={t('foot.disconnect')}
           tag={t('notYet')}
-          why={numbers.length === 0 ? t('foot.noRecord') : t('foot.disconnectMany')}
+          why={
+            numbers.length > 0
+              ? t('foot.disconnectMany')
+              : unprofiled.length > 0
+                ? t('foot.noRecordDisconnect')
+                : t('foot.noRecord')
+          }
           testid="whatsapp-foot-disconnect"
         />
       )}

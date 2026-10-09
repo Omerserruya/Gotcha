@@ -28,6 +28,43 @@ function reasonOf(cause: unknown): 'not_found' | 'forbidden' | 'failed' {
 
 const done = () => revalidatePath('/[locale]/settings/channels', 'page');
 
+/** Why a refresh of a number with no record here did not happen (Backend 7131f530). */
+export type UnprofiledRefreshResult =
+  | WriteResult
+  /** 429: once a minute per number. */
+  | { readonly ok: false; readonly reason: 'too_soon' }
+  /** 409: GOTCHA's access to it has expired - only a reconnect brings it back. */
+  | { readonly ok: false; readonly reason: 'reconnect' }
+  /** 502: Meta did not answer; nothing was changed. */
+  | { readonly ok: false; readonly reason: 'meta_silent' };
+
+/**
+ * "Refresh from Meta" for a number GOTCHA has no record of (dev's one): the
+ * same route, by its channel account id - Meta's number, verified name and
+ * quality read again now. Read-only on Meta.
+ */
+export async function refreshUnprofiled(
+  channelAccountId: string,
+): Promise<UnprofiledRefreshResult> {
+  try {
+    await serverApi().post({
+      endpoint: channelEndpoints.whatsappRefresh(channelAccountId),
+      payload: z.unknown(),
+      raw: true,
+    });
+    done();
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    const status = isApiError(cause) ? cause.status : undefined;
+    logger.warn('whatsapp.unprofiled_refresh_failed', { status });
+    if (status === 429) return { ok: false, reason: 'too_soon' };
+    if (status === 409) return { ok: false, reason: 'reconnect' };
+    if (status === 502) return { ok: false, reason: 'meta_silent' };
+    return { ok: false, reason: reasonOf(cause) };
+  }
+}
+
 /**
  * 13b's "Refresh from Meta": re-read one number's health from Meta now
  * (POST …/numbers/:id/refresh). Reads Meta; changes nothing there.

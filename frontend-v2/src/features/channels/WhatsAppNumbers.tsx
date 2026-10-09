@@ -1,4 +1,4 @@
-import { getLocale, getTranslations } from 'next-intl/server';
+import { getLocale, getTimeZone, getTranslations } from 'next-intl/server';
 
 import { Link } from '@/i18n/navigation';
 
@@ -72,6 +72,7 @@ export async function WhatsAppNumbers({
 }) {
   const t = await getTranslations('channels.whatsapp');
   const locale = await getLocale();
+  const timeZone = await getTimeZone();
 
   if (numbers === null) {
     return (
@@ -165,7 +166,7 @@ export async function WhatsAppNumbers({
         ))}
         {numbers.unprofiled.map((u) => (
           <li key={u.channelAccountId}>
-            <UnprofiledCard number={u} t={t} />
+            <UnprofiledCard number={u} t={t} locale={locale} timeZone={timeZone} />
           </li>
         ))}
         <li>
@@ -366,13 +367,30 @@ function NumberIdentity({
   );
 }
 
-function UnprofiledCard({ number, t }: { readonly number: UnprofiledNumber; readonly t: T }) {
+function UnprofiledCard({
+  number,
+  t,
+  locale,
+  timeZone,
+}: {
+  readonly number: UnprofiledNumber;
+  readonly t: T;
+  readonly locale: string;
+  readonly timeZone: string | undefined;
+}) {
   /*
     02's number card, in its shape: the number over its state; then what is
-    configured on it. A number set up before per-number health existed has
-    no health data - said as a grey chip, not a paragraph - and its raw
-    `connectionStatus` is never printed.
+    configured on it. Its raw `connectionStatus` is never printed.
+
+    ★ What Meta last told us is shown (Omer, 2026-10-09): its quality, its
+      verified name and when it was last read. Only with none of the three is
+      it "No health data" - the chip that said so on every card.
   */
+  const known =
+    number.qualityRating !== null ||
+    number.verifiedName !== null ||
+    number.lastHealthCheck !== null;
+  const checked = number.lastHealthCheck ? new Date(number.lastHealthCheck) : null;
   return (
     <article className={styles.number} data-testid="whatsapp-unprofiled">
       <div className={styles.numberHead}>
@@ -380,11 +398,40 @@ function UnprofiledCard({ number, t }: { readonly number: UnprofiledNumber; read
           <NumberIdentity phone={number.phoneNumber} name={number.name} t={t} />
         </span>
         <span className={styles.numberChips}>
-          <span className={styles.chipQuiet} title={t('unprofiled.body')}>
-            {t('unprofiled.noHealth')}
-          </span>
+          {number.qualityRating ? (
+            <span
+              className={styles.chipQuiet}
+              data-quality={number.qualityRating}
+              title={t('unprofiled.qualityWhy')}
+              data-testid="whatsapp-quality"
+            >
+              {t(`unprofiled.quality.${number.qualityRating}`)}
+            </span>
+          ) : known ? null : (
+            <span className={styles.chipQuiet} title={t('unprofiled.body')}>
+              {t('unprofiled.noHealth')}
+            </span>
+          )}
         </span>
       </div>
+      {number.verifiedName ? (
+        <p className={styles.lastChecked} data-testid="whatsapp-verified-name">
+          {t('unprofiled.verifiedName')} <UserText>{number.verifiedName}</UserText>
+        </p>
+      ) : null}
+      {checked && Number.isFinite(checked.getTime()) ? (
+        <p className={styles.lastChecked} data-testid="whatsapp-last-checked">
+          {t('lastChecked', {
+            // 24-hour, in the workspace's zone, as the rest of the product writes a time.
+            date: new Intl.DateTimeFormat(locale, {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+              hourCycle: 'h23',
+              timeZone,
+            }).format(checked),
+          })}
+        </p>
+      ) : null}
       <NumberRows t={t} />
     </article>
   );

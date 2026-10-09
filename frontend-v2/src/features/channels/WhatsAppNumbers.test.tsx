@@ -38,6 +38,7 @@ vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'channels.whatsapp') =>
     createTranslator({ locale: 'en', messages: { channels: messages }, namespace }),
   getLocale: async () => 'en',
+  getTimeZone: async () => 'Asia/Jerusalem',
 }));
 
 const number = (health: Record<string, unknown> = {}) => ({
@@ -484,5 +485,49 @@ describe('★ a number Meta has not given us yet (Omer, 2026-10-09)', () => {
     expect(card).toHaveTextContent('Support');
     expect(within(card).getByTestId('number-not-read')).toBeInTheDocument();
     expect(card).not.toHaveTextContent('rec_9f2c');
+  });
+});
+
+describe('★ what Meta last told us, on the card dev has (Omer, 2026-10-09; Backend 7131f530)', () => {
+  const read = (over: Record<string, unknown> = {}) => ({
+    channelAccountId: 'ca1',
+    phoneNumberId: '1010938148762991',
+    name: 'Demo WhatsApp',
+    phoneNumber: '+972 55-777-3421',
+    verifiedName: 'GOTCHA Demo',
+    qualityRating: 'GREEN',
+    lastHealthCheck: '2026-10-09T13:40:00.000Z',
+    connectionStatus: 'CONNECTED',
+    ...over,
+  });
+
+  it('★ quality in words, the verified name, and when it was read - not "No health data"', async () => {
+    await renderNumbers({ data: [], unprofiled: [read()] });
+    const card = screen.getByTestId('whatsapp-unprofiled');
+    expect(screen.getByTestId('whatsapp-quality')).toHaveTextContent(/^Quality: green$/);
+    expect(screen.getByTestId('whatsapp-quality')).toHaveAttribute('data-quality', 'GREEN');
+    expect(screen.getByTestId('whatsapp-verified-name')).toHaveTextContent(
+      'Verified name on Meta: GOTCHA Demo',
+    );
+    // 13:40Z is 16:40 in Jerusalem in October - the workspace's clock, 24-hour
+    // (an afternoon, so a 12-hour clock would read 4:40 and fail here).
+    expect(screen.getByTestId('whatsapp-last-checked')).toHaveTextContent('16:40');
+    expect(card).not.toHaveTextContent('No health data');
+  });
+
+  it('a rating Meta adds later, or none, is no chip; with nothing read at all it is "No health data"', async () => {
+    await renderNumbers({ data: [], unprofiled: [read({ qualityRating: 'UNKNOWN' })] });
+    expect(screen.queryByTestId('whatsapp-quality')).toBeNull();
+    expect(screen.getByTestId('whatsapp-unprofiled')).not.toHaveTextContent('No health data');
+  });
+
+  it('nothing read yet: the grey chip, as before, and no empty lines', async () => {
+    await renderNumbers({
+      data: [],
+      unprofiled: [read({ verifiedName: null, qualityRating: null, lastHealthCheck: null })],
+    });
+    expect(screen.getByTestId('whatsapp-unprofiled')).toHaveTextContent('No health data');
+    expect(screen.queryByTestId('whatsapp-verified-name')).toBeNull();
+    expect(screen.queryByTestId('whatsapp-last-checked')).toBeNull();
   });
 });

@@ -347,6 +347,22 @@
     color: var(--text-body);
   }
 
+  /* Meta's quality rating, in its own colour - and always in words too. */
+  .chipQuiet[data-quality='GREEN'] {
+    background-color: var(--intent-opportunity-surface);
+    color: var(--intent-opportunity-text);
+  }
+
+  .chipQuiet[data-quality='YELLOW'] {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .chipQuiet[data-quality='RED'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
   /* Who answers is the automations' to decide: said once, quietly. */
   .whoAnswersNote {
     margin: var(--space-8) 0 0;

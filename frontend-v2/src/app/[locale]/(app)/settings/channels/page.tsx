@@ -234,6 +234,7 @@ export default async function Page({
           }
           tab={panelTab}
           numbers={(whatsapp[0]?.data ?? []).map((n) => ({ id: n.id, phoneNumber: n.phoneNumber }))}
+          unprofiled={(whatsapp[0]?.unprofiled ?? []).map((u) => u.channelAccountId)}
         >
           {panelTab === 'templates' ? (
             <TemplatesTab templates={(await loadTemplates()).templates} />

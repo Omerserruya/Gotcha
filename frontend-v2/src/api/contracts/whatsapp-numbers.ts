@@ -164,6 +164,10 @@ const displayPhone = z
   .default(null)
   .transform((v) => v?.trim() || null);
 
+/** Meta's quality rating for a number, as the unprofiled row stores it. */
+export const QUALITY_RATINGS = ['GREEN', 'YELLOW', 'RED'] as const;
+export type QualityRating = (typeof QUALITY_RATINGS)[number];
+
 export const numberSchema = z.object({
   id: z.string(),
   phoneNumber: displayPhone,
@@ -195,6 +199,14 @@ export const unprofiledSchema = z.object({
   /** Backend adds it (2026-10-09); dev's account has none stored. */
   phoneNumber: displayPhone,
   name: z.string().nullable().default(null),
+  /*
+   * What Meta last told us about it (Backend 7131f530): each null until the
+   * 6-hourly check or "Refresh from Meta" has read it. A rating Meta may add
+   * later reads as none rather than failing the card.
+   */
+  verifiedName: displayPhone,
+  qualityRating: z.enum(QUALITY_RATINGS).nullable().catch(null).default(null),
+  lastHealthCheck: z.string().nullable().catch(null).default(null),
   connectionStatus: z.string(),
   /**
    * The route's own sentence, in English only - there is no `noteHe`.

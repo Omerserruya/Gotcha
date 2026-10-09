@@ -103,7 +103,14 @@
     },
     "unprofiled": {
       "body": "This number is connected and working. It was set up before GOTCHA could check individual numbers, so there is nothing to report about its health and no repairs to offer. Reconnecting it would enable both.",
-      "noHealth": "No health data"
+      "noHealth": "No health data",
+      "quality": {
+        "GREEN": "Quality: green",
+        "YELLOW": "Quality: yellow",
+        "RED": "Quality: red"
+      },
+      "qualityWhy": "Meta's rating of how customers have been receiving this number's messages lately.",
+      "verifiedName": "Verified name on Meta:"
     },
     "lastChecked": "Last checked {date}.",
     "neverChecked": "This number's health has not been checked yet.",
@@ -211,7 +218,10 @@
         "done": "Updated just now",
         "not_found": "That number isn't connected here any more.",
         "forbidden": "You don't have permission to refresh this number.",
-        "failed": "Couldn't reach Meta just now. Try again in a moment."
+        "failed": "Couldn't reach Meta just now. Try again in a moment.",
+        "too_soon": "It was refreshed a moment ago. Try again in a minute.",
+        "reconnect": "GOTCHA's access to this number has expired. Reconnect it to refresh.",
+        "meta_silent": "Meta didn't answer for this number. Nothing was changed."
       },
       "noRecord": "This number isn't fully set up in GOTCHA yet, so there's nothing to refresh or disconnect from here.",
       "disconnectMany": "There's more than one number here: disconnecting one at a time from its card isn't available yet.",
@@ -224,7 +234,8 @@
         "forbidden": "You don't have permission to disconnect this number.",
         "failed": "It wasn't disconnected. Try again in a moment."
       },
-      "disconnectCancel": "Cancel"
+      "disconnectCancel": "Cancel",
+      "noRecordDisconnect": "This number isn't fully set up in GOTCHA yet, so it can't be disconnected from here."
     },
     "rows": {
       "hours": "Hours",

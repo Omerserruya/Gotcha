@@ -22,6 +22,7 @@ export async function WhatsAppPanel({
   line,
   tab = 'numbers',
   numbers = [],
+  unprofiled = [],
   children,
 }: {
   /** The account in one line: how many numbers. */
@@ -30,6 +31,8 @@ export async function WhatsAppPanel({
   readonly tab?: WhatsAppTab;
   /** Numbers GOTCHA keeps a record of - what the foot's Refresh and Disconnect act on. */
   readonly numbers?: readonly { readonly id: string; readonly phoneNumber: string | null }[];
+  /** Channel accounts with no number record - refreshed from Meta by their id. */
+  readonly unprofiled?: readonly string[];
   readonly children: ReactNode;
 }) {
   const t = await getTranslations('channels.whatsapp');
@@ -81,7 +84,7 @@ export async function WhatsAppPanel({
         >
           {children}
         </div>
-        <PanelFoot numbers={numbers} />
+        <PanelFoot numbers={numbers} unprofiled={unprofiled} />
       </aside>
     </div>
   );
