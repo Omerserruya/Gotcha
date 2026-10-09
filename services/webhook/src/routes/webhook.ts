@@ -101,11 +101,17 @@ router.get("/", (req: Request, res: Response) => {
     // The Meta verification handshake failed. Either the configured token
     // drifted from the one in the Meta dashboard - in which case NO webhook
     // will ever be delivered - or someone is probing the endpoint.
-    reportOperationalFailure({
-      errorCode: ERROR_CODES.webhook_verification_failed,
-      domain: "webhook", service: "webhook", provider: "meta",
-      context: { mode: String(mode ?? "none"), configured: Boolean(verifyToken) },
-    });
+    // The report can never change the answer: a 5xx here makes Meta retry
+    // (2026-10-09), and the answer below is always 403.
+    try {
+      reportOperationalFailure({
+        errorCode: ERROR_CODES.webhook_verification_failed,
+        domain: "webhook", service: "webhook", provider: "meta",
+        context: { mode: String(mode ?? "none"), configured: Boolean(verifyToken) },
+      });
+    } catch (err: any) {
+      console.warn("[webhook] verification failure could not be reported:", err?.message);
+    }
   }
   if (mode === "subscribe" && token === verifyToken) {
     console.log("Webhook verified");

@@ -29,11 +29,16 @@ vi.mock("@chatcenter/shared", () => {
     // Pass-through: webhook.ts mounts this as router-level middleware at module
     // load, so the mock must define it or the whole suite fails to import.
     crossTenantMiddleware: (_req: any, _res: any, next: any) => next(),
+    // The verifier reports a failed handshake before it answers. Without these
+    // two the double threw on ERROR_CODES.webhook_verification_failed and the
+    // route answered 500, which read as a broken verifier (2026-10-09).
+    reportOperationalFailure: vi.fn(),
+    ERROR_CODES: new Proxy({}, { get: (_t, k) => String(k) }),
   };
 });
 
 import webhookRoutes from "../routes/webhook";
-import { prisma, incomingMessageQueue, detectInboundAdapter, verifyWebhookSignature } from "@chatcenter/shared";
+import { prisma, incomingMessageQueue, detectInboundAdapter, verifyWebhookSignature, reportOperationalFailure } from "@chatcenter/shared";
 
 function createTestApp() {
   const app = express();
@@ -74,6 +79,25 @@ describe("Webhook Service", () => {
           "hub.challenge": "challenge-123",
         });
 
+      expect(res.status).toBe(403);
+      expect(res.text).not.toContain("challenge-123");
+      expect(reportOperationalFailure).toHaveBeenCalledWith(expect.objectContaining({ errorCode: "webhook_verification_failed" }));
+    });
+
+    it("answers the challenge for the right token, and reports nothing", async () => {
+      process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN = "test-token";
+      const res = await request(createTestApp()).get("/api/webhook")
+        .query({ "hub.mode": "subscribe", "hub.verify_token": "test-token", "hub.challenge": "challenge-123" });
+      expect(res.status).toBe(200);
+      expect(res.text).toBe("challenge-123");
+      expect(reportOperationalFailure).not.toHaveBeenCalled();
+    });
+
+    it("a reporter that throws still answers 403, never 500 (Meta retries a 5xx)", async () => {
+      process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN = "test-token";
+      (reportOperationalFailure as any).mockImplementationOnce(() => { throw new Error("sentry down"); });
+      const res = await request(createTestApp()).get("/api/webhook")
+        .query({ "hub.mode": "subscribe", "hub.verify_token": "wrong-token", "hub.challenge": "c" });
       expect(res.status).toBe(403);
     });
   });
