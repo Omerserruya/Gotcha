@@ -8,6 +8,29 @@ import {
   encryptCredentials, metaGraphBaseUrl } from "@chatcenter/shared";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
+
+/**
+ * The number as Meta shows it: display_phone_number, verified_name and
+ * quality_rating, read with the account's own token. Null when the read fails
+ * (logged), so the health check never fails over it.
+ */
+export async function whatsappNumberDetails(phoneNumberId: string, accessToken: string): Promise<Record<string, string> | null> {
+  try {
+    const r = await axios.get(`${FB_API_URL}/${encodeURIComponent(phoneNumberId)}`, {
+      params: { fields: "display_phone_number,verified_name,quality_rating" },
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const d = r.data ?? {};
+    const out: Record<string, string> = {};
+    if (typeof d.display_phone_number === "string" && d.display_phone_number) out.displayPhoneNumber = d.display_phone_number;
+    if (typeof d.verified_name === "string" && d.verified_name) out.verifiedName = d.verified_name;
+    if (typeof d.quality_rating === "string" && d.quality_rating) out.qualityRating = d.quality_rating;
+    return Object.keys(out).length ? out : null;
+  } catch (err: any) {
+    console.warn(`[channel-health] could not read WhatsApp number ${phoneNumberId}:`, err?.response?.data?.error?.message ?? err?.message);
+    return null;
+  }
+}
 // Intentionally OUTSIDE central Meta versioning: graph.instagram.com
 // (Instagram Login) rejects version-prefixed paths. See meta-graph-version.ts.
 const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
@@ -144,6 +167,13 @@ export async function runHealthCheck(): Promise<void> {
         if (account.connectionStatus === "ERROR") recovered++;
         if (tokenData.expires_at && tokenData.expires_at > 0) {
           updateData.tokenExpiresAt = new Date(tokenData.expires_at * 1000);
+        }
+        // A WhatsApp number's own details, so the channels screen can show the
+        // number (it was fetched at connect and dropped, 2026-10-09). One read,
+        // never a write to Meta; a failure here changes nothing else.
+        if (account.channel === "WHATSAPP") {
+          const meta = await whatsappNumberDetails(account.externalId, accessToken);
+          if (meta) updateData.platformMeta = { ...(account.platformMeta && typeof account.platformMeta === "object" ? (account.platformMeta as Record<string, unknown>) : {}), ...meta };
         }
         await prisma.channelAccount.update({
           where: { id: account.id },
