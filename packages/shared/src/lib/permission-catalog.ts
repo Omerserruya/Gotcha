@@ -423,13 +423,10 @@ export const BUILTIN_ROLES: Record<BuiltinRoleKey, BuiltinRoleDef> = {
     // Kept narrow: conversations + customer/CRM context. Approvals and
     // MANAGEMENT reporting stay department-manager-and-up.
     //
-    // The workspace overview is the exception, and it is deliberate. Home is
-    // the first screen an agent opens and it is built on that data; without it
-    // they get a greeting, a command box, and four empty regions. This is a
-    // reversal of the earlier "analytics is manager-and-up" line, and it is
-    // narrow on purpose - it grants the queue and who is on, not the reports.
+    // 2026-10-09 owner decision: no analytics:workspace:read here. It opens the
+    // whole-team overview, team, insights and dormant-customer lists, which is
+    // management data; a workspace grants it per user or via a custom role.
     permissions: [
-      "analytics:workspace:read",
       // The workspace facts an agent quotes back to a customer. Read only:
       // changing what the AI may say is a management act.
       "settings:workspace:read",

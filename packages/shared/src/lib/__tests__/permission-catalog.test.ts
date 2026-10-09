@@ -123,6 +123,18 @@ describe("permission-catalog: built-in roles", () => {
     expect(mgr.size).toBeGreaterThan(agent.size);
   });
 
+  // 2026-10-09 owner decision: the workspace overview (team, insights, dormant
+  // customers) is management data, so the default Agent role does not hold it.
+  it("agent does NOT hold analytics:workspace:read; owner, admin and manager do", () => {
+    const has = (k: keyof typeof BUILTIN_ROLES) =>
+      expandPermissionPatterns(BUILTIN_ROLES[k].permissions).has("analytics:workspace:read");
+    expect(BUILTIN_ROLES.agent.permissions).not.toContain("analytics:workspace:read");
+    expect(has("agent")).toBe(false);
+    expect(has("owner")).toBe(true);
+    expect(has("admin")).toBe(true);
+    expect(has("department_manager")).toBe(true);
+  });
+
   it("scope ordering: agent < manager < admin/owner", () => {
     expect(BUILTIN_ROLES.agent.defaultScope).toBe("own");
     expect(BUILTIN_ROLES.department_manager.defaultScope).toBe("department");
