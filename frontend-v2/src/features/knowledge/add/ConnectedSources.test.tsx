@@ -12,6 +12,7 @@ const s = vi.hoisted(() => ({
   readSpaces: vi.fn(),
   learnDrive: vi.fn(),
   learnSpaces: vi.fn(),
+  disconnectSource: vi.fn(),
 }));
 vi.mock('./sources', async (original) => ({ ...(await original<object>()), ...s }));
 
@@ -95,5 +96,39 @@ describe('★★ 08b after connecting - a list in the sheet’s shape, nothing l
     s.readIntegrations.mockResolvedValue(null);
     show();
     expect(await screen.findByTestId('sources-unread')).toBeInTheDocument();
+  });
+});
+
+describe('★★ a connected source can be disconnected - confirmed, and its learning kept', () => {
+  it('asks first, says what stops and what stays, then the card goes', async () => {
+    s.readIntegrations.mockResolvedValue([drive]);
+    s.disconnectSource.mockResolvedValue({ ok: true });
+    const onConnected = vi.fn();
+    render(
+      <NextIntlClientProvider locale="en" messages={{ knowledge }}>
+        <ConnectedSources kbId="kb1" onConnected={onConnected} />
+      </NextIntlClientProvider>,
+    );
+    await userEvent.click(await screen.findByTestId('source-disconnect-int1'));
+    expect(s.disconnectSource).not.toHaveBeenCalled();
+    expect(screen.getByTestId('source-disconnect-what')).toHaveTextContent(
+      'Disconnect Maya’s Drive? GOTCHA stops syncing from it. What it already learned stays in your knowledge.',
+    );
+    await userEvent.click(screen.getByTestId('source-disconnect-yes'));
+    expect(s.disconnectSource).toHaveBeenCalledExactlyOnceWith('int1');
+    expect(screen.queryByTestId('source-int1')).toBeNull();
+    expect(onConnected).toHaveBeenLastCalledWith(new Set());
+  });
+
+  it('refused: in words, and the source stays', async () => {
+    s.readIntegrations.mockResolvedValue([drive]);
+    s.disconnectSource.mockResolvedValue({ ok: false, reason: 'forbidden' });
+    show();
+    await userEvent.click(await screen.findByTestId('source-disconnect-int1'));
+    await userEvent.click(screen.getByTestId('source-disconnect-yes'));
+    expect(await screen.findByTestId('source-disconnect-problem')).toHaveTextContent(
+      'Only an admin can disconnect a knowledge source.',
+    );
+    expect(screen.getByTestId('source-int1')).toBeInTheDocument();
   });
 });

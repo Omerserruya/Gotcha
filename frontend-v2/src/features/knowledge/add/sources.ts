@@ -112,6 +112,31 @@ export async function learnDrive(
   }
 }
 
+export type DisconnectSourceResult =
+  { readonly ok: true } | { readonly ok: false; readonly reason: 'forbidden' | 'failed' };
+
+/**
+ * Disconnects a Drive or Confluence: `DELETE /api/knowledge/integrations/:id`
+ * WITHOUT `removeData` - its sync stops, and what it already taught stays.
+ * The router is ADMIN-only (403).
+ */
+export async function disconnectSource(intId: string): Promise<DisconnectSourceResult> {
+  try {
+    await browserApi.delete({
+      endpoint: knowledgeEndpoints.removeIntegration(intId),
+      payload: z.unknown(),
+      raw: true,
+    });
+    return { ok: true };
+  } catch (cause) {
+    logger.warn('knowledge.disconnect_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    if (isApiError(cause) && cause.status === 403) return { ok: false, reason: 'forbidden' };
+    return { ok: false, reason: 'failed' };
+  }
+}
+
 /** Learns the chosen Confluence spaces' pages. */
 export async function learnSpaces(intId: string, keys: readonly string[]): Promise<LearnResult> {
   if (keys.length === 0) return { ok: false, reason: 'failed' };

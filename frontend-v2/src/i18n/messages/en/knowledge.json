@@ -217,6 +217,17 @@
         "busy": "A sync is already running for this source - try again when it finishes.",
         "mixed": "Learn folders and files in separate rounds.",
         "failed": "That wasn't learned - try again."
+      },
+      "disconnect": {
+        "button": "Disconnect",
+        "confirm": "Disconnect {name}? GOTCHA stops syncing from it. What it already learned stays in your knowledge.",
+        "yes": "Disconnect",
+        "working": "Disconnecting…",
+        "keep": "Keep it",
+        "problem": {
+          "forbidden": "Only an admin can disconnect a knowledge source.",
+          "failed": "{name} wasn't disconnected. Try again."
+        }
       }
     },
     "connectedAlready": "Connected",

@@ -496,6 +496,52 @@
     color: var(--text-primary);
   }
 
+  /* ── Disconnect: a quiet button, then the consequence and a confirm ── */
+  .disconnect {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-10);
+    line-height: normal;
+  }
+
+  .disconnectConfirm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .disconnectRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+
+  .disconnectButton,
+  .disconnectKeep {
+    padding: var(--space-8) var(--space-14);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-item);
+    background-color: transparent;
+    font: inherit;
+    font-size: var(--font-size-label);
+    cursor: pointer;
+  }
+
+  .disconnectButton {
+    color: var(--alert-text);
+  }
+
+  .disconnectKeep {
+    color: var(--text-primary);
+  }
+
+  .disconnectButton:disabled,
+  .disconnectKeep:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
   .connectLead {
     margin: 0;
     line-height: normal;

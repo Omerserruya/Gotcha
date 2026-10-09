@@ -9,7 +9,7 @@ vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get, post }) }))
 vi.mock('server-only', () => ({}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
-import { connectIntegration, startOAuth, startWooOAuth } from './connect-actions';
+import { connectIntegration, disconnectSystem, startOAuth, startWooOAuth } from './connect-actions';
 import { storeAddressOf } from './oauth';
 
 const catalogue = [
@@ -244,5 +244,37 @@ describe('★★ 1aaaefe4 - 422 from a key form', () => {
       reason: 'validation',
       message: 'That key was rejected.',
     });
+  });
+});
+
+describe('★★ Disconnect at the wire', () => {
+  beforeEach(() => {
+    post.mockReset();
+  });
+
+  it('POSTs the connectors route - the one that keeps the action settings', async () => {
+    post.mockResolvedValue({ ok: true });
+    expect(await disconnectSystem('pipedrive')).toEqual({ ok: true });
+    const call = post.mock.calls[0]![0] as { endpoint: { path: string }; raw?: boolean };
+    expect(call.endpoint.path).toBe('/api/connectors/pipedrive/disconnect');
+    expect(call.raw).toBe(true);
+  });
+
+  it.each(['shopify', 'google_calendar', 'calendly'])(
+    '%s is never sent - its disconnect is not this route’s to say',
+    async (slug) => {
+      expect(await disconnectSystem(slug)).toEqual({ ok: false, reason: 'not_here' });
+      expect(post).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [403, 'authorization', 'forbidden'],
+    [402, 'tenant_inactive', 'inactive'],
+    [404, 'not_found', 'failed'],
+    [500, 'server', 'failed'],
+  ] as const)('%i → %s → said as %s', async (status, kind, reason) => {
+    post.mockRejectedValueOnce(new ApiError({ kind, status }));
+    expect(await disconnectSystem('pipedrive')).toEqual({ ok: false, reason });
   });
 });

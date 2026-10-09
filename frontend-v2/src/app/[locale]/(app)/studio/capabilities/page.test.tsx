@@ -5,6 +5,7 @@ import { capabilitySchema } from '@/api/contracts/capabilities';
 import { integrationSchema } from '@/api/contracts/integrations';
 import { AvailableSystem } from '@/features/capabilities/AvailableSystem';
 import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
+import { DisconnectSystem } from '@/features/capabilities/DisconnectSystem';
 import { OAuthLanding } from '@/features/capabilities/OAuthLanding';
 import { ReconnectSystem } from '@/features/capabilities/ReconnectSystem';
 import { SystemHead } from '@/features/capabilities/SystemHead';
@@ -140,6 +141,13 @@ describe('★★ a broken connection has a way back on its screen', () => {
     expect(find(await page({ system: 'hubspot' }), ReconnectSystem)).toBeNull();
   });
 
+  it.each(['CONNECTED', 'ERROR'])('%s: a Disconnect, for this system', async (status) => {
+    withHubspot({ id: 'c1', status });
+    expect(find<{ slug: string }>(await page({ system: 'hubspot' }), DisconnectSystem)?.slug).toBe(
+      'hubspot',
+    );
+  });
+
   it.each([
     ['DISCONNECTED', { id: 'c1', status: 'DISCONNECTED' }],
     ['no row', null],
@@ -148,5 +156,6 @@ describe('★★ a broken connection has a way back on its screen', () => {
     const tree = await page({ system: 'hubspot' });
     expect(find(tree, ReconnectSystem)).toBeNull();
     expect(find(tree, AvailableSystem)).not.toBeNull();
+    expect(find(tree, DisconnectSystem)).toBeNull();
   });
 });

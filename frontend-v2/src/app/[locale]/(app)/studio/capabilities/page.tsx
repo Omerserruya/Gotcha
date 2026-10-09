@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { isConnected, needsReconnect } from '@/api/contracts/integrations';
 import { AvailableSystem } from '@/features/capabilities/AvailableSystem';
 import { oauthFailure } from '@/features/capabilities/oauth';
+import { DisconnectSystem } from '@/features/capabilities/DisconnectSystem';
 import { OAuthLanding } from '@/features/capabilities/OAuthLanding';
 import { ReconnectSystem } from '@/features/capabilities/ReconnectSystem';
 import {
@@ -166,6 +167,10 @@ export default async function Page({
                 <CapabilityScreen capabilities={actions} usage={usage} integration={integration} />
               </>
             )}
+            {/* Last, and confirmed before anything is sent. */}
+            {integration !== null && isConnected(integration) ? (
+              <DisconnectSystem slug={integration.slug} name={integration.name} />
+            ) : null}
           </>
         }
       />

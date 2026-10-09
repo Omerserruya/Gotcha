@@ -761,6 +761,15 @@ export const integrationEndpoints = {
    */
   connect: (slug: string) => endpoint('/api/integrations/{slug}/connect', { slug }),
   /**
+   * Disconnect (connectors-admin.ts): the row goes DISCONNECTED and its
+   * credentials are emptied; `TenantTool` rows are left, so the action
+   * settings survive. Answers `{ ok: true }` (not enveloped). Chosen over
+   * `POST /api/integrations/:slug/disconnect`, which DELETES those tool rows -
+   * and `/connect`'s update branch never recreates them, so a form system
+   * reconnected after it would have no actions at all.
+   */
+  disconnect: (slug: string) => endpoint('/api/connectors/{slug}/disconnect', { slug }),
+  /**
    * OAuth at the provider, returning to THIS app (backend 381a5d1b): the
    * `redesign_studio` flow lands on `/v2/studio/capabilities?system=<slug>`
    * with `connected=1` or `error=<code>`. Answers `{ url }` (not enveloped).
@@ -1335,6 +1344,12 @@ export const knowledgeEndpoints = {
   /** `{ spaceKeys }` - learns those spaces' pages. */
   confluenceSync: (intId: string) =>
     endpoint('/api/knowledge/integrations/{intId}/confluence/sync', { intId }),
+  /**
+   * DELETE: disconnects a Drive or Confluence - the connection row goes, so
+   * its sync stops; what it already taught stays (`removeData=1`, never sent
+   * here, would delete Drive's documents too). Answers `{ data: { deleted } }`.
+   */
+  removeIntegration: (intId: string) => endpoint('/api/knowledge/integrations/{intId}', { intId }),
   oauthInit: (provider: 'google-drive' | 'confluence', kbId: string) =>
     endpoint('/api/knowledge/oauth/{provider}/init?kbId={kbId}&flow=redesign_studio', {
       provider,

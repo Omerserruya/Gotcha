@@ -5,6 +5,7 @@ import { Folder } from 'lucide-react';
 import { useEffect, useState, useTransition } from 'react';
 
 import {
+  disconnectSource,
   FOLDER,
   learnDrive,
   learnSpaces,
@@ -51,6 +52,14 @@ export function ConnectedSources({
     };
   }, [kbId, onConnected]);
 
+  // A disconnected source leaves the list, and the rows above stop saying "Connected".
+  const gone = (id: string) => {
+    if (integrations === null || integrations === 'loading') return;
+    const next = integrations.filter((i) => i.id !== id);
+    setIntegrations(next);
+    onConnected?.(new Set(next.filter((i) => i.isActive).map((i) => i.provider)));
+  };
+
   if (integrations === 'loading')
     return <SkeletonRows label={t('loading')} rows={2} height={48} testid="sources-skeleton" />;
   if (integrations === null) {
@@ -68,16 +77,94 @@ export function ConnectedSources({
     <div className={styles.sources} data-testid="connected-sources">
       {shown.map((i) =>
         i.provider === 'google_drive' ? (
-          <DriveSourceCard key={i.id} integration={i} />
+          <DriveSourceCard key={i.id} integration={i} onGone={gone} />
         ) : (
-          <ConfluenceCard key={i.id} integration={i} />
+          <ConfluenceCard key={i.id} integration={i} onGone={gone} />
         ),
       )}
     </div>
   );
 }
 
-function DriveSourceCard({ integration }: { readonly integration: KnowledgeIntegration }) {
+/**
+ * Disconnect, confirmed first. What it does is the route's: the connection
+ * row is deleted, so the sync stops; the documents it brought are kept.
+ */
+function SourceDisconnect({
+  integration,
+  name,
+  onGone,
+}: {
+  readonly integration: KnowledgeIntegration;
+  readonly name: string;
+  readonly onGone: (id: string) => void;
+}) {
+  const t = useTranslations('knowledge.addSheet.sources.disconnect');
+  const [confirming, setConfirming] = useState(false);
+  const [problem, setProblem] = useState<'forbidden' | 'failed' | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        className={styles.sourceBtn}
+        data-testid={`source-disconnect-${integration.id}`}
+        onClick={() => {
+          setProblem(null);
+          setConfirming(true);
+        }}
+      >
+        {t('button')}
+      </button>
+    );
+  }
+  return (
+    <div role="group" aria-label={t('button')} data-testid="source-disconnect-confirm">
+      <p className={styles.sourceMeta} data-testid="source-disconnect-what">
+        {t('confirm', { name })}
+      </p>
+      {problem ? (
+        <p className={styles.problem} role="alert" data-testid="source-disconnect-problem">
+          {t(`problem.${problem}`, { name })}
+        </p>
+      ) : null}
+      <div className={styles.sourceActions}>
+        <button
+          type="button"
+          className={styles.sourceBtnPrimary}
+          disabled={isPending}
+          data-testid="source-disconnect-yes"
+          onClick={() =>
+            startTransition(async () => {
+              const result = await disconnectSource(integration.id);
+              if (result.ok) onGone(integration.id);
+              else setProblem(result.reason);
+            })
+          }
+        >
+          {isPending ? t('working') : t('yes')}
+        </button>
+        <button
+          type="button"
+          className={styles.sourceBtn}
+          disabled={isPending}
+          onClick={() => setConfirming(false)}
+        >
+          {t('keep')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DriveSourceCard({
+  integration,
+  onGone,
+}: {
+  readonly integration: KnowledgeIntegration;
+  readonly onGone: (id: string) => void;
+}) {
   const t = useTranslations('knowledge.addSheet.sources');
   const [sources, setSources] = useState<readonly DriveSource[] | null>(null);
   const [browsing, setBrowsing] = useState(false);
@@ -256,11 +343,22 @@ function DriveSourceCard({ integration }: { readonly integration: KnowledgeInteg
           </div>
         </>
       )}
+      <SourceDisconnect
+        integration={integration}
+        name={integration.displayName ?? t('driveName')}
+        onGone={onGone}
+      />
     </section>
   );
 }
 
-function ConfluenceCard({ integration }: { readonly integration: KnowledgeIntegration }) {
+function ConfluenceCard({
+  integration,
+  onGone,
+}: {
+  readonly integration: KnowledgeIntegration;
+  readonly onGone: (id: string) => void;
+}) {
   const t = useTranslations('knowledge.addSheet.sources');
   const [spaces, setSpaces] = useState<readonly ConfluenceSpace[] | null | 'loading'>('loading');
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
@@ -337,6 +435,11 @@ function ConfluenceCard({ integration }: { readonly integration: KnowledgeIntegr
           {t('learnSpaces', { count: picked.size })}
         </button>
       </div>
+      <SourceDisconnect
+        integration={integration}
+        name={integration.displayName ?? 'Confluence'}
+        onGone={onGone}
+      />
     </section>
   );
 }

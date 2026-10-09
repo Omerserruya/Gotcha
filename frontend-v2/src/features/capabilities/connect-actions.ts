@@ -10,7 +10,7 @@ import { integrationEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 import { credentialsFor } from './connect-form';
-import { OAUTH_HERE, SALESFORCE_HOSTS, storeAddressOf } from './oauth';
+import { disconnectHere, OAUTH_HERE, SALESFORCE_HOSTS, storeAddressOf } from './oauth';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
 export type ConnectResult =
@@ -118,6 +118,44 @@ export async function startOAuth(slug: string, loginHost?: string): Promise<OAut
       if (cause.status === 500 && /not_configured/.test(cause.developerMessage ?? '')) {
         return { ok: false, reason: 'not_configured' };
       }
+    }
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export type DisconnectResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      /**
+       * `not_here` - Shopify or a calendar (see `disconnectHere`);
+       * `forbidden` (403) · `inactive` (402, the tenant gate) · `failed`.
+       */
+      readonly reason: 'not_here' | 'forbidden' | 'inactive' | 'failed';
+    };
+
+/**
+ * Disconnect a connected system: `POST /api/connectors/:slug/disconnect`. Its
+ * actions stop (the AI's tools are read only from CONNECTED rows) and its
+ * credentials are emptied; its action settings are kept.
+ */
+export async function disconnectSystem(slug: string): Promise<DisconnectResult> {
+  if (disconnectHere(slug) !== 'here') return { ok: false, reason: 'not_here' };
+  try {
+    await serverApi().post({
+      endpoint: integrationEndpoints.disconnect(slug),
+      payload: z.object({ ok: z.literal(true) }),
+      raw: true,
+    });
+    revalidatePath('/[locale]/(app)/studio/capabilities', 'page');
+    revalidatePath('/[locale]/(app)/settings/systems', 'page');
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('capabilities.disconnect_failed', { slug, cause });
+    if (isApiError(cause)) {
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+      if (cause.status === 402) return { ok: false, reason: 'inactive' };
     }
     return { ok: false, reason: 'failed' };
   }

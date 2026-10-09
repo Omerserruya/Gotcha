@@ -48,6 +48,20 @@ export function oauthFailure(code: string | undefined): OAuthFailure | 'other' |
   return (OAUTH_FAILURES as readonly string[]).includes(code) ? (code as OAuthFailure) : 'other';
 }
 
+/**
+ * Can this system be disconnected from here?
+ *
+ *   `shopify`  - by removing the app in Shopify; no route here uninstalls it
+ *                or touches its Shopify billing.
+ *   `calendar` - it books through a per-employee `CalendarAccount`, which
+ *                neither disconnect route touches.
+ */
+export function disconnectHere(slug: string): 'here' | 'shopify' | 'calendar' {
+  if (slug === 'shopify') return 'shopify';
+  if (slug === 'google_calendar' || slug === 'calendly') return 'calendar';
+  return 'here';
+}
+
 /** Salesforce's two login hosts - the only extra the start takes. */
 export const SALESFORCE_HOSTS = ['https://login.salesforce.com', 'https://test.salesforce.com'];
 
