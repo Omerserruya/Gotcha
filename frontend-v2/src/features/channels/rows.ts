@@ -102,6 +102,15 @@ export const DISCONNECTABLE_CHANNELS = [
   'EMAIL',
 ] as const satisfies readonly ChannelType[];
 
+/** Channels whose Connect, run again, brings a disconnected account back (OAuth). */
+export const RECONNECT_BY_CONNECTING = [
+  'INSTAGRAM',
+  'MESSENGER',
+  'GMAIL',
+  'OUTLOOK',
+  'SLACK',
+] as const satisfies readonly ChannelType[];
+
 /** A Disconnect on this row - never on one that is disconnected already. */
 export function canDisconnect(row: ConnectedRow): boolean {
   return (
@@ -116,7 +125,22 @@ export function buildChannelRows(
   voiceOffered: boolean,
   locale: string,
 ): ChannelRow[] {
-  const connected: ConnectedRow[] = channels.map((channel) => ({
+  /*
+   * ★ A channel someone disconnected is connectable again (2026-10-09).
+   * Disconnect keeps its account, DISCONNECTED and inactive; the OAuth
+   * callbacks find that account by its key and set it CONNECTED again. So it
+   * is offered as a Connect row - not left on the list as "needs attention"
+   * with nothing to press. Email is not here: its route answers 409 "already
+   * connected" for a disconnected address (Backend gap), so its row stays.
+   */
+  const live = channels.filter(
+    (c) =>
+      !(
+        c.connectionStatus === 'DISCONNECTED' &&
+        (RECONNECT_BY_CONNECTING as readonly ChannelType[]).includes(c.channel)
+      ),
+  );
+  const connected: ConnectedRow[] = live.map((channel) => ({
     kind: 'connected',
     id: channel.id,
     channel: channel.channel,
@@ -193,7 +217,7 @@ export function buildChannelRows(
    * `WEBCHAT` now too: the widget's row is always there, and its Install tab
    * is where the code is made.
    */
-  const already = new Set<ChannelType>(channels.map((c) => c.channel));
+  const already = new Set<ChannelType>(live.map((c) => c.channel));
   if (voice.length > 0) already.add('VOICE');
 
   const offerable: readonly ChannelType[] = voiceOffered

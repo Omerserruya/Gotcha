@@ -234,3 +234,44 @@ describe('buildChannelRows', () => {
     ).toBeNull();
   });
 });
+
+describe('★ a channel someone disconnected can be connected again (2026-10-09)', () => {
+  const connectable = (rows: ReturnType<typeof buildChannelRows>) =>
+    rows.flatMap((r) => (r.kind === 'connectable' ? [r.channel] : []));
+
+  it('★ a disconnected Instagram is a Connect row - not "needs attention" with nothing to press', () => {
+    const rows = buildChannelRows(
+      [channel({ id: 'ig1', channel: 'INSTAGRAM', connectionStatus: 'DISCONNECTED' })],
+      [],
+      false,
+      'en',
+    );
+    expect(connectedOnly(rows).map((r) => r.id)).not.toContain('ig1');
+    expect(connectable(rows)).toContain('INSTAGRAM');
+  });
+
+  it('one of two Messenger pages disconnected: the other stays, and no second Connect row', () => {
+    const rows = buildChannelRows(
+      [
+        channel({ id: 'p1', channel: 'MESSENGER', connectionStatus: 'DISCONNECTED' }),
+        channel({ id: 'p2', channel: 'MESSENGER', connectionStatus: 'CONNECTED' }),
+      ],
+      [],
+      false,
+      'en',
+    );
+    expect(connectedOnly(rows).map((r) => r.id)).toEqual(['p2']);
+    expect(connectable(rows)).not.toContain('MESSENGER');
+  });
+
+  it('a disconnected mailbox stays its row: its connect route refuses the same address (409)', () => {
+    const rows = buildChannelRows(
+      [channel({ id: 'e1', channel: 'EMAIL', connectionStatus: 'DISCONNECTED' })],
+      [],
+      false,
+      'en',
+    );
+    expect(connectedOnly(rows).map((r) => r.id)).toContain('e1');
+    expect(connectable(rows)).not.toContain('EMAIL');
+  });
+});
