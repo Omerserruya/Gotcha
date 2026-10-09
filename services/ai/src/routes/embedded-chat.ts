@@ -267,6 +267,14 @@ router.post("/whatsapp-handoff", messageLimiter, async (req: Request, res: Respo
   }
 });
 
+/**
+ * A visitor id the client sent, when it is as strong as one /init mints
+ * (128 bits: 32+ hex). The widget's own `v_<time><Math.random>` is not.
+ */
+function strongClientId(v: unknown): string | null {
+  return typeof v === "string" && /^(?:visitor_)?[0-9a-f]{32,128}$/i.test(v) ? v : null;
+}
+
 router.post("/init", initLimiter, async (req: Request, res: Response) => {
   try {
     // `sessionToken` resumes a visitor's conversation (the token /init gave
@@ -308,28 +316,37 @@ router.post("/init", initLimiter, async (req: Request, res: Response) => {
       ).catch(() => { /* verification flip is best-effort; chat still works */ });
     }
 
-    const finalVisitorId = visitorId || `visitor_${crypto.randomBytes(8).toString("hex")}`;
-    const finalSessionId = sessionId || `sess_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+    // Both ids are minted at 128 bits. The token IS the conversation's secret
+    // (it was `sess_<ms>_<8 hex>`, 32 random bits), and a visitor id the client
+    // chose is kept only when it is as strong as one we mint (2026-10-09).
+    const finalVisitorId = strongClientId(visitorId) ?? `visitor_${crypto.randomBytes(16).toString("hex")}`;
+    const clientToken = typeof sessionId === "string" && sessionId ? sessionId : null;
 
     // Find conversation for THIS session first (tab-level isolation)
-    // sessionId is stored as customerExternalId so each tab gets its own conversation
-    // Resume only this widget's own conversation.
-    let conversation = await prisma.conversation.findFirst({
-      where: {
-        tenantId: channelAccount.tenantId,
-        channelAccountId: channelAccount.id,
-        channel: "WEBCHAT",
-        customerExternalId: finalSessionId,
-        status: { in: ["OPEN", "WAITING"] },
-      },
-      orderBy: { updatedAt: "desc" },
-    });
+    // The token is stored as customerExternalId so each tab gets its own conversation.
+    // Resume only this widget's own conversation. A token a live visitor already
+    // holds resumes whatever its shape.
+    let conversation = clientToken
+      ? await prisma.conversation.findFirst({
+          where: {
+            tenantId: channelAccount.tenantId,
+            channelAccountId: channelAccount.id,
+            channel: "WEBCHAT",
+            customerExternalId: clientToken,
+            status: { in: ["OPEN", "WAITING"] },
+          },
+          orderBy: { updatedAt: "desc" },
+        })
+      : null;
 
-    // If no session-specific conversation, find by visitor (returning user in new tab)
+    // If no session-specific conversation, find by visitor (returning user in
+    // new tab), on this widget only: it was workspace-wide, so another widget's
+    // token sent as a visitor id resumed that widget's conversation.
     if (!conversation) {
       conversation = await prisma.conversation.findFirst({
         where: {
           tenantId: channelAccount.tenantId,
+          channelAccountId: channelAccount.id,
           customerExternalId: finalVisitorId,
           channel: "WEBCHAT",
           status: { in: ["OPEN", "WAITING"] },
@@ -358,7 +375,8 @@ router.post("/init", initLimiter, async (req: Request, res: Response) => {
           tenantId: channelAccount.tenantId,
           channelAccountId: channelAccount.id,
           channel: "WEBCHAT",
-          customerExternalId: finalSessionId,
+          // A new conversation's token is always ours, never the client's choice.
+          customerExternalId: `sess_${crypto.randomBytes(16).toString("hex")}`,
           customerName: displayName,
           status: "OPEN",
         },
