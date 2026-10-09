@@ -44,7 +44,12 @@
     "contact": "A contact",
     "call": "Call",
     "play": "Play the voice note",
-    "pause": "Pause"
+    "pause": "Pause",
+    "location": {
+      "title": "Shared location",
+      "open": "Open in map",
+      "unreadable": "A location was shared, but its place didn't come through."
+    }
   },
   "queue": {
     "cap": "Showing the {count} most recent.",

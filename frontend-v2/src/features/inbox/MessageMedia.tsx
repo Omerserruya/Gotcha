@@ -1,8 +1,9 @@
-import { FileText, TriangleAlert } from 'lucide-react';
+import { FileText, MapPin, TriangleAlert } from 'lucide-react';
 
 import type { InboxMessage } from '@/api/contracts/inbox';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
-import { mediaKind, safeMediaUrl } from './media';
+import { isLocationMessage, mediaKind, messageLocation, safeMediaUrl } from './media';
 import { VoicePlayer } from './VoicePlayer';
 import styles from './Inbox.module.css';
 
@@ -25,7 +26,10 @@ type T = (
     | 'pause'
     | 'media.image'
     | 'media.video'
-    | 'media.document',
+    | 'media.document'
+    | 'location.title'
+    | 'location.open'
+    | 'location.unreadable',
 ) => string;
 
 export function MessageMedia({ message, t }: { readonly message: InboxMessage; readonly t: T }) {
@@ -148,5 +152,53 @@ function VoiceNote({ id, t }: { readonly id: string; readonly t: T }) {
     <p className={styles.mediaNote} data-testid={`voice-${id}`}>
       {t('voiceNoTranscript')}
     </p>
+  );
+}
+
+/**
+ * A shared location (WhatsApp, 2026-10-09): the place's name and address when
+ * the provider sent them, and a way to the map - never `[Location: …]`.
+ */
+export function LocationCard({ message, t }: { readonly message: InboxMessage; readonly t: T }) {
+  if (!isLocationMessage(message)) return null;
+  const place = messageLocation(message);
+  if (!place) {
+    // A location with no usable point (`[Shared location]`): said, not printed raw.
+    return (
+      <p className={styles.mediaNote} data-testid={`location-${message.id}`}>
+        {t('location.unreadable')}
+      </p>
+    );
+  }
+  return (
+    <div className={styles.contact} data-testid={`location-${message.id}`}>
+      <span className={styles.contactName}>
+        <MapPin size={13} aria-hidden="true" />{' '}
+        {place.name ? <UserText>{place.name}</UserText> : t('location.title')}
+      </span>
+      {place.address ? (
+        <span className={styles.contactOrg}>
+          <UserText>{place.address}</UserText>
+        </span>
+      ) : null}
+      {place.name || place.address ? null : (
+        <span className={styles.contactOrg}>
+          <bdi dir="ltr">
+            {place.latitude}, {place.longitude}
+          </bdi>
+        </span>
+      )}
+      <span className={styles.contactPhone}>
+        <a
+          className={styles.contactLink}
+          href={place.mapUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid={`location-${message.id}-map`}
+        >
+          {t('location.open')}
+        </a>
+      </span>
+    </div>
   );
 }

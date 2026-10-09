@@ -13,8 +13,8 @@ import {
 } from '@/api/contracts/inbox';
 
 import styles from './Inbox.module.css';
-import { ContactCards, MessageMedia } from './MessageMedia';
-import { isPlaceholderCaption, mediaKind } from './media';
+import { ContactCards, LocationCard, MessageMedia } from './MessageMedia';
+import { isLocationMessage, isPlaceholderCaption, mediaKind } from './media';
 import { ReplyButton } from './ReplyButton';
 import { STREAM_SCROLLER } from './stream-scroller';
 import { plainDashes } from '@/lib/plain-dashes';
@@ -172,7 +172,9 @@ export async function MessageStream({
          * one means the agent can see what was sent.
          */
         const rendered =
-          mediaKind(message) !== null || (message.metadata?.contacts?.length ?? 0) > 0;
+          mediaKind(message) !== null ||
+          (message.metadata?.contacts?.length ?? 0) > 0 ||
+          isLocationMessage(message);
         return (
           <li
             key={message.id}
@@ -240,6 +242,7 @@ export async function MessageStream({
               */}
               <MessageMedia message={message} t={(key) => t(`stream.${key}`)} />
               <ContactCards message={message} t={(key) => t(`stream.${key}`)} />
+              <LocationCard message={message} t={(key) => t(`stream.${key}`)} />
 
               {/*
               ════════════════════════════════════════════════════════════════

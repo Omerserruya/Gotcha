@@ -85,12 +85,13 @@ describe('★★ an unconstrained type gets no label we would be guessing at', (
 
   it('★★ names a RECOGNISED type it cannot draw, not just an unknown one', async () => {
     /*
-     * The hole this test found. `location` is in KNOWN_MESSAGE_TYPES and
-     * has no rendering branch, so keying the fallback on "unrecognised"
-     * left it as a timestamp in an empty bubble. Recognised-and-unhandled
-     * is a third case and it looked like the handled one.
+     * The hole this test found. `location` was in KNOWN_MESSAGE_TYPES with
+     * no rendering branch, so keying the fallback on "unrecognised" left it
+     * as a timestamp in an empty bubble. Recognised-and-unhandled is a third
+     * case and it looked like the handled one. (Location is drawn since
+     * 2026-10-09; `interactive` is still recognised and undrawn.)
      */
-    await show([message({ messageType: 'location', body: '' })]);
+    await show([message({ messageType: 'interactive', body: '' })]);
     expect(screen.getByTestId('unknown-m1')).toHaveTextContent(/can.t show yet/i);
   });
 
@@ -467,5 +468,78 @@ describe('★ media corrections (measured in a preview)', () => {
     expect(screen.getByTestId('voice-play-m1')).toHaveAccessibleName('Play the voice note');
     expect(voice.querySelector('audio')).not.toHaveAttribute('controls');
     expect(voice).toHaveTextContent('0:00');
+  });
+});
+
+describe('★★ a shared location is a place and a way to the map - never "[Location: …]" (2026-10-09)', () => {
+  it('★ from metadata (Backend 11094abb): the name, the address, the provider’s link as given', async () => {
+    await show([
+      message({
+        messageType: 'location',
+        body: '[Shared location: Sarona Market, Kalman Magen 3 (32.0717, 34.7867)]',
+        metadata: {
+          location: {
+            latitude: 32.0717,
+            longitude: 34.7867,
+            name: 'Sarona Market',
+            address: 'Kalman Magen 3, Tel Aviv',
+            url: 'https://maps.app.goo.gl/abc',
+          },
+        },
+      }),
+    ]);
+    const card = screen.getByTestId('location-m1');
+    expect(card).toHaveTextContent('Sarona Market');
+    expect(card).toHaveTextContent('Kalman Magen 3, Tel Aviv');
+    const map = screen.getByTestId('location-m1-map');
+    expect(map).toHaveAttribute('href', 'https://maps.app.goo.gl/abc');
+    expect(map).toHaveAttribute('rel', expect.stringContaining('noopener'));
+    expect(map).toHaveTextContent('Open in map');
+    expect(screen.getByTestId('message-m1')).not.toHaveTextContent('[Shared location');
+    expect(screen.queryByTestId('unknown-m1')).toBeNull();
+  });
+
+  it('★ the live row from dev: the old body, read as a point - the bracket text never shown', async () => {
+    await show([message({ messageType: 'location', body: '[Location: 32.0853, 34.7818]' })]);
+    const card = screen.getByTestId('location-m1');
+    expect(card).toHaveTextContent('Shared location');
+    expect(card).toHaveTextContent('32.0853, 34.7818');
+    expect(screen.getByTestId('location-m1-map')).toHaveAttribute(
+      'href',
+      'https://www.google.com/maps?q=32.0853,34.7818',
+    );
+    expect(screen.getByTestId('message-m1')).not.toHaveTextContent('[Location');
+  });
+
+  it('a link that is not https is not followed - the map is built from the point', async () => {
+    await show([
+      message({
+        messageType: 'location',
+        body: '',
+        metadata: { location: { latitude: 1, longitude: 2, url: 'javascript:alert(1)' } },
+      }),
+    ]);
+    expect(screen.getByTestId('location-m1-map')).toHaveAttribute(
+      'href',
+      'https://www.google.com/maps?q=1,2',
+    );
+  });
+
+  it('★ stored as TEXT when its point was bad (the adapter’s `[Shared location]`): still not raw', async () => {
+    await show([message({ messageType: 'text', body: '[Shared location]' })]);
+    expect(screen.getByTestId('location-m1')).toHaveTextContent(/its place didn.t come through/);
+    expect(screen.getByTestId('message-m1')).not.toHaveTextContent('[Shared location]');
+  });
+
+  it('a location with no point is said in words, not printed raw', async () => {
+    await show([message({ messageType: 'location', body: '[Shared location]' })]);
+    expect(screen.getByTestId('location-m1')).toHaveTextContent(/its place didn.t come through/);
+    expect(screen.getByTestId('message-m1')).not.toHaveTextContent('[Shared location]');
+  });
+
+  it('a customer who types brackets about a place is still their own words', async () => {
+    await show([message({ messageType: 'text', body: 'my location: [home]' })]);
+    expect(screen.queryByTestId('location-m1')).toBeNull();
+    expect(screen.getByTestId('message-m1')).toHaveTextContent('my location: [home]');
   });
 });

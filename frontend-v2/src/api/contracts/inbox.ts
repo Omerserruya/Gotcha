@@ -451,6 +451,21 @@ export const messageSchema = z.object({
       toAgentName: z.string().optional(),
       /** The attachment could not be fetched (WhatsApp media expires) - said, never blank. */
       mediaError: z.string().optional().catch(undefined),
+      /**
+       * A shared location (Backend 11094abb): `{ latitude, longitude, name?,
+       * address?, url }` - `url` the provider's https link, else Google Maps.
+       * The body is `[Shared location: …]`, written for the AI, never shown.
+       */
+      location: z
+        .object({
+          latitude: z.coerce.number(),
+          longitude: z.coerce.number(),
+          name: z.string().nullish().catch(null),
+          address: z.string().nullish().catch(null),
+          url: z.string().nullish().catch(null),
+        })
+        .optional()
+        .catch(undefined),
       /** A shared contact card: who, and the numbers to reach them. */
       contacts: z
         .array(
