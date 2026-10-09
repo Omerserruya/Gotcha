@@ -72,7 +72,8 @@ type Namespace =
   | 'home.conversation'
   | 'home.conversation.step'
   | 'home.conversation.problem'
-  | 'home.conversation.blocks';
+  | 'home.conversation.blocks'
+  | 'home.conversation.proposal';
 
 /** `useTranslations`, in the turn's language when it has its own. */
 export function useTurnTranslations<N extends Namespace>(namespace: N) {

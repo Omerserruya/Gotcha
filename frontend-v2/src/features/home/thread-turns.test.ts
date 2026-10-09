@@ -4,6 +4,7 @@ import { ApiError } from '@/api/client/api-error';
 import {
   eventSeq,
   parseThreadEvent,
+  proposalStateOf,
   threadDetailSchema,
   threadMessageSchema,
   type ThreadEvent,
@@ -236,5 +237,85 @@ describe('★★ stage 2: blocks and sources are the server’s, applied once (�
       blocks: [{ id: 'b1' }],
       sources: [{ id: 's1' }],
     });
+  });
+});
+
+describe('★★ design 7 stage 3: a proposal is its own list, read beside the blocks (Backend 26b04e52)', () => {
+  const proposal = {
+    type: 'proposal',
+    approvalRequestId: 'ap1',
+    summary: 'Assign Dana to you',
+    steps: [{ summary: 'Assign Dana to you', target: { conversationId: 'c1', junk: 1 } }],
+    state: 'pending',
+  };
+  const chart = {
+    type: 'chart',
+    id: 'b1',
+    title: 'Week',
+    kind: 'bar',
+    x: { kind: 'day', values: ['2026-10-06'] },
+    series: [{ key: 'c', label: 'C', values: [3] }],
+    unit: 'count',
+  };
+
+  it('★ a stored message: the chart in blocks, the proposal in proposals, a stranger in neither', () => {
+    const m = threadMessageSchema.parse({
+      id: 'm1',
+      role: 'assistant',
+      text: 'A request waits in Approvals.',
+      status: 'done',
+      blocks: [chart, proposal, { type: 'poll', id: 'x' }],
+    });
+    expect(m.blocks.map((b) => b.type)).toEqual(['chart']);
+    expect(m.proposals).toHaveLength(1);
+    expect(m.proposals[0]!.steps[0]!.target).toEqual({ conversationId: 'c1' });
+  });
+
+  it('a state this screen has no words for reads as still waiting; a step with no target is null', () => {
+    const m = threadMessageSchema.parse({
+      id: 'm1',
+      role: 'assistant',
+      text: '',
+      status: 'done',
+      blocks: [{ ...proposal, state: 'cancelled', steps: [{ summary: 'x' }] }],
+    });
+    expect(m.proposals[0]!.state).toBe('pending');
+    expect(m.proposals[0]!.steps[0]!.target).toBeNull();
+  });
+
+  it('★ the `proposal` event adds it once, and a stored thread carries it into the turn', () => {
+    const turn = play([
+      ev('run.start', { runId: 'run1', userMessageId: 'u1', messageId: 'm1' }),
+      ev('proposal', { block: proposal }),
+      ev('proposal', { block: proposal }),
+    ]);
+    expect(turn.proposals.map((p) => p.approvalRequestId)).toEqual(['ap1']);
+    const [stored] = turnsFromMessages(
+      threadDetailSchema.parse({
+        thread: { id: 't1', title: null, scope: { range: { preset: '7d' }, channels: 'all' } },
+        messages: [
+          { id: 'u1', role: 'user', text: 'q', status: 'done' },
+          { id: 'm1', role: 'assistant', text: 'a', status: 'done', blocks: [proposal] },
+        ],
+        activeRun: null,
+      }).messages,
+    );
+    expect(stored!.proposals.map((p) => p.approvalRequestId)).toEqual(['ap1']);
+  });
+
+  it('★ the state is Backend’s rule: expired past its deadline, executed only when it ran', () => {
+    const now = new Date('2026-10-09T12:00:00Z');
+    const at = (
+      status: string,
+      executionState = 'NOT_STARTED',
+      expiresAt = '2026-10-10T00:00:00Z',
+    ) => proposalStateOf({ status, executionState, expiresAt }, now);
+    expect(at('PENDING')).toBe('pending');
+    expect(at('PENDING', 'NOT_STARTED', '2026-10-09T11:00:00Z')).toBe('expired');
+    expect(at('APPROVED', 'FAILED')).toBe('approved');
+    expect(at('APPROVED', 'SUCCEEDED')).toBe('executed');
+    expect(at('REJECTED')).toBe('rejected');
+    expect(at('EXPIRED')).toBe('expired');
+    expect(at('CANCELLED')).toBeNull();
   });
 });

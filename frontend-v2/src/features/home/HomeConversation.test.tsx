@@ -283,6 +283,25 @@ describe('★★ the first question makes a thread, and Home becomes the convers
     expect(screen.getByTestId('step-s9-approvals')).toHaveAttribute('href', '/approvals?id=ar1');
   });
 
+  it('★ design 7 stage 3: a proposed plan is a card under the answer, to decide here', async () => {
+    show();
+    await ask('Assign Dana to me');
+    await push(
+      START,
+      ev('proposal', 2, {
+        block: {
+          type: 'proposal',
+          approvalRequestId: 'ar1',
+          summary: 'Assign Dana to you',
+          steps: [{ summary: 'Assign Dana to you', target: { conversationId: 'c1' } }],
+          state: 'pending',
+        },
+      }),
+    );
+    expect(screen.getByTestId('proposal-ar1')).toHaveTextContent('1 change ready');
+    expect(screen.getByTestId('proposal-edit')).toHaveAttribute('href', '/approvals?id=ar1');
+  });
+
   it('★ the question and the answer read in their own direction - a Hebrew one right to left', async () => {
     show();
     await ask('מה קרה עם ההחזרות האחרונות?');

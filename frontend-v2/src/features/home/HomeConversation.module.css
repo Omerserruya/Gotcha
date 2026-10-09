@@ -381,6 +381,85 @@
     color: var(--text-secondary);
   }
 
+  /* ── Stage 3 (design 7): a proposed plan, decided here or in Approvals ── */
+  .proposal {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-inline-size: 0;
+    margin-block-start: 4px;
+    padding: 16px 18px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+  }
+
+  .proposalSteps,
+  .proposalRun {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    margin: 0;
+    padding-inline-start: 18px;
+    font-size: 13px;
+  }
+
+  .proposalStep {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    align-items: baseline;
+  }
+
+  .proposalConfirm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding-block-start: var(--space-10);
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .proposalAsk {
+    margin: 0;
+    font-size: 13px;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .proposalActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-12);
+    align-items: center;
+    margin: 0;
+  }
+
+  .proposalGo {
+    padding-block: var(--space-6);
+    padding-inline: var(--space-14);
+    border: none;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--action-text);
+    cursor: pointer;
+  }
+
+  .proposalGo:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .proposalQuiet {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
   /* ── Stage 2 (01a): the work under the words ── */
   .blocks {
     display: flex;

@@ -2,6 +2,7 @@ import { isApiError } from '@/api/client/api-error';
 import type {
   AnswerBlock,
   AnswerSource,
+  ProposalBlock,
   ThreadEvent,
   ThreadMessage,
   ThreadStep,
@@ -33,6 +34,8 @@ export interface ThreadTurn {
   readonly suggestions: readonly string[];
   /** Stage 2: the server's blocks, in order, each final as it arrives. */
   readonly blocks: readonly AnswerBlock[];
+  /** Plans this answer proposed - each an approval request, decided here or in Approvals. */
+  readonly proposals: readonly ProposalBlock[];
   /** Stage 2: what the answer stands on - its chips, and what `[^sN]` cites. */
   readonly sources: readonly AnswerSource[];
   /** The answer's message - what its sources' full lists are read through. */
@@ -55,6 +58,7 @@ export function newTurn(id: string, question: string): ThreadTurn {
     steps: [],
     suggestions: [],
     blocks: [],
+    proposals: [],
     sources: [],
     messageId: null,
     lang: null,
@@ -115,6 +119,11 @@ export function applyEvent(turn: ThreadTurn, event: ThreadEvent, seq: number | n
       return next.blocks.some((b) => b.id === event.data.block.id)
         ? next
         : { ...next, blocks: [...next.blocks, event.data.block] };
+    case 'proposal':
+      // One request once: a resume replays nothing, but a reload's read may have it already.
+      return next.proposals.some((p) => p.approvalRequestId === event.data.block.approvalRequestId)
+        ? next
+        : { ...next, proposals: [...next.proposals, event.data.block] };
     case 'sources':
       return { ...next, sources: event.data.items };
     case 'error':
@@ -177,6 +186,7 @@ export function turnsFromMessages(messages: readonly ThreadMessage[]): ThreadTur
       steps: message.steps,
       suggestions: message.suggestions.slice(0, 3),
       blocks: message.blocks,
+      proposals: message.proposals,
       sources: message.sources,
       messageId: message.id,
       lang: message.lang ?? null,

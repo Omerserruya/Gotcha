@@ -156,6 +156,74 @@ export const blockSchema = z.discriminatedUnion('type', [
 ]);
 export type AnswerBlock = z.infer<typeof blockSchema>;
 
+/**
+ * ★ A plan this answer proposed (Backend 26b04e52, G5): one approval request,
+ * as a block - `{ type: "proposal", approvalRequestId, summary, steps, state }`.
+ * No id, title or sourceId: the request's id names it. `summary` and each
+ * step's are the plan's own stored words, said to the thread's owner, in the
+ * turn's language; `target` is ids only, or null.
+ *
+ * `state` streams and saves as `pending`; a thread READ returns the approval's
+ * state at that moment, since the decision and the expiry happen elsewhere and
+ * never call back. Read apart from the answer's other blocks (it has no `id`,
+ * and it is decided, not looked at), so it is its own list on the message.
+ */
+export const PROPOSAL_STATES = ['pending', 'approved', 'rejected', 'expired', 'executed'] as const;
+export type ProposalState = (typeof PROPOSAL_STATES)[number];
+
+const proposalTargetSchema = z.object({
+  conversationId: z.string().min(1).optional().catch(undefined),
+  customerId: z.string().min(1).optional().catch(undefined),
+  assigneeId: z.string().min(1).optional().catch(undefined),
+  questionId: z.string().min(1).optional().catch(undefined),
+});
+export type ProposalTarget = z.infer<typeof proposalTargetSchema>;
+
+export const proposalBlockSchema = z.object({
+  type: z.literal('proposal'),
+  approvalRequestId: z.string().min(1),
+  summary: z.string().catch(''),
+  steps: z
+    .array(
+      z.object({
+        summary: z.string().catch(''),
+        target: proposalTargetSchema.nullable().catch(null).default(null),
+      }),
+    )
+    .catch([])
+    .default([]),
+  // One this screen has no words for reads as the safe one: still waiting.
+  state: z.enum(PROPOSAL_STATES).catch('pending'),
+});
+export type ProposalBlock = z.infer<typeof proposalBlockSchema>;
+
+/**
+ * A request's state as the block names it - the same rule as Backend's
+ * `proposalStateOf`, so a re-read here and a thread read there agree. `null`
+ * for a status it does not map (CANCELLED): keep what was shown.
+ */
+export function proposalStateOf(
+  approval: {
+    readonly status: string;
+    readonly executionState: string;
+    readonly expiresAt: string;
+  },
+  now: Date = new Date(),
+): ProposalState | null {
+  switch (approval.status) {
+    case 'PENDING':
+      return Date.parse(approval.expiresAt) <= now.getTime() ? 'expired' : 'pending';
+    case 'APPROVED':
+      return approval.executionState === 'SUCCEEDED' ? 'executed' : 'approved';
+    case 'REJECTED':
+      return 'rejected';
+    case 'EXPIRED':
+      return 'expired';
+    default:
+      return null;
+  }
+}
+
 export const sourceSchema = z.object({
   id: z.string(),
   label: z.string(),
@@ -199,19 +267,30 @@ export const TURN_LANGS = ['he', 'en'] as const;
 export type TurnLang = (typeof TURN_LANGS)[number];
 const turnLang = z.enum(TURN_LANGS).optional().catch(undefined);
 
-export const threadMessageSchema = z.object({
-  id: z.string(),
-  role: z.enum(['user', 'assistant']),
-  text: z.string(),
-  status: z.enum(MESSAGE_STATES),
-  steps: z.array(threadStepSchema).catch([]).default([]),
-  suggestions: z.array(z.string()).catch([]).default([]),
-  runId: z.string().nullable().catch(null).default(null),
-  blocks: eachOf(blockSchema),
-  sources: eachOf(sourceSchema),
-  /** On an assistant message; absent when its question had no clear language. */
-  lang: turnLang,
-});
+/*
+ * `blocks` is read twice: the answer's blocks, and its proposals. Each list
+ * keeps what it can read and drops the rest, so neither rejects the other.
+ */
+export const threadMessageSchema = z.preprocess(
+  (raw) =>
+    raw !== null && typeof raw === 'object'
+      ? { ...raw, proposals: (raw as { blocks?: unknown }).blocks }
+      : raw,
+  z.object({
+    id: z.string(),
+    role: z.enum(['user', 'assistant']),
+    text: z.string(),
+    status: z.enum(MESSAGE_STATES),
+    steps: z.array(threadStepSchema).catch([]).default([]),
+    suggestions: z.array(z.string()).catch([]).default([]),
+    runId: z.string().nullable().catch(null).default(null),
+    blocks: eachOf(blockSchema),
+    proposals: eachOf(proposalBlockSchema),
+    sources: eachOf(sourceSchema),
+    /** On an assistant message; absent when its question had no clear language. */
+    lang: turnLang,
+  }),
+);
 export type ThreadMessage = z.infer<typeof threadMessageSchema>;
 
 /** `GET /threads` - `data` beside `nextCursor`, so read raw. */
@@ -252,6 +331,7 @@ const EVENT_SCHEMAS = {
   'thread.title': z.object({ title: z.string() }),
   error: z.object({ code: z.string(), message: z.string().optional() }),
   block: z.object({ block: blockSchema }),
+  proposal: z.object({ block: proposalBlockSchema }),
   sources: z.object({ items: eachOf(sourceSchema) }),
   'message.done': z.object({
     messageId: z.string(),

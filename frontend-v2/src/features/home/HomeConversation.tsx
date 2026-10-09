@@ -20,6 +20,7 @@ import { Link } from '@/i18n/navigation';
 import { typedDir } from '@/lib/typed-dir';
 
 import { AnswerBlocks, SourceChips } from './AnswerBlocks';
+import { ProposalCard } from './ProposalCard';
 import { AnswerText } from './AnswerText';
 import { AskContext } from './home-ask';
 import styles from './HomeConversation.module.css';
@@ -528,6 +529,10 @@ function TurnAnswer({
           sources={turn.sources}
         />
         <SourceChips sources={turn.sources} />
+        {/* Design 7 stage 3: what the answer proposes, decided here or in Approvals. */}
+        {turn.proposals.map((proposal) => (
+          <ProposalCard key={proposal.approvalRequestId} proposal={proposal} />
+        ))}
         {turn.problem ? (
           <Problem problem={turn.problem} />
         ) : turn.status === 'failed' ? (

@@ -494,6 +494,32 @@
       "title": "About a request",
       "line": "About a request waiting for approval. GOTCHA can explain it here; deciding it stays on its page.",
       "open": "Open the request"
+    },
+    "proposal": {
+      "ready": "{count, plural, one {1 change ready} other {# changes ready}}",
+      "notLive": "Nothing is live yet",
+      "state": {
+        "approved": "Approved - not run yet",
+        "executed": "Done",
+        "rejected": "Rejected - nothing ran",
+        "expired": "Expired - nothing ran"
+      },
+      "open": "Open",
+      "approve": "Approve and apply",
+      "edit": "Edit",
+      "openRequest": "Open the request",
+      "confirm": {
+        "ask": "{count, plural, one {This will run now:} other {These # will run now:}}",
+        "yes": "Yes, run it",
+        "back": "Back"
+      },
+      "ran": "Approved, and it ran.",
+      "notRun": "Approved, but it didn’t run. Open the request to see why and try again.",
+      "refused": {
+        "stale": "Someone else decided this, or its deadline passed. It now shows where it stands.",
+        "forbidden": "You don’t have permission to decide this one.",
+        "failed": "That didn’t go through. Nothing ran."
+      }
     }
   }
 }

@@ -12,7 +12,6 @@ import {
   isOutcomeUnknown,
   isRetryable,
   type Approval,
-  type PlanTarget,
 } from '@/api/contracts/approvals';
 
 import { approveRequest, askAboutRequest, rejectRequest, retryExecution } from './actions';
@@ -33,6 +32,7 @@ import {
 import styles from './Approvals.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { isolated } from './isolate';
+import { stepHref } from './step-href';
 
 /**
  * Screen 03 - the queue and the decision.
@@ -78,16 +78,6 @@ const REJECT_REASONS = ['policy', 'myself', 'wrongOrder', 'tooGenerous', 'other'
 /** A plan the assistant proposed has no order and no amount: Omer's three. */
 const PLAN_REJECT_REASONS = ['wrong', 'myself', 'other'] as const;
 type RejectReason = (typeof REJECT_REASONS)[number] | (typeof PLAN_REJECT_REASONS)[number];
-
-/** Where a plan step's target opens: its conversation, its customer, the open questions. */
-function stepHref(target: PlanTarget) {
-  if (target.conversationId)
-    return { pathname: '/inbox' as const, query: { c: target.conversationId } };
-  if (target.customerId) return `/customers/${target.customerId}`;
-  if (target.questionId)
-    return { pathname: '/studio/knowledge' as const, query: { section: 'gaps' } };
-  return null;
-}
 
 export function ApprovalsScreen({
   pending,
