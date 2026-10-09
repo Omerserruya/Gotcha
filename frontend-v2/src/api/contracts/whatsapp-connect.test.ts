@@ -4,9 +4,11 @@ import {
   businessAppOptionsSchema,
   candidateSchema,
   explainsCoexistence,
+  blockReason,
   inspectResponseSchema,
   isConnectable,
   needsPin,
+  pendingAction,
 } from './whatsapp-connect';
 
 const candidate = (over: Record<string, unknown> = {}) =>
@@ -40,10 +42,17 @@ describe('★ two kinds of impossibility', () => {
     // "Not you, not now" - a blocker the customer can clear.
     const blocked = candidate({
       scenario: 'BLOCKED',
-      blockers: ['This number belongs to another GOTCHA workspace.'],
+      blockers: [
+        {
+          code: 'CONNECTED_ELSEWHERE',
+          message: 'This number is already connected to a different GOTCHA workspace.',
+          customerActionable: true,
+        },
+      ],
     });
     expect(isConnectable(blocked)).toBe(false);
-    expect(blocked.blockers).toHaveLength(1);
+    // The code survives; the platform's English does not.
+    expect(blocked.blockers).toStrictEqual([{ code: 'CONNECTED_ELSEWHERE' }]);
   });
 
   it('★ types full migration as never available, not unavailable here', () => {
@@ -116,5 +125,57 @@ describe('the session id is the only credential the browser holds', () => {
     });
     expect(parsed.sessionId).toBe('s1');
     expect(parsed).not.toHaveProperty('accessToken');
+  });
+});
+
+describe('★★ a block is named from its code - never the platform’s sentence', () => {
+  const blockedBy = (...codes: string[]) =>
+    blockReason(
+      candidate({
+        scenario: 'BLOCKED',
+        blockers: codes.map((code) => ({ code, message: 'English', customerActionable: true })),
+      }),
+    );
+
+  it('each code selectFlow blocks on', () => {
+    expect(blockedBy('CONNECTED_ELSEWHERE')).toBe('connectedElsewhere');
+    expect(blockedBy('ON_PREMISE')).toBe('onPremise');
+    expect(blockedBy('PHONE_BANNED')).toBe('banned');
+    expect(blockedBy('WEBHOOK_OVERRIDDEN')).toBe('otherPlatform');
+    expect(blockedBy('MISSING_PERMISSION_WHATSAPP_BUSINESS_MANAGEMENT')).toBe('permission');
+    expect(blockedBy('MISSING_PERMISSION_WHATSAPP_BUSINESS_MESSAGING')).toBe('permission');
+  });
+
+  it('the first one it knows, past codes it does not block on', () => {
+    expect(blockedBy('NOT_VERIFIED', 'WEBHOOK_OVERRIDDEN', 'ON_PREMISE')).toBe('otherPlatform');
+  });
+
+  it('none known - an unseen platform type, a new code, a prototype key - is null', () => {
+    expect(blockedBy()).toBeNull();
+    expect(blockedBy('SOMETHING_NEW', 'constructor', 'toString')).toBeNull();
+  });
+
+  it('a blocker list in another shape is "no known reason", not a rejected inspect', () => {
+    const parsed = inspectResponseSchema.parse({
+      sessionId: 's1',
+      candidates: [{ phoneNumberId: 'p1', scenario: 'BLOCKED', blockers: ['a sentence'] }],
+    });
+    expect(parsed.candidates[0]!.blockers).toStrictEqual([]);
+    expect(blockReason(parsed.candidates[0]!)).toBeNull();
+  });
+});
+
+describe('★★ what Meta still needs is named from its code', () => {
+  it('each WhatsAppPendingAction', () => {
+    expect(pendingAction('TWO_STEP_PIN')).toBe('twoStepPin');
+    expect(pendingAction('VERIFICATION_CODE')).toBe('verificationCode');
+    expect(pendingAction('BUSINESS_APP_CONFIRMATION')).toBe('businessAppConfirmation');
+    expect(pendingAction('BUSINESS_VERIFICATION')).toBe('businessVerification');
+    expect(pendingAction('DISPLAY_NAME_REVIEW')).toBe('displayNameReview');
+  });
+
+  it('an unknown code is null - the generic sentence', () => {
+    expect(pendingAction('SOMETHING_NEW')).toBeNull();
+    expect(pendingAction('constructor')).toBeNull();
   });
 });

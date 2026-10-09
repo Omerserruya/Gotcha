@@ -5,8 +5,10 @@ import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import {
+  blockReason,
   isConnectable,
   needsPin,
+  pendingAction,
   type Candidate,
   type EmbeddedSignupLaunch,
 } from '@/api/contracts/whatsapp-connect';
@@ -80,7 +82,9 @@ export function ConnectWhatsApp({
         return;
       }
       if (result.pendingAction) {
-        setFailure(result.message ?? t('number.pending'));
+        // The code in our words; one we do not know is the generic sentence.
+        const action = pendingAction(result.pendingAction);
+        setFailure(action ? t(`number.pendingAction.${action}`) : t('number.pending'));
         return;
       }
       // 4 · Learn: 13e shows the import once Meta sends the history.
@@ -288,6 +292,7 @@ function NumberStep({
       <div role="radiogroup" aria-label={t('question')} className={styles.paths}>
         {candidates.map((c) => {
           const off = c.alreadyConnectedHere || !isConnectable(c);
+          const reason = blockReason(c);
           return (
             <button
               key={c.phoneNumberId}
@@ -309,7 +314,9 @@ function NumberStep({
                   {c.alreadyConnectedHere
                     ? t('flow.connected')
                     : !isConnectable(c)
-                      ? (c.message ?? t('flow.blocked'))
+                      ? reason
+                        ? t(`flow.blockedBy.${reason}`)
+                        : t('flow.blocked')
                       : c.usesBusinessApp
                         ? t('flow.businessApp')
                         : needsPin(c)

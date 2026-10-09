@@ -230,17 +230,75 @@ describe('★★ 13d - exactly one number per pass', () => {
     expect(connectNumber).toHaveBeenCalledWith('s1', 'p1', '123456');
   });
 
-  it('Meta still needs a step, or it failed: said, and no move to 13e', async () => {
-    connectNumber.mockResolvedValue({
-      ok: true,
-      pendingAction: 'VERIFICATION_CODE',
-      message: 'Enter the code Meta sent.',
+  describe('★★ Meta still needs a step: said in our words from the code, and no move to 13e', () => {
+    const pending = messages.whatsapp.wizard.number.pendingAction;
+    async function connectWith(code: string) {
+      connectNumber.mockResolvedValue({
+        ok: true,
+        pendingAction: code,
+        message: 'RAW ENGLISH FROM THE ROUTE',
+      });
+      await toNumbers([candidate({ phoneNumberId: 'p1' })]);
+      await userEvent.click(screen.getByTestId('candidate-p1'));
+      await userEvent.click(screen.getByTestId('connect-number'));
+      const said = screen.getByTestId('connect-failure');
+      expect(said).not.toHaveTextContent('RAW ENGLISH');
+      expect(push).not.toHaveBeenCalled();
+      return said;
+    }
+
+    it.each([
+      ['TWO_STEP_PIN', pending.twoStepPin],
+      ['VERIFICATION_CODE', pending.verificationCode],
+      ['BUSINESS_APP_CONFIRMATION', pending.businessAppConfirmation],
+      ['BUSINESS_VERIFICATION', pending.businessVerification],
+      ['DISPLAY_NAME_REVIEW', pending.displayNameReview],
+    ])('%s', async (code, sentence) => {
+      expect((await connectWith(code)).textContent).toBe(sentence);
     });
-    await toNumbers([candidate({ phoneNumberId: 'p1' })]);
-    await userEvent.click(screen.getByTestId('candidate-p1'));
-    await userEvent.click(screen.getByTestId('connect-number'));
-    expect(screen.getByTestId('connect-failure')).toHaveTextContent('Enter the code Meta sent.');
-    expect(push).not.toHaveBeenCalled();
+
+    it('an unknown code: the generic sentence', async () => {
+      expect((await connectWith('SOMETHING_NEW')).textContent).toBe(
+        messages.whatsapp.wizard.number.pending,
+      );
+    });
+  });
+
+  describe('★★ a blocked number says why in our words - never the platform’s sentence', () => {
+    const flow = messages.whatsapp.wizard.number.flow;
+    const blockedRow = async (...codes: string[]) => {
+      await toNumbers([
+        candidate({
+          phoneNumberId: 'p1',
+          scenario: 'BLOCKED',
+          message: 'RAW ENGLISH FROM THE ROUTE',
+          blockers: codes.map((code) => ({
+            code,
+            message: 'RAW BLOCKER ENGLISH',
+            customerActionable: true,
+          })),
+        }),
+      ]);
+      const row = screen.getByTestId('candidate-p1');
+      expect(row).toBeDisabled();
+      expect(row).not.toHaveTextContent('RAW');
+      return row;
+    };
+
+    it.each([
+      ['CONNECTED_ELSEWHERE', flow.blockedBy.connectedElsewhere],
+      ['ON_PREMISE', flow.blockedBy.onPremise],
+      ['PHONE_BANNED', flow.blockedBy.banned],
+      ['WEBHOOK_OVERRIDDEN', flow.blockedBy.otherPlatform],
+      ['MISSING_PERMISSION_WHATSAPP_BUSINESS_MANAGEMENT', flow.blockedBy.permission],
+      ['MISSING_PERMISSION_WHATSAPP_BUSINESS_MESSAGING', flow.blockedBy.permission],
+    ])('%s', async (code, sentence) => {
+      expect(await blockedRow(code)).toHaveTextContent(sentence);
+    });
+
+    it('no code it knows: the generic sentence', async () => {
+      expect(await blockedRow('SOMETHING_NEW')).toHaveTextContent(flow.blocked);
+    });
   });
 
   it('who answers, the import and contacts are drawn, each saying why; Back returns to step 1', async () => {

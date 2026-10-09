@@ -22,14 +22,14 @@ import { z } from 'zod';
  * One list, then. Each row carries what would happen to that number.
  *
  * ════════════════════════════════════════════════════════════════════════════
- * AND THE COPY IS THE PLATFORM'S
+ * AND THE WORDS ARE OURS, FROM THE PLATFORM'S CODES
  * ════════════════════════════════════════════════════════════════════════════
- * `customerMessage` is documented as *"the text the connect screen shows, so
- * it says what will happen rather than what we detected"* - authored for this
- * screen, in the customer's register, with no Meta vocabulary. Rendered
- * verbatim, like `metaSolution` and `ESTIMATE_DISCLAIMER`. Six sentences of
- * our own would compete with six of theirs and drift the first time a
- * scenario changed meaning.
+ * The route also sends `message` (`customerMessage`) and each blocker's
+ * `message` - English sentences, on a screen that is also Hebrew. Neither is
+ * read here: `message` is not in the contract at all, and a blocker keeps
+ * only its `code`. The screen says a block in words of its own from the
+ * code (`blockReason`), and anything it does not know as one generic
+ * sentence - never the platform's English.
  */
 
 export const SCENARIOS = [
@@ -61,11 +61,17 @@ export const candidateSchema = z.object({
   /** Already ours. A reconnect is a repair, not a new connection. */
   alreadyConnectedHere: z.boolean().default(false),
   scenario: z.enum(SCENARIOS),
-  /** The platform's sentence for this row. Never rewritten. */
-  message: z.string().nullable().default(null),
   customerAction: z.enum(CUSTOMER_ACTIONS).nullable().default(null),
-  /** Why nothing can proceed, in plain language. */
-  blockers: z.array(z.string()).default([]),
+  /**
+   * Why nothing can proceed - the inspector's `Blocker`s. Each is
+   * `{ code, message, customerActionable, ... }`; only the code is kept, and
+   * a list in any other shape reads as "no known reason" rather than
+   * rejecting every number on the account.
+   */
+  blockers: z
+    .array(z.object({ code: z.string() }))
+    .catch([])
+    .default([]),
 });
 
 export type Candidate = z.infer<typeof candidateSchema>;
@@ -78,6 +84,51 @@ export const inspectResponseSchema = z.object({
 export type InspectResponse = z.infer<typeof inspectResponseSchema>;
 
 /* ── What a row is allowed to offer ──────────────────────────────────────── */
+
+/**
+ * Why a BLOCKED row is blocked, as the screen words it. The keys are the
+ * codes `selectFlow` blocks on: its fatal set (`CONNECTED_ELSEWHERE`,
+ * `ON_PREMISE`, `PHONE_BANNED`, `WEBHOOK_OVERRIDDEN`) and the two required
+ * permissions. Any other code is not a reason it blocks on.
+ */
+const BLOCK_REASONS = {
+  CONNECTED_ELSEWHERE: 'connectedElsewhere',
+  ON_PREMISE: 'onPremise',
+  PHONE_BANNED: 'banned',
+  WEBHOOK_OVERRIDDEN: 'otherPlatform',
+  MISSING_PERMISSION_WHATSAPP_BUSINESS_MANAGEMENT: 'permission',
+  MISSING_PERMISSION_WHATSAPP_BUSINESS_MESSAGING: 'permission',
+} as const;
+export type BlockReason = (typeof BLOCK_REASONS)[keyof typeof BLOCK_REASONS];
+
+/**
+ * The first blocker this screen can name, in the platform's order (it says
+ * the first fatal one). `null` - say the generic sentence - when none is
+ * known, including a platform type this build has never seen.
+ */
+export function blockReason(candidate: Candidate): BlockReason | null {
+  for (const { code } of candidate.blockers) {
+    if (Object.hasOwn(BLOCK_REASONS, code)) {
+      return BLOCK_REASONS[code as keyof typeof BLOCK_REASONS];
+    }
+  }
+  return null;
+}
+
+/** What Meta still needs after a connect (`WhatsAppPendingAction`), as the screen words it. */
+const PENDING_ACTIONS = {
+  TWO_STEP_PIN: 'twoStepPin',
+  VERIFICATION_CODE: 'verificationCode',
+  BUSINESS_APP_CONFIRMATION: 'businessAppConfirmation',
+  BUSINESS_VERIFICATION: 'businessVerification',
+  DISPLAY_NAME_REVIEW: 'displayNameReview',
+} as const satisfies Record<CustomerAction, string>;
+export type PendingAction = (typeof PENDING_ACTIONS)[CustomerAction];
+
+/** `null` for a code this build does not know - the generic sentence. */
+export function pendingAction(code: string): PendingAction | null {
+  return Object.hasOwn(PENDING_ACTIONS, code) ? PENDING_ACTIONS[code as CustomerAction] : null;
+}
 
 /** Can this number be connected at all? */
 export function isConnectable(candidate: Candidate): boolean {

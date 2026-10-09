@@ -31,6 +31,54 @@ describe('★★ inspect at the wire - the popup’s assets ride along, and only
   });
 });
 
+describe('★★ inspect parses what the route answers', () => {
+  /** The client's own rule: unwrap `{ data }` unless the call is `raw`. */
+  const asTheClientDoes = (envelope: { data: unknown }) =>
+    post.mockImplementation(
+      ({ payload, raw }: { payload: { parse: (v: unknown) => unknown }; raw?: boolean }) =>
+        Promise.resolve(payload.parse(raw ? envelope : envelope.data)),
+    );
+
+  it('★ `{ data: { sessionId, candidates } }` with Blocker objects reads as the numbers', async () => {
+    // whatsapp-numbers.ts /inspect, field for field.
+    asTheClientDoes({
+      data: {
+        sessionId: 's1',
+        path: 'new',
+        outcome: null,
+        candidates: [
+          {
+            phoneNumberId: 'p1',
+            phoneNumber: '+972 52 611 0290',
+            name: 'Aviv Studio',
+            usesBusinessApp: false,
+            alreadyConnectedHere: false,
+            scenario: 'BLOCKED',
+            message: 'This number is already connected to a different GOTCHA workspace.',
+            customerAction: null,
+            blockers: [
+              {
+                code: 'CONNECTED_ELSEWHERE',
+                message: 'This number is already connected to a different GOTCHA workspace.',
+                customerActionable: true,
+              },
+            ],
+          },
+        ],
+        degraded: false,
+        degradedReasons: [],
+        missingPermissions: [],
+        portfolios: [],
+        inspectedAt: '2026-10-09T10:00:00Z',
+      },
+    });
+    const result = await inspectNumbers('abc');
+    expect(result?.sessionId).toBe('s1');
+    expect(result?.candidates[0]!.blockers).toStrictEqual([{ code: 'CONNECTED_ELSEWHERE' }]);
+    expect(result?.candidates[0]).not.toHaveProperty('message');
+  });
+});
+
 describe('★★ connect and resume at the wire', () => {
   const body = () => (post.mock.calls.at(-1)![0] as { body: unknown }).body;
 
@@ -40,6 +88,14 @@ describe('★★ connect and resume at the wire', () => {
     expect(body()).toStrictEqual({ sessionId: 's1', phoneNumberId: 'p1' });
     await connectNumber('s1', 'p1', '123456');
     expect(body()).toStrictEqual({ sessionId: 's1', phoneNumberId: 'p1', twoStepPin: '123456' });
+  });
+
+  it('connect carries the pending code and not the route’s English', async () => {
+    post.mockResolvedValue({ pendingAction: 'TWO_STEP_PIN', message: 'Enter your PIN.' });
+    expect(await connectNumber('s1', 'p1')).toStrictEqual({
+      ok: true,
+      pendingAction: 'TWO_STEP_PIN',
+    });
   });
 
   it('a PIN that is not six digits never leaves', async () => {

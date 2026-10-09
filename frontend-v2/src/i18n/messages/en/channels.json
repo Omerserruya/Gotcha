@@ -366,7 +366,14 @@
           "pin": "Registered with two-step verification · needs its 6-digit PIN",
           "new": "Not registered yet",
           "connected": "Already connected to GOTCHA",
-          "blocked": "Can't be connected right now"
+          "blocked": "Can't be connected right now",
+          "blockedBy": {
+            "connectedElsewhere": "Connected to another GOTCHA workspace - disconnect it there first",
+            "onPremise": "Runs on WhatsApp's older on-premise system, which can't be connected to GOTCHA",
+            "banned": "WhatsApp has banned this number",
+            "otherPlatform": "Another platform receives this number's messages - disconnect it there first",
+            "permission": "GOTCHA wasn't given full WhatsApp permission - connect again and accept every permission"
+          }
         },
         "pin": "Its 6-digit PIN",
         "pinInvalid": "The PIN is six digits.",
@@ -381,7 +388,14 @@
         "connectImport": "Connect and import",
         "back": "Back",
         "pending": "Meta needs one more step from you before this number works.",
-        "failed": "The number wasn't connected - try again."
+        "failed": "The number wasn't connected - try again.",
+        "pendingAction": {
+          "twoStepPin": "This number needs its 6-digit two-step PIN before it works.",
+          "verificationCode": "Meta needs to verify this number with a code it sends before it works.",
+          "businessAppConfirmation": "Confirm the connection in your WhatsApp Business app before this number works.",
+          "businessVerification": "Meta needs your business to finish Business Verification before this number works.",
+          "displayNameReview": "Meta is reviewing this number's display name. It works once the name is approved."
+        }
       },
       "problem": {
         "notConfigured": "Meta's sign-up isn't set up for this workspace yet.",

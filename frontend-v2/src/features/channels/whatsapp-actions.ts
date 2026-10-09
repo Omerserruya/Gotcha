@@ -43,16 +43,18 @@ const ackSchema = z.object({}).loose();
 export type ConnectResult =
   | {
       ok: true;
-      /** What Meta still needs from the customer, when anything (a PIN, a code…). */
+      /**
+       * What Meta still needs from the customer, when anything (a PIN, a
+       * code…) - a `WhatsAppPendingAction` code. The route's `message` beside
+       * it is English and is not carried: the screen words the code.
+       */
       pendingAction?: string | null;
-      message?: string | null;
     }
   | { ok: false; message: string };
 
 const connectedSchema = z
   .object({
     pendingAction: z.string().nullable().catch(null).default(null),
-    message: z.string().nullable().catch(null).default(null),
   })
   .loose();
 
@@ -73,8 +75,10 @@ export async function inspectNumbers(
         ...(assets.businessPortfolioId ? { businessPortfolioId: assets.businessPortfolioId } : {}),
         ...(assets.wabaIds?.length ? { wabaIds: [...assets.wabaIds] } : {}),
       },
+      // The route answers `{ data: { sessionId, candidates, ... } }` with no
+      // sibling of `data`, so it is unwrapped like any other; `raw` parsed the
+      // envelope itself, found no `sessionId`, and every inspect failed.
       payload: inspectResponseSchema,
-      raw: true,
     });
   } catch (cause) {
     await signInIfSignedOut(cause);
@@ -99,7 +103,7 @@ export async function connectNumber(
       body: { sessionId, phoneNumberId, ...(twoStepPin ? { twoStepPin } : {}) },
       payload: connectedSchema,
     });
-    return { ok: true, pendingAction: done.pendingAction, message: done.message };
+    return { ok: true, pendingAction: done.pendingAction };
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('whatsapp.connect_failed', { cause });
