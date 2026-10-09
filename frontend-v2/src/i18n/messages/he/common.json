@@ -35,6 +35,10 @@
   "platformError": {
     "shopify_chat_uninstalled": "האפליקציה הוסרה מהחנות. מתקינים אותה מחדש כדי שהצ׳אט יחזור.",
     "shopify_app_uninstalled": "האפליקציה של GOTCHA הוסרה מהחנות. מתקינים אותה מחדש כדי לחבר שוב.",
-    "unknown": "משהו לא תקין בערוץ הזה. פותחים אותו כדי לראות מה הוא צריך."
+    "unknown": "משהו לא תקין בערוץ הזה. פותחים אותו כדי לראות מה הוא צריך.",
+    "voice_credentials_unreadable": "אי אפשר לקרוא את פרטי הגישה ל‑Twilio שנשמרו.",
+    "voice_credentials_rejected": "Twilio כבר לא מקבל את פרטי הגישה שנשמרו.",
+    "voice_twilio_unreachable": "חשבון ה‑Twilio לא היה זמין בבדיקה האחרונה.",
+    "voice_outbound_not_set_up": "שיחות נכנסות מגיעות, אבל שיחות יוצאות לא הוגדרו ב‑Twilio."
   }
 }

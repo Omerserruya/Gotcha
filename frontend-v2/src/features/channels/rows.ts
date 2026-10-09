@@ -1,4 +1,8 @@
-import { platformErrorReason, type PlatformErrorReason } from '@/api/contracts/platform-errors';
+import {
+  platformErrorReason,
+  voiceErrorReason,
+  type ChannelErrorReason,
+} from '@/api/contracts/platform-errors';
 import {
   CONNECTABLE_CHANNELS,
   voiceStateAsConnection,
@@ -25,10 +29,11 @@ export interface ConnectedRow {
   readonly identity: string | null;
   readonly status: ConnectionState;
   /**
-   * The platform's error as a reason (`platformErrorReason`), never its raw
-   * English. Present on a healthy row too - see below.
+   * The platform's error as a reason (`platformErrorReason`, or
+   * `voiceErrorReason` on voice), never its raw English. Present on a
+   * healthy row too - see below.
    */
-  readonly error: PlatformErrorReason | null;
+  readonly error: ChannelErrorReason | null;
   /** Open RIGHT NOW - not CLOSED, no window. */
   readonly openConversations: number | null;
   /**
@@ -119,9 +124,9 @@ export function buildChannelRows(
         vc.friendlyName?.trim() ||
         null,
       status: voiceStateAsConnection(vc.status),
-      // `healthStatus` is a free-form string on this spine, not an error
-      // message - it is only a problem when the status already says so.
-      error: null,
+      // A failed health check, or outgoing calls never set up, in words -
+      // never `healthStatus`'s raw Twilio text.
+      error: voiceErrorReason(vc.healthStatus, vc.config?.outboundProvisioningFailed ?? false),
       openConversations: null,
       windowConversations: null,
     });

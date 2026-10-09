@@ -35,6 +35,10 @@
   "platformError": {
     "shopify_chat_uninstalled": "The app was removed from the store. Install it again to bring the chat back.",
     "shopify_app_uninstalled": "The GOTCHA app was removed from the store. Install it again to reconnect.",
-    "unknown": "Something is wrong with this channel. Open it to see what it needs."
+    "unknown": "Something is wrong with this channel. Open it to see what it needs.",
+    "voice_credentials_unreadable": "The saved Twilio credentials can't be read.",
+    "voice_credentials_rejected": "Twilio no longer accepts the saved credentials.",
+    "voice_twilio_unreachable": "The Twilio account couldn't be reached on the last check.",
+    "voice_outbound_not_set_up": "Calls come in, but outgoing calls weren't set up on Twilio."
   }
 }

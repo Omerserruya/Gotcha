@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { platformErrorReason, stripErrorCode } from './platform-errors';
+import { platformErrorReason, stripErrorCode, voiceErrorReason } from './platform-errors';
 
 describe('★★ a connection’s last error as a reason - code first, then the prefix, then the old sentence', () => {
   it('lastErrorCode wins', () => {
@@ -36,5 +36,34 @@ describe('★★ a connection’s last error as a reason - code first, then the 
     expect(platformErrorReason(null, null)).toBeNull();
     expect(platformErrorReason('  ', undefined)).toBeNull();
     expect(stripErrorCode('[X] ')).toBeNull();
+  });
+});
+
+describe('★★ voice’s health as a reason - healthStatus first, then the outbound flag', () => {
+  it('each value /validate writes', () => {
+    expect(voiceErrorReason('decryption_failed', false)).toBe('voice_credentials_unreadable');
+    expect(voiceErrorReason('twilio_api_401: {"code":20003}', false)).toBe(
+      'voice_credentials_rejected',
+    );
+    expect(voiceErrorReason('twilio_api_403: Forbidden', false)).toBe('voice_credentials_rejected');
+    expect(voiceErrorReason('account_unreachable', false)).toBe('voice_twilio_unreachable');
+    expect(voiceErrorReason('failed', false)).toBe('voice_twilio_unreachable');
+  });
+
+  it('any other health text is unknown - Twilio’s 500 body, a fetch error - never printed', () => {
+    expect(voiceErrorReason('twilio_api_500: upstream', false)).toBe('unknown');
+    expect(voiceErrorReason('fetch failed', true)).toBe('unknown');
+  });
+
+  it('healthy, or never checked: the outbound flag decides', () => {
+    expect(voiceErrorReason('ok', true)).toBe('voice_outbound_not_set_up');
+    expect(voiceErrorReason(null, true)).toBe('voice_outbound_not_set_up');
+    expect(voiceErrorReason('ok', false)).toBeNull();
+    expect(voiceErrorReason(undefined, false)).toBeNull();
+    expect(voiceErrorReason('  ', false)).toBeNull();
+  });
+
+  it('a failed check outranks the outbound flag', () => {
+    expect(voiceErrorReason('decryption_failed', true)).toBe('voice_credentials_unreadable');
   });
 });

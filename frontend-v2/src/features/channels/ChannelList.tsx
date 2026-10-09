@@ -19,7 +19,7 @@ import {
   type WidgetRow,
 } from './rows';
 import { channelName } from '@/api/contracts/inbox';
-import type { PlatformErrorReason } from '@/api/contracts/platform-errors';
+import type { ChannelErrorReason } from '@/api/contracts/platform-errors';
 import {
   WIDGET_CHANNELS,
   WIDGET_PATH,
@@ -62,7 +62,7 @@ export async function ChannelList({
   const t = await getTranslations('channels');
   // The platform's error in the reader's words - never its raw English.
   const tp = await getTranslations('common.platformError');
-  const errorWords = (reason: PlatformErrorReason | null) => (reason ? tp(reason) : null);
+  const errorWords = (reason: ChannelErrorReason | null) => (reason ? tp(reason) : null);
   const locale = await getLocale();
   const rows = buildChannelRows(channels, voice, voiceOffered, locale);
   const number = new Intl.NumberFormat(locale);
@@ -243,7 +243,7 @@ function WidgetListRow({
   readonly row: WidgetRow;
   readonly install: WidgetInstall | null;
   readonly t: Awaited<ReturnType<typeof getTranslations<'channels'>>>;
-  readonly errorWords: (reason: PlatformErrorReason | null) => string | null;
+  readonly errorWords: (reason: ChannelErrorReason | null) => string | null;
   readonly number: Intl.NumberFormat;
   readonly windowDays: number;
 }) {

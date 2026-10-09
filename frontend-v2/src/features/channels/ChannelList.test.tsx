@@ -3,7 +3,8 @@ import { createTranslator } from 'next-intl';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { channelSchema } from '@/api/contracts/channels';
+import { channelSchema, voiceChannelSchema } from '@/api/contracts/channels';
+import type { VoiceErrorReason } from '@/api/contracts/platform-errors';
 import { widgetInstallSchema } from '@/api/contracts/website-widget';
 import channels from '@/i18n/messages/en/channels.json';
 import common from '@/i18n/messages/en/common.json';
@@ -122,6 +123,70 @@ describe('★ 13 - the warning above the list, and who answers on the line', () 
     );
     expect(screen.queryByTestId('channel-banner')).toBeNull();
     expect(screen.getByTestId('channel-detail-e1')).not.toHaveTextContent(/answers|with AI help/i);
+  });
+});
+
+describe('★★ a voice channel that needs attention says why, in the reader’s words', () => {
+  const voiceWith = (healthStatus: string | null, outboundProvisioningFailed: boolean) =>
+    ChannelList({
+      channels: [],
+      voice: [
+        voiceChannelSchema.parse({
+          id: 'v1',
+          status: 'ACTIVE',
+          healthStatus,
+          config: { outboundProvisioningFailed, outboundProvisioningError: 'RAW TWILIO TEXT' },
+          numbers: [{ phoneNumber: '+972 3 000 0000' }],
+        }),
+      ],
+      voiceOffered: true,
+      windowDays: 30,
+    });
+
+  it('outgoing calls never set up: Needs attention, and the words on its title and banner', async () => {
+    render(await voiceWith('ok', true));
+    const chip = screen.getByTestId('channel-status-v1');
+    expect(chip).toHaveTextContent('Needs attention');
+    expect(chip).toHaveAttribute('title', common.platformError.voice_outbound_not_set_up);
+    expect(screen.getByTestId('channel-banner')).toHaveTextContent(
+      common.platformError.voice_outbound_not_set_up,
+    );
+    expect(document.body).not.toHaveTextContent('RAW TWILIO TEXT');
+  });
+
+  it('a health text it does not know: the generic sentence, never the text', async () => {
+    render(await voiceWith('twilio_api_500: RAW TWILIO BODY', false));
+    expect(screen.getByTestId('channel-status-v1')).toHaveAttribute(
+      'title',
+      common.platformError.unknown,
+    );
+    expect(document.body).not.toHaveTextContent('RAW TWILIO');
+  });
+
+  it('every voice reason has words in both languages', () => {
+    const reasons: readonly VoiceErrorReason[] = [
+      'voice_credentials_unreadable',
+      'voice_credentials_rejected',
+      'voice_twilio_unreachable',
+      'voice_outbound_not_set_up',
+    ];
+    for (const reason of reasons) {
+      expect(common.platformError[reason]).toBeTruthy();
+      expect(heCommon.platformError[reason]).toBeTruthy();
+    }
+  });
+
+  it('Hebrew: the credentials Twilio refused, in Hebrew', async () => {
+    lang.he = true;
+    try {
+      render(await voiceWith('twilio_api_401: x', false));
+      expect(screen.getByTestId('channel-status-v1')).toHaveAttribute(
+        'title',
+        heCommon.platformError.voice_credentials_rejected,
+      );
+    } finally {
+      lang.he = false;
+    }
   });
 });
 

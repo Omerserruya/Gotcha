@@ -45,3 +45,37 @@ export function platformErrorReason(
   }
   return OLD_SENTENCES.find(([pattern]) => pattern.test(sentence ?? ''))?.[1] ?? 'unknown';
 }
+
+/**
+ * Voice's health, which is not `lastError` (conversation
+ * `routes/voice-channels.ts`). Two things are served on the channel:
+ *
+ *   - `healthStatus`, written only by `POST /:id/validate`: `ok`,
+ *     `decryption_failed`, or the failed account check's error - Twilio's
+ *     `twilio_api_<status>: <body>`, else `account_unreachable` / `failed`.
+ *   - `config.outboundProvisioningFailed`, set when creating the channel could
+ *     not make the API key or TwiML app: calls come in, none go out.
+ *
+ * A failed check outranks the outbound flag. A health text this build does
+ * not know is `unknown` - said generically, never printed.
+ */
+export type VoiceErrorReason =
+  | 'voice_credentials_unreadable'
+  | 'voice_credentials_rejected'
+  | 'voice_twilio_unreachable'
+  | 'voice_outbound_not_set_up';
+export type ChannelErrorReason = PlatformErrorReason | VoiceErrorReason;
+
+export function voiceErrorReason(
+  healthStatus: string | null | undefined,
+  outboundProvisioningFailed: boolean,
+): ChannelErrorReason | null {
+  const health = healthStatus?.trim();
+  if (health && health !== 'ok') {
+    if (health === 'decryption_failed') return 'voice_credentials_unreadable';
+    if (/^twilio_api_40[13]\b/.test(health)) return 'voice_credentials_rejected';
+    if (health === 'account_unreachable' || health === 'failed') return 'voice_twilio_unreachable';
+    return 'unknown';
+  }
+  return outboundProvisioningFailed ? 'voice_outbound_not_set_up' : null;
+}

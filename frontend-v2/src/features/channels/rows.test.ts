@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { channelSchema, type Channel } from '@/api/contracts/channels';
+import { channelSchema, voiceChannelSchema, type Channel } from '@/api/contracts/channels';
 
 import { buildChannelRows, isTroubled, type ConnectedRow } from './rows';
 
@@ -100,6 +100,42 @@ describe('buildChannelRows', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.channel).toBe('VOICE');
     expect(rows[0]!.identity).toBe('+972 3 000 0000');
+  });
+
+  it('★★ a voice channel’s failed check or missing outbound is its error, from the route’s shape', () => {
+    // conversation routes/voice-channels.ts serializeChannel, field for field.
+    const wire = (over: Record<string, unknown>) =>
+      voiceChannelSchema.parse({
+        id: 'v1',
+        friendlyName: 'Main line',
+        status: 'ACTIVE',
+        healthStatus: null,
+        healthCheckedAt: null,
+        config: {},
+        webhookSecret: 'hmac',
+        numbers: [],
+        ...over,
+      });
+    const errorOf = (over: Record<string, unknown>) =>
+      connectedOnly(buildChannelRows([], [wire(over)], true, 'en'))[0]!;
+
+    expect(errorOf({}).error).toBeNull();
+    const outbound = errorOf({
+      config: { outboundProvisioningFailed: true, outboundProvisioningError: 'twilio_api_401: x' },
+    });
+    expect(outbound.error).toBe('voice_outbound_not_set_up');
+    expect(isTroubled(outbound)).toBe(true);
+    expect(errorOf({ healthStatus: 'decryption_failed' }).error).toBe(
+      'voice_credentials_unreadable',
+    );
+    expect(errorOf({ healthStatus: 'Some Twilio text' }).error).toBe('unknown');
+    // A config in another shape is no flag, not a rejected voice read.
+    expect(errorOf({ config: 'nonsense' }).error).toBeNull();
+    // Twilio's raw text and the webhook secret do not cross into the row's source.
+    expect(wire({ config: { outboundProvisioningError: 'raw' } }).config).toStrictEqual({
+      outboundProvisioningFailed: false,
+    });
+    expect(wire({})).not.toHaveProperty('webhookSecret');
   });
 
   it('maps ACTIVE to connected and DISABLED to disconnected', () => {

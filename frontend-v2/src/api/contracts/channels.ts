@@ -186,6 +186,14 @@ export const voiceChannelSchema = z.object({
   status: z.enum(VOICE_STATES).catch('PENDING'),
   healthStatus: z.string().nullable().optional(),
   healthCheckedAt: z.string().nullable().optional(),
+  /**
+   * Only the outbound flag (`voiceErrorReason`); the route's
+   * `outboundProvisioningError` beside it is Twilio's raw text and is dropped.
+   */
+  config: z
+    .object({ outboundProvisioningFailed: z.boolean().catch(false).default(false) })
+    .nullish()
+    .catch(null),
   /** Always an array from the backend, even when discovery was skipped. */
   numbers: z.array(z.object({ phoneNumber: z.string().nullable().optional() })).default([]),
 });
