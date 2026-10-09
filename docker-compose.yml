@@ -1137,7 +1137,8 @@ services:
 
   # ── The redesigned app, installed BESIDE the existing product ───────────────
   #
-  # Its own repository, its own dependencies, its own image. Reachable at /v2
+  # Its own directory (frontend-v2/, imported with its history 2026-10-09),
+  # its own dependencies, its own image. Reachable at /v2
   # once the gateway route exists; until then it is only on the compose network.
   # What is deliberately ABSENT matters as much as what is here:
   #
@@ -1178,7 +1179,7 @@ services:
   frontend-auth:
     restart: unless-stopped
     build:
-      context: ../redesign
+      context: ./frontend-v2
       args:
         # Root-mounted. An ARG with an empty value is SET, and an empty base
         # path is exactly what `next.config.ts` normalises to "no prefix".
@@ -1209,7 +1210,7 @@ services:
   frontend-v2:
     restart: unless-stopped
     build:
-      context: ../redesign
+      context: ./frontend-v2
       args:
         # ★ A BUILD ARG, NOT AN `environment:` ENTRY.
         #

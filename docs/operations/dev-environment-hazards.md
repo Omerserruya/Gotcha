@@ -202,11 +202,13 @@ test run as a gate, and do not read 286 as a regression.**
 
 ---
 
-## The frontend is a second repository, and nothing links them
+## The v2 frontend shares the repository, and still nothing links them
 
 ```
-/home/ocs/projects/ChatCenter   the platform
-/home/ocs/projects/redesign     the rebrand frontend — its own repo, one directory up
+/home/ocs/projects/ChatCenter              the platform
+/home/ocs/projects/ChatCenter/frontend-v2  the rebrand frontend: imported with its history on
+                                           2026-10-09 (from ../redesign, now an archive),
+                                           still its own package, build and types
 ```
 
 **There is no import edge between them.** No shared build, no shared types, no test that spans
@@ -223,7 +225,7 @@ written after grepping `ChatCenter/frontend/src` — **the wrong tree.**
 
 **Before changing a served response shape:**
 ```bash
-grep -rn "<the field>" ../redesign/src/api/contracts/
+grep -rn "<the field>" frontend-v2/src/api/contracts/
 ```
 
 **And the frontend's diagnosis is the one to keep**, because it says why the guard was right to
