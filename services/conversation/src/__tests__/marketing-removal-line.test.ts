@@ -80,6 +80,32 @@ describe("★ a marketing template carries the removal line", () => {
     expect(r2.body.data.body).toBe("מבצע חדש\n\nלהסרה השיבו הסר");
   });
 
+  // 2026-10-09: the line is for MARKETING only; UTILITY and AUTHENTICATION
+  // texts are transactional and never gain it, on any path.
+  it("UTILITY and AUTHENTICATION never get it: create, update, duplicate", async () => {
+    for (const category of ["UTILITY", "utility", "AUTHENTICATION", "authentication"]) {
+      const c = (await request(app).post("/api/templates").send({ name: `t_${category}`, body: "הקוד שלך 1234", category, language: "he" })).body.data;
+      expect(c.body).toBe("הקוד שלך 1234");
+      const u = await request(app).patch(`/api/templates/${c.id}`).send({ body: "ההזמנה נשלחה" });
+      expect(u.body.data.body).toBe("ההזמנה נשלחה");
+      const d = await request(app).post(`/api/templates/${c.id}/duplicate`).send({});
+      expect(d.body.data.body).toBe("ההזמנה נשלחה");
+    }
+    // MARKETING on the same three paths still gets it.
+    const m = (await request(app).post("/api/templates").send({ name: "m", body: "מבצע", category: "MARKETING", language: "he" })).body.data;
+    expect(m.body).toBe("מבצע\n\nלהסרה השיבו הסר");
+    expect((await request(app).post(`/api/templates/${m.id}/duplicate`).send({})).body.data.body).toBe("מבצע\n\nלהסרה השיבו הסר");
+  });
+
+  it("a UTILITY or AUTHENTICATION template without it is not refused at submit", async () => {
+    for (const category of ["UTILITY", "AUTHENTICATION"]) {
+      H.templates.push({ id: category, tenantId: "T", name: category, body: "ההזמנה נשלחה", category, language: "he", channel: "WHATSAPP", status: "DRAFT", channelAccountId: null });
+      const r = await request(app).post(`/api/templates/${category}/submit-to-meta`).send({});
+      expect(r.body.code).not.toBe("MISSING_REMOVAL_LINE");
+      expect(r.status).not.toBe(422);
+    }
+  });
+
   it("an older marketing template without it is not submitted to Meta", async () => {
     H.templates.push({ id: "old", tenantId: "T", name: "old", body: "מבצע", category: "MARKETING", language: "he", channel: "WHATSAPP", status: "DRAFT" });
     const r = await request(app).post("/api/templates/old/submit-to-meta").send({});
@@ -108,6 +134,21 @@ describe("★ a campaign carries the removal line", () => {
     H.recipients.push({ id: "r1", broadcastId: "b1", externalId: "9725" });
     expect((await request(app).post("/api/broadcasts/b1/send").send({})).status).toBe(200);
     expect(H.queued).toHaveLength(1);
+  });
+
+  // 2026-10-09: a UTILITY or AUTHENTICATION template is not marketing, so a
+  // campaign with one is sent as approved, with no removal line required.
+  it("a UTILITY or AUTHENTICATION template without it is sent, unchanged", async () => {
+    for (const category of ["UTILITY", "AUTHENTICATION", "utility"]) {
+      H.templates = []; H.broadcasts = []; H.recipients = []; H.queued = [];
+      H.templates.push({ id: "tp", tenantId: "T", body: "ההזמנה שלך נשלחה", category });
+      H.broadcasts.push(bc({ templateId: "tp", body: "ההזמנה שלך נשלחה" }));
+      H.recipients.push({ id: "r1", broadcastId: "b1", externalId: "9725" });
+      const r = await request(app).post("/api/broadcasts/b1/send").send({});
+      expect(r.status).toBe(200);
+      expect(H.queued).toHaveLength(1);
+      expect(H.queued[0].body).toBe("ההזמנה שלך נשלחה");
+    }
   });
 
   it("a text campaign: every message gets the line", async () => {

@@ -1763,9 +1763,10 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
     console.warn(`${tag} skip opted_out conv=${ctx.conversationId}`);
     return "skipped_opted_out";
   }
-  // A marketing template (by its category, or sent by a marketing run) must
-  // carry the removal line in its approved text: never sent without it.
-  if ((ctx.run?.marketing || String(tmpl.category ?? "").toUpperCase() === "MARKETING") && !hasRemovalLine(tmpl.body)) {
+  // A MARKETING template must carry the removal line in its approved text:
+  // never sent without it. 2026-10-09: by category only; a UTILITY or
+  // AUTHENTICATION template is not marketing, even inside a marketing run.
+  if (String(tmpl.category ?? "").toUpperCase() === "MARKETING" && !hasRemovalLine(tmpl.body)) {
     console.warn(`${tag} skip missing_removal_line id=${templateId} conv=${ctx.conversationId}`);
     return "skipped_missing_removal_line";
   }

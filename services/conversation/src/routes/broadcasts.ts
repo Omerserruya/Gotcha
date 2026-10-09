@@ -573,9 +573,11 @@ router.post("/:id/send", async (req: Request, res: Response) => {
     // השיבו הסר"; opt-out model, docs/product/ai-studio-skills-automations.md
     // §6). An approved template cannot be changed at send time, so one without
     // the line is refused before anything is queued; a text gets it appended.
+    // 2026-10-09: only a MARKETING template needs it; a UTILITY or
+    // AUTHENTICATION template is not marketing and is sent as approved.
     if (broadcast.templateId) {
-      const tmpl = await prisma.messageTemplate.findFirst({ where: { id: broadcast.templateId, tenantId: req.tenantId! }, select: { body: true } });
-      if (tmpl && !hasRemovalLine(tmpl.body)) {
+      const tmpl = await prisma.messageTemplate.findFirst({ where: { id: broadcast.templateId, tenantId: req.tenantId! }, select: { body: true, category: true } });
+      if (tmpl && String(tmpl.category ?? "").toUpperCase() === "MARKETING" && !hasRemovalLine(tmpl.body)) {
         res.status(422).json({ error: "The template must end with the removal line (להסרה השיבו הסר / Reply STOP to unsubscribe)", code: "MISSING_REMOVAL_LINE" });
         return;
       }
