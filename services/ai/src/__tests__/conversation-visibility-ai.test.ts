@@ -64,6 +64,7 @@ vi.mock("@chatcenter/shared", async () => {
 });
 vi.mock("../services/ai-assist.service", () => ({ getSuggestions: vi.fn(), getEffectiveCopilotConfig: async () => ({ copilotMode: "READY_MESSAGE" }) }));
 vi.mock("../services/customer-memory.service", () => ({ getCustomerMemory: async () => { H.reached.push("memory"); return { facts: [], historical: null }; } }));
+vi.mock("../services/ai-activity.service", () => ({ getAiActivity: async () => { H.reached.push("activity"); return { items: [] }; } }));
 vi.mock("../services/tool-execution.service", () => ({
   getToolsForTenant: vi.fn(), getToolExecutions: vi.fn(),
   executeTool: async () => { H.reached.push("tool"); return { ok: true }; },
@@ -95,6 +96,8 @@ beforeEach(() => { H.reached.length = 0; H.viewer = SALES_AGENT; });
 const doors = (id: string) => [
   () => request(app).get(`/api/ai-assist/${id}/suggestions`),
   () => request(app).get(`/api/ai-assist/${id}/customer-memory`),
+  // Named by the 2026-10-09 review as tenant-only; the router.param guard covers it.
+  () => request(app).get(`/api/ai-assist/${id}/ai-activity`),
   () => request(app).post(`/api/ai-assist/${id}/tools/execute`).send({ toolId: "t1", input: {} }),
   () => request(app).get(`/api/commerce-context/${id}`),
   () => request(app).post(`/api/commerce-context/${id}/actions`).send({ action: "add_note", payload: { note: "x" } }),
@@ -113,9 +116,10 @@ describe("★ a department-restricted agent", () => {
 
   it("reaches the handlers for their own department's conversation", async () => {
     await request(app).get("/api/ai-assist/c_sales/customer-memory");
+    await request(app).get("/api/ai-assist/c_sales/ai-activity");
     await request(app).get("/api/commerce-context/c_sales");
     await request(app).get("/api/customer-snapshot?conversationId=c_sales");
-    expect(H.reached).toEqual(["memory", "commerce", "snapshot"]);
+    expect(H.reached).toEqual(["memory", "activity", "commerce", "snapshot"]);
   });
 });
 
