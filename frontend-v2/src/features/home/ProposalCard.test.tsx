@@ -173,6 +173,25 @@ describe('★ design 7 stage 3 - N changes ready, nothing is live yet', () => {
     expect(screen.getByTestId('proposal-head')).toHaveTextContent(/^Done$/);
   });
 
+  it('★★ rejected in Approvals, read back with the thread: said, and nothing offered', () => {
+    // The thread GET carries the approval's state at the time of reading (26b04e52).
+    card(PLAN({ state: 'rejected' }));
+    expect(screen.getByTestId('proposal-head')).toHaveTextContent(/^Rejected - nothing ran$/);
+    expect(screen.queryByTestId('proposal-approve')).toBeNull();
+    expect(screen.queryByTestId('proposal-edit')).toBeNull();
+    expect(screen.getByTestId('proposal-ap1')).not.toHaveTextContent('Nothing is live yet');
+  });
+
+  it.each([
+    ['rejected', 'התוכנית נדחתה, שום דבר לא הופעל'],
+    ['executed', 'התוכנית בוצעה'],
+    ['approved', 'התוכנית אושרה, עוד לא הופעלה'],
+    ['expired', 'פג תוקף התוכנית, שום דבר לא הופעל'],
+  ])('★ in Hebrew, %s names the plan: "%s"', (state, words) => {
+    card(PLAN({ state }), 'he');
+    expect(screen.getByTestId('proposal-head')).toHaveTextContent(words);
+  });
+
   it('★ in Hebrew: the supervisor’s words', async () => {
     card(PLAN(), 'he');
     expect(screen.getByTestId('proposal-head')).toHaveTextContent('2 שינויים מוכנים');

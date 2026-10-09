@@ -301,6 +301,24 @@ describe('★★ design 7 stage 3: a proposal is its own list, read beside the b
       }).messages,
     );
     expect(stored!.proposals.map((p) => p.approvalRequestId)).toEqual(['ap1']);
+    // ★ Rejected in Approvals: the thread's read says so, and the turn keeps it.
+    const [rejected] = turnsFromMessages(
+      threadDetailSchema.parse({
+        thread: { id: 't1', title: null, scope: { range: { preset: '7d' }, channels: 'all' } },
+        messages: [
+          { id: 'u1', role: 'user', text: 'q', status: 'done' },
+          {
+            id: 'm1',
+            role: 'assistant',
+            text: 'a',
+            status: 'done',
+            blocks: [{ ...proposal, state: 'rejected' }],
+          },
+        ],
+        activeRun: null,
+      }).messages,
+    );
+    expect(rejected!.proposals[0]!.state).toBe('rejected');
   });
 
   it('★ the state is Backend’s rule: expired past its deadline, executed only when it ran', () => {
