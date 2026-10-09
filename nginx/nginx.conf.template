@@ -108,6 +108,49 @@ http {
         default "${PUBLIC_PRICING_ENABLED}";
     }
 
+    # ── DEV ONLY: v2 is the front door on dev.gotcha.co.il (2026-10-09) ──────
+    # A v1 page path 302s to its v2 equivalent, query kept. Only this host:
+    # localhost probes and any other Host keep v1. The gotcha_ui=v1 cookie
+    # (set by /legacy) opts out of every redirect. Unlisted paths fall through
+    # to v1 (no v2 equivalent yet), and /api, /socket.io, /widget, /_next,
+    # /join, /checkout, /legal, /auth and the rest have their own locations or
+    # no entry here. Named captures only. Dots are excluded so public assets
+    # under a page prefix (/integrations/x.svg) are never redirected.
+    map $host $v2_host { default 0; dev.gotcha.co.il 1; }
+    map $cookie_gotcha_ui $v2_optout { default 0; v1 1; }
+    map $arg_id $v2_inbox_qs { default "?c=$arg_id"; "" ""; }
+    map "$arg_status$arg_calendar" $v2_cap_ok { default ""; ~connected "&connected=1"; }
+    map "$v2_host$v2_optout:$uri" $v2_dest {
+        default "";
+        "10:/"                                                              /v2;
+        ~^10:/login/?$                                                      /v2;
+        ~^10:/(dashboard|getting-started)/?$                                /v2/home$is_args$args;
+        ~^10:/setup/?$                                                      /v2/onboarding$is_args$args;
+        ~^10:/(conversations|history)/?$                                    /v2/inbox$v2_inbox_qs;
+        ~^10:/contacts/(?<v2cid>[^/.]+)/?$                                  /v2/customers/$v2cid;
+        ~^10:/(?<v2top>analytics|approvals)/?$                              /v2/$v2top$is_args$args;
+        ~^10:/outbound(/(broadcasts|campaigns|scheduled))?/?$               /v2/outreach$is_args$args;
+        ~^10:/outbound/templates/?$                                         /v2/outreach/templates;
+        ~^10:/outbound/call/?$                                              /v2/outreach/calls;
+        ~^10:/(settings/)?channels/?$                                       /v2/settings/channels$is_args$args;
+        ~^10:/settings/channels/whatsapp/?$                                 /v2/settings/channels/whatsapp$is_args$args;
+        ~^10:/settings/?$                                                   /v2/settings;
+        ~^10:/(agents|settings/(people|users|agents))/?$                    /v2/settings/people;
+        ~^10:/settings/permissions/?$                                       /v2/settings/people/permissions;
+        ~^10:/settings/(?<v2set>security|notifications)/?$                  /v2/settings/$v2set;
+        ~^10:/(usage|settings/usage|settings/billing(/(details|credits|usage-limit))?)/?$  /v2/settings/billing$is_args$args;
+        ~^10:/settings/billing/(?<v2bill>plan|payment-method)/?$            /v2/settings/billing/$v2bill$is_args$args;
+        ~^10:/settings/(business-systems|integrations)/?$                   /v2/settings/systems$is_args$args;
+        ~^10:/settings/business-systems/shopify/finish/?$                   /v2/studio/capabilities?system=shopify&pending=1&reason=claim;
+        ~^10:/integrations/shopify/billing/complete/?$                      /v2/studio/capabilities?system=shopify&billing=verify&shop=$arg_shop;
+        ~^10:/integrations/?$                                               /v2/studio/capabilities$is_args$args;
+        ~^10:/(integrations|ai-studio/marketplace)/(?<v2slug>[a-z0-9_-]+)/?$ /v2/studio/capabilities?system=$v2slug$v2_cap_ok;
+        ~^10:/settings/(tools|policy|business-rules)/?$                     /v2/studio/capabilities;
+        ~^10:/ai-studio/?$                                                  /v2/studio$is_args$args;
+        ~^10:/(knowledge|business|ai-studio/knowledge)/?$                   /v2/studio/knowledge$is_args$args;
+        ~^10:/ai-studio/agents/[^/.]+/?$                                    /v2/studio/employees;
+    }
+
     map $http_upgrade $connection_upgrade {
         default upgrade;
         ''      close;
@@ -1920,6 +1963,32 @@ http {
         #
         # Longest-prefix wins among `^~` locations, so this takes precedence
         # over `^~ /v2` below regardless of the order they appear in.
+        # ── DEV: the v1 opt-out for the v2 front door (2026-10-09) ──────────
+        # /legacy keeps this browser on v1 (every v2 redirect skipped) for 30
+        # days; /legacy/off undoes it. add_header here stops inheritance, so
+        # the server-scope security headers are repeated (CSP not needed on a
+        # bodiless 302).
+        location = /legacy {
+            absolute_redirect off;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Set-Cookie "gotcha_ui=v1; Path=/; Max-Age=2592000; SameSite=Lax; Secure" always;
+            return 302 /;
+        }
+        location = /legacy/off {
+            absolute_redirect off;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Set-Cookie "gotcha_ui=; Path=/; Max-Age=0; SameSite=Lax; Secure" always;
+            return 302 /v2;
+        }
+
         location ^~ /v2/auth-api/ {
             proxy_pass http://authentik_server/api/v3/;
             # ★★ THE EXECUTOR REDIRECTS TO ITS OWN ROOT, AND THAT IS NOT OURS.
@@ -1964,6 +2033,10 @@ http {
 
         # ─── Frontend (catch-all) ────────────────────────
         location / {
+            # DEV: v2 is the front door (see the $v2_dest map). A relative
+            # Location, because $scheme is http behind cloudflared.
+            absolute_redirect off;
+            if ($v2_dest != "") { return 302 $v2_dest; }
             proxy_pass http://frontend;
             # WebSocket upgrade so Next.js dev HMR (/_next/webpack-hmr) works.
             proxy_http_version 1.1;

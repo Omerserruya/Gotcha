@@ -596,6 +596,9 @@ services:
       CALENDLY_CLIENT_SECRET: ${CALENDLY_CLIENT_SECRET:-}
       CALENDLY_REDIRECT_URI: ${CALENDLY_REDIRECT_URI:-}
       DASHBOARD_URL: ${DASHBOARD_URL:-}
+      # DEV: a Shopify App Store install with no session lands in v2, the main
+      # frontend on dev (Omer, 2026-10-05; v2 front door 2026-10-09).
+      SHOPIFY_ANONYMOUS_INSTALL_LANDING: ${SHOPIFY_ANONYMOUS_INSTALL_LANDING:-v2}
       ZOHO_CLIENT_ID: ${ZOHO_CLIENT_ID:-}
       ZOHO_CLIENT_SECRET: ${ZOHO_CLIENT_SECRET:-}
       ZOHO_REDIRECT_URI: ${ZOHO_REDIRECT_URI:-}
