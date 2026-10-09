@@ -468,8 +468,13 @@ function fallbackReplyHebrew(
 }
 
 // ─── Get Onboarding Status ──────────────────────────────────
+// Any member of the workspace (authenticate + resolveTenant above): it is this
+// workspace's own setup state, and every page reads it to send an unpaid or
+// still-onboarding workspace to the right screen. It was gated on
+// analytics:workspace:read, which agents no longer hold (2026-10-09), and the
+// redirect would silently stop for them. /setup-map keeps its gate.
 
-router.get("/status", requirePermission("analytics:workspace:read"), async (req: Request, res: Response): Promise<void> => {
+router.get("/status", async (req: Request, res: Response): Promise<void> => {
   try {
     const tenant = await prisma.tenant.findUnique({
       where: { id: req.tenantId! },
