@@ -590,9 +590,13 @@ function StepLine({ step }: { readonly step: ThreadStep }) {
         </span>
       ) : null}
       {step.status === 'waiting_approval' ? (
-        // Stage 1 shows it; the decision is made in Approvals.
+        // The decision is made in Approvals - on this request, not on the list.
         <Link
-          href="/approvals"
+          href={
+            step.approvalRequestId
+              ? { pathname: '/approvals', query: { id: step.approvalRequestId } }
+              : '/approvals'
+          }
           className={styles.stepLink}
           data-testid={`step-${step.id}-approvals`}
         >

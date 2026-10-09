@@ -279,7 +279,8 @@ describe('★★ the first question makes a thread, and Home becomes the convers
       }),
     );
     expect(screen.getByTestId('step-s9')).toHaveTextContent('waiting for your approval');
-    expect(screen.getByTestId('step-s9-approvals')).toHaveAttribute('href', '/approvals');
+    // ★ The request itself, not the list it is somewhere in.
+    expect(screen.getByTestId('step-s9-approvals')).toHaveAttribute('href', '/approvals?id=ar1');
   });
 
   it('★ the question and the answer read in their own direction - a Hebrew one right to left', async () => {
