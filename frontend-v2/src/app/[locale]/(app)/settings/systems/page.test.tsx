@@ -5,12 +5,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import messages from '@/i18n/messages/en/business-core.json';
 import systems from '@/i18n/messages/en/systems.json';
+import capabilities from '@/i18n/messages/en/capabilities.json';
 
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: string) =>
     createTranslator({
       locale: 'en',
-      messages: { 'business-core': messages, systems },
+      messages: { 'business-core': messages, systems, capabilities },
       namespace: namespace as 'systems',
     }),
   getLocale: async () => 'en',
@@ -123,5 +124,36 @@ describe('★ 14d corrections - the line and the host', () => {
     } as never);
     await open({ part: 'ecommerce' });
     expect(screen.getByTestId('part')).toHaveAttribute('data-host', 'avivco.myshopify.com');
+  });
+});
+
+describe('★★ a refused Shopify install lands here (nginx) - said in words, never the code', () => {
+  it.each([
+    [
+      'invalid_request',
+      "That request couldn't be confirmed as coming from Shopify. Nothing was connected - start again from Shopify.",
+    ],
+    [
+      'not_configured',
+      "This connection isn't set up in this environment yet. Nothing was connected.",
+    ],
+    ['shop_connected_elsewhere', 'That store is already connected to another workspace.'],
+  ])('%s', async (code, words) => {
+    await open({ shopify_install_error: code });
+    expect(screen.getByTestId('shopify-install-error')).toHaveTextContent(words);
+    expect(screen.getByTestId('shopify-install-error')).not.toHaveTextContent(code);
+  });
+
+  it('an unknown code: the generic sentence, and the raw value is never printed', async () => {
+    await open({ shopify_install_error: '<b>made_up</b>' });
+    expect(screen.getByTestId('shopify-install-error')).toHaveTextContent(
+      "Shopify didn't connect. Try again.",
+    );
+    expect(screen.getByTestId('shopify-install-error')).not.toHaveTextContent(/made_up|<b>/);
+  });
+
+  it('none: nothing said', async () => {
+    await open({});
+    expect(screen.queryByTestId('shopify-install-error')).toBeNull();
   });
 });

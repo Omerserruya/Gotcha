@@ -3,6 +3,8 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { connectedButFailing } from '@/api/contracts/business-core';
 
 import { pageMetadata } from '@/shell/page-metadata';
+import { shopifyInstallError } from '@/features/capabilities/oauth';
+import capabilityStyles from '@/features/capabilities/Capabilities.module.css';
 import { loadCapabilities } from '@/features/capabilities/load-capabilities';
 import { AcrossDrawer } from '@/features/integrations/AcrossDrawer';
 import { BusinessCore } from '@/features/integrations/BusinessCore';
@@ -24,13 +26,21 @@ import { SettingsSection } from '@/shell/SettingsSection';
 export default async function Page({
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ readonly part?: string; readonly panel?: string }>;
+  readonly searchParams?: Promise<{
+    readonly part?: string;
+    readonly panel?: string;
+    /** A refused Shopify install (`shopify-install.ts`), sent here by nginx. */
+    readonly shopify_install_error?: string;
+  }>;
 }) {
   const t = await getTranslations('systems');
   const tb = await getTranslations('business-core');
   const locale = await getLocale();
   const params = (await searchParams) ?? {};
   const core = await loadBusinessCore();
+  // Said in words; an unknown code is said generically and never printed.
+  const installError = shopifyInstallError(params.shopify_install_error);
+  const tl = await getTranslations('capabilities.landing');
   const part = params.part ? (core?.roles.find((r) => r.role === params.part) ?? null) : null;
   // 10's actions and the system's record, only when a part's drawer needs them.
   const capabilityData = part ? await loadCapabilities() : null;
@@ -55,6 +65,16 @@ export default async function Page({
   */
   return (
     <SettingsSection title={t('title')} description={t('description')}>
+      {installError ? (
+        <p
+          className={capabilityStyles.landing}
+          role="alert"
+          data-outcome="problem"
+          data-testid="shopify-install-error"
+        >
+          {tl(`error.${installError}`, { name: 'Shopify' })}
+        </p>
+      ) : null}
       <BusinessCore core={core} />
 
       {/* 14c / 14d: a part's drawer; 14e: across both. */}

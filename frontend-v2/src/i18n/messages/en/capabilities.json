@@ -160,10 +160,11 @@
       "shop_connected_elsewhere": "That store is already connected to another workspace.",
       "link_failed": "{name} answered, but the store couldn't be linked to this workspace.",
       "other": "{name} didn't connect. Try again.",
-      "not_configured": "{name} isn't set up on GOTCHA's side yet. Nothing was connected.",
+      "not_configured": "This connection isn't set up in this environment yet. Nothing was connected.",
       "insufficient_permissions": "{name} was approved without the access GOTCHA needs. Approve again with read and write access.",
       "callback_not_received": "{name} didn't send the keys back. Nothing was connected - try again.",
-      "invalid_state": "That approval couldn't be matched to this workspace. Start again from Connect."
+      "invalid_state": "That approval couldn't be matched to this workspace. Start again from Connect.",
+      "invalid_request": "That request couldn't be confirmed as coming from {name}. Nothing was connected - start again from {name}."
     },
     "close": "Close"
   },

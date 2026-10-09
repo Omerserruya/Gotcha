@@ -11,7 +11,13 @@ vi.mock('@/i18n/navigation', () => ({
   usePathname: () => '/studio/capabilities',
 }));
 
-import { OAUTH_FAILURES, oauthFailure, oauthHere } from './oauth';
+import {
+  OAUTH_FAILURES,
+  oauthFailure,
+  oauthHere,
+  SHOPIFY_INSTALL_ERRORS,
+  shopifyInstallError,
+} from './oauth';
 import { OAuthLanding } from './OAuthLanding';
 
 beforeEach(() => {
@@ -102,5 +108,18 @@ describe('★★ the sentence outlives the tidied URL', () => {
     render(tree(null));
     expect(screen.queryByTestId('oauth-landing')).toBeNull();
     expect(replace).not.toHaveBeenCalled();
+  });
+});
+
+describe('★ Shopify’s refused install - a closed set, said on either screen', () => {
+  it('every install code is also a way-back code, so /studio/capabilities says it too', () => {
+    for (const code of SHOPIFY_INSTALL_ERRORS) expect(oauthFailure(code)).toBe(code);
+  });
+
+  it('an unknown code is "other"; none is nothing', () => {
+    expect(shopifyInstallError('shop_connected_elsewhere')).toBe('shop_connected_elsewhere');
+    expect(shopifyInstallError('<script>')).toBe('other');
+    expect(shopifyInstallError(undefined)).toBeNull();
+    expect(shopifyInstallError('')).toBeNull();
   });
 });

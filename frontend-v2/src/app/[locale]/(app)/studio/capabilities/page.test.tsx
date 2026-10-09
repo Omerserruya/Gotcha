@@ -99,6 +99,10 @@ describe('★★ the way back from a provider', () => {
     [{ system: 'shopify', connected: '1' }, 'connected'],
     [{ system: 'shopify', error: 'denied' }, 'denied'],
     [{ system: 'shopify', error: 'made_up' }, 'other'],
+    // Shopify's refused install, once the backend lands it here.
+    [{ system: 'shopify', error: 'invalid_request' }, 'invalid_request'],
+    [{ system: 'shopify', error: 'not_configured' }, 'not_configured'],
+    [{ system: 'shopify', error: 'shop_connected_elsewhere' }, 'shop_connected_elsewhere'],
   ])('%o → said as %s, above the system', async (params, outcome) => {
     const tree = await page(params);
     expect(find<{ outcome: string; slug: string }>(tree, OAuthLanding)).toMatchObject({

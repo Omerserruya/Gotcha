@@ -40,12 +40,38 @@ export const OAUTH_FAILURES = [
   'insufficient_permissions',
   'callback_not_received',
   'invalid_state',
+  // Shopify's refused install (shopify-install.ts), when it lands here.
+  'invalid_request',
 ] as const;
 export type OAuthFailure = (typeof OAUTH_FAILURES)[number];
 
 export function oauthFailure(code: string | undefined): OAuthFailure | 'other' | null {
   if (!code) return null;
   return (OAUTH_FAILURES as readonly string[]).includes(code) ? (code as OAuthFailure) : 'other';
+}
+
+/**
+ * Shopify's refused install, as `shopify-install.ts` (`installErrorRedirect`)
+ * and the callback's `shop_taken` name it - a closed set. It lands on
+ * `/settings/business-systems?shopify_install_error=<code>`, which nginx sends
+ * to `/v2/settings/systems`; the backend is moving it to this screen as
+ * `?system=shopify&error=<code>`, where `oauthFailure` reads the same codes.
+ */
+export const SHOPIFY_INSTALL_ERRORS = [
+  'invalid_request',
+  'not_configured',
+  'shop_connected_elsewhere',
+] as const;
+export type ShopifyInstallError = (typeof SHOPIFY_INSTALL_ERRORS)[number];
+
+/** A code we name, or `other` - said generically, never printed. */
+export function shopifyInstallError(
+  code: string | undefined,
+): ShopifyInstallError | 'other' | null {
+  if (!code) return null;
+  return (SHOPIFY_INSTALL_ERRORS as readonly string[]).includes(code)
+    ? (code as ShopifyInstallError)
+    : 'other';
 }
 
 /**
