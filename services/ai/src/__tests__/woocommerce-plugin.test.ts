@@ -14,6 +14,13 @@ import express from "express";
 import request from "supertest";
 import crypto from "crypto";
 
+// This suite is about the plugin's behaviour, and calls the public endpoints
+// for one site far more often than a minute's limit; the limits have their
+// own suite (woocommerce-plugin-rate-limit.test.ts).
+vi.hoisted(() => {
+  process.env.WOO_PLUGIN_EXCHANGE_RPM = "10000";
+  process.env.WOO_PLUGIN_SIGNAL_RPM = "10000";
+});
 const H = vi.hoisted(() => ({
   redis: new Map<string, string>(), settings: new Map<string, string>(), allowed: true,
   integration: { config: { storeUrl: "https://shop.example.com" } } as any, webchat: { externalId: "widget_abc" } as any,

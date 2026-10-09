@@ -8,6 +8,8 @@
  *   GET    /api/woocommerce-plugin/download  (authenticated: connect systems) → the zip
  */
 import { Router, type Request, type Response } from "express";
+import rateLimit from "express-rate-limit";
+import crypto from "crypto";
 import express from "express";
 import fs from "fs";
 import path from "path";
@@ -49,13 +51,47 @@ router.post("/bind", express.json(), ...authed, canConnect, async (req: Request 
   } catch (err) { fail(res, err, "bind"); }
 });
 
-router.post("/exchange", express.json(), async (req: Request, res: Response) => {
+// ── Public endpoints: rate limited per IP and per site ────────────────────
+// /exchange and /signal take no session (the plugin calls them), so nothing
+// but these bounds a flood (2026-10-09 review). In-process like the other
+// public limiters: the bound is per replica.
+function envInt(name: string, fallback: number): number {
+  const n = Number(process.env[name]);
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+}
+function limiter(name: string, max: number, key: (req: Request) => string) {
+  return rateLimit({
+    windowMs: 60 * 1000,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => `woo-plugin:${name}:${key(req)}`,
+    message: { error: "rate_limited" },
+  });
+}
+/** The site a call speaks for: its host, never the raw URL. */
+function siteHost(req: Request): string {
+  try { return new URL(String((req.body as any)?.siteUrl ?? "")).host.toLowerCase() || "none"; } catch { return "none"; }
+}
+/** The plugin's token, hashed: a key must never hold the secret itself. */
+function tokenHash(req: Request): string {
+  const raw = String(req.headers.authorization ?? "");
+  return raw ? crypto.createHash("sha256").update(raw).digest("hex").slice(0, 24) : "none";
+}
+const EXCHANGE_RPM = envInt("WOO_PLUGIN_EXCHANGE_RPM", 10);
+const SIGNAL_RPM = envInt("WOO_PLUGIN_SIGNAL_RPM", 120);
+const exchangeByIp = limiter("exchange-ip", EXCHANGE_RPM, (req) => String(req.ip));
+const exchangeBySite = limiter("exchange-site", EXCHANGE_RPM, siteHost);
+const signalByIp = limiter("signal-ip", SIGNAL_RPM, (req) => String(req.ip));
+const signalBySite = limiter("signal-site", SIGNAL_RPM, tokenHash);
+
+router.post("/exchange", express.json(), exchangeByIp, exchangeBySite, async (req: Request, res: Response) => {
   try {
     res.json(await exchangeCode(req.body ?? {}, resolveAppPublicUrl(process.env)));
   } catch (err) { fail(res, err, "exchange"); }
 });
 
-router.post("/signal", express.json(), async (req: Request, res: Response) => {
+router.post("/signal", express.json(), signalByIp, signalBySite, async (req: Request, res: Response) => {
   try {
     await signal(req.headers.authorization, req.body ?? {});
     res.status(204).end();
