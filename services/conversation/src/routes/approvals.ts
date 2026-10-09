@@ -441,10 +441,15 @@ export function isOperatorPlan(tool: unknown, params: unknown): boolean {
   return typeof source === "string" && OPERATOR_SOURCES.has(source);
 }
 
-/** The person behind requestedBy: "user:<id>" (Home) and a bare id are the same user. */
+/**
+ * The person behind requestedBy: "user:<id>" (Home), "agent:<id>" (a human's
+ * commerce request, 2026-10-09) and a bare id are the same user. "agent-loop:"
+ * and "ai-agent:" name an AI agent, never a person, and stay as they are.
+ */
 function requesterUserId(requestedBy: unknown): string | null {
   if (typeof requestedBy !== "string" || !requestedBy) return null;
-  return requestedBy.startsWith("user:") ? requestedBy.slice("user:".length) : requestedBy;
+  const m = /^(?:user|agent):(.+)$/.exec(requestedBy);
+  return m ? m[1]! : requestedBy;
 }
 
 /**

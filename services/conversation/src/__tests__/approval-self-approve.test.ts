@@ -146,6 +146,22 @@ describe("G7: a non-plan approval the user raised themselves is refused", () => 
     expect(mocks.approveRequest).not.toHaveBeenCalled();
   });
 
+  it("requestedBy agent:<self> (a human's commerce request): refused the same way", async () => {
+    rowIs({ ...OWN_ACTION, tool: "shopify.refund_order", params: { orderId: "o_1" }, requestedBy: "agent:mgr_1" });
+    const r = await approve();
+    expect(r.status).toBe(403);
+    expect(r.body).toEqual(REFUSED);
+    expect(mocks.approveRequest).not.toHaveBeenCalled();
+  });
+
+  it("an AI agent's prefix is not a person: 'agent-loop:mgr_1' is not mgr_1", async () => {
+    for (const requestedBy of ["agent-loop:mgr_1", "agent-mgr_1"]) {
+      rowIs({ ...OWN_ACTION, requestedBy });
+      const r = await approve();
+      expect(r.status).toBe(200);
+    }
+  });
+
   it("a prefix only at the start counts: 'xuser:mgr_1' is not mgr_1", async () => {
     rowIs({ ...OWN_ACTION, requestedBy: "xuser:mgr_1" });
     const r = await approve();
@@ -158,6 +174,7 @@ describe("G7: someone else approving still works", () => {
     ["user:other_1", OWN_ACTION],
     ["other_1", OWN_ACTION],
     ["ai-agent:agent_1", OWN_ACTION],
+    ["agent:other_1", OWN_ACTION],
     ["user:other_1", HOME_PLAN],
   ])("requestedBy %s is approved by mgr_1", async (requestedBy, row) => {
     rowIs({ ...row, requestedBy });
