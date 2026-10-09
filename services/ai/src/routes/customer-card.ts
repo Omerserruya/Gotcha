@@ -32,13 +32,24 @@
  * third option.
  */
 import { Router, type Request, type Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, visibilityClause, viewerOf } from "@chatcenter/shared";
+import { privateNumbers, conversationIsPrivate } from "../lib/private-numbers";
 import { loadCustomerContext } from "../services/memory/customer-context.service";
 import { loadCustomerCommerceFacts } from "../services/customer-commerce-facts.service";
 
 const router = Router();
 
-router.use("/customer-card", authenticate, resolveTenant, requireActiveTenant());
+// Order count, lifetime value and refunds, with live store calls: for someone
+// who may read approvals AND a customer's commerce, never any member
+// (2026-10-09 review). Visibility on the approval's conversation is below.
+router.use(
+  "/customer-card",
+  authenticate,
+  resolveTenant,
+  requireActiveTenant(),
+  requirePermissionOrRole("approvals:requests:view", "ADMIN"),
+  requirePermissionOrRole("customer:commerce:read", "ADMIN"),
+);
 
 /** A value that may be absent, and always says why when it is. */
 type Field<T> = { value: T | null; reason: string | null };
@@ -74,6 +85,18 @@ router.get("/customer-card/:approvalId", async (req: Request, res: Response): Pr
           sentiment: { value: null, score: null, analyzedAt: null, reason: "approval_has_no_conversation" },
         },
       });
+      return;
+    }
+
+    // The inbox's rule on the conversation behind it: another department's, or a
+    // private number's, reads as not found, exactly like a missing approval.
+    const clause = visibilityClause(viewerOf(req));
+    const conv = await prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId, ...(clause ? { OR: clause } : {}) },
+      select: { channel: true, customerExternalId: true, channelAccountId: true },
+    });
+    if (!conv || conversationIsPrivate(conv as any, await privateNumbers(tenantId))) {
+      res.status(404).json({ error: "approval not found" });
       return;
     }
 
