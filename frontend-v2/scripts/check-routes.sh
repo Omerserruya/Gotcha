@@ -17,10 +17,11 @@
 # session, no cookie and no running stack, and it found the same single defect
 # an authenticated sweep found.
 #
-# Usage:  scripts/check-routes.sh [path-to-ChatCenter]
+# Usage:  scripts/check-routes.sh [path-to-the-platform]
+#         (default: the monorepo this app lives in)
 set -uo pipefail
 
-PLATFORM="${1:-$HOME/projects/ChatCenter}"
+PLATFORM="${1:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)}"
 [ -d "$PLATFORM/services" ] || { echo "no services/ under $PLATFORM" >&2; exit 2; }
 
 fail=0

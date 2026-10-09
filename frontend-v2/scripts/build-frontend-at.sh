@@ -7,10 +7,18 @@
 #
 # ── WHY THIS EXISTS ───────────────────────────────────────────────────────────
 #
-# Same reason as ever: `context: ../redesign` is a shared checkout that several
-# sessions edit, so a build from it cannot be attributed to a commit. `git
-# archive <ref>` can be. See the long note in build-v2-at.sh, which this file
-# now implements for both services.
+# A build from the working tree cannot be attributed to a commit. The app's
+# directory is a shared checkout that several sessions edit, and on 2026-09-27
+# `git status` read clean, `COPY . .` then captured a half-written symbol that
+# existed in no commit, and the build failed with type errors in source nobody
+# had committed - which read as "Frontend's commit does not compile". Every
+# reading was true, of a different tree. `git archive <ref>:<app dir>`
+# materialises exactly what is committed, so a green result names a ref.
+# (This replaces build-v2-at.sh, which did the same for frontend-v2 only.)
+#
+# ★ The app lives in a subdirectory of the GOTCHA monorepo. Both the repo and
+#   the subdirectory are found from this script's own location, so moving or
+#   renaming the directory cannot leave a stale path here.
 #
 # ── ★★ AND THE REASON IT IS ONE SCRIPT AND NOT TWO ────────────────────────────
 #
@@ -45,8 +53,17 @@
 # catch it; a check that only runs when somebody remembers is not a check.
 set -euo pipefail
 
-REPO=/home/ocs/projects/redesign
-COMPOSE=/home/ocs/projects/ChatCenter
+HERE=$(cd "$(dirname "$0")/.." && pwd)
+REPO=$(git -C "$HERE" rev-parse --show-toplevel)
+# The app's directory inside the monorepo, e.g. `frontend-v2` - no slashes at
+# either end, as `<ref>:<path>` wants it.
+APP=$(git -C "$HERE" rev-parse --show-prefix)
+APP=${APP%/}
+COMPOSE=$REPO
+if [ -z "$APP" ]; then
+  echo "refusing: $HERE is the repo root, not an app directory inside it" >&2
+  exit 1
+fi
 
 SERVICE="${1:-}"
 case "$SERVICE" in
@@ -63,8 +80,15 @@ SHA=$(git -C "$REPO" rev-parse --short "$REF")
 SRC=$(mktemp -d /tmp/claude-1000/fesrc-XXXXXX)
 trap 'rm -rf "$SRC"' EXIT
 
-echo "── materialising $REF ($SHA) for $SERVICE ──"
-git -C "$REPO" archive "$REF" | tar -x -C "$SRC"
+# A ref from before the import has no such directory: say so, rather than
+# archiving nothing and building an empty context.
+if ! git -C "$REPO" cat-file -e "$REF:$APP" 2>/dev/null; then
+  echo "refusing: $REF has no $APP/ (a ref from before the app was imported?)" >&2
+  exit 1
+fi
+
+echo "── materialising $REF:$APP ($SHA) for $SERVICE ──"
+git -C "$REPO" archive "$REF:$APP" | tar -x -C "$SRC"
 
 # Read the args out of compose rather than restating them: they are inlined by
 # `next build`, and a drift between this script and the service definition is
