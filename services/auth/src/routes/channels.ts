@@ -4,6 +4,8 @@ import { z } from "zod";
 import axios from "axios";
 import jwt from "jsonwebtoken";
 import { splitErrorCode, withErrorCode } from "../lib/error-code";
+// Every row a route answers with goes through this one serializer (2026-10-10).
+import { publicChannelAccount } from "../lib/channel-account-dto";
 import {
   prisma,
   // The website widget shares its experience config with the Shopify
@@ -90,12 +92,6 @@ function providerReason(err: any): string {
  */
 const SUBSCRIPTION_GAP_CODES = new Set(["SUBSCRIBE_FAILED", "WATCH_FAILED", "OUTLOOK_SUBSCRIPTION_FAILED"]);
 
-/** platformMeta as a client may see it: Outlook's clientState authenticates Graph's pushes, so it stays here. */
-function publicPlatformMeta(meta: unknown): unknown {
-  if (!meta || typeof meta !== "object" || Array.isArray(meta) || !("clientState" in meta)) return meta;
-  const { clientState: _secret, ...rest } = meta as Record<string, unknown>;
-  return rest;
-}
 
 
 const META_APP_ID = process.env.META_APP_ID || "";
@@ -249,8 +245,7 @@ router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:
 
     // The code a writer stored beside the sentence (lib/error-code), served apart.
     const withCode = <T extends { lastError: string | null; platformMeta: unknown }>(a: T) => ({
-      ...a,
-      platformMeta: publicPlatformMeta(a.platformMeta),
+      ...publicChannelAccount(a),
       ...splitErrorCode(a.lastError),
     });
     if (!windowed) {
@@ -723,7 +718,7 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
     }
 
     console.log(`[WA-CONNECT] Persisted ${connectedAccounts.length} account(s), webhookSubscribed=${webhookSubscribed}`);
-    res.status(201).json({ data: connectedAccounts, webhookSubscribed });
+    res.status(201).json({ data: connectedAccounts.map(publicChannelAccount), webhookSubscribed });
   } catch (err: any) {
     console.error("[WA-CONNECT] Error:", err.response?.data || err.message);
     const metaError = err.response?.data?.error;
@@ -822,7 +817,7 @@ router.post("/connect/whatsapp-session", authenticate, resolveTenant, requirePer
     }
 
     console.log(`[WA-SESSION] Connected ${connectedAccounts.length} account(s)`);
-    res.status(201).json({ data: connectedAccounts });
+    res.status(201).json({ data: connectedAccounts.map(publicChannelAccount) });
   } catch (err: any) {
     console.error("[WA-SESSION] Error:", err.response?.data || err.message);
     res.status(500).json({ error: "Failed to complete WhatsApp setup" });
@@ -2373,13 +2368,16 @@ router.post("/:id/disconnect", authenticate, resolveTenant, requirePermission("c
       console.warn("Channel disconnect cleanup warning:", cleanupErr.response?.data || cleanupErr.message);
     }
 
-    // Soft disconnect: keep record, clear credentials
+    // Soft disconnect: keep record, clear credentials. A widget's "credentials"
+    // are its settings, not a secret: wiping them left nothing to come back to,
+    // so a widget keeps them and /webchat/create revives it (2026-10-10).
+    const keepsSettings = account.channel === "WEBCHAT";
     await prisma.channelAccount.update({
       where: { id: account.id },
       data: {
         connectionStatus: "DISCONNECTED",
         isActive: false,
-        credentials: {},
+        ...(keepsSettings ? {} : { credentials: {} }),
         lastError: null,
       },
     });
@@ -2561,11 +2559,14 @@ router.post("/connect/email", authenticate, resolveTenant, requirePermission("ch
   try {
     const { emailAddress, displayName, smtpHost, smtpPort, smtpUser, smtpPass, imapHost, imapPort, imapUser, imapPass } = req.body;
 
-    // Check for duplicate
-    const existing = await prisma.channelAccount.findFirst({
-      where: { channel: "EMAIL", externalId: emailAddress, tenantId: req.tenantId! },
+    // Unique-key lookup (see /connect/whatsapp), so another tenant's address is
+    // a clean 409 rather than a failed create. Our own DISCONNECTED row is a
+    // reconnect: refusing it left the address unusable forever (2026-10-10).
+    const existing = await prisma.channelAccount.findUnique({
+      where: { channel_externalId: { channel: "EMAIL", externalId: emailAddress } },
     });
-    if (existing) {
+    const reconnecting = !!existing && existing.tenantId === req.tenantId! && existing.connectionStatus === "DISCONNECTED";
+    if (existing && !reconnecting) {
       res.status(409).json({ error: "This email address is already connected" });
       return;
     }
@@ -2575,6 +2576,24 @@ router.post("/connect/email", authenticate, resolveTenant, requirePermission("ch
       imapHost, imapPort, imapUser, imapPass,
       fromAddress: emailAddress,
     };
+
+    if (existing && reconnecting) {
+      const revived = await prisma.channelAccount.update({
+        where: { id: existing.id },
+        data: {
+          displayName,
+          credentials: encryptCredentials(credentials),
+          connectionStatus: "CONNECTED",
+          isActive: true,
+          lastError: null,
+          connectedAt: new Date(),
+          connectedBy: req.user!.userId,
+        },
+      });
+      await getRedis().del(`channel_account:EMAIL:${emailAddress}`);
+      res.json({ data: [publicChannelAccount(revived)] });
+      return;
+    }
 
     const channelAccount = await prisma.channelAccount.create({
       data: {
@@ -2589,7 +2608,7 @@ router.post("/connect/email", authenticate, resolveTenant, requirePermission("ch
       },
     });
 
-    res.json({ data: [channelAccount] });
+    res.json({ data: [publicChannelAccount(channelAccount)] });
   } catch (err: any) {
     console.error("Email connection error:", err);
     res.status(500).json({ error: "Failed to connect email channel" });
@@ -2608,8 +2627,22 @@ router.post("/webchat/create", authenticate, resolveTenant, requirePermission("c
       where: { tenantId: req.tenantId!, channel: "WEBCHAT" },
     });
 
+    // A disconnected widget comes back as the SAME widget, settings intact:
+    // its id is in the customer's embed code. PENDING, as a fresh create, since
+    // /bootstrap and /init (ai embedded-chat) accept only PENDING or CONNECTED
+    // and flip PENDING to CONNECTED on the first real load (2026-10-10).
+    if (existing && existing.connectionStatus === "DISCONNECTED") {
+      const revived = await prisma.channelAccount.update({
+        where: { id: existing.id },
+        data: { connectionStatus: "PENDING", isActive: true, lastError: null },
+      });
+      await getRedis().del(`channel_account:WEBCHAT:${existing.externalId}`);
+      res.json({ data: publicChannelAccount(revived) });
+      return;
+    }
+
     if (existing) {
-      res.json({ data: existing });
+      res.json({ data: publicChannelAccount(existing) });
       return;
     }
 
@@ -2629,7 +2662,7 @@ router.post("/webchat/create", authenticate, resolveTenant, requirePermission("c
       },
     });
 
-    res.status(201).json({ data: account });
+    res.status(201).json({ data: publicChannelAccount(account) });
   } catch (err) {
     console.error("Create webchat widget error:", err);
     res.status(500).json({ error: "Failed to create widget" });
@@ -2662,7 +2695,7 @@ router.put("/webchat/:id/settings", authenticate, resolveTenant, requirePermissi
       where: { id: account.id },
       data: { credentials: settings as any },
     });
-    res.json({ data: { ...updated, config: settings } });
+    res.json({ data: { ...publicChannelAccount(updated), config: settings } });
   } catch (err) {
     console.error("Update webchat settings error:", err);
     res.status(500).json({ error: "Failed to update widget settings" });

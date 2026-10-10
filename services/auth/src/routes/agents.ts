@@ -17,8 +17,11 @@ import {
   AuditAction,
   getLastLoginBySubject,
   normalizeE164,
-  userMayApprove, readDurableSetting, writeDurableSetting, requirePermission } from "@chatcenter/shared";
+  userMayApprove, readDurableSetting, writeDurableSetting, requirePermission,
+  encryptCredentials,
+} from "@chatcenter/shared";
 import * as invitations from "../services/invitation.service";
+import { publicChannelAccount } from "../lib/channel-account-dto";
 
 const router = Router();
 // API-level MFA enforcement: a required-but-unenrolled caller is 403'd here, not
@@ -344,10 +347,13 @@ router.post("/settings/channels", requireRole("ADMIN"), validate(createChannelSc
         channel,
         externalId,
         displayName,
-        credentials,
+        // Encrypted like every other channel writer (2026-10-10): this
+        // legacy route stored the access token as plain JSON.
+        credentials: encryptCredentials(credentials),
       },
     });
-    res.status(201).json({ data: account });
+    // Never the stored credentials or any other secret on the wire.
+    res.status(201).json({ data: publicChannelAccount(account) });
   } catch (err) {
     console.error("Create channel account error:", err);
     res.status(500).json({ error: "Failed to create channel account" });
@@ -377,13 +383,13 @@ router.patch("/settings/channels/:id", requireRole("ADMIN"), validate(updateChan
     };
     const data: Record<string, unknown> = {};
     if (displayName !== undefined) data.displayName = displayName;
-    if (credentials !== undefined) data.credentials = credentials;
+    if (credentials !== undefined) data.credentials = encryptCredentials(credentials as Record<string, unknown>);
     if (isActive !== undefined) data.isActive = isActive;
     const updated = await prisma.channelAccount.update({
       where: { id: req.params.id as string },
       data,
     });
-    res.json({ data: updated });
+    res.json({ data: publicChannelAccount(updated) });
   } catch (err) {
     console.error("Update channel account error:", err);
     res.status(500).json({ error: "Failed to update channel account" });
