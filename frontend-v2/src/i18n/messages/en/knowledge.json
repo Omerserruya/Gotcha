@@ -176,6 +176,8 @@
     "connectProblem": {
       "not_configured": "This connection isn't set up in this environment yet.",
       "forbidden": "You don't have permission to connect a knowledge source.",
+      "entitlement": "Knowledge isn't part of this plan, so {name} can't be connected.",
+      "limit": "This plan has no room for another knowledge base, so {name} wasn't connected.",
       "failed": "{name} couldn't be opened - try again."
     },
     "opening": "Opening…",

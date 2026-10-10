@@ -126,11 +126,20 @@ describe('★★ Drive and Confluence at the wire', () => {
     expect(getPath(1)).toBe('/api/knowledge/oauth/confluence/init?kbId=kb1&flow=redesign_studio');
   });
 
-  it('no base yet: one is made first; an unread base: nothing at all', async () => {
-    post.mockResolvedValue({ id: 'kb-new' });
+  it('★ no base yet: none is made here - the start carries its name (ai c6c6309a); an unread base: nothing at all', async () => {
     get.mockResolvedValue({ url: 'https://auth.atlassian.com/authorize' });
     await startKnowledgeConnect('none', 'confluence', 'Knowledge');
-    expect(getPath(0)).toContain('kbId=kb-new');
+    expect(post).not.toHaveBeenCalled();
+    expect(getPath(0)).toBe(
+      '/api/knowledge/oauth/confluence/init?newBaseName=Knowledge&flow=redesign_studio',
+    );
+    // The name is a value in the query, never a second parameter.
+    await startKnowledgeConnect('none', 'google_drive', 'ידע & more');
+    expect(getPath(1)).toBe(
+      `/api/knowledge/oauth/google-drive/init?newBaseName=${encodeURIComponent('ידע & more')}&flow=redesign_studio`,
+    );
+    expect(getPath(1)).not.toContain('kbId');
+    expect(post).not.toHaveBeenCalled();
     get.mockClear();
     post.mockClear();
     expect(await startKnowledgeConnect('unknown', 'confluence', 'K')).toEqual({
@@ -172,5 +181,26 @@ describe('★★ Drive and Confluence at the wire', () => {
       ok: false,
       reason: 'not_configured',
     });
+  });
+
+  it('★ ai c6c6309a: not configured is a 409 now - the code decides, not the status', async () => {
+    get.mockImplementation(async () => {
+      throw new ApiError({ kind: 'conflict', status: 409, code: 'NOT_CONFIGURED' });
+    });
+    expect(await startKnowledgeConnect({ id: 'kb1' }, 'confluence', 'K')).toEqual({
+      ok: false,
+      reason: 'not_configured',
+    });
+  });
+
+  it.each([
+    ['PLAN_FEATURE_REQUIRED', 'entitlement'],
+    ['PLAN_LIMIT_REACHED', 'limit'],
+    [undefined, 'entitlement'],
+  ] as const)('a new base the plan refuses (402 %s) is %s', async (code, reason) => {
+    get.mockImplementation(async () => {
+      throw new ApiError({ kind: 'tenant_inactive', status: 402, code });
+    });
+    expect(await startKnowledgeConnect('none', 'confluence', 'K')).toEqual({ ok: false, reason });
   });
 });

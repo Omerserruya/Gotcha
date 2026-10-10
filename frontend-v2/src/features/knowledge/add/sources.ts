@@ -118,7 +118,8 @@ export type DisconnectSourceResult =
 /**
  * Disconnects a Drive or Confluence: `DELETE /api/knowledge/integrations/:id`
  * WITHOUT `removeData` - its sync stops, and what it already taught stays.
- * The router is ADMIN-only (403).
+ * The router needs ai:knowledge:write (403), as starting the connect does
+ * (ai c6c6309a; it was ADMIN only).
  */
 export async function disconnectSource(intId: string): Promise<DisconnectSourceResult> {
   try {

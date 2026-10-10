@@ -1350,11 +1350,24 @@ export const knowledgeEndpoints = {
    * here, would delete Drive's documents too). Answers `{ data: { deleted } }`.
    */
   removeIntegration: (intId: string) => endpoint('/api/knowledge/integrations/{intId}', { intId }),
-  oauthInit: (provider: 'google-drive' | 'confluence', kbId: string) =>
-    endpoint('/api/knowledge/oauth/{provider}/init?kbId={kbId}&flow=redesign_studio', {
-      provider,
-      kbId,
-    }),
+  /**
+   * The provider's page for a base that exists (`kbId`), or for a NEW base
+   * the callback creates only once the provider's grant works (`newBaseName`,
+   * ai c6c6309a) - so a connect abandoned at the provider leaves no empty base.
+   */
+  oauthInit: (
+    provider: 'google-drive' | 'confluence',
+    target: { readonly kbId: string } | { readonly newBaseName: string },
+  ) =>
+    'kbId' in target
+      ? endpoint('/api/knowledge/oauth/{provider}/init?kbId={kbId}&flow=redesign_studio', {
+          provider,
+          kbId: target.kbId,
+        })
+      : endpoint(
+          '/api/knowledge/oauth/{provider}/init?newBaseName={newBaseName}&flow=redesign_studio',
+          { provider, newBaseName: target.newBaseName },
+        ),
   addDocument: (baseId: string) => endpoint('/api/knowledge-bases/{baseId}/documents', { baseId }),
   upload: (baseId: string) =>
     endpoint('/api/knowledge-bases/{baseId}/documents/upload', { baseId }),

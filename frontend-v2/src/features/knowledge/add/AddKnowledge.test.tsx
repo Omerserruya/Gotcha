@@ -238,6 +238,17 @@ describe('★★ Drive and Confluence - at the provider, and back here (backend 
     );
   });
 
+  it.each([
+    ['entitlement', "Knowledge isn't part of this plan, so Confluence can't be connected."],
+    ['limit', "This plan has no room for another knowledge base, so Confluence wasn't connected."],
+  ] as const)('a new base the plan refuses (%s) is said in words', async (reason, words) => {
+    startKnowledgeConnect.mockResolvedValue({ ok: false, reason });
+    render(drive());
+    await userEvent.click(screen.getByTestId('add-connect-confluence'));
+    expect(screen.getByTestId('add-connect-problem')).toHaveTextContent(words);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
   it('each source carries its mark (Omer, 10): Drive’s logo; Confluence, which has none, the plug', () => {
     render(drive());
     const row = (id: string) => screen.getByTestId(id).closest('li')!;

@@ -133,13 +133,22 @@ export async function addKnowledge(
 
 export type ConnectStart =
   | { readonly ok: true; readonly url: string }
-  | { readonly ok: false; readonly reason: 'not_configured' | 'forbidden' | 'failed' };
+  | {
+      readonly ok: false;
+      readonly reason: 'not_configured' | 'forbidden' | 'entitlement' | 'limit' | 'failed';
+    };
 
 /**
  * 08b's Drive and Confluence - live (backend df9ee4cd). The provider's page
  * is asked for here, then the browser goes there; the way back lands on this
  * sheet with `connected=1` or `error=<code>`. Nothing is connected until the
- * person approves at the provider. A base is needed first, as for any source.
+ * person approves at the provider.
+ *
+ * ★ With no base yet, none is made here (ai c6c6309a): the start carries the
+ *   new base's name and the callback creates it only after the provider's
+ *   grant works. Made first, an unconfigured Confluence, a refused grant or a
+ *   person who walked away left an empty base behind. The new base is held
+ *   at the start to the plan's knowledge entitlement and its limit (402).
  */
 export async function startKnowledgeConnect(
   base: KnowledgeBaseRef,
@@ -148,20 +157,10 @@ export async function startKnowledgeConnect(
 ): Promise<ConnectStart> {
   if (base === 'unknown') return { ok: false, reason: 'failed' };
   try {
-    const baseId =
-      base === 'none'
-        ? (
-            await browserApi.post({
-              endpoint: knowledgeEndpoints.createBase(),
-              payload: created,
-              body: { name: newBaseName },
-            })
-          ).id
-        : base.id;
     const { url } = await browserApi.get({
       endpoint: knowledgeEndpoints.oauthInit(
         connector === 'google_drive' ? 'google-drive' : 'confluence',
-        baseId,
+        base === 'none' ? { newBaseName } : { kbId: base.id },
       ),
       payload: z.object({ url: z.string().url() }),
       raw: true,
@@ -173,10 +172,14 @@ export async function startKnowledgeConnect(
       connector,
       status: isApiError(cause) ? cause.status : undefined,
     });
+    // The code first: NOT_CONFIGURED now answers 409 (ai c6c6309a).
+    if (isNotConfigured(cause)) return { ok: false, reason: 'not_configured' };
     if (isApiError(cause)) {
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+      if (cause.status === 402) {
+        return { ok: false, reason: cause.code === 'PLAN_LIMIT_REACHED' ? 'limit' : 'entitlement' };
+      }
     }
-    if (isNotConfigured(cause)) return { ok: false, reason: 'not_configured' };
     return { ok: false, reason: 'failed' };
   }
 }
