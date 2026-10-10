@@ -4,9 +4,9 @@ import { prisma } from "@chatcenter/shared";
 /**
  * The tool audit log must outlive the things it describes.
  *
- * Disconnecting an integration deletes the tenant's `tenant_tools` rows
- * (routes/integrations.ts does this explicitly, and the TenantIntegration
- * cascade would anyway). Under the old `ON DELETE CASCADE` that took
+ * A tenant's `tenant_tools` rows can still be deleted (the TenantIntegration
+ * cascade does it; routes/integrations.ts disconnect kept them since
+ * 2026-10-10). Under the old `ON DELETE CASCADE` that took
  * `tool_executions` with it: a merchant clicking "Disconnect" erased every
  * record of what the AI had done through that integration, and reconnecting
  * did not bring it back. CLAUDE.md requires every AI action to stay traceable;

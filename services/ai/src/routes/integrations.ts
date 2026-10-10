@@ -869,6 +869,22 @@ router.post("/:slug/connect", canConnectSystems, async (req: Request, res: Respo
           lastError: null,
         },
       });
+      // A connection that lost its tool rows (the old disconnect deleted
+      // them) gets the catalogue's tools back, enabled; rows that exist keep
+      // the admin's choices.
+      const have = new Set(
+        (await prisma.tenantTool.findMany({
+          where: { tenantId: req.tenantId!, tenantIntegrationId: existing.id },
+          select: { catalogToolId: true },
+        })).map((t) => t.catalogToolId),
+      );
+      const missing = entry.catalogTools.filter((tool) => !have.has(tool.id));
+      if (missing.length) {
+        await prisma.tenantTool.createMany({
+          data: missing.map((tool) => ({ tenantId: req.tenantId!, tenantIntegrationId: existing.id, catalogToolId: tool.id, isEnabled: true })),
+          skipDuplicates: true,
+        });
+      }
     } else {
       tenantIntegration = await prisma.tenantIntegration.create({
         data: {
@@ -1116,11 +1132,10 @@ router.post("/:slug/disconnect", canManageSystems, async (req: Request, res: Res
       return;
     }
 
-    // Explicitly delete tenant tools (cascade on TenantIntegration deletion handles this,
-    // but we delete them explicitly to be safe when only updating status)
-    await prisma.tenantTool.deleteMany({
-      where: { tenantId: req.tenantId!, tenantIntegrationId: tenantIntegration.id },
-    });
+    // The tool rows are KEPT (2026-10-10), as POST /api/connectors/:slug/disconnect
+    // keeps them: they hold the admin's per-tool choices, a tool is only offered
+    // while its connection is CONNECTED, and /connect never recreated them, so a
+    // reconnect after this route left the system with no actions at all.
 
     const updated = await prisma.tenantIntegration.update({
       where: { id: tenantIntegration.id },

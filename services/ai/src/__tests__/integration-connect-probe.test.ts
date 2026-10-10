@@ -50,6 +50,8 @@ vi.mock("@chatcenter/shared", async () => {
     ...actual,
     prisma: {
       integrationCatalog: { findUnique: async (a: any) => ({ id: `cat_${a.where.slug}`, slug: a.where.slug, catalogTools: [] }) },
+      // A reconnect restores missing tool rows (2026-10-10); none in this catalogue.
+      tenantTool: { findMany: async () => [], createMany: async () => ({ count: 0 }) },
       tenantIntegration: {
         findFirst: async (a: any) => DB.rows.find((r) => matches(r, a.where)) ?? null,
         create: async (a: any) => {
