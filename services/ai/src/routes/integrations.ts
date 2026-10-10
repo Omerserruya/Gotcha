@@ -25,6 +25,7 @@ import { readerLocale } from "../lib/reader-locale";
 import { catalogDescription } from "../lib/catalog-descriptions";
 import { catalogTool } from "../lib/catalog-tools-he";
 import { splitErrorCode } from "../lib/error-code";
+import { probeConnectCredentials } from "../services/connect-probe";
 
 const router = Router();
 
@@ -840,6 +841,19 @@ router.post("/:slug/connect", canConnectSystems, async (req: Request, res: Respo
         .catch((err: any) => ({ ok: false, error: `The credentials could not be checked (${String(err?.message || "error").slice(0, 80)}).` }));
       if (!verdict.ok) {
         res.status(422).json({ error: "validation_failed", message: verdict.error ?? "The credentials were rejected." });
+        return;
+      }
+    } else {
+      // Form systems with no validate() get one read-only probe (2026-10-09).
+      // Same contract as above: a refusal writes nothing, and the 422 keeps
+      // the shape v2 maps; `code` says which kind of refusal it was.
+      const probe = await probeConnectCredentials({ slug, tenantId: req.tenantId!, credentials, config: cfg });
+      if (probe && !probe.ok) {
+        if ("missing" in probe) {
+          res.status(400).json({ error: "credentials required", missingFields: probe.missing });
+          return;
+        }
+        res.status(422).json({ error: "validation_failed", code: probe.code, message: probe.message });
         return;
       }
     }

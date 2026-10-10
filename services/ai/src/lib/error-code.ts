@@ -16,6 +16,9 @@
 export const ERROR_CODES_KNOWN = {
   SHOPIFY_APP_UNINSTALLED: "The GOTCHA Shopify app was uninstalled from this store.",
   SHOPIFY_CHAT_UNINSTALLED: "Shopify Chat app was uninstalled from the store.",
+  // Connect-time probe verdicts (services/connect-probe, 2026-10-09).
+  CREDENTIALS_INVALID: "The system rejected these credentials.",
+  CONNECTION_FAILED: "The system could not be reached.",
 } as const;
 export type KnownErrorCode = keyof typeof ERROR_CODES_KNOWN;
 

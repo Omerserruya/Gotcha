@@ -101,8 +101,9 @@ describe("WooCommerce keys are proven before CONNECTED", () => {
 });
 
 describe("integrations without a validate hook are unchanged", () => {
+  // airtable is probed since 2026-10-09 (integration-connect-probe.test.ts).
   it("connect as before", async () => {
-    const r = await connect("airtable", { credentials: { apiKey: "k" }, config: {} });
+    const r = await connect("custom_api", { credentials: { apiKey: "k" }, config: {} });
     expect(r.status).toBe(201);
     expect(DB.writes[0][1].status).toBe("CONNECTED");
   });
