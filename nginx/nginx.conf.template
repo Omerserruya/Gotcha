@@ -585,6 +585,20 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # ─── Signed media links for providers (2026-10-10) ──────
+        # Meta and Slack fetch an outbound attachment here with no login: the
+        # HMAC signature in the query is the credential, valid 15 minutes, and
+        # the app answers private, no-store so the edge never keeps a copy.
+        location ^~ /api/media/s/ {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://conversation_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # ─── Templates, Broadcasts, Scheduled Messages, Contacts (Conversation Service) ──
         location /api/templates {
             limit_req zone=api burst=20 nodelay;
