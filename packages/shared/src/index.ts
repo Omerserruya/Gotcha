@@ -837,6 +837,7 @@ export {
 // What a stored customer upload may be called and how it is served (the
 // stored-XSS fix, 2026-10-09).
 export { safeUploadExtension, uploadServingHeaders, SAFE_UPLOAD_EXTENSIONS, INLINE_UPLOAD_EXTENSIONS } from "./lib/upload-safety";
+export { signMediaUrl, verifyMediaSignature, mediaSignatureShapeOk, presentMediaUrl, storedUploadName, signedMediaPath, STORED_UPLOAD_NAME } from "./lib/media-url";
 
 // A WhatsApp number's own details from Meta (the channel check and the
 // on-demand refresh read it the same way).

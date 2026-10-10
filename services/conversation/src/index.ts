@@ -23,6 +23,8 @@ import voiceChannelsRoutes from "./routes/voice-channels";
 import autoBuyRoutes from "./routes/auto-buy";
 import { handleVoiceSessionEnded } from "./subscribers/voice-auto-close";
 import { uploadsStatic } from "./lib/uploads-static";
+import { signedMediaHandler } from "./lib/media-serving";
+import { presentRelayedMessage } from "./lib/message-media";
 import { relayToVisitor, relayConversationState } from "./subscribers/shopify-visitor-relay";
 
 const config = { name: "conversation-service", port: parseInt(process.env.PORT || "4002", 10) };
@@ -55,6 +57,7 @@ const untargeted = new Set<string>();
 subscribeToEvents((event) => {
   try {
     const io = getIO();
+    presentRelayedMessage(event.data);
     const channel = typeof (event.data as any)?.channel === "string" ? (event.data as any).channel : null;
     if (channel) {
       io.to(channel).emit(event.event, event.data);
@@ -117,6 +120,10 @@ if (!uploadsProbe.ok) {
 }
 
 app.use("/api/uploads", uploadsStatic(uploadsDir));
+// Short-lived signed media links for providers that fetch with no login (Meta,
+// Slack); before any auth on purpose (2026-10-10). Rate limited by the app-wide
+// /api/ limiter in createServiceApp.
+app.get("/api/media/s/:messageId", signedMediaHandler(uploadsDir));
 
 // Routes
 app.use("/api/conversations", conversationRoutes);

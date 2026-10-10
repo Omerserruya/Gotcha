@@ -299,6 +299,11 @@ export interface OutgoingMessageJob {
   emailReplyMode?: "reply" | "new";
   mediaUrl?: string;
   fileName?: string;
+  /**
+   * This app's public origin, for minting a signed media link at send time
+   * when the worker has no PUBLIC_URL of its own (2026-10-10, uploads plan).
+   */
+  publicBaseUrl?: string;
   // Broadcast linkage - when set, the outgoing worker writes the send result
   // back to the BroadcastRecipient row and updates broadcast counters.
   broadcastId?: string;

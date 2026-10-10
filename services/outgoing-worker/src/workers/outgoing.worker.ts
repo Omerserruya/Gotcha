@@ -2,6 +2,7 @@ import { Job } from "bullmq";
 import { prisma, createWorker, OutgoingMessageJob, analyticsQueue, publishEvent, getOutboundAdapter, decryptCredentials, describeSendError, sanitizeCustomerText, resolveEmailThread } from "@chatcenter/shared";
 import type { ChannelCredentials, ProviderSendError } from "@chatcenter/shared";
 import { recordBroadcastResult } from "./broadcast.worker";
+import { outboundMediaUrl } from "../lib/outbound-media-url";
 
 const MEDIA_MESSAGE_TYPES = ["image", "video", "document"];
 
@@ -90,7 +91,9 @@ export async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Prom
         credentials,
         channelAccount.externalId,
         recipientExternalId,
-        mediaUrl,
+        // A stored upload goes out as a signed link minted now (2026-10-10);
+        // inside the try, so a missing origin is a FAILED send with a reason.
+        outboundMediaUrl({ mediaUrl, messageId, tenantId, publicBaseUrl: job.data.publicBaseUrl }),
         messageType as "image" | "video" | "document",
         fileName,
         body || undefined

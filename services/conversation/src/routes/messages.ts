@@ -4,11 +4,13 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { prisma, authenticate, resolveTenant, validate, outgoingMessageQueue, decryptCredentials, requireActiveTenant,
-  type EmailThreadContext,
+  withHistoricalRecords, type EmailThreadContext,
 } from "@chatcenter/shared";
 import * as messageService from "../services/message.service";
 import { safeUploadExtension } from "@chatcenter/shared/src/lib/upload-safety";
 import { requireVisibleConversation } from "../lib/require-visible-conversation";
+import { mediaNotFound, serveStoredUpload } from "../lib/media-serving";
+import { STORED_UPLOAD_NAME, storedUploadName } from "@chatcenter/shared/src/lib/media-url";
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
@@ -273,9 +275,11 @@ router.post("/:conversationId/messages/media", async (req: Request, res: Respons
     const mediaUrl = `${UPLOADS_BASE_URL}/${savedName}`;
     const channel = conversation.channel || "WHATSAPP";
 
-    // Build a public URL for the outgoing message (channels need a publicly accessible URL)
-    const baseUrl = process.env.PUBLIC_URL || process.env.NEXT_PUBLIC_API_URL || "";
-    const publicMediaUrl = baseUrl ? `${baseUrl}${mediaUrl}` : mediaUrl;
+    // The job carries the STORED path, never a public /api/uploads link: the
+    // outgoing worker signs a short-lived /api/media/s link at send time
+    // (2026-10-10). The worker has no PUBLIC_URL of its own, so the origin
+    // travels with the job.
+    const publicBaseUrl = process.env.PUBLIC_URL || process.env.NEXT_PUBLIC_API_URL || "";
 
     const message = await messageService.create({
       tenantId: req.tenantId!,
@@ -300,7 +304,8 @@ router.post("/:conversationId/messages/media", async (req: Request, res: Respons
       messageType,
       senderName: req.user!.email,
       messageId: message.id,
-      mediaUrl: publicMediaUrl,
+      mediaUrl,
+      publicBaseUrl,
       fileName: originalName,
     }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
 
@@ -340,6 +345,29 @@ function getExtFromMime(mime: string): string {
   };
   return map[mime] || ".bin";
 }
+
+// ─── Message media (logged in) ───────────────────────────────
+// The inbox's URL for a stored upload (2026-10-10, replacing the public
+// /api/uploads). Inherits authenticate, tenant, active tenant and the
+// conversation visibility check above. The name must be exactly the one this
+// message stored, so no other file, and no path outside the directory, is
+// reachable. Every refusal is the same bare 404.
+router.get("/:conversationId/messages/:messageId/media/:storedName", async (req: Request, res: Response) => {
+  try {
+    const storedName = String(req.params.storedName);
+    if (!STORED_UPLOAD_NAME.test(storedName)) return mediaNotFound(res);
+    // The caller already chose this conversation, so an imported one's media
+    // opens too (same reason as listByConversation).
+    const message = await withHistoricalRecords(() => prisma.message.findFirst({
+      where: { id: req.params.messageId as string, conversationId: req.params.conversationId as string, tenantId: req.tenantId! },
+      select: { mediaUrl: true },
+    }));
+    if (!message || storedUploadName(message.mediaUrl) !== storedName) return mediaNotFound(res);
+    serveStoredUpload(res, UPLOADS_DIR, storedName);
+  } catch {
+    mediaNotFound(res);
+  }
+});
 
 // ─── Delete Message ──────────────────────────────────────────
 router.delete("/:conversationId/messages/:messageId", async (req: Request, res: Response) => {

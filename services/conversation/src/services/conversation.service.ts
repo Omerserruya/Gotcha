@@ -5,6 +5,7 @@ import { getIO } from "../lib/socket";
 import { visibilityClause } from "../lib/conversation-visibility";
 import { contactIdsFor, contactIdOf } from "../lib/conversation-contact";
 import * as messageService from "./message.service";
+import { presentMessageMedia } from "../lib/message-media";
 
 /**
  * Keyset pagination for the conversation list.
@@ -381,7 +382,12 @@ export async function getById(tenantId: string, id: string) {
   });
   if (!conversation) return null;
   const contactMap = await contactIdsFor(tenantId, [conversation as any]);
-  return { ...conversation, contactId: contactIdOf(contactMap, conversation as any) };
+  return {
+    ...conversation,
+    // Stored uploads go out as the logged-in media route (2026-10-10).
+    ...(Array.isArray(conversation.messages) ? { messages: conversation.messages.map((m) => presentMessageMedia(m)) } : {}),
+    contactId: contactIdOf(contactMap, conversation as any),
+  };
 }
 
 /** The customer and channel an assignment notice names ("the conversation with Dana on WhatsApp"). */

@@ -1,5 +1,6 @@
 import { prisma, publishEvent, type ChannelType, withHistoricalRecords } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
+import { presentMessageMedia } from "../lib/message-media";
 
 interface CreateMessageData {
   tenantId: string;
@@ -77,7 +78,7 @@ export async function listByConversation(tenantId: string, conversationId: strin
     }),
     prisma.message.count({ where: { tenantId, conversationId } }),
   ]));
-  return { data: messages, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+  return { data: messages.map((m) => presentMessageMedia(m)), meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
 
 export async function create(data: CreateMessageData) {
@@ -150,10 +151,13 @@ export async function create(data: CreateMessageData) {
     return msg;
   });
 
-  const eventData = { message, conversationId: data.conversationId };
+  // Presented once for the caller, the socket and the bus: the bus event is
+  // relayed to browsers by this service's socket bridge too.
+  const presented = presentMessageMedia(message);
+  const eventData = { message: presented, conversationId: data.conversationId };
   try { getIO().to(`tenant:${data.tenantId}`).emit("message:new", eventData); } catch {}
   publishEvent({ event: "message:new", tenantId: data.tenantId, data: eventData }).catch(() => {});
-  return message;
+  return presented;
 }
 
 /**
