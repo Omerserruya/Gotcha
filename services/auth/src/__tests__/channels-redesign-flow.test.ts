@@ -192,7 +192,7 @@ describe("init: the flow is a closed list signed into the state", () => {
   it("init-url: an unconfigured platform is 409 naming THAT platform", async () => {
     const r = await request(app()).get("/api/channels/oauth/init-url?platform=slack");
     expect(r.status).toBe(409);
-    expect(r.body).toEqual({ error: "not_configured", platform: "slack" });
+    expect(r.body).toEqual({ error: "not_configured", code: "NOT_CONFIGURED", platform: "slack" });
   });
 
   it("★ the redirect variant's not_configured names the platform asked for (WhatsApp said messenger)", async () => {

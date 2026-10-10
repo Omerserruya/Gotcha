@@ -3,7 +3,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import axios from "axios";
 import jwt from "jsonwebtoken";
-import { splitErrorCode } from "../lib/error-code";
+import { splitErrorCode, withErrorCode } from "../lib/error-code";
 import {
   prisma,
   // The website widget shares its experience config with the Shopify
@@ -13,6 +13,7 @@ import {
   authenticate,
   resolveTenant,
   requirePermission,
+  requirePermissionOrRole,
   requireCapacity,
   validate,
   getRedis,
@@ -64,6 +65,33 @@ export function whatsappMeta(
 const requireChannelCapacity = requireCapacity("limit:channels", (tenantId) =>
   prisma.channelAccount.count({ where: { tenantId, connectionStatus: { not: "DISCONNECTED" } } }),
 );
+
+/**
+ * Starting a channel OAuth is a connect, so it takes the connect permission
+ * like every other connect route; a hard role==ADMIN refused a member who
+ * holds it. ADMIN still passes where licensing predates the catalog
+ * (2026-10-09).
+ */
+const requireChannelConnect = requirePermissionOrRole("channels:manage:update", "ADMIN");
+
+/** The provider's own reason, one short line, for the log sentence beside a code. */
+function providerReason(err: any): string {
+  const raw = err?.response?.data?.error?.message ?? err?.response?.data?.error_description ?? err?.message ?? "unknown error";
+  return String(raw).replace(/\s+/g, " ").slice(0, 300);
+}
+
+/**
+ * Codes that say "the token is fine, the subscription is not". A token check
+ * proves nothing about them, so it must not clear them (2026-10-09).
+ */
+const SUBSCRIPTION_GAP_CODES = new Set(["SUBSCRIBE_FAILED", "WATCH_FAILED", "OUTLOOK_SUBSCRIPTION_FAILED"]);
+
+/** platformMeta as a client may see it: Outlook's clientState authenticates Graph's pushes, so it stays here. */
+function publicPlatformMeta(meta: unknown): unknown {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta) || !("clientState" in meta)) return meta;
+  const { clientState: _secret, ...rest } = meta as Record<string, unknown>;
+  return rest;
+}
 
 
 const META_APP_ID = process.env.META_APP_ID || "";
@@ -216,7 +244,11 @@ router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:
     });
 
     // The code a writer stored beside the sentence (lib/error-code), served apart.
-    const withCode = <T extends { lastError: string | null }>(a: T) => ({ ...a, ...splitErrorCode(a.lastError) });
+    const withCode = <T extends { lastError: string | null; platformMeta: unknown }>(a: T) => ({
+      ...a,
+      platformMeta: publicPlatformMeta(a.platformMeta),
+      ...splitErrorCode(a.lastError),
+    });
     if (!windowed) {
       res.json({ data: accounts.map(withCode) });
       return;
@@ -1063,11 +1095,12 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
   // Inject tenant/user context like the authenticate middleware would.
   req.tenantId = principal.tenantId;
   (req as any).userId = principal.userId;
+  (req as any).user = principal;
 
-  if (principal.role !== "ADMIN") {
-    res.status(403).json({ error: "Admin access required" });
-    return;
-  }
+  // The same connect gate as /oauth/init-url; it answers the 403 itself.
+  let allowed = false;
+  await requireChannelConnect(req, res, () => { allowed = true; });
+  if (!allowed) return;
 
   try {
     const flow = parseChannelFlow(req.query.flow);
@@ -1108,12 +1141,8 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
  * cookie, through the one auth gate) and gets the provider URL back as JSON;
  * the browser then navigates to it. Same platforms, same flows, same state.
  */
-router.get("/oauth/init-url", authenticate, resolveTenant, async (req: Request, res: Response) => {
+router.get("/oauth/init-url", authenticate, resolveTenant, requireChannelConnect, async (req: Request, res: Response) => {
   const user = (req as any).user;
-  if (user?.role !== "ADMIN") {
-    res.status(403).json({ error: "Admin access required" });
-    return;
-  }
   try {
     const outcome = buildChannelOAuth({
       tenantId: req.tenantId!,
@@ -1129,7 +1158,8 @@ router.get("/oauth/init-url", authenticate, resolveTenant, async (req: Request, 
       return;
     }
     if (outcome.kind === "not_configured") {
-      res.status(409).json({ error: "not_configured", platform: outcome.platform });
+      // `code` is the machine code every reader keys on (2026-10-09).
+      res.status(409).json({ error: "not_configured", code: "NOT_CONFIGURED", platform: outcome.platform });
       return;
     }
     res.json({ url: outcome.url });
@@ -1506,6 +1536,13 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         // Subscribe page to webhooks. `feed` delivers comment + post events
         // for the FB page - required for the Comment Trigger to fire.
         // `message_reactions` delivers reactions to inbound messages.
+        //
+        // A failed subscribe keeps the page (its token is good) but as
+        // PENDING with a code, as the WhatsApp connect does: CONNECTED would
+        // be a lie, and the 6-hourly Meta token sweep clears lastError on any
+        // CONNECTED row with a valid token, so the reason would vanish while
+        // nothing arrives (2026-10-09).
+        let subscribeError: string | null = null;
         try {
           const pageSubResp = await axios.post(`${FB_API_URL}/${pageId}/subscribed_apps`, null, {
             params: {
@@ -1516,7 +1553,12 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
           console.log(`[MESSENGER-CALLBACK] Page ${pageId} subscribed_apps result:`, pageSubResp.data);
         } catch (subErr: any) {
           console.error(`[MESSENGER-CALLBACK] Page subscription FAILED for ${pageId}:`, subErr.response?.data || subErr.message);
+          subscribeError = withErrorCode(
+            "SUBSCRIBE_FAILED",
+            `Messenger page subscription failed, so messages cannot arrive: ${providerReason(subErr)}`,
+          );
         }
+        const pageStatus = subscribeError ? ("PENDING" as const) : ("CONNECTED" as const);
 
         // Unique-key lookup on (channel, externalId). Detects a page bound
         // to a different tenant so we can refuse instead of silently
@@ -1543,12 +1585,12 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             where: { id: existing.id },
             data: {
               credentials,
-              connectionStatus: "CONNECTED",
+              connectionStatus: pageStatus,
               connectedAt: new Date(),
               connectedBy: userId,
               tokenExpiresAt,
               isActive: true,
-              lastError: null,
+              lastError: subscribeError,
               displayName: pageName,
             },
           });
@@ -1560,7 +1602,8 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
               externalId: pageId,
               displayName: pageName,
               credentials,
-              connectionStatus: "CONNECTED",
+              connectionStatus: pageStatus,
+              lastError: subscribeError,
               connectedAt: new Date(),
               connectedBy: userId,
               tokenExpiresAt,
@@ -1602,6 +1645,8 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       // Login the subscription is per-account (no Page), via /me/subscribed_apps.
       // The webhook callback URL + verify token are configured under the
       // Instagram product in the Meta App Dashboard, not via API.
+      // A failure is PENDING with a code, for the reason Messenger's is.
+      let subscribeError: string | null = null;
       try {
         const subResp = await axios.post(`${IG_API_URL}/me/subscribed_apps`, null, {
           params: {
@@ -1612,7 +1657,12 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         console.log(`[INSTAGRAM-CALLBACK] IG ${igBusinessId} subscribed_apps result:`, subResp.data);
       } catch (subErr: any) {
         console.error(`[INSTAGRAM-CALLBACK] IG subscription FAILED for ${igBusinessId}:`, subErr.response?.data || subErr.message);
+        subscribeError = withErrorCode(
+          "SUBSCRIBE_FAILED",
+          `Instagram app subscription failed, so messages cannot arrive: ${providerReason(subErr)}`,
+        );
       }
+      const igStatus = subscribeError ? ("PENDING" as const) : ("CONNECTED" as const);
 
       // Unique-key lookup on (channel, externalId) - see Messenger.
       const existing = await prisma.channelAccount.findUnique({
@@ -1637,12 +1687,12 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
           where: { id: existing.id },
           data: {
             credentials,
-            connectionStatus: "CONNECTED",
+            connectionStatus: igStatus,
             connectedAt: new Date(),
             connectedBy: userId,
             tokenExpiresAt,
             isActive: true,
-            lastError: null,
+            lastError: subscribeError,
             displayName: `@${igUsername}`,
           },
         });
@@ -1654,7 +1704,8 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             externalId: igBusinessId,
             displayName: `@${igUsername}`,
             credentials,
-            connectionStatus: "CONNECTED",
+            connectionStatus: igStatus,
+            lastError: subscribeError,
             connectedAt: new Date(),
             connectedBy: userId,
             tokenExpiresAt,
@@ -1718,9 +1769,21 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       // the mailbox history record at the moment the watch was armed, which is
       // the correct starting point: an older id would replay mail that arrived
       // before we were listening.
-      try {
-        const watchTopic = process.env.GMAIL_PUBSUB_TOPIC || "";
-        if (watchTopic) {
+      //
+      // No topic or a failed watch keeps the mailbox CONNECTED with a code,
+      // not PENDING as Messenger does: the daily watch renewal re-arms only
+      // CONNECTED Gmail rows and clears lastError only after a watch succeeds,
+      // so PENDING would turn a passing failure into a permanent one
+      // (2026-10-09).
+      let watchError: string | null = null;
+      const watchTopic = process.env.GMAIL_PUBSUB_TOPIC || "";
+      if (!watchTopic) {
+        watchError = withErrorCode(
+          "WATCH_FAILED",
+          "Gmail push is not set up on this server (no Pub/Sub topic), so new mail will not arrive.",
+        );
+      } else {
+        try {
           const watchRes = await axios.post(
             `https://gmail.googleapis.com/gmail/v1/users/me/watch`,
             { topicName: watchTopic, labelIds: ["INBOX"] },
@@ -1728,9 +1791,10 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
           );
           initialHistoryId = watchRes.data?.historyId?.toString() || initialHistoryId;
           console.log(`[GMAIL-CALLBACK] Push notifications enabled for ${emailAddress}`);
+        } catch (watchErr: any) {
+          console.warn("[GMAIL-CALLBACK] Watch setup warning:", watchErr.response?.data || watchErr.message);
+          watchError = withErrorCode("WATCH_FAILED", `Gmail watch failed, so new mail will not arrive: ${providerReason(watchErr)}`);
         }
-      } catch (watchErr: any) {
-        console.warn("[GMAIL-CALLBACK] Watch setup warning:", watchErr.response?.data || watchErr.message);
       }
 
       console.log(`[GMAIL-CALLBACK] Initial historyId: ${initialHistoryId}`);
@@ -1768,7 +1832,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             connectedBy: userId,
             tokenExpiresAt,
             isActive: true,
-            lastError: null,
+            lastError: watchError,
             displayName,
             platformMeta: gmailPlatformMeta,
           },
@@ -1782,6 +1846,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             displayName,
             credentials,
             connectionStatus: "CONNECTED",
+            lastError: watchError,
             connectedAt: new Date(),
             connectedBy: userId,
             tokenExpiresAt,
@@ -1828,12 +1893,26 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         return;
       }
 
-      // Create a mail subscription for incoming messages via Microsoft Graph webhooks
+      // Create a mail subscription for incoming messages via Microsoft Graph webhooks.
+      //
+      // clientState is per account and STORED: the webhook compares each
+      // notification against it. It was random and dropped, so every
+      // notification failed the check (2026-10-09). A missing webhook URL or a
+      // refused subscription keeps the mailbox CONNECTED (the 6-hourly Outlook
+      // probe refreshes its 1h token only for CONNECTED/ERROR rows) with a code.
       const webhookUrl = process.env.OUTLOOK_WEBHOOK_URL || "";
       let subscriptionId: string | null = null;
-      if (webhookUrl) {
+      let storedClientState: string | null = null;
+      let subscriptionExpiresAt: string | null = null;
+      let subscriptionError: string | null = null;
+      if (!webhookUrl) {
+        subscriptionError = withErrorCode(
+          "OUTLOOK_SUBSCRIPTION_FAILED",
+          "Outlook push is not set up on this server (no webhook URL), so new mail will not arrive.",
+        );
+      } else {
         try {
-          const clientState = crypto.randomBytes(16).toString("hex");
+          const clientState = crypto.randomBytes(32).toString("hex");
           const subscriptionResponse = await axios.post(
             "https://graph.microsoft.com/v1.0/subscriptions",
             {
@@ -1845,10 +1924,18 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             },
             { headers: { Authorization: `Bearer ${outlookAccessToken}`, "Content-Type": "application/json" } }
           );
-          subscriptionId = subscriptionResponse.data.id;
+          // Without an id no notification can be matched to this mailbox.
+          if (!subscriptionResponse.data?.id) throw new Error("Graph returned no subscription id");
+          subscriptionId = String(subscriptionResponse.data.id);
+          storedClientState = clientState;
+          subscriptionExpiresAt = subscriptionResponse.data.expirationDateTime ?? null;
           console.log(`[OUTLOOK-CALLBACK] Webhook subscription created: ${subscriptionId}`);
         } catch (subErr: any) {
           console.warn("[OUTLOOK-CALLBACK] Subscription warning:", subErr.response?.data || subErr.message);
+          subscriptionError = withErrorCode(
+            "OUTLOOK_SUBSCRIPTION_FAILED",
+            `Outlook subscription failed, so new mail will not arrive: ${providerReason(subErr)}`,
+          );
         }
       }
 
@@ -1871,6 +1958,16 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         fromAddress: emailAddress,
       });
 
+      // All three are rewritten together: a reconnect's old clientState must
+      // not outlive the subscription it belonged to.
+      const prevMeta = existing?.platformMeta;
+      const outlookMeta = {
+        ...(prevMeta && typeof prevMeta === "object" && !Array.isArray(prevMeta) ? (prevMeta as Record<string, unknown>) : {}),
+        subscriptionId,
+        clientState: storedClientState,
+        subscriptionExpiresAt,
+      };
+
       if (existing) {
         await prisma.channelAccount.update({
           where: { id: existing.id },
@@ -1881,9 +1978,9 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             connectedBy: userId,
             tokenExpiresAt,
             isActive: true,
-            lastError: null,
+            lastError: subscriptionError,
             displayName,
-            platformMeta: { subscriptionId },
+            platformMeta: outlookMeta,
           },
         });
       } else {
@@ -1895,11 +1992,12 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             displayName,
             credentials,
             connectionStatus: "CONNECTED",
+            lastError: subscriptionError,
             connectedAt: new Date(),
             connectedBy: userId,
             tokenExpiresAt,
             isActive: true,
-            platformMeta: { subscriptionId },
+            platformMeta: outlookMeta,
           },
         });
       }
@@ -2218,8 +2316,12 @@ router.get("/:id/status", authenticate, resolveTenant, requirePermission("channe
       console.warn("Token debug error:", debugErr.response?.data || debugErr.message);
     }
 
-    const newStatus = tokenValid ? "CONNECTED" : "ERROR";
-    const lastError = tokenValid ? null : "Token is invalid or expired";
+    // A valid token says nothing about a failed subscription: keep that row's
+    // status and coded error, or this button would mark it healthy while
+    // nothing arrives (2026-10-09).
+    const keepsGap = tokenValid && SUBSCRIPTION_GAP_CODES.has(splitErrorCode(account.lastError).lastErrorCode ?? "");
+    const newStatus = keepsGap ? account.connectionStatus : tokenValid ? "CONNECTED" : "ERROR";
+    const lastError = keepsGap ? account.lastError : tokenValid ? null : "Token is invalid or expired";
 
     await prisma.channelAccount.update({
       where: { id: account.id },

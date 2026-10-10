@@ -884,72 +884,64 @@ router.post("/outlook", async (req: Request, res: Response) => {
     const body = req.body;
     console.log(`[WEBHOOK] Outlook notification received, count=${body?.value?.length || 0}`);
 
-    // Verify the Microsoft Graph clientState (set at subscription creation).
-    // Every notification must carry the matching secret, else it is dropped
-    // (fail-closed in production).
-    const notifications: any[] = Array.isArray(body?.value) ? body.value : [];
-    for (const n of notifications) {
-      const outlookVerdict = verifySharedSecretToken({
-        expected: process.env.OUTLOOK_WEBHOOK_CLIENT_STATE,
-        provided: n?.clientState,
-        isProduction: IS_PRODUCTION,
-        label: "Outlook clientState",
-      });
-      if (!outlookVerdict.ok) {
-        console.error(`[WEBHOOK] Rejected Outlook webhook: ${outlookVerdict.reason}`);
-        return;
-      }
-    }
-
     if (!outlookInboundAdapter.canHandle(body)) {
       console.warn("Outlook webhook: invalid payload");
       return;
     }
 
-    // Outlook sends subscriptionId which maps to our channel account
-    const subscriptionId = outlookInboundAdapter.resolveChannelAccountExternalId(body);
-
-    // Find channel account by subscriptionId stored in platformMeta
-    let channelAccount;
-    if (subscriptionId) {
-      // Search by subscriptionId in platformMeta
-      const accounts = await prisma.channelAccount.findMany({
-        where: { channel: "OUTLOOK", isActive: true },
-      });
-      channelAccount = accounts.find((a) => {
-        const meta = a.platformMeta as any;
-        return meta?.subscriptionId === subscriptionId;
-      });
+    // Each notification is checked against the clientState stored on the
+    // account its subscriptionId names (auth writes it at subscription time).
+    // One env value could never match a per-subscription random secret, so
+    // every notification was rejected (2026-10-09). No stored value, no
+    // account or a mismatch drops the whole delivery, in every environment.
+    const notifications: any[] = body.value;
+    const accounts = await prisma.channelAccount.findMany({
+      where: { channel: "OUTLOOK", isActive: true },
+    });
+    const accountFor = (subscriptionId: unknown) =>
+      typeof subscriptionId === "string" && subscriptionId
+        ? accounts.find((a) => (a.platformMeta as any)?.subscriptionId === subscriptionId)
+        : undefined;
+    const verified: Array<{ notification: any; account: (typeof accounts)[number] }> = [];
+    for (const n of notifications) {
+      const account = accountFor(n?.subscriptionId);
+      const stored = (account?.platformMeta as any)?.clientState;
+      if (!account) {
+        console.warn(`No Outlook channel account found for subscription: ${n?.subscriptionId}`);
+        return;
+      }
+      if (typeof stored !== "string" || !timingSafeEqualStr(stored, n?.clientState)) {
+        console.error(`[WEBHOOK] Rejected Outlook webhook: Outlook clientState ${typeof stored === "string" && stored ? "token mismatch" : "not stored"}`);
+        return;
+      }
+      verified.push({ notification: n, account });
     }
 
-    if (!channelAccount) {
-      console.warn(`No Outlook channel account found for subscription: ${subscriptionId}`);
-      return;
-    }
-
-    const tenantId = channelAccount.tenantId;
-    const channelAccountId = channelAccount.id;
-
-    const messages = outlookInboundAdapter.extractMessages(body);
-    for (const msg of messages) {
-      await incomingMessageQueue.add(
-        "process",
-        {
-          tenantId,
-          channel: "OUTLOOK",
-          channelAccountId,
-          normalizedMessage: {
-            externalMessageId: msg.externalMessageId,
-            senderId: msg.senderId,
-            senderDisplayName: msg.senderDisplayName,
-            timestamp: msg.timestamp.toISOString(),
-            contentType: msg.content.type,
-            body: msg.content.text || "",
-            messageType: "text",
+    // Per notification, so a batch from two mailboxes never lands on one.
+    for (const { notification, account } of verified) {
+      const tenantId = account.tenantId;
+      const channelAccountId = account.id;
+      const messages = outlookInboundAdapter.extractMessages({ value: [notification] });
+      for (const msg of messages) {
+        await incomingMessageQueue.add(
+          "process",
+          {
+            tenantId,
+            channel: "OUTLOOK",
+            channelAccountId,
+            normalizedMessage: {
+              externalMessageId: msg.externalMessageId,
+              senderId: msg.senderId,
+              senderDisplayName: msg.senderDisplayName,
+              timestamp: msg.timestamp.toISOString(),
+              contentType: msg.content.type,
+              body: msg.content.text || "",
+              messageType: "text",
+            },
           },
-        },
-        { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
-      );
+          { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
+        );
+      }
     }
   } catch (err) {
     console.error("Outlook webhook error:", err);
