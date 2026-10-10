@@ -57,7 +57,9 @@ describe("Meta channel health recovery", () => {
     findMany.mockResolvedValue([
       { id: "ch-1", channel: "MESSENGER", externalId: "page-1", connectionStatus: "ERROR", credentials: { accessToken: "EAAW-fixed" } },
     ]);
-    (axios.get as any).mockResolvedValue({ data: { data: { is_valid: true } } });
+    // The Page subscription is read too since 2026-10-09; here our app is still listed.
+    (axios.get as any).mockImplementation(async (url: string) =>
+      url.endsWith("/subscribed_apps") ? { data: { data: [{ id: "app-1" }] } } : { data: { data: { is_valid: true } } });
 
     await runHealthCheck();
 

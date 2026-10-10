@@ -77,7 +77,8 @@ describe("★ the WhatsApp number is stored by the channel check", () => {
   it("Messenger is not read for a number", async () => {
     H.accounts = [wa({ id: "ca_m", channel: "MESSENGER", externalId: "page_1" })];
     await runHealthCheck();
-    expect(H.gets.filter((g) => !g.url.endsWith("/debug_token"))).toEqual([]);
+    // Its Page subscription IS read since 2026-10-09 (channel-health-delivery.test.ts); its number never.
+    expect(H.gets.filter((g) => !g.url.endsWith("/debug_token") && !g.url.endsWith("/subscribed_apps"))).toEqual([]);
     expect(H.updates[0].data).not.toHaveProperty("platformMeta");
   });
 });
