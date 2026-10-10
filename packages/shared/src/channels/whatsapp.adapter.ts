@@ -606,9 +606,9 @@ function extractWhatsAppContent(msg: any): NormalizedInboundMessage["content"] {
         mimeType: msg.video?.mime_type,
       };
     case "sticker":
-      // A sticker is an image (webp, often animated). Treated as one so it
-      // renders instead of printing "[sticker message]" as dead text.
-      return { type: "image", mediaUrl: msg.sticker?.id, caption: "[Sticker]", mimeType: msg.sticker?.mime_type };
+      // Its own type (2026-10-09): stored as "image" it was drawn as a photo
+      // and counted as one. Still downloaded and rendered like an image.
+      return { type: "sticker", mediaUrl: msg.sticker?.id, caption: "[Sticker]", mimeType: msg.sticker?.mime_type };
     case "location":
       // Name, address and a link travel with the coordinates (2026-10-09):
       // "[Location: lat, lng]" was all the AI and the inbox ever saw.

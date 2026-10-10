@@ -327,3 +327,31 @@ describe("Instagram story mention → the queued message", () => {
   });
 });
 
+
+describe("★ a WhatsApp sticker → the queued message (2026-10-09)", () => {
+  it("is queued as a sticker WITH its media id, so the worker downloads it", async () => {
+    vi.clearAllMocks();
+    (prisma.channelAccount.findFirst as any).mockResolvedValue({ id: "ca-wa", tenantId: "tenant-1", externalId: "pn-1" });
+    (detectInboundAdapter as any).mockReturnValue({
+      channel: "WHATSAPP",
+      getSignatureHeader: () => "x-hub-signature-256",
+      verifySignature: vi.fn().mockReturnValue(true),
+      resolveChannelAccountExternalId: vi.fn().mockReturnValue("pn-1"),
+      extractMessages: vi.fn().mockReturnValue([{
+        externalMessageId: "wamid.stk", senderId: "972552633304", timestamp: new Date(),
+        content: { type: "sticker", caption: "[Sticker]", mediaUrl: "MEDIA_STK", mimeType: "image/webp" },
+      }]),
+      extractStatusUpdates: vi.fn().mockReturnValue([]),
+    });
+    const res = await request(createTestApp()).post("/api/webhook").send({ object: "whatsapp_business_account", entry: [{ id: "waba", changes: [{}] }] });
+    expect(res.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(incomingMessageQueue.add).toHaveBeenCalledWith(
+      "process",
+      expect.objectContaining({
+        normalizedMessage: expect.objectContaining({ body: "[Sticker]", messageType: "sticker", mediaUrl: "MEDIA_STK", mimeType: "image/webp" }),
+      }),
+      expect.any(Object),
+    );
+  });
+});

@@ -286,6 +286,8 @@ router.post("/:conversationId/messages/media", async (req: Request, res: Respons
       senderName: req.user!.email,
       mediaUrl,
       fileName: originalName,
+      // Same shape the incoming worker writes for customer media (2026-10-09).
+      metadata: { media: uploadMediaFacts(mimeType, (fileBuffer as Buffer).length, originalName) },
     });
 
     await outgoingMessageQueue.add("send", {
@@ -308,6 +310,24 @@ router.post("/:conversationId/messages/media", async (req: Request, res: Respons
     res.status(500).json({ error: "Failed to send media message" });
   }
 });
+
+/**
+ * metadata.media for an agent's upload (2026-10-09): busboy's declared type,
+ * the bytes actually received, and the uploader's name made safe to render.
+ */
+function uploadMediaFacts(mimeType: string, byteSize: number, originalName: string) {
+  const name = originalName
+    .replace(/[\\/]/g, "_")
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim()
+    .slice(0, 180);
+  return {
+    mimeType: mimeType.split(";")[0]?.trim().toLowerCase() || null,
+    byteSize,
+    originalName: name || null,
+  };
+}
 
 function getExtFromMime(mime: string): string {
   const map: Record<string, string> = {

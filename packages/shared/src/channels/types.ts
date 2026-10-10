@@ -84,7 +84,7 @@ export function sharedLocationContent(
 }
 
 export interface MessageContent {
-  type: "text" | "image" | "document" | "audio" | "video" | "interactive" | "location" | "contact";
+  type: "text" | "image" | "sticker" | "document" | "audio" | "video" | "interactive" | "location" | "contact";
   text?: string;
   /**
    * WhatsApp hands us a media ID to resolve; Meta's other channels hand us a

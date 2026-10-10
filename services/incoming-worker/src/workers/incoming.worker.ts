@@ -151,7 +151,7 @@ export async function resolveWhatsAppMedia(
   // they beat anything we can infer: `application/octet-stream` is a very
   // common content-type on the download and tells us nothing.
   opts?: { fileName?: string; mimeType?: string },
-): Promise<{ localUrl: string; fileName: string; displayName: string } | null> {
+): Promise<{ localUrl: string; fileName: string; displayName: string; media: MediaFacts } | null> {
   try {
     // Step 1: Get the CDN download URL
     const metaRes = await axios.get(`${WA_API_URL}/${mediaId}`, {
@@ -189,6 +189,12 @@ export async function resolveWhatsAppMedia(
       localUrl: `${UPLOADS_BASE_URL}/${fileName}`,
       fileName,
       displayName: sanitizeDisplayName(opts?.fileName) || fileName,
+      media: mediaFacts({
+        declaredMime: opts?.mimeType,
+        downloadedMime: contentType,
+        byteSize: byteLengthOf(fileRes.data),
+        senderFileName: opts?.fileName,
+      }),
     };
   } catch (err: any) {
     // Which half failed matters, and the two have completely different fixes:
@@ -213,6 +219,42 @@ export async function resolveWhatsAppMedia(
     lastMediaFailure = reason;
     return null;
   }
+}
+
+/**
+ * What we know about an attachment, kept at `metadata.media` (2026-10-09) so
+ * the inbox can say "PDF, 2.1 MB" without fetching the file. Never a provider
+ * URL or token: only these three facts.
+ */
+export interface MediaFacts {
+  mimeType: string | null;
+  byteSize: number | null;
+  originalName: string | null;
+}
+
+/**
+ * The channel's declared MIME wins over the download's content-type, which is
+ * often a generic application/octet-stream. Parameters are dropped.
+ */
+export function mediaFacts(input: {
+  declaredMime?: string | null;
+  downloadedMime?: string | null;
+  byteSize?: number | null;
+  senderFileName?: string | null;
+}): MediaFacts {
+  const baseMime = (raw?: string | null) => raw?.split(";")[0]?.trim().toLowerCase() || null;
+  return {
+    mimeType: baseMime(input.declaredMime) ?? baseMime(input.downloadedMime),
+    byteSize: typeof input.byteSize === "number" && Number.isFinite(input.byteSize) ? input.byteSize : null,
+    originalName: sanitizeDisplayName(input.senderFileName ?? undefined) || null,
+  };
+}
+
+function byteLengthOf(data: unknown): number | null {
+  if (data && typeof (data as { byteLength?: unknown }).byteLength === "number") {
+    return (data as { byteLength: number }).byteLength;
+  }
+  return typeof data === "string" ? Buffer.byteLength(data) : null;
 }
 
 /**
@@ -274,6 +316,8 @@ function getExtensionFromMime(contentType: string, messageType: string): string 
   // Fallback based on message type
   switch (messageType) {
     case "image": return ".jpg";
+    // WhatsApp stickers are always webp (2026-10-09).
+    case "sticker": return ".webp";
     case "video": return ".mp4";
     case "audio": return ".ogg";
     case "document": return ".pdf";
@@ -455,6 +499,9 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // on the message so the inbox can say the file did not arrive, instead of
   // rendering a bare "[Document]" that looks like the customer sent the word.
   let mediaError: string | undefined;
+  // metadata.media (2026-10-09). On a failed download it still records what
+  // was declared, so the inbox can name the file that did not arrive.
+  let media: MediaFacts | undefined;
   if (rawMediaUrl) {
     if (channel === "WHATSAPP") {
       // WhatsApp gives us a media ID, not a URL - resolve and download it
@@ -470,6 +517,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
           resolvedMediaUrl = resolved.localUrl;
           // The name the AGENT sees. The file on disk keeps its UUID.
           resolvedFileName = resolved.displayName;
+          media = resolved.media;
         } else {
           // Meta expires media after a few days and the id is the only handle
           // on it, so a download failure here is permanent for that file. A
@@ -481,6 +529,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       } else {
         mediaError = "no_channel_token";
       }
+      media ??= mediaFacts({ declaredMime: senderMimeType, senderFileName });
     } else {
       // Messenger/Instagram: URL is directly usable
       resolvedMediaUrl = rawMediaUrl;
@@ -525,13 +574,14 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       // under the interactive reply so a channel can attach its own
       // context - e.g. the Shopify storefront page a visitor asked from.
       metadata:
-        interactiveReply || producerMetadata || mediaError
+        interactiveReply || producerMetadata || mediaError || media
           ? {
               ...(producerMetadata ?? {}),
               ...(interactiveReply ? { interactiveReply } : {}),
               // Why the attachment is not here. The bubble reads this to
               // explain itself rather than showing an empty "[Document]".
               ...(mediaError ? { mediaError } : {}),
+              ...(media ? { media } : {}),
             }
           : undefined,
       mediaUrl: resolvedMediaUrl,

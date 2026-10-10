@@ -76,11 +76,13 @@ describe("WhatsApp inbound media", () => {
     expect(c.fileName).toBe("scan.pdf");
   });
 
-  it("treats a sticker as an image so it renders", () => {
+  it("keeps a sticker as a sticker, with its media id and mime (2026-10-09)", () => {
     const c = wa({ type: "sticker", sticker: { id: "MEDIA_E", mime_type: "image/webp" } });
 
-    expect(c.type).toBe("image");
+    expect(c.type).toBe("sticker");
     expect(c.mediaUrl).toBe("MEDIA_E");
+    expect(c.mimeType).toBe("image/webp");
+    expect(c.caption).toBe("[Sticker]");
   });
 
   it("still carries images and video with their mime", () => {

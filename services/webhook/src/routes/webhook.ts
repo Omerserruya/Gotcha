@@ -540,6 +540,9 @@ function normalizeContentToBodyAndType(
       return { body: content.text || "", messageType: "text" };
     case "image":
       return { body: content.caption || "[Image]", messageType: "image", ...media };
+    case "sticker":
+      // Without this case the default branch drops the media id (2026-10-09).
+      return { body: content.caption || "[Sticker]", messageType: "sticker", ...media };
     case "document":
       return { body: content.caption || content.fileName || "[Document]", messageType: "document", ...media };
     case "audio":
