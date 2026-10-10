@@ -303,7 +303,10 @@ export async function list(tenantId: string, filters: ConversationFilters) {
       where: { status: { not: "FAILED" as const } },
       orderBy: { createdAt: "desc" as const },
       take: 1,
-      select: { direction: true, body: true, createdAt: true },
+      // messageType lets the row say "Photo" / "Voice message" instead of the
+      // adapter's "[Image]" filler (2026-10-09). metadata is NOT selected: a
+      // nested take is applied in memory, so it would load every message's JSON.
+      select: { direction: true, body: true, createdAt: true, messageType: true },
     },
   };
   // id breaks ties so two conversations sharing a millisecond cannot straddle a
@@ -343,6 +346,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
       contactId: contactIdOf(contactMap, c as any),
       lastMessageDirection: lastMsg?.direction || null,
       lastMessageBody: lastMsg?.body || null,
+      lastMessageType: lastMsg?.messageType ?? null,
     };
   });
 
