@@ -291,6 +291,8 @@ describe("POST /inspect", () => {
 
     expect(again.status).toBe(400);
     expect(again.body.error).toMatch(/try connecting again/i);
+    // A machine code beside the sentence, so v2 never parses English (2026-10-09).
+    expect(again.body.code).toBe("AUTHORIZATION_REJECTED");
   });
 
   it("issues a distinct session per relaunch and retires the old one", async () => {
@@ -329,6 +331,7 @@ describe("POST /connect", () => {
       .send({ sessionId: staleSession, phoneNumberId: "pn_1" });
 
     expect(res.status).toBe(410);
+    expect(res.body.code).toBe("SESSION_EXPIRED");
     expect(state.writes).toEqual([]);
   });
 
@@ -354,6 +357,23 @@ describe("POST /connect", () => {
       .send({ sessionId: mine.body.data.sessionId, phoneNumberId: "pn_1" });
 
     expect(res.status).toBe(410);
+    expect(res.body.code).toBe("SESSION_EXPIRED");
     expect(state.writes).toEqual([]);
+  });
+});
+
+
+describe("★ every number error carries a code (2026-10-09)", () => {
+  it("an unknown number: 404 NUMBER_NOT_FOUND on refresh, repair, resume, events and remove", async () => {
+    const id = "num_missing";
+    const calls = [
+      request(app()).post(`/api/channels/whatsapp/numbers/${id}/repair`).send({ action: "REFRESH_STATUS" }),
+      request(app()).post(`/api/channels/whatsapp/numbers/${id}/resume`).send({}),
+      request(app()).get(`/api/channels/whatsapp/numbers/${id}/events`),
+    ];
+    for (const r of await Promise.all(calls)) {
+      expect(r.status).toBe(404);
+      expect(r.body.code).toBe("NUMBER_NOT_FOUND");
+    }
   });
 });

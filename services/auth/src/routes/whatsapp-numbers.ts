@@ -232,7 +232,7 @@ router.post(
       console.error("[wa-numbers] code exchange failed:", err?.message);
       return res
         .status(400)
-        .json({ error: "Meta did not accept the authorization. Try connecting again." });
+        .json({ error: "Meta did not accept the authorization. Try connecting again.", code: "AUTHORIZATION_REJECTED" });
     }
 
     // Held server-side, keyed by tenant so one workspace's session can never be
@@ -323,6 +323,7 @@ router.post(
       console.error("[wa-numbers] inspect failed:", err?.message);
       return res.status(502).json({
         error: "We could not read your WhatsApp setup from Meta. Try connecting again.",
+        code: "META_UNREADABLE",
       });
     }
   },
@@ -374,6 +375,7 @@ router.post(
     if (!session) {
       return res.status(410).json({
         error: "That WhatsApp connection has expired. Start connecting again.",
+        code: "SESSION_EXPIRED",
       });
     }
 
@@ -392,6 +394,7 @@ router.post(
       if (decision.scenario === "BLOCKED") {
         return res.status(409).json({
           error: decision.customerMessage,
+          code: "NUMBER_BLOCKED",
           blockers: decision.blockers,
         });
       }
@@ -422,7 +425,7 @@ router.post(
       });
     } catch (err: any) {
       console.error("[wa-numbers] connect failed:", err?.message);
-      return res.status(500).json({ error: "We could not finish connecting this number." });
+      return res.status(500).json({ error: "We could not finish connecting this number.", code: "CONNECT_FAILED" });
     }
   },
 );
@@ -450,13 +453,13 @@ router.post(
     const number = await prisma.whatsAppNumber.findFirst({
       where: { id: paramId(req), tenantId: req.tenantId! },
     });
-    if (!number) return res.status(404).json({ error: "Number not found." });
+    if (!number) return res.status(404).json({ error: "Number not found.", code: "NUMBER_NOT_FOUND" });
 
     const channel = await prisma.channelAccount.findUnique({
       where: { id: number.channelAccountId },
       select: { credentials: true },
     });
-    if (!channel) return res.status(409).json({ error: "This number needs reconnecting." });
+    if (!channel) return res.status(409).json({ error: "This number needs reconnecting.", code: "RECONNECT_REQUIRED" });
 
     let accessToken: string;
     try {
@@ -465,6 +468,7 @@ router.post(
     } catch {
       return res.status(409).json({
         error: "GOTCHA's access to this number has expired. Reconnect it.",
+        code: "TOKEN_EXPIRED",
       });
     }
 
@@ -494,7 +498,7 @@ router.post(
       });
     } catch (err: any) {
       console.error("[wa-numbers] resume failed:", err?.message);
-      return res.status(500).json({ error: "We could not finish setting up this number." });
+      return res.status(500).json({ error: "We could not finish setting up this number.", code: "SETUP_FAILED" });
     }
   },
 );
@@ -527,19 +531,19 @@ async function refreshUnprofiled(req: Request, res: Response) {
     where: { id: paramId(req), tenantId: req.tenantId!, channel: "WHATSAPP" },
     select: { ...UNPROFILED_SELECT, credentials: true },
   });
-  if (!account) return res.status(404).json({ error: "Number not found." });
+  if (!account) return res.status(404).json({ error: "Number not found.", code: "NUMBER_NOT_FOUND" });
   // A profiled number refreshes through its own row, above.
   const profiled = await prisma.whatsAppNumber.findFirst({
     where: { tenantId: req.tenantId!, phoneNumberId: account.externalId },
     select: { id: true },
   });
-  if (profiled) return res.status(404).json({ error: "Number not found." });
+  if (profiled) return res.status(404).json({ error: "Number not found.", code: "NUMBER_NOT_FOUND" });
 
   // Once a minute per account, across replicas: a key that expires on its own.
   const slot = await getRedis().set(`wa-number-refresh:${account.id}`, "1", "PX", UNPROFILED_REFRESH_EVERY_MS, "NX");
   if (slot !== "OK") {
     res.setHeader("Retry-After", String(Math.ceil(UNPROFILED_REFRESH_EVERY_MS / 1000)));
-    return res.status(429).json({ error: "This number was refreshed a moment ago. Try again in a minute." });
+    return res.status(429).json({ error: "This number was refreshed a moment ago. Try again in a minute.", code: "RATE_LIMITED" });
   }
 
   let accessToken: string | undefined;
@@ -549,12 +553,12 @@ async function refreshUnprofiled(req: Request, res: Response) {
     accessToken = undefined;
   }
   if (!accessToken) {
-    return res.status(409).json({ error: "GOTCHA's access to this number has expired. Reconnect it." });
+    return res.status(409).json({ error: "GOTCHA's access to this number has expired. Reconnect it.", code: "TOKEN_EXPIRED" });
   }
 
   const details = await whatsappNumberDetails(account.externalId, accessToken);
   if (!details) {
-    return res.status(502).json({ error: "Meta did not answer for this number. Nothing was changed." });
+    return res.status(502).json({ error: "Meta did not answer for this number. Nothing was changed.", code: "META_UNREADABLE" });
   }
   const updated = await prisma.channelAccount.update({
     where: { id: account.id },
@@ -579,7 +583,7 @@ router.post(
       where: { id: paramId(req), tenantId: req.tenantId! },
       select: { id: true },
     });
-    if (!owned) return res.status(404).json({ error: "Number not found." });
+    if (!owned) return res.status(404).json({ error: "Number not found.", code: "NUMBER_NOT_FOUND" });
 
     const result = await repairNumber(owned.id, req.body.action as RepairAction);
     return res.status(result.succeeded ? 200 : 502).json({ data: result });
@@ -603,7 +607,7 @@ router.delete(
   requirePermission("channels:manage:update"),
   async (req: Request, res: Response) => {
     const result = await disconnectNumber(paramId(req), req.tenantId!);
-    if (!result.succeeded) return res.status(404).json({ error: result.message });
+    if (!result.succeeded) return res.status(404).json({ error: result.message, code: "NUMBER_NOT_FOUND" });
     return res.json({ data: result });
   },
 );
@@ -739,7 +743,7 @@ router.get(
       where: { id: paramId(req), tenantId: req.tenantId! },
       select: { id: true },
     });
-    if (!owned) return res.status(404).json({ error: "Number not found." });
+    if (!owned) return res.status(404).json({ error: "Number not found.", code: "NUMBER_NOT_FOUND" });
 
     const events = await prisma.whatsAppNumberEvent.findMany({
       where: { numberId: owned.id },
