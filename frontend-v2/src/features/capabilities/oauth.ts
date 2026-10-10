@@ -75,19 +75,11 @@ export function shopifyInstallError(
 }
 
 /**
- * Can this system be disconnected from here?
- *
- *   `calendar` - it books through a per-employee `CalendarAccount`, which
- *                neither disconnect route touches.
- *
- * Shopify is (ai 9d583f03): the route stops the storefront chat and releases
- * the store, locally - the app stays installed and Shopify keeps billing
- * until the merchant removes it in their admin, which the confirm says.
+ * The calendars whose disconnect stops every AI employee's calendar too (ai
+ * 547ec625): bookings run through each employee's `CalendarAccount`, and the
+ * connectors route now sets all of that provider's to DISCONNECTED.
  */
-export function disconnectHere(slug: string): 'here' | 'calendar' {
-  if (slug === 'google_calendar' || slug === 'calendly') return 'calendar';
-  return 'here';
-}
+export const CALENDAR_SYSTEMS: readonly string[] = ['google_calendar', 'calendly'];
 
 /** Salesforce's two login hosts - the only extra the start takes. */
 export const SALESFORCE_HOSTS = ['https://login.salesforce.com', 'https://test.salesforce.com'];

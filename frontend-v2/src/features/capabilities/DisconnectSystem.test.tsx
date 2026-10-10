@@ -117,23 +117,23 @@ describe('★★ ai 9d583f03 - Shopify disconnects here, and says what it does n
   });
 });
 
-describe('★★ the calendars are a status, never a button', () => {
+describe('★★ ai 547ec625 - a calendar disconnects here, and every AI employee’s calendar with it', () => {
   it.each([
-    [
-      'google_calendar',
-      'Google Calendar',
-      "A calendar is connected for each AI employee, and can't be disconnected from here yet.",
-    ],
-    [
-      'calendly',
-      'Calendly',
-      "A calendar is connected for each AI employee, and can't be disconnected from here yet.",
-    ],
-  ])('%s: the reason, aria-disabled, nothing to press', (slug, name, why) => {
+    ['google_calendar', 'Google Calendar'],
+    ['calendly', 'Calendly'],
+  ])('%s: a button, and the confirmation says no employee books through it', async (slug, name) => {
+    disconnectSystem.mockResolvedValue({ ok: true, chatDisabled: false });
     show(slug, name);
-    const status = screen.getByTestId('disconnect-unavailable');
-    expect(status).toHaveAttribute('aria-disabled', 'true');
-    expect(status).toHaveAttribute('title', why);
-    expect(screen.getByTestId('disconnect').querySelector('button')).toBeNull();
+    await userEvent.click(screen.getByTestId('disconnect-start'));
+    expect(disconnectSystem).not.toHaveBeenCalled();
+    expect(screen.getByTestId('disconnect-what')).toHaveTextContent(
+      `GOTCHA will stop using ${name}: its actions stop working, the sign-in details saved for it are deleted, and every AI employee's calendar is disconnected, so none of them books through it. Its action settings are not deleted.`,
+    );
+    await userEvent.click(screen.getByTestId('disconnect-confirm'));
+    expect(disconnectSystem).toHaveBeenCalledExactlyOnceWith(slug);
+  });
+
+  it('Hebrew says it too', () => {
+    expect(heMessages.disconnect.confirmCalendar).toContain('והיומן של כל עובד AI ינותק');
   });
 });

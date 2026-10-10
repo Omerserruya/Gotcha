@@ -268,15 +268,11 @@
     "button": "Disconnect {name}",
     "confirm": "GOTCHA will stop using {name}: its actions stop working and the sign-in details saved for it are deleted. Its action settings are not deleted.",
     "confirmShopify": "GOTCHA will stop using {name}: the chat in your store stops now, and its actions stop working. The GOTCHA app stays installed in Shopify, and Shopify keeps billing for it until you remove the app in your Shopify admin. Connecting again later links the store afresh.",
+    "confirmCalendar": "GOTCHA will stop using {name}: its actions stop working, the sign-in details saved for it are deleted, and every AI employee's calendar is disconnected, so none of them books through it. Its action settings are not deleted.",
     "yes": "Disconnect",
     "working": "Disconnecting…",
     "keep": "Keep it connected",
-    "notHere": "Not available here",
-    "why": {
-      "calendar": "A calendar is connected for each AI employee, and can't be disconnected from here yet."
-    },
     "problem": {
-      "not_here": "{name} can't be disconnected from here.",
       "forbidden": "You don't have permission to disconnect systems.",
       "inactive": "Disconnecting needs an active workspace.",
       "failed": "{name} wasn't disconnected. Try again."

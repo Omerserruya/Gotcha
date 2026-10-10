@@ -3,11 +3,10 @@
 import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
-import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
 import { usePathname, useRouter } from '@/i18n/navigation';
 
 import { disconnectSystem, type DisconnectResult } from './connect-actions';
-import { disconnectHere } from './oauth';
+import { CALENDAR_SYSTEMS } from './oauth';
 import styles from './Capabilities.module.css';
 
 /**
@@ -22,9 +21,9 @@ import styles from './Capabilities.module.css';
  * Shopify, and Shopify keeps billing until it is removed there; connecting
  * again later links the store afresh.
  *
- * The calendars are a status, not a button: a calendar books through its
- * per-employee `CalendarAccount`, which neither route touches -
- * "disconnected" here would still book.
+ * A calendar's confirmation says every AI employee's calendar is
+ * disconnected with it (ai 547ec625): bookings run through each one's
+ * `CalendarAccount`, which the route now stops too.
  *
  * Done, the system is no longer connected and this unmounts, so what came
  * of it ("the chat in your store is off") is said by the system's landing
@@ -39,20 +38,12 @@ export function DisconnectSystem({ slug, name }: { readonly slug: string; readon
     null,
   );
   const [isPending, startTransition] = useTransition();
-  const where = disconnectHere(slug);
-
-  if (where !== 'here') {
-    return (
-      <section className={styles.disconnect} data-testid="disconnect">
-        <UnavailableAction
-          label={t('button', { name })}
-          tag={t('notHere')}
-          why={t(`why.${where}`, { name })}
-          testid="disconnect-unavailable"
-        />
-      </section>
-    );
-  }
+  const confirm =
+    slug === 'shopify'
+      ? 'confirmShopify'
+      : CALENDAR_SYSTEMS.includes(slug)
+        ? 'confirmCalendar'
+        : 'confirm';
 
   return (
     <section className={styles.disconnect} data-testid="disconnect">
@@ -71,7 +62,7 @@ export function DisconnectSystem({ slug, name }: { readonly slug: string; readon
       ) : (
         <div className={styles.disconnectConfirm} role="group" aria-label={t('button', { name })}>
           <p className={styles.connectLead} data-testid="disconnect-what">
-            {t(slug === 'shopify' ? 'confirmShopify' : 'confirm', { name })}
+            {t(confirm, { name })}
           </p>
           <div className={styles.disconnectRow}>
             <button

@@ -11,7 +11,7 @@ import { integrationEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 import { credentialsFor } from './connect-form';
-import { disconnectHere, OAUTH_HERE, SALESFORCE_HOSTS, storeAddressOf } from './oauth';
+import { OAUTH_HERE, SALESFORCE_HOSTS, storeAddressOf } from './oauth';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
 export type ConnectResult =
@@ -155,11 +155,8 @@ export type DisconnectResult =
   | { readonly ok: true; readonly chatDisabled: boolean }
   | {
       readonly ok: false;
-      /**
-       * `not_here` - a calendar (see `disconnectHere`);
-       * `forbidden` (403) · `inactive` (402, the tenant gate) · `failed`.
-       */
-      readonly reason: 'not_here' | 'forbidden' | 'inactive' | 'failed';
+      /** `forbidden` (403) · `inactive` (402, the tenant gate) · `failed`. */
+      readonly reason: 'forbidden' | 'inactive' | 'failed';
     };
 
 /**
@@ -170,7 +167,6 @@ export type DisconnectResult =
  * ai 9d583f03); billing is never touched by it.
  */
 export async function disconnectSystem(slug: string): Promise<DisconnectResult> {
-  if (disconnectHere(slug) !== 'here') return { ok: false, reason: 'not_here' };
   try {
     const answer = await serverApi().post({
       endpoint: integrationEndpoints.disconnect(slug),

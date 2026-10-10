@@ -316,10 +316,13 @@ describe('★★ Disconnect at the wire', () => {
   });
 
   it.each(['google_calendar', 'calendly'])(
-    '%s is never sent - its disconnect is not this route’s to say',
+    '★ ai 547ec625: %s is sent - the route stops every employee’s calendar too',
     async (slug) => {
-      expect(await disconnectSystem(slug)).toEqual({ ok: false, reason: 'not_here' });
-      expect(post).not.toHaveBeenCalled();
+      answers({ ok: true });
+      expect(await disconnectSystem(slug)).toEqual({ ok: true, chatDisabled: false });
+      expect((post.mock.calls[0]![0] as { endpoint: { path: string } }).endpoint.path).toBe(
+        `/api/connectors/${slug}/disconnect`,
+      );
     },
   );
 
