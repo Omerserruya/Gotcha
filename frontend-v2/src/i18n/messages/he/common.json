@@ -39,6 +39,12 @@
     "voice_credentials_unreadable": "אי אפשר לקרוא את פרטי הגישה ל‑Twilio שנשמרו.",
     "voice_credentials_rejected": "Twilio כבר לא מקבל את פרטי הגישה שנשמרו.",
     "voice_twilio_unreachable": "חשבון ה‑Twilio לא היה זמין בבדיקה האחרונה.",
-    "voice_outbound_not_set_up": "שיחות נכנסות מגיעות, אבל שיחות יוצאות לא הוגדרו ב‑Twilio."
+    "voice_outbound_not_set_up": "שיחות נכנסות מגיעות, אבל שיחות יוצאות לא הוגדרו ב‑Twilio.",
+    "subscribe_failed": "מחובר, אבל הודעות לא מגיעות: הפלטפורמה לא אישרה ל‑GOTCHA לקבל אותן. מחברים מחדש כדי לנסות שוב.",
+    "gmail_watch_failed": "מחובר, אבל מיילים חדשים לא מגיעים: לא הצלחנו להגדיר את ההתראות של Gmail. מחברים מחדש כדי לנסות שוב.",
+    "outlook_subscription_failed": "מחובר, אבל מיילים חדשים לא מגיעים: לא הצלחנו להגדיר את ההתראות של Outlook. מחברים מחדש כדי לנסות שוב.",
+    "voice_number_not_found": "המספר הזה לא נמצא בחשבון ה‑Twilio.",
+    "voice_webhook_not_updated": "Twilio לא קיבל את כתובת השיחות של GOTCHA למספר הזה, אז ייתכן ששיחות לא מגיעות אליה.",
+    "voice_public_url_missing": "עוד אי אפשר להעביר שיחות ל‑GOTCHA: כתובת הקול של השרת לא הוגדרה. אין מה לתקן מהצד שלכם."
   }
 }

@@ -1,7 +1,9 @@
 import {
+  NOT_RECEIVING_REASONS,
   platformErrorReason,
   voiceErrorReason,
   type ChannelErrorReason,
+  type PlatformErrorReason,
 } from '@/api/contracts/platform-errors';
 import {
   CONNECTABLE_CHANNELS,
@@ -111,6 +113,19 @@ export const RECONNECT_BY_CONNECTING = [
   'SLACK',
 ] as const satisfies readonly ChannelType[];
 
+/**
+ * A Reconnect on this row: it is connected, but its messages cannot arrive
+ * (`NOT_RECEIVING_REASONS`), and its Connect, run again, updates this account
+ * and retries the subscription.
+ */
+export function needsReconnect(row: ConnectedRow): boolean {
+  return (
+    row.error != null &&
+    NOT_RECEIVING_REASONS.includes(row.error as PlatformErrorReason) &&
+    (RECONNECT_BY_CONNECTING as readonly ChannelType[]).includes(row.channel)
+  );
+}
+
 /** A Disconnect on this row - never on one that is disconnected already. */
 export function canDisconnect(row: ConnectedRow): boolean {
   return (
@@ -177,9 +192,14 @@ export function buildChannelRows(
         vc.friendlyName?.trim() ||
         null,
       status: voiceStateAsConnection(vc.status),
-      // A failed health check, or outgoing calls never set up, in words -
-      // never `healthStatus`'s raw Twilio text.
-      error: voiceErrorReason(vc.healthStatus, vc.config?.outboundProvisioningFailed ?? false),
+      // A failed activation or check, or outgoing calls never set up, in
+      // words - never `healthStatus`'s or `lastError`'s raw Twilio text.
+      error: voiceErrorReason(
+        vc.healthStatus,
+        vc.config?.outboundProvisioningFailed ?? false,
+        vc.lastError,
+        vc.lastErrorCode,
+      ),
       openConversations: null,
       windowConversations: null,
     });

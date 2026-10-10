@@ -66,6 +66,8 @@ export default async function Page({
     readonly pending?: string;
     readonly platform?: string;
     readonly error?: string;
+    /** A pending connect's code: `SUBSCRIBE_FAILED` (Messenger, Instagram). */
+    readonly reason?: string;
     readonly tab?: string;
     /** The web chat's old embed link: its code is the widget's Install tab now. */
     readonly embed?: string;

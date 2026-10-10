@@ -28,15 +28,15 @@ describe('★★ the way back, read off the URL', () => {
   it.each([
     [
       { connected: 'instagram', count: '1' },
-      { channel: 'INSTAGRAM', outcome: 'connected', count: 1, pending: false },
+      { channel: 'INSTAGRAM', outcome: 'connected', count: 1, pending: false, reason: null },
     ],
     [
       { connected: 'whatsapp', count: '2', pending: '1' },
-      { channel: 'WHATSAPP', outcome: 'connected', count: 2, pending: true },
+      { channel: 'WHATSAPP', outcome: 'connected', count: 2, pending: true, reason: null },
     ],
     [
       { connected: 'gmail' },
-      { channel: 'GMAIL', outcome: 'connected', count: null, pending: false },
+      { channel: 'GMAIL', outcome: 'connected', count: null, pending: false, reason: null },
     ],
     [
       { platform: 'slack', error: 'denied' },
@@ -52,7 +52,7 @@ describe('★★ the way back, read off the URL', () => {
     // ★ v1's way back (dev's v1 paths 302 here since 2026-10-09)
     [
       { connected: 'whatsapp', pending: 'true' },
-      { channel: 'WHATSAPP', outcome: 'connected', count: null, pending: true },
+      { channel: 'WHATSAPP', outcome: 'connected', count: null, pending: true, reason: null },
     ],
     [{ error: 'no_whatsapp_numbers' }, { channel: 'WHATSAPP', outcome: 'no_whatsapp_numbers' }],
     [{ error: 'gmail_already_connected' }, { channel: 'GMAIL', outcome: 'already_connected' }],
@@ -62,6 +62,41 @@ describe('★★ the way back, read off the URL', () => {
     [{ error: 'invalid_state' }, { channel: null, outcome: 'invalid_state' }],
     // A provider's own words: never shown - "didn't connect".
     [{ error: 'The user denied your request.' }, { channel: null, outcome: 'other' }],
+    // ★ A pending connect that is not WhatsApp's: Messenger's or Instagram's refused subscription.
+    [
+      { connected: 'messenger', count: '2', pending: '1', reason: 'SUBSCRIBE_FAILED' },
+      {
+        channel: 'MESSENGER',
+        outcome: 'connected',
+        count: 2,
+        pending: true,
+        reason: 'subscribe_failed',
+      },
+    ],
+    [
+      { platform: 'instagram', pending: '1', reason: 'SUBSCRIBE_FAILED' },
+      {
+        channel: 'INSTAGRAM',
+        outcome: 'connected',
+        count: null,
+        pending: true,
+        reason: 'subscribe_failed',
+      },
+    ],
+    // A code nobody knows here is no reason; a reason on a finished connect is ignored.
+    [
+      { connected: 'messenger', pending: '1', reason: 'toString' },
+      { channel: 'MESSENGER', outcome: 'connected', count: null, pending: true, reason: null },
+    ],
+    [
+      { connected: 'messenger', reason: 'SUBSCRIBE_FAILED' },
+      { channel: 'MESSENGER', outcome: 'connected', count: null, pending: false, reason: null },
+    ],
+    // `platform=` names a connect only when it is pending; with `error=` it is a failure.
+    [
+      { platform: 'instagram', pending: '1', error: 'denied' },
+      { channel: 'INSTAGRAM', outcome: 'denied' },
+    ],
   ])('%o', (params, landing) => {
     expect(channelLandingOf(params)).toEqual(landing);
   });
@@ -69,7 +104,7 @@ describe('★★ the way back, read off the URL', () => {
 
 describe('★★ said once, and the URL tidied', () => {
   it('"Instagram connected - 1 account."; the list stays the list', () => {
-    show({ channel: 'INSTAGRAM', outcome: 'connected', count: 1, pending: false });
+    show({ channel: 'INSTAGRAM', outcome: 'connected', count: 1, pending: false, reason: null });
     expect(screen.getByTestId('channel-landing')).toHaveTextContent(
       'Instagram connected - 1 account.',
     );
@@ -77,8 +112,44 @@ describe('★★ said once, and the URL tidied', () => {
   });
 
   it('WhatsApp connected: back to its panel, 13b', () => {
-    show({ channel: 'WHATSAPP', outcome: 'connected', count: 1, pending: false });
+    show({ channel: 'WHATSAPP', outcome: 'connected', count: 1, pending: false, reason: null });
     expect(replace).toHaveBeenCalledWith('/settings/channels?panel=whatsapp', { scroll: false });
+  });
+
+  it('★ a refused subscription is said as one: connected, nothing arrives, reconnect from the row', () => {
+    show({
+      channel: 'MESSENGER',
+      outcome: 'connected',
+      count: 1,
+      pending: true,
+      reason: 'subscribe_failed',
+    });
+    const said = screen.getByTestId('channel-landing');
+    expect(said).toHaveTextContent(
+      "Messenger is connected, but messages can't arrive: the platform refused GOTCHA's subscription to them. Reconnect it from its row below.",
+    );
+    expect(said).not.toHaveTextContent(/Meta needs one more step/);
+    expect(replace).toHaveBeenCalledWith('/settings/channels', { scroll: false });
+  });
+
+  it('pending with no known reason: WhatsApp keeps its Meta step; any other channel points at its row', () => {
+    const one = show({
+      channel: 'WHATSAPP',
+      outcome: 'connected',
+      count: null,
+      pending: true,
+      reason: null,
+    });
+    expect(screen.getByTestId('channel-landing')).toHaveTextContent(
+      'WhatsApp is connected, and Meta needs one more step',
+    );
+    one.unmount();
+    show({ channel: 'INSTAGRAM', outcome: 'connected', count: null, pending: true, reason: null });
+    const said = screen.getByTestId('channel-landing');
+    expect(said).toHaveTextContent(
+      "Instagram is connected, but it isn't ready for messages yet. Its row below says what it needs.",
+    );
+    expect(said).not.toHaveTextContent(/Meta|number/);
   });
 
   it('nothing to say: nothing drawn, the URL left alone', () => {

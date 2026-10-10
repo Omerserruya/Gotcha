@@ -6,6 +6,12 @@ import type { ChannelType } from '@/api/contracts/channels';
  *   `?platform=<platform>&error=<code>`
  * Pure, so the server page can call it - a client module's helper cannot be.
  *
+ * ★ A pending connect that is not WhatsApp's (2026-10-10): Messenger and
+ *   Instagram come back `pending=1&reason=SUBSCRIBE_FAILED` when the
+ *   platform refused the webhook subscription - connected, nothing arrives.
+ *   The platform may be named by `connected=` or by `platform=`; the reason
+ *   is read only from codes this build knows, never printed.
+ *
  * ★ And v1's way back (2026-10-09: dev's v1 paths now 302 here, so a flow
  *   started in v1 lands on this page): `pending=true` rather than `1`, and
  *   `error=` with NO `platform=` - every v1 failure. It was dropped in
@@ -62,12 +68,18 @@ const PLATFORM_CHANNEL: Record<string, ChannelType> = {
   whatsapp: 'WHATSAPP',
 };
 
+/** Why a pending connect is pending, by the code the way back carries. */
+const PENDING_REASONS = { SUBSCRIBE_FAILED: 'subscribe_failed' } as const;
+export type PendingReason = (typeof PENDING_REASONS)[keyof typeof PENDING_REASONS];
+
 export type ChannelLanding =
   | {
       readonly channel: ChannelType;
       readonly outcome: 'connected';
       readonly count: number | null;
       readonly pending: boolean;
+      /** A pending connect's known reason; `null` when none, or one unknown here. */
+      readonly reason: PendingReason | null;
     }
   | {
       /** `null`: v1's way back named no platform, and the code names none either. */
@@ -81,17 +93,25 @@ export function channelLandingOf(params: {
   readonly pending?: string;
   readonly platform?: string;
   readonly error?: string;
+  readonly reason?: string;
 }): ChannelLanding | null {
-  if (params.connected) {
-    const channel = PLATFORM_CHANNEL[params.connected];
+  // `1` is ours; `true` is v1's.
+  const pending = params.pending === '1' || params.pending === 'true';
+  const connected = params.connected ?? (pending && !params.error ? params.platform : undefined);
+  if (connected) {
+    const channel = PLATFORM_CHANNEL[connected];
     if (!channel) return null;
     const n = Number(params.count);
+    const reason = params.reason ?? '';
     return {
       channel,
       outcome: 'connected',
       count: Number.isInteger(n) && n >= 0 ? n : null,
-      // `1` is ours; `true` is v1's.
-      pending: params.pending === '1' || params.pending === 'true',
+      pending,
+      reason:
+        pending && Object.hasOwn(PENDING_REASONS, reason)
+          ? PENDING_REASONS[reason as keyof typeof PENDING_REASONS]
+          : null,
     };
   }
   if (params.error) {

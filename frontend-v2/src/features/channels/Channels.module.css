@@ -158,6 +158,16 @@
   }
 
   /* A connected row's Disconnect: 02's row button, as a button. */
+  /* Reconnect and Disconnect: one item in the row, so its layout holds at any width. */
+  .rowActions {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-8);
+  }
+
   .rowDisconnect {
     flex: none;
     padding: var(--space-6) var(--space-12);

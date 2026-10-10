@@ -64,7 +64,7 @@
     "opening": "פותח…",
     "start": {
       "not_configured": "{channel} עוד לא מוגדר בצד של GOTCHA.",
-      "forbidden": "רק מנהל יכול לחבר ערוץ.",
+      "forbidden": "אין לך הרשאה לחבר ערוץ.",
       "failed": "לא הצלחנו לפתוח את {channel} - אפשר לנסות שוב."
     },
     "notSetUp": "עוד לא מוגדר",
@@ -519,6 +519,10 @@
     "connected": "{channel} מחובר.",
     "connectedCount": "{count, plural, =0 {{channel} מחובר - לא הגיעו חשבונות.} one {{channel} מחובר - חשבון אחד.} other {{channel} מחובר - # חשבונות.}}",
     "pending": "{channel} מחובר, ו‑Meta צריך עוד צעד - משלימים אותו בהגדרות המספר.",
+    "pendingOther": "{channel} מחובר, אבל עוד לא מוכן לקבל הודעות. השורה שלו ברשימה אומרת מה חסר.",
+    "pendingReason": {
+      "subscribe_failed": "{channel} מחובר, אבל הודעות לא מגיעות: הפלטפורמה לא אישרה ל‑GOTCHA לקבל אותן. מחברים מחדש מהשורה שלו ברשימה."
+    },
     "error": {
       "denied": "ביטלת ב‑{channel} - שום דבר לא חובר.",
       "token_exchange_failed": "{channel} לא אישר את החיבור. שום דבר לא חובר - אפשר לנסות שוב.",
@@ -870,5 +874,9 @@
       "forbidden": "אין לך הרשאה לנתק את הערוץ הזה.",
       "failed": "הערוץ לא נותק. אפשר לנסות שוב בעוד רגע."
     }
+  },
+  "reconnect": {
+    "action": "חיבור מחדש",
+    "label": "חיבור מחדש של {channel}"
   }
 }

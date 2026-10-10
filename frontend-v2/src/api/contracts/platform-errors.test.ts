@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { platformErrorReason, stripErrorCode, voiceErrorReason } from './platform-errors';
+import {
+  NOT_RECEIVING_REASONS,
+  platformErrorReason,
+  stripErrorCode,
+  voiceErrorReason,
+} from './platform-errors';
 
 describe('★★ a connection’s last error as a reason - code first, then the prefix, then the old sentence', () => {
   it('lastErrorCode wins', () => {
@@ -65,5 +70,56 @@ describe('★★ voice’s health as a reason - healthStatus first, then the out
 
   it('a failed check outranks the outbound flag', () => {
     expect(voiceErrorReason('decryption_failed', true)).toBe('voice_credentials_unreadable');
+  });
+
+  it('★★ lastErrorCode (conversation 538c0218): each code voice-channels.ts writes, in words', () => {
+    const coded = (code: string) => voiceErrorReason(null, false, 'any sentence', code);
+    expect(coded('TWILIO_CREDENTIALS_INVALID')).toBe('voice_credentials_rejected');
+    expect(coded('TWILIO_ACCOUNT_UNREACHABLE')).toBe('voice_twilio_unreachable');
+    expect(coded('TWILIO_NUMBER_NOT_FOUND')).toBe('voice_number_not_found');
+    expect(coded('TWILIO_WEBHOOK_UPDATE_FAILED')).toBe('voice_webhook_not_updated');
+    expect(coded('VOICE_PUBLIC_URL_MISSING')).toBe('voice_public_url_missing');
+  });
+
+  it('a known code outranks the health text and the outbound flag - it names the step that failed', () => {
+    // validate passed (ok) but the last activation could not set the call address.
+    expect(voiceErrorReason('ok', true, 'x', 'TWILIO_WEBHOOK_UPDATE_FAILED')).toBe(
+      'voice_webhook_not_updated',
+    );
+    expect(voiceErrorReason('decryption_failed', false, 'x', 'TWILIO_NUMBER_NOT_FOUND')).toBe(
+      'voice_number_not_found',
+    );
+  });
+
+  it('an unknown code or an uncoded error: the health text if it says more, else unknown - never null', () => {
+    expect(voiceErrorReason('decryption_failed', false, 'x', 'SOMETHING_NEW')).toBe(
+      'voice_credentials_unreadable',
+    );
+    expect(voiceErrorReason('ok', true, 'x', 'SOMETHING_NEW')).toBe('unknown');
+    expect(voiceErrorReason(null, false, 'Some Twilio text', null)).toBe('unknown');
+    expect(voiceErrorReason(null, false, null, 'toString')).toBe('unknown');
+    expect(voiceErrorReason(null, false, null, null)).toBeNull();
+    expect(voiceErrorReason(null, false, '  ', '  ')).toBeNull();
+  });
+});
+
+describe('★★ connected, but nothing arrives (auth 4061f669) - the subscription codes', () => {
+  it('each code, served split or still on the sentence', () => {
+    expect(platformErrorReason('x', 'SUBSCRIBE_FAILED')).toBe('subscribe_failed');
+    expect(platformErrorReason('x', 'WATCH_FAILED')).toBe('gmail_watch_failed');
+    expect(platformErrorReason('x', 'OUTLOOK_SUBSCRIPTION_FAILED')).toBe(
+      'outlook_subscription_failed',
+    );
+    expect(platformErrorReason('[SUBSCRIBE_FAILED] (#200) provider text', null)).toBe(
+      'subscribe_failed',
+    );
+  });
+
+  it('they, and only they, are the reasons a Reconnect retries', () => {
+    expect([...NOT_RECEIVING_REASONS].sort()).toEqual([
+      'gmail_watch_failed',
+      'outlook_subscription_failed',
+      'subscribe_failed',
+    ]);
   });
 });

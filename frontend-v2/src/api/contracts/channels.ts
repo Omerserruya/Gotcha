@@ -194,6 +194,12 @@ export const voiceChannelSchema = z.object({
     .object({ outboundProvisioningFailed: z.boolean().catch(false).default(false) })
     .nullish()
     .catch(null),
+  /**
+   * The last failed activation or check (conversation 538c0218), split from
+   * its stored `[CODE] sentence`. Read for the code; never shown.
+   */
+  lastError: z.string().nullable().optional().catch(null),
+  lastErrorCode: z.string().nullable().optional().catch(null),
   /** Always an array from the backend, even when discovery was skipped. */
   numbers: z.array(z.object({ phoneNumber: z.string().nullable().optional() })).default([]),
 });

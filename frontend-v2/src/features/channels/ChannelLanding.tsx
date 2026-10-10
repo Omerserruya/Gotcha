@@ -65,7 +65,12 @@ export function ChannelLanding({
       <span>
         {said.outcome === 'connected'
           ? said.pending
-            ? t('landing.pending', { channel: label })
+            ? said.reason
+              ? t(`landing.pendingReason.${said.reason}`, { channel: label })
+              : said.channel === 'WHATSAPP'
+                ? t('landing.pending', { channel: label })
+                : // Not WhatsApp's "one more step at Meta": its row says what it needs.
+                  t('landing.pendingOther', { channel: label })
             : said.count === null
               ? t('landing.connected', { channel: label })
               : t('landing.connectedCount', { channel: label, count: said.count })

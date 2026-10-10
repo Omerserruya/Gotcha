@@ -12,10 +12,12 @@ import styles from './Channels.module.css';
 import { ChannelTile } from './ChannelTile';
 import { ConnectableRow } from './ConnectableRow';
 import { DisconnectChannel } from './DisconnectChannel';
+import { ReconnectChannel } from './ReconnectChannel';
 import {
   buildChannelRows,
   canDisconnect,
   isTroubled,
+  needsReconnect,
   type ChannelRow,
   type ConnectedRow,
   type WidgetRow,
@@ -210,12 +212,22 @@ export async function ChannelList({
                 /*
                   Disconnect, after a confirmation in the channel's name
                   (POST /api/channels/:id/disconnect; conversations are kept).
+                  Reconnect beside it when messages cannot arrive.
                 */
-                <DisconnectChannel
-                  id={row.id}
-                  name={channelName(row.channel, t) ?? t('name.other')}
-                  identity={row.identity}
-                />
+                <span className={styles.rowActions}>
+                  {needsReconnect(row) ? (
+                    <ReconnectChannel
+                      id={row.id}
+                      channel={row.channel}
+                      name={channelName(row.channel, t) ?? t('name.other')}
+                    />
+                  ) : null}
+                  <DisconnectChannel
+                    id={row.id}
+                    name={channelName(row.channel, t) ?? t('name.other')}
+                    identity={row.identity}
+                  />
+                </span>
               ) : (
                 /*
                   Nothing to set (checked 2026-10-08): the platform's only

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { channelSchema, voiceChannelSchema, type Channel } from '@/api/contracts/channels';
 
-import { buildChannelRows, isTroubled, type ConnectedRow } from './rows';
+import { buildChannelRows, isTroubled, needsReconnect, type ConnectedRow } from './rows';
 
 const channel = (over: Partial<Channel> = {}): Channel => ({
   id: 'c1',
@@ -129,6 +129,19 @@ describe('buildChannelRows', () => {
       'voice_credentials_unreadable',
     );
     expect(errorOf({ healthStatus: 'Some Twilio text' }).error).toBe('unknown');
+    // ★ conversation 538c0218: the last failed activation, by its code; the sentence is never read.
+    expect(
+      errorOf({
+        lastError: 'Twilio did not accept the new call address for this number.',
+        lastErrorCode: 'TWILIO_WEBHOOK_UPDATE_FAILED',
+      }).error,
+    ).toBe('voice_webhook_not_updated');
+    expect(
+      errorOf({ healthStatus: 'ok', lastError: 'x', lastErrorCode: 'VOICE_PUBLIC_URL_MISSING' })
+        .error,
+    ).toBe('voice_public_url_missing');
+    // A field in another shape is no error, not a rejected voice read.
+    expect(errorOf({ lastError: 5, lastErrorCode: { a: 1 } }).error).toBeNull();
     // A config in another shape is no flag, not a rejected voice read.
     expect(errorOf({ config: 'nonsense' }).error).toBeNull();
     // Twilio's raw text and the webhook secret do not cross into the row's source.
@@ -273,5 +286,46 @@ describe('★ a channel someone disconnected can be connected again (2026-10-09)
     );
     expect(connectedOnly(rows).map((r) => r.id)).toContain('e1');
     expect(connectable(rows)).not.toContain('EMAIL');
+  });
+});
+
+describe('★★ connected, but nothing arrives: a Reconnect on the row (auth 4061f669)', () => {
+  const rowOf = (over: Partial<Channel>) =>
+    connectedOnly(buildChannelRows([channel(over)], [], false, 'en'))[0]!;
+
+  it.each([
+    ['MESSENGER', 'PENDING', 'SUBSCRIBE_FAILED'],
+    ['INSTAGRAM', 'PENDING', 'SUBSCRIBE_FAILED'],
+    ['GMAIL', 'CONNECTED', 'WATCH_FAILED'],
+    ['OUTLOOK', 'CONNECTED', 'OUTLOOK_SUBSCRIPTION_FAILED'],
+  ] as const)('%s %s with %s: needs attention, and Reconnect', (type, status, code) => {
+    const row = rowOf({
+      channel: type,
+      connectionStatus: status,
+      lastError: 'provider text',
+      lastErrorCode: code,
+    });
+    expect(isTroubled(row)).toBe(true);
+    expect(needsReconnect(row)).toBe(true);
+  });
+
+  it('another error, or none: no Reconnect - Connect would not mend it', () => {
+    expect(needsReconnect(rowOf({ channel: 'MESSENGER' }))).toBe(false);
+    expect(
+      needsReconnect(
+        rowOf({ channel: 'INSTAGRAM', lastError: 'Token expired', lastErrorCode: null }),
+      ),
+    ).toBe(false);
+  });
+
+  it('a channel whose Connect does not come back to its account gets none, whatever the code', () => {
+    expect(
+      needsReconnect(
+        rowOf({ channel: 'WHATSAPP', lastError: 'x', lastErrorCode: 'SUBSCRIBE_FAILED' }),
+      ),
+    ).toBe(false);
+    expect(
+      needsReconnect(rowOf({ channel: 'EMAIL', lastError: 'x', lastErrorCode: 'WATCH_FAILED' })),
+    ).toBe(false);
   });
 });
