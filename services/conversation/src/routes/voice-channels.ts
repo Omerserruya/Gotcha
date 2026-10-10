@@ -112,16 +112,63 @@ interface ByoCredentials {
   apiKeySecret?: string | null;
 }
 
-function serializePhoneNumber(row: PhoneNumberRow) {
+/**
+ * One number as the wizard and the channels list read it. `config` is the
+ * channel's, for the number's last activation failure (2026-10-09): the
+ * number table has no JSON column, so it lives in the channel's config
+ * under numberActivationErrors[numberId], as "[CODE] sentence".
+ * webhookConfigured is isActive: activation sets the Twilio webhooks to us
+ * before it flips isActive, and deactivation clears them before it unflips.
+ */
+function serializePhoneNumber(row: PhoneNumberRow, config?: unknown) {
+  const errors = numberActivationErrors(config);
+  const split = splitErrorCode(errors[row.id] ?? null);
   return {
     id: row.id,
     e164: row.e164,
     twilioSid: row.twilioSid,
     friendlyName: row.friendlyName,
     isActive: row.isActive,
+    webhookConfigured: row.isActive,
+    activationError: split.lastError,
+    activationErrorCode: split.lastErrorCode,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+function numberActivationErrors(config: unknown): Record<string, string> {
+  const v = config && typeof config === "object" && !Array.isArray(config) ? (config as Record<string, unknown>).numberActivationErrors : null;
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, string>) : {};
+}
+
+/**
+ * Merge keys into a channel's config, read fresh so nothing another writer
+ * stored is lost (2026-10-09: a provisioning failure REPLACED the whole
+ * config). A key set to undefined is removed.
+ */
+async function mergeChannelConfig(channelId: string, patch: Record<string, unknown>): Promise<void> {
+  try {
+    const ch = await prisma.communicationChannel.findUnique({ where: { id: channelId }, select: { config: true } });
+    const cur = ch?.config && typeof ch.config === "object" && !Array.isArray(ch.config) ? { ...(ch.config as Record<string, unknown>) } : {};
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === undefined) delete cur[k];
+      else cur[k] = v;
+    }
+    await prisma.communicationChannel.update({ where: { id: channelId }, data: { config: cur as object } });
+  } catch (err) {
+    console.warn("voice-channels: failed to merge config:", (err as Error)?.message);
+  }
+}
+
+/** Set (code) or clear (null) one number's activation error in the channel config. */
+async function recordNumberActivationError(channelId: string, numberId: string, code: KnownErrorCode | null): Promise<void> {
+  const ch = await prisma.communicationChannel.findUnique({ where: { id: channelId }, select: { config: true } }).catch(() => null);
+  const errors = { ...numberActivationErrors(ch?.config) };
+  if (code) errors[numberId] = withErrorCode(code);
+  else if (numberId in errors) delete errors[numberId];
+  else return;
+  await mergeChannelConfig(channelId, { numberActivationErrors: Object.keys(errors).length ? errors : undefined });
 }
 
 /**
@@ -134,7 +181,7 @@ function splitStoredVoiceError(config: unknown): { config: unknown; lastError: s
   if (!config || typeof config !== "object" || Array.isArray(config)) {
     return { config, lastError: null, lastErrorCode: null };
   }
-  const { lastError: stored, ...rest } = config as Record<string, unknown>;
+  const { lastError: stored, numberActivationErrors: _perNumber, ...rest } = config as Record<string, unknown>;
   return { config: rest, ...splitErrorCode(typeof stored === "string" ? stored : null) };
 }
 
@@ -144,7 +191,7 @@ function serializeChannel(row: ChannelRow) {
   // `voiceChannel` for any consumer that wants the joined-row shape.
   // Always an array, never `undefined`, so renderers can `.length`/`.map`
   // without null-checks even when Twilio discovery was skipped.
-  const numbers = (row.voiceChannel?.phoneNumbers ?? []).map(serializePhoneNumber);
+  const numbers = (row.voiceChannel?.phoneNumbers ?? []).map((n) => serializePhoneNumber(n, row.config));
   const stored = splitStoredVoiceError(row.config);
   return {
     id: row.id,
@@ -420,7 +467,7 @@ async function provisionOutboundResources(
   voiceChannelId: string,
   accountSid: string,
   authToken: string,
-): Promise<void> {
+): Promise<boolean> {
   const ctx: TwilioApiContext = { channelId, accountSid, authToken };
   const base = publicBaseUrl();
 
@@ -438,13 +485,8 @@ async function provisionOutboundResources(
   } catch (err) {
     const msg = (err as { message?: string })?.message ?? "key_create_failed";
     console.warn("voice-channels.provision: API key creation failed:", msg);
-    await prisma.communicationChannel.update({
-      where: { id: channelId },
-      data: {
-        config: { outboundProvisioningFailed: true, outboundProvisioningError: msg },
-      },
-    });
-    return;
+    await mergeChannelConfig(channelId, { outboundProvisioningFailed: true, outboundProvisioningError: msg });
+    return false;
   }
 
   // 2. Create TwiML App
@@ -468,13 +510,8 @@ async function provisionOutboundResources(
     });
     const msg = (err as { message?: string })?.message ?? "app_create_failed";
     console.warn("voice-channels.provision: TwiML App creation failed:", msg);
-    await prisma.communicationChannel.update({
-      where: { id: channelId },
-      data: {
-        config: { outboundProvisioningFailed: true, outboundProvisioningError: msg },
-      },
-    });
-    return;
+    await mergeChannelConfig(channelId, { outboundProvisioningFailed: true, outboundProvisioningError: msg });
+    return false;
   }
 
   // 3. Re-encrypt secrets to include new apiKeySecret, then persist both SIDs.
@@ -502,7 +539,12 @@ async function provisionOutboundResources(
   } catch (err) {
     const msg = (err as { message?: string })?.message ?? "persist_failed";
     console.warn("voice-channels.provision: failed to persist provisioned resources:", msg);
+    await mergeChannelConfig(channelId, { outboundProvisioningFailed: true, outboundProvisioningError: msg });
+    return false;
   }
+  // Outbound works now: a flag left by an earlier attempt no longer holds.
+  await mergeChannelConfig(channelId, { outboundProvisioningFailed: undefined, outboundProvisioningError: undefined });
+  return true;
 }
 
 // ─── POST / ─────────────────────────────────────────────────
@@ -1193,6 +1235,38 @@ function buildContextFromChannel(
   };
 }
 
+// ─── POST /:id/outbound/retry ──────────────────────────────
+// Outbound provisioning (API Key + TwiML App) failed at create time and the
+// flag config.outboundProvisioningFailed had no way back (2026-10-09). This
+// runs the same provisioning again with the channel's stored credentials and
+// clears the flag on success. Inbound is unaffected either way.
+router.post("/:id/outbound/retry", async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const ch = await prisma.communicationChannel.findUnique({ where: { id }, include: CHANNEL_INCLUDE });
+    if (!ch || ch.tenantId !== req.tenantId! || ch.channelType !== "VOICE" || !ch.voiceChannel) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const ctxResult = buildContextFromChannel(ch as unknown as ChannelRow);
+    if ("error" in ctxResult) {
+      res.status(ctxResult.status).json({ error: ctxResult.error });
+      return;
+    }
+    const ok = await provisionOutboundResources(ch.id, ch.voiceChannel.id, ctxResult.ctx.accountSid, ctxResult.ctx.authToken);
+    const fresh = await prisma.communicationChannel.findUnique({ where: { id: ch.id }, include: CHANNEL_INCLUDE });
+    const body = { data: serializeChannel(fresh as unknown as ChannelRow) };
+    if (!ok) {
+      res.status(502).json({ error: "outbound_provisioning_failed", code: "OUTBOUND_PROVISIONING_FAILED", ...body });
+      return;
+    }
+    res.json(body);
+  } catch (err) {
+    console.error("voice-channels.outbound.retry error:", err);
+    res.status(500).json({ error: "failed_to_retry" });
+  }
+});
+
 // ─── POST /:id/numbers/refresh ──────────────────────────────
 router.post("/:id/numbers/refresh", async (req: Request, res: Response) => {
   try {
@@ -1277,6 +1351,7 @@ router.post("/:id/numbers/:numberId/activate", async (req: Request, res: Respons
       // (2026-10-09): a 502 the wizard drops was the only trace before.
       const code = activationErrorCode(err);
       await recordVoiceError(channel.id, channel.config, code);
+      await recordNumberActivationError(channel.id, number.id, code);
       res.status(502).json({ error: "twilio_update_failed", message: msg, lastErrorCode: code });
       return;
     }
@@ -1286,6 +1361,7 @@ router.post("/:id/numbers/:numberId/activate", async (req: Request, res: Respons
     });
     // A working activation disproves every stored cause, so clear any.
     await recordVoiceError(channel.id, channel.config, null);
+    await recordNumberActivationError(channel.id, number.id, null);
     res.json({ data: serializePhoneNumber(updated as unknown as PhoneNumberRow) });
   } catch (err) {
     console.error("voice-channels.numbers.activate error:", err);

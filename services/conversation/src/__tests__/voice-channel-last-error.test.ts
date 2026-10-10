@@ -50,6 +50,14 @@ vi.mock("@chatcenter/shared", async () => {
         return withVoice(r);
       },
     },
+    voiceChannel: {
+      update: async (a: any) => {
+        const r = DB.voice.find((v) => v.id === a.where.id);
+        if (!r) throw new Error("not found");
+        Object.assign(r, a.data);
+        return { ...r };
+      },
+    },
     voiceChannelPhoneNumber: {
       update: async (a: any) => {
         const r = DB.numbers.find((n) => n.id === a.where.id);
@@ -234,5 +242,79 @@ describe("validation failure is kept and served", () => {
     await activate("ch_a");
     await validate("ch_a");
     expect(stored("ch_a")).toMatch(/^\[VOICE_PUBLIC_URL_MISSING\] /);
+  });
+});
+
+
+describe("★ V1: a number's activation failure is kept on that number (2026-10-09)", () => {
+  const numbersOf = async (id: string) => (await request(app).get(`/api/voice-channels/${id}`)).body.data.numbers;
+
+  it("a failed activation: activationErrorCode on that number only, webhookConfigured false", async () => {
+    twilio(404, {});
+    expect((await activate("ch_a")).status).toBe(502);
+    const [n] = await numbersOf("ch_a");
+    expect(n).toMatchObject({ id: "n_ch_a", activationErrorCode: "TWILIO_NUMBER_NOT_FOUND", webhookConfigured: false });
+    expect(n.activationError).toBeTruthy();
+    const [other] = await numbersOf("ch_b");
+    expect(other).toMatchObject({ activationErrorCode: null, activationError: null });
+  });
+
+  it("the next successful activation clears it, and webhookConfigured is true", async () => {
+    twilio(500, {});
+    await activate("ch_a");
+    twilio(200, { sid: "PN_ch_a" });
+    const r = await activate("ch_a");
+    expect(r.status).toBe(200);
+    expect(r.body.data).toMatchObject({ webhookConfigured: true, activationErrorCode: null });
+    const [n] = await numbersOf("ch_a");
+    expect(n).toMatchObject({ webhookConfigured: true, activationErrorCode: null });
+    expect(DB.channels.find((c) => c.id === "ch_a")!.config.numberActivationErrors).toBeUndefined();
+  });
+
+  it("the per-number map never shows up inside the served config", async () => {
+    twilio(404, {});
+    await activate("ch_a");
+    const body = (await request(app).get("/api/voice-channels/ch_a")).body.data;
+    expect(body.config).not.toHaveProperty("numberActivationErrors");
+    expect(body.config.outboundProvisioningFailed).toBe(true);
+  });
+});
+
+describe("★ V2: outbound provisioning can be retried, and the flag clears (2026-10-09)", () => {
+  const retry = (id: string) => request(app).post(`/api/voice-channels/${id}/outbound/retry`).send({});
+  const byUrl = (map: Record<string, [number, any]>) =>
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const hit = Object.entries(map).find(([k]) => String(url).includes(k));
+      const [status, body] = hit ? hit[1] : [500, {}];
+      return { ok: status < 400, status, json: async () => body, text: async () => JSON.stringify(body) };
+    }));
+
+  it("success: the API key and TwiML app are stored and the flag is cleared; other config kept", async () => {
+    DB.channels.find((c) => c.id === "ch_a")!.config = { outboundProvisioningFailed: true, outboundProvisioningError: "old", keep: 1 };
+    byUrl({ "/Keys.json": [201, { sid: "SK1", secret: "sec" }], "/Applications.json": [201, { sid: "AP1" }] });
+    const r = await retry("ch_a");
+    expect(r.status).toBe(200);
+    const cfg = DB.channels.find((c) => c.id === "ch_a")!.config;
+    // Keys, not toEqual: a key left as undefined would still be stored.
+    expect(Object.keys(cfg)).toEqual(["keep"]);
+    expect(DB.voice.find((v) => v.id === "vc_ch_a")).toMatchObject({ apiKeySid: "SK1", twimlAppSid: "AP1" });
+    expect(r.body.data.config).not.toHaveProperty("outboundProvisioningFailed");
+  });
+
+  it("failure: 502 OUTBOUND_PROVISIONING_FAILED, the flag set again, other config kept (never replaced)", async () => {
+    DB.channels.find((c) => c.id === "ch_b")!.config = { keep: 1, lastError: "[TWILIO_NUMBER_NOT_FOUND] x" };
+    byUrl({ "/Keys.json": [401, { code: 20003 }] });
+    const r = await retry("ch_b");
+    expect(r.status).toBe(502);
+    expect(r.body.code).toBe("OUTBOUND_PROVISIONING_FAILED");
+    const cfg = DB.channels.find((c) => c.id === "ch_b")!.config;
+    expect(cfg).toMatchObject({ keep: 1, outboundProvisioningFailed: true, lastError: "[TWILIO_NUMBER_NOT_FOUND] x" });
+  });
+
+  it("another tenant's channel: 404, no Twilio call", async () => {
+    seedChannel("ch_z", "tenant_z");
+    twilio(201, {});
+    expect((await retry("ch_z")).status).toBe(404);
+    expect(fetchCalls()).toBe(0);
   });
 });
