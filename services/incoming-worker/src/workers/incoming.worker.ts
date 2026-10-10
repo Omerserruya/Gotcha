@@ -5,6 +5,7 @@ import path from "path";
 import crypto from "crypto";
 import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
 import { prisma, createWorker, type AutomationEventJob, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, HistoricalImportChunkJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, isInboundExcluded, probeUploadsDir, describeUploadsProbe, classifyMediaFailure, reportOperationalFailure, ERROR_CODES, type MediaFailureReason, type InboundReferral } from "@chatcenter/shared";
+import { safeUploadExtension } from "@chatcenter/shared/src/lib/upload-safety";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
@@ -171,7 +172,9 @@ export async function resolveWhatsAppMedia(
     const contentType = String(fileRes.headers["content-type"] ?? "");
     const senderExt = opts?.fileName ? path.extname(opts.fileName) : "";
     const declaredExt = extensionFromMimeOrEmpty(opts?.mimeType);
-    const ext = senderExt || declaredExt || getExtensionFromMime(contentType, messageType);
+    // Only an allowlisted extension is ever written: the sender's name could
+    // say ".html" and the file would be served as a page (2026-10-09).
+    const ext = safeUploadExtension(senderExt, declaredExt, getExtensionFromMime(contentType, messageType));
 
     // Stored under a UUID (never the sender's name - that is attacker-supplied
     // text and this path is written straight to disk), but the sender's name

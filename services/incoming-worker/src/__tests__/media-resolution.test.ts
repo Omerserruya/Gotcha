@@ -92,6 +92,14 @@ describe("resolveWhatsAppMedia", () => {
     expect(res!.localUrl.endsWith(".xlsx")).toBe(true);
   });
 
+  it("★ a sender's extension a browser could run is stored as .bin, never guessed (2026-10-09)", async () => {
+    for (const fileName of ["x.html", "logo.SVG", "a.js"]) {
+      const res = await resolveWhatsAppMedia("MEDIA_X", "tok", "document", { fileName, mimeType: "text/html" });
+      expect(res?.fileName, fileName).toMatch(/^[0-9a-f-]{36}\.bin$/);
+      expect(res?.displayName).toBe(fileName);
+    }
+  });
+
   it("falls back to the MIME the channel declared", async () => {
     mockDownload("application/octet-stream");
 

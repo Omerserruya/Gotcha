@@ -7,6 +7,7 @@ import { prisma, authenticate, resolveTenant, validate, outgoingMessageQueue, de
   type EmailThreadContext,
 } from "@chatcenter/shared";
 import * as messageService from "../services/message.service";
+import { safeUploadExtension } from "@chatcenter/shared/src/lib/upload-safety";
 import { requireVisibleConversation } from "../lib/require-visible-conversation";
 
 const router = Router();
@@ -262,7 +263,9 @@ router.post("/:conversationId/messages/media", async (req: Request, res: Respons
     else if (mimeType.startsWith("video/")) messageType = "video";
 
     // Save file to uploads directory
-    const ext = path.extname(originalName) || getExtFromMime(mimeType);
+    // Only an allowlisted extension is ever stored: the uploader's name could
+    // say ".html" (2026-10-09). The original name still goes on the message.
+    const ext = safeUploadExtension(path.extname(originalName), getExtFromMime(mimeType));
     const savedName = `${crypto.randomUUID()}${ext}`;
     const filePath = path.join(UPLOADS_DIR, savedName);
     fs.writeFileSync(filePath, fileBuffer);

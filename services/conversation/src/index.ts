@@ -22,6 +22,7 @@ import voiceSessionsRoutes from "./routes/voice-sessions";
 import voiceChannelsRoutes from "./routes/voice-channels";
 import autoBuyRoutes from "./routes/auto-buy";
 import { handleVoiceSessionEnded } from "./subscribers/voice-auto-close";
+import { uploadsStatic } from "./lib/uploads-static";
 import { relayToVisitor, relayConversationState } from "./subscribers/shopify-visitor-relay";
 
 const config = { name: "conversation-service", port: parseInt(process.env.PORT || "4002", 10) };
@@ -115,7 +116,7 @@ if (!uploadsProbe.ok) {
   console.log(describeUploadsProbe(uploadsProbe, "conversation"));
 }
 
-app.use("/api/uploads", express.static(uploadsDir));
+app.use("/api/uploads", uploadsStatic(uploadsDir));
 
 // Routes
 app.use("/api/conversations", conversationRoutes);
