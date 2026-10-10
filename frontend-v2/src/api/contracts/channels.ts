@@ -221,3 +221,87 @@ export function voiceStateAsConnection(status: VoiceState): ConnectionState {
   if (status === 'ERROR') return 'ERROR';
   return 'PENDING';
 }
+
+/* ── Messenger: choose the Pages to connect (backend 0ce84f21) ─────────────
+ *
+ * A Messenger sign-in that grants two or more Pages connects none of them: the
+ * callback keeps them (encrypted, for a while) and lands on
+ * `?pick=1&platform=messenger&session=<uuid>`. Read off
+ * `services/auth/src/routes/channels.ts`:
+ *
+ *   GET  /api/channels/messenger/candidates?session=
+ *        200 { data: { pages: [{ id, name, category, connectedHere,
+ *              takenElsewhere }], expiresAt } }
+ *        410 { code: 'SESSION_EXPIRED' } - expired, replaced, another
+ *            workspace's or another person's: one answer for all four
+ *   POST /api/channels/messenger/select { session, pageIds (1..50) }
+ *        200 { data: { results: [{ id, name, status, subscribed }], connected } }
+ *        410 SESSION_EXPIRED · 422 UNKNOWN_PAGE (an id the grant did not offer)
+ *        402 PLAN_LIMIT_REACHED (counts only Pages NEW here; a reconnect is
+ *            never refused) · 409 NONE_CONNECTED (every choice was taken,
+ *            `data: { results, connected }` beside the code)
+ *        400 from `validate()` for an empty or oversized list
+ *
+ * Both successes are `{ data }` alone, so the client's unwrap is right and no
+ * `raw` is needed. The schemas read only what the screen uses, and every field
+ * falls back rather than failing: one Page the backend describes in a way this
+ * build does not know must not take the other Pages' answers with it.
+ */
+
+/** `pageIds` takes at most this many (the route's `z.array().max(50)`). */
+export const MESSENGER_SELECT_MAX = 50;
+
+const messengerCandidateSchema = z.object({
+  /** The only field without a fallback: a Page with no id cannot be chosen. */
+  id: z.string().min(1),
+  name: z.string().catch(''),
+  /** Absent reads as `null` too (an `optional()` would leave the key out). */
+  category: z.string().nullable().catch(null),
+  /** A live row of this workspace's: choosing it reconnects (never refused by the limit). */
+  connectedHere: z.boolean().catch(false),
+  /**
+   * Another workspace owns it: the route answers `taken` and writes nothing.
+   * Unreadable reads as `false` - the server is the one that refuses, so a
+   * choice made on a wrong `false` comes back `taken`, in words.
+   */
+  takenElsewhere: z.boolean().catch(false),
+});
+export type MessengerCandidate = z.infer<typeof messengerCandidateSchema>;
+
+export const messengerCandidatesSchema = z.object({
+  pages: z
+    .array(messengerCandidateSchema.nullable().catch(null))
+    .catch([])
+    .transform((pages) => pages.filter((p): p is MessengerCandidate => p !== null)),
+});
+
+/** What the route can say about one Page; anything else reads as `unknown`, in words. */
+export const MESSENGER_PAGE_STATUSES = ['connected', 'reconnected', 'taken'] as const;
+export type MessengerPageStatus = (typeof MESSENGER_PAGE_STATUSES)[number] | 'unknown';
+
+const messengerPageResultSchema = z.object({
+  id: z.string().catch(''),
+  name: z.string().catch(''),
+  status: z
+    .string()
+    .catch('')
+    .transform((s): MessengerPageStatus =>
+      (MESSENGER_PAGE_STATUSES as readonly string[]).includes(s)
+        ? (s as MessengerPageStatus)
+        : 'unknown',
+    ),
+  /**
+   * `false`: saved, but Meta refused the webhook subscription - nothing will
+   * arrive. Absent or unreadable is `null`: no claim either way.
+   */
+  subscribed: z.boolean().nullable().catch(null),
+});
+export type MessengerPageResult = z.infer<typeof messengerPageResultSchema>;
+
+/** POST /messenger/select's `data`, and the 409's `data` beside its code. */
+export const messengerSelectSchema = z.object({
+  results: z
+    .array(messengerPageResultSchema.nullable().catch(null))
+    .catch([])
+    .transform((results) => results.filter((r): r is MessengerPageResult => r !== null)),
+});

@@ -11,6 +11,7 @@ import { ChannelLanding } from './ChannelLanding';
 import {
   CHANNEL_CONNECT_FAILURES,
   channelLandingOf,
+  messengerPickOf,
   type ChannelLanding as Landing,
 } from './landing';
 
@@ -97,6 +98,19 @@ describe('★★ the way back, read off the URL', () => {
       { platform: 'instagram', pending: '1', error: 'denied' },
       { channel: 'INSTAGRAM', outcome: 'denied' },
     ],
+    // ★ Backend 0ce84f21: Messenger over the plan's limit, and choices not kept.
+    [
+      { platform: 'messenger', error: 'limit_reached' },
+      { channel: 'MESSENGER', outcome: 'limit_reached' },
+    ],
+    [
+      { platform: 'messenger', error: 'picker_failed' },
+      { channel: 'MESSENGER', outcome: 'picker_failed' },
+    ],
+    [{ error: 'picker_failed' }, { channel: 'MESSENGER', outcome: 'picker_failed' }],
+    [{ error: 'limit_reached' }, { channel: null, outcome: 'limit_reached' }],
+    // The picker's way back is not a sentence: nothing connected, nothing failed.
+    [{ pick: '1', platform: 'messenger', session: 's1' }, null],
   ])('%o', (params, landing) => {
     expect(channelLandingOf(params)).toEqual(landing);
   });
@@ -201,5 +215,39 @@ describe('★★ v1’s way back with no channel: said, in a sentence that needs
       expect(text).not.toMatch(/landing\.|error\.|unnamed\.|Another channel/);
       unmount();
     }
+  });
+});
+
+describe('★★ Messenger’s picker way back (backend 0ce84f21)', () => {
+  it.each([
+    [{ pick: '1', platform: 'messenger', session: 'abc-123' }, { session: 'abc-123' }],
+    [{ pick: '1', platform: 'messenger', session: ' abc ' }, { session: 'abc' }],
+    [{ pick: '1', platform: 'messenger' }, null],
+    [{ pick: '1', platform: 'messenger', session: '' }, null],
+    [{ pick: '1', platform: 'messenger', session: 'x'.repeat(101) }, null],
+    // Only Messenger keeps Pages to choose from.
+    [{ pick: '1', platform: 'instagram', session: 'abc' }, null],
+    [{ pick: '1', session: 'abc' }, null],
+    [{ pick: '0', platform: 'messenger', session: 'abc' }, null],
+    [{ platform: 'messenger', session: 'abc' }, null],
+  ])('%o', (params, pick) => {
+    expect(messengerPickOf(params)).toEqual(pick);
+  });
+
+  it('limit_reached and picker_failed are said in words, named and unnamed', () => {
+    const one = show({ channel: 'MESSENGER', outcome: 'limit_reached' });
+    expect(screen.getByTestId('channel-landing')).toHaveTextContent(
+      "Your plan has no room for another channel, so Messenger wasn't connected.",
+    );
+    one.unmount();
+    const two = show({ channel: 'MESSENGER', outcome: 'picker_failed' });
+    expect(screen.getByTestId('channel-landing')).toHaveTextContent(
+      "Your Pages couldn't be kept for you to choose from, so nothing was connected. Connect Messenger again.",
+    );
+    two.unmount();
+    show({ channel: null, outcome: 'limit_reached' });
+    expect(screen.getByTestId('channel-landing')).toHaveTextContent(
+      'Your plan has no room for another channel, so nothing was connected.',
+    );
   });
 });

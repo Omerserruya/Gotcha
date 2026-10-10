@@ -11,6 +11,7 @@ import {
 } from '@/features/channels/LearnPanels';
 import { WhatsAppNumbers } from '@/features/channels/WhatsAppNumbers';
 import { ChannelLanding } from '@/features/channels/ChannelLanding';
+import { MessengerPicker } from '@/features/channels/MessengerPicker';
 import { ConnectWhatsApp } from '@/features/channels/ConnectWhatsApp';
 import { WhatsAppPanel } from '@/features/channels/WhatsAppPanel';
 import channels from '@/i18n/messages/en/channels.json';
@@ -53,6 +54,10 @@ const reads = vi.hoisted(() => ({
   thread: vi.fn(async () => null),
   profiles: vi.fn(async () => []),
 }));
+const loadMessengerPages = vi.hoisted(() =>
+  vi.fn(async () => ({ ok: true, pages: [{ id: 'p1', name: 'Shop' }] })),
+);
+vi.mock('@/features/channels/messenger-actions', () => ({ loadMessengerPages }));
 vi.mock('@/features/webchat/load-website-widget', () => ({ loadWidgetInstall: async () => null }));
 vi.mock('@/features/outreach/load-templates', () => ({ loadTemplates: reads.templates }));
 vi.mock('@/features/channels/load-whatsapp', () => ({
@@ -145,6 +150,29 @@ describe('★ 13e / 13f are their own panels, replacing 13b while open', () => {
       channel: 'MESSENGER',
       outcome: 'no_pages',
     });
+  });
+
+  it('★ Messenger’s picker way back: its Pages read with the session, handed to the picker', async () => {
+    loadMessengerPages.mockClear();
+    const { default: Page } = await import('./page');
+    const tree = await Page({
+      searchParams: Promise.resolve({ pick: '1', platform: 'messenger', session: 's-1' }),
+    });
+    expect(loadMessengerPages).toHaveBeenCalledWith('s-1');
+    expect(find<{ pick: unknown }>(tree, MessengerPicker)?.pick).toEqual({
+      session: 's-1',
+      read: { ok: true, pages: [{ id: 'p1', name: 'Shop' }] },
+    });
+    // No sentence: nothing was connected and nothing failed yet.
+    expect(find<{ landing: unknown }>(tree, ChannelLanding)?.landing).toBeNull();
+  });
+
+  it('no picker way back: nothing read, the picker mounted with nothing', async () => {
+    loadMessengerPages.mockClear();
+    const { default: Page } = await import('./page');
+    const tree = await Page({ searchParams: Promise.resolve({ connected: 'messenger' }) });
+    expect(loadMessengerPages).not.toHaveBeenCalled();
+    expect(find<{ pick: unknown }>(tree, MessengerPicker)?.pick).toBeNull();
   });
 
   it('?view=progress opens 13e and not 13b', async () => {

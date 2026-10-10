@@ -537,6 +537,8 @@
       "no_whatsapp_numbers": "Meta shared no WhatsApp numbers. Nothing was connected.",
       "slack_no_team": "Slack didn't say which workspace - try again.",
       "callback_error": "Something went wrong on the way back from {channel}. Nothing was connected - try again.",
+      "limit_reached": "Your plan has no room for another channel, so {channel} wasn't connected.",
+      "picker_failed": "Your Pages couldn't be kept for you to choose from, so nothing was connected. Connect {channel} again.",
       "other": "{channel} didn't connect. Try again."
     },
     "unnamed": {
@@ -545,6 +547,8 @@
       "not_configured": "That channel isn't set up on GOTCHA's side yet.",
       "already_connected": "That account is already connected to this workspace.",
       "callback_error": "Something went wrong on the way back. Nothing was connected - try again.",
+      "limit_reached": "Your plan has no room for another channel, so nothing was connected.",
+      "picker_failed": "Your Pages couldn't be kept for you to choose from, so nothing was connected. Try again.",
       "other": "The connection didn't go through. Try again."
     }
   },
@@ -878,5 +882,42 @@
   "reconnect": {
     "action": "Reconnect",
     "label": "Reconnect {channel}"
+  },
+  "pick": {
+    "heading": "Choose the Facebook Pages to connect",
+    "lead": "Your sign-in shared these Pages. Only the ones you choose are connected to Messenger here.",
+    "here": "Already connected here. Choosing it reconnects it.",
+    "taken": "Connected to another GOTCHA workspace, so it can't be connected here.",
+    "confirm": "{count, plural, one {Connect # Page} other {Connect # Pages}}",
+    "connecting": "Connecting…",
+    "chooseOne": "Choose at least one Page to connect.",
+    "tooMany": "Choose up to {max} Pages at a time.",
+    "noneAvailable": "Every Page from this sign-in is connected to another GOTCHA workspace, so there is nothing to connect here.",
+    "later": "Not now",
+    "again": "Connect Messenger again",
+    "opening": "Opening…",
+    "read": {
+      "expired": "This choice has expired. Connect Messenger again to choose your Pages.",
+      "forbidden": "You don't have permission to connect a channel.",
+      "failed": "Your Pages couldn't be loaded. Connect Messenger again to choose them."
+    },
+    "refused": {
+      "expired": "This choice has expired. Connect Messenger again to choose your Pages.",
+      "limit": "Your plan has no room for that many new channels. Choose fewer new Pages; Pages already connected here don't count.",
+      "none_connected": "None of those Pages were connected: each one is connected to another GOTCHA workspace.",
+      "unknown_page": "Some of those Pages weren't part of this sign-in. Connect Messenger again to choose from your Pages.",
+      "forbidden": "You don't have permission to connect a channel.",
+      "failed": "Those Pages didn't connect. Try again."
+    },
+    "resultHeading": "What happened to each Page",
+    "result": {
+      "connected": "Connected.",
+      "reconnected": "Reconnected.",
+      "taken": "Not connected: it's connected to another GOTCHA workspace.",
+      "unknown": "Its answer couldn't be read. Its row in the list shows where it stands.",
+      "connectedNotSubscribed": "Connected, but messages can't arrive: the platform refused GOTCHA's subscription to them. Reconnect to try again.",
+      "reconnectedNotSubscribed": "Reconnected, but messages can't arrive: the platform refused GOTCHA's subscription to them. Reconnect to try again."
+    },
+    "done": "Done"
   }
 }

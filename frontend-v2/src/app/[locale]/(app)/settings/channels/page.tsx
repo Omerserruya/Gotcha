@@ -29,7 +29,9 @@ import { ActivityTab, ContactsTab, TemplatesTab } from '@/features/channels/What
 import { loadTemplates } from '@/features/outreach/load-templates';
 import { ChannelLanding } from '@/features/channels/ChannelLanding';
 import { ConnectWhatsApp } from '@/features/channels/ConnectWhatsApp';
-import { channelLandingOf } from '@/features/channels/landing';
+import { channelLandingOf, messengerPickOf } from '@/features/channels/landing';
+import { loadMessengerPages } from '@/features/channels/messenger-actions';
+import { MessengerPicker } from '@/features/channels/MessengerPicker';
 import { WhatsAppNumbers } from '@/features/channels/WhatsAppNumbers';
 import { WhatsAppPanel } from '@/features/channels/WhatsAppPanel';
 import { loadWidgetInstall } from '@/features/webchat/load-website-widget';
@@ -68,6 +70,9 @@ export default async function Page({
     readonly error?: string;
     /** A pending connect's code: `SUBSCRIBE_FAILED` (Messenger, Instagram). */
     readonly reason?: string;
+    /** Messenger granted 2+ Pages: `pick=1&platform=messenger&session=` (backend 0ce84f21). */
+    readonly pick?: string;
+    readonly session?: string;
     readonly tab?: string;
     /** The web chat's old embed link: its code is the widget's Install tab now. */
     readonly embed?: string;
@@ -83,8 +88,9 @@ export default async function Page({
     });
   }
   const landing = channelLandingOf(params);
+  const pick = messengerPickOf(params);
   const panel = params.panel === 'whatsapp';
-  const [{ channels, voice, voiceOffered, windowDays }, whatsapp, config, install] =
+  const [{ channels, voice, voiceOffered, windowDays }, whatsapp, config, install, pages] =
     await Promise.all([
       loadChannels(),
       // 13b's reads only when its panel is open.
@@ -95,6 +101,8 @@ export default async function Page({
       loadChannelsConfig(),
       // The Website widget's one row: live or not is where it is installed.
       loadWidgetInstall(),
+      // Messenger's Pages to choose from, only on its way back with a session.
+      pick ? loadMessengerPages(pick.session) : Promise.resolve(null),
     ]);
   const learn = whatsapp?.[1].status ?? null;
   const first = whatsapp?.[0]?.data[0] ?? null;
@@ -136,6 +144,8 @@ export default async function Page({
     <SettingsSection title={t('title')} description={t('description')}>
       {/* Always mounted: after the URL is tidied its sentence must stay. */}
       <ChannelLanding landing={landing} />
+      {/* Always mounted too: it holds its Pages after the URL is tidied. */}
+      <MessengerPicker pick={pick && pages ? { session: pick.session, read: pages } : null} />
       {channels ? (
         <ChannelList
           channels={channels}

@@ -1644,6 +1644,88 @@
     cursor: pointer;
   }
 
+  /*
+   * Messenger's Page picker (backend 0ce84f21): a connect panel over the
+   * list, under the way-back sentence. 02 draws no picker; rows and checkboxes.
+   */
+  .pick {
+    margin-block: 0 var(--space-14);
+    line-height: normal;
+  }
+
+  .pickLead {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  .pickList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .pickRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-10);
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  label.pickRow {
+    cursor: pointer;
+  }
+
+  .pickRow input {
+    margin: 0;
+    margin-block-start: var(--space-2);
+    accent-color: var(--action-base);
+  }
+
+  /* Another workspace's Page: said, not offered - aligned with the names above. */
+  .pickRow[data-taken='true'] {
+    padding-inline-start: var(--space-22);
+  }
+
+  .pickText {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-inline-size: 0;
+  }
+
+  .pickName {
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+
+  .pickMeta {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .pickHint {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .pickResult {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    font-size: var(--font-size-meta);
+  }
+
+  .pickResult[data-outcome='problem'] .pickMeta {
+    color: var(--intent-urgent-text);
+  }
+
   /* A provider not set up on the server: said in place of Connect, quietly. */
   .notSetUp {
     font-size: var(--font-size-label);

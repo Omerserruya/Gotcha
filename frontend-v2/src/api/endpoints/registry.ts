@@ -595,6 +595,15 @@ export const channelEndpoints = {
   /** SMTP/IMAP credentials. Stores real secrets; never exercised by a test. */
   connectEmail: () => endpoint('/api/channels/connect/email'),
   disconnect: (id: string) => endpoint('/api/channels/{id}/disconnect', { id }),
+  /**
+   * The Pages a Messenger grant offered, to choose from (backend 0ce84f21):
+   * names and ids, never a token. 410 `SESSION_EXPIRED` for an expired,
+   * replaced, another workspace's or another person's session.
+   */
+  messengerCandidates: (session: string) =>
+    endpoint('/api/channels/messenger/candidates?session={session}', { session }),
+  /** ★ WRITES: connects the chosen Pages and subscribes them at Meta. */
+  messengerSelect: () => endpoint('/api/channels/messenger/select'),
 
   /* ── Screen 13 - WhatsApp numbers ──────────────────────────────────────
    *

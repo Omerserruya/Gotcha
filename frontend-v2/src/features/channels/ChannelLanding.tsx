@@ -23,6 +23,8 @@ const UNNAMED_OUTCOMES = [
   'not_configured',
   'already_connected',
   'callback_error',
+  'limit_reached',
+  'picker_failed',
   'other',
 ] as const;
 type Unnamed = (typeof UNNAMED_OUTCOMES)[number];

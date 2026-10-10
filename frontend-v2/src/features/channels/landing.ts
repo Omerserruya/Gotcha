@@ -34,6 +34,10 @@ export const CHANNEL_CONNECT_FAILURES = [
   'no_whatsapp_numbers',
   'slack_no_team',
   'callback_error',
+  // Backend 0ce84f21: Messenger's connect over the plan's channel limit, and
+  // its Page choices that could not be kept for the picker.
+  'limit_reached',
+  'picker_failed',
 ] as const;
 
 /** v1's codes for what ours already say. */
@@ -57,6 +61,8 @@ const CODE_CHANNEL: Partial<Record<string, ChannelType>> = {
   slack_no_team: 'SLACK',
   no_instagram_account: 'INSTAGRAM',
   no_whatsapp_numbers: 'WHATSAPP',
+  // Only Messenger keeps Pages to choose from.
+  picker_failed: 'MESSENGER',
 };
 
 const PLATFORM_CHANNEL: Record<string, ChannelType> = {
@@ -129,4 +135,21 @@ export function channelLandingOf(params: {
     return { channel, outcome };
   }
   return null;
+}
+
+/**
+ * Messenger's way back when the sign-in granted two or more Pages (backend
+ * 0ce84f21): `?pick=1&platform=messenger&session=<uuid>`. Nothing was
+ * connected; the person chooses. Only Messenger has a picker, and the route
+ * takes a session of at most 100 characters.
+ */
+export function messengerPickOf(params: {
+  readonly pick?: string;
+  readonly platform?: string;
+  readonly session?: string;
+}): { readonly session: string } | null {
+  if (params.pick !== '1' || params.platform !== 'messenger') return null;
+  const session = params.session?.trim() ?? '';
+  if (!session || session.length > 100) return null;
+  return { session };
 }
