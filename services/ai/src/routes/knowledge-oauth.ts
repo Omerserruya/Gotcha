@@ -1,11 +1,16 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole, mintOAuthState, consumeOAuthState,
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole, requirePermissionOrRole, mintOAuthState, consumeOAuthState,
   resolveAppPublicUrl, encryptCredentials, decryptCredentials, isEncrypted,
 } from "@chatcenter/shared";
 import * as confluenceService from "../services/confluence.service";
 import * as googleDriveService from "../services/google-drive.service";
 
 const router = Router();
+
+// 2026-10-09: starting a knowledge connect is a knowledge write, gated like
+// every other write in routes/knowledge.ts. Role ADMIN alone refused a member
+// who holds ai:knowledge:write; ADMIN still passes via the role fallback.
+const canWriteKnowledge = requirePermissionOrRole("ai:knowledge:write", "ADMIN");
 
 /**
  * Read a stored refresh token without caring how it was stored.
@@ -135,11 +140,11 @@ async function knowledgeDenied(req: Request, res: Response, provider: string): P
 
 // ─── Confluence OAuth ───────────────────────────────────────
 
-router.get("/oauth/confluence/init", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), (req: Request, res: Response) => {
+router.get("/oauth/confluence/init", authenticate, resolveTenant, requireActiveTenant(), canWriteKnowledge, (req: Request, res: Response) => {
   const clientId = process.env.CONFLUENCE_CLIENT_ID;
   const redirectUri = process.env.CONFLUENCE_REDIRECT_URI;
   if (!clientId || !redirectUri) {
-    res.status(500).json({ error: "Confluence OAuth not configured" });
+    res.status(500).json({ error: "Confluence OAuth not configured", code: "NOT_CONFIGURED" });
     return;
   }
 
@@ -243,11 +248,11 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
 // PENDING_ONBOARDING allowed: onboarding Movement 6 connects Drive before the
 // tenant flips ACTIVE. `flow=onboarding` rides the state so the callback can
 // land back on /setup instead of the app's knowledge page.
-router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canWriteKnowledge, async (req: Request, res: Response) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const redirectUri = process.env.GOOGLE_REDIRECT_URI;
   if (!clientId || !redirectUri) {
-    res.status(500).json({ error: "Google Drive OAuth not configured" });
+    res.status(500).json({ error: "Google Drive OAuth not configured", code: "NOT_CONFIGURED" });
     return;
   }
 

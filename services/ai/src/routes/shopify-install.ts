@@ -104,7 +104,11 @@ function installErrorRedirect(reason: string): string {
   } catch {
     base = "";
   }
-  return `${base}/settings/business-systems?shopify_install_error=${encodeURIComponent(reason)}`;
+  // 2026-10-09: lands on the v2 studio. The v1 target
+  // (/settings/business-systems?shopify_install_error=) never read the param,
+  // so a refused install told the merchant nothing.
+  const params = new URLSearchParams({ system: "shopify", error: reason });
+  return `${base}/v2/studio/capabilities?${params.toString()}`;
 }
 
 /**

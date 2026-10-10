@@ -153,6 +153,25 @@ const OAUTH_FAILURE_CODES = new Set([
 ]);
 
 /**
+ * A callback refused BEFORE its state verified (bad or reused state, no code,
+ * a failed Shopify HMAC). 2026-10-09: these answered plain text on the API
+ * host, which strands the browser off the app. They now land on the v2 studio
+ * with a closed code. Safe without a verified flow: the path and origin are
+ * fixed and the code is ours, so the request steers nothing. Fail-soft on a
+ * missing FRONTEND_URL (same posture as the Shopify install entry): a relative
+ * landing beats a 500 on a public route. The `code` union is its closed list.
+ */
+function rejectCallback(res: Response, slug: string, code: "invalid_state" | "callback_error" | "denied"): void {
+  let to: string;
+  try {
+    to = postOAuthRedirect(slug, "redesign_studio", { error: code });
+  } catch {
+    to = `${REDESIGN_BASE_PATH}/studio/capabilities?${new URLSearchParams({ system: slug, error: code }).toString()}`;
+  }
+  res.redirect(to);
+}
+
+/**
  * A callback that fails AFTER its state verified knows which flow started it.
  * The redesigned app gets a redirect it can render; every other flow keeps the
  * plain-text response it always had (`legacyBody`), byte for byte.
@@ -381,7 +400,7 @@ router.get(
   (req: Request, res: Response) => {
     const clientId = process.env.STRIPE_CLIENT_ID;
     const redirect = process.env.STRIPE_REDIRECT_URI;
-    if (!clientId || !redirect) { res.status(500).json({ error: "stripe_oauth_not_configured" }); return; }
+    if (!clientId || !redirect) { res.status(500).json({ error: "stripe_oauth_not_configured", code: "NOT_CONFIGURED" }); return; }
     // Only the redesign flow changes where Stripe lands; every other caller
     // keeps the marketplace landing it always had.
     const flow = parseFlow(req.query.flow) === "redesign_studio" ? "redesign_studio" : undefined;
@@ -402,12 +421,12 @@ router.get("/connectors/stripe/oauth/callback", async (req: Request, res: Respon
   try {
     if (await redirectIfProviderDenied(req, res, "stripe", "missing_code_or_state")) return;
     const { code, state } = req.query;
-    if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
+    if (!code || !state) { rejectCallback(res, "stripe", "callback_error"); return; }
     const consumed = await consumeOAuthState<any>(state as string, "stripe");
     if (!consumed.ok) {
       // Replay and forgery look identical to the caller; only our logs distinguish them.
       console.warn(`[stripe oauth] state rejected: ${consumed.reason}`);
-      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      rejectCallback(res, "stripe", "invalid_state");
       return;
     }
     const payload = consumed.claims;
@@ -457,7 +476,7 @@ router.get(
   (req: Request, res: Response) => {
     const clientId = process.env.HUBSPOT_CLIENT_ID;
     const redirect = process.env.HUBSPOT_REDIRECT_URI;
-    if (!clientId || !redirect) { res.status(500).json({ error: "hubspot_oauth_not_configured" }); return; }
+    if (!clientId || !redirect) { res.status(500).json({ error: "hubspot_oauth_not_configured", code: "NOT_CONFIGURED" }); return; }
     const flow = parseFlow(req.query.flow);
     const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "hubspot", flow, userId: (req as any).user?.userId });
     // HubSpot enforces an EXACT scope contract between the install URL and the
@@ -515,12 +534,12 @@ router.get("/connectors/hubspot/oauth/callback", async (req: Request, res: Respo
   try {
     if (await redirectIfProviderDenied(req, res, "hubspot", "missing_code_or_state")) return;
     const { code, state } = req.query;
-    if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
+    if (!code || !state) { rejectCallback(res, "hubspot", "callback_error"); return; }
     const consumed = await consumeOAuthState<any>(state as string, "hubspot");
     if (!consumed.ok) {
       // Replay and forgery look identical to the caller; only our logs distinguish them.
       console.warn(`[hubspot oauth] state rejected: ${consumed.reason}`);
-      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      rejectCallback(res, "hubspot", "invalid_state");
       return;
     }
     const payload = consumed.claims;
@@ -587,7 +606,7 @@ router.get(
   async (req: Request, res: Response) => {
     const identity = getShopifyAppIdentity();
     if (!identity.clientId || !identity.redirectUri) {
-      res.status(500).json({ error: "shopify_oauth_not_configured" });
+      res.status(500).json({ error: "shopify_oauth_not_configured", code: "NOT_CONFIGURED" });
       return;
     }
 
@@ -621,7 +640,7 @@ router.get(
       redirectUri: identity.redirectUri,
       state,
     });
-    if (!url) { res.status(500).json({ error: "shopify_oauth_not_configured" }); return; }
+    if (!url) { res.status(500).json({ error: "shopify_oauth_not_configured", code: "NOT_CONFIGURED" }); return; }
     res.json({ url });
   },
 );
@@ -654,21 +673,22 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
     const signed = verifyOAuthCallbackHmac(req.query as Record<string, unknown>, identity.clientSecret);
     if (!signed.ok) {
       console.warn(`[shopify oauth] callback rejected: ${signed.reason}`);
-      res.status(400).send("invalid_request");
+      // An unsigned return is an approval we cannot match: v2's invalid_state.
+      rejectCallback(res, "shopify", "invalid_state");
       return;
     }
     const shop = signed.shop;
 
     const code = singleValue(req.query.code);
     const rawState = singleValue(req.query.state);
-    if (!code || !rawState) { res.status(400).send("invalid_request"); return; }
+    if (!code || !rawState) { rejectCallback(res, "shopify", "callback_error"); return; }
 
     // 2. Single use. Expired, reused and forged are distinguished in the log
     //    and identical to the caller.
     const consumed = await consumeOAuthState<any>(rawState, "shopify");
     if (!consumed.ok) {
       console.warn(`[shopify oauth] state rejected: ${consumed.reason}`);
-      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      rejectCallback(res, "shopify", "invalid_state");
       return;
     }
     const payload = consumed.claims;
@@ -677,7 +697,7 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
     // 3. The state was minted for ONE store.
     if (normalizeShopifyShopDomain(payload.shop) !== shop) {
       console.warn("[shopify oauth] callback shop does not match the shop bound into state");
-      res.status(400).send("bad_state");
+      rejectCallback(res, "shopify", "invalid_state");
       return;
     }
 
@@ -789,10 +809,12 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
       if (linked.reason === "shop_taken") {
         // Never silently moved. The merchant is told, and resolves it by
         // disconnecting in the workspace that holds it.
+        // 2026-10-09: every flow lands on v2. The old v1 target
+        // (/settings/business-systems?shopify_install_error=) is a page that
+        // never reads the param, so the merchant was told nothing.
         let base = "";
         try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
-        if (flow === "redesign_studio") { oauthFail(res, "shopify", flow, 409, "shop_connected_elsewhere"); return; }
-        res.redirect(`${base}/settings/business-systems?shopify_install_error=shop_connected_elsewhere`);
+        res.redirect(`${base}${REDESIGN_BASE_PATH}/studio/capabilities?system=shopify&error=shop_connected_elsewhere`);
         return;
       }
       oauthFail(res, "shopify", flow, 500, "link_failed", `shopify_link_failed:${linked.reason}`);
@@ -878,7 +900,7 @@ router.get(
   (req: Request, res: Response) => {
     const clientId = process.env.AIRTABLE_CLIENT_ID;
     const redirect = process.env.AIRTABLE_REDIRECT_URI;
-    if (!clientId || !redirect) { res.status(500).json({ error: "airtable_oauth_not_configured" }); return; }
+    if (!clientId || !redirect) { res.status(500).json({ error: "airtable_oauth_not_configured", code: "NOT_CONFIGURED" }); return; }
     const flow = parseFlow(req.query.flow);
     const verifier = base64url(crypto.randomBytes(48));
     const challenge = base64url(crypto.createHash("sha256").update(verifier).digest());
@@ -900,15 +922,18 @@ router.get(
 router.get("/connectors/airtable/oauth/callback", async (req: Request, res: Response) => {
   let flow: string | undefined;
   try {
-    if (await redirectIfProviderDenied(req, res, "airtable", `airtable_oauth_error:${String(req.query.error)}`)) return;
+    // 2026-10-09: the provider's `error` was echoed into a text/html body on
+    // the API host (reflected markup). The legacy body is now constant, and a
+    // provider error that did not verify a state lands on v2 as denied.
+    if (await redirectIfProviderDenied(req, res, "airtable", "airtable_oauth_error")) return;
     const { code, state, error } = req.query;
-    if (error) { res.status(400).send(`airtable_oauth_error:${String(error)}`); return; }
-    if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
+    if (error) { rejectCallback(res, "airtable", "denied"); return; }
+    if (!code || !state) { rejectCallback(res, "airtable", "callback_error"); return; }
     const consumed = await consumeOAuthState<any>(state as string, "airtable");
     if (!consumed.ok) {
       // Replay and forgery look identical to the caller; only our logs distinguish them.
       console.warn(`[airtable oauth] state rejected: ${consumed.reason}`);
-      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      rejectCallback(res, "airtable", "invalid_state");
       return;
     }
     const payload = consumed.claims;
@@ -1104,7 +1129,7 @@ router.get(
   (req: Request, res: Response) => {
     const appId = process.env.WIX_CLIENT_ID;            // Wix App ID
     const redirect = process.env.WIX_REDIRECT_URI;
-    if (!appId || !redirect) { res.status(500).json({ error: "wix_oauth_not_configured" }); return; }
+    if (!appId || !redirect) { res.status(500).json({ error: "wix_oauth_not_configured", code: "NOT_CONFIGURED" }); return; }
     const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "wix", userId: (req as any).user?.userId });
     // Wix App install flow - NOT the headless `oauth/authorize` flow.
     const params = new URLSearchParams({
@@ -1176,7 +1201,7 @@ router.get(
   (req: Request, res: Response) => {
     const clientId = process.env.SQUARE_APPLICATION_ID;
     const redirect = process.env.SQUARE_REDIRECT_URI;
-    if (!clientId || !redirect) { res.status(500).json({ error: "square_oauth_not_configured" }); return; }
+    if (!clientId || !redirect) { res.status(500).json({ error: "square_oauth_not_configured", code: "NOT_CONFIGURED" }); return; }
     const env = String(req.query.environment || "production") === "sandbox" ? "sandbox" : "production";
     const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "square", env, userId: (req as any).user?.userId });
     const scopes = "PAYMENTS_WRITE PAYMENTS_READ CUSTOMERS_READ CUSTOMERS_WRITE ORDERS_READ ORDERS_WRITE INVOICES_READ INVOICES_WRITE MERCHANT_PROFILE_READ";
@@ -1249,7 +1274,7 @@ router.get(
   (req: Request, res: Response) => {
     const clientId = process.env.SALESFORCE_CLIENT_ID;
     const redirect = process.env.SALESFORCE_REDIRECT_URI;
-    if (!clientId || !redirect) { res.status(500).json({ error: "salesforce_oauth_not_configured" }); return; }
+    if (!clientId || !redirect) { res.status(500).json({ error: "salesforce_oauth_not_configured", code: "NOT_CONFIGURED" }); return; }
     const loginHost = String(req.query.loginHost || "https://login.salesforce.com");
     if (!/^https:\/\/(login|test)\.salesforce\.com$/.test(loginHost)) {
       res.status(400).json({ error: "bad_login_host (use login.salesforce.com or test.salesforce.com)" });
@@ -1273,12 +1298,12 @@ router.get("/connectors/salesforce/oauth/callback", async (req: Request, res: Re
   try {
     if (await redirectIfProviderDenied(req, res, "salesforce", "missing_code_or_state")) return;
     const { code, state } = req.query;
-    if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
+    if (!code || !state) { rejectCallback(res, "salesforce", "callback_error"); return; }
     const consumed = await consumeOAuthState<any>(state as string, "salesforce");
     if (!consumed.ok) {
       // Replay and forgery look identical to the caller; only our logs distinguish them.
       console.warn(`[salesforce oauth] state rejected: ${consumed.reason}`);
-      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      rejectCallback(res, "salesforce", "invalid_state");
       return;
     }
     const payload = consumed.claims;
@@ -1331,7 +1356,7 @@ router.get(
   (req: Request, res: Response) => {
     const clientId = process.env.MONDAY_CLIENT_ID;
     const redirect = process.env.MONDAY_REDIRECT_URI;
-    if (!clientId || !redirect) { res.status(500).json({ error: "monday_oauth_not_configured" }); return; }
+    if (!clientId || !redirect) { res.status(500).json({ error: "monday_oauth_not_configured", code: "NOT_CONFIGURED" }); return; }
     // SINGLE-USE state. `flow` and the initiating user ride INSIDE the signed
     // token (never a browser-supplied return URL), and the jti is consumed on
     // callback so a captured state cannot be replayed within its TTL.
@@ -1356,13 +1381,13 @@ router.get("/connectors/monday/oauth/callback", async (req: Request, res: Respon
   try {
     if (await redirectIfProviderDenied(req, res, "monday", "missing_code_or_state")) return;
     const { code, state } = req.query;
-    if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
+    if (!code || !state) { rejectCallback(res, "monday", "callback_error"); return; }
     const consumed = await consumeOAuthState<{ tenantId: string; flow?: string }>(state as string, "monday");
     if (!consumed.ok) {
       // Replay and forgery are reported identically to the browser; the reason
       // is distinguishable only in our logs.
       console.warn(`[monday oauth] state rejected: ${consumed.reason}`);
-      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      rejectCallback(res, "monday", "invalid_state");
       return;
     }
     const payload = consumed.claims;

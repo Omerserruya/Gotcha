@@ -181,6 +181,10 @@ beforeEach(() => {
 
 // ─── The button ──────────────────────────────────────────────
 
+// 2026-10-09: a refused install lands on the v2 studio with the same code it
+// always carried; v1's /settings/business-systems never read the param.
+const INSTALL_REFUSED = "https://app.gotcha.co.il/v2/studio/capabilities?system=shopify&error=invalid_request";
+
 describe("GET /connectors/shopify/install/start", () => {
   it("returns a SHOPIFY-owned URL and never asks for a shop domain", async () => {
     // The listing has to be marked live for a URL to exist at all; before
@@ -332,7 +336,7 @@ describe("GET /connectors/shopify/install (public)", () => {
     q.set("hmac", "0".repeat(64));
     const res = await request(app()).get(`/api/connectors/shopify/install?${q}`);
     expect(res.status).toBe(302);
-    expect(res.headers.location).toContain("shopify_install_error=invalid_request");
+    expect(res.headers.location).toBe(INSTALL_REFUSED);
     expect(res.headers.location).not.toContain("myshopify.com/admin/oauth");
   });
 
@@ -340,13 +344,13 @@ describe("GET /connectors/shopify/install (public)", () => {
     const q = new URLSearchParams(entryQuery());
     q.delete("hmac");
     const res = await request(app()).get(`/api/connectors/shopify/install?${q}`);
-    expect(res.headers.location).toContain("shopify_install_error=invalid_request");
+    expect(res.headers.location).toBe(INSTALL_REFUSED);
   });
 
   it("rejects a stale timestamp", async () => {
     const stale = entryQuery({}, Date.now() - 3600_000);
     const res = await request(app()).get(`/api/connectors/shopify/install?${stale}`);
-    expect(res.headers.location).toContain("shopify_install_error=invalid_request");
+    expect(res.headers.location).toBe(INSTALL_REFUSED);
   });
 
   it("rejects deceptive shop hostnames, signed or not", async () => {
@@ -354,7 +358,7 @@ describe("GET /connectors/shopify/install (public)", () => {
       const base = { shop, timestamp: String(Math.floor(Date.now() / 1000)) };
       const q = new URLSearchParams({ ...base, hmac: sign(base) }).toString();
       const res = await request(app()).get(`/api/connectors/shopify/install?${q}`);
-      expect(res.headers.location, shop).toContain("shopify_install_error=invalid_request");
+      expect(res.headers.location, shop).toBe(INSTALL_REFUSED);
     }
   });
 
@@ -370,7 +374,27 @@ describe("GET /connectors/shopify/install (public)", () => {
   it("rejects duplicated parameters", async () => {
     const q = `${entryQuery()}&shop=${encodeURIComponent("attacker.myshopify.com")}`;
     const res = await request(app()).get(`/api/connectors/shopify/install?${q}`);
-    expect(res.headers.location).toContain("shopify_install_error=invalid_request");
+    expect(res.headers.location).toBe(INSTALL_REFUSED);
+  });
+
+  it("★ an unconfigured app lands on v2 with error=not_configured (2026-10-09)", async () => {
+    const saved = process.env.SHOPIFY_REDIRECT_URI;
+    delete process.env.SHOPIFY_REDIRECT_URI;
+    try {
+      const res = await request(app()).get(`/api/connectors/shopify/install?${entryQuery()}`);
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=shopify&error=not_configured");
+    } finally {
+      process.env.SHOPIFY_REDIRECT_URI = saved;
+    }
+  });
+
+  it("the refusal landing ignores the request's Host", async () => {
+    const q = new URLSearchParams(entryQuery());
+    q.set("hmac", "0".repeat(64));
+    const res = await request(app()).get(`/api/connectors/shopify/install?${q}`)
+      .set("Host", "evil.example").set("X-Forwarded-Host", "evil.example");
+    expect(res.headers.location).toBe(INSTALL_REFUSED);
   });
 
   it("does not log the shop or the hmac when the signature fails", async () => {
@@ -662,7 +686,7 @@ describe("installation works with no SHOPIFY_APP_HANDLE configured", () => {
     const q = new URLSearchParams(entryQuery());
     q.set("hmac", "0".repeat(64));
     const res = await request(app()).get(`/api/connectors/shopify/install?${q}`);
-    expect(res.headers.location).toContain("shopify_install_error=invalid_request");
+    expect(res.headers.location).toBe(INSTALL_REFUSED);
   });
 
   it("...and still works with no GOTCHA session at all", async () => {

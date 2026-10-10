@@ -22,6 +22,7 @@ import {
   resolveTenant,
   requireOnboardingOrActiveTenant,
   requireRole,
+  requirePermission,
   encryptCredentials,
   getOAuthStateSecret,
   mintOAuthState,
@@ -34,6 +35,11 @@ import { parseConnectFlow, redesignCapabilitiesUrl, redirectRedesignDenied, REDE
 const router = Router();
 // OAuth `state` signing only - not user auth. See getOAuthStateSecret().
 const OAUTH_STATE_SECRET = getOAuthStateSecret();
+
+// 2026-10-09: the connect permission every other integration uses (see
+// integrations.ts / connectors-admin.ts), not role ADMIN. A member delegated
+// connect could start HubSpot but got 403 on this one. Admin/Owner hold it.
+const canConnectSystems = requirePermission("integrations:connections:connect", "business-systems:connections:connect");
 
 // ─── Google Calendar ────────────────────────────────────────
 
@@ -56,12 +62,12 @@ router.get(
   authenticate,
   resolveTenant,
   requireOnboardingOrActiveTenant(),
-  requireRole("ADMIN"),
+  canConnectSystems,
   async (req: Request, res: Response) => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const redirectUri = process.env.GOOGLE_CALENDAR_REDIRECT_URI;
     if (!clientId || !redirectUri) {
-      res.status(500).json({ error: "Google Calendar OAuth not configured" });
+      res.status(500).json({ error: "Google Calendar OAuth not configured", code: "NOT_CONFIGURED" });
       return;
     }
     // aiAgentId is optional. Marketplace UI doesn't pass it; in that case we
@@ -198,12 +204,12 @@ router.get(
   authenticate,
   resolveTenant,
   requireOnboardingOrActiveTenant(),
-  requireRole("ADMIN"),
+  canConnectSystems,
   async (req: Request, res: Response) => {
     const clientId = process.env.CALENDLY_CLIENT_ID;
     const redirectUri = process.env.CALENDLY_REDIRECT_URI;
     if (!clientId || !redirectUri) {
-      res.status(500).json({ error: "Calendly OAuth not configured" });
+      res.status(500).json({ error: "Calendly OAuth not configured", code: "NOT_CONFIGURED" });
       return;
     }
     const aiAgentId = await resolveAiAgentId(String(req.tenantId), String(req.query.aiAgentId || ""));

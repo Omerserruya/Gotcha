@@ -52,6 +52,8 @@ vi.mock("@chatcenter/shared", async () => {
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "tenant_a"; n(); },
     requireOnboardingOrActiveTenant: () => (_q: any, _s: any, n: any) => n(),
     requireRole: () => (_q: any, _s: any, n: any) => n(),
+    // 2026-10-09: init gates on the connect permission (pinned in connect-oauth-permissions.test.ts).
+    requirePermission: () => (_q: any, _s: any, n: any) => n(),
     reportOperationalFailure: () => undefined,
   };
 });

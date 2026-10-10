@@ -4,7 +4,7 @@
  * Mounted at /api/integrations BEFORE the authenticated `integrationRoutes`
  * router, so the public /callback path is not caught by the admin auth gate.
  *
- *   GET /oauth/zoho_crm/init      (ADMIN) → signs JWT state, returns auth URL
+ *   GET /oauth/zoho_crm/init      (connect) → signs JWT state, returns auth URL
  *   GET /oauth/zoho_crm/callback  (public) → verifies state, exchanges code,
  *                                        upserts TenantIntegration(CONNECTED),
  *                                        creates default TenantTool rows,
@@ -15,7 +15,7 @@
  */
 import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, mintOAuthState, consumeOAuthState,
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermission, mintOAuthState, consumeOAuthState,
   resolveAppPublicUrl,
 } from "@chatcenter/shared";
 import {
@@ -27,6 +27,11 @@ import {
 import { parseConnectFlow, redesignCapabilitiesUrl, redirectRedesignDenied, REDESIGN_FLOW } from "../services/redesign-return";
 const router = Router();
 
+// 2026-10-09: the connect permission every other integration uses (see
+// integrations.ts / connectors-admin.ts), not role ADMIN. A member delegated
+// connect could start HubSpot but got 403 on this one. Admin/Owner hold it.
+const canConnectSystems = requirePermission("integrations:connections:connect", "business-systems:connections:connect");
+
 
 // ─── Zoho CRM OAuth ─────────────────────────────────────────
 
@@ -35,12 +40,12 @@ router.get(
   authenticate,
   resolveTenant,
   requireOnboardingOrActiveTenant(),
-  requireRole("ADMIN"),
+  canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.ZOHO_CLIENT_ID;
     const redirectUri = process.env.ZOHO_REDIRECT_URI;
     if (!clientId || !redirectUri) {
-      res.status(500).json({ error: "Zoho OAuth not configured (set ZOHO_CLIENT_ID + ZOHO_REDIRECT_URI)" });
+      res.status(500).json({ error: "Zoho OAuth not configured (set ZOHO_CLIENT_ID + ZOHO_REDIRECT_URI)", code: "NOT_CONFIGURED" });
       return;
     }
 

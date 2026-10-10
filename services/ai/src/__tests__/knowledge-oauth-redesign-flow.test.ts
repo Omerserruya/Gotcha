@@ -49,6 +49,8 @@ vi.mock("@chatcenter/shared", async () => {
     requireActiveTenant: () => (_q: any, _s: any, n: any) => n(),
     requireOnboardingOrActiveTenant: () => (_q: any, _s: any, n: any) => n(),
     requireRole: () => (_q: any, _s: any, n: any) => n(),
+    // 2026-10-09: init gates on ai:knowledge:write (pinned in connect-oauth-permissions.test.ts).
+    requirePermissionOrRole: () => (_q: any, _s: any, n: any) => n(),
   };
 });
 

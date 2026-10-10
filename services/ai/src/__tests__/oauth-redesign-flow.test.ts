@@ -33,6 +33,11 @@ vi.hoisted(() => {
   process.env.MONDAY_CLIENT_ID = "m-client";
   process.env.MONDAY_CLIENT_SECRET = "m-secret";
   process.env.MONDAY_REDIRECT_URI = "https://app.gotcha.co.il/api/connectors/monday/oauth/callback";
+  process.env.SALESFORCE_CLIENT_ID = "sf-client";
+  process.env.SALESFORCE_CLIENT_SECRET = "sf-secret";
+  process.env.SALESFORCE_REDIRECT_URI = "https://app.gotcha.co.il/api/connectors/salesforce/oauth/callback";
+  process.env.AIRTABLE_CLIENT_ID = "at-client";
+  process.env.AIRTABLE_REDIRECT_URI = "https://app.gotcha.co.il/api/connectors/airtable/oauth/callback";
 });
 
 const R = vi.hoisted(() => ({ used: new Set<string>() }));
@@ -200,9 +205,77 @@ describe("the user pressed Cancel at the provider (?error=, no code)", () => {
     const state = stateFor("hubspot", "redesign_studio");
     await callback("hubspot", { error: "access_denied", state });
     const replay = await callback("hubspot", { code: "c", state });
-    expect(replay.status).toBe(400);
-    expect(replay.text).toBe("state_already_used");
+    // 2026-10-09: refused on v2 with a closed code, not plain text.
+    expect(replay.status).toBe(302);
+    expect(replay.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=hubspot&error=invalid_state");
     expect(C.upserts).toHaveLength(0);
+  });
+});
+
+// 2026-10-09: refusals BEFORE the state verifies answered plain text on the
+// API host and stranded the browser. They land on v2 now, for every flow.
+describe("refused before the state verifies: the browser lands on v2", () => {
+  const V2 = "https://app.gotcha.co.il/v2/studio/capabilities";
+  const SLUGS = ["hubspot", "stripe", "monday", "salesforce", "airtable"] as const;
+
+  it.each(SLUGS)("★ %s: a forged state → error=invalid_state, nothing exchanged or written", async (slug) => {
+    const fetchSpy = vi.fn(async () => tokenOk);
+    vi.stubGlobal("fetch", fetchSpy);
+    const res = await callback(slug, { code: "c", state: "eyJhbGciOiJIUzI1NiJ9.eyJmbG93IjoicmVkZXNpZ25fc3R1ZGlvIn0.x" });
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe(`${V2}?system=${slug}&error=invalid_state`);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(C.upserts).toHaveLength(0);
+  });
+
+  it.each(SLUGS)("★ %s: a state minted for another provider → error=invalid_state", async (slug) => {
+    vi.stubGlobal("fetch", vi.fn(async () => tokenOk));
+    const res = await callback(slug, { code: "c", state: stateFor(slug === "hubspot" ? "monday" : "hubspot", "redesign_studio") });
+    expect(res.headers.location).toBe(`${V2}?system=${slug}&error=invalid_state`);
+    expect(C.upserts).toHaveLength(0);
+  });
+
+  it.each(SLUGS)("★ %s: no code → error=callback_error, and the state is not spent", async (slug) => {
+    vi.stubGlobal("fetch", vi.fn(async () => tokenOk));
+    const state = stateFor(slug, "onboarding");
+    const res = await callback(slug, { state });
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe(`${V2}?system=${slug}&error=callback_error`);
+    // Still usable: a missing code proves nothing about the state.
+    const later = await callback(slug, { code: "c", state });
+    expect(later.status).toBe(302);
+    expect(later.headers.location).not.toContain("invalid_state");
+  });
+
+  it("the landing is on the configured origin, whatever Host the request names", async () => {
+    const res = await request(app).get("/api/connectors/hubspot/oauth/callback")
+      .set("Host", "evil.example").set("X-Forwarded-Host", "evil.example")
+      .query({ code: "c", state: "bogus" });
+    expect(new URL(res.headers.location).origin).toBe("https://app.gotcha.co.il");
+  });
+
+  it("with no FRONTEND_URL in production the landing is relative, never a 500", async () => {
+    const saved = { env: process.env.NODE_ENV, url: process.env.FRONTEND_URL };
+    process.env.NODE_ENV = "production";
+    delete process.env.FRONTEND_URL;
+    try {
+      const res = await callback("hubspot", { code: "c", state: "bogus" });
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toBe("/v2/studio/capabilities?system=hubspot&error=invalid_state");
+    } finally {
+      process.env.NODE_ENV = saved.env;
+      process.env.FRONTEND_URL = saved.url;
+    }
+  });
+
+  it("★ Airtable: the provider's error text is never echoed back", async () => {
+    const res = await callback("airtable", { error: "<script>alert(1)</script>", code: "c", state: "s" });
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe(`${V2}?system=airtable&error=denied`);
+    expect(res.text ?? "").not.toContain("<script>");
+    const unverified = await callback("airtable", { error: "<script>alert(1)</script>", state: "eyJhbGciOiJIUzI1NiJ9.e30.x" });
+    expect(unverified.status).toBe(400);
+    expect(unverified.text).toBe("airtable_oauth_error");
   });
 });
 
@@ -234,5 +307,30 @@ describe("Stripe (it carried no flow and answered failures in plain text)", () =
     vi.stubGlobal("fetch", vi.fn(async () => tokenOk));
     const ok = await callback("stripe", { code: "c", state: stateFor("stripe") });
     expect(ok.headers.location).toContain("/ai-studio/marketplace/stripe?status=connected");
+  });
+});
+
+// 2026-10-09: "not configured" carries a machine code next to the text.
+describe("an unconfigured provider answers code NOT_CONFIGURED", () => {
+  it.each([
+    ["stripe", "STRIPE_CLIENT_ID"],
+    ["hubspot", "HUBSPOT_CLIENT_ID"],
+    ["airtable", "AIRTABLE_CLIENT_ID"],
+    ["salesforce", "SALESFORCE_REDIRECT_URI"],
+    ["monday", "MONDAY_CLIENT_ID"],
+    ["wix", "WIX_CLIENT_ID"],
+    ["square", "SQUARE_APPLICATION_ID"],
+    ["shopify", "SHOPIFY_API_KEY"],
+  ])("%s init", async (slug, envName) => {
+    const saved = process.env[envName];
+    delete process.env[envName];
+    try {
+      const res = await request(app).get(`/api/connectors/${slug}/oauth/init`).query({ flow: "redesign_studio" });
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: `${slug}_oauth_not_configured`, code: "NOT_CONFIGURED" });
+    } finally {
+      if (saved === undefined) delete process.env[envName];
+      else process.env[envName] = saved;
+    }
   });
 });
