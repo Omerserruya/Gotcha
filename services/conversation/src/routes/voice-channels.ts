@@ -41,7 +41,9 @@ import {
   resolveVoicePublicUrl,
   reportOperationalFailure,
   ERROR_CODES,
+  AppOriginError,
 } from "@chatcenter/shared";
+import { withErrorCode, splitErrorCode, type KnownErrorCode } from "../lib/error-code";
 
 const router = Router();
 
@@ -122,6 +124,20 @@ function serializePhoneNumber(row: PhoneNumberRow) {
   };
 }
 
+/**
+ * The last activation/validation failure lives in config.lastError as
+ * "[CODE] sentence": CommunicationChannel has no lastError column and this
+ * needs no migration (2026-10-09). Served split at the top level, and taken
+ * out of `config` so there is one place to read it.
+ */
+function splitStoredVoiceError(config: unknown): { config: unknown; lastError: string | null; lastErrorCode: string | null } {
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    return { config, lastError: null, lastErrorCode: null };
+  }
+  const { lastError: stored, ...rest } = config as Record<string, unknown>;
+  return { config: rest, ...splitErrorCode(typeof stored === "string" ? stored : null) };
+}
+
 function serializeChannel(row: ChannelRow) {
   // `numbers` is exposed BOTH at the top level (frontend contract - see
   // `VoiceChannel` in `frontend/src/lib/api.ts`) AND nested under
@@ -129,6 +145,7 @@ function serializeChannel(row: ChannelRow) {
   // Always an array, never `undefined`, so renderers can `.length`/`.map`
   // without null-checks even when Twilio discovery was skipped.
   const numbers = (row.voiceChannel?.phoneNumbers ?? []).map(serializePhoneNumber);
+  const stored = splitStoredVoiceError(row.config);
   return {
     id: row.id,
     friendlyName: row.friendlyName,
@@ -137,7 +154,9 @@ function serializeChannel(row: ChannelRow) {
     channelType: row.channelType,
     provider: row.provider,
     capabilities: row.capabilities,
-    config: row.config,
+    config: stored.config,
+    lastError: stored.lastError,
+    lastErrorCode: stored.lastErrorCode,
     webhookSecret: row.webhookSecret,
     healthCheckedAt: row.healthCheckedAt,
     healthStatus: row.healthStatus,
@@ -176,6 +195,15 @@ const CHANNEL_INCLUDE = {
 } as const;
 
 // ─── Twilio API dispatcher (BYO Basic auth) ─────────────────
+// Carries the HTTP status so a failure can be told apart (401 vs 404 vs the
+// rest) without parsing the message; the message itself is unchanged.
+class TwilioApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "TwilioApiError";
+  }
+}
+
 interface TwilioApiContext {
   channelId: string;
   accountSid: string;
@@ -208,7 +236,7 @@ async function twilioApiCall(
   }
   const resp = await fetch(fullUrl, init);
   if (!resp.ok) {
-    throw new Error(`twilio_api_${resp.status}: ${await resp.text()}`);
+    throw new TwilioApiError(resp.status, `twilio_api_${resp.status}: ${await resp.text()}`);
   }
   if (resp.status === 204) return {};
   return resp.json();
@@ -294,6 +322,52 @@ async function setNumberWebhooksOnTwilio(
       context: { enabling: enable },
     });
     throw err;
+  }
+}
+
+/** Activation: what the failed webhook write can actually be told apart by. */
+function activationErrorCode(err: unknown): KnownErrorCode {
+  if (err instanceof AppOriginError) return "VOICE_PUBLIC_URL_MISSING";
+  if (err instanceof TwilioApiError) {
+    if (err.status === 401 || err.status === 403) return "TWILIO_CREDENTIALS_INVALID";
+    if (err.status === 404) return "TWILIO_NUMBER_NOT_FOUND";
+  }
+  return "TWILIO_WEBHOOK_UPDATE_FAILED";
+}
+
+/** Validation fetches the account itself, so a 404 there means a wrong SID. */
+function validationErrorCode(err: unknown): KnownErrorCode {
+  if (err instanceof TwilioApiError && [401, 403, 404].includes(err.status)) return "TWILIO_CREDENTIALS_INVALID";
+  return "TWILIO_ACCOUNT_UNREACHABLE";
+}
+
+/**
+ * Store (code) or clear (null) the channel's last error, merged into config so
+ * nothing else in it is lost. `clearOnly` limits a clear to the codes this
+ * success actually disproves. Best effort: failing to record must not change
+ * the answer the admin gets.
+ */
+async function recordVoiceError(
+  channelId: string,
+  config: unknown,
+  code: KnownErrorCode | null,
+  clearOnly?: readonly KnownErrorCode[],
+): Promise<void> {
+  const cfg = config && typeof config === "object" && !Array.isArray(config) ? (config as Record<string, unknown>) : {};
+  const { lastError: stored, ...rest } = cfg;
+  let next: Record<string, unknown>;
+  if (code) {
+    next = { ...rest, lastError: withErrorCode(code) };
+  } else {
+    if (typeof stored !== "string") return;
+    const storedCode = splitErrorCode(stored).lastErrorCode;
+    if (clearOnly && !clearOnly.includes(storedCode as KnownErrorCode)) return;
+    next = rest;
+  }
+  try {
+    await prisma.communicationChannel.update({ where: { id: channelId }, data: { config: next as object } });
+  } catch (err) {
+    console.warn("voice-channels: failed to record lastError:", (err as Error)?.message);
   }
 }
 
@@ -1189,7 +1263,7 @@ router.post("/:id/numbers/:numberId/activate", async (req: Request, res: Respons
       res.status(result.status).json({ error: result.error });
       return;
     }
-    const { number, ctx } = result;
+    const { channel, number, ctx } = result;
     if (!number.twilioSid) {
       res.status(409).json({ error: "missing_twilio_sid" });
       return;
@@ -1199,13 +1273,19 @@ router.post("/:id/numbers/:numberId/activate", async (req: Request, res: Respons
     } catch (err) {
       const msg = (err as { message?: string })?.message ?? "twilio_error";
       console.error("voice-channels.numbers.activate: twilio failed:", msg);
-      res.status(502).json({ error: "twilio_update_failed", message: msg });
+      // Kept on the channel so the channels list can say it later
+      // (2026-10-09): a 502 the wizard drops was the only trace before.
+      const code = activationErrorCode(err);
+      await recordVoiceError(channel.id, channel.config, code);
+      res.status(502).json({ error: "twilio_update_failed", message: msg, lastErrorCode: code });
       return;
     }
     const updated = await prisma.voiceChannelPhoneNumber.update({
       where: { id: number.id },
       data: { isActive: true },
     });
+    // A working activation disproves every stored cause, so clear any.
+    await recordVoiceError(channel.id, channel.config, null);
     res.json({ data: serializePhoneNumber(updated as unknown as PhoneNumberRow) });
   } catch (err) {
     console.error("voice-channels.numbers.activate error:", err);
@@ -1307,11 +1387,13 @@ router.post("/:id/validate", async (req: Request, res: Response) => {
 
     const checks = { accountReachable: false };
     let lastError: string | null = null;
+    let failure: unknown = null;
     try {
       // Hit the account fetch endpoint via our dispatcher.
       await twilioApiCall(ctxOrErr.ctx, "GET", `.json`);
       checks.accountReachable = true;
     } catch (e) {
+      failure = e;
       lastError = (e as { message?: string })?.message ?? "account_unreachable";
     }
 
@@ -1323,7 +1405,14 @@ router.post("/:id/validate", async (req: Request, res: Response) => {
         healthStatus: ok ? "ok" : lastError ?? "failed",
       },
     });
-    res.json({ ok, checks });
+    // Reaching the account proves only the credentials, so a success clears
+    // only an account-level error, never an activation one (2026-10-09).
+    const code = ok ? null : validationErrorCode(failure);
+    await recordVoiceError(
+      id, ch.config, code,
+      ["TWILIO_CREDENTIALS_INVALID", "TWILIO_ACCOUNT_UNREACHABLE"],
+    );
+    res.json(code ? { ok, checks, lastErrorCode: code } : { ok, checks });
   } catch (err) {
     console.error("voice-channels.validate error:", err);
     res.status(500).json({ error: "failed_to_validate" });
