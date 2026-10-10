@@ -346,9 +346,17 @@ core.post("/app-uninstalled", async (req: Request, res: Response) => {
     });
 
     if (!match) {
-      // No legacy row. Billing has already been told, so this is only a note
-      // that there was nothing on the legacy side to disconnect.
-      await recordDelivery({ app: "core", hook, outcome: "no_connection" });
+      // No legacy row. Billing has already been told. The storefront chat
+      // still goes with the app (2026-10-10): a store disconnected here first
+      // has no CONNECTED row, and this return used to skip the chat shutdown,
+      // leaving the chat on after the merchant removed the app.
+      let chatDisabled = false;
+      try {
+        chatDisabled = (await disableChatForUninstalledShop(shop)).disabled;
+      } catch (err) {
+        console.error("[shopify-webhook] chat disable on unmatched uninstall failed:", (err as Error)?.message);
+      }
+      await recordDelivery({ app: "core", hook, outcome: chatDisabled ? "no_connection+chat_disabled" : "no_connection" });
       return;
     }
 

@@ -210,11 +210,21 @@ describe("core app/uninstalled", () => {
     expect(H.updateConnection).not.toHaveBeenCalled();
   });
 
-  it("ignores a shop with no matching connection", async () => {
+  it("ignores a shop with no matching connection, but still stops its storefront chat (2026-10-10)", async () => {
+    // A store disconnected here first has no CONNECTED row; the chat used to
+    // stay on after the merchant removed the app.
     H.connections.current = [{ id: "ti9", tenantId: "t9", config: { shopDomain: "other.myshopify.com" } }];
     await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
     await new Promise((r) => setImmediate(r));
     expect(H.updateConnection).not.toHaveBeenCalled();
+    expect(H.disableChatOnUninstall).toHaveBeenCalledWith(SHOP);
+  });
+
+  it("an unmatched uninstall whose chat disable throws is still acknowledged", async () => {
+    H.connections.current = [];
+    H.disableChatOnUninstall.mockRejectedValueOnce(new Error("boom"));
+    const res = await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
+    expect(res.status).toBe(200);
   });
 });
 
