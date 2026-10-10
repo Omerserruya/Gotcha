@@ -87,6 +87,7 @@ const conversationsSchema = z.object({
         status: z.enum(['OPEN', 'WAITING', 'CLOSED']).catch('CLOSED'),
         lastMessageAt: z.string().nullable().catch(null).default(null),
         lastMessageBody: z.string().nullable().catch(null).default(null),
+        lastMessageType: z.string().nullable().catch(null).default(null),
         lastMessageDirection: z.enum(['INBOUND', 'OUTBOUND']).nullable().catch(null).default(null),
       }),
     )

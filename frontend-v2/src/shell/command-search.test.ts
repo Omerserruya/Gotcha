@@ -6,7 +6,7 @@ const post = vi.hoisted(() => vi.fn());
 vi.mock('server-only', () => ({}));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get, post }) }));
 
-import { searchPeople } from './command-search';
+import { searchConversations, searchPeople } from './command-search';
 
 const row = (id: string, name: string) => ({ id, displayName: name, phone: `+9725${id}` });
 /* The route's shape: an approval parses whole or not at all. */
@@ -103,5 +103,53 @@ describe('★★ 19 - customers, and only the actions that exist', () => {
   it('the customers read failed: said as a failure, not as nobody', async () => {
     contacts = new Error('down');
     expect(await searchPeople('dana')).toEqual({ ok: false });
+  });
+});
+
+describe('★★ a conversation hit’s last word: words, or the kind of message - never "[Image]"', () => {
+  const hitsOf = async (rows: unknown[]) => {
+    get.mockImplementation(async ({ payload }: { payload: { parse: (v: unknown) => unknown } }) =>
+      payload.parse({ data: rows }),
+    );
+    const result = await searchConversations('dana');
+    if (!result.ok) throw new Error('search failed');
+    return result.hits.map((h) => ({ word: h.lastWord, kind: h.lastKind }));
+  };
+  const conv = (body: string | null, type?: string | null) => ({
+    id: 'c1',
+    lastMessageBody: body,
+    ...(type === undefined ? {} : { lastMessageType: type }),
+  });
+
+  it('by its type (conversation 33e6216a), as the inbox list says it', async () => {
+    expect(
+      await hitsOf([
+        conv('[Image]', 'image'),
+        conv('[Voice message]', 'audio'),
+        conv('[Shared location: Dizengoff (32.1, 34.8)]', 'location'),
+        conv('', 'document'),
+      ]),
+    ).toEqual([
+      { word: null, kind: 'photo' },
+      { word: null, kind: 'voice' },
+      { word: null, kind: 'location' },
+      { word: null, kind: 'file' },
+    ]);
+  });
+
+  it('a caption or text stays the word; an older service with no type still reads its placeholder', async () => {
+    expect(
+      await hitsOf([
+        conv('  the  blue\none  ', 'image'),
+        conv('Cancel order #1016', 'text'),
+        conv('[Image]'),
+        conv(null, null),
+      ]),
+    ).toEqual([
+      { word: 'the blue one', kind: null },
+      { word: 'Cancel order #1016', kind: null },
+      { word: null, kind: 'photo' },
+      { word: null, kind: null },
+    ]);
   });
 });

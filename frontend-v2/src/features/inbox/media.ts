@@ -1,4 +1,5 @@
 import type { InboxMessage } from '@/api/contracts/inbox';
+import { MESSAGE_PLACEHOLDERS as PLACEHOLDERS } from '@/api/contracts/message-kind';
 
 /**
  * What a message's attachment is, as the stream draws it - and the two
@@ -150,16 +151,6 @@ export function isLocationMessage(
 /** Types whose body is the adapter's filler when it is one: never the customer's text. */
 const MEDIA_TYPES = new Set(['image', 'sticker', 'video', 'audio', 'voice', 'document']);
 
-const PLACEHOLDERS = new Set([
-  '[Image]',
-  '[Video]',
-  '[Document]',
-  '[Audio message]',
-  '[Voice message]',
-  '[Sticker]',
-  '[Contact]',
-]);
-
 /** The adapter's own filler, or the file's name repeated: not printed under the media. */
 export function isPlaceholderCaption(
   message: Pick<InboxMessage, 'body' | 'fileName' | 'mediaUrl' | 'messageType' | 'metadata'>,
@@ -186,34 +177,8 @@ export function isPlaceholderCaption(
   return PLACEHOLDERS.has(body) || (!!message.fileName && body === message.fileName);
 }
 
-/** What a quote or a reply preview calls a message whose body is not words. */
-export type QuoteKind = 'photo' | 'sticker' | 'video' | 'voice' | 'file' | 'location' | 'contact';
-
-/**
- * A quoted message in words: its own text, or - when the body is only the
- * adapter's filler ("[Image]", "[Shared location: …]") or empty - what kind
- * of message it was. `null`: no text and no kind known.
+/*
+ * `quoteOf` lives in api/contracts (message-kind.ts): GO TO and the people
+ * list say a message's kind too, and the shell may not import a feature.
  */
-export function quoteOf(message: {
-  readonly body: string;
-  readonly messageType?: string | null;
-}): { readonly text: string } | { readonly kind: QuoteKind } | null {
-  const body = message.body.trim();
-  const type = (message.messageType ?? '').trim().toLowerCase();
-  const filler = body === '' || PLACEHOLDERS.has(body) || /^\[(Shared )?[Ll]ocation\b/.test(body);
-  if (!filler) return { text: body };
-  if (body === '[Sticker]' || type === 'sticker') return { kind: 'sticker' };
-  if (type === 'image' || body === '[Image]') return { kind: 'photo' };
-  if (type === 'video' || body === '[Video]') return { kind: 'video' };
-  if (type === 'audio' || type === 'voice' || /^\[(Audio|Voice) message\]$/.test(body)) {
-    return { kind: 'voice' };
-  }
-  if (type === 'document' || body === '[Document]') return { kind: 'file' };
-  if (type === 'location' || body.startsWith('[')) {
-    return /^\[(Shared )?[Ll]ocation\b/.test(body) || type === 'location'
-      ? { kind: 'location' }
-      : null;
-  }
-  if (/^contacts?$/.test(type) || body === '[Contact]') return { kind: 'contact' };
-  return null;
-}
+export { quoteOf, type QuoteKind } from '@/api/contracts/message-kind';

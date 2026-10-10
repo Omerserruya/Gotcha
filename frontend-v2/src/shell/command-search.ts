@@ -13,6 +13,7 @@ import {
   type CustomerRow,
 } from '@/api/contracts/customers';
 import { approvalEndpoints, customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
+import { quoteOf, type QuoteKind } from '@/api/contracts/message-kind';
 import { logger } from '@/observability/logger';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
@@ -32,6 +33,7 @@ const resultSchema = z.object({
         channel: z.string().nullable().catch(null).default(null),
         lastMessageAt: z.string().nullable().catch(null).default(null),
         lastMessageBody: z.string().nullable().catch(null).default(null),
+        lastMessageType: z.string().nullable().catch(null).default(null),
       }),
     )
     .catch([])
@@ -46,6 +48,11 @@ export type ConversationHit = {
   /** What tells one person's conversations apart: when, and their last word. */
   readonly lastAt: string | null;
   readonly lastWord: string | null;
+  /**
+   * The last message's kind when it is not words ("Photo"), as the inbox
+   * list says it (`quoteOf`) - never its stored "[Image]".
+   */
+  readonly lastKind: QuoteKind | null;
 };
 
 export async function searchConversations(
@@ -64,14 +71,22 @@ export async function searchConversations(
     });
     return {
       ok: true,
-      hits: page.data.map((row) => ({
-        id: row.id,
-        name: row.customerName,
-        handle: row.customerExternalId,
-        channel: row.channel,
-        lastAt: row.lastMessageAt,
-        lastWord: row.lastMessageBody?.replace(/\s+/g, ' ').trim().slice(0, 60) || null,
-      })),
+      hits: page.data.map((row) => {
+        const said = quoteOf({
+          body: row.lastMessageBody ?? '',
+          messageType: row.lastMessageType,
+        });
+        return {
+          id: row.id,
+          name: row.customerName,
+          handle: row.customerExternalId,
+          channel: row.channel,
+          lastAt: row.lastMessageAt,
+          lastWord:
+            said && 'text' in said ? said.text.replace(/\s+/g, ' ').trim().slice(0, 60) : null,
+          lastKind: said && 'kind' in said ? said.kind : null,
+        };
+      }),
     };
   } catch (cause) {
     await signInIfSignedOut(cause);

@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import channels from '@/i18n/messages/en/channels.json';
 import navigation from '@/i18n/messages/en/navigation.json';
 import common from '@/i18n/messages/en/common.json';
+import inbox from '@/i18n/messages/en/inbox.json';
 
 const push = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ push }) }));
@@ -20,7 +21,7 @@ import { CommandPalette, OPEN_COMMAND_PALETTE } from './CommandPalette';
 
 const mount = () =>
   render(
-    <NextIntlClientProvider locale="en" messages={{ navigation, channels, common }}>
+    <NextIntlClientProvider locale="en" messages={{ navigation, channels, common, inbox }}>
       <CommandPalette />
     </NextIntlClientProvider>,
   );
@@ -201,6 +202,15 @@ describe('★★ 19 - ⌘K from anywhere', () => {
           lastAt: null,
           lastWord: 'היי',
         },
+        {
+          id: 'c3',
+          name: 'Matan Amran',
+          handle: null,
+          channel: 'WHATSAPP',
+          lastAt: '2026-10-02T09:00:00Z',
+          lastWord: null,
+          lastKind: 'photo',
+        },
       ],
     });
     mount();
@@ -212,6 +222,8 @@ describe('★★ 19 - ⌘K from anywhere', () => {
     expect(
       screen.getByTestId('command-item-conversation-c2').querySelector('bdi'),
     ).toHaveTextContent('היי');
+    // A photo is "Photo", in the reader's words - never its stored "[Image]".
+    expect(screen.getByTestId('command-item-conversation-c3')).toHaveTextContent('Photo · 2 Oct');
   });
 
   it('★ an order number that found nobody: a quiet line - the search ran', async () => {

@@ -29,7 +29,16 @@ describe('★★ 04 reads the day; the dialer’s search does not', () => {
       }) => {
         if (endpoint.path === '/api/conversations') {
           expect(query).toStrictEqual({ limit: 100, cursor: '' });
-          return payload.parse({ data: [{ customerExternalId: 'wa-1', status: 'OPEN' }] });
+          return payload.parse({
+            data: [
+              {
+                customerExternalId: 'wa-1',
+                status: 'OPEN',
+                lastMessageBody: '[Image]',
+                lastMessageType: 'image',
+              },
+            ],
+          });
         }
         if (endpoint.path.startsWith('/api/analytics/dormant-customers')) {
           return payload.parse({ data: [{ customerId: 'wa-2' }, { customerId: null }] });
@@ -39,6 +48,8 @@ describe('★★ 04 reads the day; the dialer’s search does not', () => {
     );
     const data = await loadCustomers('', { today: true });
     expect(data.conversations?.map((c) => c.customerExternalId)).toEqual(['wa-1']);
+    // The last message's type is kept (conversation 33e6216a): the row says "Photo" by it.
+    expect(data.conversations?.[0]?.lastMessageType).toBe('image');
     expect(data.quiet).toEqual({ ids: new Set(['wa-2']), count: 2, capped: false });
   });
 

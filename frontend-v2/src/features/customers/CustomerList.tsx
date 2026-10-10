@@ -97,6 +97,7 @@ export async function CustomerList({
   readonly now?: Date;
 }) {
   const t = await getTranslations('customers');
+  const tin = await getTranslations('inbox');
   const locale = await getLocale();
 
   if (rowsEmpty) {
@@ -128,7 +129,17 @@ export async function CustomerList({
     <section className={`${fill.fillCard} ${styles.listCard}`} data-testid="customer-list">
       <ul className={`${fill.fillScroll} ${styles.rows}`}>
         {people.map(
-          ({ key, primary: row, members, channels, lastContactAt, situation, waiting, faded }) => {
+          ({
+            key,
+            primary: row,
+            members,
+            channels,
+            lastContactAt,
+            situation,
+            situationKind,
+            waiting,
+            faded,
+          }) => {
             const label = customerLabel(row);
             const mark = channelMark(channels[0] ?? row.channel ?? null);
             const handle = row.phone ?? row.email ?? row.externalId;
@@ -224,6 +235,11 @@ export async function CustomerList({
                         <bdi dir="auto" className={styles.rowSituation}>
                           {situation}
                         </bdi>
+                      ) : situationKind ? (
+                        // A photo, a voice note: its kind in the reader's words.
+                        <span className={styles.rowSituation} data-kind={situationKind}>
+                          {tin(`stream.quote.kind.${situationKind}`)}
+                        </span>
                       ) : (
                         <span title={t('today.noWord')} aria-label={t('today.noWord')}>
                           -

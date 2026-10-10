@@ -1,5 +1,6 @@
 import { collapseToPeople, type CustomerRow } from '@/api/contracts/customers';
 import { pairKey } from '@/api/contracts/identity';
+import { quoteOf, type QuoteKind } from '@/api/contracts/message-kind';
 
 /**
  * 04's rows as 02 writes them - "what is true about that person today" -
@@ -14,6 +15,8 @@ export interface ConversationFact {
   readonly status: 'OPEN' | 'WAITING' | 'CLOSED';
   readonly lastMessageAt: string | null;
   readonly lastMessageBody: string | null;
+  /** The last message's type (conversation 33e6216a); absent from an older service. */
+  readonly lastMessageType?: string | null;
   readonly lastMessageDirection: 'INBOUND' | 'OUTBOUND' | null;
 }
 
@@ -24,8 +27,10 @@ export interface PersonToday {
   readonly members: readonly CustomerRow[];
   /** Their newest conversation's last message; `null` when none was read. */
   readonly lastContactAt: string | null;
-  /** That message, as the row's second line. */
+  /** That message, as the row's second line - when it is words. */
   readonly situation: string | null;
+  /** …or what kind of message it was ("Photo"), never its stored "[Image]" (`quoteOf`). */
+  readonly situationKind: QuoteKind | null;
   /** Open, and a word in the last 24 hours: "talking to you now". */
   readonly talking: boolean;
   /** …and the last word was theirs: they are waiting on you. */
@@ -73,10 +78,14 @@ export function peopleToday(
       const isOpen = ids.some((id) => open.has(id));
       // A month-old open conversation is not "now" (02: 37 of 4,180).
       const talking = isOpen && at !== null && Date.parse(at) >= now.getTime() - NOW_WINDOW_MS;
+      const said = latest
+        ? quoteOf({ body: latest.lastMessageBody ?? '', messageType: latest.lastMessageType })
+        : null;
       return {
         ...person,
         lastContactAt: at,
-        situation: latest?.lastMessageBody?.replace(/\s+/g, ' ').trim() || null,
+        situation: said && 'text' in said ? said.text.replace(/\s+/g, ' ').trim() || null : null,
+        situationKind: said && 'kind' in said ? said.kind : null,
         talking,
         // Waiting stays on any open conversation whose last word was theirs.
         waiting: isOpen && latest?.lastMessageDirection === 'INBOUND',

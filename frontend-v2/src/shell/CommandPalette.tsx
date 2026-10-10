@@ -64,6 +64,7 @@ export function CommandPalette() {
   const tp = useTranslations('navigation.palette');
   const common = useTranslations('common');
   const tch = useTranslations('channels');
+  const tin = useTranslations('inbox');
   const router = useRouter();
   const locale = useLocale();
   const { canSee } = usePermissions();
@@ -177,7 +178,10 @@ export function CommandPalette() {
           .join(' · '),
         href: `/inbox?c=${encodeURIComponent(hit.id)}`,
         detail:
-          [hit.lastWord, hit.lastAt ? shortWhen(hit.lastAt, locale) : null]
+          [
+            hit.lastWord ?? (hit.lastKind ? tin(`stream.quote.kind.${hit.lastKind}`) : null),
+            hit.lastAt ? shortWhen(hit.lastAt, locale) : null,
+          ]
             .filter(Boolean)
             .join(' · ') || undefined,
       })),
@@ -203,7 +207,7 @@ export function CommandPalette() {
         href: `/home?ask=${encodeURIComponent(typed)}`,
       },
     ];
-  }, [actions, common, hits, locale, people, query, screens, tch, tp]);
+  }, [actions, common, hits, locale, people, query, screens, tch, tin, tp]);
 
   if (!open) return null;
 

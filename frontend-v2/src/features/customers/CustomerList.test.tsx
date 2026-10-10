@@ -73,6 +73,40 @@ const show = async (
     }),
   );
 
+describe('★★ the last word is words, or the kind of message - never "[Image]"', () => {
+  it.each([
+    ['[Image]', 'image', 'Photo'],
+    ['[Voice message]', 'audio', 'Voice message'],
+    ['', 'document', 'File'],
+    // An older service sends no type: its placeholder still reads as the kind.
+    ['[Shared location: Dizengoff (32.1, 34.8)]', undefined, 'Location'],
+  ] as const)('%s (%s) reads "%s"', async (body, type, words) => {
+    await show(
+      [row()],
+      [conv({ lastMessageBody: body, ...(type ? { lastMessageType: type } : {}) })],
+    );
+    const line = screen.getByTestId('situation-k1');
+    expect(line).toHaveTextContent(words);
+    expect(line).not.toHaveTextContent('[');
+  });
+
+  it('a caption is the word itself', async () => {
+    await show([row()], [conv({ lastMessageBody: 'the blue one', lastMessageType: 'image' })]);
+    expect(screen.getByTestId('situation-k1')).toHaveTextContent('the blue one');
+    expect(screen.getByTestId('situation-k1')).not.toHaveTextContent('Photo');
+  });
+
+  it('the person carries the kind, apart from the words', () => {
+    const [dana] = peopleToday(
+      [row()],
+      [conv({ lastMessageBody: '[Sticker]', lastMessageType: 'image' })],
+      null,
+      NOW,
+    );
+    expect(dana).toMatchObject({ situation: null, situationKind: 'sticker' });
+  });
+});
+
 describe('★★ 04’s rows - what is true about them today', () => {
   it('a link to the person: initials, name, their last word, and how long ago', async () => {
     await show([row()]);
