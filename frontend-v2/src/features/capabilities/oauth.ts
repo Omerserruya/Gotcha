@@ -77,13 +77,14 @@ export function shopifyInstallError(
 /**
  * Can this system be disconnected from here?
  *
- *   `shopify`  - by removing the app in Shopify; no route here uninstalls it
- *                or touches its Shopify billing.
  *   `calendar` - it books through a per-employee `CalendarAccount`, which
  *                neither disconnect route touches.
+ *
+ * Shopify is (ai 9d583f03): the route stops the storefront chat and releases
+ * the store, locally - the app stays installed and Shopify keeps billing
+ * until the merchant removes it in their admin, which the confirm says.
  */
-export function disconnectHere(slug: string): 'here' | 'shopify' | 'calendar' {
-  if (slug === 'shopify') return 'shopify';
+export function disconnectHere(slug: string): 'here' | 'calendar' {
   if (slug === 'google_calendar' || slug === 'calendly') return 'calendar';
   return 'here';
 }

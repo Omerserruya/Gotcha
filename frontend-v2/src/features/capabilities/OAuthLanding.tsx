@@ -20,6 +20,9 @@ import styles from './Capabilities.module.css';
  * another system is opened. Reading the prop each render made it vanish the
  * moment the URL was tidied.
  */
+/** The way back, or a disconnect done here (the system's screen no longer has its button). */
+type Outcome = 'connected' | 'disconnected' | 'disconnected_chat_off' | OAuthFailure | 'other';
+
 export function OAuthLanding({
   slug,
   name,
@@ -28,12 +31,21 @@ export function OAuthLanding({
   readonly slug: string;
   readonly name: string;
   /** `null` when this render carries no way back. */
-  readonly outcome: 'connected' | OAuthFailure | 'other' | null;
+  readonly outcome: Outcome | null;
 }) {
   const t = useTranslations('capabilities.landing');
   const router = useRouter();
   const pathname = usePathname();
   const [said, setSaid] = useState(outcome);
+  /*
+   * A disconnect lands on the system already open, under the same key: an
+   * outcome that arrives later is adopted, during render, once.
+   */
+  const [seen, setSeen] = useState(outcome);
+  if (outcome !== seen) {
+    setSeen(outcome);
+    if (outcome !== null) setSaid(outcome);
+  }
   const arrived = outcome !== null;
 
   useEffect(() => {
@@ -45,10 +57,18 @@ export function OAuthLanding({
     <p
       className={styles.landing}
       role="status"
-      data-outcome={said === 'connected' ? 'ok' : 'problem'}
+      data-outcome={
+        said === 'connected' || said === 'disconnected' || said === 'disconnected_chat_off'
+          ? 'ok'
+          : 'problem'
+      }
       data-testid="oauth-landing"
     >
-      <span>{said === 'connected' ? t('connected', { name }) : t(`error.${said}`, { name })}</span>
+      <span>
+        {said === 'connected' || said === 'disconnected' || said === 'disconnected_chat_off'
+          ? t(said, { name })
+          : t(`error.${said}`, { name })}
+      </span>
       <button
         type="button"
         className={styles.landingClose}

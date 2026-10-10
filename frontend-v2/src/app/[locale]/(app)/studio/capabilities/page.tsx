@@ -65,6 +65,9 @@ export default async function Page({
     /** Back from Shopify's plan page (backend bb4acc12): `billing=verify&shop=`. */
     readonly billing?: string;
     readonly shop?: string;
+    /** A disconnect done here, and whether Shopify's storefront chat went off with it. */
+    readonly disconnected?: string;
+    readonly chat?: string;
   }>;
 } = {}) {
   const t = await getTranslations('capabilities');
@@ -120,7 +123,15 @@ export default async function Page({
                 key={integration.slug}
                 slug={integration.slug}
                 name={integration.name}
-                outcome={params.connected === '1' ? 'connected' : oauthFailure(params.error)}
+                outcome={
+                  params.disconnected === '1'
+                    ? params.chat === 'off'
+                      ? 'disconnected_chat_off'
+                      : 'disconnected'
+                    : params.connected === '1'
+                      ? 'connected'
+                      : oauthFailure(params.error)
+                }
               />
             ) : null}
             {onShopify && params.billing === 'verify' ? (

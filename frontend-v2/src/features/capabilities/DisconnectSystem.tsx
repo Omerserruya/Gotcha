@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
-import { useRouter } from '@/i18n/navigation';
+import { usePathname, useRouter } from '@/i18n/navigation';
 
 import { disconnectSystem, type DisconnectResult } from './connect-actions';
 import { disconnectHere } from './oauth';
@@ -17,17 +17,23 @@ import styles from './Capabilities.module.css';
  * CONNECTED rows) and the stored credentials are emptied; the per-action
  * settings (`TenantTool`) are left alone.
  *
- * Shopify and the calendars are a status, not a button:
- *   - Shopify is disconnected by removing the app in Shopify (its uninstall
- *     webhook sets the row DISCONNECTED). Neither route here uninstalls the
- *     app or touches its Shopify billing, so a button here could not say
- *     what happens to the merchant's plan.
- *   - A calendar books through its per-employee `CalendarAccount`, which
- *     neither route touches - "disconnected" here would still book.
+ * Shopify's confirmation says what its route does and does not (ai
+ * 9d583f03): the storefront chat stops now; the app stays installed in
+ * Shopify, and Shopify keeps billing until it is removed there; connecting
+ * again later links the store afresh.
+ *
+ * The calendars are a status, not a button: a calendar books through its
+ * per-employee `CalendarAccount`, which neither route touches -
+ * "disconnected" here would still book.
+ *
+ * Done, the system is no longer connected and this unmounts, so what came
+ * of it ("the chat in your store is off") is said by the system's landing
+ * line, on `disconnected=1[&chat=off]`.
  */
 export function DisconnectSystem({ slug, name }: { readonly slug: string; readonly name: string }) {
   const t = useTranslations('capabilities.disconnect');
   const router = useRouter();
+  const pathname = usePathname();
   const [confirming, setConfirming] = useState(false);
   const [problem, setProblem] = useState<Exclude<DisconnectResult, { ok: true }>['reason'] | null>(
     null,
@@ -65,7 +71,7 @@ export function DisconnectSystem({ slug, name }: { readonly slug: string; readon
       ) : (
         <div className={styles.disconnectConfirm} role="group" aria-label={t('button', { name })}>
           <p className={styles.connectLead} data-testid="disconnect-what">
-            {t('confirm', { name })}
+            {t(slug === 'shopify' ? 'confirmShopify' : 'confirm', { name })}
           </p>
           <div className={styles.disconnectRow}>
             <button
@@ -78,7 +84,17 @@ export function DisconnectSystem({ slug, name }: { readonly slug: string; readon
                   const result = await disconnectSystem(slug);
                   if (result.ok) {
                     setConfirming(false);
-                    router.refresh();
+                    router.replace(
+                      {
+                        pathname,
+                        query: {
+                          system: slug,
+                          disconnected: '1',
+                          ...(result.chatDisabled ? { chat: 'off' } : {}),
+                        },
+                      },
+                      { scroll: false },
+                    );
                   } else setProblem(result.reason);
                 })
               }

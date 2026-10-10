@@ -153,6 +153,8 @@
   },
   "landing": {
     "connected": "{name} is connected.",
+    "disconnected": "{name} is disconnected.",
+    "disconnected_chat_off": "{name} is disconnected, and the chat in your store is off.",
     "error": {
       "denied": "You cancelled at {name} - nothing was connected.",
       "token_exchange_failed": "{name} didn't confirm the connection. Nothing was connected - try again.",
@@ -265,12 +267,12 @@
   "disconnect": {
     "button": "Disconnect {name}",
     "confirm": "GOTCHA will stop using {name}: its actions stop working and the sign-in details saved for it are deleted. Its action settings are not deleted.",
+    "confirmShopify": "GOTCHA will stop using {name}: the chat in your store stops now, and its actions stop working. The GOTCHA app stays installed in Shopify, and Shopify keeps billing for it until you remove the app in your Shopify admin. Connecting again later links the store afresh.",
     "yes": "Disconnect",
     "working": "Disconnecting…",
     "keep": "Keep it connected",
     "notHere": "Not available here",
     "why": {
-      "shopify": "Shopify is disconnected by removing the GOTCHA app in your Shopify admin.",
       "calendar": "A calendar is connected for each AI employee, and can't be disconnected from here yet."
     },
     "problem": {

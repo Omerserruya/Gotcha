@@ -109,6 +109,32 @@ describe('★★ the sentence outlives the tidied URL', () => {
     expect(screen.queryByTestId('oauth-landing')).toBeNull();
     expect(replace).not.toHaveBeenCalled();
   });
+
+  it('★ a disconnect done here lands later, under the same key: adopted, said, tidied, kept', () => {
+    const shopify = (outcome: Parameters<typeof OAuthLanding>[0]['outcome']) => (
+      <NextIntlClientProvider locale="en" messages={{ capabilities: messages }}>
+        <OAuthLanding slug="shopify" name="Shopify" outcome={outcome} />
+      </NextIntlClientProvider>
+    );
+    const { rerender } = render(shopify(null));
+    expect(screen.queryByTestId('oauth-landing')).toBeNull();
+    rerender(shopify('disconnected_chat_off'));
+    const said = screen.getByTestId('oauth-landing');
+    expect(said).toHaveTextContent('Shopify is disconnected, and the chat in your store is off.');
+    expect(said).toHaveAttribute('data-outcome', 'ok');
+    expect(replace).toHaveBeenCalledWith(
+      { pathname: '/studio/capabilities', query: { system: 'shopify' } },
+      { scroll: false },
+    );
+    rerender(shopify(null));
+    expect(screen.getByTestId('oauth-landing')).toHaveTextContent('the chat in your store is off');
+  });
+
+  it('a disconnect with no chat to stop says only that', () => {
+    render(tree('disconnected'));
+    expect(screen.getByTestId('oauth-landing')).toHaveTextContent('HubSpot is disconnected.');
+    expect(screen.getByTestId('oauth-landing')).not.toHaveTextContent('chat');
+  });
 });
 
 describe('★ Shopify’s refused install - a closed set, said on either screen', () => {

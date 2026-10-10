@@ -103,6 +103,10 @@ describe('★★ the way back from a provider', () => {
     [{ system: 'shopify', error: 'invalid_request' }, 'invalid_request'],
     [{ system: 'shopify', error: 'not_configured' }, 'not_configured'],
     [{ system: 'shopify', error: 'shop_connected_elsewhere' }, 'shop_connected_elsewhere'],
+    // ★ A disconnect done here (ai 9d583f03), and whether the store's chat went off with it.
+    [{ system: 'shopify', disconnected: '1', chat: 'off' }, 'disconnected_chat_off'],
+    [{ system: 'shopify', disconnected: '1' }, 'disconnected'],
+    [{ system: 'shopify', disconnected: '0', chat: 'off' }, null],
   ])('%o → said as %s, above the system', async (params, outcome) => {
     const tree = await page(params);
     expect(find<{ outcome: string; slug: string }>(tree, OAuthLanding)).toMatchObject({

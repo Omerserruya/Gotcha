@@ -288,16 +288,34 @@ describe('★★ Disconnect at the wire', () => {
   beforeEach(() => {
     post.mockReset();
   });
+  /** The client parses the answer with the call's own payload. */
+  const answers = (body: unknown) =>
+    post.mockImplementation(async ({ payload }: { payload: { parse: (v: unknown) => unknown } }) =>
+      payload.parse(body),
+    );
 
   it('POSTs the connectors route - the one that keeps the action settings', async () => {
-    post.mockResolvedValue({ ok: true });
-    expect(await disconnectSystem('pipedrive')).toEqual({ ok: true });
+    answers({ ok: true });
+    expect(await disconnectSystem('pipedrive')).toEqual({ ok: true, chatDisabled: false });
     const call = post.mock.calls[0]![0] as { endpoint: { path: string }; raw?: boolean };
     expect(call.endpoint.path).toBe('/api/connectors/pipedrive/disconnect');
     expect(call.raw).toBe(true);
   });
 
-  it.each(['shopify', 'google_calendar', 'calendly'])(
+  it('★ ai 9d583f03: Shopify is sent, and says whether its storefront chat went off (mocked - never dev’s store)', async () => {
+    answers({ ok: true, chatDisabled: true, billing: 'unchanged' });
+    expect(await disconnectSystem('shopify')).toEqual({ ok: true, chatDisabled: true });
+    expect((post.mock.calls[0]![0] as { endpoint: { path: string } }).endpoint.path).toBe(
+      '/api/connectors/shopify/disconnect',
+    );
+    answers({ ok: true, chatDisabled: false, billing: 'unchanged' });
+    expect(await disconnectSystem('shopify')).toEqual({ ok: true, chatDisabled: false });
+    // An unreadable flag claims nothing was turned off.
+    answers({ ok: true, chatDisabled: 'yes' });
+    expect(await disconnectSystem('shopify')).toEqual({ ok: true, chatDisabled: false });
+  });
+
+  it.each(['google_calendar', 'calendly'])(
     '%s is never sent - its disconnect is not this route’s to say',
     async (slug) => {
       expect(await disconnectSystem(slug)).toEqual({ ok: false, reason: 'not_here' });

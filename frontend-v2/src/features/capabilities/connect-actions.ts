@@ -151,11 +151,12 @@ export async function startOAuth(slug: string, loginHost?: string): Promise<OAut
 }
 
 export type DisconnectResult =
-  | { readonly ok: true }
+  /** `chatDisabled`: Shopify's storefront chat was on, and is off now. */
+  | { readonly ok: true; readonly chatDisabled: boolean }
   | {
       readonly ok: false;
       /**
-       * `not_here` - Shopify or a calendar (see `disconnectHere`);
+       * `not_here` - a calendar (see `disconnectHere`);
        * `forbidden` (403) · `inactive` (402, the tenant gate) · `failed`.
        */
       readonly reason: 'not_here' | 'forbidden' | 'inactive' | 'failed';
@@ -164,19 +165,24 @@ export type DisconnectResult =
 /**
  * Disconnect a connected system: `POST /api/connectors/:slug/disconnect`. Its
  * actions stop (the AI's tools are read only from CONNECTED rows) and its
- * credentials are emptied; its action settings are kept.
+ * credentials are emptied; its action settings are kept. Shopify's answer
+ * also says whether its storefront chat was turned off (`chatDisabled`,
+ * ai 9d583f03); billing is never touched by it.
  */
 export async function disconnectSystem(slug: string): Promise<DisconnectResult> {
   if (disconnectHere(slug) !== 'here') return { ok: false, reason: 'not_here' };
   try {
-    await serverApi().post({
+    const answer = await serverApi().post({
       endpoint: integrationEndpoints.disconnect(slug),
-      payload: z.object({ ok: z.literal(true) }),
+      payload: z.object({
+        ok: z.literal(true),
+        chatDisabled: z.boolean().catch(false).default(false),
+      }),
       raw: true,
     });
     revalidatePath('/[locale]/(app)/studio/capabilities', 'page');
     revalidatePath('/[locale]/(app)/settings/systems', 'page');
-    return { ok: true };
+    return { ok: true, chatDisabled: answer.chatDisabled };
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('capabilities.disconnect_failed', { slug, cause });
