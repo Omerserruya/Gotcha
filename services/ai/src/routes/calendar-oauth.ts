@@ -67,7 +67,7 @@ router.get(
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const redirectUri = process.env.GOOGLE_CALENDAR_REDIRECT_URI;
     if (!clientId || !redirectUri) {
-      res.status(500).json({ error: "Google Calendar OAuth not configured", code: "NOT_CONFIGURED" });
+      res.status(409).json({ error: "Google Calendar OAuth not configured", code: "NOT_CONFIGURED" });
       return;
     }
     // aiAgentId is optional. Marketplace UI doesn't pass it; in that case we
@@ -209,7 +209,7 @@ router.get(
     const clientId = process.env.CALENDLY_CLIENT_ID;
     const redirectUri = process.env.CALENDLY_REDIRECT_URI;
     if (!clientId || !redirectUri) {
-      res.status(500).json({ error: "Calendly OAuth not configured", code: "NOT_CONFIGURED" });
+      res.status(409).json({ error: "Calendly OAuth not configured", code: "NOT_CONFIGURED" });
       return;
     }
     const aiAgentId = await resolveAiAgentId(String(req.tenantId), String(req.query.aiAgentId || ""));

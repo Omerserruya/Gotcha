@@ -45,7 +45,7 @@ router.get(
     const clientId = process.env.ZOHO_CLIENT_ID;
     const redirectUri = process.env.ZOHO_REDIRECT_URI;
     if (!clientId || !redirectUri) {
-      res.status(500).json({ error: "Zoho OAuth not configured (set ZOHO_CLIENT_ID + ZOHO_REDIRECT_URI)", code: "NOT_CONFIGURED" });
+      res.status(409).json({ error: "Zoho OAuth not configured (set ZOHO_CLIENT_ID + ZOHO_REDIRECT_URI)", code: "NOT_CONFIGURED" });
       return;
     }
 

@@ -161,10 +161,10 @@ describe.each(CONNECT_INITS)("$name init: the integrations connect permission", 
     expect((await get(c.path, "admin")).status).toBe(403);
   });
 
-  it("★ not configured → 500 with the same text and code NOT_CONFIGURED", async () => {
+  it("★ not configured → 409 (a 4xx, 2026-10-09) with the same text and code NOT_CONFIGURED", async () => {
     delete process.env[c.env];
     const r = await get(c.path, "admin");
-    expect(r.status).toBe(500);
+    expect(r.status).toBe(409);
     expect(r.body).toEqual({ error: c.text, code: "NOT_CONFIGURED" });
   });
 });
@@ -197,17 +197,19 @@ describe.each(KNOWLEDGE_INITS)("$name init: the knowledge write permission", (c)
     expect((await get(c.path, "writer", "tenant_a")).status).toBe(200);
   });
 
-  it("★ not configured → 500 with the same text and code NOT_CONFIGURED", async () => {
+  it("★ not configured → 409 (a 4xx, 2026-10-09) with the same text and code NOT_CONFIGURED", async () => {
     delete process.env[c.env];
     const r = await get(c.path, "admin");
-    expect(r.status).toBe(500);
+    expect(r.status).toBe(409);
     expect(r.body).toEqual({ error: c.text, code: "NOT_CONFIGURED" });
   });
 });
 
-describe("the knowledge management routes behind init are unchanged", () => {
-  it("still require role ADMIN (a writer is refused listing integrations)", async () => {
-    const r = await get("/api/knowledge/kb/kb_1/integrations", "writer");
-    expect(r.status).toBe(403);
+describe("★ the knowledge management routes behind init take the knowledge write permission (2026-10-09)", () => {
+  // A writer who could start a Drive connect could not then browse or sync it.
+  it("a writer gets past the gate; a member without the permission does not", async () => {
+    expect((await get("/api/knowledge/kb/kb_1/integrations", "writer")).status).not.toBe(403);
+    expect((await get("/api/knowledge/kb/kb_1/integrations", "agent")).status).toBe(403);
+    expect((await get("/api/knowledge/kb/kb_1/integrations", "admin")).status).not.toBe(403);
   });
 });

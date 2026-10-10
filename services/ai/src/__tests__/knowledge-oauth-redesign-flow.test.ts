@@ -32,12 +32,16 @@ vi.mock("ioredis", () => ({
 }));
 vi.mock("bullmq", () => ({ Queue: class { add = vi.fn(); }, Worker: class {}, Job: class {} }));
 
-const DB = vi.hoisted(() => ({ writes: [] as any[], data: [] as any[] }));
+const DB = vi.hoisted(() => ({ writes: [] as any[], data: [] as any[], bases: [] as any[], atCapacity: false, capacityAsked: 0 }));
 vi.mock("@chatcenter/shared", async () => {
   const actual = await vi.importActual<any>("@chatcenter/shared");
   return {
     ...actual,
     prisma: {
+      knowledgeBase: {
+        create: async (a: any) => { const kb = { id: `kb_new_${DB.bases.length + 1}`, ...a.data }; DB.bases.push(kb); return kb; },
+        count: async () => 0,
+      },
       knowledgeIntegration: {
         findFirst: async () => null,
         create: async (a: any) => { DB.writes.push(["create", a.data.provider]); DB.data.push(a.data); return { id: "ki_1" }; },
@@ -51,6 +55,9 @@ vi.mock("@chatcenter/shared", async () => {
     requireRole: () => (_q: any, _s: any, n: any) => n(),
     // 2026-10-09: init gates on ai:knowledge:write (pinned in connect-oauth-permissions.test.ts).
     requirePermissionOrRole: () => (_q: any, _s: any, n: any) => n(),
+    requireEntitlement: () => (_q: any, _s: any, n: any) => n(),
+    // A new base is held to capacity at init; a test flips it full.
+    requireCapacity: () => (_q: any, res: any, n: any) => { DB.capacityAsked++; return DB.atCapacity ? res.status(403).json({ error: "limit_reached" }) : n(); },
   };
 });
 
@@ -71,7 +78,7 @@ const cb = (path: string, q: Record<string, string>) => request(app).get(`/api/k
 const flowOf = (url: string) =>
   JSON.parse(Buffer.from(new URL(url).searchParams.get("state")!.split(".")[1], "base64url").toString()).flow;
 
-beforeEach(() => { R.used.clear(); DB.writes = []; DB.data = []; vi.unstubAllGlobals(); });
+beforeEach(() => { R.used.clear(); DB.writes = []; DB.data = []; DB.bases = []; DB.atCapacity = false; DB.capacityAsked = 0; vi.unstubAllGlobals(); });
 
 describe("init: the flow is a closed list signed into the state", () => {
   it("drive and confluence accept redesign_studio", async () => {
@@ -183,5 +190,93 @@ describe("Cancel at the provider (?error=, no code)", () => {
     const replay = await cb("google-drive", { code: "c", state: s });
     expect(replay.status).toBe(400);
     expect(DB.writes).toEqual([]);
+  });
+});
+
+
+describe("★ a new base is created only once the provider's grant works (2026-10-09)", () => {
+  const stateOf = (url: string) => new URL(url).searchParams.get("state")!;
+  const claimsOf = (url: string) => JSON.parse(Buffer.from(stateOf(url).split(".")[1], "base64url").toString());
+
+  it.each(["confluence", "google-drive"])("%s init with newBaseName: no base yet, the name rides the state", async (p) => {
+    const r = await request(app).get(`/api/knowledge/oauth/${p}/init`).query({ newBaseName: "  Help center  ", flow: "redesign_studio" });
+    expect(r.status).toBe(200);
+    expect(claimsOf(r.body.url)).toMatchObject({ newBaseName: "Help center" });
+    expect(claimsOf(r.body.url).kbId).toBeUndefined();
+    expect(DB.bases).toEqual([]);
+    expect(DB.capacityAsked).toBe(1);
+  });
+
+  it.each(["confluence", "google-drive"])("%s init with neither kbId nor newBaseName: 400", async (p) => {
+    expect((await request(app).get(`/api/knowledge/oauth/${p}/init`).query({})).status).toBe(400);
+  });
+
+  it("an existing base (kbId) skips the capacity check, as before", async () => {
+    await request(app).get("/api/knowledge/oauth/confluence/init").query({ kbId: "kb_1" });
+    expect(DB.capacityAsked).toBe(0);
+  });
+
+  it("at capacity, a new base is refused at init", async () => {
+    DB.atCapacity = true;
+    expect((await request(app).get("/api/knowledge/oauth/confluence/init").query({ newBaseName: "X" })).status).toBe(403);
+  });
+
+  it("confluence: the token exchange works, so the base is created and the integration lands on it", async () => {
+    const init = await request(app).get("/api/knowledge/oauth/confluence/init").query({ newBaseName: "Wiki", flow: "redesign_studio" });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      String(url).includes("accessible-resources") ? ok([{ id: "cloud1", name: "Acme" }]) : ok({ access_token: "a", refresh_token: "r", expires_in: 3600 })));
+    const r = await cb("confluence", { code: "c", state: stateOf(init.body.url) });
+    expect(r.status).toBe(302);
+    expect(DB.bases).toEqual([expect.objectContaining({ tenantId: "tenant_a", name: "Wiki" })]);
+    expect(DB.data[0]).toMatchObject({ provider: "confluence", knowledgeBaseId: DB.bases[0].id });
+  });
+
+  it("confluence: the token exchange fails, so no base is left behind", async () => {
+    const init = await request(app).get("/api/knowledge/oauth/confluence/init").query({ newBaseName: "Wiki", flow: "redesign_studio" });
+    vi.stubGlobal("fetch", vi.fn(async () => bad));
+    await cb("confluence", { code: "c", state: stateOf(init.body.url) });
+    expect(DB.bases).toEqual([]);
+    expect(DB.data).toEqual([]);
+  });
+
+  it("confluence: a working token but no accessible site, so no base either", async () => {
+    const init = await request(app).get("/api/knowledge/oauth/confluence/init").query({ newBaseName: "Wiki", flow: "redesign_studio" });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      String(url).includes("accessible-resources") ? ok([]) : ok({ access_token: "a", refresh_token: "r", expires_in: 3600 })));
+    await cb("confluence", { code: "c", state: stateOf(init.body.url) });
+    expect(DB.bases).toEqual([]);
+  });
+
+  it("an existing base (kbId): no new base, the integration lands on kb_1", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      String(url).includes("accessible-resources") ? ok([{ id: "cloud1", name: "Acme" }]) : ok({ access_token: "a", refresh_token: "r", expires_in: 3600 })));
+    await cb("confluence", { code: "c", state: st("confluence", "redesign_studio") });
+    expect(DB.bases).toEqual([]);
+    expect(DB.data[0]).toMatchObject({ knowledgeBaseId: "kb_1" });
+  });
+
+  it("drive: the same, a working grant creates the base", async () => {
+    const init = await request(app).get("/api/knowledge/oauth/google-drive/init").query({ newBaseName: "Docs", flow: "redesign_studio" });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      String(url).includes("/about") ? ok({ user: { displayName: "Me" } }) : ok({ access_token: "a", refresh_token: "r", expires_in: 3600 })));
+    await cb("google-drive", { code: "c", state: stateOf(init.body.url) });
+    expect(DB.bases.map((b) => b.name)).toEqual(["Docs"]);
+    expect(DB.data[0]).toMatchObject({ provider: "google_drive", knowledgeBaseId: DB.bases[0].id });
+  });
+
+  it("drive: a failed grant leaves no base", async () => {
+    const init = await request(app).get("/api/knowledge/oauth/google-drive/init").query({ newBaseName: "Docs" });
+    vi.stubGlobal("fetch", vi.fn(async () => bad));
+    await cb("google-drive", { code: "c", state: stateOf(init.body.url) });
+    expect(DB.bases).toEqual([]);
+  });
+
+  it("not configured: 409 with code NOT_CONFIGURED (a 4xx, not a 500)", async () => {
+    const saved = process.env.CONFLUENCE_CLIENT_ID;
+    delete process.env.CONFLUENCE_CLIENT_ID;
+    const r = await request(app).get("/api/knowledge/oauth/confluence/init").query({ newBaseName: "X" });
+    process.env.CONFLUENCE_CLIENT_ID = saved;
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe("NOT_CONFIGURED");
   });
 });

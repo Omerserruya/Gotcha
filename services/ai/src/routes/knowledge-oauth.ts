@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole, requirePermissionOrRole, mintOAuthState, consumeOAuthState,
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity, mintOAuthState, consumeOAuthState,
   resolveAppPublicUrl, encryptCredentials, decryptCredentials, isEncrypted,
 } from "@chatcenter/shared";
 import * as confluenceService from "../services/confluence.service";
@@ -11,6 +11,36 @@ const router = Router();
 // every other write in routes/knowledge.ts. Role ADMIN alone refused a member
 // who holds ai:knowledge:write; ADMIN still passes via the role fallback.
 const canWriteKnowledge = requirePermissionOrRole("ai:knowledge:write", "ADMIN");
+
+/**
+ * Where a connect lands: an existing base (kbId) or a NEW base named
+ * newBaseName that the callback creates only once the provider's token
+ * exchange worked (2026-10-09: Confluence, unconfigured or abandoned at the
+ * provider, left an empty base behind because v2 created it first).
+ */
+function connectTarget(req: Request): { kbId?: string; newBaseName?: string } | null {
+  const kbId = typeof req.query.kbId === "string" && req.query.kbId ? req.query.kbId : undefined;
+  if (kbId) return { kbId };
+  const name = typeof req.query.newBaseName === "string" ? req.query.newBaseName.trim().slice(0, 120) : "";
+  return name ? { newBaseName: name } : null;
+}
+
+/**
+ * A new base is held to the same entitlement and capacity as POST
+ * /knowledge-bases, checked at init (the callback has no session to answer).
+ */
+const knowledgeBaseEntitled = requireEntitlement("ai.knowledge_base");
+const knowledgeBaseCapacity = requireCapacity("limit:knowledge_sources", (tenantId) => prisma.knowledgeBase.count({ where: { tenantId } }));
+function whenNewBase(mw: (req: Request, res: Response, next: () => void) => unknown) {
+  return (req: Request, res: Response, next: () => void) => (connectTarget(req)?.newBaseName ? mw(req, res, next) : next());
+}
+
+/** The base this callback writes to: the existing one, or the new one, created now. */
+async function resolveCallbackBase(tenantId: string, claims: { kbId?: string; newBaseName?: string }): Promise<string> {
+  if (claims.kbId) return claims.kbId;
+  const kb = await prisma.knowledgeBase.create({ data: { tenantId, name: claims.newBaseName!, description: null } });
+  return kb.id;
+}
 
 /**
  * Read a stored refresh token without caring how it was stored.
@@ -140,21 +170,21 @@ async function knowledgeDenied(req: Request, res: Response, provider: string): P
 
 // ─── Confluence OAuth ───────────────────────────────────────
 
-router.get("/oauth/confluence/init", authenticate, resolveTenant, requireActiveTenant(), canWriteKnowledge, (req: Request, res: Response) => {
+router.get("/oauth/confluence/init", authenticate, resolveTenant, requireActiveTenant(), canWriteKnowledge, whenNewBase(knowledgeBaseEntitled), whenNewBase(knowledgeBaseCapacity), (req: Request, res: Response) => {
   const clientId = process.env.CONFLUENCE_CLIENT_ID;
   const redirectUri = process.env.CONFLUENCE_REDIRECT_URI;
   if (!clientId || !redirectUri) {
-    res.status(500).json({ error: "Confluence OAuth not configured", code: "NOT_CONFIGURED" });
+    res.status(409).json({ error: "Confluence OAuth not configured", code: "NOT_CONFIGURED" });
     return;
   }
 
-  const kbId = req.query.kbId as string;
-  if (!kbId) { res.status(400).json({ error: "kbId is required" }); return; }
+  const target = connectTarget(req);
+  if (!target) { res.status(400).json({ error: "kbId or newBaseName is required" }); return; }
 
   // Single-use state (shared store): the jti is burned on callback so a
   // captured state cannot be replayed within its TTL.
   const { state } = mintOAuthState({
-    tenantId: req.tenantId!, provider: "confluence", kbId, userId: (req as any).userId,
+    tenantId: req.tenantId!, provider: "confluence", ...target, userId: (req as any).userId,
     flow: parseKnowledgeFlow(req.query.flow, new Set(["redesign_studio"])),
   });
 
@@ -171,13 +201,13 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).json({ error: "Missing code or state" }); return; }
 
-    const consumed = await consumeOAuthState<{ tenantId: string; kbId: string; flow?: string }>(state as string, "confluence");
+    const consumed = await consumeOAuthState<{ tenantId: string; kbId?: string; newBaseName?: string; flow?: string }>(state as string, "confluence");
     if (!consumed.ok) {
       console.warn(`[confluence oauth] state rejected: ${consumed.reason}`);
       res.status(400).json({ error: consumed.reason === "replayed" ? "state already used" : "invalid state" });
       return;
     }
-    const { tenantId, kbId } = consumed.claims;
+    const { tenantId } = consumed.claims;
     flow = consumed.claims.flow;
 
     const clientId = process.env.CONFLUENCE_CLIENT_ID!;
@@ -217,6 +247,8 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
     }
 
     const site = resources[0];
+    // Only now, with a working grant, does a new base come into being.
+    const kbId = await resolveCallbackBase(tenantId, consumed.claims);
 
     await (prisma as any).knowledgeIntegration.create({
       data: {
@@ -248,19 +280,20 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
 // PENDING_ONBOARDING allowed: onboarding Movement 6 connects Drive before the
 // tenant flips ACTIVE. `flow=onboarding` rides the state so the callback can
 // land back on /setup instead of the app's knowledge page.
-router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canWriteKnowledge, async (req: Request, res: Response) => {
+router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canWriteKnowledge, whenNewBase(knowledgeBaseEntitled), whenNewBase(knowledgeBaseCapacity), async (req: Request, res: Response) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const redirectUri = process.env.GOOGLE_REDIRECT_URI;
   if (!clientId || !redirectUri) {
-    res.status(500).json({ error: "Google Drive OAuth not configured", code: "NOT_CONFIGURED" });
+    res.status(409).json({ error: "Google Drive OAuth not configured", code: "NOT_CONFIGURED" });
     return;
   }
 
-  const kbId = req.query.kbId as string;
-  if (!kbId) { res.status(400).json({ error: "kbId is required" }); return; }
+  const target = connectTarget(req);
+  if (!target) { res.status(400).json({ error: "kbId or newBaseName is required" }); return; }
+  const kbId = target.kbId;
 
   const { state } = mintOAuthState({
-    tenantId: req.tenantId!, provider: "google_drive", kbId, userId: (req as any).userId,
+    tenantId: req.tenantId!, provider: "google_drive", ...target, userId: (req as any).userId,
     flow: parseKnowledgeFlow(req.query.flow),
   });
 
@@ -273,10 +306,12 @@ router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireOnboa
   // Google only returns a refresh token when it shows the consent screen. Force
   // it for a first connect or an explicit reconnect, and stay quiet otherwise -
   // re-consenting an admin who is already connected is noise, not security.
-  const existing = await prisma.knowledgeIntegration.findFirst({
-    where: { tenantId: req.tenantId!, knowledgeBaseId: kbId, provider: "google_drive" },
-    select: { credentials: true },
-  });
+  const existing = kbId
+    ? await prisma.knowledgeIntegration.findFirst({
+        where: { tenantId: req.tenantId!, knowledgeBaseId: kbId, provider: "google_drive" },
+        select: { credentials: true },
+      })
+    : null;
   const needsConsent = req.query.reconnect === "1" || !hasRefreshToken(existing?.credentials);
 
   const authUrl =
@@ -295,7 +330,7 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).json({ error: "Missing code or state" }); return; }
 
-    const consumed = await consumeOAuthState<{ tenantId: string; kbId: string; flow?: string }>(state as string, "google_drive");
+    const consumed = await consumeOAuthState<{ tenantId: string; kbId?: string; newBaseName?: string; flow?: string }>(state as string, "google_drive");
     if (!consumed.ok) {
       console.warn(`[google_drive oauth] state rejected: ${consumed.reason}`);
       res.status(400).json({ error: consumed.reason === "replayed" ? "state already used" : "invalid state" });
@@ -303,7 +338,7 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
     }
     const payload = consumed.claims;
     flow = payload.flow;
-    const { tenantId, kbId } = payload;
+    const { tenantId } = payload;
 
     const clientId = process.env.GOOGLE_CLIENT_ID!;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
@@ -335,6 +370,8 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     });
     const userInfo: any = userRes.ok ? await userRes.json() : null;
+    // Only now, with a working grant, does a new base come into being.
+    const kbId = await resolveCallbackBase(tenantId, payload);
 
     // Re-authorizing an already-connected knowledge base must land on the SAME
     // integration row. Creating a second one would fork the picked sources: the
@@ -393,7 +430,9 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
 
 // PENDING_ONBOARDING allowed so the onboarding wizard can list the Drive
 // integration, browse files, and trigger the first sync (admin-only, tenant-scoped).
-router.use(authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"));
+// 2026-10-09: the knowledge write permission, like starting the connect (a
+// writer who could connect Drive could not then browse or sync it).
+router.use(authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canWriteKnowledge);
 
 // List integrations for a knowledge base
 router.get("/kb/:kbId/integrations", async (req: Request, res: Response) => {
