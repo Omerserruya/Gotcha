@@ -131,7 +131,9 @@
       "entitlement": "Connecting systems isn't part of this plan.",
       "forbidden": "You don't have permission to connect systems.",
       "failed": "It didn't connect. Nothing was saved - try again.",
-      "validation": "{name} didn't accept those details. Nothing was saved - check them and try again."
+      "validation": "{name} didn't accept those details. Nothing was saved - check them and try again.",
+      "credentials_invalid": "The details aren't right: {name} didn't accept them. Nothing was saved - check them and try again.",
+      "connection_failed": "We couldn't connect to {name}: it didn't answer. Nothing was saved - check the details and try again."
     }
   },
   "systemDown": "Hidden from GOTCHA while {name} needs fixing - reconnect it in Integrations.",

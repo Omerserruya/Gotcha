@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { capabilitySchema } from '@/api/contracts/capabilities';
 import { integrationSchema } from '@/api/contracts/integrations';
 import messages from '@/i18n/messages/en/capabilities.json';
+import heMessages from '@/i18n/messages/he/capabilities.json';
 
 const refresh = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh }) }));
@@ -342,6 +343,7 @@ describe('★★ 1aaaefe4 - keys that do not work: the backend’s sentence, ver
     connectIntegration.mockResolvedValue({
       ok: false,
       reason: 'validation',
+      code: null,
       message: 'Airtable rejected that token - it needs data.records:read.',
     });
     const one = inIntl(await AvailableSystem({ integration: airtable }));
@@ -351,12 +353,46 @@ describe('★★ 1aaaefe4 - keys that do not work: the backend’s sentence, ver
       'Airtable rejected that token - it needs data.records:read.',
     );
     one.unmount();
-    connectIntegration.mockResolvedValue({ ok: false, reason: 'validation', message: null });
+    connectIntegration.mockResolvedValue({
+      ok: false,
+      reason: 'validation',
+      code: null,
+      message: null,
+    });
     inIntl(await AvailableSystem({ integration: airtable }));
     await userEvent.type(screen.getByTestId('connect-apiKey'), 'pat');
     await userEvent.click(screen.getByTestId('connect-submit'));
     expect(screen.getByTestId('connect-problem')).toHaveTextContent(
       "Airtable didn't accept those details.",
+    );
+  });
+});
+
+describe('★★ ai 36739bcc - which way the keys failed, in the reader’s words', () => {
+  it.each([
+    ['credentials_invalid', "The details aren't right: Airtable didn't accept them."],
+    ['connection_failed', "We couldn't connect to Airtable: it didn't answer."],
+  ] as const)('%s: ours, never the backend’s English sentence', async (code, words) => {
+    connectIntegration.mockResolvedValue({
+      ok: false,
+      reason: 'validation',
+      code,
+      message: 'The provider rejected these credentials.',
+    });
+    inIntl(await AvailableSystem({ integration: airtable }));
+    await userEvent.type(screen.getByTestId('connect-apiKey'), 'pat');
+    await userEvent.click(screen.getByTestId('connect-submit'));
+    const said = screen.getByTestId('connect-problem');
+    expect(said).toHaveTextContent(words);
+    expect(said).not.toHaveTextContent('The provider rejected');
+  });
+
+  it('Hebrew says both', () => {
+    expect(heMessages.available.error.credentials_invalid).toBe(
+      'הפרטים לא נכונים: {name} לא קיבל אותם. שום דבר לא נשמר - כדאי לבדוק ולנסות שוב.',
+    );
+    expect(heMessages.available.error.connection_failed).toBe(
+      'לא הצלחנו להתחבר ל‑{name}: הוא לא ענה. שום דבר לא נשמר - כדאי לבדוק את הפרטים ולנסות שוב.',
     );
   });
 });

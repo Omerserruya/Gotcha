@@ -245,7 +245,41 @@ describe('★★ 1aaaefe4 - 422 from a key form', () => {
     expect(await connectIntegration('airtable', { apiKey: 'x' })).toEqual({
       ok: false,
       reason: 'validation',
+      code: null,
       message: 'That key was rejected.',
+    });
+  });
+
+  it.each([
+    ['CREDENTIALS_INVALID', 'credentials_invalid'],
+    ['CONNECTION_FAILED', 'connection_failed'],
+    // A code this build does not know is no code: the sentence decides.
+    ['SOMETHING_NEW', null],
+    ['toString', null],
+  ] as const)('★ ai 36739bcc: code %s → %s', async (code, said) => {
+    get.mockResolvedValue([
+      {
+        id: 'i',
+        slug: 'fireberry',
+        name: 'Fireberry',
+        authType: 'API_KEY',
+        authSchema: { fields: [{ key: 'apiKey', type: 'password', label: 'Key', required: true }] },
+      },
+    ]);
+    post.mockImplementation(async () => {
+      throw new ApiError({
+        kind: 'validation',
+        status: 422,
+        code,
+        developerMessage: 'validation_failed',
+        userMessage: 'The provider rejected these credentials.',
+      });
+    });
+    expect(await connectIntegration('fireberry', { apiKey: 'x' })).toEqual({
+      ok: false,
+      reason: 'validation',
+      code: said,
+      message: 'The provider rejected these credentials.',
     });
   });
 });
@@ -288,5 +322,12 @@ describe('★ NOT_CONFIGURED by its code, whatever the words', () => {
       throw new ApiError({ kind: 'server', status: 500, code: 'NOT_CONFIGURED' });
     });
     expect(await startOAuth('zoho_crm')).toEqual({ ok: false, reason: 'not_configured' });
+  });
+
+  it('the code outranks the status: a 409 that says NOT_CONFIGURED is not "needs a store"', async () => {
+    get.mockImplementation(async () => {
+      throw new ApiError({ kind: 'conflict', status: 409, code: 'NOT_CONFIGURED' });
+    });
+    expect(await startOAuth('shopify')).toEqual({ ok: false, reason: 'not_configured' });
   });
 });

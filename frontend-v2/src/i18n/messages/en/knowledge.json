@@ -175,7 +175,7 @@
     },
     "connectProblem": {
       "not_configured": "This connection isn't set up in this environment yet.",
-      "forbidden": "Only an admin can connect a knowledge source.",
+      "forbidden": "You don't have permission to connect a knowledge source.",
       "failed": "{name} couldn't be opened - try again."
     },
     "opening": "Opening…",

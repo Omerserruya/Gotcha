@@ -224,7 +224,7 @@ describe('★★ Drive and Confluence - at the provider, and back here (backend 
     render(drive());
     await userEvent.click(screen.getByTestId('add-connect-confluence'));
     expect(screen.getByTestId('add-connect-problem')).toHaveTextContent(
-      'Only an admin can connect a knowledge source.',
+      "You don't have permission to connect a knowledge source.",
     );
     expect(assign).not.toHaveBeenCalled();
   });

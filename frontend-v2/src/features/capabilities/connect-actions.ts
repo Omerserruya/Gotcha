@@ -25,8 +25,30 @@ export type ConnectResult =
        */
       readonly reason: 'missing' | 'not_here' | 'entitlement' | 'forbidden' | 'failed';
     }
-  /** 422: the keys did not work; nothing was written. The sentence is the backend's, for the merchant. */
-  | { readonly ok: false; readonly reason: 'validation'; readonly message: string | null };
+  /**
+   * 422: the keys did not work; nothing was written. `code` says which way
+   * (ai 36739bcc): the provider refused them, or never answered. Without one
+   * the sentence is the backend's, for the merchant.
+   */
+  | {
+      readonly ok: false;
+      readonly reason: 'validation';
+      readonly code: ValidationCode | null;
+      readonly message: string | null;
+    };
+
+/** The 422 codes POST /api/integrations/:slug/connect sends, as the form says them. */
+const VALIDATION_CODES = {
+  CREDENTIALS_INVALID: 'credentials_invalid',
+  CONNECTION_FAILED: 'connection_failed',
+} as const;
+export type ValidationCode = (typeof VALIDATION_CODES)[keyof typeof VALIDATION_CODES];
+
+function validationCodeOf(code: string | undefined): ValidationCode | null {
+  return code && Object.hasOwn(VALIDATION_CODES, code)
+    ? VALIDATION_CODES[code as keyof typeof VALIDATION_CODES]
+    : null;
+}
 
 /**
  * 10's Connect - live (Omer, 2026-10-04): `POST /api/integrations/:slug/connect`.
@@ -67,7 +89,12 @@ export async function connectIntegration(
     if (isApiError(cause)) {
       if (cause.status === 400) return { ok: false, reason: 'missing' };
       if (cause.status === 422) {
-        return { ok: false, reason: 'validation', message: cause.userMessage?.trim() || null };
+        return {
+          ok: false,
+          reason: 'validation',
+          code: validationCodeOf(cause.code),
+          message: cause.userMessage?.trim() || null,
+        };
       }
       if (cause.status === 402) return { ok: false, reason: 'entitlement' };
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
@@ -113,11 +140,12 @@ export async function startOAuth(slug: string, loginHost?: string): Promise<OAut
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('capabilities.oauth_start_failed', { slug, cause });
+    // The code first: NOT_CONFIGURED is said as itself, whatever status carries it.
+    if (isNotConfigured(cause)) return { ok: false, reason: 'not_configured' };
     if (isApiError(cause)) {
       if (cause.status === 409) return { ok: false, reason: 'needs_store' };
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
     }
-    if (isNotConfigured(cause)) return { ok: false, reason: 'not_configured' };
     return { ok: false, reason: 'failed' };
   }
 }

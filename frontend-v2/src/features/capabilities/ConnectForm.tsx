@@ -41,9 +41,14 @@ export function ConnectForm({
     startTransition(async () => {
       const result = await connectIntegration(slug, values);
       if (result.ok) router.refresh();
-      // 422: the backend's own sentence, written for the merchant (1aaaefe4).
+      // 422: which way it failed, in the reader's words (ai 36739bcc); with
+      // no code, the backend's own sentence, written for the merchant (1aaaefe4).
       else if (result.reason === 'validation')
-        setProblem(result.message ?? t('error.validation', { name }));
+        setProblem(
+          result.code
+            ? t(`error.${result.code}`, { name })
+            : (result.message ?? t('error.validation', { name })),
+        );
       else setProblem(t(`error.${result.reason}`, { name }));
     });
   }
