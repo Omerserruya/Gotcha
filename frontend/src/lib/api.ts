@@ -919,10 +919,34 @@ export interface ShopifyChatActivation {
  * merchant can have commerce running with chat off and the UI must be able
  * to say which of the two is missing.
  */
+/**
+ * Health of the INSTALLATION, which is a separate row from the channel and
+ * can disagree with it. A merchant who uninstalls and re-adds the app leaves
+ * the installation UNINSTALLED while the channel keeps enabled=true, so the
+ * channel flag is never proof that storefront chat works.
+ */
+export type ShopifyChatInstallHealth =
+  | "ok"
+  | "installation_missing"
+  | "uninstalled"
+  | "wrong_app_identity"
+  | "tenant_binding_missing";
+
 export interface ShopifyChatStatus {
   shopifyConnected: boolean;
   shopDomain: string | null;
-  state: "shopify_not_connected" | "ready_to_activate" | "enabled";
+  state:
+    | "shopify_not_connected"
+    | "active"
+    | "disabled"
+    | "installation_missing"
+    | "uninstalled"
+    | "wrong_app_identity"
+    | "tenant_binding_missing";
+  installHealth: ShopifyChatInstallHealth;
+  /** True when the settings surface must offer REPAIR, not a toggle. */
+  needsRepair: boolean;
+  chatEnabled?: boolean;
   activation: ShopifyChatActivation | null;
   /** Null until the app handle is confirmed; the UI hides the link rather
    *  than offering one that 404s in the merchant's admin. */

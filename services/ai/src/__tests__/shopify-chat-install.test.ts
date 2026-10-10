@@ -45,6 +45,7 @@ const H = vi.hoisted(() => {
     enableChatForTenant: v.fn(),
     disableChatForTenant: v.fn(async () => ({ ok: true, disabled: 1 })),
     refreshVerifiedDomains: v.fn(async () => ["my-store.myshopify.com"]),
+    readChatChannelEnabled: v.fn(async () => true),
   };
 });
 
@@ -70,13 +71,22 @@ vi.mock("../services/connectors/integration-framework", () => ({
   loadConnection: vi.fn(async () => H.connection.current),
 }));
 
-vi.mock("../services/shopify-chat-install.service", () => ({
+vi.mock("../services/shopify-chat-install.service", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+  // assessInstallHealth / needsReconciliation are PURE and are the thing
+  // under test here - use the real implementations, not stubs.
+  assessInstallHealth: actual.assessInstallHealth,
+  needsReconciliation: actual.needsReconciliation,
+  readChatChannelEnabled: H.readChatChannelEnabled,
+  findLatestInstallation: vi.fn(async () => H.install.current),
   findLiveInstallation: vi.fn(async () => H.install.current),
   activationSnapshot: vi.fn(async () => H.snapshot.current),
   refreshVerifiedDomains: H.refreshVerifiedDomains,
   enableChatForTenant: H.enableChatForTenant,
   disableChatForTenant: H.disableChatForTenant,
-}));
+  };
+});
 
 import router from "../routes/shopify-chat-install";
 
@@ -95,6 +105,7 @@ const INSTALLATION = {
   status: "ACTIVE" as const,
   tenantId: "t1",
   channelAccountId: "c1",
+  appIdentity: "gotcha-core",
   verifiedDomains: [SHOP],
   installedAt: new Date(),
   uninstalledAt: null,
@@ -109,6 +120,7 @@ beforeEach(() => {
   H.install.current = { ...INSTALLATION };
   H.connection.current = { config: { shopDomain: SHOP } };
   H.disableChatForTenant.mockResolvedValue({ ok: true, disabled: 1 });
+  H.readChatChannelEnabled.mockResolvedValue(true);
   H.enableChatForTenant.mockResolvedValue({
     ok: true,
     installation: { ...INSTALLATION },
@@ -151,7 +163,9 @@ describe("status", () => {
     expect(res.status).toBe(200);
     expect(res.body.data.shopifyConnected).toBe(true);
     expect(res.body.data.shopDomain).toBe(SHOP);
-    expect(res.body.data.state).toBe("enabled");
+    // "enabled" was the old flat vocabulary. The state machine now
+    // distinguishes a healthy+on install from every degraded shape.
+    expect(res.body.data.state).toBe("active");
   });
 
   it("says shopify_not_connected rather than pretending chat is unavailable", async () => {
@@ -170,10 +184,13 @@ describe("status", () => {
     expect(res.body.data.appAdminLink).toBeNull();
   });
 
-  it("reports ready_to_activate when another organization holds the install", async () => {
+  it("names WHY another organization's install is unusable, not just 'not ready'", async () => {
+    // Previously this collapsed to "ready_to_activate", which reads as "click
+    // enable" - wrong and misleading when the store belongs to someone else.
     H.install.current = { ...INSTALLATION, tenantId: "other-tenant" };
     const res = await request(app()).get("/api/shopify-chat-install/status");
-    expect(res.body.data.state).toBe("ready_to_activate");
+    expect(res.body.data.state).toBe("tenant_binding_missing");
+    expect(res.body.data.needsRepair).toBe(true);
     expect(res.body.data.activation).toBeNull();
   });
 });
@@ -276,5 +293,82 @@ describe("activation", () => {
     H.install.current = null;
     H.connection.current = null;
     expect((await request(app()).get("/api/shopify-chat-install/activation")).status).toBe(404);
+  });
+});
+
+// ─── Installation health drives the status, not the channel flag ──
+
+describe("status reports installation health, not just the channel", () => {
+  it("reports active when the installation is healthy and chat is on", async () => {
+    const res = await request(app()).get("/api/shopify-chat-install/status");
+    expect(res.body.data.state).toBe("active");
+    expect(res.body.data.needsRepair).toBe(false);
+  });
+
+  it("reports disabled — healthy install, chat simply off", async () => {
+    H.readChatChannelEnabled.mockResolvedValue(false);
+    const res = await request(app()).get("/api/shopify-chat-install/status");
+    expect(res.body.data.state).toBe("disabled");
+    expect(res.body.data.needsRepair).toBe(false);
+  });
+
+  it("reports uninstalled EVEN WHEN the channel says enabled", async () => {
+    // The exact production-adjacent failure: channel enabled=true, install
+    // retired. Previously this showed a healthy toggle while the storefront
+    // refused. It must now demand repair.
+    H.install.current = { ...INSTALLATION, status: "UNINSTALLED" };
+    H.readChatChannelEnabled.mockResolvedValue(true);
+    const res = await request(app()).get("/api/shopify-chat-install/status");
+    expect(res.body.data.state).toBe("uninstalled");
+    expect(res.body.data.needsRepair).toBe(true);
+    expect(res.body.data.activation).toBeNull();
+  });
+
+  it("reports installation_missing when there is no row at all", async () => {
+    H.install.current = null;
+    const res = await request(app()).get("/api/shopify-chat-install/status");
+    expect(res.body.data.state).toBe("installation_missing");
+    expect(res.body.data.needsRepair).toBe(true);
+  });
+
+  it("reports wrong_app_identity for a row left on the retired Chat Dev app", async () => {
+    H.install.current = { ...INSTALLATION, appIdentity: "gotcha-chat-dev" };
+    const res = await request(app()).get("/api/shopify-chat-install/status");
+    expect(res.body.data.state).toBe("wrong_app_identity");
+    expect(res.body.data.needsRepair).toBe(true);
+  });
+
+  it("reports tenant_binding_missing for another organization's install", async () => {
+    H.install.current = { ...INSTALLATION, tenantId: "other-tenant" };
+    const res = await request(app()).get("/api/shopify-chat-install/status");
+    expect(res.body.data.state).toBe("tenant_binding_missing");
+    expect(res.body.data.needsRepair).toBe(true);
+  });
+
+  it("never returns an activation snapshot for a degraded install", async () => {
+    // A snapshot would read as "here is your working configuration".
+    for (const bad of [
+      { status: "UNINSTALLED" },
+      { tenantId: null },
+      { appIdentity: "gotcha-chat" },
+    ]) {
+      H.install.current = { ...INSTALLATION, ...bad };
+      const res = await request(app()).get("/api/shopify-chat-install/status");
+      expect(res.body.data.activation, JSON.stringify(bad)).toBeNull();
+    }
+  });
+});
+
+describe("repair reuses the enable path", () => {
+  it("enable is what repairs a retired installation - not a channel save", async () => {
+    H.install.current = { ...INSTALLATION, status: "UNINSTALLED" };
+    H.enableChatForTenant.mockResolvedValue({
+      ok: true, installation: { ...INSTALLATION }, channel: { id: "c1" }, created: false,
+    });
+    const res = await request(app()).post("/api/shopify-chat-install/enable");
+    expect(res.status).toBe(200);
+    // created=false proves the existing channel was reused, not duplicated.
+    expect(res.body.data.channelCreated).toBe(false);
+    expect(res.body.data.channelId).toBe("c1");
   });
 });
