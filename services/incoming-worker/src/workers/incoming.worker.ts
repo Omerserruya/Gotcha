@@ -188,7 +188,8 @@ export async function resolveWhatsAppMedia(
     return {
       localUrl: `${UPLOADS_BASE_URL}/${fileName}`,
       fileName,
-      displayName: sanitizeDisplayName(opts?.fileName) || fileName,
+      // No sender name: a readable one, never the stored uuid (2026-10-10).
+      displayName: sanitizeDisplayName(opts?.fileName) || defaultMediaName(messageType, ext, new Date()),
       media: mediaFacts({
         declaredMime: opts?.mimeType,
         downloadedMime: contentType,
@@ -248,6 +249,44 @@ export function mediaFacts(input: {
     byteSize: typeof input.byteSize === "number" && Number.isFinite(input.byteSize) ? input.byteSize : null,
     originalName: sanitizeDisplayName(input.senderFileName ?? undefined) || null,
   };
+}
+
+/**
+ * A readable name for an attachment the sender did not name (2026-10-10):
+ * "<kind>-<YYYY-MM-DD>.<ext>", e.g. "image-2026-10-10.jpg", "voice-2026-10-10.ogg".
+ * The stored file keeps its uuid; this is only what people see.
+ */
+export function defaultMediaName(messageType: string, ext: string | null | undefined, at: Date): string {
+  const kind: Record<string, string> = { image: "image", sticker: "sticker", audio: "voice", video: "video", document: "file" };
+  const day = (Number.isNaN(at.getTime()) ? new Date() : at).toISOString().slice(0, 10);
+  const e = typeof ext === "string" && /^\.[a-z0-9]{1,8}$/i.test(ext) ? ext.toLowerCase() : "";
+  return `${kind[messageType] ?? "file"}-${day}${e}`;
+}
+
+/** The extension a MIME maps to, or "" when unknown (never ".bin"). */
+function extFromMime(mime: string | null | undefined): string {
+  const e = getExtensionFromMime(String(mime ?? "").split(";")[0].trim().toLowerCase(), "__none__");
+  return e === ".bin" ? "" : e;
+}
+
+/** The hosts Meta serves Messenger and Instagram media from. */
+const META_MEDIA_HOSTS = /(^|\.)(fbcdn\.net|fbsbx\.com|cdninstagram\.com|facebook\.com|instagram\.com)$/i;
+
+/**
+ * What Meta's CDN says about a Messenger/Instagram attachment we do not
+ * download: one HEAD for its type and size (2026-10-10). Best effort and
+ * bounded: https Meta hosts only, 4s, never throws.
+ */
+export async function headMetaMedia(url: string): Promise<{ mime: string | null; size: number | null }> {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" || !META_MEDIA_HOSTS.test(u.hostname)) return { mime: null, size: null };
+    const r = await axios.head(url, { timeout: 4000, maxRedirects: 3, validateStatus: (s) => s >= 200 && s < 300 });
+    const len = Number(r.headers["content-length"]);
+    return { mime: (r.headers["content-type"] as string) || null, size: Number.isFinite(len) && len >= 0 ? len : null };
+  } catch {
+    return { mime: null, size: null };
+  }
 }
 
 function byteLengthOf(data: unknown): number | null {
@@ -533,7 +572,17 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     } else {
       // Messenger/Instagram: URL is directly usable
       resolvedMediaUrl = rawMediaUrl;
+      // Their facts too (2026-10-10): the CDN's own type and size, one HEAD.
+      const head = await headMetaMedia(rawMediaUrl);
+      media = mediaFacts({ declaredMime: senderMimeType, downloadedMime: head.mime, byteSize: head.size, senderFileName });
       resolvedFileName = senderFileName;
+    }
+    // No sender name: a readable default, for the facts and the bubble alike.
+    if (media && !media.originalName) {
+      const storedExt = resolvedMediaUrl?.startsWith(UPLOADS_BASE_URL) ? path.extname(resolvedMediaUrl) : "";
+      const name = defaultMediaName(messageType, storedExt || extFromMime(media.mimeType), new Date(normalizedMessage.timestamp ?? Date.now()));
+      media = { ...media, originalName: name };
+      if (!sanitizeDisplayName(senderFileName ?? undefined)) resolvedFileName = name;
     }
   }
 

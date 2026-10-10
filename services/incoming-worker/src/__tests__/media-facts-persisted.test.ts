@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { get, prisma } = vi.hoisted(() => {
+const { get, head, prisma } = vi.hoisted(() => {
   const prisma = {
     tenant: { findUnique: vi.fn(async () => ({ status: "ACTIVE" })) },
     message: {
@@ -26,9 +26,9 @@ const { get, prisma } = vi.hoisted(() => {
     channelAccount: { findUnique: vi.fn(async () => ({ id: "ca1", externalId: "pn1", displayName: "Shop", credentials: "enc" })) },
     contact: { update: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })), findFirst: vi.fn(async () => null) },
   };
-  return { get: vi.fn(), prisma };
+  return { get: vi.fn(), head: vi.fn(), prisma };
 });
-vi.mock("axios", () => ({ default: { get, post: vi.fn(async () => ({ data: {} })) } }));
+vi.mock("axios", () => ({ default: { get, head, post: vi.fn(async () => ({ data: {} })) } }));
 vi.mock("fs", () => {
   const writeFileSync = vi.fn();
   const mkdirSync = vi.fn();
@@ -156,7 +156,9 @@ describe("★ inbound WhatsApp media keeps its facts on the row", () => {
     expect(row.messageType).toBe("sticker");
     expect(row.body).toBe("[Sticker]");
     expect(row.mediaUrl).toMatch(/^\/api\/uploads\/[0-9a-f-]{36}\.webp$/);
-    expect(row.metadata.media).toEqual({ mimeType: "image/webp", byteSize: 16, originalName: null });
+    // No sender name: a readable default, never the uuid (2026-10-10).
+    expect(row.metadata.media).toEqual({ mimeType: "image/webp", byteSize: 16, originalName: expect.stringMatching(/^sticker-\d{4}-\d{2}-\d{2}\.webp$/) });
+    expect(row.fileName).toBe(row.metadata.media.originalName);
   });
 
   it("a text message gets no media facts", async () => {
@@ -213,5 +215,57 @@ describe("★ a Coexistence echo keeps the same facts", () => {
       mediaError: "download_failed",
       media: { mimeType: "application/pdf", byteSize: null, originalName: "a.pdf" },
     });
+  });
+});
+
+
+describe("★ Messenger and Instagram media get their facts too (2026-10-10)", () => {
+  const meta = (channel: string, n: Record<string, unknown>) => {
+    const j = inbound(n);
+    j.data.channel = channel;
+    return j;
+  };
+
+  it("one HEAD to Meta's CDN gives the type and size; the CDN URL is kept as the media URL", async () => {
+    head.mockResolvedValueOnce({ headers: { "content-type": "image/jpeg; charset=binary", "content-length": "2048" } });
+    await dispatch(meta("MESSENGER", { contentType: "image", body: "[Image]", messageType: "image", mediaUrl: "https://scontent.xx.fbcdn.net/v/t1/x.jpg?sig=1" }));
+    const row = created()[0];
+    expect(head).toHaveBeenCalledWith("https://scontent.xx.fbcdn.net/v/t1/x.jpg?sig=1", expect.objectContaining({ timeout: 4000 }));
+    expect(row.mediaUrl).toBe("https://scontent.xx.fbcdn.net/v/t1/x.jpg?sig=1");
+    expect(row.metadata.media).toEqual({ mimeType: "image/jpeg", byteSize: 2048, originalName: expect.stringMatching(/^image-\d{4}-\d{2}-\d{2}\.jpg$/) });
+    expect(row.fileName).toBe(row.metadata.media.originalName);
+  });
+
+  it("a sender's file name is kept", async () => {
+    head.mockResolvedValueOnce({ headers: { "content-type": "application/pdf", "content-length": "99" } });
+    await dispatch(meta("INSTAGRAM", { contentType: "document", body: "x", messageType: "document", mediaUrl: "https://lookaside.fbsbx.com/ig/x", fileName: "menu.pdf" }));
+    expect(created()[0].metadata.media).toEqual({ mimeType: "application/pdf", byteSize: 99, originalName: "menu.pdf" });
+    expect(created()[0].fileName).toBe("menu.pdf");
+  });
+
+  it("a host that is not Meta's is never fetched; the HEAD failing changes nothing else", async () => {
+    await dispatch(meta("MESSENGER", { contentType: "image", body: "[Image]", messageType: "image", mediaUrl: "https://evil.example/x.jpg" }));
+    expect(head).not.toHaveBeenCalled();
+    expect(created()[0].metadata.media).toMatchObject({ mimeType: null, byteSize: null });
+    head.mockRejectedValueOnce(new Error("timeout"));
+    await dispatch(meta("MESSENGER", { contentType: "image", body: "[Image]", messageType: "image", mediaUrl: "https://scontent.cdninstagram.com/x.jpg" }));
+    expect(created()[1]).toMatchObject({ messageType: "image", mediaUrl: "https://scontent.cdninstagram.com/x.jpg" });
+    expect(created()[1].metadata.media).toMatchObject({ mimeType: null, byteSize: null });
+  });
+});
+
+describe("★ an unnamed WhatsApp file gets a readable name (2026-10-10)", () => {
+  it("document without a name: file-<date>.pdf on the facts and the bubble", async () => {
+    mockDownload("application/pdf");
+    await dispatch(inbound({ contentType: "document", body: "[Document]", messageType: "document", mediaUrl: "MEDIA_2", mimeType: "application/pdf" }));
+    const row = created()[0];
+    expect(row.metadata.media.originalName).toMatch(/^file-\d{4}-\d{2}-\d{2}\.pdf$/);
+    expect(row.fileName).toBe(row.metadata.media.originalName);
+  });
+
+  it("voice note: voice-<date>.ogg", async () => {
+    mockDownload("audio/ogg");
+    await dispatch(inbound({ contentType: "audio", body: "[Voice message]", messageType: "audio", mediaUrl: "MEDIA_3", mimeType: "audio/ogg; codecs=opus" }));
+    expect(created()[0].metadata.media.originalName).toMatch(/^voice-\d{4}-\d{2}-\d{2}\.ogg$/);
   });
 });
