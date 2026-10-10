@@ -59,6 +59,15 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         findFirst: vi.fn(async ({ where }: any) => H.channels.rows.find((c) => c.id === where.id) ?? null),
         create: H.createChannel,
         update: H.updateChannel,
+        // Honours the where it is given (id, tenantId, channel, status, OR on lastError).
+        updateMany: vi.fn(async ({ where, data }: any) => {
+          const hit = H.channels.rows.filter((c) =>
+            c.id === where.id && c.tenantId === where.tenantId && c.channel === where.channel
+            && c.connectionStatus === where.connectionStatus
+            && (where.OR ?? []).some((o: any) => c.lastError === o.lastError));
+          hit.forEach((c) => Object.assign(c, data));
+          return { count: hit.length };
+        }),
       },
       tenant: { findUnique: vi.fn(async () => ({ status: "ACTIVE", isActive: true })) },
     },
@@ -79,6 +88,7 @@ import {
   ensureChannelForShop,
   markUninstalledByShop,
   refreshVerifiedDomains,
+  clearStaleUninstalledError,
 } from "../services/shopify-chat-install.service";
 
 function channelRow(id: string, shopDomain: string | null, tenantId = "t1") {
@@ -318,5 +328,37 @@ describe("uninstall", () => {
     const res = await markUninstalledByShop("nobody.myshopify.com");
     expect(res).toBeNull();
     expect(H.updateChannel).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("★ a live storefront clears a stale \"uninstalled\" (2026-10-09)", () => {
+  const live = { channelAccountId: "ca1", tenantId: "T", status: "ACTIVE" as any };
+  const chan = (o: any = {}) => ({ id: "ca1", tenantId: "T", channel: "SHOPIFY_LIVE_CHAT", connectionStatus: "CONNECTED", lastError: "Shopify Chat app was uninstalled from the store.", ...o });
+
+  it("the old uncoded sentence and the coded form are both cleared", async () => {
+    for (const lastError of ["Shopify Chat app was uninstalled from the store.", "[SHOPIFY_CHAT_UNINSTALLED] Shopify Chat app was uninstalled from the store."]) {
+      H.channels.rows = [chan({ lastError })];
+      expect(await clearStaleUninstalledError(live)).toBe(true);
+      expect(H.channels.rows[0].lastError).toBeNull();
+      expect(H.channels.rows[0].connectionStatus).toBe("CONNECTED");
+    }
+  });
+
+  it("any other error is kept", async () => {
+    H.channels.rows = [chan({ lastError: "[SHOPIFY_APP_UNINSTALLED] The Shopify app was uninstalled." })];
+    expect(await clearStaleUninstalledError(live)).toBe(false);
+    expect(H.channels.rows[0].lastError).toMatch(/SHOPIFY_APP_UNINSTALLED/);
+  });
+
+  it("a DISCONNECTED channel, another tenant's, or an uninstalled installation: untouched", async () => {
+    H.channels.rows = [chan({ connectionStatus: "DISCONNECTED" })];
+    expect(await clearStaleUninstalledError(live)).toBe(false);
+    H.channels.rows = [chan({ tenantId: "OTHER" })];
+    expect(await clearStaleUninstalledError(live)).toBe(false);
+    H.channels.rows = [chan()];
+    expect(await clearStaleUninstalledError({ ...live, status: "UNINSTALLED" })).toBe(false);
+    expect(await clearStaleUninstalledError({ ...live, channelAccountId: null })).toBe(false);
+    expect(H.channels.rows[0].lastError).not.toBeNull();
   });
 });

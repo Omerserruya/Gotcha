@@ -54,6 +54,7 @@ import { validateCartLine } from "../services/shopify-catalog.service";
 import {
   findLiveInstallation,
   recordInstallationHeartbeat,
+  clearStaleUninstalledError,
   isKnownStorefrontOrigin,
 } from "../services/shopify-chat-install.service";
 
@@ -180,7 +181,10 @@ router.use(async (req: Request, res: Response, next: NextFunction) => {
 async function touchInstallationHeartbeat(shopDomain: string | null | undefined): Promise<void> {
   if (!shopDomain) return;
   const installation = await findLiveInstallation(shopDomain);
-  if (installation) await recordInstallationHeartbeat(installation.id);
+  if (!installation) return;
+  await recordInstallationHeartbeat(installation.id);
+  // A storefront that is serving shoppers is installed (2026-10-09).
+  await clearStaleUninstalledError(installation).catch(() => false);
 }
 
 /**
@@ -563,6 +567,10 @@ router.post("/message", messageLimiter, async (req: Request, res: Response) => {
       },
       { attempts: 3, backoff: { type: "exponential", delay: 1000 } },
     );
+
+    // A shopper's message is the storefront working: same bookkeeping as
+    // the bootstrap heartbeat, never in the way of the reply.
+    touchInstallationHeartbeat(channel.config.shopDomain).catch(() => undefined);
 
     trackEvent(session.tenantId, "shopify_chat_message_sent", {
       conversationId: conversation.id,

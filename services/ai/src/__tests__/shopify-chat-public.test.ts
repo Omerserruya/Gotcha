@@ -101,6 +101,16 @@ vi.mock("../services/shopify-catalog.service", () => ({
   validateCartLine: H.validateCartLine,
 }));
 
+// The installation bookkeeping, spied: a live install for the shop, so the
+// heartbeat path runs and its stale-"uninstalled" clearing can be observed.
+const INSTALL = vi.hoisted(() => ({ clear: vi.fn(async () => true), heartbeat: vi.fn(async () => undefined) }));
+vi.mock("../services/shopify-chat-install.service", async (importOriginal) => ({
+  ...(await importOriginal<any>()),
+  findLiveInstallation: vi.fn(async () => ({ id: "inst1", status: "ACTIVE", tenantId: "t1", channelAccountId: "ch1" })),
+  recordInstallationHeartbeat: INSTALL.heartbeat,
+  clearStaleUninstalledError: INSTALL.clear,
+}));
+
 import router from "../routes/shopify-chat-public";
 import { signVisitorSession, defaultShopifyLiveChatConfig } from "@chatcenter/shared";
 
@@ -643,5 +653,25 @@ describe("POST /lead", () => {
       .set("Origin", ORIGIN)
       .send({ sessionToken: session(), message: "hi", consent: true });
     expect(res.status).toBe(403);
+  });
+});
+
+
+describe("★ a working storefront clears a stale \"uninstalled\" (2026-10-09)", () => {
+  beforeEach(() => { INSTALL.clear.mockClear(); INSTALL.heartbeat.mockClear(); });
+
+  it("on bootstrap: the live installation's heartbeat, then the clearing", async () => {
+    await request(app()).post("/api/shopify-chat/bootstrap").set("Origin", ORIGIN).send({ publicKey: freshKey() });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(INSTALL.heartbeat).toHaveBeenCalledWith("inst1");
+    expect(INSTALL.clear).toHaveBeenCalledWith(expect.objectContaining({ id: "inst1", channelAccountId: "ch1", tenantId: "t1" }));
+  });
+
+  it("on a shopper's message too, without holding up the reply", async () => {
+    const res = await request(app()).post("/api/shopify-chat/message").set("Origin", ORIGIN)
+      .send({ sessionToken: session(), body: "hi", clientId: "abc123def456" });
+    expect(res.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(INSTALL.clear).toHaveBeenCalled();
   });
 });
