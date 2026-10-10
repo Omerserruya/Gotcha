@@ -428,3 +428,95 @@ describe('★★ lastMessageType - kept as written, and never the reason a row i
     expect(parsed.data?.lastMessageType).toBeNull();
   });
 });
+
+describe('★★ metadata.media survives parsing, and a bad fact never costs the message (Backend 9e68eb03)', () => {
+  const withMedia = (media: unknown) =>
+    messageSchema.safeParse({
+      id: 'm1',
+      direction: 'INBOUND',
+      createdAt: '2026-10-10T09:00:00.000Z',
+      messageType: 'document',
+      metadata: { mediaError: 'download_failed', media },
+    });
+
+  it('★★ kept as written - a z.object that does not name it strips it', () => {
+    const media = {
+      mimeType: 'application/pdf',
+      byteSize: 2411724,
+      originalName: 'Quote 2026.pdf',
+    };
+    const parsed = withMedia(media);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.metadata?.media).toEqual(media);
+    // Its neighbours are untouched.
+    expect(parsed.data?.metadata?.mediaError).toBe('download_failed');
+  });
+
+  it('★ a failed download: type and name, size null', () => {
+    const parsed = withMedia({
+      mimeType: 'application/pdf',
+      byteSize: null,
+      originalName: 'a.pdf',
+    });
+    expect(parsed.data?.metadata?.media).toEqual({
+      mimeType: 'application/pdf',
+      byteSize: null,
+      originalName: 'a.pdf',
+    });
+  });
+
+  it.each([
+    ['a negative size', { byteSize: -1 }, 'byteSize'],
+    ['a size as text', { byteSize: '2048' }, 'byteSize'],
+    ['a name that is not text', { originalName: 42 }, 'originalName'],
+    ['a type that is not text', { mimeType: ['application/pdf'] }, 'mimeType'],
+  ] as const)('★ %s becomes null; the message and the other facts still parse', (_, bad, field) => {
+    const parsed = withMedia({
+      mimeType: 'image/webp',
+      byteSize: 2048,
+      originalName: 'x.webp',
+      ...bad,
+    });
+    expect(parsed.success).toBe(true);
+    const media = parsed.data?.metadata?.media as Record<string, unknown>;
+    expect(media[field]).toBeNull();
+    const kept = { mimeType: 'image/webp', byteSize: 2048, originalName: 'x.webp' };
+    for (const [k, v] of Object.entries(kept)) if (k !== field) expect(media[k]).toBe(v);
+  });
+
+  it.each([
+    ['a string', 'application/pdf'],
+    ['null', null],
+    ['an array', [1, 2]],
+  ])('★ media that is %s is dropped, never the message', (_, media) => {
+    const parsed = withMedia(media);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.metadata?.media).toBeUndefined();
+    expect(parsed.data?.metadata?.mediaError).toBe('download_failed');
+  });
+
+  it('absent (a row from before it) is fine', () => {
+    const parsed = messageSchema.safeParse({
+      id: 'm1',
+      direction: 'INBOUND',
+      createdAt: '2026-10-10T09:00:00.000Z',
+      metadata: { systemEvent: 'agent_claimed' },
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.metadata?.media).toBeUndefined();
+  });
+
+  it('★ a sticker keeps its own type through the contract', () => {
+    const parsed = messageSchema.parse({
+      id: 'm9',
+      direction: 'INBOUND',
+      createdAt: '2026-10-10T09:00:00.000Z',
+      messageType: 'sticker',
+      body: '[Sticker]',
+      mediaUrl: '/api/uploads/x.webp',
+      metadata: { media: { mimeType: 'image/webp', byteSize: 2048, originalName: null } },
+    });
+    expect(renderableType(parsed)).toBe('sticker');
+    expect(parsed.metadata?.media?.originalName).toBeNull();
+  });
+});

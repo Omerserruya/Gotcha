@@ -11,6 +11,7 @@
     "delivered": "delivered",
     "media": {
       "image": "A photo.",
+      "sticker": "A sticker.",
       "video": "A video.",
       "document": "A file."
     },
@@ -50,6 +51,10 @@
     "mediaUnavailable": "This attachment couldn't be fetched - WhatsApp keeps media only a few days.",
     "openPhoto": "Open the photo",
     "file": "Download the file",
+    "fileSize": {
+      "kb": "{size, number} KB",
+      "mb": "{size, number} MB"
+    },
     "contact": "A contact",
     "call": "Call",
     "play": "Play the voice note",

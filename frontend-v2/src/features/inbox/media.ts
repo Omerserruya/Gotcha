@@ -36,6 +36,32 @@ export function mediaKind(
   return null;
 }
 
+/**
+ * A file's label: the name its sender gave it (`metadata.media.originalName`,
+ * Backend 9e68eb03), else the row's `fileName` - which on an inbound file with
+ * no sender name is our stored uuid name, so it comes second. `null`: unnamed.
+ */
+export function fileLabelOf(message: Pick<InboxMessage, 'fileName' | 'metadata'>): string | null {
+  return message.metadata?.media?.originalName?.trim() || message.fileName?.trim() || null;
+}
+
+/**
+ * A file's size, rounded for reading: whole KB under a thousand, then MB to
+ * one decimal. The number is formatted in the reader's locale by the
+ * catalogue. Any byte of content reads as at least 1 KB; `null` when the
+ * size is unknown (a failed download, or a row from before it was stored).
+ */
+export function fileSizeOf(
+  bytes: number | null | undefined,
+): { readonly unit: 'kb' | 'mb'; readonly size: number } | null {
+  if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes < 0) return null;
+  const kb = bytes / 1024;
+  if (Math.round(kb) < 1000) {
+    return { unit: 'kb', size: bytes === 0 ? 0 : Math.max(1, Math.round(kb)) };
+  }
+  return { unit: 'mb', size: Math.round((kb / 1024) * 10) / 10 };
+}
+
 /** A shared location, as the card draws it. */
 export interface SharedLocation {
   readonly latitude: number;
@@ -121,6 +147,9 @@ export function isLocationMessage(
   );
 }
 
+/** Types whose body is the adapter's filler when it is one: never the customer's text. */
+const MEDIA_TYPES = new Set(['image', 'sticker', 'video', 'audio', 'voice', 'document']);
+
 const PLACEHOLDERS = new Set([
   '[Image]',
   '[Video]',
@@ -145,7 +174,15 @@ export function isPlaceholderCaption(
   }
   // A location's body is written for the AI ("[Shared location: …]"): the card says it.
   if (isLocationMessage(message)) return true;
-  if (!message.mediaUrl && !message.metadata?.mediaError) return false;
+  // Filler only on a media message: by its file, its failure, or its own type -
+  // a sticker that came without its file is still not "[Sticker]" typed out.
+  if (
+    !message.mediaUrl &&
+    !message.metadata?.mediaError &&
+    !MEDIA_TYPES.has(message.messageType.trim().toLowerCase())
+  ) {
+    return false;
+  }
   return PLACEHOLDERS.has(body) || (!!message.fileName && body === message.fileName);
 }
 

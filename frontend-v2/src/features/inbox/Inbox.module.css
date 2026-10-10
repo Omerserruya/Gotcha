@@ -111,6 +111,7 @@
 
   .message[data-direction='OUTBOUND'] .quoted,
   .message[data-direction='OUTBOUND'] .mediaNote,
+  .message[data-direction='OUTBOUND'] .fileSize,
   .message[data-direction='OUTBOUND'] .quote {
     color: var(--text-faint);
   }
@@ -1998,6 +1999,14 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--font-size-label);
+  }
+
+  /* The size beside the name never wraps or shrinks; the name takes the ellipsis. */
+  .fileSize {
+    flex: none;
+    white-space: nowrap;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
   }
 
   .mediaGone {

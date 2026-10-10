@@ -6,13 +6,21 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { messageSchema, type InboxMessage } from '@/api/contracts/inbox';
 import messages from '@/i18n/messages/en/inbox.json';
+import heMessages from '@/i18n/messages/he/inbox.json';
 
 import { MessageStream } from './MessageStream';
 
+/** The reader's locale; English unless a test says otherwise (and restores it). */
+const intl = vi.hoisted(() => ({ locale: 'en' as 'en' | 'he' }));
+
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'inbox') =>
-    createTranslator({ locale: 'en', messages: { inbox: messages }, namespace }),
-  getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
+    createTranslator({
+      locale: intl.locale,
+      messages: { inbox: intl.locale === 'he' ? heMessages : messages },
+      namespace,
+    }),
+  getFormatter: async () => createFormatter({ locale: intl.locale, timeZone: 'Asia/Jerusalem' }),
 }));
 
 const message = (over: Record<string, unknown> = {}): InboxMessage =>
@@ -484,6 +492,136 @@ describe('★★ media in the stream, as 02 draws it - never "A photo." when the
       'src',
       'https://cdn.example/s.webp',
     );
+  });
+});
+
+describe('★★ a file says what it is and how big - by the name its sender gave it (Backend 9e68eb03)', () => {
+  /*
+   * The write sites: an inbound WhatsApp document is stored under a uuid
+   * name, with the sender's name as `fileName` only when they gave one, and
+   * `metadata.media = { mimeType, byteSize, originalName }` beside it.
+   */
+  const doc = (media: unknown, over: Record<string, unknown> = {}) =>
+    message({
+      messageType: 'document',
+      mediaUrl: '/api/uploads/0b6f2c3e.pdf',
+      fileName: '0b6f2c3e.pdf',
+      body: '[Document]',
+      metadata: { media },
+      ...over,
+    });
+
+  const inLocale = async (locale: 'en' | 'he', list: readonly InboxMessage[]) => {
+    intl.locale = locale;
+    try {
+      await show(list);
+    } finally {
+      intl.locale = 'en';
+    }
+  };
+
+  it('★★ in English: the sender’s name, then the size in MB', async () => {
+    await show([
+      doc({ mimeType: 'application/pdf', byteSize: 2411724, originalName: 'Quote 2026.pdf' }),
+    ]);
+    const file = screen.getByTestId('file-m1');
+    expect(file).toHaveTextContent('Quote 2026.pdf 2.3 MB');
+    expect(file).toHaveAttribute('download', 'Quote 2026.pdf');
+    expect(file).not.toHaveTextContent('0b6f2c3e');
+    expect(screen.getByTestId('file-size-m1').textContent).toBe('2.3 MB');
+    // The customer's name for it, isolated in its own direction - and only that.
+    const bdi = file.querySelector('bdi');
+    expect(bdi).toHaveAttribute('dir', 'auto');
+    expect(bdi?.textContent).toBe('Quote 2026.pdf');
+  });
+
+  it('★★ in Hebrew: a Hebrew name in its own direction, the size in the reader’s numbers', async () => {
+    await inLocale('he', [
+      doc({
+        mimeType: 'application/pdf',
+        byteSize: 1536 * 1024 * 1024,
+        originalName: 'הצעת מחיר.pdf',
+      }),
+    ]);
+    const file = screen.getByTestId('file-m1');
+    expect(file.querySelector('bdi')?.textContent).toBe('הצעת מחיר.pdf');
+    expect(screen.getByTestId('file-size-m1').textContent).toBe(
+      `${new Intl.NumberFormat('he').format(1536)} MB`,
+    );
+    expect(heMessages.stream.fileSize.mb).toBe('{size, number} MB');
+  });
+
+  it('★ a small file in KB', async () => {
+    await show([doc({ mimeType: 'text/plain', byteSize: 1234, originalName: 'notes.txt' })]);
+    expect(screen.getByTestId('file-size-m1').textContent).toBe('1 KB');
+  });
+
+  it('★ the size of a file in Hebrew reads the same number and unit', async () => {
+    await inLocale('he', [
+      doc({ mimeType: 'text/plain', byteSize: 512000, originalName: 'a.txt' }),
+    ]);
+    expect(screen.getByTestId('file-size-m1').textContent).toBe('500 KB');
+  });
+
+  it('★ no facts (a row from before them): the row’s name, no size - as before', async () => {
+    await show([doc(undefined, { fileName: 'Terms.pdf', body: 'Terms.pdf' })]);
+    const file = screen.getByTestId('file-m1');
+    expect(file).toHaveTextContent('Terms.pdf');
+    expect(screen.queryByTestId('file-size-m1')).toBeNull();
+  });
+
+  it('★ unnamed and of unknown size: our own words, never a raw type', async () => {
+    await show([
+      doc({ mimeType: 'application/pdf', byteSize: null, originalName: null }, { fileName: null }),
+    ]);
+    const file = screen.getByTestId('file-m1');
+    expect(file.textContent).toBe('Download the file');
+    expect(file.querySelector('bdi')).toBeNull();
+    expect(screen.queryByTestId('file-size-m1')).toBeNull();
+    expect(screen.getByTestId('message-m1')).not.toHaveTextContent('application/pdf');
+  });
+
+  it('★ a size that is not a size is not shown, and the file still is', async () => {
+    await show([doc({ byteSize: -5, originalName: 'x.pdf' })]);
+    expect(screen.getByTestId('file-m1')).toHaveTextContent('x.pdf');
+    expect(screen.queryByTestId('file-size-m1')).toBeNull();
+  });
+});
+
+describe('★ a sticker stored as a sticker (Backend 9e68eb03)', () => {
+  it('drawn as a sticker, its "[Sticker]" not printed', async () => {
+    await show([
+      message({
+        messageType: 'sticker',
+        mediaUrl: '/api/uploads/4c1d.webp',
+        body: '[Sticker]',
+        metadata: { media: { mimeType: 'image/webp', byteSize: 2048, originalName: null } },
+      }),
+    ]);
+    const sticker = screen.getByTestId('photo-m1');
+    expect(sticker.className).toContain('sticker');
+    expect(screen.getByTestId('message-m1')).not.toHaveTextContent('[Sticker]');
+    expect(screen.queryByTestId('unknown-m1')).toBeNull();
+  });
+
+  it('without its file: says a sticker, never a photo', async () => {
+    await show([message({ messageType: 'sticker', mediaUrl: null, body: '[Sticker]' })]);
+    expect(screen.getByTestId('media-m1').textContent).toBe('A sticker.');
+    expect(screen.getByTestId('message-m1')).not.toHaveTextContent('[Sticker]');
+  });
+
+  it('a reply to a sticker quotes it as a sticker', async () => {
+    await show([
+      message({
+        id: 'm2',
+        body: 'cute',
+        replyToExternalId: 'wamid.s',
+        replyToMessageId: 'm0',
+        replyTo: { id: 'm0', body: '[Sticker]', direction: 'INBOUND', messageType: 'sticker' },
+      }),
+    ]);
+    expect(screen.getByTestId('message-m2')).toHaveTextContent('Sticker');
+    expect(screen.getByTestId('message-m2')).not.toHaveTextContent('[Sticker]');
   });
 });
 

@@ -3,7 +3,14 @@ import { FileText, MapPin, TriangleAlert } from 'lucide-react';
 import type { InboxMessage } from '@/api/contracts/inbox';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
-import { isLocationMessage, mediaKind, messageLocation, safeMediaUrl } from './media';
+import {
+  fileLabelOf,
+  fileSizeOf,
+  isLocationMessage,
+  mediaKind,
+  messageLocation,
+  safeMediaUrl,
+} from './media';
 import { VoicePlayer } from './VoicePlayer';
 import styles from './Inbox.module.css';
 
@@ -25,11 +32,15 @@ type T = (
     | 'play'
     | 'pause'
     | 'media.image'
+    | 'media.sticker'
     | 'media.video'
     | 'media.document'
+    | 'fileSize.kb'
+    | 'fileSize.mb'
     | 'location.title'
     | 'location.open'
     | 'location.unreadable',
+  values?: { readonly size: number },
 ) => string;
 
 export function MessageMedia({ message, t }: { readonly message: InboxMessage; readonly t: T }) {
@@ -50,7 +61,7 @@ export function MessageMedia({ message, t }: { readonly message: InboxMessage; r
     if (kind === 'image' || kind === 'sticker' || kind === 'video' || kind === 'document') {
       return (
         <p className={styles.mediaNote} data-testid={`media-${message.id}`}>
-          {t(kind === 'sticker' ? 'media.image' : `media.${kind}`)}
+          {t(`media.${kind}`)}
         </p>
       );
     }
@@ -91,17 +102,31 @@ export function MessageMedia({ message, t }: { readonly message: InboxMessage; r
       </>
     );
   }
+  // A file by the name its sender gave it, and how big it is (Backend 9e68eb03).
+  const name = fileLabelOf(message);
+  const size = fileSizeOf(message.metadata?.media?.byteSize);
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      download={message.fileName ?? undefined}
+      download={name ?? undefined}
       className={styles.file}
       data-testid={`file-${message.id}`}
     >
       <FileText size={16} aria-hidden="true" />
-      <span className={styles.fileName}>{message.fileName ?? t('file')}</span>
+      <span className={styles.fileName}>
+        {/* The sender's name for it, in its own direction; ours when there is none. */}
+        {name ? <UserText>{name}</UserText> : t('file')}
+      </span>
+      {size ? (
+        <>
+          {' '}
+          <span className={styles.fileSize} data-testid={`file-size-${message.id}`}>
+            {t(`fileSize.${size.unit}`, { size: size.size })}
+          </span>
+        </>
+      ) : null}
     </a>
   );
 }

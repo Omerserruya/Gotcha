@@ -459,6 +459,21 @@ export const messageSchema = z.object({
       /** The attachment could not be fetched (WhatsApp media expires) - said, never blank. */
       mediaError: z.string().optional().catch(undefined),
       /**
+       * What the attachment is (Backend 9e68eb03): written for inbound WhatsApp
+       * media, Coexistence echoes and agent uploads - `byteSize` null when the
+       * download failed, `originalName` null when nobody named the file. Rows
+       * from before it have none. Each field falls to null on its own, and a
+       * malformed object to nothing, so a bad value never costs the message.
+       */
+      media: z
+        .object({
+          mimeType: z.string().nullish().catch(null),
+          byteSize: z.number().nonnegative().nullish().catch(null),
+          originalName: z.string().nullish().catch(null),
+        })
+        .optional()
+        .catch(undefined),
+      /**
        * A shared location (Backend 11094abb): `{ latitude, longitude, name?,
        * address?, url }` - `url` the provider's https link, else Google Maps.
        * The body is `[Shared location: …]`, written for the AI, never shown.

@@ -1316,7 +1316,7 @@ describe('★★ the preview says what a media message is, never the adapter’s
    * Each fixture is a body and type a write site produces: the webhook's
    * "[Image]" / "[Video]" / "[Document]" / "[Audio message]" / "[Location]",
    * WhatsApp's "[Voice message]", its sticker stored as an image with
-   * "[Sticker]", its location fallback stored as TEXT "[Shared location]",
+   * "[Sticker]" (and since Backend 9e68eb03 as a "sticker"), its location fallback stored as TEXT "[Shared location]",
    * `sharedLocationContent`'s "[Shared location: … (lat, lng)]", and a file
    * the composer sent without a caption - body "", which the list route
    * flattens to null.
@@ -1327,6 +1327,7 @@ describe('★★ the preview says what a media message is, never the adapter’s
     ['image', 'image', '[Image]', 'Photo', 'תמונה'],
     ['sentImage', 'image', null, 'Photo', 'תמונה'],
     ['sticker', 'image', '[Sticker]', 'Sticker', 'מדבקה'],
+    ['newSticker', 'sticker', '[Sticker]', 'Sticker', 'מדבקה'],
     ['voice', 'audio', '[Voice message]', 'Voice message', 'הודעה קולית'],
     ['audio', 'audio', '[Audio message]', 'Voice message', 'הודעה קולית'],
     ['video', 'video', '[Video]', 'Video', 'סרטון'],

@@ -246,7 +246,7 @@ export async function MessageStream({
                 note to play, a file to download - or, when it could not be
                 fetched, a sentence saying so. (Was "A photo." in words.)
               */}
-              <MessageMedia message={message} t={(key) => t(`stream.${key}`)} />
+              <MessageMedia message={message} t={(key, values) => t(`stream.${key}`, values)} />
               <ContactCards message={message} t={(key) => t(`stream.${key}`)} />
               <LocationCard message={message} t={(key) => t(`stream.${key}`)} />
 

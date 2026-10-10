@@ -11,6 +11,7 @@
     "delivered": "נמסר",
     "media": {
       "image": "תמונה.",
+      "sticker": "מדבקה.",
       "video": "סרטון.",
       "document": "קובץ."
     },
@@ -50,6 +51,10 @@
     "mediaUnavailable": "לא הצלחנו להביא את הקובץ המצורף - WhatsApp שומר מדיה רק כמה ימים.",
     "openPhoto": "פתיחת התמונה",
     "file": "הורדת הקובץ",
+    "fileSize": {
+      "kb": "{size, number} KB",
+      "mb": "{size, number} MB"
+    },
     "contact": "איש קשר",
     "call": "חיוג",
     "play": "השמעת ההודעה הקולית",
