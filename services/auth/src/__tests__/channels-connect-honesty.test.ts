@@ -440,3 +440,44 @@ describe("★ a token check does not wipe a subscription gap", () => {
     expect((await request(app).get("/api/channels/ca_t/status")).status).toBe(404);
   });
 });
+
+
+describe("★ a subscribe failure lands as connected-but-pending, in the redesign only (2026-10-10)", () => {
+  const redesign = (platform: string) =>
+    request(app).get("/api/channels/oauth/callback").query({
+      code: "code_1",
+      state: mintOAuthState({ tenantId: "tenant_a", provider: "meta_channels", userId: "u_admin", platform, flow: "redesign_studio" }).state,
+    });
+  const query = (r: any) => new URL(r.headers.location, "https://x.test").searchParams;
+
+  it("Instagram refused: pending=1, platform and reason=SUBSCRIBE_FAILED", async () => {
+    A.fail.add("ig_sub");
+    const q = query(await redesign("instagram"));
+    expect(q.get("pending")).toBe("1");
+    expect(q.get("platform")).toBe("instagram");
+    expect(q.get("reason")).toBe("SUBSCRIBE_FAILED");
+    expect(q.get("connected")).toBe("instagram");
+  });
+
+  it("Instagram accepted: a plain connected landing", async () => {
+    const q = query(await redesign("instagram"));
+    expect(q.get("pending")).toBeNull();
+    expect(q.get("reason")).toBeNull();
+  });
+
+  it("v1 keeps its old landing even when the subscription failed", async () => {
+    A.fail.add("ig_sub");
+    const r = await callback("instagram");
+    expect(r.headers.location).not.toMatch(/reason=|pending=/);
+  });
+});
+
+describe("★ Outlook: a mailbox owned by another workspace is refused BEFORE any Graph subscription (2026-10-10)", () => {
+  it("no subscription is created for a refused connect", async () => {
+    process.env.OUTLOOK_WEBHOOK_URL = "https://dev.example.test/api/webhook/outlook";
+    DB.rows.push({ id: "ca_other", tenantId: "tenant_b", channel: "OUTLOOK", externalId: "ops@acme.test", connectionStatus: "CONNECTED", lastError: null, platformMeta: {} });
+    const r = await callback("outlook");
+    expect(r.headers.location).toMatch(/already_connected/);
+    expect(A.graphSubBody).toBeNull();
+  });
+});

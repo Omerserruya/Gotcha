@@ -21,7 +21,7 @@ vi.hoisted(() => {
 });
 vi.mock("ioredis", () => ({ default: class { on = vi.fn(); quit = vi.fn(); publish = vi.fn(); subscribe = vi.fn(); async get() { return null; } async set() { return "OK"; } async del() { return 0; } } }));
 
-const H = vi.hoisted(() => ({ existing: null as any, writes: [] as any[], numbers: [] as any[], legacy: [] as any[], details: {} as any, accounts: [] as any[], slots: new Set<string>(), detailsFail: false, graphReads: 0 }));
+const H = vi.hoisted(() => ({ subscribeFails: false, existing: null as any, writes: [] as any[], numbers: [] as any[], legacy: [] as any[], details: {} as any, accounts: [] as any[], slots: new Set<string>(), detailsFail: false, graphReads: 0 }));
 
 vi.mock("axios", () => ({
   default: {
@@ -30,7 +30,10 @@ vi.mock("axios", () => ({
       if (url.endsWith("/pn_1")) { H.graphReads++; if (H.detailsFail) throw new Error("graph down"); return { data: H.details }; }
       throw new Error(`unexpected GET ${url}`);
     },
-    post: async () => ({ data: { success: true } }),
+    post: async (url: string) => {
+      if (H.subscribeFails && url.endsWith("/subscribed_apps")) throw Object.assign(new Error("refused"), { response: { data: { error: { message: "refused" } } } });
+      return { data: { success: true } };
+    },
   },
 }));
 vi.mock("@chatcenter/shared", async () => {
@@ -79,6 +82,7 @@ app.use("/api/channels", channelsRouter);
 const connect = () => request(app).post("/api/channels/connect/whatsapp").send({ code: "c1", wabaId: "waba_1", phoneNumberId: "pn_1" });
 
 beforeEach(() => {
+  H.subscribeFails = false;
   H.existing = null; H.writes = []; H.numbers = []; H.legacy = []; H.accounts = []; H.slots = new Set(); H.detailsFail = false; H.graphReads = 0;
   H.details = { id: "pn_1", display_phone_number: "+972 52-540-1686", verified_name: "GOTCHA Demo", quality_rating: "GREEN" };
 });
@@ -177,5 +181,16 @@ describe("★ refresh from Meta, for an unprofiled account (POST /numbers/:chann
     H.numbers = [{ id: "num_1", tenantId: "T", phoneNumberId: "pn_1" }];
     expect((await refresh("ca_1")).status).toBe(404);
     expect(H.graphReads).toBe(0);
+  });
+});
+
+
+describe("★ a refused webhook subscription is PENDING with a code (2026-10-10)", () => {
+  it("lastError carries SUBSCRIBE_FAILED, so a token check cannot erase it and v2 can name it", async () => {
+    H.subscribeFails = true;
+    const r = await connect();
+    expect(r.status).toBe(201);
+    expect(H.writes[0].data.connectionStatus).toBe("PENDING");
+    expect(H.writes[0].data.lastError).toMatch(/^\[SUBSCRIBE_FAILED\] Webhook subscription failed/);
   });
 });

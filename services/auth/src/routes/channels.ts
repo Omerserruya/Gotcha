@@ -671,7 +671,8 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
       const credentials = encryptCredentials({ accessToken, wabaId, phoneNumber: displayPhone });
       const tokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // Business tokens don't expire
       const honestStatus = webhookSubscribed ? ("CONNECTED" as const) : ("PENDING" as const);
-      const honestError = webhookSubscribed ? null : `Webhook subscription failed - messages cannot arrive yet: ${webhookError}`;
+      // Coded (2026-10-10) so /:id/status cannot erase it and v2 can name it.
+      const honestError = webhookSubscribed ? null : withErrorCode("SUBSCRIBE_FAILED", `Webhook subscription failed - messages cannot arrive yet: ${webhookError}`);
 
       if (existing) {
         const updated = await prisma.channelAccount.update({
@@ -1039,6 +1040,9 @@ const CHANNEL_ERROR_ALIASES: Record<string, string> = {
   missing_params: "callback_error",
 };
 
+/** The reasons a connect can land as connected-but-pending (closed list). */
+const PENDING_REASONS = new Set(["SUBSCRIBE_FAILED"]);
+
 export function redesignChannelsUrl(origin: string, platform: string | undefined, legacyQuery: string): string {
   const legacy = new URLSearchParams(legacyQuery);
   const out = new URLSearchParams();
@@ -1055,7 +1059,16 @@ export function redesignChannelsUrl(origin: string, platform: string | undefined
   } else {
     out.set("connected", legacy.get("connected") || platform || "");
     if (legacy.get("count") != null) out.set("count", String(legacy.get("count")));
-    if (legacy.get("pending") === "true") out.set("pending", "1");
+    if (legacy.get("pending") === "true") {
+      out.set("pending", "1");
+      // Connected but cannot receive yet, with a reason (2026-10-10): say
+      // which channel and why. WhatsApp's reasonless pending is unchanged.
+      const reason = legacy.get("reason");
+      if (reason && PENDING_REASONS.has(reason)) {
+        if (platform) out.set("platform", platform);
+        out.set("reason", reason);
+      }
+    }
   }
   return `${origin}${REDESIGN_BASE_PATH}/settings/channels?${out.toString()}`;
 }
@@ -1509,6 +1522,9 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
     }
 
     const connectedAccounts: string[] = [];
+    // Any account saved PENDING because its subscription failed: the landing
+    // says so instead of a plain "connected" (2026-10-10).
+    let subscribeGap = false;
     const redis = getRedis();
 
     if (platform === "whatsapp") {
@@ -1715,6 +1731,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         return;
       }
       for (const r of saved) connectedAccounts.push(r.name);
+      if (saved.some((r) => r.subscribed === false)) subscribeGap = true;
     } else if (platform === "instagram") {
       // ─── INSTAGRAM (Instagram API with Instagram Login) ──
       // No Facebook Page involved: the IG professional account is connected
@@ -1763,6 +1780,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         );
       }
       const igStatus = subscribeError ? ("PENDING" as const) : ("CONNECTED" as const);
+      if (subscribeError) subscribeGap = true;
 
       // Unique-key lookup on (channel, externalId) - see Messenger.
       const existing = await prisma.channelAccount.findUnique({
@@ -1993,6 +2011,18 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         return;
       }
 
+      // Unique-key lookup; refuse if mailbox is already bound elsewhere. BEFORE
+      // the Graph subscription: a refusal after it left a live subscription
+      // behind, pushing this mailbox's mail at us for nobody (2026-10-10).
+      const existing = await prisma.channelAccount.findUnique({
+        where: { channel_externalId: { channel: "OUTLOOK", externalId: emailAddress } },
+      });
+
+      if (existing && existing.tenantId !== tenantId) {
+        res.redirect(back(`error=outlook_already_connected`));
+        return;
+      }
+
       // Create a mail subscription for incoming messages via Microsoft Graph webhooks.
       //
       // clientState is per account and STORED: the webhook compares each
@@ -2037,16 +2067,6 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             `Outlook subscription failed, so new mail will not arrive: ${providerReason(subErr)}`,
           );
         }
-      }
-
-      // Unique-key lookup; refuse if mailbox is already bound elsewhere.
-      const existing = await prisma.channelAccount.findUnique({
-        where: { channel_externalId: { channel: "OUTLOOK", externalId: emailAddress } },
-      });
-
-      if (existing && existing.tenantId !== tenantId) {
-        res.redirect(back(`error=outlook_already_connected`));
-        return;
       }
 
       const credentials = encryptCredentials({
@@ -2195,7 +2215,11 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       connectedAccounts.push(teamName);
     }
 
-    res.redirect(back(`connected=${platform}&count=${connectedAccounts.length}`));
+    res.redirect(back(
+      `connected=${platform}&count=${connectedAccounts.length}` +
+        // v1's pending copy is WhatsApp's; only the redesign says this one.
+        (subscribeGap && flow === "redesign_studio" ? `&pending=true&reason=SUBSCRIBE_FAILED` : ""),
+    ));
   } catch (err: any) {
     console.error("OAuth callback error:", err.response?.data || err.message);
     res.redirect(back(`error=connection_failed`));
