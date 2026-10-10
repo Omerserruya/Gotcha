@@ -120,6 +120,13 @@ export const conversationRowSchema = z.object({
    */
   lastMessageBody: z.string().nullable().default(null),
   /**
+   * The same last message's `messageType` (Backend 33e6216a), so the row can
+   * say "Photo" where the body is the adapter's "[Image]". A free String on the
+   * model, not an enum: any string is kept, and anything else - or an older
+   * service that does not send it - is `null`, never a rejected row.
+   */
+  lastMessageType: z.string().nullable().catch(null).default(null),
+  /**
    * ★★ WHO SPOKE LAST, WHICH IS NOT THE SAME AS "UNREAD" AND IS STILL USEFUL.
    *
    * `agentUnreadIsUnknown()` remains true: there is no per-user read marker in

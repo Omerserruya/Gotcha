@@ -399,3 +399,32 @@ describe('⚠ senderLabel - a login email is not a name', () => {
     expect(senderLabel({ direction, senderName })).toBe(expected);
   });
 });
+
+describe('★★ lastMessageType - kept as written, and never the reason a row is lost', () => {
+  const parse = (over: Record<string, unknown>) =>
+    conversationRowSchema.parse({ id: 'c1', status: 'OPEN', ...over });
+
+  it('★ keeps the type the route sends', () => {
+    expect(parse({ lastMessageType: 'image' }).lastMessageType).toBe('image');
+  });
+
+  it('★★ an unknown type is a string, not a rejected row', () => {
+    // messageType is a free String on the model: `voice_final`, `email`, `template` all exist.
+    expect(parse({ lastMessageType: 'shopify_product' }).lastMessageType).toBe('shopify_product');
+  });
+
+  it('★ absent (an older service) and null both read as null', () => {
+    expect(parse({}).lastMessageType).toBeNull();
+    expect(parse({ lastMessageType: null }).lastMessageType).toBeNull();
+  });
+
+  it('⚠ a value that is not a string is null, and the row still parses', () => {
+    const parsed = conversationRowSchema.safeParse({
+      id: 'c1',
+      status: 'OPEN',
+      lastMessageType: 7,
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.lastMessageType).toBeNull();
+  });
+});

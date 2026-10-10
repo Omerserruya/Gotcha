@@ -11,6 +11,7 @@ import {
 
 import { channelMark } from './channel-marks';
 import { initials } from './initials';
+import { quoteOf } from './media';
 import { QueueMenu } from './QueueMenu';
 import { QueueRowLink } from './QueueRowLink';
 import styles from './Inbox.module.css';
@@ -349,21 +350,40 @@ export async function ConversationList({
               ★ The fourth value today that existed and had no reader.
             */}
             {/*
-              ⚠ AN EMPTY PREVIEW KEEPS ITS LINE. A media message has no body
-                and the list does not send its type, so there is nothing true
-                to write - but dropping the line made those rows 69 tall in a
-                column of 82s. The line stays, empty; no text is invented.
+              ★ BY TYPE, NEVER THE FILLER. The body of a photo is the
+                adapter's "[Image]", of a voice note "[Voice message]", of a
+                location "[Shared location: …]". `quoteOf` is what the reply
+                quote already reads, so the row and the quote say one word for
+                one kind: a caption is shown as the caption, filler as the
+                kind, and a body that is only "[Image]" still reads as a photo
+                from an older service that sends no `lastMessageType`.
+
+              ⚠ AN EMPTY PREVIEW KEEPS ITS LINE. With no text and no known
+                kind there is nothing true to write - but dropping the line
+                made those rows 69 tall in a column of 82s. The line stays,
+                empty; no text is invented.
             */}
-            <span
-              className={styles.preview}
-              data-testid={`preview-${conversation.id}`}
-              data-empty={conversation.lastMessageBody === null ? '' : undefined}
-            >
-              {conversation.lastMessageBody === null ? null : (
-                /* Somebody else's words: their direction, not the layout's. */
-                <UserText>{conversation.lastMessageBody}</UserText>
-              )}
-            </span>
+            {(() => {
+              const said = quoteOf({
+                body: conversation.lastMessageBody ?? '',
+                messageType: conversation.lastMessageType,
+              });
+              return (
+                <span
+                  className={styles.preview}
+                  data-testid={`preview-${conversation.id}`}
+                  data-empty={said === null ? '' : undefined}
+                  data-kind={said !== null && 'kind' in said ? said.kind : undefined}
+                >
+                  {said === null ? null : 'text' in said ? (
+                    /* Somebody else's words: their direction, not the layout's. */
+                    <UserText>{said.text}</UserText>
+                  ) : (
+                    t(`stream.quote.kind.${said.kind}`)
+                  )}
+                </span>
+              );
+            })()}
 
             <span className={styles.rowTags}>
               {/*

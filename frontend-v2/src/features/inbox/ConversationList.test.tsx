@@ -11,6 +11,9 @@ import channels from '@/i18n/messages/en/channels.json';
 import common from '@/i18n/messages/en/common.json';
 import navigation from '@/i18n/messages/en/navigation.json';
 import messages from '@/i18n/messages/en/inbox.json';
+import heChannels from '@/i18n/messages/he/channels.json';
+import heNavigation from '@/i18n/messages/he/navigation.json';
+import heMessages from '@/i18n/messages/he/inbox.json';
 
 import { ConversationList } from './ConversationList';
 import { QUEUE_CHANNEL_FILTERS } from './inbox-views';
@@ -65,13 +68,22 @@ vi.mock('@/i18n/navigation', () => ({
  * maintains it in two languages - copying ten names into `inbox` would be a
  * second set of words for one set of things.
  */
+/* The server translator's language; a Hebrew test sets it and puts it back. */
+const intl = vi.hoisted(() => ({ locale: 'en' as 'en' | 'he' }));
+
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'inbox' | 'channels' | 'navigation') =>
-    createTranslator({
-      locale: 'en',
-      messages: { inbox: messages, channels, navigation },
-      namespace,
-    }),
+    intl.locale === 'he'
+      ? createTranslator({
+          locale: 'he',
+          messages: { inbox: heMessages, channels: heChannels, navigation: heNavigation },
+          namespace,
+        })
+      : createTranslator({
+          locale: 'en',
+          messages: { inbox: messages, channels, navigation },
+          namespace,
+        }),
   /*
    * ⚠ THE ZONE IS PINNED, AND THAT IS THE POINT OF MOCKING IT AT ALL.
    *   `next-intl` is configured with `Asia/Jerusalem`; a formatter that used
@@ -496,8 +508,8 @@ describe('⚠⚠ the row the design draws, and the line it exists for', () => {
   });
 
   it('⚠ keeps an EMPTY line when there is no body - no text invented', async () => {
-    // A media message has no body and the list sends no type. Dropping the
-    // line made those rows 69 tall among 82s; 02 has three lines on every row.
+    // No body and no known kind: nothing true to write. Dropping the line
+    // made those rows 69 tall among 82s; 02 has three lines on every row.
     render(
       await ConversationList({
         rows: [row({ lastMessageBody: null })],
@@ -1296,5 +1308,113 @@ describe('★ 02b - on a clear queue the bar at the column’s foot carries what
       await ConversationList({ rows: [row()], cap: 10, now: NOW, hasMore: false, clear: null }),
     );
     expect(screen.getByTestId('queue-cap')).toHaveTextContent(/that's all of them/i);
+  });
+});
+
+describe('★★ the preview says what a media message is, never the adapter’s filler', () => {
+  /*
+   * Each fixture is a body and type a write site produces: the webhook's
+   * "[Image]" / "[Video]" / "[Document]" / "[Audio message]" / "[Location]",
+   * WhatsApp's "[Voice message]", its sticker stored as an image with
+   * "[Sticker]", its location fallback stored as TEXT "[Shared location]",
+   * `sharedLocationContent`'s "[Shared location: … (lat, lng)]", and a file
+   * the composer sent without a caption - body "", which the list route
+   * flattens to null.
+   */
+  const KINDS: ReadonlyArray<
+    readonly [id: string, type: string | null, body: string | null, en: string, he: string]
+  > = [
+    ['image', 'image', '[Image]', 'Photo', 'תמונה'],
+    ['sentImage', 'image', null, 'Photo', 'תמונה'],
+    ['sticker', 'image', '[Sticker]', 'Sticker', 'מדבקה'],
+    ['voice', 'audio', '[Voice message]', 'Voice message', 'הודעה קולית'],
+    ['audio', 'audio', '[Audio message]', 'Voice message', 'הודעה קולית'],
+    ['video', 'video', '[Video]', 'Video', 'סרטון'],
+    ['document', 'document', '[Document]', 'File', 'קובץ'],
+    ['sentFile', 'document', null, 'File', 'קובץ'],
+    ['place', 'location', '[Shared location: Eilat Port (29.55, 34.95)]', 'Location', 'מיקום'],
+    ['pin', 'location', '[Location]', 'Location', 'מיקום'],
+    ['pinAsText', 'text', '[Shared location]', 'Location', 'מיקום'],
+    // An older service sends no type; the body alone still names the kind.
+    ['oldImage', null, '[Image]', 'Photo', 'תמונה'],
+    ['oldVoice', null, '[Voice message]', 'Voice message', 'הודעה קולית'],
+  ];
+
+  const rows = () =>
+    KINDS.map(([id, type, body]) =>
+      row({ id, lastMessageType: type ?? undefined, lastMessageBody: body }),
+    );
+  const showRows = async (list: readonly ConversationRow[]) =>
+    render(await ConversationList({ rows: list, cap: 50, now: NOW, hasMore: false }));
+
+  it('★★ in English: the kind word, exactly, and no bracket', async () => {
+    await showRows(rows());
+    for (const [id, , , en] of KINDS) {
+      const preview = screen.getByTestId(`preview-${id}`);
+      expect([id, preview.textContent]).toEqual([id, en]);
+      expect(preview).not.toHaveAttribute('data-empty');
+    }
+  });
+
+  it('★★ in Hebrew: the reader’s language, the same word the reply quote says', async () => {
+    intl.locale = 'he';
+    try {
+      await showRows(rows());
+    } finally {
+      intl.locale = 'en';
+    }
+    for (const [id, , , , he] of KINDS) {
+      expect([id, screen.getByTestId(`preview-${id}`).textContent]).toEqual([id, he]);
+    }
+    expect(heMessages.stream.quote.kind.photo).toBe('תמונה');
+  });
+
+  it('★ a caption is what they wrote, shown as written - as the quote shows it', async () => {
+    await showRows([
+      row({ id: 'caption', lastMessageType: 'image', lastMessageBody: 'The stain on the left' }),
+      row({ id: 'named', lastMessageType: 'document', lastMessageBody: 'invoice-0412.pdf' }),
+    ]);
+    expect(screen.getByTestId('preview-caption').textContent).toBe('The stain on the left');
+    expect(screen.getByTestId('preview-caption')).not.toHaveAttribute('data-kind');
+    expect(screen.getByTestId('preview-named').textContent).toBe('invoice-0412.pdf');
+  });
+
+  it('★ text, an unknown type and no type keep today’s body - brackets the customer typed too', async () => {
+    await showRows([
+      row({ id: 'text', lastMessageType: 'text', lastMessageBody: '[order 1042] still waiting' }),
+      row({ id: 'unknown', lastMessageType: 'shopify_product', lastMessageBody: 'Linen duvet' }),
+      row({ id: 'untyped', lastMessageBody: 'Hi, is this in stock?' }),
+    ]);
+    expect(screen.getByTestId('preview-text').textContent).toBe('[order 1042] still waiting');
+    expect(screen.getByTestId('preview-unknown').textContent).toBe('Linen duvet');
+    expect(screen.getByTestId('preview-untyped').textContent).toBe('Hi, is this in stock?');
+  });
+
+  it('⚠ no text and no media kind keeps the empty line - a system row invents nothing', async () => {
+    await showRows([
+      row({ id: 'system', lastMessageType: 'system', lastMessageBody: null }),
+      row({ id: 'blank', lastMessageType: 'text', lastMessageBody: null }),
+    ]);
+    for (const id of ['system', 'blank']) {
+      expect(screen.getByTestId(`preview-${id}`).textContent).toBe('');
+      expect(screen.getByTestId(`preview-${id}`)).toHaveAttribute('data-empty');
+    }
+  });
+
+  it('⚠⚠ no placeholder reaches the screen, in either language', async () => {
+    for (const locale of ['en', 'he'] as const) {
+      intl.locale = locale;
+      try {
+        const { unmount } = await showRows(rows());
+        for (const [id, , body] of KINDS) {
+          const said = screen.getByTestId(`preview-${id}`).textContent ?? '';
+          expect([locale, id, said.includes('[')]).toEqual([locale, id, false]);
+          if (body) expect(said).not.toBe(body);
+        }
+        unmount();
+      } finally {
+        intl.locale = 'en';
+      }
+    }
   });
 });
