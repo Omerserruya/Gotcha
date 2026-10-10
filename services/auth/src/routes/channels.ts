@@ -28,7 +28,11 @@ import {
   EMBEDDED_SIGNUP_DIALOG_VERSION,
   resolveAppPublicUrl,
   hasPermission,
+  assertWithinLimit,
+  handleEntitlementError,
+  EntitlementDeniedError,
 } from "@chatcenter/shared";
+import { startPageSession, readPageSession, endPageSession, type PageCandidate } from "../services/messenger/page-session";
 
 const router = Router();
 
@@ -62,9 +66,9 @@ export function whatsappMeta(
  * every direct-connect route; OAuth callbacks re-check through the same helper
  * at the point they create the account.
  */
-const requireChannelCapacity = requireCapacity("limit:channels", (tenantId) =>
-  prisma.channelAccount.count({ where: { tenantId, connectionStatus: { not: "DISCONNECTED" } } }),
-);
+const countChannels = (tenantId: string) =>
+  prisma.channelAccount.count({ where: { tenantId, connectionStatus: { not: "DISCONNECTED" } } });
+const requireChannelCapacity = requireCapacity("limit:channels", countChannels);
 
 /**
  * Starting a channel OAuth is a connect, so it takes the connect permission
@@ -1027,6 +1031,8 @@ const CHANNEL_ERROR_CODES = new Set([
   "no_whatsapp_numbers",
   "slack_no_team",
   "callback_error",
+  "limit_reached",
+  "picker_failed",
 ]);
 /** The callback's existing codes, folded onto the closed list. */
 const CHANNEL_ERROR_ALIASES: Record<string, string> = {
@@ -1046,6 +1052,11 @@ export function redesignChannelsUrl(origin: string, platform: string | undefined
     const code = CHANNEL_ERROR_ALIASES[err] ?? err;
     if (platform) out.set("platform", platform);
     out.set("error", CHANNEL_ERROR_CODES.has(code) ? code : "callback_error");
+  } else if (legacy.get("pick") === "1" && legacy.get("session")) {
+    // More than one Page was granted: the customer chooses (2026-10-09).
+    out.set("pick", "1");
+    if (platform) out.set("platform", platform);
+    out.set("session", String(legacy.get("session")));
   } else {
     out.set("connected", legacy.get("connected") || platform || "");
     if (legacy.get("count") != null) out.set("count", String(legacy.get("count")));
@@ -1067,6 +1078,149 @@ function signedFlowOf(state: unknown): { flow?: string; platform?: string } {
   } catch {
     return {};
   }
+}
+
+// ─── Messenger Pages: one connect path for the callback and the picker ───
+
+/**
+ * Where a Page stands for this tenant. "taken" is any row another tenant owns,
+ * whatever its status; "here" is a live row of ours. Only "new" needs a seat:
+ * a DISCONNECTED row of ours is not counted by countChannels (2026-10-09).
+ */
+type PageStanding = "taken" | "here" | "new";
+
+async function messengerStandings(
+  tenantId: string,
+  pageIds: string[],
+): Promise<Map<string, { standing: PageStanding; existing: any }>> {
+  const out = new Map<string, { standing: PageStanding; existing: any }>();
+  for (const pageId of pageIds) {
+    // findUnique on the unique index is exempt from TenantGuard (see prisma.ts),
+    // which is what lets us see a Page another tenant owns.
+    const existing = await prisma.channelAccount.findUnique({
+      where: { channel_externalId: { channel: "MESSENGER", externalId: pageId } },
+    });
+    const standing: PageStanding = !existing
+      ? "new"
+      : existing.tenantId !== tenantId
+        ? "taken"
+        : existing.connectionStatus === "DISCONNECTED"
+          ? "new"
+          : "here";
+    out.set(pageId, { standing, existing });
+  }
+  return out;
+}
+
+export interface MessengerPageResult {
+  id: string;
+  name: string;
+  status: "connected" | "reconnected" | "taken";
+  subscribed: boolean;
+}
+
+/**
+ * Connect ONE Page. The callback's loop and POST /messenger/select both run
+ * this, so the two cannot drift (2026-10-09).
+ *
+ * A Page another tenant owns is refused before anything is called or written.
+ * A failed subscribe keeps the page (its token is good) as PENDING with a code,
+ * as the WhatsApp connect does: CONNECTED would be a lie, and the 6-hourly Meta
+ * token sweep clears lastError on any CONNECTED row with a valid token, so the
+ * reason would vanish while nothing arrives.
+ */
+async function connectMessengerPage(
+  ctx: { tenantId: string; userId: string; tokenExpiresAt: Date },
+  page: PageCandidate,
+  existing: any,
+): Promise<MessengerPageResult> {
+  const { tenantId, userId, tokenExpiresAt } = ctx;
+  const pageId = page.id;
+  const pageName = page.name || pageId;
+
+  if (existing && existing.tenantId !== tenantId) {
+    console.warn(`Messenger page ${pageId} already connected to another tenant`);
+    return { id: pageId, name: pageName, status: "taken", subscribed: false };
+  }
+
+  // `feed` delivers comment + post events (the Comment Trigger);
+  // `message_reactions` delivers reactions to inbound messages.
+  let subscribeError: string | null = null;
+  try {
+    const pageSubResp = await axios.post(`${FB_API_URL}/${pageId}/subscribed_apps`, null, {
+      params: {
+        subscribed_fields: "messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads,message_reactions,feed",
+        access_token: page.accessToken,
+      },
+    });
+    console.log(`[MESSENGER-CALLBACK] Page ${pageId} subscribed_apps result:`, pageSubResp.data);
+  } catch (subErr: any) {
+    console.error(`[MESSENGER-CALLBACK] Page subscription FAILED for ${pageId}:`, subErr.response?.data || subErr.message);
+    subscribeError = withErrorCode(
+      "SUBSCRIBE_FAILED",
+      `Messenger page subscription failed, so messages cannot arrive: ${providerReason(subErr)}`,
+    );
+  }
+  const pageStatus = subscribeError ? ("PENDING" as const) : ("CONNECTED" as const);
+
+  const credentials = encryptCredentials({ accessToken: page.accessToken, userId, pageId, pageName });
+
+  if (existing) {
+    await prisma.channelAccount.update({
+      where: { id: existing.id },
+      data: {
+        credentials,
+        connectionStatus: pageStatus,
+        connectedAt: new Date(),
+        connectedBy: userId,
+        tokenExpiresAt,
+        isActive: true,
+        lastError: subscribeError,
+        displayName: pageName,
+      },
+    });
+  } else {
+    await prisma.channelAccount.create({
+      data: {
+        tenantId,
+        channel: "MESSENGER",
+        externalId: pageId,
+        displayName: pageName,
+        credentials,
+        connectionStatus: pageStatus,
+        lastError: subscribeError,
+        connectedAt: new Date(),
+        connectedBy: userId,
+        tokenExpiresAt,
+        isActive: true,
+      },
+    });
+  }
+
+  await getRedis().del(`channel_account:MESSENGER:${pageId}`);
+  return { id: pageId, name: pageName, status: existing ? "reconnected" : "connected", subscribed: !subscribeError };
+}
+
+/**
+ * Connect a set of Pages, after checking the plan has room for the NEW ones.
+ * A reconnect never needs a seat, so a tenant already over its limit (after a
+ * downgrade) can still refresh the Pages it has. Throws EntitlementDeniedError
+ * before anything is written.
+ */
+async function connectMessengerPages(
+  ctx: { tenantId: string; userId: string; tokenExpiresAt: Date },
+  pages: PageCandidate[],
+): Promise<MessengerPageResult[]> {
+  const standings = await messengerStandings(ctx.tenantId, pages.map((p) => p.id));
+  const adding = pages.filter((p) => standings.get(p.id)?.standing === "new").length;
+  if (adding > 0) {
+    await assertWithinLimit(ctx.tenantId, "limit:channels", await countChannels(ctx.tenantId), adding);
+  }
+  const results: MessengerPageResult[] = [];
+  for (const page of pages) {
+    results.push(await connectMessengerPage(ctx, page, standings.get(page.id)?.existing ?? null));
+  }
+  return results;
 }
 
 router.get("/oauth/init", async (req: Request, res: Response) => {
@@ -1517,104 +1671,55 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         }
       }
 
-      if (pages.length === 0) {
-        console.error("[MESSENGER-CALLBACK] No pages found via /me/accounts or debug_token");
+      // A Page without its own token cannot be connected or chosen.
+      const usable: PageCandidate[] = [];
+      for (const page of pages) {
+        if (!page?.id || !page.access_token) {
+          console.warn(`[MESSENGER-CALLBACK] No access_token for page ${page?.id}, skipping`);
+          continue;
+        }
+        usable.push({ id: String(page.id), name: page.name || String(page.id), category: page.category ?? null, accessToken: page.access_token });
+      }
+
+      if (usable.length === 0) {
+        console.error("[MESSENGER-CALLBACK] No connectable pages via /me/accounts or debug_token");
         res.redirect(back(`error=no_pages`));
         return;
       }
 
-      for (const page of pages) {
-        const pageId = page.id;
-        const pageAccessToken = page.access_token;
-        const pageName = page.name || pageId;
-
-        if (!pageAccessToken) {
-          console.warn(`[MESSENGER-CALLBACK] No access_token for page ${pageId}, skipping`);
-          continue;
-        }
-
-        // Subscribe page to webhooks. `feed` delivers comment + post events
-        // for the FB page - required for the Comment Trigger to fire.
-        // `message_reactions` delivers reactions to inbound messages.
-        //
-        // A failed subscribe keeps the page (its token is good) but as
-        // PENDING with a code, as the WhatsApp connect does: CONNECTED would
-        // be a lie, and the 6-hourly Meta token sweep clears lastError on any
-        // CONNECTED row with a valid token, so the reason would vanish while
-        // nothing arrives (2026-10-09).
-        let subscribeError: string | null = null;
+      // The redesigned app lets the customer choose when the grant holds more
+      // than one Page; connecting every Page a person can manage was never
+      // their choice (2026-10-09). v1 has no picker and keeps connecting all.
+      if (flow === "redesign_studio" && usable.length > 1) {
+        let sessionId: string;
         try {
-          const pageSubResp = await axios.post(`${FB_API_URL}/${pageId}/subscribed_apps`, null, {
-            params: {
-              subscribed_fields: "messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads,message_reactions,feed",
-              access_token: pageAccessToken,
-            },
-          });
-          console.log(`[MESSENGER-CALLBACK] Page ${pageId} subscribed_apps result:`, pageSubResp.data);
-        } catch (subErr: any) {
-          console.error(`[MESSENGER-CALLBACK] Page subscription FAILED for ${pageId}:`, subErr.response?.data || subErr.message);
-          subscribeError = withErrorCode(
-            "SUBSCRIBE_FAILED",
-            `Messenger page subscription failed, so messages cannot arrive: ${providerReason(subErr)}`,
-          );
+          sessionId = await startPageSession(tenantId, userId, { tokenExpiresAt: tokenExpiresAt.toISOString(), pages: usable });
+        } catch (sessErr: any) {
+          console.error("[MESSENGER-CALLBACK] could not keep the Page choices:", sessErr?.message);
+          res.redirect(back(`error=picker_failed`));
+          return;
         }
-        const pageStatus = subscribeError ? ("PENDING" as const) : ("CONNECTED" as const);
-
-        // Unique-key lookup on (channel, externalId). Detects a page bound
-        // to a different tenant so we can refuse instead of silently
-        // overwriting; findUnique on a unique index is exempt from
-        // TenantGuard (see prisma.ts).
-        const existing = await prisma.channelAccount.findUnique({
-          where: { channel_externalId: { channel: "MESSENGER", externalId: pageId } },
-        });
-
-        if (existing && existing.tenantId !== tenantId) {
-          console.warn(`Messenger page ${pageId} already connected to another tenant`);
-          continue;
-        }
-
-        const credentials = encryptCredentials({
-          accessToken: pageAccessToken,
-          userId,
-          pageId,
-          pageName,
-        });
-
-        if (existing) {
-          await prisma.channelAccount.update({
-            where: { id: existing.id },
-            data: {
-              credentials,
-              connectionStatus: pageStatus,
-              connectedAt: new Date(),
-              connectedBy: userId,
-              tokenExpiresAt,
-              isActive: true,
-              lastError: subscribeError,
-              displayName: pageName,
-            },
-          });
-        } else {
-          await prisma.channelAccount.create({
-            data: {
-              tenantId,
-              channel: "MESSENGER",
-              externalId: pageId,
-              displayName: pageName,
-              credentials,
-              connectionStatus: pageStatus,
-              lastError: subscribeError,
-              connectedAt: new Date(),
-              connectedBy: userId,
-              tokenExpiresAt,
-              isActive: true,
-            },
-          });
-        }
-
-        await redis.del(`channel_account:MESSENGER:${pageId}`);
-        connectedAccounts.push(pageName);
+        res.redirect(back(`pick=1&session=${encodeURIComponent(sessionId)}`));
+        return;
       }
+
+      let results: MessengerPageResult[];
+      try {
+        results = await connectMessengerPages({ tenantId, userId, tokenExpiresAt }, usable);
+      } catch (capErr) {
+        if (capErr instanceof EntitlementDeniedError) {
+          res.redirect(back(`error=limit_reached`));
+          return;
+        }
+        throw capErr;
+      }
+      const saved = results.filter((r) => r.status !== "taken");
+      // Nothing saved used to land on "connected" with count=0 (2026-10-09).
+      if (saved.length === 0) {
+        res.redirect(back(`error=already_connected`));
+        return;
+      }
+      for (const r of saved) connectedAccounts.push(r.name);
     } else if (platform === "instagram") {
       // ─── INSTAGRAM (Instagram API with Instagram Login) ──
       // No Facebook Page involved: the IG professional account is connected
@@ -2099,6 +2204,97 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("OAuth callback error:", err.response?.data || err.message);
     res.redirect(back(`error=connection_failed`));
+  }
+});
+
+// ─── Messenger Page picker (redesigned app) ──────────────────
+
+/** Same answer for missing, expired, another workspace's or another person's session. */
+const sessionExpired = (res: Response) => res.status(410).json({ error: "session_expired", code: "SESSION_EXPIRED" });
+
+/**
+ * GET /messenger/candidates?session= - the Pages a grant offered, to choose
+ * from. Names and ids only: the Page tokens stay in the encrypted session.
+ */
+router.get("/messenger/candidates", authenticate, resolveTenant, requireChannelConnect, async (req: Request, res: Response) => {
+  try {
+    const sessionId = typeof req.query.session === "string" ? req.query.session : "";
+    const session = await readPageSession(req.tenantId!, sessionId, (req as any).user?.userId);
+    if (!session) {
+      sessionExpired(res);
+      return;
+    }
+    const standings = await messengerStandings(req.tenantId!, session.pages.map((p) => p.id));
+    res.json({
+      data: {
+        pages: session.pages.map((p) => ({
+          id: p.id,
+          name: p.name,
+          category: p.category ?? null,
+          connectedHere: standings.get(p.id)?.standing === "here",
+          takenElsewhere: standings.get(p.id)?.standing === "taken",
+        })),
+        expiresAt: session.expiresAt,
+      },
+    });
+  } catch (err: any) {
+    console.error("[MESSENGER-PICKER] candidates error:", err?.message);
+    res.status(500).json({ error: "Failed to load Pages" });
+  }
+});
+
+const messengerSelectSchema = z.object({
+  session: z.string().min(1).max(100),
+  pageIds: z
+    .array(z.string().min(1).max(64))
+    .min(1)
+    .max(50)
+    .transform((ids) => Array.from(new Set(ids))),
+});
+
+/**
+ * POST /messenger/select { session, pageIds } - connect the chosen Pages.
+ * Only ids the grant offered are accepted. The session ends on success, so a
+ * replay is 410; a refusal (unknown id, limit) leaves it for another try.
+ */
+router.post("/messenger/select", authenticate, resolveTenant, requireChannelConnect, validate(messengerSelectSchema), async (req: Request, res: Response) => {
+  const tenantId = req.tenantId!;
+  const userId: string = (req as any).user?.userId;
+  try {
+    const { session: sessionId, pageIds } = req.body as z.infer<typeof messengerSelectSchema>;
+    const session = await readPageSession(tenantId, sessionId, userId);
+    if (!session) {
+      sessionExpired(res);
+      return;
+    }
+    const offered = new Map(session.pages.map((p) => [p.id, p]));
+    const unknown = pageIds.filter((id) => !offered.has(id));
+    if (unknown.length > 0) {
+      res.status(422).json({ error: "unknown_page", code: "UNKNOWN_PAGE", pageIds: unknown });
+      return;
+    }
+
+    let results: MessengerPageResult[];
+    try {
+      results = await connectMessengerPages(
+        { tenantId, userId, tokenExpiresAt: new Date(session.tokenExpiresAt) },
+        pageIds.map((id) => offered.get(id)!),
+      );
+    } catch (capErr) {
+      if (handleEntitlementError(capErr, res)) return;
+      throw capErr;
+    }
+
+    const connected = results.filter((r) => r.status !== "taken").length;
+    if (connected === 0) {
+      res.status(409).json({ error: "none_connected", code: "NONE_CONNECTED", data: { results, connected } });
+      return;
+    }
+    await endPageSession(tenantId, sessionId, userId);
+    res.json({ data: { results, connected } });
+  } catch (err: any) {
+    console.error("[MESSENGER-PICKER] select error:", err?.response?.data || err?.message);
+    res.status(500).json({ error: "Failed to connect Pages" });
   }
 });
 

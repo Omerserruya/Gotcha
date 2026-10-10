@@ -174,6 +174,9 @@ vi.mock("@chatcenter/shared", async () => {
       };
     },
     requireCapacity: () => (_q: any, _s: any, n: any) => n(),
+    // The Messenger connect checks the plan inline since 2026-10-09; the real
+    // resolver reads the database, which this suite has none of.
+    assertWithinLimit: async () => {},
     validate: () => (_q: any, _s: any, n: any) => n(),
     hasPermission: async () => true,
   };
