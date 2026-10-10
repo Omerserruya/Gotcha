@@ -170,3 +170,87 @@ describe("Meta webhook signature - two apps, two secrets", () => {
     expect(queueAdd).not.toHaveBeenCalled();
   });
 });
+
+describe("Meta webhook signature - the Facebook app secret under both names", () => {
+  // Dev on 2026-10-10: WHATSAPP_APP_SECRET held the prod app's secret and
+  // META_APP_SECRET the dev app's. `WHATSAPP_APP_SECRET || META_APP_SECRET`
+  // never tried the second, so every delivery for a number or Page subscribed
+  // to the dev app was dropped while connect and health looked fine.
+  const PROD_APP = "prod-fb-app-secret-51e0";
+  const DEV_APP = "dev-fb-app-secret-7c42";
+
+  const MESSENGER_BODY = {
+    object: "page",
+    entry: [{
+      id: "PAGE_1",
+      time: 1760000000000,
+      messaging: [{
+        sender: { id: "PSID_1" },
+        recipient: { id: "PAGE_1" },
+        timestamp: 1760000000000,
+        message: { mid: "m_1", text: "hello" },
+      }],
+    }],
+  };
+
+  beforeEach(() => {
+    process.env.WHATSAPP_APP_SECRET = PROD_APP;
+    process.env.META_APP_SECRET = DEV_APP;
+    delete process.env.INSTAGRAM_APP_SECRET;
+  });
+
+  it("accepts WhatsApp signed by the app named in META_APP_SECRET", async () => {
+    await post(WA_BODY, DEV_APP);
+
+    expect(queueAdd).toHaveBeenCalledWith("process", expect.objectContaining({ channel: "WHATSAPP" }), expect.any(Object));
+  });
+
+  it("accepts Messenger signed by the app named in META_APP_SECRET", async () => {
+    await post(MESSENGER_BODY, DEV_APP);
+
+    expect(queueAdd).toHaveBeenCalledWith("process", expect.objectContaining({ channel: "MESSENGER" }), expect.any(Object));
+  });
+
+  it("still accepts WhatsApp signed by the app named in WHATSAPP_APP_SECRET", async () => {
+    await post(WA_BODY, PROD_APP);
+
+    expect(queueAdd).toHaveBeenCalledWith("process", expect.objectContaining({ channel: "WHATSAPP" }), expect.any(Object));
+  });
+
+  it("still rejects a signature from neither app", async () => {
+    await post(WA_BODY, "some-other-secret");
+    await post(MESSENGER_BODY, "some-other-secret");
+
+    expect(queueAdd).not.toHaveBeenCalled();
+  });
+
+  it("with only WHATSAPP_APP_SECRET set, behaves exactly as before", async () => {
+    delete process.env.META_APP_SECRET;
+
+    await post(WA_BODY, DEV_APP);
+    expect(queueAdd).not.toHaveBeenCalled();
+
+    await post(WA_BODY, PROD_APP);
+    expect(queueAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it("with only META_APP_SECRET set, behaves exactly as before", async () => {
+    delete process.env.WHATSAPP_APP_SECRET;
+
+    await post(WA_BODY, PROD_APP);
+    expect(queueAdd).not.toHaveBeenCalled();
+
+    await post(WA_BODY, DEV_APP);
+    expect(queueAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it("with no secret configured at all, still fails closed", async () => {
+    delete process.env.WHATSAPP_APP_SECRET;
+    delete process.env.META_APP_SECRET;
+
+    await post(WA_BODY, "");
+    await post(WA_BODY, DEV_APP);
+
+    expect(queueAdd).not.toHaveBeenCalled();
+  });
+});

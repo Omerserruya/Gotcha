@@ -50,13 +50,20 @@ const router = Router();
  * This does NOT weaken the gate. Each candidate is the full HMAC check, a
  * signature matching none of them is still rejected, and a request with no
  * signature or no configured secret still fails closed.
+ *
+ * The Facebook app's secret can be configured under two names, and both are
+ * candidates. With `WHATSAPP_APP_SECRET || META_APP_SECRET` only the first was
+ * ever tried, so when the two named DIFFERENT apps (dev on 2026-10-10: the
+ * first was the prod app's secret, the second the dev app's) every delivery
+ * for a number or Page subscribed to the second app failed the HMAC and was
+ * dropped, while connect and health looked fine.
  */
 function verifyMetaSignature(adapter: { channel: string; getSignatureHeader(): string; verifySignature(s: string, b: Buffer, sig: string): boolean }, req: Request) {
   // Ordered by which app most likely signed this channel, so the common case
   // matches on the first try.
-  const fbSecret = process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET;
+  const fbSecrets = [process.env.WHATSAPP_APP_SECRET, process.env.META_APP_SECRET];
   const igSecret = process.env.INSTAGRAM_APP_SECRET;
-  const ordered = adapter.channel === "INSTAGRAM" ? [igSecret, fbSecret] : [fbSecret, igSecret];
+  const ordered = adapter.channel === "INSTAGRAM" ? [igSecret, ...fbSecrets] : [...fbSecrets, igSecret];
 
   const configured = Array.from(new Set(ordered.filter((s): s is string => !!s)));
   // With nothing configured, still make ONE call with an empty secret so the
