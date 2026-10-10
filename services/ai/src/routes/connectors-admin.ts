@@ -242,6 +242,12 @@ router.get(
   },
 );
 
+/** The catalogue slugs whose bookings run through CalendarAccount rows. */
+const CALENDAR_PROVIDER_BY_SLUG: Record<string, "GOOGLE_CALENDAR" | "CALENDLY"> = {
+  google_calendar: "GOOGLE_CALENDAR",
+  calendly: "CALENDLY",
+};
+
 router.post(
   "/connectors/:slug/disconnect",
   authenticate, resolveTenant, requireActiveTenant(), canManageSystems,
@@ -285,9 +291,24 @@ router.post(
       });
     }
 
+    // Calendar bookings run through each employee's CalendarAccount, which
+    // only POST /api/calendar/disconnect (one employee at a time) stopped:
+    // disconnecting the system here left every employee still booking
+    // (2026-10-10). A system-level disconnect stops all of them.
+    const calendarProvider = CALENDAR_PROVIDER_BY_SLUG[String(cat.slug)];
+    let calendarAccounts = 0;
+    if (calendarProvider) {
+      const r = await (prisma as any).calendarAccount.updateMany({
+        where: { tenantId: req.tenantId, provider: calendarProvider, status: { not: "DISCONNECTED" } },
+        data: { status: "DISCONNECTED" },
+      });
+      calendarAccounts = r?.count ?? 0;
+    }
+
     console.log(
       `[connectors] ${req.params.slug} disconnected by tenant=${req.tenantId} ` +
-        `(store identity released, ${rows.length} row(s))`,
+        `(store identity released, ${rows.length} row(s)` +
+        (calendarProvider ? `, ${calendarAccounts} employee calendar(s) stopped` : "") + ")",
     );
     res.json({ ok: true });
   },
