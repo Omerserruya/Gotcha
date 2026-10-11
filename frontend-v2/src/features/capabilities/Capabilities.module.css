@@ -232,6 +232,37 @@
     color: var(--text-muted);
   }
 
+  /* S2: customer details to "Do it" - one line, Continue and Cancel, on the row. */
+  .choiceConfirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-4) var(--space-8);
+    margin: 0;
+    max-inline-size: 320px;
+    font-size: var(--font-size-micro);
+    text-align: end;
+    color: var(--text-body);
+  }
+
+  .choiceConfirmYes,
+  .choiceConfirmNo {
+    padding: 3px var(--space-9);
+    border-radius: 6px;
+    font-size: var(--font-size-micro);
+  }
+
+  .choiceConfirmYes {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .choiceConfirmNo {
+    border: var(--border-width-thin) solid var(--border-default);
+    color: var(--text-subtle);
+  }
+
   /* A stored state the ceiling would now forbid, and a failed write. */
   .choiceWarn {
     margin: 0;

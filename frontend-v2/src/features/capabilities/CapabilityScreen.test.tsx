@@ -372,7 +372,9 @@ describe('★★ 02’s row: what it is, how it ran, one control - and nothing b
       capability({ toolName: 'b', riskGroup: 'financial' }),
     ]);
     expect(screen.getAllByTestId('ceiling-note')).toHaveLength(1);
-    expect(screen.queryByText(/changes orders or money, so it can be asked/i)).toBeNull();
+    expect(
+      screen.queryByText(/deletes something, moves money or changes settings, so it can be asked/i),
+    ).toBeNull();
   });
 
   it('no foot line when every action may be automated', async () => {

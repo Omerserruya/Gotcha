@@ -25,25 +25,25 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * Omer authorized the control; that is not a reason to make it easy to press
  * by accident, and it is not a reason for anything automated to press it.
  *
- * **No test and no capture calls this.** The behaviour that matters - which
- * choices are offered - is decided by `automationCeiling` before any request
- * exists, and that is what is tested.
+ * **No capture calls this**; its tests run it against a mocked client only.
  *
  * ── AND THE CEILING IS RE-CHECKED HERE ──
- * The component withholds *Do it* where the platform cannot positively say
- * `read_only`. This checks again, because a server action is an endpoint:
- * anything that can post a form can post `do_it`, and the component's guard
- * does not travel with the request.
+ * The component withholds *Do it* where the server would refuse it
+ * (`automationCeiling`, S2). This checks again, because a server action is an
+ * endpoint: anything that can post a form can post `do_it`, and the
+ * component's guard does not travel with the request.
  *
- * `PUT /api/tool-permissions/:toolName` does not call `mayBeAlwaysAllowed`
- * itself - Backend has that - so until it does, this is the last check in
- * the chain rather than a convenience on top of one.
+ * The PUT enforces the same table itself (`mayBeAlwaysAllowed`, 422
+ * `approval_cannot_be_removed`). Should the two ever disagree, that refusal
+ * is said as a sentence, not as "didn't save".
  */
 
 export type PermissionWriteResult =
   | { readonly ok: true }
   /** The chosen state is not one this tool may be set to. */
   | { readonly ok: false; readonly reason: 'not_automatable' }
+  /** 422 - the server keeps approval on this one (delete, money, settings). */
+  | { readonly ok: false; readonly reason: 'approval_cannot_be_removed' }
   /** 409 - the provider is not connected, so there is nothing to enable. */
   | { readonly ok: false; readonly reason: 'not_connected' }
   | { readonly ok: false; readonly reason: 'forbidden' }
@@ -57,10 +57,8 @@ export async function setToolPermission(
    * ★★ THE CEILING, ENFORCED ON THE WRITE AND NOT ONLY IN THE MARKUP.
    *
    * A disabled radio is a statement to a person, not a constraint on a
-   * request. `create_update` is the no-match fallback of a name regex -
-   * `shopify.cancel_order` lands there - so letting it through would
-   * auto-approve order cancellation on the strength of a pattern that did
-   * not match.
+   * request. The same table as the screen, so neither offers what the other
+   * refuses.
    */
   if (choice === 'do_it' && automationCeiling(capability) !== null) {
     logger.warn('capabilities.automation_refused', { toolName: capability.toolName });
@@ -90,6 +88,14 @@ export async function setToolPermission(
       if (cause.status === 409) {
         logger.warn('capabilities.not_connected', { toolName: capability.toolName });
         return { ok: false, reason: 'not_connected' };
+      }
+      /*
+       * The server's own ceiling (`tool-permissions.ts`): `{ error:
+       * "approval_cannot_be_removed" }` - the reason is in `error`, not `code`.
+       */
+      if (cause.status === 422 && cause.developerMessage === 'approval_cannot_be_removed') {
+        logger.warn('capabilities.approval_kept', { toolName: capability.toolName });
+        return { ok: false, reason: 'approval_cannot_be_removed' };
       }
       if (cause.kind === 'authorization') return { ok: false, reason: 'forbidden' };
     }

@@ -692,73 +692,79 @@ export function usageFor(toolName: string, usage: readonly ToolUsage[] | null): 
 /**
  * The three states an admin may choose from for one tool.
  *
- * `do_it` is absent from the list wherever the platform cannot positively
- * say the tool is read-only. See `automationCeiling`.
+ * `do_it` is withheld wherever the platform would refuse it. See
+ * `automationCeiling`.
  */
 export const ADMIN_CHOICES = ['do_it', 'ask_me', 'never'] as const;
 export type AdminChoice = (typeof ADMIN_CHOICES)[number];
 
 /** Why "Do it" is not on offer, or `null` when it is. */
-export type NoAutomationReason = 'changes_orders_or_money' | 'unclassified' | null;
+export type NoAutomationReason = 'deletes_money_or_settings' | 'unclassified' | null;
+
+/**
+ * The risk groups the platform lets run without asking - every group
+ * `mayBeAlwaysAllowed(group, false)` answers true for
+ * (`packages/shared/src/lib/tool-availability.ts`).
+ */
+export const AUTOMATABLE_GROUPS = ['read_only', 'create_update', 'sensitive_data'] as const;
+
+/**
+ * The platform's `NEVER_AUTO_APPROVE`: `PUT /api/tool-permissions/:toolName`
+ * refuses `requiresApproval: false` for these with 422
+ * `approval_cannot_be_removed` (`services/ai/src/routes/tool-permissions.ts`).
+ */
+export const NEVER_AUTOMATIC_GROUPS = ['delete', 'financial', 'administrative'] as const;
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
- * ★★ "DO IT" IS OFFERED ONLY WHERE THE PLATFORM POSITIVELY SAYS `read_only`
+ * ★★ "DO IT" IS OFFERED EXACTLY WHERE THE SERVER ALLOWS IT (S2, 2026-10-11)
  * ════════════════════════════════════════════════════════════════════════════
- * Two independent reasons, either of which would be enough.
+ * Omer's rule: Do it · Ask me · Never move freely, within what the server
+ * allows - and the server now decides. The PUT computes `riskGroupFor` on the
+ * tool's name and refuses `requiresApproval: false` for delete, financial and
+ * administrative (422 `approval_cannot_be_removed`); every other group may
+ * run on its own. The list read sends the same `riskGroupFor(toolName)` as
+ * `riskGroup`, so this table is the server's, row for row:
  *
- * ── ONE · THE CLASSIFIER IS A NAME REGEX AND IT MISSES TWO OF THE FOUR ──
- * `riskGroupFor` tests four patterns against the tool's NAME and falls
- * through to `create_update`. Measured against real names:
+ *   read_only · create_update · sensitive_data   Do it offered
+ *   delete · financial · administrative          withheld, said on the segment
+ *   missing, empty, or a group not named here    withheld: "we can't tell"
  *
- *   shopify.process_refund   → financial       mayBeAlwaysAllowed = false
- *   shopify.cancel_order     → create_update   mayBeAlwaysAllowed = TRUE
- *   shopify.create_return    → create_update   mayBeAlwaysAllowed = TRUE
+ * ── UNCLASSIFIED STAYS LOCKED ──
+ * The server never lacks a group - `riskGroupFor` always answers one of six.
+ * A row WITHOUT one means the read did not carry it, and the screen cannot
+ * know which of the six the PUT will compute: guessing "allowed" would offer a
+ * choice the server may refuse. It is the one place this is stricter than the
+ * server, and it says so in its own sentence.
  *
- * Neither "cancel" nor "return" appears in `FINANCIAL_RE`, `DELETE_RE`,
- * `ADMIN_RE` or `SENSITIVE_RE`. The design puts both under *"Changing orders
- * and money"* reading *"Comes to Approvals"* - so the classifier disagrees
- * with the design about two of them, permissively.
- *
- * **`create_update` is not a judgement. It is the absence of four
- * judgements**, and a name-based classifier may be trusted when it says SAFE
- * and never when it merely fails to say DANGEROUS. That is the rule already
- * written three functions above `mayBeAlwaysAllowed` in the platform's own
- * file: *"an absent verdict never means 'definitely fine'."*
- *
- * ── TWO · THE DESIGN'S "DO IT" PRESUPPOSES A LIMIT THAT DOES NOT EXIST ──
- * It draws *"Refund up to ₪100 · Do it"*. There is no limit anywhere:
- * `BusinessActionPolicy` has zero rows, `AgentToolPermission` has no numeric
- * field, and per-employee amounts are deferred.
- *
- * So *Do it* on a refund today does not mean *"up to ₪100 automatically"*.
- * It means **refund, any amount, automatically.** The design's control and
- * the product's capability are different controls wearing the same three
- * radio buttons, and the state that requires a bound cannot be offered while
- * no bound exists.
- *
- * ── AND THE ASYMMETRY DECIDES THE TIE ──
- * Too strict: an admin cannot automate a safe write, and says so. A sentence
- * fixes it. Too loose: `cancel_order` is set to Do it **because the screen
- * offered it**, an order is cancelled with nobody looking, and the audit row
- * says `succeeded: null` because no customer-keyed write records a verdict.
- * Not recoverable, and least visible afterwards.
- *
- * ⚠ AND THIS IS NOT THE ONLY GUARD IT SHOULD BE.
- * `PUT /api/tool-permissions/:toolName` does not call `mayBeAlwaysAllowed` -
- * it stores `requiresApproval: false` on a refund if asked. A UI-only guard
- * is one anybody with curl steps over. Backend has the enforcement; this one
- * exists because it is the guard that explains itself to a person.
+ * ── AND ONE CONFIRM ──
+ * `sensitive_data` (customer details) may run on its own, but only after one
+ * sentence saying so - `confirmBeforeChoosing`.
  */
 export function automationCeiling(capability: Capability): NoAutomationReason {
   const group = (capability.riskGroup ?? '').trim();
-  if (group === 'read_only') return null;
+  if ((AUTOMATABLE_GROUPS as readonly string[]).includes(group)) return null;
   /*
-   * Named apart so the sentence can be. "This changes orders or money" is a
-   * statement about the tool; "we could not classify this" is a statement
-   * about us, and a reader can act on the first.
+   * Named apart so the sentence can be. "This deletes, moves money or changes
+   * settings" is a statement about the tool; "we could not classify this" is
+   * a statement about us, and a reader can act on the first.
    */
-  return group === '' || group === 'create_update' ? 'unclassified' : 'changes_orders_or_money';
+  return (NEVER_AUTOMATIC_GROUPS as readonly string[]).includes(group)
+    ? 'deletes_money_or_settings'
+    : 'unclassified';
+}
+
+/**
+ * Loosening a tool that touches customer details to run on its own asks once
+ * first (Omer, 2026-10-11). Nothing else confirms: not Ask me, not Never, not
+ * Do it on any other group, and not a tool already set to Do it.
+ */
+export function confirmBeforeChoosing(capability: Capability, choice: AdminChoice): boolean {
+  return (
+    choice === 'do_it' &&
+    (capability.riskGroup ?? '').trim() === 'sensitive_data' &&
+    currentChoice(capability) !== 'do_it'
+  );
 }
 
 /** The choices an admin may actually pick for this tool, in design order. */

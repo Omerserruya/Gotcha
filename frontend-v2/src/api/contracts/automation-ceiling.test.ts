@@ -1,11 +1,17 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
+  AUTOMATABLE_GROUPS,
   automationCeiling,
   bodyFor,
   capabilitySchema,
   choicesFor,
+  confirmBeforeChoosing,
   currentChoice,
+  NEVER_AUTOMATIC_GROUPS,
   type Capability,
 } from './capabilities';
 
@@ -21,54 +27,105 @@ import {
 const tool = (over: Record<string, unknown> = {}): Capability =>
   capabilitySchema.parse({ toolName: 'shopify.get_order', riskGroup: 'read_only', ...over });
 
-describe('★★ "Do it" needs a positive read_only, not the absence of a warning', () => {
-  it('★★ withholds automation from create_update, which is the NO-MATCH fallback', () => {
-    /*
-     * THE MEASUREMENT THIS RULE COMES FROM.
-     *
-     * `riskGroupFor` tests four name patterns and falls through to
-     * `create_update`. Neither "cancel" nor "return" is in any of them, so
-     * `shopify.cancel_order` and `shopify.create_return` both land here and
-     * the platform's own `mayBeAlwaysAllowed` returns TRUE for them - while
-     * the design puts both under "Changing orders and money · Comes to
-     * Approvals".
-     *
-     * `create_update` is not a judgement. It is the absence of four
-     * judgements, and reading it as "assessed and found low-risk" is the
-     * same error as reading an empty conflict list as "nothing disagrees".
-     */
-    const cancel = tool({ toolName: 'shopify.cancel_order', riskGroup: 'create_update' });
-    expect(automationCeiling(cancel)).toBe('unclassified');
-    expect(choicesFor(cancel)).toEqual(['ask_me', 'never']);
-  });
+/*
+ * S2 (Omer, 2026-10-11): Do it · Ask me · Never move freely within what the
+ * SERVER allows. The PUT refuses `requiresApproval: false` for exactly
+ * delete, financial and administrative (`NEVER_AUTO_APPROVE`, 422
+ * `approval_cannot_be_removed`); the list read sends the same
+ * `riskGroupFor(toolName)` as `riskGroup`. The table below is the server's.
+ */
+const SERVER_TABLE: Record<string, 'allowed' | 'refused'> = {
+  read_only: 'allowed',
+  create_update: 'allowed',
+  sensitive_data: 'allowed',
+  delete: 'refused',
+  financial: 'refused',
+  administrative: 'refused',
+};
 
-  it('★★ withholds it from every group the platform DOES name as risky', () => {
-    for (const group of ['financial', 'delete', 'administrative', 'sensitive_data']) {
-      const risky = tool({ riskGroup: group });
-      expect(automationCeiling(risky), group).toBe('changes_orders_or_money');
-      expect(choicesFor(risky), group).toEqual(['ask_me', 'never']);
+describe('★★ "Do it" is offered exactly where the server allows it', () => {
+  it('★★ every one of the server’s six groups, row for row', () => {
+    // The six are `RISK_GROUPS` in packages/shared - all of them, no more.
+    expect(Object.keys(SERVER_TABLE).sort()).toEqual(
+      [...AUTOMATABLE_GROUPS, ...NEVER_AUTOMATIC_GROUPS].sort(),
+    );
+    for (const [group, server] of Object.entries(SERVER_TABLE)) {
+      const row = tool({ toolName: `x.${group}`, riskGroup: group });
+      if (server === 'allowed') {
+        expect(automationCeiling(row), group).toBeNull();
+        expect(choicesFor(row), group).toEqual(['do_it', 'ask_me', 'never']);
+      } else {
+        expect(automationCeiling(row), group).toBe('deletes_money_or_settings');
+        expect(choicesFor(row), group).toEqual(['ask_me', 'never']);
+      }
     }
   });
 
-  it('★ withholds it when the group is missing entirely', () => {
-    // A tool we were told nothing about is not a tool we may automate.
-    expect(automationCeiling(tool({ riskGroup: null }))).toBe('unclassified');
+  it('★ create_update, the classifier’s no-match, is allowed - as the server allows it', () => {
+    const cancel = tool({ toolName: 'shopify.cancel_order', riskGroup: 'create_update' });
+    expect(automationCeiling(cancel)).toBeNull();
   });
 
-  it('offers it for a positively read-only tool', () => {
-    expect(automationCeiling(tool())).toBeNull();
-    expect(choicesFor(tool())).toEqual(['do_it', 'ask_me', 'never']);
+  it('★★ no group, an empty one, or one the server never sends: locked, "we can’t tell"', () => {
+    // The server always computes one of six; a row without one cannot say which.
+    for (const riskGroup of [null, '', '   ', 'unclassified', 'critical']) {
+      expect(automationCeiling(tool({ riskGroup })), String(riskGroup)).toBe('unclassified');
+      expect(choicesFor(tool({ riskGroup })), String(riskGroup)).toEqual(['ask_me', 'never']);
+    }
   });
 
-  it('★ separates "changes money" from "we could not classify it"', () => {
-    /*
-     * Two different sentences. The first is about the tool and a reader can
-     * act on it; the second is about us. Collapsing them would tell an admin
-     * their calendar tool moves money.
-     */
+  it('★ separates "deletes, money or settings" from "we could not classify it"', () => {
     expect(automationCeiling(tool({ riskGroup: 'financial' }))).not.toBe(
-      automationCeiling(tool({ riskGroup: 'create_update' })),
+      automationCeiling(tool({ riskGroup: null })),
     );
+  });
+});
+
+/*
+ * The table above, read against the server's own source where the monorepo
+ * holds it (`packages/shared/src/lib/tool-availability.ts`). Outside the
+ * monorepo the source is absent and this is SKIPPED - reported as skipped,
+ * never passed.
+ */
+const SHARED = join(process.cwd(), '..', 'packages/shared/src/lib/tool-availability.ts');
+describe.skipIf(!existsSync(SHARED))('★★ the server’s own source agrees with the table', () => {
+  const source = existsSync(SHARED) ? readFileSync(SHARED, 'utf8') : '';
+  const quoted = (block: string) => [...block.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]!).sort();
+
+  it('RISK_GROUPS is the six groups the table names', () => {
+    const groups = /RISK_GROUPS = \[([^\]]*)\]/.exec(source)?.[1] ?? '';
+    expect(quoted(groups)).toEqual(Object.keys(SERVER_TABLE).sort());
+  });
+
+  it('NEVER_AUTO_APPROVE is exactly the groups the screen withholds', () => {
+    const never =
+      /NEVER_AUTO_APPROVE[^=]*= new Set<RiskGroup>\(\[([^\]]*)\]/.exec(source)?.[1] ?? '';
+    expect(quoted(never)).toEqual([...NEVER_AUTOMATIC_GROUPS].sort());
+  });
+});
+
+describe('★★ one confirm: customer details to "Do it", nothing else', () => {
+  const at = (riskGroup: string, choice: 'do_it' | 'ask_me' | 'never') =>
+    tool({
+      riskGroup,
+      enabled: choice !== 'never',
+      requiresApproval: choice !== 'do_it',
+    });
+
+  it('sensitive_data from Ask me or from Never to Do it: confirm', () => {
+    expect(confirmBeforeChoosing(at('sensitive_data', 'ask_me'), 'do_it')).toBe(true);
+    expect(confirmBeforeChoosing(at('sensitive_data', 'never'), 'do_it')).toBe(true);
+  });
+
+  it('not when tightening, not when already Do it, and not for any other group', () => {
+    expect(confirmBeforeChoosing(at('sensitive_data', 'do_it'), 'ask_me')).toBe(false);
+    expect(confirmBeforeChoosing(at('sensitive_data', 'do_it'), 'never')).toBe(false);
+    expect(confirmBeforeChoosing(at('sensitive_data', 'do_it'), 'do_it')).toBe(false);
+    expect(confirmBeforeChoosing(at('sensitive_data', 'ask_me'), 'never')).toBe(false);
+    for (const group of Object.keys(SERVER_TABLE).filter((g) => g !== 'sensitive_data')) {
+      expect(confirmBeforeChoosing(at(group, 'ask_me'), 'do_it'), group).toBe(false);
+      expect(confirmBeforeChoosing(at(group, 'never'), 'do_it'), group).toBe(false);
+    }
   });
 });
 
@@ -108,7 +165,7 @@ describe('★ where the tool is now', () => {
   it('★★ can report `do_it` on a tool that may no longer be SET to it', () => {
     /*
      * A financial tool stored as auto-approve - set before this ceiling
-     * existed, or by curl, since the write does not enforce the guard.
+     * existed.
      * `currentChoice` reports the truth and `choicesFor` withholds the
      * option, so the screen shows what IS without offering to put it back.
      *

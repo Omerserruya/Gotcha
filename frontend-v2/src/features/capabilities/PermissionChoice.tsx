@@ -7,6 +7,7 @@ import {
   ADMIN_CHOICES,
   automationCeiling,
   choicesFor,
+  confirmBeforeChoosing,
   currentChoice,
   type AdminChoice,
   type Capability,
@@ -24,14 +25,17 @@ import styles from './Capabilities.module.css';
  * Not greyed silently. A greyed control with no reason reads as a defect or
  * as a plan upgrade; the sentence says which of the two real reasons applies:
  *
- *   this action changes orders or money       the platform named the risk
- *   we could not tell what this one changes   it did not, and that is not
- *                                             permission to automate it
+ *   it deletes, moves money or changes        the server keeps approval on
+ *   settings                                  these (S2, 2026-10-11)
+ *   we could not tell what this one changes   the read carried no group
+ *
+ * ── ONE CONFIRM: CUSTOMER DETAILS TO "DO IT" ──
+ * Loosening a `sensitive_data` tool to run on its own asks once, on the row
+ * (`confirmBeforeChoosing`). Nothing else confirms.
  *
  * ── AND THE CURRENT STATE IS SHOWN EVEN WHEN IT IS NO LONGER OFFERABLE ──
  * A financial tool can be stored as auto-approve: set before this ceiling
- * existed, or by curl, since the write does not enforce the guard. The
- * screen shows what IS and withholds the option to put it back. **Hiding the
+ * existed. The screen shows what IS and withholds the option to put it back. **Hiding the
  * current state would be worse - an admin cannot fix a setting the screen
  * will not show them.**
  */
@@ -50,18 +54,29 @@ export function PermissionChoice({
 }) {
   const t = useTranslations('capabilities');
   const [result, setResult] = useState<PermissionWriteResult | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const choices = choicesFor(capability);
   const current = currentChoice(capability);
   const ceiling = automationCeiling(capability);
 
-  function choose(choice: AdminChoice) {
-    if (blocked !== undefined || choice === current) return;
+  function write(choice: AdminChoice) {
     setResult(null);
     startTransition(async () => {
       setResult(await setToolPermission(capability, choice));
     });
+  }
+
+  function choose(choice: AdminChoice) {
+    if (blocked !== undefined || choice === current) return;
+    if (confirmBeforeChoosing(capability, choice)) {
+      setResult(null);
+      setConfirming(true);
+      return;
+    }
+    setConfirming(false);
+    write(choice);
   }
 
   /*
@@ -105,6 +120,32 @@ export function PermissionChoice({
           );
         })}
       </div>
+
+      {confirming ? (
+        <p className={styles.choiceConfirm} data-testid={`choice-confirm-${capability.toolName}`}>
+          <span>{t('choice.confirmSensitive')}</span>
+          <button
+            type="button"
+            className={styles.choiceConfirmYes}
+            disabled={isPending}
+            data-testid={`choice-confirm-${capability.toolName}-yes`}
+            onClick={() => {
+              setConfirming(false);
+              write('do_it');
+            }}
+          >
+            {t('choice.confirmYes')}
+          </button>
+          <button
+            type="button"
+            className={styles.choiceConfirmNo}
+            data-testid={`choice-confirm-${capability.toolName}-no`}
+            onClick={() => setConfirming(false)}
+          >
+            {t('choice.confirmNo')}
+          </button>
+        </p>
+      ) : null}
 
       {result && !result.ok ? (
         <p className={styles.choiceWarn} data-testid={`choice-problem-${capability.toolName}`}>

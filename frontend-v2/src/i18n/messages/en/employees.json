@@ -191,7 +191,7 @@
         "ask_me": "Ask me",
         "never": "Never"
       },
-      "ceiling": "This changes orders or money, so it always asks first.",
+      "ceiling": "This one deletes something, moves money or changes settings, or we can't tell what it changes, so it always asks first.",
       "handover": "Always hand over to a person when…",
       "when": {
         "askPerson": "they ask for a person",
