@@ -28,6 +28,14 @@ import {
   getLastLoginBySubject,
 } from "@chatcenter/shared";
 import { changeRoles, RoleChangeRefused } from "../services/role-guard";
+import { actorOf, patternsRefusal, roleRefusal, targetRefusal, type GrantRefusal } from "../lib/grant-ceiling";
+
+/** Answer a refusal from lib/grant-ceiling; true when the request is done. */
+function refusedGrant(res: Response, refusal: GrantRefusal | null): boolean {
+  if (!refusal) return false;
+  res.status(refusal.status).json({ error: refusal.error, code: refusal.code, ...(refusal.missing ? { missing: refusal.missing } : {}) });
+  return true;
+}
 import { readerLocale } from "../lib/reader-locale";
 import { permissionFor, roleFor } from "../lib/permission-catalog-he";
 
@@ -316,6 +324,10 @@ router.put(
       return;
     }
     const { granted, reason } = req.body as { granted: boolean; reason?: string };
+    // Nobody grants what they do not hold, and an Owner's access is changed
+    // by an Owner only (lib/grant-ceiling).
+    if (refusedGrant(res, await targetRefusal(actorOf(req), tenantId, userId))) return;
+    if (granted && refusedGrant(res, await patternsRefusal(actorOf(req), [feature]))) return;
     const rawExpiry = (req.body as { expiresAt?: string | null }).expiresAt ?? null;
     const expiresAt = rawExpiry === null ? null : new Date(rawExpiry);
     // A date already in the past would store an override that never applied -
@@ -352,6 +364,7 @@ router.delete(
       res.status(404).json({ error: "User not found" });
       return;
     }
+    if (refusedGrant(res, await targetRefusal(actorOf(req), tenantId, userId))) return;
     await prisma.userFeatureGrant.deleteMany({ where: { userId, feature } });
     void writeAudit({ tenantId: assertTenantId(req), actorType: "user", actorId: req.user?.userId,
       action: AuditAction.PERMISSION_REVOKED, targetType: "user", targetId: userId, metadata: { feature } });
@@ -390,6 +403,9 @@ router.post(
       res.status(400).json({ error: "Unknown features", features: unknown });
       return;
     }
+    // A custom role holding "*" (or anything its creator lacks) was a way for
+    // an admin to hand out Owner-only power (lib/grant-ceiling).
+    if (refusedGrant(res, await patternsRefusal(actorOf(req), features))) return;
 
     try {
       const role = await prisma.tenantRole.create({
@@ -530,6 +546,10 @@ router.put(
       res.status(400).json({ error: "Unknown features", features: unknown });
       return;
     }
+    if (refusedGrant(res, await patternsRefusal(actorOf(req), features))) return;
+    // The before image, so the audit record can say exactly what changed and
+    // the change can be put back.
+    const before = (await prisma.tenantRoleFeature.findMany({ where: { roleId }, select: { feature: true } })).map((f) => f.feature).sort();
 
     await prisma.$transaction([
       prisma.tenantRoleFeature.deleteMany({ where: { roleId } }),
@@ -539,6 +559,11 @@ router.put(
       }),
     ]);
     invalidatePermissionsCache();
+    const after = [...new Set(features)].sort();
+    void writeAudit({ tenantId, actorType: "user", actorId: req.user?.userId,
+      action: AuditAction.ROLE_UPDATED, targetType: "role", targetId: roleId,
+      metadata: { change: "features", before, after,
+        added: after.filter((f) => !before.includes(f)), removed: before.filter((f) => !after.includes(f)) } });
     const updated = await prisma.tenantRole.findUnique({
       where: { id: roleId },
       include: { features: true },
@@ -564,6 +589,8 @@ router.post(
       res.status(404).json({ error: "Role not found" });
       return;
     }
+    if (refusedGrant(res, await targetRefusal(actorOf(req), tenantId, userId))) return;
+    if (refusedGrant(res, await roleRefusal(actorOf(req), tenantId, roleId))) return;
     // The latest assignment is the effective role: assigning "agent" to an admin demotes them.
     try {
       await changeRoles({
@@ -593,6 +620,7 @@ router.delete(
       res.status(404).json({ error: "User not found" });
       return;
     }
+    if (refusedGrant(res, await targetRefusal(actorOf(req), tenantId, userId))) return;
     const removing = await prisma.userRoleAssignment.findFirst({ where: { userId, roleId }, select: { role: { select: { builtinKey: true } } } });
     try {
       await changeRoles({
@@ -664,6 +692,8 @@ router.put(
       res.status(404).json({ error: "Role not found" });
       return;
     }
+    if (refusedGrant(res, await targetRefusal(actorOf(req), tenantId, userId))) return;
+    if (refusedGrant(res, await roleRefusal(actorOf(req), tenantId, roleId))) return;
     try {
       await changeRoles({
         tenantId, actorId: req.user?.userId, targetUserId: userId,

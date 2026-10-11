@@ -34,6 +34,17 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   };
 });
 
+// lib/grant-ceiling (2026-10-11) refuses granting above one's own role. This
+// file tests a different guard, so the ceiling never refuses here; it has its
+// own tests (grant-ceiling-routes.test.ts).
+vi.mock("../lib/grant-ceiling", () => ({
+  actorOf: (req: any) => ({ userId: req.user?.userId, tenantId: req.tenantId, role: req.user?.role }),
+  patternsRefusal: async () => null,
+  roleRefusal: async () => null,
+  targetRefusal: async () => null,
+  inviteRoleRefusal: async () => null,
+}));
+
 import router from "../routes/permissions";
 
 const app = express();

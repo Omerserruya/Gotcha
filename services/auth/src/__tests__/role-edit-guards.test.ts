@@ -33,6 +33,8 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         },
       },
       tenantRoleFeature: {
+        // The route reads the role's set first: the audit's before image.
+        findMany: async (a: any) => DB.features.filter((f) => f.roleId === a.where.roleId).map((f) => ({ feature: f.feature })),
         deleteMany: (a: any) => ({ op: "delete", a }),
         createMany: (a: any) => ({ op: "create", a }),
       },
@@ -46,6 +48,17 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     },
   };
 });
+
+// lib/grant-ceiling (2026-10-11) refuses granting above one's own role. This
+// file tests a different guard, so the ceiling never refuses here; it has its
+// own tests (grant-ceiling-routes.test.ts).
+vi.mock("../lib/grant-ceiling", () => ({
+  actorOf: (req: any) => ({ userId: req.user?.userId, tenantId: req.tenantId, role: req.user?.role }),
+  patternsRefusal: async () => null,
+  roleRefusal: async () => null,
+  targetRefusal: async () => null,
+  inviteRoleRefusal: async () => null,
+}));
 
 import router from "../routes/permissions";
 

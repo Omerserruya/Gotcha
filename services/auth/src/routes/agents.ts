@@ -21,6 +21,8 @@ import {
   encryptCredentials,
 } from "@chatcenter/shared";
 import * as invitations from "../services/invitation.service";
+import { resolveInviteRoleStrict, ensureRoleAssignment } from "../services/invite-role.service";
+import { actorOf, inviteRoleRefusal } from "../lib/grant-ceiling";
 import { publicChannelAccount } from "../lib/channel-account-dto";
 
 const router = Router();
@@ -105,6 +107,10 @@ const inviteAgentSchema = z.object({
   // Zero, one or many departments. Every id is validated against the ACTIVE
   // tenant below - ids arriving from frontend state are never trusted as-is.
   departmentIds: z.array(z.string().min(1)).max(20).optional(),
+  // A TenantRole id, or a built-in keyword ("AGENT", "ADMIN"). Absent means
+  // agent, as before. Resolved against THIS tenant (invite-role.service) and
+  // never above the inviter's own role (lib/grant-ceiling), 2026-10-11.
+  role: z.string().min(1).max(64).optional(),
 });
 
 // Seat limit. Counts ACTIVE members only, so deactivating someone frees their
@@ -130,7 +136,20 @@ router.post(
         return;
       }
     }
-    const result = await invitations.inviteUser(req.tenantId!, email, name, "AGENT");
+    const resolved = await resolveInviteRoleStrict(req.tenantId!, (req.body as { role?: string }).role ?? "AGENT");
+    if (!resolved) {
+      res.status(400).json({ error: "unknown_role", code: "UNKNOWN_ROLE" });
+      return;
+    }
+    const refusal = await inviteRoleRefusal(actorOf(req), req.tenantId!, resolved);
+    if (refusal) {
+      res.status(refusal.status).json({ error: refusal.error, code: refusal.code, ...(refusal.missing ? { missing: refusal.missing } : {}) });
+      return;
+    }
+    const result = await invitations.inviteUser(req.tenantId!, email, name, resolved.coarse);
+    // Both role systems, as every invite path does: the coarse enum above and
+    // the real assignment here.
+    await ensureRoleAssignment(result.user.id, resolved.tenantRoleId, (req as any).user?.userId ?? null);
     if (wantedDepts.length > 0) {
       await prisma.departmentMember.createMany({
         data: wantedDepts.map((departmentId) => ({
@@ -144,7 +163,7 @@ router.post(
     void writeAudit({
       tenantId: req.tenantId!, actorType: "user", actorId: (req as any).user?.userId,
       action: AuditAction.INVITE_CREATED, targetType: "user", targetId: result.user.id,
-      metadata: { email, role: "AGENT", departmentIds: wantedDepts },
+      metadata: { email, role: resolved.coarse, roleId: resolved.tenantRoleId, roleName: resolved.roleName, departmentIds: wantedDepts },
     });
     res.status(201).json(result);
   } catch (err: any) {

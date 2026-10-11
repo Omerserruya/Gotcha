@@ -20,6 +20,7 @@ import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, s
 import { inviteUser, resendSetupLink } from "../services/invitation.service";
 import { resolveInviteRoleStrict, resolveInviteRoleWithFallback, ensureRoleAssignment }
   from "../services/invite-role.service";
+import { actorOf, inviteRoleRefusal } from "../lib/grant-ceiling";
 import { ingestTaughtDocument, updateTaughtDocument } from "../services/teach-ingest";
 import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
 import { syncDiscoveryRecommendations, listRecommendations, setRecommendationStatus, addStoreInspectionRecs, reconcileConnectSystemRecs } from "../services/recommendations.service";
@@ -2841,6 +2842,9 @@ router.post("/invite-team", requireRole("ADMIN"), validate(inviteTeamSchema), as
       res.status(400).json({ error: "unknown_role", role });
       return;
     }
+    // Nobody invites into a role above their own; Owner by an Owner only.
+    const refusal = await inviteRoleRefusal(actorOf(req), tenantId, resolved);
+    if (refusal) { res.status(refusal.status).json({ error: refusal.error, code: refusal.code, ...(refusal.missing ? { missing: refusal.missing } : {}) }); return; }
     const inviter = await prisma.user.findUnique({
       where: { id: req.user!.userId },
       select: { name: true, email: true },
@@ -2936,6 +2940,8 @@ router.post("/invite-link", requireRole("ADMIN"), async (req: Request, res: Resp
       res.status(400).json({ error: "unknown_role", role: requestedRole });
       return;
     }
+    const refusal = await inviteRoleRefusal(actorOf(req), tenantId, resolved);
+    if (refusal) { res.status(refusal.status).json({ error: refusal.error, code: refusal.code, ...(refusal.missing ? { missing: refusal.missing } : {}) }); return; }
     const role = requestedRole;
 
     const tenant = await prisma.tenant.findUnique({
