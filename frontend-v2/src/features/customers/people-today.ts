@@ -1,5 +1,4 @@
 import { collapseToPeople, type CustomerRow } from '@/api/contracts/customers';
-import { pairKey } from '@/api/contracts/identity';
 import { quoteOf, type QuoteKind } from '@/api/contracts/message-kind';
 
 /**
@@ -111,33 +110,4 @@ export function sinceWords(iso: string, now: Date): { key: string; n?: number } 
   if (days < 2) return { key: 'yesterday' };
   if (days < 31) return { key: 'days', n: days };
   return { key: 'months', n: Math.max(1, Math.round(days / 30)) };
-}
-
-/**
- * "Two accounts look like one person" - matched on a shared phone or email,
- * as the design says, between rows the unifier has NOT already joined, and
- * never a pair somebody marked "not the same" (04, `pairKey`). A suggestion
- * only: merging is a person's call.
- */
-export function duplicateSuggestion(
-  rows: readonly CustomerRow[],
-  notSame: ReadonlySet<string> = new Set(),
-): readonly [CustomerRow, CustomerRow] | null {
-  const seen = new Map<string, CustomerRow>();
-  const keyOf = (row: CustomerRow): string[] => [
-    ...(row.phone ? [`p:${row.phone.replace(/\D/g, '').slice(-9)}`] : []),
-    ...(row.email ? [`e:${row.email.trim().toLowerCase()}`] : []),
-  ];
-  for (const row of rows) {
-    if (row.mergedIntoId) continue;
-    for (const key of keyOf(row)) {
-      if (key.length < 6) continue;
-      const other = seen.get(key);
-      const samePerson = other && other.personId !== null && other.personId === row.personId;
-      const turnedDown = other && notSame.has(pairKey(other.id, row.id));
-      if (other && !samePerson && !turnedDown && other.id !== row.id) return [other, row];
-      if (!other) seen.set(key, row);
-    }
-  }
-  return null;
 }

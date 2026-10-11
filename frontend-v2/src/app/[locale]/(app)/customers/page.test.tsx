@@ -1,6 +1,7 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { IdentitySuggestion } from '@/api/contracts/identity';
 import type * as LoadCustomers from '@/features/customers/load-customers';
 
 const loadCustomers = vi.hoisted(() => vi.fn());
@@ -14,10 +15,10 @@ vi.mock('next-intl/server', () => ({
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
-const loadNotSame = vi.hoisted(() =>
-  vi.fn(async (): Promise<ReadonlySet<string> | null> => new Set()),
+const loadSuggestions = vi.hoisted(() =>
+  vi.fn(async (): Promise<readonly IdentitySuggestion[] | null> => []),
 );
-vi.mock('@/features/customers/load-not-same', () => ({ loadNotSame }));
+vi.mock('@/features/customers/load-suggestions', () => ({ loadSuggestions }));
 
 import { CustomerList, Segments } from '@/features/customers/CustomerList';
 import { DuplicateCard } from '@/features/customers/DuplicateCard';
@@ -118,7 +119,8 @@ describe('★★ 04 - the segment is in the URL, and the counts are live', () =>
   });
 });
 
-describe('★★ 04 - the suggestion skips what was marked; unread marks, it suggests none', () => {
+describe('★★ 04 - the pair is the server’s; none, or an unread list, is no card', () => {
+  // Two customers sharing a phone, neither linked: the client once paired these itself.
   const twins = [
     {
       id: 'k1',
@@ -139,25 +141,33 @@ describe('★★ 04 - the suggestion skips what was marked; unread marks, it sug
       tags: [],
     },
   ];
-  type Card = { pair: readonly { id: string }[] | null; unchecked?: boolean };
+  const pair = (id: string, a: string, b: string): IdentitySuggestion => ({
+    id,
+    source: 'link',
+    contactIds: [a, b],
+    signal: 'same_name',
+    identifier: null,
+    contacts: [
+      { id: a, label: 'Yael', channel: 'WHATSAPP' },
+      { id: b, label: 'Instagram customer', channel: 'INSTAGRAM' },
+    ],
+  });
+  type Card = { suggestion: IdentitySuggestion };
 
-  it('a marked pair is not offered', async () => {
-    loadNotSame.mockResolvedValueOnce(new Set(['k1|k2']));
-    const card = propsOf<Card>(await page({ rows: twins, total: 2 }), DuplicateCard);
-    expect(card?.pair).toBeNull();
-    expect(card?.unchecked).toBe(false);
+  it('the server’s first pair is the card, keyed by the pair', async () => {
+    loadSuggestions.mockResolvedValueOnce([pair('s1', 'x1', 'x2'), pair('s2', 'x3', 'x4')]);
+    const tree = await page({ rows: twins, total: 2 });
+    expect(propsOf<Card>(tree, DuplicateCard)?.suggestion.contactIds).toEqual(['x1', 'x2']);
+    expect(loadSuggestions).toHaveBeenCalled();
   });
 
-  it('unmarked: offered', async () => {
-    loadNotSame.mockResolvedValueOnce(new Set());
-    const card = propsOf<Card>(await page({ rows: twins, total: 2 }), DuplicateCard);
-    expect(card?.pair?.map((r) => r.id)).toEqual(['k1', 'k2']);
+  it('★★ no pair from the server: no card - two rows sharing a phone are not paired here', async () => {
+    loadSuggestions.mockResolvedValueOnce([]);
+    expect(propsOf<Card>(await page({ rows: twins, total: 2 }), DuplicateCard)).toBeNull();
   });
 
-  it('the marks unread: none offered, and the card says why', async () => {
-    loadNotSame.mockResolvedValueOnce(null);
-    const card = propsOf<Card>(await page({ rows: twins, total: 2 }), DuplicateCard);
-    expect(card?.pair).toBeNull();
-    expect(card?.unchecked).toBe(true);
+  it('the pairs unread: no card at all, never an empty one', async () => {
+    loadSuggestions.mockResolvedValueOnce(null);
+    expect(propsOf<Card>(await page({ rows: twins, total: 2 }), DuplicateCard)).toBeNull();
   });
 });

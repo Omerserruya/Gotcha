@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { currentUserSchema, membershipSchema, notSamePairsSchema, pairKey } from './identity';
+import {
+  currentUserSchema,
+  identitySuggestionsSchema,
+  membershipSchema,
+  suggestionMatch,
+} from './identity';
 
 /**
  * `GET /api/auth/me`.
@@ -105,15 +110,90 @@ describe('★★ the shape the route actually sends', () => {
   });
 });
 
-describe('★ 04’s marked pairs - one key whichever way round, a bad row left out', () => {
-  it('reads each pair to its key; a malformed row is dropped, not the read', () => {
+/*
+ * ★★ `GET /api/identity/suggestions` (Backend 83579ac8), the `data` array as
+ * the route builds it (services/conversation/src/routes/identity.ts): a new
+ * link record and an older AI-written row, each with both customers' labels.
+ * The transport unwraps `data`, so the schema reads the array.
+ */
+const LINK_ITEM = {
+  id: 'identity:link:ig1:wa1',
+  source: 'link',
+  contactIds: ['ig1', 'wa1'],
+  signal: 'same_name',
+  identifier: null,
+  status: 'PENDING',
+  at: '2026-10-11T10:00:00Z',
+  contacts: [
+    { id: 'ig1', label: 'Instagram customer', channel: 'INSTAGRAM' },
+    { id: 'wa1', label: 'Omer Tsruya', channel: 'WHATSAPP' },
+  ],
+};
+const LEGACY_ITEM = {
+  id: 's1',
+  source: 'legacy',
+  contactIds: ['wa2', 'ig1'],
+  signal: 'ai_extracted_identifier',
+  identifier: { type: 'EMAIL', value: 'd@x.com' },
+  status: 'PENDING',
+  at: '2026-08-02T08:46:53.000Z',
+  contacts: [
+    { id: 'wa2', label: 'Dana', channel: 'WHATSAPP' },
+    { id: 'ig1', label: 'Instagram customer', channel: 'INSTAGRAM' },
+  ],
+};
+
+describe('★★ 04’s suggested pairs - the server’s shape, a bad item left out', () => {
+  it('reads both kinds of item as sent', () => {
+    const [link, legacy] = identitySuggestionsSchema.parse([LINK_ITEM, LEGACY_ITEM]);
+    expect(link).toEqual({
+      id: 'identity:link:ig1:wa1',
+      source: 'link',
+      contactIds: ['ig1', 'wa1'],
+      signal: 'same_name',
+      identifier: null,
+      contacts: LINK_ITEM.contacts,
+    });
+    expect(legacy?.contactIds).toEqual(['wa2', 'ig1']);
+    expect(legacy?.identifier).toEqual({ type: 'EMAIL', value: 'd@x.com' });
+    expect(legacy?.contacts.map((c) => c.label)).toEqual(['Dana', 'Instagram customer']);
+  });
+
+  it('a malformed item is dropped, not the read', () => {
     expect(
-      notSamePairsSchema.parse([
-        { contactIds: ['k2', 'k1'], markedAt: '2026-10-08T10:00:00Z', markedBy: 'u1' },
-        { contactIds: ['k3'] },
-        'nonsense',
-      ]),
-    ).toEqual(['k1|k2']);
-    expect(pairKey('a', 'b')).toBe(pairKey('b', 'a'));
+      identitySuggestionsSchema
+        .parse([
+          LINK_ITEM,
+          { ...LINK_ITEM, contacts: [LINK_ITEM.contacts[0]] },
+          { ...LINK_ITEM, contactIds: ['ig1', 'ig1'] },
+          { ...LINK_ITEM, contactIds: ['ig1', 'zz'] },
+          { ...LINK_ITEM, contacts: [{ id: 'ig1', label: '' }, LINK_ITEM.contacts[1]] },
+          'nonsense',
+        ])
+        .map((s) => s.id),
+    ).toEqual(['identity:link:ig1:wa1']);
+  });
+
+  it('a signal or source this app has no words for keeps the pair', () => {
+    const [item] = identitySuggestionsSchema.parse([
+      { ...LINK_ITEM, signal: 'brand_new_signal', source: 'elsewhere', identifier: 7 },
+    ]);
+    expect(item?.signal).toBe('brand_new_signal');
+    expect(item?.identifier).toBeNull();
+    expect(item && suggestionMatch(item)).toBe('other');
+  });
+
+  it('what they share: the name, a phone or an email, in either case', () => {
+    const [link, legacy] = identitySuggestionsSchema.parse([LINK_ITEM, LEGACY_ITEM]);
+    expect(link && suggestionMatch(link)).toBe('name');
+    expect(legacy && suggestionMatch(legacy)).toBe('email');
+    const [typed] = identitySuggestionsSchema.parse([
+      {
+        ...LINK_ITEM,
+        signal: 'unproven_identifier',
+        identifier: { type: 'phone', value: '+9725' },
+      },
+    ]);
+    expect(typed && suggestionMatch(typed)).toBe('phone');
   });
 });

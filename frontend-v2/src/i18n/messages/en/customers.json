@@ -39,7 +39,7 @@
     "SMS": "SMS",
     "TELEGRAM": "Telegram"
   },
-  "identityLimit": "If the same person writes from WhatsApp and from Instagram, they appear here twice. GOTCHA joins two entries only when it has the same phone number for both - and Instagram never provides one.",
+  "identityLimit": "If the same person writes from WhatsApp and from Instagram, they can appear here twice. GOTCHA joins the two on its own when it has proof, like a phone number or email it already knows them by, and suggests the rest for you to decide.",
   "detail": {
     "unavailable": "We couldn't load this customer.",
     "brief": {
@@ -466,26 +466,26 @@
   },
   "dupes": {
     "title": "Two accounts look like one person",
-    "body": "They share a {match}. Merging keeps every message under one person.",
-    "match": {
-      "phone": "phone number",
-      "email": "email address"
+    "why": {
+      "phone": "They share a phone number.",
+      "email": "They share an email address.",
+      "name": "They have the same name on two channels.",
+      "other": "GOTCHA found something they have in common."
     },
+    "keeps": "Merging shows them as one person and keeps every message from both.",
     "merge": "Merge them",
     "confirm": "Merge these two into one person?",
     "confirmYes": "Yes, merge",
     "cancel": "Cancel",
     "notSame": "Not the same",
-    "none": "No duplicates found.",
-    "done": "Merged.",
+    "done": "Merged. They now show as one person.",
     "failed": {
       "gone": "One of them no longer exists.",
-      "conflict": "These two can't be merged - one was already merged elsewhere.",
+      "not_same": "These two were marked as different people, so they weren't merged.",
       "forbidden": "You don't have permission to merge customers.",
       "failed": "They weren't merged - try again."
     },
     "notSameDone": "Marked as two people. GOTCHA won't suggest them together again.",
-    "unchecked": "Couldn't check which accounts were marked as different people, so none is suggested just now.",
     "notSameFailed": {
       "gone": "One of them no longer exists.",
       "already_same": "These two are already one person.",

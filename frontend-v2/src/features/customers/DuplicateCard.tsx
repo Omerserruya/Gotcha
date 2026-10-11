@@ -3,66 +3,59 @@
 import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
-import { customerLabel, type CustomerRow } from '@/api/contracts/customers';
+import { labelFromServer } from '@/api/contracts/customers';
+import { suggestionMatch, type IdentitySuggestion } from '@/api/contracts/identity';
 import { useRouter } from '@/i18n/navigation';
 
 import {
+  acceptSuggestion,
   markNotSame,
-  mergeContacts,
-  type MergeResult,
+  type AcceptResult,
   type NotSameResult,
 } from './identity-actions';
+import { PersonName } from './PersonName';
 import styles from './Customers.module.css';
 
 /**
- * 02's "Two accounts look like one person" - suggested, never silent. Merge
- * asks once more, then `POST /api/identity/merge`; nothing happens before
- * that second press. "Not the same" remembers the pair as two people
- * (`POST /api/identity/not-same`) and they are never suggested together
- * again; a merge later still works.
+ * 02's "Two accounts look like one person" - a pair the SERVER suggested
+ * (`GET /api/identity/suggestions`, Backend 83579ac8); nothing here pairs
+ * customers itself. The page draws it only when there is a pair: none, or a
+ * failed read, is no card at all.
+ *
+ * Suggested, never silent. "Merge them" asks once more, then `POST
+ * /api/identity/suggestions/accept`; nothing happens before that second
+ * press. "Not the same" remembers the pair as two people (`POST
+ * /api/identity/not-same`) and the server never suggests them again.
  */
-export function DuplicateCard({
-  pair,
-  unchecked = false,
-}: {
-  /** Two rows that share a phone or email; `null` when none do. */
-  readonly pair: readonly [CustomerRow, CustomerRow] | null;
-  /** The marked pairs could not be read, so none is suggested - said, not "no duplicates". */
-  readonly unchecked?: boolean;
-}) {
+export function DuplicateCard({ suggestion }: { readonly suggestion: IdentitySuggestion }) {
   const t = useTranslations('customers.dupes');
+  const list = useTranslations('customers.list');
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
-  const [result, setResult] = useState<MergeResult | null>(null);
+  const [result, setResult] = useState<AcceptResult | null>(null);
   const [marked, setMarked] = useState<NotSameResult | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  if (pair === null) {
-    return (
-      <section className={styles.sideCard} data-testid="duplicates">
-        <h2 className={styles.sideTitle}>{t('title')}</h2>
-        <p className={styles.sideNote} data-testid={unchecked ? 'duplicates-unchecked' : undefined}>
-          {unchecked ? t('unchecked') : t('none')}
-        </p>
-      </section>
-    );
-  }
-  const [target, source] = pair;
-  const shared =
-    target.phone &&
-    source.phone &&
-    target.phone.replace(/\D/g, '').slice(-9) === source.phone.replace(/\D/g, '').slice(-9)
-      ? 'phone'
-      : 'email';
+  const [a, b] = suggestion.contactIds;
+  // The server's labels: a name as written, its fallback words in ours.
+  const nameOf = (contact: IdentitySuggestion['contacts'][number]) => {
+    const label = labelFromServer(contact.label, contact.channel);
+    return 'name' in label ? <PersonName name={label.name} /> : list(`generic.${label.generic}`);
+  };
 
   return (
     <section className={styles.sideCard} data-testid="duplicates">
       <h2 className={styles.sideTitle}>{t('title')}</h2>
       <p className={styles.dupeNames} data-testid="duplicate-pair">
-        <span>{customerLabel(target)}</span>
-        <span>{customerLabel(source)}</span>
+        {suggestion.contacts.map((contact) => (
+          <span key={contact.id} data-testid={`duplicate-${contact.id}`}>
+            {nameOf(contact)}
+          </span>
+        ))}
       </p>
-      <p className={styles.sideNote}>{t('body', { match: t(`match.${shared}`) })}</p>
+      <p className={styles.sideNote}>
+        {`${t(`why.${suggestionMatch(suggestion)}`)} ${t('keeps')}`}
+      </p>
       {result?.ok ? (
         <p className={styles.sideNote} role="status" data-testid="merge-done">
           {t('done')}
@@ -83,7 +76,7 @@ export function DuplicateCard({
                 data-testid="merge-confirm"
                 onClick={() =>
                   startTransition(async () => {
-                    const done = await mergeContacts(target.id, source.id);
+                    const done = await acceptSuggestion(a, b);
                     setResult(done);
                     setConfirming(false);
                     if (done.ok) router.refresh();
@@ -122,7 +115,7 @@ export function DuplicateCard({
                 onClick={() =>
                   startTransition(async () => {
                     setResult(null);
-                    const done = await markNotSame(target.id, source.id);
+                    const done = await markNotSame(a, b);
                     setMarked(done);
                     if (done.ok) router.refresh();
                   })

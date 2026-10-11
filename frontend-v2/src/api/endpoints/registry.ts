@@ -1167,6 +1167,19 @@ export const identityEndpoints = {
    * ALREADY_SAME_PERSON). A later merge of the pair clears the mark.
    */
   notSame: () => endpoint('/api/identity/not-same'),
+  /**
+   * 04's "Two accounts look like one person" (Backend 83579ac8): GET the
+   * pending pairs (`crm:contacts:read`), each with both customers' labels.
+   * `?status=APPLIED` lists the automatic links instead; 04 draws no place
+   * for those, so nothing here asks for them.
+   */
+  suggestions: () => endpoint('/api/identity/suggestions'),
+  /**
+   * POST `{ contactIds: [a, b] }`: link a pair a person approved as one
+   * person (`crm:contacts:update`). 400 TWO_CONTACTS_REQUIRED, 404
+   * CONTACT_NOT_FOUND, 409 NOT_SAME. Both contacts stay; no field changes.
+   */
+  acceptSuggestion: () => endpoint('/api/identity/suggestions/accept'),
   timeline: (id: string) => endpoint('/api/identity/{id}/timeline', { id }),
 } as const;
 

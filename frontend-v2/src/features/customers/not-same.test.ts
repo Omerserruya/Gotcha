@@ -9,7 +9,6 @@ vi.mock('@/api/client/server-api', () => ({ serverApi: () => api }));
 vi.mock('@/api/client/signed-out', () => ({ signInIfSignedOut: async () => {} }));
 
 import { markNotSame } from './identity-actions';
-import { loadNotSame } from './load-not-same';
 
 const path = (call: unknown[]) => (call[0] as { endpoint: { path: string } }).endpoint.path;
 
@@ -42,16 +41,5 @@ describe('★★ 04 at the wire (conversation e5a56fd3)', () => {
     expect(await markNotSame('k1', 'k2')).toEqual({ ok: false, reason: 'gone' });
     api.post.mockRejectedValueOnce(new ApiError({ kind: 'authorization', status: 403 }));
     expect(await markNotSame('k1', 'k2')).toEqual({ ok: false, reason: 'forbidden' });
-  });
-
-  it('reads the marks as keys; a failed read is null - never "none marked"', async () => {
-    api.get.mockImplementationOnce(
-      async ({ payload }: { payload: { parse: (v: unknown) => unknown } }) =>
-        payload.parse([{ contactIds: ['k1', 'k2'] }]),
-    );
-    expect(await loadNotSame()).toEqual(new Set(['k1|k2']));
-    expect(path(api.get.mock.calls[0]!)).toBe('/api/identity/not-same');
-    api.get.mockRejectedValueOnce(new Error('down'));
-    expect(await loadNotSame()).toBeNull();
   });
 });

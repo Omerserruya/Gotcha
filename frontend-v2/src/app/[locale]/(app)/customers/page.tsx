@@ -5,16 +5,11 @@ import { CustomerList, ReachOut, Segments, WhoTheyAre } from '@/features/custome
 import { CustomerSelection } from '@/features/customers/CustomerSelection';
 import { CustomersActions } from '@/features/customers/CustomersActions';
 import { DuplicateCard } from '@/features/customers/DuplicateCard';
-import {
-  duplicateSuggestion,
-  inSegment,
-  peopleToday,
-  segmentOf,
-} from '@/features/customers/people-today';
+import { inSegment, peopleToday, segmentOf } from '@/features/customers/people-today';
 import styles from '@/features/customers/Customers.module.css';
 import { loadCommerce, loadInsights, loadSegments } from '@/features/customers/load-customer-facts';
 import { loadCustomers } from '@/features/customers/load-customers';
-import { loadNotSame } from '@/features/customers/load-not-same';
+import { loadSuggestions } from '@/features/customers/load-suggestions';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -61,8 +56,10 @@ export default async function Page({
   const [
     { rows, total, truncated, searchedField, orderSearched, conversations, quiet },
     segments,
-    notSame,
-  ] = await Promise.all([loadCustomers(query, { today: true }), loadSegments(), loadNotSame()]);
+    suggestions,
+  ] = await Promise.all([loadCustomers(query, { today: true }), loadSegments(), loadSuggestions()]);
+  // The server's pairs only (Backend 83579ac8); none, or an unread list, is no card.
+  const suggestion = suggestions?.[0] ?? null;
   const now = new Date();
   const everyone = rows === null ? [] : peopleToday(rows, conversations, quiet?.ids ?? null, now);
   const shown = everyone.filter((person) => inSegment(person, segment));
@@ -126,11 +123,8 @@ export default async function Page({
               <ReachOut
                 quiet={quiet === null ? null : { count: quiet.count, capped: quiet.capped }}
               />
-              {/* A pair marked "not the same" is never suggested; unread marks, none is. */}
-              <DuplicateCard
-                pair={notSame === null ? null : duplicateSuggestion(rows, notSame)}
-                unchecked={notSame === null}
-              />
+              {/* Keyed by the pair: the next one opens fresh, never under the last one's result. */}
+              {suggestion ? <DuplicateCard key={suggestion.id} suggestion={suggestion} /> : null}
               <WhoTheyAre segments={segments} />
             </aside>
           </div>
