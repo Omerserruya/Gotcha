@@ -33,10 +33,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (originError) return originError;
 
   try {
+    /*
+     * ★★ ENVELOPED: the platform answers `{ data: { ticket, expiresInSeconds } }`
+     * (auth routes/realtime.ts), and the client unwraps a top-level `data`.
+     * Read `raw`, the schema looked for `ticket` beside `data` and refused
+     * every ticket the platform minted (2026-10-11).
+     */
     const ticket = await serverApi().post({
       endpoint: realtimeEndpoints.ticket(),
       payload: realtimeTicketSchema,
-      raw: true,
     });
 
     return NextResponse.json(ticket, {
