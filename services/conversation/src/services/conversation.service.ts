@@ -4,6 +4,7 @@ import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords, noti
 import { getIO } from "../lib/socket";
 import { visibilityClause } from "../lib/conversation-visibility";
 import { contactIdsFor, contactIdOf } from "../lib/conversation-contact";
+import { unreadStates } from "../lib/unread-state";
 import * as messageService from "./message.service";
 import { presentMessageMedia } from "../lib/message-media";
 
@@ -130,18 +131,14 @@ async function workspaceTimeZone(tenantId: string): Promise<string> {
 /** What "an automation owns this" means, in one place. */
 const AUTOMATED_HANDLERS = ["ai_agent", "flow"];
 
-export async function list(tenantId: string, filters: ConversationFilters) {
-  const { status, assignedAgentId, channel, departmentId, search, page = 1, limit = 50, cursor, includeAutomated = false, automatedOnly = false, view, from, to, withTotal = false, userRole, userId, userDepartmentId } = filters;
-  if ((from !== undefined && !isWorkspaceDay(from)) || (to !== undefined && !isWorkspaceDay(to)) || (from && to && from > to)) {
-    throw Object.assign(new Error("invalid_period: from and to are YYYY-MM-DD days, from <= to"), { status: 400 });
-  }
-  const decodedCursor = cursor ? decodeConversationCursor(cursor) : null;
-  if (cursor && !decodedCursor) {
-    // Refused by name rather than silently restarting from the top, which a
-    // paging UI renders as a list that never ends.
-    throw Object.assign(new Error("invalid_cursor"), { status: 400 });
-  }
-  const keyset = cursor !== undefined;
+/**
+ * The list's WHERE for a set of filters: view, status, automation rule,
+ * assignee, period, channel, department, the sandbox exclusion, the viewer's
+ * visibility and the search. Shared by `list` and `unreadCounts`, so a count
+ * can never disagree with the rows it counts. No cursor: that is the page's.
+ */
+export async function listWhere(tenantId: string, filters: ConversationFilters): Promise<any> {
+  const { status, assignedAgentId, channel, departmentId, search, includeAutomated = false, automatedOnly = false, view, from, to, userRole, userId, userDepartmentId } = filters;
   const where: any = { tenantId };
   if (view === "queue") {
     // One AND element carrying the whole definition (its own OR inside), so the
@@ -222,6 +219,22 @@ export async function list(tenantId: string, filters: ConversationFilters) {
       ],
     });
   }
+  return where;
+}
+
+export async function list(tenantId: string, filters: ConversationFilters) {
+  const { page = 1, limit = 50, cursor, view, from, to, withTotal = false, userId } = filters;
+  if ((from !== undefined && !isWorkspaceDay(from)) || (to !== undefined && !isWorkspaceDay(to)) || (from && to && from > to)) {
+    throw Object.assign(new Error("invalid_period: from and to are YYYY-MM-DD days, from <= to"), { status: 400 });
+  }
+  const decodedCursor = cursor ? decodeConversationCursor(cursor) : null;
+  if (cursor && !decodedCursor) {
+    // Refused by name rather than silently restarting from the top, which a
+    // paging UI renders as a list that never ends.
+    throw Object.assign(new Error("invalid_cursor"), { status: 400 });
+  }
+  const keyset = cursor !== undefined;
+  const where: any = await listWhere(tenantId, filters);
   /**
    * How many conversations in THIS VIEW have no `lastMessageAt`.
    *
@@ -338,16 +351,30 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   // Flatten last message info, and the contact behind each row (one batched,
   // read-only lookup for the page - see lib/conversation-contact.ts).
   const rows = keyset ? pageRows : conversations;
-  const contactMap = await contactIdsFor(tenantId, rows as any[]);
+  const [contactMap, unread] = await Promise.all([
+    contactIdsFor(tenantId, rows as any[]),
+    // The VIEWER's read state, one query for the page (lib/unread-state.ts).
+    // Decoration: if it fails the inbox still loads, its rows served as read.
+    userId
+      ? unreadStates(tenantId, userId, rows.map((c) => c.id)).catch((err) => {
+          console.warn("[conversations] unread state unavailable, rows served as read:", (err as Error)?.message);
+          return new Map();
+        })
+      : Promise.resolve(new Map()),
+  ]);
   const data = rows.map((c) => {
     const lastMsg = c.messages[0] || null;
     const { messages, ...rest } = c;
+    const state = unread.get(c.id);
     return {
       ...rest,
       contactId: contactIdOf(contactMap, c as any),
       lastMessageDirection: lastMsg?.direction || null,
       lastMessageBody: lastMsg?.body || null,
       lastMessageType: lastMsg?.messageType ?? null,
+      unread: state?.unread ?? false,
+      unreadCount: state?.unreadCount ?? 0,
+      lastReadAt: state?.lastReadAt ?? null,
     };
   });
 
@@ -368,6 +395,49 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   // Legacy offset callers keep the exact shape they had, total included.
   const t = total as number;
   return { data, meta: { total: t, page, limit, totalPages: Math.ceil(t / limit) }, undatedCount, viewTotal: t };
+}
+
+/**
+ * The inbox views, as list filters: the same mapping as frontend-v2's
+ * `viewQuery` (features/inbox/inbox-views.ts), so a count and its list agree.
+ */
+export const UNREAD_COUNT_VIEWS = ["queue", "mine", "active", "gotcha", "all", "resolved"] as const;
+export type UnreadCountView = (typeof UNREAD_COUNT_VIEWS)[number];
+
+function viewFilters(view: UnreadCountView, userId: string): Partial<ConversationFilters> {
+  switch (view) {
+    case "queue": return { view: "queue" };
+    case "mine": return { assignedAgentId: userId, includeAutomated: true };
+    case "active": return { status: "OPEN" };
+    case "gotcha": return { automatedOnly: true };
+    case "all": return { includeAutomated: true };
+    case "resolved": return { status: "CLOSED", includeAutomated: true };
+  }
+}
+
+/**
+ * How many conversations in each view are unread for this viewer. Each view's
+ * set comes from `listWhere`, with the list's own filters and visibility; the
+ * unread rule is `unreadStates`, the one the rows carry. One id read per view
+ * and one unread query for all of them.
+ */
+export async function unreadCounts(
+  tenantId: string,
+  viewer: { userId: string; role?: string; departmentId?: string },
+  views: UnreadCountView[],
+): Promise<Record<string, number>> {
+  const sets = await Promise.all(views.map(async (view) => {
+    const where = await listWhere(tenantId, {
+      ...viewFilters(view, viewer.userId),
+      userId: viewer.userId, userRole: viewer.role, userDepartmentId: viewer.departmentId,
+    });
+    const rows = await prisma.conversation.findMany({ where, select: { id: true } });
+    return { view, ids: rows.map((r) => r.id) };
+  }));
+  const states = await unreadStates(tenantId, viewer.userId, Array.from(new Set(sets.flatMap((s) => s.ids))));
+  const out: Record<string, number> = {};
+  for (const { view, ids } of sets) out[view] = ids.filter((id) => states.get(id)?.unread).length;
+  return out;
 }
 
 export async function getById(tenantId: string, id: string) {

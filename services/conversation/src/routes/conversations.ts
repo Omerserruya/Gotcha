@@ -2,6 +2,8 @@ import { Router, Request, Response } from "express";
 import { authenticate, resolveTenant, requireRole, requireActiveTenant, prisma, latestHandover } from "@chatcenter/shared";
 import { requireVisibleConversation } from "../lib/require-visible-conversation";
 import * as conversationService from "../services/conversation.service";
+import { getIO } from "../lib/socket";
+import { unreadStates } from "../lib/unread-state";
 
 async function generateAndSaveSummary(tenantId: string, conversationId: string, authHeader?: string) {
   if (!authHeader) return;
@@ -101,6 +103,32 @@ router.get("/", async (req: Request, res: Response) => {
     if (err?.status === 400) { res.status(400).json({ error: err.message }); return; }
     console.error("List conversations error:", err);
     res.status(500).json({ error: "Failed to list conversations" });
+  }
+});
+
+/**
+ * GET /unread-counts?views=queue,mine,active,gotcha,all
+ *   -> { data: { queue: n, mine: n, ... } }
+ * Unread for THIS viewer, per view, with exactly the list's filters and
+ * visibility (conversationService.listWhere). Registered above "/:id", which
+ * would otherwise take "unread-counts" as an id.
+ */
+router.get("/unread-counts", async (req: Request, res: Response) => {
+  try {
+    const asked = String(req.query.views ?? "queue,mine,active,gotcha,all").split(",").map((v) => v.trim()).filter(Boolean);
+    const unknown = asked.filter((v) => !(conversationService.UNREAD_COUNT_VIEWS as readonly string[]).includes(v));
+    if (unknown.length) { res.status(400).json({ error: `unknown view: ${unknown.join(",")}` }); return; }
+    const views = Array.from(new Set(asked)) as conversationService.UnreadCountView[];
+    const data = await conversationService.unreadCounts(
+      req.tenantId!,
+      { userId: req.user!.userId, role: req.user!.role, departmentId: req.user!.departmentId },
+      views,
+    );
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({ data });
+  } catch (err) {
+    console.error("Unread counts error:", err);
+    res.status(500).json({ error: "Failed to count unread conversations" });
   }
 });
 
@@ -272,6 +300,27 @@ router.delete("/:id/archive", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Tell the viewer's OTHER tabs (their own room only: read state is personal)
+ * that this conversation's unread changed, so the dot clears or appears there
+ * too. conversation:updated, merged by id like any partial update. Best-effort:
+ * the HTTP answer is the truth for this tab.
+ */
+async function pushReadState(tenantId: string, userId: string, conversationId: string, markedUnread: boolean): Promise<void> {
+  try {
+    const state = (await unreadStates(tenantId, userId, [conversationId])).get(conversationId);
+    getIO().to(`user:${userId}`).emit("conversation:updated", {
+      id: conversationId,
+      conversationId,
+      tenantId,
+      unread: state?.unread ?? markedUnread,
+      unreadCount: state?.unreadCount ?? 0,
+      lastReadAt: state?.lastReadAt ?? null,
+      markedUnread,
+    });
+  } catch { /* socket not ready */ }
+}
+
 router.post("/:id/unread", async (req: Request, res: Response) => {
   try {
     const conversationId = req.params.id as string;
@@ -295,6 +344,7 @@ router.post("/:id/unread", async (req: Request, res: Response) => {
       create: { tenantId: req.tenantId!, userId, conversationId, markedUnread: true },
       update: { markedUnread: true },
     });
+    await pushReadState(req.tenantId!, userId, conversationId, true);
     res.json({ data: state });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message || "Failed to mark conversation unread" });
@@ -316,6 +366,7 @@ router.delete("/:id/unread", async (req: Request, res: Response) => {
       create: { tenantId: req.tenantId!, userId, conversationId, markedUnread: false, lastReadAt: new Date() },
       update: { markedUnread: false, lastReadAt: new Date() },
     });
+    await pushReadState(req.tenantId!, userId, conversationId, false);
     res.json({ data: state });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message || "Failed to mark conversation read" });
