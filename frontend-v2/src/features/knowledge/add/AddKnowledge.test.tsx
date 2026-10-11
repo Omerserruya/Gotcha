@@ -187,6 +187,58 @@ describe('★★ 08b live (Omer, 2026-10-04) - and nothing is sent without the b
   });
 });
 
+/*
+ * K5 (Omer, 2026-10-11): what was added is in the list at once. The page's
+ * list is the server's read, so every way that writes re-reads it - after the
+ * write has answered, once, and never when it was refused.
+ */
+describe('★★ K5 - an add re-reads the page behind the sheet', () => {
+  const live = (initialWay: AddWay) =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ knowledge }}>
+        <AddKnowledge initialWay={initialWay} base={{ id: 'kb1' }} />
+      </NextIntlClientProvider>,
+    );
+  beforeEach(() => {
+    addKnowledge.mockReset();
+    refresh.mockReset();
+  });
+
+  it('a document: once, after the write answered', async () => {
+    addKnowledge.mockResolvedValue({ ok: true, title: 'Terms', status: 'pending' });
+    live('document');
+    await userEvent.upload(
+      screen.getByTestId('add-file'),
+      new File(['%PDF'], 'Terms.pdf', { type: 'application/pdf' }),
+    );
+    expect(refresh).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId('add-teach'));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refresh.mock.invocationCallOrder[0]).toBeGreaterThan(
+      addKnowledge.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('a page: once, after the write answered', async () => {
+    addKnowledge.mockResolvedValue({ ok: true, title: 'shop.example.com', status: 'pending' });
+    live('page');
+    await userEvent.type(screen.getByTestId('add-url'), 'https://shop.example.com/terms');
+    await userEvent.click(screen.getByTestId('add-read'));
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('refused: the page is not re-read', async () => {
+    addKnowledge.mockResolvedValue({ ok: false, reason: 'failed' });
+    live('document');
+    await userEvent.upload(
+      screen.getByTestId('add-file'),
+      new File(['%PDF'], 'Terms.pdf', { type: 'application/pdf' }),
+    );
+    await userEvent.click(screen.getByTestId('add-teach'));
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
 describe('★★ Drive and Confluence - at the provider, and back here (backend df9ee4cd)', () => {
   const assign = vi.fn();
   beforeEach(() => {

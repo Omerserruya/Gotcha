@@ -187,3 +187,68 @@ describe('★ "Scan again" sits with the website (moved from Workspace, Omer 202
     expect(screen.queryByTestId('knowledge-rescan')).toBeNull();
   });
 });
+
+/*
+ * K5 (Omer, 2026-10-11): what was just added is in the list at once - a row
+ * of its own, with its state. Before, a source row stood for everything in
+ * it, so an added document turned "One document" into "2 documents" and
+ * nothing appeared.
+ */
+describe('★★ K5 - every document is a row, and a just-added one says it is being read', () => {
+  const doc = (over: Partial<KnowledgeSource['documents'][number]>) => ({
+    id: 'd-new',
+    title: 'Autumn terms',
+    status: 'pending',
+    chunkCount: 0,
+    sourceType: 'file',
+    sourceUrl: null,
+    updatedAt: '2026-10-11T09:00:00.000Z',
+    ...over,
+  });
+
+  it('★★ the just-added document is listed, still being read - beside the older one', async () => {
+    const older = source().documents[0]!;
+    await renderScreen([source({ documents: [doc({}), older] })]);
+    const row = screen.getByTestId('doc-d-new');
+    expect(row).toHaveTextContent('Autumn terms');
+    expect(row).toHaveAttribute('data-state', 'reading');
+    expect(screen.getByTestId('doc-state-d-new')).toHaveTextContent(/^Being read$/);
+    expect(row).toHaveTextContent('updated October 11, 2026');
+    // The older, ready one is a row too, and claims no state.
+    expect(screen.getByTestId('doc-d1')).toHaveTextContent('Wholesale terms');
+    expect(screen.queryByTestId('doc-state-d1')).toBeNull();
+    // Newest first, as the route orders them - under their source.
+    const rows = screen
+      .getAllByTestId(/^(source|doc)-/)
+      .filter((el) => el.tagName === 'LI')
+      .map((el) => el.dataset.testid);
+    expect(rows).toEqual(['source-k1', 'doc-d-new', 'doc-d1']);
+  });
+
+  it('`processing` is being read too; `error` says it could not be read', async () => {
+    await renderScreen([
+      source({
+        documents: [doc({ id: 'p', status: 'processing' }), doc({ id: 'e', status: 'error' })],
+      }),
+    ]);
+    expect(screen.getByTestId('doc-state-p')).toHaveTextContent(/^Being read$/);
+    expect(screen.getByTestId('doc-e')).toHaveAttribute('data-state', 'failed');
+    expect(screen.getByTestId('doc-state-e')).toHaveTextContent(/^Couldn't be read$/);
+  });
+
+  it('a status nobody wrote down is not "ready"', async () => {
+    await renderScreen([source({ documents: [doc({ id: 'x', status: 'queued' })] })]);
+    expect(screen.getByTestId('doc-x')).toHaveAttribute('data-state', 'reading');
+  });
+
+  it('an untitled document says so, and the title is set apart as the user’s text', async () => {
+    await renderScreen([
+      source({ documents: [doc({ id: 'u', title: '' }), doc({ id: 'h', title: 'תנאי משלוח' })] }),
+    ]);
+    expect(screen.getByTestId('doc-u')).toHaveTextContent('Untitled');
+    expect(screen.getByTestId('doc-u').querySelector('bdi')).toBeNull();
+    const bdi = screen.getByTestId('doc-h').querySelector('bdi');
+    expect(bdi).toHaveTextContent('תנאי משלוח');
+    expect(bdi).toHaveAttribute('dir', 'auto');
+  });
+});

@@ -373,6 +373,27 @@
     color: var(--intent-blocked-text);
   }
 
+  /* K5: a document in the source above it - 02's uploaded row, set in under its source. */
+  .doc {
+    padding-inline-start: var(--space-32);
+  }
+
+  .docTitle {
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+    overflow-wrap: anywhere;
+  }
+
+  /* 02's "Conflict" pill colours: it was not read, so it answers nothing. */
+  .docFailed {
+    flex: none;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--intent-urgent-surface);
+    font-size: var(--font-size-micro);
+    color: var(--intent-urgent-text);
+  }
+
   .gap {
     display: flex;
     align-items: center;

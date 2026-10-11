@@ -71,7 +71,11 @@
     "sameName": "another source has this name too",
     "documents": "{count, plural, =0 {Nothing in it} =1 {One document} other {# documents}}",
     "refreshed": "last refreshed {date}",
-    "pending": "{count, plural, =1 {One document is still being read, so it isn't answering anything yet} other {# documents are still being read, so they aren't answering anything yet}}"
+    "pending": "{count, plural, =1 {One document is still being read, so it isn't answering anything yet} other {# documents are still being read, so they aren't answering anything yet}}",
+    "untitled": "Untitled",
+    "docUpdated": "updated {date}",
+    "docReading": "Being read",
+    "docFailed": "Couldn't be read"
   },
   "add": "Add knowledge",
   "way": {

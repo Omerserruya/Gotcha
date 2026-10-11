@@ -1,7 +1,8 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 import {
+  documentState,
   hasAmbiguousName,
   lastRefreshed,
   notReadyCount,
@@ -281,38 +282,84 @@ export async function KnowledgeScreen({
                       const refreshed = date(lastRefreshed(source));
                       const pending = notReadyCount(source);
                       return (
-                        <li
-                          key={source.id}
-                          className={styles.source}
-                          data-testid={`source-${source.id}`}
-                        >
-                          <span className={styles.sourceText}>
-                            <span className={styles.sourceName}>
-                              {source.name || t('sources.unnamed')}
-                              {/* A shared name says what tells the two apart. */}
-                              {hasAmbiguousName(source, sources) ? (
-                                <span
-                                  className={styles.disambiguate}
-                                  data-testid={`same-name-${source.id}`}
-                                >
-                                  {t('sources.sameName')}
+                        <Fragment key={source.id}>
+                          <li className={styles.source} data-testid={`source-${source.id}`}>
+                            <span className={styles.sourceText}>
+                              <span className={styles.sourceName}>
+                                {source.name || t('sources.unnamed')}
+                                {/* A shared name says what tells the two apart. */}
+                                {hasAmbiguousName(source, sources) ? (
+                                  <span
+                                    className={styles.disambiguate}
+                                    data-testid={`same-name-${source.id}`}
+                                  >
+                                    {t('sources.sameName')}
+                                  </span>
+                                ) : null}
+                              </span>
+                              {/* WHEN, not whether that is good: no staleness policy exists. */}
+                              <span className={styles.sourceMeta} data-testid={`docs-${source.id}`}>
+                                {t('sources.documents', { count: source.documents.length })}
+                                {refreshed
+                                  ? ` · ${t('sources.refreshed', { date: refreshed })}`
+                                  : null}
+                              </span>
+                            </span>
+                            {pending > 0 ? (
+                              <span className={styles.pending} data-testid={`pending-${source.id}`}>
+                                {t('sources.pending', { count: pending })}
+                              </span>
+                            ) : null}
+                          </li>
+                          {/*
+                          ★★ K5 (Omer, 2026-10-11): what is IN it, a row each -
+                          newest first, as the route orders them. A source row
+                          alone turned an added document into "13 documents"
+                          where "12" had been, and nothing appeared. Each row
+                          says whether it is still being read.
+                        */}
+                          {source.documents.map((document) => {
+                            const state = documentState(document);
+                            const updated = date(document.updatedAt);
+                            return (
+                              <li
+                                key={document.id}
+                                className={`${styles.source} ${styles.doc}`}
+                                data-testid={`doc-${document.id}`}
+                                data-state={state}
+                              >
+                                <span className={styles.sourceText}>
+                                  <span className={styles.docTitle}>
+                                    {document.title ? (
+                                      <UserText>{document.title}</UserText>
+                                    ) : (
+                                      t('sources.untitled')
+                                    )}
+                                  </span>
+                                  {updated ? (
+                                    <span className={styles.sourceMeta}>
+                                      {t('sources.docUpdated', { date: updated })}
+                                    </span>
+                                  ) : null}
                                 </span>
-                              ) : null}
-                            </span>
-                            {/* WHEN, not whether that is good: no staleness policy exists. */}
-                            <span className={styles.sourceMeta} data-testid={`docs-${source.id}`}>
-                              {t('sources.documents', { count: source.documents.length })}
-                              {refreshed
-                                ? ` · ${t('sources.refreshed', { date: refreshed })}`
-                                : null}
-                            </span>
-                          </span>
-                          {pending > 0 ? (
-                            <span className={styles.pending} data-testid={`pending-${source.id}`}>
-                              {t('sources.pending', { count: pending })}
-                            </span>
-                          ) : null}
-                        </li>
+                                {state === 'ready' ? null : (
+                                  <span
+                                    className={
+                                      state === 'failed' ? styles.docFailed : styles.pending
+                                    }
+                                    data-testid={`doc-state-${document.id}`}
+                                  >
+                                    {t(
+                                      state === 'failed'
+                                        ? 'sources.docFailed'
+                                        : 'sources.docReading',
+                                    )}
+                                  </span>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </Fragment>
                       );
                     })}
                   </ul>

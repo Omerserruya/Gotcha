@@ -68,6 +68,20 @@ export function lastRefreshed(source: KnowledgeSource): string | null {
   return stamps.length > 0 ? stamps[stamps.length - 1]! : null;
 }
 
+export type KnowledgeListDocument = z.infer<typeof knowledgeDocumentSchema>;
+
+/**
+ * One document's state, as its row says it. The writers' vocabulary
+ * (`embedding.service.ts`): `pending` on create, `processing` while it is
+ * read, then `ready`, or `error`. Anything else is not answering yet, so it
+ * reads as being read - never as ready.
+ */
+export function documentState(document: KnowledgeListDocument): 'ready' | 'reading' | 'failed' {
+  if (document.status === 'ready') return 'ready';
+  if (document.status === 'error') return 'failed';
+  return 'reading';
+}
+
 /** Documents that are not yet answering anything. */
 export function notReadyCount(source: KnowledgeSource): number {
   return source.documents.filter((d) => d.status !== 'ready').length;
