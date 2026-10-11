@@ -71,20 +71,23 @@ export default async function Page({
   /*
     12, measured: the header with "Invite someone" on the right (it opens the
     inline invite row, `?invite=1`), then People · Roles · Teams, then the
-    view the tab names.
+    view the tab names. The Teams view has no invite (Omer, 2026-10-11):
+    inviting is the People tab's, where the row it opens lives.
   */
   return (
     <SettingsSection
       title={t('title')}
       description={summary ?? t('description')}
       actions={
-        <Link
-          href={{ pathname: '/settings/people', query: { invite: '1' } }}
-          className={styles.headerAction}
-          data-testid="invite-open"
-        >
-          {t('invite.open')}
-        </Link>
+        tab === 'teams' ? undefined : (
+          <Link
+            href={{ pathname: '/settings/people', query: { invite: '1' } }}
+            className={styles.headerAction}
+            data-testid="invite-open"
+          >
+            {t('invite.open')}
+          </Link>
+        )
       }
     >
       <PeopleTabs

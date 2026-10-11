@@ -10,10 +10,17 @@ vi.mock('next-intl/server', () => ({
     createTranslator({ locale: 'en', messages: { people }, namespace }),
 }));
 vi.mock('@/i18n/navigation', () => ({
-  Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
+  Link: ({ children, href: _href, ...rest }: { children: ReactNode; href: unknown }) => (
+    <a {...rest}>{children}</a>
+  ),
 }));
 vi.mock('@/shell/SettingsSection', () => ({
-  SettingsSection: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  SettingsSection: ({ actions, children }: { actions?: ReactNode; children: ReactNode }) => (
+    <div>
+      <header data-testid="section-actions">{actions}</header>
+      {children}
+    </div>
+  ),
 }));
 vi.mock('@/shell/Drawer', () => ({
   Drawer: ({
@@ -103,5 +110,28 @@ describe('★ 12 - the team cards sit under the people list, as 02 draws them', 
     const table = screen.getByTestId('table');
     const teams = screen.getByTestId('teams');
     expect(table.compareDocumentPosition(teams) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe('★ 12 - inviting is the People tab’s, not the Teams view’s (Omer, 2026-10-11)', () => {
+  it('Teams: the teams, and no "Invite someone" - in the header or anywhere', async () => {
+    await open({ tab: 'teams' });
+    expect(screen.getByTestId('teams')).toBeInTheDocument();
+    expect(screen.queryByTestId('invite-open')).toBeNull();
+    expect(screen.getByTestId('section-actions')).toBeEmptyDOMElement();
+    expect(screen.queryByTestId('invite')).toBeNull();
+    expect(screen.queryByText(people.invite.open)).toBeNull();
+  });
+
+  it('Teams with ?invite=1 still opens nothing', async () => {
+    await open({ tab: 'teams', invite: '1' });
+    expect(screen.queryByTestId('invite')).toBeNull();
+    expect(screen.queryByTestId('invite-open')).toBeNull();
+  });
+
+  it('People keeps its invite exactly: the header link and the invite row', async () => {
+    await open({});
+    expect(screen.getByTestId('invite-open')).toHaveTextContent(people.invite.open);
+    expect(screen.getByTestId('invite')).toBeInTheDocument();
   });
 });
