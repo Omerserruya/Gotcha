@@ -174,12 +174,25 @@ export default async function Page({
               </div>
             ) : (
               <>
-                <SystemHead integration={integration} capabilities={actions} usage={usage} />
+                <SystemHead
+                  integration={integration}
+                  capabilities={actions}
+                  usage={usage}
+                  // In the head, in view on arrival; a broken system has it on its Reconnect card.
+                  disconnect={integration !== null && !needsReconnect(integration)}
+                />
                 <CapabilityScreen capabilities={actions} usage={usage} integration={integration} />
               </>
             )}
-            {/* Last, and confirmed before anything is sent. */}
-            {integration !== null && isConnected(integration) ? (
+            {/*
+              Connected, not broken, and no head drawn (no actions to list):
+              here, which is near the top when nothing is listed. Otherwise
+              the head or the Reconnect card carries it - never twice.
+            */}
+            {integration !== null &&
+            isConnected(integration) &&
+            !needsReconnect(integration) &&
+            (capabilities === null || capabilities.length === 0) ? (
               <DisconnectSystem slug={integration.slug} name={integration.name} />
             ) : null}
           </>

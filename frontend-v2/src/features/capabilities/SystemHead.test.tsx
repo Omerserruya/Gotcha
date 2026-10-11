@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { createFormatter, createTranslator } from 'next-intl';
+import { render, screen, within } from '@testing-library/react';
+import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import { capabilitySchema } from '@/api/contracts/capabilities';
@@ -11,6 +11,17 @@ vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'capabilities') =>
     createTranslator({ locale: 'en', messages: { capabilities: messages, common }, namespace }),
   getFormatter: async () => createFormatter({ locale: 'en' }),
+}));
+
+vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => '/studio/capabilities',
+}));
+vi.mock('./connect-actions', () => ({
+  // Never pressed here: a real disconnect is never sent from a test.
+  disconnectSystem: vi.fn(async () => {
+    throw new Error('a test must never disconnect for real');
+  }),
 }));
 
 import { SystemHead } from './SystemHead';
@@ -126,5 +137,36 @@ describe('★★ the connection’s last error, in words, under its line', () =>
   it('a healthy connection has no error line', async () => {
     render(await SystemHead({ integration: shopify, capabilities: caps, usage: null }));
     expect(screen.queryByTestId('system-error')).toBeNull();
+  });
+});
+
+describe('★★ Disconnect is in the head - in view on arrival (Omer, 2026-10-11)', () => {
+  const head = async (disconnect?: boolean) =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ capabilities: messages, common }}>
+        {await SystemHead({ integration: shopify, capabilities: caps, usage: null, disconnect })}
+      </NextIntlClientProvider>,
+    );
+
+  it('★★ asked for: the head holds this system’s Disconnect', async () => {
+    await head(true);
+    const button = within(screen.getByTestId('system-head')).getByTestId('disconnect-start');
+    expect(button).toHaveTextContent('Shopify');
+  });
+
+  it('not asked for (a broken system has it on its Reconnect card): none here', async () => {
+    await head(false);
+    expect(screen.queryByTestId('disconnect-start')).toBeNull();
+    await head(undefined);
+    expect(screen.queryAllByTestId('disconnect-start')).toHaveLength(0);
+  });
+
+  it('the built-in actions have nothing to disconnect, whatever is asked', async () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ capabilities: messages, common }}>
+        {await SystemHead({ integration: null, capabilities: caps, usage: null, disconnect: true })}
+      </NextIntlClientProvider>,
+    );
+    expect(screen.queryByTestId('disconnect-start')).toBeNull();
   });
 });

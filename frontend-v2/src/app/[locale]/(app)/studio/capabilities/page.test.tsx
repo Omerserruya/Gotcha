@@ -149,11 +149,18 @@ describe('★★ a broken connection has a way back on its screen', () => {
     expect(find(await page({ system: 'hubspot' }), ReconnectSystem)).toBeNull();
   });
 
-  it.each(['CONNECTED', 'ERROR'])('%s: a Disconnect, for this system', async (status) => {
-    withHubspot({ id: 'c1', status });
+  it('CONNECTED with no actions listed (no head): its Disconnect, for this system', async () => {
+    withHubspot({ id: 'c1', status: 'CONNECTED' });
     expect(find<{ slug: string }>(await page({ system: 'hubspot' }), DisconnectSystem)?.slug).toBe(
       'hubspot',
     );
+  });
+
+  it('ERROR: its Disconnect is on the Reconnect card, so not drawn a second time below', async () => {
+    withHubspot({ id: 'c1', status: 'ERROR' });
+    const tree = await page({ system: 'hubspot' });
+    expect(find(tree, ReconnectSystem)).not.toBeNull();
+    expect(find(tree, DisconnectSystem)).toBeNull();
   });
 
   it.each([
@@ -164,6 +171,37 @@ describe('★★ a broken connection has a way back on its screen', () => {
     const tree = await page({ system: 'hubspot' });
     expect(find(tree, ReconnectSystem)).toBeNull();
     expect(find(tree, AvailableSystem)).not.toBeNull();
+    expect(find(tree, DisconnectSystem)).toBeNull();
+  });
+});
+
+describe('★★ Disconnect is in view on arrival - in the head, or on the Reconnect card (Omer, 2026-10-11)', () => {
+  const withActions = (status: string) =>
+    loadCapabilities.mockResolvedValue({
+      capabilities: [capabilitySchema.parse({ toolName: 'hubspot.a', integration: 'hubspot' })],
+      usage: null,
+      integrations: [
+        integrationSchema.parse({
+          id: 'i1',
+          slug: 'hubspot',
+          name: 'HubSpot',
+          tenantConnection: { id: 'c1', status },
+        }),
+      ],
+    });
+
+  it('★★ CONNECTED with actions: the head carries it, and nothing below the list', async () => {
+    withActions('CONNECTED');
+    const tree = await page({ system: 'hubspot' });
+    expect(find<{ disconnect?: boolean }>(tree, SystemHead)?.disconnect).toBe(true);
+    expect(find(tree, DisconnectSystem)).toBeNull();
+  });
+
+  it('★ ERROR with actions: the Reconnect card carries it, so the head does not', async () => {
+    withActions('ERROR');
+    const tree = await page({ system: 'hubspot' });
+    expect(find(tree, ReconnectSystem)).not.toBeNull();
+    expect(find<{ disconnect?: boolean }>(tree, SystemHead)?.disconnect).toBe(false);
     expect(find(tree, DisconnectSystem)).toBeNull();
   });
 });

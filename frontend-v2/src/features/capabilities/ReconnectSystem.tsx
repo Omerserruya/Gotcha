@@ -4,6 +4,7 @@ import type { Integration } from '@/api/contracts/integrations';
 import { platformErrorReason } from '@/api/contracts/platform-errors';
 
 import { ConnectFor } from './ConnectFor';
+import { DisconnectSystem } from './DisconnectSystem';
 import styles from './Capabilities.module.css';
 
 /**
@@ -18,6 +19,9 @@ import styles from './Capabilities.module.css';
  * The reason is the code's, in words; the stored sentence never is (dev's
  * Shopify row holds a raw HTML 401 page). `showReason` is for when the header
  * that normally carries it is not drawn.
+ *
+ * ★ And the other way out: Disconnect, beside Reconnect - a broken system is
+ *   exactly one somebody may want to let go of (Omer, 2026-10-11).
  */
 export async function ReconnectSystem({
   integration,
@@ -54,6 +58,7 @@ export async function ReconnectSystem({
           noForm: t('available.noForm'),
         }}
       />
+      <DisconnectSystem slug={integration.slug} name={integration.name} />
     </section>
   );
 }

@@ -46,7 +46,11 @@ export function DisconnectSystem({ slug, name }: { readonly slug: string; readon
         : 'confirm';
 
   return (
-    <section className={styles.disconnect} data-testid="disconnect">
+    <section
+      className={styles.disconnect}
+      data-testid="disconnect"
+      data-confirming={confirming ? '' : undefined}
+    >
       {!confirming ? (
         <button
           type="button"

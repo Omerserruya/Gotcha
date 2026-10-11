@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { createTranslator, NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -11,11 +11,18 @@ import {
 import messages from '@/i18n/messages/en/capabilities.json';
 import common from '@/i18n/messages/en/common.json';
 
-vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn(), replace: vi.fn() }),
+  usePathname: () => '/studio/capabilities',
+}));
 vi.mock('./connect-actions', () => ({
   connectIntegration: vi.fn(),
   startOAuth: vi.fn(),
   startWooOAuth: vi.fn(),
+  // Never pressed here: a real disconnect is never sent from a test.
+  disconnectSystem: vi.fn(async () => {
+    throw new Error('a test must never disconnect for real');
+  }),
 }));
 vi.mock('./shopify-actions', () => ({
   startShopifyInstall: vi.fn(),
@@ -178,5 +185,18 @@ describe('★ a DISCONNECTED system is available again - and says so, and why', 
     await show(AvailableSystem({ integration: system({}, null) }));
     expect(screen.getByTestId('system-state')).toHaveTextContent('Not connected');
     expect(screen.queryByTestId('system-error')).toBeNull();
+  });
+});
+
+describe('★★ a broken system can also be let go of - Disconnect beside Reconnect (Omer, 2026-10-11)', () => {
+  it('ERROR: the card offers Disconnect for this system, in view with the Reconnect', async () => {
+    await show(
+      ReconnectSystem({
+        integration: system({}, { status: 'ERROR', lastError: HTML_401 }),
+        showReason: true,
+      }),
+    );
+    const card = screen.getByTestId('reconnect-card');
+    expect(within(card).getByTestId('disconnect-start')).toHaveTextContent('Pipedrive');
   });
 });

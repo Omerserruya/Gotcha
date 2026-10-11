@@ -4,6 +4,7 @@ import { usageFor, type Capability, type ToolUsage } from '@/api/contracts/capab
 import { isIntegrationState, type Integration } from '@/api/contracts/integrations';
 import { platformErrorReason } from '@/api/contracts/platform-errors';
 
+import { DisconnectSystem } from './DisconnectSystem';
 import { IntegrationLogo } from './IntegrationLogo';
 import styles from './Capabilities.module.css';
 
@@ -17,17 +18,26 @@ import styles from './Capabilities.module.css';
  *
  * "Narrow it for one employee" is drawn, not live: there are no
  * per-employee overrides.
+ *
+ * ★★ DISCONNECT LIVES HERE (Omer, 2026-10-11: "why is there no disconnect
+ *   for integrations?"). It was drawn after the system's whole action list -
+ *   945px down for WooCommerce at 1440x900, further for Shopify - so for a
+ *   person it did not exist. In the head it is in view on arrival; its
+ *   confirmation opens as a full-width line under the row.
  */
 export async function SystemHead({
   integration,
   capabilities,
   usage,
+  disconnect = false,
 }: {
   /** `null` for the built-in actions, which belong to no provider. */
   readonly integration: Integration | null;
   /** This system's actions. */
   readonly capabilities: readonly Capability[];
   readonly usage: readonly ToolUsage[] | null;
+  /** Offer Disconnect in the head: a connected system that is not broken (a broken one has it beside its Reconnect). */
+  readonly disconnect?: boolean;
 }) {
   const t = await getTranslations('capabilities');
   const format = await getFormatter();
@@ -80,6 +90,9 @@ export async function SystemHead({
           {t('system.narrow')}
         </span>
       </span>
+      {disconnect && integration ? (
+        <DisconnectSystem slug={integration.slug} name={integration.name} />
+      ) : null}
     </header>
   );
 }

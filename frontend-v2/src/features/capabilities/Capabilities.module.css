@@ -19,9 +19,19 @@
   /* ── The selected system's header: a 38px tile, 16/600, state on the right ── */
   .systemHead {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-14);
     line-height: normal;
+  }
+
+  /* Disconnect in the head: a button at the row's end; its confirmation, a line of its own. */
+  .systemHead > .disconnect {
+    flex: none;
+  }
+
+  .systemHead > .disconnect[data-confirming] {
+    flex-basis: 100%;
   }
 
   .systemTile {
