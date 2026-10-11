@@ -646,8 +646,14 @@
     inline-size: 24px;
     block-size: 24px;
     border-radius: 7px;
-    background-color: var(--copilot-well);
-    color: var(--frame-text-body);
+    /*
+     * The plate, not `--copilot-well`: the marks are the brands' own colours
+     * now, drawn for a light ground. On the well, Outlook's `#0A2767` measured
+     * 1.02:1 and its `#0364B8` 2.41:1 - the envelope disappeared. Neutral
+     * glyphs (web chat, phone, plain email) take the panel's ink.
+     */
+    background-color: var(--channel-mark-plate);
+    color: var(--channel-web-mark);
   }
 
   .summaryLine {

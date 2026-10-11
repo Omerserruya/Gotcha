@@ -9,7 +9,7 @@ import {
   type ConversationRow,
 } from '@/api/contracts/inbox';
 
-import { channelMark } from './channel-marks';
+import { ChannelMark } from './channel-marks';
 import { initials } from './initials';
 import { quoteOf } from './media';
 import { QueueMenu } from './QueueMenu';
@@ -194,7 +194,7 @@ export async function ConversationList({
 
   const row = (conversation: ConversationRow, testid: string) => {
     const waiting = waitingMinutes(conversation, now);
-    const mark = channelMark(conversation.channel);
+    const badgeLabel = channelName(conversation.channel, channelNames) ?? t('queue.unknownChannel');
     return (
       <li key={conversation.id} className={styles.queueItem}>
         {/*
@@ -237,6 +237,7 @@ export async function ConversationList({
             id: conversation.id,
             name: conversation.customerName,
             channelLabel: channelName(conversation.channel, channelNames),
+            channel: conversation.channel,
           }}
           /*
             ★★ 02 DRAWS A SETTLED ROW QUIETER IN FIVE SEPARATE WAYS - name
@@ -275,7 +276,7 @@ export async function ConversationList({
                 it was a visible word a moment ago. Hiding the stack would
                 remove that fact from anybody using a screen reader.
             */
-            title={channelName(conversation.channel, channelNames) ?? t('queue.unknownChannel')}
+            title={badgeLabel}
           >
             <span
               className={styles.avatar}
@@ -283,8 +284,12 @@ export async function ConversationList({
             >
               {initials(conversation.customerName)}
             </span>
-            <span className={styles.channelBadge} data-tone={mark.tone}>
-              <mark.Icon size={10} strokeWidth={2.4} />
+            {/*
+              ★★ THE BRAND'S OWN MARK (Omer, 2026-10-11), labelled: the badge
+              is the row's only statement of the channel.
+            */}
+            <span className={styles.channelBadge} data-testid={`channel-badge-${conversation.id}`}>
+              <ChannelMark channel={conversation.channel} label={badgeLabel} size={14} />
             </span>
           </span>
 
@@ -533,20 +538,18 @@ export async function ConversationList({
             {t('queue.filter.all')}
           </Link>
           {QUEUE_CHANNEL_FILTERS.map((filter) => {
-            const mark = channelMark(filter);
+            const name = channelName(filter, channelNames) ?? filter;
             return (
               <Link
                 key={filter}
                 href={{ pathname: '/inbox', query: inboxQuery({ view, channel: filter, period }) }}
                 className={styles.filterChannel}
-                data-tone={mark.tone}
                 aria-current={channel === filter ? 'true' : undefined}
-                /* The glyph is the only thing on the chip; the name is its label. */
-                aria-label={channelName(filter, channelNames) ?? filter}
-                title={channelName(filter, channelNames) ?? filter}
+                title={name}
                 data-testid={`filter-${filter}`}
               >
-                <mark.Icon size={14} strokeWidth={2} />
+                {/* The mark is the only thing on the chip; its label is the link's name. */}
+                <ChannelMark channel={filter} label={name} size={16} />
               </Link>
             );
           })}

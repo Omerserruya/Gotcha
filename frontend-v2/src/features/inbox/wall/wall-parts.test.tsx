@@ -113,6 +113,12 @@ describe('★★ History across all channels - three levels over the column', ()
     );
     // "No summary yet" - not an empty line.
     expect(screen.getByTestId('wall-summary-c2')).toHaveTextContent('No summary yet');
+    // ★★ Each conversation wears its channel's own mark - the shared component.
+    const glyph = (id: string) =>
+      screen.getByTestId(`wall-channel-${id}`).querySelector('[data-channel-mark]');
+    expect(glyph('c1')).toHaveAttribute('data-glyph', 'whatsapp');
+    expect(glyph('c2')).toHaveAttribute('data-glyph', 'instagram');
+    expect(glyph('c3')).toHaveAttribute('data-glyph', 'phone');
 
     fireEvent.click(screen.getByTestId('wall-history-c1'));
     expect(screen.getByTestId('wall-drill')).toHaveAttribute('data-level', 'summary');

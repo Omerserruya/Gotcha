@@ -76,6 +76,24 @@ describe('★★ who this is, on what channel, and how long they have waited', (
     expect(facts).not.toHaveTextContent('SHOPIFY_LIVE_CHAT');
   });
 
+  it('★★ the channel’s own mark before its name - the shared component (Omer, 2026-10-11)', async () => {
+    await show({ channel: 'INSTAGRAM' });
+    const facts = screen.getByTestId('conversation-facts');
+    const mark = facts.querySelector('svg');
+    expect(mark).toHaveAttribute('data-channel-mark');
+    expect(mark).toHaveAttribute('data-glyph', 'instagram');
+    // Decorative: the name is written right after it, so it is said once.
+    expect(mark).toHaveAttribute('aria-hidden', 'true');
+    expect(facts.textContent!.startsWith('Instagram')).toBe(true);
+  });
+
+  it('⚠ an unknown channel still gets a mark - the neutral one', async () => {
+    await show({ channel: 'SOMETHING_NEW' });
+    const facts = screen.getByTestId('conversation-facts');
+    expect(facts.querySelector('svg')).toHaveAttribute('data-glyph', 'unknown');
+    expect(facts).toHaveTextContent('Another channel');
+  });
+
   it('carries the handle, which is what tells two unnamed people apart', async () => {
     await show({ customerName: null });
     expect(screen.getByTestId('conversation-facts')).toHaveTextContent('+972525401686');

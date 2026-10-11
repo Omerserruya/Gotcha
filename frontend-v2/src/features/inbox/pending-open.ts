@@ -19,6 +19,8 @@ export interface PendingOpen {
   readonly id: string;
   readonly name: string | null;
   readonly channelLabel: string | null;
+  /** The channel itself, for its mark beside the name - as the header draws it. */
+  readonly channel?: string | null;
 }
 
 let current: PendingOpen | null = null;

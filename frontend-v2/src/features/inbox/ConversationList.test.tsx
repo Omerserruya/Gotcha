@@ -613,10 +613,15 @@ describe('⚠⚠ the channel badge I said could not be built', () => {
    *   wrong negative today, and the one that cost the most visible element in
    *   the row.
    */
-  const toneOf = (testid: string) =>
-    screen.getByTestId(testid).querySelector('[data-tone]')?.getAttribute('data-tone');
+  /*
+   * ★★ SINCE 2026-10-11 THE BADGE IS THE BRAND'S OWN MARK (Omer: "put the
+   *   channels' official icons in the inbox"), drawn by the shared
+   *   `ChannelMark` and named - it is the row's only statement of the channel.
+   */
+  const badgeOf = (id: string) =>
+    within(screen.getByTestId(`channel-badge-${id}`)).getByRole('img');
 
-  it('★★ tints each channel the design’s way', async () => {
+  it('★★ each row’s badge is the shared mark, the channel’s own, and named', async () => {
     render(
       await ConversationList({
         rows: [
@@ -629,12 +634,16 @@ describe('⚠⚠ the channel badge I said could not be built', () => {
         hasMore: false,
       }),
     );
-    expect(toneOf('conversation-c1')).toBe('whatsapp');
-    expect(toneOf('conversation-c2')).toBe('email');
-    expect(toneOf('conversation-c3')).toBe('instagram');
+    expect(badgeOf('c1')).toHaveAttribute('data-channel-mark');
+    expect(badgeOf('c1')).toHaveAttribute('data-glyph', 'whatsapp');
+    expect(badgeOf('c1')).toHaveAccessibleName('WhatsApp');
+    expect(badgeOf('c2')).toHaveAttribute('data-glyph', 'mail');
+    expect(badgeOf('c2')).toHaveAccessibleName('Email');
+    expect(badgeOf('c3')).toHaveAttribute('data-glyph', 'instagram');
+    expect(badgeOf('c3')).toHaveAccessibleName('Instagram');
   });
 
-  it('⚠⚠ an unrecognised channel gets the globe, never nothing', async () => {
+  it('⚠⚠ an unrecognised channel gets the neutral fallback, never nothing', async () => {
     /*
      * `channel` is an unconstrained column - the same reason `channelName`
      * answers "another channel" rather than echoing a raw enum. A row with no
@@ -648,8 +657,10 @@ describe('⚠⚠ the channel badge I said could not be built', () => {
         hasMore: false,
       }),
     );
-    expect(toneOf('conversation-c1')).toBe('web');
-    expect(toneOf('conversation-c2')).toBe('web');
+    expect(badgeOf('c1')).toHaveAttribute('data-glyph', 'unknown');
+    expect(badgeOf('c1')).toHaveAccessibleName('Another channel');
+    expect(badgeOf('c2')).toHaveAttribute('data-glyph', 'unknown');
+    expect(badgeOf('c2')).toHaveAccessibleName('Unknown channel');
   });
 });
 
@@ -1173,7 +1184,12 @@ describe("★★ Wave 2 - 02's filter row, and every chip in it filters", () => 
 
   it('★★ "All" then the channels, in 02\'s order and Shopify chat after the web chat, each named', async () => {
     render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
-    expect(chips().map((c) => c.getAttribute('aria-label') ?? c.textContent)).toEqual([
+    /*
+     * The accessible name, as a screen reader computes it - a chip's comes
+     * from its mark's label, since the mark is all the chip holds.
+     */
+    const nav = within(screen.getByTestId('queue-filters'));
+    const names = [
       'All',
       'WhatsApp',
       'Instagram',
@@ -1181,7 +1197,25 @@ describe("★★ Wave 2 - 02's filter row, and every chip in it filters", () => 
       'Email',
       'Web chat',
       'Shopify live chat',
+    ];
+    expect(names.map((name) => chips().indexOf(nav.getByRole('link', { name })))).toEqual([
+      0, 1, 2, 3, 4, 5, 6,
     ]);
+  });
+
+  it('★★ every channel chip draws the shared mark - the channel’s own', async () => {
+    render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
+    for (const id of QUEUE_CHANNEL_FILTERS) {
+      const mark = screen.getByTestId(`filter-${id}`).querySelector('svg');
+      expect(mark).toHaveAttribute('data-channel-mark');
+      expect(mark).not.toHaveAttribute('data-glyph', 'unknown');
+    }
+    expect(
+      screen.getByTestId('filter-WHATSAPP').querySelector('[data-glyph="whatsapp"]'),
+    ).not.toBeNull();
+    expect(
+      screen.getByTestId('filter-SHOPIFY_LIVE_CHAT').querySelector('[data-glyph="shopify"]'),
+    ).not.toBeNull();
   });
 
   it('★★ each chip filters by its channel and keeps the view', async () => {

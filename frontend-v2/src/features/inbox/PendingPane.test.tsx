@@ -36,7 +36,12 @@ const rows = (openId: string | null) => (
         href={{ pathname: '/inbox', query: { c: id } }}
         data-testid={`row-${id}`}
         open={id === openId}
-        pending={{ id, name: id === 'c2' ? 'Dana Cohen' : 'Yael', channelLabel: 'WhatsApp' }}
+        pending={{
+          id,
+          name: id === 'c2' ? 'Dana Cohen' : 'Yael',
+          channelLabel: 'WhatsApp',
+          channel: 'WHATSAPP',
+        }}
       >
         {id}
       </QueueRowLink>
@@ -74,6 +79,8 @@ describe('★★ the click is answered before the server is', () => {
     const pane = screen.getByTestId('pending-pane');
     expect(pane).toHaveTextContent('Dana Cohen');
     expect(pane).toHaveTextContent('WhatsApp');
+    // The header's mark too, so it does not appear only when the page lands.
+    expect(pane.querySelector('[data-channel-mark]')).toHaveAttribute('data-glyph', 'whatsapp');
     expect(screen.getByTestId('stream-skeleton')).toBeInTheDocument();
     expect(screen.getByTestId('composer-skeleton')).toBeInTheDocument();
   });

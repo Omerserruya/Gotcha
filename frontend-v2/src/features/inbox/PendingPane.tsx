@@ -3,6 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import { useEffect } from 'react';
 
+import { ChannelMark } from './channel-marks';
 import { ConversationSkeleton } from './Skeletons';
 import { initials } from './initials';
 import { clearPendingOpen, usePendingOpen } from './pending-open';
@@ -43,7 +44,13 @@ export function PendingPane({ openId }: { readonly openId: string | null }) {
             <div className={styles.openWho}>
               <p className={styles.openName}>{pending.name}</p>
               {pending.channelLabel ? (
-                <p className={styles.openFacts}>{pending.channelLabel}</p>
+                <p className={styles.openFacts}>
+                  {/* The header's mark, so it does not appear only when the page lands. */}
+                  <span className={styles.openFactsMark}>
+                    <ChannelMark channel={pending.channel ?? null} size={14} decorative />
+                  </span>
+                  {pending.channelLabel}
+                </p>
               ) : null}
             </div>
           </div>

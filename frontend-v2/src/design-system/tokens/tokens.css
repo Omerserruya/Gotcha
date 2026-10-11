@@ -519,6 +519,14 @@
     --channel-messenger-surface: #e3e8f2;
     --channel-messenger-mark: #3e5c99;
     /*
+     * The plate a brand's own mark sits on (Omer, 2026-10-11: the official
+     * icons). White, because white is the ground every one of these brands
+     * draws its mark for - and it is what keeps them legible on the dark
+     * wall: Outlook's `#0A2767` measures 1.02:1 on `--copilot-well` without
+     * it, and 14:1 on this.
+     */
+    --channel-mark-plate: #fff;
+    /*
      * The website widget's WhatsApp look (design 7, "GOTCHA Widgets on
      * Store"): WhatsApp's own panel colours, so the preview is the look the
      * customer will see - header, chat wallpaper, composer, send, launcher.

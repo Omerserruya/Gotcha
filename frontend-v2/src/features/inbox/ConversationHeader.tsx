@@ -9,6 +9,7 @@ import {
 } from '@/api/contracts/inbox';
 import type { CommerceContextResponse } from '@/api/contracts/customer-orders';
 
+import { ChannelMark } from './channel-marks';
 import { initials } from './initials';
 import styles from './Inbox.module.css';
 import { ltr } from '@/lib/bidi';
@@ -105,6 +106,14 @@ export async function ConversationHeader({
           carries the status and how long they have waited.
         */}
         <p className={styles.openFacts} data-testid="conversation-facts">
+          {/*
+            ★★ THE CHANNEL'S OWN MARK BEFORE ITS NAME (Omer, 2026-10-11).
+            Decorative: the name is written right after it, and a screen
+            reader would otherwise hear "WhatsApp, WhatsApp".
+          */}
+          <span className={styles.openFactsMark}>
+            <ChannelMark channel={conversation.channel} size={14} decorative />
+          </span>
           {[
             channelName(conversation.channel, channels),
             /*

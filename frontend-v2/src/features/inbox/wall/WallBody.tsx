@@ -6,7 +6,7 @@ import { useEffect, useState, useTransition, type ReactNode } from 'react';
 import { channelName, type InboxMessage } from '@/api/contracts/inbox';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
-import { channelMark } from '../channel-marks';
+import { ChannelMark } from '../channel-marks';
 import type { WallConversation, WallHistory } from './load-wall';
 import { conversationMessages } from './wall-actions';
 import { historyChannels } from './wall-model';
@@ -203,12 +203,16 @@ function ConversationFacts({
   const t = useTranslations('inbox.wall.history');
   const channels = useTranslations('channels');
   const format = useFormatter();
-  const { Icon, tone } = channelMark(conversation.channel);
   const at = conversation.lastAt ?? conversation.startedAt;
   return (
     <span className={styles.conversationFacts}>
-      <span className={styles.channelMark} data-tone={tone} aria-hidden="true">
-        <Icon size={13} strokeWidth={2} />
+      {/*
+        ★★ THE BRAND'S OWN MARK (Omer, 2026-10-11), on a light plate: this is
+        the dark wall, and Outlook's navy layer vanishes on it (1.02:1).
+        Decorative: the channel's name is the first words beside it.
+      */}
+      <span className={styles.channelMark} data-testid={`wall-channel-${conversation.id}`}>
+        <ChannelMark channel={conversation.channel} size={16} decorative />
       </span>
       <span className={styles.historyText}>
         <span>

@@ -3,4 +3,9 @@
  * channel-marks`), where the shell's desktop notification can draw them too.
  * Re-exported here so every screen that imports them keeps one table.
  */
-export { channelMark, InstagramGlyph } from '@/design-system/brand/channel-marks';
+export {
+  ChannelMark,
+  channelMark,
+  channelTone,
+  InstagramGlyph,
+} from '@/design-system/brand/channel-marks';
