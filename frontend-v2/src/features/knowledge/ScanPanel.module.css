@@ -19,6 +19,21 @@
     color: var(--text-body);
   }
 
+  /*
+   * The basis under a statement: why an offer was left alone ("You edited
+   * this, so it was left alone."), what taking one means, what was taken.
+   * Used since 32c7df6a and never defined, so those lines fell back to the
+   * size they inherit - larger than the lead they qualify. They are the
+   * quieter line under it: caption size, subtle, as `.rowCaveat` is on 11.
+   */
+  .provenanceBasis {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
   /* ── Screen 11b · scan again ─────────────────────────────────────────── */
 
   .scan {

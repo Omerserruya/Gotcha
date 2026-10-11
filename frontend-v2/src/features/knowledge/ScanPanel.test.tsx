@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
@@ -290,5 +292,31 @@ describe('nothing marked means nothing refreshed, and it says so', () => {
     renderPanel();
     await userEvent.click(screen.getByTestId('scan-run'));
     expect(await screen.findByTestId('scan-no-changes')).toHaveTextContent(/says the same/i);
+  });
+});
+
+describe('★ every class the panel names is defined in its stylesheet', () => {
+  /*
+   * `provenanceBasis` was used on four lines from 32c7df6a on and defined
+   * nowhere - a CSS module answers an unknown name with `undefined`, so the
+   * lines took whatever size they inherited and nothing said so.
+   */
+  const tsx = readFileSync('src/features/knowledge/ScanPanel.tsx', 'utf8');
+  const css = readFileSync('src/features/knowledge/ScanPanel.module.css', 'utf8');
+  const used = [...new Set([...tsx.matchAll(/styles\.([A-Za-z0-9_]+)/g)].map((m) => m[1]!))];
+
+  it('reads the names it checks', () => {
+    expect(used).toContain('provenanceBasis');
+    expect(used.length).toBeGreaterThan(10);
+  });
+
+  it.each(used)('.%s', (name) => {
+    expect(css).toMatch(new RegExp(`\\.${name}\\s*[{,:]`));
+  });
+
+  it('the basis is the quieter line under the lead it qualifies', () => {
+    const rule = css.match(/\.provenanceBasis\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toMatch(/font-size:\s*var\(--font-size-caption\)/);
+    expect(rule).toMatch(/color:\s*var\(--text-subtle\)/);
   });
 });
