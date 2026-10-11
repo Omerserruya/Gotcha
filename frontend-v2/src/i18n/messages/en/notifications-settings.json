@@ -1,6 +1,23 @@
 {
   "title": "Notifications",
-  "description": "GOTCHA never pings you for an incoming message - that's what the inbox is for. It tells you when something needs a decision or something broke.",
+  "description": "GOTCHA tells you when something needs a decision or something broke. On this device it can also chime, or show a desktop notification, when a customer writes.",
+  "device": {
+    "title": "On this device",
+    "note": "Kept in this browser only. Your other devices and browsers keep their own.",
+    "notKept": "This browser isn't keeping settings, so these go back to how they were when the page reloads.",
+    "quiet": "Quiet hours silence these too.",
+    "sound": {
+      "label": "Sound for incoming messages",
+      "about": "A short chime when a customer writes, unless that conversation is open in front of you."
+    },
+    "desktop": {
+      "label": "Desktop notifications",
+      "about": "A notification at the side of the screen when a customer writes, whatever tab or app you're in, while GOTCHA is open in this browser.",
+      "blocked": "Blocked in this browser - allow it in the site settings",
+      "unsupported": "This browser has no desktop notifications.",
+      "notAllowed": "Still off: the browser wasn't given permission. Turn it on again to be asked."
+    }
+  },
   "heading": "Who hears about what",
   "family": {
     "work": "Work",

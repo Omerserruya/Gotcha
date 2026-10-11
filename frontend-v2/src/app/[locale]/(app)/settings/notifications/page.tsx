@@ -8,8 +8,10 @@ import { SettingsSection } from '@/shell/SettingsSection';
 /**
  * Settings · Notifications - screen 15.
  *
- * *"GOTCHA never pings you for an incoming message - that's what the inbox is
- * for. It tells you when something needs a decision or something broke."*
+ * The design's line was *"GOTCHA never pings you for an incoming message"*.
+ * Omer asked for one (2026-10-11): a chime, and a desktop notification, per
+ * device - so the line now says what the page does, and the device's two
+ * switches sit under the matrix (`DeviceAlerts`).
  *
  * The design drew a personal matrix, and since notifications 9164a058 the
  * fan-out obeys it: each person's channel switches, approvals, and quiet

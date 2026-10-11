@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import { useRouter } from '@/i18n/navigation';
+import { announcePreferencesChanged } from '@/lib/inbound-alerts/settings';
 
 import styles from './Notifications.module.css';
 import { saveQuietHours, type QuietHoursSave } from './preference-actions';
@@ -35,6 +36,8 @@ export function QuietHours({ initial }: { readonly initial: Window | null }) {
       }
       setStored(done.preferences.quietHours);
       setEditing(null);
+      // Every open tab's chime and desktop notification keep to the new window.
+      announcePreferencesChanged();
       router.refresh();
     });
 

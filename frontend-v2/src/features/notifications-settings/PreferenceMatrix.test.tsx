@@ -1,4 +1,4 @@
-import { act, fireEvent, render as rtlRender, screen } from '@testing-library/react';
+import { act, fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
 import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -227,7 +227,14 @@ describe('★★ 15 - the switches the platform has: a channel for everything, a
 
   it('preferences not read: no switches at all - never a guess to save over', async () => {
     render(await PreferenceMatrix({ preferences: null, volume: null, whatsappDestination: null }));
-    expect(screen.queryByRole('switch')).toBeNull();
+    /*
+     * None of the person's switches. This device's two (sound, desktop) stay:
+     * they are kept in the browser and save nothing to the platform, so an
+     * unread preference is not a guess they could save over.
+     */
+    const device = screen.getByTestId('pref-device');
+    expect(screen.queryAllByRole('switch').filter((s) => !device.contains(s))).toEqual([]);
+    expect(within(device).getAllByRole('switch')).toHaveLength(2);
   });
 });
 

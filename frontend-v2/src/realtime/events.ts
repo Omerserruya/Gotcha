@@ -35,7 +35,21 @@ export type RealtimeEvent =
       conversationId: string;
       assigneeId: string | null;
     })
-  | (RealtimeEventBase & { type: 'message.received'; conversationId: string; messageId: string })
+  | (RealtimeEventBase & {
+      type: 'message.received';
+      conversationId: string;
+      messageId: string;
+      /**
+       * The row's own fields, for the incoming-message alert (shell
+       * `InboundAlerts`): who wrote it - `INBOUND` is the customer, `OUTBOUND`
+       * an agent, the AI or an automation - and its first line. Optional and
+       * `null` when the frame does not carry them; read defensively, like
+       * everything here.
+       */
+      direction?: 'INBOUND' | 'OUTBOUND' | null;
+      body?: string | null;
+      messageType?: string | null;
+    })
   | (RealtimeEventBase & {
       type: 'message.delivery_changed';
       conversationId: string;
@@ -230,7 +244,19 @@ export const translators: readonly EventTranslator[] = [
     const conversationId = str(data, 'conversationId') ?? str(message, 'conversationId');
     const messageId = str(data, 'messageId') ?? str(data, 'id') ?? str(message, 'id');
     if (!tenantId || !conversationId || !messageId) return null;
-    return { type: 'message.received', tenantId, at: Date.now(), conversationId, messageId };
+    const direction = str(message, 'direction');
+    const body = field(message, 'body');
+    return {
+      type: 'message.received',
+      tenantId,
+      at: Date.now(),
+      conversationId,
+      messageId,
+      direction: direction === 'INBOUND' || direction === 'OUTBOUND' ? direction : null,
+      // Empty is a body (a photo's); only a non-string is none.
+      body: typeof body === 'string' ? body : null,
+      messageType: str(message, 'messageType'),
+    };
   },
 
   (wireEvent, payload) => {

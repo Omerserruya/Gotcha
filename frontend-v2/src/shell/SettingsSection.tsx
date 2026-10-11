@@ -8,8 +8,9 @@ import styles from './SettingsSection.module.css';
  * The opening of a Settings section: what it is, in one line.
  *
  * Every screen from 11 to 18 starts this way, and the line is doing work
- * rather than decorating - "GOTCHA never pings you for an incoming message"
- * tells someone what this page will not do before they look for the switch.
+ * rather than decorating - "GOTCHA tells you when something needs a decision
+ * or something broke" tells someone what the page is for before they look for
+ * the switch.
  *
  * Measured against 11-18: a ROW across the section's 888 - the title at 02's
  * screen size (26/600, tracked) over a 13px muted line that does not wrap

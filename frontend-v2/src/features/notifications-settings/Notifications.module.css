@@ -430,6 +430,48 @@
     }
   }
 
+  /* This device's alerts for an incoming message: a card across the row. */
+  .deviceCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    margin-block-start: var(--space-14);
+    padding: 18px var(--space-20);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+    line-height: normal;
+  }
+
+  .deviceRow {
+    display: flex;
+    gap: var(--space-12);
+    align-items: flex-start;
+  }
+
+  .deviceRow > .switch {
+    flex: none;
+    margin-block-start: 1px;
+  }
+
+  .deviceText {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-inline-size: 0;
+  }
+
+  .deviceLabel {
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .deviceState {
+    font-size: var(--font-size-label);
+    color: var(--intent-urgent-text);
+  }
+
   /* Quiet hours, edited where they are read. */
   .quietForm {
     display: flex;

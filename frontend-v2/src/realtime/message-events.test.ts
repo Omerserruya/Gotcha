@@ -119,6 +119,10 @@ describe('★★ message:new - an inbound reply while the agent is reading', () 
       at: expect.any(Number),
       conversationId: 'c1',
       messageId: 'm7',
+      // The row's own fields ride along for the incoming-message alert.
+      direction: null,
+      body: 'hi',
+      messageType: null,
     });
     // the channel hint some publishers add changes nothing
     expect(
@@ -126,6 +130,29 @@ describe('★★ message:new - an inbound reply while the agent is reading', () 
     ).toMatchObject({ tenantId: 't1', conversationId: 'c1', messageId: 'm7' });
     // and the conversation is the row's when the frame does not repeat it
     expect(translate('message:new', { message: row })).toMatchObject({ conversationId: 'c1' });
+  });
+
+  it('★ who wrote it and what it says, from the row, for the incoming-message alert', () => {
+    const row = {
+      id: 'm8',
+      tenantId: 't1',
+      conversationId: 'c1',
+      direction: 'INBOUND',
+      body: '',
+      messageType: 'image',
+    };
+    expect(translate('message:new', { message: row, conversationId: 'c1' })).toMatchObject({
+      direction: 'INBOUND',
+      body: '',
+      messageType: 'image',
+    });
+    // A direction that is neither is none, never a guess.
+    expect(
+      translate('message:new', {
+        message: { ...row, direction: 'SIDEWAYS' },
+        conversationId: 'c1',
+      }),
+    ).toMatchObject({ direction: null });
   });
 
   it('a row with no tenant is still unattributable', () => {

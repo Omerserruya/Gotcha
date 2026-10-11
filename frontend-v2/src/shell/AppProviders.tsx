@@ -9,6 +9,7 @@ import { RealtimeProvider } from '@/realtime/realtime-provider';
 import { QueryProvider } from '@/server-state/query-provider';
 import { TenantProvider } from '@/tenant/tenant-context';
 
+import { InboundAlerts } from './InboundAlerts';
 import { ScrollFades } from './ScrollFades';
 import { SessionExpiryWatcher } from './SessionExpiryWatcher';
 
@@ -52,6 +53,8 @@ export function AppProviders({
             <RealtimeProvider tenantId={tenantId}>
               <TooltipProvider delayDuration={400} skipDelayDuration={200}>
                 <SessionExpiryWatcher />
+                {/* A chime and a desktop notification for a customer's message, on every screen. */}
+                <InboundAlerts tenantId={tenantId} />
                 <ScrollFades />
                 {children}
               </TooltipProvider>

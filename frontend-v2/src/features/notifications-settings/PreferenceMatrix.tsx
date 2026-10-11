@@ -4,6 +4,7 @@ import type { NotificationPreferences } from '@/api/contracts/notifications';
 import { UnavailableStatus } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link } from '@/i18n/navigation';
 
+import { DeviceAlerts } from './DeviceAlerts';
 import styles from './Notifications.module.css';
 import { PreferenceSwitch } from './PreferenceSwitch';
 import { QuietHours } from './QuietHours';
@@ -198,6 +199,9 @@ export async function PreferenceMatrix({
           )}
         </section>
       </div>
+
+      {/* This device's chime and desktop notification for a customer's message. */}
+      <DeviceAlerts />
     </>
   );
 }
