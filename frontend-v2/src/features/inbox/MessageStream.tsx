@@ -10,6 +10,8 @@ import {
   unsupportedType,
   type InboxMessage,
   deliveryOf,
+  escalationReasonOf,
+  type SystemEvent,
 } from '@/api/contracts/inbox';
 
 import styles from './Inbox.module.css';
@@ -98,20 +100,7 @@ export async function MessageStream({
               data-testid={`system-${message.id}`}
               data-event={systemEvent}
             >
-              <span className={styles.dividerText}>
-                {t(`stream.system.${systemEvent}` as 'stream.system.agent_claimed', {
-                  /*
-                   * Empty string rather than a placeholder name. The service
-                   * writes `agentName: updated.assignedAgent?.name || "Agent"`
-                   * - so a missing name already arrives as the word "Agent",
-                   * and inventing a second fallback here would hide which of
-                   * the two happened. ICU needs the argument present.
-                   */
-                  name: message.metadata?.agentName ?? '',
-                  from: message.metadata?.fromAgentName ?? '',
-                  to: message.metadata?.toAgentName ?? '',
-                })}
-              </span>
+              <span className={styles.dividerText}>{systemDivider(t, message, systemEvent)}</span>
             </li>
           );
         }
@@ -379,4 +368,40 @@ export async function MessageStream({
       })}
     </ol>
   );
+}
+
+/**
+ * A system row's divider, in words.
+ *
+ * The AI's handover says why when the code is one we have words for
+ * ("GOTCHA handed the conversation to the team: the daily AI budget ran
+ * out"), and never prints the platform's English summary. A system row we
+ * have no words for is "System update" (`stream.system.other`, through the
+ * same key as every event) - never an empty customer bubble.
+ */
+function systemDivider(
+  t: Awaited<ReturnType<typeof getTranslations<'inbox'>>>,
+  message: InboxMessage,
+  event: SystemEvent | 'other',
+): string {
+  if (event === 'ai_bot_escalation') {
+    const reason = escalationReasonOf(message);
+    return reason
+      ? t('stream.system.ai_bot_escalation_because', {
+          reason: t(`stream.system.reason.${reason}`),
+        })
+      : t('stream.system.ai_bot_escalation');
+  }
+  return t(`stream.system.${event}` as 'stream.system.agent_claimed', {
+    /*
+     * Empty string rather than a placeholder name. The service writes
+     * `agentName: updated.assignedAgent?.name || "Agent"` - so a missing name
+     * already arrives as the word "Agent", and inventing a second fallback
+     * here would hide which of the two happened. ICU needs the argument
+     * present.
+     */
+    name: message.metadata?.agentName ?? '',
+    from: message.metadata?.fromAgentName ?? '',
+    to: message.metadata?.toAgentName ?? '',
+  });
 }

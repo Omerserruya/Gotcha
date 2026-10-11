@@ -20,7 +20,26 @@
       "agent_transferred": "{from} transferred this to {to}",
       "department_transferred": "This was transferred to another team",
       "returned_to_ai": "Handed back to the AI",
-      "ai_stopped": "AI stopped"
+      "ai_stopped": "AI stopped",
+      "ai_bot_escalation": "GOTCHA handed the conversation to the team",
+      "ai_bot_escalation_because": "GOTCHA handed the conversation to the team: {reason}",
+      "flow_ended_handoff": "The automation ended and handed the conversation to the team",
+      "visitor_requested_human": "The visitor asked for a person in the website chat",
+      "auto_closed": "Closed automatically after no activity",
+      "whatsapp_app_takeover": "Someone replied from the WhatsApp Business app, so GOTCHA stopped replying",
+      "continued_on_whatsapp": "The conversation continues on WhatsApp",
+      "continued_from_website": "Continued from the website chat",
+      "approval_execution_failed": "An approved action failed",
+      "other": "System update",
+      "reason": {
+        "daily_budget": "the daily AI budget ran out",
+        "budget": "the AI budget ran out",
+        "customer_asked": "a person was asked for",
+        "ai_paused": "the AI employee is paused",
+        "ai_inactive": "the AI employee is not active",
+        "ai_failed": "the AI could not produce a reply",
+        "message_limit": "the AI reached its message limit for this conversation"
+      }
     },
     "reaction": {
       "toMessage": "They reacted {emoji} to “{preview}”",

@@ -3,12 +3,27 @@ import userEvent from '@testing-library/user-event';
 import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { messageSchema, systemEventOf, SYSTEM_EVENTS } from '@/api/contracts/inbox';
+import {
+  messageSchema,
+  systemEventOf,
+  SYSTEM_EVENTS,
+  type EscalationReason,
+} from '@/api/contracts/inbox';
 import en from '@/i18n/messages/en/inbox.json';
 import he from '@/i18n/messages/he/inbox.json';
 
 import { ConversationVerbs } from './ConversationVerbs';
 import { MessageStream } from './MessageStream';
+
+const ESCALATION_REASONS: readonly EscalationReason[] = [
+  'daily_budget',
+  'budget',
+  'customer_asked',
+  'ai_paused',
+  'ai_inactive',
+  'ai_failed',
+  'message_limit',
+];
 
 /**
  * Screen 02's verbs, and the dividers they write.
@@ -271,28 +286,101 @@ describe('★★ a colleague’s action is not a message from the customer', () 
     );
   });
 
-  it('★★ an unknown system event falls to "we cannot show this", not to a guess', async () => {
+  it('★★ an unknown system event is a neutral divider, never a customer bubble (Omer, 2026-10-11)', async () => {
     /*
-     * The `messageType` trap one level down. A default branch that said
-     * "something happened" would name the next event somebody adds without
-     * knowing what it was.
+     * It used to fall to "Something was sent here that we can't show yet" - an
+     * empty bubble on the customer's side for something the platform did.
+     * "System update" claims only what `messageType: "system"` proves.
      */
     await stream([systemMessage('agent_went_for_lunch')]);
-    expect(screen.queryByTestId('system-m-agent_went_for_lunch')).toBeNull();
-    expect(screen.getByTestId('unknown-m-agent_went_for_lunch')).toBeInTheDocument();
+    const divider = screen.getByTestId('system-m-agent_went_for_lunch');
+    expect(divider).toHaveAttribute('data-event', 'other');
+    expect(divider).toHaveTextContent(/^System update$/);
+    expect(screen.queryByTestId('unknown-m-agent_went_for_lunch')).toBeNull();
   });
 
-  it('★ a system message with no metadata at all is not a divider', async () => {
+  it('★ a system message with no metadata at all is the same neutral divider', async () => {
     const bare = messageSchema.parse({
       id: 'm-bare',
       direction: 'INBOUND',
       body: '',
-      messageType: 'system',
+      messageType: ' System ',
       createdAt: '2026-09-26T09:00:00.000Z',
     });
-    expect(systemEventOf(bare)).toBeNull();
+    expect(systemEventOf(bare)).toBe('other');
     await stream([bare]);
-    expect(screen.getByTestId('unknown-m-bare')).toBeInTheDocument();
+    expect(screen.getByTestId('system-m-bare')).toHaveTextContent(/^System update$/);
+    expect(screen.queryByTestId('unknown-m-bare')).toBeNull();
+  });
+
+  it('★★ a tagged text the customer received stays a message (the marketing confirmations)', () => {
+    const confirmation = messageSchema.parse({
+      id: 'm-optout',
+      direction: 'OUTBOUND',
+      body: 'You will not receive marketing messages.',
+      messageType: 'text',
+      createdAt: '2026-09-26T09:00:00.000Z',
+      metadata: { systemEvent: 'marketing_opt_out_confirmation' },
+    });
+    expect(systemEventOf(confirmation)).toBeNull();
+  });
+
+  it('★★ the AI handing over says why in words, never the platform’s English summary', async () => {
+    // The row Omer saw (conversation cmsbziuch0001cna5jixtd50q).
+    await stream([
+      systemMessage('ai_bot_escalation', {
+        escalationCase: 'budget_exceeded:tenant_day',
+        escalationSummary: 'Token budget exceeded (tenant_day): 1203/1000.',
+      }),
+    ]);
+    const divider = screen.getByTestId('system-m-ai_bot_escalation');
+    expect(divider).toHaveTextContent(
+      /^GOTCHA handed the conversation to the team: the daily AI budget ran out$/,
+    );
+    expect(divider).not.toHaveTextContent(/Token budget/);
+  });
+
+  it.each([
+    ['budget_exceeded:tenant_month', 'the AI budget ran out'],
+    ['customer_requested_human', 'a person was asked for'],
+    ['agent_paused', 'the AI employee is paused'],
+    ['agent_inactive:PAUSED', 'the AI employee is not active'],
+    ['ai_service_failure', 'the AI could not produce a reply'],
+    ['hard_message_ceiling', 'the AI reached its message limit for this conversation'],
+    ['autonomous_message_cap', 'the AI reached its message limit for this conversation'],
+  ])('handover reason %s reads "%s"', async (escalationCase, words) => {
+    await stream([systemMessage('ai_bot_escalation', { escalationCase })]);
+    expect(screen.getByTestId('system-m-ai_bot_escalation')).toHaveTextContent(
+      `GOTCHA handed the conversation to the team: ${words}`,
+    );
+  });
+
+  it.each(['ai_decided', 'toString', 'the customer is angry'])(
+    'a handover reason we have no words for (%s): the sentence alone',
+    async (escalationCase) => {
+      await stream([systemMessage('ai_bot_escalation', { escalationCase })]);
+      expect(screen.getByTestId('system-m-ai_bot_escalation')).toHaveTextContent(
+        /^GOTCHA handed the conversation to the team$/,
+      );
+    },
+  );
+
+  it.each([
+    ['flow_ended_handoff', 'The automation ended and handed the conversation to the team'],
+    ['visitor_requested_human', 'The visitor asked for a person in the website chat'],
+    ['auto_closed', 'Closed automatically after no activity'],
+    [
+      'whatsapp_app_takeover',
+      'Someone replied from the WhatsApp Business app, so GOTCHA stopped replying',
+    ],
+    ['continued_on_whatsapp', 'The conversation continues on WhatsApp'],
+    ['continued_from_website', 'Continued from the website chat'],
+    ['approval_execution_failed', 'An approved action failed'],
+  ])('%s is a divider that says "%s"', async (event, words) => {
+    await stream([systemMessage(event)]);
+    const divider = screen.getByTestId(`system-m-${event}`);
+    expect(divider).toHaveAttribute('data-event', event);
+    expect(divider).toHaveTextContent(new RegExp(`^${words}$`));
   });
 });
 
@@ -318,6 +406,9 @@ describe('★★ both languages say all of it', () => {
       'verbs.problem.not_found',
       'verbs.problem.failed',
       ...SYSTEM_EVENTS.map((event) => `stream.system.${event}`),
+      'stream.system.other',
+      'stream.system.ai_bot_escalation_because',
+      ...ESCALATION_REASONS.map((reason) => `stream.system.reason.${reason}`),
     ];
 
     for (const key of keys) {

@@ -20,7 +20,26 @@
       "agent_transferred": "{from} העביר את השיחה אל {to}",
       "department_transferred": "השיחה הועברה לצוות אחר",
       "returned_to_ai": "הוחזר ל‑AI",
-      "ai_stopped": "ה‑AI הופסק"
+      "ai_stopped": "ה‑AI הופסק",
+      "ai_bot_escalation": "GOTCHA העבירה את השיחה לצוות",
+      "ai_bot_escalation_because": "GOTCHA העבירה את השיחה לצוות: {reason}",
+      "flow_ended_handoff": "האוטומציה הסתיימה והעבירה את השיחה לצוות",
+      "visitor_requested_human": "התבקש נציג בצ׳אט באתר",
+      "auto_closed": "השיחה נסגרה אוטומטית אחרי חוסר פעילות",
+      "whatsapp_app_takeover": "נשלחה תשובה מאפליקציית WhatsApp Business, אז GOTCHA הפסיקה לענות",
+      "continued_on_whatsapp": "השיחה ממשיכה ב‑WhatsApp",
+      "continued_from_website": "המשך של שיחה מהצ׳אט באתר",
+      "approval_execution_failed": "פעולה שאושרה נכשלה",
+      "other": "עדכון מערכת",
+      "reason": {
+        "daily_budget": "תקציב ה‑AI היומי נגמר",
+        "budget": "תקציב ה‑AI נגמר",
+        "customer_asked": "התבקש נציג",
+        "ai_paused": "עובד ה‑AI מושהה",
+        "ai_inactive": "עובד ה‑AI לא פעיל",
+        "ai_failed": "ה‑AI לא הצליח לענות",
+        "message_limit": "ה‑AI הגיע למגבלת ההודעות בשיחה הזו"
+      }
     },
     "reaction": {
       "toMessage": "הם הגיבו {emoji} ל״{preview}״",

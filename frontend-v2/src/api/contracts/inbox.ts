@@ -456,6 +456,13 @@ export const messageSchema = z.object({
       /** `agent_transferred`. */
       fromAgentName: z.string().optional(),
       toAgentName: z.string().optional(),
+      /**
+       * `ai_bot_escalation`: why the AI handed over, as a code
+       * (`budget_exceeded:tenant_day`, `customer_requested_human`, ...). Read
+       * through `escalationReasonOf`, never printed. Its sibling
+       * `escalationSummary` is the platform's English and is not named here.
+       */
+      escalationCase: z.string().optional().catch(undefined),
       /** The attachment could not be fetched (WhatsApp media expires) - said, never blank. */
       mediaError: z.string().optional().catch(undefined),
       /**
@@ -685,12 +692,25 @@ export function queueOrder(rows: readonly ConversationRow[]): {
 /* ── What a colleague did, which is not a message ────────────────────────── */
 
 /**
- * The system events `conversation.service.ts` writes.
+ * The system events the platform writes, each drawn as a divider in words.
  *
- * All four are `messageType: "system"`, `direction: "INBOUND"` and
- * `body: ""`. The direction is the service's, not a statement about who
- * acted - rendering them as inbound bubbles puts a colleague's action on the
- * customer's side of the thread.
+ * Every one is `messageType: "system"`, `direction: "INBOUND"` and
+ * `body: ""`. The direction is the writer's, not a statement about who
+ * acted - rendering them as inbound bubbles puts a colleague's action, or the
+ * AI's, on the customer's side of the thread.
+ *
+ * The first five are `conversation.service.ts`'s. The rest were read off
+ * their writers (2026-10-11): the AI handing over (`ai-bot.service.ts`), an
+ * automation ending in a handoff (`flow-executor.service.ts`), a storefront
+ * visitor asking for a person (`shopify-chat-public.ts`), the idle closer
+ * (`idle-conversation.worker.ts`), a reply from the WhatsApp Business app
+ * (`outbound-echo.service.ts`), the website-to-WhatsApp continuation
+ * (`whatsapp-handoff-link.service.ts`) and an approved action that failed
+ * (`approvals.ts`).
+ *
+ * Not here: `marketing_opt_in_confirmation` / `marketing_opt_out_confirmation`.
+ * Those are real OUTBOUND texts sent to the customer that carry the event as
+ * a tag - a message, and drawn as one.
  */
 export const SYSTEM_EVENTS = [
   'agent_claimed',
@@ -699,27 +719,76 @@ export const SYSTEM_EVENTS = [
   'returned_to_ai',
   // stop-ai (3e7bae17): written with no name - nothing says who stopped it.
   'ai_stopped',
+  'ai_bot_escalation',
+  'flow_ended_handoff',
+  'visitor_requested_human',
+  'auto_closed',
+  'whatsapp_app_takeover',
+  'continued_on_whatsapp',
+  'continued_from_website',
+  'approval_execution_failed',
 ] as const;
 export type SystemEvent = (typeof SYSTEM_EVENTS)[number];
 
 /**
- * The event this row records, or `null` if it is not one we can account for.
+ * What this row records: a known event, `'other'` for a system row we have
+ * no words for, or `null` for a message.
+ *
+ * ★★ A SYSTEM ROW IS NEVER A CUSTOMER BUBBLE (Omer, 2026-10-11). An unknown
+ * event used to fall to "Something was sent here that we can't show yet" -
+ * an empty bubble on the customer's side for something the platform did.
+ * It is now a neutral divider ("System update"): it claims only that the
+ * system wrote a row, which `messageType: "system"` is the proof of, and
+ * names nothing it does not know.
  *
  * `department_transferred` is included although this product never offers a
  * department transfer: the platform writes it, other clients can cause it,
  * and a divider that skipped it would leave an unexplained gap in the thread
  * exactly where somebody needs to know the conversation moved.
  *
- * Unknown events return `null` and fall to the stream's "we cannot show
- * this" line - **not** to a generic "something happened", which would be the
- * `messageType` trap one level down: an unconstrained string read through an
- * exhaustive switch, where the default branch names something it does not
- * know.
+ * An unknown event on a row that is NOT `system` stays a message: that is
+ * the shape of the marketing confirmations, text the customer received.
  */
-export function systemEventOf(message: InboxMessage): SystemEvent | null {
+export function systemEventOf(message: InboxMessage): SystemEvent | 'other' | null {
   const event = message.metadata?.systemEvent?.trim();
-  if (!event) return null;
-  return (SYSTEM_EVENTS as readonly string[]).includes(event) ? (event as SystemEvent) : null;
+  if (event && (SYSTEM_EVENTS as readonly string[]).includes(event)) return event as SystemEvent;
+  return message.messageType?.trim().toLowerCase() === 'system' ? 'other' : null;
+}
+
+/** Why the AI handed a conversation to the team, in words we have - or null. */
+export type EscalationReason =
+  | 'daily_budget'
+  | 'budget'
+  | 'customer_asked'
+  | 'ai_paused'
+  | 'ai_inactive'
+  | 'ai_failed'
+  | 'message_limit';
+
+/**
+ * `ai_bot_escalation`'s reason, from its code - never from
+ * `escalationSummary`, which is the platform's English ("Token budget
+ * exceeded (tenant_day): 1203/1000."). Codes read off their writers: the
+ * budget's `budget_exceeded:<scope>` (only `tenant_day` exists), the
+ * incoming worker's `agent_paused`, `customer_requested_human`,
+ * `ai_service_failure`, `hard_message_ceiling`, `autonomous_message_cap`,
+ * and the AI's `agent_inactive:<status>`. Anything else - `ai_decided`, a
+ * free-text reason the model gave - is no reason line, not a guessed one.
+ */
+export function escalationReasonOf(message: InboxMessage): EscalationReason | null {
+  const code = message.metadata?.escalationCase?.trim();
+  if (!code) return null;
+  if (code === 'budget_exceeded:tenant_day') return 'daily_budget';
+  if (code.startsWith('budget_exceeded')) return 'budget';
+  if (code.startsWith('agent_inactive')) return 'ai_inactive';
+  const exact: Record<string, EscalationReason> = {
+    customer_requested_human: 'customer_asked',
+    agent_paused: 'ai_paused',
+    ai_service_failure: 'ai_failed',
+    hard_message_ceiling: 'message_limit',
+    autonomous_message_cap: 'message_limit',
+  };
+  return Object.hasOwn(exact, code) ? exact[code]! : null;
 }
 
 /* ── Reactions, inbound only, because outbound does not exist ────────────── */
