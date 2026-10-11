@@ -137,14 +137,18 @@ describe.each(CONNECT_INITS)("$name init: the integrations connect permission", 
     expect(r.body.url).toMatch(/^https:\/\//);
   });
 
-  it("★ a non-admin holding integrations:connections:connect starts it", async () => {
+  // Role ceilings (Omer, 2026-10-11): connecting a system is something an
+  // Agent can NEVER hold - a per-user grant of either connect key no longer
+  // lifts it (permission-catalog ROLE_CEILINGS, enforced in hasPermission).
+  // These two cases asserted the opposite before the ceilings existed.
+  it("★ an Agent GRANTED integrations:connections:connect is still refused: the Agent ceiling", async () => {
     const r = await get(c.path, "connector");
-    expect(r.status).toBe(200);
-    expect(r.body.url).toMatch(/^https:\/\//);
+    expect(r.status).toBe(403);
+    expect(r.body.url).toBeUndefined();
   });
 
-  it("★ a non-admin holding business-systems:connections:connect starts it", async () => {
-    expect((await get(c.path, "bsConnector")).status).toBe(200);
+  it("★ an Agent GRANTED business-systems:connections:connect is still refused: the Agent ceiling", async () => {
+    expect((await get(c.path, "bsConnector")).status).toBe(403);
   });
 
   it("★ a member without it is refused, and so is a knowledge-only writer", async () => {
