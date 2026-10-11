@@ -60,6 +60,62 @@ export function zoneOptions(locale: string, at: Date = new Date()): readonly Zon
 }
 
 /**
+ * The zone's distance from UTC today, in minutes ("GMT+5:30" is 330), read
+ * from `Intl`'s English short offset so the format is fixed. 0 when unread.
+ */
+export function zoneOffsetMinutes(iana: string, at: Date = new Date()): number {
+  try {
+    const m = /^GMT(?:([+-])(\d{1,2})(?::(\d{2}))?)?$/.exec(partOf(iana, 'en', at, 'shortOffset'));
+    if (!m?.[1]) return 0;
+    const minutes = Number(m[2]) * 60 + Number(m[3] ?? 0);
+    return m[1] === '-' ? -minutes : minutes;
+  } catch {
+    return 0;
+  }
+}
+
+/** The zones most workspaces pick, offered first - in this order, after the stored one's place. */
+export const COMMON_ZONES = [
+  'Asia/Jerusalem',
+  'Europe/London',
+  'America/New_York',
+  'Europe/Paris',
+  'UTC',
+] as const;
+
+/**
+ * ★★ THE PICKER'S ORDER (Omer, 2026-10-11). Sorted by its Hebrew label, the
+ *   list opened on "שעון אוזבקיסטן… Samarkand". Now: a short common group -
+ *   Jerusalem, the stored zone, London, New York, Paris, UTC - then every
+ *   other zone by its offset from UTC, then by what it says. A common zone
+ *   the browser does not list is still offered, by its own label.
+ */
+export function zoneGroups(
+  options: readonly Zone[],
+  stored: string | null,
+  locale: string,
+  at: Date = new Date(),
+): { readonly common: readonly Zone[]; readonly rest: readonly Zone[] } {
+  const byId = new Map(options.map((z) => [z.iana, z]));
+  const wanted = [COMMON_ZONES[0], ...(stored ? [stored] : []), ...COMMON_ZONES.slice(1)];
+  const common: Zone[] = [];
+  for (const iana of wanted) {
+    if (common.some((z) => z.iana === iana)) continue;
+    const zone =
+      byId.get(iana) ?? (iana === stored ? null : { iana, label: zoneLabel(iana, locale, at) });
+    if (zone) common.push(zone);
+  }
+  const taken = new Set(common.map((z) => z.iana));
+  const offset = new Map(options.map((z) => [z.iana, zoneOffsetMinutes(z.iana, at)]));
+  const rest = options
+    .filter((z) => !taken.has(z.iana))
+    .sort(
+      (a, b) => offset.get(a.iana)! - offset.get(b.iana)! || a.label.localeCompare(b.label, locale),
+    );
+  return { common, rest };
+}
+
+/**
  * What was typed, back to IANA: a label from the list, or an IANA name typed
  * as is - the server stores a string, and a zone this browser does not list
  * must still be savable. Anything else is null, and is not sent.

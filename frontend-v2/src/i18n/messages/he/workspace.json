@@ -233,5 +233,7 @@
   "typeCity": "הקלידו עיר",
   "currencyHint": "המטבע שבו ה־AI מצטט מחירים, והשעון שלפיו שעות הפתיחה פועלות.",
   "zoneUnknown": "בחרו עיר מהרשימה.",
-  "zoneDefault": "{zone} (ברירת מחדל)"
+  "zoneDefault": "{zone} (ברירת מחדל)",
+  "zonesCommon": "נפוצים",
+  "zonesAll": "כל אזורי הזמן"
 }

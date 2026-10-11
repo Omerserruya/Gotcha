@@ -14,6 +14,7 @@ import {
   COMMON_CURRENCIES,
   currencyLabel,
   SERVER_DEFAULT_ZONE,
+  zoneGroups,
   zoneLabel,
   zoneOptions,
 } from './zones';
@@ -58,11 +59,12 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
    *   It was an <input list> over a <datalist>, which a browser does not open
    *   on a click - most show nothing until you type, some never. A <select>
    *   opens, and its type-ahead still finds a city by its first letters.
-   *   Sorted by what it says, so the cities read in order.
+   *   Ordered as `zoneGroups` says: the common ones first, then by offset.
    */
-  const zones = useMemo(
-    () => [...zoneOptions(locale)].sort((a, b) => a.label.localeCompare(b.label, locale)),
-    [locale],
+  const zones = useMemo(() => zoneOptions(locale), [locale]);
+  const groups = useMemo(
+    () => zoneGroups(zones, workspace.timezone ?? null, locale),
+    [zones, workspace.timezone, locale],
   );
 
   const origin = (key: FactKey) => {
@@ -273,11 +275,20 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
               {workspace.timezone && !zones.some((z) => z.iana === workspace.timezone) ? (
                 <option value={workspace.timezone}>{workspace.timezone}</option>
               ) : null}
-              {zones.map((zone) => (
-                <option key={zone.iana} value={zone.iana}>
-                  {zone.label}
-                </option>
-              ))}
+              <optgroup label={t('zonesCommon')} data-testid="timezone-common">
+                {groups.common.map((zone) => (
+                  <option key={zone.iana} value={zone.iana}>
+                    {zone.label}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label={t('zonesAll')} data-testid="timezone-all">
+                {groups.rest.map((zone) => (
+                  <option key={zone.iana} value={zone.iana}>
+                    {zone.label}
+                  </option>
+                ))}
+              </optgroup>
             </select>
             <button
               type="button"

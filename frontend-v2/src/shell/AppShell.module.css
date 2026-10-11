@@ -323,10 +323,17 @@
    * would otherwise push the pill past the row's end (Chromium, 2026-10-11).
    * It wraps at a space first, and only a word that still cannot fit is cut.
    */
+  /*
+   * ★ ONE LINE, ALWAYS (Omer, 2026-10-11). "מנוהל ע״י GOTCHA" with its size
+   *   and pill wrapped to two lines at 1440x900. The name keeps one line and
+   *   gives way with an ellipsis when the numbers need the room; its whole
+   *   self is still the link's name and the row's tooltip.
+   */
   .subNavText {
     min-inline-size: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /*
@@ -338,7 +345,7 @@
   .subNavCount {
     flex: none;
     margin-inline-start: auto;
-    padding-inline-start: var(--space-8);
+    padding-inline-start: var(--space-6);
     font-family: var(--font-mono);
     font-size: var(--font-size-counter);
     font-variant-numeric: tabular-nums;
@@ -371,7 +378,7 @@
 
   /* After the size, the pill sits beside it rather than splitting the free space. */
   .subNavCount + .subNavUnread {
-    margin-inline-start: var(--space-6);
+    margin-inline-start: var(--space-4);
   }
 
   .commandHint {

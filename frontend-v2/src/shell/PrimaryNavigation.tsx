@@ -128,7 +128,9 @@ export function PrimaryNavigation() {
                     className={styles.subNavLink}
                     aria-current={isCurrentChild(active, child) ? 'page' : undefined}
                   >
-                    <span className={styles.subNavText}>{t(child.labelKey)}</span>
+                    <span className={styles.subNavText} title={t(child.labelKey)}>
+                      {t(child.labelKey)}
+                    </span>
                     {/*
                      * Each number opens with a space, so the link is named
                      * "Active 5 conversations", not "Active5 conversations".

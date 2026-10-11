@@ -200,14 +200,33 @@ describe('★★ 11e · the time zone is a list that opens (Omer, 2026-10-11)', 
     expect(document.querySelector('datalist')).toBeNull();
   });
 
-  it('offers each zone by its city and offset, valued as the IANA id, in order', async () => {
+  it('offers each zone by its city and offset, valued as the IANA id', async () => {
     renderRows();
     await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
     const options = [...screen.getByTestId('timezone-select').querySelectorAll('option')];
     const jerusalem = options.find((o) => o.value === 'Asia/Jerusalem');
     expect(jerusalem?.textContent).toMatch(/^Jerusalem \(GMT/);
-    const labels = options.map((o) => o.textContent ?? '');
-    expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b, 'en')));
+  });
+
+  it('★★ the common ones first - Jerusalem, the stored zone, London, New York, Paris, UTC (Omer, 2026-10-11)', async () => {
+    renderRows({ timezone: 'Asia/Tokyo' });
+    await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
+    const common = [...screen.getByTestId('timezone-common').querySelectorAll('option')].map(
+      (o) => o.value,
+    );
+    expect(common).toEqual([
+      'Asia/Jerusalem',
+      'Asia/Tokyo',
+      'Europe/London',
+      'America/New_York',
+      'Europe/Paris',
+      'UTC',
+    ]);
+    // …and none of them again below.
+    const all = [...screen.getByTestId('timezone-all').querySelectorAll('option')].map(
+      (o) => o.value,
+    );
+    for (const zone of common) expect(all).not.toContain(zone);
   });
 
   it('opens on the stored zone, and the currency beside it', async () => {

@@ -229,6 +229,8 @@ describe('★★ each view’s size, a plain muted number before the pill (Omer,
     );
     expect(text).toContain('min-inline-size: 0');
     expect(text).toContain('text-overflow: ellipsis');
+    // ★ one line at every desktop width: it gives way, it never wraps (Omer, 2026-10-11)
+    expect(text).toContain('white-space: nowrap');
     // after the size, the pill keeps a small gap instead of an auto margin
     expect(css).toMatch(
       /\.subNavCount \+ \.subNavUnread \{\s*margin-inline-start: var\(--space-\d+\);/,
