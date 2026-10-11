@@ -123,3 +123,67 @@ describe('a date, never a verdict', () => {
     expect(document.body.textContent).not.toMatch(/\bfresh\b|out of date|up to date|stale/i);
   });
 });
+
+describe('★ "Scan again" sits with the website (moved from Workspace, Omer 2026-10-11)', () => {
+  const rescan = <button type="button" data-testid="rescan-probe" />;
+  const website = source({
+    id: 'web',
+    name: 'Website',
+    documents: [
+      {
+        id: 'w1',
+        title: 'Home',
+        status: 'ready',
+        chunkCount: 3,
+        sourceType: 'onboarding_scan',
+        sourceUrl: 'https://urban-supply.example',
+        updatedAt: '2026-07-29T19:58:14.000Z',
+      },
+    ],
+  });
+  const draw = async (sources: readonly KnowledgeSource[] | null) =>
+    render(
+      await KnowledgeScreen({
+        sources,
+        unanswered: [],
+        conflicts: [],
+        conflictsScannedAt: null,
+        everImported: true,
+        rescan,
+      }),
+    );
+
+  it('under "Your website" when the website is listed - once', async () => {
+    await draw([source(), website]);
+    expect(screen.getByTestId('way-website')).toContainElement(screen.getByTestId('rescan-probe'));
+    expect(screen.getAllByTestId('rescan-probe')).toHaveLength(1);
+  });
+
+  it('no website listed: first in "Where it learns from", so it can still be pressed', async () => {
+    await draw([source()]);
+    const probe = screen.getByTestId('rescan-probe');
+    expect(screen.getByTestId('sources-section')).toContainElement(probe);
+    expect(screen.queryByTestId('way-website')).toBeNull();
+  });
+
+  it('the sources read failed: still there, beside the sentence saying so', async () => {
+    await draw(null);
+    expect(screen.getByTestId('sources-section')).toContainElement(
+      screen.getByTestId('rescan-probe'),
+    );
+    expect(screen.getByTestId('sources-unavailable')).toBeInTheDocument();
+  });
+
+  it('none handed in (the workspace read failed): nothing drawn', async () => {
+    render(
+      await KnowledgeScreen({
+        sources: [website],
+        unanswered: [],
+        conflicts: [],
+        conflictsScannedAt: null,
+        everImported: true,
+      }),
+    );
+    expect(screen.queryByTestId('knowledge-rescan')).toBeNull();
+  });
+});

@@ -272,5 +272,36 @@ for (const size of SIZES) {
 
       await shoot(page, `${size.name}-5-above-the-fold`);
     });
+
+    /*
+     * ★ 6 · "Scan again", NOT FIRED - moved here from Settings · Workspace
+     * (Omer, 2026-10-11).
+     *
+     * The button is present and this test does not press it: the action
+     * re-crawls a live website, and a capture is not a strange user. The
+     * resting state is photographed and the sentences that must be read
+     * BEFORE the click are asserted. The result states are in
+     * src/features/knowledge/ScanPanel.test.tsx.
+     */
+    test('6 · the website rescan, unfired', async ({ page }) => {
+      if (onlyOneProject()) return;
+
+      await openKnowledge(page, 'en');
+
+      const rescan = page.getByTestId('knowledge-rescan');
+      await expect(rescan).toBeVisible();
+      await expect(page.getByTestId('sources-section')).toContainText(/scan again/i);
+      await expect(page.getByTestId('scan-run')).toHaveAttribute(
+        'title',
+        /come back as suggestions/i,
+      );
+      await expect(page.getByTestId('scan-intro')).toHaveText(/does not change the pages/i);
+
+      // Nothing has run, so no result may be on screen.
+      await expect(page.getByTestId('scan-result')).toHaveCount(0);
+      await expect(page.getByTestId('scan-refusal')).toHaveCount(0);
+
+      await shoot(page, `${size.name}-6-rescan-unfired`);
+    });
   });
 }

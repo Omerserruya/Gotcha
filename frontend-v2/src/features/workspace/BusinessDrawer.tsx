@@ -86,12 +86,13 @@ export function BusinessDrawer({
               {workspace.websiteDomain ? displayHost(workspace.websiteDomain) : '-'}
             </span>
             {/*
-              The rescan is the Workspace page's (POST /workspace/scan): it
-              answers with what it applied and what it only offers, and that
-              conversation lives in its panel - so this leads there.
+              The rescan (POST /workspace/scan) lives on Studio · Knowledge,
+              beside the website (Omer, 2026-10-11): it answers with what it
+              applied and what it only offers, and that conversation lives in
+              its panel there - so this leads there.
             */}
             <Link
-              href={{ pathname: '/settings/workspace', hash: 'scan' }}
+              href={{ pathname: '/studio/knowledge', hash: 'scan' }}
               className={styles.scanAgainLink}
               data-testid="business-scan-again"
             >

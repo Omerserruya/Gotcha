@@ -319,6 +319,11 @@
     text-transform: none;
   }
 
+  /* "Scan again", inset like the rows it sits among. */
+  .rescan {
+    padding: var(--space-10) 18px;
+  }
+
   .sources,
   .gaps {
     margin: 0;

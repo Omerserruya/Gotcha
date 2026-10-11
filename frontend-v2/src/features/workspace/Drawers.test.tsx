@@ -303,7 +303,11 @@ describe('★ 11b - the website: what the scan read, what else it found, and Sca
     expect(screen.getByTestId('business-also-found')).toHaveTextContent(
       'Also foundShopify storeInstagram',
     );
-    expect(screen.getByTestId('business-scan-again').getAttribute('href')).toContain('scan');
+    // ★ The rescan lives on Studio · Knowledge now (Omer, 2026-10-11).
+    const again = screen.getByTestId('business-scan-again').getAttribute('href') ?? '';
+    expect(again).toContain('/studio/knowledge');
+    expect(again).toContain('scan');
+    expect(again).not.toContain('/settings/workspace');
   });
 
   it('nothing read: no line and no chips - never "0 pages read"', () => {

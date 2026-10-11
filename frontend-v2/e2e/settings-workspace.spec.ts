@@ -201,9 +201,10 @@ for (const size of SIZES) {
         await expect(page.getByTestId(`fact-${key}`)).toBeVisible();
       }
 
-      // The header the inline badges depend on. Without it, "From website"
-      // on a row has no reason to mean anything to a reader.
-      await expect(page.getByTestId('facts-intro')).toHaveText(/only updates fields marked/i);
+      // "Scan again" moved to Studio · Knowledge (Omer, 2026-10-11): no
+      // banner here, and no button to re-crawl the site from this screen.
+      await expect(page.getByTestId('scan-intro')).toHaveCount(0);
+      await expect(page.getByTestId('scan-run')).toHaveCount(0);
 
       // And the website row states the domain WITHOUT a page count: `reach`
       // is on the scan response only, and `pagesRead` would be 17 against a
@@ -698,42 +699,6 @@ for (const size of SIZES) {
       await expect(page.getByTestId('language-other')).toHaveAttribute('aria-disabled', 'true');
 
       await shoot(page, `${size.name}-15-languages`);
-    });
-
-    /*
-     * ★ 11b · the scan panel, NOT FIRED.
-     *
-     * The button is present and this test does not press it. `runWorkspaceScan`
-     * re-crawls a live website; a capture is not a strange user, and pressing
-     * it here would cost a real fetch on every viewport of every run.
-     *
-     * So this photographs the resting state and asserts the sentence that has
-     * to be read BEFORE the click — that suggestions come back rather than
-     * changes going in. The result states are in ScanPanel.test.tsx.
-     *
-     * Also unreached anywhere: a REAL scan producing a REAL proposal. The
-     * rescan dies at the model call on exhausted AI units, so Backend
-     * verified the accept endpoint against a seeded proposal row. Storage and
-     * endpoint are real; the scan that would produce the proposal is
-     * substituted. That is a gap in the evidence and it is named, not papered.
-     */
-    test('16 · the scan panel, unfired', async ({ page }) => {
-      if (onlyOneProject()) return;
-
-      await openWorkspace(page, 'en');
-
-      await expect(page.getByTestId('scan-run')).toBeVisible();
-
-      const before = page.getByTestId('scan-before');
-      await expect(before).toBeVisible();
-      await expect(before).toHaveText(/come back as suggestions/i);
-      await expect(before).toHaveText(/only fields the website already owns/i);
-
-      // Nothing has run, so no result may be on screen.
-      await expect(page.getByTestId('scan-result')).toHaveCount(0);
-      await expect(page.getByTestId('scan-refusal')).toHaveCount(0);
-
-      await shoot(page, `${size.name}-16-scan-unfired`);
     });
 
     test('14 · one reply language, and the screen says so', async ({ page }) => {

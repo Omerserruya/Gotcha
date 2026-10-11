@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AddKnowledge } from '@/features/knowledge/add/AddKnowledge';
 import { FocusSection } from '@/features/knowledge/FocusSection';
+import { KnowledgeScreen } from '@/features/knowledge/KnowledgeScreen';
+import { ScanPanel } from '@/features/knowledge/ScanPanel';
 
 const sources = vi.hoisted(() => ({ value: [] as unknown[] | null }));
 vi.mock('@/features/knowledge/load-knowledge', () => ({
@@ -19,6 +21,12 @@ vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
   getFormatter: async () => ({ list: (items: string[]) => items.join(', ') }),
 }));
+/* The workspace read the rescan needs: answered, or failed (`null`). */
+const facts = vi.hoisted(() => ({ value: { websiteDomain: 'urban-supply.example' } as unknown }));
+vi.mock('@/features/workspace/load-workspace', () => ({
+  loadWorkspaceFacts: async () => facts.value,
+}));
+vi.mock('@/features/knowledge/ScanPanel', () => ({ ScanPanel: () => null }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
@@ -137,5 +145,34 @@ describe('★ /studio/knowledge?section=gaps - the assistant links to the unansw
     );
     expect(find(await page(), FocusSection)).toBeNull();
     expect(find(await page({ section: 'other' }), FocusSection)).toBeNull();
+  });
+});
+
+describe('★ "Scan again" lives here now - moved from Settings · Workspace (Omer, 2026-10-11)', () => {
+  const rescanOf = async () =>
+    find<{ rescan: ReactNode }>(await page(), KnowledgeScreen)?.rescan ?? null;
+
+  it('handed to the screen with the website the workspace read names', async () => {
+    facts.value = { websiteDomain: 'urban-supply.example' };
+    const rescan = await rescanOf();
+    expect(isValidElement(rescan)).toBe(true);
+    expect((rescan as ReactElement).type).toBe(ScanPanel);
+    expect((rescan as ReactElement<{ domain: string | null }>).props.domain).toBe(
+      'urban-supply.example',
+    );
+  });
+
+  it('no website on file: still drawn, naming none', async () => {
+    facts.value = { websiteDomain: null };
+    expect((await rescanOf()) as ReactElement<{ domain: string | null }>).toHaveProperty(
+      'props.domain',
+      null,
+    );
+  });
+
+  it('★ the gate it had on Workspace: the workspace read failed, no rescan', async () => {
+    facts.value = null;
+    expect(await rescanOf()).toBeNull();
+    facts.value = { websiteDomain: 'urban-supply.example' };
   });
 });

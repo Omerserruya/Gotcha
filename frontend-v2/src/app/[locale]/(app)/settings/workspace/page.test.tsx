@@ -23,7 +23,6 @@ const { stub } = vi.hoisted(() => ({
   stub: (id: string) => () => <div data-testid={id} />,
 }));
 vi.mock('@/features/workspace/FactRows', () => ({ FactRows: stub('facts') }));
-vi.mock('@/features/workspace/ScanPanel', () => ({ ScanPanel: stub('scan') }));
 vi.mock('@/features/workspace/VoiceEditor', () => ({ VoiceEditor: stub('voice') }));
 vi.mock('@/features/workspace/ProhibitedClaims', () => ({ ProhibitedClaims: stub('claims') }));
 vi.mock('@/features/workspace/BusinessDrawer', () => ({ BusinessDrawer: stub('business') }));
@@ -61,5 +60,22 @@ describe('★ 11 - 11b, 11c and 11d open over it', () => {
     await open(panel);
     expect(screen.getByTestId(drawer)).toHaveAttribute('aria-label', title);
     expect(screen.getByTestId(inside)).toBeInTheDocument();
+  });
+});
+
+describe('★ 11 - no "Scan again" here: it moved to Studio · Knowledge (Omer, 2026-10-11)', () => {
+  it('the facts, the voice and the rules - and no scan banner, button or anchor', async () => {
+    const { container } = await open();
+    expect(screen.getByTestId('facts')).toBeInTheDocument();
+    expect(screen.queryByTestId('scan')).toBeNull();
+    expect(screen.queryByTestId('scan-run')).toBeNull();
+    expect(screen.queryByTestId('scan-intro')).toBeNull();
+    expect(container.querySelector('#scan')).toBeNull();
+    expect(container).not.toHaveTextContent(/scan again/i);
+  });
+
+  it('its copy is not Workspace’s any more', () => {
+    expect(workspace).not.toHaveProperty('scan');
+    expect(workspace).not.toHaveProperty('intro');
   });
 });

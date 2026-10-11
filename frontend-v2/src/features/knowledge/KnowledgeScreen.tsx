@@ -1,4 +1,5 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
+import type { ReactNode } from 'react';
 
 import {
   hasAmbiguousName,
@@ -76,12 +77,19 @@ export async function KnowledgeScreen({
   conflicts,
   conflictsScannedAt,
   everImported,
+  rescan = null,
 }: {
   readonly sources: readonly KnowledgeSource[] | null;
   readonly unanswered: readonly UnansweredQuestion[] | null;
   readonly conflicts: readonly Candidate[] | null;
   readonly conflictsScannedAt: string | null;
   readonly everImported: boolean;
+  /**
+   * "Scan again" (11b, from Settings · Workspace since 2026-10-11): under
+   * "Your website" when that group is listed, else first in the card - a
+   * tenant whose website pages are not (or not yet) listed can still rescan.
+   */
+  readonly rescan?: ReactNode;
 }) {
   const t = await getTranslations('knowledge');
   const format = await getFormatter();
@@ -92,6 +100,12 @@ export async function KnowledgeScreen({
   const stale = sources ? staleSources(sources, new Date()) : [];
   const undated = sources ? undatedSources(sources) : [];
   const groups = sources ? groupByWayIn(sources) : [];
+  const websiteListed = groups.some((group) => group.way === 'website');
+  const rescanBlock = rescan ? (
+    <div className={styles.rescan} data-testid="knowledge-rescan">
+      {rescan}
+    </div>
+  ) : null;
 
   return (
     <div className={styles.screen} data-testid="knowledge-screen">
@@ -267,6 +281,7 @@ export async function KnowledgeScreen({
           </header>
 
           <div className={styles.cardBody}>
+            {websiteListed ? null : rescanBlock}
             {sources === null ? (
               <p className={styles.degraded} data-testid="sources-unavailable">
                 {t('sources.unavailable')}
@@ -287,6 +302,8 @@ export async function KnowledgeScreen({
                       <span className={styles.wayNote}>{t('way.scanned')}</span>
                     ) : null}
                   </p>
+                  {/* 02's "Your website · scanned automatically" - and its rescan. */}
+                  {group.way === 'website' ? rescanBlock : null}
                   <ul className={styles.sources}>
                     {group.sources.map((source) => {
                       const refreshed = date(lastRefreshed(source));

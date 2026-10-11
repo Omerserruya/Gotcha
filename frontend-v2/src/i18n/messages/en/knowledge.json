@@ -234,5 +234,37 @@
     },
     "connectedAlready": "Connected",
     "addAnother": "Add another account"
+  },
+  "scan": {
+    "intro": {
+      "withSite": "Your business details were read from {domain} when you signed up. Scanning again refreshes the ones marked “From your website” in Settings · Workspace. It does not change the pages listed here.",
+      "noSite": "Your business details were filled in when you signed up."
+    },
+    "button": "Scan again",
+    "running": "Reading your website…",
+    "beforeYouStart": "The scan reads {domain} again. Nothing is changed without you: fields you have never marked come back as suggestions, and only fields the website already owns are refreshed on their own.",
+    "appliedNone": "Nothing was refreshed on its own - no field is marked as coming from your website yet.",
+    "applied": "{count, plural, =1 {One field was refreshed from your site.} other {# fields were refreshed from your site.}}",
+    "noChanges": "Your site says the same as what is stored. Nothing to change.",
+    "offerHeading": "Suggestions from your site",
+    "offerIntro": "Taking a suggestion tells GOTCHA this field follows your website, so future scans will refresh it without asking.",
+    "because": {
+      "human_edited": "You edited this, so it was left alone.",
+      "source_unknown": "Nobody recorded who wrote this, so it was left alone."
+    },
+    "currentLabel": "Now",
+    "proposedLabel": "Your site says",
+    "accept": "Use the site's version",
+    "accepted": "{count, plural, =1 {One suggestion taken.} other {# suggestions taken.}}",
+    "skipped": "{count, plural, =1 {One suggestion was out of date and was not applied - scan again.} other {# suggestions were out of date and were not applied - scan again.}}",
+    "unreadable": "Your site answered, but every page it returned was the same one - usually a login or password screen. Anything suggested below was inferred from that page rather than from your content.",
+    "refusal": {
+      "no_domain": "GOTCHA does not have your website address, so there is nothing to scan.",
+      "fetch_failed": "Your site did not answer. Nothing was changed.",
+      "scan_failed": "We reached your site but could not make sense of it. Nothing was changed.",
+      "scan_in_progress": "A scan is already running. Try again in a moment.",
+      "no_profile": "This workspace has no business profile yet, so there is nothing to update."
+    },
+    "failed": "The scan could not run. Nothing was changed."
   }
 }

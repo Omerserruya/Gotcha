@@ -12,6 +12,8 @@ import { FocusSection } from '@/features/knowledge/FocusSection';
 import { KnowledgeScreen, knowledgeSummary } from '@/features/knowledge/KnowledgeScreen';
 import { loadKnowledge } from '@/features/knowledge/load-knowledge';
 import styles from '@/features/knowledge/Knowledge.module.css';
+import { ScanPanel } from '@/features/knowledge/ScanPanel';
+import { loadWorkspaceFacts } from '@/features/workspace/load-workspace';
 import { Link } from '@/i18n/navigation';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -55,8 +57,14 @@ export default async function Page({
 } = {}) {
   const params = (await searchParams) ?? {};
   const t = await getTranslations('knowledge');
-  const { sources, unanswered, conflicts, conflictsScannedAt, everImported } =
-    await loadKnowledge();
+  const [{ sources, unanswered, conflicts, conflictsScannedAt, everImported }, workspace] =
+    await Promise.all([loadKnowledge(), loadWorkspaceFacts()]);
+  /*
+    "Scan again" (11b), moved here from Settings · Workspace (Omer,
+    2026-10-11). Drawn only when the workspace read answers - the gate it had
+    there - and it names the website that read gives.
+  */
+  const rescan = workspace ? <ScanPanel domain={workspace.websiteDomain ?? null} /> : null;
 
   /*
     02's line is a SUMMARY from data - "Learned four ways: … Two things need
@@ -119,6 +127,7 @@ export default async function Page({
           conflicts={conflicts}
           conflictsScannedAt={conflictsScannedAt}
           everImported={everImported}
+          rescan={rescan}
         />
       )}
       {params.add === '1' ? (

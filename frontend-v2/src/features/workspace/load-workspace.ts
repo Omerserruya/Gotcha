@@ -58,6 +58,20 @@ export async function loadWorkspace(): Promise<WorkspaceData> {
   return { workspace, voice, claims };
 }
 
+/**
+ * The workspace facts alone - for Studio · Knowledge, whose "Scan again"
+ * names the website and, like Workspace did, is drawn only when this read
+ * answers (it needs `settings:workspace:read`). `null` when it failed.
+ */
+export async function loadWorkspaceFacts(): Promise<Workspace | null> {
+  return serverApi()
+    .get({ endpoint: workspaceEndpoints.read(), payload: workspaceSchema })
+    .catch((cause: unknown) => {
+      logger.warn('workspace.read_failed', { cause });
+      return null;
+    });
+}
+
 /** 11b's website line: what the scan read, and what else it found. */
 export interface WebsiteScan {
   readonly pagesRead: number;

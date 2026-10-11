@@ -4,7 +4,6 @@ import { FactRows } from '@/features/workspace/FactRows';
 import { BusinessDrawer } from '@/features/workspace/BusinessDrawer';
 import { HoursDrawer } from '@/features/workspace/HoursDrawer';
 import { LanguageDrawer } from '@/features/workspace/LanguageDrawer';
-import { ScanPanel } from '@/features/workspace/ScanPanel';
 import { loadLanguages } from '@/features/workspace/load-languages';
 import { loadWebsiteScan, loadWorkspace } from '@/features/workspace/load-workspace';
 import { ProhibitedClaims } from '@/features/workspace/ProhibitedClaims';
@@ -38,15 +37,13 @@ export default async function Page({
   ]);
 
   /*
-    11, measured: the scan banner (its sentence, the "From website" legend,
-    "Scan again"), the facts as one table with the marking ON the rows, then
-    "How GOTCHA should sound" beside "Never say". The separate "where these
-    details came from" section is gone: its facts live on the chips and on
-    the scan control.
+    11, measured: the facts as one table with the marking ON the rows, then
+    "How GOTCHA should sound" beside "Never say". The scan banner ("Scan
+    again") moved to Studio · Knowledge, beside the website (Omer,
+    2026-10-11); the business drawer's "Scan again" leads there.
   */
   return (
     <SettingsSection title={t('title')} description={t('description')}>
-      {workspace ? <ScanPanel domain={workspace.websiteDomain ?? null} /> : null}
       {workspace ? <FactRows workspace={workspace} /> : <p>{t('unavailable')}</p>}
       <div className={styles.cards}>
         {voice ? <VoiceEditor voice={voice} /> : <p>{t('voice.unavailable')}</p>}
