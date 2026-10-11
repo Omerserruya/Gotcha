@@ -9,6 +9,7 @@ import {
   parsePeriod,
   retiredView,
   VIEW_AFTER,
+  viewAfter,
   viewQuery,
 } from './inbox-views';
 import enNav from '@/i18n/messages/en/navigation.json';
@@ -207,5 +208,13 @@ describe('★★ a verb takes the list to where the conversation now is', () => 
 
   it('★★ Return to the AI lands on "Handled by GOTCHA"', () => {
     expect(VIEW_AFTER.returnToAi).toBe('gotcha');
+  });
+
+  it('★ the viewer unknown: a claim lands on "Active", which needs no "me"; return is unchanged', () => {
+    expect(viewQuery('mine', null)).toBeNull();
+    expect(viewAfter('claim', false)).toBe('active');
+    expect(viewAfter('claim', true)).toBe('mine');
+    expect(viewAfter('returnToAi', false)).toBe('gotcha');
+    expect(viewAfter('returnToAi', true)).toBe('gotcha');
   });
 });

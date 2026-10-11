@@ -100,6 +100,7 @@ const show = (over: Partial<Parameters<typeof ConversationVerbs>[0]> = {}) =>
         greeting={null}
         colleagues={colleagues}
         resolved={false}
+        meKnown={true}
         {...over}
       />
     </NextIntlClientProvider>,
@@ -513,6 +514,17 @@ describe('★★ after Take control or Return to the AI, the list goes where the
     await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
     expect(push).toHaveBeenCalledWith(
       { pathname: '/inbox', query: { view: 'mine', c: 'c1' } },
+      { scroll: false },
+    );
+  });
+
+  it('★ Take control with the viewer unknown (/auth/me unread): to "Active", `c` kept', async () => {
+    claimConversation.mockResolvedValueOnce({ ok: true } as never);
+    show({ mine: false, meKnown: false });
+    await userEvent.click(screen.getByTestId('claim-c1'));
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    expect(push).toHaveBeenCalledWith(
+      { pathname: '/inbox', query: { view: 'active', c: 'c1' } },
       { scroll: false },
     );
   });

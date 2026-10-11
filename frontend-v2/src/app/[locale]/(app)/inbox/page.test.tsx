@@ -243,6 +243,7 @@ describe('★★ what the page decides before the verbs are drawn', () => {
   const verbs = async (over: Record<string, unknown>) =>
     propsOf<{
       mine: boolean;
+      meKnown: boolean;
       handedOver: boolean;
       hasAiEmployee: boolean;
       greeting: boolean | null;
@@ -262,6 +263,15 @@ describe('★★ what the page decides before the verbs are drawn', () => {
      */
     expect(await verbs({ meId: null, open: row({ assignedAgentId: null }) })).toMatchObject({
       mine: false,
+    });
+  });
+
+  it('★ the verbs know whether the viewer is known - a claim then lands on "Active"', async () => {
+    expect(await verbs({ meId: null, open: row({ assignedAgentId: null }) })).toMatchObject({
+      meKnown: false,
+    });
+    expect(await verbs({ open: row({ assignedAgentId: null }) })).toMatchObject({
+      meKnown: true,
     });
   });
 

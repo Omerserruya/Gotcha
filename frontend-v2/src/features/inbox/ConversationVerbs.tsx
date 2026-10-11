@@ -12,7 +12,7 @@ import {
   transferConversation,
   type VerbResult,
 } from './conversation-actions';
-import { inboxQuery, VIEW_AFTER, type InboxView } from './inbox-views';
+import { inboxQuery, viewAfter, type InboxView } from './inbox-views';
 import styles from './Inbox.module.css';
 
 /**
@@ -46,6 +46,7 @@ export function ConversationVerbs({
   greeting,
   colleagues,
   resolved,
+  meKnown,
 }: {
   readonly conversationId: string;
   /** Is this conversation assigned to the person looking at it? */
@@ -76,6 +77,11 @@ export function ConversationVerbs({
    *   controls are decorative.
    */
   readonly resolved: boolean;
+  /**
+   * Could `/auth/me` be read? Without it "Assigned to me" has no query, so a
+   * claim lands on "Active" instead (`viewAfter`).
+   */
+  readonly meKnown: boolean;
 }) {
   const t = useTranslations('inbox.verbs');
   const [result, setResult] = useState<VerbResult | null>(null);
@@ -90,7 +96,7 @@ export function ConversationVerbs({
    * Taking control moves a conversation out of the queue and into "Assigned
    * to me"; handing it back moves it into "Handled by GOTCHA". The list
    * stayed where it was, so the row the reader just acted on vanished from
-   * it. `landsOn` is where it now lives (`VIEW_AFTER`), and the address goes
+   * it. `landsOn` is where it now lives (`viewAfter`), and the address goes
    * there with `c` kept, so the same conversation stays open.
    *
    * ⚠ Only after the server says yes. A refusal (`already_claimed`,
@@ -136,7 +142,7 @@ export function ConversationVerbs({
           className={styles.verbButton}
           data-testid={`claim-${conversationId}`}
           disabled={isPending}
-          onClick={() => run(() => claimConversation(conversationId), VIEW_AFTER.claim)}
+          onClick={() => run(() => claimConversation(conversationId), viewAfter('claim', meKnown))}
         >
           {t('claim')}
         </button>
@@ -153,7 +159,7 @@ export function ConversationVerbs({
           className={styles.verbButton}
           data-testid={`return-${conversationId}`}
           disabled={isPending}
-          onClick={() => run(() => returnToAi(conversationId), VIEW_AFTER.returnToAi)}
+          onClick={() => run(() => returnToAi(conversationId), viewAfter('returnToAi', meKnown))}
         >
           {t('returnToAi')}
         </button>

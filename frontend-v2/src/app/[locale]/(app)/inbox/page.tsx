@@ -285,6 +285,7 @@ export default async function Page({
 
                 <ConversationVerbs
                   conversationId={data.open.id}
+                  meKnown={data.meId !== null}
                   mine={data.meId !== null && data.open.assignedAgentId === data.meId}
                   handedOver={data.open.isHandedOver}
                   /*

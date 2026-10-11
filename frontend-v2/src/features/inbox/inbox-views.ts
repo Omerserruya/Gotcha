@@ -72,6 +72,20 @@ export const VIEW_AFTER = {
 } as const satisfies Record<string, InboxView>;
 
 /**
+ * Where to take the list after a verb, for this viewer.
+ *
+ * ★ "Assigned to me" needs to know who "me" is (`viewQuery` answers null
+ *   for `mine` without it), so when `/auth/me` could not be read the claim
+ *   lands on "Active" instead - an open conversation is there whoever holds
+ *   it - rather than on a list that can only say it could not read
+ *   (supervisor, 2026-10-11).
+ */
+export function viewAfter(verb: keyof typeof VIEW_AFTER, meKnown: boolean): InboxView {
+  if (verb === 'claim' && !meKnown) return 'active';
+  return VIEW_AFTER[verb];
+}
+
+/**
  * The query for one view.
  *
  * ⚠ `mine` needs the viewer's platform id, which only `/auth/me` knows. It is
