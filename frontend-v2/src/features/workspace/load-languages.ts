@@ -7,20 +7,14 @@ import { logger } from '@/observability/logger';
 import { z } from 'zod';
 
 /**
- * What screen 11d needs - and it is three different settings, not one.
- *
- * The design separates them and is right to: the language customers are
- * answered in, the language GOTCHA itself writes in, and the language this
- * person sees the interface in. Only the last two are stored, and they are
- * stored in different places.
+ * What screen 11d needs: the languages customers wrote in, and the language
+ * GOTCHA itself writes in. A person's own interface language is not here -
+ * it is theirs alone, read and saved by the shell (`use-interface-language`,
+ * `locale-actions`), never from this screen.
  */
 
 /** `GET /api/account` - bare, not enveloped. */
 const accountSchema = z.object({
-  user: z
-    .object({ locale: z.string().nullable().default(null) })
-    .nullable()
-    .default(null),
   tenantDefaultLocale: z.string().nullable().default(null),
 });
 
@@ -29,8 +23,6 @@ export interface LanguageData {
   readonly share: LanguageShare | null;
   /** The language GOTCHA writes its own output in, for the whole workspace. */
   readonly systemLocale: string | null;
-  /** This person's interface language, which is theirs alone. */
-  readonly myLocale: string | null;
 }
 
 export async function loadLanguages(): Promise<LanguageData> {
@@ -56,6 +48,5 @@ export async function loadLanguages(): Promise<LanguageData> {
   return {
     share,
     systemLocale: account?.tenantDefaultLocale ?? null,
-    myLocale: account?.user?.locale ?? null,
   };
 }

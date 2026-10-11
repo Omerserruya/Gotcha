@@ -37,7 +37,7 @@ vi.mock('@/features/workspace/load-workspace', () => ({
   }),
 }));
 vi.mock('@/features/workspace/load-languages', () => ({
-  loadLanguages: async () => ({ share: null, systemLocale: 'he', myLocale: 'en' }),
+  loadLanguages: async () => ({ share: null, systemLocale: 'he' }),
 }));
 
 import Page from './page';
