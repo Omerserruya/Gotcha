@@ -42,6 +42,11 @@ describe('PermissionSet', () => {
     expect(set.has('anything:at:all')).toBe(true);
   });
 
+  it('★ the role key the route actually sends, "system_admin", is the system admin too', () => {
+    // /permissions/me: `roleKey: role === "SYSTEM_ADMIN" ? "system_admin" : roleKey`.
+    expect(new PermissionSet([], 'system_admin').has('anything:at:all')).toBe(true);
+  });
+
   it('does not grant everything to any other role', () => {
     expect(new PermissionSet([], 'TENANT_ADMIN').has('conversation:messages:read')).toBe(false);
   });

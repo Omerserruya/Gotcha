@@ -31,7 +31,12 @@ export class PermissionSet {
 
   constructor(permissions: readonly PermissionString[], roleKey?: string) {
     this.held = new Set(permissions);
-    this.isSystemAdmin = roleKey === SYSTEM_ADMIN_ROLE;
+    /*
+     * ★ CASE-INSENSITIVE. /permissions/me sends the effective built-in role
+     *   as `"system_admin"` (auth permissions.ts:119) while `User.role` is
+     *   `"SYSTEM_ADMIN"` - the exact compare never matched the real answer.
+     */
+    this.isSystemAdmin = roleKey?.toUpperCase() === SYSTEM_ADMIN_ROLE;
   }
 
   /** True when the set grants `required`. Exact match, or system admin. */
