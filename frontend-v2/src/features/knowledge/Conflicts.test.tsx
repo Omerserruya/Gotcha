@@ -28,6 +28,29 @@ import { KnowledgeScreen } from './KnowledgeScreen';
  * one question in more than one way, across past conversations - and says so.
  */
 
+/* K6: each document row's link - `href` as the address it would open. */
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({
+    href,
+    children,
+    scroll: _scroll,
+    ...rest
+  }: {
+    href: string | { pathname: string; query?: Record<string, string> };
+    children?: unknown;
+    scroll?: boolean;
+  }) => {
+    const to =
+      typeof href === 'string'
+        ? href
+        : `${href.pathname}?${new URLSearchParams(href.query ?? {}).toString()}`;
+    return (
+      <a href={to} {...rest}>
+        {children as never}
+      </a>
+    );
+  },
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'knowledge') =>
     createTranslator({ locale: 'en', messages: { knowledge: messages }, namespace }),

@@ -68,19 +68,67 @@ export function lastRefreshed(source: KnowledgeSource): string | null {
   return stamps.length > 0 ? stamps[stamps.length - 1]! : null;
 }
 
-export type KnowledgeListDocument = z.infer<typeof knowledgeDocumentSchema>;
-
 /**
  * One document's state, as its row says it. The writers' vocabulary
  * (`embedding.service.ts`): `pending` on create, `processing` while it is
  * read, then `ready`, or `error`. Anything else is not answering yet, so it
  * reads as being read - never as ready.
  */
-export function documentState(document: KnowledgeListDocument): 'ready' | 'reading' | 'failed' {
+export function documentState(document: {
+  readonly status: string;
+}): 'ready' | 'reading' | 'failed' {
   if (document.status === 'ready') return 'ready';
   if (document.status === 'error') return 'failed';
   return 'reading';
 }
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ K6 - ONE DOCUMENT, FOR ITS DRAWER (ai 67d267f0)
+ * ════════════════════════════════════════════════════════════════════════════
+ * `GET /api/knowledge-bases/:id/documents/:docId` (`services/ai/src/routes/
+ * knowledge.ts`), enveloped in `data`. Only what the drawer draws is required
+ * to be well-formed; everything has a default so a field the route stops
+ * sending blanks one line, not the drawer.
+ *
+ *   content          the stored text, 20 000 characters at most
+ *   contentLength    the whole text's length; `truncated` when it is longer
+ *   ai.sections      the stored sections the AI searches - 50 at most, each
+ *                    240 characters of preview; `sectionsTruncated` past that
+ *   ai.facts         `null`: no per-document facts are extracted. Never
+ *                    drawn - not "0 facts", not "none found".
+ */
+export const knowledgeDocumentDetailSchema = z.object({
+  id: z.string().min(1),
+  knowledgeBaseId: z.string().default(''),
+  title: z.string().default(''),
+  /** The document's `sourceType`, under the route's name for it. */
+  type: z.string().default('text'),
+  sourceUrl: z.string().nullable().default(null),
+  status: z.string().default('pending'),
+  createdAt: z.string().nullable().default(null),
+  updatedAt: z.string().nullable().default(null),
+  content: z.string().nullable().default(''),
+  contentLength: z.number().default(0),
+  truncated: z.boolean().default(false),
+  ai: z
+    .object({
+      sectionCount: z.number().default(0),
+      sections: z
+        .array(
+          z.object({
+            index: z.number(),
+            length: z.number().default(0),
+            preview: z.string().default(''),
+          }),
+        )
+        .default([]),
+      sectionsTruncated: z.boolean().default(false),
+    })
+    .default({ sectionCount: 0, sections: [], sectionsTruncated: false }),
+});
+
+export type KnowledgeDocumentDetail = z.infer<typeof knowledgeDocumentDetailSchema>;
 
 /** Documents that are not yet answering anything. */
 export function notReadyCount(source: KnowledgeSource): number {

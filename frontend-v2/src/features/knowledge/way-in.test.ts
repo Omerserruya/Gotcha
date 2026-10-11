@@ -4,6 +4,7 @@ import { knowledgeSourceSchema } from '@/api/contracts/knowledge';
 
 vi.mock('next-intl/server', () => ({}));
 vi.mock('./ResolveConflict', () => ({ ResolveConflict: () => null }));
+vi.mock('@/i18n/navigation', () => ({ Link: () => null }));
 
 import { groupByWayIn, wayIn } from './KnowledgeScreen';
 

@@ -21,9 +21,16 @@ export async function Drawer({
   width = 560,
   testId,
   lead,
+  userTitle = false,
   children,
 }: {
   readonly title: string;
+  /**
+   * The title is text somebody wrote (a document's own title), set apart in
+   * a `bdi dir="auto"` so Hebrew in an English drawer - or the reverse -
+   * keeps its own order.
+   */
+  readonly userTitle?: boolean;
   readonly line?: string;
   readonly closeHref: string;
   /** 02's widths: 560 (11b, 11c), 600 (12d, 14c), 620 (11d), 820 (14e). */
@@ -41,7 +48,7 @@ export async function Drawer({
         <header className={styles.head}>
           {lead}
           <div className={styles.titles}>
-            <h2 className={styles.title}>{title}</h2>
+            <h2 className={styles.title}>{userTitle ? <bdi dir="auto">{title}</bdi> : title}</h2>
             {line ? <p className={styles.line}>{line}</p> : null}
           </div>
           <Link href={closeHref} className={styles.close} aria-label={t('close')}>

@@ -6,6 +6,8 @@ import { AddKnowledge } from '@/features/knowledge/add/AddKnowledge';
 import { FocusSection } from '@/features/knowledge/FocusSection';
 import { KnowledgeScreen } from '@/features/knowledge/KnowledgeScreen';
 import { ScanPanel } from '@/features/knowledge/ScanPanel';
+import { DocumentDrawer } from '@/features/knowledge/DocumentDrawer';
+import { Drawer } from '@/shell/Drawer';
 
 const sources = vi.hoisted(() => ({ value: [] as unknown[] | null }));
 vi.mock('@/features/knowledge/load-knowledge', () => ({
@@ -27,6 +29,9 @@ vi.mock('@/features/workspace/load-workspace', () => ({
   loadWorkspaceFacts: async () => facts.value,
 }));
 vi.mock('@/features/knowledge/ScanPanel', () => ({ ScanPanel: () => null }));
+/* K6: the item's read is a spy - its own outcomes have their own tests. */
+const loadDoc = vi.hoisted(() => vi.fn());
+vi.mock('@/features/knowledge/load-document', () => ({ loadKnowledgeDocument: loadDoc }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
@@ -174,5 +179,50 @@ describe('★ "Scan again" lives here now - moved from Settings · Workspace (Om
     facts.value = null;
     expect(await rescanOf()).toBeNull();
     facts.value = { websiteDomain: 'urban-supply.example' };
+  });
+});
+
+describe('★★ K6 - ?doc=<id> opens that item’s drawer', () => {
+  const listed = [{ id: 'kb-1', isActive: true, documents: [{ id: 'd1' }] }];
+
+  it('reads the item from the list just read, and draws its title as the user’s text', async () => {
+    sources.value = listed;
+    loadDoc.mockReset();
+    loadDoc.mockResolvedValueOnce({ state: 'ok', document: { id: 'd1', title: 'Terms' } });
+    const tree = await page({ doc: 'd1' });
+    expect(loadDoc).toHaveBeenCalledWith(listed, 'd1');
+    const drawer = find<{ title: string; userTitle?: boolean; closeHref: string; testId: string }>(
+      tree,
+      Drawer,
+    );
+    expect(drawer).toMatchObject({
+      title: 'Terms',
+      userTitle: true,
+      closeHref: '/studio/knowledge',
+      testId: 'knowledge-doc-drawer',
+    });
+    expect(find<{ read: unknown }>(tree, DocumentDrawer)?.read).toEqual({
+      state: 'ok',
+      document: { id: 'd1', title: 'Terms' },
+    });
+    sources.value = [];
+  });
+
+  it('★ a refusal still opens the drawer - with our title and its sentence', async () => {
+    loadDoc.mockReset();
+    loadDoc.mockResolvedValueOnce({ state: 'forbidden' });
+    const tree = await page({ doc: 'd1' });
+    expect(find<{ title: string; userTitle?: boolean }>(tree, Drawer)).toMatchObject({
+      title: 'doc.title',
+      userTitle: false,
+    });
+    expect(find<{ read: unknown }>(tree, DocumentDrawer)?.read).toEqual({ state: 'forbidden' });
+  });
+
+  it('no ?doc, or the Add sheet open: no drawer, and nothing is read', async () => {
+    loadDoc.mockReset();
+    expect(find(await page(), Drawer)).toBeNull();
+    expect(find(await page({ add: '1', doc: 'd1' }), Drawer)).toBeNull();
+    expect(loadDoc).not.toHaveBeenCalled();
   });
 });

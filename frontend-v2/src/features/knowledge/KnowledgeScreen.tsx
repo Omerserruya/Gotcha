@@ -27,6 +27,8 @@ import { GapRow } from './GapRow';
 import { ResolveConflict } from './ResolveConflict';
 import styles from './Knowledge.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
+import rowLink from '@/design-system/styles/row-link.module.css';
+import { Link } from '@/i18n/navigation';
 
 /**
  * Screen 08 - what GOTCHA knows, and what it does not.
@@ -324,18 +326,30 @@ export async function KnowledgeScreen({
                             return (
                               <li
                                 key={document.id}
-                                className={`${styles.source} ${styles.doc}`}
+                                className={`${styles.source} ${styles.doc} ${rowLink.row}`}
                                 data-testid={`doc-${document.id}`}
                                 data-state={state}
                               >
                                 <span className={styles.sourceText}>
-                                  <span className={styles.docTitle}>
+                                  {/*
+                                    K6: the row's one link, stretched over the
+                                    row (row-link) - one tab stop, the drawer.
+                                  */}
+                                  <Link
+                                    href={{
+                                      pathname: '/studio/knowledge',
+                                      query: { doc: document.id },
+                                    }}
+                                    className={`${styles.docTitle} ${rowLink.link}`}
+                                    scroll={false}
+                                    data-testid={`doc-open-${document.id}`}
+                                  >
                                     {document.title ? (
                                       <UserText>{document.title}</UserText>
                                     ) : (
                                       t('sources.untitled')
                                     )}
-                                  </span>
+                                  </Link>
                                   {updated ? (
                                     <span className={styles.sourceMeta}>
                                       {t('sources.docUpdated', { date: updated })}

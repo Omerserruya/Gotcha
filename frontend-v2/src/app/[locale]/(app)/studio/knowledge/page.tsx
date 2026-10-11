@@ -8,13 +8,16 @@ import {
   type KnowledgeLanding,
 } from '@/features/knowledge/add/add-way';
 import { AddKnowledge } from '@/features/knowledge/add/AddKnowledge';
+import { DocumentDrawer } from '@/features/knowledge/DocumentDrawer';
 import { FocusSection } from '@/features/knowledge/FocusSection';
 import { KnowledgeScreen } from '@/features/knowledge/KnowledgeScreen';
 import { loadKnowledge } from '@/features/knowledge/load-knowledge';
+import { loadKnowledgeDocument } from '@/features/knowledge/load-document';
 import styles from '@/features/knowledge/Knowledge.module.css';
 import { ScanPanel } from '@/features/knowledge/ScanPanel';
 import { loadWorkspaceFacts } from '@/features/workspace/load-workspace';
 import { Link } from '@/i18n/navigation';
+import { Drawer } from '@/shell/Drawer';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -53,6 +56,8 @@ export default async function Page({
     readonly error?: string;
     /** `gaps`: open on the questions GOTCHA could not answer (the assistant links here). */
     readonly section?: string;
+    /** K6: one knowledge item's drawer - a document id from "Where it learns from". */
+    readonly doc?: string;
   }>;
 } = {}) {
   const params = (await searchParams) ?? {};
@@ -65,6 +70,13 @@ export default async function Page({
     there - and it names the website that read gives.
   */
   const rescan = workspace ? <ScanPanel domain={workspace.websiteDomain ?? null} /> : null;
+  /*
+    K6: the item's drawer. Its base comes from the list just read - the route
+    is scoped by base AND tenant - so an id in no listed source is "not
+    found" without a request. Never over the Add sheet.
+  */
+  const docId = params.add === '1' ? undefined : params.doc?.trim() || undefined;
+  const docRead = docId ? await loadKnowledgeDocument(sources, docId) : null;
 
   /*
     08, measured: 02's header with "Add knowledge" on the right, and no
@@ -109,6 +121,21 @@ export default async function Page({
           rescan={rescan}
         />
       )}
+      {docRead ? (
+        <Drawer
+          title={
+            docRead.state === 'ok' && docRead.document.title
+              ? docRead.document.title
+              : t('doc.title')
+          }
+          userTitle={docRead.state === 'ok' && docRead.document.title !== ''}
+          closeHref="/studio/knowledge"
+          width={600}
+          testId="knowledge-doc-drawer"
+        >
+          <DocumentDrawer read={docRead} />
+        </Drawer>
+      ) : null}
       {params.add === '1' ? (
         <AddKnowledge
           initialWay={

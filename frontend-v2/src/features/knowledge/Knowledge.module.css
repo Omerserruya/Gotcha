@@ -381,6 +381,7 @@
   .docTitle {
     font-size: var(--font-size-meta);
     color: var(--text-body);
+    text-decoration: none;
     overflow-wrap: anywhere;
   }
 

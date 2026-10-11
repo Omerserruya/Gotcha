@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { KnowledgeSource } from '@/api/contracts/knowledge';
 import messages from '@/i18n/messages/en/knowledge.json';
+import { expectPlainRow, expectStretchedRow } from '@/test/stretched-row';
 
 import { KnowledgeScreen } from './KnowledgeScreen';
 
@@ -38,6 +39,29 @@ import { KnowledgeScreen } from './KnowledgeScreen';
  * timestamp in the evening. Either way the test renders a date the product
  * never shows, and a date assertion can pass while the screen is a day out.
  */
+/* K6: each document row's link - `href` as the address it would open. */
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({
+    href,
+    children,
+    scroll: _scroll,
+    ...rest
+  }: {
+    href: string | { pathname: string; query?: Record<string, string> };
+    children?: unknown;
+    scroll?: boolean;
+  }) => {
+    const to =
+      typeof href === 'string'
+        ? href
+        : `${href.pathname}?${new URLSearchParams(href.query ?? {}).toString()}`;
+    return (
+      <a href={to} {...rest}>
+        {children as never}
+      </a>
+    );
+  },
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'knowledge') =>
     createTranslator({ locale: 'en', messages: { knowledge: messages }, namespace }),
@@ -250,5 +274,46 @@ describe('★★ K5 - every document is a row, and a just-added one says it is b
     const bdi = screen.getByTestId('doc-h').querySelector('bdi');
     expect(bdi).toHaveTextContent('תנאי משלוח');
     expect(bdi).toHaveAttribute('dir', 'auto');
+  });
+});
+
+/*
+ * K6 (Omer, 2026-10-11): a document row opens its drawer - the whole row,
+ * through its one link (row-link), one tab stop. The source row above it is
+ * left as it was.
+ */
+describe('★★ K6 - a document row opens its drawer', () => {
+  it('the whole row, through one link to ?doc=<id>', async () => {
+    await renderScreen([source()]);
+    const link = expectStretchedRow(screen.getByTestId('doc-d1'));
+    expect(link).toHaveAttribute('href', '/studio/knowledge?doc=d1');
+    expect(link).toHaveTextContent('Wholesale terms');
+  });
+
+  it('a row still being read opens too - its state is not a second stop', async () => {
+    await renderScreen([
+      source({
+        documents: [
+          {
+            id: 'p',
+            title: 'Autumn terms',
+            status: 'pending',
+            chunkCount: 0,
+            sourceType: 'file',
+            sourceUrl: null,
+            updatedAt: null,
+          },
+        ],
+      }),
+    ]);
+    expect(expectStretchedRow(screen.getByTestId('doc-p'))).toHaveAttribute(
+      'href',
+      '/studio/knowledge?doc=p',
+    );
+  });
+
+  it('the source row is not a link', async () => {
+    await renderScreen([source()]);
+    expectPlainRow(screen.getByTestId('source-k1'));
   });
 });

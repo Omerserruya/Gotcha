@@ -242,5 +242,42 @@
     "failed": "The scan could not run. Nothing was changed."
   },
   "subtitle": "What GOTCHA knows about your business",
-  "description": "Where it learned about your business, and the questions it could not answer."
+  "description": "Where it learned about your business, and the questions it could not answer.",
+  "doc": {
+    "title": "Knowledge item",
+    "source": "Source",
+    "updated": "Updated",
+    "status": "Status",
+    "type": {
+      "website": "A page on your website",
+      "uploaded": "A file you uploaded",
+      "typed": "Typed by you",
+      "drive": "Google Drive",
+      "confluence": "Confluence",
+      "conversations": "Past conversations",
+      "answers": "Your answer during setup",
+      "other": "Other"
+    },
+    "state": {
+      "ready": "In use",
+      "reading": "Being read",
+      "failed": "Couldn't be read"
+    },
+    "content": "Content",
+    "noContent": "No text was kept from it.",
+    "truncated": "Showing part of the content ({shown} of {total} characters)",
+    "ai": {
+      "heading": "What the AI uses",
+      "count": "{count, plural, =1 {One section} other {# sections}}",
+      "section": "Section {n}",
+      "more": "Showing the first {shown} of {count} sections.",
+      "noneYet": "It's still being read. Its sections appear when it's done.",
+      "none": "The AI uses nothing from it yet."
+    },
+    "problem": {
+      "not_found": "This item isn't in your knowledge any more.",
+      "forbidden": "You don't have permission to see what's in your knowledge.",
+      "failed": "We couldn't open this item just now. Try again in a moment."
+    }
+  }
 }

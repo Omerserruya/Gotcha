@@ -1404,6 +1404,15 @@ export const knowledgeEndpoints = {
   upload: (baseId: string) =>
     endpoint('/api/knowledge-bases/{baseId}/documents/upload', { baseId }),
   /**
+   * K6's drawer: one document (ai 67d267f0, `knowledge.ts` GET
+   * `/:id/documents/:docId`). `{ data: { …, content (20k at most), truncated,
+   * ai: { sectionCount, sections, sectionsTruncated, facts: null } } }`;
+   * 404 when it is not in this tenant AND this base, 403 without
+   * `ai:knowledge:read`.
+   */
+  document: (baseId: string, docId: string) =>
+    endpoint('/api/knowledge-bases/{baseId}/documents/{docId}', { baseId, docId }),
+  /**
    * Screen 08's conflicts, and the reason they need an import id first.
    *
    * ★ CONFLICT DETECTION RUNS INSIDE THE HISTORICAL-IMPORT PIPELINE ONLY.
