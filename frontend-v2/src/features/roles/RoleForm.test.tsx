@@ -268,3 +268,32 @@ describe('★★ 12b Edit - one custom role, saved over itself', () => {
     expect(push).not.toHaveBeenCalled();
   });
 });
+
+describe('★★ the grant ceiling, said on create and on edit (auth 679b8812)', () => {
+  it('create: a role above your own names what you lack - nothing created', async () => {
+    createRole.mockResolvedValue({
+      ok: false,
+      reason: 'above_own_role',
+      missing: ['customer:commerce:refund'],
+    });
+    renderForm();
+    await userEvent.type(screen.getByTestId('role-name'), 'Refunds');
+    await userEvent.click(screen.getByTestId('role-save'));
+    expect(await screen.findByTestId('role-error')).toHaveTextContent(
+      `You can't give permissions you don't hold yourself: ${messages.form.row['customer:commerce']} · ${messages.form.action.refund}. Nothing was changed.`,
+    );
+  });
+
+  it('edit: OWNER_ONLY in its sentence, and the form stays', async () => {
+    updateRole.mockResolvedValue({ ok: false, reason: 'owner_only' });
+    const custom: Role = { ...ROLES[0]!, id: 'r8', name: 'Desk', isSystem: false };
+    render(
+      <NextIntlClientProvider locale="en" messages={{ roles: messages }}>
+        <RoleForm permissions={PERMISSIONS} roles={[...ROLES, custom]} editing={custom} />
+      </NextIntlClientProvider>,
+    );
+    await userEvent.click(screen.getByTestId('role-save'));
+    expect(screen.getByTestId('role-error')).toHaveTextContent(messages.ceiling.ownerOnly);
+    expect(push).not.toHaveBeenCalled();
+  });
+});

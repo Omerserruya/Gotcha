@@ -184,10 +184,9 @@ export type Department = z.infer<typeof departmentSchema>;
 /**
  * `POST /api/agents` - the invite. Answers **bare**, with no `data` envelope.
  *
- * The route hardcodes the role to `AGENT`; `inviteUser` accepts a role but the
- * caller passes a literal. So an invite cannot choose one, and the form does
- * not offer to. Role is assignable afterwards via
- * `POST /api/permissions/users/:userId/roles/:roleId`.
+ * It takes `role` (auth 679b8812, G5): a TenantRole id of this workspace, or
+ * "AGENT"/"ADMIN"; absent means agent. One above the inviter's own is refused
+ * before anyone is created (403 ABOVE_OWN_ROLE / OWNER_ONLY, 400 UNKNOWN_ROLE).
  *
  * `setupLink` is null when the invitee's identity has signed in somewhere
  * before - the backend withholds it deliberately, because mailing an existing

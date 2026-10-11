@@ -68,7 +68,7 @@
     "failed": "That didn't send. Try again.",
     "role": "Role",
     "roleAgent": "Agent",
-    "roleFixed": "Everyone is invited as an Agent: the invite takes no role.",
+    "unknownRole": "That role isn't in this workspace any more, so nobody was invited. Choose another role.",
     "noTeam": "No team",
     "teamsCount": "{count, plural, one {1 team} other {# teams}}",
     "noTeams": "No teams yet."

@@ -205,3 +205,21 @@ describe('★ A1 - the picker in Hebrew', () => {
     expect(screen.queryByTestId('grant-option-customer:export:run')).toBeNull();
   });
 });
+
+describe('★★ the grant ceiling, in the same sentence as every other save (auth 679b8812)', () => {
+  it('ABOVE_OWN_ROLE: a permission you do not hold yourself, named - nothing given', async () => {
+    addPermission.mockResolvedValue({
+      ok: false,
+      reason: 'above_own_role',
+      missing: ['customer:export:run'],
+    } as never);
+    picker();
+    await userEvent.click(
+      screen.getByTestId('grant-option-customer:export:run').querySelector('input')!,
+    );
+    await userEvent.click(screen.getByTestId('grant-add'));
+    const problem = await screen.findByTestId('grant-problem');
+    expect(problem).toHaveTextContent(/^You can't give permissions you don't hold yourself/);
+    expect(problem).not.toHaveTextContent('customer:export:run');
+  });
+});

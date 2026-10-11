@@ -6,6 +6,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from '@/i18n/navigation';
 
 import { changeRole } from './actions';
+import { isCeilingReason, useCeilingSentence } from './ceiling-words';
 import styles from './Roles.module.css';
 
 /** A role to offer, already in the reader's words. */
@@ -44,6 +45,7 @@ export function ChangeRole({
 }) {
   const t = useTranslations('roles.person.changeRole');
   const tp = useTranslations('roles.person');
+  const ceiling = useCeilingSentence();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState('');
@@ -85,7 +87,10 @@ export function ChangeRole({
         setSaid({ ok: true, text: t('done', { name: personName, role: target.name }) });
         router.refresh();
       } else {
-        setSaid({ ok: false, text: t(`refused.${result.reason}`) });
+        setSaid({
+          ok: false,
+          text: isCeilingReason(result) ? ceiling(result) : t(`refused.${result.reason}`),
+        });
       }
     });
 

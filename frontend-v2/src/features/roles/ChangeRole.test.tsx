@@ -119,3 +119,30 @@ describe('★★ the server’s refusals, said in words (Omer: "test that the UI
     );
   });
 });
+
+describe('★★ the grant ceiling, in the same sentences as every other save (auth 679b8812)', () => {
+  it.each([
+    [
+      'above_own_role',
+      { ok: false, reason: 'above_own_role', missing: ['crm:contacts:update'] },
+      `You can't give permissions you don't hold yourself: ${en.form.row['crm:contacts']} · ${en.form.action.update}. Nothing was changed.`,
+    ],
+    ['owner_only', { ok: false, reason: 'owner_only' }, en.ceiling.ownerOnly],
+  ])('%s', async (_reason, outcome, words) => {
+    changeRole.mockResolvedValue(outcome);
+    show();
+    await pick();
+    await userEvent.click(screen.getByTestId('change-role-yes'));
+    expect(screen.getByTestId('change-role-problem')).toHaveTextContent(words);
+    expect(screen.queryByTestId('change-role-done')).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('in Hebrew, OWNER_ONLY in Hebrew words', async () => {
+    changeRole.mockResolvedValue({ ok: false, reason: 'owner_only' });
+    show('he');
+    await pick();
+    await userEvent.click(screen.getByTestId('change-role-yes'));
+    expect(screen.getByTestId('change-role-problem')).toHaveTextContent(he.ceiling.ownerOnly);
+  });
+});

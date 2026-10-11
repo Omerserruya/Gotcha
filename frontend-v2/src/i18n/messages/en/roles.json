@@ -283,5 +283,10 @@
     "cancel": "Cancel",
     "done": "Added. It applies to {name} from now on.",
     "allCovered": "{role} already allows everything."
+  },
+  "ceiling": {
+    "aboveOwn": "You can't give permissions you don't hold yourself: {permissions}. Nothing was changed.",
+    "aboveOwnUnnamed": "You can't give permissions you don't hold yourself, and this includes some. Nothing was changed.",
+    "ownerOnly": "Only an Owner can give the Owner role or change an Owner's access. Nothing was changed."
   }
 }

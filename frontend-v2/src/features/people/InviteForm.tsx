@@ -1,11 +1,16 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 
 import type { Department } from '@/api/contracts/people';
+import type { Role } from '@/api/contracts/roles';
 import { Button } from '@/design-system/primitives/button/Button';
+import { isCeilingReason, useCeilingSentence } from '@/features/roles/ceiling-words';
+import { grantableRoles } from '@/features/roles/grantable';
+import { roleNameOf } from '@/features/roles/role-words';
 import { Link } from '@/i18n/navigation';
+import { usePermissions } from '@/permissions/permissions-context';
 
 import { inviteMember, type PeopleWriteResult } from './actions';
 import styles from './People.module.css';
@@ -13,14 +18,15 @@ import styles from './People.module.css';
 /**
  * *"Invite happens inline on the page, with role and team set before sending."*
  *
- * Team, yes. **Role, no** - and the field is absent rather than disabled.
- * `POST /api/agents` passes a literal `"AGENT"` to `inviteUser`, so a selector
- * would be a control the write path ignores. Role IS assignable afterwards,
- * through a different route; doing it here would mean a second call that can
- * fail AFTER a real person has been created and already emailed, leaving them
- * in the tenant with a role nobody chose and no control on the roster to fix
- * it. A selector that is right most of the time and unrepairable the rest is
- * worse than none, because the admin believes the role was set.
+ * Both, in the one call (auth 679b8812, G5): `POST /api/agents` takes `role`,
+ * resolves it in this workspace and refuses one above the inviter's own
+ * BEFORE anyone is created or emailed - so a refusal invites nobody, and is
+ * said in a sentence (`ceiling-words.ts`).
+ *
+ * The list holds only the roles this viewer may give (`grantableRoles`: every
+ * permission the role expands to is one they hold; Owner only for an Owner),
+ * and starts on the agent role - what an invite without a role is. With no
+ * roles read, it is that agent default alone, sent as no role.
  *
  * The NAME field is not in the design, and is here because the backend
  * requires it. The alternative is deriving it from the email's local part,
@@ -32,8 +38,14 @@ import styles from './People.module.css';
 export function InviteForm({
   teams,
   open,
+  roles = null,
+  catalog = null,
 }: {
   readonly teams: readonly Department[];
+  /** The workspace's roles - the Roles screen's read; `null` when unread. */
+  readonly roles?: readonly Role[] | null;
+  /** Every permission key the catalogue lists, to expand "*" patterns; `null` when unread. */
+  readonly catalog?: readonly string[] | null;
   /**
    * 12: the header's "Invite someone" opens this row (`?invite=1`) and its
    * Cancel closes it - the URL holds the state, so header and row share it.
@@ -41,6 +53,15 @@ export function InviteForm({
   readonly open: boolean;
 }) {
   const t = useTranslations('people');
+  const tr = useTranslations('roles');
+  const { canSee, roleKey } = usePermissions();
+  const choices = useMemo(
+    () => (roles ? grantableRoles(roles, { has: canSee, roleKey }, catalog) : []),
+    [roles, canSee, roleKey, catalog],
+  );
+  // The platform's key is lowercase (`invite-role.service`: builtinKey "agent").
+  const agentId = choices.find((r) => r.builtinKey?.toLowerCase() === 'agent')?.id ?? '';
+  const [roleId, setRoleId] = useState(agentId);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   /* Several teams at once (Omer, 12: "you can allow several") - the route takes a list. */
@@ -53,7 +74,12 @@ export function InviteForm({
   function submit() {
     setResult(null);
     startTransition(async () => {
-      const outcome = await inviteMember({ email, name, departmentIds: teamIds });
+      const outcome = await inviteMember({
+        email,
+        name,
+        departmentIds: teamIds,
+        role: roleId || null,
+      });
       setResult(outcome);
       if (outcome.ok) {
         // The fields clear but the panel STAYS OPEN, because the success
@@ -62,6 +88,7 @@ export function InviteForm({
         setEmail('');
         setName('');
         setTeamIds([]);
+        setRoleId(agentId);
       }
     });
   }
@@ -79,8 +106,7 @@ export function InviteForm({
       name   REQUIRED by `POST /api/agents` (`z.string().min(1)`): 02 has no
              name field, so it is one more input in the row - a constraint,
              not a design choice. What it is for is on the field (`title`).
-      role   the route invites every person as AGENT and takes no role: the
-             control shows "Agent" and is not live.
+      role   the roles this viewer may give, on the agent role (679b8812).
       team   the route takes several, and so does the row (Omer, 12): 02's
              dropdown, holding a checkbox per team.
   */
@@ -116,16 +142,22 @@ export function InviteForm({
         <label className="srOnly" htmlFor="invite-role">
           {t('invite.role')}
         </label>
-        {/* 02's "Agent ▾" pill - fixed: the route invites every person as an agent. */}
-        <span
+        {/* 02's "Agent ▾" pill, live: only roles this viewer may give. */}
+        <select
           id="invite-role"
           className={styles.inviteSelect}
-          aria-disabled="true"
-          title={t('invite.roleFixed')}
+          value={roleId}
           data-testid="invite-role"
+          onChange={(e) => setRoleId(e.target.value)}
         >
-          {t('invite.roleAgent')} <span aria-hidden="true">▾</span>
-        </span>
+          {/* No role read, or no agent role among them: an invite without a role is an agent. */}
+          {agentId ? null : <option value="">{t('invite.roleAgent')}</option>}
+          {choices.map((role) => (
+            <option key={role.id} value={role.id}>
+              {roleNameOf(role, (key, part) => tr(`builtinRole.${key}.${part}`))}
+            </option>
+          ))}
+        </select>
         <details className={styles.inviteTeams} data-testid="invite-team">
           <summary className={styles.inviteSelect} aria-label={t('invite.teams')}>
             <span aria-hidden="true" className={styles.inviteChevron}>
@@ -210,6 +242,7 @@ function InviteOutcome({
   readonly result: PeopleWriteResult<{ setupLink?: string | null }>;
 }) {
   const t = useTranslations('people');
+  const ceiling = useCeilingSentence();
 
   if (result.ok) {
     const link = result.data.setupLink;
@@ -235,16 +268,19 @@ function InviteOutcome({
     );
   }
 
-  const message =
-    result.reason === 'duplicate'
-      ? t('invite.duplicate')
-      : result.reason === 'limit'
-        ? t('invite.seatLimit')
-        : result.reason === 'forbidden'
-          ? t('invite.forbidden')
-          : result.reason === 'invalid'
-            ? (Object.values(result.fields)[0] ?? t('invite.failed'))
-            : t('invite.failed');
+  const message = isCeilingReason(result)
+    ? ceiling(result)
+    : result.reason === 'unknown_role'
+      ? t('invite.unknownRole')
+      : result.reason === 'duplicate'
+        ? t('invite.duplicate')
+        : result.reason === 'limit'
+          ? t('invite.seatLimit')
+          : result.reason === 'forbidden'
+            ? t('invite.forbidden')
+            : result.reason === 'invalid'
+              ? (Object.values(result.fields)[0] ?? t('invite.failed'))
+              : t('invite.failed');
 
   return (
     <p className={styles.inviteNote} data-testid="invite-note" data-note-kind="problem">

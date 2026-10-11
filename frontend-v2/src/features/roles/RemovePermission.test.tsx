@@ -127,3 +127,17 @@ describe('it is not a toggle', () => {
     expect(screen.getByTestId('remove-confirm-billing:refund:create')).toBeInTheDocument();
   });
 });
+
+describe('★★ the grant ceiling, in the same sentence as every other save (auth 679b8812)', () => {
+  it('OWNER_ONLY: an Owner’s access is changed by an Owner only - said, dialog kept', async () => {
+    remove.mockResolvedValue({ ok: false, reason: 'owner_only' });
+    renderRemove();
+    await open();
+    await type('pending a review');
+    await act(async () => screen.getByTestId('remove-go-billing:refund:create').click());
+    expect(screen.getByTestId('remove-error-billing:refund:create')).toHaveTextContent(
+      messages.ceiling.ownerOnly,
+    );
+    expect(screen.getByTestId('remove-confirm-billing:refund:create')).toBeInTheDocument();
+  });
+});

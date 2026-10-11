@@ -80,6 +80,8 @@ export interface ApiErrorInit {
   readonly failureDetail?: Readonly<Record<string, unknown>>;
   /** A refusal's own `data` object, where a route sends one. */
   readonly errorData?: Readonly<Record<string, unknown>>;
+  /** `ABOVE_OWN_ROLE`'s keys the caller does not hold. See `errorEnvelopeSchema.missing`. */
+  readonly missing?: readonly string[];
   /** Set only where a charge was actually attempted. */
   readonly invoiceId?: string | null;
   /** Tenant lifecycle status the gate reported (402). */
@@ -122,6 +124,8 @@ export class ApiError extends Error {
   readonly failureDetail?: Readonly<Record<string, unknown>>;
   /** A refusal's own `data` object, where a route sends one. */
   readonly errorData?: Readonly<Record<string, unknown>>;
+  /** `ABOVE_OWN_ROLE`'s keys the caller does not hold. */
+  readonly missing?: readonly string[];
   readonly invoiceId?: string | null;
   readonly tenantStatus?: string;
   readonly checkoutPath?: string;
@@ -152,6 +156,7 @@ export class ApiError extends Error {
     this.failureCode = init.failureCode;
     this.failureDetail = init.failureDetail;
     this.errorData = init.errorData;
+    this.missing = init.missing;
     this.invoiceId = init.invoiceId;
     this.tenantStatus = init.tenantStatus;
     this.checkoutPath = init.checkoutPath;

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 
 import { removePermission } from './actions';
+import { isCeilingReason, useCeilingSentence } from './ceiling-words';
 import styles from './Roles.module.css';
 
 /**
@@ -42,6 +43,7 @@ export function RemovePermission({
   readonly featureName: string;
 }) {
   const t = useTranslations('roles');
+  const ceiling = useCeilingSentence();
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -110,7 +112,12 @@ export function RemovePermission({
             setBusy(true);
             const result = await removePermission(userId, feature, reason);
             setBusy(false);
-            if (!result.ok) setError(t(`error.${result.reason}` as 'error.failed'));
+            if (!result.ok)
+              setError(
+                isCeilingReason(result)
+                  ? ceiling(result)
+                  : t(`error.${result.reason}` as 'error.failed'),
+              );
             else {
               setConfirming(false);
               setReason('');

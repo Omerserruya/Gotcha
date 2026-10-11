@@ -11,6 +11,8 @@ import { permissionEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
+import { ceilingRefusalOf, type CeilingRefusal } from './ceiling';
+
 /**
  * Overrides on one person - screen 12e.
  *
@@ -37,7 +39,9 @@ export type GrantResult =
   | {
       readonly ok: false;
       readonly reason: 'forbidden' | 'gone' | 'needs_reason' | 'past_date' | 'failed';
-    };
+    }
+  /** Granting what the caller lacks, or touching an Owner's access (`ceiling.ts`). */
+  | CeilingRefusal;
 
 /** Gives someone a permission their role does not include. */
 export async function addPermission(
@@ -87,6 +91,9 @@ async function write(
     return { ok: true };
   } catch (cause) {
     await signInIfSignedOut(cause);
+    // Before the bare 403: these are 403s too, and each has its own sentence.
+    const ceiling = ceilingRefusalOf(cause);
+    if (ceiling) return ceiling;
     if (isApiError(cause)) {
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
       if (cause.status === 404) return { ok: false, reason: 'gone' };
@@ -122,7 +129,9 @@ export type CreateRoleResult =
        * between two lists and nothing the person did.
        */
       readonly reason: 'name_taken' | 'unknown_features' | 'forbidden' | 'failed';
-    };
+    }
+  /** A role holding what its creator lacks ("*" included) - nothing created. */
+  | CeilingRefusal;
 
 export async function createRole(input: {
   name: string;
@@ -141,6 +150,8 @@ export async function createRole(input: {
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('roles.create_failed', { cause });
+    const ceiling = ceilingRefusalOf(cause);
+    if (ceiling) return ceiling;
     if (isApiError(cause)) {
       if (cause.status === 409) return { ok: false, reason: 'name_taken' };
       if (cause.status === 400) return { ok: false, reason: 'unknown_features' };
@@ -162,7 +173,9 @@ export type UpdateRoleResult =
        */
       readonly reason:
         'system' | 'unknown_features' | 'partial' | 'name_taken' | 'gone' | 'forbidden' | 'failed';
-    };
+    }
+  /** The features PUT refused them: nothing was changed. */
+  | CeilingRefusal;
 
 /**
  * Edit a custom role - 12b's Edit: its capabilities (`PUT …/features`,
@@ -192,6 +205,8 @@ export async function updateRole(
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('roles.update_features_failed', { cause });
+    const ceiling = ceilingRefusalOf(cause);
+    if (ceiling) return ceiling;
     if (isApiError(cause)) {
       if (cause.status === 400) return { ok: false, reason: 'unknown_features' };
       // 00d669a3: the features route refuses a built-in role by code too.
@@ -237,7 +252,9 @@ export type ChangeRoleResult =
        * them. `gone` - the person or the role is no longer there.
        */
       readonly reason: 'self_lockout' | 'last_admin' | 'gone' | 'forbidden' | 'failed';
-    };
+    }
+  /** A role above the caller's own, or an Owner's role changed by a non-owner. */
+  | CeilingRefusal;
 
 const ASSIGNMENT_SCOPES = ['OWN', 'TEAM', 'DEPARTMENT', 'WORKSPACE'] as const;
 
@@ -271,6 +288,8 @@ export async function changeRole(
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('roles.change_failed', { status: isApiError(cause) ? cause.status : undefined });
+    const ceiling = ceilingRefusalOf(cause);
+    if (ceiling) return ceiling;
     if (isApiError(cause)) {
       if (cause.code === 'SELF_LOCKOUT') return { ok: false, reason: 'self_lockout' };
       if (cause.code === 'LAST_ADMIN') return { ok: false, reason: 'last_admin' };

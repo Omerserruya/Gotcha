@@ -48,7 +48,8 @@ export default async function Page({
     loadPeople(),
     loadRoles(),
     params.person ? loadPerson(params.person) : Promise.resolve(null),
-    params.person ? loadCatalog() : Promise.resolve(null),
+    // 12e's picker, and the invite's role list ("*" patterns expand against it).
+    params.person || params.invite === '1' ? loadCatalog() : Promise.resolve(null),
   ]);
   const member = person ? (members?.find((m) => m.id === person.id) ?? null) : null;
   const role = member?.roleId ? (roles?.find((r) => r.id === member.roleId) ?? null) : null;
@@ -107,7 +108,12 @@ export default async function Page({
       ) : (
         <>
           {/* It needs the teams: a failed teams read means inviting without one. */}
-          <InviteForm teams={teams ?? []} open={params.invite === '1'} />
+          <InviteForm
+            teams={teams ?? []}
+            open={params.invite === '1'}
+            roles={roles}
+            catalog={catalog ? catalog.permissions.map((p) => p.key) : null}
+          />
           {members && aiEmployees ? (
             <PeopleTable members={members} aiEmployees={aiEmployees} presence={presence} />
           ) : (

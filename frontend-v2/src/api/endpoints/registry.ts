@@ -528,9 +528,9 @@ export const departmentEndpoints = {
  * (singular) behind Home's command surface. Two different things a character
  * apart, so neither is spelled as a literal anywhere but here.
  *
- * `invite` creates the person, their identity and their team memberships in
- * one call, and emails them. It cannot set a role: the route passes a literal
- * `"AGENT"`. Role is assigned afterwards, through `permissionEndpoints`.
+ * `invite` creates the person, their identity, their role and their team
+ * memberships in one call, and emails them. `role` is a TenantRole id (or
+ * "AGENT"/"ADMIN"); absent means agent (auth 679b8812).
  */
 export const memberEndpoints = {
   invite: () => endpoint('/api/agents'),

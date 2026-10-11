@@ -103,6 +103,13 @@ export const errorEnvelopeSchema = z.object({
    */
   data: z.record(z.string(), z.unknown()).optional().catch(undefined),
   /**
+   * The permission keys a grant would hand out without the caller holding
+   * them - a 403 `ABOVE_OWN_ROLE` from role edits, grants, assignments and
+   * invites (auth 679b8812, `lib/grant-ceiling`). A sibling of `code`, not
+   * inside `data`. A bad value is no list, not an unread error.
+   */
+  missing: z.array(z.string()).optional().catch(undefined),
+  /**
    * ★★ PRESENT ON A FAILURE ONLY WHEN THE CARD WAS ACTUALLY REACHED.
    *
    * `buyCredits` sets it solely from `chargeFor`'s result, so on a refusal it

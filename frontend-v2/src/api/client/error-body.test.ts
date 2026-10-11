@@ -244,3 +244,29 @@ describe('★ a success hands its headers to who asked (Shopify’s intent cooki
     expect(seen).toEqual(['gotcha_shopify_intent=h; Path=/']);
   });
 });
+
+describe('★★ 679b8812 - ABOVE_OWN_ROLE keeps the keys the caller lacks', () => {
+  it('`{ error, code, missing }` → code and missing, through the real client', async () => {
+    // The body `lib/grant-ceiling` answers, exactly: `missing` beside `code`, not in `data`.
+    respond(403, {
+      error: 'You cannot grant permissions you do not have',
+      code: 'ABOVE_OWN_ROLE',
+      missing: ['billing:invoices:read', 'roles:roles:update'],
+    });
+    const caught = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(caught.status).toBe(403);
+    expect(caught.code).toBe('ABOVE_OWN_ROLE');
+    expect(caught.missing).toEqual(['billing:invoices:read', 'roles:roles:update']);
+  });
+
+  it('OWNER_ONLY has no list, and a bad one costs only itself', async () => {
+    respond(403, { error: 'Only an Owner can make someone an Owner', code: 'OWNER_ONLY' });
+    const owner = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(owner.code).toBe('OWNER_ONLY');
+    expect(owner.missing).toBeUndefined();
+    respond(403, { error: 'x', code: 'ABOVE_OWN_ROLE', missing: 'billing' });
+    const bad = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(bad.code).toBe('ABOVE_OWN_ROLE');
+    expect(bad.missing).toBeUndefined();
+  });
+});

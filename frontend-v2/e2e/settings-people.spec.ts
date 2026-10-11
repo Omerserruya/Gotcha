@@ -248,9 +248,8 @@ for (const size of SIZES) {
      * yourself to whoever received it. The capture photographs the form; shot
      * 7 exercises the write down a path that creates nothing.
      *
-     * No role selector is asserted here, and its absence is the point:
-     * `POST /api/agents` passes a literal "AGENT" to `inviteUser`, so a
-     * selector would be a control the write path ignores.
+     * The role is a list of the roles the viewer may give (auth 679b8812:
+     * `POST /api/agents` takes `role`), on the agent role until changed.
      */
     test('6 · the invite form', async ({ page }) => {
       if (onlyOneProject()) return;
@@ -267,8 +266,10 @@ for (const size of SIZES) {
       await form.getByLabel('Email').fill('someone@example.com');
       await form.getByLabel('Name').fill('Someone Example');
 
-      // A role control must not exist. If one is ever added, this fails.
-      await expect(form.getByLabel(/role/i)).toHaveCount(0);
+      // The role: a real list now, on the agent role until someone changes it.
+      const role = form.getByTestId('invite-role');
+      await expect(role).toBeEnabled();
+      await expect(role.locator('option:checked')).toHaveText(/agent/i);
 
       await shoot(page, `${size.name}-6-invite-form`);
     });

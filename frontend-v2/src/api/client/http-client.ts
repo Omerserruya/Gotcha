@@ -97,6 +97,7 @@ async function readErrorBody(response: Response): Promise<{
   failureCode?: string;
   failureDetail?: Readonly<Record<string, unknown>>;
   errorData?: Readonly<Record<string, unknown>>;
+  missing?: readonly string[];
   invoiceId?: string | null;
   tenantStatus?: string;
   checkoutPath?: string;
@@ -125,6 +126,7 @@ async function readErrorBody(response: Response): Promise<{
     failureCode: parsed.data.failureCode,
     failureDetail: parsed.data.detail,
     errorData: parsed.data.data,
+    missing: parsed.data.missing,
     invoiceId: parsed.data.invoiceId,
     tenantStatus: parsed.data.tenantStatus,
     checkoutPath: parsed.data.checkoutPath,
@@ -207,6 +209,7 @@ export class HttpClient {
         failureCode,
         failureDetail,
         errorData,
+        missing,
         invoiceId,
         tenantStatus,
         checkoutPath,
@@ -237,6 +240,7 @@ export class HttpClient {
         failureCode,
         failureDetail,
         errorData,
+        missing,
         invoiceId,
         tenantStatus,
         checkoutPath,

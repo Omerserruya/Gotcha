@@ -13,6 +13,7 @@ import {
 import { departmentEndpoints, memberEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { signInIfSignedOut } from '@/api/client/signed-out';
+import { ceilingRefusalOf, type CeilingRefusal } from '@/features/roles/ceiling';
 
 /**
  * Writes for screen 12.
@@ -47,6 +48,10 @@ export type PeopleWriteResult<T> =
    */
   | { readonly ok: false; readonly reason: 'limit' }
   | { readonly ok: false; readonly reason: 'forbidden' }
+  /** The role is not one of this workspace's (400 UNKNOWN_ROLE) - nobody invited. */
+  | { readonly ok: false; readonly reason: 'unknown_role' }
+  /** A role above the inviter's own, or Owner by a non-owner - nobody invited. */
+  | CeilingRefusal
   | { readonly ok: false; readonly reason: 'failed' };
 
 function fieldErrorsOf(cause: unknown): Record<string, string> {
@@ -63,8 +68,13 @@ function fieldErrorsOf(cause: unknown): Record<string, string> {
  * tenant that has simply run out of seats is not reported as suspended.
  */
 function classify(cause: unknown): Extract<PeopleWriteResult<never>, { ok: false }> {
+  // 403s with their own sentences, before the bare 403 below.
+  const ceiling = ceilingRefusalOf(cause);
+  if (ceiling) return ceiling;
   if (isApiError(cause)) {
     if (cause.code === 'PLAN_LIMIT_REACHED') return { ok: false, reason: 'limit' };
+    // A 400 too, so before `validation`: the role, not a field the person typed.
+    if (cause.code === 'UNKNOWN_ROLE') return { ok: false, reason: 'unknown_role' };
     if (cause.kind === 'conflict') return { ok: false, reason: 'duplicate' };
     if (cause.kind === 'authorization') return { ok: false, reason: 'forbidden' };
     if (cause.kind === 'validation') {
@@ -84,13 +94,16 @@ function classify(cause: unknown): Extract<PeopleWriteResult<never>, { ok: false
  * state are never trusted as-is, so this action passes them straight through
  * and lets the server be the authority.
  *
- * It cannot set a role. The route passes a literal `"AGENT"`, so a role
- * argument here would be a parameter the backend ignores.
+ * `role` is a TenantRole id of this workspace (auth 679b8812, G5); absent,
+ * the route invites as an agent. The route resolves it in this tenant and
+ * refuses one above the inviter's own - before anyone is created or emailed,
+ * so a refusal invites nobody.
  */
 export async function inviteMember(input: {
   email: string;
   name: string;
   departmentIds: readonly string[];
+  role?: string | null;
 }): Promise<PeopleWriteResult<InviteResult>> {
   try {
     const data = await serverApi().post({
@@ -100,6 +113,7 @@ export async function inviteMember(input: {
         email: input.email.trim().toLowerCase(),
         name: input.name.trim(),
         ...(input.departmentIds.length > 0 ? { departmentIds: [...input.departmentIds] } : {}),
+        ...(input.role ? { role: input.role } : {}),
       },
     });
     revalidatePath('/[locale]/settings/people', 'page');

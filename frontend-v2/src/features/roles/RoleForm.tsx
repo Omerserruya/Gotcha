@@ -11,6 +11,7 @@ import drawer from '@/design-system/styles/drawer.module.css';
 import { Link, useRouter } from '@/i18n/navigation';
 
 import { createRole, updateRole } from './actions';
+import { isCeilingReason, useCeilingSentence } from './ceiling-words';
 import { gridRows, levelOf, levelsOf, rowChanged, withLevel, type GridRow } from './role-grid';
 import { permissionName } from './permission-words';
 import { roleNameOf } from './role-words';
@@ -56,6 +57,7 @@ export function RoleForm({
   // A built-in role in the reader's words; a custom one in its owner's.
   const nameOf = (role: Role) => roleNameOf(role, (key, part) => t(`builtinRole.${key}.${part}`));
   const router = useRouter();
+  const ceiling = useCeilingSentence();
   /*
    * 02 starts from Agent: "you start from an existing role and only touch
    * what's different" - so the Compared card is there from the first look.
@@ -105,7 +107,10 @@ export function RoleForm({
           isSystem: editing.isSystem,
         });
         if (result.ok) router.push('/settings/people/roles');
-        else setError(t(`form.edit.error.${result.reason}`));
+        else
+          setError(
+            isCeilingReason(result) ? ceiling(result) : t(`form.edit.error.${result.reason}`),
+          );
       });
       return;
     }
@@ -115,7 +120,8 @@ export function RoleForm({
         description: description.trim(),
         features: selected,
       });
-      if (!result.ok) setError(t(`form.error.${result.reason}`));
+      if (!result.ok)
+        setError(isCeilingReason(result) ? ceiling(result) : t(`form.error.${result.reason}`));
       else {
         setName('');
         setDescription('');

@@ -21,6 +21,12 @@ interface PermissionsContextValue {
   /** Tenant these permissions were resolved for. Guards against stale reads. */
   readonly tenantId: string | null;
   /**
+   * The effective built-in role (`/permissions/me`'s `roleKey`: "owner",
+   * "admin", "system_admin", …), `null` when unread. The invite offers the
+   * Owner role only to an Owner (auth 679b8812).
+   */
+  readonly roleKey: string | null;
+  /**
    * Whether a surface should be shown.
    *
    * When the set could not be loaded this answers `true` for everything. That
@@ -37,6 +43,7 @@ const DEFAULT: PermissionsContextValue = {
   permissions: EMPTY_PERMISSIONS,
   status: 'loaded',
   tenantId: null,
+  roleKey: null,
   canSee: () => false,
 };
 
@@ -66,6 +73,7 @@ export function PermissionsProvider({
       permissions: set,
       status,
       tenantId,
+      roleKey: roleKey ?? null,
       canSee: (permission?: PermissionString) => {
         if (!permission) return true;
         if (status === 'unavailable') return true;

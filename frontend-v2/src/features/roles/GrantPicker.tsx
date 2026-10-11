@@ -9,6 +9,7 @@ import drawer from '@/design-system/styles/drawer.module.css';
 import { Link } from '@/i18n/navigation';
 
 import { addPermission } from './actions';
+import { isCeilingReason, useCeilingSentence } from './ceiling-words';
 import { dateIn, expiresAtOf, type Ends } from './grant-end';
 import { areaName, permissionName } from './permission-words';
 import styles from './Roles.module.css';
@@ -36,6 +37,7 @@ export function GrantPicker({
 }) {
   const t = useTranslations('roles.grant');
   const tr = useTranslations('roles');
+  const ceiling = useCeilingSentence();
   const locale = useLocale();
   // The catalogue is English only: names and areas in the role grid's own words.
   const word = (key: string) => (tr.has(key as never) ? tr(key as never) : null);
@@ -84,7 +86,11 @@ export function GrantPicker({
         const result = await addPermission(person.id, key, reason.trim(), expiresAt);
         if (!result.ok) {
           // Stop at the first refusal: the ones before it are given.
-          setProblem(tr(`error.${result.reason}` as 'error.failed'));
+          setProblem(
+            isCeilingReason(result)
+              ? ceiling(result)
+              : tr(`error.${result.reason}` as 'error.failed'),
+          );
           return;
         }
       }
