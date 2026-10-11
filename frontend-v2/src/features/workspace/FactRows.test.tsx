@@ -175,7 +175,7 @@ describe('★ 11e · the single value edits in place, with the keyboard', () => 
     saveWorkspace.mockResolvedValue({ ok: true, data: {} });
     renderRows();
     await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
-    await userEvent.type(screen.getByTestId('timezone-input'), '{Enter}');
+    await userEvent.type(screen.getByTestId('timezone-select'), '{Enter}');
     expect(saveWorkspace).not.toHaveBeenCalled();
     expect(screen.queryByTestId('fact-save-currencyTimezone')).toBeNull();
   });
@@ -184,43 +184,52 @@ describe('★ 11e · the single value edits in place, with the keyboard', () => 
     renderRows();
     await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
     expect(screen.getByTestId('fact-save-currencyTimezone')).toBeInTheDocument();
-    await userEvent.type(screen.getByTestId('timezone-input'), '{Escape}');
+    await userEvent.type(screen.getByTestId('timezone-select'), '{Escape}');
     expect(screen.queryByTestId('fact-save-currencyTimezone')).toBeNull();
     expect(saveWorkspace).not.toHaveBeenCalled();
   });
 });
 
-describe('★ 11e · the time zone picker is searchable', () => {
-  it('offers the IANA zones, which carry the city in the name', async () => {
+describe('★★ 11e · the time zone is a list that opens (Omer, 2026-10-11)', () => {
+  it('a real select - not an <input list>, which a browser does not open on a click', async () => {
     renderRows();
     await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
-    const list = screen.getByTestId('timezone-options');
-    expect(list.querySelectorAll('option').length).toBeGreaterThan(100);
-    expect(list.querySelector('option[value^="Jerusalem (GMT"]')).not.toBeNull();
+    const zone = screen.getByTestId('timezone-select');
+    expect(zone.tagName).toBe('SELECT');
+    expect(zone.querySelectorAll('option').length).toBeGreaterThan(100);
+    expect(document.querySelector('datalist')).toBeNull();
   });
 
-  it('shows the city and its offset, never the IANA name', async () => {
+  it('offers each zone by its city and offset, valued as the IANA id, in order', async () => {
     renderRows();
     await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
-    const input = screen.getByTestId('timezone-input') as HTMLInputElement;
-    expect(input.value).toMatch(/^London \(GMT/);
-    expect(input).toHaveAttribute('list', 'timezone-options');
+    const options = [...screen.getByTestId('timezone-select').querySelectorAll('option')];
+    const jerusalem = options.find((o) => o.value === 'Asia/Jerusalem');
+    expect(jerusalem?.textContent).toMatch(/^Jerusalem \(GMT/);
+    const labels = options.map((o) => o.textContent ?? '');
+    expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b, 'en')));
+  });
+
+  it('opens on the stored zone, and the currency beside it', async () => {
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
+    expect(screen.getByTestId('timezone-select')).toHaveValue('Europe/London');
     expect(screen.getByTestId('currency-select')).toHaveDisplayValue('$ USD');
   });
 
-  it('an IANA name typed as is can still be saved; anything else is not sent', async () => {
+  it('★ picking a zone saves its IANA id - and only what changed', async () => {
     saveWorkspace.mockResolvedValue({ ok: true, data: {} });
     renderRows();
     await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
-    const input = screen.getByTestId('timezone-input');
-    await userEvent.clear(input);
-    await userEvent.type(input, 'somewhere{Enter}');
-    expect(saveWorkspace).not.toHaveBeenCalled();
-    expect(screen.getByTestId('fact-note-currencyTimezone')).toHaveTextContent(/pick a city/i);
-    await userEvent.clear(input);
-    await userEvent.type(input, 'Asia/Jerusalem{Enter}');
-    // Only what changed: the zone - the currency was left as it was.
+    await userEvent.selectOptions(screen.getByTestId('timezone-select'), 'Asia/Jerusalem');
+    await userEvent.click(screen.getByTestId('fact-save-currencyTimezone'));
     expect(saveWorkspace).toHaveBeenCalledWith({ timezone: 'Asia/Jerusalem' }, null);
+  });
+
+  it('⚠ a stored zone this browser does not list is still shown, and kept', async () => {
+    renderRows({ timezone: 'Mars/Olympus_Mons' });
+    await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
+    expect(screen.getByTestId('timezone-select')).toHaveValue('Mars/Olympus_Mons');
   });
 
   it('the read row says it the same way', () => {
@@ -306,7 +315,7 @@ describe('★★ the time zone in the reader’s words, and only ever the one ch
     saveWorkspace.mockResolvedValue({ ok: true, data: {} });
     renderRows({ timezone: null });
     await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
-    expect(screen.getByTestId('timezone-input')).toHaveValue('');
+    expect(screen.getByTestId('timezone-select')).toHaveValue('');
     await userEvent.selectOptions(screen.getByTestId('currency-select'), 'ILS');
     await userEvent.click(screen.getByTestId('fact-save-currencyTimezone'));
     expect(saveWorkspace).toHaveBeenCalledWith({ currency: 'ILS' }, null);

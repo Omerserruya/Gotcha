@@ -14,7 +14,6 @@ import {
   COMMON_CURRENCIES,
   currencyLabel,
   SERVER_DEFAULT_ZONE,
-  zoneFromInput,
   zoneLabel,
   zoneOptions,
 } from './zones';
@@ -54,7 +53,17 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
   const [timezone, setTimezone] = useState('');
   const [note, setNote] = useState<{ text: string; quiet?: boolean } | null>(null);
   const [isPending, startTransition] = useTransition();
-  const zones = useMemo(() => zoneOptions(locale), [locale]);
+  /*
+   * ★★ A REAL LIST (Omer, 2026-10-11: "the time zone list doesn't open").
+   *   It was an <input list> over a <datalist>, which a browser does not open
+   *   on a click - most show nothing until you type, some never. A <select>
+   *   opens, and its type-ahead still finds a city by its first letters.
+   *   Sorted by what it says, so the cities read in order.
+   */
+  const zones = useMemo(
+    () => [...zoneOptions(locale)].sort((a, b) => a.label.localeCompare(b.label, locale)),
+    [locale],
+  );
 
   const origin = (key: FactKey) => {
     const field = PROVENANCE_FIELD[key];
@@ -70,16 +79,8 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
    */
   function saveCurrencyTimezone() {
     setNote(null);
-    const text = timezone.trim();
-    const zone = text === '' && !workspace.timezone ? null : zoneFromInput(text, zones);
-    if (text !== '' && zone === null) {
-      setNote({ text: t('zoneUnknown') });
-      return;
-    }
-    if (text === '' && workspace.timezone) {
-      setNote({ text: t('zoneUnknown') });
-      return;
-    }
+    // An IANA id from the list, or '' while nothing is stored and nothing was picked.
+    const zone = timezone === '' ? null : timezone;
     const patch: Record<string, string | null> = {};
     if ((currency || null) !== (workspace.currency ?? null)) patch.currency = currency || null;
     if (zone !== null && zone !== workspace.timezone) patch.timezone = zone;
@@ -260,20 +261,24 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
               ★ Searchable by city: "Type a city" finds the zone, shown as
               02 writes it - "London (GMT+1)" - and saved as IANA.
             */}
-            <input
+            <select
               className={styles.inlineCombo}
               aria-label={t('timezone')}
-              placeholder={t('typeCity')}
-              list="timezone-options"
               value={timezone}
-              data-testid="timezone-input"
+              data-testid="timezone-select"
               onChange={(e) => setTimezone(e.target.value)}
-            />
-            <datalist id="timezone-options" data-testid="timezone-options">
+            >
+              {timezone === '' ? <option value="">-</option> : null}
+              {/* A stored zone this browser does not list is still shown, and kept. */}
+              {workspace.timezone && !zones.some((z) => z.iana === workspace.timezone) ? (
+                <option value={workspace.timezone}>{workspace.timezone}</option>
+              ) : null}
               {zones.map((zone) => (
-                <option key={zone.iana} value={zone.label} />
+                <option key={zone.iana} value={zone.iana}>
+                  {zone.label}
+                </option>
               ))}
-            </datalist>
+            </select>
             <button
               type="button"
               className={styles.inlineSave}
@@ -348,13 +353,7 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
               setEditing(true);
               setNote(null);
               setCurrency(workspace.currency ?? '');
-              // The option's own label (a shared Hebrew name carries its city), so an unchanged zone matches.
-              setTimezone(
-                workspace.timezone
-                  ? (zones.find((z) => z.iana === workspace.timezone)?.label ??
-                      zoneLabel(workspace.timezone, locale))
-                  : '',
-              );
+              setTimezone(workspace.timezone ?? '');
             }}
           >
             {t('edit')}
