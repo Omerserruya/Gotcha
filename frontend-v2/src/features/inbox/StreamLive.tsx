@@ -42,6 +42,9 @@ import { useRealtimeEvent } from '@/realtime/realtime-provider';
  */
 const COALESCE_MS = 800;
 
+/** How many message ids are remembered for the once-per-message rule. */
+const SEEN_LIMIT = 500;
+
 export function StreamLive({ conversationId }: { readonly conversationId: string }) {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -86,15 +89,25 @@ export function StreamLive({ conversationId }: { readonly conversationId: string
    * answering is the other thing that makes this screen stale, and an agent
    * writing a reply to a message that has already been superseded is the failure
    * it prevents.
+   *
+   * ★ ONCE PER MESSAGE. An agent's own send is announced twice - directly and
+   * again through the bus (Backend, 2026-10-11) - and the second can land after
+   * the coalescing window has closed. A message already seen is not news.
    */
+  const seen = useRef(new Set<string>());
   useRealtimeEvent(
     'message.received',
     useCallback(
       (event) => {
         if (event.type !== 'message.received') return;
+        if (event.conversationId !== conversationId) return;
+        if (seen.current.has(event.messageId)) return;
+        // Bounded: a conversation left open all day must not grow without end.
+        if (seen.current.size >= SEEN_LIMIT) seen.current.clear();
+        seen.current.add(event.messageId);
         forThisConversation(event);
       },
-      [forThisConversation],
+      [conversationId, forThisConversation],
     ),
   );
 

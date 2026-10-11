@@ -111,6 +111,51 @@ describe('★★ a delivery change re-reads the conversation', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
+  it('★★ the same message announced twice (direct, then via the bus) re-reads once', () => {
+    const received = (messageId: string): RealtimeEvent => ({
+      type: 'message.received',
+      tenantId: 't1',
+      at: Date.now(),
+      conversationId: 'c1',
+      messageId,
+    });
+    render(<StreamLive conversationId="c1" />);
+    act(() => deliver(received('m5')));
+    act(() => vi.advanceTimersByTime(800));
+    // the bus copy, after the coalescing window has closed
+    act(() => deliver(received('m5')));
+    act(() => vi.advanceTimersByTime(800));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    // a different message is news
+    act(() => deliver(received('m6')));
+    act(() => vi.advanceTimersByTime(800));
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it('★ another conversation’s message does not use up its id here', () => {
+    render(<StreamLive conversationId="c1" />);
+    act(() =>
+      deliver({
+        type: 'message.received',
+        tenantId: 't1',
+        at: 0,
+        conversationId: 'c2',
+        messageId: 'm8',
+      }),
+    );
+    act(() =>
+      deliver({
+        type: 'message.received',
+        tenantId: 't1',
+        at: 0,
+        conversationId: 'c1',
+        messageId: 'm8',
+      }),
+    );
+    act(() => vi.advanceTimersByTime(800));
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
   it('★★ a refresh scheduled as the screen unmounts does not run', () => {
     /*
      * Navigating away between the frame and the timer would refresh a route that
