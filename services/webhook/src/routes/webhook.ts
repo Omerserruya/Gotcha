@@ -61,25 +61,34 @@ const router = Router();
 function verifyMetaSignature(adapter: { channel: string; getSignatureHeader(): string; verifySignature(s: string, b: Buffer, sig: string): boolean }, req: Request) {
   // Ordered by which app most likely signed this channel, so the common case
   // matches on the first try.
-  const fbSecrets = [process.env.WHATSAPP_APP_SECRET, process.env.META_APP_SECRET];
-  const igSecret = process.env.INSTAGRAM_APP_SECRET;
+  type Named = { name: string; secret: string | undefined };
+  const fbSecrets: Named[] = [
+    { name: "WHATSAPP_APP_SECRET", secret: process.env.WHATSAPP_APP_SECRET },
+    { name: "META_APP_SECRET", secret: process.env.META_APP_SECRET },
+  ];
+  const igSecret: Named = { name: "INSTAGRAM_APP_SECRET", secret: process.env.INSTAGRAM_APP_SECRET };
   const ordered = adapter.channel === "INSTAGRAM" ? [igSecret, ...fbSecrets] : [...fbSecrets, igSecret];
 
-  const configured = Array.from(new Set(ordered.filter((s): s is string => !!s)));
+  // One candidate per distinct secret, named by the first env var holding it.
+  const seen = new Set<string>();
+  const configured = ordered.filter((c) => !!c.secret && !seen.has(c.secret) && (seen.add(c.secret), true));
   // With nothing configured, still make ONE call with an empty secret so the
   // "not configured" verdict keeps coming from the shared verifier rather than
   // being re-implemented here with a reason string that could drift from it.
-  const candidates: Array<string | undefined> = configured.length > 0 ? configured : [undefined];
+  const candidates: Named[] = configured.length > 0 ? configured : [{ name: "none", secret: undefined }];
 
   let last: ReturnType<typeof verifyWebhookSignature> = { ok: false, reason: "signature mismatch" };
-  for (const secret of candidates) {
+  for (const { name, secret } of candidates) {
     const verdict = verifyWebhookSignature({
       secret,
       rawBody: (req as any).rawBody,
       signature: req.headers[adapter.getSignatureHeader()] as string | undefined,
       verify: (s, b, sig) => adapter.verifySignature(s, b, sig),
     });
-    if (verdict.ok) return verdict;
+    // Which app signed it, by env NAME (never the value): the only way to tell
+    // two subscriptions delivering the same event apart (2026-10-11, every
+    // Instagram event arrived twice ~400ms apart).
+    if (verdict.ok) return { ...verdict, via: name };
     // A missing body or missing header is a property of the REQUEST, not of the
     // secret, so retrying with another key cannot help and the reason must not
     // be flattened into "signature mismatch" - that is the difference between
@@ -196,6 +205,7 @@ router.post("/", async (req: Request, res: Response) => {
       });
       return;
     }
+    console.log(`[WEBHOOK] ${adapter.channel} signature verified via=${(verdict as { via?: string }).via ?? "?"}`);
 
     // Step 2.5: Template-related updates from WhatsApp arrive at the WABA level
     // (entry.id = WABA id, no phone_number_id), so they cannot be resolved via
