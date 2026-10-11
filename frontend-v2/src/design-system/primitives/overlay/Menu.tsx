@@ -1,5 +1,6 @@
 'use client';
 
+import { Check } from 'lucide-react';
 import { DropdownMenu } from 'radix-ui';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
@@ -53,6 +54,28 @@ export function MenuItem({
     >
       {children}
     </DropdownMenu.Item>
+  );
+}
+
+/**
+ * One choice of several, the current one checked: `role="menuitemradio"`
+ * with `aria-checked`, and a check mark at the item's end. The group owns
+ * which one is current (`value`) and hears the choice (`onValueChange`) -
+ * including a choice of the one already checked, which Radix reports too.
+ */
+export const MenuRadioGroup = DropdownMenu.RadioGroup;
+
+export function MenuRadioItem({
+  children,
+  ...rest
+}: ComponentPropsWithoutRef<typeof DropdownMenu.RadioItem>) {
+  return (
+    <DropdownMenu.RadioItem className={styles.item} {...rest}>
+      {children}
+      <DropdownMenu.ItemIndicator className={styles.itemCheck}>
+        <Check size={13} aria-hidden="true" />
+      </DropdownMenu.ItemIndicator>
+    </DropdownMenu.RadioItem>
   );
 }
 

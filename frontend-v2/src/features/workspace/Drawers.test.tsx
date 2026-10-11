@@ -8,19 +8,12 @@ import { languageShareSchema } from '@/api/contracts/language-share';
 import { workspaceSchema } from '@/api/contracts/workspace';
 import messages from '@/i18n/messages/en/workspace.json';
 
-const { saveWorkspaceFacts, saveSystemLanguage, saveMyLanguage, replace } = vi.hoisted(() => ({
+const { saveWorkspaceFacts, saveSystemLanguage } = vi.hoisted(() => ({
   saveWorkspaceFacts: vi.fn(),
   saveSystemLanguage: vi.fn(),
-  saveMyLanguage: vi.fn(),
-  replace: vi.fn(),
 }));
-vi.mock('./actions', () => ({ saveWorkspaceFacts, saveSystemLanguage, saveMyLanguage }));
-vi.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams('panel=language'),
-}));
+vi.mock('./actions', () => ({ saveWorkspaceFacts, saveSystemLanguage }));
 vi.mock('@/i18n/navigation', () => ({
-  useRouter: () => ({ replace }),
-  usePathname: () => '/settings/workspace',
   Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
     <a href={typeof href === 'string' ? href : JSON.stringify(href)} {...rest}>
       {children}
@@ -36,9 +29,6 @@ beforeEach(() => {
   saveWorkspaceFacts.mockResolvedValue({ ok: true, data: {} });
   saveSystemLanguage.mockReset();
   saveSystemLanguage.mockResolvedValue({ ok: true });
-  saveMyLanguage.mockReset();
-  saveMyLanguage.mockResolvedValue({ ok: true });
-  replace.mockReset();
 });
 
 const ws = (over: Record<string, unknown> = {}) =>
@@ -221,23 +211,21 @@ describe('★ 11d - two cards, no paragraphs', () => {
     expect(screen.queryByTestId('language-saved')).toBeNull();
   });
 
-  it('★★ your interface language: kept on your account, then this page reopens in it', async () => {
+  it('★★ the interface language is not here: it is personal (Omer, 2026-10-11)', () => {
     drawer();
-    const mine = screen.getByTestId('language-mine') as HTMLSelectElement;
-    expect(mine.value).toBe('en');
-    await userEvent.selectOptions(mine, 'he');
-    expect(saveMyLanguage).toHaveBeenCalledWith('he');
-    expect(replace).toHaveBeenCalledWith(
-      { pathname: '/settings/workspace', query: { panel: 'language' } },
-      { locale: 'he' },
+    const card = screen.getByTestId('language-system');
+    // One select in the card - the system language - and nothing else to choose.
+    const selects = card.querySelectorAll('select');
+    expect(selects).toHaveLength(1);
+    expect(selects[0]).toHaveAttribute('data-testid', 'language-system-select');
+    expect(screen.queryByTestId('language-mine')).toBeNull();
+    expect(screen.queryByText('Your interface language')).toBeNull();
+    // Where it lives now: a line, not a control.
+    const where = screen.getByTestId('language-mine-where');
+    expect(where.tagName).toBe('P');
+    expect(where).toHaveTextContent(
+      'Your own interface language is in your menu, at the bottom of the side bar.',
     );
-  });
-
-  it('⚠ a failed keep does not switch the page', async () => {
-    saveMyLanguage.mockResolvedValueOnce({ ok: false, reason: 'failed' });
-    drawer();
-    await userEvent.selectOptions(screen.getByTestId('language-mine'), 'he');
-    expect(saveMyLanguage).toHaveBeenCalled();
-    expect(replace).not.toHaveBeenCalled();
+    expect(where.querySelector('a, button, select, input')).toBeNull();
   });
 });

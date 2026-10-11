@@ -265,8 +265,3 @@ async function putLocale(
 export async function saveSystemLanguage(locale: string): Promise<LanguageResult> {
   return putLocale(workspaceEndpoints.systemLocale(), locale, 'workspace.system_locale_failed');
 }
-
-/** This person's own interface language - kept, so it is theirs on every device. */
-export async function saveMyLanguage(locale: string): Promise<LanguageResult> {
-  return putLocale(workspaceEndpoints.myLocale(), locale, 'workspace.my_locale_failed');
-}

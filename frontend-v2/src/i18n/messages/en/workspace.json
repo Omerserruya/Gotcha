@@ -190,8 +190,7 @@
     "systemHint": "The language GOTCHA uses with your team, for everyone who has not chosen their own.",
     "translate": "Translate customer messages into {language} for your team",
     "translateHint": "Nothing stores this choice yet.",
-    "mineLabel": "Your interface language",
-    "mineHint": "Just for you, on every device. The page switches at once.",
+    "mineWhere": "Your own interface language is in your menu, at the bottom of the side bar.",
     "forbidden": "You don't have permission to change the workspace's language."
   },
   "timezone": "Time zone",

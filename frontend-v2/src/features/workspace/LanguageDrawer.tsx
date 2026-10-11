@@ -8,13 +8,11 @@ import {
   sharesAreMeaningful,
   type LanguageShare,
 } from '@/api/contracts/language-share';
-import { useSearchParams } from 'next/navigation';
-
-import { Link, usePathname, useRouter } from '@/i18n/navigation';
+import { Link } from '@/i18n/navigation';
 import { LOCALE_CODES } from '@/i18n/locales';
 import drawer from '@/design-system/styles/drawer.module.css';
 
-import { saveMyLanguage, saveSystemLanguage, saveWorkspaceFacts } from './actions';
+import { saveSystemLanguage, saveWorkspaceFacts } from './actions';
 import styles from './Workspace.module.css';
 
 /** Offered for the main language; the stored one is added when it is not here. */
@@ -32,12 +30,13 @@ const COMMON = ['he', 'en', 'ar', 'ru', 'fr', 'es', 'de'] as const;
  * the system language have no store here - drawn, not live, each with why.
  * "Also answers in" is what the last 30 days actually saw.
  *
- * ★★ BOTH LANGUAGES INSIDE GOTCHA CHANGE HERE (Omer, 2026-10-11: "you can't
- *   change the system language"). The workspace's system language saves with
- *   the drawer (`PUT /agents/settings/locale`); the person's own interface
- *   language applies the moment it is chosen - kept on their account
- *   (`PUT /agents/me/locale`) and the page reopened in it, since the language
- *   is the address (`/he/...`).
+ * ★★ THE SYSTEM LANGUAGE CHANGES HERE (Omer, 2026-10-11: "you can't change
+ *   the system language"): it saves with the drawer
+ *   (`PUT /agents/settings/locale`).
+ *
+ * ★★ THE INTERFACE LANGUAGE DOES NOT (Omer, 2026-10-11): it is personal, so it
+ *   lives in the person's own places - the rail's account menu, and their own
+ *   row in People (12d). This card only says where; a line, not a control.
  */
 export function LanguageDrawer({
   storedLanguage,
@@ -55,10 +54,6 @@ export function LanguageDrawer({
   const locale = useLocale();
   const [main, setMain] = useState(storedLanguage ?? '');
   const [system, setSystem] = useState(systemLocale ?? '');
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const [switching, startSwitch] = useTransition();
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -92,22 +87,6 @@ export function LanguageDrawer({
         }
       }
       setSaved(true);
-    });
-  }
-
-  /** The interface language: kept on the account, then this page in it. */
-  function switchInterface(next: string) {
-    setProblem(null);
-    startSwitch(async () => {
-      const written = await saveMyLanguage(next);
-      if (!written.ok) {
-        setProblem(tw('failed'));
-        return;
-      }
-      router.replace(
-        { pathname, query: Object.fromEntries(searchParams.entries()) },
-        { locale: next as (typeof LOCALE_CODES)[number] },
-      );
     });
   }
 
@@ -215,24 +194,9 @@ export function LanguageDrawer({
             <span className={styles.weekPill} data-on="no" aria-hidden="true" />
             {t('translate', { language: systemLocale ? name(systemLocale) : '-' })}
           </p>
-          <label className={drawer.field}>
-            <span className={drawer.fieldLabel}>{t('mineLabel')}</span>
-            <select
-              className={drawer.box}
-              value={locale}
-              title={t('mineHint')}
-              disabled={switching}
-              data-testid="language-mine"
-              onChange={(e) => switchInterface(e.target.value)}
-            >
-              {LOCALE_CODES.map((code) => (
-                <option key={code} value={code}>
-                  {name(code)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className={drawer.hint}>{t('mineHint')}</p>
+          <p className={drawer.hint} data-testid="language-mine-where">
+            {t('mineWhere')}
+          </p>
         </section>
       </div>
       <footer className={drawer.drawerFoot}>

@@ -59,6 +59,17 @@
     cursor: not-allowed;
   }
 
+  /* The checked choice: its words in the primary ink, its check at the end. */
+  .item[data-state='checked'] {
+    color: var(--text-primary);
+  }
+
+  .itemCheck {
+    display: flex;
+    margin-inline-start: auto;
+    padding-inline-start: var(--space-16);
+  }
+
   .itemDanger[data-highlighted] {
     background-color: var(--panel-sunken);
     color: var(--signal-ai-strong);
