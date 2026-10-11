@@ -1073,8 +1073,10 @@
 
   .overlayDialog {
     inset-block-start: 50%;
-    inset-inline-start: 50%;
-    translate: -50% -50%;
+    /* Both insets and auto margins: a logical inset with a physical translate is off-screen in Hebrew. */
+    inset-inline: 0;
+    margin-inline: auto;
+    translate: 0 -50%;
     inline-size: min(700px, calc(100% - var(--space-32)));
     max-block-size: calc(100% - var(--space-32));
     border-radius: var(--radius-panel);

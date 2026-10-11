@@ -18,7 +18,10 @@ describe('★ the studio overlays, measured', () => {
     const dialog = rule(read('src/features/employees/hired/Hired.module.css'), 'dialog');
     expect(dialog).toMatch(/inline-size:\s*min\(720px/);
     expect(dialog).toMatch(/inset-block-start:\s*120px/);
-    expect(dialog).toMatch(/translate:\s*-50% 0/);
+    // Centred by both insets, never a logical inset with a physical translate (K4).
+    expect(dialog).toMatch(/inset-inline:\s*0/);
+    expect(dialog).toMatch(/margin-inline:\s*auto/);
+    expect(dialog).not.toMatch(/translate/);
   });
 });
 

@@ -105,8 +105,9 @@
   .dialogContent {
     position: fixed;
     inset-block-start: 50%;
-    inset-inline-start: 50%;
-    translate: -50% -50%;
+    inset-inline: 0;
+    margin-inline: auto;
+    translate: 0 -50%;
     inline-size: min(560px, calc(100vw - var(--space-40)));
     max-block-size: calc(100dvh - var(--space-40));
     overflow-y: auto;
@@ -117,9 +118,10 @@
   }
 
   /*
-   * `translate: -50% -50%` centres correctly in both directions because
-   * `inset-inline-start` already resolves per direction. A `left: 50%` here
-   * would pin the dialog to the physical left in Hebrew.
+   * Centred inline by both insets and auto margins. `inset-inline-start: 50%`
+   * with `translate: -50%` does NOT centre in Hebrew: the inset resolves per
+   * direction (`right: 50%`) but the translate is physical (left), so the two
+   * add up and the dialog leaves the screen. Measured in Chromium (K4).
    */
 
   /* ── Drawer ──────────────────────────────────────────────────────────── */

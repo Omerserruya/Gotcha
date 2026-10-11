@@ -1,10 +1,16 @@
 @layer features {
-  /* 08b, measured: 860 wide, 60 from the top, centred, over Hire's scrim. */
+  /*
+   * 08b, measured: 860 wide, 60 from the top, centred, over Hire's scrim.
+   * Centred by both inline insets and auto margins, never `inset-inline-start:
+   * 50%` with `translate: -50%`: the inset is logical and the translate is
+   * physical, so in Hebrew the two add up and two thirds of the sheet sat
+   * off the left edge (K4, measured: x = -570 at 1440).
+   */
   .dialog {
     position: absolute;
     inset-block-start: 60px;
-    inset-inline-start: 50%;
-    translate: -50% 0;
+    inset-inline: 0;
+    margin-inline: auto;
     display: flex;
     flex-direction: column;
     inline-size: min(860px, calc(100% - var(--space-24)));

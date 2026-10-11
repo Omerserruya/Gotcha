@@ -3,8 +3,9 @@
   .dialog {
     position: absolute;
     inset-block-start: 120px;
-    inset-inline-start: 50%;
-    translate: -50% 0;
+    /* Both insets and auto margins: a logical inset with a physical translate is off-screen in Hebrew. */
+    inset-inline: 0;
+    margin-inline: auto;
     inline-size: min(720px, calc(100% - var(--space-24)));
     border-radius: var(--radius-panel);
     background-color: var(--panel-base);
