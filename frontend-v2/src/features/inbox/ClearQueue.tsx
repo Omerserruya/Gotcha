@@ -85,7 +85,7 @@ export async function ClearQueuePane({ clear }: { readonly clear: ClearQueue }) 
         </p>
         <div className={styles.clearPaneActions}>
           <Link
-            href={{ pathname: '/inbox', query: { view: 'ai' } }}
+            href={{ pathname: '/inbox', query: { view: 'gotcha' } }}
             className={styles.clearPrimary}
             data-testid="see-answered"
           >

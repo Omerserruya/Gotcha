@@ -49,6 +49,7 @@ vi.mock('@/features/inbox/load-inbox', async (original) => ({
 vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
   getFormatter: async () => ({}),
+  getLocale: async () => 'he',
 }));
 vi.mock('server-only', () => ({}));
 /* 02b's reads, only on a clear queue: no network here. */
@@ -61,7 +62,16 @@ vi.mock('@/features/inbox/load-clear-queue', () => ({ loadClearQueue }));
  *   inspects the TREE rather than rendering it, so the real Link is never
  *   needed; the mock exists so the module graph loads at all.
  */
-vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
+/*
+ * `redirect` throws like Next's, so nothing after it runs - a test that saw the
+ * page render past a redirect would be testing a page Next never draws.
+ */
+const redirect = vi.hoisted(() =>
+  vi.fn((to: unknown) => {
+    throw Object.assign(new Error('NEXT_REDIRECT'), { to });
+  }),
+);
+vi.mock('@/i18n/navigation', () => ({ Link: 'a', redirect }));
 
 /** Every panel that must not be nested inside another. */
 const ASYNC_PANELS = new Set<unknown>([
@@ -161,6 +171,7 @@ const page = async (over: Record<string, unknown> = {}, query: Record<string, st
 
 beforeEach(() => {
   loadInbox.mockReset();
+  redirect.mockClear();
 });
 
 describe('★★ four panels, and none of them inside another', () => {
@@ -536,6 +547,45 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
   it('⚠ an invented view falls back to the queue rather than an error', async () => {
     await withView('../../admin');
     expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'queue', null, null);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it('★★ `?view=ai` and `?view=flow` land on "Handled by GOTCHA", the rest of the address kept', async () => {
+    /*
+     * The two views are one now (Omer, 2026-10-11). An old link is not the
+     * queue and not an empty list: it is the merged view, and the address
+     * says so, so the rail lights what the list shows. The cursor goes - a
+     * new view starts at page one.
+     */
+    const { default: Page } = await import('./page');
+    for (const old of ['ai', 'flow']) {
+      redirect.mockClear();
+      await expect(
+        Page({
+          searchParams: Promise.resolve({
+            view: old,
+            c: 'c7',
+            channel: 'WHATSAPP',
+            from: '2026-09-01',
+            cursor: 'k1',
+          }),
+        }),
+      ).rejects.toThrow('NEXT_REDIRECT');
+      expect(redirect, old).toHaveBeenCalledWith({
+        href: {
+          pathname: '/inbox',
+          query: { view: 'gotcha', c: 'c7', channel: 'WHATSAPP', from: '2026-09-01' },
+        },
+        locale: 'he',
+      });
+    }
+    expect(loadInbox).not.toHaveBeenCalled();
+  });
+
+  it('★ and `?view=gotcha` itself is read, not redirected', async () => {
+    await withView('gotcha');
+    expect(redirect).not.toHaveBeenCalled();
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'gotcha', null, null);
   });
 
   it('★★ reads `channel` too, and hands it to the loader and the list', async () => {

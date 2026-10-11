@@ -7,8 +7,11 @@ import {
   parseInboxView,
   QUEUE_CHANNEL_FILTERS,
   parsePeriod,
+  retiredView,
   viewQuery,
 } from './inbox-views';
+import enNav from '@/i18n/messages/en/navigation.json';
+import heNav from '@/i18n/messages/he/navigation.json';
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -46,21 +49,15 @@ describe('★★ each view asks the route for what its name says', () => {
     expect(viewQuery('queue', null)).toEqual({ view: 'queue' });
   });
 
-  it('⚠⚠ AI and Flow send `handledBy`, which the route does not read YET', () => {
+  it('★★ "Handled by GOTCHA" asks for `automatedOnly` and nothing else', () => {
     /*
-     * ════════════════════════════════════════════════════════════════════════
-     * THE ROUTE CANNOT SEPARATE THEM, AND THIS IS STATED RATHER THAN HIDDEN
-     * ════════════════════════════════════════════════════════════════════════
-     * `automatedOnly` returns both - `AUTOMATED_HANDLERS = ["ai_agent",
-     * "flow"]`. The route ignores an unknown query key today, so sending
-     * `handledBy` is harmless now and exact the moment the route accepts it.
-     *
-     * ⚠ Filtering on the CLIENT would be correct on page one and wrong on
-     *   every page after: a page of ten automated rows could be all flow,
-     *   showing an empty "AI managed" while AI rows sit on page two.
+     * The route's `automatedOnly` is already "the AI's or a flow's, nobody
+     * holding it, not closed" (conversation.service.ts:131,155-170), and it
+     * reads no `handledBy`. So the merged view is that one parameter - a
+     * `handledBy` beside it would be a filter the route throws away, written
+     * as if it narrowed something.
      */
-    expect(viewQuery('ai', null)).toEqual({ automatedOnly: 'true', handledBy: 'ai_agent' });
-    expect(viewQuery('flow', null)).toEqual({ automatedOnly: 'true', handledBy: 'flow' });
+    expect(viewQuery('gotcha', null)).toEqual({ automatedOnly: 'true' });
   });
 });
 
@@ -68,6 +65,17 @@ describe('★ an unknown view is the default, never an error page', () => {
   it('falls back for absent, empty and invented values', () => {
     for (const raw of [undefined, '', 'archived', 'QUEUE', '../admin']) {
       expect(parseInboxView(raw), String(raw)).toBe('queue');
+    }
+  });
+
+  it('★★ `ai` and `flow` - the two views it replaced - mean the GOTCHA view, not the queue', () => {
+    for (const old of ['ai', 'flow']) {
+      expect(parseInboxView(old), old).toBe('gotcha');
+      expect(retiredView(old), old).toBe('gotcha');
+    }
+    // Only those two: a live view, an invented one or nothing is not "retired".
+    for (const raw of [undefined, '', 'gotcha', 'queue', 'AI', 'toString', '__proto__']) {
+      expect(retiredView(raw), String(raw)).toBeNull();
     }
   });
 
@@ -170,5 +178,21 @@ describe('★★ "all" - every conversation, as an assistant counts them (Backen
     expect(
       inboxQuery({ view: 'all', channel: null, period: { from: '2026-09-01', to: '2026-09-30' } }),
     ).toEqual({ view: 'all', from: '2026-09-01', to: '2026-09-30' });
+  });
+});
+
+describe('★★ one view for what GOTCHA handles, not two (Omer, 2026-10-11)', () => {
+  it('★★ the views are six, and neither "AI managed" nor "Flow managed" is one', () => {
+    // The rail's own list is asserted in shell/navigation.test.ts (the shell may not import this).
+    expect(INBOX_VIEW_IDS).toEqual(['queue', 'mine', 'active', 'gotcha', 'resolved', 'all']);
+  });
+
+  it('★★ named in both languages, with the gershayim and no old label left', () => {
+    expect(enNav.inbox).toMatchObject({ gotcha: 'Handled by GOTCHA' });
+    expect(heNav.inbox).toMatchObject({ gotcha: 'מנוהל ע\u05f4י GOTCHA' });
+    for (const nav of [enNav.inbox, heNav.inbox]) {
+      expect(Object.keys(nav)).not.toContain('ai');
+      expect(Object.keys(nav)).not.toContain('flow');
+    }
   });
 });

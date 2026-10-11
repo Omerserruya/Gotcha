@@ -1,4 +1,4 @@
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import { Suspense } from 'react';
 
 import { ConversationHeader } from '@/features/inbox/ConversationHeader';
@@ -14,7 +14,13 @@ import { ActivityProvider } from '@/features/inbox/wall/Activity';
 import { AskCopilot } from '@/features/inbox/wall/AskCopilot';
 import { CopilotWall, WallHeader } from '@/features/inbox/wall/CopilotWall';
 import styles from '@/features/inbox/Inbox.module.css';
-import { parseChannelFilter, parseInboxView, parsePeriod } from '@/features/inbox/inbox-views';
+import {
+  parseChannelFilter,
+  parseInboxView,
+  parsePeriod,
+  retiredView,
+} from '@/features/inbox/inbox-views';
+import { redirect } from '@/i18n/navigation';
 import { loadClearQueue } from '@/features/inbox/load-clear-queue';
 import { loadInbox, QUEUE_CAP } from '@/features/inbox/load-inbox';
 import { PendingPane } from '@/features/inbox/PendingPane';
@@ -84,6 +90,25 @@ export default async function Page({
   const params = await searchParams;
   const { cursor, view: rawView, channel: rawChannel, from, to } = params;
   const c = params.c ?? params.conversation;
+  /*
+   * `?view=ai` and `?view=flow` are one view now, "Handled by GOTCHA". An old
+   * link lands there with the rest of its address kept, and the address says
+   * `gotcha` - so the rail lights the view the list is showing. Not the
+   * cursor: a new view starts at page one, as every inbox link does.
+   */
+  const retired = retiredView(rawView);
+  if (retired !== null) {
+    const kept = Object.fromEntries(
+      Object.entries(params).filter(
+        (entry): entry is [string, string] =>
+          typeof entry[1] === 'string' && entry[0] !== 'view' && entry[0] !== 'cursor',
+      ),
+    );
+    redirect({
+      href: { pathname: '/inbox', query: { ...kept, view: retired } },
+      locale: await getLocale(),
+    });
+  }
   const view = parseInboxView(rawView);
   const channel = parseChannelFilter(rawChannel);
   const asked = parsePeriod(from, to);

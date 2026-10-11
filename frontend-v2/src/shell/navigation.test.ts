@@ -29,3 +29,20 @@ describe('★★ the rail marks one place, not two', () => {
     expect(parent.children!.find((c) => c.id === marked[0])!.href).toBe(href);
   });
 });
+
+describe('★★ the inbox rail has one view for what GOTCHA handles, not two (Omer, 2026-10-11)', () => {
+  it('★★ "AI managed" and "Flow managed" are gone, "Handled by GOTCHA" is in their place', () => {
+    /*
+     * The same ids as `INBOX_VIEW_IDS` (less `all`, reached by links): a rail
+     * view the page does not know falls back to the queue under its own name.
+     */
+    const inbox = PRIMARY_NAVIGATION.find((item) => item.id === 'inbox')!;
+    expect(inbox.children!.map((child) => [child.view, child.labelKey])).toEqual([
+      ['queue', 'inbox.queue'],
+      ['mine', 'inbox.mine'],
+      ['active', 'inbox.active'],
+      ['gotcha', 'inbox.gotcha'],
+      ['resolved', 'inbox.resolved'],
+    ]);
+  });
+});

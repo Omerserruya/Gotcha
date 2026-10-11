@@ -118,9 +118,9 @@ describe('★★ 02b - the pane: nothing to read, and the day', () => {
     expect(screen.getByTestId('clear-strip')).toHaveTextContent('Answered today-');
   });
 
-  it('see what GOTCHA answered → the AI view; write to a customer is drawn', async () => {
+  it('see what GOTCHA answered → the GOTCHA view; write to a customer is drawn', async () => {
     render(await ClearQueuePane({ clear: { overview: null, inFlight: null } }));
-    expect(screen.getByTestId('see-answered')).toHaveAttribute('href', '/inbox?view=ai');
+    expect(screen.getByTestId('see-answered')).toHaveAttribute('href', '/inbox?view=gotcha');
     expect(screen.getByTestId('write-customer')).toHaveAttribute('aria-disabled', 'true');
   });
 });

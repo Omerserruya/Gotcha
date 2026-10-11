@@ -27,8 +27,7 @@
     "queue": "Waiting in queue",
     "mine": "Assigned to me",
     "active": "Active",
-    "ai": "AI managed",
-    "flow": "Flow managed",
+    "gotcha": "Handled by GOTCHA",
     "resolved": "Resolved",
     "all": "All conversations"
   },

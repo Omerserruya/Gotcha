@@ -87,8 +87,10 @@ export function isCurrentHrefChild(
  * Inbox views.
  *
  * From the brief: "Waiting in queue / Assigned to me / Active / AI managed /
- * Flow managed". These are predicates over one list, not five pages - which is
- * why they are query state. Channel filters compose on top and are a page-level
+ * Flow managed" - and the last two are one view now, "Handled by GOTCHA"
+ * (Omer, 2026-10-11): the route never told them apart (`inbox-views.ts`).
+ * These are predicates over one list, not separate pages - which is why they
+ * are query state. Channel filters compose on top and are a page-level
  * control, not rail navigation, per "keep advanced filtering out of the way by
  * default".
  */
@@ -96,8 +98,7 @@ const INBOX_VIEWS: readonly NavigationChild[] = [
   { id: 'queue', labelKey: 'inbox.queue', view: 'queue' },
   { id: 'mine', labelKey: 'inbox.mine', view: 'mine' },
   { id: 'active', labelKey: 'inbox.active', view: 'active' },
-  { id: 'ai', labelKey: 'inbox.ai', view: 'ai' },
-  { id: 'flow', labelKey: 'inbox.flow', view: 'flow' },
+  { id: 'gotcha', labelKey: 'inbox.gotcha', view: 'gotcha' },
   { id: 'resolved', labelKey: 'inbox.resolved', view: 'resolved' },
 ];
 

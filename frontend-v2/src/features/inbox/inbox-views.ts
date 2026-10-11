@@ -20,19 +20,36 @@
  *    Trusting the spec's silence would have meant filtering client-side, over
  *    ONE page of ten, silently missing every match on the pages after it.
  *
- * ⚠ THE ROUTE CANNOT SEPARATE AI FROM FLOW. `automatedOnly` returns both -
- *   `AUTOMATED_HANDLERS = ["ai_agent", "flow"]` - and there is no `handledBy`
- *   parameter. So the two views send `handledBy` anyway: the route ignores an
- *   unknown key today, and the view becomes exact the moment it accepts one,
- *   with no change here. Until then both show the union. Filtering on the
- *   client instead would be correct on page one and wrong on every page after.
+ * ★★ ONE VIEW FOR WHAT GOTCHA HANDLES (Omer, 2026-10-11). There were two,
+ *   "AI managed" and "Flow managed", and the route could never tell them
+ *   apart: `automatedOnly=true` is `handledBy IN ["ai_agent","flow"]`, not
+ *   handed over, nobody assigned, not closed
+ *   (services/conversation/src/services/conversation.service.ts:131,155-170),
+ *   and the route reads no `handledBy` (routes/conversations.ts:75). Both
+ *   showed the same list under two names. `gotcha` is that one list, under
+ *   one name - and it needs no backend change, because it is exactly what
+ *   `automatedOnly` already returns.
  */
 
-export const INBOX_VIEW_IDS = ['queue', 'mine', 'active', 'ai', 'flow', 'resolved', 'all'] as const;
+export const INBOX_VIEW_IDS = ['queue', 'mine', 'active', 'gotcha', 'resolved', 'all'] as const;
 export type InboxView = (typeof INBOX_VIEW_IDS)[number];
+
+/**
+ * The two views `gotcha` replaced. A bookmark, a shared link or an old tab
+ * still says `?view=ai` or `?view=flow`; it lands on the merged view, never
+ * on the queue as if the reader had asked for nothing.
+ */
+const RETIRED_VIEWS: Readonly<Record<string, InboxView>> = { ai: 'gotcha', flow: 'gotcha' };
+
+/** The view a retired `?view=` now means, or null when it is not a retired one. */
+export function retiredView(raw: string | undefined): InboxView | null {
+  return Object.hasOwn(RETIRED_VIEWS, raw ?? '') ? RETIRED_VIEWS[raw!]! : null;
+}
 
 /** An unknown or absent `?view=` is the default, never an error page. */
 export function parseInboxView(raw: string | undefined): InboxView {
+  const retired = retiredView(raw);
+  if (retired !== null) return retired;
   return (INBOX_VIEW_IDS as readonly string[]).includes(raw ?? '') ? (raw as InboxView) : 'queue';
 }
 
@@ -72,10 +89,12 @@ export function viewQuery(view: InboxView, meId: string | null): Record<string, 
     case 'resolved':
       // A conversation the AI closed is still resolved.
       return { status: 'CLOSED', includeAutomated: 'true' };
-    case 'ai':
-      return { automatedOnly: 'true', handledBy: 'ai_agent' };
-    case 'flow':
-      return { automatedOnly: 'true', handledBy: 'flow' };
+    case 'gotcha':
+      /*
+       * What GOTCHA handles, by the AI or by a flow: the route's own
+       * `automatedOnly`, which already means both and nothing a person holds.
+       */
+      return { automatedOnly: 'true' };
   }
 }
 
