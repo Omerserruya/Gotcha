@@ -27,6 +27,7 @@ import {
   type StrongChannel,
 } from "../services/connectors/crm-identity.service";
 import { loadCustomerContext } from "../services/memory/customer-context.service";
+import { withErrorCode } from "../lib/error-code";
 
 const router = Router();
 
@@ -288,6 +289,24 @@ async function persistCrmLinkage(args: {
   });
 }
 
+const CRM_CREDENTIALS_REFUSED = /(?:\b|_)40[13]\b|unauthori[sz]ed|forbidden|invalid_grant|invalid_token|invalid_client/i;
+const CRM_UNREACHABLE = /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|EAI_AGAIN|fetch failed|timed? ?out|(?:\b|_)5\d\d\b/i;
+const CODE_LIKE_REASON = /^[\w.:-]{1,64}$/;
+
+/**
+ * What a failed CRM call's reason looks like in the audit log: "[CODE] sentence".
+ * The raw reason can be a provider's whole HTML error page (Shopify's 401 on a
+ * token refresh, 2026-10-11), which the audit row stored verbatim. A short
+ * code-like reason ("not_found", "no_crm_link") is already clean and is kept.
+ */
+export function auditReason(raw: unknown): unknown {
+  if (typeof raw !== "string" || !raw) return raw;
+  if (CRM_CREDENTIALS_REFUSED.test(raw)) return withErrorCode("CREDENTIALS_INVALID");
+  if (CRM_UNREACHABLE.test(raw)) return withErrorCode("CONNECTION_FAILED");
+  if (CODE_LIKE_REASON.test(raw)) return raw;
+  return "[CRM_REQUEST_FAILED] The CRM did not accept the request.";
+}
+
 async function auditCrmAction(args: {
   tenantId: string;
   conversationId: string;
@@ -295,6 +314,17 @@ async function auditCrmAction(args: {
   ok: boolean;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
+  const metadata: Record<string, unknown> = { ...(args.metadata || {}) };
+  if (!args.ok) {
+    for (const key of ["reason", "link_reason"]) {
+      const raw = metadata[key];
+      const clean = auditReason(raw);
+      if (clean === raw) continue;
+      // The raw text stays in the service log only, never in the audit row.
+      console.warn(`[crm-panel] ${args.action} conv=${args.conversationId} ${key} raw:`, String(raw).slice(0, 2000));
+      metadata[key] = clean;
+    }
+  }
   try {
     await (prisma as any).auditLog?.create?.({
       data: {
@@ -303,7 +333,7 @@ async function auditCrmAction(args: {
         action: args.action,
         targetType: "conversation",
         targetId: args.conversationId,
-        metadata: { ok: args.ok, ...(args.metadata || {}) },
+        metadata: { ok: args.ok, ...metadata },
       },
     });
   } catch (err: any) {
