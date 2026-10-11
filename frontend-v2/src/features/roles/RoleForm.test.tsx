@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
@@ -69,12 +69,17 @@ const ROLES: readonly Role[] = [
   role('r2', 'Owner', ['*']),
 ];
 
-const renderForm = (initialSourceId = '') =>
-  render(
+/** The form; with a source, picked in "Start from" (12b's Duplicate is gone). */
+const renderForm = (sourceId = '') => {
+  const view = render(
     <NextIntlClientProvider locale="en" messages={{ roles: messages }}>
-      <RoleForm permissions={PERMISSIONS} roles={ROLES} initialSourceId={initialSourceId} />
+      <RoleForm permissions={PERMISSIONS} roles={ROLES} />
     </NextIntlClientProvider>,
   );
+  if (sourceId)
+    fireEvent.change(screen.getByTestId('role-source'), { target: { value: sourceId } });
+  return view;
+};
 
 describe('★ 12c - 02’s table on the approved mapping', () => {
   it('a ladder row is a level; separate jobs are actions', () => {

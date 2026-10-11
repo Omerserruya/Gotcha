@@ -11,7 +11,7 @@ import { SettingsSection } from '@/shell/SettingsSection';
 /**
  * Settings · People & teams · Edit role - 12b's Edit (Omer, 2026-10-08):
  * the 12c form on one custom role. A built-in role is not edited (the route
- * refuses it) - said, with Duplicate; a role that is gone is said too.
+ * refuses it) - said, with Create role; a role that is gone is said too.
  */
 export default async function Page({
   params,
@@ -38,8 +38,8 @@ export default async function Page({
           {t('form.edit.builtIn', {
             name: roleNameOf(role, (key, part) => t(`builtinRole.${key}.${part}`)),
           })}{' '}
-          <Link href={{ pathname: '/settings/people/roles/new', query: { from: role.id } }}>
-            {t('duplicate')}
+          <Link href="/settings/people/roles/new" data-testid="role-edit-create">
+            {t('create')}
           </Link>
         </p>
       ) : (

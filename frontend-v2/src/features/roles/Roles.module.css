@@ -531,64 +531,10 @@
     cursor: default;
   }
 
-  /* The two cards under the table: `padding:16px 18px`, gap 14. */
-  /* 12b, measured: 494 · 380 across the 888. */
-  .cards {
-    display: grid;
-    grid-template-columns: minmax(0, 494fr) minmax(0, 380fr);
-    gap: var(--space-14);
-    line-height: normal;
-  }
-
-  .card {
-    display: flex;
-    flex: 1;
-    align-items: center;
-    gap: var(--space-14);
-    padding: var(--space-16) 18px;
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-card);
-    background-color: var(--panel-field);
-  }
-
-  .cardText {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    gap: 3px;
-    min-inline-size: 0;
-  }
-
-  .cardTitle {
-    font-size: var(--font-size-body-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--text-primary);
-  }
-
-  .cardBody {
-    font-size: var(--font-size-meta);
-    line-height: 1.4;
-    color: var(--text-body);
-  }
-
-  .cardLink {
-    flex: none;
-    border-block-end: 1px solid var(--border-strong);
-    font-size: var(--font-size-label);
-    color: var(--text-primary);
-    text-decoration: none;
-  }
-
   .foot {
     margin: 0;
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
-  }
-
-  @media (width < 64rem) {
-    .cards {
-      grid-template-columns: minmax(0, 1fr);
-    }
   }
 }
 

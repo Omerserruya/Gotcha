@@ -195,7 +195,7 @@
       "save": "Save changes",
       "saving": "Saving…",
       "error": {
-        "system": "A built-in role can't be changed - duplicate it instead.",
+        "system": "A built-in role can't be changed. Create a role of your own instead.",
         "unknown_features": "One of these capabilities is no longer one a role can hold. Nothing was changed.",
         "partial": "The capabilities were saved; the name and description weren't. Try saving again.",
         "name_taken": "A role with this name already exists. The capabilities were saved - choose another name and save again.",
@@ -204,7 +204,7 @@
         "failed": "It wasn't saved. Try again."
       },
       "notHere": "This role isn't here. It may have been deleted.",
-      "builtIn": "{name} is built in and can't be changed. Duplicate it to make a role of your own."
+      "builtIn": "{name} is built in and can't be changed. Create a role of your own: it can start from {name}."
     }
   },
   "person": {
@@ -265,17 +265,8 @@
   },
   "custom": "Custom",
   "edit": "Edit",
-  "duplicate": "Duplicate",
   "create": "Create role",
-  "cards": {
-    "extraTitle": "Extra permissions for one person",
-    "extraBody": "Give one person a permission on top of their role, without changing the role.",
-    "extraLink": "Open People",
-    "aiTitle": "AI employees",
-    "aiBody": "What they may do is set in Studio · Integrations, the same for every employee.",
-    "aiLink": "Open Studio"
-  },
-  "foot": "Built-in roles can't be changed or deleted. Duplicate one to make a role you can.",
+  "foot": "Built-in roles can't be changed or deleted. Create a role to have one you can change.",
   "grant": {
     "title": "Add a permission for {name}",
     "search": "Search permissions",

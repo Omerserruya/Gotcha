@@ -29,24 +29,22 @@ import { pageMetadata } from '@/shell/page-metadata';
  * platform's own description; one a tenant creates has whatever they typed.
  * Generating a sentence from a permission list would read as a promise about
  * behaviour rather than a summary of settings.
+ *
+ * **No tiles to People and to AI employees** under the table, and no
+ * Duplicate on a built-in role (Omer, 2026-10-11). A role of your own starts
+ * from Create role, whose "Start from" copies any role.
  */
 export default async function Page({
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ readonly create?: string; readonly from?: string }>;
+  readonly searchParams?: Promise<{ readonly create?: string }>;
 } = {}) {
   const t = await getTranslations('roles');
   const tp = await getTranslations('people');
   const params = (await searchParams) ?? {};
   // 12c is its own page now; old addresses land on it.
   if (params.create === '1') {
-    redirect({
-      href: {
-        pathname: '/settings/people/roles/new',
-        query: params.from ? { from: params.from } : {},
-      },
-      locale: await getLocale(),
-    });
+    redirect({ href: '/settings/people/roles/new', locale: await getLocale() });
   }
   const [roles, { members, aiEmployees, teams }] = await Promise.all([loadRoles(), loadPeople()]);
 
@@ -84,27 +82,6 @@ export default async function Page({
       ) : (
         <>
           <RoleList roles={roles} members={members} />
-
-          <div className={styles.cards}>
-            <section className={styles.card} data-testid="card-extra">
-              <span className={styles.cardText}>
-                <span className={styles.cardTitle}>{t('cards.extraTitle')}</span>
-                <span className={styles.cardBody}>{t('cards.extraBody')}</span>
-              </span>
-              <Link href="/settings/people" className={styles.cardLink}>
-                {t('cards.extraLink')}
-              </Link>
-            </section>
-            <section className={styles.card} data-testid="card-ai">
-              <span className={styles.cardText}>
-                <span className={styles.cardTitle}>{t('cards.aiTitle')}</span>
-                <span className={styles.cardBody}>{t('cards.aiBody')}</span>
-              </span>
-              <Link href="/studio/capabilities" className={styles.cardLink}>
-                {t('cards.aiLink')}
-              </Link>
-            </section>
-          </div>
 
           <p className={styles.foot}>{t('foot')}</p>
         </>

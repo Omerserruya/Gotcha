@@ -40,14 +40,11 @@ import styles from './Roles.module.css';
 export function RoleForm({
   permissions,
   roles,
-  initialSourceId = '',
   editing = null,
 }: {
   readonly permissions: readonly PermissionDef[];
   /** Existing roles to start from. */
   readonly roles: readonly Role[];
-  /** 12b's "Duplicate": the role this one starts from (`?from=`). */
-  readonly initialSourceId?: string;
   /** 12b's "Edit": the custom role being changed - the form saves over it. */
   readonly editing?: Role | null;
 }) {
@@ -62,12 +59,12 @@ export function RoleForm({
   /*
    * 02 starts from Agent: "you start from an existing role and only touch
    * what's different" - so the Compared card is there from the first look.
-   * 12b's Duplicate (`?from=`) wins; no Agent role, nothing.
+   * No Agent role, nothing.
    */
   // The platform's key is lowercase (`invite-role.service`: builtinKey "agent").
   const startId = editing
     ? editing.id
-    : initialSourceId || (roles.find((r) => r.builtinKey?.toLowerCase() === 'agent')?.id ?? '');
+    : (roles.find((r) => r.builtinKey?.toLowerCase() === 'agent')?.id ?? '');
   const [sourceId, setSourceId] = useState(startId);
   const [name, setName] = useState(editing?.name ?? '');
   const [description, setDescription] = useState(editing?.description ?? '');

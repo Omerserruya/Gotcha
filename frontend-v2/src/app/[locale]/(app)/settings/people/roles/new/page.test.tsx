@@ -35,8 +35,8 @@ vi.mock('@/shell/SettingsSection', () => ({
 }));
 const { loadCatalog } = vi.hoisted(() => ({ loadCatalog: vi.fn() }));
 vi.mock('@/features/roles/RoleForm', () => ({
-  RoleForm: ({ initialSourceId }: { initialSourceId: string }) => (
-    <div data-testid="role-form" data-from={initialSourceId} />
+  RoleForm: (props: Record<string, unknown>) => (
+    <div data-testid="role-form" data-props={Object.keys(props).sort().join(',')} />
   ),
 }));
 vi.mock('@/features/roles/load-catalog', () => ({ loadCatalog }));
@@ -47,20 +47,18 @@ vi.mock('@/features/roles/load-roles', () => ({
 import Page from './page';
 
 describe('★ 12c is a page: "← Roles" above "New role"', () => {
-  it('starts from ?from= when it names a role, and from nothing otherwise', async () => {
+  it('the form, given the catalogue and the roles - and no Duplicate source', async () => {
     loadCatalog.mockResolvedValue({ permissions: [] });
-    const { unmount } = render(await Page({ searchParams: Promise.resolve({ from: 'r1' }) }));
+    render(await Page());
     expect(screen.getByRole('heading')).toHaveTextContent('New role');
     expect(screen.getByTestId('back')).toHaveAttribute('href', '/settings/people/roles');
-    expect(screen.getByTestId('role-form')).toHaveAttribute('data-from', 'r1');
-    unmount();
-    render(await Page({ searchParams: Promise.resolve({ from: 'nope' }) }));
-    expect(screen.getByTestId('role-form')).toHaveAttribute('data-from', '');
+    // ★ 12b's Duplicate is gone (Omer, 2026-10-11): nothing seeds the form from `?from=`.
+    expect(screen.getByTestId('role-form')).toHaveAttribute('data-props', 'permissions,roles');
   });
 
   it('no catalogue, no form: a role of no permissions is not offered', async () => {
     loadCatalog.mockResolvedValue(null);
-    render(await Page({ searchParams: Promise.resolve({}) }));
+    render(await Page());
     expect(screen.queryByTestId('role-form')).toBeNull();
     expect(screen.getByTestId('role-form-unavailable')).toBeInTheDocument();
   });

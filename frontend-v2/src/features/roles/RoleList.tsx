@@ -121,8 +121,9 @@ export async function RoleList({
             </span>
 
             {/*
-              A built-in role can be copied but never edited - the route refuses
-              it. A custom one opens in the 12c form, saved over it.
+              A built-in role is never edited - the route refuses it - so its
+              cell is empty (no Duplicate: Omer, 2026-10-11). A custom one
+              opens in the 12c form, saved over it.
             */}
             <span className={styles.colAction} data-testid={`action-${role.id}`}>
               {isEditable(role) ? (
@@ -133,14 +134,7 @@ export async function RoleList({
                 >
                   {t('edit')}
                 </Link>
-              ) : (
-                <Link
-                  href={{ pathname: '/settings/people/roles/new', query: { from: role.id } }}
-                  className={styles.actionLink}
-                >
-                  {t('duplicate')}
-                </Link>
-              )}
+              ) : null}
             </span>
           </li>
         ))}

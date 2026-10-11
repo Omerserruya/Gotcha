@@ -35,7 +35,7 @@ const role = (over: Record<string, unknown>) =>
   roleSchema.parse({ id: 'r', name: 'Agent', features: ['inbox:read'], ...over });
 
 describe('★ 12b - the roles as one table', () => {
-  it('a built-in role: its description, a lock, and Duplicate → the form, from it', async () => {
+  it('a built-in role: its description, a lock - and no action at all', async () => {
     render(
       await RoleList({
         roles: [role({ id: 'admin', name: 'Admin', isSystem: true, description: 'Everything.' })],
@@ -43,10 +43,10 @@ describe('★ 12b - the roles as one table', () => {
     );
     expect(screen.getByTestId('builtin-admin')).toHaveTextContent('Built-in');
     expect(screen.getByTestId('allows-admin')).toHaveTextContent('Everything.');
-    expect(screen.getByTestId('action-admin').querySelector('a')).toHaveAttribute(
-      'href',
-      '/settings/people/roles/new?from=admin',
-    );
+    // ★ No Duplicate (Omer, 2026-10-11): the cell is empty, not a link to a copy.
+    expect(screen.getByTestId('action-admin')).toBeEmptyDOMElement();
+    expect(screen.queryByRole('link', { name: /duplicate/i })).toBeNull();
+    expect(document.querySelector('a[href*="from="]')).toBeNull();
   });
 
   it('★ a custom role: "Custom" (no creator is recorded), and Edit opens it in the form', async () => {
