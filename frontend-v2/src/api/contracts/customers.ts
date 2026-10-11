@@ -204,29 +204,6 @@ export const customerDetailSchema = customerRowSchema.extend({
 export type CustomerDetail = z.infer<typeof customerDetailSchema>;
 
 /**
- * What to call someone when `displayName` is null.
- *
- * Falls back to a real handle rather than to "Unknown": on a channel like
- * WhatsApp the phone number **is** how the business knows them, and inventing
- * a placeholder would be less informative than the identifier we hold. Returns
- * null only when there is genuinely nothing, and the caller says so.
- */
-export function customerLabel(row: {
-  displayName: string | null;
-  phone: string | null;
-  email: string | null;
-  externalId: string;
-}): string | null {
-  return (
-    row.displayName?.trim() ||
-    row.phone?.trim() ||
-    row.email?.trim() ||
-    row.externalId.trim() ||
-    null
-  );
-}
-
-/**
  * Channels whose `externalId` IS the customer's phone or address, proven by
  * the channel itself - the same lists as Backend's `PHONE_CHANNELS` and
  * `EMAIL_CHANNELS` (`packages/shared/src/lib/identity-links.ts`). Anywhere

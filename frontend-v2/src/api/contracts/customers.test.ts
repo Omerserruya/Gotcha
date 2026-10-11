@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   customerDetailSchema,
-  customerLabel,
   customerListSchema,
   customerRowSchema,
   collapseToPeople,
@@ -96,33 +95,6 @@ describe('the total is the count, not the page', () => {
 
   it('falls back to the server total only once the page is full', () => {
     expect(listedCount(500, 812)).toBe(812);
-  });
-});
-
-describe('customerLabel - a handle beats a placeholder', () => {
-  it('prefers the name when there is one', () => {
-    expect(customerLabel(row)).toBe('Dana Cohen');
-  });
-
-  it('falls back to the phone, which on WhatsApp is how they are known', () => {
-    expect(customerLabel({ ...row, displayName: null })).toBe('+972500000000');
-  });
-
-  it('falls back to email, then to the channel handle', () => {
-    expect(
-      customerLabel({ ...row, displayName: null, phone: null, email: 'dana@example.com' }),
-    ).toBe('dana@example.com');
-    expect(
-      customerLabel({ ...row, displayName: null, phone: null, email: null, externalId: 'psid-9' }),
-    ).toBe('psid-9');
-  });
-
-  it('returns null rather than a placeholder when there is genuinely nothing', () => {
-    // The caller says so in words; inventing "Unknown" here would make an
-    // absence look like a value.
-    expect(
-      customerLabel({ displayName: '  ', phone: null, email: null, externalId: '' }),
-    ).toBeNull();
   });
 });
 

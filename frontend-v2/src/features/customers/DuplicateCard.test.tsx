@@ -58,7 +58,7 @@ describe('★★ the pair is the server’s', () => {
     const { container } = show();
     expect(screen.getByTestId('duplicate-ig1')).toHaveTextContent('Instagram customer');
     expect(screen.getByTestId('duplicate-wa1')).toHaveTextContent('Yael Barak');
-    expect(screen.getByTestId('duplicates')).toHaveTextContent('They share a phone number.');
+    expect(screen.getByTestId('duplicates')).toHaveTextContent('The same phone number.');
     expect(container.innerHTML).not.toContain(IGSID);
     expect(container.innerHTML).not.toContain('+972541111111');
   });
@@ -70,12 +70,11 @@ describe('★★ the pair is the server’s', () => {
   });
 
   it.each([
-    ['same_name', null, 'They have the same name on two channels.'],
-    [
-      'ai_extracted_identifier',
-      { type: 'EMAIL', value: 'd@x.com' },
-      'They share an email address.',
-    ],
+    ['same_name', null, 'The same name on two channels.'],
+    ['similar_name', null, 'Similar names on two channels.'],
+    ['shopify_customer', null, 'An order from the same customer.'],
+    ['ai_extracted_identifier', { type: 'EMAIL', value: 'd@x.com' }, 'The same email address.'],
+    ['unproven_identifier', { type: 'phone', value: '+972500' }, 'The same phone number.'],
     ['something_new', null, 'GOTCHA found something they have in common.'],
   ])('signal %s says why', (signal, identifier, words) => {
     show(pairFromServer({ signal, identifier }));
@@ -92,7 +91,9 @@ describe('★★ suggested, never silent - "Merge them" accepts the suggestion',
     await userEvent.click(screen.getByTestId('merge-confirm'));
     expect(acceptSuggestion).toHaveBeenCalledWith('ig1', 'wa1');
     expect(markNotSame).not.toHaveBeenCalled();
-    expect(screen.getByTestId('merge-done')).toHaveTextContent('Merged.');
+    expect(screen.getByTestId('merge-done')).toHaveTextContent(
+      'Done. They now show as one person.',
+    );
     expect(refresh).toHaveBeenCalled();
   });
 
@@ -144,5 +145,30 @@ describe('★★ 04’s "Not the same" (conversation e5a56fd3) - remembered, nev
     expect(screen.getByTestId('not-same-problem')).toHaveTextContent(words);
     expect(screen.queryByTestId('not-same-done')).toBeNull();
     expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe('★ it links, it does not merge fields (supervisor, 2026-10-11)', () => {
+  it('the card promises one person and every message kept - never a merge of their details', () => {
+    show(pairFromServer({ signal: 'same_name', identifier: null }));
+    const card = screen.getByTestId('duplicates');
+    expect(card).toHaveTextContent("They'll show as one person, and all their messages are kept.");
+    expect(card).not.toHaveTextContent(/Merging/);
+  });
+});
+
+describe('★ the reason in Hebrew is the words agreed (supervisor, 2026-10-11)', () => {
+  it('by signal', async () => {
+    const he = (await import('@/i18n/messages/he/customers.json')).default;
+    expect(he.dupes.why).toMatchObject({
+      similarName: 'שמות דומים בשני ערוצים.',
+      sameName: 'אותו שם בשני ערוצים.',
+      phone: 'אותו מספר טלפון.',
+      email: 'אותה כתובת מייל.',
+      order: 'הזמנה של אותו לקוח.',
+    });
+    expect(he.dupes.keeps).toBe('יוצגו כאדם אחד, וכל ההודעות של שניהם נשמרות.');
+    // A Hebrew loanword is spelled with a geresh, never an ASCII apostrophe.
+    expect(JSON.stringify(he)).not.toMatch(/[\u05D0-\u05EA]'/);
   });
 });

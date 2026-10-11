@@ -185,7 +185,7 @@ describe('★★ 04’s suggested pairs - the server’s shape, a bad item left 
 
   it('what they share: the name, a phone or an email, in either case', () => {
     const [link, legacy] = identitySuggestionsSchema.parse([LINK_ITEM, LEGACY_ITEM]);
-    expect(link && suggestionMatch(link)).toBe('name');
+    expect(link && suggestionMatch(link)).toBe('sameName');
     expect(legacy && suggestionMatch(legacy)).toBe('email');
     const [typed] = identitySuggestionsSchema.parse([
       {

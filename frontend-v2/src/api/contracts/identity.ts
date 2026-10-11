@@ -180,8 +180,13 @@ export const identitySuggestionsSchema = z.array(z.unknown()).transform((rows) =
  * another channel, or a phone or an email (`identifier.type` is lower case
  * on a link record and upper case on an older AI-written row).
  */
-export function suggestionMatch(s: IdentitySuggestion): 'name' | 'phone' | 'email' | 'other' {
-  if (s.signal === 'same_name') return 'name';
+export function suggestionMatch(
+  s: IdentitySuggestion,
+): 'sameName' | 'similarName' | 'phone' | 'email' | 'order' | 'other' {
+  // Backend's LinkSignal (identity-links.ts): the reason, said in our words.
+  if (s.signal === 'same_name') return 'sameName';
+  if (s.signal === 'similar_name') return 'similarName';
+  if (s.signal === 'shopify_customer') return 'order';
   const type = s.identifier?.type.toLowerCase();
   return type === 'phone' || type === 'email' ? type : 'other';
 }

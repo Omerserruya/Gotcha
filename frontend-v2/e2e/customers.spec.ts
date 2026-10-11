@@ -384,31 +384,29 @@ for (const size of SIZES) {
     });
 
     /*
-     * 2c · THE LIMIT OF THE COLLAPSE, STATED.
+     * 2c · WHAT THE LIST CANNOT YET JOIN, STATED.
      *
-     * The unifier that populates `personId` matches on **phone only**, and
-     * Instagram contacts have no phone — `externalId` there is an opaque
-     * page-scoped id. So one person on two channels is two rows and will
-     * stay two rows.
+     * Since Backend 83579ac8 GOTCHA joins two entries on its own when it has
+     * proof (a phone or email it already knows them by) and suggests the rest
+     * ("Two accounts look like one person"). One person on WhatsApp and on
+     * Instagram with no shared proof can still be two rows - and the reader
+     * must not close this screen believing otherwise. The words ride on the
+     * list's count, as its tooltip (02 shows states in the foot, it does not
+     * explain them).
      *
-     * The design's first line is *"One identity per human, however many
-     * channels they use."* That is a missing capability, not a bug, and a
-     * reader must not close this screen believing it works.
+     * ⚠ This test looked for `identity-limit`, a test id nothing has rendered
+     *   since the foot was redrawn - it could not pass (2026-10-11).
      */
-    test('2c · says what the collapse cannot join', async ({ page }) => {
+    test('2c · says what the list cannot yet join', async ({ page }) => {
       if (onlyOneProject()) return;
 
       await openCustomers(page, 'en');
 
-      const limit = page.getByTestId('identity-limit');
-      await expect(limit).toBeVisible();
-      /*
-       * One line on 02's footer bar now — 02 shows states, it does not explain
-       * them — and the reason, still specific, is its tooltip.
-       */
-      await expect(limit).toHaveText(/appear twice/i);
-      await expect(limit).toHaveAttribute('title', /same phone number/i);
-      await expect(limit).toHaveAttribute('title', /instagram never provides one/i);
+      const count = page.getByTestId('customer-count');
+      await expect(count).toBeVisible();
+      await expect(count).toHaveAttribute('title', /can appear here twice/i);
+      await expect(count).toHaveAttribute('title', /joins the two on its own when it has proof/i);
+      await expect(count).toHaveAttribute('title', /suggests the rest/i);
 
       await shoot(page, `${size.name}-2c-identity-limit`);
     });

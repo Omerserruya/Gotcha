@@ -72,6 +72,37 @@ describe('★★ 19 - customers, and only the actions that exist', () => {
     });
   });
 
+  it('★★ never a raw Instagram or Messenger id - the list’s own rule (Backend 83579ac8)', async () => {
+    contacts = [
+      {
+        id: 'ig1',
+        displayName: null,
+        phone: null,
+        email: null,
+        externalId: '17841400000000001',
+        channel: 'INSTAGRAM',
+        displayLabel: 'Instagram customer',
+      },
+      {
+        id: 'ms1',
+        displayName: null,
+        phone: null,
+        email: null,
+        externalId: '24000000000000001',
+        channel: 'MESSENGER',
+      },
+    ];
+    const found = await searchPeople('cust');
+    expect(found).toMatchObject({
+      ok: true,
+      people: expect.arrayContaining([
+        expect.objectContaining({ id: 'ig1', name: null, generic: 'INSTAGRAM', handle: null }),
+        expect.objectContaining({ id: 'ms1', name: null, generic: 'MESSENGER', handle: null }),
+      ]),
+    });
+    expect(JSON.stringify(found)).not.toMatch(/17841400000000001|24000000000000001/);
+  });
+
   it('an order number asks the store too; its customer leads, marked by the order', async () => {
     contacts = [];
     order = { contactId: 'k9' };

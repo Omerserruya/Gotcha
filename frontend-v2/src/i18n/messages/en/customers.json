@@ -467,18 +467,20 @@
   "dupes": {
     "title": "Two accounts look like one person",
     "why": {
-      "phone": "They share a phone number.",
-      "email": "They share an email address.",
-      "name": "They have the same name on two channels.",
-      "other": "GOTCHA found something they have in common."
+      "phone": "The same phone number.",
+      "email": "The same email address.",
+      "other": "GOTCHA found something they have in common.",
+      "sameName": "The same name on two channels.",
+      "similarName": "Similar names on two channels.",
+      "order": "An order from the same customer."
     },
-    "keeps": "Merging shows them as one person and keeps every message from both.",
+    "keeps": "They'll show as one person, and all their messages are kept.",
     "merge": "Merge them",
-    "confirm": "Merge these two into one person?",
+    "confirm": "Show these two as one person?",
     "confirmYes": "Yes, merge",
     "cancel": "Cancel",
     "notSame": "Not the same",
-    "done": "Merged. They now show as one person.",
+    "done": "Done. They now show as one person.",
     "failed": {
       "gone": "One of them no longer exists.",
       "not_same": "These two were marked as different people, so they weren't merged.",

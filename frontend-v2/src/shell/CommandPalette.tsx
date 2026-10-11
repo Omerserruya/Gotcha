@@ -65,6 +65,7 @@ export function CommandPalette() {
   const common = useTranslations('common');
   const tch = useTranslations('channels');
   const tin = useTranslations('inbox');
+  const tgeneric = useTranslations('customers.list.generic');
   const router = useRouter();
   const locale = useLocale();
   const { canSee } = usePermissions();
@@ -169,10 +170,16 @@ export function CommandPalette() {
         group: 'go' as const,
         label: person.byOrder
           ? tp('order', { number: person.byOrder.replace(/^#/, '') })
-          : (shown(person.name) ?? ltr(person.handle) ?? tp('someone')),
+          : (shown(person.name) ??
+            (person.generic ? tgeneric(person.generic) : null) ??
+            ltr(person.handle) ??
+            tp('someone')),
         // A handle is an LTR island: a phone in a Hebrew line lays out backwards otherwise.
         meta: person.byOrder
-          ? (shown(person.name) ?? ltr(person.handle) ?? tp('customer'))
+          ? (shown(person.name) ??
+            (person.generic ? tgeneric(person.generic) : null) ??
+            ltr(person.handle) ??
+            tp('customer'))
           : [tp('customer'), ltr(person.handle)].filter(Boolean).join(' · '),
         href: `/customers/${encodeURIComponent(person.id)}`,
       })),
@@ -217,7 +224,7 @@ export function CommandPalette() {
         href: `/home?ask=${encodeURIComponent(typed)}`,
       },
     ];
-  }, [actions, common, hits, locale, people, query, screens, tch, tin, tp]);
+  }, [actions, common, hits, locale, people, query, screens, tch, tgeneric, tin, tp]);
 
   if (!open) return null;
 

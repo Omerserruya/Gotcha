@@ -8,9 +8,11 @@ import { byOrderSchema, looksLikeOrderNumber } from '@/api/contracts/customer-fa
 import {
   collapseToPeople,
   customerListSchema,
-  customerLabel,
   customerRowSchema,
+  labelOfPerson,
+  reachHandle,
   type CustomerRow,
+  type GenericPerson,
 } from '@/api/contracts/customers';
 import { approvalEndpoints, customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
 import { quoteOf, type QuoteKind } from '@/api/contracts/message-kind';
@@ -98,6 +100,11 @@ export async function searchConversations(
 export type PersonHit = {
   readonly id: string;
   readonly name: string | null;
+  /**
+   * A nameless customer, said by their channel in the reader's words
+   * ("Instagram customer"). Never a raw platform id: `personLabel`'s rule.
+   */
+  readonly generic: GenericPerson | null;
   readonly handle: string | null;
   /** Found by an order number (`by-order`), not by name/phone/email. */
   readonly byOrder: string | null;
@@ -148,8 +155,16 @@ export async function searchPeople(query: string): Promise<
       .slice(0, 5)
       .map(({ primary: row, members }) => ({
         id: row.id,
-        name: customerLabel(row),
-        handle: row.phone ?? row.email ?? (row.externalId || null),
+        ...(() => {
+          // The list's own rule (Backend 83579ac8): never an IG or Messenger id.
+          const label = labelOfPerson(members);
+          return label === null
+            ? { name: null, generic: null }
+            : 'name' in label
+              ? { name: label.name, generic: null }
+              : { name: null, generic: label.generic };
+        })(),
+        handle: reachHandle(row),
         byOrder: ordered && members.some((r) => r.id === ordered.id) ? search : null,
       }));
     const ids = new Set(rows.map((row) => row.id));
