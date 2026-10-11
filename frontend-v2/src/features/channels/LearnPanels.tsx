@@ -13,6 +13,7 @@ import {
   type ImportedThread,
 } from '@/api/contracts/knowledge-candidates';
 import drawer from '@/design-system/styles/drawer.module.css';
+import rowLink from '@/design-system/styles/row-link.module.css';
 import { Link } from '@/i18n/navigation';
 
 import { RerunFailed, ReportFoot } from './ReportFootActions';
@@ -692,7 +693,14 @@ export async function ChatsPanel({
             </p>
             <ul className={styles.chatsList}>
               {evidence.map((e, i) => (
-                <li key={i} className={styles.chatsItem} data-testid={`chats-item-${i}`}>
+                <li
+                  key={i}
+                  // With a chat to open, the whole item opens it.
+                  className={[styles.chatsItem, e.conversationId ? rowLink.row : '']
+                    .join(' ')
+                    .trim()}
+                  data-testid={`chats-item-${i}`}
+                >
                   <span className={styles.chatWho}>
                     {e.occurredAt ? when.format(new Date(e.occurredAt)) : '-'}
                   </span>
@@ -707,7 +715,7 @@ export async function ChatsPanel({
                   {e.conversationId ? (
                     <Link
                       href={chatsHref(status.id, candidate.id, e.conversationId)}
-                      className={styles.chatsOpen}
+                      className={`${styles.chatsOpen} ${rowLink.link}`}
                       data-testid={`chats-open-${i}`}
                       scroll={false}
                     >
@@ -767,7 +775,10 @@ export async function ProfilesPanel({
             return (
               <li
                 key={customer.id}
-                className={styles.chatsItem}
+                // With a customer to open, the whole item opens them.
+                className={[styles.chatsItem, customer.contactId ? rowLink.row : '']
+                  .join(' ')
+                  .trim()}
                 data-testid={`profile-${customer.id}`}
               >
                 <span className={styles.reportQuestion}>
@@ -810,7 +821,7 @@ export async function ProfilesPanel({
                 {customer.contactId ? (
                   <Link
                     href={`/customers/${customer.contactId}`}
-                    className={styles.chatsOpen}
+                    className={`${styles.chatsOpen} ${rowLink.link}`}
                     data-testid={`profile-open-${customer.id}`}
                   >
                     {t('open')}

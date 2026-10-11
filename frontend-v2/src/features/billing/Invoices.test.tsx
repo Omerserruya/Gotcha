@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { invoiceSchema, type Invoice } from '@/api/contracts/invoices';
 import messages from '@/i18n/messages/en/billing.json';
+import { expectPlainRow, expectStretchedRow } from '@/test/stretched-row';
 
 import { Invoices } from './BillingSections';
 
@@ -97,5 +98,19 @@ describe('⚠⚠ the receipt link is the validated one, not the provider’s str
   it('★ and a paid invoice with nothing at all still reads as an anomaly', async () => {
     await show(invoice({ id: 'x', providerPdfUrl: null }));
     expect(screen.getByTestId('no-receipt-x')).toHaveTextContent(/hasn't arrived/i);
+  });
+});
+
+describe('★★ an invoice with a receipt: the whole row opens it (Omer, 2026-10-11)', () => {
+  it('with a receipt: one stretched Receipt, the only stop; without one, nothing stretched', async () => {
+    await show(
+      invoice({ id: 'r', providerPdfUrl: 'https://pay.example/r.pdf' }),
+      invoice({ id: 'f', status: 'FAILED' }),
+    );
+    expect(expectStretchedRow(screen.getByTestId('invoice-r'))).toHaveAttribute(
+      'href',
+      'https://pay.example/r.pdf',
+    );
+    expectPlainRow(screen.getByTestId('invoice-f'));
   });
 });

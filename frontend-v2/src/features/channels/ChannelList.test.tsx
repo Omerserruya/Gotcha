@@ -11,6 +11,8 @@ import channels from '@/i18n/messages/en/channels.json';
 import common from '@/i18n/messages/en/common.json';
 import heChannels from '@/i18n/messages/he/channels.json';
 import heCommon from '@/i18n/messages/he/common.json';
+import rowLink from '@/design-system/styles/row-link.module.css';
+import { expectPlainRow, expectStretchedRow } from '@/test/stretched-row';
 
 /* The page's language, per test: the channel words and the shared error words. */
 const lang = vi.hoisted(() => ({ he: false }));
@@ -466,5 +468,59 @@ describe('★★ a channel’s error in the reader’s words - the platform send
     });
     expect(prefixed).toContain(words);
     expect(prefixed).not.toContain('[SHOPIFY');
+  });
+});
+
+describe('★★ a row with Settings is clickable across its width (Omer, 2026-10-11)', () => {
+  it('WhatsApp’s row and the widget’s: one stretched Settings, the only tab stop', async () => {
+    render(
+      await ChannelList({
+        channels: [channel('w1', 'WHATSAPP')],
+        voice: [],
+        voiceOffered: false,
+        windowDays: 30,
+      }),
+    );
+    expect(expectStretchedRow(screen.getByTestId('channel-w1'))).toBe(
+      screen.getByTestId('channel-settings-w1'),
+    );
+    expect(expectStretchedRow(screen.getByTestId('channel-widget'))).toBe(
+      screen.getByTestId('channel-settings-widget'),
+    );
+  });
+
+  it('★ a troubled row’s chip stays above the overlay, so its words still show on hover', async () => {
+    render(
+      await ChannelList({
+        channels: [
+          channelSchema.parse({
+            id: 'w1',
+            channel: 'WHATSAPP',
+            connectionStatus: 'ERROR',
+            lastError: 'token expired',
+          }),
+        ],
+        voice: [],
+        voiceOffered: false,
+        windowDays: 30,
+      }),
+    );
+    expectStretchedRow(screen.getByTestId('channel-w1'));
+    const chip = screen.getByTestId('channel-status-w1');
+    expect(chip).toHaveAttribute('title');
+    expect(chip.classList.contains(rowLink.above!)).toBe(true);
+  });
+
+  it('⚠ a row whose action is Disconnect is NOT stretched: a click on a row never takes a channel down', async () => {
+    render(
+      await ChannelList({
+        channels: [channel('i1', 'INSTAGRAM')],
+        voice: [],
+        voiceOffered: false,
+        windowDays: 30,
+      }),
+    );
+    expect(screen.getByTestId('channel-disconnect-i1')).toBeInTheDocument();
+    expectPlainRow(screen.getByTestId('channel-i1'));
   });
 });

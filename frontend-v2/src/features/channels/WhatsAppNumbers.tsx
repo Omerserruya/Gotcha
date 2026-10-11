@@ -17,6 +17,7 @@ import {
 
 import styles from './Channels.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
+import rowLink from '@/design-system/styles/row-link.module.css';
 
 /**
  * The resolved translator and locale, passed down rather than re-fetched.
@@ -447,11 +448,12 @@ function NumberRows({ t }: { readonly t: T }) {
   return (
     <>
       <dl className={styles.numberRows}>
-        <div>
+        {/* The whole row leads to Workspace, where the hours are set. */}
+        <div className={rowLink.row}>
           <dt>{t('rows.hours')}</dt>
           <dd>
             {/* The workspace's hours apply; they are set on Workspace. */}
-            <Link href="/settings/workspace" className={styles.numberLink}>
+            <Link href="/settings/workspace" className={`${styles.numberLink} ${rowLink.link}`}>
               {t('rows.hoursWorkspace')}
             </Link>
           </dd>

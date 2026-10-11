@@ -9,6 +9,7 @@ import { billingProfileSchema, paymentMethodSchema } from '@/api/contracts/billi
 import { creditSummarySchema } from '@/api/contracts/credits';
 import { invoiceSchema } from '@/api/contracts/invoices';
 import messages from '@/i18n/messages/en/billing.json';
+import { expectPlainRow, expectStretchedRow } from '@/test/stretched-row';
 
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'billing.overview') =>
@@ -231,5 +232,35 @@ describe('★ 17 - a change already applied is not announced (ported from PlanLi
   it('says NOTHING once the scheduler has applied it', async () => {
     await hero({ ...SCHEDULED, appliedAt: '2026-09-08T00:00:00Z' });
     expect(screen.queryByTestId('plan-pending')).toBeNull();
+  });
+});
+
+describe('★★ the Billing card’s Invoices row opens the list from anywhere on it (Omer, 2026-10-11)', () => {
+  const paid = (id: string) =>
+    invoiceSchema.parse({ id, status: 'PAID', amount: '10.00', currency: 'USD' });
+
+  it('with invoices: "All", stretched, the row’s only stop; the other rows have nothing to open', async () => {
+    render(
+      await BillingCard({
+        profile: billingProfileSchema.parse({ state: 'present' }),
+        methods: [],
+        invoices: [paid('p')],
+      }),
+    );
+    expect(expectStretchedRow(screen.getByTestId('billing-row-invoices'))).toBe(
+      screen.getByTestId('billing-invoices-all'),
+    );
+    expectPlainRow(screen.getByTestId('billing-row-card'));
+  });
+
+  it('no invoices: no "All", so nothing stretched', async () => {
+    render(
+      await BillingCard({
+        profile: billingProfileSchema.parse({ state: 'present' }),
+        methods: [],
+        invoices: [],
+      }),
+    );
+    expectPlainRow(screen.getByTestId('billing-row-invoices'));
   });
 });

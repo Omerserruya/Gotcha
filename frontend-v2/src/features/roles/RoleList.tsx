@@ -4,6 +4,7 @@ import { Lock } from 'lucide-react';
 
 import type { Member } from '@/api/contracts/people';
 import { allowsEverything, isEditable, type Role } from '@/api/contracts/roles';
+import rowLink from '@/design-system/styles/row-link.module.css';
 import { Link } from '@/i18n/navigation';
 
 import { roleDescriptionOf, roleNameOf, type BuiltinWords } from './role-words';
@@ -61,7 +62,8 @@ export async function RoleList({
         {roles.map((role) => (
           <li
             key={role.id}
-            className={styles.row}
+            // A custom role's whole row opens it; a built-in one has nothing to open.
+            className={[styles.row, isEditable(role) ? rowLink.row : ''].join(' ').trim()}
             data-testid={`role-${role.id}`}
             data-builtin={role.isSystem ? 'yes' : 'no'}
           >
@@ -94,8 +96,9 @@ export async function RoleList({
             <span className={styles.colPeople} data-testid={`members-${role.id}`}>
               {members !== null && holders(role).length > 0 ? (
                 // 02: a face per person - initials, 26px; more than four, "+N".
+                // Above the row's link: the names ride on its `title`.
                 <span
-                  className={styles.faces}
+                  className={[styles.faces, rowLink.above].join(' ')}
                   title={holders(role)
                     .map((m) => m.name ?? m.email ?? '')
                     .filter(Boolean)
@@ -129,7 +132,7 @@ export async function RoleList({
               {isEditable(role) ? (
                 <Link
                   href={`/settings/people/roles/edit/${encodeURIComponent(role.id)}`}
-                  className={styles.actionLink}
+                  className={`${styles.actionLink} ${rowLink.link}`}
                   data-testid={`edit-${role.id}`}
                 >
                   {t('edit')}

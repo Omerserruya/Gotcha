@@ -31,6 +31,7 @@ import {
   type WidgetInstall,
 } from '@/api/contracts/website-widget';
 import { UnavailableStatus } from '@/design-system/primitives/unavailable/Unavailable';
+import rowLink from '@/design-system/styles/row-link.module.css';
 import { Link } from '@/i18n/navigation';
 
 /**
@@ -162,10 +163,16 @@ export async function ChannelList({
           }
 
           const troubled = isTroubled(row);
+          /*
+            WhatsApp's whole row opens its Settings. A row whose action is
+            Disconnect stays as it is: a click anywhere on a row must never
+            start taking a channel down.
+          */
+          const opens = row.channel === 'WHATSAPP';
           return (
             <li
               key={row.id}
-              className={styles.row}
+              className={[styles.row, opens ? rowLink.row : ''].join(' ').trim()}
               data-testid={`channel-${row.id}`}
               data-kind="connected"
               data-troubled={troubled ? 'yes' : 'no'}
@@ -187,7 +194,12 @@ export async function ChannelList({
               </div>
 
               <span
-                className={[styles.status, troubled ? styles.statusTroubled : styles.statusGood]
+                className={[
+                  styles.status,
+                  troubled ? styles.statusTroubled : styles.statusGood,
+                  // Above the row's link while it carries words on its `title`.
+                  opens && row.error ? rowLink.above : '',
+                ]
                   .join(' ')
                   .trim()}
                 data-testid={`channel-status-${row.id}`}
@@ -200,10 +212,10 @@ export async function ChannelList({
               </span>
 
               {/* 02's "Settings" on the row: WhatsApp's numbers, health and repairs (13b). */}
-              {row.channel === 'WHATSAPP' ? (
+              {opens ? (
                 <Link
                   href={{ pathname: '/settings/channels', query: { panel: 'whatsapp' } }}
-                  className={styles.settingsLink}
+                  className={`${styles.settingsLink} ${rowLink.link}`}
                   data-testid={`channel-settings-${row.id}`}
                 >
                   {t('rowSettings')}
@@ -300,7 +312,8 @@ function WidgetListRow({
   const live = row.parts.length === 0 ? false : install ? isLive(install) : null;
   return (
     <li
-      className={styles.row}
+      // The whole row opens the widget's settings.
+      className={`${styles.row} ${rowLink.row}`}
       data-testid="channel-widget"
       data-kind="widget"
       data-troubled={troubled ? 'yes' : 'no'}
@@ -317,6 +330,8 @@ function WidgetListRow({
           styles.status,
           // Not live yet is a step to take, not a fault: neither green nor alarmed.
           troubled ? styles.statusTroubled : live === false ? '' : styles.statusGood,
+          // Above the row's link while it carries words on its `title`.
+          troubled?.error ? rowLink.above : '',
         ]
           .join(' ')
           .trim()}
@@ -335,7 +350,7 @@ function WidgetListRow({
       </span>
       <Link
         href={WIDGET_PATH}
-        className={styles.settingsLink}
+        className={`${styles.settingsLink} ${rowLink.link}`}
         data-testid="channel-settings-widget"
       >
         {t('rowSettings')}

@@ -1,5 +1,6 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 
+import rowLink from '@/design-system/styles/row-link.module.css';
 import { Link } from '@/i18n/navigation';
 
 import {
@@ -156,7 +157,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
           */}
           <ul className={styles.parts}>
             <li>
-              <article className={styles.part} data-testid="core-both-identity">
+              <article className={`${styles.part} ${rowLink.row}`} data-testid="core-both-identity">
                 <div className={styles.partMain}>
                   <p className={styles.partName}>
                     {t('both.identity')}
@@ -165,7 +166,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
                 </div>
                 <div className={styles.partControl}>
                   {crm?.elected ? (
-                    <span className={styles.system} title={t('writeback.crmDefault')}>
+                    <span className={rowLink.above} title={t('writeback.crmDefault')}>
                       {crm.elected.name}
                     </span>
                   ) : (
@@ -176,7 +177,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
                 {/* 14e: both rows open the across-both drawer. */}
                 <Link
                   href={{ pathname: '/settings/systems', query: { panel: 'across' } }}
-                  className={styles.open}
+                  className={`${styles.open} ${rowLink.link}`}
                   aria-label={t('openAcross')}
                   data-testid="core-open-across-identity"
                   scroll={false}
@@ -186,7 +187,10 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
               </article>
             </li>
             <li>
-              <article className={styles.part} data-testid="core-both-writeback">
+              <article
+                className={`${styles.part} ${rowLink.row}`}
+                data-testid="core-both-writeback"
+              >
                 <div className={styles.partMain}>
                   <p className={styles.partName}>
                     {t('both.writeback')}
@@ -195,7 +199,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
                 </div>
                 <div className={styles.partControl}>
                   {crm?.elected ? (
-                    <span className={styles.system} title={t('writeback.sourceOfTruth')}>
+                    <span className={rowLink.above} title={t('writeback.sourceOfTruth')}>
                       {crm.elected.name}
                     </span>
                   ) : (
@@ -206,7 +210,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
                 {/* 14e: both rows open the across-both drawer. */}
                 <Link
                   href={{ pathname: '/settings/systems', query: { panel: 'across' } }}
-                  className={styles.open}
+                  className={`${styles.open} ${rowLink.link}`}
                   aria-label={t('openAcross')}
                   data-testid="core-open-across-writeback"
                   scroll={false}
@@ -457,7 +461,12 @@ function Part({
     : null;
 
   return (
-    <article className={styles.part} data-testid={`core-part-${part.role}`} data-state={state}>
+    // 14c / 14d: the whole row opens its part's drawer; the choice in it stays a choice.
+    <article
+      className={`${styles.part} ${rowLink.row}`}
+      data-testid={`core-part-${part.role}`}
+      data-state={state}
+    >
       <div className={styles.partMain}>
         <p className={styles.partName}>
           {t(`part.${part.role}`)}
@@ -482,7 +491,7 @@ function Part({
         The system playing the part: the choice ONLY where the server would
         accept it (14c); otherwise who plays it, or "-" when nobody does.
       */}
-      <div className={styles.partControl}>
+      <div className={[styles.partControl, electable(part) ? rowLink.above : ''].join(' ').trim()}>
         {electable(part) ? (
           <ElectPart part={part} />
         ) : part.elected ? (
@@ -497,7 +506,8 @@ function Part({
 
       {/* 02's state chip, from the same reading as the sentence it carries. */}
       <span
-        className={styles.chip}
+        // Above the row's link: the state's sentence rides on its `title`.
+        className={`${styles.chip} ${rowLink.above}`}
         data-tone={CHIP_TONE[state]}
         title={[explain, unmappedWhy, where].filter(Boolean).join(' ')}
         data-testid={`core-chip-${part.role}`}
@@ -507,7 +517,7 @@ function Part({
       {/* 14c / 14d: the row opens its part's drawer. */}
       <Link
         href={{ pathname: '/settings/systems', query: { part: part.role } }}
-        className={styles.open}
+        className={`${styles.open} ${rowLink.link}`}
         aria-label={t('open', { part: t(`part.${part.role}`) })}
         data-testid={`core-open-${part.role}`}
         scroll={false}

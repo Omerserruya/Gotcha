@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { importStatusSchema } from '@/api/contracts/historical-import';
 import { candidateSchema } from '@/api/contracts/knowledge-candidates';
 import messages from '@/i18n/messages/en/channels.json';
+import { expectPlainRow, expectStretchedRow } from '@/test/stretched-row';
 
 /* The decisions are a client component with their own tests; here, what each card is given. */
 vi.mock('./SuggestionActions', () => ({
@@ -624,5 +625,49 @@ describe('★★ 13f "Preview five" - five customers, as GOTCHA remembers them',
     one.unmount();
     render(await ProfilesPanel({ status: status(), profiles: [] }));
     expect(screen.getByTestId('profiles-empty')).toBeInTheDocument();
+  });
+});
+
+describe('★★ an exchange or a customer with something to open: the whole item opens it (Omer, 2026-10-11)', () => {
+  it('a chat with a conversation: its Open, stretched, the only stop; one without is left as it is', async () => {
+    render(
+      await ChatsPanel({
+        status: status({ stage: 'ready' }),
+        candidate: candidate({ id: 'c7' }),
+        evidence: [
+          { question: 'q', answer: 'a', occurredAt: null, variantKey: null, conversationId: 'v1' },
+          { question: 'q', answer: 'a', occurredAt: null, variantKey: null, conversationId: null },
+        ],
+        open: null,
+        thread: null,
+      }),
+    );
+    expect(expectStretchedRow(screen.getByTestId('chats-item-0'))).toBe(
+      screen.getByTestId('chats-open-0'),
+    );
+    expectPlainRow(screen.getByTestId('chats-item-1'));
+  });
+
+  it('a customer with a contact: its Open, stretched, the only stop; one without is left as it is', async () => {
+    const customer = (id: string, contactId: string | null) => ({
+      id,
+      displayName: 'Dana',
+      normalizedPhone: '972541234567',
+      contactId,
+      messageCount: 1,
+    });
+    render(
+      await ProfilesPanel({
+        status: status({ stage: 'ready' }),
+        profiles: [
+          { customer: customer('h1', 'k1'), memory: 'none' },
+          { customer: customer('h2', null), memory: 'none' },
+        ],
+      }),
+    );
+    expect(expectStretchedRow(screen.getByTestId('profile-h1'))).toBe(
+      screen.getByTestId('profile-open-h1'),
+    );
+    expectPlainRow(screen.getByTestId('profile-h2'));
   });
 });

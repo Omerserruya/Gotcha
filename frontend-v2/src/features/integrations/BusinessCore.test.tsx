@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { businessCoreSchema } from '@/api/contracts/business-core';
 import messages from '@/i18n/messages/en/business-core.json';
+import rowLink from '@/design-system/styles/row-link.module.css';
+import { expectStretchedRow } from '@/test/stretched-row';
 
 import { BusinessCore } from './BusinessCore';
 
@@ -515,5 +517,50 @@ describe('★ Hebrew: the platform’s English prose is not printed under a Hebr
       'connection status is ERROR',
     );
     page.locale = 'en';
+  });
+});
+
+describe('★★ a part is clickable across its row; its choice stays a choice (Omer, 2026-10-11)', () => {
+  const CHOICE = {
+    useCase: null,
+    roles: [
+      {
+        role: 'ecommerce',
+        source: 'unmapped',
+        candidates: [
+          { slug: 'woocommerce', name: 'WooCommerce', connected: true, status: 'CONNECTED' },
+        ],
+      },
+      { role: 'payments', candidates: [] },
+    ],
+  };
+
+  it('a row with nothing to choose: its › is stretched and the only tab stop', async () => {
+    await render14(CHOICE);
+    expect(expectStretchedRow(screen.getByTestId('core-part-payments'))).toBe(
+      screen.getByTestId('core-open-payments'),
+    );
+  });
+
+  it('★ a row with the system picker: the › and the picker, each its own stop, the picker above', async () => {
+    await render14(CHOICE);
+    const row = screen.getByTestId('core-part-ecommerce');
+    expect(expectStretchedRow(row, { controls: 1 })).toBe(
+      screen.getByTestId('core-open-ecommerce'),
+    );
+    expect(within(row).getByTestId('core-elect-open-ecommerce')).toBeInTheDocument();
+  });
+
+  it('★ the chip keeps its sentence on hover: it sits above the overlay', async () => {
+    await render14(CHOICE);
+    const chip = screen.getByTestId('core-chip-payments');
+    expect(chip.getAttribute('title')).toBeTruthy();
+    expect(chip.classList.contains(rowLink.above!)).toBe(true);
+  });
+
+  it('both across rows: one stretched ›', async () => {
+    await render14(CHOICE);
+    expectStretchedRow(screen.getByTestId('core-both-identity'));
+    expectStretchedRow(screen.getByTestId('core-both-writeback'));
   });
 });

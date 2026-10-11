@@ -11,6 +11,7 @@ import { planNameFor, pricePer, type Plan, type Subscription } from '@/api/contr
 import type { CreditSummary } from '@/api/contracts/credits';
 import { failedInvoices, totalAmount, type Invoice } from '@/api/contracts/invoices';
 import { isStillPending } from '@/api/contracts/pricing';
+import rowLink from '@/design-system/styles/row-link.module.css';
 import { Link } from '@/i18n/navigation';
 
 import styles from './Billing.module.css';
@@ -297,7 +298,16 @@ export async function BillingCard({
             {(present && profile?.billingEmail) || '-'}
           </dd>
         </div>
-        <div className={styles.billingRow} data-testid="billing-row-invoices">
+        <div
+          // With invoices to list, the whole row opens them.
+          className={[
+            styles.billingRow,
+            invoices !== null && invoices.length > 0 ? rowLink.row : '',
+          ]
+            .join(' ')
+            .trim()}
+          data-testid="billing-row-invoices"
+        >
           <dt>{t('billing.invoices')}</dt>
           <dd title={invoices === null ? t('billing.invoicesUnread') : undefined}>
             {invoices === null
@@ -320,7 +330,7 @@ export async function BillingCard({
           {invoices !== null && invoices.length > 0 ? (
             <Link
               href="/settings/billing/invoices"
-              className={styles.billingAll}
+              className={`${styles.billingAll} ${rowLink.link}`}
               data-testid="billing-invoices-all"
             >
               {t('billing.all')}

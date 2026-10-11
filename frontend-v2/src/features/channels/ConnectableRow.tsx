@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
 import type { ChannelType } from '@/api/contracts/channels';
+import rowLink from '@/design-system/styles/row-link.module.css';
 
 import styles from './Channels.module.css';
 import { ChannelTile } from './ChannelTile';
@@ -35,7 +36,8 @@ export function ConnectableRow({
 
   return (
     <li
-      className={[styles.row, styles.rowOpen].join(' ')}
+      // Closed, the whole row is its Connect; open, the panel's controls are the row's.
+      className={[styles.row, styles.rowOpen, rowLink.row].join(' ')}
       data-testid={`channel-connectable-${channel}`}
       data-kind="connectable"
     >
@@ -57,7 +59,7 @@ export function ConnectableRow({
       ) : open ? null : (
         <button
           type="button"
-          className={styles.connectOpen}
+          className={`${styles.connectOpen} ${rowLink.link}`}
           data-testid={`connect-open-${channel}`}
           onClick={() => setOpen(true)}
         >

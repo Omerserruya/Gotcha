@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { numbersResponseSchema } from '@/api/contracts/whatsapp-numbers';
 import messages from '@/i18n/messages/en/channels.json';
+import { expectStretchedRow } from '@/test/stretched-row';
 
 import { WhatsAppNumbers } from './WhatsAppNumbers';
 
@@ -529,5 +530,14 @@ describe('★ what Meta last told us, on the card dev has (Omer, 2026-10-09; Bac
     expect(screen.getByTestId('whatsapp-unprofiled')).toHaveTextContent('No health data');
     expect(screen.queryByTestId('whatsapp-verified-name')).toBeNull();
     expect(screen.queryByTestId('whatsapp-last-checked')).toBeNull();
+  });
+});
+
+describe('★★ a number’s Hours row leads to Workspace from anywhere on it (Omer, 2026-10-11)', () => {
+  it('one stretched link, the row’s only stop', async () => {
+    await renderNumbers({ data: [number()] });
+    const link = screen.getByRole('link', { name: messages.whatsapp.rows.hoursWorkspace });
+    expect(link).toHaveAttribute('href', '/settings/workspace');
+    expect(expectStretchedRow(link.closest('dl > div') as HTMLElement)).toBe(link);
   });
 });

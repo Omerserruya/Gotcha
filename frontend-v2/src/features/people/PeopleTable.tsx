@@ -5,6 +5,8 @@ import type { AgentPresence } from '@/api/contracts/presence';
 
 import { Link } from '@/i18n/navigation';
 
+import rowLink from '@/design-system/styles/row-link.module.css';
+
 import styles from './People.module.css';
 import { buildRoster, type RosterRow } from './roster';
 import { builtinRoleKey } from '@/features/roles/role-words';
@@ -132,6 +134,8 @@ export async function PeopleTable({
               key={row.key}
               className={[
                 styles.row,
+                // A person's whole row opens their drawer (12d); an AI's has nothing to open.
+                row.kind === 'person' ? rowLink.row : '',
                 row.kind === 'ai' ? styles.rowAi : '',
                 row.dormant ? styles.rowDormant : '',
               ]
@@ -152,7 +156,7 @@ export async function PeopleTable({
                   {row.kind === 'person' ? (
                     <Link
                       href={{ pathname: '/settings/people', query: { person: row.id } }}
-                      className={styles.nameLink}
+                      className={`${styles.nameLink} ${rowLink.link}`}
                       data-testid={`person-name-${row.id}`}
                       scroll={false}
                     >

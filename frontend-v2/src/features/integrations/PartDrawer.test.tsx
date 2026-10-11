@@ -8,6 +8,7 @@ import { capabilitySchema } from '@/api/contracts/capabilities';
 import { sentenceCase } from '@/api/contracts/integrations';
 import capabilities from '@/i18n/messages/en/capabilities.json';
 import messages from '@/i18n/messages/en/business-core.json';
+import { expectStretchedRow } from '@/test/stretched-row';
 
 vi.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ refresh: () => undefined }),
@@ -282,5 +283,13 @@ describe('★ action names in the product’s sentence case', () => {
     ['Sync Shopify Orders', 'Sync Shopify orders'],
   ])('%s → %s', (raw, expected) => {
     expect(sentenceCase(raw, 'Shopify')).toBe(expected);
+  });
+});
+
+describe('★★ a system to connect: its whole row is its Connect (Omer, 2026-10-11)', () => {
+  it('WooCommerce, available: one stretched Connect, the row’s only stop', async () => {
+    inIntl(await PartDrawer({ part: store, capabilities: [] }));
+    const link = screen.getByRole('link', { name: 'Connect ↗' });
+    expect(expectStretchedRow(link.closest('li')!)).toBe(link);
   });
 });

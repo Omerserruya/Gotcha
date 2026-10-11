@@ -17,6 +17,7 @@ import {
 } from '@/api/contracts/capabilities';
 import { catalogName, toolSlugOf, type Integration } from '@/api/contracts/integrations';
 import drawer from '@/design-system/styles/drawer.module.css';
+import rowLink from '@/design-system/styles/row-link.module.css';
 import { PermissionChoice } from '@/features/capabilities/PermissionChoice';
 import { Link } from '@/i18n/navigation';
 
@@ -122,11 +123,12 @@ export async function PartDrawer({
           <h4 className={styles.drawerEyebrow}>{t('drawer.available')}</h4>
           <ul className={styles.drawerList}>
             {available.map((c) => (
-              <li key={c.slug} className={styles.drawerListRow}>
+              // The whole row is its Connect.
+              <li key={c.slug} className={`${styles.drawerListRow} ${rowLink.row}`}>
                 <span>{c.name}</span>
                 <Link
                   href={{ pathname: '/studio/capabilities', query: { system: c.slug } }}
-                  className={styles.drawerLink}
+                  className={`${styles.drawerLink} ${rowLink.link}`}
                 >
                   {t('drawer.connect')}
                 </Link>

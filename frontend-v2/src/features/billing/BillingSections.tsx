@@ -8,6 +8,8 @@ import {
   type Invoice,
 } from '@/api/contracts/invoices';
 
+import rowLink from '@/design-system/styles/row-link.module.css';
+
 import styles from './Billing.module.css';
 
 /**
@@ -83,7 +85,14 @@ export async function Invoices({ invoices }: { readonly invoices: readonly Invoi
           const receipt = receiptHref(invoice);
           const when = invoice.issuedAt ?? invoice.createdAt;
           return (
-            <li key={invoice.id} className={styles.invoice} data-testid={`invoice-${invoice.id}`}>
+            <li
+              key={invoice.id}
+              // With a receipt, the whole row opens it.
+              className={[styles.invoice, absence === null && receipt !== null ? rowLink.row : '']
+                .join(' ')
+                .trim()}
+              data-testid={`invoice-${invoice.id}`}
+            >
               <span className={styles.invoiceWhen}>
                 {when ? day.format(new Date(when)) : t('invoices.undated')}
               </span>
@@ -123,7 +132,7 @@ export async function Invoices({ invoices }: { readonly invoices: readonly Invoi
                 the last row to hand somebody a receipt for.
               */}
               {absence === null && receipt !== null ? (
-                <a className={styles.invoiceReceipt} href={receipt}>
+                <a className={`${styles.invoiceReceipt} ${rowLink.link}`} href={receipt}>
                   {t('invoices.receipt')}
                 </a>
               ) : (

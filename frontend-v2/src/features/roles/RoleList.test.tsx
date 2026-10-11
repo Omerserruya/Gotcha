@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { memberSchema } from '@/api/contracts/people';
 import { roleSchema } from '@/api/contracts/roles';
 import roles from '@/i18n/messages/en/roles.json';
+import rowLink from '@/design-system/styles/row-link.module.css';
+import { expectPlainRow, expectStretchedRow } from '@/test/stretched-row';
 
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'roles') =>
@@ -126,5 +128,32 @@ describe('★★ a built-in role in the reader’s words - by its key', () => {
     // A custom role keeps the name its owner typed - even "Admin".
     expect(screen.getByTestId('role-w')).toHaveTextContent(/^Admin/);
     expect(screen.getByTestId('allows-w')).toHaveTextContent('Ours.');
+  });
+});
+
+describe('★★ a custom role’s whole row opens it (Omer, 2026-10-11)', () => {
+  it('custom: Edit, stretched, the only tab stop; built-in: nothing to open, nothing stretched', async () => {
+    render(
+      await RoleList({
+        roles: [
+          role({ id: 'w', name: 'Wholesale rep' }),
+          role({ id: 'admin', name: 'Admin', isSystem: true }),
+        ],
+        members: [memberSchema.parse({ id: 'm', name: 'Maya Cohen', roleId: 'w' })],
+      }),
+    );
+    expect(expectStretchedRow(screen.getByTestId('role-w'))).toBe(screen.getByTestId('edit-w'));
+    expectPlainRow(screen.getByTestId('role-admin'));
+  });
+
+  it('★ the faces keep their names on hover: above the overlay', async () => {
+    render(
+      await RoleList({
+        roles: [role({ id: 'w', name: 'Wholesale rep' })],
+        members: [memberSchema.parse({ id: 'm', name: 'Maya Cohen', roleId: 'w' })],
+      }),
+    );
+    const faces = screen.getByTitle('Maya Cohen');
+    expect(faces.classList.contains(rowLink.above!)).toBe(true);
   });
 });
