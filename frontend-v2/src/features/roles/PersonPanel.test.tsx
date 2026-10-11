@@ -374,6 +374,30 @@ describe('★ 12d - 02’s drawer', () => {
   });
 });
 
+describe('★★ 12d - Interface language is personal (Omer, 2026-10-11)', () => {
+  it('the viewer’s own drawer: the row, labelled, holding the switch it is given', async () => {
+    render(
+      await PersonPanel({
+        person: person(),
+        permissions: CATALOG,
+        ownLanguage: <select data-testid="own-switch" />,
+      }),
+    );
+    const row = screen.getByTestId('person-language');
+    expect(row.tagName).toBe('LABEL');
+    expect(row).toHaveTextContent(/^Interface language/);
+    expect(row).toContainElement(screen.getByTestId('own-switch'));
+    // The label names the control.
+    expect(screen.getByLabelText('Interface language')).toBe(screen.getByTestId('own-switch'));
+  });
+
+  it('⚠ anyone else’s: no row at all - the member API serves no locale, so no guess', async () => {
+    await renderPanel();
+    expect(screen.queryByTestId('person-language')).toBeNull();
+    expect(screen.queryByText('Interface language')).toBeNull();
+  });
+});
+
 describe('★ 12d corrections (measurement of 9121d4f)', () => {
   it('"Extra permissions" is a section, and the footer’s Save is drawn not live', async () => {
     await renderPanel();

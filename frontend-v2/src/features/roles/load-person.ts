@@ -1,7 +1,8 @@
 import 'server-only';
 
+import { currentUserSchema } from '@/api/contracts/identity';
 import { personDetailSchema, type Person } from '@/api/contracts/roles';
-import { permissionEndpoints } from '@/api/endpoints/registry';
+import { authEndpoints, permissionEndpoints } from '@/api/endpoints/registry';
 import { serverApi } from '@/api/client/server-api';
 import { logger } from '@/observability/logger';
 
@@ -21,6 +22,21 @@ export async function loadPerson(userId: string): Promise<Person | null> {
     });
   } catch (cause) {
     logger.warn('person.load_failed', { cause, userId });
+    return null;
+  }
+}
+
+/**
+ * Who is looking - `/auth/me`'s `user.id`, the same `User.id` the member
+ * routes use - so 12d knows when the drawer is the viewer's OWN. `null` when
+ * unread: then no drawer is taken to be theirs.
+ */
+export async function loadViewerId(): Promise<string | null> {
+  try {
+    const me = await serverApi().get({ endpoint: authEndpoints.me(), payload: currentUserSchema });
+    return me.user.id;
+  } catch (cause) {
+    logger.warn('person.me_failed', { cause });
     return null;
   }
 }

@@ -1,4 +1,5 @@
 import { getLocale, getTimeZone, getTranslations } from 'next-intl/server';
+import type { ReactNode } from 'react';
 
 import type { PermissionDef } from '@/api/contracts/permission-catalog';
 import type { Member } from '@/api/contracts/people';
@@ -30,6 +31,7 @@ export async function PersonPanel({
   member = null,
   role = null,
   roles = null,
+  ownLanguage = null,
 }: {
   readonly person: Person;
   readonly permissions: readonly PermissionDef[];
@@ -39,6 +41,15 @@ export async function PersonPanel({
   readonly role?: Role | null;
   /** Every role, to change to; null when the list could not be read. */
   readonly roles?: readonly Role[] | null;
+  /**
+   * 12d's "Interface language" - the viewer's OWN switch, passed only when
+   * this drawer is theirs (the page composes it from the shell, which a
+   * feature may not import). Anyone else's is not drawn: the language is
+   * personal, and the member API serves no one's `locale` (auth
+   * permissions.ts `/users` and `/users/:userId`), so there is nothing to
+   * show but a guess.
+   */
+  readonly ownLanguage?: ReactNode;
 }) {
   const t = await getTranslations('roles');
   const locale = await getLocale();
@@ -122,12 +133,12 @@ export async function PersonPanel({
               -
             </span>
           </div>
-          <div className={drawer.field}>
-            <span className={drawer.fieldLabel}>{t('person.language')}</span>
-            <span className={drawer.box} aria-disabled="true" title={noField}>
-              -
-            </span>
-          </div>
+          {ownLanguage ? (
+            <label className={drawer.field} data-testid="person-language">
+              <span className={drawer.fieldLabel}>{t('person.language')}</span>
+              {ownLanguage}
+            </label>
+          ) : null}
         </div>
 
         <h3 className={drawer.sectionTitle}>{t('person.role')}</h3>

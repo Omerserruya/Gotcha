@@ -40,19 +40,29 @@ vi.mock('@/shell/Drawer', () => ({
     </aside>
   ),
 }));
-const { stub, loadPerson } = vi.hoisted(() => ({
+const { stub, loadPerson, loadViewerId } = vi.hoisted(() => ({
   stub: (id: string) => (props: Record<string, unknown>) => (
     <div data-testid={id} data-props={JSON.stringify(Object.keys(props).sort())} />
   ),
   loadPerson: vi.fn(),
+  loadViewerId: vi.fn(),
 }));
 vi.mock('@/features/people/InviteForm', () => ({ InviteForm: stub('invite') }));
 vi.mock('@/features/people/PeopleTabs', () => ({ PeopleTabs: stub('tabs') }));
 vi.mock('@/features/people/PeopleTable', () => ({ PeopleTable: stub('table') }));
 vi.mock('@/features/people/TeamCards', () => ({ TeamCards: stub('teams') }));
-vi.mock('@/features/roles/PersonPanel', () => ({ PersonPanel: stub('person-panel') }));
+vi.mock('@/features/roles/PersonPanel', () => ({
+  PersonPanel: ({ ownLanguage }: { ownLanguage?: ReactNode }) => (
+    <div data-testid="person-panel">
+      {ownLanguage ? <div data-testid="own-language">{ownLanguage}</div> : null}
+    </div>
+  ),
+}));
+vi.mock('@/shell/InterfaceLanguageSelect', () => ({
+  InterfaceLanguageSelect: () => <select data-testid="interface-language-select" />,
+}));
 vi.mock('@/features/roles/GrantPicker', () => ({ GrantPicker: stub('grant-picker') }));
-vi.mock('@/features/roles/load-person', () => ({ loadPerson }));
+vi.mock('@/features/roles/load-person', () => ({ loadPerson, loadViewerId }));
 vi.mock('@/features/roles/load-catalog', () => ({
   loadCatalog: async () => ({ permissions: [] }),
 }));
@@ -101,6 +111,38 @@ describe('★ 12d over People, 12e over 12d', () => {
     loadPerson.mockResolvedValue(null);
     await open({ person: 'nobody' });
     expect(screen.queryByTestId('drawer-person')).toBeNull();
+  });
+});
+
+describe('★★ 12d - Interface language: the viewer’s own switch, in their own drawer only', () => {
+  it('my own drawer: the switch', async () => {
+    loadPerson.mockResolvedValue(TOMER);
+    loadViewerId.mockResolvedValue('u1');
+    await open({ person: 'u1' });
+    expect(screen.getByTestId('own-language')).toContainElement(
+      screen.getByTestId('interface-language-select'),
+    );
+  });
+
+  it('⚠ someone else’s drawer: nothing - not theirs to set, and not served to show', async () => {
+    loadPerson.mockResolvedValue(TOMER);
+    loadViewerId.mockResolvedValue('u2');
+    await open({ person: 'u1' });
+    expect(screen.getByTestId('person-panel')).toBeInTheDocument();
+    expect(screen.queryByTestId('own-language')).toBeNull();
+  });
+
+  it('⚠ who is looking could not be read: no drawer is taken to be theirs', async () => {
+    loadPerson.mockResolvedValue(TOMER);
+    loadViewerId.mockResolvedValue(null);
+    await open({ person: 'u1' });
+    expect(screen.queryByTestId('own-language')).toBeNull();
+  });
+
+  it('no drawer open: who is looking is not even asked', async () => {
+    loadViewerId.mockClear();
+    await open({});
+    expect(loadViewerId).not.toHaveBeenCalled();
   });
 });
 

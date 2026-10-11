@@ -5,7 +5,7 @@ import { PeopleTabs } from '@/features/people/PeopleTabs';
 import styles from '@/features/people/People.module.css';
 import { GrantPicker } from '@/features/roles/GrantPicker';
 import { loadCatalog } from '@/features/roles/load-catalog';
-import { loadPerson } from '@/features/roles/load-person';
+import { loadPerson, loadViewerId } from '@/features/roles/load-person';
 import { loadRoles } from '@/features/roles/load-roles';
 import { PersonPanel } from '@/features/roles/PersonPanel';
 import { roleNameOf } from '@/features/roles/role-words';
@@ -15,6 +15,7 @@ import { PeopleTable } from '@/features/people/PeopleTable';
 import { TeamCards } from '@/features/people/TeamCards';
 import { pageMetadata } from '@/shell/page-metadata';
 import { Drawer } from '@/shell/Drawer';
+import { InterfaceLanguageSelect } from '@/shell/InterfaceLanguageSelect';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
@@ -44,13 +45,16 @@ export default async function Page({
   const t = await getTranslations('people');
   const tr = await getTranslations('roles');
   const params = (await searchParams) ?? {};
-  const [{ members, aiEmployees, teams, presence }, roles, person, catalog] = await Promise.all([
-    loadPeople(),
-    loadRoles(),
-    params.person ? loadPerson(params.person) : Promise.resolve(null),
-    // 12e's picker, and the invite's role list ("*" patterns expand against it).
-    params.person || params.invite === '1' ? loadCatalog() : Promise.resolve(null),
-  ]);
+  const [{ members, aiEmployees, teams, presence }, roles, person, catalog, viewerId] =
+    await Promise.all([
+      loadPeople(),
+      loadRoles(),
+      params.person ? loadPerson(params.person) : Promise.resolve(null),
+      // 12e's picker, and the invite's role list ("*" patterns expand against it).
+      params.person || params.invite === '1' ? loadCatalog() : Promise.resolve(null),
+      // 12d: whether the open drawer is the viewer's own.
+      params.person ? loadViewerId() : Promise.resolve(null),
+    ]);
   const member = person ? (members?.find((m) => m.id === person.id) ?? null) : null;
   const role = member?.roleId ? (roles?.find((r) => r.id === member.roleId) ?? null) : null;
   const tab = params.tab === 'teams' ? 'teams' : 'people';
@@ -148,6 +152,10 @@ export default async function Page({
             member={member}
             role={role}
             roles={roles}
+            // Their own interface language, and only theirs: it is personal.
+            ownLanguage={
+              viewerId !== null && person.id === viewerId ? <InterfaceLanguageSelect /> : null
+            }
           />
           {params.grant === '1' ? (
             <GrantPicker

@@ -2,7 +2,7 @@
 
 import { useLocale } from 'next-intl';
 import { unstable_rethrow, useSearchParams } from 'next/navigation';
-import { useRef, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 
 import { isLocale } from '@/i18n/locales';
 import { usePathname, useRouter } from '@/i18n/navigation';
@@ -48,18 +48,21 @@ export function useInterfaceLanguage(): {
   readonly choose: (next: string) => void;
   readonly isPending: boolean;
 } {
-  const current = useLocale();
+  const locale = useLocale();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   /** The language being switched to, until the page is in it. */
   const inFlight = useRef<string | null>(null);
+  /** The same, for the screen: what was chosen reads as chosen while it saves. */
+  const [target, setTarget] = useState<string | null>(null);
 
   function choose(next: string) {
-    if (!isLocale(next) || next === current) return;
-    if (inFlight.current !== null && inFlight.current !== current) return;
+    if (!isLocale(next) || next === locale) return;
+    if (inFlight.current !== null && inFlight.current !== locale) return;
     inFlight.current = next;
+    setTarget(next);
     const query = queryOf(new URLSearchParams(searchParams.toString()));
     startTransition(async () => {
       try {
@@ -74,5 +77,5 @@ export function useInterfaceLanguage(): {
     });
   }
 
-  return { current, choose, isPending };
+  return { current: target ?? locale, choose, isPending };
 }
