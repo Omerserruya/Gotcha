@@ -38,22 +38,53 @@ import { z } from 'zod';
  * lasts until someone removes it, rather than offering a date.
  */
 
-export const roleSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string().nullable().default(null),
-  /** Built-in roles are fixed and cannot be edited or deleted. */
-  isSystem: z.boolean().default(false),
-  /** `admin` · `agent` · `department_manager` · `owner`, when built in. */
-  builtinKey: z.string().nullable().default(null),
-  /** The permission keys this role holds. No amounts - see above. */
-  features: z
-    .array(z.union([z.string(), z.object({ feature: z.string() })]))
-    .default([])
-    .transform((items) => items.map((i) => (typeof i === 'string' ? i : i.feature))),
-  /** `_count.assignments` - how many people wear this role. */
-  memberCount: z.number().default(0),
-});
+/** A list of keys, or nothing: a bad value is no list, never an unread role. */
+const keyList = z
+  .array(z.unknown())
+  .catch([])
+  .default([])
+  .transform((items) => items.filter((i): i is string => typeof i === 'string' && i.length > 0));
+
+export const roleSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string().nullable().default(null),
+    /** Built in: never renamed or deleted (PATCH and DELETE refuse it, 403 SYSTEM_ROLE). */
+    isSystem: z.boolean().default(false),
+    /** `owner` · `department_manager` · `agent` (and the merged `admin`), when built in. */
+    builtinKey: z.string().nullable().default(null),
+    /** The permission keys this role holds, patterns included. No amounts - see above. */
+    features: z
+      .array(z.union([z.string(), z.object({ feature: z.string() })]))
+      .default([])
+      .transform((items) => items.map((i) => (typeof i === 'string' ? i : i.feature))),
+    /** `_count.assignments` - how many people wear this role. */
+    memberCount: z.number().default(0),
+    /**
+     * Can its permissions be changed (auth 30d610da `roleView`)? Unsaid (a
+     * backend before it) or unreadable: a custom role is, a built-in one is
+     * not - what the screen did before. Settled below the object.
+     */
+    editable: z.boolean().optional().catch(undefined),
+    /** A built-in role whose permissions this workspace changed: it has a default to go back to. */
+    customized: z.boolean().catch(false).default(false),
+    /**
+     * Keys this role can NEVER hold, already expanded (`ceilingKeysFor`).
+     * Built-in roles only: a custom role is `[]`, because its cap is its
+     * holder's, decided when it is used.
+     */
+    ceiling: keyList,
+    /** Keys the Owner role always keeps (`OWNER_FLOOR`); `[]` for every other role. */
+    floor: keyList,
+    /** A built-in role's default keys; `null` for a custom role or when unsaid. */
+    defaults: z.array(z.string()).nullable().catch(null).default(null),
+  })
+  .transform((role) => ({
+    ...role,
+    // The merged Admin is never edited, whatever arrives (409 ROLE_MERGED).
+    editable: isMergedAdmin(role) ? false : (role.editable ?? !role.isSystem),
+  }));
 
 export type Role = z.infer<typeof roleSchema>;
 
@@ -74,6 +105,13 @@ export const roleListSchema = z
           builtinKey: z.string().nullable().optional(),
           features: z.array(z.object({ feature: z.string() })).optional(),
           _count: z.object({ assignments: z.number() }).optional(),
+          // auth 30d610da. Read loosely here and judged in `roleSchema`: one
+          // bad value costs that field, never the whole list of roles.
+          editable: z.unknown().optional(),
+          customized: z.unknown().optional(),
+          ceiling: z.unknown().optional(),
+          floor: z.unknown().optional(),
+          defaults: z.unknown().optional(),
         }),
       )
       .default([]),
@@ -88,6 +126,11 @@ export const roleListSchema = z
         builtinKey: r.builtinKey ?? null,
         features: r.features ?? [],
         memberCount: r._count?.assignments ?? 0,
+        editable: r.editable,
+        customized: r.customized,
+        ceiling: r.ceiling,
+        floor: r.floor,
+        defaults: r.defaults,
       }),
     ),
   );
@@ -116,9 +159,23 @@ export function allowsEverything(role: Role): boolean {
   return role.features.includes(WILDCARD_FEATURE);
 }
 
-/** Built-in roles can be copied but never edited or deleted. */
+/**
+ * Can this role's permissions be changed here? The server's word
+ * (`editable`, auth 30d610da): a built-in role is, within its ceiling, unless
+ * the kill switch is on. Its name and description never are, and it is never
+ * deleted - PATCH and DELETE still refuse it (403 SYSTEM_ROLE).
+ */
 export function isEditable(role: Role): boolean {
-  return !role.isSystem;
+  return role.editable;
+}
+
+/**
+ * The Admin role, merged into Owner (auth 30d610da). The list returns it only
+ * while someone still holds it; it is never edited (409 ROLE_MERGED) and
+ * never given (assigning it answers 409 ROLE_MERGED too).
+ */
+export function isMergedAdmin(role: { readonly builtinKey?: string | null }): boolean {
+  return role.builtinKey?.toLowerCase() === 'admin';
 }
 
 /**

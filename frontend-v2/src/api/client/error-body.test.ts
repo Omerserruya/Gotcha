@@ -270,3 +270,33 @@ describe('★★ 679b8812 - ABOVE_OWN_ROLE keeps the keys the caller lacks', () 
     expect(bad.missing).toBeUndefined();
   });
 });
+
+describe('★★ 30d610da - ROLE_CEILING keeps the keys the role can never hold', () => {
+  it('`{ error, code, blocked }` → code and blocked, through the real client', async () => {
+    // The body `PUT /permissions/roles/:id/features` answers, exactly.
+    respond(403, {
+      error: 'This role can never hold these permissions',
+      code: 'ROLE_CEILING',
+      blocked: ['settings:roles:manage', 'settings:workspace:update'],
+    });
+    const caught = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(caught.status).toBe(403);
+    expect(caught.code).toBe('ROLE_CEILING');
+    expect(caught.blocked).toEqual(['settings:roles:manage', 'settings:workspace:update']);
+  });
+
+  it('OWNER_FLOOR names its keys in `missing`; a bad `blocked` costs only itself', async () => {
+    respond(422, {
+      error: 'The Owner role always keeps these permissions',
+      code: 'OWNER_FLOOR',
+      missing: ['settings:billing:manage'],
+    });
+    const floor = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(floor.code).toBe('OWNER_FLOOR');
+    expect(floor.missing).toEqual(['settings:billing:manage']);
+    respond(403, { error: 'x', code: 'ROLE_CEILING', blocked: 'settings' });
+    const bad = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(bad.code).toBe('ROLE_CEILING');
+    expect(bad.blocked).toBeUndefined();
+  });
+});

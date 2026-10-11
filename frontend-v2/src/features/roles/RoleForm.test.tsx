@@ -56,6 +56,11 @@ const role = (id: string, name: string, features: string[]): Role => ({
   builtinKey: null,
   features,
   memberCount: 1,
+  editable: false,
+  customized: false,
+  ceiling: [],
+  floor: [],
+  defaults: null,
 });
 
 const ROLES: readonly Role[] = [
@@ -221,6 +226,11 @@ describe('★★ 12b Edit - one custom role, saved over itself', () => {
     builtinKey: null,
     features: ['crm:contacts:read', 'customer:commerce:refund'],
     memberCount: 2,
+    editable: true,
+    customized: false,
+    ceiling: [],
+    floor: [],
+    defaults: null,
   };
   const renderEdit = () =>
     render(

@@ -110,6 +110,12 @@ export const errorEnvelopeSchema = z.object({
    */
   missing: z.array(z.string()).optional().catch(undefined),
   /**
+   * The keys a built-in role can never hold that an edit tried to give it - a
+   * 403 `ROLE_CEILING` from `PUT /permissions/roles/:id/features` (auth
+   * 30d610da). A sibling of `code`, like `missing`; a bad value is no list.
+   */
+  blocked: z.array(z.string()).optional().catch(undefined),
+  /**
    * ★★ PRESENT ON A FAILURE ONLY WHEN THE CARD WAS ACTUALLY REACHED.
    *
    * `buyCredits` sets it solely from `chargeFor`'s result, so on a refusal it

@@ -5,6 +5,7 @@ import {
   grantSchema,
   isAddition,
   isEditable,
+  isMergedAdmin,
   roleListSchema,
   roleSchema,
 } from './roles';
@@ -43,7 +44,12 @@ describe('a role is a set of feature keys and nothing else', () => {
     const surface = Object.keys(
       roleSchema.parse({ id: 'r1', name: 'Agent', features: ['billing.refund'] }),
     );
-    expect(surface.filter((k) => /limit|cap|max|amount|ceiling/i.test(k))).toEqual([]);
+    expect(surface.filter((k) => /limit|cap|max|amount/i.test(k))).toEqual([]);
+    // `ceiling` (auth 30d610da) is a list of permission KEYS a role can never
+    // hold - never a number, so it cannot be read as an amount.
+    expect(roleSchema.parse({ id: 'r1', name: 'Agent', ceiling: ['a:b:c'] }).ceiling).toEqual([
+      'a:b:c',
+    ]);
   });
 
   it('counts an empty role as allowing nothing rather than failing', () => {
@@ -51,11 +57,39 @@ describe('a role is a set of feature keys and nothing else', () => {
   });
 });
 
-describe('built-in roles can be copied, never changed', () => {
-  it('refuses to call a system role editable', () => {
-    // The route rejects an edit, so an edit control would be a button the
-    // server turns down.
-    expect(isEditable(roleSchema.parse({ id: 'r1', name: 'Admin', isSystem: true }))).toBe(false);
+describe('a built-in role is edited only when the server says so (auth 30d610da)', () => {
+  it('unsaid (a backend before it): a built-in role stays fixed, as it was', () => {
+    // The route rejected an edit then, so an edit control would be a button
+    // the server turns down.
+    expect(isEditable(roleSchema.parse({ id: 'r1', name: 'Owner', isSystem: true }))).toBe(false);
+  });
+
+  it('said: a built-in role with `editable: true` is editable, and one with false is not', () => {
+    const owner = { id: 'o', name: 'Owner', isSystem: true, builtinKey: 'owner' };
+    expect(isEditable(roleSchema.parse({ ...owner, editable: true }))).toBe(true);
+    expect(isEditable(roleSchema.parse({ ...owner, editable: false }))).toBe(false);
+  });
+
+  it('★ garbage in `editable` costs only that field - a built-in role stays fixed', () => {
+    expect(
+      isEditable(roleSchema.parse({ id: 'o', name: 'Owner', isSystem: true, editable: 'yes' })),
+    ).toBe(false);
+    expect(isEditable(roleSchema.parse({ id: 'c', name: 'Desk', editable: 1 }))).toBe(true);
+  });
+
+  it('★ the merged Admin is never editable, whatever arrives (409 ROLE_MERGED)', () => {
+    const admin = roleSchema.parse({
+      id: 'a',
+      name: 'Admin',
+      isSystem: true,
+      builtinKey: 'admin',
+      editable: true,
+    });
+    expect(isEditable(admin)).toBe(false);
+    expect(isMergedAdmin(admin)).toBe(true);
+    expect(isMergedAdmin(roleSchema.parse({ id: 'o', name: 'Owner', builtinKey: 'owner' }))).toBe(
+      false,
+    );
   });
 
   it('allows editing a role the tenant made', () => {
@@ -121,5 +155,99 @@ describe('a wildcard role says what it means, never how many rows it has', () =>
 
   it('reports an empty role as allowing nothing, not everything', () => {
     expect(allowsEverything(roleSchema.parse({ id: 'r3', name: 'New' }))).toBe(false);
+  });
+});
+
+describe('★★ GET /roles (auth 30d610da `roleView`): ceiling, floor, editable, customized, defaults', () => {
+  /** The row `roleView` answers: a Prisma role spread, `features` as `{ feature }` objects. */
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: 'dm',
+    name: 'Department Manager',
+    description: null,
+    isSystem: true,
+    builtinKey: 'department_manager',
+    features: [
+      { id: 'f1', roleId: 'dm', feature: 'conversation:messages:*' },
+      { id: 'f2', roleId: 'dm', feature: 'crm:contacts:read' },
+    ],
+    _count: { assignments: 2 },
+    ...over,
+  });
+
+  it('present: every field read, the features flattened, patterns kept as they are', () => {
+    const [dm] = roleListSchema.parse({
+      data: [
+        row({
+          editable: true,
+          customized: true,
+          ceiling: ['settings:roles:manage', 'settings:workspace:update'],
+          floor: [],
+          defaults: ['conversation:messages:*', 'crm:contacts:read'],
+        }),
+      ],
+    });
+    expect(dm).toMatchObject({
+      editable: true,
+      customized: true,
+      ceiling: ['settings:roles:manage', 'settings:workspace:update'],
+      floor: [],
+      defaults: ['conversation:messages:*', 'crm:contacts:read'],
+      features: ['conversation:messages:*', 'crm:contacts:read'],
+      memberCount: 2,
+    });
+  });
+
+  it('the Owner row carries its floor', () => {
+    const [owner] = roleListSchema.parse({
+      data: [
+        row({
+          id: 'o',
+          builtinKey: 'owner',
+          editable: true,
+          floor: ['settings:roles:manage', 'settings:members:manage', 'settings:billing:manage'],
+        }),
+      ],
+    });
+    expect(owner!.floor).toEqual([
+      'settings:roles:manage',
+      'settings:members:manage',
+      'settings:billing:manage',
+    ]);
+  });
+
+  it('absent (an older backend): built-in fixed, custom editable, nothing limited, no defaults', () => {
+    const [dm, custom] = roleListSchema.parse({
+      data: [row(), row({ id: 'c', name: 'Desk', isSystem: false, builtinKey: null })],
+    });
+    expect(dm).toMatchObject({
+      editable: false,
+      customized: false,
+      ceiling: [],
+      floor: [],
+      defaults: null,
+    });
+    expect(custom).toMatchObject({ editable: true, ceiling: [], floor: [] });
+  });
+
+  it('★ garbage costs only its own field, never the list of roles', () => {
+    const roles = roleListSchema.parse({
+      data: [
+        row({
+          editable: 'true',
+          customized: 'no',
+          ceiling: 'settings:roles:manage',
+          floor: [42, 'settings:roles:manage', null, ''],
+          defaults: [1, 2],
+        }),
+      ],
+    });
+    expect(roles).toHaveLength(1);
+    expect(roles[0]).toMatchObject({
+      editable: false,
+      customized: false,
+      ceiling: [],
+      floor: ['settings:roles:manage'],
+      defaults: null,
+    });
   });
 });

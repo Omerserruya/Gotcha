@@ -128,3 +128,95 @@ export function withLevel(
 export function rowChanged(row: GridRow, a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
   return row.permissions.some((p) => a.has(p.key) !== b.has(p.key));
 }
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════
+ * A ROLE'S PATTERNS, ON THE GRID AND BACK (auth 30d610da: built-ins edit)
+ * ════════════════════════════════════════════════════════════════════════════
+ * Owner holds `*`; Department Manager holds `conversation:messages:*` beside
+ * explicit keys. To edit one, the grid shows what each pattern covers today
+ * (`expandPatterns`), and the save gives back every pattern whose keys are
+ * all still on (`compactPatterns`) - so an untouched pattern stays a standing
+ * instruction that picks up permissions added later, and only a pattern the
+ * editor actually narrowed becomes a list.
+ */
+
+const isPattern = (f: string) => f === '*' || f.endsWith(':*');
+const covers = (pattern: string, key: string) =>
+  pattern === '*' || key.startsWith(pattern.slice(0, -1));
+
+/** The keys a pattern covers in this catalogue; an exact key is itself. */
+function keysOf(feature: string, catalog: readonly string[]): readonly string[] {
+  return isPattern(feature) ? catalog.filter((key) => covers(feature, key)) : [feature];
+}
+
+/**
+ * A role's keys with every pattern expanded against the catalogue. An exact
+ * key the catalogue does not list is kept: dropping it would change the role
+ * without anyone choosing to.
+ */
+export function expandPatterns(
+  features: readonly string[],
+  catalog: readonly string[],
+): readonly string[] {
+  return [...new Set(features.flatMap((f) => keysOf(f, catalog)))];
+}
+
+/**
+ * The list to save: each pattern the role held, while every key it covers is
+ * still on; everything else as keys. A pattern that covers nothing in this
+ * catalogue is kept as it was - the grid could not show it, so it was not
+ * changed.
+ */
+export function compactPatterns(
+  selected: readonly string[],
+  held: readonly string[],
+  catalog: readonly string[],
+): readonly string[] {
+  const on = new Set(selected);
+  const kept: string[] = [];
+  const consumed = new Set<string>();
+  for (const pattern of held.filter(isPattern)) {
+    const keys = keysOf(pattern, catalog);
+    if (keys.every((key) => on.has(key))) {
+      kept.push(pattern);
+      for (const key of keys) consumed.add(key);
+    }
+  }
+  return [...kept, ...selected.filter((key) => !consumed.has(key))];
+}
+
+/**
+ * Why a control in this role's grid cannot be changed: a key its `ceiling`
+ * says the role can never hold, or one its `floor` says the Owner always
+ * keeps. The ceiling is said first - a key in both would be the server's
+ * contradiction, and "can't have" is the one it enforces before the floor.
+ */
+export type Lock = 'ceiling' | 'floor';
+
+export interface RoleLimits {
+  readonly ceiling: ReadonlySet<string>;
+  readonly floor: ReadonlySet<string>;
+}
+
+/** An action's lock: on the ceiling, it cannot be turned on; on the floor, not off. */
+export function keyLock(key: string, limits: RoleLimits): Lock | null {
+  if (limits.ceiling.has(key)) return 'ceiling';
+  if (limits.floor.has(key)) return 'floor';
+  return null;
+}
+
+/**
+ * A level's lock: it would turn on a ceiling key, or turn off a floor key of
+ * this row ("None" on Owner's Roles row, say).
+ */
+export function levelLock(row: GridRow, level: Level, limits: RoleLimits): Lock | null {
+  const keys =
+    level === 'none' || !row.ladder
+      ? []
+      : (row.ladder[level as Exclude<Level, 'none'>] ?? []).map((a) => keyOf(row, a));
+  if (keys.some((key) => limits.ceiling.has(key))) return 'ceiling';
+  const floorHere = row.permissions.filter((p) => limits.floor.has(p.key));
+  if (floorHere.some((p) => !keys.includes(p.key))) return 'floor';
+  return null;
+}
