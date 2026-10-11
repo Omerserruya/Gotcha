@@ -319,9 +319,10 @@ export type ChangeRoleResult =
   | {
       readonly ok: false;
       /**
-       * `self_lockout` - the caller would take away their own admin (409
-       * SELF_LOCKOUT); `last_admin` - the workspace would be left without one
-       * (409 LAST_ADMIN). Both are the server's, checked under a workspace
+       * `self_lockout` - the caller would take away their own Owner role (409
+       * SELF_LOCKOUT); `last_admin` - the workspace would be left without an
+       * Owner (409 LAST_ADMIN: the code kept its name when Admin became part
+       * of Owner, auth role-guard.ts). Both are the server's, checked under a workspace
        * lock (auth 00d669a3) - the screen does not pre-judge them, it says
        * them. `gone` - the person or the role is no longer there.
        */

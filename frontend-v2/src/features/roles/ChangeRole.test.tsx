@@ -85,9 +85,9 @@ describe('★★ 12d Change - chosen, said, and only then sent', () => {
 
 describe('★★ the server’s refusals, said in words (Omer: "test that the UI says it in words")', () => {
   it.each([
-    ['self_lockout', "You can't remove your own admin access. Ask another admin."],
-    ['last_admin', "This is the workspace's last admin. Make someone else an admin first."],
-    ['forbidden', "Only an admin can change a person's role."],
+    ['self_lockout', "You can't take away your own Owner role. Ask another Owner."],
+    ['last_admin', "This is the workspace's last Owner. Make someone else an Owner first."],
+    ['forbidden', "Only an Owner can change a person's role."],
     ['gone', "This person or role isn't here any more."],
     ['failed', "The role wasn't changed. Try again."],
   ])('%s', async (reason, words) => {
@@ -107,7 +107,7 @@ describe('★★ the server’s refusals, said in words (Omer: "test that the UI
     await pick();
     await userEvent.click(screen.getByTestId('change-role-yes'));
     expect(screen.getByTestId('change-role-problem')).toHaveTextContent(
-      'אי אפשר להסיר את הרשאת הניהול של עצמך',
+      'אי אפשר להסיר מעצמך את תפקיד הבעלים',
     );
     one.unmount();
     changeRole.mockResolvedValue({ ok: false, reason: 'last_admin' });
@@ -115,7 +115,7 @@ describe('★★ the server’s refusals, said in words (Omer: "test that the UI
     await pick();
     await userEvent.click(screen.getByTestId('change-role-yes'));
     expect(screen.getByTestId('change-role-problem')).toHaveTextContent(
-      'זה המנהל/ת האחרון/ה של סביבת העבודה',
+      'זה הבעלים האחרון/ה של סביבת העבודה',
     );
   });
 });

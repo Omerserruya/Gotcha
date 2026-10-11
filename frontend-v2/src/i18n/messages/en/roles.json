@@ -202,7 +202,7 @@
         "partial": "The capabilities were saved; the name and description weren't. Try saving again.",
         "name_taken": "A role with this name already exists. The capabilities were saved - choose another name and save again.",
         "gone": "This role isn't here any more.",
-        "forbidden": "Only an admin can change a role.",
+        "forbidden": "Only an Owner can change a role.",
         "failed": "It wasn't saved. Try again."
       },
       "notHere": "This role isn't here. It may have been deleted.",
@@ -249,10 +249,10 @@
       "cancel": "Cancel",
       "done": "{name} is now {role}. It takes effect within a minute.",
       "refused": {
-        "self_lockout": "You can't remove your own admin access. Ask another admin.",
-        "last_admin": "This is the workspace's last admin. Make someone else an admin first.",
+        "self_lockout": "You can't take away your own Owner role. Ask another Owner.",
+        "last_admin": "This is the workspace's last Owner. Make someone else an Owner first.",
         "gone": "This person or role isn't here any more.",
-        "forbidden": "Only an admin can change a person's role.",
+        "forbidden": "Only an Owner can change a person's role.",
         "failed": "The role wasn't changed. Try again."
       }
     },

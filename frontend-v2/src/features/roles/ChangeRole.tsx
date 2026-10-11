@@ -19,8 +19,8 @@ export interface RoleChoice {
  * 12d's Change - a person's role, replaced (PUT), live since auth 00d669a3.
  *
  * Choose → the sentence of what changes → Yes. Nothing is sent before Yes.
- * The server alone decides the two lock-outs (the caller's own admin, the
- * workspace's last admin) and the screen says each in words; it does not
+ * The server alone decides the two lock-outs (the caller's own Owner role,
+ * the workspace's last Owner) and the screen says each in words; it does not
  * guess them first, because the server's check runs on the state after the
  * change, under a lock, and a guess here could only disagree with it.
  * Success says "within a minute": other services cache a role for up to 30s.
