@@ -62,6 +62,45 @@
     color: var(--text-primary);
   }
 
+  /*
+   * A row that edits in place: the whole row starts it, and its Edit is the
+   * one tab stop. Focus is drawn on the ROW, inset, because the card clips
+   * anything outside it - so a keyboard user sees the line they are on.
+   */
+  .rowEditable {
+    cursor: pointer;
+  }
+
+  .rowEditable:hover {
+    background-color: var(--table-head-surface);
+  }
+
+  .rowEditable:hover .edit {
+    color: var(--text-primary);
+  }
+
+  .rowEditable:has(.edit:focus-visible) {
+    outline: var(--focus-ring-width) solid var(--border-focus);
+    outline-offset: calc(-1 * var(--focus-ring-width));
+  }
+
+  .rowEditable .edit:focus-visible {
+    outline: none;
+  }
+
+  /* A value with lines under it - the website, then what the scan read. */
+  .valueStack {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  .valueStack .rowCaveat {
+    margin: 0;
+  }
+
   /* ── The row, while it is being edited ──────────────────────────────── */
   .rowEditing {
     display: flex;
@@ -230,7 +269,8 @@
       inline-size: auto;
     }
 
-    .row .value {
+    .row .value,
+    .row .valueStack {
       grid-row: 2;
       grid-column: 1;
     }
@@ -368,29 +408,6 @@
    * 02's "From website" chip - on the rows and as the banner's legend, one
    * look for both: violet, radius 6, `padding:3px 8px`, 10.5px, a dot.
    */
-  /* 11b: the site, then Scan again beside it - 02's row. */
-  .websiteRow {
-    display: flex;
-    align-items: center;
-    gap: var(--space-8);
-  }
-
-  .websiteRow > :first-child {
-    flex: 1;
-    min-inline-size: 0;
-  }
-
-  .scanAgainLink {
-    flex: none;
-    padding: 7px var(--space-12);
-    border: 1px solid var(--border-default);
-    border-radius: var(--space-8);
-    font-size: var(--font-size-label);
-    color: var(--text-primary);
-    white-space: nowrap;
-    text-decoration: none;
-  }
-
   /* "Also found" - what else the scan saw, as quiet chips. */
   .alsoFound {
     display: flex;
@@ -909,6 +926,39 @@
 
   .inlineCombo {
     inline-size: 200px;
+  }
+
+  /* 11e's field for a typed value: the box takes the row, the buttons follow. */
+  .inlineInput,
+  .inlineText {
+    flex: 1;
+    min-inline-size: 0;
+    padding-block: 7px;
+    padding-inline: var(--space-10);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-chip);
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .inlineText {
+    flex-basis: 100%;
+    min-block-size: 72px;
+    line-height: var(--line-height-snug);
+    resize: block;
+  }
+
+  .inlineInput:focus-visible,
+  .inlineText:focus-visible {
+    outline: var(--focus-ring-width) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .inlineInput[aria-invalid='true'],
+  .inlineText[aria-invalid='true'] {
+    border-color: var(--intent-urgent-text);
   }
 
   .inlineSave {

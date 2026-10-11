@@ -220,9 +220,10 @@ for (const size of SIZES) {
       if (onlyOneProject()) return;
 
       await openWorkspace(page, 'en');
-      // 11b: the row's Edit opens the business drawer (`?panel=business`).
+      // The name edits in its own row - 11e's way; there is no business drawer.
       await page.getByTestId('fact-edit-name').click();
-      await expect(page.getByTestId('drawer-save-business')).toBeVisible();
+      await expect(page.getByTestId('fact-input-name')).toBeFocused();
+      await expect(page.getByTestId('fact-save-name')).toBeVisible();
       await shoot(page, `${size.name}-02-edit-name-en`);
     });
 
@@ -386,7 +387,7 @@ for (const size of SIZES) {
 
       await openWorkspace(page, 'en');
       await page.getByTestId('fact-edit-name').click();
-      await expect(page.getByTestId('drawer-save-business')).toBeVisible();
+      await expect(page.getByTestId('fact-save-name')).toBeVisible();
 
       /*
        * Someone else saves first. Through the app's own BFF, so this carries
@@ -500,12 +501,13 @@ for (const size of SIZES) {
         'the out-of-band write must succeed for this test to mean anything',
       ).toBe(true);
 
-      await page.getByTestId('drawer-save-business').click();
+      // The name, unchanged: a value-neutral write that still carries If-Match.
+      await page.getByTestId('fact-save-name').click();
 
       // Not merely "a message appeared". A successful save also produces a
       // note, so asserting on presence alone would pass if the conflict were
       // never detected — which is the whole thing this shot exists to prove.
-      const note = page.getByTestId('business-problem');
+      const note = page.getByTestId('fact-problem-name');
       await expect(note).toBeVisible({ timeout: 15_000 });
       await expect(note).toHaveAttribute('data-note-kind', 'problem');
       await shoot(page, `${size.name}-09-stale-write-en`);

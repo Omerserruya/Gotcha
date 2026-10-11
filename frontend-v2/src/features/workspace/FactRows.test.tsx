@@ -103,12 +103,8 @@ describe("the rows are the design's rows", () => {
   });
 });
 
-describe('★ 11b / 11c / 11d - the rows open 02’s drawers', () => {
+describe('★ 11c / 11d - hours and language open 02’s drawers', () => {
   it.each([
-    ['name', 'business'],
-    ['website', 'business'],
-    ['description', 'business'],
-    ['address', 'business'],
     ['hours', 'hours'],
     ['language', 'language'],
   ])('%s → ?panel=%s', (key, panel) => {
@@ -119,10 +115,13 @@ describe('★ 11b / 11c / 11d - the rows open 02’s drawers', () => {
     );
   });
 
-  it('none of them edits in its row any more', async () => {
+  it('★ the business rows open no drawer: they edit in place (BusinessFacts.test)', async () => {
     renderRows();
+    for (const key of ['name', 'description', 'address']) {
+      expect(screen.getByTestId(`fact-edit-${key}`).tagName).toBe('BUTTON');
+    }
     await userEvent.click(screen.getByTestId('fact-edit-name'));
-    expect(screen.queryByTestId('fact-save-name')).toBeNull();
+    expect(screen.getByTestId('fact-save-name')).toBeInTheDocument();
   });
 });
 

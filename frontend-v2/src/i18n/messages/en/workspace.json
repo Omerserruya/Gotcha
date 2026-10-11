@@ -147,13 +147,7 @@
   "business": {
     "industry": "Industry",
     "country": "Country",
-    "note": "Note for visitors",
     "notHere": "Set from your website and onboarding; it can't be changed here yet.",
-    "noNote": "GOTCHA has no field for a note to visitors yet.",
-    "legend": "updates when you scan again. Anything you type yourself stays as it is.",
-    "save": "Save changes",
-    "title": "Business & website",
-    "line": "Changes reach every channel within a minute.",
     "industryName": {
       "ecommerce": "E-commerce",
       "legal": "Legal services",
@@ -202,5 +196,18 @@
   "zoneUnknown": "Pick a city from the list.",
   "zoneDefault": "{zone} (default)",
   "zonesCommon": "Common",
-  "zonesAll": "All time zones"
+  "zonesAll": "All time zones",
+  "businessEdit": {
+    "required": {
+      "name": "Your business name can't be empty.",
+      "description": "Say what you sell. This can't be empty."
+    },
+    "tooLong": "{max} characters at most. This has {count}.",
+    "rejected": "This wasn't accepted. Check it and save again.",
+    "hint": {
+      "name": "Enter saves, Esc cancels.",
+      "description": "Enter saves, Shift+Enter starts a new line, Esc cancels.",
+      "address": "Leave it empty to remove the address. Enter saves, Esc cancels."
+    }
+  }
 }

@@ -3,12 +3,14 @@
 import { useLocale, useTranslations } from 'next-intl';
 import { useMemo, useState, useTransition } from 'react';
 
-import { fieldOrigin, type DayKey, type Workspace, displayHost } from '@/api/contracts/workspace';
+import { fieldOrigin, type DayKey, type Workspace } from '@/api/contracts/workspace';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
 
 import { saveWorkspaceFacts, type WriteResult } from './actions';
+import { BusinessFacts } from './BusinessFacts';
 import { summariseWeek, weekOf } from './hours';
+import type { WebsiteScan } from './load-workspace';
 import styles from './Workspace.module.css';
 import {
   COMMON_CURRENCIES,
@@ -22,17 +24,16 @@ import {
 /**
  * The facts an AI employee quotes to a customer, as 11's table.
  *
- * 02 edits them in three drawers and one place: name, website, what you sell
- * and address in 11b (`?panel=business`), opening hours in 11c
- * (`?panel=hours`), language in 11d (`?panel=language`). Only a single value
- * edits in its row - 11e, "Enter saves, Esc cancels" - and that is currency
- * & time zone.
+ * The business - name, website, what you sell, address - is one block that
+ * edits in place (`BusinessFacts`; it was also 11b's drawer, which repeated
+ * it). Opening hours open 11c (`?panel=hours`) and language 11d
+ * (`?panel=language`). Currency & time zone edit in their row - 11e, "Enter
+ * saves, Esc cancels".
  */
 
-type FactKey =
-  'name' | 'website' | 'description' | 'address' | 'hours' | 'language' | 'currencyTimezone';
+type FactKey = 'hours' | 'language' | 'currencyTimezone';
 
-type Panel = 'business' | 'hours' | 'language';
+type Panel = 'hours' | 'language';
 
 /**
  * The provenance field behind each row. Hours and currency & time zone have
@@ -40,13 +41,17 @@ type Panel = 'business' | 'hours' | 'language';
  * fields would claim a source for both.
  */
 const PROVENANCE_FIELD: Partial<Record<FactKey, string>> = {
-  name: 'organizationName',
-  description: 'businessDescription',
-  address: 'address',
   language: 'primaryLanguage',
 };
 
-export function FactRows({ workspace }: { readonly workspace: Workspace }) {
+export function FactRows({
+  workspace,
+  scan = null,
+}: {
+  readonly workspace: Workspace;
+  /** What the website scan read and found - drawn on the website row. */
+  readonly scan?: WebsiteScan | null;
+}) {
   const t = useTranslations('workspace');
   const locale = useLocale();
   const [editing, setEditing] = useState(false);
@@ -102,7 +107,7 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
   }
 
   /** A row whose Edit opens a drawer. */
-  const row = (key: FactKey, value: string | null, panel: Panel, caveat?: string) => (
+  const row = (key: FactKey, value: string | null, panel: Panel) => (
     <div key={key} className={styles.row} data-testid={`fact-${key}`}>
       <div className={styles.label}>{t(`fact.${key}`)}</div>
       <div
@@ -121,11 +126,6 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
           </span>
         ) : null}
       </div>
-      {caveat ? (
-        <p className={styles.rowCaveat} data-testid={`fact-caveat-${key}`}>
-          {caveat}
-        </p>
-      ) : null}
       <Link
         href={{ pathname: '/settings/workspace', query: { panel } }}
         className={styles.edit}
@@ -182,26 +182,7 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
 
   return (
     <div className={styles.facts}>
-      {row('name', workspace.name ?? null, 'business')}
-
-      {/*
-        ★ THE WEBSITE ROW, WITHOUT THE PAGE COUNT THE DESIGN SHOWS. Neither
-        number reaches this screen - `GET /workspace` does not carry the
-        scan's `reach` - and "42 pages read" is the sentence the crawler's
-        own comment forbids for a store answering every path with one login
-        page. The domain is the whole of what is known here. Its Edit opens
-        11b, where the website is drawn and not live: `websiteDomain` is not
-        on `PATCH /workspace`'s allow-list.
-      */}
-      {row(
-        'website',
-        workspace.websiteDomain ? displayHost(workspace.websiteDomain) : null,
-        'business',
-        workspace.websiteDomain ? undefined : t('website.notSet'),
-      )}
-
-      {row('description', workspace.description ?? null, 'business')}
-      {row('address', workspace.address ?? null, 'business')}
+      <BusinessFacts workspace={workspace} scan={scan} />
       {row('hours', hoursValue, 'hours')}
 
       {/*

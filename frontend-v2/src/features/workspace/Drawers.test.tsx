@@ -28,7 +28,6 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-import { BusinessDrawer } from './BusinessDrawer';
 import { HoursDrawer } from './HoursDrawer';
 import { LanguageDrawer } from './LanguageDrawer';
 
@@ -66,44 +65,6 @@ const inIntl = (node: ReactNode) =>
       {node}
     </NextIntlClientProvider>,
   );
-
-describe('★ 11b - the business form', () => {
-  it('what PATCH cannot take is drawn, not live, and says why', () => {
-    inIntl(<BusinessDrawer workspace={ws()} />);
-    const site = screen.getByTestId('business-website');
-    expect(site).toHaveTextContent('urban-supply.com');
-    expect(site).toHaveAttribute('aria-disabled', 'true');
-    expect(site).toHaveAttribute('title', expect.stringMatching(/\S/));
-    expect(screen.getByText('Home textiles')).toHaveAttribute('aria-disabled', 'true');
-  });
-
-  it('★ no stored value as stored: a crawler code by name, "unknown" as "-"', () => {
-    inIntl(<BusinessDrawer workspace={ws({ industry: 'ecommerce', country: 'unknown' })} />);
-    expect(screen.getByText('E-commerce')).toBeInTheDocument();
-    expect(screen.getByTestId('business-drawer')).not.toHaveTextContent(/ecommerce|unknown/);
-  });
-
-  it('a country code is a country', () => {
-    inIntl(<BusinessDrawer workspace={ws({ country: 'IL' })} />);
-    expect(screen.getByText('Israel')).toBeInTheDocument();
-    expect(screen.getByTestId('business-note')).toHaveAttribute(
-      'title',
-      expect.stringMatching(/no field/i),
-    );
-  });
-
-  it('saves exactly the three fields the route takes', async () => {
-    inIntl(<BusinessDrawer workspace={ws()} />);
-    await userEvent.clear(screen.getByTestId('business-address'));
-    await userEvent.type(screen.getByTestId('business-address'), '14 Ha’arba’a');
-    await userEvent.click(screen.getByTestId('drawer-save-business'));
-    expect(saveWorkspaceFacts).toHaveBeenCalledWith(
-      { name: 'Urban Supply', description: 'Linen bedding', address: '14 Ha’arba’a' },
-      null,
-    );
-    expect(await screen.findByTestId('business-saved')).toBeInTheDocument();
-  });
-});
 
 describe('★ 11c - the week, and what it cannot hold', () => {
   it('+ Split and the holidays are drawn, not live, with why on their titles', () => {
@@ -278,41 +239,5 @@ describe('★ 11d - two cards, no paragraphs', () => {
     await userEvent.selectOptions(screen.getByTestId('language-mine'), 'he');
     expect(saveMyLanguage).toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
-  });
-});
-
-describe('★ 11b - the website: what the scan read, what else it found, and Scan again', () => {
-  it('"42 pages read" with when and its topics; "Also found" as chips; Scan again leads to the scan', () => {
-    inIntl(
-      <BusinessDrawer
-        workspace={ws()}
-        scan={{
-          pagesRead: 42,
-          daysAgo: 3,
-          topics: ['products', 'shipping'],
-          alsoFound: [
-            { kind: 'store', name: 'Shopify' },
-            { kind: 'channel', name: 'Instagram' },
-          ],
-        }}
-      />,
-    );
-    expect(screen.getByTestId('business-scan-line')).toHaveTextContent(
-      '42 pages read 3 days ago · products, shipping',
-    );
-    expect(screen.getByTestId('business-also-found')).toHaveTextContent(
-      'Also foundShopify storeInstagram',
-    );
-    // ★ The rescan lives on Studio · Knowledge now (Omer, 2026-10-11).
-    const again = screen.getByTestId('business-scan-again').getAttribute('href') ?? '';
-    expect(again).toContain('/studio/knowledge');
-    expect(again).toContain('scan');
-    expect(again).not.toContain('/settings/workspace');
-  });
-
-  it('nothing read: no line and no chips - never "0 pages read"', () => {
-    inIntl(<BusinessDrawer workspace={ws()} scan={null} />);
-    expect(screen.queryByTestId('business-scan-line')).toBeNull();
-    expect(screen.queryByTestId('business-also-found')).toBeNull();
   });
 });

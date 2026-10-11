@@ -19,17 +19,17 @@ vi.mock('@/shell/Drawer', () => ({
     </aside>
   ),
 }));
-const { stub } = vi.hoisted(() => ({
+const { stub, factRows } = vi.hoisted(() => ({
   stub: (id: string) => () => <div data-testid={id} />,
+  factRows: vi.fn((_props: { scan?: unknown }) => <div data-testid="facts" />),
 }));
-vi.mock('@/features/workspace/FactRows', () => ({ FactRows: stub('facts') }));
+vi.mock('@/features/workspace/FactRows', () => ({ FactRows: factRows }));
 vi.mock('@/features/workspace/VoiceEditor', () => ({ VoiceEditor: stub('voice') }));
 vi.mock('@/features/workspace/ProhibitedClaims', () => ({ ProhibitedClaims: stub('claims') }));
-vi.mock('@/features/workspace/BusinessDrawer', () => ({ BusinessDrawer: stub('business') }));
 vi.mock('@/features/workspace/HoursDrawer', () => ({ HoursDrawer: stub('hours') }));
 vi.mock('@/features/workspace/LanguageDrawer', () => ({ LanguageDrawer: stub('language') }));
 vi.mock('@/features/workspace/load-workspace', () => ({
-  loadWebsiteScan: async () => null,
+  loadWebsiteScan: async () => ({ pagesRead: 4, daysAgo: 1, topics: [], alsoFound: [] }),
   loadWorkspace: async () => ({
     workspace: { name: 'Urban Supply', languages: ['he'] },
     voice: null,
@@ -45,7 +45,7 @@ import Page from './page';
 const open = async (panel?: string) =>
   render(await Page({ searchParams: Promise.resolve(panel ? { panel } : {}) }));
 
-describe('★ 11 - 11b, 11c and 11d open over it', () => {
+describe('★ 11 - 11c and 11d open over it', () => {
   it('11 alone: no drawer', async () => {
     await open();
     expect(screen.getByTestId('facts')).toBeInTheDocument();
@@ -53,13 +53,37 @@ describe('★ 11 - 11b, 11c and 11d open over it', () => {
   });
 
   it.each([
-    ['business', 'drawer-business', 'business', 'Business & website'],
     ['hours', 'drawer-hours', 'hours', 'Opening hours'],
     ['language', 'drawer-language', 'language', 'Language'],
   ])('?panel=%s opens %s, titled as 02', async (panel, drawer, inside, title) => {
     await open(panel);
     expect(screen.getByTestId(drawer)).toHaveAttribute('aria-label', title);
     expect(screen.getByTestId(inside)).toBeInTheDocument();
+  });
+});
+
+describe('★ the business is one block on the page - no 11b drawer repeating it (Omer, 2026-10-11)', () => {
+  it('?panel=business opens nothing: the rows edit in place', async () => {
+    await open('business');
+    expect(screen.getByTestId('facts')).toBeInTheDocument();
+    expect(screen.queryByRole('complementary')).toBeNull();
+    expect(screen.queryByTestId('drawer-business')).toBeNull();
+  });
+
+  it('the rows get what the scan read, for the website row', async () => {
+    await open();
+    expect(factRows.mock.calls.at(-1)?.[0].scan).toEqual({
+      pagesRead: 4,
+      daysAgo: 1,
+      topics: [],
+      alsoFound: [],
+    });
+  });
+
+  it('the drawer’s own copy is gone from the catalogue', () => {
+    for (const key of ['title', 'line', 'save', 'note', 'noNote', 'legend']) {
+      expect(workspace.business).not.toHaveProperty(key);
+    }
   });
 });
 

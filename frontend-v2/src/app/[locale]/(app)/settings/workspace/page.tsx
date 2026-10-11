@@ -1,7 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
 import { FactRows } from '@/features/workspace/FactRows';
-import { BusinessDrawer } from '@/features/workspace/BusinessDrawer';
 import { HoursDrawer } from '@/features/workspace/HoursDrawer';
 import { LanguageDrawer } from '@/features/workspace/LanguageDrawer';
 import { loadLanguages } from '@/features/workspace/load-languages';
@@ -31,36 +30,31 @@ export default async function Page({
 }) {
   const t = await getTranslations('workspace');
   const panel = (await searchParams)?.panel;
-  const [{ workspace, voice, claims }, languages] = await Promise.all([
+  const [{ workspace, voice, claims }, languages, scan] = await Promise.all([
     loadWorkspace(),
     loadLanguages(),
+    loadWebsiteScan(),
   ]);
 
   /*
     11, measured: the facts as one table with the marking ON the rows, then
     "How GOTCHA should sound" beside "Never say". The scan banner ("Scan
     again") moved to Studio · Knowledge, beside the website (Omer,
-    2026-10-11); the business drawer's "Scan again" leads there.
+    2026-10-11); the website row's "Scan again" leads there.
+
+    No business drawer (11b): name, what you sell and address edit in their
+    own rows, so the drawer only repeated them (Omer, 2026-10-11).
   */
   return (
     <SettingsSection title={t('title')} description={t('description')}>
-      {workspace ? <FactRows workspace={workspace} /> : <p>{t('unavailable')}</p>}
+      {workspace ? <FactRows workspace={workspace} scan={scan} /> : <p>{t('unavailable')}</p>}
       <div className={styles.cards}>
         {voice ? <VoiceEditor voice={voice} /> : <p>{t('voice.unavailable')}</p>}
         {claims ? <ProhibitedClaims claims={claims.claims} /> : <p>{t('claims.unavailable')}</p>}
       </div>
 
-      {/* 11b, 11c, 11d: the facts' drawers, opened from their rows' Edit. */}
-      {workspace && panel === 'business' ? (
-        <Drawer
-          title={t('business.title')}
-          line={t('business.line')}
-          closeHref="/settings/workspace"
-          testId="drawer-business"
-        >
-          <BusinessDrawer workspace={workspace} scan={await loadWebsiteScan()} />
-        </Drawer>
-      ) : workspace && panel === 'hours' ? (
+      {/* 11c, 11d: the facts' drawers, opened from their rows' Edit. */}
+      {workspace && panel === 'hours' ? (
         <Drawer
           title={t('hoursDrawer.title')}
           line={t('hoursDrawer.line')}
