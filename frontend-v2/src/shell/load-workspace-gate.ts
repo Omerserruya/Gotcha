@@ -25,6 +25,13 @@ export async function readWorkspaceGate(): Promise<{
   readonly setupAdmin: string | null;
   /** A live workspace's admin: onboarding may be walked as a preview. */
   readonly mayPreview: boolean;
+  /**
+   * ★★ THE WORKSPACE THE REALTIME SOCKET IS FOR. The session cookie has a
+   * `tid` slot that no sign-in has ever filled, so the provider was handed
+   * `null` and never opened a socket: new messages appeared only on a reload
+   * (2026-10-11). `/api/auth/me` names the tenant the token acts in.
+   */
+  readonly tenantId: string | null;
 }> {
   try {
     const me = await serverApi().get({ endpoint: authEndpoints.me(), payload: currentUserSchema });
@@ -33,12 +40,13 @@ export async function readWorkspaceGate(): Promise<{
       route: workspaceRoute(who),
       setupAdmin: me.setupAdmin?.name?.trim() || null,
       mayPreview: mayPreviewOnboarding(who),
+      tenantId: me.user.tenantId || null,
     };
   } catch (cause) {
     if (isApiError(cause) && cause.status === 401) {
-      return { route: 'signed_out', setupAdmin: null, mayPreview: false };
+      return { route: 'signed_out', setupAdmin: null, mayPreview: false, tenantId: null };
     }
     logger.warn('gate.me_failed', { status: isApiError(cause) ? cause.status : undefined });
-    return { route: 'unavailable', setupAdmin: null, mayPreview: false };
+    return { route: 'unavailable', setupAdmin: null, mayPreview: false, tenantId: null };
   }
 }

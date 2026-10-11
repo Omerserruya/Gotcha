@@ -106,6 +106,36 @@ describe('★★ message:new - an inbound reply while the agent is reading', () 
   it('drops an unattributable frame', () => {
     expect(translate('message:new', { tenantId: 't1', data: {} })).toBeNull();
   });
+
+  it('★★ the frame the platform sends: `{ message, conversationId }`, tenant and id on the row', () => {
+    /*
+     * message.service.ts and incoming.worker.ts publish exactly this, and the
+     * bridge relays only `data` - no envelope, no top-level tenant or id.
+     */
+    const row = { id: 'm7', tenantId: 't1', conversationId: 'c1', body: 'hi' };
+    expect(translate('message:new', { message: row, conversationId: 'c1' })).toEqual({
+      type: 'message.received',
+      tenantId: 't1',
+      at: expect.any(Number),
+      conversationId: 'c1',
+      messageId: 'm7',
+    });
+    // the channel hint some publishers add changes nothing
+    expect(
+      translate('message:new', { message: row, conversationId: 'c1', channel: 'WHATSAPP' }),
+    ).toMatchObject({ tenantId: 't1', conversationId: 'c1', messageId: 'm7' });
+    // and the conversation is the row's when the frame does not repeat it
+    expect(translate('message:new', { message: row })).toMatchObject({ conversationId: 'c1' });
+  });
+
+  it('a row with no tenant is still unattributable', () => {
+    expect(
+      translate('message:new', {
+        message: { id: 'm7', conversationId: 'c1' },
+        conversationId: 'c1',
+      }),
+    ).toBeNull();
+  });
 });
 
 describe('★★ the translators still do not answer for anything else', () => {

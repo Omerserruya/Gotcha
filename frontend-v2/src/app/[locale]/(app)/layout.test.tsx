@@ -22,7 +22,8 @@ vi.mock('next/headers', () => ({
   headers: async () => new Headers({ 'x-gotcha-return-to': '/en/approvals?tab=done' }),
 }));
 vi.mock('@/i18n/load-messages', () => ({ loadMessages: async () => ({}) }));
-vi.mock('@/shell/AppProviders', () => ({ AppProviders: () => null }));
+const AppProviders = vi.hoisted(() => vi.fn(() => null));
+vi.mock('@/shell/AppProviders', () => ({ AppProviders }));
 vi.mock('@/shell/AppShell', () => ({ AppShell: () => null }));
 const WorkspaceGate = vi.hoisted(() => vi.fn(() => null));
 vi.mock('@/shell/WorkspaceGate', () => ({ WorkspaceGate }));
@@ -68,17 +69,22 @@ describe('★★ signed out is sign-in, with the way back', () => {
   );
 });
 
-/** The gate's props, wherever the layout put it in the tree. */
-function gateIn(node: unknown): Record<string, unknown> | null {
+/** One component's props, wherever the layout put it in the tree. */
+function propsOf(type: unknown, node: unknown): Record<string, unknown> | null {
   if (!node || typeof node !== 'object') return null;
   const el = node as { type?: unknown; props?: Record<string, unknown> };
-  if (el.type === WorkspaceGate) return el.props ?? null;
+  if (el.type === type) return el.props ?? null;
   for (const value of Object.values(el.props ?? {})) {
-    const hit = Array.isArray(value) ? value.map(gateIn).find(Boolean) : gateIn(value);
+    const hit = Array.isArray(value)
+      ? value.map((v) => propsOf(type, v)).find(Boolean)
+      : propsOf(type, value);
     if (hit) return hit;
   }
   return null;
 }
+
+/** The gate's props, wherever the layout put it in the tree. */
+const gateIn = (node: unknown) => propsOf(WorkspaceGate, node);
 
 describe("★★ onboarding is a gate (Omer, 2026-10-07) - the server's status decides", () => {
   const me = (tenantStatus: string, role = 'ADMIN', setupAdmin?: { name: string }) =>
@@ -128,5 +134,31 @@ describe("★★ onboarding is a gate (Omer, 2026-10-07) - the server's status d
   it('status unread: Retry, not the product', async () => {
     get.mockRejectedValue(new ApiError({ kind: 'server', status: 503 }));
     expect(gateIn(await render())).toMatchObject({ route: 'unavailable' });
+  });
+});
+
+describe('★★ the realtime socket is for the workspace /auth/me names (2026-10-11)', () => {
+  /*
+   * The session's `tid` slot is filled by no sign-in, so a layout that read
+   * only it handed the provider `null`: no ticket, no socket, and every new
+   * message waited for a reload.
+   */
+  const me = (user: Record<string, unknown>) =>
+    get.mockImplementation(async ({ endpoint }: { endpoint: { path: string } }) =>
+      endpoint.path === '/api/auth/me'
+        ? { user: { id: 'u', role: 'ADMIN', ...user }, tenantStatus: 'ACTIVE' }
+        : { permissions: [], features: [] },
+    );
+
+  it('a session with no tenant: the providers get the one /auth/me names', async () => {
+    me({ tenantId: 'cms4ug98n0004chmrp4lv6ujl' });
+    expect(propsOf(AppProviders, await render())).toMatchObject({
+      tenantId: 'cms4ug98n0004chmrp4lv6ujl',
+    });
+  });
+
+  it('/auth/me naming none: null, never an empty string', async () => {
+    me({ tenantId: '' });
+    expect(propsOf(AppProviders, await render())).toMatchObject({ tenantId: null });
   });
 });

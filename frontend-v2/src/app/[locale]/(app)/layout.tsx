@@ -52,7 +52,7 @@ export default async function AuthenticatedLayout({
     product as before. No rail and no ⌘K behind the closed door.
   */
   const resolved = isLocale(locale) ? locale : DEFAULT_LOCALE;
-  const { route, setupAdmin } = await readWorkspaceGate();
+  const { route, setupAdmin, tenantId } = await readWorkspaceGate();
   if (route === 'signed_out') redirect(await signInHere());
   if (route === 'onboarding') localeRedirect({ href: '/onboarding', locale: resolved });
   if (route === 'waiting' || route === 'unavailable' || route === 'payment') {
@@ -87,7 +87,7 @@ export default async function AuthenticatedLayout({
     <NextIntlClientProvider messages={await loadMessages(resolved)}>
       <AppProviders
         locale={locale}
-        tenantId={session.tid ?? null}
+        tenantId={session.tid ?? tenantId}
         permissions={permissions}
         roleKey={roleKey}
         permissionsStatus={status}

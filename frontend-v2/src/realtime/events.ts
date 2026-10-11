@@ -218,9 +218,17 @@ export const translators: readonly EventTranslator[] = [
   (wireEvent, payload) => {
     if (wireEvent !== 'message:new') return null;
     const data = field(payload, 'data') ?? payload;
-    const tenantId = str(payload, 'tenantId') ?? str(data, 'tenantId');
-    const conversationId = str(data, 'conversationId');
-    const messageId = str(data, 'messageId') ?? str(data, 'id');
+    /*
+     * ★★ THE ROW RIDES AS `message`. Every emitter (message.service, the
+     * incoming worker, the AI bot, the flow executor) sends
+     * `{ message, conversationId }`, and the bridge relays only that `data` -
+     * so the tenant and the id are the row's own. Read only at the top, every
+     * live frame was dropped (2026-10-11).
+     */
+    const message = field(data, 'message');
+    const tenantId = str(payload, 'tenantId') ?? str(data, 'tenantId') ?? str(message, 'tenantId');
+    const conversationId = str(data, 'conversationId') ?? str(message, 'conversationId');
+    const messageId = str(data, 'messageId') ?? str(data, 'id') ?? str(message, 'id');
     if (!tenantId || !conversationId || !messageId) return null;
     return { type: 'message.received', tenantId, at: Date.now(), conversationId, messageId };
   },
