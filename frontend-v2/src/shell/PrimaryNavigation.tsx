@@ -102,19 +102,18 @@ export function PrimaryNavigation() {
           <ul className={styles.subNavList} role="list">
             {children.map((child) => {
               /*
-               * ★ THE VIEW'S SIZE, THEN ITS UNREAD PILL - ONLY WHAT THE PAGE WAS TOLD.
+               * ★ THE VIEW'S SIZE - ONLY WHAT THE PAGE WAS TOLD.
                *   The total is a plain muted number, as 02 draws a view's size
                *   in this slot. A real 0 IS drawn: it is the view's size, and
                *   "Waiting in queue 0" is the news that the queue is empty. No
                *   total (a failed read, or a backend that does not send them
                *   yet) draws nothing, never a 0 (Omer, 2026-10-11).
                *
-               *   The unread count is the pill, drawn only above 0: an unread
-               *   badge of 0 is not news. Each number says what it is to a
-               *   screen reader, so neither is taken for the other.
+               *   ★ NO UNREAD PILL HERE (Omer, 2026-10-11: "there's both what I
+               *   wanted AND the circles with numbers - remove them"). The
+               *   rail says a view's size; unread is the list's, on each row.
                */
               const total = child.view === undefined ? undefined : counts?.totals[child.view];
-              const unread = child.view === undefined ? undefined : counts?.unread[child.view];
               return (
                 <li key={child.id}>
                   <Link
@@ -144,21 +143,6 @@ export function PrimaryNavigation() {
                             {total}
                           </span>
                           <span className="srOnly">{t('totalCount', { count: total })}</span>
-                        </span>
-                      </>
-                    ) : null}
-                    {unread !== undefined && unread > 0 ? (
-                      <>
-                        {' '}
-                        <span
-                          className={styles.subNavUnread}
-                          data-testid={`rail-unread-${child.id}`}
-                        >
-                          {/* "99+" is a number: kept left-to-right, or Hebrew draws "+99". */}
-                          <span aria-hidden="true" dir="ltr">
-                            {unread > 99 ? '99+' : unread}
-                          </span>
-                          <span className="srOnly">{t('unreadCount', { count: unread })}</span>
                         </span>
                       </>
                     ) : null}

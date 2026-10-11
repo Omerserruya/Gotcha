@@ -342,10 +342,20 @@
    * there when looked for and never pulls the eye. It does not wrap, and the
    * padding keeps it off a long label.
    */
+  /*
+   * A view row that carries its size ends 4px tighter, so "Handled by
+   * GOTCHA 11" keeps its name whole at the narrowest desktop rail (Omer,
+   * 2026-10-11; measured in Chromium). The start padding is untouched, so
+   * the names stay aligned with the group's label.
+   */
+  .subNavLink:has(> .subNavCount) {
+    padding-inline-end: var(--space-8);
+  }
+
   .subNavCount {
     flex: none;
     margin-inline-start: auto;
-    padding-inline-start: var(--space-6);
+    padding-inline-start: var(--space-4);
     font-family: var(--font-mono);
     font-size: var(--font-size-counter);
     font-variant-numeric: tabular-nums;
@@ -353,33 +363,7 @@
     color: var(--frame-text-muted);
   }
 
-  /*
-   * A view's UNREAD count, as the inbox row's pill (02's badge: 18 tall, at
-   * least 18 wide, radius 9, 600 10px/18px) so it never reads as the view's
-   * size, which is a plain muted number in this slot. Inked for the rail: the
-   * row's #121212 pill would vanish on a #121212 frame, so the same pill is
-   * drawn light on dark.
-   */
-  .subNavUnread {
-    flex: none;
-    margin-inline-start: auto;
-    min-inline-size: var(--space-18);
-    block-size: var(--space-18);
-    padding-inline: var(--space-4);
-    border-radius: var(--radius-item);
-    background-color: var(--frame-text);
-    color: var(--frame-base);
-    font-size: 10px;
-    font-weight: var(--font-weight-semibold);
-    line-height: var(--space-18);
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-  }
-
   /* After the size, the pill sits beside it rather than splitting the free space. */
-  .subNavCount + .subNavUnread {
-    margin-inline-start: var(--space-4);
-  }
 
   .commandHint {
     display: flex;
