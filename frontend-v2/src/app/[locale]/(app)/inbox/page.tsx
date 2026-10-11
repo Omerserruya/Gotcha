@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import { ConversationHeader } from '@/features/inbox/ConversationHeader';
 import { Composer } from '@/features/inbox/Composer';
 import { ConversationStream, OrdersChip } from '@/features/inbox/ConversationDetail';
-import { StreamLive } from '@/features/inbox/StreamLive';
+import { ListLive } from '@/features/inbox/ListLive';
 import { InboxEscape } from '@/features/inbox/InboxEscape';
 import { NothingOpen } from '@/features/inbox/NothingOpen';
 import { ClearQueueList, ClearQueuePane } from '@/features/inbox/ClearQueue';
@@ -171,6 +171,14 @@ export default async function Page({
         */
         data-owns-panels=""
       >
+        {/*
+          Renders nothing. It re-reads this page when the platform says a
+          message arrived or a conversation changed - the list (rows, order,
+          previews, new conversations, the total) and the open conversation's
+          delivery, which is what makes the composer's "it will say so if it
+          fails" true. Mounted whether or not a conversation is open.
+        */}
+        <ListLive openId={data.open?.id ?? null} />
         <section className={styles.queueColumn} aria-label={t('queue.label')}>
           <ConversationList
             rows={data.rows}
@@ -324,12 +332,6 @@ export default async function Page({
                 </p>
               ) : (
                 <>
-                  {/*
-                    Renders nothing. It keeps this conversation current as delivery
-                    changes, which is what makes the composer's "it will say so if it
-                    fails" true rather than a sentence we wrote.
-                  */}
-                  <StreamLive conversationId={data.open.id} />
                   {/* Renders nothing: Esc closes this conversation (see `InboxEscape`). */}
                   <InboxEscape conversationId={data.open.id} />
                   {/*

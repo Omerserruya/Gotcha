@@ -13,6 +13,7 @@ import { AskCopilot } from '@/features/inbox/wall/AskCopilot';
 import { CopilotWall, WallHeader } from '@/features/inbox/wall/CopilotWall';
 import { PendingPane } from '@/features/inbox/PendingPane';
 import { InboxEscape } from '@/features/inbox/InboxEscape';
+import { ListLive } from '@/features/inbox/ListLive';
 import { NothingOpen } from '@/features/inbox/NothingOpen';
 
 /**
@@ -762,5 +763,26 @@ describe('★★ 02b - the queue is clear, and only then', () => {
     const tree = await page(data as never, query as never);
     expect(loadClearQueue).not.toHaveBeenCalled();
     expect(props(tree, ClearQueuePane)).toBeNull();
+  });
+});
+
+describe('★★ the inbox keeps itself current - open or not (ListLive)', () => {
+  /*
+   * New messages did not reach the list without a reload: the only listener
+   * was mounted inside the open conversation and listened only to it.
+   */
+  it('★★ nothing open: mounted, with nothing open', async () => {
+    const tree = await page({ rows: [row()], open: null, messages: null });
+    expect(propsOf<{ openId: string | null }>(tree, ListLive)).toEqual({ openId: null });
+  });
+
+  it('★★ a conversation open: mounted once, told which one', async () => {
+    const tree = await page();
+    let mounts = 0;
+    walk(tree, [], (element) => {
+      if (element.type === ListLive) mounts += 1;
+    });
+    expect(mounts).toBe(1);
+    expect(propsOf<{ openId: string | null }>(tree, ListLive)).toEqual({ openId: 'conv1' });
   });
 });

@@ -29,7 +29,13 @@ interface RealtimeEventBase {
 }
 
 export type RealtimeEvent =
+  /**
+   * A conversation's row changed (status, owner, department, last message) -
+   * or, as `conversation.closed`, it was resolved. The inbox list re-reads on
+   * both (`ListLive`); neither carries more than the id this app relies on.
+   */
   | (RealtimeEventBase & { type: 'conversation.updated'; conversationId: string })
+  | (RealtimeEventBase & { type: 'conversation.closed'; conversationId: string })
   | (RealtimeEventBase & {
       type: 'conversation.assigned';
       conversationId: string;
@@ -147,6 +153,48 @@ function str(payload: unknown, key: string): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+/*
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THE CONVERSATION EVENTS - TWO ROUTES TO THE SOCKET, ONE ID, TWO SPELLINGS
+ * ════════════════════════════════════════════════════════════════════════════
+ * Read off the emitters (ChatCenter `services/`, 2026-10-11), not guessed:
+ *
+ *  - The conversation service's own changes (transfer, claim, release, return
+ *    to AI, stop AI, reassign, close) go through `emitToTenant`: the whole
+ *    Prisma row, flat, straight to `tenant:<id>` - `{ id, tenantId, status,
+ *    assignedAgentId, departmentId, …, assignedAgent }` - AND the same row to
+ *    the bus, which the bridge relays again. So each of those arrives twice;
+ *    the list coalesces, it does not count.
+ *  - Every bus publisher (the incoming worker, the AI bot, the flow executor,
+ *    routing, the idle worker, outbound echo, Shopify chat): the bridge relays
+ *    only `data`, and adds the envelope's `tenantId` when `data` has none.
+ *    Usually `{ id, …what changed }` - `{ id, status: "CLOSED" }`, or bare
+ *    `{ id }` for a reminder; the incoming worker sends the row plus `channel`.
+ *  - Read / unread (Backend 0190bd4e): to the viewer's own `user:<id>` room,
+ *    flat - `{ id, conversationId, tenantId, unread, unreadCount, lastReadAt,
+ *    markedUnread }` - so their other tabs re-read too.
+ *
+ * ★ THE CONVERSATION IS `id` - except the WhatsApp handoff, which closes the
+ *   web conversation with `{ conversationId, reason }` and no `id`, and the AI
+ *   bot's close, which sends both. `conversationId` first: on every frame that
+ *   has it, it is the conversation; `id` is only ever the conversation's here.
+ *
+ * ⚠ `data` only when it is an object. The relayed row IS the payload, and a
+ *   string `data` column on it must not stand in for the frame.
+ */
+function conversationEvent(
+  type: 'conversation.updated' | 'conversation.closed',
+  payload: unknown,
+): RealtimeEvent | null {
+  const nested = field(payload, 'data');
+  const data = typeof nested === 'object' && nested !== null ? nested : payload;
+  const tenantId = str(payload, 'tenantId') ?? str(data, 'tenantId');
+  const conversationId = str(data, 'conversationId') ?? str(data, 'id');
+  // Unattributable is dropped, as everywhere here: a guess re-reads someone else.
+  if (!tenantId || !conversationId) return null;
+  return { type, tenantId, at: Date.now(), conversationId };
+}
+
 export const translators: readonly EventTranslator[] = [
   /*
    * The wall's suggestions changed (Backend 9c5e96cc). Sent to `conv:{id}`
@@ -258,6 +306,14 @@ export const translators: readonly EventTranslator[] = [
       messageType: str(message, 'messageType'),
     };
   },
+
+  // Colon-separated on the wire, like the message events; see `conversationEvent`.
+  (wireEvent, payload) =>
+    wireEvent === 'conversation:updated'
+      ? conversationEvent('conversation.updated', payload)
+      : null,
+  (wireEvent, payload) =>
+    wireEvent === 'conversation:closed' ? conversationEvent('conversation.closed', payload) : null,
 
   (wireEvent, payload) => {
     if (wireEvent !== 'voice.transcript') return null;

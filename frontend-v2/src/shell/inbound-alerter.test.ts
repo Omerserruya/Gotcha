@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { RealtimeEvent } from '@/realtime/events';
+import { translate, type RealtimeEvent } from '@/realtime/events';
 
 import { inboundAlerter, type AlerterDeps, type ConversationGlance } from './inbound-alerter';
 
@@ -165,5 +165,73 @@ describe('★ an incoming message, end to end', () => {
       messageId: 'm1',
     });
     expect(h.readConversation).not.toHaveBeenCalled();
+  });
+});
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ FROM THE WIRE: A NEW CONVERSATION, AND ONE THAT IS NOT OPEN
+ * ════════════════════════════════════════════════════════════════════════════
+ * The frame the incoming worker publishes for a customer's first message,
+ * as the bridge relays it: `{ message, conversationId, channel }` plus the
+ * envelope's `tenantId` and the row's id as `messageId`. Nothing in it says
+ * "new" - a first message alerts like any other, because the conversation is
+ * created (and committed) before the message, and the message before the
+ * publish (incoming.worker: findOrCreateOpenConversation, message.create,
+ * then publishEvent), so the alerter's read finds it.
+ */
+describe('★★ through the translator', () => {
+  const wire = (conversationId: string, messageId: string) =>
+    translate('message:new', {
+      message: {
+        id: messageId,
+        tenantId: 't1',
+        conversationId,
+        channel: 'INSTAGRAM',
+        direction: 'INBOUND',
+        body: 'Hi, is this in stock?',
+        messageType: 'text',
+        status: 'DELIVERED',
+        senderName: null,
+        createdAt: '2026-10-11T09:00:00.000Z',
+      },
+      conversationId,
+      channel: 'INSTAGRAM',
+      tenantId: 't1',
+      messageId,
+    });
+
+  it('★★ a brand-new conversation’s first message: chime and popup', async () => {
+    const event = wire('c-new', 'm-first');
+    expect(event).not.toBeNull();
+    const h = harness({}, { name: 'yael.k', channel: 'INSTAGRAM' });
+    await h.onMessage(event!);
+    expect(h.readConversation).toHaveBeenCalledWith('c-new');
+    expect(h.chime).toHaveBeenCalledTimes(1);
+    expect(h.popup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'c-new',
+        name: 'yael.k',
+        body: 'Hi, is this in stock?',
+      }),
+    );
+  });
+
+  it('★★ a message in a conversation that is not the one open: it alerts', async () => {
+    // Looking at v2 with another conversation open: the sound.
+    const focused = harness({ role: () => 'focused', openConversationId: () => 'c-open' });
+    await focused.onMessage(wire('c-other', 'm1')!);
+    expect(focused.chime).toHaveBeenCalledTimes(1);
+    // A background tab with one open: the sound and the popup.
+    const leader = harness({ openConversationId: () => 'c-open' });
+    await leader.onMessage(wire('c-other', 'm2')!);
+    expect(leader.chime).toHaveBeenCalledTimes(1);
+    expect(leader.popup).toHaveBeenCalledTimes(1);
+  });
+
+  it('the same conversation open and focused: nothing (the contrast)', async () => {
+    const h = harness({ role: () => 'focused', openConversationId: () => 'c-open' });
+    await h.onMessage(wire('c-open', 'm3')!);
+    expect(h.chime).not.toHaveBeenCalled();
   });
 });

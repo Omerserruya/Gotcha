@@ -26,8 +26,9 @@ import { SkeletonCards } from '@/design-system/primitives/skeleton/Skeleton';
  *   the GET      again, on `copilot.suggestions.updated` for this one
  *   the refresh  "Try again" - a model call, metered, and only the button
  *
- * Not in `loadConversation`: the page re-renders on every delivery change
- * (`StreamLive`), and a read there is a read per refresh.
+ * Not in `loadConversation`: the page re-renders on every message, conversation
+ * change and open-conversation delivery change (`ListLive`), and a read there
+ * is a read per refresh.
  *
  * ── "USE THIS" AND "EDIT" SEND NOTHING ──
  * Both put the text in the reply box; Use this as it is, Edit with the box

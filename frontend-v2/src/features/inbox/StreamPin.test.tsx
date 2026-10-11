@@ -53,3 +53,21 @@ describe('⚠⚠ a conversation opens at its LATEST message', () => {
     expect(el.scrollTop).toBe(400);
   });
 });
+
+describe('★★ a live re-read leaves the reader where they were (ListLive)', () => {
+  it('★★ the same conversation re-rendered: no jump to the end, and a new message does not pull them down', async () => {
+    const { el, grow } = scroller();
+    const { rerender } = render(<StreamPin conversationId="c1" />);
+    el.scrollTop = 400;
+    el.dispatchEvent(new Event('scroll'));
+    // what `router.refresh()` delivers: the same props, the same element
+    rerender(<StreamPin conversationId="c1" />);
+    expect(el.scrollTop).toBe(400);
+    grow(80);
+    await act(async () => {
+      el.appendChild(document.createElement('li'));
+      await Promise.resolve();
+    });
+    expect(el.scrollTop).toBe(400);
+  });
+});

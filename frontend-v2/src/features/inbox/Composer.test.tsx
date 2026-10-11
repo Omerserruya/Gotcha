@@ -573,3 +573,23 @@ describe('★★ a draft is kept per conversation - Esc closes without losing it
     expect(screen.getByTestId('composer-body')).toHaveValue('');
   });
 });
+
+describe('★★ a live re-read keeps the draft (ListLive)', () => {
+  it('★★ the page re-rendered with the same conversation: the text is still there', async () => {
+    /*
+     * `router.refresh()` merges the new server payload into the mounted tree
+     * (next/dist/docs, use-router): the composer gets the same props at the
+     * same place, and keeps its state. A refresh per inbound message must not
+     * cost the agent what they were writing.
+     */
+    const user = userEvent.setup();
+    const { rerender } = show();
+    await user.type(screen.getByTestId('composer-body'), 'Half a reply');
+    rerender(
+      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+        <Composer conversationId="c1" channelName="WhatsApp" />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('composer-body')).toHaveValue('Half a reply');
+  });
+});
