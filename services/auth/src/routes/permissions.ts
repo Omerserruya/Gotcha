@@ -21,6 +21,12 @@ import {
   PERMISSIONS,
   BUILTIN_ROLES,
   BUILTIN_ROLE_ORDER,
+  ROLE_CEILINGS,
+  OWNER_FLOOR,
+  ceilingKeysFor,
+  rolesEditable,
+  customizedRoleKey,
+  expandPermissionPatterns,
   SCOPE_ORDER,
   isPermissionKey,
   expandPermissionPattern,
@@ -374,14 +380,46 @@ router.delete(
 );
 
 // ─── Custom tenant roles ───────────────────────────────────────
+/*
+ * EDITABLE BUILT-INS WITH CEILINGS (Omer, 2026-10-11). A built-in role's set
+ * can be edited (unless ROLES_EDITABLE=false), never to include a key its
+ * ceiling forbids (permission-catalog ROLE_CEILINGS), and the Owner role never
+ * below OWNER_FLOOR. An edited built-in is marked customized so the startup
+ * seed leaves it alone; "reset" restores the catalog defaults. "admin" was
+ * merged into "owner" and is not offered any more.
+ */
+type BuiltinKey = keyof typeof ROLE_CEILINGS;
+const isBuiltinKey = (k: unknown): k is BuiltinKey => typeof k === "string" && k in ROLE_CEILINGS;
+
+/** What the roles screen needs to draw one role, including what it may never hold. */
+function roleView(role: any, customized: Set<string>) {
+  const key = isBuiltinKey(role.builtinKey) ? role.builtinKey : null;
+  return {
+    ...role,
+    editable: key === "admin" ? false : !role.isSystem || rolesEditable(),
+    customized: customized.has(role.id),
+    // Built-ins only: a custom role is capped by its HOLDER's built-in role at
+    // read time (a person with only custom roles is capped like an Agent).
+    ceiling: key ? [...ceilingKeysFor(key)].sort() : [],
+    floor: key === "owner" ? [...OWNER_FLOOR] : [],
+    defaults: key ? BUILTIN_ROLES[key as BuiltinKey].permissions : null,
+  };
+}
+
 router.get("/roles", ...ADMIN_ONLY, async (req: Request, res: Response): Promise<void> => {
   const tenantId = assertTenantId(req);
-  const roles = await prisma.tenantRole.findMany({
-    where: { tenantId },
-    include: { features: true, _count: { select: { assignments: true } } },
-    orderBy: { name: "asc" },
-  });
-  res.json({ data: roles });
+  const [roles, markers] = await Promise.all([
+    prisma.tenantRole.findMany({
+      where: { tenantId },
+      include: { features: true, _count: { select: { assignments: true } } },
+      orderBy: { name: "asc" },
+    }),
+    prisma.tenantSetting.findMany({ where: { tenantId, key: { startsWith: "rbac:customized:" } }, select: { key: true } }),
+  ]);
+  const customized = new Set(markers.map((m) => m.key.slice("rbac:customized:".length)));
+  // The merged Admin role is shown only while someone still holds it.
+  const visible = roles.filter((r: any) => r.builtinKey !== "admin" || r._count.assignments > 0);
+  res.json({ data: visible.map((r) => roleView(r, customized)) });
 });
 
 const createRoleSchema = z.object({
@@ -534,13 +572,31 @@ router.put(
       res.status(404).json({ error: "Role not found" });
       return;
     }
-    // A built-in role's capabilities are the product's definition, not this
-    // workspace's: PATCH and DELETE already refused them, this did not.
-    if (role.isSystem) {
+    // A built-in role is editable (2026-10-11) unless the kill switch is set;
+    // the merged Admin role is not.
+    const builtin = isBuiltinKey((role as any).builtinKey) ? ((role as any).builtinKey as BuiltinKey) : null;
+    if (role.isSystem && !rolesEditable()) {
       res.status(403).json({ error: "System roles cannot be modified", code: "SYSTEM_ROLE" });
       return;
     }
+    if (builtin === "admin") {
+      res.status(409).json({ error: "Admin is now part of Owner", code: "ROLE_MERGED" });
+      return;
+    }
     const { features } = req.body as { features: string[] };
+    if (builtin) {
+      const expanded = expandPermissionPatterns(features);
+      const blocked = [...ceilingKeysFor(builtin)].filter((k) => expanded.has(k)).sort();
+      if (blocked.length) {
+        res.status(403).json({ error: "This role can never hold these permissions", code: "ROLE_CEILING", blocked });
+        return;
+      }
+      const missing = builtin === "owner" ? OWNER_FLOOR.filter((k) => !expanded.has(k)) : [];
+      if (missing.length) {
+        res.status(422).json({ error: "The Owner role always keeps these permissions", code: "OWNER_FLOOR", missing });
+        return;
+      }
+    }
     const unknown = features.filter((f) => !isGrantableKey(f));
     if (unknown.length) {
       res.status(400).json({ error: "Unknown features", features: unknown });
@@ -559,6 +615,14 @@ router.put(
       }),
     ]);
     invalidatePermissionsCache();
+    // An edited built-in is the workspace's now: the startup seed leaves it.
+    if (builtin) {
+      await prisma.tenantSetting.upsert({
+        where: { tenantId_key: { tenantId, key: customizedRoleKey(roleId) } },
+        create: { tenantId, key: customizedRoleKey(roleId), value: { at: new Date().toISOString(), by: req.user?.userId ?? null }, updatedBy: req.user?.userId },
+        update: { value: { at: new Date().toISOString(), by: req.user?.userId ?? null }, updatedBy: req.user?.userId },
+      });
+    }
     const after = [...new Set(features)].sort();
     void writeAudit({ tenantId, actorType: "user", actorId: req.user?.userId,
       action: AuditAction.ROLE_UPDATED, targetType: "role", targetId: roleId,
@@ -569,6 +633,36 @@ router.put(
       include: { features: true },
     });
     res.json({ data: updated });
+  },
+);
+
+// Reset a built-in role to the product's defaults; the seed follows the
+// catalog for it again.
+router.post(
+  "/roles/:roleId/reset",
+  ...ADMIN_ONLY,
+  async (req: Request, res: Response): Promise<void> => {
+    const tenantId = assertTenantId(req);
+    const roleId = req.params.roleId as string;
+    const role = await ensureRoleBelongsToTenant(roleId, tenantId);
+    if (!role) { res.status(404).json({ error: "Role not found" }); return; }
+    const builtin = isBuiltinKey((role as any).builtinKey) ? ((role as any).builtinKey as BuiltinKey) : null;
+    if (!builtin || builtin === "admin") { res.status(409).json({ error: "Only a built-in role has defaults", code: "NOT_BUILTIN" }); return; }
+    const defaults = BUILTIN_ROLES[builtin].permissions;
+    if (refusedGrant(res, await patternsRefusal(actorOf(req), defaults))) return;
+    const before = (await prisma.tenantRoleFeature.findMany({ where: { roleId }, select: { feature: true } })).map((f) => f.feature).sort();
+    await prisma.$transaction([
+      prisma.tenantRoleFeature.deleteMany({ where: { roleId } }),
+      prisma.tenantRoleFeature.createMany({ data: defaults.map((feature) => ({ roleId, feature })), skipDuplicates: true }),
+      prisma.tenantSetting.deleteMany({ where: { tenantId, key: customizedRoleKey(roleId) } }),
+    ]);
+    invalidatePermissionsCache();
+    const after = [...new Set(defaults)].sort();
+    void writeAudit({ tenantId, actorType: "user", actorId: req.user?.userId,
+      action: AuditAction.ROLE_UPDATED, targetType: "role", targetId: roleId,
+      metadata: { change: "reset", before, after, added: after.filter((f) => !before.includes(f)), removed: before.filter((f) => !after.includes(f)) } });
+    const updated = await prisma.tenantRole.findUnique({ where: { id: roleId }, include: { features: true } });
+    res.json({ data: roleView(updated, new Set()) });
   },
 );
 
@@ -589,6 +683,7 @@ router.post(
       res.status(404).json({ error: "Role not found" });
       return;
     }
+    if ((role as any).builtinKey === "admin") { res.status(409).json({ error: "Admin is now part of Owner", code: "ROLE_MERGED" }); return; }
     if (refusedGrant(res, await targetRefusal(actorOf(req), tenantId, userId))) return;
     if (refusedGrant(res, await roleRefusal(actorOf(req), tenantId, roleId))) return;
     // The latest assignment is the effective role: assigning "agent" to an admin demotes them.
@@ -692,6 +787,7 @@ router.put(
       res.status(404).json({ error: "Role not found" });
       return;
     }
+    if ((role as any).builtinKey === "admin") { res.status(409).json({ error: "Admin is now part of Owner", code: "ROLE_MERGED" }); return; }
     if (refusedGrant(res, await targetRefusal(actorOf(req), tenantId, userId))) return;
     if (refusedGrant(res, await roleRefusal(actorOf(req), tenantId, roleId))) return;
     try {

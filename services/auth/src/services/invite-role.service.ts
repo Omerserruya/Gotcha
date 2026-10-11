@@ -76,7 +76,9 @@ export async function resolveInviteRoleStrict(
   // been seeded, so a keyword invite produces a real assignment too.
   const upper = wanted.toUpperCase();
   if (upper === "ADMIN" || upper === "AGENT") {
-    const key = upper === "ADMIN" ? "admin" : "agent";
+    // Owner and Admin are one role (2026-10-11): "ADMIN" invites an Owner,
+    // which only an Owner may do (lib/grant-ceiling).
+    const key = upper === "ADMIN" ? "owner" : "agent";
     const role = await prisma.tenantRole.findFirst({
       where: { tenantId, builtinKey: key },
       select: { id: true, name: true, builtinKey: true },
@@ -92,11 +94,16 @@ export async function resolveInviteRoleStrict(
   // tenantId in the WHERE, always. A role id from another organisation simply
   // does not match, so it is refused by not being found rather than by a check
   // someone could forget to write.
-  const role = await prisma.tenantRole.findFirst({
+  let role = await prisma.tenantRole.findFirst({
     where: { id: wanted, tenantId },
     select: { id: true, name: true, builtinKey: true },
   });
   if (!role) return null;
+  // The merged Admin role's id (an old link, an old screen) invites an Owner.
+  if (role.builtinKey === "admin") {
+    const owner = await prisma.tenantRole.findFirst({ where: { tenantId, builtinKey: "owner" }, select: { id: true, name: true, builtinKey: true } });
+    if (owner) role = owner;
+  }
 
   return {
     coarse: coarseFor(role.builtinKey),

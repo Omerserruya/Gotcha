@@ -23,11 +23,26 @@ import { prisma } from "@chatcenter/shared";
 const ADMIN_BUILTINS = new Set(["owner", "admin"]);
 
 export class RoleChangeRefused extends Error {
+  // The code stays LAST_ADMIN (frontend-v2 reads it); since Owner and Admin
+  // became one role (2026-10-11) it means "the last Owner".
   constructor(public code: "LAST_ADMIN" | "SELF_LOCKOUT") {
     super(code === "LAST_ADMIN"
-      ? "This would leave the workspace without an admin"
-      : "You cannot remove your own admin role");
+      ? "This would leave the workspace without an Owner"
+      : "You cannot remove your own Owner role");
   }
+}
+
+/**
+ * Would the workspace still have an Owner if this person stopped being one?
+ * For the system-admin route that sets User.role and isActive directly and so
+ * never ran changeRoles (2026-10-11).
+ */
+export async function ownerRemainsWithout(tenantId: string, userId: string): Promise<boolean> {
+  const members = await prisma.user.findMany({ where: { tenantId, isActive: true, role: { not: "SYSTEM_ADMIN" }, id: { not: userId } }, select: { id: true, role: true } });
+  for (const m of members) {
+    if (m.role === "ADMIN" || ADMIN_BUILTINS.has((await latestBuiltin(prisma as unknown as Tx, m.id, tenantId)) ?? "")) return true;
+  }
+  return false;
 }
 
 /** The transaction client of the shared (extended) prisma. */

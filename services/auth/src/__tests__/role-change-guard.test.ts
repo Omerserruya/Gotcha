@@ -94,6 +94,9 @@ const setRole = (userId: string, roleId: string) => request(app).put(`/api/permi
 beforeEach(() => {
   DB.roles = ROLES; DB.audits = []; DB.locks = []; DB.actor = "a1"; DB.clock = 10;
   DB.users = [user("a1", "ADMIN"), user("a2", "AGENT"), user("x1", "ADMIN", { tenantId: "OTHER" })];
+  // Owner and Admin are one role (2026-10-11): a1 still holds the old Admin
+  // row (as people do until the merge script runs); promotions now go to Owner,
+  // since assigning the merged Admin role is refused.
   DB.assignments = [{ userId: "a1", roleId: "r_admin", assignedAt: 1 }, { userId: "a2", roleId: "r_agent", assignedAt: 2 }];
 });
 
@@ -130,7 +133,7 @@ describe("★ the last admin", () => {
 
   it("can be demoted once another admin exists", async () => {
     DB.actor = "sysop";
-    expect((await setRole("a2", "r_admin")).status).toBe(200);
+    expect((await setRole("a2", "r_owner")).status).toBe(200);
     expect((await setRole("a1", "r_agent")).status).toBe(200);
     expect(isAdmin("a1")).toBe(false);
     expect(isAdmin("a2")).toBe(true);
@@ -139,7 +142,7 @@ describe("★ the last admin", () => {
 
 describe("★ the caller's own admin", () => {
   it("cannot be removed by the caller, even with another admin present", async () => {
-    await setRole("a2", "r_admin");
+    await setRole("a2", "r_owner");
     const r = await setRole("a1", "r_agent");
     expect(r.status).toBe(409);
     expect(r.body.code).toBe("SELF_LOCKOUT");
@@ -149,7 +152,7 @@ describe("★ the caller's own admin", () => {
   });
 
   it("another admin can do it", async () => {
-    await setRole("a2", "r_admin");
+    await setRole("a2", "r_owner");
     DB.actor = "a2";
     expect((await setRole("a1", "r_agent")).status).toBe(200);
   });
@@ -166,9 +169,9 @@ describe("★ one truth: User.role follows the assigned built-in", () => {
   });
 
   it("promoting sets the enum too; removing the only admin assignment drops it", async () => {
-    await setRole("a2", "r_admin");
+    await setRole("a2", "r_owner");
     expect(DB.users.find((u) => u.id === "a2")!.role).toBe("ADMIN");
-    const r = await request(app).delete("/api/permissions/users/a2/roles/r_admin");
+    const r = await request(app).delete("/api/permissions/users/a2/roles/r_owner");
     expect(r.status).toBe(204);
     expect(DB.users.find((u) => u.id === "a2")!.role).toBe("AGENT");
     expect(isAdmin("a2")).toBe(false);

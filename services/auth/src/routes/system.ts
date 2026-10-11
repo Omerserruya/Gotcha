@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { ownerRemainsWithout } from "../services/role-guard";
 import { z } from "zod";
 import {
   prisma,
@@ -1479,6 +1480,15 @@ router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), v
     // Passwords are not GOTCHA's to set. A system admin who needs to restore
     // access issues a setup link via POST /agents/:id/reset-password, which
     // routes through Authentik's recovery flow.
+
+    // Demoting or deactivating the last Owner would leave the workspace with
+    // nobody able to run it; the tenant routes refuse that (role-guard), and
+    // this one bypassed it.
+    const losesOwner = user.role === "ADMIN" && (data.role === "AGENT" || data.isActive === false);
+    if (losesOwner && !(await ownerRemainsWithout(req.params.id as string, user.id))) {
+      res.status(409).json({ error: "This would leave the workspace without an Owner", code: "LAST_ADMIN" });
+      return;
+    }
 
     const updated = await prisma.user.update({
       where: { id: user.id },

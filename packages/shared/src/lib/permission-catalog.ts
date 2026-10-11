@@ -448,7 +448,73 @@ export const BUILTIN_ROLES: Record<BuiltinRoleKey, BuiltinRoleDef> = {
   },
 };
 
-export const BUILTIN_ROLE_ORDER: BuiltinRoleKey[] = ["owner", "admin", "department_manager", "agent"];
+/**
+ * The built-ins a workspace has. "admin" is gone (2026-10-11, Omer: Owner and
+ * Admin are one role): it stays in BUILTIN_ROLES only so rows created before
+ * the merge still resolve, and is never seeded or offered again.
+ */
+export const BUILTIN_ROLE_ORDER: BuiltinRoleKey[] = ["owner", "department_manager", "agent"];
+
+/**
+ * Built-in roles are editable unless this is "false" - the kill switch back to
+ * read-only built-ins that the seed rewrites from the catalog on every start.
+ */
+export function rolesEditable(): boolean {
+  return (process.env.ROLES_EDITABLE ?? "true").toLowerCase() !== "false";
+}
+
+// ─────────────────────────────────────────────────────────────
+// Ceilings - what a role can NEVER have, however it is edited, granted or
+// combined with a custom role (Omer approved, 2026-10-11). Enforced at read
+// time in hasPermission (permissions.ts) by the person's built-in role; a
+// person whose roles are all custom gets the Agent ceiling. The edit routes
+// refuse these keys too, so the screen can say why.
+// ─────────────────────────────────────────────────────────────
+
+const NEVER_FOR_DEPARTMENT_MANAGER = [
+  "settings:billing:*",
+  "settings:roles:manage",
+  // Inviting and removing people stays with the Owner (decision c).
+  "settings:members:manage",
+  "integrations:connections:connect",
+  "integrations:connections:disconnect",
+  "business-systems:connections:connect",
+  "business-systems:connections:manage",
+  "business-systems:sot:select",
+  "settings:workspace:update",
+  "settings:business-policies:manage",
+  "approvals:policies:manage",
+  "ai:employees:delete",
+];
+
+export const ROLE_CEILINGS: Record<BuiltinRoleKey, readonly string[]> = {
+  owner: [],
+  admin: [],
+  department_manager: NEVER_FOR_DEPARTMENT_MANAGER,
+  agent: [
+    ...NEVER_FOR_DEPARTMENT_MANAGER,
+    "channels:manage:update",
+    // Management reporting (Omer, 2026-10-09). analytics:dashboard:read stays
+    // grantable - off by default (decision a).
+    "analytics:workspace:read",
+    "analytics:reports:export",
+    // Customer data leaving the workspace.
+    "customer:profile:export",
+    "ai:employees:create",
+    "ai:tools:manage",
+    "ai:workflows:publish",
+    // Refunds and cancellations are NOT here: an agent's go through approval
+    // (decision b).
+  ],
+};
+
+/** The keys the Owner role always keeps, so a workspace cannot lock itself out. */
+export const OWNER_FLOOR: readonly string[] = ["settings:roles:manage", "settings:members:manage", "settings:billing:manage"];
+
+/** The concrete keys a built-in role can never hold. */
+export function ceilingKeysFor(key: BuiltinRoleKey | null | undefined): Set<string> {
+  return expandPermissionPatterns(key ? ROLE_CEILINGS[key] ?? [] : []);
+}
 
 // ─────────────────────────────────────────────────────────────
 // Migration bridge - map the legacy coarse `Role` enum + departmentRole to a
@@ -462,7 +528,8 @@ export function builtinRoleForLegacy(
   role: string,
   departmentRole?: string | null,
 ): BuiltinRoleKey | null {
-  if (role === "ADMIN") return "admin";
+  // Owner and Admin are one role (2026-10-11): a legacy ADMIN is an Owner.
+  if (role === "ADMIN") return "owner";
   if (role === "AGENT") return departmentRole === "MANAGER" ? "department_manager" : "agent";
   return null; // SYSTEM_ADMIN handled by platform bypass; unknown → no role
 }

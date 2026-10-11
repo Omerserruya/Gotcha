@@ -77,8 +77,13 @@ beforeEach(() => {
 });
 
 describe("★ a built-in role's capabilities cannot be rewritten", () => {
-  it("PUT /roles/:id/features on a system role: 403 SYSTEM_ROLE, nothing written", async () => {
-    const r = await request(app).put("/api/permissions/roles/r_admin/features").send({ features: [] });
+  // Built-ins became editable within their ceilings (Omer, 2026-10-11;
+  // role-editing-routes.test.ts). The refusal below is the kill switch's,
+  // ROLES_EDITABLE=false, which restores exactly this behaviour.
+  it("PUT /roles/:id/features on a system role with ROLES_EDITABLE=false: 403 SYSTEM_ROLE, nothing written", async () => {
+    process.env.ROLES_EDITABLE = "false";
+    let r: any;
+    try { r = await request(app).put("/api/permissions/roles/r_admin/features").send({ features: [] }); } finally { delete process.env.ROLES_EDITABLE; }
     expect(r.status).toBe(403);
     expect(r.body.code).toBe("SYSTEM_ROLE");
     expect(DB.writes).toBe(0);

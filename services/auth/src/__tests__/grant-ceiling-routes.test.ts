@@ -199,6 +199,13 @@ describe("★ invites (G5): into a chosen role, never above the inviter's", () =
     expect(H.invites).toHaveLength(0);
   });
 
+  it("the \"ADMIN\" keyword (and the merged Admin role's id) now means Owner: an Admin gets OWNER_ONLY", async () => {
+    H.roles.push({ id: "r_old_admin", tenantId: "T", name: "Admin", isSystem: true, builtinKey: "admin", features: [] });
+    expect((await request(app).post("/api/agents").send({ email: "k@example.com", name: "K", role: "ADMIN" })).body.code).toBe("OWNER_ONLY");
+    expect((await request(app).post("/api/agents").send({ email: "l@example.com", name: "L", role: "r_old_admin" })).body.code).toBe("OWNER_ONLY");
+    expect(H.invites).toHaveLength(0);
+  });
+
   it("a role from another workspace, or no such role: 400, nobody invited", async () => {
     H.roles.push({ id: "r_other", tenantId: "OTHER", name: "Other", isSystem: false, builtinKey: null, features: [] });
     expect((await request(app).post("/api/agents").send({ email: "z@example.com", name: "Z", role: "r_other" })).status).toBe(400);

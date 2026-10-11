@@ -430,6 +430,10 @@ export {
   licenseKeysFor,
   builtinRoleForLegacy,
   maxScope,
+  ROLE_CEILINGS,
+  OWNER_FLOOR,
+  ceilingKeysFor,
+  rolesEditable,
 } from "./lib/permission-catalog";
 export type {
   PermissionDef,
@@ -451,7 +455,9 @@ export {
   backfillTenantAssignments,
   seedTenantRbac,
   seedAllTenantsRbac,
+  customizedRoleKey,
 } from "./lib/rbac-seed";
+export { mergeAdminIntoOwner, undoMergeAdminIntoOwner, MERGE_RECORD_KEY } from "./lib/rbac-merge";
 
 // Packaging / plans (License layer presets).
 export {
