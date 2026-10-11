@@ -102,15 +102,19 @@ export function PrimaryNavigation() {
           <ul className={styles.subNavList} role="list">
             {children.map((child) => {
               /*
-               * ★ THE VIEW'S UNREAD COUNT, ONLY WHEN THE PAGE WAS TOLD ONE.
-               *   No count, a failed read and a 0 all draw nothing: an
-               *   unread badge of 0 is not news, and 02 puts the VIEW'S SIZE
-               *   in this slot - a "0" beside "Waiting in queue" would read as
-               *   an empty queue. The words say "unread" for a screen reader,
-               *   and the row's pill says it to the eye, so the number is never
-               *   taken for the view's size (supervisor, 2026-10-11).
+               * ★ THE VIEW'S SIZE, THEN ITS UNREAD PILL - ONLY WHAT THE PAGE WAS TOLD.
+               *   The total is a plain muted number, as 02 draws a view's size
+               *   in this slot. A real 0 IS drawn: it is the view's size, and
+               *   "Waiting in queue 0" is the news that the queue is empty. No
+               *   total (a failed read, or a backend that does not send them
+               *   yet) draws nothing, never a 0 (Omer, 2026-10-11).
+               *
+               *   The unread count is the pill, drawn only above 0: an unread
+               *   badge of 0 is not news. Each number says what it is to a
+               *   screen reader, so neither is taken for the other.
                */
-              const unread = child.view === undefined ? undefined : counts?.[child.view];
+              const total = child.view === undefined ? undefined : counts?.totals[child.view];
+              const unread = child.view === undefined ? undefined : counts?.unread[child.view];
               return (
                 <li key={child.id}>
                   <Link
@@ -124,15 +128,37 @@ export function PrimaryNavigation() {
                     className={styles.subNavLink}
                     aria-current={isCurrentChild(active, child) ? 'page' : undefined}
                   >
-                    {t(child.labelKey)}
-                    {unread !== undefined && unread > 0 ? (
-                      <span className={styles.subNavUnread} data-testid={`rail-unread-${child.id}`}>
-                        {/* "99+" is a number: kept left-to-right, or Hebrew draws "+99". */}
-                        <span aria-hidden="true" dir="ltr">
-                          {unread > 99 ? '99+' : unread}
+                    <span className={styles.subNavText}>{t(child.labelKey)}</span>
+                    {/*
+                     * Each number opens with a space, so the link is named
+                     * "Active 5 conversations", not "Active5 conversations".
+                     * A flex row draws no item for a bare space.
+                     */}
+                    {total !== undefined ? (
+                      <>
+                        {' '}
+                        <span className={styles.subNavCount} data-testid={`rail-total-${child.id}`}>
+                          <span aria-hidden="true" dir="ltr">
+                            {total}
+                          </span>
+                          <span className="srOnly">{t('totalCount', { count: total })}</span>
                         </span>
-                        <span className="srOnly">{t('unreadCount', { count: unread })}</span>
-                      </span>
+                      </>
+                    ) : null}
+                    {unread !== undefined && unread > 0 ? (
+                      <>
+                        {' '}
+                        <span
+                          className={styles.subNavUnread}
+                          data-testid={`rail-unread-${child.id}`}
+                        >
+                          {/* "99+" is a number: kept left-to-right, or Hebrew draws "+99". */}
+                          <span aria-hidden="true" dir="ltr">
+                            {unread > 99 ? '99+' : unread}
+                          </span>
+                          <span className="srOnly">{t('unreadCount', { count: unread })}</span>
+                        </span>
+                      </>
                     ) : null}
                   </Link>
                 </li>

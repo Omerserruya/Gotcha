@@ -358,6 +358,26 @@ export function parseUnreadCounts<View extends string>(
   return counts;
 }
 
+/**
+ * How many conversations each view holds, from the same answer: Backend adds
+ * `totals: { <view>: n }` beside the unread keys (each equal to that view's
+ * own viewTotal), so the rail's sizes cost no second call.
+ *
+ * ★ ABSENT IS NOT 0. A backend that does not send `totals` yet, or sends
+ *   something that is not an object, gives no total for any view - and a view
+ *   whose total is not a whole non-negative number gives none for that view.
+ *   The rail draws nothing for a missing total; a real 0 IS drawn, because it
+ *   is the view's size.
+ */
+export function parseViewTotals<View extends string>(
+  body: Record<string, unknown>,
+  views: readonly View[],
+): Partial<Record<View, number>> {
+  const totals = body.totals;
+  if (typeof totals !== 'object' || totals === null) return {};
+  return parseUnreadCounts(totals as Record<string, unknown>, views);
+}
+
 /* ── The stream ──────────────────────────────────────────────────────────── */
 
 /**

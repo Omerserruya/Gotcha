@@ -317,11 +317,32 @@
     cursor: default;
   }
 
+  /*
+   * A view's name, beside its numbers. It may shrink below its longest word:
+   * at the 210px rail "All conversations" with a four-digit size and a pill
+   * would otherwise push the pill past the row's end (Chromium, 2026-10-11).
+   * It wraps at a space first, and only a word that still cannot fit is cut.
+   */
+  .subNavText {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /*
+   * A view's SIZE: plain muted text at the row's end - no fill, no shape, in
+   * the label's own grey and weight at the counter's smaller size, so it is
+   * there when looked for and never pulls the eye. It does not wrap, and the
+   * padding keeps it off a long label.
+   */
   .subNavCount {
+    flex: none;
     margin-inline-start: auto;
+    padding-inline-start: var(--space-8);
     font-family: var(--font-mono);
     font-size: var(--font-size-counter);
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
     color: var(--frame-text-muted);
   }
 
@@ -346,6 +367,11 @@
     line-height: var(--space-18);
     text-align: center;
     font-variant-numeric: tabular-nums;
+  }
+
+  /* After the size, the pill sits beside it rather than splitting the free space. */
+  .subNavCount + .subNavUnread {
+    margin-inline-start: var(--space-6);
   }
 
   .commandHint {

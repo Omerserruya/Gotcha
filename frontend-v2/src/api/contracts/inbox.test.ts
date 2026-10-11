@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   parseUnreadCounts,
+  parseViewTotals,
   rowIsUnread,
   unreadCountsSchema,
   unreadMark,
@@ -112,6 +113,69 @@ describe('★★ unread counts per view: a number per view, or none - never a 0 
     const body = unreadCountsSchema.parse({ queue: '3', mine: -1, active: 1.5 });
     expect(parseUnreadCounts(body, views)).toEqual({});
     expect(parseUnreadCounts({ queue: 2, mine: 'x' }, views)).toEqual({ queue: 2 });
+  });
+
+  it('★ the totals object is not a view: unread reads only the views asked about', () => {
+    const body = unreadCountsSchema.parse({ queue: 1, totals: { queue: 4 } });
+    expect(parseUnreadCounts(body, views)).toEqual({ queue: 1 });
+  });
+});
+
+describe('★★ each view’s size, from the same answer - absent is no total, never a 0', () => {
+  const views = ['queue', 'mine', 'active'] as const;
+
+  it('★★ the live answer (Backend a3d07d09), as the client unwraps it', () => {
+    // GET /api/conversations/unread-counts?views=queue,mine,active,gotcha,all, verbatim `data`.
+    const live = {
+      queue: 0,
+      mine: 1,
+      active: 1,
+      gotcha: 1,
+      all: 2,
+      totals: { queue: 0, mine: 3, active: 2, gotcha: 11, all: 90 },
+    };
+    const all = ['queue', 'mine', 'active', 'gotcha', 'all'] as const;
+    const body = unreadCountsSchema.parse(live);
+    expect(parseUnreadCounts(body, all)).toEqual({
+      queue: 0,
+      mine: 1,
+      active: 1,
+      gotcha: 1,
+      all: 2,
+    });
+    expect(parseViewTotals(body, all)).toEqual({
+      queue: 0,
+      mine: 3,
+      active: 2,
+      gotcha: 11,
+      all: 90,
+    });
+  });
+
+  it('★ reads `totals` beside the unread keys, a real 0 kept', () => {
+    const body = unreadCountsSchema.parse({
+      queue: 2,
+      mine: 1,
+      totals: { queue: 2, mine: 5, active: 0, other: 9 },
+    });
+    expect(parseViewTotals(body, views)).toEqual({ queue: 2, mine: 5, active: 0 });
+  });
+
+  it('⚠⚠ an old backend with no `totals` gives no total for any view - not 0s', () => {
+    expect(parseViewTotals(unreadCountsSchema.parse({ queue: 2, mine: 1 }), views)).toEqual({});
+  });
+
+  it.each([null, 'many', 7, true])(
+    '⚠ a `totals` that is not an object (%s) gives none',
+    (totals) => {
+      expect(parseViewTotals({ queue: 2, totals }, views)).toEqual({});
+    },
+  );
+
+  it('⚠ a negative, fractional or non-number total drops that view only', () => {
+    const body = { totals: { queue: -1, mine: 2.5, active: '3' } };
+    expect(parseViewTotals(body, views)).toEqual({});
+    expect(parseViewTotals({ totals: { queue: -4, mine: 6 } }, views)).toEqual({ mine: 6 });
   });
 });
 

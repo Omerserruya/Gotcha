@@ -23,6 +23,7 @@
   "toggleSidebar": "פתיחה וסגירה של הניווט",
   "commandPalette": "חיפוש או פעולה",
   "unreadCount": "{count, plural, one {שיחה אחת שלא נקראה} other {# שיחות שלא נקראו}}",
+  "totalCount": "{count, plural, one {שיחה אחת} other {# שיחות}}",
   "mainNavigation": "ניווט ראשי",
   "inbox": {
     "queue": "ממתין בתור",

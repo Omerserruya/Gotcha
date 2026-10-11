@@ -53,7 +53,7 @@ const settle = () => act(async () => {});
 beforeEach(() => {
   vi.useFakeTimers();
   get.mockReset();
-  get.mockResolvedValue({ queue: 2, mine: 1, gotcha: 0 });
+  get.mockResolvedValue({ queue: 2, mine: 1, gotcha: 0, totals: { queue: 2, mine: 5, gotcha: 0 } });
   listeners.clear();
 });
 afterEach(() => vi.useRealTimers());
@@ -64,7 +64,50 @@ describe('★★ one read on load, every view in one call', () => {
     await settle();
     expect(get).toHaveBeenCalledTimes(1);
     expect(get.mock.calls[0]![0]).toMatchObject({ query: { views: 'queue,mine,gotcha' } });
-    expect(seen()).toEqual({ queue: 2, mine: 1, gotcha: 0 });
+    expect(seen()).toEqual({
+      unread: { queue: 2, mine: 1, gotcha: 0 },
+      totals: { queue: 2, mine: 5, gotcha: 0 },
+    });
+  });
+
+  it('★★ the totals come from that same one call - no second read', async () => {
+    mount();
+    await settle();
+    expect(get).toHaveBeenCalledTimes(1);
+    expect((seen() as { totals: unknown }).totals).toEqual({ queue: 2, mine: 5, gotcha: 0 });
+  });
+
+  it('★★ the live answer (Backend a3d07d09), every view in one call', async () => {
+    get.mockResolvedValue({
+      queue: 0,
+      mine: 1,
+      active: 1,
+      gotcha: 1,
+      all: 2,
+      totals: { queue: 0, mine: 3, active: 2, gotcha: 11, all: 90 },
+    });
+    render(
+      <>
+        <Rail />
+        <RailUnreadCounts views={['queue', 'mine', 'active', 'gotcha', 'all']} />
+      </>,
+    );
+    await settle();
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get.mock.calls[0]![0]).toMatchObject({
+      query: { views: 'queue,mine,active,gotcha,all' },
+    });
+    expect(seen()).toEqual({
+      unread: { queue: 0, mine: 1, active: 1, gotcha: 1, all: 2 },
+      totals: { queue: 0, mine: 3, active: 2, gotcha: 11, all: 90 },
+    });
+  });
+
+  it('⚠ an old backend with no totals: the unread counts, and no totals at all - never 0s', async () => {
+    get.mockResolvedValue({ queue: 2, mine: 1 });
+    mount();
+    await settle();
+    expect(seen()).toEqual({ unread: { queue: 2, mine: 1 }, totals: {} });
   });
 
   it('a re-render does not read again - only events do', async () => {
@@ -120,10 +163,10 @@ describe('⚠ no count is never a 0, and an old answer never wins', () => {
     expect(seen()).toBeNull();
   });
 
-  it('a read that fails after one that worked takes the numbers away, not leaves them stale', async () => {
+  it('a read that fails after one that worked takes both numbers away, not leaves them stale', async () => {
     mount();
     await settle();
-    expect(seen()).toEqual({ queue: 2, mine: 1, gotcha: 0 });
+    expect(seen()).toMatchObject({ totals: { queue: 2, mine: 5, gotcha: 0 } });
     get.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 503 }));
     act(() => fire('message.received'));
     await act(async () => vi.advanceTimersByTime(RAIL_COUNTS_DEBOUNCE_MS));
@@ -139,9 +182,9 @@ describe('⚠ no count is never a 0, and an old answer never wins', () => {
     mount();
     act(() => fire('message.received'));
     await act(async () => vi.advanceTimersByTime(RAIL_COUNTS_DEBOUNCE_MS));
-    expect(seen()).toEqual({ queue: 5 });
-    await act(async () => answerFirst({ queue: 9 }));
-    expect(seen()).toEqual({ queue: 5 });
+    expect(seen()).toEqual({ unread: { queue: 5 }, totals: {} });
+    await act(async () => answerFirst({ queue: 9, totals: { queue: 9 } }));
+    expect(seen()).toEqual({ unread: { queue: 5 }, totals: {} });
   });
 
   it('★ leaving the inbox clears the rail and cancels a pending read', async () => {

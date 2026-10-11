@@ -4,14 +4,14 @@ import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 
 import { isApiError } from '@/api/client/api-error';
 import { browserApi } from '@/api/client/browser-api';
-import { parseUnreadCounts, unreadCountsSchema } from '@/api/contracts/inbox';
+import { parseUnreadCounts, parseViewTotals, unreadCountsSchema } from '@/api/contracts/inbox';
 import { inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { useRealtimeEvent } from '@/realtime/realtime-provider';
 
 /**
  * Counts a page hands the rail for its own views - today the inbox's unread
- * count per view.
+ * count per view, and how many conversations each view holds.
  *
  * ★★ ONE READ ON LOAD, THEN ONE PER BURST - OWNED HERE, NOT BY THE PAGE.
  *   The inbox page re-renders on every open, verb, mark-read and live
@@ -25,8 +25,13 @@ import { useRealtimeEvent } from '@/realtime/realtime-provider';
  *
  * `null` is "nobody said": the rail draws no count at all. The publisher
  * clears it when the page goes, so another screen never shows the inbox's.
+ *
+ * Both numbers come from the same answer, so they are published together and
+ * cleared together: a view absent from `unread` draws no pill, and one absent
+ * from `totals` (a backend that does not send them yet) draws no total.
  */
-export type RailCounts = Readonly<Partial<Record<string, number>>>;
+export type ViewCounts = Readonly<Partial<Record<string, number>>>;
+export type RailCounts = { readonly unread: ViewCounts; readonly totals: ViewCounts };
 
 let current: RailCounts | null = null;
 const listeners = new Set<() => void>();
@@ -63,8 +68,8 @@ export function PublishRailCounts({ counts }: { readonly counts: RailCounts | nu
 export const RAIL_COUNTS_DEBOUNCE_MS = 1_000;
 
 /**
- * Renders nothing: keeps the rail's unread count per view current while the
- * inbox is mounted. `views` are the inbox's view ids (the shell does not own
+ * Renders nothing: keeps the rail's unread count and total per view current
+ * while the inbox is mounted. `views` are the inbox's view ids (the shell does not own
  * them); an unknown one is a 400, so the page passes its own list.
  *
  * A 404 (the endpoint not yet deployed) or any failure is no count - never a
@@ -84,7 +89,9 @@ export function RailUnreadCounts({ views }: { readonly views: readonly string[] 
         query: { views: query },
         payload: unreadCountsSchema,
       });
-      if (mine === sequence.current) set(parseUnreadCounts(body, query.split(',')));
+      if (mine !== sequence.current) return;
+      const asked = query.split(',');
+      set({ unread: parseUnreadCounts(body, asked), totals: parseViewTotals(body, asked) });
     } catch (cause) {
       if (mine !== sequence.current) return;
       if (isApiError(cause) && cause.status === 404) logger.debug('inbox.unread_counts_absent');
