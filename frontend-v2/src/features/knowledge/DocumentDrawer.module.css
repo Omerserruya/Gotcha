@@ -69,8 +69,16 @@
     margin: 0 0 var(--space-8);
   }
 
+  /*
+   * The indent is each item's own, not the list's: an item reads in its own
+   * direction, and a Hebrew one's bullet (on its right) needs its room there.
+   */
   .mdList {
-    padding-inline-start: 1.3em;
+    padding: 0;
+  }
+
+  .mdList > li {
+    margin-inline-start: 1.3em;
   }
 
   .mdParagraph:last-child,

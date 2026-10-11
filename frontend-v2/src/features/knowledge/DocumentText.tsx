@@ -14,6 +14,11 @@ import styles from './DocumentDrawer.module.css';
  *
  * A heading is one level under the drawer's section title (h3): `#` is h4,
  * `##` h5, and every deeper one h6.
+ *
+ * ★ Each heading, paragraph and LIST ITEM reads in its own direction
+ *   (`dir="auto"`; supervisor at 1440: "שם: Urban Supply - GOTCHA Demo" drew
+ *   as "Urban Supply - GOTCHA Demo :שם" under a list that took one direction
+ *   for all its items). A Hebrew item's bullet sits on its right.
  */
 export function DocumentText({ text }: { readonly text: string }) {
   return <>{blocks(text).map(renderBlock)}</>;
@@ -77,12 +82,38 @@ function renderBlock(block: Block, key: number): ReactNode {
   }
   const List = block.kind;
   return (
-    <List key={key} className={styles.mdList} dir="auto">
+    <List key={key} className={styles.mdList}>
       {block.items.map((item, i) => (
-        <li key={i}>
+        <li key={i} dir="auto">
           <MarkdownInline text={item} />
         </li>
       ))}
     </List>
   );
+}
+
+/**
+ * A section's preview as plain text (the "What the AI uses" list): the
+ * markdown markers gone - heading hashes, bullets, numbers, bold, code, a
+ * link's address - and its lines joined by " · ". The route sends the
+ * section's first characters as stored (ai knowledge.ts, `slice(0, …)`), so
+ * the lines and the marks are still there, and a bold may be cut in half.
+ */
+export function plainPreview(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .replace(HEADING, '$2')
+        .replace(BULLET, '$1')
+        .replace(NUMBERED, '$1')
+        .replace(/\[([^\]\n]+)\]\([^)\s]*\)/g, '$1')
+        .replace(/\*\*([^*\n]+)\*\*|__([^_\n]+)__/g, '$1$2')
+        // A preview is a cut slice: a pair it cut in half leaves one mark.
+        .replace(/\*\*/g, '')
+        .replace(/`([^`\n]+)`/g, '$1')
+        .trim(),
+    )
+    .filter((line) => line !== '')
+    .join(' · ');
 }

@@ -3,7 +3,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 import { documentState, type KnowledgeDocumentDetail } from '@/api/contracts/knowledge';
 import drawer from '@/design-system/styles/drawer.module.css';
 
-import { DocumentText } from './DocumentText';
+import { DocumentText, plainPreview } from './DocumentText';
 import type { DocumentRead } from './load-document';
 import styles from './DocumentDrawer.module.css';
 
@@ -137,7 +137,7 @@ function documentBody(
                     {t('ai.section', { n: section.index + 1 })}
                   </span>
                   <span className={styles.preview} dir="auto">
-                    {section.preview}
+                    {plainPreview(section.preview)}
                   </span>
                 </li>
               ))}

@@ -2,9 +2,10 @@
 
 import { X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import type { AdminChoice } from '@/api/contracts/capabilities';
+import { pressSheetClose, useSheetFocus } from '@/design-system/primitives/overlay/use-sheet-focus';
 import drawer from '@/design-system/styles/drawer.module.css';
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import { Link } from '@/i18n/navigation';
@@ -79,6 +80,10 @@ export function HireSheet({
 
   const groups = toolGroups(tools);
 
+  // Escape is a press on ×; focus stays in the sheet and goes back to "Hire".
+  const sheetRef = useRef<HTMLElement>(null);
+  useSheetFocus(sheetRef, { onEscape: () => pressSheetClose(sheetRef.current) });
+
   return (
     <div className={styles.layer} data-testid="hire-sheet" data-step={step}>
       <Link
@@ -87,7 +92,14 @@ export function HireSheet({
         aria-label={t('close')}
         tabIndex={-1}
       />
-      <section className={styles.sheet} aria-label={t('title')}>
+      <section
+        ref={sheetRef}
+        className={styles.sheet}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('title')}
+        tabIndex={-1}
+      >
         <header className={styles.head}>
           <div className={styles.titles}>
             <h2 className={styles.title}>{t('title')}</h2>
@@ -107,7 +119,12 @@ export function HireSheet({
               </li>
             ))}
           </ol>
-          <Link href="/studio/employees" className={styles.close} aria-label={t('close')}>
+          <Link
+            href="/studio/employees"
+            className={styles.close}
+            aria-label={t('close')}
+            data-sheet-close
+          >
             <X size={16} aria-hidden="true" />
           </Link>
         </header>

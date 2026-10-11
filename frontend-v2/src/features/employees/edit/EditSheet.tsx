@@ -2,7 +2,7 @@
 
 import { X } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 
 import { humaniseCode, type CapabilityStance } from '@/api/contracts/capabilities';
 import {
@@ -13,6 +13,7 @@ import {
 } from '@/api/contracts/employees';
 import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog';
 import { UserText } from '@/design-system/primitives/text/UserText';
+import { pressSheetClose, useSheetFocus } from '@/design-system/primitives/overlay/use-sheet-focus';
 import { Link, useRouter } from '@/i18n/navigation';
 
 import { saveEmployeeEdits, type EmployeeEditResult } from '../actions';
@@ -109,6 +110,10 @@ export function EditSheet({
   // The stored tone stays offered, even one the builder no longer writes.
   const tones = [...new Set([...EMPLOYEE_TONES, ...(employee.tone ? [employee.tone] : [])])];
 
+  // Escape is a press on ×; focus stays in the sheet and goes back to Edit.
+  const sheetRef = useRef<HTMLElement>(null);
+  useSheetFocus(sheetRef, { onEscape: () => pressSheetClose(sheetRef.current) });
+
   return (
     <div className={hire.layer} data-testid="edit-sheet">
       <Link
@@ -118,7 +123,14 @@ export function EditSheet({
         tabIndex={-1}
         scroll={false}
       />
-      <section className={hire.sheet} aria-label={t('title', { name: employee.name })}>
+      <section
+        ref={sheetRef}
+        className={hire.sheet}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('title', { name: employee.name })}
+        tabIndex={-1}
+      >
         <header className={hire.head}>
           <div className={hire.titles}>
             <h2 className={hire.title}>{t('title', { name: employee.name })}</h2>
@@ -133,7 +145,13 @@ export function EditSheet({
               {t('edited', { when: format.relativeTime(new Date(employee.updatedAt)) })}
             </span>
           ) : null}
-          <Link href={back} className={hire.close} aria-label={t('close')} scroll={false}>
+          <Link
+            href={back}
+            className={hire.close}
+            aria-label={t('close')}
+            scroll={false}
+            data-sheet-close
+          >
             <X size={16} aria-hidden="true" />
           </Link>
         </header>

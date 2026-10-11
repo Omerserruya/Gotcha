@@ -266,3 +266,18 @@ describe('★★ 07f - the business systems it may use (Backend 00c6c229; ruling
     expect(screen.queryByTestId('edit-systems-rows')).toBeNull();
   });
 });
+
+describe('★ Escape closes it, as the ×; it is a modal dialog', () => {
+  it('Escape presses the sheet’s own ×; focus starts inside', async () => {
+    sheet();
+    const dialog = screen.getByRole('dialog', { name: /Edit/ });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    const close = dialog.querySelector<HTMLElement>('[data-sheet-close]')!;
+    expect(close).toHaveAccessibleName('Close');
+    const pressed = vi.fn((event: Event) => event.preventDefault());
+    close.addEventListener('click', pressed);
+    await userEvent.keyboard('{Escape}');
+    expect(pressed).toHaveBeenCalledTimes(1);
+  });
+});

@@ -7,8 +7,10 @@ import { describe, expect, it, vi } from 'vitest';
 import employees from '@/i18n/messages/en/employees.json';
 
 vi.mock('@/i18n/navigation', () => ({
-  Link: ({ href, children }: { href: string; children: ReactNode }) => (
-    <a href={href}>{children}</a>
+  Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
   ),
 }));
 
@@ -185,5 +187,20 @@ describe('★ 07b-07d corrections (measurement of aca09ea)', () => {
     const cost = screen.getByTestId('hire-cost');
     expect(cost).toHaveTextContent('Not enough history to estimate yet');
     expect(screen.queryByText('approvals a day')).toBeNull();
+  });
+});
+
+describe('★ Escape closes it, as the ×; it is a modal dialog', () => {
+  it('Escape presses the sheet’s own ×; focus starts inside', async () => {
+    sheet();
+    const dialog = screen.getByRole('dialog', { name: 'Hire an AI employee' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    const close = dialog.querySelector<HTMLElement>('[data-sheet-close]')!;
+    expect(close).toHaveAccessibleName('Close');
+    const pressed = vi.fn((event: Event) => event.preventDefault());
+    close.addEventListener('click', pressed);
+    await userEvent.keyboard('{Escape}');
+    expect(pressed).toHaveBeenCalledTimes(1);
   });
 });

@@ -111,6 +111,10 @@ describe('★★ K6 - what the drawer says about one item', () => {
     expect(content.querySelector('h5')).toHaveTextContent(/^מי אנחנו$/);
     expect(content.textContent).not.toContain('##');
     const bullets = [...content.querySelectorAll('ul > li')].map((li) => li.textContent);
+    // Each item in its own direction - a Hebrew one right to left, its colon after its word.
+    for (const li of content.querySelectorAll('li')) expect(li).toHaveAttribute('dir', 'auto');
+    for (const h of content.querySelectorAll('h4, h5, h6, p'))
+      expect(h).toHaveAttribute('dir', 'auto');
     expect(bullets).toEqual(['שם: GOTCHA', 'אתר: האתר']);
     expect(content.querySelector('ul strong')).toHaveTextContent(/^GOTCHA$/);
     expect(content.querySelector('ul a')).toHaveAttribute('href', 'https://example.com/');
@@ -240,5 +244,30 @@ describe('the contract', () => {
     const parsed = knowledgeDocumentDetailSchema.parse({ id: 'd1' });
     expect(parsed.ai).toEqual({ sectionCount: 0, sections: [], sectionsTruncated: false });
     expect(parsed.content).toBe('');
+  });
+});
+
+describe('★ a section’s preview is plain text - no markdown marks', () => {
+  it('heading, bullets, bold, a link: the words alone, lines joined by " · "', async () => {
+    await show({
+      state: 'ok',
+      document: doc({
+        ai: {
+          sectionCount: 1,
+          sectionsTruncated: false,
+          facts: null,
+          sections: [
+            {
+              index: 0,
+              length: 200,
+              preview:
+                '## מי אנחנו\n- שם: **Urban Supply**\n\n1. [האתר](https://x.com) `code`\n**cut in ha',
+            },
+          ],
+        },
+      }),
+    });
+    const preview = screen.getByTestId('doc-section-0').querySelector('[dir="auto"]');
+    expect(preview).toHaveTextContent(/^מי אנחנו · שם: Urban Supply · האתר code · cut in ha$/);
   });
 });

@@ -27,7 +27,7 @@ import {
 } from './add-way';
 import { ConnectedSources } from './ConnectedSources';
 import styles from './AddKnowledge.module.css';
-import { useSheetFocus } from './use-sheet-focus';
+import { useSheetFocus } from '@/design-system/primitives/overlay/use-sheet-focus';
 
 /**
  * 08b, measured: "Add knowledge" - an 860 dialog over 08. The ways in as
