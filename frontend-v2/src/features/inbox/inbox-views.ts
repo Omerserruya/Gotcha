@@ -46,11 +46,33 @@ export function retiredView(raw: string | undefined): InboxView | null {
   return Object.hasOwn(RETIRED_VIEWS, raw ?? '') ? RETIRED_VIEWS[raw!]! : null;
 }
 
+/**
+ * The inbox with no `?view=`: "Assigned to me" (Omer, 2026-10-11) - what the
+ * reader holds, before the queue of what nobody does. Every bare `/inbox`
+ * link follows it; a link that means the queue says `?view=queue`.
+ *
+ * ⚠ "Assigned to me" needs `/auth/me`. When it cannot be read, a bare inbox
+ *   shows "Active" instead (`loadInbox`'s `unknownViewer`), the same rule as
+ *   Take control's landing - never a list that can only say it could not read.
+ */
+export const DEFAULT_INBOX_VIEW: InboxView = 'mine';
+
+/**
+ * The view a list is actually of: the one asked for - except the DEFAULT
+ * "mine" when the viewer is unknown, which is "Active". An explicit
+ * `?view=mine` keeps its honest "could not read": that is what was asked.
+ */
+export function shownView(view: InboxView, explicit: boolean, meKnown: boolean): InboxView {
+  return view === 'mine' && !explicit && !meKnown ? 'active' : view;
+}
+
 /** An unknown or absent `?view=` is the default, never an error page. */
 export function parseInboxView(raw: string | undefined): InboxView {
   const retired = retiredView(raw);
   if (retired !== null) return retired;
-  return (INBOX_VIEW_IDS as readonly string[]).includes(raw ?? '') ? (raw as InboxView) : 'queue';
+  return (INBOX_VIEW_IDS as readonly string[]).includes(raw ?? '')
+    ? (raw as InboxView)
+    : DEFAULT_INBOX_VIEW;
 }
 
 /**
@@ -185,7 +207,8 @@ export function inboxQuery(state: {
   readonly period?: InboxPeriod | null;
 }): Record<string, string> {
   return {
-    ...(state.view === 'queue' ? {} : { view: state.view }),
+    // The default is the bare address; every other view, the queue included, is named.
+    ...(state.view === DEFAULT_INBOX_VIEW ? {} : { view: state.view }),
     ...(state.channel === null ? {} : { channel: state.channel }),
     ...(state.period?.from ? { from: state.period.from } : {}),
     ...(state.period?.to ? { to: state.period.to } : {}),

@@ -256,7 +256,8 @@ export const PRIMARY_NAVIGATION: readonly NavigationItem[] = [
     children: INBOX_VIEWS,
     childrenLabelKey: 'groups.views',
     viewParam: 'view',
-    defaultView: 'queue',
+    // A bare /inbox is "Assigned to me" (inbox-views' DEFAULT_INBOX_VIEW; the shell may not import it).
+    defaultView: 'mine',
   },
   {
     id: 'approvals',

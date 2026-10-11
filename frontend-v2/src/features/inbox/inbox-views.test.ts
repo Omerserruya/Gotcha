@@ -4,7 +4,9 @@ import {
   inboxQuery,
   INBOX_VIEW_IDS,
   parseChannelFilter,
+  DEFAULT_INBOX_VIEW,
   parseInboxView,
+  shownView,
   QUEUE_CHANNEL_FILTERS,
   parsePeriod,
   retiredView,
@@ -66,7 +68,7 @@ describe('★★ each view asks the route for what its name says', () => {
 describe('★ an unknown view is the default, never an error page', () => {
   it('falls back for absent, empty and invented values', () => {
     for (const raw of [undefined, '', 'archived', 'QUEUE', '../admin']) {
-      expect(parseInboxView(raw), String(raw)).toBe('queue');
+      expect(parseInboxView(raw), String(raw)).toBe('mine');
     }
   });
 
@@ -120,9 +122,22 @@ describe('⚠⚠ an inbox link keeps where the reader is', () => {
     });
   });
 
-  it('leaves out what is already the default, and never a cursor', () => {
-    expect(inboxQuery({ view: 'queue', channel: null })).toEqual({});
-    expect(inboxQuery({ view: 'queue', channel: null, c: null })).toEqual({});
+  it('leaves out what is already the default ("Assigned to me"), and never a cursor', () => {
+    expect(inboxQuery({ view: 'mine', channel: null })).toEqual({});
+    expect(inboxQuery({ view: 'mine', channel: null, c: null })).toEqual({});
+  });
+
+  it('★★ the queue is NAMED now - a bare /inbox is "Assigned to me" (Omer, 2026-10-11)', () => {
+    expect(DEFAULT_INBOX_VIEW).toBe('mine');
+    expect(inboxQuery({ view: 'queue', channel: null })).toEqual({ view: 'queue' });
+  });
+
+  it('★ the default with an unknown viewer shows "Active"; a named "mine" stays "mine"', () => {
+    expect(shownView('mine', false, false)).toBe('active');
+    expect(shownView('mine', true, false)).toBe('mine');
+    expect(shownView('mine', false, true)).toBe('mine');
+    // Only "mine" needs a viewer.
+    expect(shownView('queue', false, false)).toBe('queue');
   });
 });
 

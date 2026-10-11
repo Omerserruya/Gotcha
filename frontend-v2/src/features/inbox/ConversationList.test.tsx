@@ -883,6 +883,7 @@ describe('⚠⚠ "every thing in its own container" - the panel, and how a row i
         cap: 10,
         now: NOW,
         hasMore: true,
+        view: 'queue',
       }),
     );
     // What the page holds, said as that - never "3" standing for the queue.

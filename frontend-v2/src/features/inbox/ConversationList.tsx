@@ -23,6 +23,7 @@ import { Link } from '@/i18n/navigation';
 
 import {
   inboxQuery,
+  DEFAULT_INBOX_VIEW,
   QUEUE_CHANNEL_FILTERS,
   type InboxPeriod,
   type InboxView,
@@ -71,7 +72,7 @@ export async function ConversationList({
   role = null,
   colleagues = [],
   greeting = null,
-  view = 'queue',
+  view = DEFAULT_INBOX_VIEW,
   channel = null,
   period = null,
   periodInvalid = false,

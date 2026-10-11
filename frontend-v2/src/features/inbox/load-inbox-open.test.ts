@@ -42,14 +42,14 @@ const asked = () =>
 
 describe('★★ a link opens its conversation, whatever the view', () => {
   it('listed: opened from the rows, no extra read', async () => {
-    const data = await loadInbox('listed');
+    const data = await loadInbox('listed', undefined, 'queue');
     expect(data.open?.id).toBe('listed');
     expect(data.missing).toBeNull();
     expect(asked()).not.toContain('/api/conversations/listed');
   });
 
   it('★★ not in this view: read by id and opened', async () => {
-    const data = await loadInbox('elsewhere');
+    const data = await loadInbox('elsewhere', undefined, 'queue');
     expect(asked()).toContain('/api/conversations/elsewhere');
     expect(data.open?.id).toBe('elsewhere');
     expect(data.missing).toBeNull();
@@ -58,7 +58,7 @@ describe('★★ a link opens its conversation, whatever the view', () => {
 
   it.each([404, 403])('★ %i: "isn’t available" - not "Nothing is open"', async (status) => {
     byId = () => new ApiError({ kind: status === 404 ? 'not_found' : 'authorization', status });
-    const data = await loadInbox('gone');
+    const data = await loadInbox('gone', undefined, 'queue');
     expect(data.open).toBeNull();
     expect(data.missing).toBe('unavailable');
     expect(data.detail).toBeNull();
@@ -66,11 +66,11 @@ describe('★★ a link opens its conversation, whatever the view', () => {
 
   it('any other failure is a failed open, said as ours', async () => {
     byId = () => new ApiError({ kind: 'server', status: 500 });
-    expect((await loadInbox('x')).missing).toBe('failed');
+    expect((await loadInbox('x', undefined, 'queue')).missing).toBe('failed');
   });
 
   it('★★ no `?c=`: nothing open - pick one, as WhatsApp asks (Omer) - and nothing read by id', async () => {
-    const data = await loadInbox();
+    const data = await loadInbox(undefined, undefined, 'queue');
     expect(data.open).toBeNull();
     expect(data.detail).toBeNull();
     expect(data.missing).toBeNull();

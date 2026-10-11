@@ -19,6 +19,7 @@ import {
   INBOX_VIEW_IDS,
   parseChannelFilter,
   parseInboxView,
+  shownView,
   parsePeriod,
   retiredView,
 } from '@/features/inbox/inbox-views';
@@ -30,7 +31,7 @@ import { StreamSkeleton } from '@/features/inbox/Skeletons';
 import { PageContainer } from '@/shell/PageContainer';
 import { RailUnreadCounts } from '@/shell/rail-counts';
 import { pageMetadata } from '@/shell/page-metadata';
-import { channelName, rowIsUnread } from '@/api/contracts/inbox';
+import { channelName, openReadState } from '@/api/contracts/inbox';
 import { SkeletonBubbles, SkeletonCards } from '@/design-system/primitives/skeleton/Skeleton';
 
 /**
@@ -112,12 +113,16 @@ export default async function Page({
       locale: await getLocale(),
     });
   }
-  const view = parseInboxView(rawView);
+  const askedView = parseInboxView(rawView);
   const channel = parseChannelFilter(rawChannel);
   const asked = parsePeriod(from, to);
   // A period the route would refuse is not sent - and the list says it is not applied.
   const period = asked === 'invalid' ? null : asked;
-  const data = await loadInbox(c, cursor, view, channel, period);
+  // Named in the address, or the default standing in for an absent or unknown one.
+  const explicit = rawView === askedView;
+  const data = await loadInbox(c, cursor, askedView, channel, period, explicit);
+  // The view the rows are of - "Active" when the default could not know who "me" is.
+  const view = shownView(askedView, explicit, data.meId !== null);
   /*
     02b: the queue is clear - the default view, unfiltered, read and empty.
     Its own reads only then, so a busy inbox pays for nothing.
@@ -348,7 +353,7 @@ export default async function Page({
                   */}
                   <MarkReadOnOpen
                     conversationId={data.open.id}
-                    wasUnread={rowIsUnread(data.open)}
+                    readState={openReadState(data.open)}
                   />
                   {/*
                     ════════════════════════════════════════════════════════

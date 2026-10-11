@@ -1,6 +1,8 @@
 import 'server-only';
 
 import {
+  DEFAULT_INBOX_VIEW,
+  shownView,
   viewQuery,
   type InboxView,
   type QueueChannelFilter,
@@ -185,11 +187,16 @@ export interface InboxData {
 export async function loadInbox(
   conversationId?: string,
   cursor?: string,
-  view: InboxView = 'queue',
+  view: InboxView = DEFAULT_INBOX_VIEW,
   /** `null` is "All". Sent as the route's own `channel` filter. */
   channel: QueueChannelFilter | null = null,
   /** The period, as the route's own `from` / `to` (workspace days, `to` inclusive). */
   period: InboxPeriod | null = null,
+  /**
+   * Was the view named in the address? The DEFAULT "mine" with an unknown
+   * viewer is read as "Active" (`shownView`); a named one is read as named.
+   */
+  explicit = true,
 ): Promise<InboxData> {
   const api = serverApi();
 
@@ -286,7 +293,7 @@ export async function loadInbox(
 
   const queueRead =
     view === 'mine'
-      ? meRead.then((id) => fetchQueue(viewQuery('mine', id)))
+      ? meRead.then((id) => fetchQueue(viewQuery(shownView(view, explicit, id !== null), id)))
       : fetchQueue(viewQuery(view, null));
 
   const [queue, viewerMe, colleagues, greeting] = await Promise.all([

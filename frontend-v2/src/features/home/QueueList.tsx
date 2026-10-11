@@ -136,7 +136,11 @@ export async function QueueList({
       })}
 
       {remaining > 0 ? (
-        <Link href="/inbox" className={styles.queueFooter}>
+        <Link
+          // The rest of the QUEUE: named, since a bare /inbox is "Assigned to me".
+          href={{ pathname: '/inbox', query: { view: 'queue' } }}
+          className={styles.queueFooter}
+        >
           {t('more', { count: remaining })}
         </Link>
       ) : null}

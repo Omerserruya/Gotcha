@@ -49,3 +49,24 @@ describe('★ Home’s queue opens the conversation it names', () => {
     expect(screen.getByRole('link')).toHaveAttribute('href', '/inbox?c=conv+7');
   });
 });
+
+describe('★★ "N more" is the rest of the QUEUE - named, since a bare /inbox is "Assigned to me"', () => {
+  it('links to /inbox?view=queue (Omer, 2026-10-11)', async () => {
+    const item = queueItemSchema.parse({
+      conversationId: 'c1',
+      customer: { id: '+972541234567', name: 'Dana' },
+      channel: 'WHATSAPP',
+      preview: 'Hi',
+      intent: 'OTHER',
+      waitingSince: '2026-10-08T09:00:00Z',
+      rank: 1,
+    });
+    render(
+      await QueueList({ items: [item], totalWaiting: 6, now: new Date('2026-10-08T10:00:00Z') }),
+    );
+    const more = screen
+      .getAllByRole('link')
+      .find((link) => !link.getAttribute('href')?.includes('c='));
+    expect(more).toHaveAttribute('href', '/inbox?view=queue');
+  });
+});

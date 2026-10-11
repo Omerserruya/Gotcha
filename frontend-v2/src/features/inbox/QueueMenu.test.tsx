@@ -282,7 +282,7 @@ describe('★★ the list follows the conversation, as the header’s buttons do
     await userEvent.click(screen.getByTestId('menu-assign-me'));
     await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
     expect(push).toHaveBeenCalledWith(
-      { pathname: '/inbox', query: { view: 'mine', c: 'c1' } },
+      { pathname: '/inbox', query: { c: 'c1' } },
       { scroll: false },
     );
     expect(screen.queryByTestId('queue-menu-notice')).toBeNull();
@@ -298,7 +298,7 @@ describe('★★ the list follows the conversation, as the header’s buttons do
     await userEvent.click(screen.getByTestId('menu-assign-me'));
     const notice = await screen.findByTestId('queue-menu-notice');
     expect(notice).toHaveTextContent(/^2 conversations moved to Assigned to me\.$/);
-    expect(screen.getByTestId('queue-menu-moved-link')).toHaveAttribute('href', '/inbox?view=mine');
+    expect(screen.getByTestId('queue-menu-moved-link')).toHaveAttribute('href', '/inbox?');
     expect(screen.getByTestId('queue-menu-moved-link')).toHaveAttribute('data-prefetch', 'false');
     expect(push).not.toHaveBeenCalled();
   });

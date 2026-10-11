@@ -513,7 +513,7 @@ describe('★★ after Take control or Return to the AI, the list goes where the
     server.answer({ ok: true });
     await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
     expect(push).toHaveBeenCalledWith(
-      { pathname: '/inbox', query: { view: 'mine', c: 'c1' } },
+      { pathname: '/inbox', query: { c: 'c1' } },
       { scroll: false },
     );
   });

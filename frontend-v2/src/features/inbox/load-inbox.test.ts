@@ -51,7 +51,7 @@ describe('⚠⚠ two rounds, and the first one is four calls wide', () => {
      * exactly one request and fails this line.
      */
     const { loadInbox } = await import('./load-inbox');
-    void loadInbox();
+    void loadInbox(undefined, undefined, 'queue');
     await settleMicrotasks();
 
     const paths = requested();
@@ -70,7 +70,7 @@ describe('⚠⚠ two rounds, and the first one is four calls wide', () => {
      *   different bug wearing the same fix.
      */
     const { loadInbox } = await import('./load-inbox');
-    void loadInbox();
+    void loadInbox(undefined, undefined, 'queue');
     await settleMicrotasks();
 
     expect(requested().some((p) => p.includes('/messages'))).toBe(false);
@@ -115,6 +115,28 @@ describe('⚠⚠ the view reaches the route', () => {
     await settleMicrotasks();
 
     expect(queueCall()?.query).toMatchObject({ assignedAgentId: 'u7' });
+  });
+
+  it('★★ the DEFAULT "mine" with the viewer unknown reads "Active" - a list, not a failure', async () => {
+    const { loadInbox } = await import('./load-inbox');
+    const { viewQuery } = await import('./inbox-views');
+    void loadInbox(undefined, undefined, 'mine', null, null, false);
+    await settleMicrotasks();
+    const meKey = requested().find((p) => p.includes('/auth/me'))!;
+    pending.get(meKey)!({});
+    await settleMicrotasks();
+    expect(queueCall()?.query).toMatchObject(viewQuery('active', null)!);
+    expect(queueCall()?.query).not.toHaveProperty('assignedAgentId');
+  });
+
+  it('⚠ a NAMED ?view=mine with the viewer unknown asks for no list - it says it could not read', async () => {
+    const { loadInbox } = await import('./load-inbox');
+    void loadInbox(undefined, undefined, 'mine', null, null, true);
+    await settleMicrotasks();
+    const meKey = requested().find((p) => p.includes('/auth/me'))!;
+    pending.get(meKey)!({});
+    await settleMicrotasks();
+    expect(requested().some((p) => p.endsWith('/conversations'))).toBe(false);
   });
 
   it('★★ a channel filter reaches the route as its own `channel`', async () => {
@@ -169,7 +191,7 @@ describe('★★ the page does not wait for the conversation - the second round 
      * Round one settles here; round two is left unanswered on purpose.
      */
     const { loadInbox } = await import('./load-inbox');
-    const result = loadInbox('c1');
+    const result = loadInbox('c1', undefined, 'queue');
     await settleMicrotasks();
     for (const key of requested()) {
       const answer = pending.get(key)!;

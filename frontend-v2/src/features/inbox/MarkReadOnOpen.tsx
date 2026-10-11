@@ -23,27 +23,40 @@ import { markReadOnOpen } from './conversation-actions';
  *
  * ★ A client effect rather than the page's render: the render is a GET, and
  *   a GET that writes runs again on every prefetch and refresh.
+ *
+ * ★★ NOTHING SENT FOR A ROW ALREADY READ (dev, 2026-10-11). Every send is
+ *   answered with this person's own `conversation:updated`, and every one of
+ *   those re-renders the inbox - so opening a read conversation re-rendered
+ *   the page about a second later, invalidating every prefetched route. A row
+ *   that says `unread: false` has nothing to clear. A row whose read state is
+ *   unknown (opened by id, which carries none) is still sent - but without a
+ *   refresh of our own: the echo is the refresh.
  */
 export function MarkReadOnOpen({
   conversationId,
-  wasUnread,
+  readState,
 }: {
   readonly conversationId: string;
-  /** The row was drawn unread: refresh the list so it loses its dot. */
-  readonly wasUnread: boolean;
+  /**
+   * The open row's read state as the server gave it: `unread` (drawn with a
+   * mark - send, and refresh so it loses it), `read` (`unread: false` -
+   * nothing to send), `unknown` (no read fields - send, no refresh).
+   */
+  readonly readState: 'unread' | 'read' | 'unknown';
 }) {
   const marked = useRef<string | null>(null);
 
   useEffect(() => {
     if (marked.current === conversationId) return;
     marked.current = conversationId;
+    if (readState === 'read') return;
     /*
      * Silent: the action logs its own failure and never throws. The catch is
      * for the transport to our own server, which is no more the reader's
      * problem than the platform's answer is.
      */
-    markReadOnOpen(conversationId, wasUnread).catch(() => undefined);
-  }, [conversationId, wasUnread]);
+    markReadOnOpen(conversationId, readState === 'unread').catch(() => undefined);
+  }, [conversationId, readState]);
 
   return null;
 }

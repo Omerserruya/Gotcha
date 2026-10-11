@@ -550,7 +550,7 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
 
   it('★★ passes the view to the loader', async () => {
     await withView('resolved');
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'resolved', null, null);
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'resolved', null, null, true);
   });
 
   it('★★ and to the list, so its heading names the view', async () => {
@@ -558,9 +558,9 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
     expect(props?.view).toBe('mine');
   });
 
-  it('⚠ an invented view falls back to the queue rather than an error', async () => {
+  it('⚠ an invented view falls back to the default ("Assigned to me") rather than an error', async () => {
     await withView('../../admin');
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'queue', null, null);
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'mine', null, null, false);
     expect(redirect).not.toHaveBeenCalled();
   });
 
@@ -599,7 +599,7 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
   it('★ and `?view=gotcha` itself is read, not redirected', async () => {
     await withView('gotcha');
     expect(redirect).not.toHaveBeenCalled();
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'gotcha', null, null);
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'gotcha', null, null, true);
   });
 
   it('★★ reads `channel` too, and hands it to the loader and the list', async () => {
@@ -608,7 +608,14 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
     const tree = await Page({
       searchParams: Promise.resolve({ view: 'active', channel: 'MESSENGER' }),
     });
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'active', 'MESSENGER', null);
+    expect(loadInbox).toHaveBeenLastCalledWith(
+      undefined,
+      undefined,
+      'active',
+      'MESSENGER',
+      null,
+      true,
+    );
     expect(propsOf<{ channel?: string | null }>(tree, ConversationList)?.channel).toBe('MESSENGER');
   });
 
@@ -630,7 +637,7 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
       searchParams: Promise.resolve({ from: '2026-09-01', to: '2026-09-30' }),
     });
     const period = { from: '2026-09-01', to: '2026-09-30' };
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'queue', null, period);
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'mine', null, period, false);
     const props = propsOf<{ period?: unknown; periodInvalid?: boolean }>(tree, ConversationList);
     expect(props).toMatchObject({ period, periodInvalid: false });
   });
@@ -641,7 +648,7 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
     const tree = await Page({
       searchParams: Promise.resolve({ from: '2026-09-30', to: '2026-09-01' }),
     });
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'queue', null, null);
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'mine', null, null, false);
     expect(propsOf<{ periodInvalid?: boolean }>(tree, ConversationList)?.periodInvalid).toBe(true);
   });
 
@@ -649,7 +656,7 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
     loadInbox.mockResolvedValue(data());
     const { default: Page } = await import('./page');
     await Page({ searchParams: Promise.resolve({ channel: 'GMAIL' }) });
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'queue', null, null);
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'mine', null, null, false);
   });
 });
 
@@ -712,9 +719,10 @@ describe('★★ 02b - the queue is clear, and only then', () => {
   const props = (tree: unknown, type: unknown) =>
     propsOf<Record<string, unknown>>(tree as never, type);
 
-  it('the default view, read and empty: the clear list and the pane, from their own read', async () => {
+  it('the queue, read and empty: the clear list and the pane, from their own read', async () => {
     loadClearQueue.mockClear();
-    const tree = await page({ rows: [], open: null, messages: null });
+    // Named: a bare /inbox is "Assigned to me" now, and 02b is the QUEUE's clear state.
+    const tree = await page({ rows: [], open: null, messages: null }, { view: 'queue' });
     expect(loadClearQueue).toHaveBeenCalledTimes(1);
     expect((props(tree, ConversationList)?.clear as { type?: unknown } | null)?.type).toBe(
       ClearQueueList,
@@ -791,23 +799,20 @@ describe('★★ the inbox keeps itself current - open or not (ListLive)', () =>
 });
 
 describe('★★ opening reads it, for this person (MarkReadOnOpen)', () => {
-  it('★ mounted for the open conversation; the list re-reads only if its row was unread', async () => {
+  it('★ mounted for the open conversation, told its read state as the server gave it', async () => {
+    const state = async (over: Record<string, unknown>) =>
+      propsOf<{ readState: string }>(await page({ open: row(over) }), MarkReadOnOpen)?.readState;
     expect(
-      propsOf<{ conversationId: string; wasUnread: boolean }>(
+      propsOf<{ conversationId: string; readState: string }>(
         await page({ open: row({ unread: true }) }),
         MarkReadOnOpen,
       ),
-    ).toEqual({ conversationId: 'conv1', wasUnread: true });
-    expect(
-      propsOf<{ wasUnread: boolean }>(await page({ open: row({ unreadCount: 2 }) }), MarkReadOnOpen)
-        ?.wasUnread,
-    ).toBe(true);
-    expect(
-      propsOf<{ wasUnread: boolean }>(await page({ open: row({ unread: false }) }), MarkReadOnOpen)
-        ?.wasUnread,
-    ).toBe(false);
-    // Read state not sent: nothing drawn, so nothing to re-read.
-    expect(propsOf<{ wasUnread: boolean }>(await page(), MarkReadOnOpen)?.wasUnread).toBe(false);
+    ).toEqual({ conversationId: 'conv1', readState: 'unread' });
+    expect(await state({ unreadCount: 2 })).toBe('unread');
+    // Read: nothing to send, so no echo re-rendering the page.
+    expect(await state({ unread: false })).toBe('read');
+    // Read state not sent (a row read by id carries none): sent, without a refresh of our own.
+    expect(await state({})).toBe('unknown');
   });
 
   it('⚠ nothing open, nothing marked', async () => {
@@ -821,5 +826,26 @@ describe('★★ opening reads it, for this person (MarkReadOnOpen)', () => {
     expect(propsOf<{ views: readonly string[] }>(tree, RailUnreadCounts)).toEqual({
       views: INBOX_VIEW_IDS,
     });
+  });
+});
+
+describe('★★ a bare /inbox is "Assigned to me" - and "Active" when we cannot know who "me" is', () => {
+  it('★★ no view named: the loader is asked for "mine", as the default', async () => {
+    await page();
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'mine', null, null, false);
+    expect(propsOf<{ view?: string }>(await page(), ConversationList)?.view).toBe('mine');
+  });
+
+  it('★ the default with /auth/me unread: the list is "Active", never a list that cannot read', async () => {
+    expect(propsOf<{ view?: string }>(await page({ meId: null }), ConversationList)?.view).toBe(
+      'active',
+    );
+  });
+
+  it('⚠ an explicit ?view=mine with /auth/me unread stays "mine" - that is what was asked', async () => {
+    expect(
+      propsOf<{ view?: string }>(await page({ meId: null }, { view: 'mine' }), ConversationList)
+        ?.view,
+    ).toBe('mine');
   });
 });

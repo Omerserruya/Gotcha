@@ -46,3 +46,12 @@ describe('★★ the inbox rail has one view for what GOTCHA handles, not two (O
     ]);
   });
 });
+
+describe('★★ a bare /inbox is "Assigned to me" (Omer, 2026-10-11)', () => {
+  it('the rail lights "Assigned to me" when no view is named', () => {
+    const inbox = PRIMARY_NAVIGATION.find((item) => item.id === 'inbox');
+    expect(inbox?.href).toBe('/inbox');
+    // Mirrors inbox-views' DEFAULT_INBOX_VIEW, which the shell may not import.
+    expect(inbox?.defaultView).toBe('mine');
+  });
+});

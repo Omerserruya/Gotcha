@@ -299,6 +299,16 @@ export function rowIsUnread(row: UnreadFields): boolean {
   return unreadMark(row) !== null;
 }
 
+/**
+ * What opening this row has to do about its read state: `unread` (it has a
+ * mark), `read` (the server says `unread: false` - nothing to clear), or
+ * `unknown` (no read fields at all - a row read by id carries none).
+ */
+export function openReadState(row: UnreadFields): 'unread' | 'read' | 'unknown' {
+  if (rowIsUnread(row)) return 'unread';
+  return row.unread === false ? 'read' : 'unknown';
+}
+
 type UnreadFields = { readonly unread?: boolean; readonly unreadCount?: number };
 
 /**
