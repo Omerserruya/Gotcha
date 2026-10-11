@@ -564,6 +564,7 @@ export async function ConversationList({
         >
           <Link
             href={{ pathname: '/inbox', query: inboxQuery({ view, channel: null, period }) }}
+            prefetch={false}
             className={styles.filterAll}
             aria-current={channel === null ? 'true' : undefined}
             data-testid="filter-all"
@@ -576,6 +577,7 @@ export async function ConversationList({
               <Link
                 key={filter}
                 href={{ pathname: '/inbox', query: inboxQuery({ view, channel: filter, period }) }}
+                prefetch={false}
                 className={styles.filterChannel}
                 aria-current={channel === filter ? 'true' : undefined}
                 title={name}
@@ -595,6 +597,7 @@ export async function ConversationList({
         {period ? (
           <Link
             href={{ pathname: '/inbox', query: inboxQuery({ view, channel, period: null }) }}
+            prefetch={false}
             className={styles.periodChip}
             aria-label={t('queue.period.clear', { period: periodWords(period) })}
             data-testid="queue-period"

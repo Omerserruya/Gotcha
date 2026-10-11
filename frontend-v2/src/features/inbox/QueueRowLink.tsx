@@ -56,6 +56,14 @@ export function QueueRowLink({
   return (
     <Link
       href={href}
+      /*
+       * ★ NOT PREFETCHED. Every inbox prefetch renders the whole page on the
+       *   server - the list and the open conversation - and a list of rows
+       *   was dozens of those within three seconds of a load (dev,
+       *   2026-10-11). A click renders it once, with the pending pane drawn
+       *   at once, so nothing is waited on that a prefetch would have saved.
+       */
+      prefetch={false}
       onClick={onClick}
       aria-current={marked ? 'true' : undefined}
       data-open={marked ? '' : undefined}

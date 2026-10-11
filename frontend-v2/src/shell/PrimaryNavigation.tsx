@@ -106,20 +106,31 @@ export function PrimaryNavigation() {
                *   No count, a failed read and a 0 all draw nothing: an
                *   unread badge of 0 is not news, and 02 puts the VIEW'S SIZE
                *   in this slot - a "0" beside "Waiting in queue" would read as
-               *   an empty queue. The words say "unread" for a screen reader.
+               *   an empty queue. The words say "unread" for a screen reader,
+               *   and the row's pill says it to the eye, so the number is never
+               *   taken for the view's size (supervisor, 2026-10-11).
                */
               const unread = child.view === undefined ? undefined : counts?.[child.view];
               return (
                 <li key={child.id}>
                   <Link
                     href={childHref(active, child)}
+                    /*
+                     * Not prefetched: a view is the inbox page, and each
+                     * prefetch renders it on the server - list, counts and
+                     * all - for a view nobody may open (dev, 2026-10-11).
+                     */
+                    prefetch={false}
                     className={styles.subNavLink}
                     aria-current={isCurrentChild(active, child) ? 'page' : undefined}
                   >
                     {t(child.labelKey)}
                     {unread !== undefined && unread > 0 ? (
-                      <span className={styles.subNavCount} data-testid={`rail-unread-${child.id}`}>
-                        <span aria-hidden="true">{unread}</span>
+                      <span className={styles.subNavUnread} data-testid={`rail-unread-${child.id}`}>
+                        {/* "99+" is a number: kept left-to-right, or Hebrew draws "+99". */}
+                        <span aria-hidden="true" dir="ltr">
+                          {unread > 99 ? '99+' : unread}
+                        </span>
                         <span className="srOnly">{t('unreadCount', { count: unread })}</span>
                       </span>
                     ) : null}

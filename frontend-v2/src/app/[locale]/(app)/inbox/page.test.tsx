@@ -15,6 +15,8 @@ import { PendingPane } from '@/features/inbox/PendingPane';
 import { InboxEscape } from '@/features/inbox/InboxEscape';
 import { ListLive } from '@/features/inbox/ListLive';
 import { MarkReadOnOpen } from '@/features/inbox/MarkReadOnOpen';
+import { INBOX_VIEW_IDS } from '@/features/inbox/inbox-views';
+import { RailUnreadCounts } from '@/shell/rail-counts';
 import { NothingOpen } from '@/features/inbox/NothingOpen';
 
 /**
@@ -812,15 +814,12 @@ describe('★★ opening reads it, for this person (MarkReadOnOpen)', () => {
     expect(propsOf(await page({ open: null }), MarkReadOnOpen)).toBeNull();
   });
 
-  it('★ the rail’s counts are read beside the list, inside a boundary that draws nothing', async () => {
-    let bridge: unknown = null;
-    walk(await page(), [], (element) => {
-      const props = element.props as { fallback?: unknown; children?: unknown };
-      if (element.type === Suspense && props.fallback === null) {
-        const child = props.children as { type?: { name?: string } } | null;
-        if (child?.type?.name === 'ViewUnreadCounts') bridge = child;
-      }
+  it('★★ the rail’s counts are its own store’s, told every view - not read in this render', async () => {
+    // Read in the page's render, one load with ?c= read them four times
+    // (gateway, 2026-10-11): every refresh is a render.
+    const tree = await page();
+    expect(propsOf<{ views: readonly string[] }>(tree, RailUnreadCounts)).toEqual({
+      views: INBOX_VIEW_IDS,
     });
-    expect(bridge).not.toBeNull();
   });
 });

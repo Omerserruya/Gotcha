@@ -48,17 +48,19 @@ vi.mock('@/i18n/navigation', () => ({
   Link: ({
     href,
     children,
+    prefetch,
     ...rest
   }: {
     href: string | { pathname: string; query?: Record<string, string> };
     children: ReactNode;
+    prefetch?: boolean | null;
   }) => {
     const to =
       typeof href === 'string'
         ? href
         : `${href.pathname}?${new URLSearchParams(href.query ?? {}).toString()}`;
     return (
-      <a href={to} {...rest}>
+      <a href={to} data-prefetch={prefetch === undefined ? 'default' : String(prefetch)} {...rest}>
         {children}
       </a>
     );
@@ -1569,5 +1571,31 @@ describe('★★ unread for the person looking - the server’s answer, drawn li
     expect(css).toMatch(
       /\.queueRow\[data-open\] \.unreadBadge,\s*\.queueRow\[data-open\] \.unreadDot\s*\{\s*display:\s*none;/,
     );
+  });
+});
+
+describe('⚠ nothing in the list prefetches (dev, 2026-10-11)', () => {
+  /*
+   * Every inbox prefetch renders the whole page on the server - the list,
+   * the open conversation - and a load fired about thirty of them in three
+   * seconds: every row, every channel chip, every view.
+   */
+  it('★★ rows, the "All" chip, every channel chip and the period chip: prefetch off', async () => {
+    render(
+      await ConversationList({
+        rows: [row({ id: 'c1' }), row({ id: 'c2' })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        period: { from: '2026-09-01', to: null },
+      }),
+    );
+    const links = [
+      ...rowLinks(),
+      ...within(screen.getByTestId('queue-filters')).getAllByRole('link'),
+      screen.getByTestId('queue-period'),
+    ];
+    expect(rowLinks()).toHaveLength(2);
+    for (const link of links) expect(link).toHaveAttribute('data-prefetch', 'false');
   });
 });

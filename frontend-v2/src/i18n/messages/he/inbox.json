@@ -134,8 +134,8 @@
       "stopAi": "עצירת ה‑AI",
       "backToAi": "החזרה ל‑AI",
       "moved": "{count, plural, one {שיחה אחת עברה} other {# שיחות עברו}} לתצוגה <link>{view}</link>.",
-      "markUnread": "סמן כלא נקרא",
-      "markRead": "סמן כנקרא",
+      "markUnread": "סימון כלא נקרא",
+      "markRead": "סימון כנקרא",
       "markedUnread": "{count, plural, one {השיחה סומנה כלא נקראה, רק אצלך.} other {# שיחות סומנו כלא נקראו, רק אצלך.}}",
       "markedRead": "{count, plural, one {השיחה סומנה כנקראה, רק אצלך.} other {# שיחות סומנו כנקראו, רק אצלך.}}"
     },

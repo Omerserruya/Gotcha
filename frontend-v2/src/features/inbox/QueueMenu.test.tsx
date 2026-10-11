@@ -35,12 +35,18 @@ vi.mock('@/i18n/navigation', () => ({
   Link: ({
     href,
     children,
+    prefetch,
     ...rest
   }: {
     href: { pathname: string; query: Record<string, string> };
     children: React.ReactNode;
+    prefetch?: boolean | null;
   }) => (
-    <a {...rest} href={`${href.pathname}?${new URLSearchParams(href.query).toString()}`}>
+    <a
+      {...rest}
+      data-prefetch={prefetch === undefined ? 'default' : String(prefetch)}
+      href={`${href.pathname}?${new URLSearchParams(href.query).toString()}`}
+    >
       {children}
     </a>
   ),
@@ -293,6 +299,7 @@ describe('★★ the list follows the conversation, as the header’s buttons do
     const notice = await screen.findByTestId('queue-menu-notice');
     expect(notice).toHaveTextContent(/^2 conversations moved to Assigned to me\.$/);
     expect(screen.getByTestId('queue-menu-moved-link')).toHaveAttribute('href', '/inbox?view=mine');
+    expect(screen.getByTestId('queue-menu-moved-link')).toHaveAttribute('data-prefetch', 'false');
     expect(push).not.toHaveBeenCalled();
   });
 
@@ -427,8 +434,8 @@ describe('★★ Mark as unread / Mark as read - this person’s, per row', () =
   it('★ in Hebrew, the words Omer gave', () => {
     showRead('he', { inbox: heInbox, navigation: heNavigation });
     rightClick(screen.getByTestId('row-r1'));
-    expect(screen.getByTestId('menu-mark-unread')).toHaveTextContent('סמן כלא נקרא');
+    expect(screen.getByTestId('menu-mark-unread')).toHaveTextContent('סימון כלא נקרא');
     rightClick(screen.getByTestId('row-u1'));
-    expect(screen.getByTestId('menu-mark-read')).toHaveTextContent('סמן כנקרא');
+    expect(screen.getByTestId('menu-mark-read')).toHaveTextContent('סימון כנקרא');
   });
 });

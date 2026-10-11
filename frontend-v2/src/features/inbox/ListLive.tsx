@@ -123,14 +123,23 @@ export function ListLive({ openId }: { readonly openId: string | null }) {
 
   /*
    * ★ BACK FROM A DROP. A frame sent while the socket was down never arrives,
-   *   and the laptop that slept is exactly the one whose list is oldest. Any
-   *   arrival at `connected` from another state while mounted - including the
-   *   first, which closes the gap between the server's render and the socket.
+   *   and the laptop that slept is exactly the one whose list is oldest: a
+   *   return to `connected` after having been connected re-reads the page.
+   *
+   * ⚠ NOT THE FIRST CONNECT. It used to re-read on that too, to close the
+   *   second between the server's render and the socket - and so every inbox
+   *   load re-rendered the whole page about a second later with no event at
+   *   all, re-reading the list (measured on dev, 2026-10-11). A message in
+   *   that second is the cost; the next event or reconnect brings it.
    */
   const state = useRealtimeConnectionState();
   const previous = useRef(state);
+  const beenConnected = useRef(state === 'connected');
   useEffect(() => {
-    if (state === 'connected' && previous.current !== 'connected') poke();
+    if (state === 'connected' && previous.current !== 'connected') {
+      if (beenConnected.current) poke();
+      beenConnected.current = true;
+    }
     previous.current = state;
   }, [state, poke]);
 

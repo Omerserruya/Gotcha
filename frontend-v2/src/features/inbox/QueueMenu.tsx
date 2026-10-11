@@ -211,6 +211,7 @@ export function QueueMenu({
                       pathname: '/inbox',
                       query: inboxQuery({ view: notice.view, channel: null }),
                     }}
+                    prefetch={false}
                     className={styles.queueNoticeAction}
                     data-testid="queue-menu-moved-link"
                   >

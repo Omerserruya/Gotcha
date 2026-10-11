@@ -281,6 +281,30 @@ describe('★ back from a dropped socket, the page is read', () => {
   });
 });
 
+describe('⚠ the first connect is not a reconnect (dev, 2026-10-11)', () => {
+  it('★★ mounted while connecting, then connected: no re-read - nothing was missed but a second', () => {
+    connection.state = 'connecting';
+    const { rerender } = render(<ListLive openId="c1" />);
+    connection.state = 'connected';
+    rerender(<ListLive openId="c1" />);
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('★ …but a drop after that first connect still re-reads', () => {
+    connection.state = 'connecting';
+    const { rerender } = render(<ListLive openId="c1" />);
+    connection.state = 'connected';
+    rerender(<ListLive openId="c1" />);
+    connection.state = 'reconnecting';
+    rerender(<ListLive openId="c1" />);
+    connection.state = 'connected';
+    rerender(<ListLive openId="c1" />);
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('★ lifecycle', () => {
   it('★★ a read scheduled as the screen unmounts does not run', () => {
     const { unmount } = render(<ListLive openId={null} />);
