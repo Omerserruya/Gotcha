@@ -1,12 +1,9 @@
 {
-  "title": "What GOTCHA knows about your business",
-  "description": "Where it learned about your business, and the questions it could not answer.",
+  "title": "Knowledge center",
   "unavailable": "We couldn't read your knowledge just now.",
   "counters": {
     "sources": "{count, plural, =0 {No sources yet} =1 {One source} other {# sources}}",
-    "undated": "{count, plural, =1 {1 source has no last-read date} other {# sources have no last-read date}}",
-    "conflictsUnknown": "We couldn't check for contradictions",
-    "noConfidence": "GOTCHA doesn't record how sure it is of what it already knows - that score exists only on suggestions, before you accept them."
+    "undated": "{count, plural, =1 {1 source has no last-read date} other {# sources have no last-read date}}"
   },
   "conflicts": {
     "heading": "Answered more than one way",
@@ -77,12 +74,6 @@
     "pending": "{count, plural, =1 {One document is still being read, so it isn't answering anything yet} other {# documents are still being read, so they aren't answering anything yet}}"
   },
   "add": "Add knowledge",
-  "strip": {
-    "confident": "Answers confidently",
-    "thin": "Thin - guesses sometimes",
-    "conflicts": "Contradicts itself",
-    "stale": "Not refreshed in {days} days"
-  },
   "way": {
     "website": "Your website",
     "uploaded": "Uploaded by you",
@@ -94,21 +85,6 @@
     "other": "Other",
     "scanned": "scanned automatically"
   },
-  "summary": {
-    "learned": "Learned {count, plural, one {one way} other {# ways}}: {ways}.",
-    "learnedNone": "Nothing learned yet.",
-    "needs": "{count, plural, =0 {Nothing needs your answer.} one {One thing needs your answer.} other {# things need your answer.}}"
-  },
-  "wayPhrase": {
-    "website": "your website",
-    "uploaded": "files you upload",
-    "drive": "a Drive folder",
-    "confluence": "Confluence",
-    "conversations": "past conversations",
-    "answers": "your answers during setup",
-    "mixed": "sources that mix several",
-    "other": "other sources"
-  },
   "addSheet": {
     "close": "Close",
     "title": "Add knowledge",
@@ -116,8 +92,7 @@
     "eyebrow": {
       "upload": "Upload",
       "website": "Website",
-      "drive": "Drive sync",
-      "conversations": "Conversations"
+      "drive": "Drive sync"
     },
     "way": {
       "document": {
@@ -135,10 +110,6 @@
       "text": {
         "name": "Just type it",
         "text": "One fact, one answer"
-      },
-      "conversation": {
-        "name": "From a conversation",
-        "text": "Pin a good answer"
       }
     },
     "drop": "Drop a file here",
@@ -151,7 +122,6 @@
     "connect": "Connect",
     "titlePlaceholder": "What it is about",
     "bodyPlaceholder": "The fact, or the answer, as a customer should hear it",
-    "pinNone": "Nothing pins one answer yet. Past conversations are learned through the history import in Settings · Channels.",
     "learned": "What it learned",
     "learnedNone": "Nothing previews what a source teaches before it is added.",
     "teach": "Teach all of it",
@@ -266,5 +236,7 @@
       "no_profile": "This workspace has no business profile yet, so there is nothing to update."
     },
     "failed": "The scan could not run. Nothing was changed."
-  }
+  },
+  "subtitle": "What GOTCHA knows about your business",
+  "description": "Where it learned about your business, and the questions it could not answer."
 }

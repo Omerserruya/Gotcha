@@ -12,16 +12,20 @@
  * (2026-09-26) that the catalogue is not a knowledge source - it is 14's
  * part→system mapping.
  */
-export const ADD_WAYS = ['document', 'page', 'drive', 'text', 'conversation'] as const;
+/*
+ * ★ No "from a conversation" (Omer, 2026-10-11): it added nothing - no route
+ *   pins one answer - and adding knowledge always teaches something new.
+ *   Past conversations come in through the history import on 13.
+ */
+export const ADD_WAYS = ['document', 'page', 'drive', 'text'] as const;
 export type AddWay = (typeof ADD_WAYS)[number];
 
 /** 02's eyebrow over each card. */
-export const EYEBROW: Record<AddWay, 'upload' | 'website' | 'drive' | 'conversations'> = {
+export const EYEBROW: Record<AddWay, 'upload' | 'website' | 'drive'> = {
   document: 'upload',
   page: 'website',
   drive: 'drive',
   text: 'upload',
-  conversation: 'conversations',
 };
 
 export function isAddWay(value: string | undefined): value is AddWay {

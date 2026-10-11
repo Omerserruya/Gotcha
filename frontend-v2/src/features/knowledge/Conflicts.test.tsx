@@ -222,60 +222,13 @@ describe('★ the two sentences this screen must not say', () => {
   });
 });
 
-describe('★★ the header counts what it can, and names what it cannot', () => {
-  it('★★ never renders a confidence count, because the score is not on knowledge', async () => {
-    /*
-     * ════════════════════════════════════════════════════════════════════════
-     * THE DESIGN'S FIRST TWO COUNTERS CANNOT BE COMPUTED AT ALL.
-     * ════════════════════════════════════════════════════════════════════════
-     * `confidence` is a column on `KnowledgeCandidate` and on no other
-     * knowledge model - checked against every confidence field in the
-     * schema. A candidate is a SUGGESTION awaiting approval, and approving
-     * one creates a `KnowledgeDocument`, which has no confidence column.
-     *
-     * So the score exists only while the thing is not yet knowledge and is
-     * discarded at the moment it becomes knowledge. Counting pending
-     * candidates under "what GOTCHA knows about your business" would be
-     * counting the inbox as the filing cabinet.
-     */
-    /*
-     * Superseded in part (S2, 2026-10-03): 02's strip is drawn, so its two
-     * labels are on the screen - over "-", never over a number. The rule that
-     * survives is the one that mattered: NO COUNT. The absence still explains
-     * itself, on the figure that is absent.
-     */
-    const { container } = await show();
-    const text = container.textContent ?? '';
-    expect(text).not.toMatch(/\b\d+ topics\b/i);
-    const cell = screen.getByTestId('counter-no-confidence');
-    expect(cell).toHaveTextContent(/^Answers confidently-$/);
-    expect(cell.querySelector('dd')).toHaveAttribute(
-      'title',
-      expect.stringMatching(/only on suggestions, before you accept/i),
-    );
-  });
-
-  it('★★ the stale counter states the threshold, because the threshold is ours', async () => {
-    // "4 out of date" is a verdict. "4 not refreshed in 90 days" is what we
-    // actually know, and it is the same length.
+describe('★★ no strip of four figures (Omer, 2026-10-11: K3)', () => {
+  it('the hero tiles are gone - "answers confidently", "thin", "contradicts", "not refreshed"', async () => {
     await show({ sources: [] });
-    expect(screen.getByTestId('counter-stale')).toHaveTextContent(/90 days/);
-    expect(screen.getByTestId('counter-stale')).not.toHaveTextContent(/out of date/i);
-  });
-
-  it('★ a failed conflict read does not count as zero conflicts', async () => {
-    // The counter is a claim about the workspace. `null` is a claim about us.
-    await show({ conflicts: null });
-    const figure = screen.getByTestId('counter-conflicts').querySelector('dd');
-    expect(figure).toHaveTextContent(/^-$/);
-    expect(figure).toHaveAttribute('title', expect.stringMatching(/couldn't check/i));
-  });
-
-  it('★ a failed sources read is "-" in the strip, never a zero', async () => {
-    // A header of zeroes over a failed read is the most confident thing on
-    // the page. Superseded in form (S2): the strip stays, its figure is "-".
-    await show({ sources: null });
-    expect(screen.getByTestId('counter-stale').querySelector('dd')).toHaveTextContent(/^-$/);
+    expect(screen.queryByTestId('knowledge-counters')).toBeNull();
+    expect(document.body).not.toHaveTextContent(
+      /Answers confidently|guesses sometimes|Contradicts itself/i,
+    );
   });
 });
 

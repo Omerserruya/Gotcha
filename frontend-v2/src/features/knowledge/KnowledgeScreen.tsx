@@ -5,9 +5,7 @@ import {
   hasAmbiguousName,
   lastRefreshed,
   notReadyCount,
-  staleSources,
   undatedSources,
-  STALE_AFTER_DAYS,
   type KnowledgeSource,
   type UnansweredQuestion,
 } from '@/api/contracts/knowledge';
@@ -97,7 +95,6 @@ export async function KnowledgeScreen({
   const date = (iso: string | null) =>
     iso ? format.dateTime(new Date(iso), { day: 'numeric', month: 'long', year: 'numeric' }) : null;
 
-  const stale = sources ? staleSources(sources, new Date()) : [];
   const undated = sources ? undatedSources(sources) : [];
   const groups = sources ? groupByWayIn(sources) : [];
   const websiteListed = groups.some((group) => group.way === 'website');
@@ -110,35 +107,10 @@ export async function KnowledgeScreen({
   return (
     <div className={styles.screen} data-testid="knowledge-screen">
       {/*
-        ── THE STRIP: four figures, two of which nothing measures ──
-        ★ THE FACT IS THE CAPTION. "Out of date" is a verdict; "not refreshed
-        in 90 days" is what we know. And "answers confidently" / "thin" have
-        no source - "-" in their shape, not omitted, so the strip is 02's.
+        ★ No strip of four figures (Omer, 2026-10-11: K3) - two of them had
+        nothing measuring them, and the conflict and the gaps below say what
+        needs an answer.
       */}
-      <dl className={styles.strip} data-testid="knowledge-counters">
-        <div className={styles.cell} data-testid="counter-no-confidence">
-          <dt>{t('strip.confident')}</dt>
-          {/* Why there is no figure, kept where it is asked: on the figure. */}
-          <dd title={t('counters.noConfidence')}>-</dd>
-        </div>
-        <div className={styles.cell}>
-          <dt>{t('strip.thin')}</dt>
-          <dd>-</dd>
-        </div>
-        <div className={styles.cell} data-testid="counter-conflicts">
-          <dt>{t('strip.conflicts')}</dt>
-          <dd
-            data-tone={conflicts && conflicts.length > 0 ? 'urgent' : undefined}
-            title={conflicts === null ? t('counters.conflictsUnknown') : undefined}
-          >
-            {conflicts === null || !everImported ? '-' : format.number(conflicts.length)}
-          </dd>
-        </div>
-        <div className={styles.cell} data-testid="counter-stale">
-          <dt>{t('strip.stale', { days: STALE_AFTER_DAYS })}</dt>
-          <dd>{sources === null ? '-' : format.number(stale.length)}</dd>
-        </div>
-      </dl>
 
       {/*
         ════════════════════════════════════════════════════════════════════
@@ -482,22 +454,4 @@ const WAY_ICONS = {
 function WayIcon({ way }: { readonly way: WayIn }) {
   const Icon = WAY_ICONS[way];
   return <Icon className={styles.wayIcon} size={13} aria-hidden="true" />;
-}
-
-/**
- * 08's header line, a summary from data as 07's is: how many ways it
- * learned and which, then what needs an answer - the conflicts plus the
- * questions it could not answer. `null` when a read failed and the line
- * would have to guess; the page then keeps the description.
- */
-export function knowledgeSummary(
-  sources: readonly KnowledgeSource[] | null,
-  conflicts: readonly Candidate[] | null,
-  unanswered: readonly UnansweredQuestion[] | null,
-): { readonly ways: readonly WayIn[]; readonly needAnswer: number } | null {
-  if (sources === null || conflicts === null || unanswered === null) return null;
-  return {
-    ways: groupByWayIn(sources).map((group) => group.way),
-    needAnswer: conflicts.length + unanswered.length,
-  };
 }

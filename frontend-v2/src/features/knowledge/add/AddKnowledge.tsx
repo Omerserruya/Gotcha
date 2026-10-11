@@ -39,8 +39,6 @@ import styles from './AddKnowledge.module.css';
  *   drive          Google Drive or Confluence (`knowledge-oauth.ts`) -
  *                  not Dropbox, which the platform has no connector for
  *   text           `POST …/documents`, `sourceType: "text"`
- *   conversation   nothing pins one answer; past conversations come in
- *                  through the history import on 13
  *
  * ── DRAWN, AND WHY ──
  *   What it learned   nothing previews the facts a source teaches, or
@@ -328,11 +326,7 @@ export function AddKnowledge({
                 }}
               />
             </div>
-          ) : (
-            <p className={styles.none} title={t('pinNone')} data-testid="add-pin">
-              -
-            </p>
-          )}
+          ) : null}
 
           {/*
             "What it learned": the platform previews nothing before a source

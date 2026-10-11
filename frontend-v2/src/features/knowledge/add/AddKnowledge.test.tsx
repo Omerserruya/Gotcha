@@ -94,13 +94,10 @@ describe('★★ 08b - the ways in the platform has, and nothing that sends', ()
     expect(screen.getByTestId('add-url')).toHaveValue('https://example.com/terms');
   });
 
-  it('from a conversation: "-", and where past conversations are learned', () => {
-    sheet('conversation');
-    expect(screen.getByTestId('add-pin')).toHaveTextContent('-');
-    expect(screen.getByTestId('add-pin')).toHaveAttribute(
-      'title',
-      expect.stringMatching(/history import in Settings · Channels/),
-    );
+  it('★ no "from a conversation" - it added nothing (Omer, 2026-10-11: K7)', () => {
+    sheet();
+    expect(screen.queryByTestId('add-way-conversation')).toBeNull();
+    expect(screen.queryByTestId('add-pin')).toBeNull();
   });
 
   it('★ "What it learned" is drawn in its shape, with no invented facts', () => {
