@@ -58,10 +58,14 @@ describe("★ the error's code, served apart from its sentence", () => {
   });
 
   it("any other error: its text, bounded, and no code; none: nulls", async () => {
-    H.lastError = `<!DOCTYPE html>${"x".repeat(400)}`;
+    H.lastError = `provider said: ${"x".repeat(400)}`;
     const other = await served();
     expect(other.lastErrorCode).toBeNull();
     expect(other.lastError).toHaveLength(200);
+    // An HTML page is never served, even cut short (2026-10-11): it becomes a
+    // sentence (lib/error-code markupError).
+    H.lastError = `<!DOCTYPE html>${"x".repeat(400)}`;
+    expect(await served()).toEqual({ lastError: "The system answered with an error page.", lastErrorCode: null });
     H.lastError = null;
     expect(await served()).toEqual({ lastError: null, lastErrorCode: null });
   });

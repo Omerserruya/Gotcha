@@ -68,6 +68,7 @@ import {
 } from "../services/shopify-install-intent.service";
 import { resolveShopifyBillingOutcome } from "../services/shopify-billing-bridge.service";
 import { shopifyApiVersion } from "@chatcenter/shared";
+import { splitErrorCode } from "../lib/error-code";
 
 const router = Router();
 // OAuth `state` signing only - not user auth. See getOAuthStateSecret().
@@ -240,7 +241,9 @@ router.get(
       where: { tenantId_integrationId: { tenantId: req.tenantId, integrationId: cat.id } },
       select: { status: true, connectedAt: true, lastTestedAt: true, lastError: true, config: true },
     });
-    res.json({ data: ti || { status: "DISCONNECTED" } });
+    // lastError served like every integrations read: the sentence, and its code
+    // apart; a provider's HTML page is never served (lib/error-code).
+    res.json({ data: ti ? { ...ti, ...splitErrorCode(ti.lastError) } : { status: "DISCONNECTED" } });
   },
 );
 

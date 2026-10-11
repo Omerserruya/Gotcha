@@ -10,6 +10,7 @@
  */
 
 import { prisma, encryptCredentials, decryptCredentials } from "@chatcenter/shared";
+import { withErrorCode, type KnownErrorCode } from "../../lib/error-code";
 
 export interface ToolDefinition {
   /** Tool function name surfaced to the LLM (e.g. "stripe.refund_payment"). */
@@ -244,6 +245,25 @@ export async function setConnectionStatus(opts: {
 }
 
 /**
+ * A failed token refresh, said cleanly. The provider's text can be a whole HTML
+ * page (Shopify's 401, 2026-10-11), which was stored in lastError and carried
+ * in every caller's reason. Now lastError is "[CODE] sentence", and the thrown
+ * message keeps only the HTTP status beside it: "401" and "token" are what the
+ * approval classifiers read (conversation toCustomerSafeReason, frontend-v2
+ * dispatch failures), so they answer exactly as before. The raw text is logged.
+ */
+export function describeRefreshFailure(slug: string, err: unknown): { lastError: string; message: string } {
+  const raw = String((err as { message?: string })?.message || err || "unknown");
+  const status = /(?:^|\D)([45]\d\d)(?!\d)/.exec(raw)?.[1];
+  const code: KnownErrorCode =
+    /(?:\b|_)40[13]\b|unauthori[sz]ed|forbidden|invalid_grant|invalid_token|invalid_client|invalid_request/i.test(raw) ? "CREDENTIALS_INVALID"
+    : /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|EAI_AGAIN|fetch failed|timed? ?out|(?:\b|_)5\d\d\b/i.test(raw) ? "CONNECTION_FAILED"
+    : "TOKEN_REFRESH_FAILED";
+  const clean = withErrorCode(code);
+  return { lastError: clean, message: `Token refresh failed for ${slug}${status ? ` (${status})` : ""}: ${clean}` };
+}
+
+/**
  * Ensure access token is fresh; refresh when within the buffer. Returns
  * the credentials object the adapter should use for this call.
  */
@@ -301,12 +321,14 @@ export async function ensureFreshToken(opts: {
   } catch (err: any) {
     // Only a refresh FAILURE (e.g. revoked/invalid refresh token) is a real,
     // unrecoverable error - a mere access-token expiry is handled above.
+    const failure = describeRefreshFailure(opts.adapter.slug, err);
+    console.warn(`[integration-framework] token refresh failed for ${opts.adapter.slug} raw:`, String(err?.message || err).slice(0, 2000));
     await setConnectionStatus({
       tenantIntegrationId: opts.tenantIntegrationId,
       status: "ERROR",
-      lastError: `token_refresh_failed:${err?.message || "unknown"}`,
+      lastError: failure.lastError,
     });
-    throw new Error(`Token refresh failed for ${opts.adapter.slug}: ${err?.message || "unknown"}`);
+    throw new Error(failure.message);
   }
 }
 

@@ -53,7 +53,8 @@ const canReadSystems = requirePermission("integrations:connections:read", "busin
  *
  * Not sanitised beyond length: the text is shown to an admin as the platform
  * said it, because a paraphrased provider error is a worse debugging aid than
- * an ugly one.
+ * an ugly one. The one exception is an HTML page, which splitErrorCode serves
+ * as its cause's sentence (2026-10-11); the raw page is in the service log.
  */
 const LAST_ERROR_MAX = 200;
 function boundConnection<T extends { lastError?: string | null }>(row: T | undefined): (T & { lastErrorCode: string | null }) | null {
