@@ -123,7 +123,6 @@
   },
   "website": {
     "notSet": "Not set. GOTCHA learned what it knows from your website, so without one there is nothing to scan.",
-    "readOnly": "Changed when you reconnect your store, not here.",
     "scanAgain": "Scan again",
     "pagesRead": "{count, plural, one {# page read} other {# pages read}}",
     "reading": "- still reading",
@@ -151,7 +150,6 @@
   "business": {
     "industry": "Industry",
     "country": "Country",
-    "notHere": "Set from your website and onboarding; it can't be changed here yet.",
     "industryName": {
       "ecommerce": "E-commerce",
       "legal": "Legal services",
@@ -203,14 +201,19 @@
   "businessEdit": {
     "required": {
       "name": "Your business name can't be empty.",
-      "description": "Say what you sell. This can't be empty."
+      "description": "Say what you sell. This can't be empty.",
+      "industry": "Say what field the business is in. This can't be empty."
     },
     "tooLong": "{max} characters at most. This has {count}.",
     "rejected": "This wasn't accepted. Check it and save again.",
     "hint": {
       "name": "Enter saves, Esc cancels.",
       "description": "Enter saves, Shift+Enter starts a new line, Esc cancels.",
-      "address": "Leave it empty to remove the address. Enter saves, Esc cancels."
-    }
+      "address": "Leave it empty to remove the address. Enter saves, Esc cancels.",
+      "website": "Saving doesn't scan it; Scan again does. Leave it empty to remove it. Enter saves, Esc cancels.",
+      "industry": "In your own words. Enter saves, Esc cancels.",
+      "country": "Choose \"-\" to remove it. Enter saves, Esc cancels."
+    },
+    "website": "That isn't a website address. Try something like shop.example.com."
   }
 }

@@ -126,7 +126,7 @@ describe('★ edit in place saves exactly that field, against the version drawn'
 });
 
 describe('★ each field is checked as the route checks it, and refused in words', () => {
-  it('the rule, beside the route’s: 1-200, 1-2000, 0-300 after trimming', () => {
+  it('the rule, beside the route’s: 1-200, 1-2000, 0-300, 1-120 after trimming', () => {
     expect(checkBusinessFact('name', '   ')).toEqual({ ok: false, problem: 'required' });
     expect(checkBusinessFact('description', '')).toEqual({ ok: false, problem: 'required' });
     expect(checkBusinessFact('address', '  ')).toEqual({ ok: true, value: null });
@@ -140,6 +140,13 @@ describe('★ each field is checked as the route checks it, and refused in words
     });
     expect(checkBusinessFact('description', 'x'.repeat(2001))).toMatchObject({ max: 2000 });
     expect(checkBusinessFact('address', 'x'.repeat(301))).toMatchObject({ max: 300 });
+    expect(checkBusinessFact('industry', ' ')).toEqual({ ok: false, problem: 'required' });
+    expect(checkBusinessFact('industry', 'x'.repeat(120))).toMatchObject({ ok: true });
+    expect(checkBusinessFact('industry', 'x'.repeat(121))).toMatchObject({ max: 120 });
+    expect(checkBusinessFact('website', ' ')).toEqual({ ok: true, value: null });
+    expect(checkBusinessFact('website', 'ftp://x.com')).toEqual({ ok: false, problem: 'website' });
+    expect(checkBusinessFact('country', ' fr ')).toEqual({ ok: true, value: 'FR' });
+    expect(checkBusinessFact('country', '')).toEqual({ ok: true, value: null });
   });
 
   it('an empty name is refused before any request, in words', async () => {
@@ -183,31 +190,139 @@ describe('★ each field is checked as the route checks it, and refused in words
   });
 });
 
-describe('★ a field PATCH cannot save is not drawn as editable', () => {
-  it.each(['website', 'industry', 'country'])(
-    '%s: no Edit, no field, and a click does nothing',
-    async (key) => {
-      renderRows();
-      const row = screen.getByTestId(`fact-${key}`);
-      expect(screen.queryByTestId(`fact-edit-${key}`)).toBeNull();
-      expect(within(row).queryByRole('button')).toBeNull();
-      await userEvent.click(screen.getByTestId(`fact-value-${key}`));
-      expect(within(row).queryByRole('textbox')).toBeNull();
-      expect(saveWorkspaceFacts).not.toHaveBeenCalled();
-    },
-  );
-
-  it('they are shown, by name, with why on their titles', () => {
+describe('★ website, industry and country edit in place too (a6bfa7c9)', () => {
+  it.each([
+    ['website', 'shop.example.com/about?x=1', { website: 'https://shop.example.com' }],
+    ['industry', 'Bedding and home textiles', { industry: 'Bedding and home textiles' }],
+  ] as const)('%s → that field alone, as the route stores it', async (key, typed, patch) => {
     renderRows();
-    expect(screen.getByTestId('fact-value-industry')).toHaveTextContent('E-commerce');
-    expect(screen.getByTestId('fact-value-country')).toHaveTextContent('Israel');
-    expect(screen.getByTestId('fact-value-industry')).toHaveAttribute(
-      'title',
-      expect.stringMatching(/can't be changed here/),
+    await userEvent.click(screen.getByTestId(`fact-edit-${key}`));
+    const input = screen.getByTestId(`fact-input-${key}`);
+    await userEvent.clear(input);
+    await userEvent.type(input, `${typed}{Enter}`);
+    expect(saveWorkspaceFacts).toHaveBeenCalledTimes(1);
+    expect(saveWorkspaceFacts).toHaveBeenCalledWith(patch, UPDATED_AT);
+    expect(await screen.findByTestId(`fact-note-${key}`)).toHaveTextContent('Saved');
+  });
+
+  it('country: chosen from a list of names, sent as its code', async () => {
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-country'));
+    const select = screen.getByTestId('fact-input-country');
+    expect(select).toHaveValue('IL');
+    await userEvent.selectOptions(select, 'France');
+    await userEvent.click(screen.getByTestId('fact-save-country'));
+    expect(saveWorkspaceFacts).toHaveBeenCalledWith({ country: 'FR' }, UPDATED_AT);
+  });
+
+  it('country: Enter on the list saves what it shows', async () => {
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-country'));
+    await userEvent.selectOptions(screen.getByTestId('fact-input-country'), 'France');
+    await userEvent.keyboard('{Enter}');
+    expect(saveWorkspaceFacts).toHaveBeenCalledWith({ country: 'FR' }, UPDATED_AT);
+  });
+
+  it('country: "-" clears it - null, which the route takes', async () => {
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-country'));
+    await userEvent.selectOptions(screen.getByTestId('fact-input-country'), '-');
+    await userEvent.click(screen.getByTestId('fact-save-country'));
+    expect(saveWorkspaceFacts).toHaveBeenCalledWith({ country: null }, UPDATED_AT);
+  });
+
+  it('an emptied website is cleared - null', async () => {
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-website'));
+    await userEvent.clear(screen.getByTestId('fact-input-website'));
+    await userEvent.click(screen.getByTestId('fact-save-website'));
+    expect(saveWorkspaceFacts).toHaveBeenCalledWith({ website: null }, UPDATED_AT);
+  });
+
+  it('not a website address: refused in words, before any request', async () => {
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-website'));
+    await userEvent.clear(screen.getByTestId('fact-input-website'));
+    await userEvent.type(screen.getByTestId('fact-input-website'), 'our shop{Enter}');
+    expect(screen.getByTestId('fact-problem-website')).toHaveTextContent(
+      "That isn't a website address.",
     );
-    expect(screen.getByTestId('fact-value-website')).toHaveAttribute(
-      'title',
-      expect.stringMatching(/not here/),
+    expect(saveWorkspaceFacts).not.toHaveBeenCalled();
+  });
+
+  it('an empty industry is refused - the route cannot clear it', async () => {
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-industry'));
+    await userEvent.clear(screen.getByTestId('fact-input-industry'));
+    await userEvent.click(screen.getByTestId('fact-save-industry'));
+    expect(screen.getByTestId('fact-problem-industry')).toHaveTextContent(
+      "Say what field the business is in. This can't be empty.",
+    );
+    expect(saveWorkspaceFacts).not.toHaveBeenCalled();
+  });
+
+  it('★ an industry kept as a code opens as its name, and goes back as the code', async () => {
+    renderRows();
+    expect(screen.getByTestId('fact-value-industry')).toHaveTextContent(/^E-commerce$/);
+    await userEvent.click(screen.getByTestId('fact-edit-industry'));
+    expect(screen.getByTestId('fact-input-industry')).toHaveValue('E-commerce');
+    await userEvent.click(screen.getByTestId('fact-save-industry'));
+    expect(saveWorkspaceFacts).toHaveBeenCalledWith({ industry: 'ecommerce' }, UPDATED_AT);
+  });
+
+  it('a website opens as stored, not as the host the row shows', async () => {
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-website'));
+    expect(screen.getByTestId('fact-input-website')).toHaveValue('https://www.urban-supply.com/');
+  });
+
+  it('★ "Scan again" is its own action: a click on it does not start editing', async () => {
+    renderRows({}, { pagesRead: 3, daysAgo: 1, topics: [], alsoFound: [] });
+    const again = screen.getByTestId('business-scan-again');
+    again.addEventListener('click', (event) => event.preventDefault());
+    await userEvent.click(again);
+    expect(screen.queryByTestId('fact-input-website')).toBeNull();
+  });
+});
+
+describe('★ a stored value that is not one is shown as not set, never as stored', () => {
+  it.each(['unknown', 'Israel', 'ZZ', ''])('country %j → "Not set"', async (country) => {
+    renderRows({ country });
+    expect(screen.getByTestId('fact-value-country')).toHaveTextContent(/^Not set$/);
+    await userEvent.click(screen.getByTestId('fact-edit-country'));
+    expect(screen.getByTestId('fact-input-country')).toHaveValue('');
+    // Saved as it opened: cleared, never the stored value sent back.
+    await userEvent.click(screen.getByTestId('fact-save-country'));
+    expect(saveWorkspaceFacts).toHaveBeenCalledWith({ country: null }, UPDATED_AT);
+  });
+
+  it('Hebrew: "לא הוגדר", and a code by its Hebrew name', () => {
+    const { unmount } = render(
+      <NextIntlClientProvider locale="he" messages={{ workspace: he }}>
+        <FactRows workspace={ws({ country: 'unknown' })} />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('fact-value-country')).toHaveTextContent(/^לא הוגדר$/);
+    unmount();
+    render(
+      <NextIntlClientProvider locale="he" messages={{ workspace: he }}>
+        <FactRows workspace={ws()} />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('fact-value-country')).toHaveTextContent(/^ישראל$/);
+    expect(screen.getByTestId('fact-value-industry')).toHaveTextContent(/^מסחר מקוון$/);
+  });
+
+  it('an industry in a person’s words is shown, and opens, as written', async () => {
+    renderRows({ industry: 'SaaS / Customer Communication' });
+    expect(screen.getByTestId('fact-value-industry')).toHaveTextContent(
+      /^SaaS \/ Customer Communication$/,
+    );
+    await userEvent.click(screen.getByTestId('fact-edit-industry'));
+    await userEvent.click(screen.getByTestId('fact-save-industry'));
+    expect(saveWorkspaceFacts).toHaveBeenCalledWith(
+      { industry: 'SaaS / Customer Communication' },
+      UPDATED_AT,
     );
   });
 });
@@ -250,7 +365,7 @@ describe('★ 11e’s keys: Enter saves, Esc cancels', () => {
 });
 
 describe('★ the whole row starts editing; its Edit is the one tab stop', () => {
-  it.each(['name', 'description', 'address'])(
+  it.each(['name', 'website', 'description', 'address', 'industry', 'country'])(
     '%s: a click on the value opens the field',
     async (key) => {
       renderRows();
@@ -267,7 +382,7 @@ describe('★ the whole row starts editing; its Edit is the one tab stop', () =>
 
   it('one focusable per row, named with its row', () => {
     renderRows();
-    for (const key of ['name', 'description', 'address']) {
+    for (const key of ['name', 'description', 'address', 'industry', 'country']) {
       const row = screen.getByTestId(`fact-${key}`);
       // The row itself counts: a tabindex on it would be a second stop.
       const selector = 'button, a[href], input, textarea, select, [tabindex]';

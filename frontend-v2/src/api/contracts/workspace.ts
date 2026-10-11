@@ -366,18 +366,100 @@ export function industryReading(
 }
 
 /**
- * A stored country by name: an ISO 3166 code through `Intl.DisplayNames`,
- * the scan's "unknown" (and anything unreadable) as nothing.
+ * A stored country by name: an ISO 3166 code through `Intl.DisplayNames`.
+ * Anything else is nothing - onboarding's literal "unknown", a written-out
+ * "Israel", "ZZ" (which `Intl` calls "Unknown Region") - so the row reads as not set, never as
+ * what was stored.
  */
 export function countryName(value: string | null | undefined, locale: string): string | null {
-  const v = value?.trim();
-  if (!v || v.toLowerCase() === 'unknown') return null;
-  if (/^[A-Za-z]{2}$/.test(v)) {
-    try {
-      return new Intl.DisplayNames([locale], { type: 'region' }).of(v.toUpperCase()) ?? null;
-    } catch {
-      return null;
+  const v = isoCountry(value);
+  if (v === null) return null;
+  try {
+    return new Intl.DisplayNames([locale], { type: 'region', fallback: 'none' }).of(v) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A stored country as the ISO 3166 alpha-2 code of a country, or `null` -
+ * the code the country select opens on, so "ZZ" opens on "-" and an
+ * unchanged save clears it rather than sending it back.
+ */
+export function isoCountry(value: string | null | undefined): string | null {
+  const v = value?.trim().toUpperCase() ?? '';
+  return /^[A-Z]{2}$/.test(v) && isAssignedCountry(v) ? v : null;
+}
+
+/**
+ * A website as the route stores it (auth `normalizeWebsite`, a6bfa7c9): a
+ * scheme is added when missing, then the http(s) ORIGIN - lowercased host,
+ * no path, no credentials. `null` when it is not an address the route takes.
+ */
+export function websiteOrigin(raw: string): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const withProto = /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`;
+  try {
+    const u = new URL(withProto);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    if (u.username || u.password) return null;
+    const host = u.hostname.toLowerCase();
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) return null;
+    return `${u.protocol}//${host}${u.port ? `:${u.port}` : ''}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Two-letter codes `Intl` names that ISO 3166-1 does not assign to a country:
+ * groupings (EU, EZ, UN, QO), "Unknown Region" (ZZ) and the exceptionally
+ * reserved islands and territories (AC, CP, CQ, DG, EA, IC, TA).
+ */
+const NOT_A_COUNTRY = new Set([
+  'EU',
+  'EZ',
+  'UN',
+  'QO',
+  'ZZ',
+  'AC',
+  'CP',
+  'CQ',
+  'DG',
+  'EA',
+  'IC',
+  'TA',
+]);
+
+function isAssignedCountry(code: string): boolean {
+  if (NOT_A_COUNTRY.has(code)) return false;
+  if ((code[0] === 'Q' && code >= 'QM') || (code[0] === 'X' && code !== 'XK')) return false;
+  return Intl.getCanonicalLocales(`und-${code}`)[0] === `und-${code}`;
+}
+
+/**
+ * Every ISO 3166 alpha-2 country, by its name in `locale`, in that order - read
+ * from `Intl.DisplayNames` rather than kept as a table here. Private-use codes
+ * (`QM-QZ`, `XA-XZ` but Kosovo's `XK`) and the codes above are left out, and
+ * so is a retired alias (UK, SU, YU…): `Intl` names it as the country it became,
+ * which would list Russia twice.
+ */
+export function countryOptions(locale: string): readonly { code: string; name: string }[] {
+  let names: Intl.DisplayNames;
+  try {
+    names = new Intl.DisplayNames([locale], { type: 'region', fallback: 'none' });
+  } catch {
+    return [];
+  }
+  const out: { code: string; name: string }[] = [];
+  for (let a = 65; a <= 90; a += 1) {
+    for (let b = 65; b <= 90; b += 1) {
+      const code = String.fromCharCode(a, b);
+      if (!isAssignedCountry(code)) continue;
+      const name = names.of(code);
+      if (name && name !== code) out.push({ code, name });
     }
   }
-  return v;
+  return out.sort((x, y) => x.name.localeCompare(y.name, locale));
 }
