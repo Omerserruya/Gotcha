@@ -8,7 +8,10 @@ import {
   collapseToPeople,
   isKnownChannel,
   isTruncated,
+  labelOfPerson,
   listedCount,
+  personLabel,
+  reachHandle,
   type CustomerRow,
 } from './customers';
 
@@ -209,5 +212,137 @@ describe('a row carries no field that could become a false claim', () => {
     // Kept because the writer is requested. Nothing may present it as
     // recency until something initialises it.
     expect(customerRowSchema.parse(row).lastInteractionAt).toBeNull();
+  });
+});
+
+/*
+ * ★★ Backend 83579ac8: `POST /contacts/segment` answers each row with
+ * `displayLabel` (services/conversation/src/routes/contacts.ts), built by
+ * lib/contact-label.ts - never an Instagram or Messenger id. The rows below
+ * are the shapes that route sends: the Prisma contact spread, plus the label.
+ */
+const IGSID = '1031990639501705';
+const PSID = '7766554433221100';
+const segmentRow = (over: Record<string, unknown>) => ({
+  id: 'c9',
+  tenantId: 't1',
+  externalId: IGSID,
+  channel: 'INSTAGRAM',
+  displayName: null,
+  phone: null,
+  email: null,
+  tags: [],
+  metadata: { instagramUsername: 'yael.b' },
+  personId: null,
+  mergedIntoId: null,
+  ...over,
+});
+
+describe('★★ displayLabel - what the segment route calls a row (83579ac8)', () => {
+  it('parses from the segment response as sent, beside every other field', () => {
+    const parsed = customerListSchema.parse({
+      data: [
+        segmentRow({ displayLabel: 'Instagram customer' }),
+        segmentRow({ id: 'c8', displayName: '@yael.b', displayLabel: '@yael.b' }),
+      ],
+      total: 2,
+    });
+    expect(parsed.data.map((r) => r.displayLabel)).toEqual(['Instagram customer', '@yael.b']);
+  });
+
+  it('absent (an older service, or the detail route) is undefined; a bad value never fails the row', () => {
+    expect(customerRowSchema.parse(segmentRow({})).displayLabel).toBeUndefined();
+    expect(customerRowSchema.parse(segmentRow({ displayLabel: 42 })).displayLabel).toBeUndefined();
+    expect(customerRowSchema.parse(segmentRow({ displayLabel: null })).displayLabel).toBeNull();
+  });
+});
+
+describe('★★ personLabel - the server’s label, and never a raw external id', () => {
+  const parse = (over: Record<string, unknown>) => customerRowSchema.parse(segmentRow(over));
+
+  it('the server’s label is the name', () => {
+    expect(personLabel(parse({ displayName: 'Yael Barak', displayLabel: 'Yael Barak' }))).toEqual({
+      name: 'Yael Barak',
+    });
+    expect(personLabel(parse({ displayName: '@yael.b', displayLabel: '@yael.b' }))).toEqual({
+      name: '@yael.b',
+    });
+  });
+
+  it.each([
+    ['INSTAGRAM', 'Instagram customer', IGSID],
+    ['MESSENGER', 'Messenger customer', PSID],
+    ['WEBCHAT', 'Website visitor', 'sess_abc'],
+    ['SHOPIFY_LIVE_CHAT', 'Store chat visitor', 'sess_def'],
+  ] as const)('%s: its fallback words become ours, never the id', (channel, label, id) => {
+    expect(personLabel(parse({ channel, externalId: id, displayLabel: label }))).toEqual({
+      generic: channel,
+    });
+  });
+
+  it('"Customer", the last resort, is ours too; a stored name that happens to read so is a name', () => {
+    expect(
+      personLabel(parse({ channel: 'SLACK', externalId: '', displayLabel: 'Customer' })),
+    ).toEqual({
+      generic: 'other',
+    });
+    expect(personLabel(parse({ displayName: 'Customer', displayLabel: 'Customer' }))).toEqual({
+      name: 'Customer',
+    });
+  });
+
+  it('an older service sends no label: worked out here, and an opaque id is never one', () => {
+    expect(personLabel(parse({}))).toEqual({ generic: 'INSTAGRAM' });
+    expect(personLabel(parse({ channel: 'MESSENGER', externalId: PSID }))).toEqual({
+      generic: 'MESSENGER',
+    });
+    expect(personLabel(parse({ channel: 'SLACK', externalId: 'U024BE7LH' }))).toBeNull();
+    expect(personLabel(parse({ displayName: '  ', email: 'y@x.com' }))).toEqual({
+      name: 'y@x.com',
+    });
+  });
+
+  it('on WhatsApp the id IS the phone, so it may be the label', () => {
+    expect(
+      personLabel(
+        parse({ channel: 'WHATSAPP', externalId: '972541111111', displayLabel: '972541111111' }),
+      ),
+    ).toEqual({ name: '972541111111' });
+    expect(personLabel(parse({ channel: 'WHATSAPP', externalId: '972541111111' }))).toEqual({
+      name: '972541111111',
+    });
+  });
+
+  it('a label that is just an opaque id is no name at all', () => {
+    expect(
+      personLabel(parse({ channel: 'SLACK', externalId: 'U024BE7LH', displayLabel: 'U024BE7LH' })),
+    ).toBeNull();
+  });
+
+  it('a person reads by the identity that has a name, whichever was listed first', () => {
+    const ig = parse({ displayLabel: 'Instagram customer' });
+    const wa = parse({
+      id: 'c2',
+      channel: 'WHATSAPP',
+      externalId: '972541111111',
+      displayName: 'Omer Tsruya',
+      displayLabel: 'Omer Tsruya',
+    });
+    expect(labelOfPerson([ig, wa])).toEqual({ name: 'Omer Tsruya' });
+    expect(labelOfPerson([ig])).toEqual({ generic: 'INSTAGRAM' });
+    expect(labelOfPerson([parse({ channel: 'SLACK', externalId: 'U1' })])).toBeNull();
+  });
+});
+
+describe('★★ reachHandle - a phone or an address, never an opaque id', () => {
+  const parse = (over: Record<string, unknown>) => customerRowSchema.parse(segmentRow(over));
+  it('phone, then email, then the id only where it is one of those', () => {
+    expect(reachHandle(parse({ phone: '+972541111111', email: 'y@x.com' }))).toBe('+972541111111');
+    expect(reachHandle(parse({ email: 'y@x.com' }))).toBe('y@x.com');
+    expect(reachHandle(parse({ channel: 'WHATSAPP', externalId: '972541111111' }))).toBe(
+      '972541111111',
+    );
+    expect(reachHandle(parse({}))).toBeNull();
+    expect(reachHandle(parse({ channel: 'MESSENGER', externalId: PSID }))).toBeNull();
   });
 });

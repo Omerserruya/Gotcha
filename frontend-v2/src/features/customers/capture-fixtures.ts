@@ -82,6 +82,8 @@ const FIXTURE_CONTACTS: readonly CustomerRow[] = [
     id: 'fixture-1',
     externalId: '+447700900123',
     displayName: 'Avery Stone',
+    // What the segment route sends for this row (lib/contact-label.ts): its name.
+    displayLabel: 'Avery Stone',
     channel: 'WHATSAPP',
     phone: '+447700900123',
     email: 'avery@example.com',
@@ -101,6 +103,7 @@ const FIXTURE_CONTACTS: readonly CustomerRow[] = [
     id: 'fixture-2',
     externalId: 'avery@example.com',
     displayName: 'Avery Stone',
+    displayLabel: 'Avery Stone',
     // Entered by a person rather than arriving over a channel - the second
     // half of the only join this product performs.
     channel: 'EMAIL',
@@ -116,6 +119,7 @@ const FIXTURE_CONTACTS: readonly CustomerRow[] = [
     id: 'fixture-3',
     externalId: 'ig-averystone',
     displayName: 'Avery Stone',
+    displayLabel: 'Avery Stone',
     channel: 'INSTAGRAM',
     /*
      * `phone: null`, and that is the whole point. Instagram's `externalId` is
@@ -137,6 +141,7 @@ const FIXTURE_CONTACTS: readonly CustomerRow[] = [
     id: 'fixture-4',
     externalId: 'rowan@example.org',
     displayName: 'Rowan Pike',
+    displayLabel: 'Rowan Pike',
     channel: 'EMAIL',
     phone: null,
     email: 'rowan@example.org',

@@ -20,7 +20,14 @@
     "unnamed": "אין שם או מזהה לאיש הקשר הזה",
     "truncated": "מוצגות {shown} הרשומות הראשונות. בסך הכול יש {total}, וייתכן שחלקן הן אותו אדם.",
     "footer": "{count, plural, =1 {אדם אחד} other {# אנשים}}",
-    "footerTruncated": "מוצגות {shown} הרשומות הראשונות מתוך {total}"
+    "footerTruncated": "מוצגות {shown} הרשומות הראשונות מתוך {total}",
+    "generic": {
+      "INSTAGRAM": "לקוח/ה מאינסטגרם",
+      "MESSENGER": "לקוח/ה ממסנג'ר",
+      "WEBCHAT": "מבקר/ת באתר",
+      "SHOPIFY_LIVE_CHAT": "מבקר/ת בצ'אט של החנות",
+      "other": "לקוח/ה"
+    }
   },
   "channel": {
     "WHATSAPP": "וואטסאפ",

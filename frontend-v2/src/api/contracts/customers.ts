@@ -101,6 +101,14 @@ export const customerRowSchema = z.object({
   personId: z.string().nullable().default(null),
   /** Always `null` in a list response - the route filters tombstones out. */
   mergedIntoId: z.string().nullable().default(null),
+  /**
+   * What to call the row (Backend 83579ac8, `lib/contact-label.ts`): the name,
+   * phone or email, else words for the channel ("Instagram customer"), never
+   * an Instagram or Messenger id. Sent by `POST /contacts/segment` only, so
+   * optional: the detail route and an older service send none, and then
+   * `personLabel` works it out without ever falling to an opaque id.
+   */
+  displayLabel: z.string().nullish().catch(undefined),
 });
 
 export type CustomerRow = z.infer<typeof customerRowSchema>;
@@ -214,6 +222,119 @@ export function customerLabel(row: {
     row.phone?.trim() ||
     row.email?.trim() ||
     row.externalId.trim() ||
+    null
+  );
+}
+
+/**
+ * Channels whose `externalId` IS the customer's phone or address, proven by
+ * the channel itself - the same lists as Backend's `PHONE_CHANNELS` and
+ * `EMAIL_CHANNELS` (`packages/shared/src/lib/identity-links.ts`). Anywhere
+ * else the id is opaque (an IGSID, a PSID, a Slack user, a web session) and
+ * means nothing to a person.
+ */
+const READABLE_ID_CHANNELS: ReadonlySet<string> = new Set([
+  'WHATSAPP',
+  'VOICE',
+  'EMAIL',
+  'GMAIL',
+  'OUTLOOK',
+]);
+
+/**
+ * The words Backend's `contactLabel` falls back to, by channel - English
+ * strings, so the screen says them in its own words instead.
+ */
+const GENERIC_BY_CHANNEL = {
+  INSTAGRAM: 'Instagram customer',
+  MESSENGER: 'Messenger customer',
+  WEBCHAT: 'Website visitor',
+  SHOPIFY_LIVE_CHAT: 'Store chat visitor',
+} as const;
+const GENERIC_LAST_RESORT = 'Customer';
+
+/** A nameless contact, said by its channel; `other` is Backend's "Customer". */
+export type GenericPerson = keyof typeof GENERIC_BY_CHANNEL | 'other';
+
+/** A name to show as written, or a nameless contact to say in our words. */
+export type PersonLabel = { readonly name: string } | { readonly generic: GenericPerson };
+
+type GenericChannel = keyof typeof GENERIC_BY_CHANNEL;
+function genericFor(channel: string | null | undefined): GenericChannel | null {
+  return channel && Object.hasOwn(GENERIC_BY_CHANNEL, channel) ? (channel as GenericChannel) : null;
+}
+
+/**
+ * Backend's label read back: one of its fallback words becomes ours, any
+ * other string is a name. Only where a fallback was the label: a contact
+ * with a stored name, phone or email never reached that branch.
+ */
+export function labelFromServer(label: string, channel: string | null | undefined): PersonLabel {
+  const own = genericFor(channel);
+  if (own && label === GENERIC_BY_CHANNEL[own]) return { generic: own };
+  if (label === GENERIC_LAST_RESORT) return { generic: 'other' };
+  return { name: label };
+}
+
+/**
+ * What the customer list calls a row: the server's `displayLabel`, and for an
+ * older service that sends none, the same rule worked out here. **Never a raw
+ * external id**: an id is shown only on a channel where it is the phone or
+ * the address, and a label that is just an opaque id (a channel Backend has
+ * no words for) is no name at all. `null` when there is nothing to call
+ * them; the caller says so in words.
+ */
+export function personLabel(row: {
+  readonly displayLabel?: string | null;
+  readonly displayName: string | null;
+  readonly phone: string | null;
+  readonly email: string | null;
+  readonly externalId: string;
+  readonly channel: string;
+}): PersonLabel | null {
+  const stored = row.displayName?.trim() || row.phone?.trim() || row.email?.trim();
+  const opaqueId = !READABLE_ID_CHANNELS.has(row.channel) ? row.externalId.trim() : '';
+  const sent = row.displayLabel?.trim();
+  if (sent) {
+    if (opaqueId && sent === opaqueId) return null;
+    return stored ? { name: sent } : labelFromServer(sent, row.channel);
+  }
+  if (stored) return { name: stored };
+  const generic = genericFor(row.channel);
+  if (generic) return { generic };
+  return opaqueId ? null : row.externalId.trim() ? { name: row.externalId.trim() } : null;
+}
+
+/**
+ * How to reach them, for the row's title: the phone or the address - an id
+ * only where it is one of those. Never an opaque platform id.
+ */
+export function reachHandle(row: {
+  readonly phone: string | null;
+  readonly email: string | null;
+  readonly externalId: string;
+  readonly channel: string;
+}): string | null {
+  return (
+    row.phone?.trim() ||
+    row.email?.trim() ||
+    (READABLE_ID_CHANNELS.has(row.channel) ? row.externalId.trim() : '') ||
+    null
+  );
+}
+
+/**
+ * A person's label across their identities: the first one with a name, so a
+ * WhatsApp name wins over the Instagram row's "Instagram customer" whichever
+ * the route listed first; else the first generic one.
+ */
+export function labelOfPerson(
+  members: readonly Parameters<typeof personLabel>[0][],
+): PersonLabel | null {
+  const labels = members.map(personLabel);
+  return (
+    labels.find((l): l is { name: string } => l !== null && 'name' in l) ??
+    labels.find((l) => l !== null) ??
     null
   );
 }

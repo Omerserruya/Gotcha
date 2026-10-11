@@ -20,7 +20,14 @@
     "unnamed": "No name or handle on this contact",
     "truncated": "Showing the first {shown} records. There are {total} in all, and some may turn out to be the same person.",
     "footer": "{count, plural, =1 {One person} other {# people}}",
-    "footerTruncated": "Showing the first {shown} of {total} records"
+    "footerTruncated": "Showing the first {shown} of {total} records",
+    "generic": {
+      "INSTAGRAM": "Instagram customer",
+      "MESSENGER": "Messenger customer",
+      "WEBCHAT": "Website visitor",
+      "SHOPIFY_LIVE_CHAT": "Store chat visitor",
+      "other": "Customer"
+    }
   },
   "channel": {
     "WHATSAPP": "WhatsApp",

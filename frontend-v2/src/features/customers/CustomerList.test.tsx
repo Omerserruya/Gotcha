@@ -411,6 +411,101 @@ describe('★★ the join that makes a row "today"', () => {
   });
 });
 
+/*
+ * ★★ Backend 83579ac8: each segment row carries `displayLabel`, never an
+ * Instagram or Messenger id. The list printed "1031990639501705" as an
+ * Instagram customer's name (2026-10-11). These rows carry real-shaped ids
+ * that must appear nowhere in the list: not as text, not in a title.
+ */
+describe('★★ the list names people by displayLabel - never a raw external id', () => {
+  const IGSID = '1031990639501705';
+  const PSID = '7766554433221100';
+  const SLACK = 'U024BE7LH';
+  const nameless = (over: Record<string, unknown>) =>
+    row({ displayName: null, phone: null, email: null, personId: null, ...over });
+
+  it('shows the server’s label; the ids are nowhere on the screen', async () => {
+    const { container } = await show(
+      [
+        nameless({
+          id: 'ig',
+          channel: 'INSTAGRAM',
+          externalId: IGSID,
+          displayLabel: '@yael.b',
+          displayName: '@yael.b',
+        }),
+        nameless({
+          id: 'ms',
+          channel: 'MESSENGER',
+          externalId: PSID,
+          displayLabel: 'Messenger customer',
+        }),
+        nameless({
+          id: 'ig2',
+          channel: 'INSTAGRAM',
+          externalId: '17841400000000001',
+          displayLabel: 'Instagram customer',
+        }),
+      ],
+      null,
+    );
+    expect(screen.getByTestId('customer-ig')).toHaveTextContent('@yael.b');
+    expect(screen.getByTestId('customer-ms')).toHaveTextContent('Messenger customer');
+    expect(screen.getByTestId('customer-ig2')).toHaveTextContent('Instagram customer');
+    for (const id of [IGSID, PSID, '17841400000000001']) {
+      expect(container.innerHTML).not.toContain(id);
+    }
+    // No title offers an opaque id as a way to reach them.
+    expect(screen.getByTestId('customer-ms').querySelector('a')).not.toHaveAttribute('title');
+  });
+
+  it('the label is the server’s, not one built here from the fields', async () => {
+    await show([row({ id: 'k1', displayName: 'dana', displayLabel: 'Dana Cohen' })], null);
+    expect(screen.getByTestId('customer-k1')).toHaveTextContent('Dana Cohen');
+    expect(screen.getByTestId('customer-k1')).toHaveTextContent('DC');
+  });
+
+  it('an older service sends no label: words for the channel, or "no name" - never the id', async () => {
+    const { container } = await show(
+      [
+        nameless({ id: 'ig', channel: 'INSTAGRAM', externalId: IGSID }),
+        nameless({ id: 'ms', channel: 'MESSENGER', externalId: PSID }),
+        nameless({ id: 'sl', channel: 'SLACK', externalId: SLACK }),
+        nameless({ id: 'sl2', channel: 'SLACK', externalId: 'U999', displayLabel: 'U999' }),
+      ],
+      null,
+    );
+    expect(screen.getByTestId('customer-ig')).toHaveTextContent('Instagram customer');
+    expect(screen.getByTestId('customer-ms')).toHaveTextContent('Messenger customer');
+    expect(screen.getByTestId('customer-sl')).toHaveTextContent(
+      'No name or handle on this contact',
+    );
+    expect(screen.getByTestId('customer-sl2')).toHaveTextContent(
+      'No name or handle on this contact',
+    );
+    for (const id of [IGSID, PSID, SLACK, 'U999']) expect(container.innerHTML).not.toContain(id);
+  });
+
+  it('one person on two channels reads by the name, whichever identity came first', async () => {
+    const { container } = await show(
+      [
+        nameless({
+          id: 'ig',
+          channel: 'INSTAGRAM',
+          externalId: IGSID,
+          displayLabel: 'Instagram customer',
+          personId: 'p1',
+        }),
+        row({ id: 'wa', displayName: 'Omer Tsruya', displayLabel: 'Omer Tsruya', personId: 'p1' }),
+      ],
+      null,
+    );
+    expect(screen.getByTestId('customer-ig')).toHaveTextContent('Omer Tsruya');
+    expect(screen.getByTestId('customer-ig')).not.toHaveTextContent('Instagram customer');
+    expect(container.innerHTML).not.toContain(IGSID);
+  });
+});
+
 const read = (byId: Record<string, Partial<CommerceSummary>>, truncated = false) =>
   ({
     state: 'read',

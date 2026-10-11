@@ -2,7 +2,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 
 import { Link } from '@/i18n/navigation';
 
-import { customerLabel, isKnownChannel } from '@/api/contracts/customers';
+import { isKnownChannel, labelOfPerson, reachHandle } from '@/api/contracts/customers';
 
 import fill from '@/design-system/styles/fill.module.css';
 import { ChannelPlate } from '@/design-system/brand/channel-plate';
@@ -140,8 +140,11 @@ export async function CustomerList({
             waiting,
             faded,
           }) => {
-            const label = customerLabel(row);
-            const handle = row.phone ?? row.email ?? row.externalId;
+            // The server's displayLabel, never an Instagram or Messenger id (83579ac8).
+            const named = labelOfPerson(members);
+            const label = named && 'name' in named ? named.name : null;
+            const generic = named && 'generic' in named ? named.generic : null;
+            const handle = reachHandle(row);
             const since = lastContactAt ? sinceWords(lastContactAt, now) : null;
             const person = { primary: row, members, waiting };
             const insight = insightOf(person, insights);
@@ -177,7 +180,13 @@ export async function CustomerList({
                   <span className={styles.rowBody}>
                     <span className={styles.rowTop}>
                       <span className={styles.rowName}>
-                        {label ? <PersonName name={label} /> : t('list.unnamed')}
+                        {label ? (
+                          <PersonName name={label} />
+                        ) : generic ? (
+                          t(`list.generic.${generic}`)
+                        ) : (
+                          t('list.unnamed')
+                        )}
                       </span>
                       {/*
                         02's state chip: a mood when the AI read one in their
