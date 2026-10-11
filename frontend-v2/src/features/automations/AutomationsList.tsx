@@ -134,7 +134,8 @@ export function AutomationsList({ automations }: { readonly automations: readonl
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!shortcutsAllowed(event)) return;
-      if (withMod(event) && event.key.toLowerCase() === 'a') {
+      // `code`: the physical A, which types "ש" on a Hebrew keyboard (as Ctrl K did).
+      if (withMod(event) && (event.code === 'KeyA' || event.key.toLowerCase() === 'a')) {
         event.preventDefault();
         setSelected(new Set(ids));
         return;

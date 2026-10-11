@@ -56,6 +56,18 @@ describe('★★ 19 - ⌘K from anywhere', () => {
     expect(screen.getByTestId('command-palette')).toBeInTheDocument();
   });
 
+  it('★★ on a Hebrew keyboard: Ctrl and the K key types "ל", and still opens it (Omer, 2026-10-11)', () => {
+    mount();
+    fireEvent.keyDown(window, { key: 'ל', code: 'KeyK', ctrlKey: true });
+    expect(screen.getByTestId('command-palette')).toBeInTheDocument();
+  });
+
+  it('⚠ Ctrl and another key on a Hebrew keyboard opens nothing', () => {
+    mount();
+    fireEvent.keyDown(window, { key: 'ך', code: 'KeyL', ctrlKey: true });
+    expect(screen.queryByTestId('command-palette')).toBeNull();
+  });
+
   it('empty: GO TO the screens, nothing else', () => {
     mount();
     openWithKeys();

@@ -97,7 +97,17 @@ export function CommandPalette() {
 
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      /*
+       * ★★ THE KEY'S PLACE, NOT ITS LETTER (Omer, 2026-10-11: "Ctrl K does not
+       *   open search"). On a Hebrew layout that key types "ל", so `key` is
+       *   never "k" - and the browser's own Ctrl K (its search bar) ran
+       *   instead. `code` is the physical key, the same on every layout;
+       *   `key` stays for a layout that moves K (Dvorak).
+       */
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        (event.code === 'KeyK' || event.key.toLowerCase() === 'k')
+      ) {
         event.preventDefault();
         setOpen((was) => {
           if (was) reset();

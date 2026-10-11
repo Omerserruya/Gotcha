@@ -100,6 +100,12 @@ describe('★★ selecting rows', () => {
     expect(selected()).toEqual([]);
   });
 
+  it('★ on a Hebrew keyboard the A key types "ש" - Ctrl+A still selects all', () => {
+    show();
+    fireEvent.keyDown(window, { key: 'ש', code: 'KeyA', ctrlKey: true });
+    expect(selected()).toEqual(['a1', 'a2', 'a3']);
+  });
+
   it('★ nothing fires while typing in a field', () => {
     show();
     fireEvent.click(cell('a1'));
