@@ -233,6 +233,14 @@ export const workspaceEndpoints = {
    * everything forever.
    */
   scanAccept: () => endpoint('/api/workspace/scan/accept'),
+  /**
+   * The workspace's system language - `Tenant.defaultLocale`, the language
+   * GOTCHA uses with the team when a person has set none. `PUT {locale}`,
+   * `en` or `he`; needs `settings:workspace:update` (auth agents.ts).
+   */
+  systemLocale: () => endpoint('/api/agents/settings/locale'),
+  /** This person's own interface language - `PUT {locale}` (auth agents.ts). */
+  myLocale: () => endpoint('/api/agents/me/locale'),
 } as const;
 
 /**

@@ -8,10 +8,13 @@ import {
   sharesAreMeaningful,
   type LanguageShare,
 } from '@/api/contracts/language-share';
-import { Link } from '@/i18n/navigation';
+import { useSearchParams } from 'next/navigation';
+
+import { Link, usePathname, useRouter } from '@/i18n/navigation';
+import { LOCALE_CODES } from '@/i18n/locales';
 import drawer from '@/design-system/styles/drawer.module.css';
 
-import { saveWorkspaceFacts } from './actions';
+import { saveMyLanguage, saveSystemLanguage, saveWorkspaceFacts } from './actions';
 import styles from './Workspace.module.css';
 
 /** Offered for the main language; the stored one is added when it is not here. */
@@ -28,24 +31,34 @@ const COMMON = ['he', 'en', 'ar', 'ru', 'fr', 'es', 'de'] as const;
  * is drawn on and not live; "Any other language", the translate switch and
  * the system language have no store here - drawn, not live, each with why.
  * "Also answers in" is what the last 30 days actually saw.
+ *
+ * ★★ BOTH LANGUAGES INSIDE GOTCHA CHANGE HERE (Omer, 2026-10-11: "you can't
+ *   change the system language"). The workspace's system language saves with
+ *   the drawer (`PUT /agents/settings/locale`); the person's own interface
+ *   language applies the moment it is chosen - kept on their account
+ *   (`PUT /agents/me/locale`) and the page reopened in it, since the language
+ *   is the address (`/he/...`).
  */
 export function LanguageDrawer({
   storedLanguage,
   share,
   systemLocale,
-  myLocale,
   updatedAt,
 }: {
   readonly storedLanguage: string | null;
   readonly share: LanguageShare | null;
   readonly systemLocale: string | null;
-  readonly myLocale: string | null;
   readonly updatedAt: string | null;
 }) {
   const t = useTranslations('workspace.languageDrawer');
   const tw = useTranslations('workspace');
   const locale = useLocale();
   const [main, setMain] = useState(storedLanguage ?? '');
+  const [system, setSystem] = useState(systemLocale ?? '');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [switching, startSwitch] = useTransition();
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -67,8 +80,34 @@ export function LanguageDrawer({
     setSaved(false);
     startTransition(async () => {
       const result = await saveWorkspaceFacts({ languages: main ? [main] : [] }, updatedAt);
-      if (result.ok) setSaved(true);
-      else setProblem(result.reason === 'stale' ? tw('stale') : tw('failed'));
+      if (!result.ok) {
+        setProblem(result.reason === 'stale' ? tw('stale') : tw('failed'));
+        return;
+      }
+      if (system !== '' && system !== (systemLocale ?? '')) {
+        const written = await saveSystemLanguage(system);
+        if (!written.ok) {
+          setProblem(written.reason === 'forbidden' ? t('forbidden') : tw('failed'));
+          return;
+        }
+      }
+      setSaved(true);
+    });
+  }
+
+  /** The interface language: kept on the account, then this page in it. */
+  function switchInterface(next: string) {
+    setProblem(null);
+    startSwitch(async () => {
+      const written = await saveMyLanguage(next);
+      if (!written.ok) {
+        setProblem(tw('failed'));
+        return;
+      }
+      router.replace(
+        { pathname, query: Object.fromEntries(searchParams.entries()) },
+        { locale: next as (typeof LOCALE_CODES)[number] },
+      );
     });
   }
 
@@ -157,17 +196,43 @@ export function LanguageDrawer({
           <h3 className={drawer.sectionTitle}>{t('system')}</h3>
           <div className={drawer.field}>
             <span className={drawer.fieldLabel}>{t('systemLabel')}</span>
-            <span className={drawer.box} aria-disabled="true" title={t('systemHint')}>
-              {systemLocale ? name(systemLocale) : '-'}
-            </span>
+            <select
+              className={drawer.box}
+              value={system}
+              title={t('systemHint')}
+              data-testid="language-system-select"
+              onChange={(e) => setSystem(e.target.value)}
+            >
+              {system === '' ? <option value="">-</option> : null}
+              {LOCALE_CODES.map((code) => (
+                <option key={code} value={code}>
+                  {name(code)}
+                </option>
+              ))}
+            </select>
           </div>
           <p className={styles.langSwitchRow} title={t('translateHint')}>
             <span className={styles.weekPill} data-on="no" aria-hidden="true" />
             {t('translate', { language: systemLocale ? name(systemLocale) : '-' })}
           </p>
-          <p className={drawer.hint} data-testid="language-mine">
-            {myLocale ? t('mine', { language: name(myLocale) }) : t('mineUnknown')}
-          </p>
+          <label className={drawer.field}>
+            <span className={drawer.fieldLabel}>{t('mineLabel')}</span>
+            <select
+              className={drawer.box}
+              value={locale}
+              title={t('mineHint')}
+              disabled={switching}
+              data-testid="language-mine"
+              onChange={(e) => switchInterface(e.target.value)}
+            >
+              {LOCALE_CODES.map((code) => (
+                <option key={code} value={code}>
+                  {name(code)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className={drawer.hint}>{t('mineHint')}</p>
         </section>
       </div>
       <footer className={drawer.drawerFoot}>

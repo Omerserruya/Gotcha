@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
@@ -231,4 +232,41 @@ export async function acceptScanFields(fields: readonly string[]): Promise<Accep
     logger.warn('workspace.scan_accept_failed', { cause });
     return null;
   }
+}
+
+/** A language write: done, refused (no permission), or failed. */
+export type LanguageResult =
+  { readonly ok: true } | { readonly ok: false; readonly reason: 'forbidden' | 'failed' };
+
+async function putLocale(
+  endpoint: ReturnType<typeof workspaceEndpoints.systemLocale>,
+  locale: string,
+  event: string,
+): Promise<LanguageResult> {
+  try {
+    await serverApi().put({ endpoint, payload: z.unknown(), body: { locale } });
+    revalidatePath('/[locale]/settings/workspace', 'page');
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn(event, { cause });
+    return {
+      ok: false,
+      reason: isApiError(cause) && cause.status === 403 ? 'forbidden' : 'failed',
+    };
+  }
+}
+
+/**
+ * The workspace's system language (Omer, 2026-10-11: "you can't change the
+ * system language"). The route existed all along; the screen drew the field
+ * as a fixed box.
+ */
+export async function saveSystemLanguage(locale: string): Promise<LanguageResult> {
+  return putLocale(workspaceEndpoints.systemLocale(), locale, 'workspace.system_locale_failed');
+}
+
+/** This person's own interface language - kept, so it is theirs on every device. */
+export async function saveMyLanguage(locale: string): Promise<LanguageResult> {
+  return putLocale(workspaceEndpoints.myLocale(), locale, 'workspace.my_locale_failed');
 }

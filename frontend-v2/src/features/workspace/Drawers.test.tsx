@@ -8,9 +8,19 @@ import { languageShareSchema } from '@/api/contracts/language-share';
 import { workspaceSchema } from '@/api/contracts/workspace';
 import messages from '@/i18n/messages/en/workspace.json';
 
-const { saveWorkspaceFacts } = vi.hoisted(() => ({ saveWorkspaceFacts: vi.fn() }));
-vi.mock('./actions', () => ({ saveWorkspaceFacts }));
+const { saveWorkspaceFacts, saveSystemLanguage, saveMyLanguage, replace } = vi.hoisted(() => ({
+  saveWorkspaceFacts: vi.fn(),
+  saveSystemLanguage: vi.fn(),
+  saveMyLanguage: vi.fn(),
+  replace: vi.fn(),
+}));
+vi.mock('./actions', () => ({ saveWorkspaceFacts, saveSystemLanguage, saveMyLanguage }));
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams('panel=language'),
+}));
 vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ replace }),
+  usePathname: () => '/settings/workspace',
   Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
     <a href={typeof href === 'string' ? href : JSON.stringify(href)} {...rest}>
       {children}
@@ -25,6 +35,11 @@ import { LanguageDrawer } from './LanguageDrawer';
 beforeEach(() => {
   saveWorkspaceFacts.mockReset();
   saveWorkspaceFacts.mockResolvedValue({ ok: true, data: {} });
+  saveSystemLanguage.mockReset();
+  saveSystemLanguage.mockResolvedValue({ ok: true });
+  saveMyLanguage.mockReset();
+  saveMyLanguage.mockResolvedValue({ ok: true });
+  replace.mockReset();
 });
 
 const ws = (over: Record<string, unknown> = {}) =>
@@ -191,15 +206,7 @@ describe('★ 11d - two cards, no paragraphs', () => {
     ],
   });
   const drawer = () =>
-    inIntl(
-      <LanguageDrawer
-        storedLanguage="he"
-        share={share}
-        systemLocale="he"
-        myLocale="en"
-        updatedAt={null}
-      />,
-    );
+    inIntl(<LanguageDrawer storedLanguage="he" share={share} systemLocale="he" updatedAt={null} />);
 
   it('the main language by name; also-answers from what customers wrote', () => {
     drawer();
@@ -227,6 +234,50 @@ describe('★ 11d - two cards, no paragraphs', () => {
     await userEvent.selectOptions(screen.getByTestId('language-main'), 'en');
     await userEvent.click(screen.getByTestId('drawer-save-language'));
     expect(saveWorkspaceFacts).toHaveBeenCalledWith({ languages: ['en'] }, null);
+    // The system language did not change: not written.
+    expect(saveSystemLanguage).not.toHaveBeenCalled();
+  });
+
+  it('★★ the system language changes here now, and saves with the drawer (Omer, 2026-10-11)', async () => {
+    drawer();
+    const system = screen.getByTestId('language-system-select') as HTMLSelectElement;
+    expect(system.value).toBe('he');
+    expect(system).not.toBeDisabled();
+    await userEvent.selectOptions(system, 'en');
+    await userEvent.click(screen.getByTestId('drawer-save-language'));
+    expect(saveSystemLanguage).toHaveBeenCalledWith('en');
+    expect(await screen.findByTestId('language-saved')).toBeInTheDocument();
+  });
+
+  it('⚠ refused (no permission): said in words, and not "saved"', async () => {
+    saveSystemLanguage.mockResolvedValueOnce({ ok: false, reason: 'forbidden' });
+    drawer();
+    await userEvent.selectOptions(screen.getByTestId('language-system-select'), 'en');
+    await userEvent.click(screen.getByTestId('drawer-save-language'));
+    expect(
+      await screen.findByText("You don't have permission to change the workspace's language."),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('language-saved')).toBeNull();
+  });
+
+  it('★★ your interface language: kept on your account, then this page reopens in it', async () => {
+    drawer();
+    const mine = screen.getByTestId('language-mine') as HTMLSelectElement;
+    expect(mine.value).toBe('en');
+    await userEvent.selectOptions(mine, 'he');
+    expect(saveMyLanguage).toHaveBeenCalledWith('he');
+    expect(replace).toHaveBeenCalledWith(
+      { pathname: '/settings/workspace', query: { panel: 'language' } },
+      { locale: 'he' },
+    );
+  });
+
+  it('⚠ a failed keep does not switch the page', async () => {
+    saveMyLanguage.mockResolvedValueOnce({ ok: false, reason: 'failed' });
+    drawer();
+    await userEvent.selectOptions(screen.getByTestId('language-mine'), 'he');
+    expect(saveMyLanguage).toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 });
 

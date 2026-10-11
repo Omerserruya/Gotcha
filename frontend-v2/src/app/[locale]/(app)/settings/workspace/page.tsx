@@ -84,7 +84,6 @@ export default async function Page({
             storedLanguage={workspace.languages[0] ?? null}
             share={languages.share}
             systemLocale={languages.systemLocale}
-            myLocale={languages.myLocale}
             updatedAt={workspace.updatedAt ?? null}
           />
         </Drawer>

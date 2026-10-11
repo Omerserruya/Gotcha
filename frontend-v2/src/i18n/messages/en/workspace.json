@@ -222,11 +222,12 @@
     "hintCount": "{count} of the last {days} days' {total} conversations were in {language}.",
     "system": "Inside GOTCHA - system language",
     "systemLabel": "System language",
-    "systemHint": "Set for the whole workspace; it can't be changed here yet.",
+    "systemHint": "The language GOTCHA uses with your team, for everyone who has not chosen their own.",
     "translate": "Translate customer messages into {language} for your team",
     "translateHint": "Nothing stores this choice yet.",
-    "mine": "Your own interface language is {language} - that one is in your profile.",
-    "mineUnknown": "Your own interface language is in your profile."
+    "mineLabel": "Your interface language",
+    "mineHint": "Just for you, on every device. The page switches at once.",
+    "forbidden": "You don't have permission to change the workspace's language."
   },
   "timezone": "Time zone",
   "typeCity": "Type a city",
