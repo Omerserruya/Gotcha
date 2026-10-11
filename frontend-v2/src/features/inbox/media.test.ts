@@ -1,20 +1,49 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { fileLabelOf, fileSizeOf, mediaKind, quoteOf, safeMediaUrl } from './media';
 
-describe('★★ a media address is followed only over https or on this host', () => {
+describe('★★ a media address is followed only over https or through the BFF', () => {
   it.each([
-    ['/api/uploads/a.jpg', '/api/uploads/a.jpg'],
+    ['/api/uploads/a.jpg', '/api/bff/api/uploads/a.jpg'],
+    [
+      '/api/conversations/c1/messages/m1/media/0b6f2c3e-1111-2222-3333-444455556666.jpg',
+      '/api/bff/api/conversations/c1/messages/m1/media/0b6f2c3e-1111-2222-3333-444455556666.jpg',
+    ],
     ['https://cdn.example/a.jpg', 'https://cdn.example/a.jpg'],
+    ['https://api.twilio.com/2010-04-01/Media/ME1', 'https://api.twilio.com/2010-04-01/Media/ME1'],
     ['http://cdn.example/a.jpg', null],
     ['//evil.example/a.jpg', null],
     ['/\\evil.example/a.jpg', null],
+    // The parser drops tab, LF and CR before it reads: a prefix check passed these.
+    ['/\t/evil.example/a.jpg', null],
+    ['/\n/evil.example/a.jpg', null],
+    ['/.//evil.example/a.jpg', null],
     ['javascript:alert(1)', null],
     ['data:image/png;base64,AA', null],
     ['', null],
     [null, null],
   ])('%j → %j', (raw, url) => {
     expect(safeMediaUrl(raw)).toBe(url);
+  });
+
+  it('★★ under a base path the BFF is the mounted one: /v2/api/bff/api/…, an https link unchanged', async () => {
+    /*
+     * `BASE_PATH` is read once at module load, so the module is re-imported
+     * with it set. At the root the prefix is empty and asserting it would
+     * prove nothing (the flow-executor test learned this first).
+     */
+    vi.resetModules();
+    vi.stubEnv('NEXT_PUBLIC_BASE_PATH', '/v2');
+    try {
+      const { safeMediaUrl: mounted } = await import('./media');
+      expect(mounted('/api/conversations/c1/messages/m1/media/a.jpg')).toBe(
+        '/v2/api/bff/api/conversations/c1/messages/m1/media/a.jpg',
+      );
+      expect(mounted('https://cdn.example/a.jpg')).toBe('https://cdn.example/a.jpg');
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
   });
 });
 

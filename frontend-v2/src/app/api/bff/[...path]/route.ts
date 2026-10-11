@@ -43,8 +43,31 @@ const HOP_BY_HOP = new Set([
   TENANT_HEADER,
 ]);
 
-/** Response headers worth passing back. Everything else is dropped. */
-const PASS_THROUGH_RESPONSE_HEADERS = ['content-type', 'x-request-id', 'retry-after'];
+/**
+ * Response headers worth passing back. Everything else is dropped.
+ *
+ * ★ All after the first three are a FILE's: a message's photo, voice note
+ * or document comes through here since the platform serves it only to a
+ * logged-in caller (2026-10-10). Without `content-range` and `accept-ranges`
+ * a voice note or a video cannot seek (the browser asks for a Range and must
+ * be told what it got); without `content-disposition` a document the
+ * platform marks as an attachment would render in the tab; and the
+ * platform's `content-security-policy: sandbox` and `nosniff` on an upload
+ * are the reason a file that does render can run nothing. `content-length`
+ * and `cache-control` are decided separately, below.
+ */
+const PASS_THROUGH_RESPONSE_HEADERS = [
+  'content-type',
+  'x-request-id',
+  'retry-after',
+  'content-range',
+  'accept-ranges',
+  'content-disposition',
+  'etag',
+  'last-modified',
+  'content-security-policy',
+  'x-content-type-options',
+];
 
 function upstreamPath(segments: string[]): string | null {
   // Path segments arrive decoded; reject anything that could climb out of the
@@ -154,7 +177,18 @@ async function proxy(request: NextRequest, segments: string[]): Promise<NextResp
     logger.error('bff.upstream_unreachable', { method: request.method, path, cause });
     return NextResponse.json({ error: 'Upstream request failed.' }, { status: 502 });
   }
-  if (streaming && (upstream.headers.get('content-type') ?? '').includes('text/event-stream')) {
+  const contentType = upstream.headers.get('content-type') ?? '';
+  if (streaming && contentType.includes('text/event-stream')) {
+    clearTimeout(timer);
+  }
+  /*
+   * ★ A FILE'S BODY IS A STREAM TOO. A video or a long voice note read on a
+   * slow line takes longer than the timeout to arrive, and the timeout would
+   * cut it mid-file exactly as it cut the event streams. Anything a GET
+   * answers that is not JSON is a file: its timeout, like a stream's, ends
+   * when it answers.
+   */
+  if (request.method === 'GET' && contentType !== '' && !contentType.includes('json')) {
     clearTimeout(timer);
   }
 
@@ -163,9 +197,29 @@ async function proxy(request: NextRequest, segments: string[]): Promise<NextResp
     const value = upstream.headers.get(header);
     if (value) responseHeaders.set(header, value);
   }
-  // Proxied API data is per-user and per-tenant; it must never be cached by a
-  // shared cache or by the browser.
-  responseHeaders.set('cache-control', 'no-store, private');
+  /*
+   * The length is the upstream's only when the body is passed as it came.
+   * `fetch` decodes a compressed body and keeps the compressed length, so a
+   * length beside a content-encoding would be a lie that truncates the file.
+   */
+  const length = upstream.headers.get('content-length');
+  if (length && !upstream.headers.has('content-encoding')) {
+    responseHeaders.set('content-length', length);
+  }
+  /*
+   * Proxied API data is per-user and per-tenant; it must never be cached by a
+   * shared cache or by the browser. The platform's own answer is passed on
+   * when it already says `no-store` (a message's file: `private, no-store`);
+   * anything else - none, or a route that would allow caching - is replaced,
+   * so no upstream route can widen it.
+   */
+  const upstreamCache = upstream.headers.get('cache-control');
+  responseHeaders.set(
+    'cache-control',
+    upstreamCache && /(^|,)\s*no-store\s*(,|$)/i.test(upstreamCache)
+      ? upstreamCache
+      : 'no-store, private',
+  );
 
   const response = new NextResponse(upstream.body, {
     status: upstream.status,

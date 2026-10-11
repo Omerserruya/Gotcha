@@ -387,9 +387,9 @@ describe('★★ media in the stream, as 02 draws it - never "A photo." when the
       message({ messageType: 'image', mediaUrl: '/api/uploads/a.jpg', body: '[Image]' }),
     ]);
     const photo = screen.getByTestId('photo-m1');
-    expect(photo).toHaveAttribute('href', '/api/uploads/a.jpg');
+    expect(photo).toHaveAttribute('href', '/api/bff/api/uploads/a.jpg');
     expect(photo).toHaveAttribute('target', '_blank');
-    expect(photo.querySelector('img')).toHaveAttribute('src', '/api/uploads/a.jpg');
+    expect(photo.querySelector('img')).toHaveAttribute('src', '/api/bff/api/uploads/a.jpg');
     expect(screen.getByTestId('message-m1')).not.toHaveTextContent('[Image]');
     expect(screen.queryByTestId('unknown-m1')).toBeNull();
   });
@@ -411,7 +411,7 @@ describe('★★ media in the stream, as 02 draws it - never "A photo." when the
     ]);
     expect(screen.getByTestId('audio-m1').querySelector('audio')).toHaveAttribute(
       'src',
-      '/api/uploads/v.ogg',
+      '/api/bff/api/uploads/v.ogg',
     );
     expect(screen.getByTestId('voice-m1')).toHaveTextContent(/can't read it out/i);
   });
@@ -492,6 +492,67 @@ describe('★★ media in the stream, as 02 draws it - never "A photo." when the
       'src',
       'https://cdn.example/s.webp',
     );
+  });
+});
+
+describe('★★ the platform’s own media is read through the BFF - an <img> aimed at /api is a 401', () => {
+  /*
+   * Since the signed-media change (2026-10-10) a stored upload arrives as the
+   * logged-in per-message route. The platform does not accept this app's
+   * session, so every element that loads or links the file must go through
+   * `/api/bff`, which attaches the bearer. One assertion per element: each is
+   * its own request.
+   */
+  const PLATFORM = '/api/conversations/c1/messages/m1/media/0b6f2c3e-1111-2222-3333-444455556666';
+  const VIA_BFF = `/api/bff${PLATFORM}`;
+
+  it('a photo: the picture and its "open whole" link', async () => {
+    await show([message({ messageType: 'image', mediaUrl: `${PLATFORM}.jpg`, body: '' })]);
+    const photo = screen.getByTestId('photo-m1');
+    expect(photo).toHaveAttribute('href', `${VIA_BFF}.jpg`);
+    expect(photo.querySelector('img')).toHaveAttribute('src', `${VIA_BFF}.jpg`);
+  });
+
+  it('a sticker', async () => {
+    await show([message({ messageType: 'sticker', mediaUrl: `${PLATFORM}.webp`, body: '' })]);
+    expect(screen.getByTestId('photo-m1').querySelector('img')).toHaveAttribute(
+      'src',
+      `${VIA_BFF}.webp`,
+    );
+  });
+
+  it('a video', async () => {
+    await show([message({ messageType: 'video', mediaUrl: `${PLATFORM}.mp4`, body: '' })]);
+    expect(screen.getByTestId('video-m1')).toHaveAttribute('src', `${VIA_BFF}.mp4`);
+  });
+
+  it('a voice note', async () => {
+    await show([message({ messageType: 'audio', mediaUrl: `${PLATFORM}.ogg`, body: '' })]);
+    expect(screen.getByTestId('audio-m1').querySelector('audio')).toHaveAttribute(
+      'src',
+      `${VIA_BFF}.ogg`,
+    );
+  });
+
+  it('a file to download', async () => {
+    await show([
+      message({
+        messageType: 'document',
+        mediaUrl: `${PLATFORM}.pdf`,
+        fileName: 'Terms.pdf',
+        body: '',
+      }),
+    ]);
+    expect(screen.getByTestId('file-m1')).toHaveAttribute('href', `${VIA_BFF}.pdf`);
+  });
+
+  it('★ a provider’s https link (Meta, Twilio, a merchant’s) is not ours to proxy: as it came', async () => {
+    await show([
+      message({ messageType: 'image', mediaUrl: 'https://lookaside.fbsbx.com/a.jpg', body: '' }),
+    ]);
+    const photo = screen.getByTestId('photo-m1');
+    expect(photo).toHaveAttribute('href', 'https://lookaside.fbsbx.com/a.jpg');
+    expect(photo.querySelector('img')).toHaveAttribute('src', 'https://lookaside.fbsbx.com/a.jpg');
   });
 });
 

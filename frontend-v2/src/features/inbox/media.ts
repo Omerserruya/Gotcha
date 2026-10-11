@@ -1,19 +1,42 @@
 import type { InboxMessage } from '@/api/contracts/inbox';
 import { MESSAGE_PLACEHOLDERS as PLACEHOLDERS } from '@/api/contracts/message-kind';
+import { appPath } from '@/lib/base-path';
+import { safeInternalPath } from '@/lib/safe-url';
 
 /**
  * What a message's attachment is, as the stream draws it - and the two
  * guards that keep it honest: a media address is followed only over https
- * or on this host, and a caption the adapter wrote for us ("[Image]") is
+ * or through the BFF, and a caption the adapter wrote for us ("[Image]") is
  * never printed as if the customer typed it.
  */
 export type MediaKind = 'image' | 'video' | 'audio' | 'sticker' | 'document';
 
-/** https, or a path on this host (`/api/uploads/…`); anything else - `javascript:`, `//evil` - is no address. */
+/**
+ * Where an attachment is loaded from: https as it came, or the platform's
+ * own path through the BFF. Anything else - `javascript:`, `//evil`,
+ * `/<TAB>/evil` - is no address.
+ *
+ * ★★ A PLATFORM PATH IS READ THROUGH THE BFF, NEVER POINTED AT DIRECTLY.
+ * Since the signed-media change (2026-10-10) a stored upload arrives as
+ * `/api/conversations/:cid/messages/:mid/media/<uuid>.jpg`, a logged-in route.
+ * An `<img>` aimed straight at it is a request to the platform's /api with
+ * this app's session cookie, which the platform does not accept: every
+ * customer photo, voice note and file read 401. The BFF is the only door that
+ * attaches the bearer, so `/api/…` becomes `<basePath>/api/bff/api/…`. A
+ * Meta, Twilio or merchant https link is not ours to proxy and stays as it is.
+ *
+ * The path is resolved by `safeInternalPath` rather than inspected by prefix:
+ * the parser drops tab, LF and CR before it reads, so a prefix check passes
+ * `/<TAB>/evil.example` (see `lib/safe-url.ts`).
+ */
 export function safeMediaUrl(raw: string | null): string | null {
   const url = raw?.trim();
   if (!url) return null;
-  if (url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/\\')) return url;
+  if (url.startsWith('/')) {
+    const path = safeInternalPath(url);
+    if (!path) return null;
+    return path.startsWith('/api/') ? appPath(`/api/bff${path}`) : path;
+  }
   try {
     return new URL(url).protocol === 'https:' ? url : null;
   } catch {
