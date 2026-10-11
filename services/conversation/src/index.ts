@@ -24,7 +24,7 @@ import autoBuyRoutes from "./routes/auto-buy";
 import { handleVoiceSessionEnded } from "./subscribers/voice-auto-close";
 import { uploadsStatic } from "./lib/uploads-static";
 import { signedMediaHandler } from "./lib/media-serving";
-import { presentRelayedMessage } from "./lib/message-media";
+import { relayBusEvent } from "./lib/socket-bridge";
 import { relayToVisitor, relayConversationState } from "./subscribers/shopify-visitor-relay";
 
 const config = { name: "conversation-service", port: parseInt(process.env.PORT || "4002", 10) };
@@ -39,8 +39,8 @@ initSocket(httpServer);
 // writes final VOICE-channel messages directly to Postgres via its
 // StreamRouter.PersistenceSink; we only forward the events to browsers.
 //
-// ROUTING. `data.channel` names the room this event is FOR. Events that name
-// one go only there; events that do not still broadcast to the tenant.
+// ROUTING. `data.channel` names the room this event is FOR when it is shaped
+// like a room (lib/socket-bridge.ts); everything else broadcasts to the tenant.
 //
 // This bridge used to emit everything to `tenant:{id}` unconditionally, which
 // meant the routing targets that publishers had been setting since Phase 3 were
@@ -53,27 +53,9 @@ initSocket(httpServer);
 // onto `channels.conversation(id)` accomplishes nothing on its own, because the
 // bus envelope has no target field - `publishConvEvent` writes the channel into
 // `data` as a hint and THIS is the only code that can honour it.
-const untargeted = new Set<string>();
 subscribeToEvents((event) => {
   try {
-    const io = getIO();
-    presentRelayedMessage(event.data);
-    const channel = typeof (event.data as any)?.channel === "string" ? (event.data as any).channel : null;
-    if (channel) {
-      io.to(channel).emit(event.event, event.data);
-      return;
-    }
-    // ONE line per distinct event name per process, not one per event: voice
-    // transcripts alone would make this unreadable within a single call. The
-    // point is the enumeration - which events still broadcast tenant-wide - and
-    // that is a set, not a stream. Deciding to make targets mandatory needs
-    // that list first; failing hard without it would break events nobody has
-    // identified yet, which is the silent breakage this change exists to avoid.
-    if (!untargeted.has(event.event)) {
-      untargeted.add(event.event);
-      console.log(`[socket-bridge] untargeted event broadcasts tenant-wide: ${event.event}`);
-    }
-    io.to(`tenant:${event.tenantId}`).emit(event.event, event.data);
+    relayBusEvent(getIO(), event);
   } catch {
     // Socket not ready yet - event is dropped (acceptable per MVP spec)
   }

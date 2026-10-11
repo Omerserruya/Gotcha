@@ -154,7 +154,7 @@ export async function create(data: CreateMessageData) {
   // Presented once for the caller, the socket and the bus: the bus event is
   // relayed to browsers by this service's socket bridge too.
   const presented = presentMessageMedia(message);
-  const eventData = { message: presented, conversationId: data.conversationId };
+  const eventData = { message: presented, conversationId: data.conversationId, messageId: presented.id, tenantId: data.tenantId };
   try { getIO().to(`tenant:${data.tenantId}`).emit("message:new", eventData); } catch {}
   publishEvent({ event: "message:new", tenantId: data.tenantId, data: eventData }).catch(() => {});
   return presented;
@@ -184,7 +184,7 @@ export async function updateStatus(messageId: string, status: "SENT" | "DELIVERE
   if (status !== "FAILED" && newIdx <= currentIdx) return message;
 
   const updated = await prisma.message.update({ where: { id: message.id }, data: { status } });
-  const eventData = { messageId: updated.id, conversationId: updated.conversationId, status: updated.status };
+  const eventData = { messageId: updated.id, conversationId: updated.conversationId, status: updated.status, tenantId: message.tenantId };
   try { getIO().to(`tenant:${message.tenantId}`).emit("message:status", eventData); } catch {}
   publishEvent({ event: "message:status", tenantId: message.tenantId, data: eventData }).catch(() => {});
   return updated;
