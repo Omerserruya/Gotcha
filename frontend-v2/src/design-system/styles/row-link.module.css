@@ -63,4 +63,16 @@
   .above:has([aria-expanded='true']) {
     z-index: 2;
   }
+
+  /*
+   * A label that explains itself only on hover (a status chip, the faces on
+   * a role): above the row's link so its tooltip shows, and - through
+   * `RowTipForward` - a click on it opens the row all the same. It is not a
+   * control: no tab stop of its own, so the row stays one stop (2026-10-11).
+   */
+  .tip {
+    position: relative;
+    z-index: 1;
+    cursor: pointer;
+  }
 }

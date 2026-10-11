@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { RowTipForward } from '@/shell/RowTipForward';
 import { SettingsFootnote } from '@/shell/SettingsFootnote';
 import { SettingsSections } from '@/shell/SettingsSections';
 
@@ -27,6 +28,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
     <div className={styles.split}>
       <SettingsSections />
       <div className={styles.section}>{children}</div>
+      <RowTipForward />
       <div className={styles.footnote}>
         <SettingsFootnote />
       </div>

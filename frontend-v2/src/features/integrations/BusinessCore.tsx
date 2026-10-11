@@ -166,7 +166,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
                 </div>
                 <div className={styles.partControl}>
                   {crm?.elected ? (
-                    <span className={rowLink.above} title={t('writeback.crmDefault')}>
+                    <span className={rowLink.tip} title={t('writeback.crmDefault')}>
                       {crm.elected.name}
                     </span>
                   ) : (
@@ -199,7 +199,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
                 </div>
                 <div className={styles.partControl}>
                   {crm?.elected ? (
-                    <span className={rowLink.above} title={t('writeback.sourceOfTruth')}>
+                    <span className={rowLink.tip} title={t('writeback.sourceOfTruth')}>
                       {crm.elected.name}
                     </span>
                   ) : (
@@ -507,7 +507,7 @@ function Part({
       {/* 02's state chip, from the same reading as the sentence it carries. */}
       <span
         // Above the row's link: the state's sentence rides on its `title`.
-        className={`${styles.chip} ${rowLink.above}`}
+        className={`${styles.chip} ${rowLink.tip}`}
         data-tone={CHIP_TONE[state]}
         title={[explain, unmappedWhy, where].filter(Boolean).join(' ')}
         data-testid={`core-chip-${part.role}`}

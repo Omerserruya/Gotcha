@@ -508,7 +508,8 @@ describe('★★ a row with Settings is clickable across its width (Omer, 2026-1
     expectStretchedRow(screen.getByTestId('channel-w1'));
     const chip = screen.getByTestId('channel-status-w1');
     expect(chip).toHaveAttribute('title');
-    expect(chip.classList.contains(rowLink.above!)).toBe(true);
+    // Above the overlay for its tooltip, and a click on it still opens the row (RowTipForward).
+    expect(chip.classList.contains(rowLink.tip!)).toBe(true);
   });
 
   it('⚠ a row whose action is Disconnect is NOT stretched: a click on a row never takes a channel down', async () => {

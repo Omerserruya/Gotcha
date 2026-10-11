@@ -197,8 +197,8 @@ export async function ChannelList({
                 className={[
                   styles.status,
                   troubled ? styles.statusTroubled : styles.statusGood,
-                  // Above the row's link while it carries words on its `title`.
-                  opens && row.error ? rowLink.above : '',
+                  // Above the row's link while it carries words on its `title`; a click still opens the row.
+                  opens && row.error ? rowLink.tip : '',
                 ]
                   .join(' ')
                   .trim()}
@@ -330,8 +330,8 @@ function WidgetListRow({
           styles.status,
           // Not live yet is a step to take, not a fault: neither green nor alarmed.
           troubled ? styles.statusTroubled : live === false ? '' : styles.statusGood,
-          // Above the row's link while it carries words on its `title`.
-          troubled?.error ? rowLink.above : '',
+          // Above the row's link while it carries words on its `title`; a click still opens the row.
+          troubled?.error ? rowLink.tip : '',
         ]
           .join(' ')
           .trim()}

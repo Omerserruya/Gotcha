@@ -154,6 +154,7 @@ describe('★★ a custom role’s whole row opens it (Omer, 2026-10-11)', () =>
       }),
     );
     const faces = screen.getByTitle('Maya Cohen');
-    expect(faces.classList.contains(rowLink.above!)).toBe(true);
+    // Above the overlay for their names, and a click on them still opens the role (RowTipForward).
+    expect(faces.classList.contains(rowLink.tip!)).toBe(true);
   });
 });

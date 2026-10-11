@@ -98,7 +98,7 @@ export async function RoleList({
                 // 02: a face per person - initials, 26px; more than four, "+N".
                 // Above the row's link: the names ride on its `title`.
                 <span
-                  className={[styles.faces, rowLink.above].join(' ')}
+                  className={[styles.faces, rowLink.tip].join(' ')}
                   title={holders(role)
                     .map((m) => m.name ?? m.email ?? '')
                     .filter(Boolean)

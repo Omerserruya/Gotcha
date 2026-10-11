@@ -555,7 +555,8 @@ describe('★★ a part is clickable across its row; its choice stays a choice (
     await render14(CHOICE);
     const chip = screen.getByTestId('core-chip-payments');
     expect(chip.getAttribute('title')).toBeTruthy();
-    expect(chip.classList.contains(rowLink.above!)).toBe(true);
+    // Above the overlay for its tooltip, and a click on it still opens the row (RowTipForward).
+    expect(chip.classList.contains(rowLink.tip!)).toBe(true);
   });
 
   it('both across rows: one stretched ›', async () => {
