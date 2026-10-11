@@ -23,6 +23,17 @@ describe('★★ the notification draws the same mark the inbox does', () => {
     expect(svg).toContain('translate(24 24)');
   });
 
+  it.each(['INSTAGRAM', 'GMAIL', 'OUTLOOK'])(
+    '★ %s: its gradients travel with it - every url(#…) is defined in the image itself',
+    (channel) => {
+      const svg = notificationSvg(channel, colours)!;
+      const refs = [...svg.matchAll(/url\(#([^)]+)\)/g)].map((m) => m[1]);
+      expect(refs.length).toBeGreaterThan(0);
+      for (const id of refs) expect(svg).toMatch(new RegExp(`<(linear|radial)Gradient id="${id}"`));
+      expect(svg).not.toContain('var(');
+    },
+  );
+
   it('★ a neutral glyph is inked in the tone’s colour, through currentColor', () => {
     const svg = notificationSvg('VOICE', colours)!;
     expect(svg).toContain('data-glyph="phone"');
