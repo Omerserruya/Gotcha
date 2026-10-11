@@ -25,6 +25,7 @@ export type LinkSignal =
   | "shared_identifier" // a phone/email typed in a conversation equals another contact's channel-proven id
   | "shopify_customer" // an ownership-checked order resolved to a Shopify customer another contact already has
   | "same_name" // the same name on another channel (suggestion only)
+  | "similar_name" // a similar name on another channel (suggestion only)
   | "unproven_identifier" // a typed phone/email equal to another contact's unproven value (suggestion only)
   | "accepted_suggestion"; // a person accepted a suggestion
 
@@ -255,7 +256,84 @@ export async function autoLinkByShopifyCustomer(args: {
   return { outcome, targetContactId: other.id };
 }
 
-/** Same name, other channel: a suggestion only, never a link. */
+// ─── Similar names: a suggestion only, never a link ─────────────────────────
+//
+// Omer's own case (2026-10-11): Instagram "Omer Tsruya" and WhatsApp "Omer
+// Serruya" are one person spelled two ways. A name is weak evidence - two
+// people can share one - so a similar name is only ever SUGGESTED to a person.
+
+/** Names that say nothing about who someone is. */
+const GENERIC_NAMES = new Set([
+  "gotcha", "customer", "visitor", "guest", "unknown", "user", "test",
+  "instagram customer", "messenger customer", "website visitor", "store chat visitor",
+  "קונה באתר", "אורח", "לקוח", "לקוחה", "משתמש",
+]);
+
+/** A basic Hebrew-to-Latin letter map, so "עומר" and "omer" can meet. */
+const HE_TO_LATIN: Record<string, string> = {
+  א: "a", ב: "b", ג: "g", ד: "d", ה: "h", ו: "o", ז: "z", ח: "h", ט: "t", י: "i",
+  כ: "k", ך: "k", ל: "l", מ: "m", ם: "m", נ: "n", ן: "n", ס: "s", ע: "a", פ: "p", ף: "f",
+  צ: "ts", ץ: "ts", ק: "k", ר: "r", ש: "sh", ת: "t",
+};
+
+/** Lowercase, no diacritics or punctuation, Hebrew transliterated, single spaces. */
+export function normalizeName(raw: string): string {
+  const latin = raw
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[א-ת]/g, (ch) => HE_TO_LATIN[ch] ?? "");
+  return latin.replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+}
+
+function isGenericName(raw: string): boolean {
+  const trimmed = raw.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!trimmed || trimmed.startsWith("@")) return true;
+  if (GENERIC_NAMES.has(trimmed)) return true;
+  const n = normalizeName(raw);
+  if (GENERIC_NAMES.has(n)) return true;
+  const tokens = n.split(" ").filter(Boolean);
+  return tokens.length === 0 || (tokens.length === 1 && tokens[0]!.length < 4);
+}
+
+/** Damerau-Levenshtein (optimal string alignment). */
+function editDistance(a: string, b: string): number {
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0]![j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i]![j] = Math.min(d[i - 1]![j]! + 1, d[i]![j - 1]! + 1, d[i - 1]![j - 1]! + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i]![j] = Math.min(d[i]![j]!, d[i - 2]![j - 2]! + cost);
+    }
+  }
+  return d[a.length]![b.length]!;
+}
+
+/** "rr" and "r" are the same sound in a spelled-out name (Serruya / Seruya). */
+const collapse = (t: string) => t.replace(/(.)\1+/g, "$1");
+
+/**
+ * Do two names look like the same person? Never on a generic name. True when
+ * the token sets are equal, or the first tokens are equal and the last tokens
+ * (4+ letters) are within an edit distance of 2 after doubled letters collapse.
+ */
+export function namesLookAlike(a: string, b: string): boolean {
+  if (isGenericName(a) || isGenericName(b)) return false;
+  const ta = normalizeName(a).split(" ").filter(Boolean);
+  const tb = normalizeName(b).split(" ").filter(Boolean);
+  if ([...ta].sort().join(" ") === [...tb].sort().join(" ")) return true;
+  if (ta.length < 2 || tb.length < 2 || ta[0] !== tb[0]) return false;
+  const la = collapse(ta[ta.length - 1]!), lb = collapse(tb[tb.length - 1]!);
+  if (la.length < 4 || lb.length < 4) return false;
+  return editDistance(la, lb) <= 2;
+}
+
+/**
+ * The same or a similar name on another channel: a suggestion only, never a
+ * link. Candidates are narrowed in the database by the first word, then
+ * compared with namesLookAlike.
+ */
 export async function suggestBySameName(args: {
   tenantId: string;
   contactId: string;
@@ -264,17 +342,18 @@ export async function suggestBySameName(args: {
   db?: Db;
 }): Promise<{ suggested: number }> {
   const db = args.db ?? prisma;
-  const name = args.displayName.trim().replace(/\s+/g, " ");
-  // A handle or a single letter is not a name worth matching on.
-  if (name.length < 3 || name.startsWith("@") || !/\s/.test(name)) return { suggested: 0 };
+  if (isGenericName(args.displayName)) return { suggested: 0 };
+  const first = args.displayName.trim().split(/\s+/)[0]!;
   const others = await db.contact.findMany({
-    where: { tenantId: args.tenantId, id: { not: args.contactId }, mergedIntoId: null, channel: { not: args.channel }, displayName: { equals: name, mode: "insensitive" } },
-    select: { id: true },
-    take: 5,
+    where: { tenantId: args.tenantId, id: { not: args.contactId }, mergedIntoId: null, channel: { not: args.channel }, displayName: { startsWith: first, mode: "insensitive" } },
+    select: { id: true, displayName: true },
+    take: 50,
   });
   let suggested = 0;
   for (const o of others) {
-    const r = await suggestLink({ tenantId: args.tenantId, contactIds: [args.contactId, o.id], signal: "same_name", by: "auto:same_name", db });
+    if (!o.displayName || !namesLookAlike(args.displayName, o.displayName)) continue;
+    const exact = normalizeName(o.displayName) === normalizeName(args.displayName);
+    const r = await suggestLink({ tenantId: args.tenantId, contactIds: [args.contactId, o.id], signal: exact ? "same_name" : "similar_name", by: `auto:${exact ? "same_name" : "similar_name"}`, db });
     if (r === "suggested") suggested++;
   }
   return { suggested };

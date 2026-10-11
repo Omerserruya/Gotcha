@@ -129,6 +129,8 @@ export {
   autoLinkByIdentifier,
   autoLinkByShopifyCustomer,
   suggestBySameName,
+  namesLookAlike,
+  normalizeName,
   IDENTITY_LINK,
   NOT_SAME_PREFIX,
   pairKey,
