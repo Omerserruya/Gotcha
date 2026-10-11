@@ -8,6 +8,7 @@ import {
   QUEUE_CHANNEL_FILTERS,
   parsePeriod,
   retiredView,
+  VIEW_AFTER,
   viewQuery,
 } from './inbox-views';
 import enNav from '@/i18n/messages/en/navigation.json';
@@ -194,5 +195,17 @@ describe('★★ one view for what GOTCHA handles, not two (Omer, 2026-10-11)', 
       expect(Object.keys(nav)).not.toContain('ai');
       expect(Object.keys(nav)).not.toContain('flow');
     }
+  });
+});
+
+describe('★★ a verb takes the list to where the conversation now is', () => {
+  it('★★ Take control lands on "Assigned to me" - claim makes the viewer the assignee', () => {
+    expect(VIEW_AFTER.claim).toBe('mine');
+    // And that view holds a claimed conversation whatever its status or handler.
+    expect(viewQuery('mine', 'u7')).toEqual({ assignedAgentId: 'u7', includeAutomated: 'true' });
+  });
+
+  it('★★ Return to the AI lands on "Handled by GOTCHA"', () => {
+    expect(VIEW_AFTER.returnToAi).toBe('gotcha');
   });
 });

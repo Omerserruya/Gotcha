@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -72,6 +72,12 @@ vi.mock('./conversation-actions', () => ({
   returnToAi,
   transferConversation,
 }));
+/*
+ * The locale-aware router. `push` is where a verb sends the list once the
+ * server has said yes; nothing else in this file navigates.
+ */
+const push = vi.hoisted(() => vi.fn());
+vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ push }) }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'inbox') =>
     createTranslator({ locale: 'en', messages: { inbox: en }, namespace }),
@@ -103,6 +109,7 @@ beforeEach(() => {
   claimConversation.mockClear();
   returnToAi.mockClear();
   transferConversation.mockClear();
+  push.mockClear();
 });
 
 describe('★★ the greeting warning, which is the reason this is not just a button', () => {
@@ -478,5 +485,74 @@ describe('★ 02 fills ONE header button, and it is Resolve', () => {
     const claim = screen.getByTestId('claim-c1');
     expect(claim.className).toBe(screen.getByTestId('return-c1').className);
     expect(claim.className).not.toBe(screen.getByTestId('resolve-c1').className);
+  });
+});
+
+describe('★★ after Take control or Return to the AI, the list goes where the conversation now is', () => {
+  /*
+   * Omer, 2026-10-11: the row the reader acted on left the view they were in
+   * and the list stayed behind. Claim puts it in "Assigned to me" (the
+   * assignee is the viewer); return puts it in "Handled by GOTCHA". `c` stays,
+   * so the same conversation stays open. Mocked verbs: nothing is sent.
+   */
+  const settle = () => {
+    let answer!: (result: { ok: true }) => void;
+    const pending = new Promise<{ ok: true }>((resolve) => (answer = resolve));
+    return { pending, answer };
+  };
+
+  it('★★ Take control: to "Assigned to me", `c` kept - and only once the server has said yes', async () => {
+    const server = settle();
+    claimConversation.mockImplementationOnce(() => server.pending as never);
+    show({ mine: false });
+    await userEvent.click(screen.getByTestId('claim-c1'));
+    expect(claimConversation).toHaveBeenCalledWith('c1');
+    // Pressed, not answered: nowhere to go yet.
+    expect(push).not.toHaveBeenCalled();
+    server.answer({ ok: true });
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    expect(push).toHaveBeenCalledWith(
+      { pathname: '/inbox', query: { view: 'mine', c: 'c1' } },
+      { scroll: false },
+    );
+  });
+
+  it('★★ Return to the AI: to "Handled by GOTCHA", `c` kept', async () => {
+    returnToAi.mockResolvedValueOnce({ ok: true } as never);
+    show({ mine: true, handedOver: true });
+    await userEvent.click(screen.getByTestId('return-c1'));
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    expect(push).toHaveBeenCalledWith(
+      { pathname: '/inbox', query: { view: 'gotcha', c: 'c1' } },
+      { scroll: false },
+    );
+  });
+
+  it('⚠⚠ a refused claim stays where it is and says why', async () => {
+    claimConversation.mockResolvedValueOnce({ ok: false, reason: 'already_claimed' } as never);
+    show({ mine: false });
+    await userEvent.click(screen.getByTestId('claim-c1'));
+    expect(await screen.findByTestId('verb-problem-c1')).toHaveTextContent(
+      en.verbs.problem.already_claimed,
+    );
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('⚠⚠ a refused return stays where it is and says why', async () => {
+    returnToAi.mockResolvedValueOnce({ ok: false, reason: 'no_ai_employee' } as never);
+    show({ mine: true, handedOver: true });
+    await userEvent.click(screen.getByTestId('return-c1'));
+    expect(await screen.findByTestId('verb-problem-c1')).toHaveTextContent(
+      en.verbs.problem.no_ai_employee,
+    );
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('★ Resolve does not move the list - only these two verbs do', async () => {
+    closeConversation.mockResolvedValueOnce({ ok: true } as never);
+    show({ resolved: false });
+    await userEvent.click(screen.getByTestId('resolve-c1'));
+    await waitFor(() => expect(closeConversation).toHaveBeenCalledWith('c1'));
+    expect(push).not.toHaveBeenCalled();
   });
 });

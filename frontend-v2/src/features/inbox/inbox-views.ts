@@ -54,6 +54,24 @@ export function parseInboxView(raw: string | undefined): InboxView {
 }
 
 /**
+ * Where a conversation lives once a verb has moved it, so the list follows it
+ * there (Omer, 2026-10-11).
+ *
+ *   claim       `assignedAgentId = me`, `isHandedOver = true`
+ *               (conversation.service.ts `claim`). "Assigned to me" asks for
+ *               exactly `assignedAgentId=<me>` with automated rows included
+ *               and no status, so it holds the conversation whatever its
+ *               status or handler. "Active" would drop a closed one.
+ *   returnToAi  `handledBy = ai_agent`, `isHandedOver = false`, no assignee,
+ *               `OPEN` (`returnToAi` through `recordHandover`): every
+ *               condition of `automatedOnly`, which is the GOTCHA view.
+ */
+export const VIEW_AFTER = {
+  claim: 'mine',
+  returnToAi: 'gotcha',
+} as const satisfies Record<string, InboxView>;
+
+/**
  * The query for one view.
  *
  * ⚠ `mine` needs the viewer's platform id, which only `/auth/me` knows. It is

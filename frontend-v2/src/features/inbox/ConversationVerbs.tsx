@@ -3,6 +3,8 @@
 import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
+import { useRouter } from '@/i18n/navigation';
+
 import {
   claimConversation,
   closeConversation,
@@ -10,6 +12,7 @@ import {
   transferConversation,
   type VerbResult,
 } from './conversation-actions';
+import { inboxQuery, VIEW_AFTER, type InboxView } from './inbox-views';
 import styles from './Inbox.module.css';
 
 /**
@@ -78,10 +81,45 @@ export function ConversationVerbs({
   const [result, setResult] = useState<VerbResult | null>(null);
   const [isPending, startTransition] = useTransition();
   const [transferTo, setTransferTo] = useState('');
+  const router = useRouter();
 
-  function run(verb: () => Promise<VerbResult>) {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ THE LIST FOLLOWS THE CONVERSATION (Omer, 2026-10-11)
+   * ════════════════════════════════════════════════════════════════════════
+   * Taking control moves a conversation out of the queue and into "Assigned
+   * to me"; handing it back moves it into "Handled by GOTCHA". The list
+   * stayed where it was, so the row the reader just acted on vanished from
+   * it. `landsOn` is where it now lives (`VIEW_AFTER`), and the address goes
+   * there with `c` kept, so the same conversation stays open.
+   *
+   * ⚠ Only after the server says yes. A refusal (`already_claimed`,
+   *   `no_ai_employee`, ...) leaves the reader where they were, with the
+   *   sentence saying why - moving them to a view the conversation is not in
+   *   would be the opposite of the point.
+   *
+   * ★ No channel or period on the way: a filter the reader set for the old
+   *   view could hide the very conversation we are taking them to.
+   *
+   * ★ No stale "AI" on the row: the action's `revalidatePath` purges the
+   *   client's cache, so this navigation renders the new list and the open
+   *   conversation from fresh reads.
+   */
+  function run(verb: () => Promise<VerbResult>, landsOn?: InboxView) {
     setResult(null);
-    startTransition(async () => setResult(await verb()));
+    startTransition(async () => {
+      const outcome = await verb();
+      setResult(outcome);
+      if (outcome.ok && landsOn !== undefined) {
+        router.push(
+          {
+            pathname: '/inbox',
+            query: inboxQuery({ view: landsOn, channel: null, c: conversationId }),
+          },
+          { scroll: false },
+        );
+      }
+    });
   }
 
   return (
@@ -98,7 +136,7 @@ export function ConversationVerbs({
           className={styles.verbButton}
           data-testid={`claim-${conversationId}`}
           disabled={isPending}
-          onClick={() => run(() => claimConversation(conversationId))}
+          onClick={() => run(() => claimConversation(conversationId), VIEW_AFTER.claim)}
         >
           {t('claim')}
         </button>
@@ -115,7 +153,7 @@ export function ConversationVerbs({
           className={styles.verbButton}
           data-testid={`return-${conversationId}`}
           disabled={isPending}
-          onClick={() => run(() => returnToAi(conversationId))}
+          onClick={() => run(() => returnToAi(conversationId), VIEW_AFTER.returnToAi)}
         >
           {t('returnToAi')}
         </button>
