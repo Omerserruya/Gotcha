@@ -269,11 +269,11 @@ for (const size of SIZES) {
     /*
      * 4 · the unbuilt halves say they are unbuilt.
      *
-     * Invoices and the period breakdown are contracted and not yet served, so
-     * they render "we cannot show this" — never an empty list. Four real
-     * invoices exist on this tenant and are unreachable; an empty list would
-     * say they do not exist, which on a billing screen is a claim about
-     * whether someone was charged.
+     * The invoices row renders "we cannot show this" when unread, never an
+     * empty list: an empty list would say they do not exist, which on a
+     * billing screen is a claim about whether someone was charged. "Where
+     * credits went" is gone from the screen (Omer, 2026-10-11), so it must
+     * not be there at all.
      */
     test('4 · unserved sections say so rather than showing nothing', async ({ page }) => {
       if (onlyOneProject()) return;
@@ -281,14 +281,12 @@ for (const size of SIZES) {
       await openBilling(page, 'en');
 
       await expect(page.getByTestId('billing-row-invoices')).toBeVisible();
-      await expect(page.getByTestId('breakdown')).toBeVisible();
 
-      // Whichever state each is in, it must never be the silently-empty one:
-      // the invoices row says something, and every breakdown row has a value.
+      // Never the silently-empty state: the invoices row says something.
       await expect(page.getByTestId('billing-row-invoices').locator('dd')).not.toHaveText('');
-      for (const key of ['ai', 'team', 'outbound', 'voice']) {
-        await expect(page.getByTestId(`breakdown-${key}-count`)).not.toHaveText('');
-      }
+      // And the removed section is absent, not merely empty.
+      await expect(page.getByTestId('breakdown')).toHaveCount(0);
+      await expect(page.locator('main')).not.toHaveText(/where credits went/i);
 
       await shoot(page, `${size.name}-4-unserved-sections`);
     });
@@ -555,13 +553,6 @@ for (const size of SIZES) {
       // The words themselves, not just the id: a key can change and a
       // forecast can come back under a different testid.
       await expect(page.getByTestId('credits')).not.toHaveText(/0 more conversations/i);
-
-      /*
-       * Unserved, and saying so. `breakdown-unavailable` is the difference
-       * between "we could not read this" and "there is nothing here", and it
-       * is the branch this tenant actually renders.
-       */
-      await expect(page.getByTestId('breakdown-ai-count')).toHaveText(/\S/);
 
       await shoot(page, `${size.name}-credits-awaiting-grant`);
     });

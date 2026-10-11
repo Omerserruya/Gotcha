@@ -28,7 +28,6 @@ vi.mock('@/features/billing/load-billing', () => ({
     subscription: null,
     plans: [],
     invoices: null,
-    breakdown: null,
     autoPurchase: null,
     profile: billing.profile,
     paymentMethods: null,
@@ -42,7 +41,6 @@ const { stub } = vi.hoisted(() => ({
 }));
 vi.mock('@/features/billing/Overview', () => ({
   PlanHero: stub('hero'),
-  CreditsWent: stub('went'),
   RunningLow: stub('low'),
   BillingCard: stub('billing'),
   CycleValue: stub('value'),
@@ -88,9 +86,13 @@ const open = async (panel?: string) =>
 describe('★ 17 - 02’s screen, and 17c/d/e over it', () => {
   it('17 alone: the hero, both columns, no overlay', async () => {
     await open();
-    for (const id of ['hero', 'credits', 'went', 'low', 'billing', 'value']) {
+    for (const id of ['hero', 'credits', 'low', 'billing', 'value']) {
       expect(screen.getByTestId(id)).toBeInTheDocument();
     }
+    // ★ No "Where credits went" (Omer, 2026-10-11): the left column is the credits alone.
+    expect(screen.getByTestId('credits').parentElement?.children).toHaveLength(1);
+    expect(screen.queryByTestId('breakdown')).toBeNull();
+    expect(screen.queryByText(/where credits went/i)).toBeNull();
     expect(screen.queryByTestId('overlay')).toBeNull();
     expect(screen.queryByTestId('buy')).toBeNull();
   });

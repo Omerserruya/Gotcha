@@ -7,13 +7,7 @@ import {
   type PaymentMethod,
 } from '@/api/contracts/billing-profile';
 import { spendsPastZero, type AutoPurchase as Policy } from '@/api/contracts/auto-purchase';
-import {
-  planNameFor,
-  pricePer,
-  type Plan,
-  type Subscription,
-  type UsageBreakdown,
-} from '@/api/contracts/billing';
+import { planNameFor, pricePer, type Plan, type Subscription } from '@/api/contracts/billing';
 import type { CreditSummary } from '@/api/contracts/credits';
 import { failedInvoices, totalAmount, type Invoice } from '@/api/contracts/invoices';
 import { isStillPending } from '@/api/contracts/pricing';
@@ -142,58 +136,6 @@ export async function PlanHero({
           {t('buyCredits')}
         </Link>
       </div>
-    </section>
-  );
-}
-
-/** 02's four kinds of work, each tied to the figure that counts it. */
-const KINDS = [
-  { key: 'ai', count: 'handledByAi' },
-  { key: 'team', count: 'handledByPeople' },
-  { key: 'outbound', count: 'outboundMessages' },
-  { key: 'voice', count: 'voiceMinutes' },
-] as const;
-
-/**
- * "Where credits went" - each kind of work with its average cost, its count
- * and its credits, so the estimate above can be checked.
- *
- * Nothing serves credits per kind of work, so the average and the credits are
- * "-" on every row; the count is drawn where the breakdown has it. The rows
- * are drawn either way: a missing figure is "-", never zero, because "no
- * outbound messages" and "we did not count" are different, and on a billing
- * screen the difference is money.
- */
-export async function CreditsWent({ breakdown }: { readonly breakdown: UsageBreakdown | null }) {
-  const t = await getTranslations('billing.overview');
-  const locale = await getLocale();
-  const number = new Intl.NumberFormat(locale);
-
-  return (
-    <section className={styles.went} data-testid="breakdown">
-      <header className={styles.cardHead}>
-        <h2 className={styles.cardTitle}>{t('went.title')}</h2>
-        <span className={styles.cardHeadNote}>{t('went.columns')}</span>
-      </header>
-      <ul className={styles.wentRows}>
-        {KINDS.map(({ key, count }) => {
-          const n = breakdown?.[count] ?? null;
-          return (
-            <li key={key} className={styles.wentRow} data-testid={`breakdown-${key}`}>
-              <span className={styles.wentName}>{t(`went.kind.${key}`)}</span>
-              <span className={styles.wentAvg} title={t('went.noCredits')}>
-                -
-              </span>
-              <span className={styles.wentCount} data-testid={`breakdown-${key}-count`}>
-                {n === null ? '-' : number.format(n)}
-              </span>
-              <span className={styles.wentCredits} title={t('went.noCredits')}>
-                -
-              </span>
-            </li>
-          );
-        })}
-      </ul>
     </section>
   );
 }

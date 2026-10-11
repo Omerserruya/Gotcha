@@ -187,30 +187,6 @@ export type Invoice = z.infer<typeof invoiceSchema>;
 export type BillingSummary = z.infer<typeof billingSummarySchema>;
 
 /**
- * *"Where the month went"* - **contracted, not yet served.**
- *
- * Every piece exists separately: `Conversation.handledBy` gives the AI/human
- * split, `Broadcast`/`BroadcastRecipient` the outbound count, and
- * `VoiceCallSession` the minutes - with `Subscription.voiceVolumeOptionKey`
- * showing minutes are metered with an allowance of their own. Nothing
- * aggregates them.
- *
- * A separate read from the billing summary deliberately: the two change on
- * completely different cadences, and a failure in one must not blank the
- * other.
- */
-export const usageBreakdownSchema = z.object({
-  handledByAi: z.number().nullable().default(null),
-  handledByPeople: z.number().nullable().default(null),
-  outboundMessages: z.number().nullable().default(null),
-  voiceMinutes: z.number().nullable().default(null),
-  /** `null` when the plan carries no voice allowance, exactly like `limit`. */
-  voiceMinutesLimit: z.number().nullable().default(null),
-});
-
-export type UsageBreakdown = z.infer<typeof usageBreakdownSchema>;
-
-/**
  * What the price is per - said only when the period agrees with the interval.
  *
  * The demo tenant's ACTIVE row reads `billingInterval: MONTHLY` over a period

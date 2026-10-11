@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { autoPurchaseSchema } from '@/api/contracts/auto-purchase';
-import { pricePer, subscriptionSchema, usageBreakdownSchema } from '@/api/contracts/billing';
+import { pricePer, subscriptionSchema } from '@/api/contracts/billing';
 import { billingProfileSchema, paymentMethodSchema } from '@/api/contracts/billing-profile';
 import { creditSummarySchema } from '@/api/contracts/credits';
 import { invoiceSchema } from '@/api/contracts/invoices';
@@ -37,7 +37,8 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-import { BillingCard, CreditsWent, PlanHero, RunningLow } from './Overview';
+import * as Overview from './Overview';
+import { BillingCard, PlanHero, RunningLow } from './Overview';
 
 /** The measured ACTIVE row: MONTHLY, over a period a year long. */
 const MEASURED = {
@@ -83,24 +84,14 @@ describe('★ 17 - "a month" only when the period agrees', () => {
   });
 });
 
-describe('★ 17 - where credits went: 02’s four rows, "-" where nothing counts', () => {
-  it('counts where the breakdown has them, "-" (never 0) where it does not', async () => {
-    render(
-      await CreditsWent({
-        breakdown: usageBreakdownSchema.parse({ handledByAi: 690, outboundMessages: 0 }),
-      }),
-    );
-    expect(screen.getByTestId('breakdown-ai-count')).toHaveTextContent(/^690$/);
-    expect(screen.getByTestId('breakdown-outbound-count')).toHaveTextContent(/^0$/);
-    expect(screen.getByTestId('breakdown-team-count')).toHaveTextContent(/^-$/);
-    expect(screen.getByTestId('breakdown-voice-count')).toHaveTextContent(/^-$/);
-  });
-
-  it('a failed read still draws the four rows', async () => {
-    render(await CreditsWent({ breakdown: null }));
-    for (const key of ['ai', 'team', 'outbound', 'voice']) {
-      expect(screen.getByTestId(`breakdown-${key}-count`)).toHaveTextContent(/^-$/);
-    }
+describe('★ 17 - no "Where credits went" (Omer, 2026-10-11)', () => {
+  it('the section is not a component any more, and its copy is gone in both languages', async () => {
+    expect(Overview).not.toHaveProperty('CreditsWent');
+    const he = (await import('@/i18n/messages/he/billing.json')).default;
+    expect(messages.overview).not.toHaveProperty('went');
+    expect(he.overview).not.toHaveProperty('went');
+    expect(JSON.stringify(messages)).not.toMatch(/where credits went/i);
+    expect(JSON.stringify(he)).not.toMatch(/לאן הלכו הקרדיטים/);
   });
 });
 

@@ -253,8 +253,6 @@ export const workspaceEndpoints = {
  */
 export const usageEndpoints = {
   allowance: () => endpoint('/api/usage/allowance'),
-  /** Contracted, not yet served. The "where the month went" breakdown. */
-  breakdown: () => endpoint('/api/usage/breakdown'),
 } as const;
 
 /**

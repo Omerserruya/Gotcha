@@ -257,17 +257,6 @@
     "changePlan": "Change plan",
     "buyCredits": "Buy credits",
     "change": "Change",
-    "went": {
-      "title": "Where credits went",
-      "columns": "Avg · count · credits",
-      "kind": {
-        "ai": "AI conversations",
-        "team": "Team conversations, AI assist",
-        "outbound": "Outbound messages",
-        "voice": "Phone minutes"
-      },
-      "noCredits": "Nothing counts credits by kind of work yet."
-    },
     "low": {
       "title": "When credits run low",
       "unset": "Not set up - when credits run out, the AI stops answering.",

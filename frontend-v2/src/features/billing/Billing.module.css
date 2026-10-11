@@ -3,7 +3,7 @@
    * Settings · Usage & billing - screen 17.
    *
    * Runway first, because "how long am I good for" is the question someone
-   * opened this screen with. Then the plan, the breakdown and the invoices.
+   * opened this screen with. Then the plan and the invoices.
    */
 
   .section {
@@ -937,58 +937,12 @@
     border-block-end: var(--border-width-thin) solid var(--border-strong);
   }
 
-  /* ── Where credits went: name · avg 90 · count 60 · credits 70 ─────── */
-  .went,
   .billingCard {
     background-color: var(--panel-field);
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: var(--radius-card);
     overflow: clip;
     min-inline-size: 0;
-  }
-
-  .wentRows {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .wentRow {
-    display: flex;
-    align-items: center;
-    gap: var(--space-10);
-    padding-block: var(--space-10);
-    padding-inline: var(--space-16);
-    font-size: var(--font-size-meta);
-  }
-
-  .wentRow + .wentRow {
-    border-block-start: var(--border-width-thin) solid var(--row-divider);
-  }
-
-  .wentName {
-    flex: 1;
-    min-inline-size: 0;
-    color: var(--text-primary);
-  }
-
-  .wentAvg {
-    inline-size: 90px;
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
-
-  .wentCount {
-    inline-size: 60px;
-    text-align: end;
-    color: var(--text-secondary);
-  }
-
-  .wentCredits {
-    inline-size: 70px;
-    text-align: end;
-    font-weight: 500;
-    color: var(--text-primary);
   }
 
   /* ── When credits run low ─────────────────────────────────────────── */
@@ -1187,8 +1141,7 @@
 
 @layer features {
   /*
-   * 17 in 02's frame: the two columns take the rest of its height, and
-   * "Where credits went" runs to the bottom with its rows scrolling inside.
+   * 17 in 02's frame: the two columns take the rest of its height.
    */
   @media (width > 900px) {
     .overview {
@@ -1199,19 +1152,6 @@
 
     .overviewMain {
       min-block-size: 0;
-    }
-
-    .went {
-      display: flex;
-      flex: 1;
-      flex-direction: column;
-      min-block-size: 0;
-    }
-
-    .wentRows {
-      flex: 1;
-      min-block-size: 0;
-      overflow-y: auto;
     }
   }
 }

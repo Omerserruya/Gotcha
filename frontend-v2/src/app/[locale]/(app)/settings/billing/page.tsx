@@ -16,7 +16,6 @@ import { CreditPackagesSection } from '@/features/billing/Pricing';
 import {
   BillingCard,
   BuyUnavailable,
-  CreditsWent,
   CycleValue,
   PlanHero,
   RunningLow,
@@ -29,16 +28,17 @@ import { SettingsSection } from '@/shell/SettingsSection';
  * Settings · Usage & billing - screen 17.
  *
  * *"Your plan up front, credits in conversations."* 02's layout: the plan,
- * dark, across the top; then credits left and where they went on the left,
- * and running low, billing and the cycle's value on the right.
+ * dark, across the top; then credits left on the left, and running low,
+ * billing and the cycle's value on the right. 02's "Where credits went" is
+ * gone (Omer, 2026-10-11), with the usage-breakdown read that fed only it.
  *
  * Buying credits (17d), the running-low rule (17c) and the billing details
  * (17e) open over it from their buttons (`?panel=`); every invoice is its own
  * page (`./invoices`), behind the Billing card's All.
  *
  * Not drawn, because nothing reads them: 02's "3 AI employees · All
- * channels", the run-out projection ("Lasts until renewal" is "-"), credits
- * per kind of work, and the value line (hours saved, outreach revenue).
+ * channels", the run-out projection ("Lasts until renewal" is "-"), and the
+ * value line (hours saved, outreach revenue).
  *
  * The conversations allowance ("Conversations this period") is not on 02's
  * screen and is gone from it: on this tenant it said only that the plan does
@@ -55,7 +55,6 @@ export default async function Page({
     subscription,
     plans,
     invoices,
-    breakdown,
     autoPurchase,
     profile,
     paymentMethods,
@@ -70,7 +69,6 @@ export default async function Page({
       <div className={styles.overview}>
         <div className={styles.overviewMain}>
           <CreditsSection credits={credits} />
-          <CreditsWent breakdown={breakdown} />
         </div>
         <div className={styles.overviewSide}>
           <RunningLow
