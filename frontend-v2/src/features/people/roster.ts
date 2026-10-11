@@ -1,5 +1,6 @@
 import type { AiEmployee, Member } from '@/api/contracts/people';
 import type { AgentPresence, PresenceState } from '@/api/contracts/presence';
+import { legacyBuiltinKey } from '@/features/roles/role-words';
 
 /**
  * The merge behind *"humans and AI employees in one list"*.
@@ -36,6 +37,7 @@ export interface RosterRow {
   /**
    * The built-in role behind `canDo`, said in the reader's words by key
    * (roles/role-words.ts): the assigned role's `builtinKey`, or the legacy
+   * enum's built-in (ADMIN is an Owner since auth 30d610da: `legacyBuiltinKey`)
    * enum when no role is assigned. Null for a custom role and for an AI.
    */
   readonly canDoKey: string | null;
@@ -99,7 +101,7 @@ function personRow(member: Member, presence: AgentPresence | undefined): RosterR
     canDo: member.roleName ?? member.legacyRole ?? null,
     canDoKey: member.roleName
       ? (member.roleBuiltinKey ?? null)
-      : (member.legacyRole?.toLowerCase() ?? null),
+      : legacyBuiltinKey(member.legacyRole),
     teams: member.departments
       .map((d) => d.departmentName)
       .filter((n): n is string => typeof n === 'string' && n.length > 0),

@@ -44,18 +44,34 @@ describe('★★ the invite offers only roles the viewer may give (auth 679b8812
     expect(ids(grantableRoles(ROLES, short, CATALOG))).toEqual(['agent']);
   });
 
-  it('an Owner (or a platform admin) may give every role, Owner included', () => {
-    expect(ids(grantableRoles(ROLES, { has: () => false, roleKey: 'owner' }, CATALOG))).toEqual(
-      ids(ROLES),
-    );
+  it('an Owner (or a platform admin) may give every role, Owner included - but Admin', () => {
+    expect(ids(grantableRoles(ROLES, { has: () => false, roleKey: 'owner' }, CATALOG))).toEqual([
+      'owner',
+      'agent',
+      'dept',
+    ]);
     expect(
       ids(grantableRoles(ROLES, { has: () => false, roleKey: 'SYSTEM_ADMIN' }, CATALOG)),
-    ).toEqual(ids(ROLES));
+    ).toEqual(['owner', 'agent', 'dept']);
   });
 
   it('★ unknown is not an Owner: holding everything, an unread role key still hides Owner', () => {
     const everything = { has: () => true, roleKey: null };
-    expect(ids(grantableRoles(ROLES, everything, CATALOG))).toEqual(['admin', 'agent', 'dept']);
+    expect(ids(grantableRoles(ROLES, everything, CATALOG))).toEqual(['agent', 'dept']);
+  });
+
+  it('★★ Admin is part of Owner (auth 30d610da): offered to nobody, whoever asks', () => {
+    for (const viewer of [
+      { has: () => true, roleKey: 'owner' },
+      { has: () => true, roleKey: 'system_admin' },
+      { has: () => true, roleKey: 'admin' },
+      { has: () => true, roleKey: null },
+    ])
+      expect(ids(grantableRoles(ROLES, viewer, CATALOG))).not.toContain('admin');
+    // Gone from the list (nobody holds it): nothing to filter, nothing hardcoded in its place.
+    expect(
+      ids(grantableRoles([OWNER, AGENT, DEPT], { has: () => true, roleKey: 'owner' }, CATALOG)),
+    ).toEqual(['owner', 'agent', 'dept']);
   });
 
   it('no catalogue: a pattern cannot be checked here, so it is offered and the server decides', () => {

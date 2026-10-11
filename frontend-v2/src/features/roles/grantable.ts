@@ -1,4 +1,4 @@
-import type { Role } from '@/api/contracts/roles';
+import { isMergedAdmin, type Role } from '@/api/contracts/roles';
 
 /**
  * The roles someone may give - the invite's role list (auth 679b8812).
@@ -13,6 +13,10 @@ import type { Role } from '@/api/contracts/roles';
  * and a permission set that could not be read (`has` then answers true, as
  * `canSee` does). The Owner role is the exception - it is offered only to a
  * viewer KNOWN to be an Owner, because "unknown" is not an Owner.
+ *
+ * The merged Admin role is offered to nobody, an Owner included: Admin is part
+ * of Owner now, and giving it answers 409 ROLE_MERGED (auth 30d610da). The
+ * list returns it only while someone still holds it.
  */
 export interface Viewer {
   /** Exact-match permission check - `usePermissions().canSee`. */
@@ -34,8 +38,9 @@ export function grantableRoles(
   /** Every key the catalogue lists; `null` when it was not read. */
   catalog: readonly string[] | null,
 ): readonly Role[] {
-  if (isOwnerViewer(viewer)) return roles;
-  return roles.filter(
+  const offered = roles.filter((role) => !isMergedAdmin(role));
+  if (isOwnerViewer(viewer)) return offered;
+  return offered.filter(
     (role) =>
       !isOwnerRole(role) &&
       role.features.every((pattern) => {

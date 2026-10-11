@@ -193,3 +193,24 @@ describe('buildRoster', () => {
     expect(rows[0]!.teams).toEqual(['Support', 'Wholesale']);
   });
 });
+
+describe('★★ Owner and Admin are one role (auth 30d610da)', () => {
+  it('a legacy ADMIN with no assignment is said as an Owner, by key', () => {
+    const rows = buildRoster([member({ legacyRole: 'ADMIN' })], [], [], 'en');
+    expect(rows[0]!.canDoKey).toBe('owner');
+  });
+
+  it('a legacy AGENT stays an Agent; an assigned role still wins', () => {
+    const rows = buildRoster(
+      [
+        member({ id: 'a', legacyRole: 'AGENT' }),
+        member({ id: 'b', roleName: 'Agent', roleBuiltinKey: 'agent', legacyRole: 'ADMIN' }),
+      ],
+      [],
+      [],
+      'en',
+    );
+    expect(rows.find((r) => r.id === 'a')!.canDoKey).toBe('agent');
+    expect(rows.find((r) => r.id === 'b')!.canDoKey).toBe('agent');
+  });
+});

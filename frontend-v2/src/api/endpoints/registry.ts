@@ -532,7 +532,9 @@ export const departmentEndpoints = {
  *
  * `invite` creates the person, their identity, their role and their team
  * memberships in one call, and emails them. `role` is a TenantRole id (or
- * "AGENT"/"ADMIN"); absent means agent (auth 679b8812).
+ * "AGENT"/"ADMIN"); absent means agent (auth 679b8812). "ADMIN" means Owner
+ * since auth 30d610da, and so does the merged Admin role's id; this app sends
+ * a role id from the list, never the keyword.
  */
 export const memberEndpoints = {
   invite: () => endpoint('/api/agents'),

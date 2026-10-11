@@ -9,8 +9,10 @@
  * workspace made keeps the words its owner typed: translating them is not
  * ours to do.
  *
- * A built-in role cannot be renamed or rewritten (403 SYSTEM_ROLE), so the
- * catalogue cannot drift from what the role is.
+ * A built-in role cannot be renamed (PATCH answers 403 SYSTEM_ROLE), so the
+ * catalogue's name cannot drift from the role's. Its permissions can change
+ * (auth 30d610da), which is why a changed one is counted on the list rather
+ * than described.
  */
 export const BUILTIN_ROLE_KEYS = ['owner', 'admin', 'department_manager', 'agent'] as const;
 export type BuiltinRoleKey = (typeof BUILTIN_ROLE_KEYS)[number];
@@ -19,6 +21,16 @@ export function builtinRoleKey(key: string | null | undefined): BuiltinRoleKey |
   return (BUILTIN_ROLE_KEYS as readonly string[]).includes(key ?? '')
     ? (key as BuiltinRoleKey)
     : null;
+}
+
+/**
+ * The built-in role a person without an assignment holds, by the platform's
+ * legacy role (auth 30d610da `builtinRoleForLegacy`): Owner and Admin are one
+ * role now, so ADMIN is an Owner. AGENT stays an Agent.
+ */
+export function legacyBuiltinKey(legacy: string | null | undefined): BuiltinRoleKey | null {
+  if (legacy?.toUpperCase() === 'ADMIN') return 'owner';
+  return builtinRoleKey(legacy?.toLowerCase());
 }
 
 /** The catalogue's words for a built-in role - `roles.builtinRole.<key>.<part>`. */

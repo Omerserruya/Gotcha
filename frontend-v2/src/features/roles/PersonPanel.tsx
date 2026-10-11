@@ -3,14 +3,14 @@ import type { ReactNode } from 'react';
 
 import type { PermissionDef } from '@/api/contracts/permission-catalog';
 import type { Member } from '@/api/contracts/people';
-import { additions, removals, type Person, type Role } from '@/api/contracts/roles';
+import { additions, isMergedAdmin, removals, type Person, type Role } from '@/api/contracts/roles';
 import drawer from '@/design-system/styles/drawer.module.css';
 import { Link } from '@/i18n/navigation';
 
 import { ChangeRole } from './ChangeRole';
 import { areaName, permissionName } from './permission-words';
 import { RemovePermission } from './RemovePermission';
-import { builtinRoleKey, roleDescriptionOf, roleNameOf, type BuiltinWords } from './role-words';
+import { legacyBuiltinKey, roleDescriptionOf, roleNameOf, type BuiltinWords } from './role-words';
 import styles from './Roles.module.css';
 
 /**
@@ -83,7 +83,8 @@ export async function PersonPanel({
 
   // A built-in role in the reader's words, by key; a custom one in its owner's.
   const words: BuiltinWords = (key, part) => t(`builtinRole.${key}.${part}`);
-  const legacy = builtinRoleKey(person.role.toLowerCase());
+  // No assignment: the legacy role's built-in - ADMIN is an Owner now (auth 30d610da).
+  const legacy = legacyBuiltinKey(person.role);
   const roleName = role
     ? roleNameOf(role, words)
     : member?.roleName
@@ -170,7 +171,10 @@ export async function PersonPanel({
               current={currentId && roleName ? { id: currentId, name: roleName } : null}
               scope={person.roles.length === 1 ? person.roles[0]!.scope : null}
               held={person.roles.length}
-              choices={roles.map((r) => ({ id: r.id, name: roleNameOf(r, words) }))}
+              // Admin is part of Owner: never offered (assigning it is 409 ROLE_MERGED).
+              choices={roles
+                .filter((r) => !isMergedAdmin(r))
+                .map((r) => ({ id: r.id, name: roleNameOf(r, words) }))}
             />
           )}
         </div>

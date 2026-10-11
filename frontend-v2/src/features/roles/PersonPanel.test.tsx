@@ -431,7 +431,7 @@ describe('★★ 12d’s role - in the reader’s words, and changeable (auth 00
     expect(screen.getByTestId('person-role')).not.toHaveTextContent('(platform)');
   });
 
-  it('Change is given every role in those words, what they hold now, and the one scope to keep', async () => {
+  it('Change is given every role but the merged Admin, in those words, with the one scope to keep', async () => {
     render(
       await PersonPanel({
         person: person({ roles: [{ roleId: 'agent', scope: 'TEAM' }] }),
@@ -451,8 +451,8 @@ describe('★★ 12d’s role - in the reader’s words, and changeable (auth 00
       current: { id: 'agent', name: 'Agent' },
       scope: 'TEAM',
       held: 1,
+      // ★ Admin is part of Owner (auth 30d610da): never offered, giving it is 409 ROLE_MERGED.
       choices: [
-        { id: 'admin', name: 'Admin' },
         { id: 'agent', name: 'Agent' },
         { id: 'w', name: 'Wholesale' },
       ],
@@ -485,9 +485,12 @@ describe('★★ 12d’s role - in the reader’s words, and changeable (auth 00
     );
   });
 
-  it('no role read, a legacy enum: still said in the reader’s words', async () => {
+  it('no role read, a legacy enum: still said in the reader’s words - ADMIN is an Owner now', async () => {
     render(await PersonPanel({ person: person({ role: 'ADMIN' }), permissions: CATALOG }));
-    expect(screen.getByTestId('person-role')).toHaveTextContent(/^Admin/);
+    expect(screen.getByTestId('person-role')).toHaveTextContent(/^Owner/);
+    expect(screen.getByTestId('person-role')).not.toHaveTextContent(/^Admin/);
+    render(await PersonPanel({ person: person({ role: 'AGENT' }), permissions: CATALOG }));
+    expect(screen.getAllByTestId('person-role')[1]).toHaveTextContent(/^Agent/);
   });
 });
 

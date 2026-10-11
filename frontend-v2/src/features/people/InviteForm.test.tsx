@@ -133,9 +133,9 @@ describe('★★ G5 - the invite takes a role, from those the inviter may give',
     expect(options()).toEqual(['Agent', 'Refunds desk']);
   });
 
-  it('an Owner sees every role, Owner included', () => {
+  it('an Owner sees every role, Owner included - never the merged Admin (auth 30d610da)', () => {
     invite([], 'owner');
-    expect(options()).toEqual(['Owner', 'Admin', 'Agent', 'Refunds desk']);
+    expect(options()).toEqual(['Owner', 'Agent', 'Refunds desk']);
   });
 
   it('starts on the agent role, and sends the role chosen', async () => {
