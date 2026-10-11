@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
-import { prisma, createWorker, type AutomationEventJob, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, HistoricalImportChunkJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, isInboundExcluded, probeUploadsDir, describeUploadsProbe, classifyMediaFailure, reportOperationalFailure, ERROR_CODES, type MediaFailureReason, type InboundReferral } from "@chatcenter/shared";
+import { prisma, createWorker, type AutomationEventJob, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, HistoricalImportChunkJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, suggestBySameName, isInboundExcluded, probeUploadsDir, describeUploadsProbe, classifyMediaFailure, reportOperationalFailure, ERROR_CODES, type MediaFailureReason, type InboundReferral } from "@chatcenter/shared";
 import { safeUploadExtension } from "@chatcenter/shared/src/lib/upload-safety";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 import { claimInboundMessage, releaseInboundClaim, findOrCreateOpenConversation } from "../services/inbound-dedupe";
@@ -38,8 +38,11 @@ if (!uploadsProbe.ok) {
   console.log(describeUploadsProbe(uploadsProbe, "incoming-worker"));
 }
 
-async function fetchMetaProfile(senderId: string, accessToken: string, channel: string, pageId?: string, igLogin?: boolean): Promise<{ name: string | null; avatarUrl: string | null }> {
+async function fetchMetaProfile(senderId: string, accessToken: string, channel: string, pageId?: string, igLogin?: boolean): Promise<{ name: string | null; username: string | null; avatarUrl: string | null }> {
   let name: string | null = null;
+  // Instagram's handle, kept apart from the name (2026-10-11): it is how the
+  // customer is shown when they have no name, and it was being dropped.
+  let username: string | null = null;
   let avatarUrl: string | null = null;
 
   // Try direct profile lookup first
@@ -56,7 +59,8 @@ async function fetchMetaProfile(senderId: string, accessToken: string, channel: 
       params: { fields, access_token: accessToken },
     });
     if (channel === "INSTAGRAM") {
-      name = res.data.name || res.data.username || null;
+      username = typeof res.data.username === "string" && res.data.username ? res.data.username : null;
+      name = res.data.name || (username ? `@${username}` : null);
       avatarUrl = res.data.profile_pic || null;
     } else {
       const { first_name, last_name, name: fullName, picture } = res.data;
@@ -90,7 +94,7 @@ async function fetchMetaProfile(senderId: string, accessToken: string, channel: 
     }
   }
 
-  return { name, avatarUrl };
+  return { name, username, avatarUrl };
 }
 
 /**
@@ -469,6 +473,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // For Messenger/Instagram, fetch display name + avatar from Graph API if not provided
   let displayName = senderDisplayName || savedContact?.displayName || null;
   let avatarUrl: string | null = savedContact?.avatarUrl || null;
+  let profileUsername: string | null = null;
   if ((!displayName || !conversation?.customerAvatarUrl) && (channel === "MESSENGER" || channel === "INSTAGRAM") && channelAccountId) {
     const channelAccount = await prisma.channelAccount.findUnique({ where: { id: channelAccountId } });
     const creds = channelAccount?.credentials;
@@ -479,6 +484,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       const profile = await fetchMetaProfile(senderId, accessToken, channel, pageId, decrypted?.igLogin);
       if (!displayName) displayName = profile.name;
       avatarUrl = profile.avatarUrl;
+      profileUsername = profile.username;
     }
   }
 
@@ -530,11 +536,28 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // Also update Contact avatarUrl if we got one. Target the resolved
   // contact's id so a merged-away row doesn't receive the write (and so
   // avatars keep updating on the surviving target).
-  if (avatarUrl && savedContact && !savedContact.avatarUrl) {
-    await prisma.contact.update({
-      where: { id: savedContact.id },
-      data: { avatarUrl },
-    });
+  //
+  // The name too (2026-10-11): Instagram and Messenger send no name with the
+  // message, so the contact was created nameless and the profile's name only
+  // ever reached the conversation; the Customers list showed the raw IGSID.
+  // Written only while the contact has none, so a name set by hand stays, and
+  // the Instagram handle is kept beside it.
+  if (savedContact) {
+    const data: Record<string, unknown> = {};
+    if (avatarUrl && !savedContact.avatarUrl) data.avatarUrl = avatarUrl;
+    if (displayName && !savedContact.displayName) data.displayName = displayName;
+    const meta = (savedContact.metadata && typeof savedContact.metadata === "object" ? savedContact.metadata : {}) as Record<string, unknown>;
+    if (profileUsername && meta.instagramUsername !== profileUsername) data.metadata = { ...meta, instagramUsername: profileUsername };
+    if (Object.keys(data).length > 0) {
+      await prisma.contact.update({ where: { id: savedContact.id }, data });
+    }
+    // A contact that just got its first name may be someone already known on
+    // another channel: suggested to a person, never linked on a name alone
+    // (shared lib/identity-links). Best-effort.
+    if (typeof data.displayName === "string") {
+      await suggestBySameName({ tenantId, contactId: savedContact.id, displayName: data.displayName, channel })
+        .catch((err) => console.warn("[incoming-worker] same-name suggestion failed:", (err as Error)?.message));
+    }
   }
 
   // Resolve media URL (download WhatsApp media, pass through Messenger/Instagram URLs)

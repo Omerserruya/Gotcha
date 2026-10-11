@@ -122,6 +122,20 @@ export {
   unifyContact,
   findSiblingContacts,
 } from "./lib/identity-resolver";
+export {
+  linkContacts,
+  suggestLink,
+  unlinkContacts,
+  autoLinkByIdentifier,
+  autoLinkByShopifyCustomer,
+  suggestBySameName,
+  IDENTITY_LINK,
+  NOT_SAME_PREFIX,
+  pairKey,
+  type LinkRecord,
+  type LinkSignal,
+  type LinkOutcome,
+} from "./lib/identity-links";
 // Read vs write classification - ONE table, used by the Copilot's
 // who-executes decision and by the sandbox write guard in dispatchToolCall.
 // Migrating existing tool policy into the three-state model. Conservative by

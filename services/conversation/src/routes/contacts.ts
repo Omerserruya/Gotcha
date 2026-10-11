@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { contactLabel } from "../lib/contact-label";
 import {
   prisma,
   authenticate,
@@ -371,7 +372,9 @@ router.post("/segment", async (req: Request, res: Response) => {
       orderBy: { lastSeenAt: "desc" },
     });
 
-    res.json({ data: contacts, total: count });
+    // displayLabel: what to call each row, never a raw Instagram/Messenger id
+    // (lib/contact-label.ts).
+    res.json({ data: contacts.map((c) => ({ ...c, displayLabel: contactLabel(c) })), total: count });
   } catch (err) {
     console.error("Segment query error:", err);
     res.status(500).json({ error: "Failed to query contacts" });

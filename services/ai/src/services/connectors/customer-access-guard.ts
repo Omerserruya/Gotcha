@@ -24,7 +24,7 @@
  * never open access: the requester context is read from the conversation row,
  * never from tool args.
  */
-import { prisma } from "@chatcenter/shared";
+import { prisma, autoLinkByShopifyCustomer } from "@chatcenter/shared";
 
 // Shopify tools that return or act on customer/order-scoped data. Product,
 // discount-catalog and segment tools are store-scoped and stay unguarded.
@@ -300,6 +300,13 @@ export async function rememberShopifyCustomer(
     if (!contact) return;
     const metadata = { ...((contact.metadata as any) ?? {}), shopifyCustomerId: String(customerId) };
     await (prisma as any).contact.update({ where: { id: contact.id }, data: { metadata } });
+    // The same Shopify customer already known as another contact (another
+    // channel, an earlier conversation) is the same person: link them
+    // (2026-10-11, shared lib/identity-links). A display fact only:
+    // resolveRequesterIdentity above reads this conversation's OWN contact and
+    // never follows a link, so a link grants no access to anyone's orders.
+    await autoLinkByShopifyCustomer({ tenantId, contactId: contact.id, shopifyCustomerId: String(customerId) })
+      .catch((err: any) => console.warn("[guard] same-customer link failed:", err?.message));
   } catch (err: any) {
     console.warn("[guard] could not record resolved Shopify customer:", err?.message);
   }

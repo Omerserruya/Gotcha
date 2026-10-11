@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, linkContacts, unlinkContacts, IDENTITY_LINK, pairKey } from "@chatcenter/shared";
+import { contactLabel } from "../lib/contact-label";
 import { visibilityClause } from "../lib/conversation-visibility";
 import { situationOf } from "../lib/situation";
 import { NOT_SAME, notSameKey, marksNaming } from "../lib/not-same";
@@ -38,6 +39,97 @@ router.get("/not-same", requirePermissionOrRole("crm:contacts:read", "ADMIN"), a
   } catch (err) {
     console.error("not-same list error:", err);
     return res.status(500).json({ error: "Failed to list" });
+  }
+});
+
+/*
+ * LINKS AND SUGGESTIONS (2026-10-11). Strong evidence links two contacts as one
+ * person automatically; weak evidence becomes a suggestion here for a person to
+ * decide. Every automatic link can be undone exactly. Records live in the
+ * shared lib/identity-links store (TenantSetting "identity:link:<a>:<b>"); the
+ * older PENDING rows the AI's /link wrote (identity_link_suggestions) are
+ * listed beside them, so nothing already found stays invisible.
+ */
+function pairOf(body: any): [string, string] | null {
+  const ids = Array.isArray(body?.contactIds) ? [...new Set((body.contactIds as unknown[]).map(String).filter(Boolean))] : [];
+  return ids.length === 2 ? [ids[0]!, ids[1]!] : null;
+}
+
+router.get("/suggestions", requirePermissionOrRole("crm:contacts:read", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const status = req.query.status === "APPLIED" ? "APPLIED" : "PENDING";
+    const [links, legacy, notSame] = await Promise.all([
+      prisma.tenantSetting.findMany({ where: { tenantId, key: { startsWith: IDENTITY_LINK } }, select: { key: true, value: true } }),
+      status === "PENDING"
+        ? prisma.identityLinkSuggestion.findMany({ where: { tenantId, status: "PENDING" }, orderBy: { createdAt: "desc" }, take: 200 })
+        : Promise.resolve([] as any[]),
+      prisma.tenantSetting.findMany({ where: { tenantId, key: { startsWith: NOT_SAME } }, select: { key: true } }),
+    ]);
+    const notSameKeys = new Set(notSame.map((r) => r.key));
+    type Item = { id: string; source: "link" | "legacy"; contactIds: [string, string]; signal: string; identifier: unknown; status: string; at: string };
+    const items: Item[] = [];
+    for (const r of links) {
+      const v = r.value as any;
+      if (v?.status === status && Array.isArray(v.contactIds)) items.push({ id: r.key, source: "link", contactIds: v.contactIds, signal: v.signal, identifier: v.identifier ?? null, status: v.status, at: v.at });
+    }
+    for (const s of legacy) {
+      // A row the AI wrote against the same contact (a conflicting value on one
+      // customer) is not a pair of people.
+      if (s.sourceContactId === s.targetContactId) continue;
+      items.push({ id: s.id, source: "legacy", contactIds: [s.sourceContactId, s.targetContactId], signal: "ai_extracted_identifier", identifier: { type: s.identifierType, value: s.identifierValue }, status: "PENDING", at: s.createdAt.toISOString() });
+    }
+    const ids = [...new Set(items.flatMap((i) => i.contactIds))];
+    const contacts = ids.length ? await prisma.contact.findMany({ where: { tenantId, id: { in: ids }, mergedIntoId: null }, select: { id: true, displayName: true, phone: true, email: true, externalId: true, channel: true, personId: true } }) : [];
+    const byId = new Map(contacts.map((c) => [c.id, c]));
+    const data = items
+      .filter((i) => i.contactIds.every((id) => byId.has(id)))
+      // A pair a person marked "not the same" is not suggested again; and a
+      // PENDING pair that is already one person needs no decision.
+      .filter((i) => status === "APPLIED" || !notSameKeys.has(notSameKey(i.contactIds[0], i.contactIds[1])))
+      .filter((i) => status === "APPLIED" || !(byId.get(i.contactIds[0])!.personId && byId.get(i.contactIds[0])!.personId === byId.get(i.contactIds[1])!.personId))
+      .map((i) => ({ ...i, contacts: i.contactIds.map((id) => { const c = byId.get(id)!; return { id, label: contactLabel(c), channel: c.channel }; }) }));
+    res.setHeader("Cache-Control", "private, no-store");
+    return res.json({ data });
+  } catch (err) {
+    console.error("identity suggestions error:", err);
+    return res.status(500).json({ error: "Failed to list suggestions" });
+  }
+});
+
+router.post("/suggestions/accept", requirePermissionOrRole("crm:contacts:update", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const pair = pairOf(req.body);
+    if (!pair) return res.status(400).json({ error: "contactIds must be two different customers", code: "TWO_CONTACTS_REQUIRED" });
+    const by = (req as any).user?.userId ?? "user";
+    // A person decided, so a pending record is replaced by the applied one.
+    await prisma.tenantSetting.deleteMany({ where: { tenantId, key: pairKey(IDENTITY_LINK, pair[0], pair[1]), value: { path: ["status"], equals: "PENDING" } } });
+    const outcome = await linkContacts({ tenantId, sourceContactId: pair[0], targetContactId: pair[1], signal: "accepted_suggestion", by });
+    if (outcome === "missing") return res.status(404).json({ error: "Contact not found", code: "CONTACT_NOT_FOUND" });
+    if (outcome === "not_same" || outcome === "rejected_before") return res.status(409).json({ error: "Marked as not the same person", code: "NOT_SAME" });
+    await prisma.identityLinkSuggestion.updateMany({
+      where: { tenantId, status: "PENDING", OR: [{ sourceContactId: pair[0], targetContactId: pair[1] }, { sourceContactId: pair[1], targetContactId: pair[0] }] },
+      data: { status: "APPLIED", decidedAt: new Date(), decidedBy: by },
+    });
+    return res.json({ data: { outcome } });
+  } catch (err) {
+    console.error("identity accept error:", err);
+    return res.status(500).json({ error: "Failed to link" });
+  }
+});
+
+router.post("/unlink", requirePermissionOrRole("crm:contacts:update", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const pair = pairOf(req.body);
+    if (!pair) return res.status(400).json({ error: "contactIds must be two different customers", code: "TWO_CONTACTS_REQUIRED" });
+    const outcome = await unlinkContacts({ tenantId, contactIds: pair, by: (req as any).user?.userId ?? "user" });
+    if (outcome === "not_linked") return res.status(404).json({ error: "These two were not linked automatically", code: "NOT_LINKED" });
+    return res.json({ data: { outcome } });
+  } catch (err) {
+    console.error("identity unlink error:", err);
+    return res.status(500).json({ error: "Failed to unlink" });
   }
 });
 
