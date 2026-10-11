@@ -69,8 +69,10 @@ function app() {
   return a;
 }
 
+let lastBody: any = null;
 async function syncClose() {
-  await request(app()).post("/api/crm/conversation/conv1/sync-close").send({});
+  const res = await request(app()).post("/api/crm/conversation/conv1/sync-close").send({});
+  lastBody = res.body;
   const row = mocks.prisma.auditLog.create.mock.calls.map((c: any) => c[0].data).find((d: any) => d.action.startsWith("crm.sync_close"));
   return row;
 }
@@ -113,6 +115,9 @@ describe("crm.sync_close.err audit reason", () => {
     expect(row.metadata.vendor).toBe("shopify");
     expect(row.metadata.reason).toBe("[CREDENTIALS_INVALID] The system rejected these credentials.");
     expect(JSON.stringify(row.metadata)).not.toMatch(/DOCTYPE|<html|Oauth error/);
+    // The client gets the same code, never the page.
+    expect(lastBody.data).toMatchObject({ synced: false, vendor: "shopify", reason: "[CREDENTIALS_INVALID] The system rejected these credentials." });
+    expect(JSON.stringify(lastBody)).not.toMatch(/DOCTYPE|<html|Oauth error/);
     const rawLine = (console.warn as any).mock.calls.find((c: any[]) => String(c[0]).includes("crm.sync_close.err conv=conv1 reason raw:"));
     expect(String(rawLine?.[1] ?? "")).toContain("DOCTYPE");
   });
@@ -125,6 +130,7 @@ describe("crm.sync_close.err audit reason", () => {
 
     expect(row.action).toBe("crm.sync_close.err");
     expect(row.metadata.reason).toBe("[CONNECTION_FAILED] The system could not be reached.");
+    expect(lastBody.data.reason).toBe("[CONNECTION_FAILED] The system could not be reached.");
   });
 
   it("a successful sync's row is untouched", async () => {
@@ -148,5 +154,21 @@ describe("auditReason", () => {
     expect(auditReason("connect ECONNREFUSED 10.0.0.1:443")).toBe("[CONNECTION_FAILED] The system could not be reached.");
     expect(auditReason("zoho_http_502")).toBe("[CONNECTION_FAILED] The system could not be reached.");
     expect(auditReason("Field Lead_Source has an invalid value <b>x</b>")).toBe("[CRM_REQUEST_FAILED] The CRM did not accept the request.");
+  });
+});
+
+describe("other CRM responses never carry the provider's page", () => {
+  it("POST /notes failing with an HTML 401: 502 with the code", async () => {
+    mocks.prisma.tenantIntegration.findFirst.mockImplementation(async (a: any) =>
+      a?.where?.integration?.slug === "shopify"
+        ? { id: "ti_s", status: "ERROR", config: {}, credentials: {}, integration: { slug: "shopify" } }
+        : null);
+    mocks.executeAdapterTool.mockResolvedValue({ ok: false, reason: HTML_401 });
+
+    const res = await request(app()).post("/api/crm/conversation/conv1/notes").send({ body: "hello" });
+
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe("[CREDENTIALS_INVALID] The system rejected these credentials.");
+    expect(JSON.stringify(res.body)).not.toMatch(/DOCTYPE|<html/);
   });
 });

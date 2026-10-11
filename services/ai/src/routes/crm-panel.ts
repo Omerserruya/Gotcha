@@ -307,6 +307,16 @@ export function auditReason(raw: unknown): unknown {
   return "[CRM_REQUEST_FAILED] The CRM did not accept the request.";
 }
 
+/**
+ * The same, for a reason that leaves this service in a response: a client
+ * never receives a provider's raw text (2026-10-11). The raw text is logged.
+ */
+function clientReason(raw: unknown, label: string): unknown {
+  const clean = auditReason(raw);
+  if (clean !== raw) console.warn(`[crm-panel] ${label} raw:`, String(raw).slice(0, 2000));
+  return clean;
+}
+
 async function auditCrmAction(args: {
   tenantId: string;
   conversationId: string;
@@ -515,7 +525,7 @@ router.get(
           status: "needs_approval",
           contact: null,
           candidates: outcome.candidates,
-          link_reason: outcome.reason,
+          link_reason: clientReason(outcome.reason, "context needs_approval"),
           fallback,
         },
       });
@@ -528,7 +538,7 @@ router.get(
         vendor: adapter.vendor,
         status: "unmapped",
         contact: null,
-        link_reason: outcome.status === "error" ? outcome.reason : undefined,
+        link_reason: outcome.status === "error" ? clientReason(outcome.reason, "context error") : undefined,
         fallback,
       },
     });
@@ -598,13 +608,13 @@ router.post(
       res.status(409).json({
         error: "multiple_candidates",
         candidates: outcome.candidates,
-        reason: outcome.reason,
+        reason: clientReason(outcome.reason, "create-lead needs_approval"),
       });
       return;
     }
 
     if (outcome.status === "not_found" || outcome.status === "error") {
-      res.status(502).json({ error: outcome.reason ?? "create_failed" });
+      res.status(502).json({ error: clientReason(outcome.reason, "create-lead") ?? "create_failed" });
       return;
     }
 
@@ -667,7 +677,7 @@ router.post(
     // Verify the candidate still exists on the CRM side before pinning.
     const ctx = await adapter.getCustomerContext({ contact_id: crmContactId, kind });
     if (!ctx.ok || !ctx.context) {
-      res.status(404).json({ error: ctx.reason ?? "candidate_not_found" });
+      res.status(404).json({ error: clientReason(ctx.reason, "link candidate") ?? "candidate_not_found" });
       return;
     }
 
@@ -730,7 +740,7 @@ router.post(
       metadata: { vendor: adapter.vendor, reason: result.reason, body_length: body.length },
     });
 
-    if (!result.ok) { res.status(502).json({ error: result.reason ?? "note_create_failed" }); return; }
+    if (!result.ok) { res.status(502).json({ error: clientReason(result.reason, "notes") ?? "note_create_failed" }); return; }
     res.json({ data: { vendor: adapter.vendor, note_id: result.id ?? null, was_update: result.was_update ?? false } });
   },
 );
@@ -950,7 +960,8 @@ export async function syncCloseToCrm(
     synced: result.ok,
     vendor: adapter.vendor,
     crm_activity_id: result.id ?? null,
-    reason: result.reason,
+    // The raw reason is in the result log line above; callers and clients get the code.
+    reason: result.ok ? result.reason : (auditReason(result.reason) as string | undefined),
   };
 }
 
