@@ -3,6 +3,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 import { documentState, type KnowledgeDocumentDetail } from '@/api/contracts/knowledge';
 import drawer from '@/design-system/styles/drawer.module.css';
 
+import { DocumentText } from './DocumentText';
 import type { DocumentRead } from './load-document';
 import styles from './DocumentDrawer.module.css';
 
@@ -95,7 +96,7 @@ function documentBody(
         </h3>
         {content ? (
           <div className={styles.content} dir="auto" data-testid="doc-content">
-            {content}
+            <DocumentText text={content} />
           </div>
         ) : (
           <p className={styles.quiet} data-testid="doc-no-content">

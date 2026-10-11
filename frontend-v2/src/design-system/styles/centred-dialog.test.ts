@@ -21,13 +21,6 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = join(process.cwd(), 'src');
 
-/**
- * Settings · Roles is being changed by another session at the same time
- * (2026-10-11) and carries the same pair; it is left to that session and
- * named here so the gap is visible, not silent.
- */
-const LEFT_TO_ANOTHER_SESSION = ['features/roles/Roles.module.css'];
-
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
@@ -68,12 +61,19 @@ describe('★★ a centred dialog stays on the screen in Hebrew', () => {
     const found: string[] = [];
     for (const file of files(ROOT)) {
       const rel = file.slice(ROOT.length + 1);
-      if (LEFT_TO_ANOTHER_SESSION.includes(rel)) continue;
       for (const { selector, body } of blocks(readFileSync(file, 'utf8'))) {
         if (HALF_INSET.test(body) && INLINE_SHIFT.test(body)) found.push(`${rel} ${selector}`);
       }
     }
     expect(found).toEqual([]);
+  });
+
+  it('★ Roles 12e: the grant picker over the drawer, centred the same way', () => {
+    const css = readFileSync(join(ROOT, 'features/roles/Roles.module.css'), 'utf8');
+    const picker = blocks(css).find((b) => b.selector.endsWith('.grantPicker'))?.body ?? '';
+    expect(picker).toMatch(/inset-inline:\s*0\s*;/);
+    expect(picker).toMatch(/margin-inline:\s*auto\s*;/);
+    expect(picker).not.toMatch(/translate/);
   });
 
   it('the sweep sees the defect it was written for', () => {

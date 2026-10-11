@@ -13,6 +13,7 @@ const refresh = vi.hoisted(() => vi.fn());
 const addKnowledge = vi.hoisted(() => vi.fn());
 const startKnowledgeConnect = vi.hoisted(() => vi.fn());
 const replace = vi.hoisted(() => vi.fn());
+const push = vi.hoisted(() => vi.fn());
 /* After-connect sources read the network; they have their own tests. */
 const connected = vi.hoisted(() => ({ providers: new Set<string>() }));
 vi.mock('./ConnectedSources', async () => {
@@ -31,7 +32,7 @@ vi.mock('./add-knowledge', async (importOriginal) => ({
 }));
 
 vi.mock('@/i18n/navigation', () => ({
-  useRouter: () => ({ refresh, replace }),
+  useRouter: () => ({ refresh, replace, push }),
   Link: ({
     href,
     children,
@@ -54,6 +55,7 @@ import {
   type AddWay,
   type KnowledgeBaseRef,
   type KnowledgeLanding,
+  ADD_KNOWLEDGE_OPENER,
 } from './add-way';
 import { AddKnowledge } from './AddKnowledge';
 
@@ -353,5 +355,59 @@ describe('★ a connected source says so on its row - not a bare Connect', () =>
     expect(screen.queryByTestId('add-connected-confluence')).toBeNull();
     expect(screen.getByTestId('add-connect-confluence')).toHaveTextContent('Connect');
     connected.providers = new Set();
+  });
+});
+
+describe('★★ the sheet is a dialog like the others: Escape, focus inside, focus back', () => {
+  /** The page as it is: its "Add knowledge", and the sheet while `?add=1`. */
+  function Page({ open }: { readonly open: boolean }) {
+    return (
+      <NextIntlClientProvider locale="en" messages={{ knowledge }}>
+        <a href="?add=1" id={ADD_KNOWLEDGE_OPENER} data-testid="opener">
+          Add knowledge
+        </a>
+        {open ? <AddKnowledge /> : null}
+      </NextIntlClientProvider>
+    );
+  }
+
+  beforeEach(() => {
+    push.mockReset();
+  });
+
+  it('opens with focus in it, named as a modal dialog', () => {
+    render(<Page open />);
+    const dialog = screen.getByRole('dialog', { name: 'Add knowledge' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+  });
+
+  it('★ Escape closes it - the same way back as ×', async () => {
+    render(<Page open />);
+    await userEvent.keyboard('{Escape}');
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith({ pathname: '/studio/knowledge' }, { scroll: false });
+    const close = screen.getAllByRole('link', { name: 'Close' }).map((a) => a.getAttribute('href'));
+    expect(close).toContain('/studio/knowledge');
+  });
+
+  it('★ Tab and Shift+Tab stay inside it', async () => {
+    render(<Page open />);
+    const dialog = screen.getByTestId('add-dialog');
+    for (let i = 0; i < 40; i += 1) {
+      await userEvent.tab();
+      expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    }
+    for (let i = 0; i < 40; i += 1) {
+      await userEvent.tab({ shift: true });
+      expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    }
+  });
+
+  it('★ closed - by any way out - focus goes back to "Add knowledge"', () => {
+    const { rerender } = render(<Page open />);
+    expect(screen.getByTestId('opener')).not.toHaveFocus();
+    rerender(<Page open={false} />);
+    expect(screen.getByTestId('opener')).toHaveFocus();
   });
 });

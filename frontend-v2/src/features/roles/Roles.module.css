@@ -751,13 +751,15 @@
   .grantPicker {
     position: absolute;
     inset-block-start: 96px;
-    inset-inline-start: 50%;
+    /* Centred by both inline insets: a logical 50% with a physical translate
+       adds up in Hebrew instead of cancelling (K4, centred-dialog.test.ts). */
+    inset-inline: 0;
+    margin-inline: auto;
     z-index: 1;
     display: flex;
     flex-direction: column;
     inline-size: min(470px, calc(100% - var(--space-32)));
     max-block-size: min(560px, calc(100% - 120px));
-    translate: -50% 0;
     border: var(--border-width-thin) solid var(--border-strong);
     border-radius: 16px;
     background-color: var(--panel-field);

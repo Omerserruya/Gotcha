@@ -49,8 +49,33 @@
     font-size: var(--font-size-body-sm);
     line-height: 1.5;
     color: var(--text-body);
-    white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+
+  /* Its markdown, drawn (DocumentText): a heading, a paragraph, a list. */
+  .mdHeading {
+    margin: var(--space-12) 0 var(--space-4);
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .mdHeading:first-child {
+    margin-block-start: 0;
+  }
+
+  .mdParagraph,
+  .mdList {
+    margin: 0 0 var(--space-8);
+  }
+
+  .mdList {
+    padding-inline-start: 1.3em;
+  }
+
+  .mdParagraph:last-child,
+  .mdList:last-child {
+    margin-block-end: 0;
   }
 
   .quiet {

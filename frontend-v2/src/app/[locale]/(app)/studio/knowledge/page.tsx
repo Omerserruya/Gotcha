@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import type { KnowledgeSource } from '@/api/contracts/knowledge';
 import {
+  ADD_KNOWLEDGE_OPENER,
   isAddWay,
   KNOWLEDGE_CONNECT_FAILURES,
   type KnowledgeBaseRef,
@@ -95,6 +96,7 @@ export default async function Page({
         // 08b: the Add knowledge dialog over this screen.
         <Link
           href={{ pathname: '/studio/knowledge', query: { add: '1' } }}
+          id={ADD_KNOWLEDGE_OPENER}
           className={styles.add}
           data-testid="add-knowledge"
           scroll={false}

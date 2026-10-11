@@ -52,3 +52,6 @@ export type KnowledgeLanding = {
   readonly connector: 'google_drive' | 'confluence';
   readonly outcome: 'connected' | (typeof KNOWLEDGE_CONNECT_FAILURES)[number] | 'other';
 };
+
+/** The page's "Add knowledge" control, by id: where focus goes when the sheet closes. */
+export const ADD_KNOWLEDGE_OPENER = 'add-knowledge-open';

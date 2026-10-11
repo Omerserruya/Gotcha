@@ -2,7 +2,7 @@
 
 import { X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import hire from '@/features/employees/hire/Hire.module.css';
@@ -18,9 +18,16 @@ import {
   type AddResult,
   type KnowledgeLanding,
 } from './add-knowledge';
-import { ADD_WAYS, EYEBROW, type AddWay, type KnowledgeBaseRef } from './add-way';
+import {
+  ADD_KNOWLEDGE_OPENER,
+  ADD_WAYS,
+  EYEBROW,
+  type AddWay,
+  type KnowledgeBaseRef,
+} from './add-way';
 import { ConnectedSources } from './ConnectedSources';
 import styles from './AddKnowledge.module.css';
+import { useSheetFocus } from './use-sheet-focus';
 
 /**
  * 08b, measured: "Add knowledge" - an 860 dialog over 08. The ways in as
@@ -58,6 +65,13 @@ export function AddKnowledge({
 }) {
   const t = useTranslations('knowledge.addSheet');
   const router = useRouter();
+  // Escape, ×, the scrim: each goes back to the list, and focus to "Add knowledge".
+  const sheetRef = useRef<HTMLElement>(null);
+  const close = useCallback(
+    () => router.push({ pathname: '/studio/knowledge' }, { scroll: false }),
+    [router],
+  );
+  useSheetFocus(sheetRef, { onEscape: close, openerId: ADD_KNOWLEDGE_OPENER });
   /*
     ★ Held in state from the first render: tidying the URL re-renders the page
     without the query, and the sentence must outlive that (10's lesson).
@@ -136,7 +150,15 @@ export function AddKnowledge({
         tabIndex={-1}
         scroll={false}
       />
-      <section className={styles.dialog} aria-label={t('title')}>
+      <section
+        ref={sheetRef}
+        className={styles.dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('title')}
+        tabIndex={-1}
+        data-testid="add-dialog"
+      >
         <header className={styles.head}>
           <div className={styles.titles}>
             <h2 className={styles.title}>{t('title')}</h2>

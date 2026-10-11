@@ -102,7 +102,11 @@ const INLINE =
  *   right before it whatever joins the text - a word joiner did not hold it.
  *   Only the word inside the group does.
  */
-function inline(text: string, sources: readonly AnswerSource[] = []): ReactNode[] {
+function inline(
+  text: string,
+  sources: readonly AnswerSource[] = [],
+  citations = true,
+): ReactNode[] {
   const out: ReactNode[] = [];
   let at = 0;
   for (const match of text.matchAll(INLINE)) {
@@ -110,7 +114,10 @@ function inline(text: string, sources: readonly AnswerSource[] = []): ReactNode[
     const before = index > at ? text.slice(at, index) : '';
     const [whole, cites, punctuation, bold, code, label, url, italic, underscored] = match;
     const key = `${index}`;
-    if (cites !== undefined) {
+    if (cites !== undefined && !citations) {
+      // Not an answer: `[^s1]` is the text's own, and stays as written.
+      out.push(before + whole);
+    } else if (cites !== undefined) {
       // Its sources' chips. Not known yet (the sources come after the text)
       // or never: nothing - the marker itself is never shown.
       const chips = [...cites.matchAll(/\[\^(s\d+)\]/g)].flatMap(([, id], i) => {
@@ -130,7 +137,8 @@ function inline(text: string, sources: readonly AnswerSource[] = []): ReactNode[
       );
     } else {
       if (before) out.push(before);
-      if (bold !== undefined) out.push(<strong key={key}>{inline(bold, sources)}</strong>);
+      if (bold !== undefined)
+        out.push(<strong key={key}>{inline(bold, sources, citations)}</strong>);
       else if (code !== undefined) out.push(<code key={key}>{code}</code>);
       else if (label !== undefined) out.push(<AnswerLink key={key} label={label} url={url!} />);
       else out.push(<em key={key}>{italic ?? underscored}</em>);
@@ -139,6 +147,15 @@ function inline(text: string, sources: readonly AnswerSource[] = []): ReactNode[
   }
   if (at < text.length) out.push(text.slice(at));
   return out;
+}
+
+/**
+ * The same inline marks - bold, italics, code, safe links - for text that is
+ * not an answer (K6's document drawer): no citations, so a `[^s1]` in it is
+ * left as written. Builds elements; never parses HTML.
+ */
+export function MarkdownInline({ text }: { readonly text: string }) {
+  return <>{inline(text, [], false)}</>;
 }
 
 /** In-app: the app's own link (locale, base path). Out: a new tab. Neither: the label. */

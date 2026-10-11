@@ -17,6 +17,12 @@ import { DocumentDrawer } from './DocumentDrawer';
  * so the assertions read the sentences a person sees.
  */
 const lang = vi.hoisted(() => ({ he: false }));
+// The text's in-app links are the app's own Link (MarkdownInline).
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children }: { href: string; children?: React.ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'knowledge.doc') =>
     createTranslator({
@@ -80,7 +86,44 @@ describe('★★ K6 - what the drawer says about one item', () => {
     await show({ state: 'ok', document: doc({ content: 'שלום\nworld' }) });
     const content = screen.getByTestId('doc-content');
     expect(content).toHaveAttribute('dir', 'auto');
-    expect(content.textContent).toBe('שלום\nworld');
+    expect(content.textContent).toBe('שלוםworld');
+    expect(content.querySelector('br')).not.toBeNull();
+  });
+
+  it('★★ its markdown is drawn, not shown as written - and never as HTML', async () => {
+    await show({
+      state: 'ok',
+      document: doc({
+        content: [
+          '## מי אנחנו',
+          '- שם: **GOTCHA**',
+          '- אתר: [האתר](https://example.com)',
+          '',
+          '1. first',
+          '2. second',
+          '',
+          '<img src=x onerror=alert(1)> [bad](javascript:alert(1))',
+          'A note[^s1] stays as written.',
+        ].join('\n'),
+      }),
+    });
+    const content = screen.getByTestId('doc-content');
+    expect(content.querySelector('h5')).toHaveTextContent(/^מי אנחנו$/);
+    expect(content.textContent).not.toContain('##');
+    const bullets = [...content.querySelectorAll('ul > li')].map((li) => li.textContent);
+    expect(bullets).toEqual(['שם: GOTCHA', 'אתר: האתר']);
+    expect(content.querySelector('ul strong')).toHaveTextContent(/^GOTCHA$/);
+    expect(content.querySelector('ul a')).toHaveAttribute('href', 'https://example.com/');
+    expect(content.querySelectorAll('ol > li')).toHaveLength(2);
+    // Consecutive items are one list each, not a list per line.
+    expect(content.querySelectorAll('ul')).toHaveLength(1);
+    expect(content.querySelectorAll('ol')).toHaveLength(1);
+    // Text, not markup: no image, and a javascript: link is its label alone.
+    expect(content.querySelector('img')).toBeNull();
+    expect(content).toHaveTextContent('<img src=x onerror=alert(1)> bad');
+    expect(content.querySelectorAll('a')).toHaveLength(1);
+    // Not an answer: no citations, so its own `[^s1]` is text.
+    expect(content).toHaveTextContent('A note[^s1] stays as written.');
   });
 
   it('★★ truncated: says how much of how much', async () => {
