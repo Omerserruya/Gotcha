@@ -416,8 +416,9 @@ function viewFilters(view: UnreadCountView, userId: string): Partial<Conversatio
 }
 
 /**
- * How many conversations in each view are unread for this viewer. Each view's
- * set comes from `listWhere`, with the list's own filters and visibility; the
+ * How many conversations in each view are unread for this viewer, and how
+ * many the view holds. Each view's set comes from `listWhere`, with the list's
+ * own filters and visibility, so `totals[view]` is that list's `viewTotal`; the
  * unread rule is `unreadStates`, the one the rows carry. One id read per view
  * and one unread query for all of them.
  */
@@ -425,7 +426,7 @@ export async function unreadCounts(
   tenantId: string,
   viewer: { userId: string; role?: string; departmentId?: string },
   views: UnreadCountView[],
-): Promise<Record<string, number>> {
+): Promise<{ unread: Record<string, number>; totals: Record<string, number> }> {
   const sets = await Promise.all(views.map(async (view) => {
     const where = await listWhere(tenantId, {
       ...viewFilters(view, viewer.userId),
@@ -435,9 +436,13 @@ export async function unreadCounts(
     return { view, ids: rows.map((r) => r.id) };
   }));
   const states = await unreadStates(tenantId, viewer.userId, Array.from(new Set(sets.flatMap((s) => s.ids))));
-  const out: Record<string, number> = {};
-  for (const { view, ids } of sets) out[view] = ids.filter((id) => states.get(id)?.unread).length;
-  return out;
+  const unread: Record<string, number> = {};
+  const totals: Record<string, number> = {};
+  for (const { view, ids } of sets) {
+    unread[view] = ids.filter((id) => states.get(id)?.unread).length;
+    totals[view] = ids.length;
+  }
+  return { unread, totals };
 }
 
 export async function getById(tenantId: string, id: string) {

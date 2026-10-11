@@ -108,7 +108,9 @@ router.get("/", async (req: Request, res: Response) => {
 
 /**
  * GET /unread-counts?views=queue,mine,active,gotcha,all
- *   -> { data: { queue: n, mine: n, ... } }
+ *   -> { data: { queue: n, mine: n, ..., totals: { queue: n, mine: n, ... } } }
+ * The view keys are the unread counts (unchanged); `totals` is each view's
+ * size, equal to that view's list `viewTotal`.
  * Unread for THIS viewer, per view, with exactly the list's filters and
  * visibility (conversationService.listWhere). Registered above "/:id", which
  * would otherwise take "unread-counts" as an id.
@@ -119,13 +121,13 @@ router.get("/unread-counts", async (req: Request, res: Response) => {
     const unknown = asked.filter((v) => !(conversationService.UNREAD_COUNT_VIEWS as readonly string[]).includes(v));
     if (unknown.length) { res.status(400).json({ error: `unknown view: ${unknown.join(",")}` }); return; }
     const views = Array.from(new Set(asked)) as conversationService.UnreadCountView[];
-    const data = await conversationService.unreadCounts(
+    const { unread, totals } = await conversationService.unreadCounts(
       req.tenantId!,
       { userId: req.user!.userId, role: req.user!.role, departmentId: req.user!.departmentId },
       views,
     );
     res.setHeader("Cache-Control", "private, no-store");
-    res.json({ data });
+    res.json({ data: { ...unread, totals } });
   } catch (err) {
     console.error("Unread counts error:", err);
     res.status(500).json({ error: "Failed to count unread conversations" });

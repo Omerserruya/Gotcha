@@ -122,13 +122,13 @@ describe("GET /unread-counts", () => {
       // Same filters, same visibility. The list adds only its cursor, and an
       // empty cursor adds nothing.
       expect(H.findManyWhere[0], view).toEqual(listWhere);
-      expect(res.body.data, view).toEqual({ [view]: 2 });
+      expect(res.body.data, view).toEqual({ [view]: 2, totals: { [view]: 3 } });
     }
   });
 
   it("several views in one call, one unread read for all their rows", async () => {
     const res = await request(app).get("/conversations/unread-counts?views=queue,mine,active");
-    expect(res.body.data).toEqual({ queue: 2, mine: 2, active: 2 });
+    expect(res.body.data).toEqual({ queue: 2, mine: 2, active: 2, totals: { queue: 3, mine: 3, active: 3 } });
     expect(H.statesCalls).toHaveLength(1);
   });
 
@@ -143,6 +143,52 @@ describe("GET /unread-counts", () => {
     await request(app).get("/conversations/unread-counts?views=mine");
     expect(H.statesCalls[0].userId).toBe("u2");
     expect(JSON.stringify(H.findManyWhere[0])).toContain("\"assignedAgentId\":\"u2\"");
+  });
+});
+
+describe("GET /unread-counts totals", () => {
+  // Each view's total is what its list reports as viewTotal: the same where.
+  const LIST_QUERY: Record<string, string> = {
+    queue: "view=queue",
+    mine: "assignedAgentId=u1&includeAutomated=true",
+    active: "status=OPEN",
+    gotcha: "automatedOnly=true",
+    all: "includeAutomated=true",
+  };
+
+  it("totals[view] == the list's viewTotal, counted on the same where", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    for (const [view, q] of Object.entries(LIST_QUERY)) {
+      // A different size per view, so a total taken from the wrong view shows.
+      H.rows = H.rows.slice(0, 1 + (Object.keys(LIST_QUERY).indexOf(view) % 3));
+      (prisma.conversation.count as any).mockClear();
+      const list = await request(app).get(`/conversations?cursor=&total=1&${q}`);
+      const countWhere = (prisma.conversation.count as any).mock.calls.map((c: any[]) => c[0].where).find((w: any) => !("lastMessageAt" in w));
+      H.findManyWhere = [];
+      const counts = await request(app).get(`/conversations/unread-counts?views=${view}`);
+      expect(counts.body.data.totals[view], view).toBe(list.body.viewTotal);
+      expect(H.findManyWhere[0], view).toEqual(countWhere);
+      H.rows = [
+        { id: "c1", tenantId: "t1", lastMessageAt: new Date("2026-10-11T10:00:00Z") },
+        { id: "c2", tenantId: "t1", lastMessageAt: new Date("2026-10-11T09:00:00Z") },
+        { id: "c3", tenantId: "t1", lastMessageAt: new Date("2026-10-11T08:00:00Z") },
+      ];
+    }
+  });
+});
+
+describe("GET /unread-counts totals, several views at once", () => {
+  it("each view's total is its own, not another view's", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    // "active" (status OPEN) holds one conversation; the others hold three.
+    (prisma.conversation.findMany as any).mockImplementation(async (a: any) => {
+      H.findManyWhere.push(a.where);
+      const rows = JSON.stringify(a.where).includes('"status":"OPEN"') ? H.rows.slice(0, 1) : H.rows;
+      return a.select ? rows.map((r) => ({ id: r.id })) : rows.map((r) => ({ ...r, messages: [] }));
+    });
+    const res = await request(app).get("/conversations/unread-counts?views=active,all");
+    expect(res.body.data.totals).toEqual({ active: 1, all: 3 });
+    expect(res.body.data).toMatchObject({ active: 1, all: 2 });
   });
 });
 
