@@ -7,6 +7,7 @@ import { serverApi } from '@/api/client/server-api';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 import {
   notificationPreferencesSchema,
+  type EventChannel,
   type NotificationPreferences,
 } from '@/api/contracts/notifications';
 import { notificationEndpoints } from '@/api/endpoints/registry';
@@ -83,6 +84,42 @@ export async function saveQuietHours(
     if (isApiError(cause) && cause.status === 403) return { ok: false, reason: 'forbidden' };
     if (isApiError(cause) && cause.status === 400) return { ok: false, reason: 'invalid' };
     logger.warn('notification_settings.quiet_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export type EventSave =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'forbidden' | 'unknown' | 'failed' };
+
+/**
+ * One event on one channel, for this person (notifications 63307535):
+ * `PATCH {events:{<type>:{<channel>: on}}}`, which merges - nothing else is
+ * sent. `UNKNOWN_EVENT` (400) is an event the workspace no longer has.
+ */
+export async function saveEventChannel(
+  eventType: string,
+  channel: EventChannel,
+  on: boolean,
+): Promise<EventSave> {
+  if ((channel !== 'inApp' && channel !== 'email') || typeof on !== 'boolean' || !eventType) {
+    return { ok: false, reason: 'failed' };
+  }
+  try {
+    await serverApi().patch({
+      endpoint: notificationEndpoints.preferences(),
+      body: { events: { [eventType]: { [channel]: on } } },
+      payload: notificationPreferencesSchema,
+    });
+    revalidatePath('/[locale]/settings/notifications', 'page');
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    if (isApiError(cause) && cause.status === 403) return { ok: false, reason: 'forbidden' };
+    if (isApiError(cause) && cause.status === 400) return { ok: false, reason: 'unknown' };
+    logger.warn('notification_settings.event_save_failed', {
       status: isApiError(cause) ? cause.status : undefined,
     });
     return { ok: false, reason: 'failed' };

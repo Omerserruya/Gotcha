@@ -1,10 +1,11 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
-import type { NotificationPreferences } from '@/api/contracts/notifications';
+import { eventCell, type NotificationPreferences } from '@/api/contracts/notifications';
 import { UnavailableStatus } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link } from '@/i18n/navigation';
 
 import { DeviceAlerts } from './DeviceAlerts';
+import { EventSwitch } from './EventSwitch';
 import styles from './Notifications.module.css';
 import { PreferenceSwitch } from './PreferenceSwitch';
 import { QuietHours } from './QuietHours';
@@ -56,6 +57,15 @@ const CHANNELS = ['inApp', 'email', 'whatsapp'] as const;
  *   discount that failed still emails. With no workspace rule, approvals,
  *   failures and billing reach admins in-app and an assignment its assignee
  *   in-app; email goes only where a rule sends it - the foot says so.
+ *
+ * ★★ PER EVENT NOW (notifications 63307535; Omer: "the Email column - which
+ *   notifications are on by email, with a switch per row"). Each row's In app
+ *   and Email cell is that event's own switch for this person - when a route
+ *   really reaches them on that channel. One that does not is a quiet "-"
+ *   saying so ("not sent by email in this workspace"), never a disabled
+ *   switch. The column's switch stays the master: while it is off, the
+ *   rows below are off and say so. A service without the matrix keeps the
+ *   old read-only cells.
  */
 export async function PreferenceMatrix({
   preferences,
@@ -133,22 +143,49 @@ export async function PreferenceMatrix({
                   </span>
                 ) : null}
               </span>
-              {CHANNELS.map((channel) => (
-                <span key={channel} className={styles.matrixCell}>
-                  {row.event === null || preferences === null || channel === 'whatsapp' ? (
-                    <span className={styles.matrixNone}>-</span>
-                  ) : (
-                    <span
-                      className={styles.cellState}
-                      role="img"
-                      data-on={on(row, channel) ? 'yes' : 'no'}
-                      aria-label={`${t(`channel.${channel}`)}: ${on(row, channel) ? t('on') : t('off')}`}
-                      title={t('cellWhy')}
-                      data-testid={`pref-${row.key}-${channel}`}
-                    />
-                  )}
-                </span>
-              ))}
+              {CHANNELS.map((channel) => {
+                if (row.event === null || preferences === null || channel === 'whatsapp') {
+                  return (
+                    <span key={channel} className={styles.matrixCell}>
+                      <span className={styles.matrixNone}>-</span>
+                    </span>
+                  );
+                }
+                const cell = eventCell(preferences, row.event, channel);
+                return (
+                  <span key={channel} className={styles.matrixCell}>
+                    {cell.kind === 'unreachable' ? (
+                      <span
+                        className={styles.matrixNone}
+                        title={t(channel === 'email' ? 'notByEmail' : 'notInApp')}
+                        data-testid={`pref-${row.key}-${channel}-none`}
+                      >
+                        -
+                      </span>
+                    ) : cell.kind === 'switch' && preferences[channel] ? (
+                      <EventSwitch
+                        eventType={row.event}
+                        channel={channel}
+                        on={cell.on && on(row, channel)}
+                        label={t('rowSwitch', {
+                          channel: t(`channel.${channel}`),
+                          event: t(`row.${row.key}`),
+                        })}
+                        testid={`pref-${row.key}-${channel}-switch`}
+                      />
+                    ) : (
+                      <span
+                        className={styles.cellState}
+                        role="img"
+                        data-on={on(row, channel) ? 'yes' : 'no'}
+                        aria-label={`${t(`channel.${channel}`)}: ${on(row, channel) ? t('on') : t('off')}`}
+                        title={t('cellWhy')}
+                        data-testid={`pref-${row.key}-${channel}`}
+                      />
+                    )}
+                  </span>
+                );
+              })}
             </li>
           ))}
         </ul>

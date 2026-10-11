@@ -83,6 +83,54 @@ export const notificationPreferencesSchema = z.object({
    * ends to mean anything - the backend clears them together for that reason.
    */
   quietHours: quietHoursSchema.nullable().default(null),
+  /**
+   * Per event (notifications 63307535): what can reach this person, and on
+   * which channels (`email`, `in_app`) - a channel is listed only when a
+   * route really reaches them on it. `undefined` from a service that predates
+   * it. The `label` the route sends is the catalogue's English and is never
+   * shown; rows are named by our own words.
+   */
+  eventTypes: z
+    .array(z.looseObject({ type: z.string(), channels: z.array(z.string()).catch([]) }))
+    .optional()
+    .catch(undefined),
+  /** The person's switch per event and channel; an absent one is on. */
+  events: z
+    .record(
+      z.string(),
+      z.looseObject({
+        email: z.boolean().optional().catch(undefined),
+        inApp: z.boolean().optional().catch(undefined),
+      }),
+    )
+    .optional()
+    .catch(undefined),
 });
 
 export type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
+
+/** A per-event channel: the two the platform lets a person switch per event. */
+export type EventChannel = 'inApp' | 'email';
+
+/**
+ * What one event's cell is for this person:
+ *   `legacy`       the service sends no per-event matrix - the column's
+ *                  switch is all there is;
+ *   `unreachable`  nothing routes this event to them on this channel - a
+ *                  quiet "-", never a switch that does nothing;
+ *   `switch`       theirs to turn on or off, and whether it is on.
+ */
+export function eventCell(
+  preferences: NotificationPreferences,
+  eventType: string,
+  channel: EventChannel,
+):
+  | { readonly kind: 'legacy' }
+  | { readonly kind: 'unreachable' }
+  | { readonly kind: 'switch'; readonly on: boolean } {
+  if (preferences.eventTypes === undefined) return { kind: 'legacy' };
+  const wire = channel === 'inApp' ? 'in_app' : 'email';
+  const entry = preferences.eventTypes.find((e) => e.type === eventType);
+  if (!entry || !entry.channels.includes(wire)) return { kind: 'unreachable' };
+  return { kind: 'switch', on: preferences.events?.[eventType]?.[channel] ?? true };
+}

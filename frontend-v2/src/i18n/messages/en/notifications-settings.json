@@ -177,12 +177,16 @@
     "cellWhy": "Set by the switch at the top of its column",
     "saveProblem": {
       "forbidden": "This account has no preferences of its own.",
-      "failed": "Not saved. Try again."
+      "failed": "Not saved. Try again.",
+      "unknown": "This notification isn't available any more."
     },
     "whatsappUnavailable": {
       "tag": "Not available yet",
       "why": "WhatsApp alerts to you aren't available yet - there is no number for GOTCHA to send them from."
-    }
+    },
+    "notByEmail": "Not sent by email in this workspace",
+    "notInApp": "Doesn't reach you in the app in this workspace",
+    "rowSwitch": "{channel} - {event}"
   },
   "rulesPage": {
     "title": "The workspace's rules",

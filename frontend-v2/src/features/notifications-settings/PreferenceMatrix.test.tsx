@@ -28,7 +28,12 @@ vi.mock('@/i18n/navigation', () => ({
 /* A real write to the person's own row: a spy, always. */
 const save = vi.hoisted(() => vi.fn());
 const saveQuiet = vi.hoisted(() => vi.fn());
-vi.mock('./preference-actions', () => ({ savePreferenceSwitch: save, saveQuietHours: saveQuiet }));
+const saveEvent = vi.hoisted(() => vi.fn());
+vi.mock('./preference-actions', () => ({
+  savePreferenceSwitch: save,
+  saveQuietHours: saveQuiet,
+  saveEventChannel: saveEvent,
+}));
 
 import { PreferenceMatrix } from './PreferenceMatrix';
 
@@ -42,6 +47,7 @@ const render = (ui: ReactNode) =>
 
 beforeEach(() => {
   save.mockReset();
+  saveEvent.mockReset();
   refresh.mockReset();
 });
 
@@ -304,5 +310,95 @@ describe('★★ quiet hours, edited where they are read (notifications 9164a058
     expect(screen.getByTestId('pref-matrix')).toHaveTextContent(
       'With no rule for an event, an assignment reaches the person assigned and the rest above reach admins, in the app. Email goes only where a rule sends it.',
     );
+  });
+});
+
+describe('★★ per event, per channel - the platform keeps it now (notifications 63307535)', () => {
+  /*
+   * Dev today: every event reaches people in-app only (built-in routes);
+   * email only where a workspace rule sends it.
+   */
+  const matrix = (over: Record<string, unknown> = {}) =>
+    prefs({
+      email: true,
+      eventTypes: [
+        {
+          type: 'tool.approval_required',
+          label: 'Approval required',
+          group: 'ai',
+          channels: ['in_app'],
+        },
+        {
+          type: 'broadcast.completed',
+          label: 'Campaign done',
+          group: 'x',
+          channels: ['email', 'in_app'],
+        },
+      ],
+      events: { 'broadcast.completed': { email: false } },
+      ...over,
+    });
+  const show = async (p: ReturnType<typeof prefs>) =>
+    render(await PreferenceMatrix({ preferences: p, volume: null, whatsappDestination: null }));
+
+  it('★★ a channel that reaches the person is that row’s own switch, in its stored state', async () => {
+    await show(matrix());
+    expect(screen.getByTestId('pref-campaign-email-switch')).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    expect(screen.getByTestId('pref-campaign-inApp-switch')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.getByTestId('pref-campaign-email-switch')).toHaveAccessibleName(
+      'Email - A campaign finishes',
+    );
+  });
+
+  it('★★ one that does not is a quiet "-" saying so - never a disabled switch', async () => {
+    await show(matrix());
+    const none = screen.getByTestId('pref-approval-email-none');
+    expect(none).toHaveTextContent('-');
+    expect(none).toHaveAttribute('title', 'Not sent by email in this workspace');
+    expect(screen.queryByTestId('pref-approval-email-switch')).toBeNull();
+    // An event nothing routes to this person at all: both quiet.
+    expect(screen.getByTestId('pref-assigned-inApp-none')).toHaveAttribute(
+      'title',
+      "Doesn't reach you in the app in this workspace",
+    );
+  });
+
+  it('★ pressing it writes that event on that channel, and the page reads again', async () => {
+    saveEvent.mockResolvedValue({ ok: true });
+    await show(matrix());
+    await act(async () => fireEvent.click(screen.getByTestId('pref-campaign-email-switch')));
+    expect(saveEvent).toHaveBeenCalledWith('broadcast.completed', 'email', true);
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it('⚠ an event the workspace no longer has (UNKNOWN_EVENT): put back, and said', async () => {
+    saveEvent.mockResolvedValue({ ok: false, reason: 'unknown' });
+    await show(matrix());
+    await act(async () => fireEvent.click(screen.getByTestId('pref-campaign-inApp-switch')));
+    expect(screen.getByTestId('pref-campaign-inApp-switch')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.getByTestId('pref-campaign-inApp-switch-problem')).toHaveTextContent(
+      "This notification isn't available any more.",
+    );
+  });
+
+  it('★ the column’s switch stays the master: off, the rows below are off and are not switches', async () => {
+    await show(matrix({ email: false }));
+    expect(screen.queryByTestId('pref-campaign-email-switch')).toBeNull();
+    expect(screen.getByTestId('pref-campaign-email')).toHaveAttribute('data-on', 'no');
+  });
+
+  it('a service without the matrix keeps the old read-only cells', async () => {
+    await show(prefs({ email: true }));
+    expect(screen.getByTestId('pref-campaign-email')).toHaveAttribute('data-on', 'yes');
+    expect(screen.queryByTestId('pref-campaign-email-switch')).toBeNull();
   });
 });

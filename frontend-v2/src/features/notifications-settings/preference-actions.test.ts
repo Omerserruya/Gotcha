@@ -9,6 +9,7 @@ vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ patch }) }));
 vi.mock('@/api/client/signed-out', () => ({ signInIfSignedOut: async () => {} }));
 
 import {
+  saveEventChannel,
   savePreferenceSwitch,
   saveQuietHours,
   type PreferenceSwitchKey,
@@ -103,5 +104,35 @@ describe('★★ quiet hours - one window or none, checked as the route checks i
       ok: false,
       reason: 'failed',
     });
+  });
+});
+
+describe('★★ one event on one channel (notifications 63307535)', () => {
+  it('PATCH {events:{<type>:{<channel>: on}}} - that and nothing else', async () => {
+    patch.mockResolvedValue({});
+    expect(await saveEventChannel('broadcast.completed', 'email', false)).toEqual({ ok: true });
+    expect((patch.mock.calls[0]![0] as { body: object }).body).toEqual({
+      events: { 'broadcast.completed': { email: false } },
+    });
+  });
+
+  it('⚠ 400 UNKNOWN_EVENT is "unknown"; 403 "forbidden"; anything else "failed"', async () => {
+    patch.mockRejectedValueOnce(new ApiError({ kind: 'validation', status: 400 }));
+    expect(await saveEventChannel('gone.event', 'inApp', true)).toEqual({
+      ok: false,
+      reason: 'unknown',
+    });
+    patch.mockRejectedValueOnce(new ApiError({ kind: 'authorization', status: 403 }));
+    expect(await saveEventChannel('x', 'inApp', true)).toEqual({ ok: false, reason: 'forbidden' });
+    patch.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 500 }));
+    expect(await saveEventChannel('x', 'inApp', true)).toEqual({ ok: false, reason: 'failed' });
+  });
+
+  it('a channel the platform has no per-event switch for is never sent', async () => {
+    expect(await saveEventChannel('x', 'whatsapp' as never, true)).toEqual({
+      ok: false,
+      reason: 'failed',
+    });
+    expect(patch).not.toHaveBeenCalled();
   });
 });
