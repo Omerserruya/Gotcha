@@ -13,24 +13,47 @@
  *     exception: an action that failed with money involved (a refund, a
  *     discount) still reaches email.
  * No row means the defaults the settings screen shows.
+ *
+ * Per event (2026-10-11): a person can also turn one event off on one channel
+ * ("email me approvals, not new conversations"). Stored as overrides only, in
+ * TenantSetting "notify:events:<userId>" (no migration): no entry means the
+ * event behaves exactly as before.
  */
 import { prisma, readDurableSetting, parseBusinessHours } from "@chatcenter/shared";
 
-export interface Personal { inApp: boolean; email: boolean; whatsapp: boolean; approvals: boolean; quietHoursFrom: string | null; quietHoursTo: string | null }
+export type EventChannels = { email?: boolean; inApp?: boolean };
+export interface Personal { inApp: boolean; email: boolean; whatsapp: boolean; approvals: boolean; quietHoursFrom: string | null; quietHoursTo: string | null; events?: Record<string, EventChannels> }
+
+export const EVENT_PREFS_KEY = (userId: string) => `notify:events:${userId}`;
 
 /** The same defaults as routes/notification-preferences-me.ts. */
 export const PERSONAL_DEFAULTS: Personal = { inApp: true, email: true, whatsapp: false, approvals: true, quietHoursFrom: null, quietHoursTo: null };
 
 const MONEY_KINDS = new Set(["refund.issued", "discount.applied"]);
 
-export async function loadPersonal(userIds: string[]): Promise<Map<string, Personal>> {
+export async function loadPersonal(userIds: string[], tenantId?: string): Promise<Map<string, Personal>> {
   const out = new Map<string, Personal>();
   if (!userIds.length) return out;
-  const rows = await (prisma as any).userNotificationPreference.findMany({
-    where: { userId: { in: userIds } },
-    select: { userId: true, inApp: true, email: true, whatsapp: true, approvals: true, quietHoursFrom: true, quietHoursTo: true },
-  });
+  const [rows, eventRows] = await Promise.all([
+    (prisma as any).userNotificationPreference.findMany({
+      where: { userId: { in: userIds } },
+      select: { userId: true, inApp: true, email: true, whatsapp: true, approvals: true, quietHoursFrom: true, quietHoursTo: true },
+    }),
+    // The per-event overrides are optional: if they cannot be read, every
+    // event is delivered as it was before them - a lost notice is worse than
+    // one the person had turned off.
+    tenantId
+      ? Promise.resolve()
+          .then(() => (prisma as any).tenantSetting.findMany({ where: { tenantId, key: { in: userIds.map(EVENT_PREFS_KEY) } }, select: { key: true, value: true } }))
+          .catch((err: any) => { console.warn("[notifications] per-event preferences unavailable:", err?.message); return []; })
+      : Promise.resolve([]),
+  ]);
   for (const r of rows) out.set(r.userId, { ...PERSONAL_DEFAULTS, ...r });
+  for (const e of eventRows as Array<{ key: string; value: any }>) {
+    const userId = e.key.slice(EVENT_PREFS_KEY("").length);
+    const events = e.value?.events && typeof e.value.events === "object" ? e.value.events : null;
+    if (events) out.set(userId, { ...(out.get(userId) ?? PERSONAL_DEFAULTS), events });
+  }
   return out;
 }
 
@@ -62,6 +85,10 @@ export function inQuietHours(p: Personal, hhmm: string): boolean {
 /** Whether this person gets this event on this channel now. */
 export function personalAllows(p: Personal, channel: string, event: { type: string; data?: Record<string, unknown> }, hhmm: string): boolean {
   if (event.type === "tool.approval_required" && !p.approvals) return false;
+  // This one event switched off on this channel by the person.
+  const own = p.events?.[event.type];
+  if (channel === "in_app" && own?.inApp === false) return false;
+  if (channel === "email" && own?.email === false) return false;
   if (channel === "in_app") return p.inApp;
   if (channel === "email") {
     if (!p.email) return false;

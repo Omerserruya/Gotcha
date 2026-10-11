@@ -193,7 +193,7 @@ export async function processEvent(event: SystemEvent): Promise<void> {
       spec,
     });
     if (recipients.length === 0) continue;
-    const personal = await loadPersonal(recipients.map((u) => u.id));
+    const personal = await loadPersonal(recipients.map((u) => u.id), event.tenantId);
     hhmm ??= localTime(new Date(), await workspaceTimeZone(event.tenantId));
 
     for (const user of recipients) {
@@ -279,9 +279,10 @@ export async function deliverAutomationNotice(event: SystemEvent): Promise<numbe
   }
   const link = typeof d.conversationId === "string" && d.conversationId ? `/inbox?conversation=${d.conversationId}` : undefined;
   // The person's own in-app switch holds here too.
-  const personal = await loadPersonal([...users.keys()]);
+  const personal = await loadPersonal([...users.keys()], event.tenantId);
   for (const user of users.values()) {
-    if (!(personal.get(user.id) ?? PERSONAL_DEFAULTS).inApp) continue;
+    const p = personal.get(user.id) ?? PERSONAL_DEFAULTS;
+    if (!p.inApp || p.events?.[event.type]?.inApp === false) continue;
     const title = (await localeForRecipient(event.tenantId, user.id)) === "he" ? "אוטומציה" : "Automation";
     await deliverChannel({ channel: "in_app", user, event, tpl: { title, body: message, ...(link ? { link } : {}) }, priority: "MEDIUM" });
   }

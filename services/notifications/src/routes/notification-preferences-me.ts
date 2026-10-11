@@ -16,6 +16,9 @@
  */
 import { Router, type Request, type Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant } from "@chatcenter/shared";
+import { EVENT_PREFS_KEY, type EventChannels } from "../services/personal-preferences.service";
+import { receivableEvents } from "../services/receivable-events";
+import { EVENT_CATALOGUE } from "../services/event-catalogue";
 
 const router = Router();
 router.use("/notification-preferences/me", authenticate, resolveTenant, requireActiveTenant());
@@ -61,6 +64,29 @@ function currentUser(req: Request): { userId: string; tenantId: string } | null 
   return { userId, tenantId: req.tenantId as string };
 }
 
+/**
+ * Per event (2026-10-11): `eventTypes` lists what can reach this person and on
+ * which channels; `events` is the switch for each, an override if they set one,
+ * else on - exactly what was sent before anyone touched it.
+ */
+async function eventsFor(me: { userId: string; tenantId: string }) {
+  const [types, stored] = await Promise.all([
+    receivableEvents(me.tenantId, me.userId),
+    prisma.tenantSetting.findFirst({ where: { tenantId: me.tenantId, key: EVENT_PREFS_KEY(me.userId) }, select: { value: true } }),
+  ]);
+  const own = (((stored?.value as any)?.events ?? {}) as Record<string, EventChannels>);
+  const events: Record<string, { email?: boolean; inApp?: boolean }> = {};
+  for (const t of types) {
+    events[t.type] = {
+      ...(t.channels.includes("email") ? { email: own[t.type]?.email ?? true } : {}),
+      ...(t.channels.includes("in_app") ? { inApp: own[t.type]?.inApp ?? true } : {}),
+    };
+  }
+  return { events, eventTypes: types };
+}
+
+const KNOWN_EVENTS = new Set(EVENT_CATALOGUE.map((e) => e.key));
+
 router.get("/notification-preferences/me", async (req: Request, res: Response) => {
   const me = currentUser(req);
   if (!me) {
@@ -73,7 +99,7 @@ router.get("/notification-preferences/me", async (req: Request, res: Response) =
     const row = await prisma.userNotificationPreference.findUnique({
       where: { userId: me.userId },
     });
-    res.json({ data: shape(row as never) });
+    res.json({ data: { ...shape(row as never), ...(await eventsFor(me)) } });
   } catch (err) {
     console.error("Get own notification preferences error:", err);
     res.status(500).json({ error: "Failed to get notification preferences" });
@@ -130,18 +156,64 @@ router.patch("/notification-preferences/me", async (req: Request, res: Response)
     }
   }
 
-  if (Object.keys(data).length === 0) {
+  // { events: { "<eventType>": { email?: boolean, inApp?: boolean } } }
+  let eventPatch: Record<string, EventChannels> | null = null;
+  if ("events" in body) {
+    const ev = body.events;
+    if (!ev || typeof ev !== "object" || Array.isArray(ev)) {
+      res.status(400).json({ error: "events must be an object of { email?, inApp? } by event type" });
+      return;
+    }
+    eventPatch = {};
+    for (const [type, v] of Object.entries(ev as Record<string, unknown>)) {
+      if (!KNOWN_EVENTS.has(type)) {
+        res.status(400).json({ error: `unknown event type: ${type}`, code: "UNKNOWN_EVENT" });
+        return;
+      }
+      if (!v || typeof v !== "object") {
+        res.status(400).json({ error: `events.${type} must be { email?, inApp? }` });
+        return;
+      }
+      const entry: EventChannels = {};
+      for (const ch of ["email", "inApp"] as const) {
+        if (ch in (v as object)) {
+          const b = (v as Record<string, unknown>)[ch];
+          if (typeof b !== "boolean") {
+            res.status(400).json({ error: `events.${type}.${ch} must be a boolean` });
+            return;
+          }
+          entry[ch] = b;
+        }
+      }
+      eventPatch[type] = entry;
+    }
+  }
+
+  if (Object.keys(data).length === 0 && !eventPatch) {
     res.status(400).json({ error: "No recognised preference fields in the request" });
     return;
   }
 
   try {
-    const row = await prisma.userNotificationPreference.upsert({
-      where: { userId: me.userId },
-      create: { ...DEFAULTS, ...data, userId: me.userId, tenantId: me.tenantId } as never,
-      update: data as never,
-    });
-    res.json({ data: shape(row as never) });
+    const row = Object.keys(data).length
+      ? await prisma.userNotificationPreference.upsert({
+          where: { userId: me.userId },
+          create: { ...DEFAULTS, ...data, userId: me.userId, tenantId: me.tenantId } as never,
+          update: data as never,
+        })
+      : await prisma.userNotificationPreference.findUnique({ where: { userId: me.userId } });
+    if (eventPatch) {
+      const key = EVENT_PREFS_KEY(me.userId);
+      const stored = await prisma.tenantSetting.findFirst({ where: { tenantId: me.tenantId, key }, select: { value: true } });
+      const merged: Record<string, EventChannels> = { ...(((stored?.value as any)?.events ?? {}) as Record<string, EventChannels>) };
+      for (const [type, entry] of Object.entries(eventPatch)) merged[type] = { ...(merged[type] ?? {}), ...entry };
+      await prisma.tenantSetting.upsert({
+        where: { tenantId_key: { tenantId: me.tenantId, key } },
+        create: { tenantId: me.tenantId, key, value: { events: merged } as never, updatedBy: me.userId },
+        update: { value: { events: merged } as never, updatedBy: me.userId },
+      });
+    }
+    res.json({ data: { ...shape(row as never), ...(await eventsFor(me)) } });
   } catch (err) {
     console.error("Update own notification preferences error:", err);
     res.status(500).json({ error: "Failed to update notification preferences" });
