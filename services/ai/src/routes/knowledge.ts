@@ -68,6 +68,80 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
+/*
+ * One document, for the Knowledge center's detail drawer (K6, 2026-10-11).
+ * Same permission as the list (the router's ai:knowledge:read), scoped by
+ * tenant AND knowledge base. Only stored text and allowlisted provenance leave
+ * here - for a connected source (Drive, Confluence) that is the extracted text
+ * we keep, never a token; a URL loses any credential-looking query parameter.
+ */
+const DOC_CONTENT_CAP = 20_000;
+const DOC_SECTIONS_CAP = 50;
+const SECTION_PREVIEW = 240;
+const SECRET_PARAM = /token|key|secret|sig|signature|auth|password|code/i;
+
+export function safeSourceUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    u.username = "";
+    u.password = "";
+    for (const k of [...u.searchParams.keys()]) if (SECRET_PARAM.test(k)) u.searchParams.delete(k);
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+router.get("/:id/documents/:docId", async (req: Request, res: Response) => {
+  try {
+    const doc = await prisma.knowledgeDocument.findFirst({
+      where: { id: req.params.docId as string, knowledgeBaseId: req.params.id as string, tenantId: req.tenantId! },
+      select: { id: true, knowledgeBaseId: true, title: true, content: true, sourceType: true, sourceUrl: true, status: true, chunkCount: true, metadata: true, createdAt: true, updatedAt: true },
+    });
+    if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
+    const [sectionCount, sections] = await Promise.all([
+      prisma.knowledgeChunk.count({ where: { documentId: doc.id, tenantId: req.tenantId! } }),
+      prisma.knowledgeChunk.findMany({
+        where: { documentId: doc.id, tenantId: req.tenantId! },
+        select: { chunkIndex: true, content: true },
+        orderBy: { chunkIndex: "asc" },
+        take: DOC_SECTIONS_CAP,
+      }),
+    ]);
+    const content = doc.content ?? "";
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({
+      data: {
+        id: doc.id,
+        knowledgeBaseId: doc.knowledgeBaseId,
+        title: doc.title,
+        type: doc.sourceType,
+        sourceUrl: safeSourceUrl(doc.sourceUrl),
+        status: doc.status,
+        createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt,
+        content: content.slice(0, DOC_CONTENT_CAP),
+        contentLength: content.length,
+        truncated: content.length > DOC_CONTENT_CAP,
+        metadata: sanitizeDocMetadata(doc.metadata) ?? null,
+        // What the AI reads: the stored sections it searches, not the raw text.
+        ai: {
+          sectionCount,
+          sections: sections.map((c) => ({ index: c.chunkIndex, length: c.content.length, preview: c.content.slice(0, SECTION_PREVIEW) })),
+          sectionsTruncated: sectionCount > sections.length,
+          // No per-document facts are extracted today; null rather than [] so
+          // "none found" is never claimed.
+          facts: null,
+        },
+      },
+    });
+  } catch (err) {
+    console.error("Get knowledge document error:", err);
+    res.status(500).json({ error: "Failed to get document" });
+  }
+});
+
 // Create knowledge base
 router.post(
   "/",
