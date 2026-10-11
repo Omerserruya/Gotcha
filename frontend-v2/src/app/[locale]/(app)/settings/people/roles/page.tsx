@@ -2,7 +2,6 @@ import { getLocale, getTranslations } from 'next-intl/server';
 
 import { loadRoles } from '@/features/roles/load-roles';
 import { RoleList } from '@/features/roles/RoleList';
-import styles from '@/features/roles/Roles.module.css';
 import { loadPeople } from '@/features/people/load-people';
 import peopleStyles from '@/features/people/People.module.css';
 import { PeopleTabs } from '@/features/people/PeopleTabs';
@@ -33,6 +32,9 @@ import { pageMetadata } from '@/shell/page-metadata';
  * **No tiles to People and to AI employees** under the table, and no
  * Duplicate on a built-in role (Omer, 2026-10-11). A role of your own starts
  * from Create role, whose "Start from" copies any role.
+ *
+ * **No foot saying built-in roles can't be changed** (auth 30d610da): they
+ * can, within their ceilings, wherever the list says `editable`.
  */
 export default async function Page({
   searchParams,
@@ -80,11 +82,7 @@ export default async function Page({
       {roles === null ? (
         <p data-testid="roles-unavailable">{t('unavailable')}</p>
       ) : (
-        <>
-          <RoleList roles={roles} members={members} />
-
-          <p className={styles.foot}>{t('foot')}</p>
-        </>
+        <RoleList roles={roles} members={members} />
       )}
     </SettingsSection>
   );

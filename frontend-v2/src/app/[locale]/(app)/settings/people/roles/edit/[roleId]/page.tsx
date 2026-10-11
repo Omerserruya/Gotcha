@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
+import { isEditable, isMergedAdmin } from '@/api/contracts/roles';
 import { loadCatalog } from '@/features/roles/load-catalog';
 import { loadRoles } from '@/features/roles/load-roles';
 import { RoleForm } from '@/features/roles/RoleForm';
@@ -10,8 +11,16 @@ import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
  * Settings · People & teams · Edit role - 12b's Edit (Omer, 2026-10-08):
- * the 12c form on one custom role. A built-in role is not edited (the route
- * refuses it) - said, with Create role; a role that is gone is said too.
+ * the 12c form on one role the server calls `editable` - a custom role, or a
+ * built-in one within its ceiling (auth 30d610da).
+ *
+ * Not editable is said, never a form the server turns down: the merged Admin
+ * ("now part of Owner"), and a built-in role while the server keeps built-ins
+ * fixed (an older backend, or its kill switch) - with Create role. A role
+ * that is gone is said too.
+ *
+ * The form is keyed on what the role holds, so after "Reset to default" the
+ * page's fresh read seeds it again rather than leaving the old selection.
  */
 export default async function Page({
   params,
@@ -33,7 +42,9 @@ export default async function Page({
         <p data-testid="role-form-unavailable">{t('unavailable')}</p>
       ) : role === null ? (
         <p data-testid="role-edit-missing">{t('form.edit.notHere')}</p>
-      ) : role.isSystem ? (
+      ) : isMergedAdmin(role) ? (
+        <p data-testid="role-edit-merged">{t('merged')}</p>
+      ) : !isEditable(role) ? (
         <p data-testid="role-edit-builtin">
           {t('form.edit.builtIn', {
             name: roleNameOf(role, (key, part) => t(`builtinRole.${key}.${part}`)),
@@ -43,7 +54,12 @@ export default async function Page({
           </Link>
         </p>
       ) : (
-        <RoleForm permissions={catalog.permissions} roles={roles} editing={role} />
+        <RoleForm
+          key={`${role.id}:${role.customized}:${role.features.join(',')}`}
+          permissions={catalog.permissions}
+          roles={roles}
+          editing={role}
+        />
       )}
     </SettingsSection>
   );

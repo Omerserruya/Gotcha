@@ -24,24 +24,73 @@ vi.mock('@/i18n/navigation', () => ({
 vi.mock('@/shell/SettingsSection', () => ({
   SettingsSection: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
-vi.mock('@/features/roles/RoleForm', () => ({ RoleForm: () => <div data-testid="role-form" /> }));
+vi.mock('@/features/roles/RoleForm', async () => {
+  const { useState } = await import('react');
+  return {
+    // Holds what it was first given, as the real form seeds its selection once.
+    RoleForm: ({ editing }: { editing: { id: string; features: string[] } }) => {
+      const [seeded] = useState(() => editing.features.join(','));
+      return <div data-testid="role-form" data-editing={editing.id} data-seeded={seeded} />;
+    },
+  };
+});
 vi.mock('@/features/roles/load-catalog', () => ({
   loadCatalog: async () => ({ permissions: [] }),
 }));
-vi.mock('@/features/roles/load-roles', () => ({
-  loadRoles: async () => [
-    { id: 'admin', name: 'Admin', isSystem: true, builtinKey: 'admin', features: ['*'] },
-    { id: 'w', name: 'Wholesale rep', isSystem: false, builtinKey: null, features: [] },
-  ],
-}));
+// What the server holds for Department Manager - changed by "Reset to default" below.
+const dmState = vi.hoisted(() => ({ customized: true, features: ['crm:contacts:read'] }));
+
+// Through the real contract, as `loadRoles` reads them.
+vi.mock('@/features/roles/load-roles', async () => {
+  const { roleListSchema } = await import('@/api/contracts/roles');
+  return {
+    loadRoles: async () =>
+      roleListSchema.parse({
+        data: [
+          {
+            id: 'admin',
+            name: 'Admin',
+            isSystem: true,
+            builtinKey: 'admin',
+            editable: false,
+            features: [{ feature: '*' }],
+            _count: { assignments: 1 },
+          },
+          {
+            id: 'dm',
+            name: 'Department Manager',
+            isSystem: true,
+            builtinKey: 'department_manager',
+            editable: true,
+            customized: dmState.customized,
+            features: dmState.features.map((feature) => ({ feature })),
+          },
+          // The kill switch on (or a backend before 30d610da): fixed.
+          { id: 'agent', name: 'Agent', isSystem: true, builtinKey: 'agent', editable: false },
+          { id: 'w', name: 'Wholesale rep', isSystem: false, builtinKey: null },
+        ],
+      }),
+  };
+});
 
 import Page from './page';
 
 const open = async (roleId: string) => render(await Page({ params: Promise.resolve({ roleId }) }));
 
-describe('★ a built-in role is not edited - and is not duplicated either', () => {
-  it('says so, and offers Create role - never Duplicate, never `?from=`', async () => {
-    await open('admin');
+describe('★★ a built-in role opens in the form when the server says `editable` (auth 30d610da)', () => {
+  it('an editable built-in role opens in the form, on itself', async () => {
+    await open('dm');
+    expect(screen.getByTestId('role-form')).toHaveAttribute('data-editing', 'dm');
+    expect(screen.queryByTestId('role-edit-builtin')).toBeNull();
+  });
+
+  it('a custom role still opens in the form', async () => {
+    await open('w');
+    expect(screen.getByTestId('role-form')).toHaveAttribute('data-editing', 'w');
+  });
+
+  it('a built-in role the server keeps fixed: said, with Create role - never Duplicate', async () => {
+    await open('agent');
     const said = screen.getByTestId('role-edit-builtin');
     expect(said).toHaveTextContent(/built in and can't be changed/);
     expect(screen.getByTestId('role-edit-create')).toHaveAttribute(
@@ -53,8 +102,26 @@ describe('★ a built-in role is not edited - and is not duplicated either', () 
     expect(screen.queryByTestId('role-form')).toBeNull();
   });
 
-  it('a custom role still opens in the form', async () => {
-    await open('w');
-    expect(screen.getByTestId('role-form')).toBeInTheDocument();
+  it('★ the merged Admin: "now part of Owner", and no form', async () => {
+    await open('admin');
+    expect(screen.getByTestId('role-edit-merged')).toHaveTextContent(roles.merged);
+    expect(screen.queryByTestId('role-form')).toBeNull();
+  });
+});
+
+describe('★ after "Reset to default", the fresh read seeds the form again', () => {
+  it('the form is a new one when what the role holds changed - not the old selection', async () => {
+    dmState.customized = true;
+    dmState.features = ['crm:contacts:read'];
+    const view = render(await Page({ params: Promise.resolve({ roleId: 'dm' }) }));
+    expect(screen.getByTestId('role-form')).toHaveAttribute('data-seeded', 'crm:contacts:read');
+    // The reset happened; router.refresh() renders the page again on the server's new answer.
+    dmState.customized = false;
+    dmState.features = ['conversation:messages:*', 'crm:contacts:read'];
+    view.rerender(await Page({ params: Promise.resolve({ roleId: 'dm' }) }));
+    expect(screen.getByTestId('role-form')).toHaveAttribute(
+      'data-seeded',
+      'conversation:messages:*,crm:contacts:read',
+    );
   });
 });

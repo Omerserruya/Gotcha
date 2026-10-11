@@ -45,7 +45,7 @@ vi.mock('@/features/people/load-people', () => ({
 import Page from './page';
 
 describe('★ 12b without the two tiles (Omer, 2026-10-11)', () => {
-  it('the roles and the foot - and no tile to People or to AI employees', async () => {
+  it('the roles - and no tile to People or to AI employees', async () => {
     const { container } = render(await Page());
     // What stays, so the absence below is read on a screen that rendered.
     expect(screen.getByTestId('role-list')).toBeInTheDocument();
@@ -53,7 +53,6 @@ describe('★ 12b without the two tiles (Omer, 2026-10-11)', () => {
       'href',
       '/settings/people/roles/new',
     );
-    expect(container).toHaveTextContent(roles.foot);
 
     expect(screen.queryByTestId('card-extra')).toBeNull();
     expect(screen.queryByTestId('card-ai')).toBeNull();
@@ -63,9 +62,33 @@ describe('★ 12b without the two tiles (Omer, 2026-10-11)', () => {
     expect(screen.getAllByRole('link')).toHaveLength(1);
   });
 
-  it('the foot no longer sends anyone to a Duplicate that is gone', () => {
-    expect(roles.foot).not.toMatch(/duplicate/i);
+  it('nothing sends anyone to a Duplicate that is gone', () => {
     expect(JSON.stringify(roles)).not.toMatch(/duplicat/i);
     expect(roles).not.toHaveProperty('cards');
+  });
+});
+
+describe('★★ built-in roles are editable (auth 30d610da): the "can\'t be changed" foot is gone', () => {
+  // The sentence, in both catalogues, as it stood - read from neither, so a
+  // copy that drifts back in under another key is still caught.
+  const SENTENCES = [
+    'תפקידים מובנים אי אפשר לשנות או למחוק',
+    "Built-in roles can't be changed or deleted",
+  ];
+
+  it('the page draws no foot', async () => {
+    const { container } = render(await Page());
+    expect(screen.getByTestId('role-list')).toBeInTheDocument();
+    for (const sentence of SENTENCES) expect(container.textContent).not.toContain(sentence);
+  });
+
+  it('neither catalogue holds the sentence, under any key', async () => {
+    const he = (await import('@/i18n/messages/he/roles.json')).default;
+    expect(roles).not.toHaveProperty('foot');
+    expect(he).not.toHaveProperty('foot');
+    for (const sentence of SENTENCES) {
+      expect(JSON.stringify(roles)).not.toContain(sentence);
+      expect(JSON.stringify(he)).not.toContain(sentence);
+    }
   });
 });

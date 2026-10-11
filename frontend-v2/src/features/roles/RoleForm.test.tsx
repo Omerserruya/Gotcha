@@ -8,17 +8,19 @@ import type { PermissionDef } from '@/api/contracts/permission-catalog';
 import type { Role } from '@/api/contracts/roles';
 import messages from '@/i18n/messages/en/roles.json';
 
-const { createRole, updateRole } = vi.hoisted(() => ({
+const { createRole, updateRole, resetRole } = vi.hoisted(() => ({
   createRole: vi.fn(),
   updateRole: vi.fn(),
+  resetRole: vi.fn(),
 }));
-vi.mock('./actions', () => ({ createRole, updateRole }));
+vi.mock('./actions', () => ({ createRole, updateRole, resetRole }));
 const push = vi.hoisted(() => vi.fn());
+const refresh = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children }: { href: string; children: ReactNode }) => (
     <a href={href}>{children}</a>
   ),
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, refresh }),
 }));
 
 import { RoleForm } from './RoleForm';
@@ -26,7 +28,9 @@ import { RoleForm } from './RoleForm';
 beforeEach(() => {
   createRole.mockReset();
   updateRole.mockReset();
+  resetRole.mockReset();
   push.mockReset();
+  refresh.mockReset();
 });
 
 /**
@@ -305,5 +309,284 @@ describe('★★ the grant ceiling, said on create and on edit (auth 679b8812)',
     await userEvent.click(screen.getByTestId('role-save'));
     expect(screen.getByTestId('role-error')).toHaveTextContent(messages.ceiling.ownerOnly);
     expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe('★★ a built-in role, edited within its limits (auth 30d610da)', () => {
+  const P = [
+    def('conversation:messages:read', 'conversation', 'Read Conversations', true),
+    def('conversation:messages:reply', 'conversation', 'Reply to Conversations', true),
+    def('crm:contacts:read', 'crm', 'Read Contacts'),
+    def('crm:contacts:update', 'crm', 'Update Contacts'),
+    def('settings:workspace:read', 'settings', 'View Workspace'),
+    def('settings:workspace:update', 'settings', 'Update Workspace'),
+    def('settings:roles:manage', 'settings', 'Manage Roles'),
+    def('settings:billing:manage', 'settings', 'Manage Billing'),
+    def('settings:billing:read', 'settings', 'View Billing'),
+  ];
+  const builtin = (over: Partial<Role>): Role => ({
+    id: 'dm',
+    name: 'Department Manager',
+    description: null,
+    isSystem: true,
+    builtinKey: 'department_manager',
+    features: [],
+    memberCount: 1,
+    editable: true,
+    customized: false,
+    ceiling: [],
+    floor: [],
+    defaults: [],
+    ...over,
+  });
+  // The measured shape: two patterns' worth beside explicit keys, and a ceiling.
+  const DM = builtin({
+    features: ['conversation:messages:*', 'crm:contacts:read', 'settings:workspace:read'],
+    ceiling: [
+      'settings:billing:manage',
+      'settings:billing:read',
+      'settings:roles:manage',
+      'settings:workspace:update',
+    ],
+  });
+  const OWNER = builtin({
+    id: 'owner',
+    name: 'Owner',
+    builtinKey: 'owner',
+    features: ['*'],
+    floor: ['settings:roles:manage', 'settings:billing:manage'],
+  });
+  const renderEditing = (role: Role) =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ roles: messages }}>
+        <RoleForm permissions={P} roles={[role]} editing={role} />
+      </NextIntlClientProvider>,
+    );
+  /** The accessible description a control points at. */
+  const describedBy = (el: HTMLElement) =>
+    document.getElementById(el.getAttribute('aria-describedby') ?? '')?.textContent ?? null;
+
+  it('★ a ceiling key is greyed, says why (title + description), and never turns on', async () => {
+    renderEditing(DM);
+    const billing = screen.getByTestId('role-action-settings:billing:manage');
+    expect(billing).toHaveAttribute('aria-disabled', 'true');
+    expect(billing).toHaveAttribute('title', "This role can't have this");
+    expect(describedBy(billing)).toBe("This role can't have this");
+    expect(billing).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(billing);
+    expect(billing).toHaveAttribute('aria-pressed', 'false');
+    // A level that would give one is locked; the level below it is not.
+    const wsEdit = screen.getByTestId('role-level-settings:workspace-edit');
+    expect(wsEdit).toHaveAttribute('aria-disabled', 'true');
+    expect(wsEdit).toHaveAttribute('title', "This role can't have this");
+    await userEvent.click(wsEdit);
+    expect(wsEdit).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByTestId('role-level-settings:workspace-view')).not.toHaveAttribute(
+      'aria-disabled',
+    );
+    expect(screen.getByTestId('role-level-settings:workspace-view')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+  });
+
+  it('★ wildcards are expanded: the keys a pattern covers today are on', () => {
+    renderEditing(DM);
+    for (const key of ['conversation:messages:read', 'conversation:messages:reply'])
+      expect(screen.getByTestId(`role-action-${key}`)).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByTestId('role-source-wildcard')).toBeNull();
+    expect(screen.getByTestId('role-edit-patterns')).toHaveTextContent('conversation:messages:*');
+  });
+
+  it('★ the Owner’s floor: on, locked, says why - and "None" on its row is locked too', async () => {
+    renderEditing(OWNER);
+    const billing = screen.getByTestId('role-action-settings:billing:manage');
+    expect(billing).toHaveAttribute('aria-pressed', 'true');
+    expect(billing).toHaveAttribute('aria-disabled', 'true');
+    expect(billing).toHaveAttribute('title', 'The Owner always keeps this');
+    expect(describedBy(billing)).toBe('The Owner always keeps this');
+    await userEvent.click(billing);
+    expect(billing).toHaveAttribute('aria-pressed', 'true');
+    const none = screen.getByTestId('role-level-settings:roles-none');
+    expect(none).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(none);
+    expect(screen.getByTestId('role-level-settings:roles-manage')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    // `*` covers everything, and nothing else is locked on the Owner.
+    expect(screen.getByTestId('role-action-settings:billing:read')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByTestId('role-action-settings:billing:read')).not.toHaveAttribute(
+      'aria-disabled',
+    );
+  });
+
+  it('★ a custom role (`ceiling: []`) has nothing greyed by the role', () => {
+    const custom = builtin({
+      id: 'c',
+      name: 'Desk',
+      isSystem: false,
+      builtinKey: null,
+      features: ['crm:contacts:read'],
+    });
+    renderEditing(custom);
+    const controls = screen
+      .getByRole('table')
+      .querySelectorAll('button[data-testid^="role-action-"], button[data-testid^="role-level-"]');
+    expect(controls.length).toBeGreaterThan(0);
+    for (const control of controls) expect(control).not.toHaveAttribute('aria-disabled');
+    expect(screen.getByTestId('role-name')).toHaveValue('Desk');
+  });
+
+  it('★ its name and description are shown, never offered (PATCH refuses a built-in)', () => {
+    renderEditing(DM);
+    expect(screen.queryByTestId('role-name')).toBeNull();
+    expect(screen.queryByTestId('role-description')).toBeNull();
+    expect(screen.getByTestId('role-name-fixed')).toHaveTextContent(
+      messages.builtinRole.department_manager.name,
+    );
+    expect(screen.getByTestId('role-name-fixed')).toHaveAttribute(
+      'title',
+      messages.form.edit.builtinName,
+    );
+    expect(screen.getByTestId('role-save')).toBeEnabled();
+  });
+
+  it('★★ the PUT body: the full list, an untouched pattern as the pattern', async () => {
+    updateRole.mockResolvedValue({ ok: true });
+    renderEditing(DM);
+    await userEvent.click(screen.getByTestId('role-level-crm:contacts-edit'));
+    await userEvent.click(screen.getByTestId('role-save'));
+    expect(updateRole).toHaveBeenCalledWith('dm', {
+      name: 'Department Manager',
+      description: '',
+      features: [
+        'conversation:messages:*',
+        'settings:workspace:read',
+        'crm:contacts:read',
+        'crm:contacts:update',
+      ],
+      isSystem: true,
+    });
+    expect(push).toHaveBeenCalledWith('/settings/people/roles');
+  });
+
+  it('★★ a narrowed pattern is saved as the keys still on', async () => {
+    updateRole.mockResolvedValue({ ok: true });
+    renderEditing(DM);
+    await userEvent.click(screen.getByTestId('role-action-conversation:messages:reply'));
+    await userEvent.click(screen.getByTestId('role-save'));
+    expect(updateRole.mock.calls[0]![1].features).toEqual([
+      'conversation:messages:read',
+      'crm:contacts:read',
+      'settings:workspace:read',
+    ]);
+  });
+
+  it('★ a ceiling key the role still holds (a stale row) starts off - the save never sends it', async () => {
+    updateRole.mockResolvedValue({ ok: true });
+    renderEditing({ ...DM, features: [...DM.features, 'settings:roles:manage'] });
+    expect(screen.getByTestId('role-level-settings:roles-manage')).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    await userEvent.click(screen.getByTestId('role-save'));
+    expect(updateRole.mock.calls[0]![1].features).not.toContain('settings:roles:manage');
+  });
+
+  it('★ a floor key the Owner lacks (a stale row) starts on - the save always sends it', async () => {
+    updateRole.mockResolvedValue({ ok: true });
+    renderEditing({ ...OWNER, features: ['crm:contacts:read'] });
+    expect(screen.getByTestId('role-action-settings:billing:manage')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await userEvent.click(screen.getByTestId('role-save'));
+    expect(updateRole.mock.calls[0]![1].features).toEqual(
+      expect.arrayContaining(['settings:roles:manage', 'settings:billing:manage']),
+    );
+  });
+
+  it('the Owner, untouched, is saved as `*` - not as today’s list', async () => {
+    updateRole.mockResolvedValue({ ok: true });
+    renderEditing(OWNER);
+    await userEvent.click(screen.getByTestId('role-save'));
+    expect(updateRole.mock.calls[0]![1].features).toEqual(['*']);
+  });
+
+  it.each([
+    [
+      'role_ceiling',
+      { reason: 'role_ceiling', blocked: ['settings:roles:manage'] },
+      `This role can never have these: ${messages.form.row['settings:roles']} · ${messages.form.action.manage}. Nothing was changed.`,
+    ],
+    [
+      'owner_floor',
+      { reason: 'owner_floor', missing: ['settings:billing:manage'] },
+      `The Owner always keeps these: ${messages.form.row['settings:billing']} · ${messages.form.action.manage}. Nothing was changed.`,
+    ],
+    ['role_merged', { reason: 'role_merged' }, 'Admin is now part of Owner. Nothing was changed.'],
+    [
+      'system',
+      { reason: 'system' },
+      "Built-in roles can't be changed right now. Nothing was changed.",
+    ],
+  ])('★ %s is said in words, and the form stays', async (_, refusal, words) => {
+    updateRole.mockResolvedValue({ ok: false, ...refusal });
+    renderEditing(DM);
+    await userEvent.click(screen.getByTestId('role-save'));
+    expect(screen.getByTestId('role-error')).toHaveTextContent(words);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  describe('★★ Reset to default', () => {
+    it('absent while the role is as shipped', () => {
+      renderEditing(DM);
+      expect(screen.queryByTestId('role-reset')).toBeNull();
+    });
+
+    it('absent on a custom role, whatever `customized` says', () => {
+      renderEditing(
+        builtin({ id: 'c', name: 'Desk', isSystem: false, builtinKey: null, customized: true }),
+      );
+      expect(screen.queryByTestId('role-reset')).toBeNull();
+    });
+
+    it('once changed: asked first, then the POST, then the page reads the role again', async () => {
+      resetRole.mockResolvedValue({ ok: true });
+      renderEditing({ ...DM, customized: true });
+      await userEvent.click(screen.getByTestId('role-reset'));
+      expect(resetRole).not.toHaveBeenCalled();
+      expect(screen.getByTestId('role-reset-ask')).toHaveTextContent(
+        `Reset ${messages.builtinRole.department_manager.name} to its default permissions?`,
+      );
+      await userEvent.click(screen.getByTestId('role-reset-yes'));
+      expect(resetRole).toHaveBeenCalledWith('dm');
+      expect(refresh).toHaveBeenCalled();
+      expect(updateRole).not.toHaveBeenCalled();
+    });
+
+    it('"Keep it as it is" sends nothing', async () => {
+      renderEditing({ ...DM, customized: true });
+      await userEvent.click(screen.getByTestId('role-reset'));
+      await userEvent.click(screen.getByTestId('role-reset-cancel'));
+      expect(resetRole).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('role-reset-ask')).toBeNull();
+      expect(screen.getByTestId('role-reset')).toBeInTheDocument();
+    });
+
+    it('409 NOT_BUILTIN is said in words', async () => {
+      resetRole.mockResolvedValue({ ok: false, reason: 'not_builtin' });
+      renderEditing({ ...DM, customized: true });
+      await userEvent.click(screen.getByTestId('role-reset'));
+      await userEvent.click(screen.getByTestId('role-reset-yes'));
+      expect(screen.getByTestId('role-error')).toHaveTextContent(
+        messages.form.reset.error.not_builtin,
+      );
+      expect(refresh).not.toHaveBeenCalled();
+    });
   });
 });

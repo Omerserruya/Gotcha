@@ -530,12 +530,6 @@
   .actionQuiet {
     cursor: default;
   }
-
-  .foot {
-    margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
 }
 
 @layer features {
@@ -1080,6 +1074,16 @@
     color: var(--action-text);
   }
 
+  /*
+   * A control this role's limits lock (auth 30d610da): greyed, and it says
+   * why on its title. On a ceiling key it stays off; on the Owner's floor, on.
+   */
+  .segment[aria-disabled='true'],
+  .gridAction[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
   .gridPattern {
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
@@ -1234,6 +1238,41 @@
     translate: 0 -50%;
     color: var(--text-subtle);
     pointer-events: none;
+  }
+
+  /* "Reset to default": a quiet text button at the bar's far end, asked first. */
+  .resetButton {
+    padding-inline: var(--space-6);
+    border: none;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .formBar .resetButton {
+    margin-inline-start: auto;
+  }
+
+  .resetButton:disabled {
+    cursor: not-allowed;
+  }
+
+  .resetAsk {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .resetAskActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
   }
 
   /* 12c's bar at the form's end - after the grid, never over it. */

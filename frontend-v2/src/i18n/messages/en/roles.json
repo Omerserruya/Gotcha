@@ -3,6 +3,7 @@
   "description": "The work hats. Each one is a set of permissions, and people wear one.",
   "unavailable": "We couldn't read your roles just now.",
   "builtin": "Built-in",
+  "builtinChanged": "Built-in, changed",
   "builtinRole": {
     "owner": {
       "name": "Owner",
@@ -25,6 +26,7 @@
   "members": "{count, plural, =1 {One person} other {# people}}",
   "noMembers": "No one yet",
   "allowsEverything": "Allows everything",
+  "merged": "Admin is now part of Owner. It can't be changed or given.",
   "scope": {
     "own": "Sees only their own conversations",
     "team": "Sees their team's conversations",
@@ -195,7 +197,7 @@
       "save": "Save changes",
       "saving": "Saving…",
       "error": {
-        "system": "A built-in role can't be changed. Create a role of your own instead.",
+        "system": "Built-in roles can't be changed right now. Nothing was changed.",
         "unknown_features": "One of these capabilities is no longer one a role can hold. Nothing was changed.",
         "partial": "The capabilities were saved; the name and description weren't. Try saving again.",
         "name_taken": "A role with this name already exists. The capabilities were saved - choose another name and save again.",
@@ -204,7 +206,22 @@
         "failed": "It wasn't saved. Try again."
       },
       "notHere": "This role isn't here. It may have been deleted.",
-      "builtIn": "{name} is built in and can't be changed. Create a role of your own: it can start from {name}."
+      "builtIn": "{name} is built in and can't be changed. Create a role of your own: it can start from {name}.",
+      "builtinName": "A built-in role keeps its name and description.",
+      "patterns": "This role holds {patterns}: everything under a pattern, including permissions added later. A pattern stays one while everything it covers stays on; turn one of them off and that part is saved as a fixed list."
+    },
+    "reset": {
+      "start": "Reset to default",
+      "ask": "Reset {name} to its default permissions? Every change made to it is undone.",
+      "yes": "Yes, reset",
+      "cancel": "Keep it as it is",
+      "resetting": "Resetting…",
+      "error": {
+        "not_builtin": "Only a built-in role has a default to go back to. Nothing was changed.",
+        "gone": "This role isn't here any more.",
+        "forbidden": "You don't have permission to reset this role. Nothing was changed.",
+        "failed": "It wasn't reset. Try again."
+      }
     }
   },
   "person": {
@@ -266,7 +283,6 @@
   "custom": "Custom",
   "edit": "Edit",
   "create": "Create role",
-  "foot": "Built-in roles can't be changed or deleted. Create a role to have one you can change.",
   "grant": {
     "title": "Add a permission for {name}",
     "search": "Search permissions",
@@ -288,5 +304,16 @@
     "aboveOwn": "You can't give permissions you don't hold yourself: {permissions}. Nothing was changed.",
     "aboveOwnUnnamed": "You can't give permissions you don't hold yourself, and this includes some. Nothing was changed.",
     "ownerOnly": "Only an Owner can give the Owner role or change an Owner's access. Nothing was changed."
+  },
+  "rules": {
+    "ceiling": "This role can't have this",
+    "floor": "The Owner always keeps this",
+    "refused": {
+      "ceiling": "This role can never have these: {permissions}. Nothing was changed.",
+      "ceilingUnnamed": "This role can never have some of these permissions. Nothing was changed.",
+      "floor": "The Owner always keeps these: {permissions}. Nothing was changed.",
+      "floorUnnamed": "The Owner always keeps some of these permissions. Nothing was changed.",
+      "merged": "Admin is now part of Owner. Nothing was changed."
+    }
   }
 }

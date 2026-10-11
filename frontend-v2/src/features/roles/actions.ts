@@ -161,32 +161,61 @@ export async function createRole(input: {
   }
 }
 
+/**
+ * What a built-in role's own rules refused (auth 30d610da) - each said in a
+ * sentence (`ceiling-words.ts` `roleRuleSentence`). Nothing was changed on any.
+ *
+ *   role_ceiling  403 ROLE_CEILING `{ blocked }` - keys this role can never hold.
+ *   owner_floor   422 OWNER_FLOOR `{ missing }` - keys the Owner always keeps.
+ *   role_merged   409 ROLE_MERGED - the Admin role, now part of Owner.
+ */
+export type RoleRuleRefusal =
+  | { readonly ok: false; readonly reason: 'role_ceiling'; readonly blocked: readonly string[] }
+  | { readonly ok: false; readonly reason: 'owner_floor'; readonly missing: readonly string[] }
+  | { readonly ok: false; readonly reason: 'role_merged' };
+
+/** The role-rule refusal in `cause`, or `null` when it is some other failure. */
+function roleRuleRefusalOf(cause: unknown): RoleRuleRefusal | null {
+  if (!isApiError(cause)) return null;
+  if (cause.code === 'ROLE_CEILING')
+    return { ok: false, reason: 'role_ceiling', blocked: [...(cause.blocked ?? [])] };
+  if (cause.code === 'OWNER_FLOOR')
+    return { ok: false, reason: 'owner_floor', missing: [...(cause.missing ?? [])] };
+  if (cause.code === 'ROLE_MERGED') return { ok: false, reason: 'role_merged' };
+  return null;
+}
+
 export type UpdateRoleResult =
   | { readonly ok: true }
   | {
       readonly ok: false;
       /**
-       * `system` - a built-in role (the route refuses to change it);
-       * `unknown_features` - the catalogue offered a key the server will not
-       * grant; `partial` - the capabilities were saved and the name or
-       * description was not; `gone` - the role is no longer there.
+       * `system` - built-in roles can't be changed right now (403
+       * SYSTEM_ROLE: the server's kill switch is on); `unknown_features` -
+       * the catalogue offered a key the server will not grant; `partial` -
+       * the capabilities were saved and the name or description was not;
+       * `gone` - the role is no longer there.
        */
       readonly reason:
         'system' | 'unknown_features' | 'partial' | 'name_taken' | 'gone' | 'forbidden' | 'failed';
     }
   /** The features PUT refused them: nothing was changed. */
-  | CeilingRefusal;
+  | CeilingRefusal
+  | RoleRuleRefusal;
 
 /**
- * Edit a custom role - 12b's Edit: its capabilities (`PUT …/features`,
- * replacing them), then its name and description (`PATCH`). Two routes, in
- * that order: the features are what the route validates, so a refusal there
- * changes nothing; a failure after them is said as partly saved, never as
- * done.
+ * Edit a role - 12b's Edit: its capabilities (`PUT …/features`, replacing
+ * them), then, for a custom role, its name and description (`PATCH`). Two
+ * routes, in that order: the features are what the route validates, so a
+ * refusal there changes nothing; a failure after them is said as partly
+ * saved, never as done.
  *
- * ⚠ A built-in role is never sent. Both routes refuse it (403 SYSTEM_ROLE,
- *   the features route since auth 00d669a3), and that refusal is still said
- *   as `system` should a stale screen send one.
+ * ★ A BUILT-IN role (auth 30d610da) sends its capabilities only. PATCH still
+ *   refuses it (403 SYSTEM_ROLE) - it keeps its name and description - so the
+ *   rename is never sent, and a built-in's save is one call.
+ * ★ The PUT's own refusals for a built-in - its ceiling, the Owner's floor,
+ *   the merged Admin - each come back as their own reason, before the bare
+ *   403s they share a status with.
  * ★ A taken name is 409 ROLE_NAME_TAKEN on the PATCH - after the capabilities
  *   were saved, so it says so.
  */
@@ -194,7 +223,6 @@ export async function updateRole(
   roleId: string,
   input: { name: string; description: string; features: readonly string[]; isSystem: boolean },
 ): Promise<UpdateRoleResult> {
-  if (input.isSystem) return { ok: false, reason: 'system' };
   try {
     await serverApi().put({
       endpoint: permissionEndpoints.roleFeatures(roleId),
@@ -205,16 +233,22 @@ export async function updateRole(
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('roles.update_features_failed', { cause });
+    const rule = roleRuleRefusalOf(cause);
+    if (rule) return rule;
     const ceiling = ceilingRefusalOf(cause);
     if (ceiling) return ceiling;
     if (isApiError(cause)) {
       if (cause.status === 400) return { ok: false, reason: 'unknown_features' };
-      // 00d669a3: the features route refuses a built-in role by code too.
+      // The kill switch (ROLES_EDITABLE=false): built-in roles are fixed again.
       if (cause.code === 'SYSTEM_ROLE') return { ok: false, reason: 'system' };
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
       if (cause.status === 404) return { ok: false, reason: 'gone' };
     }
     return { ok: false, reason: 'failed' };
+  }
+  if (input.isSystem) {
+    revalidatePath('/[locale]/settings/people/roles', 'page');
+    return { ok: true };
   }
   try {
     await serverApi().patch({
@@ -238,6 +272,46 @@ export async function updateRole(
   }
   revalidatePath('/[locale]/settings/people/roles', 'page');
   return { ok: true };
+}
+
+export type ResetRoleResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      /** `not_builtin` - 409 NOT_BUILTIN: only a built-in role has defaults. */
+      readonly reason: 'not_builtin' | 'gone' | 'forbidden' | 'failed';
+    }
+  /** The defaults hold something the caller does not (`patternsRefusal`). */
+  | CeilingRefusal;
+
+/**
+ * "Reset to default" - a built-in role's permissions back to the product's
+ * (`POST …/roles/:id/reset`, auth 30d610da). The role is no longer
+ * customized afterwards, so the startup seed follows the catalogue for it
+ * again. Asked first on the screen; nothing is changed on any refusal.
+ */
+export async function resetRole(roleId: string): Promise<ResetRoleResult> {
+  try {
+    await serverApi().post({
+      endpoint: permissionEndpoints.roleReset(roleId),
+      body: {},
+      payload: z.unknown(),
+      raw: true,
+    });
+    revalidatePath('/[locale]/settings/people/roles', 'page');
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('roles.reset_failed', { cause });
+    const ceiling = ceilingRefusalOf(cause);
+    if (ceiling) return ceiling;
+    if (isApiError(cause)) {
+      if (cause.code === 'NOT_BUILTIN') return { ok: false, reason: 'not_builtin' };
+      if (cause.status === 404) return { ok: false, reason: 'gone' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    }
+    return { ok: false, reason: 'failed' };
+  }
 }
 
 export type ChangeRoleResult =

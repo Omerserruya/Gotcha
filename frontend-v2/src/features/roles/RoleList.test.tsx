@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { memberSchema } from '@/api/contracts/people';
-import { roleSchema } from '@/api/contracts/roles';
+import { roleListSchema, roleSchema } from '@/api/contracts/roles';
 import roles from '@/i18n/messages/en/roles.json';
 import rowLink from '@/design-system/styles/row-link.module.css';
 import { expectPlainRow, expectStretchedRow } from '@/test/stretched-row';
@@ -112,19 +112,21 @@ describe('★★ a built-in role in the reader’s words - by its key', () => {
       await RoleList({
         roles: [
           role({
-            id: 'admin',
-            name: 'Admin',
+            id: 'dm',
+            name: 'Department Manager',
             isSystem: true,
-            builtinKey: 'admin',
-            description: 'Full operational and configuration access…',
+            builtinKey: 'department_manager',
+            description: 'Runs a department: full conversation/approval handling…',
           }),
           role({ id: 'w', name: 'Admin', description: 'Ours.' }),
         ],
       }),
     );
-    expect(screen.getByTestId('role-admin')).toHaveTextContent('מנהל/ת');
-    expect(screen.getByTestId('allows-admin')).toHaveTextContent(/^גישה מלאה לתפעול/);
-    expect(screen.getByTestId('role-admin')).not.toHaveTextContent('Full operational');
+    expect(screen.getByTestId('role-dm')).toHaveTextContent(
+      heRoles.builtinRole.department_manager.name,
+    );
+    expect(screen.getByTestId('allows-dm')).toHaveTextContent(/^ניהול מחלקה/);
+    expect(screen.getByTestId('role-dm')).not.toHaveTextContent('Runs a department');
     // A custom role keeps the name its owner typed - even "Admin".
     expect(screen.getByTestId('role-w')).toHaveTextContent(/^Admin/);
     expect(screen.getByTestId('allows-w')).toHaveTextContent('Ours.');
@@ -156,5 +158,78 @@ describe('★★ a custom role’s whole row opens it (Omer, 2026-10-11)', () =>
     const faces = screen.getByTitle('Maya Cohen');
     // Above the overlay for their names, and a click on them still opens the role (RowTipForward).
     expect(faces.classList.contains(rowLink.tip!)).toBe(true);
+  });
+});
+
+describe('★★ built-in roles are editable where the server says so (auth 30d610da)', () => {
+  const dm = (over: Record<string, unknown> = {}) =>
+    role({
+      id: 'dm',
+      name: 'Department Manager',
+      isSystem: true,
+      builtinKey: 'department_manager',
+      editable: true,
+      ...over,
+    });
+
+  it('editable: its row opens it in the form, and no lock is drawn', async () => {
+    render(await RoleList({ roles: [dm()] }));
+    expect(screen.getByTestId('edit-dm')).toHaveAttribute('href', '/settings/people/roles/edit/dm');
+    expect(screen.getByTestId('builtin-dm')).toHaveTextContent('Built-in');
+    expect(screen.getByTestId('builtin-dm').querySelector('svg')).toBeNull();
+  });
+
+  it('not editable (an older backend, or the kill switch): the lock, and nothing to open', async () => {
+    render(await RoleList({ roles: [dm({ editable: false })] }));
+    expect(screen.getByTestId('action-dm')).toBeEmptyDOMElement();
+    expect(screen.getByTestId('builtin-dm').querySelector('svg')).not.toBeNull();
+  });
+
+  it('changed by the workspace: says so, and is counted - not the shipped description', async () => {
+    render(
+      await RoleList({
+        roles: [dm({ customized: true, features: ['crm:contacts:read', 'crm:contacts:update'] })],
+      }),
+    );
+    expect(screen.getByTestId('builtin-dm')).toHaveTextContent(roles.builtinChanged);
+    expect(screen.getByTestId('allows-dm')).toHaveTextContent('Allows 2 things');
+    expect(screen.getByTestId('allows-dm')).not.toHaveTextContent(
+      roles.builtinRole.department_manager.description,
+    );
+  });
+});
+
+describe('★★ Admin is part of Owner (auth 30d610da)', () => {
+  it('absent from the API: no Admin row, in either language', async () => {
+    const list = roleListSchema.parse({
+      data: [
+        { id: 'o', name: 'Owner', isSystem: true, builtinKey: 'owner', editable: true },
+        { id: 'a', name: 'Agent', isSystem: true, builtinKey: 'agent', editable: true },
+      ],
+    });
+    render(await RoleList({ roles: list }));
+    expect(screen.getByTestId('role-list')).toHaveTextContent(roles.builtinRole.owner.name);
+    expect(screen.getByTestId('role-list')).not.toHaveTextContent(roles.builtinRole.admin.name);
+    expect(screen.queryByTestId('role-admin')).toBeNull();
+  });
+
+  it('★ returned (someone still holds it): fixed, with the note - even if it says editable', async () => {
+    const [admin] = roleListSchema.parse({
+      data: [
+        {
+          id: 'admin',
+          name: 'Admin',
+          isSystem: true,
+          builtinKey: 'admin',
+          editable: true,
+          _count: { assignments: 1 },
+        },
+      ],
+    });
+    render(await RoleList({ roles: [admin!] }));
+    expect(screen.getByTestId('allows-admin')).toHaveTextContent(roles.merged);
+    expect(screen.getByTestId('action-admin')).toBeEmptyDOMElement();
+    expect(screen.getByTestId('builtin-admin').querySelector('svg')).not.toBeNull();
+    expectPlainRow(screen.getByTestId('role-admin'));
   });
 });

@@ -2,7 +2,7 @@
 
 import { ChevronDown } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
-import { useMemo, useState, useTransition } from 'react';
+import { useId, useMemo, useState, useTransition } from 'react';
 
 import { humaniseCode } from '@/api/contracts/capabilities';
 import type { PermissionDef } from '@/api/contracts/permission-catalog';
@@ -10,11 +10,29 @@ import { gridCanRepresent, holds, wildcardsIn, type Role } from '@/api/contracts
 import drawer from '@/design-system/styles/drawer.module.css';
 import { Link, useRouter } from '@/i18n/navigation';
 
-import { createRole, updateRole } from './actions';
-import { isCeilingReason, useCeilingSentence } from './ceiling-words';
-import { gridRows, levelOf, levelsOf, rowChanged, withLevel, type GridRow } from './role-grid';
+import { createRole, resetRole, updateRole } from './actions';
+import {
+  isCeilingReason,
+  isRoleRuleReason,
+  useCeilingSentence,
+  useRoleRuleSentence,
+} from './ceiling-words';
+import {
+  compactPatterns,
+  expandPatterns,
+  gridRows,
+  keyLock,
+  levelLock,
+  levelOf,
+  levelsOf,
+  rowChanged,
+  withLevel,
+  type GridRow,
+  type Lock,
+  type RoleLimits,
+} from './role-grid';
 import { permissionName } from './permission-words';
-import { roleNameOf } from './role-words';
+import { builtinRoleKey, roleDescriptionOf, roleNameOf } from './role-words';
 import styles from './Roles.module.css';
 
 /**
@@ -33,10 +51,21 @@ import styles from './Roles.module.css';
  * ticking what it matches today freezes it. Started from one, the table is
  * read-only and Create is unavailable, with the reason.
  *
- * ★ EDIT (12b's Edit, Omer 2026-10-08): the same form on one custom role -
- *   seeded from it, compared against what it holds now, saved over it, then
- *   back to the roles. No "Start from": the role starts from itself. A
- *   built-in role never comes here (the route refuses it).
+ * ★ EDIT (12b's Edit, Omer 2026-10-08): the same form on one role - seeded
+ *   from it, compared against what it holds now, saved over it, then back to
+ *   the roles. No "Start from": the role starts from itself.
+ *
+ * ★★ A BUILT-IN ROLE (auth 30d610da) is edited here too, when the server
+ *   says `editable`, within two hard limits it sends with the role:
+ *   - `ceiling` - keys it can NEVER hold: drawn greyed, with the reason as
+ *     their title and accessible description, and never turned on;
+ *   - `floor` - keys the Owner always keeps: drawn on, and never turned off.
+ *   Its name and description stay the product's (PATCH refuses a built-in),
+ *   so they are shown, not offered. Its patterns (Owner's `*`) are shown as
+ *   the keys they cover today and saved back as patterns while untouched
+ *   (`compactPatterns`). "Reset to default" appears once it was changed.
+ *   A custom role has `ceiling: []`: nothing is greyed by the role. What the
+ *   EDITOR may give is the grant ceiling's, said by the server on save.
  */
 export function RoleForm({
   permissions,
@@ -46,7 +75,7 @@ export function RoleForm({
   readonly permissions: readonly PermissionDef[];
   /** Existing roles to start from. */
   readonly roles: readonly Role[];
-  /** 12b's "Edit": the custom role being changed - the form saves over it. */
+  /** 12b's "Edit": the role being changed, custom or built in - the form saves over it. */
   readonly editing?: Role | null;
 }) {
   const t = useTranslations('roles');
@@ -58,6 +87,29 @@ export function RoleForm({
   const nameOf = (role: Role) => roleNameOf(role, (key, part) => t(`builtinRole.${key}.${part}`));
   const router = useRouter();
   const ceiling = useCeilingSentence();
+  const roleRule = useRoleRuleSentence();
+  const catalog = useMemo(() => permissions.map((p) => p.key), [permissions]);
+  // A built-in role keeps its name and description: PATCH refuses it.
+  const builtIn = editing?.isSystem ?? false;
+  const limits: RoleLimits = useMemo(
+    () => ({
+      ceiling: new Set(editing ? expandPatterns(editing.ceiling, catalog) : []),
+      floor: new Set(editing?.floor ?? []),
+    }),
+    [editing, catalog],
+  );
+  const ceilingId = useId();
+  const floorId = useId();
+  const reasonOf = (lock: Lock) => (lock === 'ceiling' ? t('rules.ceiling') : t('rules.floor'));
+  const lockProps = (lock: Lock | null) =>
+    lock
+      ? {
+          'aria-disabled': true as const,
+          'aria-describedby': lock === 'ceiling' ? ceilingId : floorId,
+          'data-lock': lock,
+          title: reasonOf(lock),
+        }
+      : {};
   /*
    * 02 starts from Agent: "you start from an existing role and only touch
    * what's different" - so the Compared card is there from the first look.
@@ -70,20 +122,43 @@ export function RoleForm({
   const [sourceId, setSourceId] = useState(startId);
   const [name, setName] = useState(editing?.name ?? '');
   const [description, setDescription] = useState(editing?.description ?? '');
-  // Seeded as `startFrom` would seed it - including its refusal of a pattern role.
+  /*
+   * Editing: what the role holds, its patterns as the keys they cover today,
+   * never a ceiling key and always a floor key - the only sets the server
+   * will take. Creating: seeded as `startFrom` would seed it, including its
+   * refusal of a pattern role.
+   */
   const [selected, setSelected] = useState<readonly string[]>(() => {
+    if (editing) {
+      const keys = expandPatterns(editing.features, catalog).filter((k) => !limits.ceiling.has(k));
+      return [...keys, ...[...limits.floor].filter((k) => !keys.includes(k))];
+    }
     const role = roles.find((r) => r.id === startId);
     return role && gridCanRepresent(role.features) ? [...role.features] : [];
   });
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [confirmReset, setConfirmReset] = useState(false);
 
-  const source = roles.find((r) => r.id === sourceId) ?? null;
-  const patterned = source !== null && !gridCanRepresent(source.features);
+  const source = editing ?? roles.find((r) => r.id === sourceId) ?? null;
+  // Only a role to START FROM is refused for its patterns; one being edited shows them expanded.
+  const patterned = !editing && source !== null && !gridCanRepresent(source.features);
   const rows = useMemo(() => gridRows(permissions), [permissions]);
   const held = new Set(selected);
-  const base = new Set(source && !patterned ? source.features : []);
+  const base = new Set(
+    editing
+      ? expandPatterns(editing.features, catalog)
+      : source && !patterned
+        ? source.features
+        : [],
+  );
   const changed = source && !patterned ? rows.filter((r) => rowChanged(r, held, base)) : [];
+  const editedPatterns = editing ? wildcardsIn(editing.features) : [];
+  const resettable =
+    editing !== null &&
+    editing.editable &&
+    editing.customized &&
+    builtinRoleKey(editing.builtinKey) !== null;
 
   function startFrom(id: string) {
     setSourceId(id);
@@ -93,7 +168,14 @@ export function RoleForm({
   }
 
   function toggle(key: string) {
+    // A ceiling key never turns on, a floor key never turns off.
+    if (keyLock(key, limits)) return;
     setSelected((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  }
+
+  function setLevel(row: GridRow, level: Parameters<typeof withLevel>[1]) {
+    if (levelLock(row, level, limits)) return;
+    setSelected(withLevel(row, level, selected));
   }
 
   function submit() {
@@ -103,13 +185,18 @@ export function RoleForm({
         const result = await updateRole(editing.id, {
           name: name.trim(),
           description: description.trim(),
-          features: selected,
+          // The full list - an untouched pattern goes back as the pattern.
+          features: compactPatterns(selected, editing.features, catalog),
           isSystem: editing.isSystem,
         });
         if (result.ok) router.push('/settings/people/roles');
         else
           setError(
-            isCeilingReason(result) ? ceiling(result) : t(`form.edit.error.${result.reason}`),
+            isRoleRuleReason(result)
+              ? roleRule(result)
+              : isCeilingReason(result)
+                ? ceiling(result)
+                : t(`form.edit.error.${result.reason}`),
           );
       });
       return;
@@ -128,6 +215,21 @@ export function RoleForm({
         setSelected([]);
         setSourceId('');
       }
+    });
+  }
+
+  /** "Reset to default", asked first; the page reads the role again after it. */
+  function reset() {
+    if (!editing) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await resetRole(editing.id);
+      setConfirmReset(false);
+      if (result.ok) router.refresh();
+      else
+        setError(
+          isCeilingReason(result) ? ceiling(result) : t(`form.reset.error.${result.reason}`),
+        );
     });
   }
 
@@ -160,16 +262,31 @@ export function RoleForm({
     <section className={styles.newRole} data-testid="role-form">
       <div className={styles.newRoleMain}>
         <div className={styles.newRoleTop}>
-          <label className={drawer.field}>
-            <span className={drawer.fieldLabel}>{t('form.name')}</span>
-            <input
-              className={drawer.box}
-              value={name}
-              maxLength={80}
-              data-testid="role-name"
-              onChange={(e) => setName(e.target.value)}
-            />
-          </label>
+          {builtIn && editing ? (
+            // Shown, not offered: PATCH refuses a built-in role (403 SYSTEM_ROLE).
+            <div className={drawer.field}>
+              <span className={drawer.fieldLabel}>{t('form.name')}</span>
+              <span
+                className={drawer.box}
+                aria-disabled="true"
+                title={t('form.edit.builtinName')}
+                data-testid="role-name-fixed"
+              >
+                {nameOf(editing)}
+              </span>
+            </div>
+          ) : (
+            <label className={drawer.field}>
+              <span className={drawer.fieldLabel}>{t('form.name')}</span>
+              <input
+                className={drawer.box}
+                value={name}
+                maxLength={80}
+                data-testid="role-name"
+                onChange={(e) => setName(e.target.value)}
+              />
+            </label>
+          )}
           {editing ? null : (
             <label className={drawer.field}>
               <span className={drawer.fieldLabel}>{t('form.startFrom')}</span>
@@ -198,18 +315,46 @@ export function RoleForm({
             </label>
           )}
         </div>
-        <label className={drawer.field}>
-          <span className={drawer.fieldLabel}>{t('form.description')}</span>
-          <input
-            className={drawer.box}
-            value={description}
-            maxLength={300}
-            data-testid="role-description"
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </label>
+        {builtIn && editing ? (
+          <div className={drawer.field}>
+            <span className={drawer.fieldLabel}>{t('form.description')}</span>
+            <span
+              className={drawer.box}
+              aria-disabled="true"
+              title={t('form.edit.builtinName')}
+              data-testid="role-description-fixed"
+            >
+              {roleDescriptionOf(editing, (key, part) => t(`builtinRole.${key}.${part}`)) ?? '-'}
+            </span>
+          </div>
+        ) : (
+          <label className={drawer.field}>
+            <span className={drawer.fieldLabel}>{t('form.description')}</span>
+            <input
+              className={drawer.box}
+              value={description}
+              maxLength={300}
+              data-testid="role-description"
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </label>
+        )}
 
-        {source && !patterned ? (
+        {/* The two reasons a control is locked, once each, for aria-describedby. */}
+        <span id={ceilingId} className="srOnly">
+          {t('rules.ceiling')}
+        </span>
+        <span id={floorId} className="srOnly">
+          {t('rules.floor')}
+        </span>
+
+        {editedPatterns.length > 0 ? (
+          <p className={styles.formHint} data-testid="role-edit-patterns">
+            {t('form.edit.patterns', { patterns: editedPatterns.join(', ') })}
+          </p>
+        ) : null}
+
+        {source && !patterned && !editing ? (
           <p className="srOnly" data-testid="role-source-hint">
             {t('form.startFromHint', { name: nameOf(source) })}
           </p>
@@ -280,7 +425,8 @@ export function RoleForm({
                           className={styles.segment}
                           data-current={level === l ? 'yes' : 'no'}
                           data-testid={`role-level-${row.id}-${l}`}
-                          onClick={() => setSelected(withLevel(row, l, selected))}
+                          {...lockProps(levelLock(row, l, limits))}
+                          onClick={() => setLevel(row, l)}
                         >
                           {t(`form.level.${l}`)}
                         </button>
@@ -296,6 +442,7 @@ export function RoleForm({
                           className={styles.gridAction}
                           data-testid={`role-action-${p.key}`}
                           title={permissionName(p, locale, word, join)}
+                          {...lockProps(keyLock(p.key, limits))}
                           onClick={() => toggle(p.key)}
                         >
                           {actionName(p.action)}
@@ -348,7 +495,43 @@ export function RoleForm({
           <Link href="/settings/people/roles" className={drawer.drawerCancel}>
             {t('form.cancel')}
           </Link>
+          {resettable && !confirmReset ? (
+            <button
+              type="button"
+              className={styles.resetButton}
+              disabled={isPending}
+              data-testid="role-reset"
+              onClick={() => setConfirmReset(true)}
+            >
+              {t('form.reset.start')}
+            </button>
+          ) : null}
         </div>
+        {resettable && confirmReset && editing ? (
+          <div className={styles.resetAsk} role="group" data-testid="role-reset-ask">
+            <p className={styles.formHint}>{t('form.reset.ask', { name: nameOf(editing) })}</p>
+            <span className={styles.resetAskActions}>
+              <button
+                type="button"
+                className={styles.createButton}
+                disabled={isPending}
+                data-testid="role-reset-yes"
+                onClick={reset}
+              >
+                {isPending ? t('form.reset.resetting') : t('form.reset.yes')}
+              </button>
+              <button
+                type="button"
+                className={styles.resetButton}
+                disabled={isPending}
+                data-testid="role-reset-cancel"
+                onClick={() => setConfirmReset(false)}
+              >
+                {t('form.reset.cancel')}
+              </button>
+            </span>
+          </div>
+        ) : null}
         {error ? (
           <p className={styles.formError} data-testid="role-error">
             {error}

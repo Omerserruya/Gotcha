@@ -27,16 +27,74 @@ export function ceilingSentence(
   list: (items: readonly string[]) => string,
 ): string {
   if (refusal.reason === 'owner_only') return t('ceiling.ownerOnly');
-  const names = refusal.missing.map((key) => nameOf(key, t));
-  return names.length > 0 && names.every((name): name is string => name !== null)
-    ? t('ceiling.aboveOwn', { permissions: list([...new Set(names)]) })
-    : t('ceiling.aboveOwnUnnamed');
+  const names = namesOf(refusal.missing, t);
+  return names ? t('ceiling.aboveOwn', { permissions: list(names) }) : t('ceiling.aboveOwnUnnamed');
 }
 
-function nameOf(
-  key: string,
-  t: { (key: string, values?: Record<string, string>): string; has: (key: string) => boolean },
-): string | null {
+type Words = {
+  (key: string, values?: Record<string, string>): string;
+  has: (key: string) => boolean;
+};
+
+/** Every key in the grid's words, once each - or `null` when one has none. */
+function namesOf(keys: readonly string[], t: Words): readonly string[] | null {
+  const names = keys.map((key) => nameOf(key, t));
+  return names.length > 0 && names.every((name): name is string => name !== null)
+    ? [...new Set(names)]
+    : null;
+}
+
+/**
+ * A built-in role's own rules, refused on save (auth 30d610da) - the same
+ * naming as the grant ceiling: the grid's words for every key, or none.
+ *
+ *   role_ceiling  the keys this role can never hold (`blocked`)
+ *   owner_floor   the keys the Owner always keeps (`missing`)
+ *   role_merged   the Admin role, now part of Owner
+ */
+export type RoleRuleReason =
+  | { readonly reason: 'role_ceiling'; readonly blocked: readonly string[] }
+  | { readonly reason: 'owner_floor'; readonly missing: readonly string[] }
+  | { readonly reason: 'role_merged' };
+
+export function roleRuleSentence(
+  refusal: RoleRuleReason,
+  t: Words,
+  list: (items: readonly string[]) => string,
+): string {
+  if (refusal.reason === 'role_merged') return t('rules.refused.merged');
+  if (refusal.reason === 'role_ceiling') {
+    const names = namesOf(refusal.blocked, t);
+    return names
+      ? t('rules.refused.ceiling', { permissions: list(names) })
+      : t('rules.refused.ceilingUnnamed');
+  }
+  const names = namesOf(refusal.missing, t);
+  return names
+    ? t('rules.refused.floor', { permissions: list(names) })
+    : t('rules.refused.floorUnnamed');
+}
+
+/** True for the three refusals `roleRuleSentence` says. */
+export function isRoleRuleReason(result: { readonly reason: string }): result is RoleRuleReason {
+  return (
+    result.reason === 'role_ceiling' ||
+    result.reason === 'owner_floor' ||
+    result.reason === 'role_merged'
+  );
+}
+
+/** `roleRuleSentence` in the reader's language, for a client component. */
+export function useRoleRuleSentence(): (refusal: RoleRuleReason) => string {
+  const t = useTranslations('roles');
+  const format = useFormatter();
+  return (refusal) =>
+    roleRuleSentence(refusal, t as unknown as Words, (items) =>
+      format.list(items, { type: 'conjunction' }),
+    );
+}
+
+function nameOf(key: string, t: Words): string | null {
   const parts = key.split(':');
   if (parts.length !== 3 || parts.some((part) => part === '' || part === '*')) return null;
   const [feature, subFeature, action] = parts as [string, string, string];

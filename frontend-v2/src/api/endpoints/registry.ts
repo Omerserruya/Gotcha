@@ -77,6 +77,8 @@ export const permissionEndpoints = {
   role: (roleId: string) => endpoint('/api/permissions/roles/{roleId}', { roleId }),
   roleFeatures: (roleId: string) =>
     endpoint('/api/permissions/roles/{roleId}/features', { roleId }),
+  /** A built-in role back to its defaults (auth 30d610da); 409 NOT_BUILTIN for any other. */
+  roleReset: (roleId: string) => endpoint('/api/permissions/roles/{roleId}/reset', { roleId }),
 
   /** One person: profile, role assignments with scope, and overrides. */
   user: (userId: string) => endpoint('/api/permissions/users/{userId}', { userId }),

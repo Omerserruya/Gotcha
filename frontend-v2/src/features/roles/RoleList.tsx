@@ -3,7 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { Lock } from 'lucide-react';
 
 import type { Member } from '@/api/contracts/people';
-import { allowsEverything, isEditable, type Role } from '@/api/contracts/roles';
+import { allowsEverything, isEditable, isMergedAdmin, type Role } from '@/api/contracts/roles';
 import rowLink from '@/design-system/styles/row-link.module.css';
 import { Link } from '@/i18n/navigation';
 
@@ -26,6 +26,14 @@ import styles from './Roles.module.css';
  * So a role is described by **how many permissions it holds**, and the
  * built-in ones carry the sentence the platform itself uses for them. A
  * custom role gets no prose, because nobody wrote any.
+ *
+ * ── BUILT-IN ROLES ARE EDITABLE (auth 30d610da) ──
+ * Wherever the server says `editable`, a built-in row opens in the form like
+ * a custom one, and the lock is drawn only on a role that is not. One the
+ * workspace changed says so, and is counted rather than described: the
+ * platform's sentence is about its defaults, which it no longer holds.
+ * Admin is part of Owner now: the list has it only while someone still holds
+ * it, and then it is fixed and says so.
  */
 export async function RoleList({
   roles,
@@ -62,7 +70,7 @@ export async function RoleList({
         {roles.map((role) => (
           <li
             key={role.id}
-            // A custom role's whole row opens it; a built-in one has nothing to open.
+            // An editable role's whole row opens it; a fixed one has nothing to open.
             className={[styles.row, isEditable(role) ? rowLink.row : ''].join(' ').trim()}
             data-testid={`role-${role.id}`}
             data-builtin={role.isSystem ? 'yes' : 'no'}
@@ -71,8 +79,8 @@ export async function RoleList({
               <span className={styles.name}>{roleNameOf(role, words)}</span>
               {role.isSystem ? (
                 <span className={styles.kind} data-testid={`builtin-${role.id}`}>
-                  <Lock size={11} aria-hidden="true" />
-                  {t('builtin')}
+                  {isEditable(role) ? null : <Lock size={11} aria-hidden="true" />}
+                  {role.customized ? t('builtinChanged') : t('builtin')}
                 </span>
               ) : (
                 // No creator is recorded, so "Custom", never "Custom · by Maya".
@@ -87,10 +95,12 @@ export async function RoleList({
               counting it read "Allows one thing" under "everything".
             */}
             <span className={styles.colAllows} data-testid={`allows-${role.id}`}>
-              {roleDescriptionOf(role, words) ??
-                (allowsEverything(role)
-                  ? t('allowsEverything')
-                  : t('allows', { count: role.features.length }))}
+              {isMergedAdmin(role)
+                ? t('merged')
+                : ((role.customized ? null : roleDescriptionOf(role, words)) ??
+                  (allowsEverything(role)
+                    ? t('allowsEverything')
+                    : t('allows', { count: role.features.length })))}
             </span>
 
             <span className={styles.colPeople} data-testid={`members-${role.id}`}>
@@ -124,9 +134,9 @@ export async function RoleList({
             </span>
 
             {/*
-              A built-in role is never edited - the route refuses it - so its
-              cell is empty (no Duplicate: Omer, 2026-10-11). A custom one
-              opens in the 12c form, saved over it.
+              An editable role - custom, or built in within its ceiling -
+              opens in the 12c form, saved over it. A fixed one's cell is
+              empty (no Duplicate: Omer, 2026-10-11).
             */}
             <span className={styles.colAction} data-testid={`action-${role.id}`}>
               {isEditable(role) ? (
