@@ -3,9 +3,11 @@ import { readFileSync } from 'node:fs';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
+import type React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import inbox from '@/i18n/messages/en/inbox.json';
+import navigation from '@/i18n/messages/en/navigation.json';
 
 /*
  * ⚠⚠ EVERY ACTION HERE CHANGES A REAL CONVERSATION, and two of them greet a
@@ -22,6 +24,24 @@ const actions = vi.hoisted(() => ({
 }));
 vi.mock('./conversation-actions', () => actions);
 
+/** The locale-aware router: where a verb on one row sends the list. */
+const push = vi.hoisted(() => vi.fn());
+vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ push }),
+  Link: ({
+    href,
+    children,
+    ...rest
+  }: {
+    href: { pathname: string; query: Record<string, string> };
+    children: React.ReactNode;
+  }) => (
+    <a {...rest} href={`${href.pathname}?${new URLSearchParams(href.query).toString()}`}>
+      {children}
+    </a>
+  ),
+}));
+
 import { QueueMenu } from './QueueMenu';
 import { clearSelected, toggleSelected } from './queue-selection';
 
@@ -33,7 +53,7 @@ const rows = [
 
 const show = (over: { role?: string | null; greeting?: boolean | null } = {}) =>
   render(
-    <NextIntlClientProvider locale="en" messages={{ inbox }}>
+    <NextIntlClientProvider locale="en" messages={{ inbox, navigation }}>
       <QueueMenu
         rows={rows}
         meId="me"
@@ -59,6 +79,7 @@ const rightClick = (el: HTMLElement) => fireEvent.contextMenu(el, { clientX: 10,
 
 beforeEach(() => {
   for (const fn of Object.values(actions)) fn.mockReset().mockResolvedValue({ ok: true });
+  push.mockReset();
 });
 afterEach(() => act(() => clearSelected()));
 
@@ -205,7 +226,7 @@ describe('★★ Stop AI and Back to the AI, from the menu', () => {
   ];
   const showAi = () =>
     render(
-      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+      <NextIntlClientProvider locale="en" messages={{ inbox, navigation }}>
         <QueueMenu rows={aiRows} meId="me" role="AGENT" colleagues={[]} greeting={true}>
           <ol>
             {aiRows.map((row) => (
@@ -234,5 +255,59 @@ describe('★★ Stop AI and Back to the AI, from the menu', () => {
     rightClick(screen.getByTestId('row-a2'));
     await userEvent.click(await screen.findByTestId('menu-back-to-ai'));
     expect(actions.returnToAi).toHaveBeenCalledWith('a2');
+    // and the list follows it into "Handled by GOTCHA", still open
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        { pathname: '/inbox', query: { view: 'gotcha', c: 'a2' } },
+        { scroll: false },
+      ),
+    );
+  });
+});
+
+describe('★★ the list follows the conversation, as the header’s buttons do (2026-10-11)', () => {
+  it('★★ Assign to me on one row: to "Assigned to me", that conversation open', async () => {
+    show();
+    rightClick(screen.getByTestId('row-c1'));
+    await userEvent.click(screen.getByTestId('menu-assign-me'));
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    expect(push).toHaveBeenCalledWith(
+      { pathname: '/inbox', query: { view: 'mine', c: 'c1' } },
+      { scroll: false },
+    );
+    expect(screen.queryByTestId('queue-menu-notice')).toBeNull();
+  });
+
+  it('★★ several picked: the list stays, and says where they went with a link', async () => {
+    act(() => {
+      toggleSelected('c1');
+      toggleSelected('c3');
+    });
+    show();
+    rightClick(screen.getByTestId('row-c1'));
+    await userEvent.click(screen.getByTestId('menu-assign-me'));
+    const notice = await screen.findByTestId('queue-menu-notice');
+    expect(notice).toHaveTextContent(/^2 conversations moved to Assigned to me\.$/);
+    expect(screen.getByTestId('queue-menu-moved-link')).toHaveAttribute('href', '/inbox?view=mine');
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('⚠⚠ a refused one stays where it is and says why', async () => {
+    actions.claimConversation.mockResolvedValueOnce({ ok: false, reason: 'already_claimed' });
+    show();
+    rightClick(screen.getByTestId('row-c1'));
+    await userEvent.click(screen.getByTestId('menu-assign-me'));
+    expect(await screen.findByTestId('queue-menu-notice')).toHaveTextContent(
+      inbox.verbs.problem.already_claimed,
+    );
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('⚠ an action that moves nothing between views (Resolve) does not move the list', async () => {
+    show();
+    rightClick(screen.getByTestId('row-c1'));
+    await userEvent.click(screen.getByTestId('menu-resolve'));
+    await waitFor(() => expect(actions.closeConversation).toHaveBeenCalledWith('c1'));
+    expect(push).not.toHaveBeenCalled();
   });
 });

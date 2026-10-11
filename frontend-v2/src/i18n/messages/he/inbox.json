@@ -130,7 +130,8 @@
       "selected": "{count} נבחרו - קליק ימני לפעולות",
       "clearSelection": "ניקוי הבחירה",
       "stopAi": "עצירת ה‑AI",
-      "backToAi": "החזרה ל‑AI"
+      "backToAi": "החזרה ל‑AI",
+      "moved": "{count, plural, one {שיחה אחת עברה} other {# שיחות עברו}} לתצוגה <link>{view}</link>."
     },
     "period": {
       "range": "נפתחו בין {from} ל־{to}",

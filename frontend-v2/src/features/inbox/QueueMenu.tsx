@@ -15,6 +15,7 @@ import {
   ContextMenuTrigger,
 } from '@/design-system/primitives/overlay/ContextMenu';
 import { Dialog, DialogClose, DialogContent } from '@/design-system/primitives/overlay/Dialog';
+import { Link, useRouter } from '@/i18n/navigation';
 
 import {
   claimConversation,
@@ -26,6 +27,7 @@ import {
   transferConversation,
   type VerbResult,
 } from './conversation-actions';
+import { inboxQuery, viewAfter, type InboxView } from './inbox-views';
 import { menuPlan, type MenuRow } from './queue-menu-rules';
 import { clearSelected, currentSelection, useSelection } from './queue-selection';
 import styles from './Inbox.module.css';
@@ -66,10 +68,15 @@ export function QueueMenu({
 }) {
   const t = useTranslations('inbox.queue.menu');
   const problems = useTranslations('inbox.verbs.problem');
+  const viewName = useTranslations('navigation.inbox');
+  const router = useRouter();
   const selection = useSelection();
   const [targets, setTargets] = useState<readonly MenuRow[]>([]);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  /** A sentence, or "N moved to <view>" with a link there. */
+  const [notice, setNotice] = useState<
+    string | { readonly moved: number; readonly view: InboxView } | null
+  >(null);
   const [confirming, setConfirming] = useState(false);
 
   const plan = menuPlan(targets, { meId, role, hasColleagues: colleagues.length > 0 });
@@ -98,8 +105,19 @@ export function QueueMenu({
     setTargets(rows.filter((it) => ids.includes(it.id)));
   };
 
-  /** Run one action over its targets, and say how it went. */
-  const run = async (ids: readonly string[], action: (id: string) => Promise<VerbResult>) => {
+  /**
+   * Run one action over its targets, and say how it went.
+   *
+   * ★★ `landsOn`: the view the conversations now live in, as the header's
+   * buttons do (supervisor, 2026-10-11). One row: the list goes there with
+   * that conversation open. Several: the list stays put - the reader may be
+   * working through it - and says where they went, with a link.
+   */
+  const run = async (
+    ids: readonly string[],
+    action: (id: string) => Promise<VerbResult>,
+    landsOn?: InboxView,
+  ) => {
     setBusy(true);
     setNotice(null);
     let done = 0;
@@ -114,7 +132,18 @@ export function QueueMenu({
     }
     setBusy(false);
     clearSelected();
-    if (done === ids.length) return;
+    if (done === ids.length) {
+      if (landsOn === undefined) return;
+      if (ids.length === 1) {
+        router.push(
+          { pathname: '/inbox', query: inboxQuery({ view: landsOn, channel: null, c: ids[0] }) },
+          { scroll: false },
+        );
+      } else {
+        setNotice({ moved: done, view: landsOn });
+      }
+      return;
+    }
     if (ids.length === 1 && last && !last.ok) {
       setNotice(problems(last.reason as 'failed'));
     } else {
@@ -151,7 +180,24 @@ export function QueueMenu({
       ) : null}
       {notice ? (
         <p className={styles.queueNotice} data-testid="queue-menu-notice" role="status">
-          {notice}
+          {typeof notice === 'string'
+            ? notice
+            : t.rich('moved', {
+                count: notice.moved,
+                view: viewName(notice.view),
+                link: (chunks) => (
+                  <Link
+                    href={{
+                      pathname: '/inbox',
+                      query: inboxQuery({ view: notice.view, channel: null }),
+                    }}
+                    className={styles.queueNoticeAction}
+                    data-testid="queue-menu-moved-link"
+                  >
+                    {chunks}
+                  </Link>
+                ),
+              })}
         </p>
       ) : null}
 
@@ -166,7 +212,9 @@ export function QueueMenu({
             <ContextMenuItem
               data-testid="menu-assign-me"
               disabled={busy}
-              onSelect={() => void run(plan.assignToMe, claimConversation)}
+              onSelect={() =>
+                void run(plan.assignToMe, claimConversation, viewAfter('claim', meId !== null))
+              }
             >
               <UserPlus size={13} aria-hidden="true" />
               <span className={styles.menuText}>
@@ -228,7 +276,9 @@ export function QueueMenu({
             <ContextMenuItem
               data-testid="menu-back-to-ai"
               disabled={busy}
-              onSelect={() => void run(plan.backToAi, returnToAi)}
+              onSelect={() =>
+                void run(plan.backToAi, returnToAi, viewAfter('returnToAi', meId !== null))
+              }
             >
               <Bot size={13} aria-hidden="true" />
               {t('backToAi')}

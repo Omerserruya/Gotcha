@@ -42,6 +42,8 @@ const render = (ui: ReactNode) =>
   });
 
 vi.mock('@/i18n/navigation', () => ({
+  // The queue's menu moves the list after a verb; nothing here presses one.
+  useRouter: () => ({ push: vi.fn() }),
   Link: ({
     href,
     children,

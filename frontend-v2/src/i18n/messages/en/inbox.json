@@ -130,7 +130,8 @@
       "selected": "{count} selected - right-click for actions",
       "clearSelection": "Clear the selection",
       "stopAi": "Stop AI",
-      "backToAi": "Back to the AI"
+      "backToAi": "Back to the AI",
+      "moved": "{count, plural, one {One conversation moved} other {# conversations moved}} to <link>{view}</link>."
     },
     "period": {
       "range": "Started {from} to {to}",
