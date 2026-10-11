@@ -140,12 +140,36 @@ router.get("/workspace", READ, async (req: Request, res: Response) => {
 
 interface FieldError { field: string; message: string }
 
+/**
+ * A website as onboarding stores it: the origin, lowercased host, scheme kept
+ * (https assumed when none is typed). Only http(s), and only a real host name -
+ * not an IP or a bare word.
+ */
+export function normalizeWebsite(raw: string): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const withProto = /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`;
+  try {
+    const u = new URL(withProto);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    if (u.username || u.password) return null;
+    const host = u.hostname.toLowerCase();
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) return null;
+    return `${u.protocol}//${host}${u.port ? `:${u.port}` : ""}`;
+  } catch {
+    return null;
+  }
+}
+
 router.patch("/workspace", WRITE, async (req: Request, res: Response) => {
   const tenantId = req.tenantId!;
   const body = (req.body ?? {}) as Record<string, unknown>;
   const errors: FieldError[] = [];
 
-  const known = new Set(["name", "description", "address", "currency", "languages", "timezone", "hours"]);
+  // website, industry and country joined the editable set (2026-10-11: "can't
+  // change the business details there"). Saving a website NEVER starts a
+  // re-scan; "Scan again" (POST /workspace/scan) stays the only way.
+  const known = new Set(["name", "description", "address", "currency", "languages", "timezone", "hours", "website", "industry", "country"]);
   for (const key of Object.keys(body)) {
     if (!known.has(key)) errors.push({ field: key, message: `unknown field "${key}"` });
   }
@@ -172,6 +196,30 @@ router.patch("/workspace", WRITE, async (req: Request, res: Response) => {
     if (v === null) currency = null;
     else if (typeof v === "string" && /^[A-Za-z]{3}$/.test(v.trim())) currency = v.trim().toUpperCase();
     else errors.push({ field: "currency", message: "currency must be a three-letter ISO-4217 code, or null" });
+  }
+
+  // Stored as the origin, the same form onboarding writes (https://host).
+  let website: string | null | undefined;
+  if ("website" in body) {
+    const v = body.website;
+    if (v === null || (typeof v === "string" && !v.trim())) website = null;
+    else if (typeof v === "string") {
+      const n = normalizeWebsite(v);
+      if (n) website = n;
+      else errors.push({ field: "website", message: "website must be an http(s) address, like https://example.com" });
+    } else errors.push({ field: "website", message: "website must be a string, or null" });
+  }
+
+  // The column is required, so it can be changed but not cleared; a free
+  // string up to 120 characters, as onboarding takes it.
+  const industry = str("industry", 120);
+
+  let country: string | null | undefined;
+  if ("country" in body) {
+    const v = body.country;
+    if (v === null) country = null;
+    else if (typeof v === "string" && /^[A-Za-z]{2}$/.test(v.trim())) country = v.trim().toUpperCase();
+    else errors.push({ field: "country", message: "country must be a two-letter ISO-3166 code, or null" });
   }
 
   let languages: string[] | undefined;
@@ -228,6 +276,9 @@ router.patch("/workspace", WRITE, async (req: Request, res: Response) => {
     if (description !== undefined) profilePatch.businessDescription = description;
     if (address !== undefined) profilePatch.address = address;
     if (currency !== undefined) profilePatch.currency = currency;
+    if (website !== undefined) profilePatch.websiteDomain = website;
+    if (industry !== undefined) profilePatch.industry = industry;
+    if (country !== undefined) profilePatch.country = country;
     // Stored as the single column that exists. The list is the contract; the
     // storage catching up is a later change that will not move the shape.
     //
@@ -249,6 +300,9 @@ router.patch("/workspace", WRITE, async (req: Request, res: Response) => {
           address: true,
           currency: true,
           primaryLanguage: true,
+          websiteDomain: true,
+          industry: true,
+          country: true,
         },
       });
       if (!existing) {
