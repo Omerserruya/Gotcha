@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +10,7 @@ import {
   type Automation,
   type Catalog,
 } from '@/api/contracts/automations';
+import plateStyles from '@/design-system/brand/channel-plate.module.css';
 import automationsMessages from '@/i18n/messages/en/automations.json';
 import commonMessages from '@/i18n/messages/en/common.json';
 import heAutomationsMessages from '@/i18n/messages/he/automations.json';
@@ -471,12 +472,38 @@ describe('★ measured on dev (e6785c4)', () => {
     expect(screen.getByTestId('node-t')).toHaveTextContent(/^Trigger · Call missed/);
   });
 
-  it('channel marks wear their channel; library steps carry a mark', () => {
+  it('★★ a step’s channels: each its own mark on the shared plate, named once in words', () => {
     wrap(<StepSheet catalog={catalog(false)} context="x" onPick={vi.fn()} onClose={vi.fn()} />);
-    const tones = [...screen.getByTestId('step-send_buttons').querySelectorAll('[data-tone]')].map(
-      (el) => el.getAttribute('data-tone'),
+    const plates = [
+      ...screen.getByTestId('step-send_buttons').querySelectorAll('[data-channel-plate]'),
+    ];
+    expect(plates.map((plate) => plate.querySelector('svg')?.getAttribute('data-glyph'))).toEqual([
+      'whatsapp',
+      'instagram',
+    ]);
+    for (const plate of plates) expect(plate.classList).toContain(plateStyles.plate);
+    // The row of them is one image, named in words; each plate is decorative.
+    expect(
+      within(screen.getByTestId('step-send_buttons')).getByRole('img', {
+        name: 'WhatsApp, Instagram',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('★★ a row whose trigger names one channel wears it on the shared plate', () => {
+    wrap(
+      <AutomationsList
+        automations={[
+          automation({ trigger: { type: 'message_received', config: { channels: ['WHATSAPP'] } } }),
+        ]}
+      />,
     );
-    expect(tones).toEqual(['whatsapp', 'instagram']);
+    const plate = screen.getByTestId('automation-a1').querySelector('[data-channel-plate]');
+    expect(plate).toHaveAttribute('data-channel-plate', 'lg');
+    expect(plate?.classList).toContain(plateStyles.plate);
+    expect(plate?.querySelector('svg')).toHaveAttribute('data-glyph', 'whatsapp');
+    // Decorative, as the tile was: the automation's name is the row's name.
+    expect(plate?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('the builder library: an icon per step', () => {

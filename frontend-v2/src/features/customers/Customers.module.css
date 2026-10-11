@@ -85,42 +85,18 @@
     text-align: center;
   }
 
+  /*
+   * The corner badge: the shared plate (`ChannelPlate`, `xs`) in a cut of the
+   * row's own colour, so it cuts the avatar's edge rather than floating on it.
+   */
   .channelBadge {
     position: absolute;
     inset-inline-end: -3px;
     inset-block-end: -3px;
-    inline-size: 17px;
-    block-size: 17px;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px solid var(--panel-field);
-    border-radius: 6px;
-  }
-
-  .channelBadge[data-tone='whatsapp'] {
-    background-color: var(--channel-whatsapp-surface);
-    color: var(--channel-whatsapp-mark);
-  }
-
-  .channelBadge[data-tone='instagram'] {
-    background-color: var(--channel-instagram-surface);
-    color: var(--channel-instagram-mark);
-  }
-
-  .channelBadge[data-tone='messenger'] {
-    background-color: var(--channel-messenger-surface);
-    color: var(--channel-messenger-mark);
-  }
-
-  .channelBadge[data-tone='email'] {
-    background-color: var(--channel-email-surface);
-    color: var(--channel-email-mark);
-  }
-
-  .channelBadge[data-tone='web'] {
-    background-color: var(--channel-web-surface);
-    color: var(--channel-web-mark);
+    padding: var(--border-width-thin);
+    border-radius: var(--radius-badge);
+    background-color: var(--panel-field);
   }
 
   .rowBody {
@@ -1446,16 +1422,10 @@
     color: var(--action-text);
   }
 
-  /* 26×26 tinted squares, radius 7. */
+  /* 02's 26px tinted squares, now the shared plate (`ChannelPlate`, `md`). */
   .filterSquare {
-    inline-size: 26px;
-    block-size: 26px;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 7px;
-    background-color: var(--channel-web-surface);
-    color: var(--channel-web-mark);
+    border-radius: var(--radius-chip);
   }
 
   .filterSquare[aria-current='true'] {
@@ -1469,30 +1439,6 @@
   .spineOpen:focus-visible {
     outline: var(--border-width-thick) solid var(--border-focus);
     outline-offset: 2px;
-  }
-
-  .filterSquare[data-tone='whatsapp'],
-  .spineMark[data-tone='whatsapp'] {
-    background-color: var(--channel-whatsapp-surface);
-    color: var(--channel-whatsapp-mark);
-  }
-
-  .filterSquare[data-tone='instagram'],
-  .spineMark[data-tone='instagram'] {
-    background-color: var(--channel-instagram-surface);
-    color: var(--channel-instagram-mark);
-  }
-
-  .filterSquare[data-tone='email'],
-  .spineMark[data-tone='email'] {
-    background-color: var(--channel-email-surface);
-    color: var(--channel-email-mark);
-  }
-
-  .filterSquare[data-tone='messenger'],
-  .spineMark[data-tone='messenger'] {
-    background-color: var(--channel-messenger-surface);
-    color: var(--channel-messenger-mark);
   }
 
   /* 02: main `padding:22px 44px`, `#EDE9E1` on its right. */
@@ -1586,18 +1532,6 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-4);
-  }
-
-  .spineMark {
-    flex: none;
-    inline-size: 22px;
-    block-size: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 7px;
-    background-color: var(--channel-web-surface);
-    color: var(--channel-web-mark);
   }
 
   /* 1px `#EDE9E1`, down to the next row's mark. */

@@ -211,30 +211,13 @@
     color: var(--text-muted);
   }
 
-  /* Each channel in its own colour (02's marks); grey only where the step cannot run. */
-  .channel {
-    display: inline-flex;
-    color: var(--channel-web-mark);
-  }
-
-  .channel[data-tone='whatsapp'] {
-    color: var(--channel-whatsapp-mark);
-  }
-
-  .channel[data-tone='instagram'] {
-    color: var(--channel-instagram-mark);
-  }
-
-  .channel[data-tone='email'] {
-    color: var(--channel-email-mark);
-  }
-
-  .channel[data-tone='messenger'] {
-    color: var(--channel-messenger-mark);
-  }
-
-  .item[data-unavailable] .channel {
-    color: var(--text-faint);
+  /*
+   * Each channel on the shared plate (`ChannelPlate`), in its brand's own
+   * colours; grey only where the step cannot run. A brand mark carries its
+   * colours on the element, so `color` cannot grey it - the filter does.
+   */
+  .item[data-unavailable] .channels {
+    filter: grayscale(1);
   }
 
   .dangerButton {

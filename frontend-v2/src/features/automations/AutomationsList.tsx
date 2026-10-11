@@ -29,7 +29,7 @@ import {
   type Issue,
   type TriggerType,
 } from '@/api/contracts/automations';
-import { channelMark } from '@/features/inbox/channel-marks';
+import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -466,10 +466,14 @@ function Mark({
   readonly channel: string | null;
 }) {
   if (channel && (trigger === 'message_received' || trigger === 'new_customer')) {
-    const { Icon, tone } = channelMark(channel);
+    /*
+     * The shared plate (28) in the trigger tile's 30px slot, so a channel
+     * row's name lines up with a trigger row's. Decorative, as the tile was:
+     * the automation's name beside it is the row's name.
+     */
     return (
-      <span className={styles.mark} data-tone={tone} aria-hidden="true">
-        <Icon size={15} strokeWidth={1.75} />
+      <span className={styles.markSlot}>
+        <ChannelPlate channel={channel} size="lg" decorative />
       </span>
     );
   }

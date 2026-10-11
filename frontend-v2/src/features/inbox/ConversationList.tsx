@@ -9,12 +9,12 @@ import {
   type ConversationRow,
 } from '@/api/contracts/inbox';
 
-import { ChannelMark } from './channel-marks';
 import { initials } from './initials';
 import { quoteOf } from './media';
 import { QueueMenu } from './QueueMenu';
 import { QueueRowLink } from './QueueRowLink';
 import styles from './Inbox.module.css';
+import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
 import { Link } from '@/i18n/navigation';
@@ -289,7 +289,7 @@ export async function ConversationList({
               is the row's only statement of the channel.
             */}
             <span className={styles.channelBadge} data-testid={`channel-badge-${conversation.id}`}>
-              <ChannelMark channel={conversation.channel} label={badgeLabel} size={14} />
+              <ChannelPlate channel={conversation.channel} label={badgeLabel} size="xs" />
             </span>
           </span>
 
@@ -549,7 +549,7 @@ export async function ConversationList({
                 data-testid={`filter-${filter}`}
               >
                 {/* The mark is the only thing on the chip; its label is the link's name. */}
-                <ChannelMark channel={filter} label={name} size={16} />
+                <ChannelPlate channel={filter} label={name} size="lg" />
               </Link>
             );
           })}

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { channelMark } from '@/features/inbox/channel-marks';
+import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import { Link } from '@/i18n/navigation';
 
 import styles from './WhoAnswers.module.css';
@@ -63,18 +63,14 @@ export function WhoAnswers({
         </p>
       ) : (
         <ul className={styles.list} data-testid="who-answers-channels">
-          {reach.map((item) => {
-            const { Icon, tone } = channelMark(item.channel);
-            return (
-              <li key={item.channel} className={styles.item} data-testid={`reach-${item.channel}`}>
-                <span className={styles.mark} data-tone={tone} aria-hidden="true">
-                  <Icon size={12} strokeWidth={1.9} />
-                </span>
-                <span className={styles.name}>{item.name}</span>
-                <span className={styles.when}>{item.when}</span>
-              </li>
-            );
-          })}
+          {reach.map((item) => (
+            <li key={item.channel} className={styles.item} data-testid={`reach-${item.channel}`}>
+              {/* Decorative: the channel's name is the next words. */}
+              <ChannelPlate channel={item.channel} size="sm" decorative />
+              <span className={styles.name}>{item.name}</span>
+              <span className={styles.when}>{item.when}</span>
+            </li>
+          ))}
         </ul>
       )}
       <p className={`${styles.where} ${className ?? ''}`.trim()}>{where}</p>

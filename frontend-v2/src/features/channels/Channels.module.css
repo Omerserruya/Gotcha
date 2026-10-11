@@ -27,38 +27,6 @@
     line-height: normal;
   }
 
-  .tile {
-    flex: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    inline-size: 34px;
-    block-size: 34px;
-    border-radius: var(--radius-item);
-    background-color: var(--channel-web-surface);
-    color: var(--channel-web-mark);
-  }
-
-  .tile[data-tone='whatsapp'] {
-    background-color: var(--channel-whatsapp-surface);
-    color: var(--channel-whatsapp-mark);
-  }
-
-  .tile[data-tone='instagram'] {
-    background-color: var(--channel-instagram-surface);
-    color: var(--channel-instagram-mark);
-  }
-
-  .tile[data-tone='email'] {
-    background-color: var(--channel-email-surface);
-    color: var(--channel-email-mark);
-  }
-
-  .tile[data-tone='messenger'] {
-    background-color: var(--channel-messenger-surface);
-    color: var(--channel-messenger-mark);
-  }
-
   .row + .row {
     border-block-start: var(--border-width-thin) solid var(--row-divider);
   }
@@ -746,18 +714,6 @@
   .panelTitleRow {
     display: flex;
     gap: var(--space-12);
-  }
-
-  .panelTile {
-    flex: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    inline-size: 40px;
-    block-size: 40px;
-    border-radius: 11px;
-    background-color: var(--channel-whatsapp-surface);
-    color: var(--channel-whatsapp-mark);
   }
 
   .panelTitles {

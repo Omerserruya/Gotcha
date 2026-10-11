@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { capabilitySchema } from '@/api/contracts/capabilities';
 import { employeeSchema } from '@/api/contracts/employees';
 import { integrationSchema } from '@/api/contracts/integrations';
+import plateStyles from '@/design-system/brand/channel-plate.module.css';
 import channels from '@/i18n/messages/en/channels.json';
 import employees from '@/i18n/messages/en/employees.json';
 
@@ -117,6 +118,17 @@ describe('★★ 07’s detail - what it is, from what the route already sends',
     expect(screen.getByTestId('reach-WEBCHAT')).toHaveTextContent(
       'Web chatSometimes (by the playbook)',
     );
+    // ★★ Each channel's mark on the shared plate; decorative, its name beside it.
+    for (const [id, glyph] of [
+      ['WHATSAPP', 'whatsapp'],
+      ['WEBCHAT', 'globe'],
+    ] as const) {
+      const plate = screen.getByTestId(`reach-${id}`).querySelector('[data-channel-plate]');
+      expect(plate).toHaveAttribute('data-channel-plate', 'sm');
+      expect(plate?.classList).toContain(plateStyles.plate);
+      expect(plate?.querySelector('svg')).toHaveAttribute('data-glyph', glyph);
+      expect(plate?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    }
     expect(card).toHaveTextContent('Decided by the playbook in Studio · Automations.');
     expect(card.querySelector('a')).toHaveAttribute('href', '/studio/automations');
     // The read replaces the line that said only where it is decided.

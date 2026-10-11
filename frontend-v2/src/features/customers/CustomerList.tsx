@@ -5,7 +5,7 @@ import { Link } from '@/i18n/navigation';
 import { customerLabel, isKnownChannel } from '@/api/contracts/customers';
 
 import fill from '@/design-system/styles/fill.module.css';
-import { channelMark } from '@/features/inbox/channel-marks';
+import { ChannelPlate } from '@/design-system/brand/channel-plate';
 
 import type { CommerceSegments, Insight } from '@/api/contracts/customer-facts';
 
@@ -141,7 +141,6 @@ export async function CustomerList({
             faded,
           }) => {
             const label = customerLabel(row);
-            const mark = channelMark(channels[0] ?? row.channel ?? null);
             const handle = row.phone ?? row.email ?? row.externalId;
             const since = lastContactAt ? sinceWords(lastContactAt, now) : null;
             const person = { primary: row, members, waiting };
@@ -166,8 +165,13 @@ export async function CustomerList({
                 >
                   <span className={styles.avatarStack} aria-hidden="true">
                     <span className={styles.avatar}>{initialsOf(label)}</span>
-                    <span className={styles.channelBadge} data-tone={mark.tone}>
-                      <mark.Icon size={9} strokeWidth={2.4} />
+                    {/* The shared plate in the badge's cut; the stack is hidden, so decorative. */}
+                    <span className={styles.channelBadge}>
+                      <ChannelPlate
+                        channel={channels[0] ?? row.channel ?? null}
+                        size="xs"
+                        decorative
+                      />
                     </span>
                   </span>
                   <span className={styles.rowBody}>

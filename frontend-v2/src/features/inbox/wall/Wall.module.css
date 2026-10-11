@@ -638,22 +638,15 @@
     gap: 10px;
   }
 
+  /*
+   * The shared plate (`ChannelPlate`, `md`), not `--copilot-well`: the marks
+   * are the brands' own colours, drawn for a light ground. On the well,
+   * Outlook's `#0A2767` measured 1.02:1 and its `#0364B8` 2.41:1 - the
+   * envelope disappeared. This only holds it in the row.
+   */
   .channelMark {
     display: flex;
     flex: none;
-    align-items: center;
-    justify-content: center;
-    inline-size: 24px;
-    block-size: 24px;
-    border-radius: 7px;
-    /*
-     * The plate, not `--copilot-well`: the marks are the brands' own colours
-     * now, drawn for a light ground. On the well, Outlook's `#0A2767` measured
-     * 1.02:1 and its `#0364B8` 2.41:1 - the envelope disappeared. Neutral
-     * glyphs (web chat, phone, plain email) take the panel's ink.
-     */
-    background-color: var(--channel-mark-plate);
-    color: var(--channel-web-mark);
   }
 
   .summaryLine {

@@ -3,6 +3,7 @@ import { createTranslator, NextIntlClientProvider } from 'next-intl';
 import type { ReactElement, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import plateStyles from '@/design-system/brand/channel-plate.module.css';
 import channels from '@/i18n/messages/en/channels.json';
 
 vi.mock('next-intl/server', () => ({
@@ -63,6 +64,15 @@ describe('★ 13b is a panel over Channels', () => {
     expect(panel).toHaveTextContent('One number');
     expect(screen.getByTestId('whatsapp-close')).toHaveAttribute('href', '/settings/channels');
     expect(panel).toHaveTextContent('numbers here');
+  });
+
+  it('★★ its tile is WhatsApp’s own mark on the shared plate, beside its name', async () => {
+    render(await WhatsAppPanel({ line: 'One number', children: null }));
+    const plate = screen.getByTestId('whatsapp-panel').querySelector('[data-channel-plate]');
+    expect(plate).toHaveAttribute('data-channel-plate', 'xxl');
+    expect(plate?.classList).toContain(plateStyles.plate);
+    expect(plate?.querySelector('svg')).toHaveAttribute('data-glyph', 'whatsapp');
+    expect(plate?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
   });
 });
 

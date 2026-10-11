@@ -1,7 +1,8 @@
-import { MessageCircle, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
 
+import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import { Link } from '@/i18n/navigation';
 
 import { PanelFoot } from './PanelFoot';
@@ -48,9 +49,8 @@ export async function WhatsAppPanel({
       <aside className={styles.panel} aria-label={t('title')}>
         <header className={styles.panelHead}>
           <div className={styles.panelTitleRow}>
-            <span className={styles.panelTile} aria-hidden="true">
-              <MessageCircle size={20} strokeWidth={1.75} />
-            </span>
+            {/* The channel's own mark on the shared plate; "WhatsApp" is the heading beside it. */}
+            <ChannelPlate channel="WHATSAPP" size="xxl" decorative />
             <span className={styles.panelTitles}>
               <h2 className={styles.panelTitle}>{t('panelTitle')}</h2>
               <span className={styles.panelLine}>{line}</span>

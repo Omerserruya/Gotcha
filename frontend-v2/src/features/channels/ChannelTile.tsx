@@ -1,25 +1,11 @@
-import { Phone } from 'lucide-react';
-
-import { channelMark } from '@/features/inbox/channel-marks';
-
-import styles from './Channels.module.css';
+import { ChannelPlate } from '@/design-system/brand/channel-plate';
 
 /**
  * 02's 34px tile on EVERY channel row - connected, connectable or calls -
- * so the names line up down the list: the channel's mark on its own surface.
+ * so the names line up down the list: the channel's mark on the shared plate
+ * (`ChannelPlate`), the one every screen draws. Decorative: the channel's
+ * name is the row's next words.
  */
 export function ChannelTile({ channel }: { readonly channel: string }) {
-  if (channel === 'VOICE') {
-    return (
-      <span className={styles.tile} data-tone="web" aria-hidden="true">
-        <Phone size={17} strokeWidth={1.75} />
-      </span>
-    );
-  }
-  const { Icon, tone } = channelMark(channel);
-  return (
-    <span className={styles.tile} data-tone={tone} aria-hidden="true">
-      <Icon size={17} strokeWidth={1.75} />
-    </span>
-  );
+  return <ChannelPlate channel={channel} size="xl" decorative />;
 }

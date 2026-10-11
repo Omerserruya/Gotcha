@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { OrderCard } from '@/api/contracts/customer-orders';
+import plateStyles from '@/design-system/brand/channel-plate.module.css';
 import channels from '@/i18n/messages/en/channels.json';
 import customers from '@/i18n/messages/en/customers.json';
 import inbox from '@/i18n/messages/en/inbox.json';
@@ -119,6 +120,12 @@ describe('★★ History across all channels - three levels over the column', ()
     expect(glyph('c1')).toHaveAttribute('data-glyph', 'whatsapp');
     expect(glyph('c2')).toHaveAttribute('data-glyph', 'instagram');
     expect(glyph('c3')).toHaveAttribute('data-glyph', 'phone');
+    // ★★ On the shared plate - the light ground the dark wall needs.
+    const plate = glyph('c1')?.closest('[data-channel-plate]');
+    expect(plate).toHaveAttribute('data-channel-plate', 'md');
+    expect(plate?.classList).toContain(plateStyles.plate);
+    // Decorative: the channel's name is the first words beside it.
+    expect(glyph('c1')).toHaveAttribute('aria-hidden', 'true');
 
     fireEvent.click(screen.getByTestId('wall-history-c1'));
     expect(screen.getByTestId('wall-drill')).toHaveAttribute('data-level', 'summary');

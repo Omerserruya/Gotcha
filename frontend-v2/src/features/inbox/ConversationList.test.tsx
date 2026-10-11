@@ -7,6 +7,7 @@ import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-
 import { describe, expect, it, vi } from 'vitest';
 
 import { conversationRowSchema, queueOrder, type ConversationRow } from '@/api/contracts/inbox';
+import plateStyles from '@/design-system/brand/channel-plate.module.css';
 import channels from '@/i18n/messages/en/channels.json';
 import common from '@/i18n/messages/en/common.json';
 import navigation from '@/i18n/messages/en/navigation.json';
@@ -643,6 +644,11 @@ describe('⚠⚠ the channel badge I said could not be built', () => {
     expect(badgeOf('c2')).toHaveAccessibleName('Email');
     expect(badgeOf('c3')).toHaveAttribute('data-glyph', 'instagram');
     expect(badgeOf('c3')).toHaveAccessibleName('Instagram');
+    // ★★ On the shared plate (Omer, 2026-10-11: "the same everywhere").
+    const plate = badgeOf('c1').closest('[data-channel-plate]');
+    expect(plate).toHaveAttribute('data-channel-plate', 'xs');
+    expect(plate?.classList).toContain(plateStyles.plate);
+    expect(screen.getByTestId('channel-badge-c1')).toContainElement(plate as HTMLElement);
   });
 
   it('⚠⚠ an unrecognised channel gets the neutral fallback, never nothing', async () => {
@@ -1211,6 +1217,12 @@ describe("★★ Wave 2 - 02's filter row, and every chip in it filters", () => 
       const mark = screen.getByTestId(`filter-${id}`).querySelector('svg');
       expect(mark).toHaveAttribute('data-channel-mark');
       expect(mark).not.toHaveAttribute('data-glyph', 'unknown');
+      // ★★ On the shared plate, and named: the mark is all the chip says.
+      const plate = mark?.closest('[data-channel-plate]');
+      expect(plate).toHaveAttribute('data-channel-plate', 'lg');
+      expect(plate?.classList).toContain(plateStyles.plate);
+      expect(mark).toHaveAttribute('role', 'img');
+      expect(mark).toHaveAccessibleName();
     }
     expect(
       screen.getByTestId('filter-WHATSAPP').querySelector('[data-glyph="whatsapp"]'),

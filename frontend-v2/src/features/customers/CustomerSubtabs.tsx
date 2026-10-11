@@ -3,12 +3,12 @@ import type { ReactNode } from 'react';
 
 import type { TimelineEvent } from '@/api/contracts/customer-detail';
 import { channelName } from '@/api/contracts/inbox';
-import { channelMark } from '@/features/inbox/channel-marks';
 import { Link } from '@/i18n/navigation';
 
 import { CUSTOMER_TABS, customerFacts, initialsOf, shortDate } from './CustomerScreen';
 import type { CustomerDetail } from './load-customer';
 import styles from './Customers.module.css';
+import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
@@ -141,23 +141,20 @@ export async function ChannelFilters({
       >
         {t('card.allChannels')}
       </Link>
-      {channels.map((channel) => {
-        const mark = channelMark(channel);
-        return (
-          <Link
-            key={channel}
-            href={{ pathname: `/customers/${contactId}`, query: { tab: 'conversations', channel } }}
-            className={styles.filterSquare}
-            data-tone={mark.tone}
-            aria-current={current === channel ? 'true' : undefined}
-            aria-label={channelName(channel, names) ?? channel}
-            title={channelName(channel, names) ?? channel}
-            data-testid={`filter-${channel}`}
-          >
-            <mark.Icon size={13} strokeWidth={2} />
-          </Link>
-        );
-      })}
+      {channels.map((channel) => (
+        <Link
+          key={channel}
+          href={{ pathname: `/customers/${contactId}`, query: { tab: 'conversations', channel } }}
+          className={styles.filterSquare}
+          aria-current={current === channel ? 'true' : undefined}
+          aria-label={channelName(channel, names) ?? channel}
+          title={channelName(channel, names) ?? channel}
+          data-testid={`filter-${channel}`}
+        >
+          {/* Decorative: the link carries the channel's name. */}
+          <ChannelPlate channel={channel} size="md" decorative />
+        </Link>
+      ))}
     </>
   );
 }
@@ -264,50 +261,43 @@ export async function ConversationsTab({
         </p>
       ) : (
         <ol className={styles.spine} data-testid="conversation-cards">
-          {cards.map((card, index) => {
-            const mark = channelMark(card.channel);
-            return (
-              <li key={card.id} className={styles.spineRow} data-testid={`conversation-${card.id}`}>
-                <span className={styles.spineWhen}>
-                  <span>{day(card.at)}</span>
-                  {/* 02 gives the time on today's row only. */}
-                  {new Date(card.at).toDateString() === now.toDateString() ? (
-                    <span className={styles.spineTime}>{time(card.at)}</span>
+          {cards.map((card, index) => (
+            <li key={card.id} className={styles.spineRow} data-testid={`conversation-${card.id}`}>
+              <span className={styles.spineWhen}>
+                <span>{day(card.at)}</span>
+                {/* 02 gives the time on today's row only. */}
+                {new Date(card.at).toDateString() === now.toDateString() ? (
+                  <span className={styles.spineTime}>{time(card.at)}</span>
+                ) : null}
+              </span>
+              <span className={styles.spineRail} aria-hidden="true">
+                <ChannelPlate channel={card.channel} size="md" decorative />
+                <span className={styles.spineLine} />
+              </span>
+              <article className={styles.spineCard} data-newest={index === 0 ? '' : undefined}>
+                <span className={styles.spineTop}>
+                  <span className={styles.spineTitle}>{card.title ?? t('card.conv.noWords')}</span>
+                  {card.imported ? (
+                    <span className={styles.spineChip}>{t('card.conv.imported')}</span>
                   ) : null}
+                  <span className={styles.spineMeta}>{channelName(card.channel, names)}</span>
                 </span>
-                <span className={styles.spineRail} aria-hidden="true">
-                  <span className={styles.spineMark} data-tone={mark.tone}>
-                    <mark.Icon size={11} strokeWidth={2.2} />
+                {card.line ? <span className={styles.spineLineText}>{card.line}</span> : null}
+                <span className={styles.spineFoot}>
+                  <span className={styles.spinePill}>
+                    {t('card.messages', { count: card.count })}
                   </span>
-                  <span className={styles.spineLine} />
+                  <Link
+                    href={{ pathname: '/inbox', query: { c: card.id } }}
+                    className={styles.spineOpen}
+                    data-testid={`open-${card.id}`}
+                  >
+                    {t('card.conv.openIt')}
+                  </Link>
                 </span>
-                <article className={styles.spineCard} data-newest={index === 0 ? '' : undefined}>
-                  <span className={styles.spineTop}>
-                    <span className={styles.spineTitle}>
-                      {card.title ?? t('card.conv.noWords')}
-                    </span>
-                    {card.imported ? (
-                      <span className={styles.spineChip}>{t('card.conv.imported')}</span>
-                    ) : null}
-                    <span className={styles.spineMeta}>{channelName(card.channel, names)}</span>
-                  </span>
-                  {card.line ? <span className={styles.spineLineText}>{card.line}</span> : null}
-                  <span className={styles.spineFoot}>
-                    <span className={styles.spinePill}>
-                      {t('card.messages', { count: card.count })}
-                    </span>
-                    <Link
-                      href={{ pathname: '/inbox', query: { c: card.id } }}
-                      className={styles.spineOpen}
-                      data-testid={`open-${card.id}`}
-                    >
-                      {t('card.conv.openIt')}
-                    </Link>
-                  </span>
-                </article>
-              </li>
-            );
-          })}
+              </article>
+            </li>
+          ))}
         </ol>
       )}
       {(older !== null && older > 0) || (older === null && mayLoadMore) ? (

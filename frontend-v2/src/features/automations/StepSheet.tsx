@@ -1,13 +1,13 @@
 'use client';
 
-import { Phone, Search, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
 import type { Catalog, CatalogItem } from '@/api/contracts/automations';
+import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog';
 import { UnavailableTag } from '@/design-system/primitives/unavailable/Unavailable';
-import { channelMark } from '@/features/inbox/channel-marks';
 
 import styles from './StepSheet.module.css';
 
@@ -202,14 +202,10 @@ function Channels({ channels }: { readonly channels: readonly string[] }) {
       role="img"
       aria-label={shown.map((c) => t(`channels.${c}` as 'channels.WHATSAPP')).join(', ')}
     >
-      {shown.slice(0, 5).map((channel) => {
-        const { Icon, tone } = channelMark(channel);
-        return (
-          <span key={channel} className={styles.channel} data-tone={tone} aria-hidden="true">
-            {channel === 'VOICE' ? <Phone size={11} /> : <Icon size={11} strokeWidth={1.75} />}
-          </span>
-        );
-      })}
+      {shown.slice(0, 5).map((channel) => (
+        // Decorative: the row of them is named above, in words.
+        <ChannelPlate key={channel} channel={channel} size="xs" decorative />
+      ))}
     </span>
   );
 }

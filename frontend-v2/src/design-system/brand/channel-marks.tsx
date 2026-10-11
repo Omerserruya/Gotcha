@@ -703,27 +703,9 @@ export function InstagramGlyph({
 }
 
 /**
- * Which tinted surface a channel's tile sits on, for the screens that draw
- * one (Automations, Channels, Customers, Employees). The mark itself is
- * `ChannelMark`; this is only the tile behind it.
- */
-const TONES: Readonly<Record<string, string>> = {
-  WHATSAPP: 'whatsapp',
-  INSTAGRAM: 'instagram',
-  MESSENGER: 'messenger',
-  EMAIL: 'email',
-  GMAIL: 'email',
-  OUTLOOK: 'email',
-};
-
-export function channelTone(channel: string | null): string {
-  return (channel !== null && Object.hasOwn(TONES, channel) && TONES[channel]) || 'web';
-}
-
-/**
- * The mark as an icon component plus its tile's tone - the shape the other
- * screens already call. `Icon` IS `ChannelMark`, decorative, because each of
- * those sites writes the channel's name beside it or labels its container.
+ * The mark as an icon component. `Icon` IS `ChannelMark`, decorative. No
+ * tinted tile's tone any more: every screen draws its mark on the one plate
+ * (`./channel-plate.tsx`); this stays for a caller that needs an icon slot.
  */
 type MarkIcon = (props: Pick<LucideProps, 'size' | 'strokeWidth'>) => ReactNode;
 
@@ -733,10 +715,7 @@ type MarkIcon = (props: Pick<LucideProps, 'size' | 'strokeWidth'>) => ReactNode;
  */
 const icons = new Map<string, MarkIcon>();
 
-export function channelMark(channel: string | null): {
-  readonly Icon: MarkIcon;
-  readonly tone: string;
-} {
+export function channelMark(channel: string | null): { readonly Icon: MarkIcon } {
   const key = channel ?? '';
   let Icon = icons.get(key);
   if (!Icon) {
@@ -745,5 +724,5 @@ export function channelMark(channel: string | null): {
     };
     icons.set(key, Icon);
   }
-  return { Icon, tone: channelTone(channel) };
+  return { Icon };
 }

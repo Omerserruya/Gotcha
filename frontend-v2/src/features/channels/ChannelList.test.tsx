@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { channelSchema, voiceChannelSchema } from '@/api/contracts/channels';
 import type { VoiceErrorReason } from '@/api/contracts/platform-errors';
 import { widgetInstallSchema } from '@/api/contracts/website-widget';
+import plateStyles from '@/design-system/brand/channel-plate.module.css';
 import channels from '@/i18n/messages/en/channels.json';
 import common from '@/i18n/messages/en/common.json';
 import heChannels from '@/i18n/messages/he/channels.json';
@@ -249,7 +250,17 @@ describe('★ 13 corrections (measurement of 9b8dd9f)', () => {
         windowDays: 30,
       }),
     );
-    expect(container.querySelector('[data-kind="connected"] [data-tone="email"]')).not.toBeNull();
+    // ★★ The shared plate (Omer, 2026-10-11), not a tinted tile per channel.
+    const plate = container.querySelector('[data-kind="connected"] [data-channel-plate]');
+    expect(plate).toHaveAttribute('data-channel-plate', 'xl');
+    expect(plate?.classList).toContain(plateStyles.plate);
+    expect(plate?.querySelector('svg')).toHaveAttribute('data-glyph', 'mail');
+    // Decorative: the channel's name is the row's next words.
+    expect(plate?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    // The web chat row wears it too.
+    expect(
+      container.querySelector('[data-kind="widget"] [data-channel-plate] [data-glyph="globe"]'),
+    ).not.toBeNull();
   });
 });
 

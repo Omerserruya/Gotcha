@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CommerceSummary, Insight } from '@/api/contracts/customer-facts';
 import { customerRowSchema, type CustomerRow } from '@/api/contracts/customers';
 import { pairKey } from '@/api/contracts/identity';
+import plateStyles from '@/design-system/brand/channel-plate.module.css';
 import messages from '@/i18n/messages/en/customers.json';
 import inboxMessages from '@/i18n/messages/en/inbox.json';
 
@@ -121,6 +122,12 @@ describe('★★ 04’s rows - what is true about them today', () => {
       // The phone is its own LTR island: in Hebrew it would lay out backwards.
       `Reach: ${String.fromCharCode(0x2066)}+972500000001${String.fromCharCode(0x2069)}`,
     );
+    // ★★ The avatar's channel badge is the shared plate, inside the hidden avatar stack.
+    const plate = screen.getByTestId('customer-k1').querySelector('[data-channel-plate]');
+    expect(plate).toHaveAttribute('data-channel-plate', 'xs');
+    expect(plate?.classList).toContain(plateStyles.plate);
+    expect(plate?.querySelector('svg')).toHaveAttribute('data-glyph', 'whatsapp');
+    expect(plate?.closest('[aria-hidden="true"]')).not.toBeNull();
   });
 
   it('★ open and their word last: "Waiting on you"; answered: no chip - a tag shows instead', async () => {

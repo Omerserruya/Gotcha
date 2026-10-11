@@ -4,9 +4,9 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useEffect, useState, useTransition, type ReactNode } from 'react';
 
 import { channelName, type InboxMessage } from '@/api/contracts/inbox';
+import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
-import { ChannelMark } from '../channel-marks';
 import type { WallConversation, WallHistory } from './load-wall';
 import { conversationMessages } from './wall-actions';
 import { historyChannels } from './wall-model';
@@ -212,7 +212,7 @@ function ConversationFacts({
         Decorative: the channel's name is the first words beside it.
       */}
       <span className={styles.channelMark} data-testid={`wall-channel-${conversation.id}`}>
-        <ChannelMark channel={conversation.channel} size={16} decorative />
+        <ChannelPlate channel={conversation.channel} size="md" decorative />
       </span>
       <span className={styles.historyText}>
         <span>

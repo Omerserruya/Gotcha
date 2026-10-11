@@ -3,6 +3,7 @@ import { createFormatter, createTranslator } from 'next-intl';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
+import plateStyles from '@/design-system/brand/channel-plate.module.css';
 import channels from '@/i18n/messages/en/channels.json';
 import customers from '@/i18n/messages/en/customers.json';
 
@@ -170,6 +171,13 @@ describe('★ the tab row', () => {
       'href',
       '/customers/k1?tab=conversations&channel=WHATSAPP',
     );
+    // ★★ Each square is the shared plate; the link names the channel, the mark is decorative.
+    const plate = screen.getByTestId('filter-WHATSAPP').querySelector('[data-channel-plate]');
+    expect(plate).toHaveAttribute('data-channel-plate', 'md');
+    expect(plate?.classList).toContain(plateStyles.plate);
+    expect(plate?.querySelector('svg')).toHaveAttribute('data-glyph', 'whatsapp');
+    expect(plate?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('filter-WHATSAPP')).toHaveAccessibleName('WhatsApp');
   });
 
   it('channelsOf: each channel once, in the order first seen', () => {
@@ -224,6 +232,13 @@ describe('★★ 04c - every conversation as a card on one spine', () => {
     expect(cards.map((li) => li.dataset.testid)).toEqual(['conversation-new', 'conversation-old']);
     expect(cards[0]!.querySelector('article')).toHaveAttribute('data-newest');
     expect(cards[1]!.querySelector('article')).not.toHaveAttribute('data-newest');
+    // ★★ Each card's mark on the spine is the shared plate.
+    const glyphs = cards.map((li) => {
+      const plate = li.querySelector('[data-channel-plate]');
+      expect(plate?.classList).toContain(plateStyles.plate);
+      return plate?.querySelector('svg')?.getAttribute('data-glyph');
+    });
+    expect(glyphs).toEqual(['whatsapp', 'mail']);
   });
 
   it('★ the title is their first words, the line their latest, the pill the count', async () => {
