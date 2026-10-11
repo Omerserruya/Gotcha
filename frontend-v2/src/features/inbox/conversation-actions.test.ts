@@ -17,14 +17,18 @@ import { ApiError } from '@/api/client/api-error';
  * had no test file beside it.
  */
 const post = vi.hoisted(() => vi.fn());
-vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ post }) }));
-vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+const del = vi.hoisted(() => vi.fn());
+const revalidatePath = vi.hoisted(() => vi.fn());
+vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ post, delete: del }) }));
+vi.mock('next/cache', () => ({ revalidatePath }));
 vi.mock('server-only', () => ({}));
 
 const actions = async () => import('./conversation-actions');
 
 beforeEach(() => {
   post.mockReset().mockResolvedValue({});
+  del.mockReset().mockResolvedValue({});
+  revalidatePath.mockReset();
 });
 
 describe('⚠⚠ the two the right-click menu needed, and the platform can do', () => {
@@ -136,5 +140,60 @@ describe('★ and the three verbs that were already here, now tested directly', 
       reason: 'failed',
     });
     expect(post).not.toHaveBeenCalled();
+  });
+});
+
+describe('★★ read and unread, for the person pressing it (Backend 7b69c714)', () => {
+  it('★★ Mark as unread POSTs to /unread, and the list re-reads', async () => {
+    const { markConversationUnread } = await actions();
+    await expect(markConversationUnread('c1')).resolves.toEqual({ ok: true });
+    const sent = post.mock.calls.at(-1)?.[0] as { endpoint: { path: string } };
+    expect(sent.endpoint.path).toBe('/api/conversations/c1/unread');
+    expect(del).not.toHaveBeenCalled();
+    expect(revalidatePath).toHaveBeenCalledTimes(1);
+  });
+
+  it('★★ Mark as read DELETEs /unread - never a POST', async () => {
+    const { markConversationRead } = await actions();
+    await expect(markConversationRead('c1')).resolves.toEqual({ ok: true });
+    const sent = del.mock.calls.at(-1)?.[0] as { endpoint: { path: string } };
+    expect(sent.endpoint.path).toBe('/api/conversations/c1/unread');
+    expect(post).not.toHaveBeenCalled();
+    expect(revalidatePath).toHaveBeenCalledTimes(1);
+  });
+
+  it('⚠ a 404 is "not found"; anything else the generic failure; never thrown', async () => {
+    const { markConversationRead, markConversationUnread } = await actions();
+    post.mockRejectedValue(new ApiError({ kind: 'server', status: 404 }));
+    del.mockRejectedValue(new ApiError({ kind: 'server', status: 404 }));
+    await expect(markConversationUnread('c1')).resolves.toEqual({ ok: false, reason: 'not_found' });
+    await expect(markConversationRead('c1')).resolves.toEqual({ ok: false, reason: 'not_found' });
+    post.mockRejectedValue(new Error('socket hang up'));
+    del.mockRejectedValue(new ApiError({ kind: 'server', status: 500 }));
+    await expect(markConversationUnread('c1')).resolves.toEqual({ ok: false, reason: 'failed' });
+    await expect(markConversationRead('c1')).resolves.toEqual({ ok: false, reason: 'failed' });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('★★ opening: DELETE /unread, a re-read only when the row was drawn unread', async () => {
+    const { markReadOnOpen } = await actions();
+    await markReadOnOpen('c1', false);
+    expect(del.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({
+        endpoint: expect.objectContaining({ path: '/api/conversations/c1/unread' }),
+      }),
+    );
+    expect(revalidatePath).not.toHaveBeenCalled();
+    await markReadOnOpen('c1', true);
+    expect(revalidatePath).toHaveBeenCalledTimes(1);
+  });
+
+  it('⚠⚠ opening is silent: a failure resolves, re-reads nothing, and throws nothing', async () => {
+    const { markReadOnOpen } = await actions();
+    del.mockRejectedValue(new ApiError({ kind: 'server', status: 500 }));
+    await expect(markReadOnOpen('c1', true)).resolves.toBeUndefined();
+    del.mockRejectedValue(new Error('socket hang up'));
+    await expect(markReadOnOpen('c1', true)).resolves.toBeUndefined();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

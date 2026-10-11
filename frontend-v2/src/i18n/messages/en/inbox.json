@@ -89,6 +89,8 @@
     "empty": "Nothing is waiting.",
     "unavailable": "We couldn't read the queue just now.",
     "unnamed": "Someone",
+    "unread": "Unread",
+    "unreadMessages": "{count, plural, one {# unread message} other {# unread messages}}",
     "unknownChannel": "Unknown channel",
     "undated": "{count, plural, =1 {One conversation has no last-message time, so we can't place it in the order above} other {# conversations have no last-message time, so we can't place them in the order above}}",
     "capAll": "{count, plural, =0 {} =1 {One conversation, and that's all of them.} other {# conversations, and that's all of them.}}",
@@ -131,7 +133,11 @@
       "clearSelection": "Clear the selection",
       "stopAi": "Stop AI",
       "backToAi": "Back to the AI",
-      "moved": "{count, plural, one {One conversation moved} other {# conversations moved}} to <link>{view}</link>."
+      "moved": "{count, plural, one {One conversation moved} other {# conversations moved}} to <link>{view}</link>.",
+      "markUnread": "Mark as unread",
+      "markRead": "Mark as read",
+      "markedUnread": "{count, plural, one {Marked as unread, for you only.} other {# conversations marked as unread, for you only.}}",
+      "markedRead": "{count, plural, one {Marked as read, for you only.} other {# conversations marked as read, for you only.}}"
     },
     "period": {
       "range": "Started {from} to {to}",

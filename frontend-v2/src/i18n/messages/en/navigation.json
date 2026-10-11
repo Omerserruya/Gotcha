@@ -22,6 +22,7 @@
   "skipToContent": "Skip to main content",
   "toggleSidebar": "Toggle navigation",
   "commandPalette": "Search or do anything",
+  "unreadCount": "{count, plural, one {# unread conversation} other {# unread conversations}}",
   "mainNavigation": "Main navigation",
   "inbox": {
     "queue": "Waiting in queue",

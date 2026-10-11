@@ -1,6 +1,16 @@
 'use client';
 
-import { Bot, Check, CornerUpLeft, Hand, Trash2, UserPlus, Users } from 'lucide-react';
+import {
+  Bot,
+  Check,
+  CornerUpLeft,
+  Hand,
+  Mail,
+  MailOpen,
+  Trash2,
+  UserPlus,
+  Users,
+} from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState, type MouseEvent, type ReactNode } from 'react';
 
@@ -22,6 +32,8 @@ import {
   stopAi,
   closeConversation,
   deleteConversation,
+  markConversationRead,
+  markConversationUnread,
   releaseConversation,
   returnToAi,
   transferConversation,
@@ -45,6 +57,8 @@ import styles from './Inbox.module.css';
  *
  * ⚠ The menu is never an action's only way in: Take control, Resolve and
  *   Transfer are in the conversation header too (the primitive's own rule).
+ *   Mark as read is what opening a conversation does. Mark as unread is the
+ *   exception: the header has no menu to carry it, and is not given one.
  *
  * ⚠⚠ ASSIGNING GREETS THE CUSTOMER. Claim and reassign both enqueue the
  *    workspace's greeting on the customer's channel. The items say so before
@@ -112,11 +126,16 @@ export function QueueMenu({
    * buttons do (supervisor, 2026-10-11). One row: the list goes there with
    * that conversation open. Several: the list stays put - the reader may be
    * working through it - and says where they went, with a link.
+   *
+   * `said`: a sentence for when every one went through - for an action whose
+   * effect is otherwise only a mark on the row (read and unread, which are
+   * this person's alone, and say so).
    */
   const run = async (
     ids: readonly string[],
     action: (id: string) => Promise<VerbResult>,
     landsOn?: InboxView,
+    said?: (count: number) => string,
   ) => {
     setBusy(true);
     setNotice(null);
@@ -133,6 +152,7 @@ export function QueueMenu({
     setBusy(false);
     clearSelected();
     if (done === ids.length) {
+      if (said) setNotice(said(done));
       if (landsOn === undefined) return;
       if (ids.length === 1) {
         router.push(
@@ -162,7 +182,7 @@ export function QueueMenu({
       plan.stopAi.length +
       plan.backToAi.length >
     0;
-  const anySecond = plan.resolve.length > 0;
+  const anySecond = plan.markUnread.length + plan.markRead.length + plan.resolve.length > 0;
 
   return (
     <>
@@ -286,6 +306,41 @@ export function QueueMenu({
           ) : null}
 
           {anyFirst && anySecond ? <ContextMenuSeparator /> : null}
+
+          {/*
+            ★ READ AND UNREAD, FOR THIS PERSON ONLY - `menuPlan` picks which:
+              the one that changes the row, or Mark as unread alone when the
+              list did not say. With several picked, each acts on its share.
+          */}
+          {plan.markUnread.length > 0 ? (
+            <ContextMenuItem
+              data-testid="menu-mark-unread"
+              disabled={busy}
+              onSelect={() =>
+                void run(plan.markUnread, markConversationUnread, undefined, (count) =>
+                  t('markedUnread', { count }),
+                )
+              }
+            >
+              <Mail size={13} aria-hidden="true" />
+              {t('markUnread')}
+            </ContextMenuItem>
+          ) : null}
+
+          {plan.markRead.length > 0 ? (
+            <ContextMenuItem
+              data-testid="menu-mark-read"
+              disabled={busy}
+              onSelect={() =>
+                void run(plan.markRead, markConversationRead, undefined, (count) =>
+                  t('markedRead', { count }),
+                )
+              }
+            >
+              <MailOpen size={13} aria-hidden="true" />
+              {t('markRead')}
+            </ContextMenuItem>
+          ) : null}
 
           {plan.resolve.length > 0 ? (
             <ContextMenuItem

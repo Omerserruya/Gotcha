@@ -1,3 +1,5 @@
+import { rowIsUnread } from '@/api/contracts/inbox';
+
 /**
  * Which of the queue menu's actions apply, and to which conversations.
  *
@@ -18,12 +20,25 @@
  *                                     rows it stands in for "Assign to me":
  *                                     the same route, said for what it does
  *   Back to the AI        /return-to-ai  taken from an AI that is still on it
+ *   Mark as unread        POST /unread    not already unread for me - and
+ *                                     a row whose read state was NOT SENT
+ *                                     counts as not unread (see below)
+ *   Mark as read          DELETE /unread  only what the list said is unread
+ *                                     (`unread`, or a positive `unreadCount`)
  *   Mark resolved         /close      anything not already CLOSED
  *   Delete                DELETE      ADMIN and SYSTEM_ADMIN only - the route
  *                                     403s everyone else
  *
- * Not here, and on purpose: Mark as unread and Archive - the routes exist,
- * Omer did not ask for them (2026-10-05).
+ * ★★ READ AND UNREAD ARE THIS PERSON'S, AND THE ROW MAY NOT SAY WHICH.
+ *   With `unread` on the row, the menu offers the one that changes it. With
+ *   no `unread` (a list route older than the field) only Mark as unread:
+ *   it is the one a person reaches for on purpose, and it lands - the dot
+ *   follows the day the list reports it. Mark as read is what opening a
+ *   conversation already does; offered on a row nobody drew unread, it
+ *   would be a second item whose effect cannot be seen.
+ *
+ * Not here, and on purpose: Archive - the route exists, Omer did not ask for
+ * it (2026-10-05).
  */
 
 export interface MenuRow {
@@ -34,6 +49,9 @@ export interface MenuRow {
   readonly assignedAiAgentId?: string | null;
   readonly isHandedOver?: boolean;
   readonly handledBy?: string | null;
+  /** Unread for the viewer, as the list said; `undefined` when it did not say. */
+  readonly unread?: boolean;
+  readonly unreadCount?: number;
 }
 
 export interface MenuViewer {
@@ -49,6 +67,8 @@ export interface MenuPlan {
   readonly release: readonly string[];
   readonly stopAi: readonly string[];
   readonly backToAi: readonly string[];
+  readonly markUnread: readonly string[];
+  readonly markRead: readonly string[];
   readonly resolve: readonly string[];
   readonly remove: readonly string[];
 }
@@ -83,6 +103,8 @@ export function menuPlan(targets: readonly MenuRow[], viewer: MenuViewer): MenuP
     ),
     assignToSomeone: viewer.hasColleagues ? ids((row) => admin || mine(row)) : [],
     release: ids((row) => row.assignedAgentId !== null && (admin || mine(row))),
+    markUnread: ids((row) => !rowIsUnread(row)),
+    markRead: ids(rowIsUnread),
     resolve: ids((row) => row.status !== 'CLOSED'),
     remove: admin ? ids(() => true) : [],
   };

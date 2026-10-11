@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import inbox from '@/i18n/messages/en/inbox.json';
 import navigation from '@/i18n/messages/en/navigation.json';
+import heInbox from '@/i18n/messages/he/inbox.json';
+import heNavigation from '@/i18n/messages/he/navigation.json';
 
 /*
  * ⚠⚠ EVERY ACTION HERE CHANGES A REAL CONVERSATION, and two of them greet a
@@ -21,6 +23,8 @@ const actions = vi.hoisted(() => ({
   deleteConversation: vi.fn(),
   returnToAi: vi.fn(),
   stopAi: vi.fn(),
+  markConversationRead: vi.fn(),
+  markConversationUnread: vi.fn(),
 }));
 vi.mock('./conversation-actions', () => actions);
 
@@ -94,11 +98,11 @@ describe('★★ right-click a row: the menu acts on that row', () => {
     expect(screen.getByTestId('menu-delete')).toBeInTheDocument();
   });
 
-  it('⚠ never the three without a live backend', () => {
+  it('⚠ never the two nobody asked for (pause, archive)', () => {
     show();
     rightClick(screen.getByTestId('row-c1'));
     const menu = screen.getByTestId('queue-menu');
-    expect(menu.textContent).not.toMatch(/pause|unread|archive/i);
+    expect(menu.textContent).not.toMatch(/pause|archive/i);
   });
 
   it('⚠⚠ Assign to me says it greets the customer - before it is pressed', () => {
@@ -309,5 +313,122 @@ describe('★★ the list follows the conversation, as the header’s buttons do
     await userEvent.click(screen.getByTestId('menu-resolve'));
     await waitFor(() => expect(actions.closeConversation).toHaveBeenCalledWith('c1'));
     expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe('★★ Mark as unread / Mark as read - this person’s, per row', () => {
+  const readRows = [
+    { id: 'u1', status: 'OPEN', assignedAgentId: null, unread: true },
+    { id: 'u2', status: 'OPEN', assignedAgentId: null, unreadCount: 3 },
+    { id: 'r1', status: 'OPEN', assignedAgentId: null, unread: false },
+    { id: 'x1', status: 'OPEN', assignedAgentId: null },
+  ];
+  const showRead = (
+    locale: 'en' | 'he' = 'en',
+    msgs: Record<string, unknown> = { inbox, navigation },
+  ) =>
+    render(
+      <NextIntlClientProvider locale={locale} messages={msgs}>
+        <QueueMenu rows={readRows} meId="me" role="AGENT" colleagues={[]} greeting={false}>
+          <ol>
+            {readRows.map((row) => (
+              <li key={row.id}>
+                <a href="#" data-conversation-id={row.id} data-testid={`row-${row.id}`}>
+                  {row.id}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </QueueMenu>
+      </NextIntlClientProvider>,
+    );
+
+  it('★ an unread row offers Mark as read only, and it DELETEs (markConversationRead)', async () => {
+    showRead();
+    rightClick(screen.getByTestId('row-u1'));
+    expect(screen.queryByTestId('menu-mark-unread')).toBeNull();
+    expect(screen.getByTestId('menu-mark-read')).toHaveTextContent('Mark as read');
+    await userEvent.click(screen.getByTestId('menu-mark-read'));
+    await waitFor(() => expect(actions.markConversationRead).toHaveBeenCalledWith('u1'));
+    expect(actions.markConversationUnread).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('queue-menu-notice')).toHaveTextContent(
+      'Marked as read, for you only.',
+    );
+  });
+
+  it('★ a counted row is unread too: Mark as read', () => {
+    showRead();
+    rightClick(screen.getByTestId('row-u2'));
+    expect(screen.getByTestId('menu-mark-read')).toBeInTheDocument();
+    expect(screen.queryByTestId('menu-mark-unread')).toBeNull();
+  });
+
+  it('★ a read row offers Mark as unread only, and it POSTs (markConversationUnread)', async () => {
+    showRead();
+    rightClick(screen.getByTestId('row-r1'));
+    expect(screen.queryByTestId('menu-mark-read')).toBeNull();
+    await userEvent.click(screen.getByTestId('menu-mark-unread'));
+    await waitFor(() => expect(actions.markConversationUnread).toHaveBeenCalledWith('r1'));
+    expect(actions.markConversationRead).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('queue-menu-notice')).toHaveTextContent(
+      'Marked as unread, for you only.',
+    );
+  });
+
+  it('⚠⚠ read state not sent: Mark as unread, which works today', async () => {
+    showRead();
+    rightClick(screen.getByTestId('row-x1'));
+    expect(screen.queryByTestId('menu-mark-read')).toBeNull();
+    await userEvent.click(screen.getByTestId('menu-mark-unread'));
+    await waitFor(() => expect(actions.markConversationUnread).toHaveBeenCalledWith('x1'));
+  });
+
+  it('★★ several picked: each item runs on its own share, all of it', async () => {
+    act(() => {
+      for (const id of ['u1', 'r1', 'x1']) toggleSelected(id);
+    });
+    showRead();
+    rightClick(screen.getByTestId('row-u1'));
+    expect(screen.getByTestId('menu-mark-read')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('menu-mark-unread'));
+    await waitFor(() => expect(actions.markConversationUnread).toHaveBeenCalledTimes(2));
+    expect(actions.markConversationUnread.mock.calls.map((c) => c[0])).toEqual(['r1', 'x1']);
+    expect(await screen.findByTestId('queue-menu-notice')).toHaveTextContent(
+      '2 conversations marked as unread, for you only.',
+    );
+  });
+
+  it('⚠ only some went through: says how many, never the success sentence', async () => {
+    actions.markConversationUnread
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: false, reason: 'failed' });
+    act(() => {
+      toggleSelected('r1');
+      toggleSelected('x1');
+    });
+    showRead();
+    rightClick(screen.getByTestId('row-r1'));
+    await userEvent.click(screen.getByTestId('menu-mark-unread'));
+    const notice = await screen.findByTestId('queue-menu-notice');
+    expect(notice).toHaveTextContent('Done for 1 of 2');
+    expect(notice).not.toHaveTextContent(/for you only/);
+  });
+
+  it('⚠ one that failed says why', async () => {
+    actions.markConversationRead.mockResolvedValueOnce({ ok: false, reason: 'not_found' });
+    showRead();
+    rightClick(screen.getByTestId('row-u1'));
+    await userEvent.click(screen.getByTestId('menu-mark-read'));
+    expect(await screen.findByTestId('queue-menu-notice')).toHaveTextContent(
+      inbox.verbs.problem.not_found,
+    );
+  });
+
+  it('★ in Hebrew, the words Omer gave', () => {
+    showRead('he', { inbox: heInbox, navigation: heNavigation });
+    rightClick(screen.getByTestId('row-r1'));
+    expect(screen.getByTestId('menu-mark-unread')).toHaveTextContent('סמן כלא נקרא');
+    rightClick(screen.getByTestId('row-u1'));
+    expect(screen.getByTestId('menu-mark-read')).toHaveTextContent('סמן כנקרא');
   });
 });

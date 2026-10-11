@@ -14,6 +14,7 @@ import {
   type NavigationChild,
   type NavigationItem,
 } from './navigation';
+import { useRailCounts } from './rail-counts';
 
 /**
  * The rail: seven destinations, then the current one's sub-navigation.
@@ -35,6 +36,7 @@ export function PrimaryNavigation() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { canSee } = usePermissions();
+  const counts = useRailCounts();
 
   const isPermitted = (entry: { permission?: string }) => canSee(entry.permission);
 
@@ -98,17 +100,33 @@ export function PrimaryNavigation() {
             {groupLabel}
           </span>
           <ul className={styles.subNavList} role="list">
-            {children.map((child) => (
-              <li key={child.id}>
-                <Link
-                  href={childHref(active, child)}
-                  className={styles.subNavLink}
-                  aria-current={isCurrentChild(active, child) ? 'page' : undefined}
-                >
-                  {t(child.labelKey)}
-                </Link>
-              </li>
-            ))}
+            {children.map((child) => {
+              /*
+               * ★ THE VIEW'S UNREAD COUNT, ONLY WHEN THE PAGE WAS TOLD ONE.
+               *   No count, a failed read and a 0 all draw nothing: an
+               *   unread badge of 0 is not news, and 02 puts the VIEW'S SIZE
+               *   in this slot - a "0" beside "Waiting in queue" would read as
+               *   an empty queue. The words say "unread" for a screen reader.
+               */
+              const unread = child.view === undefined ? undefined : counts?.[child.view];
+              return (
+                <li key={child.id}>
+                  <Link
+                    href={childHref(active, child)}
+                    className={styles.subNavLink}
+                    aria-current={isCurrentChild(active, child) ? 'page' : undefined}
+                  >
+                    {t(child.labelKey)}
+                    {unread !== undefined && unread > 0 ? (
+                      <span className={styles.subNavCount} data-testid={`rail-unread-${child.id}`}>
+                        <span aria-hidden="true">{unread}</span>
+                        <span className="srOnly">{t('unreadCount', { count: unread })}</span>
+                      </span>
+                    ) : null}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </nav>
       ) : null}

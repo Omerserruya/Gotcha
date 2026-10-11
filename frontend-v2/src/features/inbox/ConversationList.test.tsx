@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import type { ReactNode } from 'react';
 
-import { render as rtlRender, screen, within } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
 import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -1465,5 +1465,109 @@ describe('★★ the preview says what a media message is, never the adapter’s
         intl.locale = 'en';
       }
     }
+  });
+});
+
+describe('★★ unread for the person looking - the server’s answer, drawn like WhatsApp Web', () => {
+  const unreadRows = () => [
+    row({ id: 'counted', unread: true, unreadCount: 3 }),
+    row({ id: 'many', unreadCount: 140 }),
+    row({ id: 'flagged', unread: true }),
+    row({ id: 'flaggedZero', unread: true, unreadCount: 0 }),
+    row({ id: 'read', unread: false, unreadCount: 0 }),
+    row({ id: 'unsaid' }),
+    row({ id: 'garbage', unread: 'yes', unreadCount: 'lots' }),
+  ];
+  const link = (id: string) =>
+    document.querySelector<HTMLElement>(`[data-conversation-id="${id}"]`)!;
+
+  it('★★ a count → the badge; flagged with no count, or a 0 → the dot; else nothing', async () => {
+    await show(unreadRows());
+    expect(screen.getByTestId('unread-count-counted')).toHaveTextContent('3');
+    expect(screen.queryByTestId('unread-dot-counted')).toBeNull();
+    expect(screen.getByTestId('unread-dot-flagged')).toBeInTheDocument();
+    expect(screen.queryByTestId('unread-count-flagged')).toBeNull();
+    expect(screen.getByTestId('unread-dot-flaggedZero')).toBeInTheDocument();
+    for (const id of ['read', 'unsaid', 'garbage']) {
+      expect(screen.queryByTestId(`unread-count-${id}`)).toBeNull();
+      expect(screen.queryByTestId(`unread-dot-${id}`)).toBeNull();
+    }
+  });
+
+  it('★★ bold (data-unread) exactly where a mark is drawn', async () => {
+    await show(unreadRows());
+    for (const id of ['counted', 'many', 'flagged', 'flaggedZero']) {
+      expect([id, link(id).hasAttribute('data-unread')]).toEqual([id, true]);
+    }
+    for (const id of ['read', 'unsaid', 'garbage']) {
+      expect([id, link(id).hasAttribute('data-unread')]).toEqual([id, false]);
+    }
+  });
+
+  it('★ past 99 the badge says "99+", and the label keeps the number', async () => {
+    await show(unreadRows());
+    const badge = screen.getByTestId('unread-count-many');
+    expect(badge.querySelector('[aria-hidden="true"]')).toHaveTextContent(/^99\+$/);
+    expect(badge.querySelector('[aria-hidden="true"]')).toHaveAttribute('dir', 'ltr');
+    expect(badge.querySelector('.srOnly')).toHaveTextContent(/^140 unread messages$/);
+    expect(
+      screen.getByTestId('unread-count-counted').querySelector('[aria-hidden="true"]'),
+    ).toHaveTextContent(/^3$/);
+  });
+
+  it('★ a screen reader hears what the mark means', async () => {
+    await show([row({ id: 'one', unreadCount: 1 }), row({ id: 'dot', unread: true })]);
+    expect(screen.getByTestId('unread-count-one')).toHaveTextContent('1 unread message');
+    expect(screen.getByTestId('unread-dot-dot')).toHaveTextContent(/^Unread$/);
+  });
+
+  it('★ in Hebrew, with its plural', async () => {
+    intl.locale = 'he';
+    try {
+      await show([row({ id: 'one', unreadCount: 1 }), row({ id: 'five', unreadCount: 5 })]);
+    } finally {
+      intl.locale = 'en';
+    }
+    expect(screen.getByTestId('unread-count-one')).toHaveTextContent('הודעה אחת שלא נקראה');
+    expect(screen.getByTestId('unread-count-five')).toHaveTextContent('5 הודעות שלא נקראו');
+  });
+
+  it('⚠⚠ the OPEN conversation never shows a mark or bold, whatever the server says', async () => {
+    render(
+      await ConversationList({
+        rows: [
+          row({ id: 'open', unread: true, unreadCount: 4 }),
+          row({ id: 'other', unread: true }),
+        ],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        openId: 'open',
+      }),
+    );
+    expect(screen.queryByTestId('unread-count-open')).toBeNull();
+    expect(screen.queryByTestId('unread-dot-open')).toBeNull();
+    expect(link('open')).not.toHaveAttribute('data-unread');
+    expect(screen.getByTestId('unread-dot-other')).toBeInTheDocument();
+  });
+
+  it('★ the menu is told each row’s read state', async () => {
+    await show(unreadRows());
+    fireEvent.contextMenu(link('flagged'), { clientX: 10, clientY: 10 });
+    expect(screen.getByTestId('menu-mark-read')).toBeInTheDocument();
+    expect(screen.queryByTestId('menu-mark-unread')).toBeNull();
+  });
+
+  it('★ the CSS: 600 where unread and not open; the mark hidden on a row being opened', () => {
+    const css = readFileSync('src/features/inbox/Inbox.module.css', 'utf8').replace(
+      /\/\*[\s\S]*?\*\//g,
+      '',
+    );
+    expect(css).toMatch(
+      /\.queueRow\[data-unread\]:not\(\[data-open\]\) \.who\s*\{\s*font-weight:\s*var\(--font-weight-semibold\);/,
+    );
+    expect(css).toMatch(
+      /\.queueRow\[data-open\] \.unreadBadge,\s*\.queueRow\[data-open\] \.unreadDot\s*\{\s*display:\s*none;/,
+    );
   });
 });

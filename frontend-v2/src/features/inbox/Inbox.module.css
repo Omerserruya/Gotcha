@@ -469,8 +469,8 @@
    * avatar tinted down. That is why the column read flat - not spacing.
    *
    * ★ `CLOSED` is the only status that means settled. `OPEN` and `WAITING`
-   *   are both live, and the design's third state - unread - needs a field
-   *   the contract does not have.
+   *   are both live. The design's third state - unread - is `data-unread`,
+   *   below.
    */
   .queueRow[data-settled] .who {
     font-weight: var(--font-weight-regular);
@@ -483,6 +483,60 @@
 
   .queueRow[data-settled] .rowTime {
     color: var(--text-faint);
+  }
+
+  /*
+   * ★★ UNREAD FOR THE PERSON LOOKING: 02's name at 600, and the mark at the
+   *   end of the preview line. After the settled rule, so a resolved
+   *   conversation somebody marked unread still reads unread.
+   *
+   * ⚠ Never on the open row - the server leaves it out, and a row clicked and
+   *   still loading (`data-open` from the click) drops it here at once, as
+   *   02's `hasUnread: unread > 0 && !sel` does.
+   */
+  .queueRow[data-unread]:not([data-open]) .who {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .queueRow[data-open] .unreadBadge,
+  .queueRow[data-open] .unreadDot {
+    display: none;
+  }
+
+  /* 02: `display:flex; align-items:center; gap:8px` - the preview, then the mark. */
+  .previewLine {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  /*
+   * 02's badge: 18 tall, at least 18 wide, radius 9, `#121212` on `#F7F5F1`,
+   * 600 10px/18px, centred.
+   */
+  .unreadBadge {
+    flex: none;
+    min-inline-size: var(--space-18);
+    block-size: var(--space-18);
+    padding-inline: var(--space-4);
+    border-radius: var(--radius-item);
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--space-18);
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Unread and nobody counted: the badge's ink, as a dot. */
+  .unreadDot {
+    flex: none;
+    inline-size: var(--space-8);
+    block-size: var(--space-8);
+    border-radius: var(--radius-round);
+    background-color: var(--action-base);
   }
 
   .rowBody {
@@ -515,6 +569,9 @@
    * a list.
    */
   .preview {
+    /* Beside the unread mark: takes the line, and gives way to it. */
+    flex: 1;
+    min-inline-size: 0;
     /* 02 has three lines on every row; an empty preview keeps its line. */
     min-block-size: 1lh;
     font-size: 12.5px;
@@ -554,9 +611,9 @@
   .who {
     /*
      * 02: 14px / -0.14px, and the WEIGHT IS A STATE: 600 unread, 500 read,
-     * 400 settled. We have no unread state on the wire, so every row drew
-     * 600 and claimed to be unread. 500 is the honest default; 600 waits for
-     * the list to send the per-agent read state the service already keeps.
+     * 400 settled. Every row once drew 600 and claimed to be unread. 500 is
+     * the default; 600 is `data-unread`, which only the server's per-person
+     * read state sets.
      */
     font-size: 14px;
     font-weight: var(--font-weight-medium);

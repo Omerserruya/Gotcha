@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  agentUnreadIsUnknown,
+  parseUnreadCounts,
+  rowIsUnread,
+  unreadCountsSchema,
+  unreadMark,
   conversationRowSchema,
   hasTranscript,
   messageSchema,
@@ -40,18 +43,75 @@ describe('★★ the state machine is three, not the design’s five', () => {
   });
 });
 
-describe('★★ agent-unread does not exist, and the nearest field is a trap', () => {
-  it('★★ `readAt` is the CUSTOMER’s receipt and must never mean the agent saw it', () => {
+describe('★★ agent-unread is the server’s per-person answer, and nothing else', () => {
+  const parse = (over: Record<string, unknown>) =>
+    conversationRowSchema.parse({ id: 'c1', status: 'OPEN', ...over });
+
+  it('★★ `unread`: absent is "not said", true and false are kept, garbage is "not said"', () => {
+    expect(parse({}).unread).toBeUndefined();
+    expect(parse({ unread: true }).unread).toBe(true);
+    expect(parse({ unread: false }).unread).toBe(false);
+    // ⚠ A malformed value never rejects the list, and never becomes a dot.
+    expect(parse({ unread: 'yes' }).unread).toBeUndefined();
+    expect(parse({ unread: 1 }).unread).toBeUndefined();
+    expect(parse({ unread: null }).unread).toBeUndefined();
+  });
+
+  it('★ `unreadCount`: a whole number ≥ 0, or "not said" - never a default 0', () => {
+    expect(parse({}).unreadCount).toBeUndefined();
+    expect(parse({ unreadCount: 3 }).unreadCount).toBe(3);
+    expect(parse({ unreadCount: 0 }).unreadCount).toBe(0);
+    expect(parse({ unreadCount: -1 }).unreadCount).toBeUndefined();
+    expect(parse({ unreadCount: 2.5 }).unreadCount).toBeUndefined();
+    expect(parse({ unreadCount: '3' }).unreadCount).toBeUndefined();
+  });
+
+  it('★ `lastReadAt` is kept when sent, and a bad one is dropped, not fatal', () => {
+    expect(parse({ lastReadAt: '2026-10-11T08:00:00.000Z' }).lastReadAt).toBe(
+      '2026-10-11T08:00:00.000Z',
+    );
+    expect(parse({ lastReadAt: null }).lastReadAt).toBeNull();
+    expect(parse({ lastReadAt: 42 }).lastReadAt).toBeUndefined();
+  });
+
+  it('★★ the mark: a count when counted, a dot when only flagged, else nothing', () => {
+    expect(unreadMark({ unreadCount: 4 })).toEqual({ kind: 'count', count: 4 });
+    expect(unreadMark({ unread: true, unreadCount: 4 })).toEqual({ kind: 'count', count: 4 });
+    expect(unreadMark({ unread: true })).toEqual({ kind: 'dot' });
+    // Marked unread by hand, nothing new to count: still a dot.
+    expect(unreadMark({ unread: true, unreadCount: 0 })).toEqual({ kind: 'dot' });
+    expect(unreadMark({ unreadCount: 0 })).toBeNull();
+    expect(unreadMark({ unread: false })).toBeNull();
+    expect(unreadMark({})).toBeNull();
+  });
+
+  it('★★ never inferred: INBOUND-last and the customer’s `readAt` say nothing about it', () => {
     /*
-     * The same word for the opposite party's fact. Reading it as "the agent
-     * has seen this" marks a queue read because the CUSTOMER read our reply
-     * - the queue would empty itself as customers open their phones.
+     * The same word for the opposite party's fact. Reading `readAt` as "the
+     * agent has seen this" marks a queue read because the CUSTOMER read our
+     * reply - and INBOUND-last is "nobody answered", which everyone sees alike.
      */
     const read = message({ readAt: '2026-09-25T11:30:00.000Z' });
     expect(read.readAt).not.toBeNull();
-    // There is no agent-side answer to derive, and the helper says so rather
-    // than returning a plausible boolean somebody would then render.
-    expect(agentUnreadIsUnknown()).toBe(true);
+    const waiting = parse({ lastMessageDirection: 'INBOUND', lastMessageAt: NOW.toISOString() });
+    expect(rowIsUnread(waiting)).toBe(false);
+    expect(rowIsUnread(parse({ unread: true }))).toBe(true);
+    expect(rowIsUnread(parse({ unreadCount: 2 }))).toBe(true);
+  });
+});
+
+describe('★★ unread counts per view: a number per view, or none - never a 0 by default', () => {
+  const views = ['queue', 'mine', 'active'] as const;
+
+  it('keeps whole non-negative numbers for the views asked about', () => {
+    const body = unreadCountsSchema.parse({ queue: 3, mine: 0, other: 9 });
+    expect(parseUnreadCounts(body, views)).toEqual({ queue: 3, mine: 0 });
+  });
+
+  it('⚠ drops what is not a count, per view, rather than all of them', () => {
+    const body = unreadCountsSchema.parse({ queue: '3', mine: -1, active: 1.5 });
+    expect(parseUnreadCounts(body, views)).toEqual({});
+    expect(parseUnreadCounts({ queue: 2, mine: 'x' }, views)).toEqual({ queue: 2 });
   });
 });
 

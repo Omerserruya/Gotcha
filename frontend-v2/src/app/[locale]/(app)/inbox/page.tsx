@@ -6,6 +6,8 @@ import { Composer } from '@/features/inbox/Composer';
 import { ConversationStream, OrdersChip } from '@/features/inbox/ConversationDetail';
 import { ListLive } from '@/features/inbox/ListLive';
 import { InboxEscape } from '@/features/inbox/InboxEscape';
+import { MarkReadOnOpen } from '@/features/inbox/MarkReadOnOpen';
+import { loadUnreadCounts } from '@/features/inbox/load-unread-counts';
 import { NothingOpen } from '@/features/inbox/NothingOpen';
 import { ClearQueueList, ClearQueuePane } from '@/features/inbox/ClearQueue';
 import { ConversationList } from '@/features/inbox/ConversationList';
@@ -26,8 +28,9 @@ import { loadInbox, QUEUE_CAP } from '@/features/inbox/load-inbox';
 import { PendingPane } from '@/features/inbox/PendingPane';
 import { StreamSkeleton } from '@/features/inbox/Skeletons';
 import { PageContainer } from '@/shell/PageContainer';
+import { PublishRailCounts } from '@/shell/rail-counts';
 import { pageMetadata } from '@/shell/page-metadata';
-import { channelName } from '@/api/contracts/inbox';
+import { channelName, rowIsUnread } from '@/api/contracts/inbox';
 import { SkeletonBubbles, SkeletonCards } from '@/design-system/primitives/skeleton/Skeleton';
 
 /**
@@ -179,6 +182,13 @@ export default async function Page({
           fails" true. Mounted whether or not a conversation is open.
         */}
         <ListLive openId={data.open?.id ?? null} />
+        {/*
+          Renders nothing: the rail's unread count per view, read beside the
+          list and never ahead of it. A failed or absent read draws no count.
+        */}
+        <Suspense fallback={null}>
+          <ViewUnreadCounts />
+        </Suspense>
         <section className={styles.queueColumn} aria-label={t('queue.label')}>
           <ConversationList
             rows={data.rows}
@@ -335,6 +345,14 @@ export default async function Page({
                   {/* Renders nothing: Esc closes this conversation (see `InboxEscape`). */}
                   <InboxEscape conversationId={data.open.id} />
                   {/*
+                    Renders nothing: opening it reads it, for this person, once
+                    per open. The list re-renders only if its row was unread.
+                  */}
+                  <MarkReadOnOpen
+                    conversationId={data.open.id}
+                    wasUnread={rowIsUnread(data.open)}
+                  />
+                  {/*
                     ════════════════════════════════════════════════════════
                     ★★ THE STREAM STREAMS. Omer: "I want it to feel instant."
                     ════════════════════════════════════════════════════════
@@ -453,3 +471,16 @@ export default async function Page({
 }
 
 export const generateMetadata = pageMetadata('primary.inbox');
+
+/**
+ * The rail's unread count per inbox view. Renders nothing itself: it reads
+ * the counts and hands them to the rail, which lives in the shell.
+ *
+ * Here rather than in the feature because only a page may reach both the
+ * inbox's reads and the shell's rail. Inside `<Suspense fallback={null}>`, so
+ * a slow count never holds the queue or the conversation back - and a failed
+ * read draws no count, never a 0.
+ */
+async function ViewUnreadCounts() {
+  return <PublishRailCounts counts={await loadUnreadCounts()} />;
+}

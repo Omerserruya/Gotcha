@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import {
   channelName,
   queueOrder,
+  UNREAD_BADGE_MAX,
+  unreadMark,
   waitingMinutes,
   waitingScale,
   type ConversationRow,
@@ -195,6 +197,13 @@ export async function ConversationList({
   const row = (conversation: ConversationRow, testid: string) => {
     const waiting = waitingMinutes(conversation, now);
     const badgeLabel = channelName(conversation.channel, channelNames) ?? t('queue.unknownChannel');
+    /*
+     * ★★ UNREAD FOR THE PERSON LOOKING, AS THE SERVER SAID - and never on the
+     *   open row. Opening marks it read; a refresh that lands before that
+     *   write would otherwise flash a mark on the conversation being read.
+     *   (A row clicked and still loading is hidden by CSS, `[data-open]`.)
+     */
+    const mark = conversation.id === openId ? null : unreadMark(conversation);
     return (
       <li key={conversation.id} className={styles.queueItem}>
         {/*
@@ -246,10 +255,11 @@ export async function ConversationList({
 
             ⚠ `CLOSED` is the only one of the three statuses that means
               settled. `OPEN` and `WAITING` are both live and are NOT
-              distinguished here: the design's third state is "unread", which
-              needs a field the contract does not have.
+              distinguished here. The design's third state, "unread", is
+              `data-unread` - from the server's per-person read state only.
           */
           data-settled={conversation.status === 'CLOSED' ? '' : undefined}
+          data-unread={mark ? '' : undefined}
         >
           {/*
             ════════════════════════════════════════════════════════════════
@@ -368,27 +378,50 @@ export async function ConversationList({
                 made those rows 69 tall in a column of 82s. The line stays,
                 empty; no text is invented.
             */}
-            {(() => {
-              const said = quoteOf({
-                body: conversation.lastMessageBody ?? '',
-                messageType: conversation.lastMessageType,
-              });
-              return (
+            {/*
+              ★★ 02's SECOND LINE IS THE PREVIEW AND THE UNREAD MARK, `flex`
+                with the mark at the end: the count when the server counted
+                (WhatsApp Web's badge, "99+" past 99), else a dot.
+            */}
+            <span className={styles.previewLine}>
+              {(() => {
+                const said = quoteOf({
+                  body: conversation.lastMessageBody ?? '',
+                  messageType: conversation.lastMessageType,
+                });
+                return (
+                  <span
+                    className={styles.preview}
+                    data-testid={`preview-${conversation.id}`}
+                    data-empty={said === null ? '' : undefined}
+                    data-kind={said !== null && 'kind' in said ? said.kind : undefined}
+                  >
+                    {said === null ? null : 'text' in said ? (
+                      /* Somebody else's words: their direction, not the layout's. */
+                      <UserText>{said.text}</UserText>
+                    ) : (
+                      t(`stream.quote.kind.${said.kind}`)
+                    )}
+                  </span>
+                );
+              })()}
+              {mark === null ? null : mark.kind === 'count' ? (
                 <span
-                  className={styles.preview}
-                  data-testid={`preview-${conversation.id}`}
-                  data-empty={said === null ? '' : undefined}
-                  data-kind={said !== null && 'kind' in said ? said.kind : undefined}
+                  className={styles.unreadBadge}
+                  data-testid={`unread-count-${conversation.id}`}
                 >
-                  {said === null ? null : 'text' in said ? (
-                    /* Somebody else's words: their direction, not the layout's. */
-                    <UserText>{said.text}</UserText>
-                  ) : (
-                    t(`stream.quote.kind.${said.kind}`)
-                  )}
+                  {/* "99+" is a number: kept left-to-right, or Hebrew draws "+99". */}
+                  <span aria-hidden="true" dir="ltr">
+                    {mark.count > UNREAD_BADGE_MAX ? `${UNREAD_BADGE_MAX}+` : mark.count}
+                  </span>
+                  <span className="srOnly">{t('queue.unreadMessages', { count: mark.count })}</span>
                 </span>
-              );
-            })()}
+              ) : (
+                <span className={styles.unreadDot} data-testid={`unread-dot-${conversation.id}`}>
+                  <span className="srOnly">{t('queue.unread')}</span>
+                </span>
+              )}
+            </span>
 
             <span className={styles.rowTags}>
               {/*
@@ -601,6 +634,8 @@ export async function ConversationList({
             assignedAiAgentId: it.assignedAiAgentId,
             isHandedOver: it.isHandedOver,
             handledBy: it.handledBy,
+            unread: it.unread,
+            unreadCount: it.unreadCount,
           }))}
           meId={meId}
           role={role}

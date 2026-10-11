@@ -200,14 +200,12 @@ export async function transferConversation(
  *     pause the AI      /claim        ✓ taking over IS the pause
  *     requeue           /release      ← this
  *     resolve           /close        ← below
- *     mark unread       NO ENDPOINT ANYWHERE
- *     archive           NO ENDPOINT ANYWHERE
- *     delete            NO ENDPOINT ANYWHERE
+ *     mark unread       NO ENDPOINT ANYWHERE   (since: /unread, below)
+ *     archive           NO ENDPOINT ANYWHERE   (since: /archive, not drawn)
+ *     delete            NO ENDPOINT ANYWHERE   (since: DELETE, below)
  *
- * ⚠ The last three are not "not wired yet". There is no route for them in the
- *   platform's API at all, so a menu item for them would be a control that
- *   cannot work - the thirty-days label and the resend button again, three at
- *   once and on a destructive action.
+ * ⚠ The table is as measured then. Unread, archive and delete have routes
+ *   now; archive is still not drawn (Omer did not ask for it).
  */
 export async function releaseConversation(conversationId: string): Promise<VerbResult> {
   try {
@@ -287,4 +285,74 @@ export async function deleteConversation(
     logger.warn('inbox.delete_failed', { cause });
     return { ok: false, reason: 'failed' };
   }
+}
+
+/**
+ * Mark a conversation unread - FOR THE PERSON PRESSING IT, nobody else.
+ *
+ * `POST /:id/unread` sets this viewer's `markedUnread`; `lastReadAt` is left
+ * alone, deliberately (the route's own comment: a conversation you have read
+ * can still be marked unread, which is the point of the action).
+ */
+export async function markConversationUnread(conversationId: string): Promise<VerbResult> {
+  try {
+    await serverApi().post({
+      endpoint: inboxEndpoints.unread(conversationId),
+      body: {},
+      payload: unchecked,
+      raw: true,
+    });
+    refresh();
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    if (isApiError(cause) && cause.status === 404) return { ok: false, reason: 'not_found' };
+    logger.warn('inbox.mark_unread_failed', { cause });
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+/** The menu's "Mark as read": `DELETE /:id/unread`, as opening it would. */
+export async function markConversationRead(conversationId: string): Promise<VerbResult> {
+  try {
+    await sendRead(conversationId);
+    refresh();
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    if (isApiError(cause) && cause.status === 404) return { ok: false, reason: 'not_found' };
+    logger.warn('inbox.mark_read_failed', { cause });
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+/**
+ * Opening a conversation reads it - `DELETE /:id/unread` clears the manual
+ * mark and moves this person's `lastReadAt` to now. Called once per open by
+ * `MarkReadOnOpen`.
+ *
+ * ★★ SILENT. A failure is logged and nothing else: the person is reading the
+ *   conversation, and a read marker that did not land is no reason to stop
+ *   them or show them a sentence. Never throws. The one exception is the
+ *   rule every action here keeps: a signed-out session goes to sign-in.
+ *
+ * `refresh` only when the row was drawn unread: re-rendering the whole inbox
+ * to remove a dot nobody drew would double the cost of every open.
+ */
+export async function markReadOnOpen(conversationId: string, refreshList: boolean): Promise<void> {
+  try {
+    await sendRead(conversationId);
+    if (refreshList) refresh();
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('inbox.mark_read_on_open_failed', { cause });
+  }
+}
+
+async function sendRead(conversationId: string): Promise<void> {
+  await serverApi().delete({
+    endpoint: inboxEndpoints.unread(conversationId),
+    payload: unchecked,
+    raw: true,
+  });
 }

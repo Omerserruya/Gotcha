@@ -29,10 +29,11 @@ import { CHANNEL_TYPES } from './channels';
  *
  * ── AND TWO THAT LOOK PRESENT AND ARE NOT ──
  *
- * **Agent-unread does not exist.** Nothing on `Conversation` records read
- * state for the agent side. `Message.readAt` is the CUSTOMER's receipt - the
- * same word for a different fact - and using it would show an agent's queue
- * as read because the customer read our reply. See `agentUnreadIsUnknown`.
+ * **Agent-unread is the row's `unread`, and nothing else.** The platform keeps
+ * it per person (`ConversationReadState`, Backend 7b69c714); the list is to
+ * send it on each row. `Message.readAt` is the CUSTOMER's receipt - the same
+ * word for a different fact - and using it would show an agent's queue as
+ * read because the customer read our reply. See `rowIsUnread`.
  *
  * **Per-message intent does not persist YET, and it is authorized.**
  * `ConversationIntelligence` carries `detectedIntent` per CONVERSATION; the
@@ -129,15 +130,44 @@ export const conversationRowSchema = z.object({
   /**
    * ★★ WHO SPOKE LAST, WHICH IS NOT THE SAME AS "UNREAD" AND IS STILL USEFUL.
    *
-   * `agentUnreadIsUnknown()` remains true: there is no per-user read marker in
-   * the schema and `Message.readAt` is the customer's receipt. But the route
-   * projects this, and INBOUND-last is a fact - **the customer spoke and
-   * nobody has answered** - which is the thing the queue is actually for.
+   * Not unread: that is `unread` below, per person, and `Message.readAt` is
+   * the customer's receipt. But the route projects this, and INBOUND-last is
+   * a fact - **the customer spoke and nobody has answered** - which is the
+   * thing the queue is actually for.
    *
    * It is not "you have not read this". Two people looking at the same queue
    * see the same value, and that is correct for what it claims.
    */
   lastMessageDirection: z.enum(['INBOUND', 'OUTBOUND']).nullable().default(null),
+  /**
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ UNREAD FOR THE PERSON LOOKING - THE SERVER'S ANSWER, OR NOTHING
+   * ════════════════════════════════════════════════════════════════════════
+   * Per person: `ConversationReadState` (Backend 7b69c714) holds a manual
+   * `markedUnread` and a `lastReadAt` for each viewer, and the list carries
+   * the computed answer on every row (Backend 0190bd4e, building on
+   * 2026-10-11 - so optional: dev may run the older image for a while).
+   *
+   * ★ A fresh tenant has no read-state rows, so every conversation with a
+   *   customer message reads unread at first. That is true, not a defect.
+   *
+   * ⚠⚠ ABSENT IS "NOT SAID", AND IT DRAWS NO DOT. Never inferred here from
+   *    `lastMessageDirection`, `lastMessageAt` or `Message.readAt`: a wrong
+   *    dot is worse than none, because the person learns to ignore it.
+   *    `.catch(undefined)` so a malformed value is the same "not said",
+   *    never a rejected list.
+   */
+  unread: z.boolean().optional().catch(undefined),
+  /**
+   * How many of the customer's messages this person has not read - inbound,
+   * not system, since their `lastReadAt` - capped at 99 by the route. Marked
+   * unread by hand with nothing new is `unread: true, unreadCount: 0`. Like
+   * WhatsApp Web, the row shows the number when there is one. Absent or
+   * malformed is "not said", never 0.
+   */
+  unreadCount: z.number().int().nonnegative().optional().catch(undefined),
+  /** When this person last opened it. Named so it is not stripped; nothing draws it yet. */
+  lastReadAt: z.string().nullable().optional().catch(undefined),
 });
 export type ConversationRow = z.infer<typeof conversationRowSchema>;
 
@@ -253,18 +283,69 @@ export function waitingMinutes(row: ConversationRow, now: Date): number | null {
 }
 
 /**
- * ★★ AGENT-UNREAD IS NOT KNOWABLE, AND THE NEAREST FIELD IS A TRAP.
+ * ★★ IS THIS ROW UNREAD FOR THE PERSON LOOKING? ONLY IF THE SERVER SAID SO.
  *
- * A function rather than a constant so the prohibition is importable and
- * testable: any component tempted to compute unread has to call this and get
- * `false` back, and any future field has exactly one place to be added.
+ * The one place the question is answered, so the row's mark, its weight and
+ * the menu's choice of "Mark as read" cannot disagree. Unread when the
+ * server sent `unread: true` or a positive `unreadCount`; absent fields (an
+ * older list route) or `false` are not unread.
  *
- * `Message.readAt` is the customer's read receipt. Reading it as "the agent
- * has seen this" would mark a queue read because the CUSTOMER read our
- * reply - the same word for the opposite party's fact.
+ * ⚠ THE NEAREST FIELDS ARE TRAPS. `Message.readAt` is the customer's read
+ *   receipt - reading it as "the agent has seen this" would mark a queue read
+ *   because the CUSTOMER read our reply. And INBOUND-last is "nobody has
+ *   answered", which two people see alike.
  */
-export function agentUnreadIsUnknown(): true {
-  return true;
+export function rowIsUnread(row: UnreadFields): boolean {
+  return unreadMark(row) !== null;
+}
+
+type UnreadFields = { readonly unread?: boolean; readonly unreadCount?: number };
+
+/**
+ * What the row draws for it, from the server's fields alone:
+ *
+ *   unreadCount > 0               the count (WhatsApp Web's badge)
+ *   unread === true, no count     a dot - unread, and nobody counted
+ *     (or a count of 0: marked unread by hand, nothing new to count)
+ *   anything else                 nothing
+ *
+ * ⚠ The open conversation draws neither, whatever this says - that rule is
+ *   the list's, which knows which row is open.
+ */
+export type UnreadMark =
+  { readonly kind: 'count'; readonly count: number } | { readonly kind: 'dot' };
+
+export function unreadMark(row: UnreadFields): UnreadMark | null {
+  if (row.unreadCount !== undefined && row.unreadCount > 0) {
+    return { kind: 'count', count: row.unreadCount };
+  }
+  return row.unread === true ? { kind: 'dot' } : null;
+}
+
+/** Above this the badge says "99+", as WhatsApp does; the label keeps the number. */
+export const UNREAD_BADGE_MAX = 99;
+
+/**
+ * How many conversations are unread for this person, per view
+ * (`GET /api/conversations/unread-counts?views=…`, Backend 0190bd4e). The
+ * route answers `{ data: { <view>: n } }`, which the client unwraps.
+ *
+ * ★ PER KEY, NEVER ALL OR NOTHING. A view the route does not count, or counts
+ *   with something that is not a whole number, is simply absent - and an
+ *   absent view draws no count, never a 0.
+ */
+export const unreadCountsSchema = z.record(z.string(), z.unknown());
+
+export function parseUnreadCounts<View extends string>(
+  body: Record<string, unknown>,
+  views: readonly View[],
+): Partial<Record<View, number>> {
+  const counts: Partial<Record<View, number>> = {};
+  for (const view of views) {
+    const value = body[view];
+    if (typeof value === 'number' && Number.isInteger(value) && value >= 0) counts[view] = value;
+  }
+  return counts;
 }
 
 /* ── The stream ──────────────────────────────────────────────────────────── */

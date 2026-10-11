@@ -89,6 +89,8 @@
     "empty": "שום דבר לא ממתין.",
     "unavailable": "לא הצלחנו לקרוא את התור כרגע.",
     "unnamed": "מישהו",
+    "unread": "לא נקראה",
+    "unreadMessages": "{count, plural, one {הודעה אחת שלא נקראה} other {# הודעות שלא נקראו}}",
     "unknownChannel": "ערוץ לא ידוע",
     "undated": "{count, plural, one {לשיחה אחת אין זמן הודעה אחרונה, ולכן אי אפשר למקם אותה בסדר שלמעלה} other {ל-# שיחות אין זמן הודעה אחרונה, ולכן אי אפשר למקם אותן בסדר שלמעלה}}",
     "capAll": "{count, plural, =0 {} one {שיחה אחת, וזה הכול.} other {# שיחות, וזה הכול.}}",
@@ -131,7 +133,11 @@
       "clearSelection": "ניקוי הבחירה",
       "stopAi": "עצירת ה‑AI",
       "backToAi": "החזרה ל‑AI",
-      "moved": "{count, plural, one {שיחה אחת עברה} other {# שיחות עברו}} לתצוגה <link>{view}</link>."
+      "moved": "{count, plural, one {שיחה אחת עברה} other {# שיחות עברו}} לתצוגה <link>{view}</link>.",
+      "markUnread": "סמן כלא נקרא",
+      "markRead": "סמן כנקרא",
+      "markedUnread": "{count, plural, one {השיחה סומנה כלא נקראה, רק אצלך.} other {# שיחות סומנו כלא נקראו, רק אצלך.}}",
+      "markedRead": "{count, plural, one {השיחה סומנה כנקראה, רק אצלך.} other {# שיחות סומנו כנקראו, רק אצלך.}}"
     },
     "period": {
       "range": "נפתחו בין {from} ל־{to}",

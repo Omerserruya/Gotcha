@@ -104,3 +104,38 @@ describe('★★ Omer: Stop AI where the AI is driving; Back to the AI once take
     expect(menuPlan([row('a', { handledBy: 'ai_agent' })], agent).stopAi).toEqual(['a']);
   });
 });
+
+describe('★★ read and unread: the one that changes the row', () => {
+  it('★ unread row: Mark as read, not Mark as unread', () => {
+    const plan = menuPlan([row('a', { unread: true })], agent);
+    expect(plan.markRead).toEqual(['a']);
+    expect(plan.markUnread).toEqual([]);
+  });
+
+  it('★ a counted row is unread too', () => {
+    const plan = menuPlan([row('a', { unreadCount: 2 })], agent);
+    expect(plan.markRead).toEqual(['a']);
+    expect(plan.markUnread).toEqual([]);
+  });
+
+  it('★ read row: Mark as unread, not Mark as read', () => {
+    const plan = menuPlan([row('a', { unread: false })], agent);
+    expect(plan.markUnread).toEqual(['a']);
+    expect(plan.markRead).toEqual([]);
+  });
+
+  it('⚠⚠ not said (today’s list): Mark as unread only - it works, and the dot follows', () => {
+    const plan = menuPlan([row('a')], { ...agent, meId: null, role: null });
+    expect(plan.markUnread).toEqual(['a']);
+    expect(plan.markRead).toEqual([]);
+  });
+
+  it('★ several, mixed: each item acts on its own share', () => {
+    const plan = menuPlan(
+      [row('u', { unread: true }), row('r', { unread: false }), row('x')],
+      agent,
+    );
+    expect(plan.markRead).toEqual(['u']);
+    expect(plan.markUnread).toEqual(['r', 'x']);
+  });
+});

@@ -14,6 +14,7 @@ import { CopilotWall, WallHeader } from '@/features/inbox/wall/CopilotWall';
 import { PendingPane } from '@/features/inbox/PendingPane';
 import { InboxEscape } from '@/features/inbox/InboxEscape';
 import { ListLive } from '@/features/inbox/ListLive';
+import { MarkReadOnOpen } from '@/features/inbox/MarkReadOnOpen';
 import { NothingOpen } from '@/features/inbox/NothingOpen';
 
 /**
@@ -784,5 +785,42 @@ describe('★★ the inbox keeps itself current - open or not (ListLive)', () =>
     });
     expect(mounts).toBe(1);
     expect(propsOf<{ openId: string | null }>(tree, ListLive)).toEqual({ openId: 'conv1' });
+  });
+});
+
+describe('★★ opening reads it, for this person (MarkReadOnOpen)', () => {
+  it('★ mounted for the open conversation; the list re-reads only if its row was unread', async () => {
+    expect(
+      propsOf<{ conversationId: string; wasUnread: boolean }>(
+        await page({ open: row({ unread: true }) }),
+        MarkReadOnOpen,
+      ),
+    ).toEqual({ conversationId: 'conv1', wasUnread: true });
+    expect(
+      propsOf<{ wasUnread: boolean }>(await page({ open: row({ unreadCount: 2 }) }), MarkReadOnOpen)
+        ?.wasUnread,
+    ).toBe(true);
+    expect(
+      propsOf<{ wasUnread: boolean }>(await page({ open: row({ unread: false }) }), MarkReadOnOpen)
+        ?.wasUnread,
+    ).toBe(false);
+    // Read state not sent: nothing drawn, so nothing to re-read.
+    expect(propsOf<{ wasUnread: boolean }>(await page(), MarkReadOnOpen)?.wasUnread).toBe(false);
+  });
+
+  it('⚠ nothing open, nothing marked', async () => {
+    expect(propsOf(await page({ open: null }), MarkReadOnOpen)).toBeNull();
+  });
+
+  it('★ the rail’s counts are read beside the list, inside a boundary that draws nothing', async () => {
+    let bridge: unknown = null;
+    walk(await page(), [], (element) => {
+      const props = element.props as { fallback?: unknown; children?: unknown };
+      if (element.type === Suspense && props.fallback === null) {
+        const child = props.children as { type?: { name?: string } } | null;
+        if (child?.type?.name === 'ViewUnreadCounts') bridge = child;
+      }
+    });
+    expect(bridge).not.toBeNull();
   });
 });

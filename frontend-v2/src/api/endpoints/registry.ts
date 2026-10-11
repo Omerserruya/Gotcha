@@ -1728,6 +1728,38 @@ export const inboxEndpoints = {
     endpoint('/api/conversations/{conversationId}', { conversationId }),
 
   /**
+   * Read state FOR THE PERSON CALLING, not for the workspace (Backend
+   * 7b69c714, `services/conversation/src/routes/conversations.ts:275,304`).
+   *
+   *   POST    sets `markedUnread = true`; leaves `lastReadAt` alone
+   *   DELETE  sets `markedUnread = false` and `lastReadAt = now` - what
+   *           opening a conversation sends
+   *
+   * Both upsert one `ConversationReadState` row keyed on (user, conversation)
+   * and answer `{ data: <that row> }`. 404 for a conversation outside the
+   * tenant, or one this viewer may not see (`router.param("id",
+   * requireVisibleConversation)` - the list's own visibility rule). No
+   * permission and no assignment check beyond that: anyone who can see the
+   * conversation can mark it for themselves.
+   */
+  unread: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}/unread', { conversationId }),
+
+  /**
+   * ⚠⚠ AGREED, NOT YET DEPLOYED (supervisor, 2026-10-11; Backend 0190bd4e is
+   *    building it). Until it ships the route answers 404 - and it must be
+   *    registered before `GET /:id` (routes/conversations.ts:166), which
+   *    would read "unread-counts" as an id. Every failure is "no count",
+   *    never a 0.
+   *
+   * `GET ?views=queue,mine,…` → `{ data: { <view>: n } }`: how many
+   * conversations in each view are unread for the person calling. Every
+   * `InboxView` id is accepted; an unknown view is a 400, so only real ids
+   * are sent. See `unreadCountsSchema`.
+   */
+  unreadCounts: () => endpoint('/api/conversations/unread-counts'),
+
+  /**
    * The people a conversation can be transferred to.
    *
    * ★ UNGATED BEYOND SIGNING IN. `services/auth/src/routes/agents.ts:29` has
