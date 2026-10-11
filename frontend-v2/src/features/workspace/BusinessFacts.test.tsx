@@ -352,3 +352,58 @@ describe('★ Hebrew: the block’s own words', () => {
     expect(screen.getByTestId('fact-problem-name')).toHaveTextContent('שם העסק לא יכול להיות ריק.');
   });
 });
+
+describe('★ "From your website" says what it means - the banner’s sentence, on the chip', () => {
+  const marked = {
+    fieldSources: {
+      organizationName: 'scan',
+      businessDescription: 'scan',
+      address: 'scan',
+      industry: 'scan',
+      country: 'scan',
+      primaryLanguage: 'scan',
+    },
+  };
+  const withSite =
+    'Most of this was filled in from urban-supply.com when you signed up. Scanning again only updates fields marked “From your website”.';
+
+  it('its title and its accessible description, on every marked row', () => {
+    renderRows(marked);
+    for (const key of ['name', 'description', 'address', 'industry', 'country', 'language']) {
+      const chip = screen.getByTestId(`fact-origin-${key}`);
+      expect(chip).toHaveTextContent(/^From your website$/);
+      expect(chip).toHaveAttribute('title', withSite);
+      expect(chip).toHaveAccessibleDescription(withSite);
+      // Named, not only inferred from the title (which a computation falls back to).
+      const described = document.getElementById(chip.getAttribute('aria-describedby') ?? '');
+      expect(described).toHaveTextContent(withSite);
+    }
+  });
+
+  it('no website stored: the same words without one', () => {
+    renderRows({ ...marked, websiteDomain: null });
+    const chip = screen.getByTestId('fact-origin-name');
+    const noSite =
+      'Most of this was filled in when you signed up. Scanning again only updates fields marked “From your website”.';
+    expect(chip).toHaveAttribute('title', noSite);
+    expect(chip).toHaveAccessibleDescription(noSite);
+  });
+
+  it('Hebrew: the banner’s Hebrew words', () => {
+    render(
+      <NextIntlClientProvider locale="he" messages={{ workspace: he }}>
+        <FactRows workspace={ws(marked)} />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('fact-origin-description')).toHaveAccessibleDescription(
+      'רוב הפרטים האלה מולאו מ‑urban-supply.com כשנרשמתם. סריקה חוזרת מעדכנת רק שדות המסומנים „מהאתר שלכם”.',
+    );
+  });
+
+  it('read once: the description is not also on the page as text', () => {
+    renderRows(marked);
+    const copies = screen.getAllByText(withSite);
+    expect(copies).toHaveLength(6);
+    for (const copy of copies) expect(copy).not.toBeVisible();
+  });
+});

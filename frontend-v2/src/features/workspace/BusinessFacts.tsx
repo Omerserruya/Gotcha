@@ -14,6 +14,7 @@ import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
 
 import { saveWorkspaceFacts, type WriteResult } from './actions';
+import { FromWebsite } from './FromWebsite';
 import type { WebsiteScan } from './load-workspace';
 import styles from './Workspace.module.css';
 
@@ -155,11 +156,10 @@ export function BusinessFacts({
     return t('failed');
   }
 
+  const host = workspace.websiteDomain ? displayHost(workspace.websiteDomain) : null;
   const chip = (key: string, field: string) =>
     fieldOrigin(workspace, field) === 'scan' ? (
-      <span className={styles.fromWebsite} data-testid={`fact-origin-${key}`}>
-        {t('provenance.origin.scan')}
-      </span>
+      <FromWebsite domain={host} testId={`fact-origin-${key}`} />
     ) : null;
 
   /** A row that edits in place: the whole row starts it; its Edit is the one tab stop. */
@@ -310,7 +310,6 @@ export function BusinessFacts({
     </div>
   );
 
-  const host = workspace.websiteDomain ? displayHost(workspace.websiteDomain) : null;
   const industry = industryReading(workspace.industry);
   const ago = (days: number) =>
     new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(-days, 'day');

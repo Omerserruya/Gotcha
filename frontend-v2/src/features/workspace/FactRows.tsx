@@ -3,12 +3,13 @@
 import { useLocale, useTranslations } from 'next-intl';
 import { useMemo, useState, useTransition } from 'react';
 
-import { fieldOrigin, type DayKey, type Workspace } from '@/api/contracts/workspace';
+import { displayHost, fieldOrigin, type DayKey, type Workspace } from '@/api/contracts/workspace';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
 
 import { saveWorkspaceFacts, type WriteResult } from './actions';
 import { BusinessFacts } from './BusinessFacts';
+import { FromWebsite } from './FromWebsite';
 import { summariseWeek, weekOf } from './hours';
 import type { WebsiteScan } from './load-workspace';
 import styles from './Workspace.module.css';
@@ -121,9 +122,10 @@ export function FactRows({
         {value === null ? t('unset') : <UserText>{value}</UserText>}
         {/* The badge only where it is true: `scan`, never `human` or unknown. */}
         {origin(key) === 'scan' ? (
-          <span className={styles.fromWebsite} data-testid={`fact-origin-${key}`}>
-            {t('provenance.origin.scan')}
-          </span>
+          <FromWebsite
+            domain={workspace.websiteDomain ? displayHost(workspace.websiteDomain) : null}
+            testId={`fact-origin-${key}`}
+          />
         ) : null}
       </div>
       <Link

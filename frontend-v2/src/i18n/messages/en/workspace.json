@@ -115,6 +115,10 @@
       "scan": "From your website",
       "human": "You entered this",
       "unknown": "Source not recorded"
+    },
+    "why": {
+      "withSite": "Most of this was filled in from {domain} when you signed up. Scanning again only updates fields marked “From your website”.",
+      "noSite": "Most of this was filled in when you signed up. Scanning again only updates fields marked “From your website”."
     }
   },
   "website": {
