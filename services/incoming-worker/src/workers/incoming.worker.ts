@@ -7,6 +7,7 @@ import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound
 import { prisma, createWorker, type AutomationEventJob, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, HistoricalImportChunkJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, isInboundExcluded, probeUploadsDir, describeUploadsProbe, classifyMediaFailure, reportOperationalFailure, ERROR_CODES, type MediaFailureReason, type InboundReferral } from "@chatcenter/shared";
 import { safeUploadExtension } from "@chatcenter/shared/src/lib/upload-safety";
 import { processCommentTrigger } from "../services/comment-trigger.service";
+import { claimInboundMessage, releaseInboundClaim, findOrCreateOpenConversation } from "../services/inbound-dedupe";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
 // Intentionally OUTSIDE central Meta versioning: graph.instagram.com
@@ -496,8 +497,13 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   }
 
   if (!conversation) {
-    conversation = await prisma.conversation.create({
-      data: {
+    // Race-safe: a concurrent message from the same customer may have created
+    // it since the read above; then that one is used (services/inbound-dedupe.ts).
+    ({ conversation } = await findOrCreateOpenConversation<NonNullable<typeof conversation>>({
+      tenantId,
+      channel,
+      customerExternalId: senderId,
+      create: {
         tenantId,
         channel,
         channelAccountId: channelAccountId || undefined,
@@ -507,7 +513,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         status: "OPEN",
         ...referralFields(referral),
       },
-    });
+    }));
   } else {
     const updates: any = {};
     if (displayName && !conversation.customerName) updates.customerName = displayName;
@@ -1039,8 +1045,22 @@ export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob 
     await processHistoricalChunk(job as Job<HistoricalImportChunkJob>);
     return;
   }
-  // Default ("process") - DM / message path.
-  await processIncomingMessage(job as Job<IncomingMessageJob>);
+  // Default ("process") - DM / message path. Claimed first: a second delivery
+  // of the same message is dropped here, before any contact, conversation,
+  // notification or AI turn (services/inbound-dedupe.ts).
+  const data = job.data as IncomingMessageJob;
+  const claimArgs = { tenantId: data.tenantId, channel: data.channel, externalMessageId: data.normalizedMessage?.externalMessageId };
+  const claim = await claimInboundMessage(claimArgs);
+  if (claim === "duplicate") {
+    console.log(`[incoming-worker] duplicate delivery dropped channel=${data.channel} tenant=${data.tenantId} mid=...${String(claimArgs.externalMessageId).slice(-12)}`);
+    return;
+  }
+  try {
+    await processIncomingMessage(job as Job<IncomingMessageJob>);
+  } catch (err) {
+    if (claim === "claimed") await releaseInboundClaim(claimArgs);
+    throw err;
+  }
 }
 
 let worker: any;
