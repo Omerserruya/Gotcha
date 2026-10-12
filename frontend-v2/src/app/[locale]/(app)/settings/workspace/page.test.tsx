@@ -19,15 +19,16 @@ vi.mock('@/shell/Drawer', () => ({
     </aside>
   ),
 }));
-const { stub, factRows } = vi.hoisted(() => ({
+const { stub, factRows, languageDrawer } = vi.hoisted(() => ({
   stub: (id: string) => () => <div data-testid={id} />,
   factRows: vi.fn((_props: { scan?: unknown }) => <div data-testid="facts" />),
+  languageDrawer: vi.fn((_props: { systemLocale?: unknown }) => <div data-testid="language" />),
 }));
 vi.mock('@/features/workspace/FactRows', () => ({ FactRows: factRows }));
 vi.mock('@/features/workspace/VoiceEditor', () => ({ VoiceEditor: stub('voice') }));
 vi.mock('@/features/workspace/ProhibitedClaims', () => ({ ProhibitedClaims: stub('claims') }));
 vi.mock('@/features/workspace/HoursDrawer', () => ({ HoursDrawer: stub('hours') }));
-vi.mock('@/features/workspace/LanguageDrawer', () => ({ LanguageDrawer: stub('language') }));
+vi.mock('@/features/workspace/LanguageDrawer', () => ({ LanguageDrawer: languageDrawer }));
 vi.mock('@/features/workspace/load-workspace', () => ({
   loadWebsiteScan: async () => ({ pagesRead: 4, daysAgo: 1, topics: [], alsoFound: [] }),
   loadWorkspace: async () => ({
@@ -67,7 +68,7 @@ describe('★ 11 - 11c and 11d open over it', () => {
 
   it.each([
     ['hours', 'drawer-hours', 'hours', 'Opening hours'],
-    ['language', 'drawer-language', 'language', 'Language'],
+    ['language', 'drawer-language', 'language', 'System language'],
   ])('?panel=%s opens %s, titled as 02', async (panel, drawer, inside, title) => {
     await open(panel);
     expect(screen.getByTestId(drawer)).toHaveAttribute('aria-label', title);
@@ -144,5 +145,17 @@ describe('★★ W2 - the response target: a row, and its drawer for an Owner', 
       kind: 'owner',
       settings: { enabled: true, slaMinutes: 30, warningThreshold: 70 },
     };
+  });
+});
+
+describe('★★ W1 - the system language reaches the row and the drawer', () => {
+  it('the row gets it', async () => {
+    await open();
+    expect((factRows.mock.calls.at(-1)![0] as { systemLocale?: unknown }).systemLocale).toBe('he');
+  });
+
+  it('the drawer gets it, and nothing else', async () => {
+    await open('language');
+    expect(languageDrawer.mock.calls.at(-1)![0]).toEqual({ systemLocale: 'he' });
   });
 });

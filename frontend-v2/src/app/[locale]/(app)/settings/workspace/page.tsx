@@ -55,7 +55,12 @@ export default async function Page({
   return (
     <SettingsSection title={t('title')} description={t('description')}>
       {workspace ? (
-        <FactRows workspace={workspace} scan={scan} sla={<SlaRow setup={sla} />} />
+        <FactRows
+          workspace={workspace}
+          scan={scan}
+          systemLocale={languages.systemLocale}
+          sla={<SlaRow setup={sla} />}
+        />
       ) : (
         <p>{t('unavailable')}</p>
       )}
@@ -82,12 +87,7 @@ export default async function Page({
           width={620}
           testId="drawer-language"
         >
-          <LanguageDrawer
-            storedLanguage={workspace.languages[0] ?? null}
-            share={languages.share}
-            systemLocale={languages.systemLocale}
-            updatedAt={workspace.updatedAt ?? null}
-          />
+          <LanguageDrawer systemLocale={languages.systemLocale} />
         </Drawer>
       ) : panel === 'sla' && sla.kind === 'owner' ? (
         <Drawer

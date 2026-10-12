@@ -4,7 +4,6 @@ import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { languageShareSchema } from '@/api/contracts/language-share';
 import { workspaceSchema } from '@/api/contracts/workspace';
 import messages from '@/i18n/messages/en/workspace.json';
 
@@ -146,47 +145,40 @@ describe('★ 11c - the week, and what it cannot hold', () => {
   });
 });
 
-describe('★ 11d - two cards, no paragraphs', () => {
-  /** Dev's real mix: English 7, Hebrew 5 - too few for percentages. */
-  const share = languageShareSchema.parse({
-    windowDays: 30,
-    total: 12,
-    rows: [
-      { locale: 'en', conversations: 7, share: 58.3 },
-      { locale: 'he', conversations: 5, share: 41.7 },
-    ],
-  });
-  const drawer = () =>
-    inIntl(<LanguageDrawer storedLanguage="he" share={share} systemLocale="he" updatedAt={null} />);
+/*
+ * W1 (Omer, 2026-10-12): the drawer holds the SYSTEM language only. The
+ * customers' card is gone - GOTCHA answers each customer in the language they
+ * wrote in, by rule (Backend: the prompt rule, bac9737e) - and so are its
+ * switches that saved nothing.
+ */
+describe('★★ 11d - the system language, and only that (W1)', () => {
+  const drawer = (systemLocale: string | null = 'he') =>
+    inIntl(<LanguageDrawer systemLocale={systemLocale} />);
 
-  it('the main language by name; also-answers from what customers wrote', () => {
+  it('★★ one control - the system language - and no customers’ card', () => {
     drawer();
-    const main = screen.getByTestId('language-main') as HTMLSelectElement;
-    expect(main.value).toBe('he');
-    expect(main.selectedOptions[0]).toHaveTextContent('Hebrew');
-    expect(screen.getByTestId('language-also')).toHaveTextContent(/^English/);
+    const body = screen.getByTestId('language-drawer');
+    const controls = body.querySelectorAll('select, input, button, [role="button"]');
+    expect(controls).toHaveLength(1);
+    expect(controls[0]).toHaveAttribute('data-testid', 'language-system-select');
+    for (const gone of ['language-customers', 'language-main', 'language-also', 'language-other']) {
+      expect(screen.queryByTestId(gone)).toBeNull();
+    }
+    expect(body.querySelector('[aria-disabled="true"]')).toBeNull();
   });
 
-  it('a thin sample is a count, never a percentage', () => {
+  it('says the customers’ rule, as a line', () => {
     drawer();
-    expect(screen.getByTestId('language-hint')).toHaveTextContent(
-      "7 of the last 30 days' 12 conversations were in English.",
+    expect(screen.getByTestId('language-customers-rule')).toHaveTextContent(
+      'Customers are always answered in the language they wrote in.',
     );
   });
 
-  it('what has no store is drawn and not live', () => {
+  it('nothing changed: nothing is written', async () => {
     drawer();
-    expect(screen.getByTestId('language-other')).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByTestId('language-drawer')).not.toHaveTextContent(/\bhe\b/);
-  });
-
-  it('saves the one language the route stores', async () => {
-    drawer();
-    await userEvent.selectOptions(screen.getByTestId('language-main'), 'en');
     await userEvent.click(screen.getByTestId('drawer-save-language'));
-    expect(saveWorkspaceFacts).toHaveBeenCalledWith({ languages: ['en'] }, null);
-    // The system language did not change: not written.
     expect(saveSystemLanguage).not.toHaveBeenCalled();
+    expect(saveWorkspaceFacts).not.toHaveBeenCalled();
   });
 
   it('★★ the system language changes here now, and saves with the drawer (Omer, 2026-10-11)', async () => {
@@ -197,6 +189,8 @@ describe('★ 11d - two cards, no paragraphs', () => {
     await userEvent.selectOptions(system, 'en');
     await userEvent.click(screen.getByTestId('drawer-save-language'));
     expect(saveSystemLanguage).toHaveBeenCalledWith('en');
+    // The business's main language is not written from here any more.
+    expect(saveWorkspaceFacts).not.toHaveBeenCalled();
     expect(await screen.findByTestId('language-saved')).toBeInTheDocument();
   });
 
@@ -213,7 +207,7 @@ describe('★ 11d - two cards, no paragraphs', () => {
 
   it('★★ the interface language is not here: it is personal (Omer, 2026-10-11)', () => {
     drawer();
-    const card = screen.getByTestId('language-system');
+    const card = screen.getByTestId('language-drawer');
     // One select in the card - the system language - and nothing else to choose.
     const selects = card.querySelectorAll('select');
     expect(selects).toHaveLength(1);

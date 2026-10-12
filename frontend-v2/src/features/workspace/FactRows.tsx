@@ -3,13 +3,12 @@
 import { useLocale, useTranslations } from 'next-intl';
 import { useMemo, useState, useTransition, type ReactNode } from 'react';
 
-import { displayHost, fieldOrigin, type DayKey, type Workspace } from '@/api/contracts/workspace';
+import { type DayKey, type Workspace } from '@/api/contracts/workspace';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
 
 import { saveWorkspaceFacts, type WriteResult } from './actions';
 import { BusinessFacts } from './BusinessFacts';
-import { FromWebsite } from './FromWebsite';
 import { summariseWeek, weekOf } from './hours';
 import type { WebsiteScan } from './load-workspace';
 import styles from './Workspace.module.css';
@@ -36,21 +35,15 @@ type FactKey = 'hours' | 'language' | 'currencyTimezone';
 
 type Panel = 'hours' | 'language';
 
-/**
- * The provenance field behind each row. Hours and currency & time zone have
- * none: hours is a setting the scan never writes, and one badge over two
- * fields would claim a source for both.
- */
-const PROVENANCE_FIELD: Partial<Record<FactKey, string>> = {
-  language: 'primaryLanguage',
-};
-
 export function FactRows({
   workspace,
   scan = null,
+  systemLocale = null,
   sla = null,
 }: {
   readonly workspace: Workspace;
+  /** The workspace's system language (`tenantDefaultLocale`) - the language row's value. */
+  readonly systemLocale?: string | null;
   /** The response target's row (W2), last in the card - drawn by the page. */
   readonly sla?: ReactNode;
   /** What the website scan read and found - drawn on the website row. */
@@ -75,11 +68,6 @@ export function FactRows({
     () => zoneGroups(zones, workspace.timezone ?? null, locale),
     [zones, workspace.timezone, locale],
   );
-
-  const origin = (key: FactKey) => {
-    const field = PROVENANCE_FIELD[key];
-    return field ? fieldOrigin(workspace, field) : 'unknown';
-  };
 
   /*
    * ★ ONLY WHAT CHANGED IS SENT. dev's Europe/London was saved by a request,
@@ -123,13 +111,6 @@ export function FactRows({
           English screen. The data was right and the rendering was not.
         */}
         {value === null ? t('unset') : <UserText>{value}</UserText>}
-        {/* The badge only where it is true: `scan`, never `human` or unknown. */}
-        {origin(key) === 'scan' ? (
-          <FromWebsite
-            domain={workspace.websiteDomain ? displayHost(workspace.websiteDomain) : null}
-            testId={`fact-origin-${key}`}
-          />
-        ) : null}
       </div>
       <Link
         href={{ pathname: '/settings/workspace', query: { panel } }}
@@ -183,20 +164,19 @@ export function FactRows({
     }
   };
 
-  const storedLanguage = workspace.languages[0];
-
   return (
     <div className={styles.facts}>
       <BusinessFacts workspace={workspace} scan={scan} />
       {row('hours', hoursValue, 'hours')}
 
       {/*
-        The business's MAIN language - `primaryLanguage`, what knowledge from
-        the website is written in. Not the language replies go out in (each
-        customer's own, by rule) and not the system language (the tenant's
-        locale). 11d separates all three.
+        ★★ THE SYSTEM LANGUAGE (Omer, 2026-10-12, W1): "שפת המערכת: עברית" -
+        what GOTCHA writes in for the business's systems and team. Not the
+        customers' (each answered in their own, by rule) and not the
+        business's main language (`primaryLanguage`, which the scan keeps for
+        the knowledge it writes).
       */}
-      {row('language', storedLanguage ? languageName(storedLanguage) : null, 'language')}
+      {row('language', systemLocale ? languageName(systemLocale) : null, 'language')}
 
       {/*
         11e: the one row that edits in place - two values a person sets once

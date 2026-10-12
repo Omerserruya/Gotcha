@@ -3,56 +3,33 @@
 import { useLocale, useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
-import {
-  namedLanguages,
-  sharesAreMeaningful,
-  type LanguageShare,
-} from '@/api/contracts/language-share';
 import { Link } from '@/i18n/navigation';
 import { LOCALE_CODES } from '@/i18n/locales';
 import drawer from '@/design-system/styles/drawer.module.css';
 
-import { saveSystemLanguage, saveWorkspaceFacts } from './actions';
+import { saveSystemLanguage } from './actions';
 import styles from './Workspace.module.css';
 
-/** Offered for the main language; the stored one is added when it is not here. */
-const COMMON = ['he', 'en', 'ar', 'ru', 'fr', 'es', 'de'] as const;
-
 /**
- * 11d, measured: two cards - "Speaking to customers" and "Inside GOTCHA -
- * system language" - and no paragraphs.
+ * 11d: the SYSTEM language, and only that (Omer, 2026-10-12, W1) - the
+ * language GOTCHA writes in for the business's own systems and team: the CRM,
+ * Shopify, summaries and notes. `PUT /agents/settings/locale`.
  *
- * What is stored, and so what is live: the business's MAIN language
- * (`primaryLanguage`, the language knowledge from the website is written
- * in), one entry, through `PATCH /workspace`. Replies follow each
- * customer's own language on a rule that is not a setting, so that switch
- * is drawn on and not live; "Any other language", the translate switch and
- * the system language have no store here - drawn, not live, each with why.
- * "Also answers in" is what the last 30 days actually saw.
+ * ★★ NOT THE CUSTOMERS' LANGUAGE. "Speaking to customers" is gone: GOTCHA
+ *   answers every customer in the language they wrote in, a rule rather than
+ *   a setting (Backend, 2026-10-12: the prompt rule, and the agent loop's pin
+ *   fixed in bac9737e). The business's main language (`primaryLanguage`) is
+ *   read only for knowledge written from the website, and the scan keeps it
+ *   filled - so the card that edited it, and its switches that saved
+ *   nothing, went with it.
  *
- * ★★ THE SYSTEM LANGUAGE CHANGES HERE (Omer, 2026-10-11: "you can't change
- *   the system language"): it saves with the drawer
- *   (`PUT /agents/settings/locale`).
- *
- * ★★ THE INTERFACE LANGUAGE DOES NOT (Omer, 2026-10-11): it is personal, so it
- *   lives in the person's own places - the rail's account menu, and their own
- *   row in People (12d). This card only says where; a line, not a control.
+ * ★★ NOT THE INTERFACE LANGUAGE (Omer, 2026-10-11): it is personal, and lives
+ *   in the person's own menu. This drawer only says where.
  */
-export function LanguageDrawer({
-  storedLanguage,
-  share,
-  systemLocale,
-  updatedAt,
-}: {
-  readonly storedLanguage: string | null;
-  readonly share: LanguageShare | null;
-  readonly systemLocale: string | null;
-  readonly updatedAt: string | null;
-}) {
+export function LanguageDrawer({ systemLocale }: { readonly systemLocale: string | null }) {
   const t = useTranslations('workspace.languageDrawer');
   const tw = useTranslations('workspace');
   const locale = useLocale();
-  const [main, setMain] = useState(storedLanguage ?? '');
   const [system, setSystem] = useState(systemLocale ?? '');
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -66,25 +43,16 @@ export function LanguageDrawer({
     }
   };
 
-  const options = [...new Set([...(storedLanguage ? [storedLanguage] : []), ...COMMON])];
-  const seen = share ? namedLanguages(share).filter((r) => r.locale !== main) : [];
-  const top = seen[0] ?? null;
-
   function save() {
     setProblem(null);
     setSaved(false);
+    // Nothing chosen, or nothing changed: there is nothing to write.
+    if (system === '' || system === (systemLocale ?? '')) return;
     startTransition(async () => {
-      const result = await saveWorkspaceFacts({ languages: main ? [main] : [] }, updatedAt);
-      if (!result.ok) {
-        setProblem(result.reason === 'stale' ? tw('stale') : tw('failed'));
+      const written = await saveSystemLanguage(system);
+      if (!written.ok) {
+        setProblem(written.reason === 'forbidden' ? t('forbidden') : tw('failed'));
         return;
-      }
-      if (system !== '' && system !== (systemLocale ?? '')) {
-        const written = await saveSystemLanguage(system);
-        if (!written.ok) {
-          setProblem(written.reason === 'forbidden' ? t('forbidden') : tw('failed'));
-          return;
-        }
       }
       setSaved(true);
     });
@@ -93,111 +61,29 @@ export function LanguageDrawer({
   return (
     <>
       <div className={drawer.drawerBody} data-testid="language-drawer">
-        <section className={styles.langCard} data-testid="language-customers">
-          <h3 className={drawer.sectionTitle}>{t('customers')}</h3>
-          <div className={drawer.pair}>
-            <label className={drawer.field}>
-              <span className={drawer.fieldLabel}>{t('main')}</span>
-              <select
-                className={drawer.box}
-                value={main}
-                title={t('mainHint')}
-                data-testid="language-main"
-                onChange={(e) => setMain(e.target.value)}
-              >
-                {main === '' ? <option value="">-</option> : null}
-                {options.map((code) => (
-                  <option key={code} value={code}>
-                    {name(code)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className={drawer.field}>
-              <span className={drawer.fieldLabel}>{t('also')}</span>
-              <span className={styles.langChips} data-testid="language-also">
-                {share === null ? (
-                  <span className={styles.langNone}>-</span>
-                ) : (
-                  seen.map((r) => (
-                    <span key={r.locale} className={styles.langChip}>
-                      {name(r.locale!)}
-                    </span>
-                  ))
-                )}
-                <span className={styles.langAdd} aria-disabled="true" title={t('alsoHint')}>
-                  {t('add')}
-                </span>
-              </span>
-            </div>
-          </div>
-
-          <p className={styles.langSwitchRow} title={t('repliesHint')}>
-            <span className={styles.weekPill} data-on="yes" aria-hidden="true" />
-            {t('replies')}
-          </p>
-
-          <div className={styles.langOther}>
-            <span className={styles.langOtherLabel}>{t('other')}</span>
-            <span
-              className={styles.langSegmented}
-              aria-disabled="true"
-              title={t('otherHint')}
-              data-testid="language-other"
-            >
-              <span className={styles.langSegment}>
-                {t('otherMain', { language: main ? name(main) : '-' })}
-              </span>
-              <span className={styles.langSegment}>{t('otherTheirs')}</span>
-              <span className={styles.langSegment}>{t('otherPerson')}</span>
-            </span>
-          </div>
-
-          {top && share ? (
-            <p className={styles.langHint} data-testid="language-hint">
-              {sharesAreMeaningful(share)
-                ? t('hintShare', {
-                    share: top.share,
-                    days: share.windowDays,
-                    language: name(top.locale!),
-                  })
-                : t('hintCount', {
-                    count: top.conversations,
-                    total: share.total,
-                    days: share.windowDays,
-                    language: name(top.locale!),
-                  })}
-            </p>
-          ) : null}
-        </section>
-
-        <section className={styles.langCard} data-testid="language-system">
-          <h3 className={drawer.sectionTitle}>{t('system')}</h3>
-          <div className={drawer.field}>
-            <span className={drawer.fieldLabel}>{t('systemLabel')}</span>
-            <select
-              className={drawer.box}
-              value={system}
-              title={t('systemHint')}
-              data-testid="language-system-select"
-              onChange={(e) => setSystem(e.target.value)}
-            >
-              {system === '' ? <option value="">-</option> : null}
-              {LOCALE_CODES.map((code) => (
-                <option key={code} value={code}>
-                  {name(code)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <p className={styles.langSwitchRow} title={t('translateHint')}>
-            <span className={styles.weekPill} data-on="no" aria-hidden="true" />
-            {t('translate', { language: systemLocale ? name(systemLocale) : '-' })}
-          </p>
-          <p className={drawer.hint} data-testid="language-mine-where">
-            {t('mineWhere')}
-          </p>
-        </section>
+        <div className={drawer.field}>
+          <span className={drawer.fieldLabel}>{t('systemLabel')}</span>
+          <select
+            className={drawer.box}
+            value={system}
+            data-testid="language-system-select"
+            onChange={(e) => setSystem(e.target.value)}
+          >
+            {system === '' ? <option value="">-</option> : null}
+            {LOCALE_CODES.map((code) => (
+              <option key={code} value={code}>
+                {name(code)}
+              </option>
+            ))}
+          </select>
+          <span className={drawer.hint}>{t('systemHint')}</span>
+        </div>
+        <p className={drawer.hint} data-testid="language-customers-rule">
+          {t('customersRule')}
+        </p>
+        <p className={drawer.hint} data-testid="language-mine-where">
+          {t('mineWhere')}
+        </p>
       </div>
       <footer className={drawer.drawerFoot}>
         <button

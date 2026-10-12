@@ -510,7 +510,8 @@ describe('★ "From your website" says what it means - the banner’s sentence, 
 
   it('its title and its accessible description, on every marked row', () => {
     renderRows(marked);
-    for (const key of ['name', 'description', 'address', 'industry', 'country', 'language']) {
+    // Not the language row: it is the system language now (W1), no scan wrote it.
+    for (const key of ['name', 'description', 'address', 'industry', 'country']) {
       const chip = screen.getByTestId(`fact-origin-${key}`);
       expect(chip).toHaveTextContent(/^From your website$/);
       expect(chip).toHaveAttribute('title', withSite);
@@ -544,7 +545,7 @@ describe('★ "From your website" says what it means - the banner’s sentence, 
   it('read once: the description is not also on the page as text', () => {
     renderRows(marked);
     const copies = screen.getAllByText(withSite);
-    expect(copies).toHaveLength(6);
+    expect(copies).toHaveLength(5);
     for (const copy of copies) expect(copy).not.toBeVisible();
   });
 });

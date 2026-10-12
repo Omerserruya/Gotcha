@@ -76,10 +76,14 @@ const ws = (over: Record<string, unknown> = {}) =>
     ...over,
   });
 
-const renderRows = (over: Record<string, unknown> = {}) =>
+const renderRows = (
+  over: Record<string, unknown> = {},
+  scan: null = null,
+  systemLocale: string | null = 'he',
+) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ workspace: messages }}>
-      <FactRows workspace={ws(over)} />
+      <FactRows workspace={ws(over)} scan={scan} systemLocale={systemLocale} />
     </NextIntlClientProvider>,
   );
 
@@ -125,15 +129,26 @@ describe('★ 11c / 11d - hours and language open 02’s drawers', () => {
   });
 });
 
-describe('★ the language row is the business’s main language, by name', () => {
-  it('"Hebrew", never "he", and claims nothing about replies or the system', () => {
-    renderRows();
-    const value = screen.getByTestId('fact-value-language');
-    expect(value).toHaveTextContent(/^Hebrew$/);
+/*
+ * W1 (Omer, 2026-10-12): the row reads "שפת המערכת: עברית" - the system
+ * language, not the business's main language (`primaryLanguage`, which the
+ * scan keeps for the knowledge it writes).
+ */
+describe('★★ the language row is the SYSTEM language, by name (W1)', () => {
+  it('"System language: Hebrew", never "he"', () => {
+    renderRows({ languages: ['en'] }, null, 'he');
+    expect(screen.getByTestId('fact-language')).toHaveTextContent(/^System language/);
+    expect(screen.getByTestId('fact-value-language')).toHaveTextContent(/^Hebrew$/);
   });
 
-  it('falls back to Not set when no language is stored', () => {
-    renderRows({ languages: [] });
+  it('★ not the main language, and no "From your website" chip for it', () => {
+    renderRows({ languages: ['en'], fieldSources: { primaryLanguage: 'scan' } }, null, 'he');
+    expect(screen.getByTestId('fact-value-language')).not.toHaveTextContent('English');
+    expect(screen.queryByTestId('fact-origin-language')).toBeNull();
+  });
+
+  it('falls back to Not set when the system language could not be read', () => {
+    renderRows({}, null, null);
     expect(screen.getByTestId('fact-value-language')).toHaveTextContent(/not set/i);
   });
 });
@@ -288,7 +303,7 @@ describe('★ a missing key renders as NOTHING in production, not as a key', () 
 
   it('and the real catalogue renders the label the guard looks for', () => {
     renderRows();
-    expect(screen.getByTestId('fact-language')).toHaveTextContent(/^Language/);
+    expect(screen.getByTestId('fact-language')).toHaveTextContent(/^System language/);
   });
 });
 
