@@ -39,6 +39,19 @@ vi.mock('@/features/workspace/load-workspace', () => ({
 vi.mock('@/features/workspace/load-languages', () => ({
   loadLanguages: async () => ({ share: null, systemLocale: 'he' }),
 }));
+vi.mock('@/features/workspace/SlaDrawer', () => ({ SlaDrawer: stub('sla') }));
+vi.mock('@/features/workspace/SlaRow', () => ({ SlaRow: stub('sla-row') }));
+const sla = vi.hoisted(() => ({
+  setup: { kind: 'owner', settings: { enabled: true, slaMinutes: 30, warningThreshold: 70 } } as {
+    kind: string;
+    settings?: unknown;
+  },
+  departments: vi.fn(async () => []),
+}));
+vi.mock('@/features/workspace/load-sla-setup', () => ({
+  loadSlaSetup: async () => sla.setup,
+  loadDepartmentSlas: sla.departments,
+}));
 
 import Page from './page';
 
@@ -101,5 +114,35 @@ describe('★ 11 - no "Scan again" here: it moved to Studio · Knowledge (Omer, 
   it('its copy is not Workspace’s any more', () => {
     expect(workspace).not.toHaveProperty('scan');
     expect(workspace).not.toHaveProperty('intro');
+  });
+});
+
+describe('★★ W2 - the response target: a row, and its drawer for an Owner', () => {
+  it('the row is drawn in the facts card', async () => {
+    await open();
+    const props = factRows.mock.calls.at(-1)![0] as { sla?: unknown };
+    expect(props.sla).toBeTruthy();
+  });
+
+  it('★★ ?panel=sla opens it for an Owner, with the departments read only then', async () => {
+    sla.departments.mockClear();
+    await open();
+    expect(sla.departments).not.toHaveBeenCalled();
+    await open('sla');
+    expect(screen.getByTestId('drawer-sla')).toHaveAttribute('aria-label', 'Response target');
+    expect(screen.getByTestId('sla')).toBeInTheDocument();
+    expect(sla.departments).toHaveBeenCalledTimes(1);
+  });
+
+  it('★★ anyone else: no drawer, and nothing more is read', async () => {
+    sla.setup = { kind: 'forbidden' };
+    sla.departments.mockClear();
+    await open('sla');
+    expect(screen.queryByTestId('drawer-sla')).toBeNull();
+    expect(sla.departments).not.toHaveBeenCalled();
+    sla.setup = {
+      kind: 'owner',
+      settings: { enabled: true, slaMinutes: 30, warningThreshold: 70 },
+    };
   });
 });

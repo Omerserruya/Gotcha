@@ -19,7 +19,8 @@
     "hours": "Opening hours",
     "website": "Website",
     "language": "Language",
-    "currencyTimezone": "Currency & time zone"
+    "currencyTimezone": "Currency & time zone",
+    "sla": "Response target"
   },
   "hours": {
     "to": "{open}-{close}",
@@ -215,5 +216,38 @@
       "country": "Choose \"-\" to remove it. Enter saves, Esc cancels."
     },
     "website": "That isn't a website address. Try something like shop.example.com."
+  },
+  "sla": {
+    "on": "Reply within {minutes} min · warn at {warning}%",
+    "onNoWarning": "Reply within {minutes} min",
+    "off": "Off",
+    "ownerOnly": "Only an Owner can see or change this.",
+    "unavailable": "We couldn't read this just now."
+  },
+  "slaDrawer": {
+    "title": "Response target",
+    "line": "How long a customer may wait for a person's reply. The inbox marks conversations close to it, and those past it.",
+    "enabled": "Mark late conversations in the inbox",
+    "minutes": "Reply within (minutes)",
+    "warning": "Warn early at (% of the target)",
+    "warningHint": "Empty: only conversations past the target are marked.",
+    "invalidMinutes": "A whole number from 1 to 1440.",
+    "invalidWarning": "A whole number from 0 to 100.",
+    "departments": "Departments",
+    "departmentsLine": "A department with its own target uses it instead of the workspace's.",
+    "departmentsNone": "No departments yet.",
+    "departmentsUnavailable": "We couldn't read the departments just now. The workspace's target can still be changed.",
+    "own": "{name}: its own target",
+    "ownMinutes": "{name}: reply within (minutes)",
+    "usesWorkspace": "Uses the workspace's target",
+    "unread": "We couldn't read this department's target, so it isn't changed here.",
+    "notEnforced": "This marks conversations in the inbox. It doesn't move or reassign them.",
+    "fix": "Fix the highlighted values first.",
+    "problem": {
+      "forbidden": "Only an Owner can change this.",
+      "invalid": "One of the values was refused. Check them and try again.",
+      "failed": "That didn't save. Try again.",
+      "departments": "The workspace's target saved. These departments didn't: {names}. Try again."
+    }
   }
 }

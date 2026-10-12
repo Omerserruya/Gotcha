@@ -4,8 +4,11 @@ import { FactRows } from '@/features/workspace/FactRows';
 import { HoursDrawer } from '@/features/workspace/HoursDrawer';
 import { LanguageDrawer } from '@/features/workspace/LanguageDrawer';
 import { loadLanguages } from '@/features/workspace/load-languages';
+import { loadDepartmentSlas, loadSlaSetup } from '@/features/workspace/load-sla-setup';
 import { loadWebsiteScan, loadWorkspace } from '@/features/workspace/load-workspace';
 import { ProhibitedClaims } from '@/features/workspace/ProhibitedClaims';
+import { SlaDrawer } from '@/features/workspace/SlaDrawer';
+import { SlaRow } from '@/features/workspace/SlaRow';
 import { VoiceEditor } from '@/features/workspace/VoiceEditor';
 import styles from '@/features/workspace/Workspace.module.css';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -30,11 +33,15 @@ export default async function Page({
 }) {
   const t = await getTranslations('workspace');
   const panel = (await searchParams)?.panel;
-  const [{ workspace, voice, claims }, languages, scan] = await Promise.all([
+  const [{ workspace, voice, claims }, languages, scan, sla] = await Promise.all([
     loadWorkspace(),
     loadLanguages(),
     loadWebsiteScan(),
+    loadSlaSetup(),
   ]);
+  // W2: the departments' own targets - read only with the drawer open.
+  const slaDepartments =
+    panel === 'sla' && sla.kind === 'owner' ? await loadDepartmentSlas() : null;
 
   /*
     11, measured: the facts as one table with the marking ON the rows, then
@@ -47,7 +54,11 @@ export default async function Page({
   */
   return (
     <SettingsSection title={t('title')} description={t('description')}>
-      {workspace ? <FactRows workspace={workspace} scan={scan} /> : <p>{t('unavailable')}</p>}
+      {workspace ? (
+        <FactRows workspace={workspace} scan={scan} sla={<SlaRow setup={sla} />} />
+      ) : (
+        <p>{t('unavailable')}</p>
+      )}
       <div className={styles.cards}>
         {voice ? <VoiceEditor voice={voice} /> : <p>{t('voice.unavailable')}</p>}
         {claims ? <ProhibitedClaims claims={claims.claims} /> : <p>{t('claims.unavailable')}</p>}
@@ -77,6 +88,15 @@ export default async function Page({
             systemLocale={languages.systemLocale}
             updatedAt={workspace.updatedAt ?? null}
           />
+        </Drawer>
+      ) : panel === 'sla' && sla.kind === 'owner' ? (
+        <Drawer
+          title={t('slaDrawer.title')}
+          line={t('slaDrawer.line')}
+          closeHref="/settings/workspace"
+          testId="drawer-sla"
+        >
+          <SlaDrawer settings={sla.settings} departments={slaDepartments} />
         </Drawer>
       ) : null}
     </SettingsSection>

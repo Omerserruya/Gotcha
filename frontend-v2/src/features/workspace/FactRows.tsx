@@ -1,7 +1,7 @@
 'use client';
 
 import { useLocale, useTranslations } from 'next-intl';
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useState, useTransition, type ReactNode } from 'react';
 
 import { displayHost, fieldOrigin, type DayKey, type Workspace } from '@/api/contracts/workspace';
 import { UserText } from '@/design-system/primitives/text/UserText';
@@ -48,8 +48,11 @@ const PROVENANCE_FIELD: Partial<Record<FactKey, string>> = {
 export function FactRows({
   workspace,
   scan = null,
+  sla = null,
 }: {
   readonly workspace: Workspace;
+  /** The response target's row (W2), last in the card - drawn by the page. */
+  readonly sla?: ReactNode;
   /** What the website scan read and found - drawn on the website row. */
   readonly scan?: WebsiteScan | null;
 }) {
@@ -354,6 +357,7 @@ export function FactRows({
           </button>
         </div>
       )}
+      {sla}
     </div>
   );
 }
