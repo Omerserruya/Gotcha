@@ -20,8 +20,13 @@ import type { ConversationRow } from '@/api/contracts/inbox';
  * ── WHO IS TIMED ──
  * Only a customer waiting on us:
  *   - not a closed conversation;
- *   - not one GOTCHA or a flow is carrying ("מנוהל ע״י GOTCHA") - nobody is
- *     late for a conversation an employee is already answering (legacy, too);
+ *   - not one GOTCHA or a flow is CARRYING ("מנוהל ע״י GOTCHA") - nobody is
+ *     late for a conversation an employee is already answering (legacy, too).
+ *     ⚠ Carrying is the route's own three-part rule (conversation.service.ts,
+ *     `automatedOnly`): `handledBy` ai_agent or flow AND not handed over AND
+ *     nobody assigned. `handledBy` alone is not it - it stays `ai_agent`
+ *     after a person is assigned, and timing on it alone left every assigned
+ *     conversation unmarked (dev, 2026-10-12: Omer's row, 22 hours waiting);
  *   - not one whose last message was OURS (supervisor, 2026-10-12): legacy
  *     timed it anyway, and a conversation answered a minute ago went red.
  *
@@ -62,6 +67,8 @@ type Timed = Pick<
   ConversationRow,
   | 'status'
   | 'handledBy'
+  | 'isHandedOver'
+  | 'assignedAgentId'
   | 'lastMessageDirection'
   | 'lastMessageAt'
   | 'createdAt'
@@ -73,7 +80,11 @@ type Timed = Pick<
 export function slaTargetFor(row: Timed, clock: SlaClock | null): SlaTarget | null {
   if (clock === null) return null;
   if (row.status === 'CLOSED') return null;
-  if (row.handledBy === 'ai_agent' || row.handledBy === 'flow') return null;
+  const carried =
+    (row.handledBy === 'ai_agent' || row.handledBy === 'flow') &&
+    !row.isHandedOver &&
+    row.assignedAgentId === null;
+  if (carried) return null;
   // `waitingSince` null: nothing came in after our last reply - nobody waits.
   if (row.waitingSince === null) return null;
   // An older server: the customer spoke last, timed from the last message.

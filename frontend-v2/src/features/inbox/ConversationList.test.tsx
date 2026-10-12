@@ -1680,6 +1680,28 @@ describe('★★ W2 - the response target, on the rows a person owes an answer',
     for (const id of ['ai', 'fl', 'us', 'cl']) expect(screen.queryByTestId(`sla-${id}`)).toBeNull();
   });
 
+  it('★★ dev, 2026-10-12: an assigned row GOTCHA once answered is a person’s - and late', async () => {
+    render(
+      await ConversationList({
+        rows: [
+          row({
+            id: 'omer',
+            handledBy: 'ai_agent',
+            assignedAgentId: 'me',
+            isHandedOver: true,
+            lastMessageDirection: 'INBOUND',
+            waitingSince: '2026-07-30T09:00:00.000Z',
+          }),
+        ],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        sla,
+      }),
+    );
+    expect(screen.getByTestId('sla-omer')).toHaveAttribute('data-sla', 'late');
+  });
+
   it('★★ no target known: no marks at all', async () => {
     render(
       await ConversationList({

@@ -38,6 +38,18 @@ describe('★★ who is timed: a customer waiting on us', () => {
   it('★★ never a conversation GOTCHA or a flow is carrying (as legacy)', () => {
     expect(slaTargetFor(row({ handledBy: 'ai_agent' }), clock())).toBeNull();
     expect(slaTargetFor(row({ handledBy: 'flow' }), clock())).toBeNull();
+    /*
+     * ⚠⚠ "Carrying" is the route's three-part rule, not `handledBy` alone: it
+     *   stays `ai_agent` after a person is assigned or takes over. Dev,
+     *   2026-10-12: Omer's own assigned row, waiting 22 hours, had no mark.
+     */
+    expect(
+      slaTargetFor(row({ handledBy: 'ai_agent', assignedAgentId: 'u1' }), clock()),
+    ).not.toBeNull();
+    expect(
+      slaTargetFor(row({ handledBy: 'ai_agent', isHandedOver: true }), clock()),
+    ).not.toBeNull();
+    expect(slaTargetFor(row({ handledBy: 'flow', assignedAgentId: 'u1' }), clock())).not.toBeNull();
     // Unrouted is nobody's yet - a person owes it an answer.
     expect(slaTargetFor(row({ handledBy: null }), clock())).not.toBeNull();
   });
