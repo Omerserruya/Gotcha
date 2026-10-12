@@ -13,6 +13,8 @@ import {
   VIEW_AFTER,
   viewAfter,
   viewQuery,
+  FALLBACK_FILTER_CHIPS,
+  filterChips,
 } from './inbox-views';
 import enNav from '@/i18n/messages/en/navigation.json';
 import heNav from '@/i18n/messages/he/navigation.json';
@@ -97,6 +99,8 @@ describe('★ the channel filter is one of the chips the header draws', () => {
       'INSTAGRAM',
       'MESSENGER',
       'EMAIL',
+      'GMAIL',
+      'OUTLOOK',
       'WEBCHAT',
       'SHOPIFY_LIVE_CHAT',
     ]);
@@ -105,7 +109,7 @@ describe('★ the channel filter is one of the chips the header draws', () => {
 
   it('⚠ and anything else is "All" - including real channels with no chip', () => {
     // A narrowed list with no chip lit would say nothing about what narrowed it.
-    for (const raw of [undefined, '', 'GMAIL', 'whatsapp', 'OUTLOOK', 'shopify_live_chat']) {
+    for (const raw of [undefined, '', 'SLACK', 'whatsapp', 'VOICE', 'shopify_live_chat']) {
       expect(parseChannelFilter(raw), String(raw)).toBeNull();
     }
   });
@@ -231,5 +235,79 @@ describe('★★ a verb takes the list to where the conversation now is', () => 
     expect(viewAfter('claim', true)).toBe('mine');
     expect(viewAfter('returnToAi', false)).toBe('gotcha');
     expect(viewAfter('returnToAi', true)).toBe('gotcha');
+  });
+});
+
+describe('★★ I2 - only the channels this workspace has (Omer, 2026-10-12)', () => {
+  const state = (channel: string, connectionStatus = 'CONNECTED', isActive = true) => ({
+    channel,
+    connectionStatus,
+    isActive,
+  });
+
+  it('★★ a chip per connected channel - or connected and failing; never pending, gone or off', () => {
+    const chips = filterChips(
+      [
+        state('WHATSAPP'),
+        state('INSTAGRAM', 'ERROR'),
+        state('MESSENGER', 'DISCONNECTED'),
+        state('WEBCHAT', 'PENDING'),
+        state('SHOPIFY_LIVE_CHAT', 'CONNECTED', false),
+      ],
+      false,
+      null,
+    );
+    expect(chips.map((c) => c.channel)).toEqual(['WHATSAPP', 'INSTAGRAM']);
+  });
+
+  it('★★ email wears its provider: Gmail, Outlook, or plain mail - never Gmail it is not', () => {
+    expect(filterChips([state('GMAIL')], false, null)).toEqual([
+      { channel: 'GMAIL', mark: 'GMAIL' },
+    ]);
+    expect(filterChips([state('OUTLOOK')], false, null)).toEqual([
+      { channel: 'OUTLOOK', mark: 'OUTLOOK' },
+    ]);
+    expect(filterChips([state('EMAIL')], false, null)).toEqual([
+      { channel: 'EMAIL', mark: 'EMAIL' },
+    ]);
+  });
+
+  it('★★ the site’s chat follows its store: Woo’s mark on web chat, Shopify’s chat its own', () => {
+    expect(filterChips([state('WEBCHAT')], true, null)).toEqual([
+      { channel: 'WEBCHAT', mark: 'WOOCOMMERCE' },
+    ]);
+    expect(filterChips([state('WEBCHAT')], false, null)).toEqual([
+      { channel: 'WEBCHAT', mark: 'WEBCHAT' },
+    ]);
+    expect(filterChips([state('SHOPIFY_LIVE_CHAT')], true, null)).toEqual([
+      { channel: 'SHOPIFY_LIVE_CHAT', mark: 'SHOPIFY_LIVE_CHAT' },
+    ]);
+  });
+
+  it('★ the chip in force is drawn, connected or not', () => {
+    expect(filterChips([state('WHATSAPP')], false, 'MESSENGER').map((c) => c.channel)).toEqual([
+      'WHATSAPP',
+      'MESSENGER',
+    ]);
+  });
+
+  it('★ channels unread: the row as it was, never an empty one', () => {
+    expect(filterChips(null, true, null)).toBe(FALLBACK_FILTER_CHIPS);
+    expect(FALLBACK_FILTER_CHIPS.map((c) => c.channel)).toEqual([
+      'WHATSAPP',
+      'INSTAGRAM',
+      'MESSENGER',
+      'EMAIL',
+      'WEBCHAT',
+      'SHOPIFY_LIVE_CHAT',
+    ]);
+  });
+
+  it('in 02’s order whatever order the read gives', () => {
+    expect(
+      filterChips([state('WEBCHAT'), state('GMAIL'), state('WHATSAPP')], false, null).map(
+        (c) => c.channel,
+      ),
+    ).toEqual(['WHATSAPP', 'GMAIL', 'WEBCHAT']);
   });
 });

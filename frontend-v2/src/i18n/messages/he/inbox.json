@@ -118,7 +118,8 @@
       "emptyPeriod": {
         "title": "אין שיחות שנפתחו בתקופה הזאת",
         "all": "להצגת כל התאריכים"
-      }
+      },
+      "wooChat": "צ׳אט WooCommerce"
     },
     "menu": {
       "label": "פעולות על השיחה",
@@ -315,7 +316,7 @@
       "none": "עוד כלום",
       "steps": "{count, plural, =1 {צעד אחד} other {# צעדים}}",
       "ms": "{ms} מ\"ש",
-      "seconds": "{s} שנ'",
+      "seconds": "{s} שנ׳",
       "label": {
         "looking_up_order": "חיפוש ההזמנה",
         "checking_products": "בדיקת המוצרים",

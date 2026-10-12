@@ -562,7 +562,10 @@ export const memberEndpoints = {
  */
 export const channelEndpoints = {
   list: () => endpoint('/api/channels'),
-  /** Health counts only. Any tenant member; carries no credentials. */
+  /**
+   * One row per channel account, with its connection state. Any tenant member;
+   * the identifier and last error only for `channels:manage:read`.
+   */
   state: () => endpoint('/api/channels/state'),
   /**
    * NOT callable from this app as written: it accepts the access token only as

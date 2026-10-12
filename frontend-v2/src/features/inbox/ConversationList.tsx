@@ -27,7 +27,8 @@ import { Link } from '@/i18n/navigation';
 import {
   inboxQuery,
   DEFAULT_INBOX_VIEW,
-  QUEUE_CHANNEL_FILTERS,
+  FALLBACK_FILTER_CHIPS,
+  type FilterChip,
   type InboxPeriod,
   type InboxView,
   type QueueChannelFilter,
@@ -81,7 +82,10 @@ export async function ConversationList({
   periodInvalid = false,
   clear = null,
   sla = null,
+  chips = FALLBACK_FILTER_CHIPS,
 }: {
+  /** The filter row's chips: the channels this workspace has (I2). */
+  readonly chips?: readonly FilterChip[];
   /** The response target the rows are timed by (W2); `null` - none known, no marks. */
   readonly sla?: SlaClock | null;
   /** 02b: drawn in place of the empty note when the queue is clear. */
@@ -588,8 +592,11 @@ export async function ConversationList({
           >
             {t('queue.filter.all')}
           </Link>
-          {QUEUE_CHANNEL_FILTERS.map((filter) => {
-            const name = channelName(filter, channelNames) ?? filter;
+          {chips.map(({ channel: filter, mark }) => {
+            const name =
+              mark === 'WOOCOMMERCE'
+                ? t('queue.filter.wooChat')
+                : (channelName(filter, channelNames) ?? filter);
             return (
               <Link
                 key={filter}
@@ -601,7 +608,7 @@ export async function ConversationList({
                 data-testid={`filter-${filter}`}
               >
                 {/* The mark is the only thing on the chip; its label is the link's name. */}
-                <ChannelPlate channel={filter} label={name} size="lg" />
+                <ChannelPlate channel={mark} label={name} size="lg" />
               </Link>
             );
           })}
@@ -678,7 +685,11 @@ export async function ConversationList({
             <div className={styles.clearHead} data-testid="queue-empty-filtered">
               <span className={`${styles.clearTile} ${styles.emptyTile}`} aria-hidden="true">
                 {channel !== null ? (
-                  <ChannelPlate channel={channel} size="lg" decorative />
+                  <ChannelPlate
+                    channel={chips.find((chip) => chip.channel === channel)?.mark ?? channel}
+                    size="lg"
+                    decorative
+                  />
                 ) : (
                   <CalendarX size={20} />
                 )}
@@ -686,7 +697,10 @@ export async function ConversationList({
               <p className={styles.clearTitle}>
                 {channel !== null
                   ? t('queue.filter.emptyChannel.title', {
-                      channel: channelName(channel, channelNames) ?? channel,
+                      channel:
+                        chips.find((chip) => chip.channel === channel)?.mark === 'WOOCOMMERCE'
+                          ? t('queue.filter.wooChat')
+                          : (channelName(channel, channelNames) ?? channel),
                     })
                   : t('queue.filter.emptyPeriod.title')}
               </p>

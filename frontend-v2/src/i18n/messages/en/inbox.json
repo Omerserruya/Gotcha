@@ -118,7 +118,8 @@
       "emptyPeriod": {
         "title": "No conversations opened in this period",
         "all": "Show every date"
-      }
+      },
+      "wooChat": "WooCommerce chat"
     },
     "menu": {
       "label": "Actions on this conversation",

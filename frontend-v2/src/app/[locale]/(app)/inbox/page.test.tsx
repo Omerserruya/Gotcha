@@ -60,6 +60,10 @@ vi.mock('server-only', () => ({}));
 const loadClearQueue = vi.hoisted(() => vi.fn(async () => ({ overview: null, inFlight: null })));
 vi.mock('@/features/inbox/load-clear-queue', () => ({ loadClearQueue }));
 /* W2's response target: none here - the rows' marks are ConversationList's tests. */
+/* I2's chips: the row as it was - ConversationList's tests cover the rule. */
+vi.mock('@/features/inbox/load-filter-chips', async () => ({
+  loadFilterChips: async () => (await import('@/features/inbox/inbox-views')).FALLBACK_FILTER_CHIPS,
+}));
 vi.mock('@/features/inbox/load-sla', () => ({
   loadSlaSettings: async () => null,
   loadSlaClock: async () => null,
@@ -660,7 +664,7 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
   it('⚠ a channel with no chip is "All"', async () => {
     loadInbox.mockResolvedValue(data());
     const { default: Page } = await import('./page');
-    await Page({ searchParams: Promise.resolve({ channel: 'GMAIL' }) });
+    await Page({ searchParams: Promise.resolve({ channel: 'SLACK' }) });
     expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'mine', null, null, false);
   });
 });

@@ -129,6 +129,21 @@ export const channelSchema = z.object({
 });
 
 export const channelsSchema = z.array(channelSchema);
+
+/**
+ * `GET /api/channels/state` (auth channels.ts) - one row per channel account,
+ * readable by ANY workspace member, unlike the list above
+ * (`channels:manage:read`). What the inbox needs to know which channels are
+ * there: the type and whether it is connected. Nothing else is named.
+ */
+export const channelStateSchema = z.object({
+  id: z.string().min(1),
+  channel: z.string().min(1),
+  connectionStatus: z.enum(CONNECTION_STATES).catch('PENDING'),
+  isActive: z.boolean().catch(true).default(true),
+});
+export const channelStatesSchema = z.array(channelStateSchema);
+export type ChannelState = z.infer<typeof channelStateSchema>;
 export type Channel = z.infer<typeof channelSchema>;
 
 /*

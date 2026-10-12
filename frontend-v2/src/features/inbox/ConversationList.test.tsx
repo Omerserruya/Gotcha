@@ -19,6 +19,9 @@ import heMessages from '@/i18n/messages/he/inbox.json';
 import { ConversationList } from './ConversationList';
 import { QUEUE_CHANNEL_FILTERS } from './inbox-views';
 
+/* Every chip there is: a workspace with every channel connected. */
+const ALL = QUEUE_CHANNEL_FILTERS.map((channel) => ({ channel, mark: channel }));
+
 /*
  * ★ The established mock for this app's locale-aware `Link` - see
  *   `TeamPanel.test.tsx`. It renders a real anchor so `href` and the
@@ -1215,7 +1218,9 @@ describe("★★ Wave 2 - 02's filter row, and every chip in it filters", () => 
   });
 
   it('★★ every channel chip draws the shared mark - the channel’s own', async () => {
-    render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
+    render(
+      await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false, chips: ALL }),
+    );
     for (const id of QUEUE_CHANNEL_FILTERS) {
       const mark = screen.getByTestId(`filter-${id}`).querySelector('svg');
       expect(mark).toHaveAttribute('data-channel-mark');
@@ -1278,7 +1283,9 @@ describe("★★ Wave 2 - 02's filter row, and every chip in it filters", () => 
      * Instagram fell back to the globe, and in a row of five channels that put
      * two identical globes side by side meaning two different things.
      */
-    render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
+    render(
+      await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false, chips: ALL }),
+    );
     const glyphs = QUEUE_CHANNEL_FILTERS.map(
       (id) => screen.getByTestId(`filter-${id}`).querySelector('svg')?.innerHTML,
     );
@@ -1683,5 +1690,52 @@ describe('★★ W2 - the response target, on the rows a person owes an answer',
       }),
     );
     expect(document.querySelector('[data-sla]')).toBeNull();
+  });
+});
+
+describe('★★ I2 - the chips the page hands over are the row', () => {
+  it('★★ only those, each with its mark; Woo’s web chat named and drawn as Woo’s', async () => {
+    render(
+      await ConversationList({
+        rows: [row({ id: 'c1' })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        chips: [
+          { channel: 'WHATSAPP', mark: 'WHATSAPP' },
+          { channel: 'GMAIL', mark: 'GMAIL' },
+          { channel: 'WEBCHAT', mark: 'WOOCOMMERCE' },
+        ],
+      }),
+    );
+    const drawn = [
+      ...screen.getByTestId('queue-filters').querySelectorAll('[data-testid^="filter-"]'),
+    ]
+      .map((el) => el.getAttribute('data-testid'))
+      .filter((id) => id !== 'filter-all');
+    expect(drawn).toEqual(['filter-WHATSAPP', 'filter-GMAIL', 'filter-WEBCHAT']);
+    expect(screen.getByTestId('filter-GMAIL').querySelector('[data-glyph="gmail"]')).not.toBeNull();
+    const web = screen.getByTestId('filter-WEBCHAT');
+    expect(web.querySelector('[data-glyph="woocommerce"]')).not.toBeNull();
+    expect(web).toHaveAccessibleName('WooCommerce chat');
+    expect(new URL(web.getAttribute('href')!, 'https://x.test').searchParams.get('channel')).toBe(
+      'WEBCHAT',
+    );
+  });
+
+  it('★ an empty Woo web chat filter names it as the chip does', async () => {
+    render(
+      await ConversationList({
+        rows: [],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        channel: 'WEBCHAT',
+        chips: [{ channel: 'WEBCHAT', mark: 'WOOCOMMERCE' }],
+      }),
+    );
+    const head = screen.getByTestId('queue-empty-filtered');
+    expect(head).toHaveTextContent('No conversations on WooCommerce chat');
+    expect(head.querySelector('[data-glyph="woocommerce"]')).not.toBeNull();
   });
 });

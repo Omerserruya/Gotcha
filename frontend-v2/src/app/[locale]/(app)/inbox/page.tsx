@@ -25,6 +25,7 @@ import {
 } from '@/features/inbox/inbox-views';
 import { redirect } from '@/i18n/navigation';
 import { loadClearQueue } from '@/features/inbox/load-clear-queue';
+import { loadFilterChips } from '@/features/inbox/load-filter-chips';
 import { loadSlaClock, loadSlaSettings } from '@/features/inbox/load-sla';
 import { loadInbox, QUEUE_CAP } from '@/features/inbox/load-inbox';
 import { PendingPane } from '@/features/inbox/PendingPane';
@@ -121,9 +122,10 @@ export default async function Page({
   const period = asked === 'invalid' ? null : asked;
   // Named in the address, or the default standing in for an absent or unknown one.
   const explicit = rawView === askedView;
-  const [data, slaSettings] = await Promise.all([
+  const [data, slaSettings, chips] = await Promise.all([
     loadInbox(c, cursor, askedView, channel, period, explicit),
     loadSlaSettings(),
+    loadFilterChips(channel),
   ]);
   // W2: the departments' own targets, only for the departments on this page.
   const sla = await loadSlaClock(
@@ -231,6 +233,7 @@ export default async function Page({
             periodInvalid={asked === 'invalid'}
             clear={clear ? <ClearQueueList clear={clear} /> : null}
             sla={sla}
+            chips={chips}
           />
         </section>
 

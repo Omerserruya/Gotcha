@@ -7,15 +7,15 @@
   "inWindow": "{count} נפתחו ב‑{days} הימים האחרונים",
   "name": {
     "WHATSAPP": "וואטסאפ",
-    "MESSENGER": "מסנג'ר",
+    "MESSENGER": "מסנג׳ר",
     "INSTAGRAM": "אינסטגרם",
     "EMAIL": "אימייל",
     "GMAIL": "Gmail",
     "OUTLOOK": "Outlook",
     "SLACK": "Slack",
     "VOICE": "שיחות טלפון",
-    "WEBCHAT": "צ'אט באתר",
-    "SHOPIFY_LIVE_CHAT": "צ'אט Shopify",
+    "WEBCHAT": "צ׳אט באתר",
+    "SHOPIFY_LIVE_CHAT": "צ׳אט Shopify",
     "other": "ערוץ אחר"
   },
   "pitch": {
@@ -26,7 +26,7 @@
     "GMAIL": "חברו חשבון Gmail",
     "OUTLOOK": "חברו חשבון Outlook",
     "SLACK": "חברו סביבת Slack",
-    "WEBCHAT": "ווידג'ט צ'אט בכל עמוד",
+    "WEBCHAT": "ווידג׳ט צ׳אט בכל עמוד",
     "VOICE": "",
     "SHOPIFY_LIVE_CHAT": ""
   },
@@ -40,9 +40,9 @@
     "heading": "מחברים את {channel}",
     "close": "סגירה",
     "then": "שיחות מהערוץ הזה מגיעות לתיבה שלכם ונספרות במכסה החודשית.",
-    "webchatName": "שם הווידג'ט",
+    "webchatName": "שם הווידג׳ט",
     "webchatHint": "לא חובה. רק אתם רואים את זה.",
-    "create": "יצירת ווידג'ט",
+    "create": "יצירת ווידג׳ט",
     "creating": "יוצר…",
     "connect": "חיבור",
     "connecting": "מחבר…",
@@ -664,7 +664,7 @@
           "always": "עובד",
           "conditional": "תנאים בפלייבוק מחליטים",
           "team": "צוות, לא עובד אחד",
-          "flow": "תהליך צ'אטבוט",
+          "flow": "תהליך צ׳אטבוט",
           "none": "אף אחד עדיין"
         },
         "conditional": "{channels}: תנאים בפלייבוק מחליטים מי עונה - משנים אותם ב<automations>סטודיו · אוטומציות</automations>.",

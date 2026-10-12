@@ -171,10 +171,73 @@ export const QUEUE_CHANNEL_FILTERS = [
   'INSTAGRAM',
   'MESSENGER',
   'EMAIL',
+  'GMAIL',
+  'OUTLOOK',
   'WEBCHAT',
   'SHOPIFY_LIVE_CHAT',
 ] as const;
 export type QueueChannelFilter = (typeof QUEUE_CHANNEL_FILTERS)[number];
+
+/** One chip in the filter row: what it filters, and the mark it wears. */
+export interface FilterChip {
+  readonly channel: QueueChannelFilter;
+  /** A channel's mark, or `WOOCOMMERCE` - web chat on a WooCommerce store. */
+  readonly mark: string;
+}
+
+/**
+ * When the channels could not be read: the row as it was before I2, one chip
+ * per kind - never an empty row that would hide every filter.
+ */
+export const FALLBACK_FILTER_CHIPS: readonly FilterChip[] = (
+  ['WHATSAPP', 'INSTAGRAM', 'MESSENGER', 'EMAIL', 'WEBCHAT', 'SHOPIFY_LIVE_CHAT'] as const
+).map((channel) => ({ channel, mark: channel }));
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ ONLY THE CHANNELS THIS WORKSPACE HAS (Omer, 2026-10-12, I2)
+ * ════════════════════════════════════════════════════════════════════════════
+ * A chip per channel that is connected - or connected and failing (`ERROR`):
+ * its conversations are still here, and it is the one most worth filtering
+ * to. Not one that is pending or was disconnected, and not one switched off.
+ *
+ * Email wears its provider's mark because it IS its provider's channel: a
+ * Gmail mailbox is `GMAIL`, Outlook `OUTLOOK`, any other `EMAIL` (generic).
+ * Never Gmail for a mailbox that is not one (supervisor, 2026-10-12).
+ *
+ * The site's chat follows what it is on: Shopify's is its own channel
+ * (`SHOPIFY_LIVE_CHAT`, Shopify's mark); web chat on a WooCommerce store wears
+ * Woo's; otherwise the website's globe.
+ *
+ * The chip in force is always drawn, connected or not: a narrowed list with
+ * no chip lit would hide what narrowed it.
+ */
+export function filterChips(
+  states:
+    | readonly {
+        readonly channel: string;
+        readonly connectionStatus: string;
+        readonly isActive: boolean;
+      }[]
+    | null,
+  wooConnected: boolean,
+  current: QueueChannelFilter | null,
+): readonly FilterChip[] {
+  if (states === null) return FALLBACK_FILTER_CHIPS;
+  const live = new Set(
+    states
+      .filter(
+        (s) => s.isActive && (s.connectionStatus === 'CONNECTED' || s.connectionStatus === 'ERROR'),
+      )
+      .map((s) => s.channel),
+  );
+  return QUEUE_CHANNEL_FILTERS.filter((channel) => live.has(channel) || channel === current).map(
+    (channel) => ({
+      channel,
+      mark: channel === 'WEBCHAT' && wooConnected ? 'WOOCOMMERCE' : channel,
+    }),
+  );
+}
 
 /**
  * `?channel=`, or null for "All".

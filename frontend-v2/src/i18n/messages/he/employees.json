@@ -62,8 +62,8 @@
     "someInactive": "{count, plural, one {אחד מאלה כבוי, ולכן הוא לא יכול לקרוא אותו.} other {# מאלה כבויים, ולכן הוא לא יכול לקרוא אותם.}}"
   },
   "tested": {
-    "label": "צ'אט בדיקה",
-    "never": "אף אחד לא פתח צ'אט בדיקה לעובד הזה.",
+    "label": "צ׳אט בדיקה",
+    "never": "אף אחד לא פתח צ׳אט בדיקה לעובד הזה.",
     "at": "נפתח לאחרונה {when}"
   },
   "rail": {
@@ -177,7 +177,7 @@
       "EMAIL": "אימייל",
       "INSTAGRAM": "Instagram",
       "MESSENGER": "Messenger",
-      "WEBCHAT": "צ'אט באתר",
+      "WEBCHAT": "צ׳אט באתר",
       "TELEGRAM": "Telegram",
       "SMS": "SMS",
       "VOICE": "טלפון"
