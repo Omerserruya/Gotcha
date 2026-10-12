@@ -2,6 +2,7 @@ import { prisma } from "@chatcenter/shared";
 import { upsertChunks, deleteByDocumentId } from "./qdrant.service";
 import { generateEmbedding as aiGenerateEmbedding } from "./ai.service";
 import { randomUUID } from "crypto";
+import { ensureDocumentSummary } from "./knowledge-summary.service";
 
 const CHUNK_SIZE = parseInt(process.env.RAG_CHUNK_SIZE || "500", 10);
 const CHUNK_OVERLAP = parseInt(process.env.RAG_CHUNK_OVERLAP || "50", 10);
@@ -155,11 +156,18 @@ export async function processDocument(documentId: string): Promise<void> {
     });
 
     console.log(`[Embedding] Processed document ${documentId}: ${chunks.length} chunks -> Qdrant`);
+
+    // What the document contains, in a line, for the Knowledge center. Made
+    // here because every ingest and update passes through; kept until the
+    // content changes. Never fails the document.
+    await ensureDocumentSummary(documentId);
   } catch (err: any) {
     console.error(`[Embedding] Failed to process document ${documentId}:`, err.message);
     await prisma.knowledgeDocument.update({
       where: { id: documentId },
-      data: { status: "error", metadata: { error: err.message } },
+      // Merged: replacing the whole bag dropped provenance, the sync change key
+      // and the summary along with the error.
+      data: { status: "error", metadata: { ...((document.metadata as Record<string, unknown> | null) ?? {}), error: err.message } as any },
     });
     throw err;
   }

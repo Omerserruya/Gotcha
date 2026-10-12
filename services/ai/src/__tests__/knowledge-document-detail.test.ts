@@ -23,6 +23,9 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     requireCapacity: () => (_q: any, _s: any, n: any) => n(),
     prisma: {
       knowledgeDocument: { findFirst: async (a: any) => H.docs.find((d) => d.id === a.where.id && d.knowledgeBaseId === a.where.knowledgeBaseId && d.tenantId === a.where.tenantId) ?? null },
+      knowledgeBase: {
+        findMany: async (a: any) => [{ id: "kb1", tenantId: a.where.tenantId, name: "Main", documents: H.docs.filter((d) => d.tenantId === a.where.tenantId) }],
+      },
       knowledgeChunk: {
         count: async (a: any) => H.chunks.filter((c) => c.documentId === a.where.documentId && c.tenantId === a.where.tenantId).length,
         findMany: async (a: any) => H.chunks.filter((c) => c.documentId === a.where.documentId && c.tenantId === a.where.tenantId).sort((x, y) => x.chunkIndex - y.chunkIndex).slice(0, a.take),
@@ -85,5 +88,23 @@ describe("safeSourceUrl", () => {
     expect(safeSourceUrl("https://user:pass@x.atlassian.net/wiki/page?id=5&api_key=k&signature=s")).toBe("https://x.atlassian.net/wiki/page?id=5");
     expect(safeSourceUrl("not a url")).toBeNull();
     expect(safeSourceUrl(null)).toBeNull();
+  });
+});
+
+describe("summary (B3, 2026-10-12): the stored line, never generated on read", () => {
+  it("the drawer and the list both carry it", async () => {
+    H.docs[0].metadata.summary = { text: "How returns work: 14 days, full refund.", lang: "en", hash: "h", at: "t" };
+    const one = await request(app).get("/api/knowledge-bases/kb1/documents/d1");
+    expect(one.body.data.summary).toBe("How returns work: 14 days, full refund.");
+    const list = await request(app).get("/api/knowledge-bases");
+    expect(list.status).toBe(200);
+    expect(list.body.data[0].documents.map((d: any) => [d.id, d.summary])).toEqual([["d1", "How returns work: 14 days, full refund."]]);
+  });
+
+  it("null when none was made yet", async () => {
+    const one = await request(app).get("/api/knowledge-bases/kb1/documents/d1");
+    expect(one.body.data.summary).toBeNull();
+    const list = await request(app).get("/api/knowledge-bases");
+    expect(list.body.data[0].documents[0].summary).toBeNull();
   });
 });

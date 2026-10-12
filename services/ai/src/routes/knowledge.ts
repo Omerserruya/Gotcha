@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermissionOrRole, safeFetch, requireEntitlement, requireCapacity } from "@chatcenter/shared";
 import { processDocument } from "../services/embedding.service";
+import { summaryOf } from "../services/knowledge-summary.service";
 import { deleteByDocumentId, deleteByKnowledgeBaseId } from "../services/qdrant.service";
 import { parseFile, isAllowedMimeType, resolveMimeType } from "../services/file-parser.service";
 import multer from "multer";
@@ -61,7 +62,14 @@ router.get("/", async (req: Request, res: Response) => {
       },
       orderBy: { createdAt: "desc" },
     });
-    res.json({ data: knowledgeBases });
+    // `summary`: one stored line on what each document contains (B3), made when
+    // it was processed - never generated here.
+    res.json({
+      data: knowledgeBases.map((kb) => ({
+        ...kb,
+        documents: kb.documents.map((d) => ({ ...d, summary: summaryOf(d.metadata) })),
+      })),
+    });
   } catch (err) {
     console.error("List knowledge bases error:", err);
     res.status(500).json({ error: "Failed to list knowledge bases" });
@@ -116,6 +124,7 @@ router.get("/:id/documents/:docId", async (req: Request, res: Response) => {
         id: doc.id,
         knowledgeBaseId: doc.knowledgeBaseId,
         title: doc.title,
+        summary: summaryOf(doc.metadata),
         type: doc.sourceType,
         sourceUrl: safeSourceUrl(doc.sourceUrl),
         status: doc.status,
