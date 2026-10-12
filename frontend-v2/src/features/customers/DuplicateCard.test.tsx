@@ -93,7 +93,7 @@ describe('★★ the pair is the server’s', () => {
   it.each([
     ['same_name', null, 'The same name on two channels.'],
     ['similar_name', null, 'Similar names on two channels.'],
-    ['shopify_customer', null, 'An order from the same customer.'],
+    ['shopify_customer', null, 'The same Shopify customer.'],
     ['ai_extracted_identifier', { type: 'EMAIL', value: 'd@x.com' }, 'The same email address.'],
     ['unproven_identifier', { type: 'phone', value: '+972500' }, 'The same phone number.'],
     ['something_new', null, 'GOTCHA found something they have in common.'],
@@ -186,7 +186,7 @@ describe('★ the reason in Hebrew is the words agreed (supervisor, 2026-10-11)'
       sameName: 'אותו שם בשני ערוצים.',
       phone: 'אותו מספר טלפון.',
       email: 'אותה כתובת מייל.',
-      order: 'הזמנה של אותו לקוח.',
+      shopifyCustomer: 'אותו לקוח בשופיפיי.',
     });
     expect(he.dupes.keeps).toBe('יוצגו כאדם אחד, וכל ההודעות של שניהם נשמרות.');
     // A Hebrew loanword is spelled with a geresh, never an ASCII apostrophe.
@@ -321,7 +321,10 @@ describe('★★ the proof, as the server sent it (Backend 3ac2a71e)', () => {
       },
     });
     show(shopify);
-    expect(proof()).toHaveTextContent('Verified through a Shopify profile update');
+    expect(proof()).toHaveTextContent('Verified through a profile update.');
+    // Said as the same customer, never as an order (supervisor, 2026-10-12).
+    expect(screen.getByTestId('duplicates')).toHaveTextContent('The same Shopify customer.');
+    expect(screen.getByTestId('duplicates')).not.toHaveTextContent(/order/i);
     expect(screen.getByTestId('duplicates').innerHTML).not.toContain('7012');
   });
 
@@ -338,7 +341,9 @@ describe('★★ the proof, as the server sent it (Backend 3ac2a71e)', () => {
       }),
       'he',
     );
-    expect(proof()).toHaveTextContent('אומת דרך עדכון פרופיל בשופיפיי');
+    expect(screen.getByTestId('duplicates')).toHaveTextContent('אותו לקוח בשופיפיי.');
+    expect(proof()).toHaveTextContent('אומת דרך עדכון פרופיל.');
+    expect(screen.getByTestId('duplicates')).not.toHaveTextContent('הזמנה');
   });
 
   it('a Shopify proof of another kind is not said as a profile update', () => {

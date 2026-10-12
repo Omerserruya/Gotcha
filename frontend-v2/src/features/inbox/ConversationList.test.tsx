@@ -1648,3 +1648,40 @@ describe('⚠ nothing in the list prefetches (dev, 2026-10-11)', () => {
     for (const link of links) expect(link).toHaveAttribute('data-prefetch', 'false');
   });
 });
+
+describe('★★ W2 - the response target, on the rows a person owes an answer', () => {
+  const sla = { minutes: 30, warningPercent: 70, departments: {} };
+  const late = '2026-09-25T10:00:00.000Z';
+
+  it('★★ late rows marked; GOTCHA’s, a flow’s, ours-last and closed never', async () => {
+    render(
+      await ConversationList({
+        rows: [
+          row({ id: 'p', lastMessageAt: late, lastMessageDirection: 'INBOUND' }),
+          row({ id: 'ai', lastMessageAt: late, handledBy: 'ai_agent' }),
+          row({ id: 'fl', lastMessageAt: late, handledBy: 'flow' }),
+          row({ id: 'us', lastMessageAt: late, lastMessageDirection: 'OUTBOUND' }),
+          row({ id: 'cl', lastMessageAt: late, status: 'CLOSED' }),
+        ],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        sla,
+      }),
+    );
+    expect(screen.getByTestId('sla-p')).toHaveAttribute('data-sla', 'late');
+    for (const id of ['ai', 'fl', 'us', 'cl']) expect(screen.queryByTestId(`sla-${id}`)).toBeNull();
+  });
+
+  it('★★ no target known: no marks at all', async () => {
+    render(
+      await ConversationList({
+        rows: [row({ id: 'p', lastMessageAt: late })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    expect(document.querySelector('[data-sla]')).toBeNull();
+  });
+});

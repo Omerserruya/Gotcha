@@ -16,6 +16,8 @@ import { initials } from './initials';
 import { quoteOf } from './media';
 import { QueueMenu } from './QueueMenu';
 import { QueueRowLink } from './QueueRowLink';
+import { slaTargetFor, type SlaClock } from './sla-clock';
+import { SlaMark } from './SlaMark';
 import styles from './Inbox.module.css';
 import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import { UserText } from '@/design-system/primitives/text/UserText';
@@ -78,7 +80,10 @@ export async function ConversationList({
   period = null,
   periodInvalid = false,
   clear = null,
+  sla = null,
 }: {
+  /** The response target the rows are timed by (W2); `null` - none known, no marks. */
+  readonly sla?: SlaClock | null;
   /** 02b: drawn in place of the empty note when the queue is clear. */
   readonly clear?: ReactNode;
   /** `null` when the read failed. Never an empty queue. */
@@ -426,6 +431,16 @@ export async function ConversationList({
             </span>
 
             <span className={styles.rowTags}>
+              {(() => {
+                const target = slaTargetFor(conversation, sla);
+                return target ? (
+                  <SlaMark
+                    target={target}
+                    renderedAt={now.toISOString()}
+                    testId={`sla-${conversation.id}`}
+                  />
+                ) : null;
+              })()}
               {/*
                 ★ NULL IS NOT ZERO. A row we cannot age says nothing rather
                   than claiming it has been waiting no time at all, which

@@ -243,6 +243,10 @@ export const workspaceEndpoints = {
   systemLocale: () => endpoint('/api/agents/settings/locale'),
   /** This person's own interface language - `PUT {locale}` (auth agents.ts). */
   myLocale: () => endpoint('/api/agents/me/locale'),
+  /** The response target (SLA): `GET/PUT` - Owner only, the GET too (auth agents.ts). */
+  sla: () => endpoint('/api/agents/settings/sla'),
+  /** One department's own response target, overriding the workspace's when enabled. */
+  slaDepartment: (id: string) => endpoint('/api/agents/settings/sla/department/{id}', { id }),
 } as const;
 
 /**

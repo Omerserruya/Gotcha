@@ -472,13 +472,13 @@
       "other": "GOTCHA מצאה משהו משותף לשניהם.",
       "sameName": "אותו שם בשני ערוצים.",
       "similarName": "שמות דומים בשני ערוצים.",
-      "order": "הזמנה של אותו לקוח."
+      "shopifyCustomer": "אותו לקוח בשופיפיי."
     },
     "evidence": {
       "name": "השמות בשני החשבונות: <first></first> ו‑<second></second>",
       "phone": "מספר הטלפון: {value}",
       "email": "כתובת המייל: {value}",
-      "shopifyProfile": "אומת דרך עדכון פרופיל בשופיפיי"
+      "shopifyProfile": "אומת דרך עדכון פרופיל."
     },
     "keeps": "יוצגו כאדם אחד, וכל ההודעות של שניהם נשמרות.",
     "merge": "למזג",

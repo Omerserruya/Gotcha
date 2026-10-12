@@ -222,11 +222,12 @@ export const identitySuggestionsSchema = z.array(z.unknown()).transform((rows) =
  */
 export function suggestionMatch(
   s: IdentitySuggestion,
-): 'sameName' | 'similarName' | 'phone' | 'email' | 'order' | 'other' {
+): 'sameName' | 'similarName' | 'phone' | 'email' | 'shopifyCustomer' | 'other' {
   // Backend's LinkSignal (identity-links.ts): the reason, said in our words.
   if (s.signal === 'same_name') return 'sameName';
   if (s.signal === 'similar_name') return 'similarName';
-  if (s.signal === 'shopify_customer') return 'order';
+  // The same Shopify customer - no order involved (Backend 3ac2a71e).
+  if (s.signal === 'shopify_customer') return 'shopifyCustomer';
   const type = s.identifier?.type.toLowerCase();
   return type === 'phone' || type === 'email' ? type : 'other';
 }

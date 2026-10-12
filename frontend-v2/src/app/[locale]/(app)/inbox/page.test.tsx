@@ -59,6 +59,11 @@ vi.mock('server-only', () => ({}));
 /* 02b's reads, only on a clear queue: no network here. */
 const loadClearQueue = vi.hoisted(() => vi.fn(async () => ({ overview: null, inFlight: null })));
 vi.mock('@/features/inbox/load-clear-queue', () => ({ loadClearQueue }));
+/* W2's response target: none here - the rows' marks are ConversationList's tests. */
+vi.mock('@/features/inbox/load-sla', () => ({
+  loadSlaSettings: async () => null,
+  loadSlaClock: async () => null,
+}));
 
 /*
  * ⚠ `ConversationList` now imports the locale-aware `Link`, which pulls in

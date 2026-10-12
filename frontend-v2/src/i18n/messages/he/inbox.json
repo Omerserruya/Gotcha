@@ -155,7 +155,13 @@
       "invalid": "לא הצלחנו לקרוא את התקופה בקישור, ולכן מוצגות שיחות מכל התאריכים.",
       "day": "נפתחו ב־{day}"
     },
-    "shownMore": "{count} מוצגות · יש עוד למטה"
+    "shownMore": "{count} מוצגות · יש עוד למטה",
+    "sla": {
+      "left": "{count, plural, one {נותרה דקה} other {נותרו # דק׳}}",
+      "late": "חריגה מה‑SLA",
+      "warningTitle": "קרוב ליעד התגובה של {minutes} דק׳.",
+      "lateTitle": "ממתינה יותר מיעד התגובה של {minutes} דק׳."
+    }
   },
   "identity": {
     "unnamed": "מישהו",

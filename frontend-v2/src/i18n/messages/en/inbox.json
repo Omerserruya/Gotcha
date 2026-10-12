@@ -155,7 +155,13 @@
       "invalid": "This link's period couldn't be read, so conversations from every date are shown.",
       "day": "Started {day}"
     },
-    "shownMore": "{count} shown · more below"
+    "shownMore": "{count} shown · more below",
+    "sla": {
+      "left": "{count, plural, one {1 min left} other {# min left}}",
+      "late": "Past SLA",
+      "warningTitle": "Close to the {minutes} min response target.",
+      "lateTitle": "Waiting longer than the {minutes} min response target."
+    }
   },
   "identity": {
     "unnamed": "Someone",

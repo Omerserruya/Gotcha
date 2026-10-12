@@ -25,6 +25,7 @@ import {
 } from '@/features/inbox/inbox-views';
 import { redirect } from '@/i18n/navigation';
 import { loadClearQueue } from '@/features/inbox/load-clear-queue';
+import { loadSlaClock, loadSlaSettings } from '@/features/inbox/load-sla';
 import { loadInbox, QUEUE_CAP } from '@/features/inbox/load-inbox';
 import { PendingPane } from '@/features/inbox/PendingPane';
 import { StreamSkeleton } from '@/features/inbox/Skeletons';
@@ -120,7 +121,15 @@ export default async function Page({
   const period = asked === 'invalid' ? null : asked;
   // Named in the address, or the default standing in for an absent or unknown one.
   const explicit = rawView === askedView;
-  const data = await loadInbox(c, cursor, askedView, channel, period, explicit);
+  const [data, slaSettings] = await Promise.all([
+    loadInbox(c, cursor, askedView, channel, period, explicit),
+    loadSlaSettings(),
+  ]);
+  // W2: the departments' own targets, only for the departments on this page.
+  const sla = await loadSlaClock(
+    slaSettings,
+    (data.rows ?? []).flatMap((row) => (row.departmentId === null ? [] : [row.departmentId])),
+  );
   // The view the rows are of - "Active" when the default could not know who "me" is.
   const view = shownView(askedView, explicit, data.meId !== null);
   /*
@@ -221,6 +230,7 @@ export default async function Page({
             period={period}
             periodInvalid={asked === 'invalid'}
             clear={clear ? <ClearQueueList clear={clear} /> : null}
+            sla={sla}
           />
         </section>
 

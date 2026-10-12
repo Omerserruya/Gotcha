@@ -140,6 +140,13 @@ export const conversationRowSchema = z.object({
    */
   lastMessageDirection: z.enum(['INBOUND', 'OUTBOUND']).nullable().default(null),
   /**
+   * The response target's two other inputs (W2): which department's target
+   * applies, and when the conversation started - the clock's start when no
+   * message has a time. The list route sends every scalar; absent is null.
+   */
+  departmentId: z.string().nullable().default(null),
+  createdAt: z.string().nullable().default(null),
+  /**
    * ════════════════════════════════════════════════════════════════════════
    * ★★ UNREAD FOR THE PERSON LOOKING - THE SERVER'S ANSWER, OR NOTHING
    * ════════════════════════════════════════════════════════════════════════

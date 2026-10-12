@@ -644,6 +644,57 @@
    *   is 17h, which was the whole of the row's 76 against 82 - and 02 has no
    *   plain-text line in that slot anywhere.
    */
+  /* W2: close to the response target - quiet amber, the minutes left. */
+  .slaWarn {
+    flex: none;
+    font-size: 10.5px;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    white-space: nowrap;
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  /* W2: past it - red, with a dot that pulses gently. */
+  .slaLate {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10.5px;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    white-space: nowrap;
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .slaDot {
+    flex: none;
+    inline-size: 7px;
+    block-size: 7px;
+    border-radius: 50%;
+    background-color: var(--intent-urgent-text);
+    animation: sla-pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes sla-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.3;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slaDot {
+      animation: none;
+    }
+  }
+
   .waiting {
     flex: none;
     font-size: 10.5px;

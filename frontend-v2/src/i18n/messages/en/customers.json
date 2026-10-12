@@ -472,13 +472,13 @@
       "other": "GOTCHA found something they have in common.",
       "sameName": "The same name on two channels.",
       "similarName": "Similar names on two channels.",
-      "order": "An order from the same customer."
+      "shopifyCustomer": "The same Shopify customer."
     },
     "evidence": {
       "name": "Names on the two accounts: <first></first> and <second></second>",
       "phone": "The phone number: {value}",
       "email": "The email address: {value}",
-      "shopifyProfile": "Verified through a Shopify profile update"
+      "shopifyProfile": "Verified through a profile update."
     },
     "keeps": "They'll show as one person, and all their messages are kept.",
     "merge": "Merge them",
