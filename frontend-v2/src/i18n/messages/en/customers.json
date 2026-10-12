@@ -474,6 +474,12 @@
       "similarName": "Similar names on two channels.",
       "order": "An order from the same customer."
     },
+    "evidence": {
+      "name": "Names on the two accounts: <first></first> and <second></second>",
+      "phone": "The phone number: {value}",
+      "email": "The email address: {value}",
+      "shopifyProfile": "Verified through a Shopify profile update"
+    },
     "keeps": "They'll show as one person, and all their messages are kept.",
     "merge": "Merge them",
     "confirm": "Show these two as one person?",

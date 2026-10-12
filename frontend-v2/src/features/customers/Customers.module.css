@@ -2383,6 +2383,31 @@
     color: var(--text-primary);
   }
 
+  .dupeName {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-6);
+    align-self: flex-start;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .dupeName:hover {
+    text-decoration: underline;
+  }
+
+  .dupeWhy {
+    margin: var(--space-8) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .dupeProof {
+    margin: var(--space-2) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+  }
+
   .dupeActions {
     display: flex;
     flex-wrap: wrap;

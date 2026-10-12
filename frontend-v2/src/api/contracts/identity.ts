@@ -142,7 +142,13 @@ export type EffectivePermissions = z.infer<typeof effectivePermissionsSchema>;
  *
  *   { id, source: "link" | "legacy", contactIds: [a, b], signal,
  *     identifier: { type, value } | null, status, at,
- *     contacts: [{ id, label, channel }, { id, label, channel }] }
+ *     contacts: [{ id, contactId, label, channel }, { ... }],
+ *     evidence: LinkEvidence | null }
+ *
+ * `contactId` and `evidence` are Backend 3ac2a71e
+ * (services/conversation/src/lib/link-evidence.ts). Both are optional here:
+ * a server from before it still parses, and the card then says only the
+ * reason line and links by `id`, which the route sets to the same contact id.
  *
  * `label` is `contactLabel` (lib/contact-label.ts): never an Instagram or
  * Messenger id. `signal` is free text here, not an enum: a value this app
@@ -151,9 +157,42 @@ export type EffectivePermissions = z.infer<typeof effectivePermissionsSchema>;
  */
 const suggestionContactSchema = z.object({
   id: z.string().min(1),
+  /** The customer to open, `/customers/<contactId>` (Backend 3ac2a71e; equal to `id`). */
+  contactId: z.string().min(1).nullish().catch(null),
   label: z.string().min(1),
   channel: z.string().nullish().catch(null),
 });
+
+/**
+ * Why the pair is suggested - Backend 3ac2a71e's `LinkEvidence`, field for
+ * field (services/conversation/src/lib/link-evidence.ts):
+ *
+ *   { type: "name", names: [a | null, b | null] }      - in contact order
+ *   { type: "phone" | "email", value }                  - masked by the server
+ *   { type: "shopify_customer", shopifyCustomerId,
+ *     provenBy: "verified_profile_update" }
+ *   null                                                - the record holds none
+ *
+ * A `type` this app has no words for, or a malformed one, is `null`: the card
+ * says its reason line only, and the pair is never dropped for it.
+ */
+const evidenceSchema = z
+  .union([
+    z.object({
+      type: z.literal('name'),
+      names: z.tuple([z.string().nullable(), z.string().nullable()]),
+    }),
+    z.object({ type: z.enum(['phone', 'email']), value: z.string().min(1) }),
+    z.object({
+      type: z.literal('shopify_customer'),
+      shopifyCustomerId: z.string().nullish(),
+      // Free text: only the one value this app has words for is said.
+      provenBy: z.string().nullish(),
+    }),
+  ])
+  .nullish()
+  .catch(null);
+export type SuggestionEvidence = NonNullable<z.infer<typeof evidenceSchema>>;
 const suggestionSchema = z.object({
   id: z.string().min(1),
   source: z.string().nullish().catch(null),
@@ -161,6 +200,7 @@ const suggestionSchema = z.object({
   signal: z.string().nullish().catch(null),
   identifier: z.looseObject({ type: z.string() }).nullish().catch(null),
   contacts: z.tuple([suggestionContactSchema, suggestionContactSchema]),
+  evidence: evidenceSchema,
 });
 export type IdentitySuggestion = z.infer<typeof suggestionSchema>;
 

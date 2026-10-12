@@ -47,6 +47,31 @@ describe('★★ the pairs come from the server - GET /api/identity/suggestions 
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it('carries 3ac2a71e’s contactId and evidence through to the card', async () => {
+    answer([
+      {
+        id: 'identity:link:np:wa2',
+        source: 'link',
+        contactIds: ['np', 'wa2'],
+        signal: 'unproven_identifier',
+        identifier: { type: 'phone', value: '+972541113421' },
+        status: 'PENDING',
+        at: '2026-10-12T09:00:00Z',
+        contacts: [
+          { id: 'np', contactId: 'np', label: 'No Person', channel: 'INSTAGRAM' },
+          { id: 'wa2', contactId: 'wa2', label: 'Dana', channel: 'WHATSAPP' },
+        ],
+        evidence: { type: 'phone', value: '+972 5X-XXX-3421' },
+      },
+    ]);
+    const [pair] = (await loadSuggestions()) ?? [];
+    expect(pair?.evidence).toEqual({ type: 'phone', value: '+972 5X-XXX-3421' });
+    expect(pair?.contacts.map((c) => [c.contactId, c.channel])).toEqual([
+      ['np', 'INSTAGRAM'],
+      ['wa2', 'WHATSAPP'],
+    ]);
+  });
+
   it('none is an empty list, not a failure', async () => {
     answer([]);
     expect(await loadSuggestions()).toEqual([]);

@@ -197,3 +197,57 @@ describe('★★ 04’s suggested pairs - the server’s shape, a bad item left 
     expect(typed && suggestionMatch(typed)).toBe('phone');
   });
 });
+
+/*
+ * ★★ Backend 3ac2a71e: each side's `contactId` and `channel`, and the pair's
+ * `evidence` - copied from services/conversation/src/lib/link-evidence.ts and
+ * its route test. Every new field is optional: an older server still parses.
+ */
+describe('★★ the proof for a pair (Backend 3ac2a71e)', () => {
+  const withEvidence = (evidence: unknown) =>
+    identitySuggestionsSchema.parse([{ ...LINK_ITEM, evidence }])[0]?.evidence;
+
+  it('keeps each contact’s contactId', () => {
+    const [item] = identitySuggestionsSchema.parse([
+      {
+        ...LINK_ITEM,
+        contacts: LINK_ITEM.contacts.map((c) => ({ ...c, contactId: c.id })),
+      },
+    ]);
+    expect(item?.contacts.map((c) => c.contactId)).toEqual(['ig1', 'wa1']);
+  });
+
+  it.each([
+    ['name', { type: 'name', names: [null, 'Omer Tsruya'] }],
+    ['phone', { type: 'phone', value: '+972 5X-XXX-3421' }],
+    ['email', { type: 'email', value: 'd***@x.com' }],
+    [
+      'shopify_customer',
+      { type: 'shopify_customer', shopifyCustomerId: '7012', provenBy: 'verified_profile_update' },
+    ],
+  ])('reads %s evidence as sent', (_, evidence) => {
+    expect(withEvidence(evidence)).toEqual(evidence);
+  });
+
+  it('null evidence is null', () => {
+    expect(withEvidence(null)).toBeNull();
+  });
+
+  it.each([
+    ['an unknown type', { type: 'fingerprint', value: 'abc' }],
+    ['a phone with no value', { type: 'phone' }],
+    ['one name', { type: 'name', names: ['Omer'] }],
+    ['not an object', 'phone'],
+  ])('%s is no evidence, and the pair is kept', (_, evidence) => {
+    const rows = identitySuggestionsSchema.parse([{ ...LINK_ITEM, evidence }]);
+    expect(rows.map((r) => r.id)).toEqual(['identity:link:ig1:wa1']);
+    expect(rows[0]?.evidence).toBeNull();
+  });
+
+  it('an item from before 3ac2a71e (no contactId, no evidence) still parses', () => {
+    const [item] = identitySuggestionsSchema.parse([LINK_ITEM]);
+    expect(item?.contactIds).toEqual(['ig1', 'wa1']);
+    expect(item?.evidence ?? null).toBeNull();
+    expect(item?.contacts.map((c) => c.contactId ?? null)).toEqual([null, null]);
+  });
+});

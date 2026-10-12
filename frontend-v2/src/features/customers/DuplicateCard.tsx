@@ -1,11 +1,18 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
 
 import { labelFromServer } from '@/api/contracts/customers';
-import { suggestionMatch, type IdentitySuggestion } from '@/api/contracts/identity';
-import { useRouter } from '@/i18n/navigation';
+import {
+  suggestionMatch,
+  type IdentitySuggestion,
+  type SuggestionEvidence,
+} from '@/api/contracts/identity';
+import { channelName } from '@/api/contracts/inbox';
+import { ChannelPlate } from '@/design-system/brand/channel-plate';
+import { Link, useRouter } from '@/i18n/navigation';
+import { ltr } from '@/lib/bidi';
 
 import {
   acceptSuggestion,
@@ -22,6 +29,12 @@ import styles from './Customers.module.css';
  * customers itself. The page draws it only when there is a pair: none, or a
  * failed read, is no card at all.
  *
+ * Each name carries its channel's mark and opens that customer
+ * (`/customers/<contactId>`). Under the reason, the proof the server gave
+ * (Backend 3ac2a71e): the two names, the masked phone or email as sent, or
+ * the Shopify profile update that verified it. No proof, or a kind this app
+ * has no words for, is the reason line alone.
+ *
  * Suggested, never silent. "Merge them" asks once more, then `POST
  * /api/identity/suggestions/accept`; nothing happens before that second
  * press. "Not the same" remembers the pair as two people (`POST
@@ -30,6 +43,7 @@ import styles from './Customers.module.css';
 export function DuplicateCard({ suggestion }: { readonly suggestion: IdentitySuggestion }) {
   const t = useTranslations('customers.dupes');
   const list = useTranslations('customers.list');
+  const channels = useTranslations('channels');
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<AcceptResult | null>(null);
@@ -48,14 +62,27 @@ export function DuplicateCard({ suggestion }: { readonly suggestion: IdentitySug
       <h2 className={styles.sideTitle}>{t('title')}</h2>
       <p className={styles.dupeNames} data-testid="duplicate-pair">
         {suggestion.contacts.map((contact) => (
-          <span key={contact.id} data-testid={`duplicate-${contact.id}`}>
-            {nameOf(contact)}
-          </span>
+          <Link
+            key={contact.id}
+            className={styles.dupeName}
+            href={`/customers/${contact.contactId ?? contact.id}`}
+            data-testid={`duplicate-${contact.id}`}
+          >
+            {/* The channel is said nowhere else on the card: the mark names it. */}
+            {contact.channel ? (
+              <ChannelPlate
+                channel={contact.channel}
+                size="sm"
+                label={channelName(contact.channel, channels) ?? channels('name.other')}
+              />
+            ) : null}
+            <span>{nameOf(contact)}</span>
+          </Link>
         ))}
       </p>
-      <p className={styles.sideNote}>
-        {`${t(`why.${suggestionMatch(suggestion)}`)} ${t('keeps')}`}
-      </p>
+      <p className={styles.dupeWhy}>{t(`why.${suggestionMatch(suggestion)}`)}</p>
+      {suggestion.evidence ? <Proof evidence={suggestion.evidence} /> : null}
+      <p className={styles.sideNote}>{t('keeps')}</p>
       {result?.ok ? (
         <p className={styles.sideNote} role="status" data-testid="merge-done">
           {t('done')}
@@ -139,4 +166,37 @@ export function DuplicateCard({ suggestion }: { readonly suggestion: IdentitySug
       ) : null}
     </section>
   );
+}
+
+/**
+ * The server's proof for the pair, as sent. A phone or an email is already
+ * masked (`+972 5X-XXX-3421`, `o***@gmail.com`); it is only isolated, so a
+ * Hebrew line does not reverse its digits. Names are the customers' own text.
+ * A proof with nothing to say - a missing name, a Shopify proof of a kind we
+ * have no words for - is no line at all, never a dash or a blank.
+ */
+function Proof({ evidence }: { readonly evidence: SuggestionEvidence }) {
+  const t = useTranslations('customers.dupes.evidence');
+  let line: ReactNode = null;
+  if (evidence.type === 'name') {
+    const [first, second] = evidence.names;
+    if (first && second) {
+      line = t.rich('name', {
+        first: () => <PersonName name={first} />,
+        second: () => <PersonName name={second} />,
+      });
+    }
+  } else if (evidence.type === 'phone' || evidence.type === 'email') {
+    line = t(evidence.type, { value: ltr(evidence.value) });
+  } else if (
+    evidence.type === 'shopify_customer' &&
+    evidence.provenBy === 'verified_profile_update'
+  ) {
+    line = t('shopifyProfile');
+  }
+  return line ? (
+    <p className={styles.dupeProof} data-testid="duplicate-proof" data-evidence={evidence.type}>
+      {line}
+    </p>
+  ) : null;
 }
