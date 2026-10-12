@@ -1753,6 +1753,25 @@
     color: var(--signal-done-text);
   }
 
+  /* A filter with nothing in it: the same tile, neutral - not "done". */
+  .emptyTile {
+    background-color: var(--panel-inset);
+    color: var(--text-subtle);
+  }
+
+  .emptyWayOut {
+    padding: var(--space-8) var(--space-16);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+    text-decoration: none;
+  }
+
+  .emptyWayOut:hover {
+    color: var(--text-primary);
+  }
+
   .clearTitle {
     margin: 0;
     font-size: 14.5px;

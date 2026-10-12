@@ -1310,11 +1310,59 @@ describe("★★ Wave 2 - 02's filter row, and every chip in it filters", () => 
     expect(first.get('channel')).toBe('WHATSAPP');
   });
 
-  it('★ an empty filtered list says it is the filter, not that nothing waits', async () => {
+  /*
+   * I3 (Omer, 2026-10-12): a filter with no conversations shows the designed
+   * empty state, not a blank list - 02b's head, saying what is narrowed and
+   * the way out of it.
+   */
+  it('★★ an empty channel filter: the head names the channel; its way out drops only the channel', async () => {
     render(
-      await ConversationList({ rows: [], cap: 10, now: NOW, hasMore: false, channel: 'WEBCHAT' }),
+      await ConversationList({
+        rows: [],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        view: 'active',
+        channel: 'WHATSAPP',
+        period: { from: '2026-09-01', to: null },
+      }),
     );
-    expect(screen.getByTestId('queue-empty').textContent).toBe(messages.queue.filter.emptyFiltered);
+    const head = screen.getByTestId('queue-empty-filtered');
+    expect(head).toHaveTextContent('No conversations on WhatsApp');
+    expect(head).toHaveTextContent('Nothing in this view came in on this channel.');
+    expect(head.querySelector('[data-channel-plate]')).not.toBeNull();
+    const out = screen.getByTestId('queue-empty-way-out');
+    expect(out).toHaveTextContent('Show every channel');
+    expect(params(out).get('channel')).toBeNull();
+    expect(params(out).get('view')).toBe('active');
+    expect(params(out).get('from')).toBe('2026-09-01');
+    expect(screen.queryByTestId('queue-empty')).toBeNull();
+  });
+
+  it('★★ an empty period: the head says the period; its way out drops only the period', async () => {
+    render(
+      await ConversationList({
+        rows: [],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        view: 'resolved',
+        period: { from: '2026-09-07', to: '2026-09-07' },
+      }),
+    );
+    const head = screen.getByTestId('queue-empty-filtered');
+    expect(head).toHaveTextContent('No conversations opened in this period');
+    expect(head).toHaveTextContent(/Started Sep 7/);
+    const out = screen.getByTestId('queue-empty-way-out');
+    expect(out).toHaveTextContent('Show every date');
+    expect(params(out).get('from')).toBeNull();
+    expect(params(out).get('view')).toBe('resolved');
+  });
+
+  it('unfiltered and empty: the plain line, as before', async () => {
+    render(await ConversationList({ rows: [], cap: 10, now: NOW, hasMore: false, view: 'mine' }));
+    expect(screen.getByTestId('queue-empty')).toHaveTextContent(messages.queue.empty);
+    expect(screen.queryByTestId('queue-empty-filtered')).toBeNull();
   });
 });
 

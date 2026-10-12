@@ -1,3 +1,4 @@
+import { CalendarX } from 'lucide-react';
 import { getFormatter, getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 
@@ -653,9 +654,54 @@ export async function ConversationList({
 
           {dated.length === 0 && undated.length === 0 && clear ? (
             clear
+          ) : dated.length === 0 && undated.length === 0 && (channel !== null || period) ? (
+            /*
+              ★★ A FILTER WITH NOTHING IN IT IS DRAWN, NOT LEFT BLANK (Omer,
+              2026-10-12, I3): 02b's head - a tile, what is narrowed, and the
+              way out of it, keeping the view (and the other filter).
+            */
+            <div className={styles.clearHead} data-testid="queue-empty-filtered">
+              <span className={`${styles.clearTile} ${styles.emptyTile}`} aria-hidden="true">
+                {channel !== null ? (
+                  <ChannelPlate channel={channel} size="lg" decorative />
+                ) : (
+                  <CalendarX size={20} />
+                )}
+              </span>
+              <p className={styles.clearTitle}>
+                {channel !== null
+                  ? t('queue.filter.emptyChannel.title', {
+                      channel: channelName(channel, channelNames) ?? channel,
+                    })
+                  : t('queue.filter.emptyPeriod.title')}
+              </p>
+              <p className={styles.clearLine}>
+                {channel !== null
+                  ? t('queue.filter.emptyChannel.line')
+                  : period
+                    ? periodWords(period)
+                    : null}
+              </p>
+              <Link
+                href={{
+                  pathname: '/inbox',
+                  query:
+                    channel !== null
+                      ? inboxQuery({ view, channel: null, period })
+                      : inboxQuery({ view, channel, period: null }),
+                }}
+                prefetch={false}
+                className={styles.emptyWayOut}
+                data-testid="queue-empty-way-out"
+              >
+                {channel !== null
+                  ? t('queue.filter.emptyChannel.all')
+                  : t('queue.filter.emptyPeriod.all')}
+              </Link>
+            </div>
           ) : dated.length === 0 && undated.length === 0 ? (
             <p className={styles.note} data-testid="queue-empty">
-              {channel === null ? t('queue.empty') : t('queue.filter.emptyFiltered')}
+              {t('queue.empty')}
             </p>
           ) : (
             <ol className={styles.queueList}>{dated.map((c) => row(c, `conversation-${c.id}`))}</ol>

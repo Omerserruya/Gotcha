@@ -110,7 +110,15 @@
     "filter": {
       "label": "סינון לפי ערוץ",
       "all": "הכול",
-      "emptyFiltered": "אין כאן שום דבר בערוץ הזה."
+      "emptyChannel": {
+        "title": "אין שיחות ב‑{channel}",
+        "line": "שום דבר בתצוגה הזאת לא הגיע בערוץ הזה.",
+        "all": "להצגת כל הערוצים"
+      },
+      "emptyPeriod": {
+        "title": "אין שיחות שנפתחו בתקופה הזאת",
+        "all": "להצגת כל התאריכים"
+      }
     },
     "menu": {
       "label": "פעולות על השיחה",
@@ -259,7 +267,7 @@
   "clear": {
     "title": "התור ריק",
     "answered": "{count, plural, one {GOTCHA ענתה היום לשיחה אחת.} other {GOTCHA ענתה היום ל־# שיחות.}}",
-    "anything": "כל מה שהוא לא יכול לטפל בו יופיע כאן.",
+    "anything": "כל מה שהיא לא יכולה לטפל בו יופיע כאן.",
     "going": "עדיין בתנועה",
     "on": "{count, plural, one {GOTCHA בשיחה אחת} other {GOTCHA ב־# שיחות}}",
     "onNone": "GOTCHA לא בשיחה כרגע",

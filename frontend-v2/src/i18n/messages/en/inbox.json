@@ -110,7 +110,15 @@
     "filter": {
       "label": "Filter by channel",
       "all": "All",
-      "emptyFiltered": "Nothing here on this channel."
+      "emptyChannel": {
+        "title": "No conversations on {channel}",
+        "line": "Nothing in this view came in on this channel.",
+        "all": "Show every channel"
+      },
+      "emptyPeriod": {
+        "title": "No conversations opened in this period",
+        "all": "Show every date"
+      }
     },
     "menu": {
       "label": "Actions on this conversation",
