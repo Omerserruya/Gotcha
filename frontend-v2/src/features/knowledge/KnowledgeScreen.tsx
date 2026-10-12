@@ -1,8 +1,9 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
-import { Fragment, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import {
   documentState,
+  documentSummary,
   hasAmbiguousName,
   lastRefreshed,
   notReadyCount,
@@ -91,6 +92,7 @@ export async function KnowledgeScreen({
   const found = conflicts !== null && conflicts.length > 0 && everImported;
   const undated = sources ? undatedSources(sources) : [];
   const groups = sources ? groupByWayIn(sources) : [];
+  const firstNumber = firstNumbers(groups);
   const websiteListed = groups.some((group) => group.way === 'website');
   const rescanBlock = rescan ? (
     <div className={styles.rescan} data-testid="knowledge-rescan">
@@ -244,9 +246,10 @@ export async function KnowledgeScreen({
                     {group.sources.map((source) => {
                       const refreshed = date(lastRefreshed(source));
                       const pending = notReadyCount(source);
+                      const first = firstNumber.get(source.id) ?? 1;
                       return (
-                        <Fragment key={source.id}>
-                          <li className={styles.source} data-testid={`source-${source.id}`}>
+                        <li key={source.id}>
+                          <div className={styles.source} data-testid={`source-${source.id}`}>
                             <span className={styles.sourceText}>
                               <span className={styles.sourceName}>
                                 {source.name || t('sources.unnamed')}
@@ -273,82 +276,107 @@ export async function KnowledgeScreen({
                                 {t('sources.pending', { count: pending })}
                               </span>
                             ) : null}
-                          </li>
+                          </div>
                           {/*
-                          ★★ K5 (Omer, 2026-10-11): what is IN it, a row each -
-                          newest first, as the route orders them. A source row
-                          alone turned an added document into "13 documents"
-                          where "12" had been, and nothing appeared. Each row
-                          says whether it is still being read.
-                        */}
-                          {source.documents.map((document) => {
-                            const state = documentState(document);
-                            const updated = date(document.updatedAt);
-                            const type = knowledgeTypeOf(document.sourceType);
-                            return (
-                              <li
-                                key={document.id}
-                                className={`${styles.source} ${styles.doc} ${rowLink.row}`}
-                                data-testid={`doc-${document.id}`}
-                                data-state={state}
-                              >
-                                {/*
-                                  K8: its kind's one icon (the Add sheet's and
-                                  the drawer's); none of the four, an empty slot.
-                                */}
-                                {type ? (
-                                  <KnowledgeTypeIcon
-                                    type={type}
-                                    size={15}
-                                    className={styles.docIcon}
-                                  />
-                                ) : (
-                                  <span className={styles.docIcon} aria-hidden="true" />
-                                )}
-                                <span className={styles.sourceText}>
-                                  {/*
-                                    K6: the row's one link, stretched over the
-                                    row (row-link) - one tab stop, the drawer.
-                                  */}
-                                  <Link
-                                    href={{
-                                      pathname: '/studio/knowledge',
-                                      query: { doc: document.id },
-                                    }}
-                                    className={`${styles.docTitle} ${rowLink.link}`}
-                                    scroll={false}
-                                    data-testid={`doc-open-${document.id}`}
+                            ★★ K5 (Omer, 2026-10-11): what is IN it, a row each -
+                            newest first, as the route orders them. A source row
+                            alone turned an added document into "13 documents"
+                            where "12" had been, and nothing appeared. Each row
+                            says whether it is still being read.
+
+                            ★★ K10 (Omer, 2026-10-12): numbered 1, 2, 3… down the
+                            whole list, the number drawn; the kind's icon and the
+                            name, large, as the title; under it the stored
+                            summary, or no line at all.
+                          */}
+                          {source.documents.length > 0 ? (
+                            <ol className={styles.docs} start={first}>
+                              {source.documents.map((document, index) => {
+                                const state = documentState(document);
+                                const updated = date(document.updatedAt);
+                                const type = knowledgeTypeOf(document.sourceType);
+                                const summary = documentSummary(document);
+                                return (
+                                  <li
+                                    key={document.id}
+                                    className={`${styles.doc} ${rowLink.row}`}
+                                    data-testid={`doc-${document.id}`}
+                                    data-state={state}
                                   >
-                                    {document.title ? (
-                                      <UserText>{document.title}</UserText>
-                                    ) : (
-                                      t('sources.untitled')
-                                    )}
-                                  </Link>
-                                  {updated ? (
-                                    <span className={styles.sourceMeta}>
-                                      {t('sources.docUpdated', { date: updated })}
+                                    <span
+                                      className={styles.docNumber}
+                                      data-testid={`doc-number-${document.id}`}
+                                    >
+                                      {format.number(first + index)}
                                     </span>
-                                  ) : null}
-                                </span>
-                                {state === 'ready' ? null : (
-                                  <span
-                                    className={
-                                      state === 'failed' ? styles.docFailed : styles.pending
-                                    }
-                                    data-testid={`doc-state-${document.id}`}
-                                  >
-                                    {t(
-                                      state === 'failed'
-                                        ? 'sources.docFailed'
-                                        : 'sources.docReading',
+                                    {/*
+                                      K8: its kind's one icon (the Add sheet's and
+                                      the drawer's); none of the four, an empty slot.
+                                    */}
+                                    {type ? (
+                                      <KnowledgeTypeIcon
+                                        type={type}
+                                        size={16}
+                                        className={styles.docIcon}
+                                      />
+                                    ) : (
+                                      <span className={styles.docIcon} aria-hidden="true" />
                                     )}
-                                  </span>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </Fragment>
+                                    {/*
+                                      K6: the row's one link, stretched over the
+                                      row (row-link) - one tab stop, the drawer.
+                                    */}
+                                    <Link
+                                      href={{
+                                        pathname: '/studio/knowledge',
+                                        query: { doc: document.id },
+                                      }}
+                                      className={`${styles.docTitle} ${rowLink.link}`}
+                                      scroll={false}
+                                      data-testid={`doc-open-${document.id}`}
+                                    >
+                                      {document.title ? (
+                                        <UserText>{document.title}</UserText>
+                                      ) : (
+                                        t('sources.untitled')
+                                      )}
+                                    </Link>
+                                    {/* What it contains, as stored - never made up here. */}
+                                    {summary ? (
+                                      <span
+                                        className={styles.docSummary}
+                                        data-testid={`doc-summary-${document.id}`}
+                                      >
+                                        <UserText>{summary}</UserText>
+                                      </span>
+                                    ) : null}
+                                    <span className={styles.docEnd}>
+                                      {state === 'ready' ? null : (
+                                        <span
+                                          className={
+                                            state === 'failed' ? styles.docFailed : styles.pending
+                                          }
+                                          data-testid={`doc-state-${document.id}`}
+                                        >
+                                          {t(
+                                            state === 'failed'
+                                              ? 'sources.docFailed'
+                                              : 'sources.docReading',
+                                          )}
+                                        </span>
+                                      )}
+                                      {updated ? (
+                                        <span className={styles.sourceMeta}>
+                                          {t('sources.docUpdated', { date: updated })}
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                  </li>
+                                );
+                              })}
+                            </ol>
+                          ) : null}
+                        </li>
                       );
                     })}
                   </ul>
@@ -466,6 +494,25 @@ export function groupByWayIn(
   return WAY_ORDER.map((way) => ({ way, sources: sources.filter((s) => wayIn(s) === way) })).filter(
     (group) => group.sources.length > 0,
   );
+}
+
+/**
+ * K10: each source's first document number, counting down the list as it is
+ * drawn (groups in order, sources in order, documents in order) - so the
+ * items read 1, 2, 3… across the whole list, not again from 1 per source.
+ */
+export function firstNumbers(
+  groups: readonly { readonly sources: readonly KnowledgeSource[] }[],
+): ReadonlyMap<string, number> {
+  const first = new Map<string, number>();
+  let next = 1;
+  for (const group of groups) {
+    for (const source of group.sources) {
+      first.set(source.id, next);
+      next += source.documents.length;
+    }
+  }
+  return first;
 }
 
 /** A source every one of whose documents came from the website scan. */

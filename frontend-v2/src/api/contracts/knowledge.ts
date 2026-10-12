@@ -39,6 +39,13 @@ export const knowledgeDocumentSchema = z.object({
   sourceType: z.string().default('text'),
   sourceUrl: z.string().nullable().default(null),
   updatedAt: z.string().nullable().default(null),
+  /**
+   * K10: one stored line on what the document contains (ai c3fadfba, B3),
+   * made when it was processed - `null` until then, and absent from a route
+   * that predates it. Never derived here from anything else. A value of
+   * another shape blanks this line, never the list.
+   */
+  summary: z.string().nullable().optional().catch(null),
 });
 
 export const knowledgeSourceSchema = z.object({
@@ -129,6 +136,15 @@ export const knowledgeDocumentDetailSchema = z.object({
 });
 
 export type KnowledgeDocumentDetail = z.infer<typeof knowledgeDocumentDetailSchema>;
+
+/**
+ * The document's summary as its row's subtitle, or `null` for no line at
+ * all: absent, `null`, empty and only whitespace are all "nothing to say".
+ */
+export function documentSummary(document: { readonly summary?: string | null }): string | null {
+  const text = document.summary?.trim() ?? '';
+  return text === '' ? null : text;
+}
 
 /** Documents that are not yet answering anything. */
 export function notReadyCount(source: KnowledgeSource): number {

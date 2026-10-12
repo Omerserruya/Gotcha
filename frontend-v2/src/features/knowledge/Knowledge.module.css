@@ -336,24 +336,79 @@
     color: var(--intent-blocked-text);
   }
 
-  /* K5: a document in the source above it - 02's uploaded row, set in under its source. */
-  .doc {
-    padding-inline-start: var(--space-32);
+  /*
+   * K10 (Omer, 2026-10-12): the documents in the source above it, numbered
+   * down the whole list. A row is four columns - the number, the kind's
+   * icon, the title over its summary, and the state and date at the end -
+   * so every title starts in line whatever the number or the kind.
+   */
+  .docs {
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
 
-  /* K8: the kind's icon (or its empty slot), so every title starts in line. */
-  .docIcon {
-    flex: none;
-    inline-size: 15px;
-    block-size: 15px;
+  .doc {
+    display: grid;
+    grid-template-columns: minmax(2ch, auto) 16px minmax(0, 1fr) auto;
+    column-gap: var(--space-10);
+    row-gap: var(--space-3);
+    /* On the title's first line, however many lines it wraps to. */
+    align-items: start;
+    padding: var(--space-10) 18px;
+    border-block-end: 1px solid var(--row-divider);
+  }
+
+  .docNumber {
+    grid-row: 1;
+    grid-column: 1;
+    font-size: var(--font-size-meta);
+    font-variant-numeric: tabular-nums;
+    line-height: 20px;
+    text-align: end;
     color: var(--text-subtle);
   }
 
+  /* K8: the kind's icon (or its empty slot). */
+  .docIcon {
+    grid-row: 1;
+    grid-column: 2;
+    inline-size: 16px;
+    block-size: 16px;
+    margin-block-start: 2px;
+    color: var(--text-subtle);
+  }
+
+  /* The name, large: the row's title. */
   .docTitle {
-    font-size: var(--font-size-meta);
-    color: var(--text-body);
+    grid-row: 1;
+    grid-column: 3;
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-medium);
+    line-height: 20px;
+    color: var(--text-primary);
     text-decoration: none;
     overflow-wrap: anywhere;
+  }
+
+  /* What it contains, under the title - only when one is stored. */
+  .docSummary {
+    grid-row: 2;
+    grid-column: 3;
+    font-size: var(--font-size-meta);
+    line-height: 1.45;
+    color: var(--text-subtle);
+    overflow-wrap: anywhere;
+  }
+
+  .docEnd {
+    display: flex;
+    grid-row: 1 / span 2;
+    grid-column: 4;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-4);
+    white-space: nowrap;
   }
 
   /* 02's "Conflict" pill colours: it was not read, so it answers nothing. */

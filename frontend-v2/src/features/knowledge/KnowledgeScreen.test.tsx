@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { KnowledgeSource } from '@/api/contracts/knowledge';
+import { knowledgeSourceSchema, type KnowledgeSource } from '@/api/contracts/knowledge';
 import messages from '@/i18n/messages/en/knowledge.json';
 import { expectPlainRow, expectStretchedRow } from '@/test/stretched-row';
 
@@ -241,7 +241,7 @@ describe('★★ K5 - every document is a row, and a just-added one says it is b
     // Newest first, as the route orders them - under their source.
     const rows = screen
       .getAllByTestId(/^(source|doc)-/)
-      .filter((el) => el.tagName === 'LI')
+      .filter((el) => el.tagName === 'LI' || el.dataset.testid!.startsWith('source-'))
       .map((el) => el.dataset.testid);
     expect(rows).toEqual(['source-k1', 'doc-d-new', 'doc-d1']);
   });
@@ -312,5 +312,82 @@ describe('★★ K6 - a document row opens its drawer', () => {
   it('the source row is not a link', async () => {
     await renderScreen([source()]);
     expectPlainRow(screen.getByTestId('source-k1'));
+  });
+});
+
+/*
+ * K10 (Omer, 2026-10-12): the list's items are numbered 1, 2, 3… - drawn, in
+ * an ordered list - each titled by its kind's icon and its name, with the
+ * stored summary under it, or no line at all.
+ */
+describe('★★ K10 - numbered items, each a title over what it contains', () => {
+  const doc = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    title: `Title ${id}`,
+    status: 'ready',
+    sourceType: 'file',
+    ...over,
+  });
+  const parsed = (id: string, documents: Record<string, unknown>[]) =>
+    knowledgeSourceSchema.parse({ id, name: id, documents });
+
+  it('★★ 1, 2, 3… down the whole list - across groups and sources, never again from 1', async () => {
+    await renderScreen([
+      parsed('uploads', [doc('u1'), doc('u2')]),
+      parsed('site', [doc('w1', { sourceType: 'url' }), doc('w2', { sourceType: 'url' })]),
+      parsed('more', [doc('u3')]),
+    ]);
+    // Drawn, in the order a reader meets them: the website group first.
+    const numbers = screen.getAllByTestId(/^doc-number-/);
+    expect(numbers.map((n) => n.dataset.testid)).toEqual([
+      'doc-number-w1',
+      'doc-number-w2',
+      'doc-number-u1',
+      'doc-number-u2',
+      'doc-number-u3',
+    ]);
+    expect(numbers.map((n) => n.textContent)).toEqual(['1', '2', '3', '4', '5']);
+    // An ordered list each, starting where the last one stopped.
+    const lists = [...document.querySelectorAll('ol')];
+    expect(lists.map((ol) => ol.getAttribute('start'))).toEqual(['1', '3', '5']);
+    for (const id of ['w1', 'u1', 'u3']) {
+      expect(screen.getByTestId(`doc-${id}`).parentElement?.tagName).toBe('OL');
+    }
+  });
+
+  it('the title is the name, the row’s one link, and the number is outside it', async () => {
+    await renderScreen([parsed('k', [doc('a', { title: 'Shipping terms' })])]);
+    const link = screen.getByTestId('doc-open-a');
+    expect(link).toHaveTextContent(/^Shipping terms$/);
+    expect(link).not.toContainElement(screen.getByTestId('doc-number-a'));
+  });
+
+  it('★★ a stored summary is the line under the title, as the user’s text', async () => {
+    await renderScreen([parsed('k', [doc('a', { summary: '  משלוחים והחזרות, תוך 14 יום  ' })])]);
+    const line = screen.getByTestId('doc-summary-a');
+    expect(line).toHaveTextContent(/^משלוחים והחזרות, תוך 14 יום$/);
+    expect(line.querySelector('bdi')).toHaveAttribute('dir', 'auto');
+    expect(screen.getByTestId('doc-a')).toContainElement(line);
+  });
+
+  it('★★ absent, null, empty or only spaces: no line at all - and nothing put in its place', async () => {
+    await renderScreen([
+      parsed('k', [
+        doc('absent'),
+        doc('null', { summary: null }),
+        doc('empty', { summary: '' }),
+        doc('spaces', { summary: ' \n\t ' }),
+        doc('given', { summary: 'Prices and terms for shops' }),
+      ]),
+    ]);
+    for (const id of ['absent', 'null', 'empty', 'spaces']) {
+      expect(screen.queryByTestId(`doc-summary-${id}`), id).toBeNull();
+      // The row says its number and its name - nothing derived stands in.
+      expect(screen.getByTestId(`doc-${id}`).textContent, id).toBe(
+        `${screen.getByTestId(`doc-number-${id}`).textContent}Title ${id}`,
+      );
+    }
+    // Positive control: the same render does draw a summary that is there.
+    expect(screen.getByTestId('doc-summary-given')).toHaveTextContent('Prices and terms for shops');
   });
 });

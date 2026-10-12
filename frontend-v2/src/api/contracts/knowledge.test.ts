@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  documentSummary,
   hasAmbiguousName,
   isOpen,
   knowledgeSourceSchema,
@@ -114,5 +115,41 @@ describe('unanswered questions keep the two numbers apart', () => {
     expect(
       isOpen(unansweredQuestionSchema.parse({ id: 'q1', resolvedAt: '2026-09-01T00:00:00Z' })),
     ).toBe(false);
+  });
+});
+
+/*
+ * K10: `summary` (ai c3fadfba) - one stored line on what a document contains.
+ * The route sends a string or `null`; one that predates it sends nothing.
+ */
+describe('★★ a document’s summary', () => {
+  const parse = (summary?: unknown) =>
+    knowledgeSourceSchema.parse({
+      id: 'k1',
+      documents: [summary === undefined ? doc() : { ...doc(), summary }],
+    }).documents[0]!;
+
+  it('carried as stored', () => {
+    expect(parse('Prices and terms for shops').summary).toBe('Prices and terms for shops');
+  });
+
+  it('absent, null, empty or only spaces: nothing to say', () => {
+    expect(parse().summary).toBeUndefined();
+    for (const nothing of [undefined, null, '', '   ', '\n\t']) {
+      expect(documentSummary(parse(nothing)), JSON.stringify(nothing)).toBeNull();
+    }
+    expect(documentSummary(parse('  Prices  '))).toBe('Prices');
+  });
+
+  it('★ a summary of another shape blanks that line, never the list', () => {
+    const read = knowledgeSourceSchema.parse({
+      id: 'k1',
+      documents: [
+        { ...doc(), summary: { text: 'x' } },
+        { ...doc({ id: 'd2' }), summary: 7 },
+      ],
+    });
+    expect(read.documents.map((d) => d.summary)).toEqual([null, null]);
+    expect(read.documents.map((d) => d.title)).toEqual(['Wholesale terms', 'Wholesale terms']);
   });
 });
