@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { isValidElement } from 'react';
 import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-intl';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '@/api/client/api-error';
 import { conversationRowSchema } from '@/api/contracts/inbox';
@@ -11,6 +11,8 @@ import channels from '@/i18n/messages/en/channels.json';
 import common from '@/i18n/messages/en/common.json';
 import inbox from '@/i18n/messages/en/inbox.json';
 import navigation from '@/i18n/messages/en/navigation.json';
+
+import type PageType from './page';
 
 /**
  * ★★ W2 ON DEV, 2026-10-12, END TO END: the config the server read, through
@@ -122,7 +124,6 @@ const load = async (handledBy: string | null, sla: unknown) => {
     greeting: null,
     detail: null,
   });
-  const { default: Page } = await import('./page');
   const tree = await Page({ searchParams: Promise.resolve({ view: 'mine' }) });
   const props = listProps(tree);
   expect(props, 'the page mounts the list').not.toBeNull();
@@ -133,6 +134,16 @@ const load = async (handledBy: string | null, sla: unknown) => {
   );
   return props!;
 };
+
+/*
+ * The page is imported once, with time to spare: cold, it pulls in the whole
+ * inbox, and under a full parallel run that alone passed the 5s test budget -
+ * and the timed-out test then rendered into the next one.
+ */
+let Page: typeof PageType;
+beforeAll(async () => {
+  Page = (await import('./page')).default;
+}, 60_000);
 
 describe('★★ dev, 2026-10-12: SLA on, Omer’s waiting row - marked, end to end', () => {
   it.each(['ai_agent', 'human', null])(
