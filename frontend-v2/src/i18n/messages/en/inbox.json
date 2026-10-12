@@ -288,8 +288,6 @@
     "allAlone": "Every conversation today was answered without a person.",
     "nothingWaiting": "Nothing is waiting on you.",
     "seeAnswered": "See what GOTCHA answered",
-    "write": "Write to a customer",
-    "writeNotYet": "Starting a conversation from the inbox isn't built yet.",
     "stat": {
       "answered": "Answered today",
       "reply": "Average reply time",

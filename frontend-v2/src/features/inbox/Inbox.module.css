@@ -1942,24 +1942,13 @@
     margin-block-start: var(--space-12);
   }
 
-  .clearPrimary,
-  .clearSecondary {
+  .clearPrimary {
     padding: var(--space-10) var(--space-18);
     border-radius: 10px;
     font-size: var(--font-size-meta);
     text-decoration: none;
-  }
-
-  .clearPrimary {
     background-color: var(--action-base);
     color: var(--action-text);
-  }
-
-  .clearSecondary {
-    border: var(--border-width-thin) solid var(--border-default);
-    color: var(--text-body);
-    opacity: 0.6;
-    cursor: not-allowed;
   }
 
   .clearStrip {

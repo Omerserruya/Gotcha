@@ -91,15 +91,11 @@ export async function ClearQueuePane({ clear }: { readonly clear: ClearQueue }) 
           >
             {t('seeAnswered')}
           </Link>
-          <span
-            role="button"
-            className={styles.clearSecondary}
-            aria-disabled="true"
-            title={t('writeNotYet')}
-            data-testid="write-customer"
-          >
-            {t('write')}
-          </span>
+          {/*
+            02b's "Write to a customer" is not drawn: starting a conversation
+            from the inbox is not built, and a button that does nothing is a
+            dead one (supervisor, 2026-10-12). It comes back as a real action.
+          */}
         </div>
       </div>
       <dl className={styles.clearStrip} data-testid="clear-strip">

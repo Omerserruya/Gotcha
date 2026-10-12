@@ -118,9 +118,13 @@ describe('★★ 02b - the pane: nothing to read, and the day', () => {
     expect(screen.getByTestId('clear-strip')).toHaveTextContent('Answered today-');
   });
 
-  it('see what GOTCHA answered → the GOTCHA view; write to a customer is drawn', async () => {
-    render(await ClearQueuePane({ clear: { overview: null, inFlight: null } }));
+  it('★ see what GOTCHA answered → the GOTCHA view - and no control that does nothing', async () => {
+    const { container } = render(
+      await ClearQueuePane({ clear: { overview: null, inFlight: null } }),
+    );
     expect(screen.getByTestId('see-answered')).toHaveAttribute('href', '/inbox?view=gotcha');
-    expect(screen.getByTestId('write-customer')).toHaveAttribute('aria-disabled', 'true');
+    // "Write to a customer" was an aria-disabled role=button: dead, so not drawn (2026-10-12).
+    expect(screen.queryByTestId('write-customer')).toBeNull();
+    expect(container.querySelector('[aria-disabled="true"], [role="button"]')).toBeNull();
   });
 });
