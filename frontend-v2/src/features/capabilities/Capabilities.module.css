@@ -224,6 +224,16 @@
     cursor: not-allowed;
   }
 
+  /* Locked by the ceiling: it must look unpressable; the line under it says why. */
+  .choiceButton[aria-disabled='true'] {
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+
+  .choiceButton[aria-disabled='true'][data-current='yes'] {
+    color: var(--action-text);
+  }
+
   .choiceNote {
     margin: 0;
     max-inline-size: 260px;
@@ -270,12 +280,6 @@
     font-size: var(--font-size-micro);
     text-align: end;
     color: var(--intent-urgent-text);
-  }
-
-  .ceiling {
-    margin: 0;
-    font-size: var(--font-size-micro);
-    color: var(--text-subtle);
   }
 
   /* 02's violet card: `padding:15px 18px`, radius 14. */

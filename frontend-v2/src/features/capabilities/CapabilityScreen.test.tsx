@@ -366,19 +366,18 @@ describe('★★ 02’s row: what it is, how it ran, one control - and nothing b
     expect(screen.queryByTestId('ran-asks')).toBeNull();
   });
 
-  it('★★ why "Do it" is greyed is said ONCE at the foot, never on each row', async () => {
+  it('★★ why "Do it" is locked is said on each locked row, not once at the foot (Omer, 2026-10-12)', async () => {
     await renderScreen([
       capability({ toolName: 'a', riskGroup: 'financial' }),
       capability({ toolName: 'b', riskGroup: 'financial' }),
+      capability({ toolName: 'c', riskGroup: 'read_only' }),
     ]);
-    expect(screen.getAllByTestId('ceiling-note')).toHaveLength(1);
-    expect(
-      screen.queryByText(/deletes something, moves money or changes settings, so it can be asked/i),
-    ).toBeNull();
-  });
-
-  it('no foot line when every action may be automated', async () => {
-    await renderScreen([capability({ riskGroup: 'read_only' })]);
+    for (const name of ['a', 'b']) {
+      expect(screen.getByTestId(`choice-why-${name}`)).toHaveTextContent(
+        /deletes something, moves money or changes settings/i,
+      );
+    }
+    expect(screen.queryByTestId('choice-why-c')).toBeNull();
     expect(screen.queryByTestId('ceiling-note')).toBeNull();
   });
 });

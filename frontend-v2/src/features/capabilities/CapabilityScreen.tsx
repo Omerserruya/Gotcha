@@ -3,7 +3,6 @@ import { getTranslations } from 'next-intl/server';
 import { wholeUnit } from '@/lib/duration';
 
 import {
-  automationCeiling,
   capabilityStance,
   groupByCategory,
   groupIntegrationRows,
@@ -239,16 +238,6 @@ export async function CapabilityScreen({
         02's violet card proposes a change ("You've approved 11 refunds… raise
         to ₪200"). Nothing proposes one yet: drawn in its shape.
       */}
-      {/*
-        Why "Do it" is greyed on some rows - said ONCE, here, and on the
-        segment itself; never beside each of seventeen rows.
-      */}
-      {capabilities.some((capability) => automationCeiling(capability) !== null) ? (
-        <p className={styles.ceiling} data-testid="ceiling-note">
-          {t('choice.ceilingNote')}
-        </p>
-      ) : null}
-
       <section className={styles.suggest} data-testid="capability-suggest">
         <p className={styles.suggestBody}>{t('suggestNone')}</p>
       </section>

@@ -97,7 +97,6 @@
       "failed": "That didn't save. Try again.",
       "approval_cannot_be_removed": "GOTCHA can't do this one without asking: it deletes something, moves money or changes settings. It still comes to Approvals."
     },
-    "ceilingNote": "Actions that delete, move money or change settings, or that we can't classify, can be asked or refused here, not automated.",
     "confirmSensitive": "GOTCHA will do this without asking. It touches customer details. Continue?",
     "confirmYes": "Continue",
     "confirmNo": "Cancel"

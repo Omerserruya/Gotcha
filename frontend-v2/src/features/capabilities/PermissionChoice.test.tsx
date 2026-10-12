@@ -46,15 +46,27 @@ const show = (capability: Capability) =>
  * DISABLED, with its reason on itself. The rule is unchanged: it cannot be
  * chosen, and the screen says why.
  */
-describe('★★ "Do it" is disabled where it may not be chosen, and says why on itself', () => {
-  it('★★ a tool that moves money: Do it disabled, with the reason', async () => {
+/*
+ * And said on the row (Omer, 2026-10-12): the reason was a `title` on a
+ * `disabled` button, a tooltip several browsers never show, so "Do it" was a
+ * muted segment that did nothing. It is `aria-disabled` now - hoverable and
+ * focusable, its tooltip shown - and the same sentence is a line under it.
+ */
+describe('★★ "Do it" is locked where it may not be chosen, and says why on the row', () => {
+  it('★★ a tool that moves money: Do it locked, with the reason as tooltip and as a line', async () => {
     show(tool({ toolName: 'shopify.process_refund', riskGroup: 'financial' }));
     const doIt = screen.getByTestId('choice-shopify.process_refund-do_it');
-    expect(doIt).toBeDisabled();
+    expect(doIt).toHaveAttribute('aria-disabled', 'true');
+    // Not `disabled`: a disabled control shows no tooltip in several browsers.
+    expect(doIt).not.toHaveAttribute('disabled');
     expect(doIt).toHaveAttribute(
       'title',
       expect.stringMatching(/deletes something, moves money or changes settings/i),
     );
+    const line = screen.getByTestId('choice-why-shopify.process_refund');
+    expect(line.textContent).toBe(doIt.getAttribute('title'));
+    // Named by the line itself - `title` alone would give the same description.
+    expect(doIt).toHaveAttribute('aria-describedby', line.id);
     expect(screen.getByTestId('choice-shopify.process_refund-ask_me')).toBeEnabled();
     expect(screen.getByTestId('choice-shopify.process_refund-never')).toBeEnabled();
   });
@@ -67,6 +79,17 @@ describe('★★ "Do it" is disabled where it may not be chosen, and says why on
       'title',
       expect.stringMatching(/can't tell what this one changes/i),
     );
+    expect(screen.getByTestId('choice-why-shopify.cancel_order')).toHaveTextContent(
+      /can't tell what this one changes/i,
+    );
+  });
+
+  it('★★ pressing the locked one writes nothing and moves nothing', async () => {
+    show(tool({ toolName: 'coupon', riskGroup: 'financial' }));
+    await userEvent.click(screen.getByTestId('choice-coupon-do_it'));
+    expect(setToolPermission).not.toHaveBeenCalled();
+    expect(screen.getByTestId('choice-coupon-ask_me')).toHaveAttribute('data-current', 'yes');
+    expect(screen.queryByTestId('choice-confirm-coupon')).toBeNull();
   });
 
   it('★ S2: create_update and sensitive_data may run on their own, as the server allows', () => {
@@ -75,6 +98,8 @@ describe('★★ "Do it" is disabled where it may not be chosen, and says why on
     for (const name of ['cu', 'sd']) {
       expect(screen.getByTestId(`choice-${name}-do_it`)).toBeEnabled();
       expect(screen.getByTestId(`choice-${name}-do_it`)).not.toHaveAttribute('title');
+      expect(screen.getByTestId(`choice-${name}-do_it`)).not.toHaveAttribute('aria-disabled');
+      expect(screen.queryByTestId(`choice-why-${name}`)).toBeNull();
     }
   });
 
@@ -93,17 +118,19 @@ describe('★★ "Do it" is disabled where it may not be chosen, and says why on
     ]);
   });
 
-  it('★ never a disabled segment without its reason', async () => {
+  it('★ never a locked segment without its reason', async () => {
     // A greyed control with no sentence reads as a defect or a plan upgrade.
     const { container } = show(tool({ riskGroup: 'financial' }));
-    for (const button of container.querySelectorAll('button[disabled]')) {
+    const locked = container.querySelectorAll('button[aria-disabled="true"], button[disabled]');
+    expect(locked).toHaveLength(1);
+    for (const button of locked) {
       expect(button.getAttribute('title')).toBeTruthy();
     }
   });
 
-  it('★ and no explanation beside the row - states, not explanations', async () => {
+  it('★ one line under the control, and only the reason', async () => {
     const { container } = show(tool({ riskGroup: 'financial' }));
-    expect(container.querySelectorAll('p')).toHaveLength(0);
+    expect(container.querySelectorAll('p')).toHaveLength(1);
   });
 });
 
@@ -117,8 +144,9 @@ describe('★★ a stored state the ceiling would now forbid', () => {
     show(tool({ toolName: 'r', riskGroup: 'financial', enabled: true, requiresApproval: false }));
     const doIt = screen.getByTestId('choice-r-do_it');
     expect(doIt).toHaveAttribute('data-current', 'yes');
-    expect(doIt).toBeDisabled();
+    expect(doIt).toHaveAttribute('aria-disabled', 'true');
     expect(doIt).toHaveAttribute('title', expect.stringMatching(/can't be set back/i));
+    expect(screen.getByTestId('choice-why-r')).toHaveTextContent(/can't be set back/i);
     // But turning it off is available.
     expect(screen.getByTestId('choice-r-never')).toBeEnabled();
   });
@@ -127,6 +155,7 @@ describe('★★ a stored state the ceiling would now forbid', () => {
     show(tool({ toolName: 'ok', riskGroup: 'read_only', requiresApproval: false }));
     expect(screen.getByTestId('choice-ok-do_it')).toHaveAttribute('data-current', 'yes');
     expect(screen.getByTestId('choice-ok-do_it')).not.toHaveAttribute('title');
+    expect(screen.queryByTestId('choice-why-ok')).toBeNull();
   });
 
   it('marks the current choice', async () => {
@@ -146,9 +175,13 @@ describe('★★ blocked - the platform decides, so nothing can be chosen', () =
     for (const choice of ['do_it', 'ask_me', 'never'] as const) {
       const button = screen.getByTestId(`choice-shopify.get_order-${choice}`);
       expect(button).toBeDisabled();
+      expect(button).not.toHaveAttribute('aria-disabled');
+      expect(button).not.toHaveAttribute('aria-describedby');
       expect(button).toHaveAttribute('title', 'Reconnect Shopify first.');
       await userEvent.click(button);
     }
+    // Said once above the list, not again on the row.
+    expect(screen.queryByTestId('choice-why-shopify.get_order')).toBeNull();
     expect(screen.getByTestId('choice-shopify.get_order-ask_me')).toHaveAttribute(
       'data-current',
       'yes',

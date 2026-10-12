@@ -20,7 +20,7 @@ import styles from './Capabilities.module.css';
  * Do it · Ask me · Never, for one tool, at the org level.
  *
  * ════════════════════════════════════════════════════════════════════════════
- * ★★ "DO IT" IS NOT DRAWN WHERE IT MAY NOT BE CHOSEN, AND IT SAYS WHY
+ * ★★ "DO IT" WHERE IT MAY NOT BE CHOSEN IS LOCKED, AND SAYS WHY ON THE ROW
  * ════════════════════════════════════════════════════════════════════════════
  * Not greyed silently. A greyed control with no reason reads as a defect or
  * as a plan upgrade; the sentence says which of the two real reasons applies:
@@ -28,6 +28,15 @@ import styles from './Capabilities.module.css';
  *   it deletes, moves money or changes        the server keeps approval on
  *   settings                                  these (S2, 2026-10-11)
  *   we could not tell what this one changes   the read carried no group
+ *
+ * ── SAID TWICE: A LINE UNDER THE CONTROL, AND THE SEGMENT'S TOOLTIP ──
+ * Omer (2026-10-12, Woo, "Create coupon"): a muted "Do it" that did nothing
+ * on click, no reason anywhere. The reason was a `title` on a `disabled`
+ * button - a tooltip several browsers never show on a disabled control - and
+ * one line at the foot of the page. So the locked segment is `aria-disabled`,
+ * not `disabled`: hoverable and focusable, its tooltip shown, a press writing
+ * nothing; and the same sentence is a visible line under the control, which
+ * the segment names as its description.
  *
  * ── ONE CONFIRM: CUSTOMER DETAILS TO "DO IT" ──
  * Loosening a `sensitive_data` tool to run on its own asks once, on the row
@@ -69,7 +78,7 @@ export function PermissionChoice({
   }
 
   function choose(choice: AdminChoice) {
-    if (blocked !== undefined || choice === current) return;
+    if (blocked !== undefined || choice === current || !choices.includes(choice)) return;
     if (confirmBeforeChoosing(capability, choice)) {
       setResult(null);
       setConfirming(true);
@@ -93,6 +102,9 @@ export function PermissionChoice({
     const why = t(`choice.noAutomation.${ceiling}` as 'choice.noAutomation.unclassified');
     return current === choice ? `${why} ${t('choice.storedAutomatic')}` : why;
   };
+  /* The ceiling's sentence, on the row - only when the platform has not blocked all three. */
+  const locked = blocked === undefined ? reasonFor('do_it') : undefined;
+  const lockedId = `choice-why-${capability.toolName}`;
 
   return (
     <div
@@ -103,6 +115,7 @@ export function PermissionChoice({
       <div className={styles.choiceRow} role="group" aria-label={t('choice.label')}>
         {ADMIN_CHOICES.map((choice) => {
           const reason = reasonFor(choice);
+          const isLocked = blocked === undefined && reason !== undefined;
           return (
             <button
               key={choice}
@@ -111,7 +124,9 @@ export function PermissionChoice({
               data-testid={`choice-${capability.toolName}-${choice}`}
               data-current={choice === current ? 'yes' : 'no'}
               aria-pressed={choice === current}
-              disabled={isPending || reason !== undefined}
+              disabled={isPending || blocked !== undefined}
+              aria-disabled={isLocked ? 'true' : undefined}
+              aria-describedby={isLocked ? lockedId : undefined}
               title={reason}
               onClick={() => choose(choice)}
             >
@@ -120,6 +135,12 @@ export function PermissionChoice({
           );
         })}
       </div>
+
+      {locked !== undefined ? (
+        <p id={lockedId} className={styles.choiceNote} data-testid={lockedId}>
+          {locked}
+        </p>
+      ) : null}
 
       {confirming ? (
         <p className={styles.choiceConfirm} data-testid={`choice-confirm-${capability.toolName}`}>
