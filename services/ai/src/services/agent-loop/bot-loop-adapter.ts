@@ -61,7 +61,10 @@ export async function runAgentLoopForBotTurn(
   // mission / policies / persona into the kernel contract (which already has the
   // slots). Pure mapping; the kernel stays employee-agnostic.
   const binding = buildEmployeeBinding(agent);
-  const language = detectAgentLanguage(agent);
+  // No reply language is pinned: the Writer answers in the customer's language,
+  // as the live bot does. That is the product rule, not a setting (Omer,
+  // 2026-10-12). AIAgent.languages defaults to {english:true}, and mapping it
+  // here would have answered a Hebrew customer in English.
 
   // Identity threading (parity with the legacy brain's extractRecentEmail): an email
   // the customer states IN THE CONVERSATION must reach the operations' execution
@@ -122,7 +125,6 @@ export async function runAgentLoopForBotTurn(
     persona: binding.persona,
     goal: committedGoal?.objectiveId ?? null, // committed objective (per-customer continuity) or Reasoner-inferred
     memory,
-    language,
     signal,
     // Ownership probe (autonomous only): stand down mid-loop if a human takes
     // the conversation over while the loop holds the turn. Shadow runs are
@@ -308,13 +310,3 @@ function extractLatestEmail(transcript: Array<{ role: "customer" | "agent"; text
   return undefined;
 }
 
-function detectAgentLanguage(agent: any): string | undefined {
-  try {
-    const langs = agent?.languages ?? {};
-    if (langs.hebrew) return "he";
-    if (langs.arabic) return "ar";
-    return "en";
-  } catch {
-    return undefined;
-  }
-}
