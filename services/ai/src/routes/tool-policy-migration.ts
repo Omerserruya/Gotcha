@@ -199,6 +199,10 @@ router.post("/apply", requirePermissionOrRole("ai:tools:manage", "ADMIN"), async
        * Refused per-tool rather than failing the batch, matching the existing
        * contract two lines down: one tool failing must not truncate the rest and
        * must not be reported as success.
+       *
+       * Still `false` after 2026-10-12, when a workspace became free to set these
+       * groups to run without approval: that is a person's per-tool choice in
+       * PUT /api/tool-permissions/:toolName, and a bulk migration is not one.
        */
       if (!requiresApproval) {
         const riskGroup = riskGroupFor(w.toolName);

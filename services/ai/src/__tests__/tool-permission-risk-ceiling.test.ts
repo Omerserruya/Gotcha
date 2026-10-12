@@ -17,9 +17,14 @@
  * `requiresApproval` on TenantToolPermission. The guard sits BEFORE the branch
  * so it cannot protect one and miss the other - the second is the one nobody
  * remembers.
+ *
+ * Since 2026-10-12 (Omer) a workspace MAY choose to remove approval from these
+ * groups (high-risk-autorun-choice.test.ts). The wall below is now what the
+ * platform kill switch HIGH_RISK_AUTORUN=off restores, so these refusals run
+ * with the switch off.
  * ════════════════════════════════════════════════════════════════════════════
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import express from "express";
 import request from "supertest";
 import { riskGroupFor, mayBeAlwaysAllowed } from "@chatcenter/shared";
@@ -36,6 +41,9 @@ vi.mock("@chatcenter/shared", async () => {
   return {
     riskGroupFor: ta.riskGroupFor,
     mayBeAlwaysAllowed: ta.mayBeAlwaysAllowed,
+    isHighRiskGroup: ta.isHighRiskGroup,
+    highRiskAutoRunPermitted: ta.highRiskAutoRunPermitted,
+    getDefaultHighRiskTools: () => [],
     recommendedState: ta.recommendedState,
     RISK_GROUPS: ta.RISK_GROUPS,
     AuditAction: {},
@@ -53,6 +61,7 @@ vi.mock("@chatcenter/shared", async () => {
         create: async (a: any) => { state.writes.push(["tenantTool.create", a.data]); return { id: "tt1" }; },
       },
       tenantToolPermission: {
+        findUnique: async () => null,
         upsert: async (a: any) => { state.writes.push(["permission.upsert", a.update]); return { id: "p1" }; },
       },
     },
@@ -73,7 +82,16 @@ app.use("/api/tool-permissions", toolPermissionRoutes);
 const put = (tool: string, body: any) =>
   request(app).put(`/api/tool-permissions/${tool}`).send(body);
 
-beforeEach(() => { state.writes = []; });
+let savedSwitch: string | undefined;
+beforeEach(() => {
+  state.writes = [];
+  savedSwitch = process.env.HIGH_RISK_AUTORUN;
+  process.env.HIGH_RISK_AUTORUN = "off";
+});
+afterEach(() => {
+  if (savedSwitch === undefined) delete process.env.HIGH_RISK_AUTORUN;
+  else process.env.HIGH_RISK_AUTORUN = savedSwitch;
+});
 
 describe("★ the classification these rest on", () => {
   it("financial and delete tools may not be always-allowed", () => {
@@ -86,7 +104,7 @@ describe("★ the classification these rest on", () => {
   });
 });
 
-describe("★ approval cannot be removed from a money-moving action", () => {
+describe("★ with HIGH_RISK_AUTORUN=off, approval cannot be removed from a money-moving action", () => {
   it("★ refuses requiresApproval:false on a refund, and writes NOTHING", async () => {
     const res = await put("shopify.process_refund", { requiresApproval: false });
 

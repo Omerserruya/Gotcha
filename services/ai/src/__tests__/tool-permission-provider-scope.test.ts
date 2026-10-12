@@ -74,6 +74,8 @@ vi.mock("@chatcenter/shared", async () => {
   return {
     riskGroupFor: ta.riskGroupFor,
     mayBeAlwaysAllowed: ta.mayBeAlwaysAllowed,
+    isHighRiskGroup: ta.isHighRiskGroup,
+    highRiskAutoRunPermitted: ta.highRiskAutoRunPermitted,
     getDefaultHighRiskTools: () => [],
     AuditAction: {},
     prisma: {
@@ -106,7 +108,7 @@ vi.mock("@chatcenter/shared", async () => {
           return row;
         },
       },
-      tenantToolPermission: { findMany: async () => [], upsert: async () => ({}) },
+      tenantToolPermission: { findMany: async () => [], findUnique: async () => null, upsert: async () => ({}) },
     },
     authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1", role: "ADMIN" }; n(); },
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "t1"; n(); },

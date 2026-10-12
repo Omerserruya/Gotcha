@@ -186,6 +186,8 @@ export {
   RISK_GROUPS,
   riskGroupFor,
   mayBeAlwaysAllowed,
+  isHighRiskGroup,
+  highRiskAutoRunPermitted,
   recommendedState,
   resolveToolAvailability,
   summarizeTools,

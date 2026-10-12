@@ -10,7 +10,13 @@ import {
   AuditAction,
 } from "@chatcenter/shared";
 import { getAvailableTools, getGovernableIntegrationTools, TOOL_REGISTRY } from "../services/tool-registry";
-import { riskGroupFor, mayBeAlwaysAllowed, type RiskGroup } from "@chatcenter/shared";
+import {
+  riskGroupFor,
+  mayBeAlwaysAllowed,
+  isHighRiskGroup,
+  highRiskAutoRunPermitted,
+  type RiskGroup,
+} from "@chatcenter/shared";
 import {
   capabilityStateFromConfig,
   missingScopesFromConfig,
@@ -35,6 +41,12 @@ import {
 
 const router = Router();
 
+/** A tool's approval setting as a person reads it, for the audit's before and after. */
+type ApprovalMode = "ask" | "execute" | "conditional";
+function approvalModeOf(hitlMode: string): ApprovalMode {
+  return hitlMode === "always" ? "ask" : hitlMode === "on_condition" ? "conditional" : "execute";
+}
+
 router.use(
   authenticate,
   resolveTenant,
@@ -57,6 +69,12 @@ interface MergedToolRow {
   updatedAt: string | null;
   /** Display grouping + policy floor. Computed from the canonical shared table. */
   riskGroup: RiskGroup;
+  /**
+   * May this row be set to run without approval? The PUT's own answer, so the
+   * screen offers exactly what the server accepts (false only for delete,
+   * financial and administrative tools while HIGH_RISK_AUTORUN=off).
+   */
+  autoRunAllowed: boolean;
   /**
    * The facts that decide whether the tool can run at all, sent so the UI can
    * name the REAL reason instead of rendering every block as an off switch. All
@@ -153,6 +171,7 @@ router.get("/", async (req: Request, res: Response) => {
     }
 
     const defaultHighRisk = new Set(getDefaultHighRiskTools());
+    const highRiskOpen = highRiskAutoRunPermitted();
 
     const merged: MergedToolRow[] = [];
 
@@ -178,6 +197,7 @@ router.get("/", async (req: Request, res: Response) => {
         allowModification: row?.allowModification ?? false,
         updatedAt: row?.updatedAt?.toISOString?.() ?? null,
         riskGroup: riskGroupFor(spec.name),
+        autoRunAllowed: mayBeAlwaysAllowed(riskGroupFor(spec.name), highRiskOpen),
         // Internal tools have no provider, so no connection or scope can block
         // them. Left undefined deliberately: absent means "not blocking".
         integration: null,
@@ -223,6 +243,7 @@ router.get("/", async (req: Request, res: Response) => {
         allowModification: false,
         updatedAt: g.updatedAt,
         riskGroup: riskGroupFor(toolName),
+        autoRunAllowed: mayBeAlwaysAllowed(riskGroupFor(toolName), highRiskOpen),
         integration: g.integrationSlug,
         integrationConnected: conn ? conn.connected : undefined,
         requiredScopes: g.requiredScopes.length ? g.requiredScopes : undefined,
@@ -297,26 +318,41 @@ router.put("/:toolName", requirePermissionOrRole("ai:tools:manage", "ADMIN"), as
      * money-moving operations is no: the cost of a wrong always-allow there is a
      * refund nobody authorised."
      *
-     * ── Why `productPolicyPermits` is false rather than absent ──
+     * ── Now a choice, not a wall (Omer, 2026-10-12) ──
      *
-     * The guard's second parameter exists so a tenant policy CAN permit an
-     * always-allow. That policy table has zero rows today, so passing false is
-     * the honest current answer rather than a permanent one: when
-     * BusinessActionPolicy is populated, this is where it plugs in.
+     * A workspace may set these groups to run without approval too. This PUT
+     * is the one explicit, per-tool choice that can do it: the default stays
+     * "Ask me", the bulk migration still never removes approval, and every
+     * change here is audited with who, tool, before and after.
+     * `HIGH_RISK_AUTORUN=off` restores the hard block below.
      */
-    if (requiresApproval === false) {
-      const riskGroup = riskGroupFor(toolName);
-      if (!mayBeAlwaysAllowed(riskGroup, false)) {
-        res.status(422).json({
-          error: "approval_cannot_be_removed",
-          riskGroup,
-          // A reason the screen can render, not a bare refusal.
-          message:
-            `"${toolName}" is classified ${riskGroup}. Approval cannot be removed for irreversible or money-moving actions.`,
-        });
-        return;
-      }
+    const riskGroup = riskGroupFor(toolName);
+    if (requiresApproval === false && !mayBeAlwaysAllowed(riskGroup, highRiskAutoRunPermitted())) {
+      res.status(422).json({
+        error: "approval_cannot_be_removed",
+        riskGroup,
+        // A reason the screen can render, not a bare refusal.
+        message:
+          `"${toolName}" is classified ${riskGroup}. Approval cannot be removed for irreversible or money-moving actions.`,
+      });
+      return;
     }
+    const actorId: string | null = (req as any).user?.userId ?? (req as any).userId ?? null;
+    /** Who moved a delete, financial or administrative tool, from what to what. */
+    const auditApprovalChange = async (before: ApprovalMode, targetType: string, targetId: string) => {
+      if (!isHighRiskGroup(riskGroup) || typeof requiresApproval !== "boolean") return;
+      const after: ApprovalMode = requiresApproval ? "ask" : "execute";
+      if (before === after) return;
+      return writeAudit({
+        tenantId,
+        actorType: "user",
+        actorId,
+        action: AuditAction.PERMISSION_CHANGED,
+        targetType,
+        targetId,
+        metadata: { change: "approval_policy", tool: toolName, riskGroup, before, after, loosened: after === "execute" },
+      });
+    };
 
     // Integration tools store their HITL override on TenantTool.configOverrides.hitlPolicy -
     // that's where the gate reads it from. Writing to TenantToolPermission for an
@@ -388,6 +424,9 @@ router.put("/:toolName", requirePermissionOrRole("ai:tools:manage", "ADMIN"), as
       }
       const existingOverrides =
         (tenantTool.configOverrides as Record<string, unknown> | null) ?? {};
+      const approvalBefore = approvalModeOf(
+        (existingOverrides.hitlPolicy as any)?.mode ?? (catalogTool.hitlPolicy as any)?.mode ?? "never",
+      );
       const nextOverrides: Record<string, unknown> = { ...existingOverrides };
       if (typeof requiresApproval === "boolean") {
         nextOverrides.hitlPolicy = {
@@ -403,6 +442,7 @@ router.put("/:toolName", requirePermissionOrRole("ai:tools:manage", "ADMIN"), as
         where: { id: tenantTool.id },
         data: tenantToolPatch,
       });
+      await auditApprovalChange(approvalBefore, "tenant_tool", tenantTool.id);
       res.json({ data: updated });
       return;
     }
@@ -415,8 +455,17 @@ router.put("/:toolName", requirePermissionOrRole("ai:tools:manage", "ADMIN"), as
     if (typeof expiresAfterMin === "number") patch.expiresAfterMin = expiresAfterMin;
     if (typeof allowModification === "boolean") patch.allowModification = allowModification;
 
-    const actorId = (req as any).userId ?? null;
     patch.updatedBy = actorId;
+
+    // An absent row means the gate's own default, and a first write that does
+    // not name requiresApproval must keep it: creating the row with `false`
+    // silently turned "Ask me" into "Execute" for any tool whose default asks.
+    const defaultAsks = getDefaultHighRiskTools().includes(toolName);
+    const existingRow = await (prisma as any).tenantToolPermission.findUnique({
+      where: { tenantId_toolName: { tenantId, toolName } },
+      select: { requiresApproval: true },
+    });
+    const approvalBefore: ApprovalMode = (existingRow ? existingRow.requiresApproval : defaultAsks) ? "ask" : "execute";
 
     const row = await (prisma as any).tenantToolPermission.upsert({
       where: { tenantId_toolName: { tenantId, toolName } },
@@ -426,7 +475,7 @@ router.put("/:toolName", requirePermissionOrRole("ai:tools:manage", "ADMIN"), as
         toolName,
         enabled: typeof enabled === "boolean" ? enabled : true,
         requiresApproval:
-          typeof requiresApproval === "boolean" ? requiresApproval : false,
+          typeof requiresApproval === "boolean" ? requiresApproval : defaultAsks,
         approverRole: typeof approverRole === "string" ? approverRole : null,
         expiresAfterMin: typeof expiresAfterMin === "number" ? expiresAfterMin : 30,
         allowModification:
@@ -434,6 +483,7 @@ router.put("/:toolName", requirePermissionOrRole("ai:tools:manage", "ADMIN"), as
         updatedBy: actorId,
       },
     });
+    await auditApprovalChange(approvalBefore, "tenant_tool_permission", row.id ?? toolName);
 
     res.json({ data: row });
   } catch (err: any) {
@@ -457,13 +507,13 @@ export async function resolveCatalogTool(
   tenantId: string,
   toolName: string,
 ): Promise<
-  | { catalogTool: { id: string; integrationId: string; slug: string } }
+  | { catalogTool: { id: string; integrationId: string; slug: string; hitlPolicy?: unknown } }
   | { error: true; status: number; body: Record<string, unknown> }
 > {
   const dot = toolName.indexOf(".");
   const prefix = toolName.slice(0, dot);
   const slug = toolName.slice(dot + 1);
-  const select = { id: true, integrationId: true, slug: true, integration: { select: { slug: true } } };
+  const select = { id: true, integrationId: true, slug: true, hitlPolicy: true, integration: { select: { slug: true } } };
 
   if (prefix !== "integration") {
     const ct = await (prisma as any).catalogTool.findFirst({

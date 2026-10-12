@@ -62,19 +62,40 @@ export function riskGroupFor(toolName: string): RiskGroup {
   return "create_update";
 }
 
-/** Groups that must never be silently auto-approved. */
+/**
+ * Groups that must never be SILENTLY auto-approved: their default is approval,
+ * a bulk migration never removes it, and only a person's explicit per-tool
+ * choice can (audited, see `isHighRiskGroup`).
+ */
 const NEVER_AUTO_APPROVE: ReadonlySet<RiskGroup> = new Set<RiskGroup>([
   "delete",
   "financial",
   "administrative",
 ]);
 
+/** Is this one of the groups above? Callers audit every approval change on these. */
+export function isHighRiskGroup(group: RiskGroup): boolean {
+  return NEVER_AUTO_APPROVE.has(group);
+}
+
+/**
+ * May a workspace choose "always allow" for the groups above at all?
+ *
+ * Yes, by Omer's decision (2026-10-12): a workspace may set a coupon, a refund
+ * or a delete to run without approval, as an explicit choice that starts at
+ * "Ask me". `HIGH_RISK_AUTORUN=off` is the platform kill switch that restores
+ * the hard block (422 approval_cannot_be_removed) everywhere at once.
+ */
+export function highRiskAutoRunPermitted(env: Record<string, string | undefined> = process.env): boolean {
+  return String(env.HIGH_RISK_AUTORUN ?? "").trim().toLowerCase() !== "off";
+}
+
 /**
  * May this tool be set to "always allow"?
  *
- * A product may decide to permit it explicitly, but the default answer for
- * irreversible and money-moving operations is no: the cost of a wrong
- * always-allow there is a refund nobody authorised.
+ * Without a permission the answer for irreversible and money-moving operations
+ * is no: the cost of a wrong always-allow there is a refund nobody authorised.
+ * The explicit-choice writer passes `highRiskAutoRunPermitted()`.
  */
 export function mayBeAlwaysAllowed(group: RiskGroup, productPolicyPermits = false): boolean {
   if (!NEVER_AUTO_APPROVE.has(group)) return true;
