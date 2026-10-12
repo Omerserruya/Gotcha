@@ -16,6 +16,12 @@ import { generateResponse, getMicroModel } from "./ai.service";
 
 export const SUMMARY_MAX = 160;
 const CONTENT_FOR_SUMMARY = 6000;
+/**
+ * Text this short is its own summary. Asking a model to describe four letters
+ * of nothing produced "a review of key topics and practical explanations": a
+ * summary must never claim content the document does not have.
+ */
+export const SHORT_CONTENT = 80;
 
 export interface StoredSummary {
   text: string;
@@ -61,6 +67,12 @@ async function systemLanguage(tenantId: string): Promise<"he" | "en"> {
  * for the backfill's count; never throws.
  */
 export async function ensureDocumentSummary(documentId: string): Promise<"created" | "fresh" | "empty" | "failed" | "missing"> {
+  const store = async (doc: { id: string; metadata: unknown }, summary: StoredSummary) => {
+    await prisma.knowledgeDocument.update({
+      where: { id: doc.id },
+      data: { metadata: { ...((doc.metadata as Record<string, unknown> | null) ?? {}), summary } as any },
+    });
+  };
   try {
     const doc = await prisma.knowledgeDocument.findUnique({
       where: { id: documentId },
@@ -72,6 +84,13 @@ export async function ensureDocumentSummary(documentId: string): Promise<"create
     const lang = await systemLanguage(doc.tenantId);
     const hash = contentHash(doc.content);
     const current = (doc.metadata as any)?.summary as StoredSummary | undefined;
+
+    if (content.length <= SHORT_CONTENT) {
+      const text = cleanSummary(content);
+      if (current?.hash === hash && current?.text === text) return "fresh";
+      await store(doc, { text, lang, hash, at: new Date().toISOString() });
+      return "created";
+    }
     if (current?.hash === hash && current?.lang === lang && current?.text) return "fresh";
 
     const languageName = lang === "he" ? "Hebrew" : "English";
@@ -88,22 +107,20 @@ export async function ensureDocumentSummary(documentId: string): Promise<"create
             `Write ONE or TWO short sentences in ${languageName} saying what this document contains, ` +
             `for a list of a business's knowledge. At most ${SUMMARY_MAX} characters. ` +
             `Describe the content (topics, what a reader learns); do not quote it, do not start with "This document". ` +
-            `No preamble, no quotes, no dashes.`,
+            `No preamble, no quotes, no dashes. ` +
+            `If the text has no real content (placeholder, test or random characters), reply with exactly NONE.`,
         },
         { role: "user", content: `Title: ${doc.title}\n\n${content.slice(0, CONTENT_FOR_SUMMARY)}` },
       ],
     });
     const text = cleanSummary(res.content);
+    if (/^none\.?$/i.test(text)) return "empty";
     if (!text) return "failed";
 
     // Re-read so a concurrent metadata write is merged, not overwritten.
     const latest = await prisma.knowledgeDocument.findUnique({ where: { id: doc.id }, select: { metadata: true, content: true } });
     if (!latest || contentHash(latest.content) !== hash) return "failed"; // changed meanwhile; the next process run summarises it
-    const summary: StoredSummary = { text, lang, hash, at: new Date().toISOString() };
-    await prisma.knowledgeDocument.update({
-      where: { id: doc.id },
-      data: { metadata: { ...((latest.metadata as Record<string, unknown> | null) ?? {}), summary } as any },
-    });
+    await store({ id: doc.id, metadata: latest.metadata }, { text, lang, hash, at: new Date().toISOString() });
     return "created";
   } catch (err: any) {
     console.warn(`[knowledge-summary] ${documentId}: ${err?.message ?? err}`);

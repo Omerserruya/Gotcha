@@ -34,7 +34,8 @@ vi.mock("../services/qdrant.service", () => ({ upsertChunks: H.qdrant, deleteByD
 import { ensureDocumentSummary, cleanSummary, contentHash, summaryOf, SUMMARY_MAX } from "../services/knowledge-summary.service";
 import { processDocument } from "../services/embedding.service";
 
-const doc = (over: any = {}) => ({ id: "d1", tenantId: "T", knowledgeBaseId: "kb", title: "Returns", content: "Returns within 14 days.", metadata: { origin: "website", dedupeKey: "k1" }, ...over });
+const LONG = "Returns within 14 days of delivery, unused and in the original packaging. Refunds go back to the card used.";
+const doc = (over: any = {}) => ({ id: "d1", tenantId: "T", knowledgeBaseId: "kb", title: "Returns", content: LONG, metadata: { origin: "website", dedupeKey: "k1" }, ...over });
 
 beforeEach(() => {
   H.docs = new Map([["d1", doc()]]);
@@ -50,7 +51,7 @@ describe("ensureDocumentSummary", () => {
     const m = H.docs.get("d1").metadata;
     expect(m.origin).toBe("website");
     expect(m.dedupeKey).toBe("k1");
-    expect(m.summary).toMatchObject({ text: "מדיניות החזרות: 14 יום להחזרה, זיכוי מלא לכרטיס האשראי.", lang: "he", hash: contentHash("Returns within 14 days.") });
+    expect(m.summary).toMatchObject({ text: "מדיניות החזרות: 14 יום להחזרה, זיכוי מלא לכרטיס האשראי.", lang: "he", hash: contentHash(LONG) });
     const call = (H.llm.mock.calls[0] as any)[0];
     expect(call.messages[0].content).toContain("in Hebrew");
     expect(call.tenantId).toBe("T");
@@ -72,7 +73,7 @@ describe("ensureDocumentSummary", () => {
 
   it("changed content makes a new one", async () => {
     await ensureDocumentSummary("d1");
-    H.docs.get("d1").content = "Exchanges only, within 30 days.";
+    H.docs.get("d1").content = LONG + " Exchanges only, within 30 days.";
     H.llm.mockClear();
     expect(await ensureDocumentSummary("d1")).toBe("created");
     expect(H.llm).toHaveBeenCalledTimes(1);
@@ -90,6 +91,21 @@ describe("ensureDocumentSummary", () => {
     expect(await ensureDocumentSummary("d1")).toBe("empty");
     expect(H.llm).not.toHaveBeenCalled();
     expect(H.updates).toHaveLength(0);
+  });
+
+  it("★ short content is its own summary: no model call, nothing invented", async () => {
+    H.docs.get("d1").content = "דשגכ";
+    expect(await ensureDocumentSummary("d1")).toBe("created");
+    expect(H.llm).not.toHaveBeenCalled();
+    expect(H.docs.get("d1").metadata.summary.text).toBe("דשגכ");
+    expect(await ensureDocumentSummary("d1")).toBe("fresh");
+  });
+
+  it("★ a model that finds no real content says NONE, and nothing is stored", async () => {
+    H.llm.mockResolvedValueOnce({ content: "NONE" } as any);
+    expect(await ensureDocumentSummary("d1")).toBe("empty");
+    expect(H.updates).toHaveLength(0);
+    expect((H.llm.mock.calls[0] as any)[0].messages[0].content).toContain("reply with exactly NONE");
   });
 
   it("a model failure stores nothing and does not throw", async () => {
