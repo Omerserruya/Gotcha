@@ -341,6 +341,14 @@
     padding-inline-start: var(--space-32);
   }
 
+  /* K8: the kind's icon (or its empty slot), so every title starts in line. */
+  .docIcon {
+    flex: none;
+    inline-size: 15px;
+    block-size: 15px;
+    color: var(--text-subtle);
+  }
+
   .docTitle {
     font-size: var(--font-size-meta);
     color: var(--text-body);

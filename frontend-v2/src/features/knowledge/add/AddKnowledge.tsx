@@ -25,6 +25,7 @@ import {
   type AddWay,
   type KnowledgeBaseRef,
 } from './add-way';
+import { KnowledgeTypeIcon } from '../knowledge-type';
 import { ConnectedSources } from './ConnectedSources';
 import styles from './AddKnowledge.module.css';
 import { useSheetFocus } from '@/design-system/primitives/overlay/use-sheet-focus';
@@ -189,7 +190,11 @@ export function AddKnowledge({
               }}
             >
               <span className={styles.eyebrow}>{t(`eyebrow.${EYEBROW[w]}`)}</span>
-              <span className={styles.wayName}>{t(`way.${w}.name`)}</span>
+              {/* K8: the kind's one icon - the same on 08's rows and in its drawer. */}
+              <span className={styles.wayName}>
+                <KnowledgeTypeIcon type={w} size={15} className={styles.wayIcon} />
+                {t(`way.${w}.name`)}
+              </span>
               <span className={styles.wayText}>{t(`way.${w}.text`)}</span>
             </button>
           ))}

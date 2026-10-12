@@ -3,6 +3,20 @@
    * K6: one knowledge item in 02's drawer - no design frame, so 02's drawer
    * parts: label-over-value facts, 13.5/600 section titles, field boxes.
    */
+  /* K8: the kind's icon before the title, in a quiet square. */
+  .lead {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    align-self: flex-start;
+    inline-size: var(--space-32);
+    block-size: var(--space-32);
+    border-radius: var(--radius-item);
+    background-color: var(--panel-inset);
+    color: var(--text-subtle);
+  }
+
   .facts {
     display: grid;
     gap: var(--space-12);

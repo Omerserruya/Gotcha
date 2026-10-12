@@ -6,7 +6,7 @@ import { AddKnowledge } from '@/features/knowledge/add/AddKnowledge';
 import { FocusSection } from '@/features/knowledge/FocusSection';
 import { KnowledgeScreen } from '@/features/knowledge/KnowledgeScreen';
 import { ScanPanel } from '@/features/knowledge/ScanPanel';
-import { DocumentDrawer } from '@/features/knowledge/DocumentDrawer';
+import { DocumentDrawer, DocumentTypeLead } from '@/features/knowledge/DocumentDrawer';
 import { Drawer } from '@/shell/Drawer';
 
 const sources = vi.hoisted(() => ({ value: [] as unknown[] | null }));
@@ -216,6 +216,24 @@ describe('★★ K6 - ?doc=<id> opens that item’s drawer', () => {
       userTitle: false,
     });
     expect(find<{ read: unknown }>(tree, DocumentDrawer)?.read).toEqual({ state: 'forbidden' });
+  });
+
+  it('★ K8: the head starts with the item’s kind - its own type; a refusal, none', async () => {
+    sources.value = listed;
+    loadDoc.mockReset();
+    loadDoc.mockResolvedValueOnce({
+      state: 'ok',
+      document: { id: 'd1', title: 'Terms', type: 'google_drive' },
+    });
+    const lead = find<{ lead?: ReactElement<{ type?: string }> }>(
+      await page({ doc: 'd1' }),
+      Drawer,
+    )?.lead;
+    expect(lead?.type).toBe(DocumentTypeLead);
+    expect(lead?.props.type).toBe('google_drive');
+    loadDoc.mockResolvedValueOnce({ state: 'forbidden' });
+    expect(find(await page({ doc: 'd1' }), DocumentTypeLead)).toBeNull();
+    sources.value = [];
   });
 
   it('no ?doc, or the Add sheet open: no drawer, and nothing is read', async () => {

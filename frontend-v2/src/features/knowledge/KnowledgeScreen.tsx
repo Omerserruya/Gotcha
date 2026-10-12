@@ -12,18 +12,10 @@ import {
 } from '@/api/contracts/knowledge';
 import { lastHeardFor, variantsOf, type Candidate } from '@/api/contracts/knowledge-candidates';
 
-import {
-  BookOpen,
-  FolderSync,
-  Globe,
-  Layers,
-  ListChecks,
-  MessagesSquare,
-  Shapes,
-  Upload,
-} from 'lucide-react';
+import { BookOpen, Layers, ListChecks, MessagesSquare, Shapes, Upload } from 'lucide-react';
 
 import { GapRow } from './GapRow';
+import { KNOWLEDGE_TYPE_ICONS, KnowledgeTypeIcon, knowledgeTypeOf } from './knowledge-type';
 import { ResolveConflict } from './ResolveConflict';
 import styles from './Knowledge.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
@@ -292,6 +284,7 @@ export async function KnowledgeScreen({
                           {source.documents.map((document) => {
                             const state = documentState(document);
                             const updated = date(document.updatedAt);
+                            const type = knowledgeTypeOf(document.sourceType);
                             return (
                               <li
                                 key={document.id}
@@ -299,6 +292,19 @@ export async function KnowledgeScreen({
                                 data-testid={`doc-${document.id}`}
                                 data-state={state}
                               >
+                                {/*
+                                  K8: its kind's one icon (the Add sheet's and
+                                  the drawer's); none of the four, an empty slot.
+                                */}
+                                {type ? (
+                                  <KnowledgeTypeIcon
+                                    type={type}
+                                    size={15}
+                                    className={styles.docIcon}
+                                  />
+                                ) : (
+                                  <span className={styles.docIcon} aria-hidden="true" />
+                                )}
                                 <span className={styles.sourceText}>
                                   {/*
                                     K6: the row's one link, stretched over the
@@ -470,10 +476,11 @@ function scannedOnly(source: KnowledgeSource): boolean {
   );
 }
 
+/* The website and Drive ways are those kinds' own icons (K8), never a second pick. */
 const WAY_ICONS = {
-  website: Globe,
+  website: KNOWLEDGE_TYPE_ICONS.page,
   uploaded: Upload,
-  drive: FolderSync,
+  drive: KNOWLEDGE_TYPE_ICONS.drive,
   confluence: BookOpen,
   conversations: MessagesSquare,
   answers: ListChecks,

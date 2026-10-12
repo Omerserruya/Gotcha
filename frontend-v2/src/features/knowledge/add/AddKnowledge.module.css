@@ -84,9 +84,18 @@
   }
 
   .wayName {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
     font-size: 13.5px;
     font-weight: 500;
     color: var(--text-primary);
+  }
+
+  /* K8: the kind's icon, before its name. */
+  .wayIcon {
+    flex: none;
+    color: var(--text-subtle);
   }
 
   .way[aria-checked='true'] .wayName {

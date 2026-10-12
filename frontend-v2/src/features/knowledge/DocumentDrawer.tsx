@@ -4,6 +4,7 @@ import { documentState, type KnowledgeDocumentDetail } from '@/api/contracts/kno
 import drawer from '@/design-system/styles/drawer.module.css';
 
 import { DocumentText, plainPreview } from './DocumentText';
+import { KnowledgeTypeIcon, knowledgeTypeOf } from './knowledge-type';
 import type { DocumentRead } from './load-document';
 import styles from './DocumentDrawer.module.css';
 
@@ -32,6 +33,21 @@ export async function DocumentDrawer({ read }: { readonly read: DocumentRead }) 
     );
   }
   return documentBody(read.document, t, await getFormatter());
+}
+
+/**
+ * K8: the drawer's head starts with the item's kind - the one icon the Add
+ * sheet's card and the item's row on 08 draw. Decorative: "Source" below
+ * names the kind in words. None of the four kinds: nothing.
+ */
+export function DocumentTypeLead({ type }: { readonly type: string }) {
+  const kind = knowledgeTypeOf(type);
+  if (kind === null) return null;
+  return (
+    <span className={styles.lead} data-testid="doc-type-lead">
+      <KnowledgeTypeIcon type={kind} size={18} />
+    </span>
+  );
 }
 
 /* Called, not rendered: one async component, so a test can render it whole. */

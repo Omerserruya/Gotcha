@@ -9,7 +9,7 @@ import {
   type KnowledgeLanding,
 } from '@/features/knowledge/add/add-way';
 import { AddKnowledge } from '@/features/knowledge/add/AddKnowledge';
-import { DocumentDrawer } from '@/features/knowledge/DocumentDrawer';
+import { DocumentDrawer, DocumentTypeLead } from '@/features/knowledge/DocumentDrawer';
 import { FocusSection } from '@/features/knowledge/FocusSection';
 import { KnowledgeScreen } from '@/features/knowledge/KnowledgeScreen';
 import { loadKnowledge } from '@/features/knowledge/load-knowledge';
@@ -132,6 +132,10 @@ export default async function Page({
               : t('doc.title')
           }
           userTitle={docRead.state === 'ok' && docRead.document.title !== ''}
+          // K8: the item's kind, by the icon its card and its row draw.
+          lead={
+            docRead.state === 'ok' ? <DocumentTypeLead type={docRead.document.type} /> : undefined
+          }
           closeHref="/studio/knowledge"
           width={600}
           testId="knowledge-doc-drawer"
