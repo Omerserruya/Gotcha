@@ -23,6 +23,7 @@ vi.mock('@/i18n/navigation', () => ({
 import { checkBusinessFact } from './BusinessFacts';
 import { FactRows } from './FactRows';
 import type { WebsiteScan } from './load-workspace';
+import styles from './Workspace.module.css';
 
 /*
  * Reset here, not in the render helper: a resolved value set before a render
@@ -399,6 +400,31 @@ describe('★ the whole row starts editing; its Edit is the one tab stop', () =>
     screen.getByTestId('fact-edit-description').focus();
     await userEvent.keyboard('{Enter}');
     expect(screen.getByTestId('fact-input-description')).toHaveFocus();
+  });
+
+  it('★★ every row’s Edit comes after a value that fills the row - so it sits at the END (W3)', () => {
+    /*
+     * Omer (2026-10-12): on Address, Edit sat right after the value, at the
+     * start. A row with nothing under its value wrapped it in a bare div that
+     * took only its content's width (measured in Chromium: 894px from the end
+     * edge at 1280, against 38px on every other row).
+     */
+    renderRows({}, null);
+    const edits = document.querySelectorAll('[data-testid^="fact-edit-"]');
+    expect(edits.length).toBeGreaterThanOrEqual(8);
+    for (const edit of edits) {
+      const row = edit.parentElement!;
+      const fills = [...row.children].some(
+        (child) =>
+          child.classList.contains(styles.value!) || child.classList.contains(styles.valueStack!),
+      );
+      expect(fills, edit.getAttribute('data-testid')!).toBe(true);
+    }
+  });
+
+  it('★ and a row with nothing filling it still ends with Edit', () => {
+    const css = readFileSync('src/features/workspace/Workspace.module.css', 'utf8');
+    expect(css).toMatch(/\.row > \.edit\s*\{[^}]*margin-inline-start:\s*auto/);
   });
 
   it('★ focus is drawn on the row, inside the card', () => {

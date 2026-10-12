@@ -349,7 +349,12 @@ export function BusinessFacts({
         <div className={styles.label} id={labelId}>
           {label(key)}
         </div>
-        <div className={below ? styles.valueStack : undefined}>
+        {/*
+          Always the stack, below or not: it is what fills the row, so Edit
+          lands at the row's END (Omer, 2026-10-12: on Address it sat right
+          after the value, at the start). A bare div took only its content.
+        */}
+        <div className={styles.valueStack}>
           <div
             className={[styles.value, value ? '' : styles.unset].join(' ').trim()}
             data-testid={`fact-value-${key}`}

@@ -63,6 +63,14 @@
   }
 
   /*
+   * Edit closes the row, at its END side in either direction (Omer,
+   * 2026-10-12, W3) - whatever fills the row before it, or does not.
+   */
+  .row > .edit {
+    margin-inline-start: auto;
+  }
+
+  /*
    * A row that edits in place: the whole row starts it, and its Edit is the
    * one tab stop. Focus is drawn on the ROW, inset, because the card clips
    * anything outside it - so a keyboard user sees the line they are on.
@@ -606,6 +614,11 @@
 
   .cardLink:hover {
     color: var(--text-primary);
+  }
+
+  /* A card's Edit sits at the END side, as every row's does (W3). */
+  .cardLinkEnd {
+    align-self: flex-end;
   }
 
   /* The voice, read: its words at 13px - where 02 has tone chips. */

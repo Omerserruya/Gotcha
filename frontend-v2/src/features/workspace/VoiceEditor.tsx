@@ -143,7 +143,7 @@ export function VoiceEditor({ voice }: { voice: WorkspaceVoice }) {
         {sampleBox}
         <button
           type="button"
-          className={styles.cardLink}
+          className={`${styles.cardLink} ${styles.cardLinkEnd}`}
           data-testid="voice-edit"
           onClick={() => setEditing(true)}
         >

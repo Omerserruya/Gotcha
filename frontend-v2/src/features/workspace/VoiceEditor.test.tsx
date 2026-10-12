@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { fireEvent, render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
@@ -18,6 +20,7 @@ vi.mock('./actions', () => ({
 }));
 
 import { VoiceEditor } from './VoiceEditor';
+import styles from './Workspace.module.css';
 
 const show = (guidance: string | null) =>
   render(
@@ -50,5 +53,14 @@ describe('★ 11 - "How GOTCHA should sound" is read first, edited in place', ()
     expect(screen.getByTestId('voice-field')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('voice-done'));
     expect(screen.queryByTestId('voice-field')).toBeNull();
+  });
+});
+
+describe('★ its Edit sits at the END side, as every Workspace row’s does (Omer, 2026-10-12, W3)', () => {
+  it('the end modifier, and the rule behind it', () => {
+    show('Warm and brief.');
+    expect(screen.getByTestId('voice-edit')).toHaveClass(styles.cardLinkEnd!);
+    const css = readFileSync('src/features/workspace/Workspace.module.css', 'utf8');
+    expect(css).toMatch(/\.cardLinkEnd\s*\{[^}]*align-self:\s*flex-end/);
   });
 });
