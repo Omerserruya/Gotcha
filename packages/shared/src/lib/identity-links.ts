@@ -27,7 +27,8 @@ export type LinkSignal =
   | "same_name" // the same name on another channel (suggestion only)
   | "similar_name" // a similar name on another channel (suggestion only)
   | "unproven_identifier" // a typed phone/email equal to another contact's unproven value (suggestion only)
-  | "accepted_suggestion"; // a person accepted a suggestion
+  | "accepted_suggestion" // a person accepted a suggestion
+  | "ai_extracted_identifier"; // legacy identity_link_suggestions rows (the AI's /link), kept only as fromSignal
 
 export interface LinkRecord {
   status: "APPLIED" | "PENDING" | "REJECTED";
@@ -38,6 +39,8 @@ export interface LinkRecord {
   /** personId each contact had before the link, for an exact unlink. */
   previousPersonIds?: Record<string, string | null>;
   identifier?: { type: string; value: string } | null;
+  /** accepted_suggestion: the signal of the suggestion a person accepted, kept as its evidence. */
+  fromSignal?: LinkSignal;
   at: string;
   by: string;
 }
@@ -81,6 +84,7 @@ export async function linkContacts(args: {
   targetContactId: string;
   signal: LinkSignal;
   identifier?: { type: string; value: string } | null;
+  fromSignal?: LinkSignal;
   by: string;
   db?: Db;
 }): Promise<LinkOutcome> {
@@ -107,6 +111,7 @@ export async function linkContacts(args: {
     sourceContactId,
     previousPersonIds: { [sourceContactId]: source.personId ?? null, [targetContactId]: target.personId ?? null },
     identifier: args.identifier ?? null,
+    ...(args.fromSignal ? { fromSignal: args.fromSignal } : {}),
     at: new Date().toISOString(),
     by: args.by,
   };

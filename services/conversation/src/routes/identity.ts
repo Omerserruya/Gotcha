@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, linkContacts, unlinkContacts, IDENTITY_LINK, pairKey } from "@chatcenter/shared";
 import { contactLabel } from "../lib/contact-label";
+import { evidenceFor } from "../lib/link-evidence";
 import { visibilityClause } from "../lib/conversation-visibility";
 import { situationOf } from "../lib/situation";
 import { NOT_SAME, notSameKey, marksNaming } from "../lib/not-same";
@@ -67,11 +68,11 @@ router.get("/suggestions", requirePermissionOrRole("crm:contacts:read", "ADMIN")
       prisma.tenantSetting.findMany({ where: { tenantId, key: { startsWith: NOT_SAME } }, select: { key: true } }),
     ]);
     const notSameKeys = new Set(notSame.map((r) => r.key));
-    type Item = { id: string; source: "link" | "legacy"; contactIds: [string, string]; signal: string; identifier: unknown; status: string; at: string };
+    type Item = { id: string; source: "link" | "legacy"; contactIds: [string, string]; signal: string; fromSignal?: string | null; identifier: any; status: string; at: string };
     const items: Item[] = [];
     for (const r of links) {
       const v = r.value as any;
-      if (v?.status === status && Array.isArray(v.contactIds)) items.push({ id: r.key, source: "link", contactIds: v.contactIds, signal: v.signal, identifier: v.identifier ?? null, status: v.status, at: v.at });
+      if (v?.status === status && Array.isArray(v.contactIds)) items.push({ id: r.key, source: "link", contactIds: v.contactIds, signal: v.signal, fromSignal: v.fromSignal ?? null, identifier: v.identifier ?? null, status: v.status, at: v.at });
     }
     for (const s of legacy) {
       // A row the AI wrote against the same contact (a conflicting value on one
@@ -88,7 +89,17 @@ router.get("/suggestions", requirePermissionOrRole("crm:contacts:read", "ADMIN")
       // PENDING pair that is already one person needs no decision.
       .filter((i) => status === "APPLIED" || !notSameKeys.has(notSameKey(i.contactIds[0], i.contactIds[1])))
       .filter((i) => status === "APPLIED" || !(byId.get(i.contactIds[0])!.personId && byId.get(i.contactIds[0])!.personId === byId.get(i.contactIds[1])!.personId))
-      .map((i) => ({ ...i, contacts: i.contactIds.map((id) => { const c = byId.get(id)!; return { id, label: contactLabel(c), channel: c.channel }; }) }));
+      // `contactId` + `channel` per side, for an icon and a link; `evidence`
+      // says why the pair is here (a masked identifier, the two names, or the
+      // Shopify customer that proved it).
+      .map((i) => {
+        const pair = i.contactIds.map((id) => byId.get(id)!) as [any, any];
+        return {
+          ...i,
+          contacts: pair.map((c) => ({ id: c.id, contactId: c.id, label: contactLabel(c), channel: c.channel })),
+          evidence: evidenceFor(i, pair),
+        };
+      });
     res.setHeader("Cache-Control", "private, no-store");
     return res.json({ data });
   } catch (err) {
@@ -103,9 +114,20 @@ router.post("/suggestions/accept", requirePermissionOrRole("crm:contacts:update"
     const pair = pairOf(req.body);
     if (!pair) return res.status(400).json({ error: "contactIds must be two different customers", code: "TWO_CONTACTS_REQUIRED" });
     const by = (req as any).user?.userId ?? "user";
+    // What the accepted suggestion rested on stays on the link as its evidence.
+    const [pending, legacy] = await Promise.all([
+      prisma.tenantSetting.findFirst({ where: { tenantId, key: pairKey(IDENTITY_LINK, pair[0], pair[1]), value: { path: ["status"], equals: "PENDING" } }, select: { value: true } }),
+      prisma.identityLinkSuggestion.findFirst({
+        where: { tenantId, status: "PENDING", OR: [{ sourceContactId: pair[0], targetContactId: pair[1] }, { sourceContactId: pair[1], targetContactId: pair[0] }] },
+        select: { identifierType: true, identifierValue: true },
+      }),
+    ]);
+    const pv = pending?.value as any;
+    const fromSignal = pv?.signal ?? (legacy ? "ai_extracted_identifier" : undefined);
+    const identifier = pv?.identifier ?? (legacy ? { type: String(legacy.identifierType).toLowerCase(), value: legacy.identifierValue } : null);
     // A person decided, so a pending record is replaced by the applied one.
     await prisma.tenantSetting.deleteMany({ where: { tenantId, key: pairKey(IDENTITY_LINK, pair[0], pair[1]), value: { path: ["status"], equals: "PENDING" } } });
-    const outcome = await linkContacts({ tenantId, sourceContactId: pair[0], targetContactId: pair[1], signal: "accepted_suggestion", by });
+    const outcome = await linkContacts({ tenantId, sourceContactId: pair[0], targetContactId: pair[1], signal: "accepted_suggestion", fromSignal, identifier, by });
     if (outcome === "missing") return res.status(404).json({ error: "Contact not found", code: "CONTACT_NOT_FOUND" });
     if (outcome === "not_same" || outcome === "rejected_before") return res.status(409).json({ error: "Marked as not the same person", code: "NOT_SAME" });
     await prisma.identityLinkSuggestion.updateMany({

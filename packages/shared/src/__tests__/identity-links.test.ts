@@ -46,6 +46,16 @@ describe("linkContacts", () => {
     expect(rec("ig", "wa")).toMatchObject({ status: "APPLIED", signal: "shared_identifier", sourceContactId: "ig", previousPersonIds: { ig: "person_ig", wa: "person_wa" } });
   });
 
+  it("an accepted suggestion keeps the suggestion's signal and identifier as its evidence", async () => {
+    await linkContacts({ tenantId: "t1", sourceContactId: "ig", targetContactId: "wa", signal: "accepted_suggestion", fromSignal: "unproven_identifier", identifier: { type: "phone", value: "+972541113421" }, by: "u1", db });
+    expect(rec("ig", "wa")).toMatchObject({ signal: "accepted_suggestion", fromSignal: "unproven_identifier", identifier: { type: "phone", value: "+972541113421" } });
+  });
+
+  it("a link with no fromSignal stores none", async () => {
+    await linkContacts({ tenantId: "t1", sourceContactId: "ig", targetContactId: "wa", signal: "shared_identifier", by: "x", db });
+    expect("fromSignal" in rec("ig", "wa")).toBe(false);
+  });
+
   it("a target with no person gets one, shared with the source", async () => {
     await linkContacts({ tenantId: "t1", sourceContactId: "ig", targetContactId: "bare", signal: "shopify_customer", by: "auto", db });
     const p = contacts.find((c) => c.id === "bare").personId;

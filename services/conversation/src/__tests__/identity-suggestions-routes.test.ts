@@ -26,10 +26,14 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     prisma: {
       tenantSetting: {
         findMany: vi.fn(async ({ where }: any) => H.settings.filter((s) => s.tenantId === where.tenantId && s.key.startsWith(where.key.startsWith))),
+        // Honours key + the status path filter the accept route sends.
+        findFirst: vi.fn(async ({ where }: any) => H.settings.find((s) => s.tenantId === where.tenantId && s.key === where.key && (!where.value || s.value?.[where.value.path[0]] === where.value.equals)) ?? null),
         deleteMany: vi.fn(async (a: any) => { H.deleted.push(a.where); return { count: 0 }; }),
       },
       identityLinkSuggestion: {
         findMany: vi.fn(async ({ where }: any) => H.legacy.filter((s) => s.tenantId === where.tenantId && s.status === where.status)),
+        findFirst: vi.fn(async ({ where }: any) => H.legacy.find((s) => s.tenantId === where.tenantId && s.status === where.status
+          && where.OR.some((o: any) => o.sourceContactId === s.sourceContactId && o.targetContactId === s.targetContactId)) ?? null),
         updateMany: vi.fn(async (a: any) => { H.legacyUpdates.push(a); return { count: 1 }; }),
       },
       contact: { findMany: vi.fn(async ({ where }: any) => H.contacts.filter((c) => c.tenantId === where.tenantId && where.id.in.includes(c.id))) },
@@ -84,7 +88,10 @@ describe("GET /suggestions", () => {
       ["link", "same_name", "ig1+wa1"],
       ["legacy", "ai_extracted_identifier", "wa2+ig1"],
     ]);
-    expect(res.body.data[0].contacts).toEqual([{ id: "ig1", label: "Instagram customer", channel: "INSTAGRAM" }, { id: "wa1", label: "Omer Tsruya", channel: "WHATSAPP" }]);
+    expect(res.body.data[0].contacts).toEqual([
+      { id: "ig1", contactId: "ig1", label: "Instagram customer", channel: "INSTAGRAM" },
+      { id: "wa1", contactId: "wa1", label: "Omer Tsruya", channel: "WHATSAPP" },
+    ]);
     expect(JSON.stringify(res.body)).not.toContain("1031990639501705");
   });
 
@@ -104,7 +111,11 @@ describe("POST /suggestions/accept and /unlink", () => {
   it("accept links the pair as decided by the person and closes the older row", async () => {
     const res = await request(app).post("/api/identity/suggestions/accept").send({ contactIds: ["wa2", "ig1"] });
     expect(res.status).toBe(200);
-    expect(H.link).toHaveBeenCalledWith({ tenantId: "t1", sourceContactId: "wa2", targetContactId: "ig1", signal: "accepted_suggestion", by: "u1" });
+    // The older AI row's identifier is kept on the link as its evidence.
+    expect(H.link).toHaveBeenCalledWith({
+      tenantId: "t1", sourceContactId: "wa2", targetContactId: "ig1", signal: "accepted_suggestion",
+      fromSignal: "ai_extracted_identifier", identifier: { type: "email", value: "d@x.com" }, by: "u1",
+    });
     expect(H.legacyUpdates[0].data).toMatchObject({ status: "APPLIED", decidedBy: "u1" });
     expect(H.legacyUpdates[0].where.tenantId).toBe("t1");
   });
@@ -128,5 +139,48 @@ describe("POST /suggestions/accept and /unlink", () => {
   it("two different customers are required", async () => {
     expect((await request(app).post("/api/identity/unlink").send({ contactIds: ["wa1", "wa1"] })).status).toBe(400);
     expect((await request(app).post("/api/identity/suggestions/accept").send({})).status).toBe(400);
+  });
+});
+
+describe("evidence: why the pair is suggested (B4, 2026-10-12)", () => {
+  const get = async (q = "") => (await request(app).get(`/api/identity/suggestions${q}`)).body.data as any[];
+  const byPair = (rows: any[], pair: string) => rows.find((d) => d.contactIds.join("+") === pair);
+
+  it("a name signal shows the two names, in contact order", async () => {
+    expect(byPair(await get(), "ig1+wa1").evidence).toEqual({ type: "name", names: [null, "Omer Tsruya"] });
+  });
+
+  it("an email is masked to its first letter and domain", async () => {
+    const e = byPair(await get(), "wa2+ig1").evidence;
+    expect(e).toEqual({ type: "email", value: "d***@x.com" });
+    expect(JSON.stringify(e)).not.toContain("d@x.com");
+  });
+
+  it("a phone is masked to +972 5X-XXX-<last four>", async () => {
+    H.settings.push({ tenantId: "t1", key: `${LINK}np:wa2`, value: { status: "PENDING", signal: "unproven_identifier", identifier: { type: "phone", value: "+972541113421" }, contactIds: ["np", "wa2"], at: "x" } });
+    const e = byPair(await get(), "np+wa2").evidence;
+    expect(e).toEqual({ type: "phone", value: "+972 5X-XXX-3421" });
+    expect(JSON.stringify(e)).not.toContain("54111");
+  });
+
+  it("a Shopify link names the customer and how it was proven", async () => {
+    H.settings[1].value.identifier = { type: "shopify_customer", value: "7012" };
+    expect(byPair(await get("?status=APPLIED"), "wa1+wa2").evidence)
+      .toEqual({ type: "shopify_customer", shopifyCustomerId: "7012", provenBy: "verified_profile_update" });
+  });
+
+  it("an accepted suggestion keeps the evidence of the suggestion it was", async () => {
+    H.settings.push({ tenantId: "t1", key: `${LINK}np:wa1`, value: { status: "APPLIED", signal: "accepted_suggestion", fromSignal: "similar_name", contactIds: ["np", "wa1"], at: "x" } });
+    expect(byPair(await get("?status=APPLIED"), "np+wa1").evidence).toEqual({ type: "name", names: ["No Person", "Omer Tsruya"] });
+  });
+
+  it("accepting a new-style suggestion passes its signal and identifier to the link", async () => {
+    H.settings.push({ tenantId: "t1", key: `${LINK}np:wa2`, value: { status: "PENDING", signal: "unproven_identifier", identifier: { type: "phone", value: "+972541113421" }, contactIds: ["np", "wa2"], at: "x" } });
+    await request(app).post("/api/identity/suggestions/accept").send({ contactIds: ["np", "wa2"] });
+    expect(H.link).toHaveBeenCalledWith(expect.objectContaining({ fromSignal: "unproven_identifier", identifier: { type: "phone", value: "+972541113421" } }));
+  });
+
+  it("no identifier and no name signal: evidence is null, not invented", async () => {
+    expect(byPair(await get("?status=APPLIED"), "wa1+wa2").evidence).toBeNull();
   });
 });
