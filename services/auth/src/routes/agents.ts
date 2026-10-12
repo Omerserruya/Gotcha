@@ -683,7 +683,10 @@ const slaSettingsSchema = z.object({
   warningThreshold: z.number().min(0).max(100).optional(), // percentage of SLA time before warning
 });
 
-router.get("/settings/sla", requireRole("ADMIN"), async (req: Request, res: Response) => {
+// The two GETs are read by everyone who answers conversations: the inbox's SLA
+// warning is for the agent, who got 403 here when they were ADMIN-only
+// (2026-10-12). Tenant-scoped by key. The PUTs stay ADMIN (Owner).
+router.get("/settings/sla", requirePermissionOrRole("conversation:messages:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const redis = getRedis();
     const raw = await readDurableSetting(req.tenantId!, "sla");
@@ -710,7 +713,7 @@ router.put("/settings/sla", requireRole("ADMIN"), validate(slaSettingsSchema), a
 });
 
 // Department-level SLA override
-router.get("/settings/sla/department/:departmentId", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/settings/sla/department/:departmentId", requirePermissionOrRole("conversation:messages:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const redis = getRedis();
     const raw = await readDurableSetting(req.tenantId!, `department:${req.params.departmentId}:sla`);
