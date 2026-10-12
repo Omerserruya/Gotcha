@@ -5,6 +5,7 @@ import { getIO } from "../lib/socket";
 import { visibilityClause } from "../lib/conversation-visibility";
 import { contactIdsFor, contactIdOf } from "../lib/conversation-contact";
 import { unreadStates } from "../lib/unread-state";
+import { waitingSinceFor } from "../lib/waiting-since";
 import * as messageService from "./message.service";
 import { presentMessageMedia } from "../lib/message-media";
 
@@ -351,7 +352,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   // Flatten last message info, and the contact behind each row (one batched,
   // read-only lookup for the page - see lib/conversation-contact.ts).
   const rows = keyset ? pageRows : conversations;
-  const [contactMap, unread] = await Promise.all([
+  const [contactMap, unread, waiting] = await Promise.all([
     contactIdsFor(tenantId, rows as any[]),
     // The VIEWER's read state, one query for the page (lib/unread-state.ts).
     // Decoration: if it fails the inbox still loads, its rows served as read.
@@ -361,6 +362,12 @@ export async function list(tenantId: string, filters: ConversationFilters) {
           return new Map();
         })
       : Promise.resolve(new Map()),
+    // Since when the customer has waited for a reply (lib/waiting-since.ts),
+    // for the SLA dot. Decoration too: on failure, nobody is shown waiting.
+    waitingSinceFor(tenantId, rows.map((c) => c.id)).catch((err) => {
+      console.warn("[conversations] waitingSince unavailable:", (err as Error)?.message);
+      return new Map<string, string | null>();
+    }),
   ]);
   const data = rows.map((c) => {
     const lastMsg = c.messages[0] || null;
@@ -375,6 +382,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
       unread: state?.unread ?? false,
       unreadCount: state?.unreadCount ?? 0,
       lastReadAt: state?.lastReadAt ?? null,
+      waitingSince: waiting.get(c.id) ?? null,
     };
   });
 
