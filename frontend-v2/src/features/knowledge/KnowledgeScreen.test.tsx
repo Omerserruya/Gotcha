@@ -95,7 +95,6 @@ async function renderScreen(sources: readonly KnowledgeSource[]) {
       sources,
       unanswered: [],
       conflicts: [],
-      conflictsScannedAt: null,
       // These tests are about the sources panel; an imported workspace with
       // no conflicts keeps the conflict panel out of their way.
       everImported: true,
@@ -171,7 +170,6 @@ describe('★ "Scan again" sits with the website (moved from Workspace, Omer 202
         sources,
         unanswered: [],
         conflicts: [],
-        conflictsScannedAt: null,
         everImported: true,
         rescan,
       }),
@@ -204,7 +202,6 @@ describe('★ "Scan again" sits with the website (moved from Workspace, Omer 202
         sources: [website],
         unanswered: [],
         conflicts: [],
-        conflictsScannedAt: null,
         everImported: true,
       }),
     );

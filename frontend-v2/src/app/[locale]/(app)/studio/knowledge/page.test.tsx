@@ -15,7 +15,6 @@ vi.mock('@/features/knowledge/load-knowledge', () => ({
     sources: sources.value,
     unanswered: [],
     conflicts: [],
-    conflictsScannedAt: null,
     everImported: false,
   }),
 }));

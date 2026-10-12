@@ -51,7 +51,6 @@ export interface KnowledgeData {
    * flag the screen cannot tell a tenant with no contradictions from one
    * where nothing has ever looked, and those are opposite sentences.
    */
-  readonly conflictsScannedAt: string | null;
   readonly everImported: boolean;
 }
 
@@ -124,13 +123,6 @@ export async function loadKnowledge(): Promise<KnowledgeData> {
     sources,
     unanswered,
     conflicts: candidates === null ? null : conflictsIn(candidates),
-    /*
-     * When the scan that produced these actually ran. `completedAt` is the
-     * import's, which is the only timestamp the clustering stage leaves -
-     * and it is the honest answer to "how current is this?", which an empty
-     * conflict list cannot answer on its own.
-     */
-    conflictsScannedAt: newest?.completedAt ?? null,
     // `imports === null` is a failed read, not an absence of imports. Only
     // an empty ARRAY means nothing was ever imported.
     everImported: imports !== null && imports.length > 0,

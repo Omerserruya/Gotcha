@@ -76,14 +76,12 @@ export async function KnowledgeScreen({
   sources,
   unanswered,
   conflicts,
-  conflictsScannedAt,
   everImported,
   rescan = null,
 }: {
   readonly sources: readonly KnowledgeSource[] | null;
   readonly unanswered: readonly UnansweredQuestion[] | null;
   readonly conflicts: readonly Candidate[] | null;
-  readonly conflictsScannedAt: string | null;
   readonly everImported: boolean;
   /**
    * "Scan again" (11b, from Settings · Workspace since 2026-10-11): under
@@ -98,6 +96,7 @@ export async function KnowledgeScreen({
   const date = (iso: string | null) =>
     iso ? format.dateTime(new Date(iso), { day: 'numeric', month: 'long', year: 'numeric' }) : null;
 
+  const found = conflicts !== null && conflicts.length > 0 && everImported;
   const undated = sources ? undatedSources(sources) : [];
   const groups = sources ? groupByWayIn(sources) : [];
   const websiteListed = groups.some((group) => group.way === 'website');
@@ -124,40 +123,13 @@ export async function KnowledgeScreen({
         times (*"We do NOT pick one"*), clustered from an import. So the card
         says that: the question, each answer and how often it was heard. The
         scan runs inside the import only - the coverage line says so, always.
+
+        ★★ ONLY WHEN THERE IS ONE (Omer, 2026-10-12, K9). With nothing found -
+        none, never scanned, or a read that failed - there is no card: no
+        "nothing has been checked yet" box over a screen with nothing to do.
       */}
-      {/*
-        With nothing to show, the card keeps its SHAPE - a title row and one
-        line - and loses its alarm: neutral, like "Worth changing" with no
-        suggestion. What it compared goes on the card itself (`title`).
-      */}
-      <section
-        className={styles.conflictCard}
-        data-state={conflicts && conflicts.length > 0 && everImported ? 'found' : 'empty'}
-        data-testid="conflicts-section"
-        title={
-          conflicts && conflicts.length > 0 && everImported ? undefined : t('conflicts.coverage')
-        }
-      >
-        {conflicts === null ? (
-          <div className={styles.conflictEmpty} data-testid="conflicts-unavailable">
-            <p className={styles.conflictEmptyTitle}>{t('conflicts.emptyUnavailable')}</p>
-            <p className={styles.conflictEmptyLine}>{t('conflicts.emptyUnavailableLine')}</p>
-          </div>
-        ) : !everImported ? (
-          <div className={styles.conflictEmpty} data-testid="conflicts-never-scanned">
-            <p className={styles.conflictEmptyTitle}>{t('conflicts.emptyNever')}</p>
-            <p className={styles.conflictEmptyLine}>{t('conflicts.emptyNeverLine')}</p>
-          </div>
-        ) : conflicts.length === 0 ? (
-          <div className={styles.conflictEmpty} data-testid="conflicts-none">
-            <p className={styles.conflictEmptyTitle}>{t('conflicts.emptyNone')}</p>
-            <p className={styles.conflictEmptyLine}>
-              {conflictsScannedAt
-                ? t('conflicts.emptyNoneLineWhen', { when: date(conflictsScannedAt) ?? '' })
-                : t('conflicts.emptyNoneLine')}
-            </p>
-          </div>
-        ) : (
+      {found && conflicts ? (
+        <section className={styles.conflictCard} data-testid="conflicts-section">
           <ul className={styles.conflicts}>
             {conflicts.map((candidate) => {
               const variants = variantsOf(candidate);
@@ -207,12 +179,12 @@ export async function KnowledgeScreen({
                   </ul>
 
                   {/*
-                    ⚠ THIS WRITES THE TENANT KNOWLEDGE BASE. Authorized by
-                    Omer for this panel. Two presses, the second quoting the
-                    answer back - see `ResolveConflict`. No test and no
-                    capture presses it. Only where there is more than one
-                    answer to choose between.
-                  */}
+                      ⚠ THIS WRITES THE TENANT KNOWLEDGE BASE. Authorized by
+                      Omer for this panel. Two presses, the second quoting the
+                      answer back - see `ResolveConflict`. No test and no
+                      capture presses it. Only where there is more than one
+                      answer to choose between.
+                    */}
                   {variants.length > 1 ? (
                     <ResolveConflict
                       candidateId={candidate.id}
@@ -229,19 +201,16 @@ export async function KnowledgeScreen({
               );
             })}
           </ul>
-        )}
 
-        {/*
-          ★★ WHAT WAS COMPARED, beside what it found - the axis is the team's
-          own answers over time, not website against PDF. With nothing found
-          it is on the card instead (`title`), not a second paragraph.
-        */}
-        {conflicts && conflicts.length > 0 && everImported ? (
+          {/*
+            ★★ WHAT WAS COMPARED, beside what it found - the axis is the team's
+            own answers over time, not website against PDF.
+          */}
           <p className={styles.coverage} data-testid="conflicts-coverage">
             {t('conflicts.coverage')}
           </p>
-        ) : null}
-      </section>
+        </section>
+      ) : null}
 
       <div className={styles.bottom}>
         {/* ── Where it learns from ─────────────────────────────────────── */}

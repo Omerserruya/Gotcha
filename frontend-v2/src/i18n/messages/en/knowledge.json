@@ -31,14 +31,7 @@
         "too_long": "One of these answers is too long to save as it stands. Shorten it in the knowledge base after approving a shorter one, or edit it there directly.",
         "failed": "We could not save that just now, and nothing was written. Try again in a moment."
       }
-    },
-    "emptyUnavailable": "We couldn't read these just now",
-    "emptyUnavailableLine": "That isn't the same as none.",
-    "emptyNever": "Nothing has been checked for contradictions yet",
-    "emptyNeverLine": "It runs when past conversations are imported - nobody has checked.",
-    "emptyNone": "Nothing contradicted itself",
-    "emptyNoneLine": "Checked in the conversations that were imported.",
-    "emptyNoneLineWhen": "Checked in the conversations imported on {when}."
+    }
   },
   "gaps": {
     "heading": "Questions it couldn't answer",

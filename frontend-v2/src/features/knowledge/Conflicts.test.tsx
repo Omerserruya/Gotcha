@@ -100,7 +100,6 @@ const show = async (over: Record<string, unknown> = {}) =>
         sources: [],
         unanswered: [],
         conflicts: [candidate()],
-        conflictsScannedAt: '2026-09-01T00:00:00.000Z',
         everImported: true,
         ...over,
       })}
@@ -176,30 +175,23 @@ describe('★★ both answers, and neither is preferred', () => {
 });
 
 describe('★★ what the scan covered, which an empty list cannot say', () => {
-  it('★★ never-scanned is NOT "nothing disagrees"', async () => {
+  it('★★ no card unless something conflicts (Omer, 2026-10-12, K9)', async () => {
     /*
-     * THE DISTINCTION THE PANEL EXISTS TO MAKE.
-     *
-     * Conflict detection runs inside the historical-import pipeline. With no
-     * import it has never run at all, so an empty list carries no
-     * information - and "no contradictions" would be the most misleading
-     * sentence on the screen.
+     * "Nothing has been checked yet" over a screen with nothing to do was a
+     * box with no action in it. Never scanned, scanned and clean, a failed
+     * read, and conflicts with no import behind them: no card, no words.
      */
-    await show({ conflicts: [], everImported: false });
-    const never = screen.getByTestId('conflicts-never-scanned');
-    expect(never).toHaveTextContent(/nobody has checked/i);
-    expect(screen.queryByTestId('conflicts-none')).toBeNull();
-  });
-
-  it('distinguishes a scanned-and-clean workspace from an unread one', async () => {
-    await show({ conflicts: [], everImported: true });
-    expect(screen.getByTestId('conflicts-none')).toHaveTextContent(/contradicted itself/i);
-    expect(screen.queryByTestId('conflicts-never-scanned')).toBeNull();
-  });
-
-  it('a failed read is neither of those', async () => {
-    await show({ conflicts: null });
-    expect(screen.getByTestId('conflicts-unavailable')).toHaveTextContent(/couldn't read/i);
+    for (const over of [
+      { conflicts: [], everImported: false },
+      { conflicts: [], everImported: true },
+      { conflicts: null, everImported: true },
+      { everImported: false },
+    ]) {
+      const { unmount } = await show(over);
+      expect(screen.queryByTestId('conflicts-section'), JSON.stringify(over)).toBeNull();
+      expect(document.body).not.toHaveTextContent(/contradict|checked/i);
+      unmount();
+    }
   });
 
   it('★★ states the axis even when conflicts ARE found', async () => {
@@ -255,19 +247,10 @@ describe('★★ no strip of four figures (Omer, 2026-10-11: K3)', () => {
   });
 });
 
-describe('★ with nothing to show, the card keeps its shape and loses its alarm', () => {
-  it('neutral, a title row and one line - what it compared on the card itself', async () => {
-    await show({ conflicts: [], everImported: true });
-    const card = screen.getByTestId('conflicts-section');
-    expect(card).toHaveAttribute('data-state', 'empty');
-    expect(card).toHaveAttribute('title', expect.stringMatching(/past conversations/i));
-    expect(screen.getByTestId('conflicts-none').querySelectorAll('p')).toHaveLength(2);
-    expect(screen.queryByTestId('conflicts-coverage')).toBeNull();
-  });
-
-  it('found: the alert, and what was compared said beside it', async () => {
+describe('★ found: the card, and what was compared said beside it', () => {
+  it('the conflicts and the coverage line', async () => {
     await show();
-    expect(screen.getByTestId('conflicts-section')).toHaveAttribute('data-state', 'found');
+    expect(screen.getByTestId('conflicts-section')).toBeInTheDocument();
     expect(screen.getByTestId('conflicts-coverage')).toBeInTheDocument();
   });
 });

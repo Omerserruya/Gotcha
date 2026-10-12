@@ -63,8 +63,10 @@ export default async function Page({
 } = {}) {
   const params = (await searchParams) ?? {};
   const t = await getTranslations('knowledge');
-  const [{ sources, unanswered, conflicts, conflictsScannedAt, everImported }, workspace] =
-    await Promise.all([loadKnowledge(), loadWorkspaceFacts()]);
+  const [{ sources, unanswered, conflicts, everImported }, workspace] = await Promise.all([
+    loadKnowledge(),
+    loadWorkspaceFacts(),
+  ]);
   /*
     "Scan again" (11b), moved here from Settings · Workspace (Omer,
     2026-10-11). Drawn only when the workspace read answers - the gate it had
@@ -118,7 +120,6 @@ export default async function Page({
           sources={sources}
           unanswered={unanswered}
           conflicts={conflicts}
-          conflictsScannedAt={conflictsScannedAt}
           everImported={everImported}
           rescan={rescan}
         />
