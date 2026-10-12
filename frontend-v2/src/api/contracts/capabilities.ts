@@ -106,6 +106,15 @@ export const capabilitySchema = z.object({
    * never rendered as a judgement.
    */
   riskGroup: z.string().nullable().default(null),
+  /**
+   * May this row be set to run without approval: the PUT's own answer
+   * (Backend 817508a7, `mayBeAlwaysAllowed(riskGroupFor(name),
+   * highRiskAutoRunPermitted())`). False only for delete, financial and
+   * administrative while the platform's kill switch `HIGH_RISK_AUTORUN=off` is
+   * set. Optional: a read from before that commit does not carry it, and then
+   * those three stay locked, as that server refused them.
+   */
+  autoRunAllowed: z.boolean().optional(),
   integration: z.string().nullable().default(null),
 
   /* ── The fourth state's evidence, and it is all OPTIONAL on purpose ────── */
@@ -702,32 +711,36 @@ export type AdminChoice = (typeof ADMIN_CHOICES)[number];
 export type NoAutomationReason = 'deletes_money_or_settings' | 'unclassified' | null;
 
 /**
- * The risk groups the platform lets run without asking - every group
+ * The risk groups the platform always lets run without asking - every group
  * `mayBeAlwaysAllowed(group, false)` answers true for
  * (`packages/shared/src/lib/tool-availability.ts`).
  */
 export const AUTOMATABLE_GROUPS = ['read_only', 'create_update', 'sensitive_data'] as const;
 
 /**
- * The platform's `NEVER_AUTO_APPROVE`: `PUT /api/tool-permissions/:toolName`
- * refuses `requiresApproval: false` for these with 422
- * `approval_cannot_be_removed` (`services/ai/src/routes/tool-permissions.ts`).
+ * The platform's `NEVER_AUTO_APPROVE` - now "never SILENTLY" (Backend
+ * 817508a7): a person may set these to run on their own, one tool at a time,
+ * and the server audits it. Their default stays Ask me, and the kill switch
+ * `HIGH_RISK_AUTORUN=off` brings the 422 `approval_cannot_be_removed` back,
+ * which the read says as `autoRunAllowed: false`.
  */
-export const NEVER_AUTOMATIC_GROUPS = ['delete', 'financial', 'administrative'] as const;
+export const HIGH_RISK_GROUPS = ['delete', 'financial', 'administrative'] as const;
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
- * ★★ "DO IT" IS OFFERED EXACTLY WHERE THE SERVER ALLOWS IT (S2, 2026-10-11)
+ * ★★ "DO IT" IS OFFERED EXACTLY WHERE THE SERVER ALLOWS IT (S2, 2026-10-12)
  * ════════════════════════════════════════════════════════════════════════════
  * Omer's rule: Do it · Ask me · Never move freely, within what the server
- * allows - and the server now decides. The PUT computes `riskGroupFor` on the
- * tool's name and refuses `requiresApproval: false` for delete, financial and
- * administrative (422 `approval_cannot_be_removed`); every other group may
- * run on its own. The list read sends the same `riskGroupFor(toolName)` as
- * `riskGroup`, so this table is the server's, row for row:
+ * allows - and the server decides. Since 817508a7 it allows all six groups,
+ * delete, financial and administrative as an audited choice, unless the
+ * platform's kill switch is on; the read says which as `autoRunAllowed`, the
+ * PUT's own answer, so this table is the server's, row for row:
  *
  *   read_only · create_update · sensitive_data   Do it offered
- *   delete · financial · administrative          withheld, said on the segment
+ *   delete · financial · administrative          offered while `autoRunAllowed`
+ *                                                is true; withheld, and said on
+ *                                                the row, when it is false or
+ *                                                the read does not carry it
  *   missing, empty, or a group not named here    withheld: "we can't tell"
  *
  * ── UNCLASSIFIED STAYS LOCKED ──
@@ -737,9 +750,9 @@ export const NEVER_AUTOMATIC_GROUPS = ['delete', 'financial', 'administrative'] 
  * choice the server may refuse. It is the one place this is stricter than the
  * server, and it says so in its own sentence.
  *
- * ── AND ONE CONFIRM ──
- * `sensitive_data` (customer details) may run on its own, but only after one
- * sentence saying so - `confirmBeforeChoosing`.
+ * ── AND ONE CONFIRM, IN THE GROUP'S OWN WORDS ──
+ * Customer details, money, a delete and settings may run on their own, but
+ * only after one sentence saying which - `confirmBeforeChoosing`.
  */
 export function automationCeiling(capability: Capability): NoAutomationReason {
   const group = (capability.riskGroup ?? '').trim();
@@ -749,22 +762,29 @@ export function automationCeiling(capability: Capability): NoAutomationReason {
    * settings" is a statement about the tool; "we could not classify this" is
    * a statement about us, and a reader can act on the first.
    */
-  return (NEVER_AUTOMATIC_GROUPS as readonly string[]).includes(group)
-    ? 'deletes_money_or_settings'
-    : 'unclassified';
+  if (!(HIGH_RISK_GROUPS as readonly string[]).includes(group)) return 'unclassified';
+  // Only `true` opens it: a read without the field is the server that refused.
+  return capability.autoRunAllowed === true ? null : 'deletes_money_or_settings';
 }
 
+/** The groups whose move to "Do it" asks first, each in its own sentence. */
+export const CONFIRMED_GROUPS = ['sensitive_data', ...HIGH_RISK_GROUPS] as const;
+export type ConfirmedGroup = (typeof CONFIRMED_GROUPS)[number];
+
 /**
- * Loosening a tool that touches customer details to run on its own asks once
- * first (Omer, 2026-10-11). Nothing else confirms: not Ask me, not Never, not
- * Do it on any other group, and not a tool already set to Do it.
+ * Loosening a tool to run on its own asks once first when it touches
+ * customer details (Omer, 2026-10-11), moves money, deletes, or changes
+ * settings (Omer, 2026-10-12) - and says which, so the answer names the group.
+ * Nothing else confirms: not Ask me, not Never, not Do it on any other group,
+ * and not a tool already set to Do it.
  */
-export function confirmBeforeChoosing(capability: Capability, choice: AdminChoice): boolean {
-  return (
-    choice === 'do_it' &&
-    (capability.riskGroup ?? '').trim() === 'sensitive_data' &&
-    currentChoice(capability) !== 'do_it'
-  );
+export function confirmBeforeChoosing(
+  capability: Capability,
+  choice: AdminChoice,
+): ConfirmedGroup | null {
+  if (choice !== 'do_it' || currentChoice(capability) === 'do_it') return null;
+  const group = (capability.riskGroup ?? '').trim();
+  return (CONFIRMED_GROUPS as readonly string[]).includes(group) ? (group as ConfirmedGroup) : null;
 }
 
 /** The choices an admin may actually pick for this tool, in design order. */

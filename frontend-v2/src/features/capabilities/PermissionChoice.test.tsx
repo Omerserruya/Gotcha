@@ -192,10 +192,11 @@ describe('★★ blocked - the platform decides, so nothing can be chosen', () =
 
 /*
  * S2 (Omer, 2026-10-11): loosening a tool that touches customer details to
- * "Do it" asks once, on the row. Nothing else confirms. The action is the
- * mock above; each test here lets it answer once.
+ * "Do it" asks once, on the row - and (2026-10-12) one that moves money,
+ * deletes or changes settings, each in its own words. Nothing else confirms.
+ * The action is the mock above; each test here lets it answer once.
  */
-describe('★★ one confirm - customer details to "Do it"', () => {
+describe('★★ one confirm - customer details, money, a delete or settings to "Do it"', () => {
   const write = vi.mocked(setToolPermission);
   beforeEach(() => {
     write.mockClear();
@@ -219,6 +220,45 @@ describe('★★ one confirm - customer details to "Do it"', () => {
     expect(write).toHaveBeenCalledTimes(1);
     expect(write).toHaveBeenCalledWith(sd, 'do_it');
     expect(screen.queryByTestId('choice-confirm-sd')).toBeNull();
+  });
+
+  it.each([
+    [
+      'financial',
+      'GOTCHA will do this without asking, and it moves money (a coupon, a refund, a charge). Continue?',
+    ],
+    [
+      'delete',
+      "GOTCHA will do this without asking, and it deletes something that can't be undone. Continue?",
+    ],
+    ['administrative', 'GOTCHA will do this without asking, and it changes settings. Continue?'],
+  ])(
+    '★★ %s, opened by the server: Do it asks in its own words; Continue writes do_it',
+    async (group, sentence) => {
+      const row = tool({ toolName: 'coupon', riskGroup: group, autoRunAllowed: true });
+      show(row);
+      const doIt = screen.getByTestId('choice-coupon-do_it');
+      expect(doIt).not.toHaveAttribute('aria-disabled');
+      expect(doIt).not.toHaveAttribute('title');
+      expect(screen.queryByTestId('choice-why-coupon')).toBeNull();
+      await userEvent.click(doIt);
+      expect(write).not.toHaveBeenCalled();
+      expect(screen.getByTestId('choice-confirm-coupon')).toHaveTextContent(sentence);
+
+      write.mockResolvedValueOnce({ ok: true });
+      await userEvent.click(screen.getByTestId('choice-confirm-coupon-yes'));
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(write).toHaveBeenCalledWith(row, 'do_it');
+    },
+  );
+
+  it('★ the kill switch on (autoRunAllowed false): locked, said on the row, no confirm', async () => {
+    show(tool({ toolName: 'coupon', riskGroup: 'financial', autoRunAllowed: false }));
+    await userEvent.click(screen.getByTestId('choice-coupon-do_it'));
+    expect(screen.getByTestId('choice-coupon-do_it')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('choice-why-coupon')).toBeInTheDocument();
+    expect(screen.queryByTestId('choice-confirm-coupon')).toBeNull();
+    expect(write).not.toHaveBeenCalled();
   });
 
   it('from Never too', async () => {

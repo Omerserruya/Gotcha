@@ -11,6 +11,7 @@ import {
   currentChoice,
   type AdminChoice,
   type Capability,
+  type ConfirmedGroup,
 } from '@/api/contracts/capabilities';
 
 import { setToolPermission, type PermissionWriteResult } from './permission-actions';
@@ -25,8 +26,8 @@ import styles from './Capabilities.module.css';
  * Not greyed silently. A greyed control with no reason reads as a defect or
  * as a plan upgrade; the sentence says which of the two real reasons applies:
  *
- *   it deletes, moves money or changes        the server keeps approval on
- *   settings                                  these (S2, 2026-10-11)
+ *   it deletes, moves money or changes        the platform's kill switch
+ *   settings                                  keeps approval on these
  *   we could not tell what this one changes   the read carried no group
  *
  * ── SAID TWICE: A LINE UNDER THE CONTROL, AND THE SEGMENT'S TOOLTIP ──
@@ -38,9 +39,10 @@ import styles from './Capabilities.module.css';
  * nothing; and the same sentence is a visible line under the control, which
  * the segment names as its description.
  *
- * ── ONE CONFIRM: CUSTOMER DETAILS TO "DO IT" ──
- * Loosening a `sensitive_data` tool to run on its own asks once, on the row
- * (`confirmBeforeChoosing`). Nothing else confirms.
+ * ── ONE CONFIRM, NAMING WHAT IT TOUCHES ──
+ * Loosening a tool that touches customer details, moves money, deletes or
+ * changes settings to run on its own asks once, on the row, in that group's
+ * sentence (`confirmBeforeChoosing`). Nothing else confirms.
  *
  * ── AND THE CURRENT STATE IS SHOWN EVEN WHEN IT IS NO LONGER OFFERABLE ──
  * A financial tool can be stored as auto-approve: set before this ceiling
@@ -63,7 +65,7 @@ export function PermissionChoice({
 }) {
   const t = useTranslations('capabilities');
   const [result, setResult] = useState<PermissionWriteResult | null>(null);
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState<ConfirmedGroup | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const choices = choicesFor(capability);
@@ -79,12 +81,13 @@ export function PermissionChoice({
 
   function choose(choice: AdminChoice) {
     if (blocked !== undefined || choice === current || !choices.includes(choice)) return;
-    if (confirmBeforeChoosing(capability, choice)) {
+    const asks = confirmBeforeChoosing(capability, choice);
+    if (asks !== null) {
       setResult(null);
-      setConfirming(true);
+      setConfirming(asks);
       return;
     }
-    setConfirming(false);
+    setConfirming(null);
     write(choice);
   }
 
@@ -142,16 +145,16 @@ export function PermissionChoice({
         </p>
       ) : null}
 
-      {confirming ? (
+      {confirming !== null ? (
         <p className={styles.choiceConfirm} data-testid={`choice-confirm-${capability.toolName}`}>
-          <span>{t('choice.confirmSensitive')}</span>
+          <span>{t(`choice.confirm.${confirming}`)}</span>
           <button
             type="button"
             className={styles.choiceConfirmYes}
             disabled={isPending}
             data-testid={`choice-confirm-${capability.toolName}-yes`}
             onClick={() => {
-              setConfirming(false);
+              setConfirming(null);
               write('do_it');
             }}
           >
@@ -161,7 +164,7 @@ export function PermissionChoice({
             type="button"
             className={styles.choiceConfirmNo}
             data-testid={`choice-confirm-${capability.toolName}-no`}
-            onClick={() => setConfirming(false)}
+            onClick={() => setConfirming(null)}
           >
             {t('choice.confirmNo')}
           </button>

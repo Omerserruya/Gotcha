@@ -97,7 +97,12 @@
       "failed": "That didn't save. Try again.",
       "approval_cannot_be_removed": "GOTCHA can't do this one without asking: it deletes something, moves money or changes settings. It still comes to Approvals."
     },
-    "confirmSensitive": "GOTCHA will do this without asking. It touches customer details. Continue?",
+    "confirm": {
+      "sensitive_data": "GOTCHA will do this without asking. It touches customer details. Continue?",
+      "financial": "GOTCHA will do this without asking, and it moves money (a coupon, a refund, a charge). Continue?",
+      "delete": "GOTCHA will do this without asking, and it deletes something that can't be undone. Continue?",
+      "administrative": "GOTCHA will do this without asking, and it changes settings. Continue?"
+    },
     "confirmYes": "Continue",
     "confirmNo": "Cancel"
   },

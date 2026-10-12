@@ -242,7 +242,7 @@
     color: var(--text-muted);
   }
 
-  /* S2: customer details to "Do it" - one line, Continue and Cancel, on the row. */
+  /* S2: a move to "Do it" that asks first - one line, Continue and Cancel, on the row. */
   .choiceConfirm {
     display: flex;
     flex-wrap: wrap;

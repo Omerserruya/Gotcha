@@ -11,7 +11,7 @@ import {
   choicesFor,
   confirmBeforeChoosing,
   currentChoice,
-  NEVER_AUTOMATIC_GROUPS,
+  HIGH_RISK_GROUPS,
   type Capability,
 } from './capabilities';
 
@@ -28,37 +28,57 @@ const tool = (over: Record<string, unknown> = {}): Capability =>
   capabilitySchema.parse({ toolName: 'shopify.get_order', riskGroup: 'read_only', ...over });
 
 /*
- * S2 (Omer, 2026-10-11): Do it · Ask me · Never move freely within what the
- * SERVER allows. The PUT refuses `requiresApproval: false` for exactly
- * delete, financial and administrative (`NEVER_AUTO_APPROVE`, 422
- * `approval_cannot_be_removed`); the list read sends the same
- * `riskGroupFor(toolName)` as `riskGroup`. The table below is the server's.
+ * S2 (Omer, 2026-10-12): Do it · Ask me · Never move freely within what the
+ * SERVER allows. Since Backend 817508a7 the PUT refuses `requiresApproval:
+ * false` (422 `approval_cannot_be_removed`) only for delete, financial and
+ * administrative, and only while the kill switch `HIGH_RISK_AUTORUN=off` is
+ * set; the list read sends that answer as `autoRunAllowed`, beside
+ * `riskGroupFor(toolName)` as `riskGroup`. The table below is the server's,
+ * for each thing the read can say about those three.
  */
-const SERVER_TABLE: Record<string, 'allowed' | 'refused'> = {
-  read_only: 'allowed',
-  create_update: 'allowed',
-  sensitive_data: 'allowed',
-  delete: 'refused',
-  financial: 'refused',
-  administrative: 'refused',
+type Read = 'open' | 'kill switch' | 'stale read';
+const SERVER_TABLE: Record<string, Record<Read, 'allowed' | 'refused'>> = {
+  read_only: { open: 'allowed', 'kill switch': 'allowed', 'stale read': 'allowed' },
+  create_update: { open: 'allowed', 'kill switch': 'allowed', 'stale read': 'allowed' },
+  sensitive_data: { open: 'allowed', 'kill switch': 'allowed', 'stale read': 'allowed' },
+  delete: { open: 'allowed', 'kill switch': 'refused', 'stale read': 'refused' },
+  financial: { open: 'allowed', 'kill switch': 'refused', 'stale read': 'refused' },
+  administrative: { open: 'allowed', 'kill switch': 'refused', 'stale read': 'refused' },
+};
+const AUTO_RUN: Record<Read, boolean | undefined> = {
+  open: true,
+  'kill switch': false,
+  // A read from before 817508a7: no field, and that server refused the three.
+  'stale read': undefined,
 };
 
 describe('★★ "Do it" is offered exactly where the server allows it', () => {
-  it('★★ every one of the server’s six groups, row for row', () => {
+  it('★★ every one of the server’s six groups, row for row, as each read says it', () => {
     // The six are `RISK_GROUPS` in packages/shared - all of them, no more.
     expect(Object.keys(SERVER_TABLE).sort()).toEqual(
-      [...AUTOMATABLE_GROUPS, ...NEVER_AUTOMATIC_GROUPS].sort(),
+      [...AUTOMATABLE_GROUPS, ...HIGH_RISK_GROUPS].sort(),
     );
-    for (const [group, server] of Object.entries(SERVER_TABLE)) {
-      const row = tool({ toolName: `x.${group}`, riskGroup: group });
-      if (server === 'allowed') {
-        expect(automationCeiling(row), group).toBeNull();
-        expect(choicesFor(row), group).toEqual(['do_it', 'ask_me', 'never']);
-      } else {
-        expect(automationCeiling(row), group).toBe('deletes_money_or_settings');
-        expect(choicesFor(row), group).toEqual(['ask_me', 'never']);
+    for (const [group, reads] of Object.entries(SERVER_TABLE)) {
+      for (const [read, server] of Object.entries(reads) as [Read, string][]) {
+        const row = tool({
+          toolName: `x.${group}`,
+          riskGroup: group,
+          autoRunAllowed: AUTO_RUN[read],
+        });
+        const label = `${group}, ${read}`;
+        if (server === 'allowed') {
+          expect(automationCeiling(row), label).toBeNull();
+          expect(choicesFor(row), label).toEqual(['do_it', 'ask_me', 'never']);
+        } else {
+          expect(automationCeiling(row), label).toBe('deletes_money_or_settings');
+          expect(choicesFor(row), label).toEqual(['ask_me', 'never']);
+        }
       }
     }
+  });
+
+  it('★ the read keeps `autoRunAllowed` - a contract that strips it locks all three', () => {
+    expect(tool({ riskGroup: 'financial', autoRunAllowed: true }).autoRunAllowed).toBe(true);
   });
 
   it('★ create_update, the classifier’s no-match, is allowed - as the server allows it', () => {
@@ -67,10 +87,14 @@ describe('★★ "Do it" is offered exactly where the server allows it', () => {
   });
 
   it('★★ no group, an empty one, or one the server never sends: locked, "we can’t tell"', () => {
-    // The server always computes one of six; a row without one cannot say which.
+    // The server always computes one of six; a row without one cannot say
+    // which - nor which sentence a confirm would need - even when it says yes.
     for (const riskGroup of [null, '', '   ', 'unclassified', 'critical']) {
-      expect(automationCeiling(tool({ riskGroup })), String(riskGroup)).toBe('unclassified');
-      expect(choicesFor(tool({ riskGroup })), String(riskGroup)).toEqual(['ask_me', 'never']);
+      for (const autoRunAllowed of [true, false, undefined]) {
+        const row = tool({ riskGroup, autoRunAllowed });
+        expect(automationCeiling(row), String(riskGroup)).toBe('unclassified');
+        expect(choicesFor(row), String(riskGroup)).toEqual(['ask_me', 'never']);
+      }
     }
   });
 
@@ -97,34 +121,66 @@ describe.skipIf(!existsSync(SHARED))('★★ the server’s own source agrees wi
     expect(quoted(groups)).toEqual(Object.keys(SERVER_TABLE).sort());
   });
 
-  it('NEVER_AUTO_APPROVE is exactly the groups the screen withholds', () => {
+  it('NEVER_AUTO_APPROVE is exactly the groups the kill switch locks and the screen confirms', () => {
     const never =
       /NEVER_AUTO_APPROVE[^=]*= new Set<RiskGroup>\(\[([^\]]*)\]/.exec(source)?.[1] ?? '';
-    expect(quoted(never)).toEqual([...NEVER_AUTOMATIC_GROUPS].sort());
+    expect(quoted(never)).toEqual([...HIGH_RISK_GROUPS].sort());
   });
 });
 
-describe('★★ one confirm: customer details to "Do it", nothing else', () => {
+/*
+ * `autoRunAllowed` is the PUT's own answer only while both call the same
+ * guard with the same switch. Read against the route where the monorepo holds
+ * it; SKIPPED outside it, never passed.
+ */
+const ROUTE = join(process.cwd(), '..', 'services/ai/src/routes/tool-permissions.ts');
+describe.skipIf(!existsSync(ROUTE))('★★ the read’s `autoRunAllowed` is the PUT’s guard', () => {
+  const route = existsSync(ROUTE) ? readFileSync(ROUTE, 'utf8') : '';
+
+  it('every row kind sends it from mayBeAlwaysAllowed with the kill switch', () => {
+    const sent = [
+      ...route.matchAll(/autoRunAllowed: mayBeAlwaysAllowed\(riskGroupFor\([^)]*\), (\w+)\)/g),
+    ];
+    expect(sent).toHaveLength(2);
+    for (const [, flag] of sent) {
+      expect(route).toContain(`const ${flag} = highRiskAutoRunPermitted();`);
+    }
+  });
+
+  it('and the PUT refuses with the same guard and the same switch', () => {
+    expect(route).toMatch(
+      /requiresApproval === false && !mayBeAlwaysAllowed\(riskGroup, highRiskAutoRunPermitted\(\)\)/,
+    );
+  });
+});
+
+describe('★★ one confirm, in its group’s words: customer details, money, a delete, settings', () => {
   const at = (riskGroup: string, choice: 'do_it' | 'ask_me' | 'never') =>
     tool({
       riskGroup,
+      autoRunAllowed: true,
       enabled: choice !== 'never',
       requiresApproval: choice !== 'do_it',
     });
+  const ASKS = ['sensitive_data', 'financial', 'delete', 'administrative'];
 
-  it('sensitive_data from Ask me or from Never to Do it: confirm', () => {
-    expect(confirmBeforeChoosing(at('sensitive_data', 'ask_me'), 'do_it')).toBe(true);
-    expect(confirmBeforeChoosing(at('sensitive_data', 'never'), 'do_it')).toBe(true);
+  it('★★ each of the four, from Ask me or from Never to Do it, names itself', () => {
+    for (const group of ASKS) {
+      expect(confirmBeforeChoosing(at(group, 'ask_me'), 'do_it'), group).toBe(group);
+      expect(confirmBeforeChoosing(at(group, 'never'), 'do_it'), group).toBe(group);
+    }
   });
 
   it('not when tightening, not when already Do it, and not for any other group', () => {
-    expect(confirmBeforeChoosing(at('sensitive_data', 'do_it'), 'ask_me')).toBe(false);
-    expect(confirmBeforeChoosing(at('sensitive_data', 'do_it'), 'never')).toBe(false);
-    expect(confirmBeforeChoosing(at('sensitive_data', 'do_it'), 'do_it')).toBe(false);
-    expect(confirmBeforeChoosing(at('sensitive_data', 'ask_me'), 'never')).toBe(false);
-    for (const group of Object.keys(SERVER_TABLE).filter((g) => g !== 'sensitive_data')) {
-      expect(confirmBeforeChoosing(at(group, 'ask_me'), 'do_it'), group).toBe(false);
-      expect(confirmBeforeChoosing(at(group, 'never'), 'do_it'), group).toBe(false);
+    for (const group of ASKS) {
+      expect(confirmBeforeChoosing(at(group, 'do_it'), 'ask_me'), group).toBeNull();
+      expect(confirmBeforeChoosing(at(group, 'do_it'), 'never'), group).toBeNull();
+      expect(confirmBeforeChoosing(at(group, 'do_it'), 'do_it'), group).toBeNull();
+      expect(confirmBeforeChoosing(at(group, 'ask_me'), 'never'), group).toBeNull();
+    }
+    for (const group of Object.keys(SERVER_TABLE).filter((g) => !ASKS.includes(g))) {
+      expect(confirmBeforeChoosing(at(group, 'ask_me'), 'do_it'), group).toBeNull();
+      expect(confirmBeforeChoosing(at(group, 'never'), 'do_it'), group).toBeNull();
     }
   });
 });

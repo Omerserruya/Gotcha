@@ -9,8 +9,9 @@ import { capabilitySchema, type AdminChoice } from '@/api/contracts/capabilities
  *
  * The action re-checks the ceiling because it is an endpoint - anything that
  * can post can post `do_it`. Its table is the server's: `requiresApproval:
- * false` is refused for delete, financial and administrative, and for a row
- * with no group; every other group goes through to the PUT.
+ * false` is refused for delete, financial and administrative unless the read
+ * said `autoRunAllowed` (Backend 817508a7), and for a row with no group; every
+ * other group goes through to the PUT.
  */
 const { put, signInIfSignedOut } = vi.hoisted(() => ({
   put: vi.fn(),
@@ -23,8 +24,8 @@ vi.mock('@/api/client/signed-out', () => ({ signInIfSignedOut }));
 
 const { setToolPermission } = await import('./permission-actions');
 
-const tool = (riskGroup: string | null) =>
-  capabilitySchema.parse({ toolName: `x.${riskGroup}`, riskGroup });
+const tool = (riskGroup: string | null, autoRunAllowed?: boolean) =>
+  capabilitySchema.parse({ toolName: `x.${riskGroup}`, riskGroup, autoRunAllowed });
 
 beforeEach(() => {
   put.mockReset();
@@ -54,6 +55,21 @@ describe('★★ the action’s own guard is the server’s table', () => {
       expect(put).not.toHaveBeenCalled();
     }
   });
+
+  it.each(['delete', 'financial', 'administrative'])(
+    '★★ do_it on %s reaches the PUT when the server opened it - and only then',
+    async (group) => {
+      expect(await setToolPermission(tool(group, false), 'do_it')).toEqual({
+        ok: false,
+        reason: 'not_automatable',
+      });
+      expect(put).not.toHaveBeenCalled();
+      expect(await setToolPermission(tool(group, true), 'do_it')).toEqual({ ok: true });
+      expect(put).toHaveBeenCalledTimes(1);
+      const [request] = put.mock.calls[0] as [{ body: unknown }];
+      expect(request.body).toEqual({ enabled: true, requiresApproval: false });
+    },
+  );
 
   it.each(['ask_me', 'never'] as const satisfies readonly AdminChoice[])(
     '%s is never refused here, whatever the group',
