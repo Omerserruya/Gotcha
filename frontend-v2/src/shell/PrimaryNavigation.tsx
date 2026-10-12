@@ -112,8 +112,13 @@ export function PrimaryNavigation() {
                *   ★ NO UNREAD PILL HERE (Omer, 2026-10-11: "there's both what I
                *   wanted AND the circles with numbers - remove them"). The
                *   rail says a view's size; unread is the list's, on each row.
+               *
+               *   ★ AND "RESOLVED" HAS NONE (Omer, 2026-10-12) - `showsSize`.
                */
-              const total = child.view === undefined ? undefined : counts?.totals[child.view];
+              const total =
+                child.view === undefined || child.showsSize === false
+                  ? undefined
+                  : counts?.totals[child.view];
               return (
                 <li key={child.id}>
                   <Link

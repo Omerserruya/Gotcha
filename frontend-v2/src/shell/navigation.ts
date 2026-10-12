@@ -41,6 +41,8 @@ export interface NavigationChild {
   readonly labelKey: string;
   readonly href?: string;
   readonly view?: string;
+  /** `false`: the rail never draws this view's size, whatever the page sends. */
+  readonly showsSize?: false;
   readonly permission?: PermissionString;
 }
 
@@ -99,7 +101,11 @@ const INBOX_VIEWS: readonly NavigationChild[] = [
   { id: 'mine', labelKey: 'inbox.mine', view: 'mine' },
   { id: 'active', labelKey: 'inbox.active', view: 'active' },
   { id: 'gotcha', labelKey: 'inbox.gotcha', view: 'gotcha' },
-  { id: 'resolved', labelKey: 'inbox.resolved', view: 'resolved' },
+  /*
+   * No size (Omer, 2026-10-12): everything ever closed is a number that only
+   * grows, and next to the views that need someone it reads as work waiting.
+   */
+  { id: 'resolved', labelKey: 'inbox.resolved', view: 'resolved', showsSize: false },
 ];
 
 /**

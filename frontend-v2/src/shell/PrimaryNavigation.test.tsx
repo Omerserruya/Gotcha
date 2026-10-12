@@ -75,6 +75,16 @@ describe('★★ the rail says each view’s size - and no unread pill (Omer, 20
     expect(total('resolved')).toBeNull();
   });
 
+  it('★★ "Resolved" draws no size even when the page sends one (Omer, 2026-10-12)', () => {
+    // The inbox asks for every view, resolved included; the rail leaves it bare.
+    show({ totals: { queue: 4, mine: 3, active: 2, gotcha: 11, resolved: 812 } });
+    expect(total('resolved')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Resolved' })).toBeInTheDocument();
+    for (const view of ['queue', 'mine', 'active', 'gotcha']) {
+      expect(total(view), view).toBeInTheDocument();
+    }
+  });
+
   it('★★ drawn with the muted counter class', () => {
     show({ totals: { queue: 2, mine: 5 } });
     expect(total('queue')).toHaveClass(styles.subNavCount!);
