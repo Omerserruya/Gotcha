@@ -108,3 +108,32 @@ describe('★★ where it stands', () => {
     expect(slaState(late, at('2026-10-12T10:31:00.000Z'))).toEqual({ kind: 'late' });
   });
 });
+
+describe('★★ from when the customer started waiting (Backend 558f64a5)', () => {
+  it('★★ waitingSince wins over the last message - three messages do not restart the clock', () => {
+    const target = slaTargetFor(
+      row({ waitingSince: '2026-10-12T09:40:00.000Z', lastMessageAt: '2026-10-12T10:00:00.000Z' }),
+      clock(),
+    );
+    expect(target?.since).toBe('2026-10-12T09:40:00.000Z');
+  });
+
+  it('★★ null is an answer: nothing came in after our reply - no mark, whatever else the row says', () => {
+    expect(
+      slaTargetFor(row({ waitingSince: null, lastMessageDirection: 'INBOUND' }), clock()),
+    ).toBeNull();
+  });
+
+  it('★ absent (a server from before it): the older rule, from the last message', () => {
+    const parsed = row();
+    expect(parsed.waitingSince).toBeUndefined();
+    expect(slaTargetFor(parsed, clock())?.since).toBe('2026-10-12T10:00:00.000Z');
+    expect(slaTargetFor(row({ lastMessageDirection: 'OUTBOUND' }), clock())).toBeNull();
+  });
+
+  it('a value that is not a string reads as null - no mark, never the older rule', () => {
+    const parsed = row({ waitingSince: 42 });
+    expect(parsed.waitingSince).toBeNull();
+    expect(slaTargetFor(parsed, clock())).toBeNull();
+  });
+});

@@ -147,6 +147,18 @@ export const conversationRowSchema = z.object({
   departmentId: z.string().nullable().default(null),
   createdAt: z.string().nullable().default(null),
   /**
+   * Since when the customer has waited for a reply (Backend 558f64a5): the
+   * FIRST customer message after our last reply; `null` when nothing came in
+   * after it - or when the server could not work it out (it says nobody is
+   * waiting rather than fail the list).
+   *
+   * ★ ABSENT IS NOT NULL. A server from before 558f64a5 does not send it, and
+   *   the response target then keeps its older rule; `null` is an answer -
+   *   no mark. So no `.default`: it would turn "not sent" into "not waiting".
+   *   A value that is not a string reads as `null`.
+   */
+  waitingSince: z.string().nullable().optional().catch(null),
+  /**
    * ════════════════════════════════════════════════════════════════════════
    * ★★ UNREAD FOR THE PERSON LOOKING - THE SERVER'S ANSWER, OR NOTHING
    * ════════════════════════════════════════════════════════════════════════

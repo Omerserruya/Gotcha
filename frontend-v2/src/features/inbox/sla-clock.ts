@@ -9,7 +9,11 @@ import type { ConversationRow } from '@/api/contracts/inbox';
  * (frontend ConversationList.tsx, `SlaChip` and the status dot):
  *
  *   minutes   the department's own target when it has one, else the workspace's
- *   since     the last message, else when the conversation started
+ *   since     the row's `waitingSince` (Backend 558f64a5): the FIRST customer
+ *             message after our last reply. Legacy timed from the LAST
+ *             message, so three messages restarted the clock three times and
+ *             the wait was under-reported. A server without the field: the
+ *             last message, else when the conversation started
  *   ≥ 100%    late - a red dot that pulses, and "Past SLA"
  *   ≥ warn %  a quiet amber chip with the minutes left
  *
@@ -56,7 +60,13 @@ export const SLA_TICK_MS = 30_000;
 
 type Timed = Pick<
   ConversationRow,
-  'status' | 'handledBy' | 'lastMessageDirection' | 'lastMessageAt' | 'createdAt' | 'departmentId'
+  | 'status'
+  | 'handledBy'
+  | 'lastMessageDirection'
+  | 'lastMessageAt'
+  | 'createdAt'
+  | 'departmentId'
+  | 'waitingSince'
 >;
 
 /** The target this row is held to, or `null` when it is not timed. */
@@ -64,8 +74,11 @@ export function slaTargetFor(row: Timed, clock: SlaClock | null): SlaTarget | nu
   if (clock === null) return null;
   if (row.status === 'CLOSED') return null;
   if (row.handledBy === 'ai_agent' || row.handledBy === 'flow') return null;
-  if (row.lastMessageDirection === 'OUTBOUND') return null;
-  const since = row.lastMessageAt ?? row.createdAt;
+  // `waitingSince` null: nothing came in after our last reply - nobody waits.
+  if (row.waitingSince === null) return null;
+  // An older server: the customer spoke last, timed from the last message.
+  if (row.waitingSince === undefined && row.lastMessageDirection === 'OUTBOUND') return null;
+  const since = row.waitingSince ?? row.lastMessageAt ?? row.createdAt;
   if (since === null || !Number.isFinite(Date.parse(since))) return null;
   const own = row.departmentId === null ? undefined : clock.departments[row.departmentId];
   if (own === 'unread') return null;
