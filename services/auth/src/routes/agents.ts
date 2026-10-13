@@ -762,13 +762,23 @@ router.get("/settings/idle-automation", requireRole("ADMIN"), async (req: Reques
     // value used to live in alone), 2026-10-12: a Redis flush lost it.
     const raw = await readDurableSetting(req.tenantId!, "idleAutomation");
     if (!raw) {
+      // Nothing stored: the suggested texts in the workspace's language
+      // (2026-10-13), so a Hebrew workspace that only switches the reminder on
+      // does not send its customers English.
+      const tenant = await prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { defaultLocale: true } }).catch(() => null);
+      const he = String(tenant?.defaultLocale ?? "").toLowerCase().startsWith("he");
       res.json({
         reminderEnabled: false,
         reminderDelayMinutes: 60,
-        reminderMessage: "Hi! We're still here and waiting for your response. Is there anything else we can help you with?",
+        reminderMessage: he
+          ? "היי, אנחנו עדיין כאן. אפשר לעזור במשהו נוסף?"
+          : "Hi! We're still here and waiting for your response. Is there anything else we can help you with?",
         autoCloseEnabled: false,
         autoCloseDelayMinutes: 1440,
-        autoCloseMessage: "Due to the lack of response, this conversation has been closed. Feel free to reach out again anytime!",
+        autoCloseMessage: he
+          ? "השיחה נסגרה כי לא שמענו ממך. אפשר לכתוב לנו שוב בכל זמן."
+          : "Due to the lack of response, this conversation has been closed. Feel free to reach out again anytime!",
+        defaultsLanguage: he ? "he" : "en",
       });
       return;
     }

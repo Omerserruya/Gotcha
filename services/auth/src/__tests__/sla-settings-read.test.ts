@@ -8,14 +8,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
-const H = vi.hoisted(() => ({ user: null as any, reads: [] as string[][], writes: [] as any[], settings: new Map<string, string>() }));
+const H = vi.hoisted(() => ({ locale: "en", user: null as any, reads: [] as string[][], writes: [] as any[], settings: new Map<string, string>() }));
 
 vi.mock("@chatcenter/shared", async () => {
   const actual = await vi.importActual<any>("@chatcenter/shared");
   const refuse = (res: any) => res.status(403).json({ error: "forbidden" });
   return {
     ...actual,
-    prisma: { department: { findFirst: async (a: any) => (a.where.tenantId === "t1" && a.where.id === "dep1" ? { id: "dep1" } : null) } },
+    prisma: { tenant: { findUnique: async () => ({ defaultLocale: H.locale }) }, department: { findFirst: async (a: any) => (a.where.tenantId === "t1" && a.where.id === "dep1" ? { id: "dep1" } : null) } },
     authenticate: (q: any, _s: any, n: any) => { q.user = H.user; n(); },
     resolveTenant: (q: any, _s: any, n: any) => { q.tenantId = H.user.tenantId; n(); },
     enforceMfaEnrollment: () => (_q: any, _s: any, n: any) => n(),
@@ -101,5 +101,19 @@ describe("idle automation settings are durable (B8, 2026-10-12)", () => {
     H.settings.set("t1:idleAutomation", JSON.stringify(body));
     expect((await request(app).get("/api/agents/settings/idle-automation")).body).toEqual(body);
     expect(H.reads).toContainEqual(["t1", "idleAutomation"]);
+  });
+});
+
+describe("idle automation defaults follow the workspace language (2026-10-13)", () => {
+  it("★ a Hebrew workspace with nothing stored gets Hebrew texts", async () => {
+    H.user = OWNER; H.locale = "he";
+    const b = (await request(app).get("/api/agents/settings/idle-automation")).body;
+    expect(b).toMatchObject({ defaultsLanguage: "he", reminderEnabled: false });
+    expect(b.reminderMessage).toMatch(/^היי/);
+    expect(b.autoCloseMessage).toMatch(/השיחה נסגרה/);
+  });
+  it("an English workspace gets English", async () => {
+    H.user = OWNER; H.locale = "en";
+    expect((await request(app).get("/api/agents/settings/idle-automation")).body.reminderMessage).toMatch(/^Hi!/);
   });
 });
