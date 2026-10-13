@@ -16,7 +16,13 @@ import { lastHeardFor, variantsOf, type Candidate } from '@/api/contracts/knowle
 import { BookOpen, Layers, ListChecks, MessagesSquare, Shapes, Upload } from 'lucide-react';
 
 import { GapRow } from './GapRow';
-import { KNOWLEDGE_TYPE_ICONS, KnowledgeTypeIcon, knowledgeTypeOf } from './knowledge-type';
+import {
+  KNOWLEDGE_TYPE_ICONS,
+  KnowledgeTypeIcon,
+  knowledgeTypeOf,
+  SCANNED_SOURCE_TYPES,
+  WEBSITE_SOURCE_TYPES,
+} from './knowledge-type';
 import { ResolveConflict } from './ResolveConflict';
 import styles from './Knowledge.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
@@ -442,8 +448,8 @@ export type WayIn =
   'website' | 'uploaded' | 'drive' | 'confluence' | 'conversations' | 'answers' | 'mixed' | 'other';
 
 /**
- * The writers' vocabulary, read from their write sites: `url` and
- * `onboarding_scan` (the website), `file` and `text` (uploaded or typed),
+ * The writers' vocabulary, read from their write sites: `url`,
+ * `onboarding_scan` and `url_text` (the website - WEBSITE_SOURCE_TYPES), `file` and `text` (uploaded or typed),
  * `google_drive` and `drive`, `confluence`, `historical_conversations`,
  * `readiness_answer` (answers given during setup). Anything else - `ad`
  * included - is "other" rather than a guess. A source whose documents came
@@ -451,10 +457,8 @@ export type WayIn =
  */
 export function wayIn(source: KnowledgeSource): WayIn {
   const of = (type: string): WayIn => {
+    if (WEBSITE_SOURCE_TYPES.has(type)) return 'website';
     switch (type) {
-      case 'url':
-      case 'onboarding_scan':
-        return 'website';
       case 'file':
       case 'text':
         return 'uploaded';
@@ -519,7 +523,7 @@ export function firstNumbers(
 function scannedOnly(source: KnowledgeSource): boolean {
   return (
     source.documents.length > 0 &&
-    source.documents.every((document) => document.sourceType === 'onboarding_scan')
+    source.documents.every((document) => SCANNED_SOURCE_TYPES.has(document.sourceType))
   );
 }
 

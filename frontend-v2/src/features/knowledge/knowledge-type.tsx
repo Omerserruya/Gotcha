@@ -43,13 +43,30 @@ export const KNOWLEDGE_TYPE_ICONS: Readonly<Record<KnowledgeType, LucideIcon>> =
  * nobody wrote down - is none of the four, and gets no icon rather than a
  * borrowed one.
  */
+/**
+ * ★★ A PAGE OF THE WEBSITE, HOWEVER IT CAME IN - the one list every place
+ * that sorts a document by `sourceType` reads:
+ *   url              a page added by hand ("a page on the site")
+ *   onboarding_scan  the scan's own summary of the site
+ *   url_text         a page the scan crawled (auth onboarding-knowledge
+ *                    .service.ts writes `url` as `url_text`)
+ * `url_text` was in none of the lists, so every crawled page read "Other"
+ * with no icon (K11's hand-back, 2026-10-13).
+ */
+export const WEBSITE_SOURCE_TYPES: ReadonlySet<string> = new Set([
+  'url',
+  'onboarding_scan',
+  'url_text',
+]);
+
+/** The two the website SCAN writes - a source made only of these came from it. */
+export const SCANNED_SOURCE_TYPES: ReadonlySet<string> = new Set(['onboarding_scan', 'url_text']);
+
 export function knowledgeTypeOf(sourceType: string): KnowledgeType | null {
+  if (WEBSITE_SOURCE_TYPES.has(sourceType)) return 'page';
   switch (sourceType) {
     case 'file':
       return 'document';
-    case 'url':
-    case 'onboarding_scan':
-      return 'page';
     case 'google_drive':
     case 'drive':
       return 'drive';

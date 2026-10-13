@@ -220,6 +220,8 @@ const linkRowSchema = z.object({
       id: z.string().nullish().catch(null),
       contactIds: pairSchema,
       signal: z.string().nullish().catch(null),
+      /** What a suggestion that was accepted had in common - `signal` is then `accepted_suggestion`. */
+      fromSignal: z.string().nullish().catch(null),
       automatic: z.boolean().catch(false).default(false),
       at: z.string().nullish().catch(null),
       direct: z.boolean().catch(true).default(true),
@@ -249,9 +251,12 @@ export type IdentityLinks = z.infer<typeof identityLinksSchema>;
 export function linkMatch(
   link: NonNullable<IdentityLink['link']>,
 ): 'sameName' | 'similarName' | 'phone' | 'email' | 'shopifyCustomer' | 'other' {
-  if (link.signal === 'same_name') return 'sameName';
-  if (link.signal === 'similar_name') return 'similarName';
-  if (link.signal === 'shopify_customer') return 'shopifyCustomer';
+  // An accepted suggestion says what it had in common in `fromSignal` (dev, 2026-10-13:
+  // every such link read "GOTCHA found something they have in common").
+  const signal = link.fromSignal ?? link.signal;
+  if (signal === 'same_name') return 'sameName';
+  if (signal === 'similar_name') return 'similarName';
+  if (signal === 'shopify_customer') return 'shopifyCustomer';
   const type = link.evidence?.type;
   return type === 'phone' || type === 'email' ? type : 'other';
 }

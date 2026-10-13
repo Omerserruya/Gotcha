@@ -1,4 +1,5 @@
 import type { KnowledgeDocumentDetail } from '@/api/contracts/knowledge';
+import { WEBSITE_SOURCE_TYPES } from './knowledge-type';
 
 /**
  * K11 (Omer, 2026-10-13): what the drawer lets a person change about one
@@ -68,9 +69,6 @@ export function editScope(document: EditableDocument): EditScope {
   }
 }
 
-/** A page's own text: added by hand (`url`) or crawled by the scan (`url_text`). */
-const PAGE_TYPES: ReadonlySet<string> = new Set(['url', 'url_text', 'onboarding_scan']);
-
 /**
  * The line under the editor, or none:
  *   scan  the website scan made it (`origin: 'onboarding'`): the edit is kept
@@ -85,7 +83,7 @@ const PAGE_TYPES: ReadonlySet<string> = new Set(['url', 'url_text', 'onboarding_
  */
 export function editNote(document: EditableDocument): 'scan' | 'page' | 'file' | null {
   if (document.metadata?.origin === 'onboarding') return 'scan';
-  if (PAGE_TYPES.has(document.type)) return 'page';
+  if (WEBSITE_SOURCE_TYPES.has(document.type)) return 'page';
   return document.type === 'file' ? 'file' : null;
 }
 

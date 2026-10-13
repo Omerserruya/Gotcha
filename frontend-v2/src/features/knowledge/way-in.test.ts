@@ -48,6 +48,11 @@ describe('★ how a source came in - the writers’ own sourceType', () => {
     expect(wayIn(source('d', ['file', 'text']))).toBe('uploaded');
   });
 
+  it('★ a crawled page (`url_text`) is the website, with the scan summary and a hand-added page', () => {
+    expect(wayIn(source('e', ['url_text']))).toBe('website');
+    expect(wayIn(source('f', ['url_text', 'onboarding_scan', 'url']))).toBe('website');
+  });
+
   it('groups in 02’s order and leaves out empty groups', () => {
     const groups = groupByWayIn([source('x', ['file']), source('y', ['onboarding_scan'])]);
     expect(groups.map((g) => g.way)).toEqual(['website', 'uploaded']);

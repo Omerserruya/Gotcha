@@ -272,3 +272,32 @@ describe('★★ F1 - the links read, per row', () => {
     expect(row!.unlink).toBeNull();
   });
 });
+
+describe('★ F1 - an accepted suggestion says what it had in common', () => {
+  it('fromSignal over signal: "accepted_suggestion" from similar names reads as similar names', async () => {
+    const { identityLinksSchema, linkMatch } = await import('./identity');
+    const [row] = identityLinksSchema.parse({
+      personId: 'p1',
+      linked: [
+        {
+          contactId: 'a',
+          link: {
+            contactIds: ['me', 'a'],
+            signal: 'accepted_suggestion',
+            fromSignal: 'similar_name',
+          },
+        },
+      ],
+    }).linked;
+    expect(linkMatch(row!.link!)).toBe('similarName');
+  });
+
+  it('no fromSignal: the signal itself', async () => {
+    const { identityLinksSchema, linkMatch } = await import('./identity');
+    const [row] = identityLinksSchema.parse({
+      personId: 'p1',
+      linked: [{ contactId: 'a', link: { contactIds: ['me', 'a'], signal: 'same_name' } }],
+    }).linked;
+    expect(linkMatch(row!.link!)).toBe('sameName');
+  });
+});

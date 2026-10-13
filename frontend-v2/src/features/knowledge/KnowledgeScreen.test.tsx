@@ -391,3 +391,26 @@ describe('★★ K10 - numbered items, each a title over what it contains', () =
     expect(screen.getByTestId('doc-summary-given')).toHaveTextContent('Prices and terms for shops');
   });
 });
+
+describe('★ "scanned automatically" - only where every document came from the scan', () => {
+  const ofTypes = (id: string, types: string[]) =>
+    source({
+      id,
+      name: id,
+      documents: types.map((sourceType, i) => ({
+        ...source().documents[0]!,
+        id: `${id}-${i}`,
+        sourceType,
+      })),
+    });
+
+  it('the scan’s summary and its crawled pages (`url_text`): scanned', async () => {
+    await renderScreen([ofTypes('site', ['onboarding_scan', 'url_text'])]);
+    expect(screen.getByTestId('way-website')).toHaveTextContent('scanned automatically');
+  });
+
+  it('a page added by hand among them: not said', async () => {
+    await renderScreen([ofTypes('site', ['url_text', 'url'])]);
+    expect(screen.getByTestId('way-website')).not.toHaveTextContent('scanned automatically');
+  });
+});

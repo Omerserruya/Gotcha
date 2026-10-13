@@ -4,7 +4,7 @@ import { documentState, type KnowledgeDocumentDetail } from '@/api/contracts/kno
 import drawer from '@/design-system/styles/drawer.module.css';
 
 import { DocumentText, plainPreview } from './DocumentText';
-import { KnowledgeTypeIcon, knowledgeTypeOf } from './knowledge-type';
+import { KnowledgeTypeIcon, knowledgeTypeOf, WEBSITE_SOURCE_TYPES } from './knowledge-type';
 import type { DocumentRead } from './load-document';
 import styles from './DocumentDrawer.module.css';
 
@@ -182,10 +182,8 @@ function typeKey(
   | 'conversations'
   | 'answers'
   | 'other' {
+  if (WEBSITE_SOURCE_TYPES.has(type)) return 'website';
   switch (type) {
-    case 'url':
-    case 'onboarding_scan':
-      return 'website';
     case 'file':
       return 'uploaded';
     case 'text':

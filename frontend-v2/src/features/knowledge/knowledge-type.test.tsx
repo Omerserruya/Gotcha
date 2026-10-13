@@ -79,6 +79,8 @@ describe('★★ K8 - one icon per kind of knowledge', () => {
     expect(
       ['file', 'url', 'onboarding_scan', 'google_drive', 'drive', 'text'].map(knowledgeTypeOf),
     ).toEqual(['document', 'page', 'page', 'drive', 'drive', 'text']);
+    // A page the scan crawled is stored as `url_text`: a page all the same (it read "Other").
+    expect(knowledgeTypeOf('url_text')).toBe('page');
     for (const other of ['confluence', 'historical_conversations', 'readiness_answer', 'pdf', '']) {
       expect(knowledgeTypeOf(other), other).toBeNull();
     }
