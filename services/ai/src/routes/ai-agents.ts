@@ -645,6 +645,40 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       if (Object.prototype.hasOwnProperty.call(bodySrc, k)) updateData[k] = bodySrc[k];
     }
 
+    // "Says it's AI when asked" (A3b): a boolean kept inside persona, merged so
+    // a persona edit that does not mention it keeps it.
+    if (Object.prototype.hasOwnProperty.call(bodySrc, "disclosesAi")) {
+      if (typeof bodySrc.disclosesAi !== "boolean") {
+        res.status(400).json({ error: "disclosesAi must be true or false", field: "disclosesAi", code: "INVALID_DISCLOSES_AI" });
+        return;
+      }
+      const current = updateData.persona === undefined
+        ? (await prisma.aIAgent.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! as string }, select: { persona: true } }))?.persona
+        : updateData.persona;
+      const base = current && typeof current === "object" && !Array.isArray(current) ? (current as Record<string, unknown>) : {};
+      updateData.persona = { ...base, disclosesAi: bodySrc.disclosesAi };
+    } else if (updateData.persona && typeof updateData.persona === "object" && !Array.isArray(updateData.persona) && !("disclosesAi" in updateData.persona)) {
+      const prev = (await prisma.aIAgent.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! as string }, select: { persona: true } }))?.persona as any;
+      if (prev && typeof prev.disclosesAi === "boolean") updateData.persona = { ...updateData.persona, disclosesAi: prev.disclosesAi };
+    }
+
+    // Handover rules (A2): the array is replaced whole, so its shape is checked
+    // here; a malformed rule reached the prompt as "undefined".
+    if (Object.prototype.hasOwnProperty.call(bodySrc, "escalationRules")) {
+      const rules = bodySrc.escalationRules;
+      const ok = Array.isArray(rules) && rules.length <= 50 && rules.every((r: any) =>
+        r && typeof r === "object" && !Array.isArray(r)
+        && typeof r.label === "string" && r.label.trim().length > 0 && r.label.length <= 300
+        && (r.type === undefined || typeof r.type === "string")
+        && (r.value === undefined || r.value === null || typeof r.value === "string" || typeof r.value === "number")
+        && (r.enabled === undefined || typeof r.enabled === "boolean"));
+      if (!ok) {
+        res.status(400).json({ error: "escalationRules must be a list of {label, type?, value?, enabled?} (at most 50, label 1-300 characters)", field: "escalationRules", code: "INVALID_ESCALATION_RULES" });
+        return;
+      }
+      updateData.escalationRules = (rules as any[]).map((r) => ({ ...r, label: String(r.label).trim() }));
+    }
+
     // The systems this employee may use: a checked list of catalog slugs and
     // "custom:<id>" keys. An unknown key is refused (stored, it would gate nothing).
     if (Object.prototype.hasOwnProperty.call(bodySrc, "integrationAccess")) {

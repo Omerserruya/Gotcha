@@ -994,6 +994,17 @@ function buildIdentity(opts: BuildPromptOpts, _strategy: StrategyContract): stri
   // bypassed the structured-prompt contract.
 
   if (mode === "agent") {
+    // "Says it's AI when asked" (A3b, Omer 2026-10-13): persona.disclosesAi,
+    // true unless set to false. Either way the employee never claims to be a
+    // person: off only means it does not bring it up itself.
+    const disclosesAi = asRecord(a?.persona)?.disclosesAi !== false;
+    lines.push("");
+    lines.push("## Being an AI");
+    lines.push(
+      disclosesAi
+        ? "If a customer asks whether they are talking to a person or a bot, say plainly that you are an AI assistant of this business, and offer a person if they would like one."
+        : "Do not bring up that you are an AI on your own. If a customer sincerely asks whether they are talking to a person, never claim to be human: say you are this business's digital assistant, and offer a person if they would like one.",
+    );
     lines.push("");
     lines.push("## Language - STRICT");
     lines.push(

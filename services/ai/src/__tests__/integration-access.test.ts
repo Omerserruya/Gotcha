@@ -214,3 +214,36 @@ describe("★ routes", () => {
     expect((await request(app()).get("/api/ai-agents/maya/integration-access")).status).toBe(404);
   });
 });
+
+describe("PATCH: says it's AI when asked (A3b) and handover rules (A2), 2026-10-13", () => {
+  const patch = (body: any) => request(app()).patch("/api/ai-agents/maya").send(body);
+
+  it("★ disclosesAi is stored inside persona, merged with what is there", async () => {
+    H.agents[0].persona = { grammaticalGender: "feminine" };
+    expect((await patch({ disclosesAi: false })).status).toBe(200);
+    expect(H.updated.at(-1).persona).toEqual({ grammaticalGender: "feminine", disclosesAi: false });
+  });
+
+  it("a persona edit that does not mention it keeps it", async () => {
+    H.agents[0].persona = { grammaticalGender: "feminine", disclosesAi: false };
+    await patch({ persona: { grammaticalGender: "masculine" } });
+    expect(H.updated.at(-1).persona).toEqual({ grammaticalGender: "masculine", disclosesAi: false });
+  });
+
+  it("not a boolean: 400, nothing stored", async () => {
+    const r = await patch({ disclosesAi: "yes" });
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe("INVALID_DISCLOSES_AI");
+  });
+
+  it("★ handover rules: a valid list is stored (labels trimmed); a malformed one is 400", async () => {
+    const ok = await patch({ escalationRules: [{ label: "  Asks for a refund over 500  ", type: "custom", enabled: true }] });
+    expect(ok.status).toBe(200);
+    expect(H.updated.at(-1).escalationRules).toEqual([{ label: "Asks for a refund over 500", type: "custom", enabled: true }]);
+    for (const bad of [{ type: "x" }, [{ label: "" }], [{ label: "x", enabled: "yes" }], [{ label: 5 }], "rules"]) {
+      const r = await patch({ escalationRules: bad });
+      expect(r.status, JSON.stringify(bad)).toBe(400);
+      expect(r.body.code).toBe("INVALID_ESCALATION_RULES");
+    }
+  });
+});
