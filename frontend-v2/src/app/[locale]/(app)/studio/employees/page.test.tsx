@@ -35,6 +35,11 @@ vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
 }));
 vi.mock('server-only', () => ({}));
+/* E5: the selected employee's levels - the card's "may do". */
+const employeeTools = vi.hoisted(() => ({ value: null as unknown }));
+vi.mock('@/features/employees/page/load-employee-tools', () => ({
+  loadEmployeeTools: async () => employeeTools.value,
+}));
 const { loadChannels, loadKnowledge } = vi.hoisted(() => ({
   loadChannels: vi.fn(async () => ({
     channels: [
@@ -262,5 +267,42 @@ describe('★★ actions in words, by integration (Omer, 2026-10-07: "WooCommerc
     expect(props?.tools.map((tool) => [tool.label, tool.provider])).toEqual([
       ['Get customer', 'woocommerce'],
     ]);
+  });
+});
+
+describe('★★ E5 - the card names this employee’s own levels', () => {
+  it('each action named: the server’s name with its integration, our words for GOTCHA’s own', async () => {
+    caps.integrations = [{ slug: 'woocommerce', name: 'WooCommerce' }];
+    employeeTools.value = [
+      {
+        toolName: 'woocommerce.get_customer',
+        label: 'שליפת לקוח',
+        integration: 'woocommerce',
+        workspaceLevel: 'execute',
+        ownLevel: 'ask',
+        employeeLevel: 'ask',
+        allowedLevels: ['execute', 'ask', 'never'],
+      },
+      {
+        toolName: 'close_conversation',
+        label: 'close_conversation',
+        integration: null,
+        workspaceLevel: 'execute',
+        ownLevel: null,
+        employeeLevel: 'execute',
+        allowedLevels: ['execute', 'ask', 'never'],
+      },
+    ];
+    const tree = await page([employee('a')], { employee: 'a' });
+    const levels = find<{ levels: { label: string; employeeLevel: string }[] }>(
+      tree,
+      EmployeeDetail,
+    )?.levels;
+    expect(levels?.map((l) => [l.label, l.employeeLevel])).toEqual([
+      ['WooCommerce · שליפת לקוח', 'ask'],
+      ['tool.close_conversation', 'execute'],
+    ]);
+    employeeTools.value = null;
+    caps.integrations = [];
   });
 });

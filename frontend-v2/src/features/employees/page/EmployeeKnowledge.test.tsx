@@ -129,3 +129,11 @@ describe('the workspace’s list unread, or empty', () => {
     expect(screen.getByTestId('knows-manage')).toHaveAttribute('href', '/studio/knowledge');
   });
 });
+
+describe('★ a source’s name toggles its switch (dev, 2026-10-13)', () => {
+  it('pressing the words, not only the switch', async () => {
+    tab();
+    await userEvent.click(screen.getByTestId('knows-off-reach'));
+    expect(screen.getByTestId('knows-off-on')).toBeChecked();
+  });
+});

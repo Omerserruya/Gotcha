@@ -196,6 +196,40 @@
     color: var(--text-subtle);
   }
 
+  /* A switch's words toggle it: the label adds no box, the row keeps its layout. */
+  .switchLabel {
+    display: contents;
+  }
+
+  .switchLabel > * {
+    cursor: pointer;
+  }
+
+  /* E5: the levels are buttons; a level the workspace forbids is greyed. */
+  .levelRow {
+    flex-wrap: wrap;
+  }
+
+  .stanceButton {
+    cursor: pointer;
+    background: none;
+  }
+
+  .stanceButton[aria-disabled='true'] {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .linkButton {
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: var(--font-size-counter);
+    color: var(--text-subtle);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
   .rules {
     display: flex;
     flex-direction: column;

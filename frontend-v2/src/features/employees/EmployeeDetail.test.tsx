@@ -2,7 +2,6 @@ import { render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
-import { capabilitySchema } from '@/api/contracts/capabilities';
 import { employeeSchema } from '@/api/contracts/employees';
 import { integrationSchema } from '@/api/contracts/integrations';
 import plateStyles from '@/design-system/brand/channel-plate.module.css';
@@ -44,7 +43,7 @@ const employee = (over: Record<string, unknown> = {}) =>
 const show = async (
   over: Record<string, unknown> = {},
   extra: {
-    capabilities?: unknown[] | null;
+    levels?: unknown[] | null;
     integrations?: unknown[] | null;
     reach?: { channel: string; name: string; when: string }[] | null;
   } = {},
@@ -53,10 +52,7 @@ const show = async (
     await EmployeeDetail({
       employee: employee(over),
       reach: extra.reach ?? null,
-      capabilities:
-        extra.capabilities === null
-          ? null
-          : (extra.capabilities ?? []).map((c) => capabilitySchema.parse(c)),
+      levels: extra.levels === null ? null : ((extra.levels ?? []) as never),
       integrations:
         extra.integrations === null
           ? null
@@ -142,33 +138,46 @@ describe('★★ 07’s detail - what it is, from what the route already sends',
     );
   });
 
-  it('how it answers: the tone and the languages it is switched on for', async () => {
+  it('how it answers: the tone - and no reply language (E6: always the customer’s, by rule)', async () => {
     await show({ tone: 'friendly', languages: { hebrew: true, english: true, arabic: false } });
     const card = screen.getByTestId('card-how');
     expect(card).toHaveTextContent('Friendly');
-    expect(card).toHaveTextContent('Hebrew · English');
-    expect(card).not.toHaveTextContent('Arabic');
+    expect(card).not.toHaveTextContent(/English|Hebrew/);
   });
 
-  it('★★ what it may do: the tenant’s stance per action, and that it is everyone’s', async () => {
+  it('★★ what it may do: THIS employee’s level per action, named (E5)', async () => {
+    const row = (toolName: string, label: string, employeeLevel: string) => ({
+      toolName,
+      label,
+      workspaceLevel: 'execute',
+      ownLevel: null,
+      employeeLevel,
+      allowedLevels: ['execute', 'ask', 'never'],
+    });
     await show(
       {},
       {
-        capabilities: [
-          { toolName: 'shopify.lookup_order', kind: 'action', enabled: true },
-          { toolName: 'shopify.refund', kind: 'action', enabled: true, requiresApproval: true },
-          { toolName: 'crm.update', kind: 'action', enabled: false },
+        levels: [
+          row('shopify.lookup_order', 'Shopify · Look up an order', 'execute'),
+          row('shopify.refund', 'Shopify · Refund', 'ask'),
+          row('crm.update', 'Update the CRM', 'never'),
         ],
       },
     );
-    expect(screen.getByTestId('may-shopify.lookup_order')).toHaveTextContent('Allowed');
-    expect(screen.getByTestId('may-shopify.refund')).toHaveTextContent('Ask first');
-    expect(screen.getByTestId('may-crm.update')).toHaveTextContent('Never');
-    expect(screen.getByTestId('card-may-do')).toHaveTextContent('The same for every AI employee');
+    expect(screen.getByTestId('may-shopify.lookup_order')).toHaveTextContent(
+      'Shopify · Look up an orderDo it',
+    );
+    expect(screen.getByTestId('may-shopify.refund')).toHaveTextContent('Ask me');
+    expect(screen.getByTestId('may-crm.update')).toHaveTextContent('Update the CRMNever');
+    // Never the tool's raw name.
+    expect(screen.getByTestId('card-may-do')).not.toHaveTextContent('crm.update');
+    expect(screen.getByTestId('card-may-do')).toHaveTextContent(
+      'never looser than Integrations allows',
+    );
   });
 
   it('⚠ a failed permissions read is said, not drawn as "nothing it can do"', async () => {
-    await show({}, { capabilities: null });
+    await show({}, { levels: null });
     expect(screen.getByTestId('card-may-do')).toHaveTextContent("We couldn't read");
   });
 

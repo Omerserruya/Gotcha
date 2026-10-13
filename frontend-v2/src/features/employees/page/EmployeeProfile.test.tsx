@@ -21,6 +21,8 @@ vi.mock('../actions', () => ({
   saveEmployeeEdits: save,
 }));
 
+vi.mock('./tool-level-actions', () => ({ setEmployeeToolLevel: vi.fn() }));
+
 import { EmployeeProfile } from './EmployeeProfile';
 
 const employee = (over: Record<string, unknown> = {}) =>
@@ -53,8 +55,15 @@ const profile = (
         employee={employee(over)}
         head={<h1>Maya</h1>}
         tabs={<nav data-testid="tabs" />}
-        mayDo={[
-          { toolName: 'shopify.process_refund', label: 'Refund an order', stance: 'ask_first' },
+        levels={[
+          {
+            toolName: 'shopify.process_refund',
+            label: 'Refund an order',
+            workspaceLevel: 'ask',
+            ownLevel: null,
+            employeeLevel: 'ask',
+            allowedLevels: ['ask', 'never'],
+          },
         ]}
         access={{
           allowed: ['shopify'],
@@ -104,7 +113,7 @@ describe('★★ the Profile tab is ONE list, top to bottom, Limits and the hand
     profile();
     expect(screen.getByTestId('profile-responsibility')).toHaveValue('After-sale questions');
     expect(screen.getByTestId('profile-tone-friendly')).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByTestId('profile-may-shopify.process_refund-ask_first')).toHaveAttribute(
+    expect(screen.getByTestId('level-shopify.process_refund-ask')).toHaveAttribute(
       'data-current',
       'yes',
     );
@@ -272,5 +281,20 @@ describe('★ Save: asks first, sends only what changed, says what the route ref
       "A condition couldn't be saved: each needs words, up to 300 characters.",
     );
     expect(router.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe('★ a switch’s words toggle it (dev, 2026-10-13)', () => {
+  it('"Says it’s AI when asked": pressing the words, not only the switch', async () => {
+    profile();
+    const before = (screen.getByTestId('profile-discloses') as HTMLInputElement).checked;
+    await userEvent.click(screen.getByTestId('profile-discloses-says'));
+    expect((screen.getByTestId('profile-discloses') as HTMLInputElement).checked).toBe(!before);
+  });
+
+  it('a business system: pressing its name', async () => {
+    profile();
+    await userEvent.click(screen.getByText('WooCommerce'));
+    expect(screen.getByTestId('profile-system-woocommerce-on')).toBeChecked();
   });
 });

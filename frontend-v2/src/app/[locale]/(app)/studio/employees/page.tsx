@@ -11,6 +11,8 @@ import {
 import { loadCapabilities } from '@/features/capabilities/load-capabilities';
 import { catalogName, isFailing } from '@/api/contracts/integrations';
 import { HireSheet } from '@/features/employees/hire/HireSheet';
+import { loadEmployeeTools } from '@/features/employees/page/load-employee-tools';
+import { toolLevelRows } from '@/features/employees/page/tool-label';
 import { loadViewerId } from '@/features/roles/load-person';
 import { HiredDialog } from '@/features/employees/hired/HiredDialog';
 import type { HireTool } from '@/features/employees/hire/hire-plan';
@@ -166,7 +168,16 @@ export default async function Page({
         })
       : null;
   };
-  const reach = selected ? await reachOf(selected.id) : null;
+  // E5: the card's "may do" is this employee's own levels, named as its profile names them.
+  const [reach, selectedTools] = await Promise.all([
+    selected ? reachOf(selected.id) : Promise.resolve(null),
+    selected ? loadEmployeeTools(selected.id) : Promise.resolve(null),
+  ]);
+  const levels = toolLevelRows(
+    selectedTools,
+    (slug) => integrationOf(slug)?.name ?? null,
+    (toolName) => tc(`tool.${toolName}` as 'tool.send_message'),
+  );
   const hiredReach = hired ? (hired.id === selected?.id ? reach : await reachOf(hired.id)) : null;
 
   /*
@@ -219,7 +230,7 @@ export default async function Page({
           ) : (
             <EmployeeDetail
               employee={selected}
-              capabilities={capabilities}
+              levels={levels}
               integrations={integrations}
               reach={reach}
             />

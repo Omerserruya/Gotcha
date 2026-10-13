@@ -57,8 +57,31 @@ vi.mock('@/features/capabilities/load-capabilities', () => ({
     capabilities: [
       { toolName: 'woocommerce.get_customer', kind: 'action', integration: 'woocommerce' },
     ].map((c) => ({ ...c, availability: 'on', approval: 'never' })),
-    integrations: [],
+    integrations: [{ slug: 'woocommerce', name: 'WooCommerce' }],
   }),
+}));
+/* E5: this employee's actions - an integration's (named by the server) and one of GOTCHA's own. */
+vi.mock('@/features/employees/page/load-employee-tools', () => ({
+  loadEmployeeTools: async () => [
+    {
+      toolName: 'woocommerce.get_customer',
+      label: 'Get customer',
+      integration: 'woocommerce',
+      workspaceLevel: 'execute',
+      ownLevel: null,
+      employeeLevel: 'execute',
+      allowedLevels: ['execute', 'ask', 'never'],
+    },
+    {
+      toolName: 'send_message',
+      label: 'send_message',
+      integration: null,
+      workspaceLevel: 'ask',
+      ownLevel: 'never',
+      employeeLevel: 'never',
+      allowedLevels: ['ask', 'never'],
+    },
+  ],
 }));
 vi.mock('@/features/skills/skill-actions', () => ({
   readTools: async () => [
@@ -120,12 +143,16 @@ describe('★★ the employee page: four tabs, each its own page with real conte
     const props = find<{
       employee: { id: string };
       access: unknown;
-      mayDo: { label: string; stance: string }[];
+      levels: { label: string; ownLevel: string | null }[];
     }>(tree, EmployeeProfile);
     expect(props?.employee.id).toBe('a');
     expect(reads.access).toHaveBeenCalledWith('a');
     expect(props?.access).toEqual({ allowed: [], choices: [] });
-    expect(props?.mayDo.map((m) => m.label)).toEqual(['WooCommerce · Get customer']);
+    // E5: the server's name for an integration's action; our own words for GOTCHA's.
+    expect(props?.levels.map((m) => [m.label, m.ownLevel])).toEqual([
+      ['WooCommerce · Get customer', null],
+      ['Send a message to a customer', 'never'],
+    ]);
     expect(tabOf(tree)).toEqual({ id: 'a', current: 'profile', skillsCount: 2 });
     expect(find<{ employee: { id: string } }>(tree, EmployeeHead)?.employee.id).toBe('a');
   });

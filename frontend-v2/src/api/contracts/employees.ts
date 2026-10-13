@@ -373,3 +373,43 @@ export const reachabilitySchema = z.object({
     .optional(),
 });
 export type Reachability = z.infer<typeof reachabilitySchema>;
+
+/* ── What one employee may do, per action (E5, Backend a9fc1aca) ── */
+
+/** The platform's three levels: run it, ask first, never. */
+export const TOOL_LEVELS = ['execute', 'ask', 'never'] as const;
+export type ToolLevel = (typeof TOOL_LEVELS)[number];
+const toolLevel = z.enum(TOOL_LEVELS);
+
+/**
+ * `GET /api/ai-agents/:id/tools` - `{ tools: [...] }`. Per action: the
+ * workspace's level (Integrations), this employee's own (`null`: like the
+ * workspace), the effective one, and the levels it may be set to - never
+ * looser than the workspace's.
+ *
+ * `label` is the catalogue's name in the reader's language for an
+ * integration's action; for GOTCHA's own actions the server has none and
+ * sends the tool's name, so the screen uses its own words there.
+ *
+ * Per row: a row that does not parse is left out, never the list.
+ */
+const employeeToolSchema = z.object({
+  toolName: z.string().min(1),
+  label: z.string().nullish().catch(null),
+  integration: z.string().nullish().catch(null),
+  riskGroup: z.string().nullish().catch(null),
+  workspaceLevel: toolLevel,
+  ownLevel: toolLevel.nullish().catch(null),
+  employeeLevel: toolLevel,
+  allowedLevels: z.array(toolLevel).catch([]),
+});
+export type EmployeeTool = z.infer<typeof employeeToolSchema>;
+
+export const employeeToolsSchema = z
+  .object({ tools: z.array(z.unknown()).catch([]) })
+  .transform(({ tools }) =>
+    tools.flatMap((row): EmployeeTool[] => {
+      const item = employeeToolSchema.safeParse(row);
+      return item.success ? [item.data] : [];
+    }),
+  );

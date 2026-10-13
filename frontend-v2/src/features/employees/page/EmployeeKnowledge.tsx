@@ -136,23 +136,33 @@ export function EmployeeKnowledge({
                       data-testid={`knows-${source.id}`}
                       data-reach={reach}
                     >
-                      <span className={styles.rowName}>
-                        <bdi dir="auto">{name}</bdi>
-                        <span className={styles.state} data-testid={`knows-${source.id}-reach`}>
-                          {t(`reach.${reach}`)}
-                        </span>
-                      </span>
-                      {reachedByScope(source, employee) ? null : (
-                        <input
-                          type="checkbox"
-                          role="switch"
-                          className={hire.switch}
-                          checked={attached.has(source.id)}
-                          aria-label={t('connect', { source: name })}
-                          data-testid={`knows-${source.id}-on`}
-                          onChange={(e) => toggle(source.id, e.target.checked)}
-                        />
-                      )}
+                      {(() => {
+                        const named = (
+                          <span className={styles.rowName}>
+                            <bdi dir="auto">{name}</bdi>
+                            <span className={styles.state} data-testid={`knows-${source.id}-reach`}>
+                              {t(`reach.${reach}`)}
+                            </span>
+                          </span>
+                        );
+                        // Its scope already reaches it: nothing to switch.
+                        if (reachedByScope(source, employee)) return named;
+                        // Pressing the name toggles it too (dev, 2026-10-13).
+                        return (
+                          <label className={styles.switchLabel}>
+                            {named}
+                            <input
+                              type="checkbox"
+                              role="switch"
+                              className={hire.switch}
+                              checked={attached.has(source.id)}
+                              aria-label={t('connect', { source: name })}
+                              data-testid={`knows-${source.id}-on`}
+                              onChange={(e) => toggle(source.id, e.target.checked)}
+                            />
+                          </label>
+                        );
+                      })()}
                     </li>
                   );
                 })}

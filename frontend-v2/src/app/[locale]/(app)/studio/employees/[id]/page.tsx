@@ -1,13 +1,13 @@
 import { getTranslations } from 'next-intl/server';
 
-import { capabilityStance, hasOwnWords, humaniseToolName } from '@/api/contracts/capabilities';
 import { loadCapabilities } from '@/features/capabilities/load-capabilities';
 import { loadIntegrationAccess } from '@/features/employees/load-employees';
 import { EmployeeHead, EmployeeTabs } from '@/features/employees/page/EmployeeFrame';
 import { EmployeeProfile } from '@/features/employees/page/EmployeeProfile';
 import styles from '@/features/employees/page/EmployeePage.module.css';
 import { loadEmployeePage } from '@/features/employees/page/load-employee-page';
-import { readTools } from '@/features/skills/skill-actions';
+import { loadEmployeeTools } from '@/features/employees/page/load-employee-tools';
+import { toolLevelRows } from '@/features/employees/page/tool-label';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -23,12 +23,12 @@ export default async function Page({
   const t = await getTranslations('employees.page');
   const tc = await getTranslations('capabilities');
   const { id } = await params;
-  const [read, access, { capabilities }, toolWords] = await Promise.all([
+  const [read, access, { integrations }, tools] = await Promise.all([
     loadEmployeePage(id),
     loadIntegrationAccess(id),
+    // The integrations' names, for "{integration} · {action}".
     loadCapabilities(),
-    // Each action's provider and words ("WooCommerce · Get customer"), as Skills reads them.
-    readTools(),
+    loadEmployeeTools(id),
   ]);
   const { employee } = read;
 
@@ -42,35 +42,19 @@ export default async function Page({
     );
   }
 
-  const wordsOf = (toolName: string) => toolWords?.find((tool) => tool.name === toolName) ?? null;
-  /** "WooCommerce · Get customer"; our own words or the name made readable when the catalogue is silent. */
-  const actionLabel = (toolName: string) =>
-    wordsOf(toolName)?.actionLabel ??
-    (hasOwnWords(toolName)
-      ? tc(`tool.${toolName}` as 'tool.send_message')
-      : humaniseToolName(toolName));
+  /* E5: this employee's own levels, each action named (tool-label.ts). */
+  const levels = toolLevelRows(
+    tools,
+    (slug) => integrations?.find((integration) => integration.slug === slug)?.name ?? null,
+    (toolName) => tc(`tool.${toolName}` as 'tool.send_message'),
+  );
 
   return (
     <PageContainer layout="screen" flush>
       <EmployeeProfile
         employee={employee}
         access={access}
-        mayDo={
-          capabilities
-            ? capabilities
-                .filter((c) => c.kind === 'action')
-                .map((c) => {
-                  const provider = wordsOf(c.toolName)?.providerLabel;
-                  return {
-                    toolName: c.toolName,
-                    label: provider
-                      ? `${provider} · ${actionLabel(c.toolName)}`
-                      : actionLabel(c.toolName),
-                    stance: capabilityStance(c),
-                  };
-                })
-            : null
-        }
+        levels={levels}
         head={<EmployeeHead employee={employee} />}
         tabs={<EmployeeTabs id={id} current="profile" skillsCount={read.skillsCount} />}
       />

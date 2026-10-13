@@ -95,17 +95,9 @@
       "casual": "Casual",
       "formal": "Formal"
     },
-    "language": {
-      "english": "English",
-      "hebrew": "Hebrew",
-      "arabic": "Arabic"
-    },
     "mayDo": {
       "title": "What it may do on its own",
-      "on_its_own": "Allowed",
-      "ask_first": "Ask first",
-      "never": "Never",
-      "everyone": "The same for every AI employee - set in Integrations.",
+      "everyone": "Set on its own page, never looser than Integrations allows.",
       "none": "Nothing it can do yet.",
       "unavailable": "We couldn't read what it may do just now."
     },
@@ -378,6 +370,25 @@
   },
   "page": {
     "unread": "This employee couldn't be read just now.",
-    "missing": "This employee isn't here."
+    "missing": "This employee isn't here.",
+    "levels": {
+      "unavailable": "We couldn't read this employee's actions just now.",
+      "none": "No actions to set yet.",
+      "rule": "An employee can be as strict as the workspace or stricter, never looser. What Integrations rules out is greyed.",
+      "own": "own setting",
+      "likeWorkspace": "like the workspace",
+      "reset": "Back to the workspace's setting",
+      "looserThanWorkspace": "The workspace sets this to “{level}”. An employee can only be the same or stricter.",
+      "level": {
+        "execute": "Do it",
+        "ask": "Ask me",
+        "never": "Never"
+      },
+      "problem": {
+        "looser": "That's looser than the workspace allows. Change it in Integrations first.",
+        "forbidden": "You don't have permission to change what this employee may do.",
+        "failed": "That didn't save. Try again."
+      }
+    }
   }
 }

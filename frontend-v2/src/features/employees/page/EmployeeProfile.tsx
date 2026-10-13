@@ -4,7 +4,7 @@ import { Plus, X } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState, useTransition, type ReactNode } from 'react';
 
-import { humaniseCode, type CapabilityStance } from '@/api/contracts/capabilities';
+import { humaniseCode } from '@/api/contracts/capabilities';
 import {
   accessState,
   EMPLOYEE_TONES,
@@ -30,15 +30,7 @@ import {
   type ProfileDraft,
 } from './profile-plan';
 import styles from './EmployeePage.module.css';
-
-/** One action and where the business stands on it - the same for every employee. */
-export type ProfileMayDo = {
-  readonly toolName: string;
-  readonly label: string;
-  readonly stance: CapabilityStance;
-};
-
-const STANCES = ['on_its_own', 'ask_first', 'never'] as const;
+import { EmployeeToolLevels, type ToolLevelRow } from './EmployeeToolLevels';
 
 /**
  * The employee page's Profile tab (Omer, 2026-10-13, E3/E6): every regular
@@ -60,15 +52,15 @@ export function EmployeeProfile({
   employee,
   head,
   tabs,
-  mayDo,
+  levels,
   access = null,
 }: {
   readonly employee: Employee;
   /** The page's head (avatar, name, standing) - Save sits beside it. */
   readonly head: ReactNode;
   readonly tabs: ReactNode;
-  /** The business's actions and its stance on each; `null` when the read failed. */
-  readonly mayDo: readonly ProfileMayDo[] | null;
+  /** E5: every action this employee may use, its level and the workspace's; `null` when unread. */
+  readonly levels: readonly ToolLevelRow[] | null;
   /** The business systems it may use, and every one set up; `null` when unread. */
   readonly access?: IntegrationAccess | null;
 }) {
@@ -199,19 +191,25 @@ export function EmployeeProfile({
               </div>
               <div className={styles.pair}>
                 <dt id="profile-discloses-label">{t('disclose.title')}</dt>
-                <dd className={styles.switchRow}>
-                  <span className={styles.quiet} data-testid="profile-discloses-says">
-                    {draft.disclosesAi ? t('disclose.on') : t('disclose.off')}
-                  </span>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    className={hire.switch}
-                    checked={draft.disclosesAi}
-                    aria-labelledby="profile-discloses-label"
-                    data-testid="profile-discloses"
-                    onChange={(e) => set({ disclosesAi: e.target.checked })}
-                  />
+                {/*
+                  A label around the words and the switch (dev, 2026-10-13):
+                  pressing the words toggles it, as on every switch here.
+                */}
+                <dd>
+                  <label className={styles.switchRow} data-testid="profile-discloses-row">
+                    <span className={styles.quiet} data-testid="profile-discloses-says">
+                      {draft.disclosesAi ? t('disclose.on') : t('disclose.off')}
+                    </span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      className={hire.switch}
+                      checked={draft.disclosesAi}
+                      aria-labelledby="profile-discloses-label"
+                      data-testid="profile-discloses"
+                      onChange={(e) => set({ disclosesAi: e.target.checked })}
+                    />
+                  </label>
                 </dd>
               </div>
             </dl>
@@ -221,43 +219,13 @@ export function EmployeeProfile({
             <h2 className={styles.title}>{t('limits.title')}</h2>
 
             {/*
-              What it may do: the business's stance per action, the same for
-              every employee - read here, set in Integrations. An employee's
-              own level per action (`GET /:id/tools`, `PUT /:id/tool-levels/
-              :toolName`, Backend a9fc1aca) is E5, not built yet: it replaces
-              these read-only pills when it lands.
+              What it may do: THIS employee's level per action (E5, Backend
+              a9fc1aca), never looser than the workspace's - see
+              EmployeeToolLevels.
             */}
             <div className={styles.block} data-testid="profile-may-do">
               <h3 className={styles.subtitle}>{td('mayDo.title')}</h3>
-              {mayDo === null ? (
-                <p className={styles.quiet}>{td('mayDo.unavailable')}</p>
-              ) : mayDo.length === 0 ? (
-                <p className={styles.quiet}>{td('mayDo.none')}</p>
-              ) : (
-                <ul className={styles.rows} data-testid="profile-may-rows">
-                  {mayDo.map((row) => (
-                    <li key={row.toolName} className={styles.row}>
-                      <span className={styles.rowName} title={row.label}>
-                        {row.label}
-                      </span>
-                      <span className={styles.stances}>
-                        {STANCES.map((stance) => (
-                          <span
-                            key={stance}
-                            className={styles.stance}
-                            data-stance={stance}
-                            data-current={row.stance === stance ? 'yes' : 'no'}
-                            data-testid={`profile-may-${row.toolName}-${stance}`}
-                          >
-                            {td(`mayDo.${stance}`)}
-                          </span>
-                        ))}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className={styles.note}>{td('mayDo.everyone')}</p>
+              <EmployeeToolLevels employeeId={employee.id} rows={levels} />
             </div>
 
             <div className={styles.block} data-testid="profile-systems">
@@ -278,26 +246,28 @@ export function EmployeeProfile({
                         className={styles.row}
                         data-testid={`profile-system-${choice.key}`}
                       >
-                        <span className={styles.rowName}>
-                          <bdi dir="auto">{choice.name}</bdi>
-                          <span className={styles.state}>
-                            {t(`systems.state.${accessState(choice)}`)}
+                        <label className={styles.switchLabel}>
+                          <span className={styles.rowName}>
+                            <bdi dir="auto">{choice.name}</bdi>
+                            <span className={styles.state}>
+                              {t(`systems.state.${accessState(choice)}`)}
+                            </span>
                           </span>
-                        </span>
-                        <input
-                          type="checkbox"
-                          role="switch"
-                          className={hire.switch}
-                          checked={on}
-                          aria-label={t('systems.mayUse', { name: choice.name })}
-                          data-testid={`profile-system-${choice.key}-on`}
-                          onChange={(e) => {
-                            const rest = (draft.access ?? access.allowed).filter(
-                              (key) => key !== choice.key,
-                            );
-                            set({ access: e.target.checked ? [...rest, choice.key] : rest });
-                          }}
-                        />
+                          <input
+                            type="checkbox"
+                            role="switch"
+                            className={hire.switch}
+                            checked={on}
+                            aria-label={t('systems.mayUse', { name: choice.name })}
+                            data-testid={`profile-system-${choice.key}-on`}
+                            onChange={(e) => {
+                              const rest = (draft.access ?? access.allowed).filter(
+                                (key) => key !== choice.key,
+                              );
+                              set({ access: e.target.checked ? [...rest, choice.key] : rest });
+                            }}
+                          />
+                        </label>
                       </li>
                     );
                   })}

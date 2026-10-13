@@ -1,19 +1,14 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
-import {
-  capabilityStance,
-  humaniseCode,
-  humaniseToolName,
-  type Capability,
-} from '@/api/contracts/capabilities';
+import { humaniseCode } from '@/api/contracts/capabilities';
 import {
   aloneRate,
   EMPLOYEE_TONES,
-  employeeLanguages,
   handoverRules,
   responsibilityOf,
   roleKeyOf,
   type Employee,
+  type ToolLevel,
 } from '@/api/contracts/employees';
 import { isConnected, type Integration } from '@/api/contracts/integrations';
 import { UserText } from '@/design-system/primitives/text/UserText';
@@ -23,9 +18,17 @@ import { DeleteEmployee } from './DeleteEmployee';
 import { automationsLink, WhoAnswers, type ReachItem } from './WhoAnswers';
 import styles from './EmployeeDetail.module.css';
 import { PauseEmployee } from './PauseEmployee';
+import type { ToolLevelRow } from './page/EmployeeToolLevels';
 
 /** How many permission rows the card shows, as 02's does. */
 const MAY_DO_ROWS = 6;
+
+/** The card's stance colours, by level. */
+const STANCE_OF: Readonly<Record<ToolLevel, string>> = {
+  execute: 'on_its_own',
+  ask: 'ask_first',
+  never: 'never',
+};
 
 /**
  * Screen 07's detail - the selected employee, measured.
@@ -54,15 +57,15 @@ const MAY_DO_ROWS = 6;
  */
 export async function EmployeeDetail({
   employee,
-  capabilities,
+  levels,
   integrations,
   reach = null,
 }: {
   readonly employee: Employee;
   /** Where it answers, by the playbook; `null` when unread. */
   readonly reach?: readonly ReachItem[] | null;
-  /** `null`: the permissions read failed. */
-  readonly capabilities: readonly Capability[] | null;
+  /** E5: this employee's level per action, named; `null` when the read failed. */
+  readonly levels: readonly ToolLevelRow[] | null;
   /** `null`: the systems read failed. */
   readonly integrations: readonly Integration[] | null;
 }) {
@@ -72,16 +75,10 @@ export async function EmployeeDetail({
   const roleKey = roleKeyOf(employee);
   const responsibility = responsibilityOf(employee);
   const rate = aloneRate(employee);
-  const languages = employeeLanguages(employee);
   const tone = employee.tone.trim();
   const rules = handoverRules(employee);
-  const mayDo = (capabilities ?? []).filter((c) => c.kind === 'action').slice(0, MAY_DO_ROWS);
+  const mayDo = (levels ?? []).slice(0, MAY_DO_ROWS);
   const connected = (integrations ?? []).filter(isConnected);
-
-  const languageName = (code: string) =>
-    ['english', 'hebrew', 'arabic'].includes(code)
-      ? t(`detail.language.${code}` as 'detail.language.english')
-      : humaniseCode(code);
 
   return (
     <>
@@ -168,9 +165,6 @@ export async function EmployeeDetail({
                     : humaniseCode(tone)}
                 </span>
               ) : null}
-              {languages.length > 0 ? (
-                <span className={styles.chip}>{languages.map(languageName).join(' · ')}</span>
-              ) : null}
             </div>
             <div className={styles.sample}>
               <p className={styles.sampleEyebrow}>{t('detail.how.sample')}</p>
@@ -187,29 +181,31 @@ export async function EmployeeDetail({
           */}
           <section className={styles.card} data-testid="card-may-do">
             <h3 className={styles.cardHead}>{t('detail.mayDo.title')}</h3>
-            {capabilities === null ? (
+            {levels === null ? (
               <p className={styles.none}>{t('detail.mayDo.unavailable')}</p>
             ) : mayDo.length === 0 ? (
               <p className={styles.none}>{t('detail.mayDo.none')}</p>
             ) : (
               <ul className={styles.rows}>
-                {mayDo.map((capability) => {
-                  const stance = capabilityStance(capability);
-                  return (
-                    <li
-                      key={capability.toolName}
-                      className={styles.rowSplit}
-                      data-testid={`may-${capability.toolName}`}
-                    >
-                      <span className={styles.rowLabel}>
-                        {humaniseToolName(capability.toolName)}
-                      </span>
-                      <span className={styles.stance} data-stance={stance}>
-                        {t(`detail.mayDo.${stance}`)}
-                      </span>
-                    </li>
-                  );
-                })}
+                {/*
+                  E5 (dev, 2026-10-13: "Close conversation", "Create task" in
+                  English on a Hebrew page): THIS employee's level per action,
+                  each named as its profile names it (tool-label.ts).
+                */}
+                {mayDo.map((row) => (
+                  <li
+                    key={row.toolName}
+                    className={styles.rowSplit}
+                    data-testid={`may-${row.toolName}`}
+                  >
+                    <span className={styles.rowLabel}>
+                      <bdi dir="auto">{row.label}</bdi>
+                    </span>
+                    <span className={styles.stance} data-stance={STANCE_OF[row.employeeLevel]}>
+                      {t(`page.levels.level.${row.employeeLevel}`)}
+                    </span>
+                  </li>
+                ))}
               </ul>
             )}
             <p className={styles.cardFoot}>{t('detail.mayDo.everyone')}</p>

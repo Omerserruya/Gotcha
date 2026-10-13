@@ -1329,6 +1329,14 @@ export const employeeEndpoints = {
    * `PATCH /:id { integrationAccess }`, which replaces the list.
    */
   integrationAccess: (id: string) => endpoint('/api/ai-agents/{id}/integration-access', { id }),
+  /** E5 (Backend a9fc1aca): every action this employee may use, with its own level and the workspace's. */
+  tools: (id: string) => endpoint('/api/ai-agents/{id}/tools', { id }),
+  /**
+   * E5: `PUT { level: execute | ask | never | null }` - null or the workspace's
+   * own level means "like the workspace". 422 LOOSER_THAN_WORKSPACE.
+   */
+  toolLevel: (id: string, toolName: string) =>
+    endpoint('/api/ai-agents/{id}/tool-levels/{toolName}', { id, toolName }),
 } as const;
 
 /**
