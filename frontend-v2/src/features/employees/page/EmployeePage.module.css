@@ -210,6 +210,23 @@
     flex-wrap: wrap;
   }
 
+  /*
+   * The action's name, and under it whose level it is (dev, 2026-10-13: on
+   * one line the two read as one word, "…כהסתיימהכמו בסביבת העבודה", and a
+   * long name clipped the source away).
+   */
+  .levelRow .rowName {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    white-space: normal;
+  }
+
+  .levelRow .state {
+    margin-inline-start: 0;
+    font-size: 12px;
+  }
+
   .stanceButton {
     cursor: pointer;
     background: none;
