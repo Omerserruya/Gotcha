@@ -155,6 +155,63 @@ router.post("/unlink", requirePermissionOrRole("crm:contacts:update", "ADMIN"), 
   }
 });
 
+/**
+ * Who this customer is linked to, and how (D1, 2026-10-12): for the card's
+ * per-link "unlink". Every other contact on the same person, each with the
+ * link record that joined it and the exact pair POST /unlink takes. A contact
+ * on the person without an undoable record (a manual merge, an older capture)
+ * is listed with unlink null, never a button that would answer 404.
+ */
+router.get("/links/:contactId", requirePermissionOrRole("crm:contacts:read", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const contactId = String(req.params.contactId);
+    const select = { id: true, displayName: true, phone: true, email: true, externalId: true, channel: true, personId: true } as const;
+    const me = await prisma.contact.findFirst({ where: { tenantId, id: contactId, mergedIntoId: null }, select });
+    if (!me) return res.status(404).json({ error: "Contact not found", code: "CONTACT_NOT_FOUND" });
+    res.setHeader("Cache-Control", "private, no-store");
+    if (!me.personId) return res.json({ data: { personId: null, linked: [] } });
+
+    const others = await prisma.contact.findMany({ where: { tenantId, personId: me.personId, mergedIntoId: null, id: { not: me.id } }, select });
+    const group = new Map([me, ...others].map((c) => [c.id, c]));
+    const records = (await prisma.tenantSetting.findMany({ where: { tenantId, key: { startsWith: IDENTITY_LINK } }, select: { key: true, value: true } }))
+      .map((r) => ({ id: r.key, v: r.value as any }))
+      .filter((r) => r.v?.status === "APPLIED" && Array.isArray(r.v.contactIds) && r.v.contactIds.every((id: string) => group.has(id)));
+
+    const linked = others.map((c) => {
+      const touching = records.filter((r) => r.v.contactIds.includes(c.id));
+      // The record straight between the two first; else the one that brought
+      // this contact onto the person through someone else.
+      const rec = touching.find((r) => r.v.contactIds.includes(me.id)) ?? touching[0] ?? null;
+      const pair = rec ? (rec.v.contactIds as [string, string]) : null;
+      return {
+        contactId: c.id,
+        label: contactLabel(c),
+        channel: c.channel,
+        link: rec
+          ? {
+              id: rec.id,
+              contactIds: pair,
+              signal: rec.v.signal,
+              fromSignal: rec.v.fromSignal ?? null,
+              automatic: String(rec.v.by ?? "").startsWith("auto:"),
+              at: rec.v.at ?? null,
+              by: rec.v.by ?? null,
+              direct: pair!.includes(me.id),
+              evidence: evidenceFor(rec.v, pair!.map((id) => group.get(id)!) as [any, any]),
+            }
+          : null,
+        // The body for POST /api/identity/unlink, when the link can be undone.
+        unlink: rec && rec.v.previousPersonIds ? { contactIds: pair } : null,
+      };
+    });
+    return res.json({ data: { personId: me.personId, linked } });
+  } catch (err) {
+    console.error("identity links error:", err);
+    return res.status(500).json({ error: "Failed to list links" });
+  }
+});
+
 router.post("/not-same", requirePermissionOrRole("crm:contacts:update", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;

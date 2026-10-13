@@ -36,7 +36,14 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
           && where.OR.some((o: any) => o.sourceContactId === s.sourceContactId && o.targetContactId === s.targetContactId)) ?? null),
         updateMany: vi.fn(async (a: any) => { H.legacyUpdates.push(a); return { count: 1 }; }),
       },
-      contact: { findMany: vi.fn(async ({ where }: any) => H.contacts.filter((c) => c.tenantId === where.tenantId && where.id.in.includes(c.id))) },
+      contact: {
+        findMany: vi.fn(async ({ where }: any) => H.contacts.filter((c) => c.tenantId === where.tenantId
+          && (where.id?.in ? where.id.in.includes(c.id) : true)
+          && (where.id?.not ? c.id !== where.id.not : true)
+          && (where.personId !== undefined ? c.personId === where.personId : true)
+          && (where.mergedIntoId === null ? !c.mergedIntoId : true))),
+        findFirst: vi.fn(async ({ where }: any) => H.contacts.find((c) => c.tenantId === where.tenantId && c.id === where.id && !c.mergedIntoId) ?? null),
+      },
     },
     authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1", role: "ADMIN" }; n(); },
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "t1"; n(); },
@@ -182,5 +189,61 @@ describe("evidence: why the pair is suggested (B4, 2026-10-12)", () => {
 
   it("no identifier and no name signal: evidence is null, not invented", async () => {
     expect(byPair(await get("?status=APPLIED"), "wa1+wa2").evidence).toBeNull();
+  });
+});
+
+describe("GET /links/:contactId (D1): who this customer is linked to, and how to undo it", () => {
+  beforeEach(() => {
+    // One person across three channels: wa1 joined by a Shopify link, ig1 by an
+    // accepted name suggestion, em1 by a manual merge (no record).
+    H.contacts = [
+      { id: "wa1", tenantId: "t1", displayName: "Omer Serruya", phone: "+972541111111", email: null, externalId: "972541111111", channel: "WHATSAPP", personId: "P" },
+      { id: "wa2", tenantId: "t1", displayName: "Omer S", phone: null, email: null, externalId: "972549999999", channel: "WHATSAPP", personId: "P" },
+      { id: "ig1", tenantId: "t1", displayName: "Omer Tsruya", phone: null, email: null, externalId: "1031990639501705", channel: "INSTAGRAM", personId: "P" },
+      { id: "em1", tenantId: "t1", displayName: null, phone: null, email: "o@x.com", externalId: "o@x.com", channel: "EMAIL", personId: "P" },
+      { id: "gone", tenantId: "t1", displayName: "Merged away", channel: "WHATSAPP", personId: "P", mergedIntoId: "wa1" },
+      { id: "other", tenantId: "t2", displayName: "Other tenant", channel: "WHATSAPP", personId: "P" },
+      { id: "solo", tenantId: "t1", displayName: "Solo", channel: "WHATSAPP", personId: null },
+    ];
+    H.settings = [
+      { tenantId: "t1", key: `${LINK}wa1:wa2`, value: { status: "APPLIED", signal: "shopify_customer", contactIds: ["wa1", "wa2"], sourceContactId: "wa2", previousPersonIds: { wa1: "P", wa2: "p2" }, identifier: { type: "shopify_customer", value: "7012" }, at: "2026-10-11T10:00:00Z", by: "auto:shopify_customer" } },
+      { tenantId: "t1", key: `${LINK}ig1:wa2`, value: { status: "APPLIED", signal: "accepted_suggestion", fromSignal: "similar_name", contactIds: ["ig1", "wa2"], sourceContactId: "ig1", previousPersonIds: { ig1: "p3", wa2: "P" }, at: "2026-10-12T10:00:00Z", by: "u1" } },
+      // An undone link is not a link.
+      { tenantId: "t1", key: `${LINK}em1:wa1`, value: { status: "REJECTED", signal: "shared_identifier", contactIds: ["em1", "wa1"], at: "x", by: "u1" } },
+    ];
+  });
+  const get = async (id: string) => request(app).get(`/api/identity/links/${id}`);
+
+  it("★ each linked contact with its record and the exact /unlink body", async () => {
+    const res = await get("wa1");
+    expect(res.status).toBe(200);
+    expect(res.body.data.personId).toBe("P");
+    const by = Object.fromEntries(res.body.data.linked.map((l: any) => [l.contactId, l]));
+    expect(Object.keys(by).sort()).toEqual(["em1", "ig1", "wa2"]);
+    expect(by.wa2).toMatchObject({ channel: "WHATSAPP", label: "Omer S", unlink: { contactIds: ["wa1", "wa2"] } });
+    expect(by.wa2.link).toMatchObject({ id: `${LINK}wa1:wa2`, signal: "shopify_customer", automatic: true, direct: true, evidence: { type: "shopify_customer", shopifyCustomerId: "7012" } });
+  });
+
+  it("a contact joined through someone else names that link, not a direct one", async () => {
+    const by = Object.fromEntries((await get("wa1")).body.data.linked.map((l: any) => [l.contactId, l]));
+    expect(by.ig1.link).toMatchObject({ id: `${LINK}ig1:wa2`, direct: false, automatic: false, fromSignal: "similar_name", evidence: { type: "name", names: ["Omer Tsruya", "Omer S"] } });
+    expect(by.ig1.unlink).toEqual({ contactIds: ["ig1", "wa2"] });
+  });
+
+  it("★ on the person without an undoable record: listed, unlink null (never a 404 button)", async () => {
+    const by = Object.fromEntries((await get("wa1")).body.data.linked.map((l: any) => [l.contactId, l]));
+    expect(by.em1).toMatchObject({ link: null, unlink: null, channel: "EMAIL" });
+  });
+
+  it("never another tenant's contact, never a merged-away one", async () => {
+    const ids = (await get("wa1")).body.data.linked.map((l: any) => l.contactId);
+    expect(ids).not.toContain("other");
+    expect(ids).not.toContain("gone");
+  });
+
+  it("no person: nothing linked; unknown contact: 404", async () => {
+    expect((await get("solo")).body.data).toEqual({ personId: null, linked: [] });
+    expect((await get("other")).status).toBe(404);
+    expect((await get("nope")).status).toBe(404);
   });
 });
