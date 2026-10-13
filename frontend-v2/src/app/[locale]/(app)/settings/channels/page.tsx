@@ -31,6 +31,7 @@ import { ChannelLanding } from '@/features/channels/ChannelLanding';
 import { ConnectWhatsApp } from '@/features/channels/ConnectWhatsApp';
 import { channelLandingOf, messengerPickOf } from '@/features/channels/landing';
 import { loadMessengerPages } from '@/features/channels/messenger-actions';
+import { loadRequiredTemplates } from '@/features/channels/required-templates-actions';
 import { MessengerPicker } from '@/features/channels/MessengerPicker';
 import { WhatsAppNumbers } from '@/features/channels/WhatsAppNumbers';
 import { WhatsAppPanel } from '@/features/channels/WhatsAppPanel';
@@ -249,7 +250,27 @@ export default async function Page({
           unprofiled={(whatsapp[0]?.unprofiled ?? []).map((u) => u.channelAccountId)}
         >
           {panelTab === 'templates' ? (
-            <TemplatesTab templates={(await loadTemplates()).templates} />
+            <TemplatesTab
+              templates={(await loadTemplates()).templates}
+              // Each number's required templates (Backend 7e91418b), by its channel account.
+              required={await Promise.all(
+                [
+                  ...(whatsapp[0]?.data ?? []).flatMap((n) =>
+                    n.channelAccountId
+                      ? [{ id: n.channelAccountId, label: n.phoneNumber ?? n.name }]
+                      : [],
+                  ),
+                  ...(whatsapp[0]?.unprofiled ?? []).map((u) => ({
+                    id: u.channelAccountId,
+                    label: u.phoneNumber ?? u.name,
+                  })),
+                ].map(async (n) => ({
+                  channelAccountId: n.id,
+                  label: n.label,
+                  read: await loadRequiredTemplates(n.id),
+                })),
+              )}
+            />
           ) : panelTab === 'contacts' ? (
             <ContactsTab
               exclusions={await loadExclusions()}

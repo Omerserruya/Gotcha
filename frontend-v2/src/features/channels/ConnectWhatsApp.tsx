@@ -16,20 +16,25 @@ import drawer from '@/design-system/styles/drawer.module.css';
 import { Link, useRouter } from '@/i18n/navigation';
 
 import { useMetaSignup } from './signup/use-meta-signup';
+import { requiredForConnected } from './required-templates-actions';
+import { RequiredTemplates } from './RequiredTemplates';
 import { connectNumber } from './whatsapp-actions';
 import styles from './Channels.module.css';
 import { CenteredLoader } from '@/design-system/primitives/loader/Loader';
 
 type Path = 'business_app' | 'new';
-const STEPS = ['where', 'meta', 'number', 'learn'] as const;
+const STEPS = ['where', 'meta', 'number', 'templates', 'learn'] as const;
 
 /**
- * 13c → 13d, as 02 draws them: one sheet, four steps.
+ * 13c → 13d, as 02 draws them: one sheet, and its steps.
  *
  *   1 Where it lives - one question before Meta (business app, or not)
  *   2 Meta           - Meta's window; nothing is connected
  *   3 Number         - exactly one number per pass, its PIN if it needs one
- *   4 Learn          - 13e, the import, once Meta sends the history
+ *   4 Templates      - the two templates the number needs (Backend 7e91418b):
+ *                      saved as drafts, or sent to Meta from their own
+ *                      button after a confirm - never on the way past
+ *   5 Learn          - 13e, the import, once Meta sends the history
  *
  * Only "Continue with Meta" opens Meta, with the server's launch for the
  * choice made here (backend 294adc0c) - fetched up front for both, since the
@@ -57,13 +62,20 @@ export function ConnectWhatsApp({
   const [pin, setPin] = useState('');
   const [failure, setFailure] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  /** Step 4: after a connect, the number's required templates (or why not). */
+  const [required, setRequired] = useState<Awaited<ReturnType<typeof requiredForConnected>> | null>(
+    null,
+  );
+  const [connected, setConnected] = useState(false);
 
   const candidates = meta.inspection?.candidates ?? [];
-  const step: (typeof STEPS)[number] = meta.inspection
-    ? 'number'
-    : meta.stage === 'idle'
-      ? 'where'
-      : 'meta';
+  const step: (typeof STEPS)[number] = connected
+    ? 'templates'
+    : meta.inspection
+      ? 'number'
+      : meta.stage === 'idle'
+        ? 'where'
+        : 'meta';
   const current = STEPS.indexOf(step);
   const pick = candidates.find((c) => c.phoneNumberId === chosen) ?? null;
   const pinNeeded = pick !== null && needsPin(pick);
@@ -87,10 +99,16 @@ export function ConnectWhatsApp({
         setFailure(action ? t(`number.pendingAction.${action}`) : t('number.pending'));
         return;
       }
-      // 4 · Learn: 13e shows the import once Meta sends the history.
-      router.push(`/settings/channels?panel=whatsapp&view=progress`);
-      router.refresh();
+      // 4 · Templates: the number's required ones, read for this number.
+      setRequired(await requiredForConnected(pick.phoneNumberId, pick.phoneNumber ?? null));
+      setConnected(true);
     });
+  }
+
+  /** 5 · Learn: 13e shows the import once Meta sends the history. */
+  function toLearn() {
+    router.push(`/settings/channels?panel=whatsapp&view=progress`);
+    router.refresh();
   }
 
   return (
@@ -110,7 +128,9 @@ export function ConnectWhatsApp({
       </ol>
 
       <div className={drawer.drawerBody}>
-        {step === 'number' ? (
+        {step === 'templates' ? (
+          <TemplatesStep required={required} />
+        ) : step === 'number' ? (
           <NumberStep
             candidates={candidates}
             chosen={chosen}
@@ -203,7 +223,16 @@ export function ConnectWhatsApp({
       </div>
 
       <footer className={drawer.drawerFoot}>
-        {step === 'number' ? (
+        {step === 'templates' ? (
+          <button
+            type="button"
+            className={styles.connectPrimary}
+            data-testid="templates-continue"
+            onClick={toLearn}
+          >
+            {t('continue')}
+          </button>
+        ) : step === 'number' ? (
           <>
             <button
               type="button"
@@ -258,6 +287,32 @@ export function ConnectWhatsApp({
         )}
       </footer>
     </>
+  );
+}
+
+/** Step 4 - the templates the number needs; or, when it cannot be read, where they wait. */
+function TemplatesStep({
+  required,
+}: {
+  readonly required: Awaited<ReturnType<typeof requiredForConnected>>;
+}) {
+  const t = useTranslations('channels.whatsapp.required');
+  return (
+    <div data-testid="connect-templates">
+      <h3 className={styles.connectQuestion}>{t('title')}</h3>
+      <p className={styles.connectLead}>{t('lead')}</p>
+      {required === null ? (
+        <p className={styles.tabNote} data-testid="required-not-found">
+          {t('notFound')}
+        </p>
+      ) : !required.read.ok ? (
+        <p className={styles.tabNote} data-testid="required-unread">
+          {required.read.reason === 'forbidden' ? t('forbiddenRead') : t('unread')}
+        </p>
+      ) : (
+        <RequiredTemplates initial={required.read.data} />
+      )}
+    </div>
   );
 }
 

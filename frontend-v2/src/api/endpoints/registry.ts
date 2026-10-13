@@ -1249,6 +1249,16 @@ export const templateEndpoints = {
   duplicate: (id: string) => endpoint('/api/templates/{id}/duplicate', { id }),
   /** Sends it to Meta for review. The state changes; no ETA comes back. */
   submit: (id: string) => endpoint('/api/templates/{id}/submit-to-meta', { id }),
+  /**
+   * The two templates every WhatsApp number needs (Backend 7e91418b). GET
+   * `?channelAccountId=`: each role's state on that number and `canSubmit`.
+   * POST `{ channelAccountId, role, language, body?, button?, submit? }`
+   * saves the DRAFT; only `submit: true` on a connected number sends it to
+   * Meta for review (409 NUMBER_NOT_CONNECTED otherwise, still saved). An
+   * approved or pending one answers 409 ALREADY_SUBMITTED: Outreach edits it.
+   * ADMIN (Owner) only. `/api/templates/sync` is deliberately not here.
+   */
+  required: () => endpoint('/api/templates/required'),
 } as const;
 
 /**

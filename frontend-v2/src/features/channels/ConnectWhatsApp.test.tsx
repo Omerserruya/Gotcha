@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { requiredTemplatesSchema } from '@/api/contracts/required-templates';
 import { embeddedSignupLaunchSchema } from '@/api/contracts/whatsapp-connect';
 import messages from '@/i18n/messages/en/channels.json';
 
@@ -11,6 +12,13 @@ import messages from '@/i18n/messages/en/channels.json';
 const inspectNumbers = vi.hoisted(() => vi.fn());
 const connectNumber = vi.hoisted(() => vi.fn());
 vi.mock('./whatsapp-actions', () => ({ inspectNumbers, connectNumber }));
+/* The required templates' reads and writes are spies too: a submit is a real Meta write. */
+const required = vi.hoisted(() => ({
+  requiredForConnected: vi.fn(),
+  saveRequiredTemplate: vi.fn(),
+  loadRequiredTemplates: vi.fn(),
+}));
+vi.mock('./required-templates-actions', () => required);
 vi.mock('./signup/facebook-sdk', () => ({ useFacebookSdk: () => 'ready' }));
 const push = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({
@@ -52,6 +60,9 @@ beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   inspectNumbers.mockReset();
   connectNumber.mockReset();
+  required.requiredForConnected.mockReset();
+  required.saveRequiredTemplate.mockReset();
+  required.requiredForConnected.mockResolvedValue(null);
   push.mockReset();
   login.mockReset();
   window.FB = { init: vi.fn(), login };
@@ -210,13 +221,67 @@ describe('★★ 13d - exactly one number per pass', () => {
     expect(screen.getByTestId('connect-number')).toHaveTextContent('Connect and import');
   });
 
-  it('connects the one chosen, then to 13e', async () => {
+  it('connects the one chosen, then its required templates, then to 13e', async () => {
     connectNumber.mockResolvedValue({ ok: true, pendingAction: null });
-    await toNumbers([candidate({ phoneNumberId: 'p1' }), candidate({ phoneNumberId: 'p2' })]);
+    required.requiredForConnected.mockResolvedValue({
+      channelAccountId: 'ca2',
+      read: {
+        ok: true,
+        data: requiredTemplatesSchema.parse({
+          channelAccountId: 'ca2',
+          canSubmit: true,
+          languages: ['en'],
+          items: [
+            { role: 'reopen', name: 'gotcha_reopen', language: 'en', state: 'missing', body: 'Hi' },
+          ],
+        }),
+      },
+    });
+    await toNumbers([
+      candidate({ phoneNumberId: 'p1' }),
+      candidate({ phoneNumberId: 'p2', phoneNumber: '+972 3 555 0000' }),
+    ]);
     await userEvent.click(screen.getByTestId('candidate-p2'));
     await userEvent.click(screen.getByTestId('connect-number'));
     expect(connectNumber).toHaveBeenCalledWith('s1', 'p2', undefined);
+    expect(required.requiredForConnected).toHaveBeenCalledWith('p2', '+972 3 555 0000');
+    // Step 4: the templates, and no move until Continue.
+    expect(await screen.findByTestId('connect-templates')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('connect-steps').querySelector('[aria-current="step"]'),
+    ).toHaveTextContent('Required templates');
+    expect(screen.getByTestId('required-state-reopen-en')).toHaveTextContent('Not saved yet');
+    expect(push).not.toHaveBeenCalled();
+    // ★ Passing the step sends nothing to Meta.
+    await userEvent.click(screen.getByTestId('templates-continue'));
+    expect(required.saveRequiredTemplate).not.toHaveBeenCalled();
     expect(push).toHaveBeenCalledWith('/settings/channels?panel=whatsapp&view=progress');
+  });
+
+  it('the new number not found yet: said where its templates wait, and Continue', async () => {
+    connectNumber.mockResolvedValue({ ok: true, pendingAction: null });
+    await toNumbers([candidate({ phoneNumberId: 'p1' })]);
+    await userEvent.click(screen.getByTestId('candidate-p1'));
+    await userEvent.click(screen.getByTestId('connect-number'));
+    expect(await screen.findByTestId('required-not-found')).toHaveTextContent(
+      'Settings · Channels · WhatsApp · Templates',
+    );
+    await userEvent.click(screen.getByTestId('templates-continue'));
+    expect(push).toHaveBeenCalledWith('/settings/channels?panel=whatsapp&view=progress');
+  });
+
+  it('a 403 on the read: only an Owner, in words', async () => {
+    connectNumber.mockResolvedValue({ ok: true, pendingAction: null });
+    required.requiredForConnected.mockResolvedValue({
+      channelAccountId: 'ca1',
+      read: { ok: false, reason: 'forbidden' },
+    });
+    await toNumbers([candidate({ phoneNumberId: 'p1' })]);
+    await userEvent.click(screen.getByTestId('candidate-p1'));
+    await userEvent.click(screen.getByTestId('connect-number'));
+    expect(await screen.findByTestId('required-unread')).toHaveTextContent(
+      'Only an Owner can see and send the required templates.',
+    );
   });
 
   it('a number that needs its PIN: six digits, then sent with it', async () => {

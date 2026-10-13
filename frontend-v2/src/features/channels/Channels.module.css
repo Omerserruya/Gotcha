@@ -2187,4 +2187,89 @@
     font-size: 12.5px;
     color: var(--text-primary);
   }
+
+  /* The templates every WhatsApp number needs: each role, its state, its text. */
+  .reqBlock {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    margin-block-end: var(--space-16);
+    line-height: normal;
+  }
+
+  .reqItem {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    padding: var(--space-12) var(--space-14);
+    min-inline-size: 0;
+  }
+
+  .reqHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+  }
+
+  .reqChip {
+    flex-shrink: 0;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--panel-well);
+    font-size: var(--font-size-micro);
+    color: var(--text-body);
+  }
+
+  .reqChip[data-state='approved'] {
+    background-color: var(--intent-opportunity-surface);
+    color: var(--intent-opportunity-text);
+  }
+
+  .reqChip[data-state='pending'] {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .reqChip[data-state='rejected'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .reqField {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .reqField textarea {
+    padding: 7px 10px;
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-primary);
+    resize: block;
+  }
+
+  .reqBody {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+  }
+
+  .reqReason {
+    font-size: 11.5px;
+    color: var(--intent-urgent-text);
+  }
+
+  .reqActions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-8);
+  }
 }

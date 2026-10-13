@@ -5,6 +5,8 @@ import type { Exclusion, NumberEvent } from '@/api/contracts/whatsapp-numbers';
 import { Link } from '@/i18n/navigation';
 
 import { PrivateContacts, type ContactNumber } from './PrivateContacts';
+import type { RequiredRead } from './required-templates-actions';
+import { RequiredTemplates } from './RequiredTemplates';
 import styles from './Channels.module.css';
 
 const CATEGORIES = ['MARKETING', 'UTILITY', 'AUTHENTICATION'] as const;
@@ -17,16 +19,69 @@ const STEPS = [
 ] as const;
 const OUTCOMES = ['SUCCESS', 'FAILED', 'SKIPPED', 'ACTION_REQUIRED'] as const;
 
+/** One number's required templates, as the Templates tab reads them. */
+export interface NumberRequired {
+  readonly channelAccountId: string;
+  /** The number as shown; `null` when it was not read. */
+  readonly label: string | null;
+  readonly read: RequiredRead;
+}
+
 /**
- * 13b · Templates: the account's WhatsApp templates (`/api/templates`), each
- * with its state in 05c's own words and its category; one opens on 05c.
- * Templates for another channel only are not this panel's.
+ * 13b · Templates, first: each number's required templates (Backend
+ * 7e91418b) - state, Meta's reason for a rejected one, its text to fix and
+ * send again, or Outreach for one already sent.
+ */
+async function RequiredSection({ required }: { readonly required: readonly NumberRequired[] }) {
+  const t = await getTranslations('channels.whatsapp.required');
+  if (required.length === 0) return null;
+  return (
+    <section className={styles.reqBlock} data-testid="tab-required">
+      <h3 className={styles.connectQuestion}>{t('title')}</h3>
+      <p className={styles.tabNote}>{t('lead')}</p>
+      {required.map((n) => (
+        <div key={n.channelAccountId} data-testid={`tab-required-${n.channelAccountId}`}>
+          {required.length > 1 && n.label ? (
+            <bdi dir="ltr" className={styles.tabRowName}>
+              {n.label}
+            </bdi>
+          ) : null}
+          {n.read.ok ? (
+            <RequiredTemplates initial={n.read.data} />
+          ) : (
+            <p className={styles.tabNote} data-testid="required-unread">
+              {n.read.reason === 'forbidden' ? t('forbiddenRead') : t('unread')}
+            </p>
+          )}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+/**
+ * 13b · Templates: the required ones per number, then the account's WhatsApp
+ * templates (`/api/templates`), each with its state in 05c's own words and
+ * its category; one opens on 05c. Templates for another channel only are not
+ * this panel's.
  */
 export async function TemplatesTab({
   templates,
+  required = [],
 }: {
   readonly templates: readonly Template[] | null;
+  readonly required?: readonly NumberRequired[];
 }) {
+  // Called, not nested: each resolves here, so the tab renders as one tree.
+  return (
+    <>
+      {await RequiredSection({ required })}
+      {await TemplateList({ templates })}
+    </>
+  );
+}
+
+async function TemplateList({ templates }: { readonly templates: readonly Template[] | null }) {
   const t = await getTranslations('channels.whatsapp.tabs');
   const tt = await getTranslations('templates');
   if (templates === null) {

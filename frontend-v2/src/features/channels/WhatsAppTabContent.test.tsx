@@ -3,6 +3,7 @@ import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-
 import type { ReactElement, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { requiredTemplatesSchema } from '@/api/contracts/required-templates';
 import { templateSchema } from '@/api/contracts/templates';
 import { exclusionSchema, numberEventSchema } from '@/api/contracts/whatsapp-numbers';
 import channels from '@/i18n/messages/en/channels.json';
@@ -27,6 +28,13 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 const actions = vi.hoisted(() => ({ addPrivateContact: vi.fn(), removePrivateContact: vi.fn() }));
 vi.mock('./number-actions', () => actions);
+/* ★ The required templates' writes are spies: a submit is a real Meta write. */
+const required = vi.hoisted(() => ({
+  saveRequiredTemplate: vi.fn(),
+  loadRequiredTemplates: vi.fn(),
+  requiredForConnected: vi.fn(),
+}));
+vi.mock('./required-templates-actions', () => required);
 
 const render = (node: ReactElement) =>
   rtlRender(
@@ -58,6 +66,93 @@ describe('★★ 13b · Templates', () => {
     expect(screen.getByTestId('tab-template-t1')).toHaveTextContent('Utility · Ready to send');
     expect(screen.getByTestId('tab-template-t2')).toHaveTextContent('Marketing · Rejected');
     expect(screen.queryByTestId('tab-template-t3')).toBeNull();
+  });
+
+  describe('★★ each number’s required templates, first', () => {
+    const read = (items: Record<string, unknown>[]) =>
+      ({
+        ok: true,
+        data: requiredTemplatesSchema.parse({
+          channelAccountId: 'ca1',
+          canSubmit: true,
+          languages: ['en'],
+          items,
+        }),
+      }) as const;
+
+    it('a rejected one shows Meta’s reason and its text to fix; an approved one opens in Outreach', async () => {
+      render(
+        await TemplatesTab({
+          templates: [],
+          required: [
+            {
+              channelAccountId: 'ca1',
+              label: '+972 54 000 0000',
+              read: read([
+                {
+                  role: 'reopen',
+                  name: 'gotcha_reopen',
+                  language: 'en',
+                  state: 'rejected',
+                  templateId: 't1',
+                  reason: '[PAUSED] Low quality',
+                  body: 'Hi {{1}}',
+                },
+                {
+                  role: 'followup',
+                  name: 'gotcha_followup',
+                  language: 'en',
+                  state: 'approved',
+                  templateId: 't2',
+                  body: 'Hi {{1}}',
+                },
+              ]),
+            },
+          ],
+        }),
+      );
+      expect(screen.getByTestId('tab-required')).toHaveTextContent('Required templates');
+      expect(screen.getByTestId('required-state-reopen-en')).toHaveTextContent('Rejected');
+      expect(screen.getByTestId('required-reason-reopen-en')).toHaveTextContent(
+        "Meta's reason: [PAUSED] Low quality",
+      );
+      expect(screen.getByTestId('required-body-reopen-en')).toHaveValue('Hi {{1}}');
+      expect(screen.getByTestId('required-outreach-followup-en')).toHaveAttribute(
+        'href',
+        JSON.stringify({ pathname: '/outreach/templates', query: { template: 't2' } }),
+      );
+      // One number: no label over its list.
+      expect(screen.getByTestId('tab-required-ca1')).not.toHaveTextContent('+972 54 000 0000');
+      // The account's own list still follows.
+      expect(screen.getByTestId('tab-empty')).toBeInTheDocument();
+    });
+
+    it('a 403: only an Owner, in words', async () => {
+      render(
+        await TemplatesTab({
+          templates: [],
+          required: [
+            { channelAccountId: 'ca1', label: null, read: { ok: false, reason: 'forbidden' } },
+          ],
+        }),
+      );
+      expect(screen.getByTestId('required-unread')).toHaveTextContent(
+        'Only an Owner can see and send the required templates.',
+      );
+    });
+
+    it('two numbers: each under its own number', async () => {
+      render(
+        await TemplatesTab({
+          templates: [],
+          required: [
+            { channelAccountId: 'ca1', label: '+972 54 000 0000', read: read([]) },
+            { channelAccountId: 'ca2', label: '+972 3 555 0000', read: read([]) },
+          ],
+        }),
+      );
+      expect(screen.getByTestId('tab-required-ca2')).toHaveTextContent('+972 3 555 0000');
+    });
   });
 
   it('none, and unread, are different sentences', async () => {

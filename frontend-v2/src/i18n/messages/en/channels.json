@@ -330,6 +330,7 @@
         "where": "Where it lives",
         "meta": "Meta",
         "number": "Number",
+        "templates": "Required templates",
         "learn": "Learn"
       },
       "where": {
@@ -403,7 +404,8 @@
         "cancelled": "You closed Meta’s window - nothing was connected.",
         "noCode": "Meta didn't hand back a way to read your numbers. Nothing was connected - try again.",
         "inspectFailed": "We couldn't read the numbers on that account. Nothing was connected - try again."
-      }
+      },
+      "continue": "Continue"
     },
     "decide": {
       "approved": "Approved - GOTCHA answers with it now.",
@@ -507,7 +509,57 @@
       "empty": "No customers came in with this history.",
       "open": "Open the customer"
     },
-    "phoneNotRead": "Number not read from Meta yet"
+    "phoneNotRead": "Number not read from Meta yet",
+    "required": {
+      "title": "Required templates",
+      "lead": "Once 24 hours pass since a customer's last message, WhatsApp only takes a template Meta approved. These are the two GOTCHA needs on this number.",
+      "role": {
+        "reopen": {
+          "title": "Reopen a conversation",
+          "purpose": "Reopens a conversation after 24 hours"
+        },
+        "followup": {
+          "title": "Follow-up",
+          "purpose": "A reminder to a customer who didn't reply"
+        }
+      },
+      "state": {
+        "missing": "Not saved yet",
+        "draft": "Draft",
+        "pending": "Waiting for Meta",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "unknown": "Unknown state"
+      },
+      "bodyLabel": "Text",
+      "variable": "{token} is replaced with the customer's name.",
+      "button": "Button:",
+      "reason": "Meta's reason:",
+      "notConnected": "This number isn't connected yet. The templates can be sent to Meta once it is; until then, Save keeps them as drafts.",
+      "none": "This number has no required templates.",
+      "save": "Save as draft",
+      "saving": "Saving…",
+      "submit": "Approve and send to Meta",
+      "sending": "Sending…",
+      "confirm": "Send the templates to Meta for review? After that they can be edited only in Outreach · Templates.",
+      "confirmYes": "Send to Meta",
+      "confirmNo": "Cancel",
+      "editInOutreach": "Edit in Outreach · Templates",
+      "forbidden": "Only an Owner can save these templates and send them to Meta.",
+      "forbiddenRead": "Only an Owner can see and send the required templates.",
+      "unread": "We couldn't read the required templates right now. Try again in a moment.",
+      "notFound": "We couldn't find the new number yet. Its required templates wait in Settings · Channels · WhatsApp · Templates.",
+      "outcome": {
+        "saved": "Saved as a draft.",
+        "submitted": "Sent to Meta for review.",
+        "not_connected": "Saved as a draft. The number isn't connected yet, so it can be sent to Meta once it is.",
+        "already_submitted": "It was already sent to Meta, so it's edited in Outreach · Templates.",
+        "refused": "Saved as a draft, but Meta didn't accept it. Fix the text and send it again.",
+        "bad_body": "The text needs 1 to {max} characters.",
+        "not_found": "This number isn't connected here anymore.",
+        "failed": "It wasn't saved. Try again in a moment."
+      }
+    }
   },
   "rowSettings": "Settings",
   "banner": {

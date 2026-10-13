@@ -14,6 +14,7 @@ import { ChannelLanding } from '@/features/channels/ChannelLanding';
 import { MessengerPicker } from '@/features/channels/MessengerPicker';
 import { ConnectWhatsApp } from '@/features/channels/ConnectWhatsApp';
 import { WhatsAppPanel } from '@/features/channels/WhatsAppPanel';
+import { TemplatesTab } from '@/features/channels/WhatsAppTabContent';
 import channels from '@/i18n/messages/en/channels.json';
 
 /*
@@ -60,6 +61,9 @@ const loadMessengerPages = vi.hoisted(() =>
 vi.mock('@/features/channels/messenger-actions', () => ({ loadMessengerPages }));
 vi.mock('@/features/webchat/load-website-widget', () => ({ loadWidgetInstall: async () => null }));
 vi.mock('@/features/outreach/load-templates', () => ({ loadTemplates: reads.templates }));
+/* ★ The required templates' read is a spy: nothing here reaches a server. */
+const loadRequiredTemplates = vi.hoisted(() => vi.fn());
+vi.mock('@/features/channels/required-templates-actions', () => ({ loadRequiredTemplates }));
 vi.mock('@/features/channels/load-whatsapp', () => ({
   loadExclusions: reads.exclusions,
   loadEvidence: reads.evidence,
@@ -299,6 +303,23 @@ describe('★★ 13b · ?tab= decides what is read and shown', () => {
     for (const [name, fn] of Object.entries(reads)) {
       expect(fn, name).toHaveBeenCalledTimes(name === read ? 1 : 0);
     }
+  });
+
+  it('Templates reads each number’s required templates, by its channel account', async () => {
+    loadRequiredTemplates.mockReset();
+    loadRequiredTemplates.mockResolvedValue({ ok: false, reason: 'failed' });
+    const tree = await open('templates');
+    expect(loadRequiredTemplates.mock.calls).toEqual([['ca1']]);
+    expect(find<{ required: unknown }>(tree, TemplatesTab)?.required).toStrictEqual([
+      { channelAccountId: 'ca1', label: 'Demo WhatsApp', read: { ok: false, reason: 'failed' } },
+    ]);
+  });
+
+  it('another tab reads no required templates', async () => {
+    loadRequiredTemplates.mockReset();
+    await open('contacts');
+    await open();
+    expect(loadRequiredTemplates).not.toHaveBeenCalled();
   });
 
   it('an unknown tab is Numbers', async () => {
