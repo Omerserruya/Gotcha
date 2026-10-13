@@ -248,7 +248,12 @@ describe("WooCommerce adapter", () => {
     expect(calls[0].init.method).toBe("PUT");
     const body = JSON.parse(String(calls[0].init.body));
     expect(body.status).toBe("completed");
-    expect(body.customer_note).toBe("done");
+    // The note is an order note the customer sees, not customer_note (that
+    // overwrote the customer's own note; fixed 2026-10-13).
+    expect(body.customer_note).toBeUndefined();
+    expect(calls[1].init.method).toBe("POST");
+    expect(new URL(calls[1].url).pathname).toBe("/wp-json/wc/v3/orders/1/notes");
+    expect(JSON.parse(String(calls[1].init.body))).toEqual({ note: "done", customer_note: true });
   });
 
   it("EDGE 401 surfaces as adapter error", async () => {

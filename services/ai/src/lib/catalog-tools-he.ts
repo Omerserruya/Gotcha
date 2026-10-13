@@ -98,7 +98,7 @@ export const CATALOG_TOOL_HE: Record<string, { name: string; description: string
   "shopify:get_product": { name: "שליפת מוצר", description: "שליפת מוצר לפי ID או handle." },
   "shopify:get_product_images": { name: "תמונות מוצרים", description: "שליפת התמונות הראשיות של כמה מוצרים יחד, לפי מזהי המוצרים." },
   "shopify:get_shop": { name: "פרטי החנות", description: "שם החנות, הדומיין הראשי והמטבע שלה." },
-  "shopify:complementary_products": { name: "מוצרים משלימים", description: "מוצרים שהולכים עם מוצר שהלקוח בחר: אביזרים, מתכלים ותוספות, מהרשימה של בעל החנות כשיש כזו." },
+  "shopify:complementary_products": { name: "מוצרים משלימים", description: "מוצרים שמשלימים מוצר שנבחר: אביזרים, מתכלים ותוספות, לפי הרשימה של החנות כשקיימת." },
   "shopify:get_refund_status": { name: "שליפת סטטוס החזר", description: "שליפת ההחזרים שנרשמו בהזמנה." },
   "shopify:get_return_reason": { name: "שליפת סיבת החזרה", description: "שליפת הסיבה להחזרה (GraphQL או ReturnGO, עם חלופה מוגבלת כשאין תמיכה)." },
   "shopify:get_returns": { name: "שליפת החזרות", description: "הצגת ההחזרות של הזמנה (GraphQL או ReturnGO, עם חלופה מוגבלת כשאין תמיכה)." },
