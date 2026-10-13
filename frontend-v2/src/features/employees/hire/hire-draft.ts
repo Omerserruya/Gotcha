@@ -1,5 +1,5 @@
 import { MAX_RULE_LABEL, MAX_RULES, type DraftRule } from '../page/profile-plan';
-import { HIRE_JOBS, type HirePlan, type HireTool } from './hire-plan';
+import { allowedChoices, HIRE_JOBS, stepOneDone, type HirePlan, type HireTool } from './hire-plan';
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -16,11 +16,16 @@ import { HIRE_JOBS, type HirePlan, type HireTool } from './hire-plan';
  * (a private window, blocked site data) is simply no draft.
  */
 
-export type HireStep = 1 | 2 | 3;
+export type HireStep = 1 | 2 | 3 | 4;
 
 export interface HireDraft {
   readonly step: HireStep;
   readonly plan: HirePlan;
+  /**
+   * The builder draft a hire that stopped part-way left (H5), so hiring
+   * again continues it rather than leaving another behind. Absent: none.
+   */
+  readonly agentId?: string;
 }
 
 const KEY = (userId: string) => `gotcha:hire-draft:v1:${userId}`;
@@ -35,7 +40,9 @@ export function hasEntries(plan: HirePlan, fresh: HirePlan): boolean {
     plan.name.trim() !== '' ||
     JSON.stringify(plan.choices) !== JSON.stringify(fresh.choices) ||
     JSON.stringify([...plan.access].sort()) !== JSON.stringify([...fresh.access].sort()) ||
-    JSON.stringify(plan.rules) !== JSON.stringify(fresh.rules)
+    JSON.stringify(plan.rules) !== JSON.stringify(fresh.rules) ||
+    JSON.stringify([...plan.knowledge].sort()) !== JSON.stringify([...fresh.knowledge].sort()) ||
+    plan.skills.length > 0
   );
 }
 
@@ -68,7 +75,11 @@ export function readDraft(
     return null;
   }
   if (typeof data !== 'object' || data === null) return null;
-  const { step, plan } = data as { step?: unknown; plan?: Record<string, unknown> };
+  const { step, plan, agentId } = data as {
+    step?: unknown;
+    plan?: Record<string, unknown>;
+    agentId?: unknown;
+  };
   if (typeof plan !== 'object' || plan === null) return null;
   const job = (HIRE_JOBS as readonly unknown[]).includes(plan.job)
     ? (plan.job as HirePlan['job'])
@@ -79,7 +90,7 @@ export function readDraft(
       const chosen = (stored as Record<string, unknown>)[tool.toolName];
       return [
         tool.toolName,
-        (tool.choices as readonly unknown[]).includes(chosen)
+        (allowedChoices(tool) as readonly unknown[]).includes(chosen)
           ? (chosen as HirePlan['choices'][string])
           : fresh.choices[tool.toolName]!,
       ];
@@ -94,11 +105,18 @@ export function readDraft(
     access: list(plan.access) ?? fresh.access,
     // A draft kept before H3 holds chip keys (`handover`), not conditions: it starts fresh.
     rules: readRules(plan.rules) ?? fresh.rules,
+    // Ids as stored; the sheet keeps only those still offered when it sends.
+    knowledge: list(plan.knowledge) ?? fresh.knowledge,
+    skills: [...new Set(list(plan.skills) ?? [])],
   };
   if (!hasEntries(draft, fresh)) return null;
   // A later step needs step 1 done; otherwise it starts at step 1.
-  const at = step === 2 || step === 3 ? step : 1;
-  return { step: job === null ? 1 : at, plan: draft };
+  const at = step === 2 || step === 3 || step === 4 ? step : 1;
+  return {
+    step: stepOneDone(draft) ? at : 1,
+    plan: draft,
+    ...(isString(agentId) && agentId !== '' ? { agentId } : {}),
+  };
 }
 
 function store(): Storage | null {

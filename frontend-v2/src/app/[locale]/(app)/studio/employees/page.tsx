@@ -16,7 +16,8 @@ import { toolLevelRows } from '@/features/employees/page/tool-label';
 import { loadViewerId } from '@/features/roles/load-person';
 import { HiredDialog } from '@/features/employees/hired/HiredDialog';
 import type { HireTool } from '@/features/employees/hire/hire-plan';
-import { loadKnowledge } from '@/features/knowledge/load-knowledge';
+import { loadHireSkills } from '@/features/employees/hire/load-hire-skills';
+import { loadEmployeeKnowledge } from '@/features/employees/page/load-employee-knowledge';
 import { Link } from '@/i18n/navigation';
 import { EmployeeDetail } from '@/features/employees/EmployeeDetail';
 import { EmployeeRail } from '@/features/employees/EmployeeRail';
@@ -83,15 +84,18 @@ export default async function Page({
   // H6: whose hire draft this is - read only while hiring.
   const viewerId = hiring ? await loadViewerId() : null;
   // The detail's permissions and connected tools are the business's, read once.
-  const [employees, { capabilities, integrations }, knowledgeData, toolWords] = await Promise.all([
-    loadEmployees(),
-    loadCapabilities(),
-    // The Hire sheet's reads, only when it is open.
-    hiring ? loadKnowledge() : Promise.resolve(null),
-    // Each action's provider and words ("WooCommerce · Get customer"), for the
-    // hire flow's Limits - the tool catalogue, as Skills reads it.
-    hiring ? readTools() : Promise.resolve(null),
-  ]);
+  const [employees, { capabilities, integrations }, knowledge, skills, toolWords] =
+    await Promise.all([
+      loadEmployees(),
+      loadCapabilities(),
+      // The Hire sheet's reads, only when it is open: the knowledge bases with
+      // their scope (the employee page's read) and the skills it may carry (H4).
+      hiring ? loadEmployeeKnowledge() : Promise.resolve(null),
+      hiring ? loadHireSkills() : Promise.resolve(null),
+      // Each action's provider and words ("WooCommerce · Get customer"), for the
+      // hire flow's Limits - the tool catalogue, as Skills reads it.
+      hiring ? readTools() : Promise.resolve(null),
+    ]);
   const wordsOf = (toolName: string) => toolWords?.find((tool) => tool.name === toolName) ?? null;
   /*
     ★ H2 (Omer, 2026-10-13): an integration's action in the reader's
@@ -127,7 +131,7 @@ export default async function Page({
           };
         })
     : [];
-  const step = params.step === '2' ? 2 : params.step === '3' ? 3 : 1;
+  const step = params.step === '2' ? 2 : params.step === '3' ? 3 : params.step === '4' ? 4 : 1;
   const selected = employees?.find((e) => e.id === wanted) ?? employees?.[0] ?? null;
   const hired = params.hired ? (employees?.find((e) => e.id === params.hired) ?? null) : null;
   /*
@@ -200,7 +204,7 @@ export default async function Page({
       title={t('title')}
       description={summary}
       actions={
-        // 07b-07d: the Hire sheet, read-only until creating is allowed.
+        // 07b-07d: the Hire sheet; hiring from it is live (H5).
         <Link
           href={{ pathname: '/studio/employees', query: { hire: '1' } }}
           className={styles.hire}
@@ -241,9 +245,8 @@ export default async function Page({
       {hiring ? (
         <HireSheet
           tools={hireTools}
-          knowledge={
-            knowledgeData?.sources ? knowledgeData.sources.map((k) => k.name).filter(Boolean) : null
-          }
+          knowledge={knowledge}
+          skills={skills}
           initialStep={step}
           viewerId={viewerId}
           // Every system the workspace has set up, in any state - a new
@@ -252,7 +255,11 @@ export default async function Page({
             integrations
               ? integrations
                   .filter((i) => i.tenantConnection)
-                  .map((i) => ({ slug: i.slug, failing: isFailing(i.tenantConnection) }))
+                  .map((i) => ({
+                    slug: i.slug,
+                    name: i.name,
+                    failing: isFailing(i.tenantConnection),
+                  }))
               : null
           }
         />

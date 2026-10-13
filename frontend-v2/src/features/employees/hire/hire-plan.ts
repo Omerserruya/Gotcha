@@ -1,22 +1,26 @@
 import type { AdminChoice } from '@/api/contracts/capabilities';
 
-import type { DraftRule } from '../page/profile-plan';
+import {
+  knowledgePatch,
+  reachedByScope,
+  type EmployeeKnowledgeSource,
+} from '../page/knowledge-plan';
+import { rulesBody, rulesProblem, type DraftRule } from '../page/profile-plan';
 
 /**
- * 07b-07d's choices, held locally while the flow is read-only.
+ * 07b-07d's choices, held locally until the hire is confirmed (H5), then
+ * written by `hire-actions.ts` - each field to its route:
  *
- * ★ THE SHAPE THE BUILDER WILL TAKE, SO GOING LIVE IS PLUMBING.
- * Each field maps to one call on `/api/ai-agents/builder` - none is made yet
- * (Omer's call; a DRAFT row per walk-through, an LLM readiness test, and an
- * employee answering live customers):
- *
- *   job + goal     → POST /start { goal }            (creates the DRAFT)
- *   name           → POST /:id/refinements { name }
- *   choices        → the tool permissions, per tool, as 10 writes them
- *   access         → POST create { integrationAccess } (Backend 00c6c229)
+ *   job + goal     → POST /builder/start { goal } (the DRAFT), then
+ *                    PATCH /api/ai-agents/:id { role, goal }
  *   rules          → PATCH /api/ai-agents/:id { escalationRules } (H3)
- *   step 3         → POST /:id/readiness-test         (LLM, costs tokens)
- *   Hire it        → POST /:id/complete               (DRAFT → ACTIVE)
+ *   access         → PATCH /api/ai-agents/:id { integrationAccess }
+ *   knowledge      → PATCH /api/ai-agents/:id { knowledgeBaseIds } (H4)
+ *   name           → POST /builder/:id/refinements { name }
+ *   skills         → PUT /api/ai-agents/:id/skills (H4), each in Watch
+ *   choices        → PUT /api/ai-agents/:id/tool-levels/:toolName { level },
+ *                    one per action set stricter than the business
+ *   Hire, confirmed → POST /builder/:id/complete (DRAFT → ACTIVE)
  */
 export interface HirePlan {
   readonly job: HireJob | null;
@@ -36,6 +40,13 @@ export interface HirePlan {
    * whether it is on. Sent as `escalationRules`, at most 50, 1-300 each.
    */
   readonly rules: readonly DraftRule[];
+  /**
+   * The knowledge bases it is connected to, by id (H4) - the employee
+   * page's rule (`knowledge-plan.ts`). Starts as every active one.
+   */
+  readonly knowledge: readonly string[];
+  /** The business skills it carries, by id, in order (H4). Starts empty. */
+  readonly skills: readonly string[];
 }
 
 /** The builder's roles (`agent-builder.service.ts`), plus the free-text job. */
@@ -85,9 +96,12 @@ export function toolGroups(tools: readonly HireTool[]): readonly {
   return [...integrations, ...(own ? [{ provider: null, label: null, tools: own }] : [])];
 }
 
-/** Step 1 is complete when there is a job - and, for "Something else", words. */
+/**
+ * Step 1 is complete when there is a job - and, for "Something else", words -
+ * and a name: the builder completes no employee called "Untitled" (H5).
+ */
 export function stepOneDone(plan: HirePlan): boolean {
-  if (plan.job === null) return false;
+  if (plan.job === null || plan.name.trim() === '') return false;
   return plan.job !== 'custom' || plan.goal.trim().length > 0;
 }
 
@@ -99,8 +113,15 @@ export function stepOneDone(plan: HirePlan): boolean {
 export function emptyPlan(
   tools: readonly HireTool[],
   setUp: readonly string[] = [],
-  /** The conditions a hire starts with - the first chip, in the reader's words. */
-  rules: readonly DraftRule[] = [],
+  {
+    rules = [],
+    knowledge = [],
+  }: {
+    /** The conditions a hire starts with - the first chip, in the reader's words. */
+    readonly rules?: readonly DraftRule[];
+    /** The knowledge it starts connected to (`knowledgeDefault`). */
+    readonly knowledge?: readonly string[];
+  } = {},
 ): HirePlan {
   const providers = tools.map((tool) => tool.provider).filter((p): p is string => p !== null);
   return {
@@ -110,6 +131,8 @@ export function emptyPlan(
     choices: Object.fromEntries(tools.map((tool) => [tool.toolName, tool.current])),
     access: [...new Set([...setUp, ...providers])].sort(),
     rules,
+    knowledge,
+    skills: [],
   };
 }
 
@@ -117,4 +140,196 @@ export function emptyPlan(
 export function withAccess(plan: HirePlan, key: string, on: boolean): HirePlan {
   const rest = plan.access.filter((k) => k !== key);
   return { ...plan, access: on ? [...rest, key].sort() : rest };
+}
+
+/* ── H4/H5: knowledge, skills, the summary and the hire ─────────────────── */
+
+/** A knowledge base, as step 3 draws it - the page's read (`knowledge-plan.ts`). */
+export type HireSource = EmployeeKnowledgeSource;
+
+/** A business skill step 3 offers (`GET /api/business-skills`, archived left out). */
+export interface HireSkill {
+  readonly id: string;
+  readonly name: string;
+  readonly situation: string | null;
+  readonly status: 'draft' | 'active';
+}
+
+/** A hire has no id and no department yet: only `all` reaches it by scope. */
+export const NEW_HIRE = { id: null, departmentId: null } as const;
+
+/**
+ * Where a hire's knowledge starts: every active knowledge base - as the
+ * builder's own seed attaches them (`seedDraftFromGoal`), since an employee
+ * with none attached cannot be completed (`draftReadiness`: "knowledge").
+ */
+export function knowledgeDefault(sources: readonly HireSource[] | null): readonly string[] {
+  return (sources ?? [])
+    .filter((s) => s.isActive)
+    .map((s) => s.id)
+    .sort();
+}
+
+/**
+ * The knowledge bases the hire is connected to (`knowledgeBaseIds`): the
+ * ones switched on that still exist, and every active one its scope already
+ * reaches - those have no switch (`knowledge-plan.ts`), and stay attached,
+ * as the page's own rule keeps them.
+ */
+export function hireKnowledgeIds(plan: HirePlan, sources: readonly HireSource[]): string[] {
+  const known = new Set(sources.map((s) => s.id));
+  const fixed = sources.filter((s) => s.isActive && reachedByScope(s, NEW_HIRE)).map((s) => s.id);
+  return knowledgePatch([...plan.knowledge.filter((id) => known.has(id)), ...fixed])
+    .knowledgeBaseIds;
+}
+
+/** The skills it will carry, in the order chosen, each still offered. */
+export function hireSkillIds(plan: HirePlan, skills: readonly HireSkill[]): string[] {
+  const known = new Set(skills.map((s) => s.id));
+  return plan.skills.filter((id) => known.has(id));
+}
+
+/** Do it, Ask me, Never - each stricter than the one before. */
+const STRICTNESS: Record<AdminChoice, number> = { do_it: 0, ask_me: 1, never: 2 };
+
+/**
+ * What one employee may be set to: within the action's ceiling, and never
+ * looser than the business has it today - the route's rule
+ * (`PUT /:id/tool-levels/:toolName`: 422 LOOSER_THAN_WORKSPACE).
+ */
+export function allowedChoices(tool: HireTool): readonly AdminChoice[] {
+  return tool.choices.filter((c) => STRICTNESS[c] >= STRICTNESS[tool.current]);
+}
+
+/** The route's word for each choice (`ToolLevel`). */
+const LEVEL: Record<AdminChoice, 'execute' | 'ask' | 'never'> = {
+  do_it: 'execute',
+  ask_me: 'ask',
+  never: 'never',
+};
+
+/**
+ * One write per action set differently from the business: the route stores
+ * "the same as the business" as no level of its own, so the rest need none.
+ */
+export function hireLevels(
+  plan: HirePlan,
+  tools: readonly HireTool[],
+): { readonly toolName: string; readonly level: 'execute' | 'ask' | 'never' }[] {
+  return tools.flatMap((tool) => {
+    const chosen = plan.choices[tool.toolName];
+    return chosen && chosen !== tool.current
+      ? [{ toolName: tool.toolName, level: LEVEL[chosen] }]
+      : [];
+  });
+}
+
+/**
+ * Actions a hire here cannot be given, whatever Limits says: the builder's
+ * seed grants a new employee only lower-risk actions of a connected system
+ * (`seedDraftFromGoal`: not riskLevel high/critical), and no route here
+ * grants one by name - `/:id/options` and `/:id/tool` speak `tenantToolId`.
+ * Approximated by the ceiling (no "Do it" offered): an action set to
+ * anything but Never, on a system it may use.
+ */
+export function ungranted(plan: HirePlan, tools: readonly HireTool[]): readonly HireTool[] {
+  return tools.filter(
+    (tool) =>
+      tool.provider !== null &&
+      plan.access.includes(tool.provider) &&
+      !tool.choices.includes('do_it') &&
+      plan.choices[tool.toolName] !== 'never',
+  );
+}
+
+/** Why the summary cannot hire yet, in its order; empty when it can. */
+export type HireBlock = 'rules' | 'salesPipeline' | 'knowledgeUnread' | 'noKnowledge';
+
+export function hireBlocks(plan: HirePlan, sources: readonly HireSource[] | null): HireBlock[] {
+  const blocks: HireBlock[] = [];
+  if (rulesProblem(plan.rules) !== null) blocks.push('rules');
+  // A pipeline role needs a funnel to be completed (`draftReadiness`); none is chosen here.
+  if (plan.job === 'sales') blocks.push('salesPipeline');
+  if (sources === null) blocks.push('knowledgeUnread');
+  else if (hireKnowledgeIds(plan, sources).length === 0) blocks.push('noKnowledge');
+  return blocks;
+}
+
+/** Each write of a hire, in the order it runs. */
+export const HIRE_WRITES = ['draft', 'settings', 'name', 'skills', 'levels', 'hired'] as const;
+export type HireWrite = (typeof HIRE_WRITES)[number];
+
+/** What `hireEmployee` sends: the plan, made into the routes' bodies. */
+export interface HireRequest {
+  readonly goal: string;
+  readonly role: HireJob;
+  readonly name: string;
+  readonly escalationRules: readonly Record<string, unknown>[];
+  readonly integrationAccess: readonly string[];
+  readonly knowledgeBaseIds: readonly string[];
+  readonly skillIds: readonly string[];
+  readonly levels: readonly {
+    readonly toolName: string;
+    readonly level: 'execute' | 'ask' | 'never';
+  }[];
+  readonly locale: string;
+}
+
+export type HireResult =
+  | { readonly ok: true; readonly id: string }
+  | {
+      readonly ok: false;
+      /** The draft that exists, to continue; `null`: none (nothing created, or it is gone). */
+      readonly id: string | null;
+      readonly saved: readonly HireWrite[];
+      readonly failed: HireWrite;
+      readonly reason:
+        | 'forbidden'
+        | 'gone'
+        | 'invalid_access'
+        | 'invalid_rules'
+        | 'changed'
+        | 'not_ready'
+        | 'failed';
+      /** How many of the action limits were written before it stopped. */
+      readonly levels: { readonly saved: number; readonly total: number };
+    };
+
+/** The writes this request makes, in order - skills and levels only when there are any. */
+export function writesOf(request: HireRequest): readonly HireWrite[] {
+  return HIRE_WRITES.filter(
+    (w) =>
+      (w !== 'skills' || request.skillIds.length > 0) &&
+      (w !== 'levels' || request.levels.length > 0),
+  );
+}
+
+export function hireRequest(
+  plan: HirePlan,
+  {
+    goal,
+    tools,
+    sources,
+    skills,
+    locale,
+  }: {
+    readonly goal: string;
+    readonly tools: readonly HireTool[];
+    readonly sources: readonly HireSource[];
+    readonly skills: readonly HireSkill[] | null;
+    readonly locale: string;
+  },
+): HireRequest {
+  return {
+    goal,
+    role: plan.job!,
+    name: plan.name.trim(),
+    escalationRules: rulesBody(plan.rules),
+    integrationAccess: [...plan.access].sort(),
+    knowledgeBaseIds: hireKnowledgeIds(plan, sources),
+    // Unread, they are sent as chosen: the route refuses one that is gone (422).
+    skillIds: skills ? hireSkillIds(plan, skills) : [...plan.skills],
+    levels: hireLevels(plan, tools),
+    locale,
+  };
 }

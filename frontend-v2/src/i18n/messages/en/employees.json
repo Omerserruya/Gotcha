@@ -130,7 +130,8 @@
     "step": {
       "1": "Responsibility",
       "2": "Limits",
-      "3": "Try it"
+      "3": "Knowledge and skills",
+      "4": "Summary"
     },
     "job": {
       "customer_support": {
@@ -159,7 +160,9 @@
       "sub": "Pick the closest job. You can sharpen it later.",
       "goal": "The job, in your own words",
       "callIt": "Call it",
-      "namePlaceholder": "Ronnie"
+      "namePlaceholder": "Ronnie",
+      "nameNeeded": "It needs a name to be hired.",
+      "salesNote": "A sales employee needs a sales pipeline, and choosing one isn't part of hiring here yet, so it can't be hired from here."
     },
     "channel": {
       "WHATSAPP": "WhatsApp",
@@ -193,22 +196,21 @@
       "later": "A system you connect later is off for every employee until you turn it on for them.",
       "failing": "{name} is connected but failing right now, so nothing here can use it until it's fixed in Studio · Integrations.",
       "offForIt": "Off: this employee won't use {name} at all, whatever is set below.",
-      "suggest": "Quick add:"
+      "suggest": "Quick add:",
+      "looser": "Your business has this set to “{current}” for everyone. An employee can only be stricter; change it for everyone in Studio · Integrations."
     },
     "three": {
-      "title": "See it answer eight real ones",
-      "sub": "A test before anything goes live.",
-      "stat": {
-        "reviewed": "Reviewed",
-        "better": "You preferred its reply",
-        "same": "Just as good",
-        "worse": "Worse"
-      },
-      "case": "Case {n} / 8",
-      "notRun": "The test runs once you're allowed to create the employee.",
-      "run": "Run the test",
-      "hire": "Hire it",
-      "watch": "Hire in watch-only mode"
+      "title": "What should it know, and what can it do?",
+      "sub": "The knowledge it answers from, and the skills it carries. You can change both later on its page.",
+      "knowledgeLead": "Knowledge every employee reads comes with it. Connect the rest here.",
+      "knowledgeUnread": "The workspace's knowledge couldn't be read just now, so it can't be chosen. Close and reopen hiring to try again.",
+      "skills": "Skills",
+      "skillsLead": "What it does in a given situation. Each one you give it starts in Watch.",
+      "skillsUnread": "The skills couldn't be read just now.",
+      "skillsNone": "There are no skills in this workspace yet.",
+      "skillsWrite": "Write a skill",
+      "carry": "Give {name} to this employee",
+      "skillDraft": "Draft: runs nowhere until it's made active"
     },
     "side": {
       "dayOne": "What it will do on day one",
@@ -216,21 +218,19 @@
       "knowsNone": "No knowledge source could be read.",
       "cost": "What these limits cost you",
       "costNone": "Not enough history to estimate yet.",
-      "soFar": "So far",
       "next": {
         "1": "Next: how much it may decide alone, and when it should hand over.",
-        "2": "Next: you see it answer before anything is created.",
-        "3": "Hiring from here comes next - nothing is created until it does."
+        "2": "Next: what it knows, and the skills it carries.",
+        "3": "Next: the whole employee, to go over before hiring.",
+        "4": "Nothing is created until you confirm."
       }
     },
     "continue": "Continue",
     "cancel": "Cancel",
     "back": "Back",
-    "notYet": "Hiring from here comes next - nothing is created until it does.",
     "note": {
-      "1": "Nothing goes live until you've tried it in step 3",
-      "2": "Nothing is live until you have seen step 3",
-      "3": "Nothing is created yet"
+      "before": "Nothing is created until you hire, at the summary",
+      "summary": "Hiring creates it, once you confirm"
     },
     "draft": {
       "closeAsk": "Close for now? What you've filled in is kept, and next time you continue from here.",
@@ -238,6 +238,68 @@
       "closeNo": "Keep going",
       "restored": "Continuing the hire you started.",
       "startOver": "Start over"
+    },
+    "four": {
+      "title": "Go over the whole employee",
+      "sub": "This is who you're hiring. Edit takes you back to that step.",
+      "part": {
+        "profile": "Profile",
+        "limits": "Limits",
+        "handover": "Always hand over to a person when…",
+        "knowledge": "What it reads",
+        "skills": "Skills"
+      },
+      "edit": "Edit",
+      "editFor": "Edit: {part}",
+      "job": "Job",
+      "goal": "Its job, in words",
+      "name": "Name",
+      "actions": "Its actions",
+      "counts": "Do it: {doIt} · Ask me: {askMe} · Never: {never}",
+      "systems": "Systems it may use",
+      "none": "None yet",
+      "off": "(off)",
+      "watch": "Each starts in Watch.",
+      "ungranted": "Hiring here gives it only the lower-risk actions of its systems. Riskier ones, like refunds, aren't given to it from here yet, whatever Limits says.",
+      "blocked": "Before hiring:",
+      "block": {
+        "rules": "A handoff condition has no words. Write them, or remove it, in Limits.",
+        "salesPipeline": "A sales employee needs a sales pipeline, and choosing one isn't part of hiring here yet. To hire from here, pick another job in Profile.",
+        "knowledgeUnread": "The knowledge couldn't be read, and an employee needs at least one knowledge source to be hired. Close and reopen hiring to try again.",
+        "noKnowledge": "An employee needs at least one knowledge source to be hired. Connect one in Knowledge and skills, or add knowledge first."
+      },
+      "hire": "Hire",
+      "hiring": "Hiring…"
+    },
+    "confirm": {
+      "ask": "Have you gone over the whole summary of the employee?",
+      "yes": "Yes, hire",
+      "no": "No, back to the summary"
+    },
+    "failed": {
+      "nothing": "Nothing was created.",
+      "notHired": "Not hired yet.",
+      "saved": "Saved:",
+      "notSaved": "Not saved:",
+      "kept": "It's kept as a draft in your list, and a draft doesn't answer customers. Hire again to continue this same draft.",
+      "levelsPart": "its limits on actions ({saved} of {total})",
+      "write": {
+        "draft": "the draft",
+        "settings": "its job, handoff conditions, systems and knowledge",
+        "name": "its name",
+        "skills": "its skills",
+        "levels": "its limits on actions",
+        "hired": "the hire itself"
+      },
+      "reason": {
+        "forbidden": "You don't have permission to hire AI employees.",
+        "gone": "The draft is no longer there. Hiring again starts a new one.",
+        "invalid_access": "A system in Limits is no longer set up in this workspace. Check Limits, then hire again.",
+        "invalid_rules": "A handoff condition was refused. Check that each has words, at most 300 characters.",
+        "changed": "An action or a skill changed meanwhile. Close and reopen hiring to read them again.",
+        "not_ready": "GOTCHA says it isn't ready to work yet: it needs a name, a job and at least one knowledge source.",
+        "failed": "Something went wrong on our side. Try again in a moment."
+      }
     }
   },
   "hired": {

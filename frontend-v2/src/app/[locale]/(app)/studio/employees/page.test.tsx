@@ -40,17 +40,19 @@ const employeeTools = vi.hoisted(() => ({ value: null as unknown }));
 vi.mock('@/features/employees/page/load-employee-tools', () => ({
   loadEmployeeTools: async () => employeeTools.value,
 }));
-const { loadChannels, loadKnowledge } = vi.hoisted(() => ({
+const { loadChannels, loadEmployeeKnowledge, loadHireSkills } = vi.hoisted(() => ({
   loadChannels: vi.fn(async () => ({
     channels: [
       { channel: 'WHATSAPP', connectionStatus: 'CONNECTED' },
       { channel: 'EMAIL', connectionStatus: 'ERROR' },
     ],
   })),
-  loadKnowledge: vi.fn(async () => ({ sources: [{ name: 'Returns policy' }] })),
+  loadEmployeeKnowledge: vi.fn(async () => [{ id: 'k1', name: 'Returns policy' }]),
+  loadHireSkills: vi.fn(async () => [{ id: 's1', name: 'Refunds' }]),
 }));
 vi.mock('@/features/channels/load-channels', () => ({ loadChannels }));
-vi.mock('@/features/knowledge/load-knowledge', () => ({ loadKnowledge }));
+vi.mock('@/features/employees/page/load-employee-knowledge', () => ({ loadEmployeeKnowledge }));
+vi.mock('@/features/employees/hire/load-hire-skills', () => ({ loadHireSkills }));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
 const employee = (id: string, status = 'ACTIVE') =>
@@ -131,19 +133,31 @@ describe('★★ 07 is 02’s screen - header, then the list beside the selected
 describe('★ 07b - Hire opens the sheet; its reads only then', () => {
   it('without ?hire, no sheet and no extra reads', async () => {
     loadChannels.mockClear();
-    loadKnowledge.mockClear();
+    loadEmployeeKnowledge.mockClear();
+    loadHireSkills.mockClear();
     const tree = await page([employee('a')]);
     expect(find(tree, HireSheet)).toBeNull();
     expect(loadChannels).not.toHaveBeenCalled();
-    expect(loadKnowledge).not.toHaveBeenCalled();
+    expect(loadEmployeeKnowledge).not.toHaveBeenCalled();
+    expect(loadHireSkills).not.toHaveBeenCalled();
   });
 
   it("?hire=1&step=2: the sheet at step 2, and no channels - where it works is not the hire flow's", async () => {
     const tree = await page([employee('a')], { hire: '1', step: '2' });
-    const props = find<{ initialStep: number; knowledge: string[] }>(tree, HireSheet);
+    const props = find<{ initialStep: number; knowledge: unknown[]; skills: unknown[] }>(
+      tree,
+      HireSheet,
+    );
     expect(props?.initialStep).toBe(2);
     expect(props).not.toHaveProperty('channels');
-    expect(props?.knowledge).toEqual(['Returns policy']);
+    // H4: the knowledge bases with their scope, and the skills it may carry.
+    expect(props?.knowledge).toEqual([{ id: 'k1', name: 'Returns policy' }]);
+    expect(props?.skills).toEqual([{ id: 's1', name: 'Refunds' }]);
+  });
+
+  it('★ H4: ?step=4 is the summary', async () => {
+    const tree = await page([employee('a')], { hire: '1', step: '4' });
+    expect(find<{ initialStep: number }>(tree, HireSheet)?.initialStep).toBe(4);
   });
 });
 

@@ -24,13 +24,14 @@ export const employeeKnowledgeListSchema = z.array(employeeKnowledgeSourceSchema
 
 export type KnowledgeReach = 'off' | 'everyone' | 'own' | 'department' | 'connected' | 'not';
 
-type Who = { readonly id: string; readonly departmentId: string | null };
+/** `id: null`: a hire, which has no id yet - only `all` reaches it by scope. */
+type Who = { readonly id: string | null; readonly departmentId: string | null };
 
 /** The scope reaches this employee without an attachment. */
 export function reachedByScope(source: EmployeeKnowledgeSource, employee: Who): boolean {
   const scope = source.scope || 'all';
   if (scope === 'all') return true;
-  if (scope === 'agent') return source.scopeAgentId === employee.id;
+  if (scope === 'agent') return employee.id !== null && source.scopeAgentId === employee.id;
   if (scope === 'department') {
     return employee.departmentId !== null && source.scopeDepartmentId === employee.departmentId;
   }

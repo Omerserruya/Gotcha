@@ -1340,6 +1340,21 @@ export const employeeEndpoints = {
 } as const;
 
 /**
+ * The AI employee builder (`services/ai/src/routes/ai-agent-builder.ts`),
+ * mounted before the employees router. The hire flow's writes (H5):
+ *
+ *   start        POST `{ goal, forceNew, locale }` - a DRAFT; its id is the session
+ *   refinements  POST `{ name, … }` - only the fields sent
+ *   complete     POST `{ locale }` - DRAFT -> ACTIVE (422 draft_not_ready),
+ *                the readiness report queued in the background
+ */
+export const builderEndpoints = {
+  start: () => endpoint('/api/ai-agents/builder/start'),
+  refinements: (id: string) => endpoint('/api/ai-agents/builder/{id}/refinements', { id }),
+  complete: (id: string) => endpoint('/api/ai-agents/builder/{id}/complete', { id }),
+} as const;
+
+/**
  * What GOTCHA knows - Studio, screen 08.
  *
  * `sources` (at `/api/knowledge-bases`) returns each knowledge base with its documents, including

@@ -22,7 +22,10 @@ const TOOLS: HireTool[] = [
     current: 'ask_me',
   },
 ];
-const FRESH = emptyPlan(TOOLS, ['shop'], [{ label: 'they ask for a person', enabled: true }]);
+const FRESH = emptyPlan(TOOLS, ['shop'], {
+  rules: [{ label: 'they ask for a person', enabled: true }],
+  knowledge: ['k1'],
+});
 const read = (value: unknown) =>
   readDraft(typeof value === 'string' ? value : JSON.stringify(value), TOOLS, FRESH);
 
@@ -40,8 +43,35 @@ describe('★★ a stored hire is made safe before it is used', () => {
     expect(draft!.step).toBe(2);
   });
 
-  it('★ a later step without a job starts at step 1', () => {
+  it('★ a later step without a job, or without a name, starts at step 1', () => {
     expect(read({ step: 3, plan: { job: null, name: 'Noa' } })!.step).toBe(1);
+    expect(read({ step: 4, plan: { job: 'booking', name: ' ' } })!.step).toBe(1);
+    expect(read({ step: 4, plan: { job: 'booking', name: 'Noa' } })!.step).toBe(4);
+  });
+
+  it('★ H5: a choice looser than the business has it falls back - the employee can only be stricter', () => {
+    const tools: HireTool[] = [{ ...TOOLS[0]!, current: 'ask_me' }];
+    const fresh = emptyPlan(tools, []);
+    const draft = readDraft(
+      JSON.stringify({ step: 2, plan: { job: 'sales', name: 'N', choices: { 'a.get': 'do_it' } } }),
+      tools,
+      fresh,
+    );
+    expect(draft!.plan.choices).toEqual({ 'a.get': 'ask_me' });
+  });
+
+  it('★ H4/H5: knowledge, skills and a stopped hire’s draft id are read back', () => {
+    const draft = read({
+      step: 4,
+      plan: { job: 'booking', name: 'N', knowledge: ['k2', 3], skills: ['s1', 's1', 's2'] },
+      agentId: 'd1',
+    });
+    expect(draft!.plan.knowledge).toEqual(['k2']);
+    expect(draft!.plan.skills).toEqual(['s1', 's2']);
+    expect(draft!.agentId).toBe('d1');
+    expect(read({ step: 1, plan: { name: 'N' }, agentId: 7 })!.agentId).toBeUndefined();
+    // Not stored: where a hire starts.
+    expect(read({ step: 1, plan: { name: 'N' } })!.plan.knowledge).toEqual(['k1']);
   });
 
   it('an unknown job is none', () => {

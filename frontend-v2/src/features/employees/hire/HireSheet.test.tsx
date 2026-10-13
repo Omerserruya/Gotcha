@@ -7,6 +7,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import employees from '@/i18n/messages/en/employees.json';
 
 const push = vi.hoisted(() => vi.fn());
+/* ⚠ Hiring is real: the server action is replaced, and nothing reaches a server. */
+const hireEmployee = vi.hoisted(() => vi.fn());
+vi.mock('./hire-actions', () => ({ hireEmployee }));
 vi.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ push }),
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
@@ -16,8 +19,21 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-import type { HireTool } from './hire-plan';
+import { employeeKnowledgeSourceSchema } from '../page/knowledge-plan';
+import type { HireSkill, HireTool } from './hire-plan';
 import { HireSheet } from './HireSheet';
+
+const source = (id: string, over: Record<string, unknown> = {}) =>
+  employeeKnowledgeSourceSchema.parse({ id, name: `KB ${id}`, isActive: true, ...over });
+const SOURCES = [
+  source('returns', { name: 'Returns policy', scope: 'all' }),
+  source('faq', { name: 'FAQ', scope: 'agent', scopeAgentId: 'other' }),
+  source('old', { name: 'Old prices', scope: 'agent', isActive: false }),
+];
+const SKILLS: readonly HireSkill[] = [
+  { id: 's1', name: 'Refund a late order', situation: 'My order is late', status: 'active' },
+  { id: 's2', name: 'Book a visit', situation: null, status: 'draft' },
+];
 
 const TOOLS: readonly HireTool[] = [
   {
@@ -41,18 +57,34 @@ const TOOLS: readonly HireTool[] = [
 const sheet = (props: Partial<Parameters<typeof HireSheet>[0]> = {}) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ employees }}>
-      <HireSheet tools={TOOLS} knowledge={['Returns policy']} {...props} />
+      <HireSheet tools={TOOLS} knowledge={SOURCES} skills={SKILLS} {...props} />
     </NextIntlClientProvider>,
   );
 
 describe('★ 07b - the job, where it works, its name; nothing written', () => {
-  it('Continue waits for a job; "Something else" waits for its words', async () => {
+  it('Continue waits for a job; "Something else" waits for its words; and a name (H5)', async () => {
     sheet();
     expect(screen.getByTestId('hire-continue')).toBeDisabled();
     await userEvent.click(screen.getByTestId('hire-job-custom'));
     expect(screen.getByTestId('hire-continue')).toBeDisabled();
     await userEvent.type(screen.getByTestId('hire-goal'), 'Wholesale enquiries');
+    expect(screen.getByTestId('hire-continue')).toBeDisabled();
+    expect(screen.getByTestId('hire-name-needed')).toHaveTextContent(
+      'It needs a name to be hired.',
+    );
+    await userEvent.type(screen.getByTestId('hire-name'), 'Noa');
     expect(screen.getByTestId('hire-continue')).toBeEnabled();
+    expect(screen.queryByTestId('hire-name-needed')).toBeNull();
+  });
+
+  it('★ Sales says where it is chosen that it cannot be hired from here yet', async () => {
+    sheet();
+    await userEvent.click(screen.getByTestId('hire-job-sales'));
+    expect(screen.getByTestId('hire-sales-note')).toHaveTextContent(
+      'A sales employee needs a sales pipeline',
+    );
+    await userEvent.click(screen.getByTestId('hire-job-booking'));
+    expect(screen.queryByTestId('hire-sales-note')).toBeNull();
   });
 
   it('★ the name’s placeholder is a person’s name, never the job’s title (Omer, 2026-10-13, H1)', async () => {
@@ -93,22 +125,8 @@ describe('★ 07c - the business’s own actions, with 10’s ceiling', () => {
   });
 });
 
-describe('★ 07d - the report’s shape, and nothing created', () => {
-  it('eight cases of "-", and the test, Hire and watch-only are drawn not live', () => {
-    sheet({ initialStep: 3 });
-    expect(screen.getByTestId('hire-cases').querySelectorAll('li')).toHaveLength(8);
-    for (const id of ['hire-run-test', 'hire-it', 'hire-watch']) {
-      const el = screen.getByTestId(id);
-      expect(el).toHaveAttribute('aria-disabled', 'true');
-      expect(el.closest('a,button')).toBeNull();
-    }
-    expect(screen.getByTestId('hire-run-test')).toHaveAttribute(
-      'title',
-      'The test runs once you’re allowed to create the employee.'.replace('’', "'"),
-    );
-  });
-
-  it('Back and Continue move between steps', async () => {
+describe('Back and Continue', () => {
+  it('move between steps', async () => {
     sheet({ initialStep: 3 });
     await userEvent.click(screen.getByTestId('hire-back'));
     expect(screen.getByTestId('hire-sheet')).toHaveAttribute('data-step', '2');
@@ -120,6 +138,7 @@ describe('★ 07b-07d corrections (measurement of aca09ea)', () => {
     sheet();
     expect(screen.getByTestId('hire-line')).toHaveTextContent('You can change any of this later');
     await userEvent.click(screen.getByTestId('hire-job-sales'));
+    await userEvent.type(screen.getByTestId('hire-name'), 'Noa');
     await userEvent.click(screen.getByTestId('hire-continue'));
     expect(screen.getByTestId('hire-line')).toHaveTextContent(/^Sales$/);
   });
@@ -363,6 +382,7 @@ describe('★★ H3 - handoff to a person: a list to add, edit and remove', () =
         step: 2,
         plan: {
           job: 'sales',
+          name: 'Noa',
           rules: Array.from({ length: 49 }, (_, i) => ({ label: `r${i}`, enabled: true })),
         },
       }),
@@ -388,5 +408,265 @@ describe('★★ H3 - handoff to a person: a list to add, edit and remove', () =
         { label: 'they sound annoyed', enabled: true },
       ]),
     );
+  });
+});
+
+/** A hire at the summary: job, name, the rest where a hire starts unless given. */
+const KEY = 'gotcha:hire-draft:v1:u1';
+async function atSummary(
+  plan: Record<string, unknown> = {},
+  props: Partial<Parameters<typeof HireSheet>[0]> = {},
+  extra: Record<string, unknown> = {},
+) {
+  window.localStorage.setItem(
+    KEY,
+    JSON.stringify({ step: 4, plan: { job: 'booking', name: 'Ronnie', ...plan }, ...extra }),
+  );
+  const view = sheet({ viewerId: 'u1', ...props });
+  await waitFor(() => expect(screen.getByTestId('hire-sum-name')).toHaveTextContent('Ronnie'));
+  return view;
+}
+
+describe('★★ H4 - knowledge and skills, chosen before the summary', () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it('knowledge by the page’s rule: what everyone reads has no switch; the rest start connected if active', async () => {
+    sheet({ initialStep: 3 });
+    expect(screen.getByTestId('hire-sheet')).toHaveAttribute('data-step', '3');
+    expect(screen.getByTestId('hire-knows-returns')).toHaveTextContent('Every employee reads it');
+    expect(screen.queryByTestId('hire-knows-returns-on')).toBeNull();
+    expect(screen.getByTestId('hire-knows-faq-on')).toBeChecked();
+    expect(screen.getByTestId('hire-knows-faq')).toHaveTextContent('Connected to this employee');
+    expect(screen.getByTestId('hire-knows-old')).toHaveTextContent('Switched off in Knowledge');
+    expect(screen.getByTestId('hire-knows-old-on')).not.toBeChecked();
+    await userEvent.click(screen.getByTestId('hire-knows-faq-on'));
+    expect(screen.getByTestId('hire-knows-faq')).toHaveTextContent('Not connected');
+  });
+
+  it('skills: given here, a draft skill says so', async () => {
+    sheet({ initialStep: 3 });
+    expect(screen.getByTestId('hire-skill-s2')).toHaveTextContent('Draft: runs nowhere');
+    const on = screen.getByTestId('hire-skill-s1-on');
+    expect(on).not.toBeChecked();
+    expect(on).toHaveAccessibleName('Give Refund a late order to this employee');
+    await userEvent.click(on);
+    expect(on).toBeChecked();
+  });
+
+  it('unread: each says so, never "none"', () => {
+    sheet({ initialStep: 3, knowledge: null, skills: null });
+    expect(screen.getByTestId('hire-knowledge-unread')).toHaveTextContent("couldn't be read");
+    expect(screen.getByTestId('hire-skills-unread')).toHaveTextContent("couldn't be read");
+  });
+
+  it('none in the workspace: said, with where to add them', () => {
+    sheet({ initialStep: 3, knowledge: [], skills: [] });
+    expect(screen.getByTestId('hire-knowledge-none')).toHaveTextContent('Manage knowledge');
+    expect(screen.getByTestId('hire-skills-none')).toHaveTextContent('Write a skill');
+  });
+});
+
+describe('★★ H4 - the summary: the whole employee, each part with an Edit back to its step', () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it('every part, as chosen', async () => {
+    await atSummary(
+      {
+        knowledge: ['faq'],
+        skills: ['s1'],
+        rules: [
+          { label: 'a VIP writes', enabled: true },
+          { label: 'they sound annoyed', enabled: false },
+        ],
+        choices: { send_message: 'ask_me' },
+      },
+      { systems: [{ slug: 'shopify', name: 'Shopify', failing: false }] },
+    );
+    expect(screen.getByTestId('hire-sum-job')).toHaveTextContent('Bookings');
+    expect(screen.getByTestId('hire-sum-goal')).toHaveTextContent(
+      'Take booking requests and answer questions about availability.',
+    );
+    expect(screen.getByTestId('hire-sum-actions')).toHaveTextContent(
+      'Do it: 0 · Ask me: 2 · Never: 0',
+    );
+    expect(screen.getByTestId('hire-sum-systems')).toHaveTextContent('Shopify');
+    expect(screen.getByTestId('hire-sum-rules')).toHaveTextContent(
+      'a VIP writesthey sound annoyed (off)',
+    );
+    // What everyone reads comes with it, and what was switched on.
+    expect(screen.getByTestId('hire-sum-knows')).toHaveTextContent('FAQReturns policy');
+    expect(screen.getByTestId('hire-sum-skill-names')).toHaveTextContent('Refund a late order');
+    expect(screen.getByTestId('hire-sum-skill-names').nextSibling).toHaveTextContent(
+      'Each starts in Watch.',
+    );
+  });
+
+  it.each([
+    ['profile', '1'],
+    ['limits', '2'],
+    ['handover', '2'],
+    ['knowledge', '3'],
+    ['skills', '3'],
+  ])('★ Edit on %s goes back to step %s', async (part, to) => {
+    await atSummary();
+    await userEvent.click(screen.getByTestId(`hire-edit-${part}`));
+    expect(screen.getByTestId('hire-sheet')).toHaveAttribute('data-step', to);
+  });
+
+  it('★ what hiring here cannot give it is said, not dropped', async () => {
+    await atSummary();
+    expect(screen.getByTestId('hire-ungranted')).toHaveTextContent(
+      "Riskier ones, like refunds, aren't given to it from here yet",
+    );
+  });
+
+  it('…and not said when nothing needs it', async () => {
+    await atSummary({ choices: { 'shopify.process_refund': 'never' } });
+    expect(screen.queryByTestId('hire-ungranted')).toBeNull();
+  });
+
+  it('★ what holds the hire, in words, and Hire waits: sales, no knowledge', async () => {
+    await atSummary({ job: 'sales' }, { knowledge: [SOURCES[1]!] });
+    await userEvent.click(screen.getByTestId('hire-edit-knowledge'));
+    await userEvent.click(screen.getByTestId('hire-knows-faq-on'));
+    await userEvent.click(screen.getByTestId('hire-continue'));
+    expect(screen.getByTestId('hire-block-salesPipeline')).toHaveTextContent(
+      'A sales employee needs a sales pipeline',
+    );
+    expect(screen.getByTestId('hire-block-noKnowledge')).toHaveTextContent(
+      'An employee needs at least one knowledge source to be hired.',
+    );
+    expect(screen.getByTestId('hire-it')).toBeDisabled();
+  });
+
+  it('a step-2 choice looser than the business has it is not offered, and says why', () => {
+    const askMe: HireTool = { ...TOOLS[0]!, toolName: 'get_order', current: 'ask_me' };
+    sheet({ initialStep: 2, tools: [askMe] });
+    const doIt = screen.getByTestId('hire-choice-get_order-do_it');
+    expect(doIt).toBeDisabled();
+    expect(doIt).toHaveAttribute(
+      'title',
+      'Your business has this set to “Ask me” for everyone. An employee can only be stricter; change it for everyone in Studio · Integrations.',
+    );
+    expect(screen.getByTestId('hire-choice-get_order-never')).toBeEnabled();
+  });
+});
+
+describe('★★ H5 - "לגייס": asked first, then created', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    hireEmployee.mockReset();
+    push.mockClear();
+  });
+
+  const REQUEST = {
+    goal: 'Take booking requests and answer questions about availability.',
+    role: 'booking',
+    name: 'Ronnie',
+    escalationRules: [{ label: 'they ask for a person', enabled: true }],
+    integrationAccess: ['shopify'],
+    knowledgeBaseIds: ['faq', 'returns'],
+    skillIds: ['s1'],
+    levels: [{ toolName: 'send_message', level: 'never' }],
+    locale: 'en',
+  };
+  const PLAN = { skills: ['s1'], choices: { send_message: 'never' } };
+
+  it('★ Hire asks "have you gone over the whole summary?"; No sends nothing and returns to it', async () => {
+    await atSummary(PLAN);
+    await userEvent.click(screen.getByTestId('hire-it'));
+    expect(screen.getByTestId('hire-confirm')).toHaveTextContent(
+      'Have you gone over the whole summary of the employee?',
+    );
+    await userEvent.click(screen.getByTestId('hire-confirm-no'));
+    expect(hireEmployee).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('hire-confirm')).toBeNull();
+    expect(screen.getByTestId('hire-it')).toBeEnabled();
+    expect(screen.getByTestId('hire-sheet')).toHaveAttribute('data-step', '4');
+  });
+
+  it('★★ Yes hires: the plan, as the routes take it - once', async () => {
+    hireEmployee.mockResolvedValue({ ok: true, id: 'e1' });
+    await atSummary(PLAN);
+    await userEvent.click(screen.getByTestId('hire-it'));
+    await userEvent.click(screen.getByTestId('hire-confirm-yes'));
+    await waitFor(() => expect(hireEmployee).toHaveBeenCalledTimes(1));
+    expect(hireEmployee).toHaveBeenCalledWith(REQUEST, null);
+  });
+
+  it('★★ hired: the local hire is cleared and 07e opens for it', async () => {
+    hireEmployee.mockResolvedValue({ ok: true, id: 'e1' });
+    await atSummary(PLAN);
+    await userEvent.click(screen.getByTestId('hire-it'));
+    await userEvent.click(screen.getByTestId('hire-confirm-yes'));
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith({
+        pathname: '/studio/employees',
+        query: { employee: 'e1', hired: 'e1' },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 5));
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it('★★ stopped part-way: what was saved, what was not, the draft kept - and Hire again continues it', async () => {
+    hireEmployee.mockResolvedValueOnce({
+      ok: false,
+      id: 'd1',
+      saved: ['draft', 'settings', 'name'],
+      failed: 'skills',
+      reason: 'failed',
+      levels: { saved: 0, total: 1 },
+    });
+    await atSummary(PLAN);
+    await userEvent.click(screen.getByTestId('hire-it'));
+    await userEvent.click(screen.getByTestId('hire-confirm-yes'));
+    const failed = await screen.findByTestId('hire-failed');
+    expect(failed).toHaveTextContent(
+      'Not hired yet. Something went wrong on our side. Try again in a moment.',
+    );
+    expect(screen.getByTestId('hire-failed-saved')).toHaveTextContent(
+      'the draftits job, handoff conditions, systems and knowledgeits name',
+    );
+    expect(screen.getByTestId('hire-failed-not-saved')).toHaveTextContent(
+      'its skillsits limits on actionsthe hire itself',
+    );
+    expect(screen.getByTestId('hire-failed-kept')).toHaveTextContent(
+      "It's kept as a draft in your list, and a draft doesn't answer customers.",
+    );
+    expect(push).not.toHaveBeenCalled();
+    // The draft's id is kept with the hire, so a reopened sheet continues it too.
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(KEY)!).agentId).toBe('d1'));
+    hireEmployee.mockResolvedValueOnce({ ok: true, id: 'd1' });
+    await userEvent.click(screen.getByTestId('hire-it'));
+    await userEvent.click(screen.getByTestId('hire-confirm-yes'));
+    await waitFor(() => expect(hireEmployee).toHaveBeenCalledTimes(2));
+    expect(hireEmployee.mock.calls[1]).toEqual([REQUEST, 'd1']);
+  });
+
+  it('nothing created: said so, and no draft to continue', async () => {
+    hireEmployee.mockResolvedValueOnce({
+      ok: false,
+      id: null,
+      saved: [],
+      failed: 'draft',
+      reason: 'forbidden',
+      levels: { saved: 0, total: 1 },
+    });
+    await atSummary(PLAN);
+    await userEvent.click(screen.getByTestId('hire-it'));
+    await userEvent.click(screen.getByTestId('hire-confirm-yes'));
+    expect(await screen.findByTestId('hire-failed')).toHaveTextContent(
+      "Nothing was created. You don't have permission to hire AI employees.",
+    );
+    expect(screen.queryByTestId('hire-failed-kept')).toBeNull();
+  });
+
+  it('a reopened hire that stopped part-way continues its draft', async () => {
+    hireEmployee.mockResolvedValue({ ok: true, id: 'd9' });
+    await atSummary(PLAN, {}, { agentId: 'd9' });
+    await userEvent.click(screen.getByTestId('hire-it'));
+    await userEvent.click(screen.getByTestId('hire-confirm-yes'));
+    await waitFor(() => expect(hireEmployee).toHaveBeenCalledWith(REQUEST, 'd9'));
   });
 });

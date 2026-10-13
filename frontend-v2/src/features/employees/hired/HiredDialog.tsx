@@ -21,7 +21,7 @@ const RESOLVE_AT: Record<string, '/studio/knowledge' | '/settings/systems'> = {
 /**
  * 07e, measured: "Hired" - a 720 dialog over Studio, 120 from the top.
  *
- * It follows a hire, which is not live, so it is reached at `?hired=<id>`
+ * It follows a hire (H5: the hire sheet opens it on success) at `?hired=<id>`
  * for an employee that exists, and says what is true of it:
  *
  *   the head            its status and when it was created - nothing

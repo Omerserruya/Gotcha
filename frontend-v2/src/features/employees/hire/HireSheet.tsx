@@ -1,42 +1,65 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { useTranslations } from 'next-intl';
-import { useEffect, useRef, useState } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
+import { useEffect, useRef, useState, useTransition } from 'react';
 
 import type { AdminChoice } from '@/api/contracts/capabilities';
 import { pressSheetClose, useSheetFocus } from '@/design-system/primitives/overlay/use-sheet-focus';
 import drawer from '@/design-system/styles/drawer.module.css';
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
+import { humaniseCode } from '@/api/contracts/capabilities';
 import { Link, useRouter } from '@/i18n/navigation';
 
 import {
+  allowedChoices,
   emptyPlan,
+  hireBlocks,
+  hireKnowledgeIds,
+  hireRequest,
+  hireSkillIds,
+  knowledgeDefault,
+  NEW_HIRE,
+  ungranted,
   withAccess,
+  writesOf,
   HANDOVER_SUGGESTIONS,
   HIRE_JOBS,
   stepOneDone,
   toolGroups,
   type HirePlan,
+  type HireResult,
+  type HireSkill,
+  type HireSource,
   type HireTool,
+  type HireWrite,
 } from './hire-plan';
-import { clearDraft, hasEntries, loadDraft, saveDraft } from './hire-draft';
+import { hireEmployee } from './hire-actions';
+import { clearDraft, hasEntries, loadDraft, saveDraft, type HireStep } from './hire-draft';
 import { HandoverRules } from '../page/HandoverRules';
+import { reachedByScope, reachOf } from '../page/knowledge-plan';
 import { MAX_RULES, rulesProblem } from '../page/profile-plan';
+import page from '../page/EmployeePage.module.css';
 import styles from './Hire.module.css';
 
-type Step = 1 | 2 | 3;
+type Step = HireStep;
+const STEPS = [1, 2, 3, 4] as const;
 
 /**
  * 07b-07d, measured: "Hire an AI employee" as a 1000 sheet over Studio -
- * Responsibility, Limits, Try it - the form on the left, what it means on
- * the right.
+ * the form on the left, what it means on the right. Four steps (Omer,
+ * 2026-10-13, H4): Responsibility, Limits, Knowledge and skills, Summary.
  *
- * ★ READ-ONLY, ON PURPOSE (the supervisor's ruling, pending Omer). Every
- * choice is local state (`HirePlan`); nothing is written. Continue and Back
- * move between steps. "Run the test", "Hire it" and "Hire in watch-only
- * mode" are drawn and not live. `hire-plan.ts` names the builder call each
- * choice becomes, so going live is plumbing, not redesign.
+ * ★★ HIRING IS REAL (H5). Every choice is local state (`HirePlan`) until
+ * the summary's "Hire" is confirmed - "עברת על כל הסיכום של העובד?" - and
+ * only that "yes" writes: `hire-actions.ts` creates a builder DRAFT, writes
+ * the plan onto it, and completes it last. "No" sends nothing. A write that
+ * fails stops it, and the sheet says what was saved and what was not; the
+ * draft is kept, and hiring again continues it. Success clears the local
+ * hire and opens 07e's "Hired".
+ *
+ * The summary is editable by its "Edit"s, each back to its step. What the
+ * plan holds that no route here can save is said there, in words.
  *
  * Step 2's rows are the business's own actions as 10 reads them, with 10's
  * three answers and its ceiling ("Do it" is not offered where orders or
@@ -47,6 +70,7 @@ type Step = 1 | 2 | 3;
 export function HireSheet({
   tools,
   knowledge,
+  skills = null,
   initialStep = 1,
   systems = null,
   viewerId = null,
@@ -54,19 +78,26 @@ export function HireSheet({
   /** Who is hiring (`User.id`, per workspace): their draft is kept under it (H6). `null`: none kept. */
   readonly viewerId?: string | null;
   readonly tools: readonly HireTool[];
-  /** Knowledge source names, or null when they could not be read. */
-  readonly knowledge: readonly string[] | null;
+  /** The workspace's knowledge bases, with their scope; `null` when unread. */
+  readonly knowledge: readonly HireSource[] | null;
+  /** The business skills it may carry; `null` when unread. */
+  readonly skills?: readonly HireSkill[] | null;
   readonly initialStep?: Step;
   /** The systems the workspace has set up (any state); `null` when unread. */
-  readonly systems?: readonly { readonly slug: string; readonly failing: boolean }[] | null;
+  readonly systems?:
+    readonly { readonly slug: string; readonly name?: string; readonly failing: boolean }[] | null;
 }) {
   const t = useTranslations('employees.hireFlow');
   const tp = useTranslations('employees.profile');
+  const tk = useTranslations('employees.knowsTab');
   const [step, setStep] = useState<Step>(initialStep);
   const setUp = systems?.map((system) => system.slug) ?? [];
   /* Where a new hire starts: the first chip's condition, in the reader's words. */
   const fresh = () =>
-    emptyPlan(tools, setUp, [{ label: t(`two.when.${HANDOVER_SUGGESTIONS[0]}`), enabled: true }]);
+    emptyPlan(tools, setUp, {
+      rules: [{ label: t(`two.when.${HANDOVER_SUGGESTIONS[0]}`), enabled: true }],
+      knowledge: knowledgeDefault(knowledge),
+    });
   const [plan, setPlan] = useState<HirePlan>(fresh);
   /*
     ★★ H6 (Omer, 2026-10-13): a hire that was closed continues where it
@@ -77,6 +108,13 @@ export function HireSheet({
   const [loaded, setLoaded] = useState(false);
   const [restored, setRestored] = useState(false);
   const [asking, setAsking] = useState(false);
+  /* H5: the draft a stopped hire left, the confirmation, and how it went. */
+  const [agentId, setAgentId] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [failed, setFailed] = useState<Extract<HireResult, { ok: false }> | null>(null);
+  const [hired, setHired] = useState(false);
+  const [hiring, startHiring] = useTransition();
+  const locale = useLocale();
   const router = useRouter();
   useEffect(() => {
     const draft = loadDraft(viewerId, tools, fresh());
@@ -84,6 +122,7 @@ export function HireSheet({
       if (draft) {
         setPlan(draft.plan);
         setStep(draft.step);
+        setAgentId(draft.agentId ?? null);
         setRestored(true);
       }
       setLoaded(true);
@@ -94,10 +133,11 @@ export function HireSheet({
   }, []);
   const entered = hasEntries(plan, fresh());
   useEffect(() => {
-    if (!loaded) return;
-    if (entered) saveDraft(viewerId, { step, plan });
+    // Hired: the local hire is cleared once, and never written back.
+    if (!loaded || hired) return;
+    if (entered || agentId) saveDraft(viewerId, { step, plan, ...(agentId ? { agentId } : {}) });
     else clearDraft(viewerId);
-  }, [loaded, entered, viewerId, step, plan]);
+  }, [loaded, hired, entered, agentId, viewerId, step, plan]);
 
   /* × , the scrim and Escape (a press on ×) ask first when anything was entered. */
   const closing = (event: { preventDefault: () => void }) => {
@@ -108,6 +148,8 @@ export function HireSheet({
   const startOver = () => {
     clearDraft(viewerId);
     setPlan(fresh());
+    setAgentId(null);
+    setFailed(null);
     setRestored(false);
     setAsking(false);
     go(1);
@@ -129,11 +171,45 @@ export function HireSheet({
 
   const go = (next: Step) => {
     setStep(next);
+    setConfirming(false);
     // The step is in the address too, so it can be measured and reloaded.
     window.history.replaceState(null, '', `?hire=1&step=${next}`);
   };
 
   const groups = toolGroups(tools);
+  const goal =
+    plan.job === null ? '' : plan.job === 'custom' ? plan.goal.trim() : t(`job.${plan.job}.dayOne`);
+  const blocks = hireBlocks(plan, knowledge);
+  const connected = knowledge ? hireKnowledgeIds(plan, knowledge) : [];
+  const carried = skills ? hireSkillIds(plan, skills) : plan.skills;
+  const systemName = (slug: string) =>
+    systems?.find((s) => s.slug === slug)?.name ??
+    tools.find((tool) => tool.provider === slug)?.providerLabel ??
+    humaniseCode(slug);
+  const toggleIn = (list: readonly string[], id: string, on: boolean) =>
+    on ? [...list.filter((x) => x !== id), id] : list.filter((x) => x !== id);
+
+  /* H5: only the confirmation's "yes" runs this. */
+  const hire = () =>
+    startHiring(async () => {
+      setFailed(null);
+      const result = await hireEmployee(
+        hireRequest(plan, { goal, tools, sources: knowledge ?? [], skills, locale }),
+        agentId,
+      );
+      setConfirming(false);
+      if (!result.ok) {
+        setAgentId(result.id);
+        setFailed(result);
+        return;
+      }
+      setHired(true);
+      clearDraft(viewerId);
+      router.push({
+        pathname: '/studio/employees',
+        query: { employee: result.id, hired: result.id },
+      });
+    });
 
   // Escape is a press on ×; focus stays in the sheet and goes back to "Hire".
   const sheetRef = useRef<HTMLElement>(null);
@@ -164,7 +240,7 @@ export function HireSheet({
             </p>
           </div>
           <ol className={styles.stepper} aria-label={t('steps')}>
-            {([1, 2, 3] as const).map((n) => (
+            {STEPS.map((n) => (
               <li
                 key={n}
                 className={styles.stepperStep}
@@ -275,6 +351,17 @@ export function HireSheet({
                     onChange={(e) => set({ name: e.target.value })}
                   />
                 </label>
+                {plan.job !== null && plan.name.trim() === '' ? (
+                  <p className={styles.sub} data-testid="hire-name-needed">
+                    {t('one.nameNeeded')}
+                  </p>
+                ) : null}
+                {/* Said where it is chosen, not first at the summary (H5). */}
+                {plan.job === 'sales' ? (
+                  <p className={styles.notice} data-testid="hire-sales-note">
+                    {t('one.salesNote')}
+                  </p>
+                ) : null}
               </>
             ) : step === 2 ? (
               <>
@@ -350,7 +437,19 @@ export function HireSheet({
                               }
                             >
                               {(['do_it', 'ask_me', 'never'] as const).map((choice) => {
-                                const offered = tool.choices.includes(choice);
+                                /*
+                                  H5: within the ceiling, and never looser than
+                                  the business has it - an employee's level is
+                                  the same or stricter (the route's 422).
+                                */
+                                const offered = allowedChoices(tool).includes(choice);
+                                const why = !tool.choices.includes(choice)
+                                  ? t('two.ceiling')
+                                  : offered
+                                    ? undefined
+                                    : t('two.looser', {
+                                        current: t(`two.choice.${tool.current}`),
+                                      });
                                 return (
                                   <button
                                     key={choice}
@@ -358,7 +457,7 @@ export function HireSheet({
                                     role="radio"
                                     aria-checked={plan.choices[tool.toolName] === choice}
                                     disabled={!offered}
-                                    title={offered ? undefined : t('two.ceiling')}
+                                    title={why}
                                     className={styles.segment}
                                     data-testid={`hire-choice-${tool.toolName}-${choice}`}
                                     onClick={() =>
@@ -417,59 +516,350 @@ export function HireSheet({
                   ) : null}
                 </section>
               </>
-            ) : (
+            ) : step === 3 ? (
               <>
+                {/*
+                  ★ H4 (Omer, 2026-10-13): what it reads and which skills it
+                  carries, chosen before the summary. Knowledge is the
+                  employee page's rule (`knowledge-plan.ts`) for one with no
+                  id yet: a source every employee reads has no switch.
+                */}
                 <div>
                   <h3 className={styles.question}>{t('three.title')}</h3>
                   <p className={styles.sub}>{t('three.sub')}</p>
                 </div>
-                <dl className={styles.strip} data-testid="hire-strip">
-                  {(['reviewed', 'better', 'same', 'worse'] as const).map((k) => (
-                    <div key={k} className={styles.stat}>
-                      <dt className={styles.statLabel}>{t(`three.stat.${k}`)}</dt>
-                      <dd className={styles.statFigure}>-</dd>
+                <section className={styles.group} data-testid="hire-knowledge">
+                  <div className={styles.groupHead}>
+                    <h4 className={styles.groupName}>{tk('title')}</h4>
+                  </div>
+                  <p className={styles.groupNote}>{t('three.knowledgeLead')}</p>
+                  {knowledge === null ? (
+                    <p className={styles.groupNote} data-testid="hire-knowledge-unread">
+                      {t('three.knowledgeUnread')}
+                    </p>
+                  ) : knowledge.length === 0 ? (
+                    <p className={styles.groupNone} data-testid="hire-knowledge-none">
+                      {tk('none')}{' '}
+                      <Link href="/studio/knowledge" className={page.link}>
+                        {tk('manage')}
+                      </Link>
+                    </p>
+                  ) : (
+                    <ul className={styles.rows}>
+                      {knowledge.map((source) => {
+                        const attached = new Set(plan.knowledge);
+                        const reach = reachOf(source, NEW_HIRE, attached);
+                        const name = source.name || humaniseCode(source.id);
+                        return (
+                          <li
+                            key={source.id}
+                            className={styles.row}
+                            data-testid={`hire-knows-${source.id}`}
+                            data-reach={reach}
+                          >
+                            <span className={styles.rowName}>
+                              <bdi dir="auto">{name}</bdi>
+                              <span className={styles.rowState}>{tk(`reach.${reach}`)}</span>
+                            </span>
+                            {reachedByScope(source, NEW_HIRE) ? null : (
+                              <input
+                                type="checkbox"
+                                role="switch"
+                                className={styles.switch}
+                                checked={attached.has(source.id)}
+                                aria-label={tk('connect', { source: name })}
+                                data-testid={`hire-knows-${source.id}-on`}
+                                onChange={(e) =>
+                                  set({
+                                    knowledge: toggleIn(
+                                      plan.knowledge,
+                                      source.id,
+                                      e.target.checked,
+                                    ),
+                                  })
+                                }
+                              />
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
+                <section className={styles.group} data-testid="hire-skills">
+                  <div className={styles.groupHead}>
+                    <h4 className={styles.groupName}>{t('three.skills')}</h4>
+                  </div>
+                  <p className={styles.groupNote}>{t('three.skillsLead')}</p>
+                  {skills === null ? (
+                    <p className={styles.groupNote} data-testid="hire-skills-unread">
+                      {t('three.skillsUnread')}
+                    </p>
+                  ) : skills.length === 0 ? (
+                    <p className={styles.groupNone} data-testid="hire-skills-none">
+                      {t('three.skillsNone')}{' '}
+                      <Link href="/studio/skills" className={page.link}>
+                        {t('three.skillsWrite')}
+                      </Link>
+                    </p>
+                  ) : (
+                    <ul className={styles.rows}>
+                      {skills.map((skill) => (
+                        <li
+                          key={skill.id}
+                          className={styles.row}
+                          data-testid={`hire-skill-${skill.id}`}
+                        >
+                          <span className={styles.rowName}>
+                            <bdi dir="auto">{skill.name}</bdi>
+                            {skill.status === 'draft' ? (
+                              <span className={styles.rowState}>{t('three.skillDraft')}</span>
+                            ) : skill.situation ? (
+                              <span className={styles.rowState}>
+                                <bdi dir="auto">{skill.situation}</bdi>
+                              </span>
+                            ) : null}
+                          </span>
+                          <input
+                            type="checkbox"
+                            role="switch"
+                            className={styles.switch}
+                            checked={plan.skills.includes(skill.id)}
+                            aria-label={t('three.carry', { name: skill.name })}
+                            data-testid={`hire-skill-${skill.id}-on`}
+                            onChange={(e) =>
+                              set({ skills: toggleIn(plan.skills, skill.id, e.target.checked) })
+                            }
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              </>
+            ) : (
+              <>
+                {/*
+                  ★ H4: the summary replaces the trial - the whole employee,
+                  each part with an Edit back to its step. ★ H5: its only
+                  action is the hire, asked before it runs.
+                */}
+                <div>
+                  <h3 className={styles.question}>{t('four.title')}</h3>
+                  <p className={styles.sub}>{t('four.sub')}</p>
+                </div>
+                {(
+                  [
+                    ['profile', 1],
+                    ['limits', 2],
+                    ['handover', 2],
+                    ['knowledge', 3],
+                    ['skills', 3],
+                  ] as const
+                ).map(([part, to]) => (
+                  <section key={part} className={styles.summary} data-testid={`hire-sum-${part}`}>
+                    <div className={styles.summaryHead}>
+                      <h4 className={styles.blockTitle}>{t(`four.part.${part}`)}</h4>
+                      <button
+                        type="button"
+                        className={styles.edit}
+                        aria-label={t('four.editFor', { part: t(`four.part.${part}`) })}
+                        data-testid={`hire-edit-${part}`}
+                        onClick={() => go(to)}
+                      >
+                        {t('four.edit')}
+                      </button>
                     </div>
-                  ))}
-                </dl>
-                <ol className={styles.cases} data-testid="hire-cases">
-                  {Array.from({ length: 8 }, (_, i) => (
-                    <li key={i} className={styles.case} title={t('three.notRun')}>
-                      <span className={styles.caseNo}>{t('three.case', { n: i + 1 })}</span>
-                      <span className={styles.none}>-</span>
-                    </li>
-                  ))}
-                </ol>
-                <span
-                  className={styles.secondary}
-                  aria-disabled="true"
-                  title={t('three.notRun')}
-                  data-testid="hire-run-test"
-                >
-                  {t('three.run')}
-                </span>
+                    {part === 'profile' ? (
+                      <dl className={styles.pairs}>
+                        <dt>{t('four.job')}</dt>
+                        <dd data-testid="hire-sum-job">
+                          {plan.job ? t(`job.${plan.job}.name`) : null}
+                        </dd>
+                        <dt>{t('four.goal')}</dt>
+                        <dd data-testid="hire-sum-goal">
+                          <bdi dir="auto">{goal}</bdi>
+                        </dd>
+                        <dt>{t('four.name')}</dt>
+                        <dd data-testid="hire-sum-name">
+                          <bdi dir="auto">{plan.name.trim()}</bdi>
+                        </dd>
+                      </dl>
+                    ) : part === 'limits' ? (
+                      <dl className={styles.pairs}>
+                        <dt>{t('four.actions')}</dt>
+                        <dd data-testid="hire-sum-actions">
+                          {tools.length === 0
+                            ? t('two.noTools')
+                            : t('four.counts', {
+                                doIt: tools.filter((x) => plan.choices[x.toolName] === 'do_it')
+                                  .length,
+                                askMe: tools.filter((x) => plan.choices[x.toolName] === 'ask_me')
+                                  .length,
+                                never: tools.filter((x) => plan.choices[x.toolName] === 'never')
+                                  .length,
+                              })}
+                        </dd>
+                        <dt>{t('four.systems')}</dt>
+                        <dd data-testid="hire-sum-systems">
+                          {plan.access.length === 0
+                            ? t('four.none')
+                            : plan.access.map((key, i) => (
+                                <span key={key}>
+                                  {i > 0 ? ', ' : null}
+                                  <bdi dir="auto">{systemName(key)}</bdi>
+                                </span>
+                              ))}
+                        </dd>
+                      </dl>
+                    ) : part === 'handover' ? (
+                      plan.rules.length === 0 ? (
+                        <p className={styles.summaryNone}>{tp('handover.none')}</p>
+                      ) : (
+                        <ul className={styles.summaryList} data-testid="hire-sum-rules">
+                          {plan.rules.map((rule, i) => (
+                            <li key={i}>
+                              <bdi dir="auto">{rule.label.trim()}</bdi>
+                              {rule.enabled ? null : (
+                                <span className={styles.rowState}> {t('four.off')}</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )
+                    ) : part === 'knowledge' ? (
+                      connected.length === 0 ? (
+                        <p className={styles.summaryNone}>{t('four.none')}</p>
+                      ) : (
+                        <ul className={styles.summaryList} data-testid="hire-sum-knows">
+                          {connected.map((id) => {
+                            const source = knowledge?.find((k) => k.id === id);
+                            return (
+                              <li key={id}>
+                                <bdi dir="auto">{source?.name || humaniseCode(id)}</bdi>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )
+                    ) : carried.length === 0 ? (
+                      <p className={styles.summaryNone}>{t('four.none')}</p>
+                    ) : (
+                      <>
+                        <ul className={styles.summaryList} data-testid="hire-sum-skill-names">
+                          {carried.map((id) => (
+                            <li key={id}>
+                              <bdi dir="auto">
+                                {skills?.find((x) => x.id === id)?.name ?? humaniseCode(id)}
+                              </bdi>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className={styles.summaryNone}>{t('four.watch')}</p>
+                      </>
+                    )}
+                  </section>
+                ))}
+                {/* What the plan holds that hiring here cannot save: said, never dropped. */}
+                {ungranted(plan, tools).length > 0 ? (
+                  <p className={styles.notice} data-testid="hire-ungranted">
+                    {t('four.ungranted')}
+                  </p>
+                ) : null}
+                {blocks.length > 0 ? (
+                  <div className={styles.notice} data-testid="hire-blocked">
+                    <p className={styles.noticeTitle}>{t('four.blocked')}</p>
+                    <ul className={styles.summaryList}>
+                      {blocks.map((block) => (
+                        <li key={block} data-testid={`hire-block-${block}`}>
+                          {t(`four.block.${block}`)}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {failed ? (
+                  <div className={styles.failed} role="alert" data-testid="hire-failed">
+                    <p className={styles.noticeTitle}>
+                      {failed.id === null && failed.reason !== 'gone'
+                        ? t('failed.nothing')
+                        : t('failed.notHired')}{' '}
+                      {t(`failed.reason.${failed.reason}`)}
+                    </p>
+                    {failed.id !== null ? (
+                      <>
+                        <p>{t('failed.saved')}</p>
+                        <ul className={styles.summaryList} data-testid="hire-failed-saved">
+                          {failed.saved.map((w) => (
+                            <li key={w}>{t(`failed.write.${w}`)}</li>
+                          ))}
+                          {failed.failed === 'levels' && failed.levels.saved > 0 ? (
+                            <li>{t('failed.levelsPart', failed.levels)}</li>
+                          ) : null}
+                        </ul>
+                      </>
+                    ) : null}
+                    {failed.id !== null ? (
+                      <>
+                        <p>{t('failed.notSaved')}</p>
+                        <ul className={styles.summaryList} data-testid="hire-failed-not-saved">
+                          {writesOf(
+                            hireRequest(plan, {
+                              goal,
+                              tools,
+                              sources: knowledge ?? [],
+                              skills,
+                              locale,
+                            }),
+                          )
+                            .filter((w: HireWrite) => !failed.saved.includes(w))
+                            .map((w) => (
+                              <li key={w}>{t(`failed.write.${w}`)}</li>
+                            ))}
+                        </ul>
+                        <p data-testid="hire-failed-kept">{t('failed.kept')}</p>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
               </>
             )}
 
             <footer className={styles.foot}>
-              {step === 3 ? (
-                <>
-                  <span
+              {step === 4 ? (
+                confirming ? (
+                  <div className={styles.confirm} role="alertdialog" data-testid="hire-confirm">
+                    <span className={styles.confirmAsk}>{t('confirm.ask')}</span>
+                    <button
+                      type="button"
+                      className={styles.primary}
+                      disabled={hiring}
+                      data-testid="hire-confirm-yes"
+                      onClick={hire}
+                    >
+                      {hiring ? t('four.hiring') : t('confirm.yes')}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.quiet}
+                      disabled={hiring}
+                      data-testid="hire-confirm-no"
+                      onClick={() => setConfirming(false)}
+                    >
+                      {t('confirm.no')}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
                     className={styles.primary}
-                    aria-disabled="true"
-                    title={t('notYet')}
+                    disabled={blocks.length > 0 || hiring}
                     data-testid="hire-it"
+                    onClick={() => setConfirming(true)}
                   >
-                    {t('three.hire')}
-                  </span>
-                  <span
-                    className={styles.secondary}
-                    aria-disabled="true"
-                    title={t('notYet')}
-                    data-testid="hire-watch"
-                  >
-                    {t('three.watch')}
-                  </span>
-                </>
+                    {t('four.hire')}
+                  </button>
+                )
               ) : (
                 <button
                   type="button"
@@ -484,7 +874,7 @@ export function HireSheet({
                   {t('continue')}
                 </button>
               )}
-              {step === 1 ? (
+              {confirming ? null : step === 1 ? (
                 <Link href="/studio/employees" className={styles.quiet}>
                   {t('cancel')}
                 </Link>
@@ -498,31 +888,16 @@ export function HireSheet({
                   {t('back')}
                 </button>
               )}
-              <span className={styles.footNote}>{t(`note.${step}`)}</span>
+              {confirming ? null : (
+                <span className={styles.footNote}>
+                  {t(step === 4 ? 'note.summary' : 'note.before')}
+                </span>
+              )}
             </footer>
           </div>
 
           <aside className={styles.side}>
-            {step === 1 ? (
-              <>
-                <h4 className={styles.eyebrow}>{t('side.dayOne')}</h4>
-                <p className={styles.sideLead} data-testid="hire-day-one">
-                  {plan.job ? t(`job.${plan.job}.dayOne`) : '-'}
-                </p>
-                <h4 className={styles.sideLabel}>{t('side.knows')}</h4>
-                {knowledge && knowledge.length > 0 ? (
-                  <ul className={styles.sideList} data-testid="hire-knows">
-                    {knowledge.slice(0, 4).map((k) => (
-                      <li key={k}>{k}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className={styles.none} title={t('side.knowsNone')}>
-                    -
-                  </p>
-                )}
-              </>
-            ) : step === 2 ? (
+            {step === 2 ? (
               <>
                 <h4 className={styles.eyebrow}>{t('side.cost')}</h4>
                 {/* Nothing estimates it yet: said, never a dash before a unit. */}
@@ -532,10 +907,31 @@ export function HireSheet({
               </>
             ) : (
               <>
-                <h4 className={styles.eyebrow}>{t('side.soFar')}</h4>
-                <p className={styles.sideFigure} title={t('three.notRun')}>
-                  -
+                <h4 className={styles.eyebrow}>{t('side.dayOne')}</h4>
+                <p className={styles.sideLead} data-testid="hire-day-one">
+                  {plan.job ? <bdi dir="auto">{goal || t(`job.${plan.job}.dayOne`)}</bdi> : '-'}
                 </p>
+                {step === 1 ? (
+                  <>
+                    <h4 className={styles.sideLabel}>{t('side.knows')}</h4>
+                    {knowledge && knowledge.some((k) => k.isActive && k.name) ? (
+                      <ul className={styles.sideList} data-testid="hire-knows">
+                        {knowledge
+                          .filter((k) => k.isActive && k.name)
+                          .slice(0, 4)
+                          .map((k) => (
+                            <li key={k.id}>
+                              <bdi dir="auto">{k.name}</bdi>
+                            </li>
+                          ))}
+                      </ul>
+                    ) : (
+                      <p className={styles.none} title={t('side.knowsNone')}>
+                        -
+                      </p>
+                    )}
+                  </>
+                ) : null}
               </>
             )}
             <p className={styles.sideNext}>{t(`side.next.${step}`)}</p>
