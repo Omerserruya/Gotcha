@@ -367,6 +367,18 @@ router.delete("/:id/documents/:docId", requirePermissionOrRole("ai:knowledge:wri
       where: { id: String(req.params.docId), knowledgeBaseId: String(req.params.id), tenantId: req.tenantId! },
     });
     if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
+    // A synced item (Drive, Confluence) is recreated by the next hourly sync,
+    // so deleting it here would look like it worked and then come back
+    // (K11, 2026-10-13). It is removed at the source, or by not syncing it.
+    if ((doc.metadata as any)?.syncChangeKey) {
+      res.status(409).json({
+        error: "This document is kept in sync with its source. Remove it there, or stop syncing it, and it leaves the knowledge base.",
+        code: "SYNCED_DOCUMENT",
+        sourceType: doc.sourceType,
+        sourceUrl: safeSourceUrl(doc.sourceUrl),
+      });
+      return;
+    }
 
     await deleteByDocumentId(doc.id);
     await prisma.knowledgeDocument.delete({ where: { id: doc.id } });

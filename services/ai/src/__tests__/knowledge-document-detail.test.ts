@@ -10,7 +10,7 @@ import request from "supertest";
 vi.mock("bullmq", () => ({ Queue: class { add = vi.fn(); }, Worker: class {}, Job: class {} }));
 vi.mock("ioredis", () => ({ default: class { on = vi.fn(); quit = vi.fn(); async get() { return null; } async set() { return "OK"; } } }));
 
-const H = vi.hoisted(() => ({ docs: [] as any[], chunks: [] as any[], allow: true, permAsked: [] as string[] }));
+const H = vi.hoisted(() => ({ deleted: [] as string[], docs: [] as any[], chunks: [] as any[], allow: true, permAsked: [] as string[] }));
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
   return {
@@ -22,7 +22,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     requireEntitlement: () => (_q: any, _s: any, n: any) => n(),
     requireCapacity: () => (_q: any, _s: any, n: any) => n(),
     prisma: {
-      knowledgeDocument: { findFirst: async (a: any) => H.docs.find((d) => d.id === a.where.id && d.knowledgeBaseId === a.where.knowledgeBaseId && d.tenantId === a.where.tenantId) ?? null },
+      knowledgeDocument: { delete: async (a: any) => { H.deleted.push(a.where.id); return {}; }, findFirst: async (a: any) => H.docs.find((d) => d.id === a.where.id && d.knowledgeBaseId === a.where.knowledgeBaseId && d.tenantId === a.where.tenantId) ?? null },
       knowledgeBase: {
         findMany: async (a: any) => [{ id: "kb1", tenantId: a.where.tenantId, name: "Main", documents: H.docs.filter((d) => d.tenantId === a.where.tenantId) }],
       },
@@ -106,5 +106,23 @@ describe("summary (B3, 2026-10-12): the stored line, never generated on read", (
     expect(one.body.data.summary).toBeNull();
     const list = await request(app).get("/api/knowledge-bases");
     expect(list.body.data[0].documents[0].summary).toBeNull();
+  });
+});
+
+describe("DELETE a synced document (K11, 2026-10-13)", () => {
+  it("★ a Drive/Confluence document kept in sync: 409 SYNCED_DOCUMENT pointing to the source, nothing deleted", async () => {
+    H.deleted = [];
+    H.docs[0].metadata.syncChangeKey = "2026-10-01T10:00:00Z";
+    const r = await request(app).delete("/api/knowledge-bases/kb1/documents/d1");
+    expect(r.status).toBe(409);
+    expect(r.body).toMatchObject({ code: "SYNCED_DOCUMENT", sourceType: "google_drive", sourceUrl: "https://docs.google.com/document/d/abc/edit?usp=sharing" });
+    expect(H.deleted).toEqual([]);
+  });
+
+  it("any other document is deleted as before", async () => {
+    H.deleted = [];
+    const r = await request(app).delete("/api/knowledge-bases/kb1/documents/d1");
+    expect(r.status).toBe(200);
+    expect(H.deleted).toEqual(["d1"]);
   });
 });
