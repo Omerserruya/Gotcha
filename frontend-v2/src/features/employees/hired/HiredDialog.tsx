@@ -7,16 +7,9 @@ import { Link } from '@/i18n/navigation';
 
 import hire from '../hire/Hire.module.css';
 import { PauseEmployee } from '../PauseEmployee';
+import { RESOLVE_AT } from '../page/readiness';
 import { automationsLink, WhoAnswers, type ReachItem } from '../WhoAnswers';
 import styles from './Hired.module.css';
-
-/** Where each kind of readiness recommendation is resolved. */
-const RESOLVE_AT: Record<string, '/studio/knowledge' | '/settings/systems'> = {
-  add_knowledge: '/studio/knowledge',
-  add_faq: '/studio/knowledge',
-  add_business_data: '/studio/knowledge',
-  connect_tool: '/settings/systems',
-};
 
 /**
  * 07e, measured: "Hired" - a 720 dialog over Studio, 120 from the top.

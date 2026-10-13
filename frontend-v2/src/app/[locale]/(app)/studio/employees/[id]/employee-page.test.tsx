@@ -9,6 +9,7 @@ import { WhoAnswers } from '@/features/employees/WhoAnswers';
 import { EmployeeHead, EmployeeTabs } from '@/features/employees/page/EmployeeFrame';
 import { EmployeeKnowledge } from '@/features/employees/page/EmployeeKnowledge';
 import { EmployeeProfile } from '@/features/employees/page/EmployeeProfile';
+import { EmployeeReadiness } from '@/features/employees/page/EmployeeReadiness';
 import { EmployeeSkills } from '@/features/skills/EmployeeSkills';
 import capabilities from '@/i18n/messages/en/capabilities.json';
 import channels from '@/i18n/messages/en/channels.json';
@@ -42,6 +43,7 @@ const reads = vi.hoisted(() => ({
   reach: vi.fn(),
   knowledge: vi.fn(),
   skillsTab: vi.fn(),
+  readiness: vi.fn(),
 }));
 vi.mock('@/features/employees/page/load-employee-page', () => ({ loadEmployeePage: reads.page }));
 vi.mock('@/features/employees/load-employees', () => ({
@@ -52,6 +54,10 @@ vi.mock('@/features/employees/page/load-employee-knowledge', () => ({
   loadEmployeeKnowledge: reads.knowledge,
 }));
 vi.mock('@/features/skills/load-skills', () => ({ loadEmployeeSkillsTab: reads.skillsTab }));
+/* H7: the readiness run's stored status - the employee's own read. */
+vi.mock('@/features/employees/page/load-readiness-status', () => ({
+  loadReadinessStatus: reads.readiness,
+}));
 vi.mock('@/features/capabilities/load-capabilities', () => ({
   loadCapabilities: async () => ({
     capabilities: [
@@ -125,7 +131,8 @@ const tabOf = (tree: ReactNode) =>
   find<{ id: string; current: string; skillsCount: number | null }>(tree, EmployeeTabs);
 
 beforeEach(() => {
-  reads.page.mockResolvedValue({ employee: maya, missing: false, skillsCount: 2 });
+  reads.page.mockResolvedValue({ employee: maya, missing: false, skillsCount: 2, readAt: 0 });
+  reads.readiness.mockResolvedValue({ readinessStatus: 'running' });
   reads.access.mockResolvedValue({ allowed: [], choices: [] });
   reads.reach.mockResolvedValue([{ channel: 'WHATSAPP', reach: 'always' }]);
   reads.knowledge.mockResolvedValue([]);
@@ -155,6 +162,12 @@ describe('★★ the employee page: four tabs, each its own page with real conte
     ]);
     expect(tabOf(tree)).toEqual({ id: 'a', current: 'profile', skillsCount: 2 });
     expect(find<{ employee: { id: string } }>(tree, EmployeeHead)?.employee.id).toBe('a');
+    // H7: the readiness card, its run from the stored status of THIS employee.
+    expect(reads.readiness).toHaveBeenCalledWith('a');
+    expect(find<{ employeeId: string; run: unknown }>(tree, EmployeeReadiness)).toMatchObject({
+      employeeId: 'a',
+      run: { state: 'running' },
+    });
   });
 
   it('Knowledge: what is connected, and the workspace’s list', async () => {

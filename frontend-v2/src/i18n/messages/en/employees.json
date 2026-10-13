@@ -430,6 +430,42 @@
       "forbidden": "You don't have permission to change AI employees."
     }
   },
+  "readiness": {
+    "title": "Readiness",
+    "run": "Run a readiness test",
+    "rerun": "Run again",
+    "checking": "Checking readiness…",
+    "never": "Not tested yet. A test asks the questions customers are likely to ask, and shows what it cannot answer yet.",
+    "score": "{score} out of 100",
+    "totals": "Fully ready for {full} of {total, plural, one {# question} other {# questions}}",
+    "tested": "Tested {when}",
+    "gaps": "Questions it is not ready for yet",
+    "noGaps": "Ready for every question in the test.",
+    "coverage": {
+      "none": "No answer",
+      "partial": "Partial answer"
+    },
+    "recommendations": "What to add",
+    "go": {
+      "knowledge": "Open knowledge",
+      "systems": "Open systems"
+    },
+    "failed": {
+      "agent_not_found": "The last test did not run: this employee was not found.",
+      "llm_unavailable": "The last test did not run: the AI model was not available.",
+      "bad_model_output": "The last test did not finish: the model's answer could not be read.",
+      "internal_error": "The last test did not finish because of an error on our side.",
+      "persist_failed": "The last test finished, but its result was not saved.",
+      "timed_out": "The last test took too long and stopped.",
+      "other": "The last test did not finish."
+    },
+    "problem": {
+      "forbidden": "Only an admin can run the test.",
+      "missing": "This employee no longer exists.",
+      "slow": "The test is still running. Its result will appear here when it is done.",
+      "failed": "The test did not run. Try again."
+    }
+  },
   "page": {
     "unread": "This employee couldn't be read just now.",
     "missing": "This employee isn't here.",

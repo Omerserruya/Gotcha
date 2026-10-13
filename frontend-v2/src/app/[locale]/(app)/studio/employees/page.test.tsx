@@ -159,6 +159,27 @@ describe('★ 07b - Hire opens the sheet; its reads only then', () => {
     const tree = await page([employee('a')], { hire: '1', step: '4' });
     expect(find<{ initialStep: number }>(tree, HireSheet)?.initialStep).toBe(4);
   });
+
+  it('★★ the hire offers only CONNECTED systems (dev: a disconnected Shopify in the summary)', async () => {
+    const system = (slug: string, status: string | null) =>
+      integrationSchema.parse({
+        id: slug,
+        slug,
+        name: slug,
+        tenantConnection: status === null ? null : { id: `c-${slug}`, status },
+      });
+    caps.integrations = [
+      system('shopify', 'DISCONNECTED'),
+      system('woocommerce', 'CONNECTED'),
+      system('hubspot', 'ERROR'),
+      system('airtable', 'PENDING'),
+      system('zendesk', null),
+    ];
+    const tree = await page([employee('a')], { hire: '1', step: '4' });
+    const props = find<{ systems: { slug: string }[] | null }>(tree, HireSheet);
+    expect(props?.systems?.map((s) => s.slug)).toEqual(['woocommerce']);
+    caps.integrations = [];
+  });
 });
 
 describe('★ 07e - the dialog, by query; no edit sheet', () => {

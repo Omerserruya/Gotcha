@@ -249,12 +249,16 @@ export default async function Page({
           skills={skills}
           initialStep={step}
           viewerId={viewerId}
-          // Every system the workspace has set up, in any state - a new
-          // employee may use each of them unless switched off here.
+          // Every system the workspace has CONNECTED - a new employee may use
+          // each of them unless switched off here. A disconnected or broken
+          // one is not offered: the runtime reads an integration's actions
+          // only from a CONNECTED connection (Backend f14afdbd, the same rule
+          // for an employee's tools). Dev, 2026-10-13: the summary listed a
+          // disconnected Shopify.
           systems={
             integrations
               ? integrations
-                  .filter((i) => i.tenantConnection)
+                  .filter((i) => i.tenantConnection?.status === 'CONNECTED')
                   .map((i) => ({
                     slug: i.slug,
                     name: i.name,

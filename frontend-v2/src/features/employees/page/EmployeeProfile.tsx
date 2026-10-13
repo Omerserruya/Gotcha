@@ -41,6 +41,8 @@ import { EmployeeToolLevels, type ToolLevelRow } from './EmployeeToolLevels';
  *   Handoff to a person the conditions, added, reworded, switched, removed -
  *                       saved as the whole array
  *
+ * Readiness (H7) sits above them: what it is not ready for, and Run again.
+ *
  * Save asks first, naming what changes and that it reaches live customers
  * from the next reply - the runtime reads the employee on every reply, so
  * open conversations take it too. Then one PATCH.
@@ -51,6 +53,7 @@ export function EmployeeProfile({
   tabs,
   levels,
   access = null,
+  readiness = null,
 }: {
   readonly employee: Employee;
   /** The page's head (avatar, name, standing) - Save sits beside it. */
@@ -60,6 +63,8 @@ export function EmployeeProfile({
   readonly levels: readonly ToolLevelRow[] | null;
   /** The business systems it may use, and every one set up; `null` when unread. */
   readonly access?: IntegrationAccess | null;
+  /** H7: the readiness card, first in the list. */
+  readonly readiness?: ReactNode;
 }) {
   const t = useTranslations('employees.profile');
   const td = useTranslations('employees.detail');
@@ -129,6 +134,7 @@ export function EmployeeProfile({
 
       <div className={styles.scroll}>
         <div className={styles.list} data-testid="employee-profile">
+          {readiness}
           <p className={styles.applies} data-testid="profile-applies">
             {employee.openConversations > 0
               ? t('applyOpen', { count: employee.openConversations })

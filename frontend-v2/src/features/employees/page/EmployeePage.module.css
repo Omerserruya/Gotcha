@@ -371,4 +371,57 @@
     opacity: 0.6;
     cursor: default;
   }
+
+  /* H7: the readiness card - its title with "Run again" at the end. */
+  .sectionHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+  }
+
+  .sectionHead .add {
+    align-self: auto;
+  }
+
+  .readinessScore {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+
+  .readinessScore strong {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  /* A question or a recommendation: whole, wrapped - never cut to one line. */
+  .readinessItem {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .readinessLine {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .readinessLine .state {
+    margin-inline-start: 0;
+  }
+
+  .readinessGo {
+    font-size: 12.5px;
+    color: var(--action-base);
+  }
 }

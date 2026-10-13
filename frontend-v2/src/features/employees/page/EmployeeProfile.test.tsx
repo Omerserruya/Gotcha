@@ -109,6 +109,20 @@ describe('★★ the Profile tab is ONE list, top to bottom, Limits and the hand
     expect(within(list).getByTestId('profile-handover')).toHaveTextContent('Handoff to a person');
   });
 
+  it('★ H7: the readiness card is the list’s first part, above the settings', () => {
+    profile({}, { readiness: <section data-testid="profile-readiness">Readiness</section> });
+    const list = screen.getByTestId('employee-profile');
+    expect(
+      [...list.querySelectorAll(':scope > section')].map((s) => s.getAttribute('data-testid')),
+    ).toEqual([
+      'profile-readiness',
+      'profile-responsible',
+      'profile-how',
+      'profile-limits',
+      'profile-handover',
+    ]);
+  });
+
   it('real content in each: the responsibility, the tone, what it may do, its systems, its rules', () => {
     profile();
     expect(screen.getByTestId('profile-responsibility')).toHaveValue('After-sale questions');

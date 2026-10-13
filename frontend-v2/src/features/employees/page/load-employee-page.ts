@@ -12,6 +12,8 @@ export interface EmployeePageRead {
   readonly missing: boolean;
   /** How many skills it carries, for the tab; `null` when unread. */
   readonly skillsCount: number | null;
+  /** When it was read, for what depends on the time (the readiness run after a hire). */
+  readonly readAt: number;
 }
 
 /**
@@ -32,5 +34,6 @@ export async function loadEmployeePage(
     employee,
     missing: employees !== null && employee === null,
     skillsCount: skills ? skills.skills.length : null,
+    readAt: Date.now(),
   };
 }

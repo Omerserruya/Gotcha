@@ -4,9 +4,12 @@ import { loadCapabilities } from '@/features/capabilities/load-capabilities';
 import { loadIntegrationAccess } from '@/features/employees/load-employees';
 import { EmployeeHead, EmployeeTabs } from '@/features/employees/page/EmployeeFrame';
 import { EmployeeProfile } from '@/features/employees/page/EmployeeProfile';
+import { EmployeeReadiness } from '@/features/employees/page/EmployeeReadiness';
 import styles from '@/features/employees/page/EmployeePage.module.css';
 import { loadEmployeePage } from '@/features/employees/page/load-employee-page';
 import { loadEmployeeTools } from '@/features/employees/page/load-employee-tools';
+import { loadReadinessStatus } from '@/features/employees/page/load-readiness-status';
+import { readinessRun } from '@/features/employees/page/readiness';
 import { toolLevelRows } from '@/features/employees/page/tool-label';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -23,12 +26,14 @@ export default async function Page({
   const t = await getTranslations('employees.page');
   const tc = await getTranslations('capabilities');
   const { id } = await params;
-  const [read, access, { integrations }, tools] = await Promise.all([
+  const [read, access, { integrations }, tools, readiness] = await Promise.all([
     loadEmployeePage(id),
     loadIntegrationAccess(id),
     // The integrations' names, for "{integration} · {action}".
     loadCapabilities(),
     loadEmployeeTools(id),
+    // H7: is its readiness test running, done or failed - the employee's own read.
+    loadReadinessStatus(id),
   ]);
   const { employee } = read;
 
@@ -55,6 +60,13 @@ export default async function Page({
         employee={employee}
         access={access}
         levels={levels}
+        readiness={
+          <EmployeeReadiness
+            employeeId={employee.id}
+            report={employee.readinessReport}
+            run={readinessRun(employee, readiness, read.readAt)}
+          />
+        }
         head={<EmployeeHead employee={employee} />}
         tabs={<EmployeeTabs id={id} current="profile" skillsCount={read.skillsCount} />}
       />

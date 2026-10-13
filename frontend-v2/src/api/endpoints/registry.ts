@@ -1352,6 +1352,11 @@ export const builderEndpoints = {
   start: () => endpoint('/api/ai-agents/builder/start'),
   refinements: (id: string) => endpoint('/api/ai-agents/builder/{id}/refinements', { id }),
   complete: (id: string) => endpoint('/api/ai-agents/builder/{id}/complete', { id }),
+  /**
+   * H7: POST `{ locale }` - one readiness test, stored on the employee with
+   * its run status; answers `{ data: report }` when stored (404, 502).
+   */
+  readinessTest: (id: string) => endpoint('/api/ai-agents/builder/{id}/readiness-test', { id }),
 } as const;
 
 /**

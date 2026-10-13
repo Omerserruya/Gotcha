@@ -40,6 +40,15 @@ import { z } from 'zod';
 export const EMPLOYEE_STATUSES = ['ACTIVE', 'DRAFT', 'PAUSED'] as const;
 export type EmployeeStatus = (typeof EMPLOYEE_STATUSES)[number];
 
+/** One question of a readiness test, and how well the employee can answer it. */
+export const readinessQuestionSchema = z.object({
+  question: z.string().min(1),
+  coverage: z.enum(['full', 'partial', 'none']),
+  reason: z.string().catch('').default(''),
+});
+
+export type ReadinessQuestion = z.infer<typeof readinessQuestionSchema>;
+
 export const employeeSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -127,13 +136,32 @@ export const employeeSchema = z.object({
   /** 07f's "Last edited …". Nothing records who edited it. */
   updatedAt: z.string().nullable().catch(null).default(null),
   /**
-   * The last readiness test, persisted by `POST …/readiness-test`. Only what
-   * 07e draws: when it ran and what it recommends. The questions, the
-   * coverage and the score stay on the server.
+   * The last readiness test (`agent-readiness.service.ts`), stored on the
+   * employee by the run after a hire and by `POST builder/:id/readiness-test`.
+   * 07e draws its first recommendation; the employee page (H7) draws all of
+   * it - the score, the questions it is not ready for, and what to do.
    */
   readinessReport: z
     .object({
       generatedAt: z.string().nullable().catch(null).default(null),
+      /** 0-100; `null` when absent or not a number. */
+      score: z.number().min(0).max(100).nullable().catch(null).default(null),
+      totals: z
+        .object({ full: z.number(), partial: z.number(), none: z.number(), total: z.number() })
+        .nullable()
+        .catch(null)
+        .default(null),
+      /** Read per row: a malformed question drops alone, never the report. */
+      questions: z
+        .array(z.unknown())
+        .catch([])
+        .default([])
+        .transform((rows) =>
+          rows.flatMap((row) => {
+            const read = readinessQuestionSchema.safeParse(row);
+            return read.success ? [read.data] : [];
+          }),
+        ),
       recommendations: z
         .array(
           z.object({
@@ -151,6 +179,24 @@ export const employeeSchema = z.object({
 });
 
 export type Employee = z.infer<typeof employeeSchema>;
+
+/**
+ * H7 (Backend 94ccaead): the last readiness run, from the employee's own read
+ * (`GET /api/ai-agents/:id`; the list route does not carry it). Only these
+ * four are named. `readinessStatus` is `null` when no run was ever recorded,
+ * and ABSENT (`undefined`) from a server that does not store it - the page
+ * tells the two apart, so neither defaults to the other. A run left
+ * "running" for 10 minutes the server already reads as failed `timed_out`.
+ */
+export const readinessRunStatusSchema = z.object({
+  readinessStatus: z.enum(['running', 'done', 'failed']).nullable().optional().catch(undefined),
+  readinessStartedAt: z.string().nullable().optional().catch(null),
+  readinessFinishedAt: z.string().nullable().optional().catch(null),
+  /** agent_not_found, llm_unavailable, bad_model_output, internal_error, persist_failed, timed_out. */
+  readinessError: z.string().nullable().optional().catch(null),
+});
+
+export type ReadinessRunStatus = z.infer<typeof readinessRunStatusSchema>;
 
 /** The tones the builder writes. Anything else is humanised. */
 export const EMPLOYEE_TONES = ['professional', 'friendly', 'casual', 'formal'] as const;
