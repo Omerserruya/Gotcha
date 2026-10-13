@@ -475,6 +475,10 @@
       "rule": "An employee can be as strict as the workspace or stricter, never looser. What Integrations rules out is greyed.",
       "own": "own setting",
       "likeWorkspace": "like the workspace",
+      "give": "Give it this",
+      "giveFor": "Give it {name}",
+      "notGiven": "Not given to it: it can't use this action.",
+      "notGrantable": "The workspace hasn't set this action up yet, so it can't be given.",
       "reset": "Back to the workspace's setting",
       "looserThanWorkspace": "The workspace sets this to “{level}”. An employee can only be the same or stricter.",
       "level": {

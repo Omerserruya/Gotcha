@@ -41,6 +41,8 @@ export function toolLevelRows(
         ownLevel: tool.ownLevel ?? null,
         employeeLevel: tool.employeeLevel,
         allowedLevels: tool.allowedLevels,
+        granted: tool.granted,
+        grantable: tool.grantable,
       }))
     : null;
 }

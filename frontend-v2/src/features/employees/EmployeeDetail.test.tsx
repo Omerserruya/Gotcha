@@ -176,6 +176,32 @@ describe('★★ 07’s detail - what it is, from what the route already sends',
     );
   });
 
+  it('★★ an integration action NOT given to it is not something it may do (Backend 9339ca26)', async () => {
+    const row = (toolName: string, granted: boolean | null) => ({
+      toolName,
+      label: toolName,
+      workspaceLevel: 'execute',
+      ownLevel: null,
+      employeeLevel: 'execute',
+      allowedLevels: ['execute', 'ask', 'never'],
+      granted,
+      grantable: true,
+    });
+    await show(
+      {},
+      {
+        levels: [
+          row('woocommerce.create_coupon', false),
+          row('woocommerce.get_customer', true),
+          row('send_message', null),
+        ],
+      },
+    );
+    expect(screen.queryByTestId('may-woocommerce.create_coupon')).toBeNull();
+    expect(screen.getByTestId('may-woocommerce.get_customer')).toBeInTheDocument();
+    expect(screen.getByTestId('may-send_message')).toBeInTheDocument();
+  });
+
   it('⚠ a failed permissions read is said, not drawn as "nothing it can do"', async () => {
     await show({}, { levels: null });
     expect(screen.getByTestId('card-may-do')).toHaveTextContent("We couldn't read");

@@ -77,7 +77,9 @@ export async function EmployeeDetail({
   const rate = aloneRate(employee);
   const tone = employee.tone.trim();
   const rules = handoverRules(employee);
-  const mayDo = (levels ?? []).slice(0, MAY_DO_ROWS);
+  // Only what it can use: an integration's action NOT given to it (Backend
+  // 9339ca26) never reaches it, whatever its level says.
+  const mayDo = (levels ?? []).filter((row) => row.granted !== false).slice(0, MAY_DO_ROWS);
   const connected = (integrations ?? []).filter(isConnected);
 
   return (

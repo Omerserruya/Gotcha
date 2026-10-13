@@ -63,6 +63,8 @@ const profile = (
             ownLevel: null,
             employeeLevel: 'ask',
             allowedLevels: ['ask', 'never'],
+            granted: true,
+            grantable: true,
           },
         ]}
         access={{

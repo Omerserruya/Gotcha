@@ -77,6 +77,8 @@ vi.mock('@/features/employees/page/load-employee-tools', () => ({
       ownLevel: null,
       employeeLevel: 'execute',
       allowedLevels: ['execute', 'ask', 'never'],
+      granted: false,
+      grantable: true,
     },
     {
       toolName: 'send_message',
@@ -86,6 +88,8 @@ vi.mock('@/features/employees/page/load-employee-tools', () => ({
       ownLevel: 'never',
       employeeLevel: 'never',
       allowedLevels: ['ask', 'never'],
+      granted: null,
+      grantable: false,
     },
   ],
 }));
@@ -150,7 +154,12 @@ describe('★★ the employee page: four tabs, each its own page with real conte
     const props = find<{
       employee: { id: string };
       access: unknown;
-      levels: { label: string; ownLevel: string | null }[];
+      levels: {
+        label: string;
+        ownLevel: string | null;
+        granted: boolean | null;
+        grantable: boolean;
+      }[];
     }>(tree, EmployeeProfile);
     expect(props?.employee.id).toBe('a');
     expect(reads.access).toHaveBeenCalledWith('a');
@@ -159,6 +168,11 @@ describe('★★ the employee page: four tabs, each its own page with real conte
     expect(props?.levels.map((m) => [m.label, m.ownLevel])).toEqual([
       ['WooCommerce · Get customer', null],
       ['Send a message to a customer', 'never'],
+    ]);
+    // Whether each is given to it, as the server said - a built-in needs no grant.
+    expect(props?.levels.map((m) => [m.granted, m.grantable])).toEqual([
+      [false, true],
+      [null, false],
     ]);
     expect(tabOf(tree)).toEqual({ id: 'a', current: 'profile', skillsCount: 2 });
     expect(find<{ employee: { id: string } }>(tree, EmployeeHead)?.employee.id).toBe('a');
