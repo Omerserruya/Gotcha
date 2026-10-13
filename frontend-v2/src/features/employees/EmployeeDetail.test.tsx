@@ -240,10 +240,11 @@ describe('★★ 07’s detail - what it is, from what the route already sends',
     expect(screen.getByTestId('card-worth')).toHaveTextContent('Nothing to suggest yet.');
   });
 
-  it('★ 07f - Edit opens the sheet over this employee', async () => {
+  it('★★ "Edit" opens the employee’s page, its Profile tab - never a sheet (E2)', async () => {
     await show();
     const edit = screen.getByTestId('edit');
     expect(edit).not.toHaveAttribute('aria-disabled');
-    expect(edit).toHaveAttribute('href', '/studio/employees?employee=a&edit=1');
+    expect(edit).toHaveAttribute('href', '/studio/employees/a');
+    expect(edit).toHaveTextContent('Edit');
   });
 });

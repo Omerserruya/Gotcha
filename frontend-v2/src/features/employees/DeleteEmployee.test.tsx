@@ -35,6 +35,8 @@ const employee = (over: Partial<Employee> = {}): Employee => ({
   escalationRules: [],
   identity: null,
   goal: null,
+  persona: null,
+  departmentId: null,
   createdAt: null,
   updatedAt: null,
   readinessReport: null,

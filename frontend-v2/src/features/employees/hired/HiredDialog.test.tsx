@@ -79,15 +79,18 @@ describe('★★ 07e - what is true of the employee, and "-" where nothing backs
     expect(screen.getByTitle(/no watch-only mode/)).toHaveTextContent('-');
   });
 
-  it('where it answers, and its handover rules; Change and Adjust open 07f', async () => {
+  it('where it answers, and its handover rules; Change and Adjust open the employee page', async () => {
     await show();
     // Where it answers is decided in the playbook and automations, not on it.
     expect(screen.getByTestId('hired-answers')).toHaveTextContent('set in Studio · Automations');
     expect(screen.getByTestId('hired-reach')).toHaveTextContent('1 handover rule');
     expect(screen.getByTestId('hired-reach')).toHaveTextContent('Asks for a person');
-    for (const id of ['hired-change', 'hired-adjust']) {
-      expect(screen.getByTestId(id)).toHaveAttribute('href', '/studio/employees?employee=a&edit=1');
-    }
+    // Never the old sheet: each to its tab on the employee's page.
+    expect(screen.getByTestId('hired-change')).toHaveAttribute(
+      'href',
+      '/studio/employees/a/channels',
+    );
+    expect(screen.getByTestId('hired-adjust')).toHaveAttribute('href', '/studio/employees/a');
   });
 
   it('★ the readiness card is the persisted report’s first recommendation, and where to fix it', async () => {

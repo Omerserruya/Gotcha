@@ -26,8 +26,9 @@ const RESOLVE_AT: Record<string, '/studio/knowledge' | '/settings/systems'> = {
  *
  *   the head            its status and when it was created - nothing
  *                       records who hired it
- *   It answers …        its status, and where that is decided; Change opens 07f
- *   Handover rules      the rules that are on; Adjust opens 07f
+ *   It answers …        its status, and where that is decided; Change opens
+ *                       the employee page's Channels tab
+ *   Handover rules      the rules that are on; Adjust opens its Profile tab
  *   The readiness card  the last readiness test's first recommendation,
  *                       persisted by the platform - never a fresh run
  *
@@ -48,7 +49,10 @@ export async function HiredDialog({
   const te = await getTranslations('employees');
   const format = await getFormatter();
   const back = { pathname: '/studio/employees', query: { employee: employee.id } } as const;
-  const edit = { pathname: '/studio/employees', query: { employee: employee.id, edit: '1' } };
+  // Changing it is the employee's page - never a sheet: where it answers is
+  // the Channels tab, its handover rules the Profile tab.
+  const edit = `/studio/employees/${employee.id}`;
+  const channels = `/studio/employees/${employee.id}/channels`;
   const rules = handoverRules(employee);
   const report = employee.readinessReport;
   const first = report?.recommendations.find((r) => r.title.trim() !== '') ?? null;
@@ -114,7 +118,7 @@ export async function HiredDialog({
                   nowhere={te.rich('reach.nowhere', { automations: automationsLink })}
                 />
               </div>
-              <Link href={edit} className={styles.small} scroll={false} data-testid="hired-change">
+              <Link href={channels} className={styles.small} data-testid="hired-change">
                 {t('change')}
               </Link>
             </li>
@@ -127,7 +131,7 @@ export async function HiredDialog({
                   {rules.length > 0 ? <UserText>{rules.join(' · ')}</UserText> : '-'}
                 </span>
               </div>
-              <Link href={edit} className={styles.small} scroll={false} data-testid="hired-adjust">
+              <Link href={edit} className={styles.small} data-testid="hired-adjust">
                 {t('adjust')}
               </Link>
             </li>

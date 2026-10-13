@@ -49,19 +49,22 @@ export async function setEmployeeStatus(
 }
 
 /**
- * 07f's Save (Omer, 2026-10-08: editing a working employee is approved).
- * One PATCH with only what changed, each field under the route's own name
- * (`editPatch`): it applies from the employee's next reply, in the
- * conversations open now too - the confirmation says so before this runs.
+ * The employee page's Save (Omer, 2026-10-08: editing a working employee is
+ * approved) - the Profile tab's and the Knowledge tab's. One PATCH with only
+ * what changed, each field under the route's own name (`editPatch`): it
+ * applies from the employee's next reply, in the conversations open now too
+ * - the confirmation says so before this runs.
  *
  * `invalid_access`: 422 INVALID_INTEGRATION_ACCESS - a system in the list
  * that is not one of the workspace's (disconnected meanwhile).
+ * `invalid_rules`: 400 INVALID_ESCALATION_RULES - a handover condition the
+ * route refuses (no words, over 300 characters, more than 50).
  */
 export type EmployeeEditResult =
   | { readonly ok: true }
   | {
       readonly ok: false;
-      readonly reason: 'forbidden' | 'gone' | 'invalid_access' | 'failed';
+      readonly reason: 'forbidden' | 'gone' | 'invalid_access' | 'invalid_rules' | 'failed';
     };
 
 export async function saveEmployeeEdits(
@@ -74,7 +77,8 @@ export async function saveEmployeeEdits(
       payload: employeeSchema,
       body: patch,
     });
-    revalidatePath('/[locale]/(app)/studio/employees', 'page');
+    // The list and the employee's own page under it.
+    revalidatePath('/[locale]/(app)/studio/employees', 'layout');
     return { ok: true };
   } catch (cause) {
     await signInIfSignedOut(cause);
@@ -83,6 +87,7 @@ export async function saveEmployeeEdits(
       if (cause.status === 404) return { ok: false, reason: 'gone' };
       if (cause.code === 'INVALID_INTEGRATION_ACCESS')
         return { ok: false, reason: 'invalid_access' };
+      if (cause.code === 'INVALID_ESCALATION_RULES') return { ok: false, reason: 'invalid_rules' };
     }
     logger.warn('employees.edit_failed', { status: isApiError(cause) ? cause.status : undefined });
     return { ok: false, reason: 'failed' };

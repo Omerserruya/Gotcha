@@ -113,15 +113,11 @@ export async function EmployeeDetail({
           >
             {t('detail.skills')}
           </Link>
-          {/* 07f: the Edit sheet over this screen. */}
+          {/* Every edit lives on the employee's page; Edit opens its Profile tab. */}
           <Link
-            href={{
-              pathname: '/studio/employees',
-              query: { employee: employee.id, edit: '1' },
-            }}
+            href={`/studio/employees/${employee.id}`}
             className={styles.button}
             data-testid="edit"
-            scroll={false}
           >
             {t('detail.edit')}
           </Link>

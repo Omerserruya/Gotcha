@@ -1,0 +1,323 @@
+@layer features {
+  /*
+   * The employee page's tabs under 07g's head: one column, top to bottom,
+   * each part a white card at 16px 18px, as 07g's "When no skill fits".
+   */
+  .scroll {
+    flex: 1;
+    min-block-size: 0;
+    padding: 20px 32px;
+    overflow-y: auto;
+  }
+
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    max-inline-size: 760px;
+  }
+
+  .applies {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+
+  .edited {
+    color: var(--text-subtle);
+  }
+
+  .changes {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding: 16px 18px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+  }
+
+  .title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .block + .block {
+    padding-block-start: var(--space-12);
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .subtitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .quiet {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  .note {
+    margin: 0;
+    font-size: var(--font-size-counter);
+    color: var(--text-subtle);
+  }
+
+  .problem {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--intent-urgent-text);
+  }
+
+  .field {
+    padding: var(--space-10) 13px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: 13px;
+    color: var(--text-primary);
+    resize: block;
+  }
+
+  .field:focus {
+    border-color: var(--border-focus);
+    outline: none;
+  }
+
+  .pairs {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    margin: 0;
+  }
+
+  .pair {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .pair dd {
+    margin: 0;
+  }
+
+  .switchRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+  }
+
+  .rowName {
+    flex: 1;
+    min-inline-size: 0;
+    overflow: clip;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .state {
+    margin-inline-start: var(--space-8);
+    color: var(--text-subtle);
+  }
+
+  .stances {
+    display: flex;
+    flex: none;
+    gap: var(--space-4);
+  }
+
+  .stance {
+    padding: 3px var(--space-8);
+    border: var(--border-width-thin) solid var(--border-subtle);
+    border-radius: 6px;
+    font-size: var(--font-size-counter);
+    white-space: nowrap;
+    color: var(--text-disabled);
+  }
+
+  .stance[data-current='yes'] {
+    border-color: transparent;
+  }
+
+  .stance[data-current='yes'][data-stance='on_its_own'] {
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+  }
+
+  .stance[data-current='yes'][data-stance='ask_first'] {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .stance[data-current='yes'][data-stance='never'] {
+    background-color: var(--panel-well);
+    color: var(--text-subtle);
+  }
+
+  .rules {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .rule {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .ruleOn {
+    flex: none;
+    margin: 0;
+    accent-color: var(--action-base);
+  }
+
+  .ruleLabel {
+    flex: 1;
+    min-inline-size: 0;
+    padding: 7px 10px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 9px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .ruleLabel:focus {
+    border-color: var(--border-focus);
+    outline: none;
+  }
+
+  .ruleLabel[aria-invalid='true'] {
+    border-color: var(--intent-urgent-text);
+  }
+
+  .ruleRemove {
+    display: inline-flex;
+    flex: none;
+    padding: var(--space-4);
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .ruleRemove:hover {
+    background-color: var(--panel-inset);
+    color: var(--text-primary);
+  }
+
+  .add {
+    display: inline-flex;
+    align-self: flex-start;
+    align-items: center;
+    gap: var(--space-6);
+    padding: 6px 12px;
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: 8px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  .link {
+    align-self: flex-start;
+    border-block-end: var(--border-width-thin) solid var(--border-emphasis);
+    font-size: 12px;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .unread {
+    margin: 0;
+    padding: 24px 32px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  /* The confirmation before a working employee changes. */
+  .confirmList {
+    margin: 0;
+    padding-inline-start: 1.2em;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .confirmActions {
+    display: flex;
+    gap: var(--space-10);
+    justify-content: flex-end;
+  }
+
+  .confirmKeep,
+  .confirmSave {
+    padding: 8px 14px;
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: 9px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .confirmSave {
+    border-color: transparent;
+    background-color: var(--text-primary);
+    color: var(--frame-text);
+  }
+
+  .confirmSave:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+}

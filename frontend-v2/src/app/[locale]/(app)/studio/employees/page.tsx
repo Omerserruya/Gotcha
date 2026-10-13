@@ -1,7 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
 import {
-  capabilityStance,
   choicesFor,
   currentChoice,
   hasOwnWords,
@@ -10,8 +9,7 @@ import {
   resolveAvailability,
 } from '@/api/contracts/capabilities';
 import { loadCapabilities } from '@/features/capabilities/load-capabilities';
-import { catalogName, isConnected, isFailing } from '@/api/contracts/integrations';
-import { EditSheet } from '@/features/employees/edit/EditSheet';
+import { catalogName, isFailing } from '@/api/contracts/integrations';
 import { HireSheet } from '@/features/employees/hire/HireSheet';
 import { loadViewerId } from '@/features/roles/load-person';
 import { HiredDialog } from '@/features/employees/hired/HiredDialog';
@@ -21,11 +19,7 @@ import { Link } from '@/i18n/navigation';
 import { EmployeeDetail } from '@/features/employees/EmployeeDetail';
 import { EmployeeRail } from '@/features/employees/EmployeeRail';
 import styles from '@/features/employees/Employees.module.css';
-import {
-  loadEmployees,
-  loadIntegrationAccess,
-  loadReachability,
-} from '@/features/employees/load-employees';
+import { loadEmployees, loadReachability } from '@/features/employees/load-employees';
 import { foldWidget } from '@/features/employees/reach';
 import type { ReachItem } from '@/features/employees/WhoAnswers';
 import { ltr } from '@/lib/bidi';
@@ -76,8 +70,6 @@ export default async function Page({
     /** 07b-07d: the Hire sheet, and its step. */
     readonly hire?: string;
     readonly step?: string;
-    /** 07f: the Edit sheet over the selected employee. */
-    readonly edit?: string;
     /** 07e: "Hired", for this employee. */
     readonly hired?: string;
   }>;
@@ -89,15 +81,14 @@ export default async function Page({
   // H6: whose hire draft this is - read only while hiring.
   const viewerId = hiring ? await loadViewerId() : null;
   // The detail's permissions and connected tools are the business's, read once.
-  const editingWanted = params.edit === '1';
   const [employees, { capabilities, integrations }, knowledgeData, toolWords] = await Promise.all([
     loadEmployees(),
     loadCapabilities(),
     // The Hire sheet's reads, only when it is open.
     hiring ? loadKnowledge() : Promise.resolve(null),
     // Each action's provider and words ("WooCommerce · Get customer"), for the
-    // hire flow's Limits and 07f - the tool catalogue, as Skills reads it.
-    hiring || editingWanted ? readTools() : Promise.resolve(null),
+    // hire flow's Limits - the tool catalogue, as Skills reads it.
+    hiring ? readTools() : Promise.resolve(null),
   ]);
   const wordsOf = (toolName: string) => toolWords?.find((tool) => tool.name === toolName) ?? null;
   /*
@@ -136,14 +127,11 @@ export default async function Page({
     : [];
   const step = params.step === '2' ? 2 : params.step === '3' ? 3 : 1;
   const selected = employees?.find((e) => e.id === wanted) ?? employees?.[0] ?? null;
-  const editing = params.edit === '1' && selected !== null ? selected : null;
   const hired = params.hired ? (employees?.find((e) => e.id === params.hired) ?? null) : null;
-  // 07f's business systems: this employee's allowlist and every system set up.
-  const access = editing ? await loadIntegrationAccess(editing.id) : null;
   /*
     Where it answers, by the playbook (Backend f79f1e6c): the selected
-    employee's for 07 and 07f, and 07e's when it is another one. Named here,
-    so 07's server card and the client sheets say it alike.
+    employee's for 07, and 07e's when it is another one. Named here, so 07's
+    server card and 07e say it alike.
   */
   const tch = await getTranslations('channels');
   const reachOf = async (id: string): Promise<readonly ReachItem[] | null> => {
@@ -238,27 +226,6 @@ export default async function Page({
           )
         }
       />
-      {editing ? (
-        <EditSheet
-          employee={editing}
-          access={access}
-          reach={reach}
-          tools={integrations ? integrations.filter(isConnected).map((i) => i.name) : null}
-          mayDo={
-            capabilities
-              ? capabilities
-                  .filter((c) => c.kind === 'action')
-                  .map((c) => ({
-                    toolName: c.toolName,
-                    label: wordsOf(c.toolName)?.providerLabel
-                      ? `${wordsOf(c.toolName)!.providerLabel} · ${actionLabel(c.toolName, c.integration)}`
-                      : actionLabel(c.toolName, c.integration),
-                    stance: capabilityStance(c),
-                  }))
-              : null
-          }
-        />
-      ) : null}
       {hired ? <HiredDialog employee={hired} reach={hiredReach} /> : null}
       {hiring ? (
         <HireSheet

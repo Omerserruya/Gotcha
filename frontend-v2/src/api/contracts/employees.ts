@@ -110,6 +110,18 @@ export const employeeSchema = z.object({
     .catch(null)
     .default(null),
   goal: z.string().nullable().catch(null).default(null),
+  /**
+   * `{ disclosesAi, … }` - "Says it is AI when asked" (Backend 28a9c3b6):
+   * absent means it does. Only that key is named; the rest rides along.
+   */
+  persona: z
+    .object({ disclosesAi: z.boolean().optional().catch(undefined) })
+    .passthrough()
+    .nullable()
+    .catch(null)
+    .default(null),
+  /** Its department, for the knowledge a department's employees read. */
+  departmentId: z.string().nullable().catch(null).default(null),
   /** 07e's "Hired …" time. Nothing records who created it. */
   createdAt: z.string().nullable().catch(null).default(null),
   /** 07f's "Last edited …". Nothing records who edited it. */
@@ -155,6 +167,14 @@ export function handoverRules(employee: Employee): readonly string[] {
   return employee.escalationRules
     .filter((rule) => rule.enabled && rule.label.trim() !== '')
     .map((rule) => rule.label.trim());
+}
+
+/**
+ * Whether it says it is an AI when a customer asks - the prompt builder's
+ * rule (`persona.disclosesAi !== false`): absent, or anything but `false`, is yes.
+ */
+export function disclosesAi(employee: Employee): boolean {
+  return employee.persona?.disclosesAi !== false;
 }
 
 /** 07's line under the name: what it is responsible for, or its goal. */

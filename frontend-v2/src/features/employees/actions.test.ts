@@ -14,7 +14,7 @@ beforeEach(() => {
   patch.mockReset();
 });
 
-describe('★ 07f’s Save at the wire', () => {
+describe('★ the employee page’s Save at the wire', () => {
   it('one PATCH to the employee, the body exactly as given', async () => {
     patch.mockResolvedValue({});
     expect(await saveEmployeeEdits('a', { tone: 'formal' })).toEqual({ ok: true });
@@ -33,6 +33,8 @@ describe('★ 07f’s Save at the wire', () => {
     expect(await saveEmployeeEdits('a', {})).toEqual({ ok: false, reason: 'gone' });
     refuse({ kind: 'validation', status: 422, code: 'INVALID_INTEGRATION_ACCESS' });
     expect(await saveEmployeeEdits('a', {})).toEqual({ ok: false, reason: 'invalid_access' });
+    refuse({ kind: 'validation', status: 400, code: 'INVALID_ESCALATION_RULES' });
+    expect(await saveEmployeeEdits('a', {})).toEqual({ ok: false, reason: 'invalid_rules' });
     refuse({ kind: 'server', status: 500 });
     expect(await saveEmployeeEdits('a', {})).toEqual({ ok: false, reason: 'failed' });
   });

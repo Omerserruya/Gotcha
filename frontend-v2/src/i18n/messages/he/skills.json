@@ -209,7 +209,8 @@
       "profile": "פרופיל",
       "knowledge": "ידע",
       "skills": "מיומנויות · {count}",
-      "limits": "מגבלות והעברה לאדם"
+      "skillsUnread": "מיומנויות",
+      "channels": "ערוצים"
     },
     "status": {
       "live": "פעיל",
