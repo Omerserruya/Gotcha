@@ -22,6 +22,7 @@
  */
 import { prisma } from "./prisma";
 import { loadIntegrationAccess, customAccessKey } from "./integration-access";
+import { readAgentToolLevels, type EmployeeToolLevel } from "./agent-tool-levels";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -41,7 +42,7 @@ export type ToolGateDecision = "ALLOW" | "DENY" | "REQUIRE_APPROVAL";
 export interface PolicySnapshot {
   catalog?: HitlPolicy;
   tenant?: HitlPolicy;
-  agent?: { requireApproval?: boolean; approverRole?: string | null };
+  agent?: { requireApproval?: boolean; approverRole?: string | null; level?: EmployeeToolLevel };
 }
 
 export interface PolicyResult {
@@ -122,6 +123,12 @@ export async function evaluatePolicies(opts: {
   tenantId: string;
   toolName: string;
   aiAgentId?: string;
+  /**
+   * The employee acting, for its own STRICTER level only (A1). Unlike
+   * aiAgentId it does not switch on the grant check (Layer 3): a caller that
+   * did not check grants before keeps not checking them. aiAgentId implies it.
+   */
+  employeeId?: string;
   args?: unknown;
 }): Promise<PolicyResult> {
   if (!opts.toolName) {
@@ -297,7 +304,25 @@ export async function evaluatePolicies(opts: {
   }
 
   // Compose: tenant authoritative when set, else catalog default.
-  const effective = composeAuthoritative(catalog, tenant);
+  let effective = composeAuthoritative(catalog, tenant);
+
+  // Layer 4: the employee's own level (A1, 2026-10-13), never looser than the
+  // workspace: Never denies, Ask turns an auto-run into an approval. Unreadable
+  // = the workspace level holds, which is still enforced.
+  const employee = opts.employeeId ?? opts.aiAgentId;
+  if (employee) {
+    let level: EmployeeToolLevel | undefined;
+    try {
+      level = (await readAgentToolLevels(opts.tenantId, employee))[opts.toolName];
+    } catch {
+      level = undefined;
+    }
+    if (level) snapshot.agent = { ...(snapshot.agent ?? {}), level };
+    if (level === "never") return denyResult(`tool "${opts.toolName}" set to Never for this employee`, snapshot);
+    if (level === "ask" && effective.mode !== "always") {
+      effective = { ...effective, mode: "always", condition: undefined };
+    }
+  }
 
   // Materialise the decision
   if (effective.mode === "never") {
@@ -311,7 +336,7 @@ export async function evaluatePolicies(opts: {
   if (effective.mode === "always") {
     return {
       decision: "REQUIRE_APPROVAL",
-      reason: `policy requires approval (catalog=${catalog.mode}${tenant ? `, tenant=${tenant.mode}` : ""})`,
+      reason: `policy requires approval (catalog=${catalog.mode}${tenant ? `, tenant=${tenant.mode}` : ""}${snapshot.agent?.level ? `, employee=${snapshot.agent.level}` : ""})`,
       effective,
       snapshot,
       approvalConfig: {
@@ -443,8 +468,9 @@ export async function evaluateToolGate(
   tenantId: string,
   toolName: string,
   aiAgentId?: string,
+  employeeId?: string,
 ): Promise<ToolGateResult> {
-  const r = await evaluatePolicies({ tenantId, toolName, aiAgentId });
+  const r = await evaluatePolicies({ tenantId, toolName, aiAgentId, employeeId });
   return { decision: r.decision, reason: r.reason, approvalConfig: r.approvalConfig };
 }
 

@@ -54,7 +54,7 @@ router.use(
   requirePermissionOrRole("ai:tools:read", "ADMIN"),
 );
 
-interface MergedToolRow {
+export interface MergedToolRow {
   toolName: string;
   kind: "system" | "action" | "integration";
   /** Static tools: the registry category. Integration tools: the catalogue ToolCategory, or null. */
@@ -103,170 +103,179 @@ interface MergedToolRow {
   riskLevel?: string | null;
 }
 
-router.get("/", async (req: Request, res: Response) => {
-  try {
-    const tenantId = req.tenantId!;
+/**
+ * Every tool this workspace has, with its workspace level and what blocks it.
+ * The list route's rows, and the source of each tool's workspace level for an
+ * AI employee's own levels (ai-agents GET /:id/tools).
+ */
+export async function listWorkspaceTools(tenantId: string): Promise<MergedToolRow[]> {
 
-    const [available, permissions, governable] = await Promise.all([
-      getAvailableTools(tenantId),
-      (prisma as any).tenantToolPermission.findMany({
-        where: { tenantId },
-      }),
-      // Every catalogue action of every connection, provisioned or not, keyed
-      // by catalog row. This used to be TenantTool rows keyed by bare slug,
-      // which (a) hid everything behind a non-CONNECTED integration and (b)
-      // let two providers sharing a slug (stripe/paypal create_payment_link)
-      // overwrite each other's displayed policy.
-      getGovernableIntegrationTools(tenantId, { includeDisconnected: true }),
-    ]);
+  const [available, permissions, governable] = await Promise.all([
+    getAvailableTools(tenantId),
+    (prisma as any).tenantToolPermission.findMany({
+      where: { tenantId },
+    }),
+    // Every catalogue action of every connection, provisioned or not, keyed
+    // by catalog row. This used to be TenantTool rows keyed by bare slug,
+    // which (a) hid everything behind a non-CONNECTED integration and (b)
+    // let two providers sharing a slug (stripe/paypal create_payment_link)
+    // overwrite each other's displayed policy.
+    getGovernableIntegrationTools(tenantId, { includeDisconnected: true }),
+  ]);
 
-    const permByName = new Map<string, any>();
-    for (const p of permissions) permByName.set(p.toolName, p);
+  const permByName = new Map<string, any>();
+  for (const p of permissions) permByName.set(p.toolName, p);
 
-    // Connection state and scope facts per integration slug, so the UI can say
-    // "the integration is disconnected" or "this scope was never granted"
-    // instead of showing an off switch the admin cannot fix.
-    //
-    // There is no `scopes` COLUMN on TenantIntegration - an earlier version of
-    // this code selected one, which threw, was swallowed by the catch below, and
-    // left every scope fact permanently undefined. The real sources are on
-    // `config`:
-    //   config.capabilityState.grantedScopes - what the provider says is granted
-    //   config.missingScopes                 - the enforcement source the bot's
-    //                                          tool surface already reads
-    // Reading the same two the runtime reads is the point: a UI computing its
-    // own answer here is how the screen ends up disagreeing with execution.
-    const tenantIntegrations = await (prisma as any).tenantIntegration
-      .findMany({
-        where: { tenantId },
-        select: {
-          status: true,
-          config: true,
-          integration: { select: { slug: true, name: true } },
-        },
-      })
-      .catch((err: any) => {
-        // Loud, because silence here is what hid the original bug.
-        console.error("[tool-permissions] integration lookup failed:", err?.message);
-        return [] as any[];
-      });
-
-    const integrationBySlug = new Map<
-      string,
-      { connected: boolean; grantedScopes: string[]; missingScopes: string[]; name: string }
-    >();
-    for (const ti of tenantIntegrations as any[]) {
-      const slug = ti.integration?.slug;
-      if (!slug) continue;
-      // Several rows per provider exist (three Shopify rows for one dev
-      // tenant); a CONNECTED one must not be shadowed by a broken sibling.
-      if (integrationBySlug.get(slug)?.connected) continue;
-      const cfg = (ti.config && typeof ti.config === "object" ? ti.config : {}) as Record<string, any>;
-      integrationBySlug.set(slug, {
-        connected: String(ti.status || "").toUpperCase() === "CONNECTED",
-        grantedScopes: capabilityStateFromConfig(cfg).grantedScopes,
-        missingScopes: missingScopesFromConfig(cfg),
-        name: ti.integration?.name ?? slug,
-      });
-    }
-
-    const defaultHighRisk = new Set(getDefaultHighRiskTools());
-    const highRiskOpen = highRiskAutoRunPermitted();
-
-    const merged: MergedToolRow[] = [];
-
-    const push = (spec: {
-      name: string;
-      kind: "system" | "action";
-      category: string;
-      description: string;
-    }) => {
-      const row = permByName.get(spec.name);
-      merged.push({
-        toolName: spec.name,
-        kind: spec.kind,
-        category: spec.category,
-        description: spec.description,
-        enabled: row ? row.enabled : true,
-        requiresApproval: row
-          ? row.requiresApproval
-          : defaultHighRisk.has(spec.name),
-        isDefault: !row,
-        approverRole: row?.approverRole ?? null,
-        expiresAfterMin: row?.expiresAfterMin ?? 30,
-        allowModification: row?.allowModification ?? false,
-        updatedAt: row?.updatedAt?.toISOString?.() ?? null,
-        riskGroup: riskGroupFor(spec.name),
-        autoRunAllowed: mayBeAlwaysAllowed(riskGroupFor(spec.name), highRiskOpen),
-        // Internal tools have no provider, so no connection or scope can block
-        // them. Left undefined deliberately: absent means "not blocking".
-        integration: null,
-      });
-    };
-
-    // Read-only system tools (get_conversation, list_recent_messages, …) are
-    // pre-resolved context gatherers - they never mutate state, so they have
-    // no HITL meaning. Exclude them from the settings page.
-    for (const spec of available.actionTools) push(spec as any);
-
-    // A bare `integration.<slug>` is ambiguous when two of this tenant's
-    // providers share the slug; name those rows `<provider>.<slug>` so the
-    // PUT that echoes the name back resolves to exactly one catalog row.
-    const httpSlugCount = new Map<string, number>();
-    for (const g of governable) {
-      if (g.name.startsWith("integration.")) httpSlugCount.set(g.slug, (httpSlugCount.get(g.slug) ?? 0) + 1);
-    }
-    for (const g of governable) {
-      const toolName =
-        g.name.startsWith("integration.") && (httpSlugCount.get(g.slug) ?? 0) > 1
-          ? `${g.integrationSlug}.${g.slug}`
-          : g.name;
-      const conn = integrationBySlug.get(g.integrationSlug);
-      const missing = conn?.missingScopes ?? [];
-      const missingHit = g.requiredScopes.filter((sc) => missing.includes(sc));
-      merged.push({
-        toolName,
-        kind: "integration",
-        // The catalogue's own ToolCategory (READ | WRITE | DELETE | ACTION).
-        // This was a hard-coded "meta" on every integration row, which a screen
-        // grouping by category rendered under the wrong heading. Null when the
-        // catalogue row has none - not a borrowed label.
-        category: g.catalogCategory,
-        description: g.description || g.displayName,
-        // Effective state, not a placeholder: an unprovisioned action is off
-        // until a policy is chosen for it.
-        enabled: g.provisioned && g.isEnabled,
-        requiresApproval: (g.overrideHitlMode ?? g.catalogHitlMode) === "always",
-        isDefault: g.overrideHitlMode == null,
-        approverRole: null,
-        expiresAfterMin: 30,
-        allowModification: false,
-        updatedAt: g.updatedAt,
-        riskGroup: riskGroupFor(toolName),
-        autoRunAllowed: mayBeAlwaysAllowed(riskGroupFor(toolName), highRiskOpen),
-        integration: g.integrationSlug,
-        integrationConnected: conn ? conn.connected : undefined,
-        requiredScopes: g.requiredScopes.length ? g.requiredScopes : undefined,
-        grantedScopes: conn?.grantedScopes,
-        scopeBlocked: toolBlockedByMissingScopes({ name: toolName, requiredScopes: g.requiredScopes } as any, missing),
-        missingScopes: missingHit.length ? missingHit : undefined,
-        hasCatalogEntry: true,
-        state: !g.provisioned ? "not_provisioned" : g.isEnabled ? "enabled" : "disabled",
-        integrationStatus: g.integrationStatus,
-        catalogToolId: g.catalogToolId,
-        riskLevel: g.riskLevel,
-      });
-    }
-
-    // Sort: action first (most important), then integration, then system.
-    const kindOrder = { action: 0, integration: 1, system: 2 } as const;
-    merged.sort((a, b) => {
-      if (kindOrder[a.kind] !== kindOrder[b.kind]) {
-        return kindOrder[a.kind] - kindOrder[b.kind];
-      }
-      return a.toolName.localeCompare(b.toolName);
+  // Connection state and scope facts per integration slug, so the UI can say
+  // "the integration is disconnected" or "this scope was never granted"
+  // instead of showing an off switch the admin cannot fix.
+  //
+  // There is no `scopes` COLUMN on TenantIntegration - an earlier version of
+  // this code selected one, which threw, was swallowed by the catch below, and
+  // left every scope fact permanently undefined. The real sources are on
+  // `config`:
+  //   config.capabilityState.grantedScopes - what the provider says is granted
+  //   config.missingScopes                 - the enforcement source the bot's
+  //                                          tool surface already reads
+  // Reading the same two the runtime reads is the point: a UI computing its
+  // own answer here is how the screen ends up disagreeing with execution.
+  const tenantIntegrations = await (prisma as any).tenantIntegration
+    .findMany({
+      where: { tenantId },
+      select: {
+        status: true,
+        config: true,
+        integration: { select: { slug: true, name: true } },
+      },
+    })
+    .catch((err: any) => {
+      // Loud, because silence here is what hid the original bug.
+      console.error("[tool-permissions] integration lookup failed:", err?.message);
+      return [] as any[];
     });
 
+  const integrationBySlug = new Map<
+    string,
+    { connected: boolean; grantedScopes: string[]; missingScopes: string[]; name: string }
+  >();
+  for (const ti of tenantIntegrations as any[]) {
+    const slug = ti.integration?.slug;
+    if (!slug) continue;
+    // Several rows per provider exist (three Shopify rows for one dev
+    // tenant); a CONNECTED one must not be shadowed by a broken sibling.
+    if (integrationBySlug.get(slug)?.connected) continue;
+    const cfg = (ti.config && typeof ti.config === "object" ? ti.config : {}) as Record<string, any>;
+    integrationBySlug.set(slug, {
+      connected: String(ti.status || "").toUpperCase() === "CONNECTED",
+      grantedScopes: capabilityStateFromConfig(cfg).grantedScopes,
+      missingScopes: missingScopesFromConfig(cfg),
+      name: ti.integration?.name ?? slug,
+    });
+  }
+
+  const defaultHighRisk = new Set(getDefaultHighRiskTools());
+  const highRiskOpen = highRiskAutoRunPermitted();
+
+  const merged: MergedToolRow[] = [];
+
+  const push = (spec: {
+    name: string;
+    kind: "system" | "action";
+    category: string;
+    description: string;
+  }) => {
+    const row = permByName.get(spec.name);
+    merged.push({
+      toolName: spec.name,
+      kind: spec.kind,
+      category: spec.category,
+      description: spec.description,
+      enabled: row ? row.enabled : true,
+      requiresApproval: row
+        ? row.requiresApproval
+        : defaultHighRisk.has(spec.name),
+      isDefault: !row,
+      approverRole: row?.approverRole ?? null,
+      expiresAfterMin: row?.expiresAfterMin ?? 30,
+      allowModification: row?.allowModification ?? false,
+      updatedAt: row?.updatedAt?.toISOString?.() ?? null,
+      riskGroup: riskGroupFor(spec.name),
+      autoRunAllowed: mayBeAlwaysAllowed(riskGroupFor(spec.name), highRiskOpen),
+      // Internal tools have no provider, so no connection or scope can block
+      // them. Left undefined deliberately: absent means "not blocking".
+      integration: null,
+    });
+  };
+
+  // Read-only system tools (get_conversation, list_recent_messages, …) are
+  // pre-resolved context gatherers - they never mutate state, so they have
+  // no HITL meaning. Exclude them from the settings page.
+  for (const spec of available.actionTools) push(spec as any);
+
+  // A bare `integration.<slug>` is ambiguous when two of this tenant's
+  // providers share the slug; name those rows `<provider>.<slug>` so the
+  // PUT that echoes the name back resolves to exactly one catalog row.
+  const httpSlugCount = new Map<string, number>();
+  for (const g of governable) {
+    if (g.name.startsWith("integration.")) httpSlugCount.set(g.slug, (httpSlugCount.get(g.slug) ?? 0) + 1);
+  }
+  for (const g of governable) {
+    const toolName =
+      g.name.startsWith("integration.") && (httpSlugCount.get(g.slug) ?? 0) > 1
+        ? `${g.integrationSlug}.${g.slug}`
+        : g.name;
+    const conn = integrationBySlug.get(g.integrationSlug);
+    const missing = conn?.missingScopes ?? [];
+    const missingHit = g.requiredScopes.filter((sc) => missing.includes(sc));
+    merged.push({
+      toolName,
+      kind: "integration",
+      // The catalogue's own ToolCategory (READ | WRITE | DELETE | ACTION).
+      // This was a hard-coded "meta" on every integration row, which a screen
+      // grouping by category rendered under the wrong heading. Null when the
+      // catalogue row has none - not a borrowed label.
+      category: g.catalogCategory,
+      description: g.description || g.displayName,
+      // Effective state, not a placeholder: an unprovisioned action is off
+      // until a policy is chosen for it.
+      enabled: g.provisioned && g.isEnabled,
+      requiresApproval: (g.overrideHitlMode ?? g.catalogHitlMode) === "always",
+      isDefault: g.overrideHitlMode == null,
+      approverRole: null,
+      expiresAfterMin: 30,
+      allowModification: false,
+      updatedAt: g.updatedAt,
+      riskGroup: riskGroupFor(toolName),
+      autoRunAllowed: mayBeAlwaysAllowed(riskGroupFor(toolName), highRiskOpen),
+      integration: g.integrationSlug,
+      integrationConnected: conn ? conn.connected : undefined,
+      requiredScopes: g.requiredScopes.length ? g.requiredScopes : undefined,
+      grantedScopes: conn?.grantedScopes,
+      scopeBlocked: toolBlockedByMissingScopes({ name: toolName, requiredScopes: g.requiredScopes } as any, missing),
+      missingScopes: missingHit.length ? missingHit : undefined,
+      hasCatalogEntry: true,
+      state: !g.provisioned ? "not_provisioned" : g.isEnabled ? "enabled" : "disabled",
+      integrationStatus: g.integrationStatus,
+      catalogToolId: g.catalogToolId,
+      riskLevel: g.riskLevel,
+    });
+  }
+
+  // Sort: action first (most important), then integration, then system.
+  const kindOrder = { action: 0, integration: 1, system: 2 } as const;
+  merged.sort((a, b) => {
+    if (kindOrder[a.kind] !== kindOrder[b.kind]) {
+      return kindOrder[a.kind] - kindOrder[b.kind];
+    }
+    return a.toolName.localeCompare(b.toolName);
+  });
+
+  return merged;
+}
+
+router.get("/", async (req: Request, res: Response) => {
+  try {
+    const merged = await listWorkspaceTools(req.tenantId!);
     res.json({ data: merged });
   } catch (err: any) {
     console.error("List tool permissions error:", err);

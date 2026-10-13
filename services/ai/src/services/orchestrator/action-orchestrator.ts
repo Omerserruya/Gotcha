@@ -160,6 +160,7 @@ export class ActionOrchestrator {
         tenantId: action.tenantId,
         toolName: action.tool,
         args: action.args,
+        employeeId: action.aiAgentId,
       });
     } catch (err: any) {
       // Gate failure must not silently auto-execute. Treat as deny so the

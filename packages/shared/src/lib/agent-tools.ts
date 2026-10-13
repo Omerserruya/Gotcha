@@ -13,6 +13,8 @@
 
 export interface AgentToolContext {
   tenantId: string;
+  /** The AI employee acting: its own stricter tool levels apply at dispatch (A1). */
+  aiAgentId?: string;
   conversationId?: string;
   /** Required for link_customer_identifier dispatch. */
   contactId?: string;
@@ -1437,7 +1439,7 @@ async function dispatchToolCallInner(
         describeApprovalAction: (await import("./approval-requests")).describeApprovalAction,
       }),
     );
-    const gate = await evaluateToolGate(ctx.tenantId, name);
+    const gate = await evaluateToolGate(ctx.tenantId, name, undefined, ctx.aiAgentId);
     if (gate.decision === "DENY") {
       return {
         toolCallId: toolCall.id,

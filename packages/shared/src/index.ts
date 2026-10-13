@@ -1289,3 +1289,5 @@ export {
 } from "./lib/reply-window";
 export type { ReplyWindow, ReplyWindowMode, ReplyWindowRefusal } from "./lib/reply-window";
 export { buildTemplateComponents, renderTemplateText, extractPlaceholders as templatePlaceholders } from "./lib/template-components";
+export { agentToolLevelsKey, stricterLevel, allowedEmployeeLevels, readAgentToolLevels, writeAgentToolLevel } from "./lib/agent-tool-levels";
+export type { ToolLevel, EmployeeToolLevel } from "./lib/agent-tool-levels";

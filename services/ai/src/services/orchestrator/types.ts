@@ -16,6 +16,8 @@ export interface ProposedAction {
   tenantId: string;
   proposedBy: { mode: RuntimeMode; system: string };
   actor: { agentId: string };
+  /** The AI employee acting, so its own stricter tool level applies (A1). */
+  aiAgentId?: string;
   tool: string;
   args: Record<string, unknown>;
   rationale: string;

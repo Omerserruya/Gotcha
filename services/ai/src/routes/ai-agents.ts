@@ -1,5 +1,8 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity, defaultIntegrationAccess, validateIntegrationAccess, integrationAccessChoices } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity, defaultIntegrationAccess, validateIntegrationAccess, integrationAccessChoices, readAgentToolLevels, writeAgentToolLevel, stricterLevel, allowedEmployeeLevels, writeAudit, AuditAction, type ToolLevel } from "@chatcenter/shared";
+import { listWorkspaceTools } from "./tool-permissions";
+import { catalogTool } from "../lib/catalog-tools-he";
+import { readerLocale } from "../lib/reader-locale";
 import { whereEmployeeAnswers } from "../services/employee-reach.service";
 
 /**
@@ -912,6 +915,99 @@ router.put(
 // Runtime routing is exclusively the FlowCanvas graph: an ACTIVE employee
 // with no agent-node targeting it NEVER receives a conversation. This
 // endpoint tells the UI the truth so "go live" can't be a broken promise.
+// ─── The employee's own tool levels (A1, Omer 2026-10-13) ──────────────────
+//
+// Equal to or stricter than the workspace (Integrations), never looser.
+// Enforced at dispatch in the shared gate (evaluatePolicies, Layer 4); these
+// two routes read and set it.
+
+function workspaceLevelOf(row: { enabled: boolean; requiresApproval: boolean }): ToolLevel {
+  if (!row.enabled) return "never";
+  return row.requiresApproval ? "ask" : "execute";
+}
+
+router.get("/:id/tools", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const agent = await prisma.aIAgent.findFirst({ where: { id: req.params.id as string, tenantId }, select: { id: true } });
+    if (!agent) { res.status(404).json({ error: "AI employee not found" }); return; }
+    const [rows, levels, locale] = await Promise.all([
+      listWorkspaceTools(tenantId),
+      readAgentToolLevels(tenantId, agent.id),
+      readerLocale(req),
+    ]);
+    const tools = rows.map((r) => {
+      const workspaceLevel = workspaceLevelOf(r);
+      const own = levels[r.toolName] ?? null;
+      const employeeLevel: ToolLevel = own ?? workspaceLevel;
+      const slug = r.toolName.includes(".") ? r.toolName.slice(r.toolName.indexOf(".") + 1) : r.toolName;
+      const label = r.integration ? catalogTool(r.integration, { slug, name: slug, description: r.description }, locale) : null;
+      return {
+        toolName: r.toolName,
+        label: label?.name ?? r.toolName,
+        description: label?.description ?? r.description,
+        integration: r.integration,
+        riskGroup: r.riskGroup,
+        workspaceLevel,
+        // What this employee has chosen, or null for "the same as the workspace".
+        ownLevel: own,
+        // What actually applies: the stricter of the two, so a workspace that
+        // tightened after the employee was set still wins.
+        employeeLevel: stricterLevel(workspaceLevel, employeeLevel),
+        allowedLevels: allowedEmployeeLevels(workspaceLevel),
+      };
+    });
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({ data: { tools } });
+  } catch (err) {
+    console.error("Employee tools error:", err);
+    res.status(500).json({ error: "Failed to list the employee's tools" });
+  }
+});
+
+router.put("/:id/tool-levels/:toolName", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:update", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const toolName = String(req.params.toolName);
+    const level = req.body?.level as ToolLevel | null;
+    if (level !== null && level !== "execute" && level !== "ask" && level !== "never") {
+      res.status(400).json({ error: "level must be execute, ask, never or null", code: "BAD_LEVEL" }); return;
+    }
+    const agent = await prisma.aIAgent.findFirst({ where: { id: req.params.id as string, tenantId }, select: { id: true } });
+    if (!agent) { res.status(404).json({ error: "AI employee not found" }); return; }
+    const row = (await listWorkspaceTools(tenantId)).find((r) => r.toolName === toolName);
+    if (!row) { res.status(404).json({ error: `unknown tool "${toolName}"`, code: "UNKNOWN_TOOL" }); return; }
+    const workspaceLevel = workspaceLevelOf(row);
+    const wanted: ToolLevel = level ?? workspaceLevel;
+    if (!allowedEmployeeLevels(workspaceLevel).includes(wanted)) {
+      res.status(422).json({
+        error: `The workspace sets "${toolName}" to ${workspaceLevel}; an AI employee may only be the same or stricter.`,
+        code: "LOOSER_THAN_WORKSPACE",
+        workspaceLevel,
+        allowedLevels: allowedEmployeeLevels(workspaceLevel),
+      });
+      return;
+    }
+    // Equal to the workspace is stored as "no own level", so the employee
+    // follows the workspace if it later loosens back.
+    const stored = wanted === workspaceLevel ? null : wanted;
+    const levels = await writeAgentToolLevel(tenantId, agent.id, toolName, stored, (req as any).user?.userId);
+    void writeAudit({
+      tenantId,
+      actorType: "user",
+      actorId: (req as any).user?.userId ?? null,
+      action: AuditAction.PERMISSION_CHANGED,
+      targetType: "ai_agent",
+      targetId: agent.id,
+      metadata: { change: "employee_tool_level", tool: toolName, workspaceLevel, level: wanted },
+    });
+    res.json({ data: { toolName, workspaceLevel, ownLevel: levels[toolName] ?? null, employeeLevel: wanted } });
+  } catch (err) {
+    console.error("Set employee tool level error:", err);
+    res.status(500).json({ error: "Failed to set the tool level" });
+  }
+});
+
 router.get("/:id/reachability", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const agent = await prisma.aIAgent.findFirst({
