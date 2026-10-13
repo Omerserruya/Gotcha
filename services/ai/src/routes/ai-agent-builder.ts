@@ -444,7 +444,17 @@ router.post("/:id/complete", async (req: Request, res: Response) => {
         ...(salesContext !== undefined ? { salesContext: salesContext as any } : {}),
       },
     });
-    res.json({ data: { ok: true, salesContextAutofilled: salesContext !== undefined } });
+    // A hire (DRAFT -> ACTIVE) runs the readiness report in the background
+    // (A6, Omer 2026-10-13): one LLM call, stored on the employee; the manual
+    // route re-runs it. Never blocks or fails the hire.
+    const hired = agent.status === "DRAFT";
+    if (hired) {
+      void resolveLocale(tenantId, req.body?.locale)
+        .then((locale) => runAndStoreReadiness(tenantId, agentId, locale))
+        .then((r) => { if ("error" in r) console.warn(`[readiness] after hire ${agentId}: ${r.error}`); })
+        .catch((err: any) => console.warn(`[readiness] after hire ${agentId} failed:`, err?.message));
+    }
+    res.json({ data: { ok: true, salesContextAutofilled: salesContext !== undefined, readinessQueued: hired } });
   } catch (err: any) {
     console.error("Builder complete error:", err);
     res.status(500).json({ error: "Failed to complete builder" });
@@ -484,6 +494,23 @@ router.post("/:id/finalize", async (req: Request, res: Response) => {
 });
 
 // ─── Readiness Test ─────────────────────────────────────────
+/**
+ * Generate the readiness report and store it on the employee
+ * (AIAgent.readinessReport), so it can be re-viewed without re-running.
+ * Persisting is best-effort: a failure never blocks returning the report.
+ * Shared by the manual route and the automatic run after a hire.
+ */
+export async function runAndStoreReadiness(tenantId: string, agentId: string, locale: string) {
+  const report = await generateReadinessReport(tenantId, agentId, locale);
+  if ("error" in report) return report;
+  try {
+    await prisma.aIAgent.update({ where: { id: agentId }, data: { readinessReport: report as any } });
+  } catch (persistErr: any) {
+    console.warn("[readiness-test] persist failed (non-fatal):", persistErr?.message);
+  }
+  return report;
+}
+
 // Generates the realistic customer questions this employee will face, scores
 // how well it's covered (knowledge + tools), and lists concrete gap fixes.
 router.post("/:id/readiness-test", async (req: Request, res: Response) => {
@@ -494,20 +521,10 @@ router.post("/:id/readiness-test", async (req: Request, res: Response) => {
     if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
 
     const locale = await resolveLocale(tenantId, req.body?.locale);
-    const report = await generateReadinessReport(tenantId, agentId, locale);
+    const report = await runAndStoreReadiness(tenantId, agentId, locale);
     if ("error" in report) {
       res.status(report.error === "agent_not_found" ? 404 : 502).json({ error: report.error });
       return;
-    }
-    // Persist so the owner can re-view without re-running the generator (P1-5).
-    // Best-effort: a persistence failure never blocks returning the report.
-    try {
-      await prisma.aIAgent.update({
-        where: { id: agentId },
-        data: { readinessReport: report as any },
-      });
-    } catch (persistErr: any) {
-      console.warn("[readiness-test] persist failed (non-fatal):", persistErr?.message);
     }
     res.json({ data: report });
   } catch (err: any) {
