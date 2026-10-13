@@ -38,11 +38,10 @@ export async function receivableEvents(tenantId: string, userId: string): Promis
       .filter((r) => r.eventType === entry.key)
       .map((r) => ({ recipients: r.recipients as RecipientSpec, channels: Array.isArray(r.channels) ? r.channels : ["email", "in_app"], departmentId: r.departmentId ?? null }));
     if (routes.length === 0) {
-      if (entry.key === "conversation.assigned") routes = [{ recipients: { type: "users", userIds: [userId] } as RecipientSpec, channels: ["in_app"], departmentId: null }];
-      else {
-        const fb = defaultRoute({ type: entry.key, tenantId } as any);
-        if (fb) routes = [{ recipients: fb.recipients, channels: fb.channels, departmentId: null }];
-      }
+      // The built-in route, from the one definition the fan-out uses (an
+      // assignment counts as this person's).
+      const fb = defaultRoute({ type: entry.key, tenantId, metadata: { userId } } as any);
+      if (fb) routes = [{ recipients: fb.recipients, channels: fb.channels, departmentId: null }];
     }
     const channels = new Set<string>();
     for (const r of routes) {

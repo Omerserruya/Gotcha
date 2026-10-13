@@ -217,10 +217,18 @@ export async function processEvent(event: SystemEvent): Promise<void> {
 
 /**
  * Who hears of an event when the workspace set no rule for it: the person it
- * is about, else the workspace's admins. In-app only: email is opt-in (a
- * routing rule), because dev sends real mail and a default would mail every
- * admin on every event.
+ * is about, else the workspace's admins. In-app always; email too for the
+ * events below (Omer, 2026-10-12): the ones that need someone to act. Same
+ * recipients as in-app, and each person's own switches and quiet hours still
+ * decide (personalAllows). A workspace rule for the event replaces all of it.
  */
+export const EMAIL_BY_DEFAULT: ReadonlySet<string> = new Set([
+  "tool.approval_required",
+  "tool.action_failed",
+  "integration.check_failed",
+  "conversation.escalated",
+  "conversation.assigned",
+]);
 const ADMINS_FOR = new Set([
   "tool.approval_required", "tool.action_failed", "conversation.escalated", "integration.check_failed", "broadcast.completed",
   "refund.issued", "discount.applied", "meeting.scheduled",
@@ -229,12 +237,14 @@ const ADMINS_FOR = new Set([
   "credit.auto_purchase_succeeded", "credit.auto_purchase_failed", "credit.auto_purchase_ceiling_reached",
 ]);
 export function defaultRoute(event: SystemEvent): { recipients: RecipientSpec; channels: string[]; priority: string; conditions: null; departmentId: null } | null {
-  const base = { channels: ["in_app"], priority: "MEDIUM", conditions: null, departmentId: null } as const;
+  const base = { priority: "MEDIUM", conditions: null, departmentId: null } as const;
+  const channels = EMAIL_BY_DEFAULT.has(event.type) ? ["in_app", "email"] : ["in_app"];
   if (event.type === "conversation.assigned") {
+    // The assignee only, never the admins.
     const userId = event.metadata?.userId;
-    return userId ? { ...base, channels: [...base.channels], recipients: { type: "users", userIds: [userId] } as RecipientSpec } : null;
+    return userId ? { ...base, channels, recipients: { type: "users", userIds: [userId] } as RecipientSpec } : null;
   }
-  if (ADMINS_FOR.has(event.type)) return { ...base, channels: [...base.channels], recipients: { type: "tenant_owner" } as RecipientSpec };
+  if (ADMINS_FOR.has(event.type)) return { ...base, channels, recipients: { type: "tenant_owner" } as RecipientSpec };
   return null;
 }
 

@@ -87,6 +87,27 @@ describe("GET: the matrix for this person", () => {
   });
 });
 
+describe("GET with no workspace rules: the built-in routes (D2, 2026-10-12)", () => {
+  it("the five act-on-it events offer email too; others stay in-app", async () => {
+    H.rules = [];
+    const r = await request(app).get("/api/notification-preferences/me");
+    const types = Object.fromEntries(r.body.data.eventTypes.map((t: any) => [t.type, t.channels]));
+    for (const t of ["tool.approval_required", "tool.action_failed", "integration.check_failed", "conversation.escalated", "conversation.assigned"]) {
+      expect(types[t], t).toEqual(["email", "in_app"]);
+    }
+    expect(types["broadcast.completed"]).toEqual(["in_app"]);
+  });
+
+  it("an agent is offered the assignment by email, and not the admins' events", async () => {
+    H.rules = [];
+    H.me = { userId: "matan", role: "AGENT" };
+    const r = await request(app).get("/api/notification-preferences/me");
+    const types = Object.fromEntries(r.body.data.eventTypes.map((t: any) => [t.type, t.channels]));
+    expect(types["conversation.assigned"]).toEqual(["email", "in_app"]);
+    expect(types["tool.approval_required"]).toBeUndefined();
+  });
+});
+
 describe("PATCH { events }", () => {
   it("turns one event's email off, keeps the rest, and merges a later change", async () => {
     let r = await request(app).patch("/api/notification-preferences/me").send({ events: { "conversation.escalated": { email: false } } });

@@ -142,3 +142,39 @@ describe("★ one event, one channel, one person", () => {
     expect(who(H.inApp)).toEqual(["noa"]);
   });
 });
+
+describe("★ D2 (Omer, 2026-10-12): five events also email by default, to the same people", () => {
+  it("each admin event with no rule: in-app AND email to the admins, nobody else", async () => {
+    for (const type of ["tool.approval_required", "tool.action_failed", "integration.check_failed", "conversation.escalated"]) {
+      H.inApp = []; H.emails = [];
+      await processEvent(ev(type));
+      expect(who(H.inApp), type).toEqual(["dana", "noa"]);
+      expect(H.emails.map((e) => e.to).sort(), type).toEqual(["dana@x.test", "noa@x.test"]);
+    }
+  });
+
+  it("an assignment emails the assignee only", async () => {
+    await processEvent(ev("conversation.assigned", {}, { userId: "matan" }));
+    expect(who(H.inApp)).toEqual(["matan"]);
+    expect(H.emails.map((e) => e.to)).toEqual(["matan@x.test"]);
+  });
+
+  it("an event outside the five stays in-app only", async () => {
+    await processEvent(ev("broadcast.completed"));
+    expect(who(H.inApp)).toEqual(["dana", "noa"]);
+    expect(H.emails).toHaveLength(0);
+  });
+
+  it("a person's own email switch for the event still wins", async () => {
+    H.overrides = [off("dana", { "tool.action_failed": { email: false } })];
+    await processEvent(ev("tool.action_failed"));
+    expect(H.emails.map((e) => e.to)).toEqual(["noa@x.test"]);
+    expect(who(H.inApp)).toEqual(["dana", "noa"]);
+  });
+
+  it("a workspace rule for the event replaces the built-in route, email included", async () => {
+    H.rules = [rule("conversation.escalated", ["in_app"])];
+    await processEvent(ev("conversation.escalated"));
+    expect(H.emails).toHaveLength(0);
+  });
+});

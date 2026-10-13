@@ -146,17 +146,19 @@ describe("★ quiet hours, in the workspace's timezone", () => {
   });
 });
 
-describe("★ no workspace rule: the built-in route, in-app only", () => {
-  it("an approval request reaches this workspace's admins, never another's, never by email", async () => {
+describe("★ no workspace rule: the built-in route", () => {
+  // Was "in-app only, never by email". Since 2026-10-12 (Omer, D2) five events
+  // also email by default, to the same people (per-event-preferences.test.ts).
+  it("an approval request reaches this workspace's admins, never another's, in-app and by email", async () => {
     await processEvent(ev("tool.approval_required"));
     expect(who(H.inApp)).toEqual(["dana", "noa"]);
-    expect(H.emails).toEqual([]);
+    expect(H.emails.map((e: any) => e.to).sort()).toEqual(["dana@x.test", "noa@x.test"]);
   });
 
   it("an assignment reaches the assignee only", async () => {
     await processEvent(ev("conversation.assigned", { assignedByName: "Dana" }, { userId: "matan" }));
     expect(who(H.inApp)).toEqual(["matan"]);
-    expect(H.emails).toEqual([]);
+    expect(H.emails.map((e: any) => e.to)).toEqual([H.users.find((u: any) => u.id === "matan").email]);
   });
 
   it("an assignment naming nobody, or an event with no built-in route, reaches no one", async () => {
