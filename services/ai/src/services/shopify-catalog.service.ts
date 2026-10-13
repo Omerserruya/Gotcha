@@ -1,3 +1,4 @@
+import { SHOPIFY_OPERATION } from "@chatcenter/shared";
 /**
  * Shopify catalog service - the ONLY place Shopify product truth enters
  * the Live Chat feature.
@@ -54,7 +55,7 @@ export function __resetShopifyCatalogCache(): void {
 }
 
 export async function resolveShopifyStore(tenantId: string): Promise<StoreResolution> {
-  const conn = await loadConnection({ tenantId, slug: SHOPIFY_SLUG });
+  const conn = await loadConnection({ tenantId, slug: SHOPIFY_SLUG, capability: SHOPIFY_OPERATION.CATALOG });
   if (!conn) return { ok: false, reason: "not_connected" };
 
   const shopDomain =

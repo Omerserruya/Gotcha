@@ -1,39 +1,42 @@
 /**
- * The test-shop allowlist.
+ * The test-shop list, AFTER it stopped being a gate.
  *
- * WHAT IT IS PROTECTING AGAINST
- * -----------------------------
- * Testing runs against the PRODUCTION Partner app, on the production host,
- * beside real merchants. `test` is not an isolated environment - it is the same
- * deployment with a flag flipped, and Shopify's $0-on-development-stores rule
- * is the only thing between a test charge and a real one.
+ * WHAT CHANGED, AND WHY THIS FILE INVERTED
+ * ----------------------------------------
+ * `SHOPIFY_BILLING_TEST_SHOPS` used to decide who could enter the Shopify App
+ * Pricing flow while `SHOPIFY_BILLING_ENV=test`. A store nobody had listed was
+ * connected and then silently excluded from billing. This file used to assert
+ * that exclusion held.
  *
- * Without this list, flipping that flag would put every connected store into
- * plan selection at once: real merchants redirected to a Shopify pricing page
- * they never asked for, during a window meant to exercise one dev store.
+ * Shopify App Store review 132211 rejected that shape. A reviewer works from an
+ * ordinary development store that nobody added to a server-side list, so an
+ * allowlist means the reviewer - and every real merchant during the same
+ * window - takes a different code path from the one being reviewed. An app
+ * whose behaviour depends on whether the tenant was named in configuration
+ * cannot be assessed. The finding covers any reviewer-specific tenant, shop or
+ * workspace allowlist, so replacing this one with a differently-named list
+ * would not have answered it.
  *
- * So the failure mode of a forgotten variable must be "the test does not
- * start", and never "every merchant is enrolled".
+ * So the tests now pin the OPPOSITE property: parsing still works, and nothing
+ * anywhere branches on the result. The protections that actually keep test
+ * money from becoming real money are unchanged and asserted at the bottom -
+ * `SHOPIFY_BILLING_ENABLED`, `SHOPIFY_BILLING_ENV`, `SHOPIFY_ALLOW_LIVE_BILLING`,
+ * and Shopify's own $0 pricing on development stores.
  *
- * No database and no network: this is a pure predicate over configuration and
- * one already-verified shop domain.
+ * No database and no network: a pure predicate over configuration, plus one
+ * source scan.
  */
+import fs from "node:fs";
+import path from "node:path";
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import {
   shopifyBillingTestShops,
   invalidTestShopEntries,
-  shopifyBillingAppliesToShop,
+  isListedShopifyTestShop,
+  shopifyBillingEnv,
 } from "../billing-sources/shopify/config";
 
 const ORIGINAL = { ...process.env };
-
-function env(e: "mock" | "test" | "live", shops?: string) {
-  process.env.SHOPIFY_BILLING_ENABLED = "true";
-  process.env.SHOPIFY_BILLING_MODE = "app_pricing";
-  process.env.SHOPIFY_BILLING_ENV = e;
-  if (e === "live") process.env.SHOPIFY_ALLOW_LIVE_BILLING = "true";
-  if (shops !== undefined) process.env.SHOPIFY_BILLING_TEST_SHOPS = shops;
-}
 
 beforeEach(() => {
   for (const k of Object.keys(process.env)) {
@@ -45,73 +48,34 @@ afterAll(() => {
   process.env = { ...ORIGINAL };
 });
 
-describe("exact match", () => {
-  it("admits a listed shop", () => {
-    env("test", "acme-dev.myshopify.com");
-    expect(shopifyBillingAppliesToShop("acme-dev.myshopify.com")).toBe(true);
-  });
+// ─── The parser still works ──────────────────────────────────────────────
+//
+// Retained because the list is still reported at boot, and a diagnostic that
+// silently mangles what it reports is worse than no diagnostic.
 
-  it("refuses a shop that is not listed", () => {
-    env("test", "acme-dev.myshopify.com");
-    // A real merchant, mid-test-window. Must behave exactly as it does today.
-    expect(shopifyBillingAppliesToShop("real-merchant.myshopify.com")).toBe(false);
-  });
-
-  it("does not match on a prefix", () => {
-    env("test", "acme-dev.myshopify.com");
-    expect(shopifyBillingAppliesToShop("acme.myshopify.com")).toBe(false);
-  });
-
-  it("does not match on a longer handle sharing the prefix", () => {
-    env("test", "acme.myshopify.com");
-    expect(shopifyBillingAppliesToShop("acme-dev.myshopify.com")).toBe(false);
-  });
-});
-
-describe("normalization", () => {
-  it("accepts a bare handle in the configuration", () => {
-    env("test", "acme-dev");
-    expect(shopifyBillingTestShops()).toEqual(["acme-dev.myshopify.com"]);
-    expect(shopifyBillingAppliesToShop("acme-dev.myshopify.com")).toBe(true);
-  });
-
-  it("is case-insensitive on both sides", () => {
-    env("test", "ACME-Dev.MyShopify.COM");
-    expect(shopifyBillingAppliesToShop("acme-dev.myshopify.com")).toBe(true);
-    expect(shopifyBillingAppliesToShop("ACME-DEV.MYSHOPIFY.COM")).toBe(true);
-  });
-
-  it("tolerates a pasted URL", () => {
-    env("test", "https://acme-dev.myshopify.com/admin");
+describe("parsing", () => {
+  it("reads a single shop", () => {
+    process.env.SHOPIFY_BILLING_TEST_SHOPS = "acme-dev.myshopify.com";
     expect(shopifyBillingTestShops()).toEqual(["acme-dev.myshopify.com"]);
   });
 
-  it("strips a path, including a traversal-looking one", () => {
-    // Deliberate, and not a bypass: stripping a path can only ever resolve to
-    // the host the operator literally wrote. The CHECK side never sees a path
-    // at all - a runtime shop domain comes from a Shopify-signed request.
-    env("test", "acme-dev.myshopify.com/../other");
-    expect(shopifyBillingTestShops()).toEqual(["acme-dev.myshopify.com"]);
-    expect(shopifyBillingAppliesToShop("other.myshopify.com")).toBe(false);
-  });
-
-  it("tolerates surrounding whitespace and a trailing dot", () => {
-    env("test", "   acme-dev.myshopify.com.   ");
+  it("completes a bare handle", () => {
+    process.env.SHOPIFY_BILLING_TEST_SHOPS = "acme-dev";
     expect(shopifyBillingTestShops()).toEqual(["acme-dev.myshopify.com"]);
   });
 
-  it("does not admit a bare handle at CHECK time", () => {
-    // The runtime side stays strict. Only Shopify's canonical form is a shop;
-    // accepting a slug here would let a caller pass something Shopify never
-    // said.
-    env("test", "acme-dev");
-    expect(shopifyBillingAppliesToShop("acme-dev")).toBe(false);
+  it("strips a scheme and path from a pasted URL", () => {
+    process.env.SHOPIFY_BILLING_TEST_SHOPS = "https://acme-dev.myshopify.com/admin";
+    expect(shopifyBillingTestShops()).toEqual(["acme-dev.myshopify.com"]);
   });
-});
 
-describe("multiple shops", () => {
-  it("accepts a comma-separated list", () => {
-    env("test", "a-dev,b-dev.myshopify.com,c-dev");
+  it("lowercases", () => {
+    process.env.SHOPIFY_BILLING_TEST_SHOPS = "ACME-DEV.MYSHOPIFY.COM";
+    expect(shopifyBillingTestShops()).toEqual(["acme-dev.myshopify.com"]);
+  });
+
+  it("splits on commas, whitespace and newlines, and de-duplicates", () => {
+    process.env.SHOPIFY_BILLING_TEST_SHOPS = "a-dev, b-dev\nc-dev  a-dev";
     expect(shopifyBillingTestShops().sort()).toEqual([
       "a-dev.myshopify.com",
       "b-dev.myshopify.com",
@@ -119,137 +83,137 @@ describe("multiple shops", () => {
     ]);
   });
 
-  it("accepts whitespace and newline separation", () => {
-    env("test", "a-dev.myshopify.com\n  b-dev.myshopify.com\tc-dev");
-    expect(shopifyBillingTestShops()).toHaveLength(3);
-  });
-
-  it("admits every listed shop and nothing else", () => {
-    env("test", "a-dev, b-dev");
-    expect(shopifyBillingAppliesToShop("a-dev.myshopify.com")).toBe(true);
-    expect(shopifyBillingAppliesToShop("b-dev.myshopify.com")).toBe(true);
-    expect(shopifyBillingAppliesToShop("c-dev.myshopify.com")).toBe(false);
-  });
-
-  it("de-duplicates entries written more than once", () => {
-    env("test", "a-dev, a-dev.myshopify.com, https://a-dev.myshopify.com");
-    expect(shopifyBillingTestShops()).toEqual(["a-dev.myshopify.com"]);
-  });
-});
-
-describe("empty or missing configuration allows NOBODY", () => {
-  it("unset", () => {
-    env("test");
+  it("never completes a dotted host into a myshopify subdomain", () => {
+    // `evil.com` must not become `evil.com.myshopify.com`. The list is a
+    // diagnostic now, but a parser that invents hosts is still a parser that
+    // will mislead whoever reads the boot log.
+    process.env.SHOPIFY_BILLING_TEST_SHOPS = "evil.com";
     expect(shopifyBillingTestShops()).toEqual([]);
-    expect(shopifyBillingAppliesToShop("acme-dev.myshopify.com")).toBe(false);
+    expect(invalidTestShopEntries()).toEqual(["evil.com"]);
   });
 
-  it("empty string", () => {
-    env("test", "");
-    expect(shopifyBillingAppliesToShop("acme-dev.myshopify.com")).toBe(false);
-  });
-
-  it("whitespace and stray separators only", () => {
-    env("test", "  , ,  ");
-    expect(shopifyBillingTestShops()).toEqual([]);
-    expect(shopifyBillingAppliesToShop("acme-dev.myshopify.com")).toBe(false);
-  });
-
-  it("a list of only INVALID entries admits nobody", () => {
-    // The dangerous shape: the variable is set, so it looks configured.
-    env("test", "evil.com, myshopify.com, http://");
-    expect(shopifyBillingTestShops()).toEqual([]);
-    expect(shopifyBillingAppliesToShop("evil.com")).toBe(false);
-  });
-
-  it("whitespace separation means a multi-word typo becomes several handles", () => {
-    // Documented rather than defended against. `not a shop` is three
-    // whitespace-separated tokens and each is a syntactically valid handle, so
-    // the parser completes all three. They admit nothing real, and the boot
-    // warning surfaces the count - but a reader should not be surprised by it.
-    env("test", "not a shop");
+  it("drops a bad entry without taking the rest of the list with it", () => {
+    process.env.SHOPIFY_BILLING_TEST_SHOPS = "good-dev, evil.com, other-dev";
     expect(shopifyBillingTestShops().sort()).toEqual([
-      "a.myshopify.com",
-      "not.myshopify.com",
-      "shop.myshopify.com",
+      "good-dev.myshopify.com",
+      "other-dev.myshopify.com",
     ]);
-    expect(shopifyBillingAppliesToShop("real-merchant.myshopify.com")).toBe(false);
-  });
-});
-
-describe("malicious and non-myshopify domains", () => {
-  const NASTY = [
-    "acme-dev.myshopify.com.evil.com",
-    "evil.com",
-    "acme-dev.myshopify.com.attacker.net",
-    "myshopify.com",
-    "a.b.myshopify.com",
-    "acme-dev.myshopify.co",
-    "",
-  ];
-
-  it("none of them can be configured into the list", () => {
-    for (const bad of NASTY) {
-      env("test", bad);
-      expect(shopifyBillingTestShops()).toEqual([]);
-    }
+    expect(invalidTestShopEntries()).toEqual(["evil.com"]);
   });
 
-  it("none of them passes the check, even with a real shop listed", () => {
-    env("test", "acme-dev.myshopify.com");
-    for (const bad of NASTY) {
-      expect(shopifyBillingAppliesToShop(bad)).toBe(false);
-    }
-  });
-
-  it("a dotted host is REJECTED, never completed with the suffix", () => {
-    // Completing `evil.com` into `evil.com.myshopify.com` would turn a rejected
-    // entry into an accepted-looking one - the exact hazard the strict
-    // validator exists to remove.
-    env("test", "evil.com");
+  it("is empty when unset", () => {
     expect(shopifyBillingTestShops()).toEqual([]);
-    expect(shopifyBillingAppliesToShop("evil.com.myshopify.com")).toBe(false);
-  });
-
-  it("reports unparseable entries so a typo is findable", () => {
-    env("test", "acme-dev, evil.com, myshopify.com");
-    expect(shopifyBillingTestShops()).toEqual(["acme-dev.myshopify.com"]);
-    expect(invalidTestShopEntries().sort()).toEqual(["evil.com", "myshopify.com"]);
-  });
-
-  it("refuses non-string and empty input", () => {
-    env("test", "acme-dev.myshopify.com");
-    expect(shopifyBillingAppliesToShop(null)).toBe(false);
-    expect(shopifyBillingAppliesToShop(undefined)).toBe(false);
-    expect(shopifyBillingAppliesToShop("")).toBe(false);
+    expect(invalidTestShopEntries()).toEqual([]);
   });
 });
 
-describe("only test mode is gated", () => {
-  it("live admits every shop and never reads the list", () => {
-    // A stale test list surviving into live would silently exclude paying
-    // merchants from billing - the same class of bug, pointing the other way.
-    env("live", "only-this-one.myshopify.com");
-    expect(shopifyBillingAppliesToShop("any-merchant.myshopify.com")).toBe(true);
-    expect(shopifyBillingAppliesToShop("only-this-one.myshopify.com")).toBe(true);
+// ─── It reports; it does not decide ──────────────────────────────────────
+
+describe("isListedShopifyTestShop is a report, not a permission", () => {
+  it("answers the same question in every environment", () => {
+    // The old predicate returned true for everyone in `live` and `mock`, and
+    // consulted the list only in `test` - which is what made it a gate. This
+    // one has no environment in it at all.
+    process.env.SHOPIFY_BILLING_TEST_SHOPS = "acme-dev.myshopify.com";
+    for (const e of ["mock", "test", "live"] as const) {
+      process.env.SHOPIFY_BILLING_ENV = e;
+      process.env.SHOPIFY_ALLOW_LIVE_BILLING = "true";
+      expect(isListedShopifyTestShop("acme-dev.myshopify.com")).toBe(true);
+      expect(isListedShopifyTestShop("other.myshopify.com")).toBe(false);
+    }
   });
 
-  it("live admits shops even with an EMPTY list", () => {
-    env("live", "");
-    expect(shopifyBillingAppliesToShop("any-merchant.myshopify.com")).toBe(true);
+  it("refuses a suffix attack and an unparseable domain", () => {
+    process.env.SHOPIFY_BILLING_TEST_SHOPS = "acme.myshopify.com";
+    expect(isListedShopifyTestShop("acme.myshopify.com.evil.com")).toBe(false);
+    expect(isListedShopifyTestShop(null)).toBe(false);
+    expect(isListedShopifyTestShop(undefined)).toBe(false);
+    expect(isListedShopifyTestShop("")).toBe(false);
+  });
+});
+
+// ─── The gate must not come back ─────────────────────────────────────────
+
+describe("no shop, tenant or workspace allowlist gates the flow", () => {
+  const SRC = path.resolve(__dirname, "..");
+
+  /**
+   * Source with comments removed.
+   *
+   * The comments in these files NAME the removed predicate and the variable,
+   * deliberately - "this used to gate here, and must not again" is the most
+   * useful thing a future reader can find at the call site. A scan that cannot
+   * tell prose from code would force that history to be deleted to keep the
+   * test green, which is the wrong trade.
+   */
+  function read(rel: string): string {
+    return fs
+      .readFileSync(path.join(SRC, rel), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:])\/\/.*$/gm, "$1");
+  }
+
+  it("the old predicate no longer exists anywhere", () => {
+    // Named explicitly: reintroducing `shopifyBillingAppliesToShop` is the
+    // single most likely way for this regression to return, because every call
+    // site that used it reads naturally with it back.
+    const files = [
+      "billing-sources/shopify/config.ts",
+      "routes/shopify-billing.ts",
+      "services/shopify-post-install.service.ts",
+    ];
+    for (const f of files) {
+      expect(read(f), f).not.toMatch(/shopifyBillingAppliesToShop/);
+    }
   });
 
-  it("mock admits every shop, and reaches nothing", () => {
-    env("mock", "");
-    expect(shopifyBillingAppliesToShop("any-merchant.myshopify.com")).toBe(true);
+  it("nothing branches on the test-shop list", () => {
+    // The list may be READ (to report it) but never tested. An `if` around
+    // either accessor is the gate, whatever it is called.
+    for (const f of [
+      "billing-sources/shopify/config.ts",
+      "routes/shopify-billing.ts",
+      "services/shopify-post-install.service.ts",
+    ]) {
+      const src = read(f);
+      expect(src, f).not.toMatch(/if\s*\(\s*!?\s*(shopifyBillingTestShops|isListedShopifyTestShop)\s*\(/);
+    }
   });
 
-  it("an env of `live` WITHOUT the acknowledgement degrades to mock, and is still ungated", () => {
+  it("no route refuses a store for not being enabled on this deployment", () => {
+    // The merchant-visible half of the same bug: a 409 that says the store is
+    // not enabled here is an allowlist by another name.
+    expect(read("routes/shopify-billing.ts")).not.toMatch(
+      /shopify_billing_not_enabled_for_shop/,
+    );
+  });
+
+  it("post-install runs the same steps for a store nobody listed", () => {
+    // The early return that used to sit between linking and grandfathering is
+    // gone: there is exactly one `UNRESOLVED` exit left, the billing-disabled
+    // one, and it does not read a shop.
+    const src = read("services/shopify-post-install.service.ts");
+    const unresolvedExits = src.match(/state:\s*"UNRESOLVED"/g) ?? [];
+    expect(unresolvedExits).toHaveLength(1);
+    expect(src).not.toMatch(/SHOPIFY_BILLING_TEST_SHOPS/);
+  });
+});
+
+// ─── What actually keeps test money from becoming real money ─────────────
+
+describe("the protections that remain", () => {
+  it("live billing still needs its own explicit acknowledgement", () => {
     process.env.SHOPIFY_BILLING_ENABLED = "true";
     process.env.SHOPIFY_BILLING_MODE = "app_pricing";
     process.env.SHOPIFY_BILLING_ENV = "live";
-    // SHOPIFY_ALLOW_LIVE_BILLING deliberately unset => mock.
-    process.env.SHOPIFY_BILLING_TEST_SHOPS = "";
-    expect(shopifyBillingAppliesToShop("any-merchant.myshopify.com")).toBe(true);
+    // Removing the allowlist must not have loosened this. Without the second
+    // variable, `live` degrades to `mock`, which reaches Shopify not at all.
+    expect(shopifyBillingEnv()).toBe("mock");
+    process.env.SHOPIFY_ALLOW_LIVE_BILLING = "true";
+    expect(shopifyBillingEnv()).toBe("live");
+  });
+
+  it("defaults to mock when nothing is configured", () => {
+    expect(shopifyBillingEnv()).toBe("mock");
   });
 });

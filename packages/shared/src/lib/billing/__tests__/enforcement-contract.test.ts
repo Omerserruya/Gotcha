@@ -206,10 +206,25 @@ describe("the Foundation plan combination the product sells", () => {
     expect(CORE_FEATURES).not.toContain("commerce.auto_buy");
   });
 
-  it("grants the Shopify commerce keys, preserving today's behaviour", () => {
-    // Both had defaultEnabled:true under the legacy gate, so every tenant has
-    // them today. Anything narrower would REMOVE a live capability.
-    expect(CORE_FEATURES).toContain("commerce.shopify_live_chat");
-    expect(CORE_FEATURES).toContain("commerce.shopify_product_messaging");
+  /**
+   * INVERTED on purpose. This test previously asserted that CORE granted the
+   * two Shopify commerce keys, on the reasoning that both had
+   * `defaultEnabled: true` under the legacy gate so every tenant already had
+   * them, and that anything narrower would remove a live capability.
+   *
+   * That reasoning was sound as a behaviour-preservation argument and is no
+   * longer available. Shopify App Review paused submission 132211 under
+   * requirement 1.2.1, which requires capabilities tied to the Shopify
+   * integration to be billed through Shopify. GOTCHA Core is billed by GOTCHA,
+   * so a Core plan granting Shopify storefront chat or the Shopify product
+   * picker is off-platform billing for Shopify functionality.
+   *
+   * The capability is not deleted - it moves to the Shopify Connector
+   * subscription, which funds it through Shopify App Pricing. Merchants who had
+   * it under a pre-publication arrangement keep it through a grandfather grant.
+   */
+  it("keeps the Shopify commerce keys OUT of CORE - Shopify must fund them", () => {
+    expect(CORE_FEATURES).not.toContain("commerce.shopify_live_chat");
+    expect(CORE_FEATURES).not.toContain("commerce.shopify_product_messaging");
   });
 });

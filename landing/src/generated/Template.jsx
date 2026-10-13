@@ -231,6 +231,9 @@ export default function Template({ v: $v }) {
             </React.Fragment>
           ))}
           {"\n      "}
+          <a href={$A($v?.loginUrl)} style={$st("margin-top:18px;text-align:center;font-size:15px;font-weight:500;border:1px solid #D8D2C6;color:#16150F;border-radius:13px;padding:15px;text-decoration:none")}>
+            {"Login"}
+          </a>
           <a href="#cta" onClick={$v?.mnavToggle} style={$st("margin-top:18px;text-align:center;font-size:15px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:13px;padding:15px;text-decoration:none")}>
             {"Book a demo"}
           </a>
@@ -282,7 +285,7 @@ export default function Template({ v: $v }) {
               {"\n        "}
               <div style={$st(`margin-left:${$A($v?.navML)};margin-right:${$A($v?.navMR)};padding-inline-start:12px;display:flex;align-items:center;gap:10px;flex:none`)}>
                 {"\n          "}
-                <a className="m-hide" href="#cta" data-nav-secondary="" style={$st("font-size:13.5px;border-bottom:1px solid #C8C2B6;padding-bottom:1px;white-space:nowrap")}>
+                <a className="m-hide" href={$A($v?.loginUrl)} data-nav-secondary="" style={$st("font-size:13.5px;border-bottom:1px solid #C8C2B6;padding-bottom:1px;white-space:nowrap")}>
                   {"Login"}
                 </a>
                 {"\n          "}

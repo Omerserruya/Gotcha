@@ -70,7 +70,10 @@ export default function ConfirmModal({
         {/* Text */}
         <div className="text-center">
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-          <p className="text-sm text-gray-500 mt-1">{message}</p>
+          {/* `whitespace-pre-line` so a message written as paragraphs renders
+              as paragraphs. Callers passing a single line are unaffected: it
+              only changes how newlines that are already there display. */}
+          <p className="text-sm text-gray-500 mt-1 whitespace-pre-line">{message}</p>
         </div>
 
         {/* Buttons */}

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import DocView from './DocView';
 import { PUBLIC_LEGAL_DOCS } from '@/content/legal-registry.mjs';
 import { LEGAL_CONTENT } from '@/generated/legal';
+import { TRUST_ORIGIN } from '@/lib/seo';
 
 export const dynamicParams = false;
 
@@ -17,6 +18,14 @@ export function generateMetadata({ params }: { params: { slug: string } }): Meta
   return {
     title: `${doc.en.title} | GOTCHA`,
     description: meta.summary[0],
+    alternates: {
+      canonical: `${TRUST_ORIGIN}/${params.slug}`,
+      languages: {
+        en: `${TRUST_ORIGIN}/${params.slug}`,
+        he: `${TRUST_ORIGIN}/he/${params.slug}`,
+        'x-default': `${TRUST_ORIGIN}/${params.slug}`,
+      },
+    },
   };
 }
 

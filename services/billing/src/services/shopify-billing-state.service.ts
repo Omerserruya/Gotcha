@@ -87,6 +87,49 @@ export function stateGrantsShopifyAccess(state: ShopifyBillingState): boolean {
   return ENTITLING_STATES.has(state);
 }
 
+/**
+ * Does this workspace ACTUALLY have Shopify access right now.
+ *
+ * WHY THIS IS NOT `stateGrantsShopifyAccess` ON ITS OWN
+ * The snapshot used to answer this from the subscription state alone. A store
+ * that had been uninstalled reported `grantsAccess: true` while its
+ * entitlements were empty, because Shopify had not finished cancelling the
+ * subscription and the row still said TRIALING. Nothing was actually granted -
+ * enforcement reads the entitlement rows - but the field contradicted itself,
+ * and any consumer that trusted it without ALSO checking `uninstalledAt` would
+ * have granted access to a store the merchant had removed.
+ *
+ * THREE INDEPENDENT FACTS, ALL REQUIRED
+ *   1. the subscription state entitles,
+ *   2. the app is still installed,
+ *   3. the entitlement rows that enforcement reads actually exist.
+ *
+ * Each can be false while the others are true, so this is an AND and not a
+ * preference order. In particular (3) is what makes the field agree with the
+ * guard: if enforcement would deny, this says false.
+ *
+ * FAIL CLOSED ON ASYNCHRONY
+ * Shopify cancels subscriptions asynchronously, so between uninstall and
+ * cancellation the state is stale-but-entitling. During that window (2) is
+ * false and access is denied, which is the safe direction: a reinstall issues
+ * a new installation and a fresh subscription, and access returns only when
+ * all three are true again. It can never be inherited from the old one.
+ */
+export function snapshotGrantsShopifyAccess(input: {
+  state: ShopifyBillingState;
+  installationStatus: string | null | undefined;
+  uninstalledAt: Date | string | null | undefined;
+  entitlements: readonly string[];
+}): boolean {
+  if (!stateGrantsShopifyAccess(input.state)) return false;
+  // Uninstalled is terminal for access, whatever billing still says.
+  if (input.uninstalledAt) return false;
+  if (String(input.installationStatus ?? "").toUpperCase() === "DISCONNECTED") return false;
+  // No rows means enforcement denies, so the snapshot must not claim otherwise.
+  if (!input.entitlements || input.entitlements.length === 0) return false;
+  return true;
+}
+
 export interface ShopifyAccessSnapshot {
   tenantId: string;
 
@@ -378,6 +421,14 @@ export function serializeSnapshot(s: ShopifyAccessSnapshot) {
     planSelectionUrl: s.planSelectionUrl,
     availablePlanCount: s.availablePlanCount,
     requiresPlanSelection: s.shopify.state === "PLAN_SELECTION_REQUIRED",
-    grantsAccess: stateGrantsShopifyAccess(s.shopify.state),
+    // The subscription state alone is not the answer: see
+    // `snapshotGrantsShopifyAccess`. An uninstalled store whose subscription
+    // Shopify has not yet cancelled must not report access.
+    grantsAccess: snapshotGrantsShopifyAccess({
+      state: s.shopify.state,
+      installationStatus: s.installation.status,
+      uninstalledAt: s.installation.uninstalledAt,
+      entitlements: s.entitlements,
+    }),
   };
 }

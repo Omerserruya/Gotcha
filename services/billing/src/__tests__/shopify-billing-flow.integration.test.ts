@@ -712,40 +712,51 @@ describe("states that must never grant Shopify entitlements", () => {
   });
 });
 
-// ─── The test-shop allowlist, end to end ─────────────────────────────────
+// ─── Every store takes the same path, end to end ─────────────────────────
 
-describe("in test mode, only allowlisted shops enter the flow", () => {
+describe("no store is gated on a server-side list", () => {
+  // WHAT THIS BLOCK USED TO ASSERT, AND WHY IT INVERTED
+  //
+  // `SHOPIFY_BILLING_TEST_SHOPS` used to decide who could enter the App
+  // Pricing flow while SHOPIFY_BILLING_ENV=test. A store nobody had listed was
+  // connected and then silently excluded: no plan page, no entitlement, state
+  // UNRESOLVED. These tests asserted that exclusion held.
+  //
+  // Shopify App Store review 132211 rejected that shape. A reviewer works from
+  // an ordinary development store that nobody added to a server-side list, so
+  // the reviewer - and every real merchant during the same window - took a
+  // different code path from the one under review. The finding covers any
+  // reviewer-specific tenant, shop or workspace allowlist, so renaming the
+  // variable would not have answered it.
+  //
+  // So the assertions now run the SAME scenarios and require the SAME outcome
+  // regardless of what the list says.
+
   function testMode(shops: string) {
     enableBilling();
     process.env.SHOPIFY_BILLING_ENV = "test";
     process.env.SHOPIFY_BILLING_TEST_SHOPS = shops;
   }
 
-  it("a NON-allowlisted shop connects and is never sent to plan selection", async () => {
-    // The property that matters: a real merchant during a test window behaves
-    // exactly as they do today. Connected, no plan page, nothing granted.
+  it("a shop nobody listed enters the flow exactly like a listed one", async () => {
     testMode("acme-dev.myshopify.com");
     const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
 
     const r = await onShopifyConnected({
       tenantId: tenant.id,
       externalShopId: shopId(),
-      shopDomain: "real-merchant.myshopify.com",
+      shopDomain: "reviewer-store.myshopify.com",
     });
 
-    expect(r.requiresPlanSelection).toBe(false);
-    expect(r.planSelectionUrl).toBeNull();
-    expect(r.state).toBe("UNRESOLVED");
-
-    const conn = await prisma.commerceConnection.findUnique({ where: { id: r.connectionId } });
-    expect(conn?.status).toBe("CONNECTED");
-
-    const ents = await prisma.tenantEntitlement.findMany({ where: { tenantId: tenant.id } });
-    expect(ents).toEqual([]);
+    expect(r.requiresPlanSelection).toBe(true);
+    expect(r.state).toBe("PLAN_SELECTION_REQUIRED");
+    expect(r.planSelectionUrl).toBeTruthy();
   });
 
-  it("an allowlisted shop DOES enter the flow", async () => {
-    testMode("acme-dev.myshopify.com");
+  it("an EMPTY list changes nothing at all", async () => {
+    // Previously this was the fail-closed case that admitted nobody. A
+    // forgotten variable must no longer be able to divert anyone.
+    testMode("");
     const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
     const r = await onShopifyConnected({
       tenantId: tenant.id,
@@ -756,75 +767,104 @@ describe("in test mode, only allowlisted shops enter the flow", () => {
     expect(r.state).toBe("PLAN_SELECTION_REQUIRED");
   });
 
-  it("an EMPTY allowlist admits nobody, including a dev store", async () => {
-    testMode("");
-    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
-    const r = await onShopifyConnected({
-      tenantId: tenant.id,
+  it("two stores, one listed and one not, reach identical outcomes", async () => {
+    // The sharpest statement of the requirement: being named in configuration
+    // must make no observable difference.
+    testMode("listed-dev.myshopify.com");
+
+    const a = await newTenant({ coreStatus: "ACTIVE" });
+    const listed = await onShopifyConnected({
+      tenantId: a.tenant.id,
       externalShopId: shopId(),
-      shopDomain: "acme-dev.myshopify.com",
+      shopDomain: "listed-dev.myshopify.com",
     });
-    expect(r.requiresPlanSelection).toBe(false);
-    expect(r.state).toBe("UNRESOLVED");
+
+    const b = await newTenant({ coreStatus: "ACTIVE" });
+    const unlisted = await onShopifyConnected({
+      tenantId: b.tenant.id,
+      externalShopId: shopId(),
+      shopDomain: "unlisted-dev.myshopify.com",
+    });
+
+    expect(unlisted.state).toBe(listed.state);
+    expect(unlisted.requiresPlanSelection).toBe(listed.requiresPlanSelection);
+    expect(Boolean(unlisted.planSelectionUrl)).toBe(Boolean(listed.planSelectionUrl));
   });
 
-  it("the plan-selection route refuses a non-allowlisted shop", async () => {
+  it("the plan-selection route serves a shop nobody listed", async () => {
     testMode("acme-dev.myshopify.com");
     const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
     await onShopifyConnected({
       tenantId: tenant.id,
       externalShopId: shopId(),
-      shopDomain: "real-merchant.myshopify.com",
+      shopDomain: "reviewer-store.myshopify.com",
     });
 
     const res = await request(app())
       .post("/api/billing/shopify/plan-selection")
       .set("x-test-tenant", tenant.id);
 
-    expect(res.status).toBe(409);
-    expect(res.body.error).toBe("shopify_billing_not_enabled_for_shop");
+    expect(res.status).toBe(200);
+    expect(res.body.error).toBeUndefined();
+    // And the URL is Shopify's own hosted page for THIS store.
+    expect(res.body.data.url).toContain("reviewer-store");
   });
 
-  it("the verified-return route refuses a non-allowlisted shop", async () => {
-    // Belt and braces: even if a shop somehow reached a Shopify plan page, the
-    // return path must not verify a subscription or grant anything.
+  it("the verified-return route no longer refuses on a list", async () => {
     testMode("acme-dev.myshopify.com");
     const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
     await onShopifyConnected({
       tenantId: tenant.id,
       externalShopId: shopId(),
-      shopDomain: "real-merchant.myshopify.com",
+      shopDomain: "reviewer-store.myshopify.com",
     });
 
     const res = await request(app())
-      .post("/api/billing/shopify/complete?shop=real-merchant.myshopify.com")
+      .post("/api/billing/shopify/complete?shop=reviewer-store.myshopify.com")
       .set("x-test-tenant", tenant.id);
 
-    expect(res.status).toBe(409);
-    expect(res.body.error).toBe("shopify_billing_not_enabled_for_shop");
+    expect(res.body.error).not.toBe("shopify_billing_not_enabled_for_shop");
   });
 
-  it("the allowlist is read from the CONNECTION, never from the request", async () => {
-    // A query parameter naming an allowlisted shop must not let a
-    // non-allowlisted workspace through.
-    testMode("acme-dev.myshopify.com");
+  // ── What did NOT change, and must not ──
+  //
+  // Removing the allowlist removed a gate, not the authorization rules around
+  // it. These two were always the real protections on the return path.
+
+  it("STILL refuses a return whose shop is not this workspace's store", async () => {
+    testMode("");
     const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
     await onShopifyConnected({
       tenantId: tenant.id,
       externalShopId: shopId(),
-      shopDomain: "real-merchant.myshopify.com",
+      shopDomain: "reviewer-store.myshopify.com",
     });
 
     const res = await request(app())
-      .post("/api/billing/shopify/complete?shop=acme-dev.myshopify.com")
+      .post("/api/billing/shopify/complete?shop=someone-else.myshopify.com")
       .set("x-test-tenant", tenant.id);
 
-    // Rejected on the shop MISMATCH before the allowlist is even consulted -
-    // two independent guards, either of which is sufficient.
     expect(res.status).toBe(409);
-    expect(["shopify_shop_mismatch", "shopify_billing_not_enabled_for_shop"]).toContain(
-      res.body.error,
-    );
+    expect(res.body.error).toBe("shopify_shop_mismatch");
+  });
+
+  it("STILL reads the shop from the CONNECTION, never from the request", async () => {
+    // Reaching `/complete` is not evidence of payment: Shopify appends
+    // `plan_handle` and `shop` to a redirect anybody can replay. A query
+    // parameter must not be able to name the store being billed.
+    testMode("");
+    const { tenant } = await newTenant({ coreStatus: "ACTIVE" });
+    await onShopifyConnected({
+      tenantId: tenant.id,
+      externalShopId: shopId(),
+      shopDomain: "reviewer-store.myshopify.com",
+    });
+
+    const res = await request(app())
+      .post("/api/billing/shopify/complete?shop=attacker-chosen.myshopify.com&plan_handle=premium")
+      .set("x-test-tenant", tenant.id);
+
+    expect(res.status).toBe(409);
     const ents = await prisma.tenantEntitlement.findMany({ where: { tenantId: tenant.id } });
     expect(ents).toEqual([]);
   });

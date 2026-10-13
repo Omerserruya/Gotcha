@@ -42,6 +42,7 @@ import {
   requirePermission,
   mintOAuthState,
   getShopifyAppIdentity,
+  resolveShopifyInstallEntry,
   shopifyApiVersion,
   resolveAppPublicUrl,
   verifyAppEntryHmac,
@@ -55,12 +56,15 @@ import {
   discardInstallIntent,
   peekPendingConnection,
   consumePendingConnection,
+  clearPendingInstallCookie,
   INSTALL_INTENT_COOKIE,
   INSTALL_INTENT_TTL_SECONDS,
+  PENDING_INSTALL_COOKIE,
 } from "../services/shopify-install-intent.service";
 import {
   SHOPIFY_OAUTH_SCOPES,
   linkShopifyShopToTenant,
+  pendingStoreReplacement,
 } from "../services/shopify-connection-link.service";
 import { resolveShopifyBillingOutcome } from "../services/shopify-billing-bridge.service";
 
@@ -120,6 +124,20 @@ export function readIntentCookie(req: Request): string | null {
   }
 }
 
+/**
+ * The pending-install handle this browser is carrying, if any.
+ *
+ * Same codec and same failure posture as `readIntentCookie`: a malformed
+ * Cookie header means "no pending install", never a failed request.
+ */
+export function readPendingCookie(req: Request): string | null {
+  try {
+    return parseSessionCookie(req.headers?.cookie, PENDING_INSTALL_COOKIE);
+  } catch {
+    return null;
+  }
+}
+
 // ─── 1. The button ───────────────────────────────────────────
 
 /**
@@ -139,28 +157,20 @@ router.get(
   requireOnboardingOrActiveTenant(),
   canConnectSystems,
   async (req: Request, res: Response) => {
-    const identity = getShopifyAppIdentity();
-    if (!identity.installUrl) {
-      // The App Store listing is not published yet, so there is no
-      // Shopify-owned page to send this merchant to.
-      //
-      // This route ONLY is unavailable. Installation from the Partner
-      // Dashboard, the public install handler, OAuth, the callback, existing
-      // connections and reauthorization are all unaffected - none of them
-      // reads installUrl.
-      //
-      // Deliberately NOT a fallback to a shop-domain prompt. That is the
-      // thing App Store requirement 2.3.1 forbids, and re-adding it "just
-      // until the listing is live" is how it would come back permanently.
-      res.status(503).json({
-        error: "shopify_install_not_available",
-        detail:
-          "New Shopify connections are not available yet. The GOTCHA app is " +
-          "pending its Shopify App Store listing; once it is published this " +
-          "button will take you to Shopify to choose your store.",
-      });
-      return;
-    }
+    // ALWAYS resolves to a Shopify-owned page. There is no configuration this
+    // route can refuse on any more.
+    //
+    // It used to answer 503 `shopify_install_not_available` whenever the App
+    // Store listing slug was unset, and Shopify App Store review 132211 quoted
+    // the resulting screen back to us under requirement 4.5.5: the submitted
+    // test account could not demonstrate the feature, because the only in-app
+    // route to connecting a store refused. A gap in OUR configuration had
+    // become the merchant's error message.
+    //
+    // `resolveShopifyInstallEntry` degrades to App Store search instead. Still
+    // no shop domain is typed anywhere - requirement 2.3.1 is about not asking
+    // the merchant to name their store, and neither branch does.
+    const entry = resolveShopifyInstallEntry();
 
     const handle = await createInstallIntent({
       tenantId: req.tenantId!,
@@ -180,7 +190,49 @@ router.get(
       path: "/",
     });
 
-    res.json({ url: identity.installUrl });
+    // `mode` tells the UI which of two honest states this is: a live listing to
+    // navigate to, or "installation begins on Shopify" to explain. It is never
+    // an error, and there is never a shop-domain prompt.
+    //
+    // Sending a URL unconditionally is what put a 404 behind this button: an
+    // unapproved listing is not publicly reachable, and a Limited-visibility
+    // app never appears in App Store search even after approval.
+    res.json({ url: entry.url, mode: entry.mode });
+  },
+);
+
+/**
+ * Whether a Shopify connection can be STARTED from inside GOTCHA right now.
+ *
+ * Read-only on purpose. `/install/start` mints a server-side intent and sets a
+ * cookie, so a screen cannot call it just to decide what to render - doing so
+ * would create an install intent for every page view.
+ *
+ * The UI needs this BEFORE the button is pressed. Learning at click time that
+ * installation is not available yet means the merchant presses a button that
+ * then explains why it does nothing, which is a worse version of the refusal
+ * that failed review 132211.
+ */
+router.get(
+  "/connectors/shopify/install/availability",
+  authenticate,
+  resolveTenant,
+  requireOnboardingOrActiveTenant(),
+  canConnectSystems,
+  async (_req: Request, res: Response) => {
+    const entry = resolveShopifyInstallEntry();
+    res.json({
+      data: {
+        mode: entry.mode,
+        url: entry.url,
+        // Where an operator can point a merchant while the listing is not
+        // public - during App Store review this is the install link from the
+        // Shopify dashboard. Optional, and NEVER a substitute for the listing:
+        // it is shown as help, not as the install path, and it is not a URL
+        // this service constructs.
+        helpUrl: process.env.SHOPIFY_INSTALL_HELP_URL?.trim() || null,
+      },
+    });
   },
 );
 
@@ -279,12 +331,35 @@ router.get(
   requireOnboardingOrActiveTenant(),
   canConnectSystems,
   async (req: Request, res: Response) => {
-    const summary = await peekPendingConnection(singleValue(req.query.handle));
+    // The URL handle FIRST, the cookie as the fallback.
+    //
+    // The cookie is what makes a Shopify-originated install survivable. The
+    // handle used to live only in the redirect's query string, so the
+    // signed-out login bounce destroyed it and the authorized store became
+    // unreachable - the failure Shopify App Store review 132211 recorded.
+    const handle = singleValue(req.query.handle) || readPendingCookie(req);
+    const summary = await peekPendingConnection(handle);
     if (!summary) {
+      // Nothing to find. Drop a cookie pointing at an expired or consumed
+      // record so the Shopify screen stops offering to finish an installation
+      // that no longer exists.
+      clearPendingInstallCookie(res);
       res.status(404).json({ error: "pending_install_not_found" });
       return;
     }
-    res.json({ data: { shopDomain: summary.shopDomain } });
+    // The shop name only, and deliberately NOT the handle. The pending record
+    // also holds an access token, and the handle is the key to it; putting it
+    // back in a response body would place it where a script, a referrer header
+    // or a URL could carry it. The claim reads the same cookie instead, so the
+    // browser never needs to hold the value at all.
+    res.json({
+      data: {
+        shopDomain: summary.shopDomain,
+        // Lets the UI say "we found the store you just authorized" rather than
+        // implying the merchant navigated here on purpose.
+        recovered: !singleValue(req.query.handle),
+      },
+    });
   },
 );
 
@@ -305,7 +380,16 @@ router.post(
   requireActiveTenant(),
   canConnectSystems,
   async (req: Request, res: Response) => {
-    const handle = typeof req.body?.handle === "string" ? req.body.handle : undefined;
+    // Body first, cookie as the fallback - the same recovery the pending
+    // lookup uses, so a claim works after an OIDC round trip that dropped the
+    // URL. The handle proves only that THIS browser completed the Shopify
+    // authorization; who may claim it is decided by `authenticate`,
+    // `resolveTenant` and `canConnectSystems` above, and the shop comes from
+    // the server-side record rather than from anything the browser sent.
+    const handle =
+      (typeof req.body?.handle === "string" ? req.body.handle : undefined) ||
+      readPendingCookie(req) ||
+      undefined;
 
     // Peek first so a conflict does NOT burn the one-shot claim: a merchant who
     // hits "already connected elsewhere" must still be able to disconnect there
@@ -313,6 +397,35 @@ router.post(
     const summary = await peekPendingConnection(handle);
     if (!summary) {
       res.status(404).json({ error: "pending_install_not_found" });
+      return;
+    }
+
+    // Replacing a store this workspace already holds is the merchant's call.
+    // Asked BEFORE the handle is consumed: the handle is single-use, and
+    // spending it on a question the merchant has not answered yet would mean
+    // reinstalling from Shopify just to say "yes, replace it".
+    //
+    // `replace` is read from the body of an authenticated request whose caller
+    // already passed `canConnectSystems`. It decides nothing about which
+    // workspace or which store - both of those come from the session and from
+    // Shopify's signed install - only whether an overwrite the merchant was
+    // shown may proceed.
+    const allowReplace = req.body?.replace === true;
+    const replacing = await pendingStoreReplacement(req.tenantId!, summary.shopDomain);
+    if (replacing && !allowReplace) {
+      res.status(409).json({
+        error: "another_store_connected",
+        detail:
+          `This workspace is connected to ${replacing}. ` +
+          `Connecting ${summary.shopDomain} will disconnect it.`,
+        data: {
+          currentShopDomain: replacing,
+          incomingShopDomain: summary.shopDomain,
+          // The handle is still unspent, so the merchant's answer can be
+          // submitted straight back without another trip through Shopify.
+          handle,
+        },
+      });
       return;
     }
 
@@ -328,9 +441,21 @@ router.post(
       shopDomain: pending.shopDomain,
       credentials: pending.credentials as any,
       connectedBy: (req as any).user?.userId,
+      allowReplace,
     });
 
     if (!linked.ok) {
+      if (linked.reason === "another_store_connected") {
+        // Should be unreachable - the pre-consume check below answers this
+        // first, precisely so the single-use handle is not spent on a question.
+        // Kept because `linkShopifyShopToTenant` is the authority and a caller
+        // that forgets to ask must fail closed rather than overwrite a store.
+        res.status(409).json({
+          error: "another_store_connected",
+          detail: `This workspace is connected to ${linked.currentShopDomain}.`,
+        });
+        return;
+      }
       if (linked.reason === "shop_taken") {
         res.status(409).json({
           error: "shop_connected_to_another_workspace",
@@ -357,6 +482,10 @@ router.post(
       apiVersion: shopifyApiVersion(),
       acquisitionSource: "app_store",
     }).catch(() => null);
+
+    // The installation is now a connection, so the cookie must not survive to
+    // offer it again on the next page load.
+    clearPendingInstallCookie(res);
 
     res.json({
       data: {

@@ -1,3 +1,4 @@
+import { SHOPIFY_OPERATION } from "@chatcenter/shared";
 /**
  * Shopify Chat - activation routes (unified app).
  *
@@ -69,7 +70,7 @@ const ENABLE_STATUS: Record<string, number> = {
  */
 authed.get("/status", async (req: Request, res: Response) => {
   const tenantId = req.tenantId!;
-  const conn = await loadConnection({ tenantId, slug: "shopify" }).catch(() => null);
+  const conn = await loadConnection({ tenantId, slug: "shopify", capability: SHOPIFY_OPERATION.STOREFRONT }).catch(() => null);
   const shopDomain = (conn?.config as any)?.shopDomain ?? null;
 
   if (!shopDomain) {
@@ -161,7 +162,7 @@ authed.post(
 /** Live activation state, scoped to the caller's own organization. */
 authed.get("/activation", async (req: Request, res: Response) => {
   const shop = typeof req.query.shop === "string" ? req.query.shop : undefined;
-  const conn = shop ? null : await loadConnection({ tenantId: req.tenantId!, slug: "shopify" }).catch(() => null);
+  const conn = shop ? null : await loadConnection({ tenantId: req.tenantId!, slug: "shopify", capability: SHOPIFY_OPERATION.STOREFRONT }).catch(() => null);
   const target = shop ?? (conn?.config as any)?.shopDomain;
   const installation = target ? await findLiveInstallation(target) : null;
   if (!installation) {

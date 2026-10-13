@@ -250,7 +250,27 @@ export async function syncProviderSubscription(input: {
   // next pass with no operator action beyond the fix itself.
   const planUnknown = entitled && !plan;
 
-  if (planUnknown) {
+  // UNINSTALLED IS A TERMINAL STATE AND RECONCILIATION DOES NOT REOPEN IT.
+  //
+  // Looked up before the grant branch, not after, because the question is not
+  // only "what status should this connection show" but "may this pass hand a
+  // removed store paid access again". A store whose app is gone must not be
+  // granted entitlements on the strength of a subscription Shopify has not yet
+  // finished cancelling.
+  const connection = input.commerceConnectionId
+    ? await prisma.commerceConnection.findUnique({
+        where: { id: input.commerceConnectionId },
+        select: { uninstalledAt: true, status: true },
+      })
+    : null;
+  const uninstalled = Boolean(connection?.uninstalledAt);
+
+  if (uninstalled) {
+    // Revoke, never grant. `handleCommerceUninstall` already did this when the
+    // webhook arrived; doing it again is idempotent and closes the window where
+    // a late reconciliation pass would otherwise re-grant.
+    await revokeShopifyEntitlements(input.tenantId);
+  } else if (planUnknown) {
     const handle = observed?.planHandle ?? null;
     await prisma.providerSubscription.update({
       where: { id: row.id },
@@ -279,16 +299,45 @@ export async function syncProviderSubscription(input: {
   }
 
   if (input.commerceConnectionId) {
+    // This used to write `status` unconditionally, and it resurrected removed
+    // stores: a store uninstalled on the 28th came back as BILLING_PENDING on
+    // the next pass, because a cancelled subscription still pointed at its
+    // connection and "not entitled" was written as "awaiting billing". A store
+    // the merchant removed is not awaiting payment, and saying so on the
+    // integration screen is a claim we cannot support.
+    //
+    // `lastVerifiedAt` IS still advanced. We did verify, and the audit trail
+    // should record that we looked; it is `status` alone that must not move.
+    // The subscription row is updated as usual either way, so cancellation
+    // history survives for audit.
     await prisma.commerceConnection.update({
       where: { id: input.commerceConnectionId },
       data: {
         // An unknown plan is not a connected, paid store: nothing was granted,
         // so BILLING_PENDING is the honest description until the catalog is
-        // corrected.
-        status: entitled && !planUnknown ? "CONNECTED" : "BILLING_PENDING",
+        // corrected. None of that applies once the app is gone.
+        //
+        // For an uninstalled store we write DISCONNECTED rather than simply
+        // leaving the column alone. Passes that ran before this guard existed
+        // left rows sitting at BILLING_PENDING, and merely preserving the
+        // status would preserve that damage forever. Writing the correct
+        // terminal state is a no-op on a healthy row and repairs a corrupted
+        // one on the next pass, with no manual data edit.
+        status: uninstalled
+          ? "DISCONNECTED"
+          : entitled && !planUnknown
+            ? "CONNECTED"
+            : "BILLING_PENDING",
         lastVerifiedAt: new Date(),
       },
     });
+
+    if (uninstalled) {
+      console.log(
+        `[billing][provider-sub] tenant=${input.tenantId} connection=${input.commerceConnectionId} ` +
+          `uninstalled - status preserved as ${connection?.status ?? "UNKNOWN"}, not reopened`,
+      );
+    }
   }
 
   if (changed) {

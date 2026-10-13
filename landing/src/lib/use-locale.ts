@@ -14,15 +14,25 @@ const KEY = 'gotcha.locale';
  * ("here is the Hebrew privacy policy"), and that link has to survive whatever
  * the recipient picked last time.
  *
+ * `pinned` short-circuits all three. It is passed by pages whose language is
+ * part of their URL rather than a preference applied to them.
+ *
  * Resolution happens after mount on purpose. These pages are statically
  * generated, so the server has no reader to ask; starting from the default and
  * correcting on the client keeps the markup stable and avoids hydrating over a
  * guess.
  */
-export function useLocale(): [Locale, (l: Locale) => void] {
-  const [locale, setLocale] = useState<Locale>(DEFAULT_LOCALE);
+export function useLocale(pinned?: Locale): [Locale, (l: Locale) => void] {
+  const [locale, setLocale] = useState<Locale>(pinned ?? DEFAULT_LOCALE);
 
   useEffect(() => {
+    // A PINNED page is one whose language is part of its address - a help
+    // article or a legal document that exists at /help/he/... as its own
+    // document. There the URL is the answer and nothing may overrule it:
+    // letting `?lang=` or a remembered choice win would serve English text at
+    // a Hebrew address, which is both a hydration mismatch and a lie to the
+    // crawler that was told this URL is the Hebrew one.
+    if (pinned) return;
     let next: Locale | null = null;
     try {
       const q = new URLSearchParams(window.location.search).get('lang');
@@ -35,7 +45,7 @@ export function useLocale(): [Locale, (l: Locale) => void] {
       // A private window can throw on storage access; the default is fine.
     }
     if (next && next !== DEFAULT_LOCALE) setLocale(next);
-  }, []);
+  }, [pinned]);
 
   const choose = useCallback((l: Locale) => {
     setLocale(l);

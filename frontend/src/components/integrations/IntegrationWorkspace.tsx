@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ShopifyBillingBanner from "@/components/billing/ShopifyBillingBanner";
 import clsx from "clsx";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
@@ -345,6 +346,19 @@ export function IntegrationWorkspace() {
 
             {detail.channelDependency && (
               <ChannelDependencyNote dep={detail.channelDependency} he={he} />
+            )}
+
+            {/* Shopify's Connector subscription, on the Shopify page itself.
+                The header only ever says whether the STORE is connected, which
+                is a different fact from whether anyone is paying Shopify. A
+                reviewer who opens this page must be able to see the billing
+                state here rather than having to find the Billing screen, and it
+                is the same component and the same server state that screen
+                uses, so the two cannot disagree. */}
+            {detail.id === "shopify" && (
+              <div className="mb-3">
+                <ShopifyBillingBanner />
+              </div>
             )}
 
             {/* Tool search + the low-frequency actions, kept off the main axis.

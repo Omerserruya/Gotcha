@@ -1,3 +1,4 @@
+import { SHOPIFY_OPERATION } from "@chatcenter/shared";
 /**
  * Shopify Live Chat - channel service.
  *
@@ -291,7 +292,12 @@ export async function resolveForBootstrap(input: {
   // connection lookup, not an API call: this runs on every page load.
   let coreConnected = false;
   try {
-    const conn = await loadConnection({ tenantId: channel.tenantId, slug: "shopify" });
+      // CATALOG, not STOREFRONT: this probe predicts whether PRODUCT cards and
+      // cart validation will work, and those are funded by catalogue sync. The
+      // widget itself is gated above by SHOPIFY_LIVE_CHAT, which the storefront
+      // entitlement funds. A merchant with the widget but not the catalogue gets
+      // a working chat that truthfully offers no product buttons.
+      const conn = await loadConnection({ tenantId: channel.tenantId, slug: "shopify", capability: SHOPIFY_OPERATION.CATALOG });
     coreConnected = !!conn && normalizeShopDomain(conn.config?.shopDomain) === channelShop;
   } catch (err) {
     console.warn("[shopify-live-chat] core connection probe failed:", (err as Error)?.message);

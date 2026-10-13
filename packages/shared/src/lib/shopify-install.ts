@@ -231,38 +231,150 @@ export function buildShopifyAuthorizeUrl(input: {
 }
 
 /**
+ * Shopify uses the word "handle" for more than one identifier, and they are
+ * not guaranteed to be the same string. Two of them reach merchants:
+ *
+ *   SHOPIFY_APP_STORE_HANDLE   the App Store LISTING slug. Only ever appears
+ *                              in `https://apps.shopify.com/<handle>`.
+ *   SHOPIFY_APP_PRICING_HANDLE the APP handle, which appears in admin deep
+ *                              links such as the managed-pricing page
+ *                              `/store/<store>/charges/<handle>/pricing_plans`.
+ *
+ * They were one variable until App Store review 132211, and that coupling was
+ * itself the defect. The pricing handle was known and correct, the listing
+ * handle was not known, and because a single variable fed both, the only way
+ * to keep the pricing URL right was to leave the variable empty - which
+ * silently disabled the "Connect Shopify" button and produced the
+ * "not available yet" screen the reviewer hit. Splitting them means an
+ * unknown listing handle can no longer switch off a working pricing URL, or
+ * the reverse.
+ *
+ * `SHOPIFY_APP_HANDLE` stays readable as a fallback for both so an existing
+ * deployment keeps working across this change.
+ */
+function readHandle(raw: string | undefined): string | null {
+  const handle = (raw || "").trim();
+  // Shopify handles are lowercase alphanumeric with hyphens. Anything else was
+  // not copied from the dashboard, and building a URL from it would send a
+  // merchant to a 404 with no way to tell why.
+  if (!handle || !/^[a-z0-9][a-z0-9-]*$/.test(handle)) return null;
+  return handle;
+}
+
+/** The App Store listing slug, or null when it has not been configured. */
+export function resolveShopifyAppStoreHandle(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  return readHandle(env.SHOPIFY_APP_STORE_HANDLE) ?? readHandle(env.SHOPIFY_APP_HANDLE);
+}
+
+/**
  * Where the merchant-facing "Connect Shopify" button sends a merchant.
  *
  * PUBLIC DISTRIBUTION ONLY. For a public app there is exactly one
  * Shopify-owned install surface, the App Store listing, and this derives it
- * from a handle read off the Partner Dashboard. There is deliberately no
- * second source:
+ * from a handle read off the Partner Dashboard listing page. There is
+ * deliberately no second source, and this was re-checked against Shopify's
+ * documentation during review 132211:
  *
- *   • A custom-distribution install link is generated per STORE (the
- *     dashboard asks for the shop's domain before it will produce one), so
- *     configuring one would hard-code a single merchant's shop into the
- *     button every other merchant presses. It also forecloses Shopify
- *     billing and App Store review, and the distribution choice is
- *     irreversible.
- *   • A guessed handle produces a listing URL that 404s, which is worse for
- *     the merchant than an honest "not available yet".
+ *   • There is no store-picker install URL. Shopify's authorization-code-grant
+ *     documentation gives exactly one authorize URL and it is per-shop
+ *     (`https://{shop}/admin/oauth/authorize?...`), and states that an install
+ *     link which does not originate from the App Store must supply `shop`
+ *     itself. So there is nothing to fall back TO that would not mean asking
+ *     the merchant to name their store - the thing requirement 2.3.1 forbids.
+ *   • The listing handle is not exposed by the Partner API either. The `App`
+ *     type carries only `apiKey`, `events`, `id` and `name`, so it cannot be
+ *     discovered at runtime and must be configured.
+ *   • A custom-distribution install link is generated per STORE, so
+ *     configuring one would hard-code a single merchant's shop into the button
+ *     every other merchant presses.
  *
  * SCOPE OF THIS FUNCTION - important. It powers ONE thing: the button. It is
- * NOT part of the install path. A merchant arriving from Shopify (Partner
- * Dashboard "Test your app", or the listing once it is live) reaches
+ * NOT part of the install path. A merchant arriving from Shopify (the App
+ * Store listing, or Partner Dashboard "Test your app") reaches
  * `application_url` directly, and the public install handler verifies that
  * request and starts OAuth without ever calling this. So a null here means
- * "no in-app button yet", never "installation is broken" - see the tests in
+ * "no in-app shortcut", never "installation is broken" - see the tests in
  * shopify-install-route.test.ts that pin exactly that.
  *
- * Returns null when unset or malformed. Null is a real, expected state
- * before the listing publishes, and callers must render it as such.
+ * Returns null when unset or malformed. Null is an ORDINARY state and callers
+ * must render it as one: it may not become a blocked button or an error.
  */
 export function resolveShopifyInstallUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  const handle = (env.SHOPIFY_APP_HANDLE || "").trim();
-  // Shopify listing handles are lowercase alphanumeric with hyphens. Anything
-  // else was not copied from the dashboard, and building a URL from it would
-  // send merchants to a 404 with no way to tell why.
-  if (!handle || !/^[a-z0-9][a-z0-9-]*$/.test(handle)) return null;
+  const handle = resolveShopifyAppStoreHandle(env);
+  if (!handle) return null;
   return `https://apps.shopify.com/${handle}`;
+}
+
+/**
+ * Whether the App Store listing is actually reachable by a merchant.
+ *
+ * This exists because "the slug is configured" and "the page loads" are
+ * different facts, and conflating them put a 404 behind the Connect button.
+ *
+ * An App Store listing is only publicly reachable once the app is APPROVED.
+ * Before that it renders for Partner-account viewers and returns what looks
+ * like a 404 to everyone else - and an app set to "Limited visibility" never
+ * appears in App Store search at all, even after approval. So there is no URL
+ * to send a merchant to before publication, and no search page that would find
+ * us either.
+ *
+ * Off by default, because being wrong in that direction shows an honest
+ * explanation, and being wrong in the other direction shows a 404.
+ */
+function listingIsLive(env: NodeJS.ProcessEnv): boolean {
+  return String(env.SHOPIFY_APP_STORE_LISTING_LIVE || "").toLowerCase().trim() === "true";
+}
+
+/**
+ * Where "Connect Shopify" goes, or why it cannot go anywhere yet.
+ *
+ * A discriminated result rather than a nullable URL: the two states need
+ * different UI, and a `null` that callers were free to interpret is how the
+ * 503 and then the 404 both happened.
+ */
+export type ShopifyInstallEntry =
+  /** The listing is live and configured. Navigate here. */
+  | { mode: "listing"; url: string }
+  /**
+   * No reachable Shopify page exists yet. The UI must EXPLAIN that
+   * installation begins on Shopify. It must not navigate, must not present
+   * this as an error, and must never ask for a shop domain.
+   */
+  | { mode: "not_published"; url: null };
+
+/**
+ * Where "Connect Shopify" sends a merchant, or why it cannot send them yet.
+ *
+ * THE HISTORY, BECAUSE IT HAS BEEN WRONG TWICE
+ * --------------------------------------------
+ * First this route answered `503 shopify_install_not_available` whenever the
+ * listing slug was unset, and Shopify App Store review 132211 quoted the
+ * resulting screen back under requirement 4.5.5.
+ *
+ * The fix for that was worse in a quieter way: it always produced a URL,
+ * falling back to App Store search. But an unapproved listing 404s for anyone
+ * not signed in to a Partner account, and this app is "Limited visibility", so
+ * it will never appear in App Store search even after approval. The button
+ * stopped refusing and started leading to a dead page instead.
+ *
+ * So the state is now explicit. Before publication there is no reachable
+ * Shopify page, and the honest answer is to say installation begins on
+ * Shopify - which is exactly what Shopify Support advised: before publication
+ * the in-app button is not the reviewer's entry point, and no special
+ * pre-publication URL is needed.
+ *
+ * Neither branch asks the merchant to type a `.myshopify.com` domain, which is
+ * what requirement 2.3.1 actually forbids.
+ *
+ * Going live is one environment variable: set SHOPIFY_APP_STORE_LISTING_LIVE
+ * once the listing is approved. No code change, no deploy.
+ */
+export function resolveShopifyInstallEntry(
+  env: NodeJS.ProcessEnv = process.env,
+): ShopifyInstallEntry {
+  const listing = resolveShopifyInstallUrl(env);
+  if (listing && listingIsLive(env)) return { mode: "listing", url: listing };
+  return { mode: "not_published", url: null };
 }
