@@ -6,6 +6,7 @@ import { AddKnowledge } from '@/features/knowledge/add/AddKnowledge';
 import { FocusSection } from '@/features/knowledge/FocusSection';
 import { KnowledgeScreen } from '@/features/knowledge/KnowledgeScreen';
 import { ScanPanel } from '@/features/knowledge/ScanPanel';
+import { DocumentActions } from '@/features/knowledge/DocumentActions';
 import { DocumentDrawer, DocumentTypeLead } from '@/features/knowledge/DocumentDrawer';
 import { Drawer } from '@/shell/Drawer';
 
@@ -233,6 +234,44 @@ describe('★★ K6 - ?doc=<id> opens that item’s drawer', () => {
     expect(lead?.props.type).toBe('google_drive');
     loadDoc.mockResolvedValueOnce({ state: 'forbidden' });
     expect(find(await page({ doc: 'd1' }), DocumentTypeLead)).toBeNull();
+    sources.value = [];
+  });
+
+  it('★★ K11: an item that was read gets Edit and Delete around its body; a refusal, neither', async () => {
+    sources.value = listed;
+    loadDoc.mockReset();
+    loadDoc.mockResolvedValueOnce({
+      state: 'ok',
+      document: {
+        id: 'd1',
+        knowledgeBaseId: 'kb-1',
+        title: 'Terms',
+        type: 'text',
+        content: 'We ship in 2 days.',
+        truncated: false,
+        metadata: null,
+        ai: { sectionCount: 0, sections: [], sectionsTruncated: false },
+      },
+    });
+    const actions = find<{ document: unknown; children: ReactNode }>(
+      await page({ doc: 'd1' }),
+      DocumentActions,
+    );
+    // Only what editing needs crosses to the browser - not the sections.
+    expect(actions?.document).toEqual({
+      id: 'd1',
+      knowledgeBaseId: 'kb-1',
+      title: 'Terms',
+      type: 'text',
+      content: 'We ship in 2 days.',
+      truncated: false,
+      metadata: null,
+    });
+    expect(find(actions?.children, DocumentDrawer)).not.toBeNull();
+    loadDoc.mockResolvedValueOnce({ state: 'forbidden' });
+    const refused = await page({ doc: 'd1' });
+    expect(find(refused, DocumentActions)).toBeNull();
+    expect(find(refused, DocumentDrawer)).not.toBeNull();
     sources.value = [];
   });
 

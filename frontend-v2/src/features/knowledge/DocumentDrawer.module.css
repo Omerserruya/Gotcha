@@ -140,4 +140,49 @@
     color: var(--text-body);
     overflow-wrap: anywhere;
   }
+
+  /*
+   * K11: the drawer's foot - Edit and Delete, the confirm, the editor's Save.
+   * The editor is a form standing in for the body, so it is the panel's
+   * flexible part as the body was: it grows, and its body scrolls.
+   */
+  .editForm {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-block-size: 0;
+  }
+
+  .editContent {
+    min-block-size: 240px;
+    line-height: 1.5;
+  }
+
+  .footLine {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-body);
+    overflow-wrap: anywhere;
+  }
+
+  .footSaid {
+    margin: 0;
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* The confirm names the item: its sentence on a line, the answers under it. */
+  .confirmFoot {
+    flex-wrap: wrap;
+  }
+
+  .confirmFoot > .footLine {
+    flex-basis: 100%;
+  }
+
+  .footButtons {
+    display: flex;
+    gap: var(--space-10);
+  }
 }

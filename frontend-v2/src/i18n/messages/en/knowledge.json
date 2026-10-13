@@ -271,6 +271,44 @@
       "not_found": "This item isn't in your knowledge any more.",
       "forbidden": "You don't have permission to see what's in your knowledge.",
       "failed": "We couldn't open this item just now. Try again in a moment."
+    },
+    "edit": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "title": "Title",
+      "content": "Content",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "saved": "Saved.",
+      "savedReading": "Saved. GOTCHA is reading the new text, and answers from it once that's done.",
+      "titleOnly": "This item is too long to edit here, so only its title can be changed.",
+      "note": {
+        "scan": "A manual edit is kept through the next scan.",
+        "page": "You're changing the text GOTCHA took from the page. The page itself stays as it is.",
+        "file": "You're changing the text GOTCHA took from the file. Your file stays as it is."
+      },
+      "synced": {
+        "drive": "GOTCHA keeps this item in step with Google Drive, so it's changed or removed in Google Drive.",
+        "confluence": "GOTCHA keeps this item in step with Confluence, so it's changed or removed in Confluence."
+      },
+      "confirm": "Delete „<title></title>”? GOTCHA stops using it.",
+      "confirmYes": "Delete",
+      "deleting": "Deleting…",
+      "keep": "Keep it",
+      "problem": {
+        "unchanged": "Nothing has changed yet.",
+        "empty_title": "Give it a title first.",
+        "empty_content": "Write its content first. To remove the item, delete it.",
+        "forbidden": "You need permission to change what GOTCHA knows.",
+        "gone": "This item isn't in your knowledge any more.",
+        "failed": "It wasn't saved. Try again."
+      },
+      "deleteProblem": {
+        "forbidden": "You need permission to delete from what GOTCHA knows.",
+        "gone": "This item isn't in your knowledge any more.",
+        "failed": "It wasn't deleted. Try again."
+      }
     }
   }
 }

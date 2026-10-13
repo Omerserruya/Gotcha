@@ -118,6 +118,18 @@ export const knowledgeDocumentDetailSchema = z.object({
   content: z.string().nullable().default(''),
   contentLength: z.number().default(0),
   truncated: z.boolean().default(false),
+  /**
+   * K11: the provenance the route allowlists (`sanitizeDocMetadata`). One key
+   * is read: `origin: 'onboarding'` - the website scan made this item and a
+   * later scan reconciles it (and honours `manualEdit`, which every save from
+   * the drawer stamps). Any other shape is `null`: it changes one line under
+   * the editor, never the drawer.
+   */
+  metadata: z
+    .object({ origin: z.string().optional().catch(undefined) })
+    .nullable()
+    .default(null)
+    .catch(null),
   ai: z
     .object({
       sectionCount: z.number().default(0),
@@ -136,6 +148,16 @@ export const knowledgeDocumentDetailSchema = z.object({
 });
 
 export type KnowledgeDocumentDetail = z.infer<typeof knowledgeDocumentDetailSchema>;
+
+/**
+ * K11: `PUT /api/knowledge-bases/:id/documents/:docId` answers the updated
+ * row with `reprocessing` - true when the content changed, so the item went
+ * back to `pending`, its old sections were dropped and it is being read
+ * again. Only that flag is read; the row itself comes back on the next read.
+ */
+export const knowledgeDocumentUpdateSchema = z.object({
+  reprocessing: z.boolean().default(false),
+});
 
 /**
  * The document's summary as its row's subtitle, or `null` for no line at

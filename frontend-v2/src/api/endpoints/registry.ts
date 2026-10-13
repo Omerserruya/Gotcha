@@ -1416,6 +1416,11 @@ export const knowledgeEndpoints = {
    * ai: { sectionCount, sections, sectionsTruncated, facts: null } } }`;
    * 404 when it is not in this tenant AND this base, 403 without
    * `ai:knowledge:read`.
+   *
+   * K11: the same path edits and deletes it - both `ai:knowledge:write` or
+   * ADMIN. PUT `{ title?, content?, manualEdit? }` answers the row plus
+   * `reprocessing`; DELETE drops its vectors and the row, `{ deleted: true }`.
+   * See `document-actions.ts` for what each really does.
    */
   document: (baseId: string, docId: string) =>
     endpoint('/api/knowledge-bases/{baseId}/documents/{docId}', { baseId, docId }),

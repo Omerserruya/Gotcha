@@ -9,6 +9,8 @@ import {
   type KnowledgeLanding,
 } from '@/features/knowledge/add/add-way';
 import { AddKnowledge } from '@/features/knowledge/add/AddKnowledge';
+import { DocumentActions } from '@/features/knowledge/DocumentActions';
+import { editableOf } from '@/features/knowledge/document-edit';
 import { DocumentDrawer, DocumentTypeLead } from '@/features/knowledge/DocumentDrawer';
 import { FocusSection } from '@/features/knowledge/FocusSection';
 import { KnowledgeScreen } from '@/features/knowledge/KnowledgeScreen';
@@ -140,7 +142,17 @@ export default async function Page({
           width={600}
           testId="knowledge-doc-drawer"
         >
-          <DocumentDrawer read={docRead} />
+          {/*
+            K11: an item that was read can be edited and deleted - the foot
+            under its body, and the editor in its place (DocumentActions).
+          */}
+          {docRead.state === 'ok' ? (
+            <DocumentActions document={editableOf(docRead.document)}>
+              <DocumentDrawer read={docRead} />
+            </DocumentActions>
+          ) : (
+            <DocumentDrawer read={docRead} />
+          )}
         </Drawer>
       ) : null}
       {params.add === '1' ? (

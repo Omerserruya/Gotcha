@@ -233,11 +233,16 @@ describe('★ in Hebrew', () => {
 });
 
 describe('the contract', () => {
-  it('reads the route’s shape; facts and metadata are not carried', () => {
-    const parsed = doc();
+  it('reads the route’s shape; facts are not carried, and of metadata only its origin (K11)', () => {
+    const parsed = doc({
+      metadata: { origin: 'onboarding', dedupeKey: 'url:x', manualEdit: true },
+    });
     expect(parsed.ai.sections).toHaveLength(2);
     expect('facts' in parsed.ai).toBe(false);
-    expect('metadata' in parsed).toBe(false);
+    expect(parsed.metadata).toEqual({ origin: 'onboarding' });
+    // Another shape blanks that one line's source, never the drawer.
+    expect(doc({ metadata: 'onboarding' }).metadata).toBeNull();
+    expect(doc({ metadata: undefined }).metadata).toBeNull();
   });
 
   it('a field the route stops sending blanks one line, not the drawer', () => {
