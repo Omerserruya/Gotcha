@@ -30,6 +30,7 @@ import type { ChannelCredentials } from "@chatcenter/shared";
 import { processAIBot, getBusinessHoursState } from "./ai-bot.service";
 import { tryLinkIdentifierFromInbound } from "./identity-link.service";
 import { withRemovalLine, hasRemovalLine, isOptedOutOn } from "@chatcenter/shared/src/lib/marketing-optout";
+import { hasReplyWindow, lastInboundAtForRecipient, replyWindowFor, sendAllowed } from "@chatcenter/shared/src/lib/reply-window";
 
 // ─── Graph shapes (ReactFlow-compatible) ─────────────────────
 
@@ -952,6 +953,7 @@ async function walk(
         if (ctx.sendCtx && buttons.length > 0) {
           const adapter = getOutboundAdapter(ctx.sendCtx.channel as any);
           if (adapter) {
+            await refuseOutsideWindow(ctx, ctx.sendCtx, body, "interactive", { buttons });
             let extId: string | null;
             try {
               extId = await adapter.sendInteractiveMessage(
@@ -1529,6 +1531,37 @@ async function buildExplicitSendCtx(
   };
 }
 
+/**
+ * The customer-service window for a flow's free-form send (B7, 2026-10-12): a
+ * flow can resume days after its wait node, past the 24h WhatsApp window or
+ * the Instagram/Messenger one. Refused here instead of at Meta (131047): the
+ * same FAILED row with a reason and the same thrown error a provider failure
+ * gave, without the doomed call. Templates go through sendTemplate and are not
+ * checked here. Fails open: an unreadable window lets the send go.
+ */
+async function refuseOutsideWindow(
+  ctx: FlowExecCtx,
+  sendCtx: ChannelSendContext,
+  body: string,
+  messageType: string,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
+  let verdict: ReturnType<typeof sendAllowed> = { ok: true };
+  try {
+    if (!hasReplyWindow(sendCtx.channel)) return;
+    const last = await lastInboundAtForRecipient({ tenantId: ctx.tenantId, channel: sendCtx.channel, channelAccountId: null, customerExternalId: sendCtx.recipientId });
+    verdict = sendAllowed(replyWindowFor(sendCtx.channel, last), messageType);
+  } catch (err: any) {
+    console.warn(`[flow.send] reply window unreadable, sending anyway: ${err?.message}`);
+    return;
+  }
+  if (verdict.ok) return;
+  const sendError = { channel: sendCtx.channel, phase: "send", type: verdict.code, message: verdict.message, retryable: false, at: new Date().toISOString() };
+  await persistOutbound(ctx, body, messageType, null, { ...extra, sendError });
+  console.warn(`[flow.send] refused ${verdict.code} conv=${ctx.conversationId}`);
+  throw new Error(`${verdict.code}: ${verdict.message}`);
+}
+
 // `sendCtx` defaults to the conversation-bound context (ctx.sendCtx). Context-free
 // callers (webhook runs with an explicit recipient) pass a one-off context built
 // by buildExplicitSendCtx so the same dispatch + persist path is reused verbatim.
@@ -1547,6 +1580,7 @@ async function sendText(
   const resolved = ctx.run?.marketing ? withRemovalLine(interpolated) : interpolated;
   const adapter = getOutboundAdapter(sendCtx.channel as any);
   if (!adapter) return;
+  await refuseOutsideWindow(ctx, sendCtx, resolved, "text");
   let extId: string | null;
   try {
     extId = await adapter.sendTextMessage(
@@ -1578,6 +1612,7 @@ async function sendMedia(
   if (!resolvedUrl || !resolvedUrl.trim() || !ctx.sendCtx) return;
   const adapter = getOutboundAdapter(ctx.sendCtx.channel as any);
   if (!adapter) return;
+  await refuseOutsideWindow(ctx, ctx.sendCtx, resolvedCaption || resolvedUrl, mediaType, { url: resolvedUrl, filename: resolvedName });
   if (adapter.sendMediaMessage) {
     let extId: string | null;
     try {
@@ -2238,6 +2273,7 @@ async function sendButtons(body: string, buttons: Array<{ id: string; title: str
   if (!sendCtx || !body.trim() || !buttons.length) return;
   const adapter = getOutboundAdapter(sendCtx.channel as any);
   if (!adapter) return;
+  await refuseOutsideWindow(ctx, sendCtx, body, "interactive", { buttons });
   let extId: string | null;
   try {
     extId = await adapter.sendInteractiveMessage(sendCtx.credentials, sendCtx.channelAccountExternalId, sendCtx.recipientId, body, buttons);
@@ -2258,6 +2294,7 @@ async function sendList(body: string, buttonText: string, rows: Array<{ id: stri
     // channel fails loudly rather than pretending it sent.
     throw new Error(`send_list: ${sendCtx.channel} has no list messages`);
   }
+  await refuseOutsideWindow(ctx, sendCtx, body, "interactive", { list: rows });
   let extId: string | null;
   try {
     extId = await adapter.sendListMessage(sendCtx.credentials, sendCtx.channelAccountExternalId, sendCtx.recipientId, body, buttonText, rows);

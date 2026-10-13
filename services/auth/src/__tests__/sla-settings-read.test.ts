@@ -84,3 +84,22 @@ describe("SLA settings: an agent reads, only an Owner writes", () => {
     expect(H.writes[0].slice(0, 2)).toEqual(["t1", "sla"]);
   });
 });
+
+describe("idle automation settings are durable (B8, 2026-10-12)", () => {
+  const body = { reminderEnabled: true, reminderDelayMinutes: 90, reminderMessage: "Still there?", autoCloseEnabled: false, autoCloseDelayMinutes: 1440, autoCloseMessage: "" };
+
+  it("PUT writes the durable setting under the tenant, by this person", async () => {
+    H.user = OWNER;
+    const r = await request(app).put("/api/agents/settings/idle-automation").send(body);
+    expect(r.status).toBe(200);
+    expect(H.writes).toEqual([["t1", "idleAutomation", JSON.stringify(body)]]);
+  });
+
+  it("GET reads it durably, else the defaults", async () => {
+    H.user = OWNER;
+    expect((await request(app).get("/api/agents/settings/idle-automation")).body.reminderEnabled).toBe(false);
+    H.settings.set("t1:idleAutomation", JSON.stringify(body));
+    expect((await request(app).get("/api/agents/settings/idle-automation")).body).toEqual(body);
+    expect(H.reads).toContainEqual(["t1", "idleAutomation"]);
+  });
+});

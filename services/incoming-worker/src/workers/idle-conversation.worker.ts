@@ -4,9 +4,10 @@ import {
   createWorker,
   idleConversationQueue,
   outgoingMessageQueue,
-  getRedis,
   publishEvent,
+  readDurableSetting,
 } from "@chatcenter/shared";
+import { hasReplyWindow, lastInboundAtForRecipient, replyWindowFor } from "@chatcenter/shared/src/lib/reply-window";
 
 interface IdleConversationJob {
   type: "idle_check";
@@ -191,182 +192,234 @@ async function processIdleConversations(job: Job<IdleConversationJob>): Promise<
     select: { id: true },
   });
 
-  const redis = getRedis();
   let reminders = 0;
   let closes = 0;
+  let skipped = 0;
 
   for (const tenant of tenants) {
     try {
-      const raw = await redis.get(`tenant:${tenant.id}:idleAutomation`);
-      if (!raw) continue;
-
-      const config: IdleAutomationConfig = JSON.parse(raw);
-      if (!config.reminderEnabled && !config.autoCloseEnabled) continue;
-
-      // Find open conversations where last message is OUTBOUND (agent waiting for customer)
-      // and conversation is assigned to an agent
-      const conversations = await prisma.conversation.findMany({
-        where: {
-          tenantId: tenant.id,
-          status: { in: ["OPEN", "WAITING"] },
-          assignedAgentId: { not: null },
-          lastMessageAt: { not: null },
-        },
-        include: {
-          messages: {
-            orderBy: { createdAt: "desc" },
-            take: 1,
-            select: { direction: true, createdAt: true, messageType: true },
-          },
-          channelAccount: {
-            select: { id: true, channel: true },
-          },
-          assignedAgent: {
-            select: { id: true, name: true },
-          },
-        },
-      });
-
-      for (const conv of conversations) {
-        const lastMsg = conv.messages[0];
-        if (!lastMsg) continue;
-
-        // Only act if last message is from agent (OUTBOUND) and not a system message
-        if (lastMsg.direction !== "OUTBOUND" || lastMsg.messageType === "system") continue;
-
-        const lastMsgTime = lastMsg.createdAt.getTime();
-        const now = Date.now();
-        const elapsedMinutes = (now - lastMsgTime) / 60000;
-
-        // Auto-close check (takes priority - check first since it has a longer delay)
-        if (config.autoCloseEnabled && config.autoCloseDelayMinutes > 0) {
-          if (elapsedMinutes >= config.autoCloseDelayMinutes) {
-            try {
-              // Send auto-close message if configured
-              if (config.autoCloseMessage && conv.channelAccount) {
-                const message = await prisma.message.create({
-                  data: {
-                    tenantId: tenant.id,
-                    conversationId: conv.id,
-                    direction: "OUTBOUND",
-                    body: config.autoCloseMessage,
-                    messageType: "text",
-                    senderName: "System",
-                    status: "PENDING",
-                  },
-                });
-
-                await outgoingMessageQueue.add("send", {
-                  tenantId: tenant.id,
-                  conversationId: conv.id,
-                  channel: conv.channelAccount.channel,
-                  channelAccountId: conv.channelAccount.id,
-                  recipientExternalId: conv.customerExternalId,
-                  body: config.autoCloseMessage,
-                  messageType: "text",
-                  senderName: "System",
-                  messageId: message.id,
-                }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
-              }
-
-              // Close the conversation
-              await prisma.conversation.update({
-                where: { id: conv.id },
-                data: { status: "CLOSED", closedAt: new Date() },
-              });
-
-              // Create system message
-              await prisma.message.create({
-                data: {
-                  tenantId: tenant.id,
-                  conversationId: conv.id,
-                  direction: "INBOUND",
-                  body: "",
-                  messageType: "system",
-                  senderName: "System",
-                  metadata: { systemEvent: "auto_closed", reason: "idle_timeout" },
-                },
-              });
-
-              publishEvent({
-                event: "conversation:closed",
-                tenantId: tenant.id,
-                data: { id: conv.id, status: "CLOSED" },
-              }).catch(() => {});
-
-              // Intelligence: the ai service analyses it on the
-              // conversation:closed event above.
-
-              closes++;
-              console.log(`[idle-check] Auto-closed conversation ${conv.id} (idle ${Math.round(elapsedMinutes)}m)`);
-            } catch (err) {
-              console.error(`[idle-check] Auto-close failed for ${conv.id}:`, err);
-            }
-            continue; // Skip reminder since we're closing
-          }
-        }
-
-        // Reminder check
-        if (config.reminderEnabled && config.reminderDelayMinutes > 0) {
-          if (elapsedMinutes >= config.reminderDelayMinutes) {
-            // Check if reminder was already sent for this idle period
-            if (conv.reminderSentAt && conv.reminderSentAt.getTime() > lastMsgTime) {
-              continue; // Already sent reminder after last agent message
-            }
-
-            try {
-              if (config.reminderMessage && conv.channelAccount) {
-                const message = await prisma.message.create({
-                  data: {
-                    tenantId: tenant.id,
-                    conversationId: conv.id,
-                    direction: "OUTBOUND",
-                    body: config.reminderMessage,
-                    messageType: "text",
-                    senderName: conv.assignedAgent?.name || "System",
-                    status: "PENDING",
-                  },
-                });
-
-                await outgoingMessageQueue.add("send", {
-                  tenantId: tenant.id,
-                  conversationId: conv.id,
-                  channel: conv.channelAccount.channel,
-                  channelAccountId: conv.channelAccount.id,
-                  recipientExternalId: conv.customerExternalId,
-                  body: config.reminderMessage,
-                  messageType: "text",
-                  senderName: conv.assignedAgent?.name || "System",
-                  messageId: message.id,
-                }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
-              }
-
-              // Mark reminder as sent
-              await prisma.conversation.update({
-                where: { id: conv.id },
-                data: { reminderSentAt: new Date() },
-              });
-
-              publishEvent({
-                event: "conversation:updated",
-                tenantId: tenant.id,
-                data: { id: conv.id },
-              }).catch(() => {});
-
-              reminders++;
-              console.log(`[idle-check] Sent reminder for conversation ${conv.id} (idle ${Math.round(elapsedMinutes)}m)`);
-            } catch (err) {
-              console.error(`[idle-check] Reminder failed for ${conv.id}:`, err);
-            }
-          }
-        }
-      }
+      const r = await idleAutomationForTenant(tenant.id);
+      reminders += r.reminders;
+      closes += r.closes;
+      skipped += r.skippedOutsideWindow;
     } catch (err) {
       console.error(`[idle-check] Error processing tenant ${tenant.id}:`, err);
     }
   }
 
-  console.log(`[idle-check] Complete: ${reminders} reminders sent, ${closes} conversations closed`);
+  console.log(`[idle-check] Complete: ${reminders} reminders sent, ${closes} conversations closed, ${skipped} messages skipped outside the reply window`);
+}
+
+/**
+ * The customer-service window for an idle reminder or close message (B8,
+ * 2026-10-12): free text only while the customer's 24h window is open
+ * (WhatsApp, Instagram, Messenger). Outside it the message is skipped and
+ * logged; the close itself still happens. Free text there failed at Meta
+ * (131047). An unreadable window allows the message, as before.
+ */
+async function messageAllowed(conv: { tenantId: string; channel: string | null; channelAccountId: string | null; customerExternalId: string }): Promise<boolean> {
+  try {
+    const channel = conv.channel || "WHATSAPP";
+    if (!hasReplyWindow(channel)) return true;
+    const last = await lastInboundAtForRecipient({ tenantId: conv.tenantId, channel, channelAccountId: conv.channelAccountId, customerExternalId: conv.customerExternalId });
+    return replyWindowFor(channel, last).mode === "free";
+  } catch (err: any) {
+    console.warn(`[idle-check] reply window unreadable for ${conv.customerExternalId.slice(0, 4)}***, allowing: ${err?.message}`);
+    return true;
+  }
+}
+
+/**
+ * One workspace's idle reminders and auto-closes. The settings are durable
+ * (TenantSetting "idleAutomation", read cache-first); they lived in Redis only
+ * and a flush lost them.
+ */
+export async function idleAutomationForTenant(tenantId: string): Promise<{ reminders: number; closes: number; skippedOutsideWindow: number }> {
+  let reminders = 0;
+  let closes = 0;
+  let skippedOutsideWindow = 0;
+  const raw = await readDurableSetting(tenantId, "idleAutomation");
+  if (!raw) return { reminders, closes, skippedOutsideWindow };
+
+  const config: IdleAutomationConfig = JSON.parse(raw);
+  if (!config.reminderEnabled && !config.autoCloseEnabled) return { reminders, closes, skippedOutsideWindow };
+
+  // Find open conversations where last message is OUTBOUND (agent waiting for customer)
+  // and conversation is assigned to an agent
+  const conversations = await prisma.conversation.findMany({
+    where: {
+      tenantId,
+      status: { in: ["OPEN", "WAITING"] },
+      assignedAgentId: { not: null },
+      lastMessageAt: { not: null },
+    },
+    include: {
+      messages: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { direction: true, createdAt: true, messageType: true },
+      },
+      channelAccount: {
+        select: { id: true, channel: true },
+      },
+      assignedAgent: {
+        select: { id: true, name: true },
+      },
+    },
+  });
+
+  for (const conv of conversations) {
+    const lastMsg = conv.messages[0];
+    if (!lastMsg) continue;
+
+    // Only act if last message is from agent (OUTBOUND) and not a system message
+    if (lastMsg.direction !== "OUTBOUND" || lastMsg.messageType === "system") continue;
+
+    const lastMsgTime = lastMsg.createdAt.getTime();
+    const now = Date.now();
+    const elapsedMinutes = (now - lastMsgTime) / 60000;
+
+    // Auto-close check (takes priority - check first since it has a longer delay)
+    if (config.autoCloseEnabled && config.autoCloseDelayMinutes > 0) {
+      if (elapsedMinutes >= config.autoCloseDelayMinutes) {
+        try {
+          // Send auto-close message if configured, and only inside the
+          // customer's reply window; the close happens either way.
+          const closeMessageAllowed = !!(config.autoCloseMessage && conv.channelAccount) && (await messageAllowed(conv as any));
+          if (config.autoCloseMessage && conv.channelAccount && !closeMessageAllowed) {
+            skippedOutsideWindow++;
+            console.log(`[idle-check] Close message skipped for ${conv.id}: outside the reply window`);
+          }
+          if (closeMessageAllowed && conv.channelAccount) {
+            const message = await prisma.message.create({
+              data: {
+                tenantId,
+                conversationId: conv.id,
+                direction: "OUTBOUND",
+                body: config.autoCloseMessage,
+                messageType: "text",
+                senderName: "System",
+                status: "PENDING",
+              },
+            });
+
+            await outgoingMessageQueue.add("send", {
+              tenantId,
+              conversationId: conv.id,
+              channel: conv.channelAccount.channel,
+              channelAccountId: conv.channelAccount.id,
+              recipientExternalId: conv.customerExternalId,
+              body: config.autoCloseMessage,
+              messageType: "text",
+              senderName: "System",
+              messageId: message.id,
+            }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
+          }
+
+          // Close the conversation
+          await prisma.conversation.update({
+            where: { id: conv.id },
+            data: { status: "CLOSED", closedAt: new Date() },
+          });
+
+          // Create system message
+          await prisma.message.create({
+            data: {
+              tenantId,
+              conversationId: conv.id,
+              direction: "INBOUND",
+              body: "",
+              messageType: "system",
+              senderName: "System",
+              metadata: { systemEvent: "auto_closed", reason: "idle_timeout" },
+            },
+          });
+
+          publishEvent({
+            event: "conversation:closed",
+            tenantId,
+            data: { id: conv.id, status: "CLOSED" },
+          }).catch(() => {});
+
+          // Intelligence: the ai service analyses it on the
+          // conversation:closed event above.
+
+          closes++;
+          console.log(`[idle-check] Auto-closed conversation ${conv.id} (idle ${Math.round(elapsedMinutes)}m)`);
+        } catch (err) {
+          console.error(`[idle-check] Auto-close failed for ${conv.id}:`, err);
+        }
+        continue; // Skip reminder since we're closing
+      }
+    }
+
+    // Reminder check
+    if (config.reminderEnabled && config.reminderDelayMinutes > 0) {
+      if (elapsedMinutes >= config.reminderDelayMinutes) {
+        // Check if reminder was already sent for this idle period
+        if (conv.reminderSentAt && conv.reminderSentAt.getTime() > lastMsgTime) {
+          continue; // Already sent reminder after last agent message
+        }
+
+        try {
+          // Outside the customer's reply window the reminder is skipped,
+          // and marked handled for this silence so it is not retried every
+          // five minutes. (An approved follow-up template will be used here
+          // once the WhatsApp required templates exist.)
+          const reminderAllowed = !!(config.reminderMessage && conv.channelAccount) && (await messageAllowed(conv as any));
+          if (config.reminderMessage && conv.channelAccount && !reminderAllowed) {
+            skippedOutsideWindow++;
+            console.log(`[idle-check] Reminder skipped for ${conv.id}: outside the reply window`);
+          }
+          if (reminderAllowed && conv.channelAccount) {
+            const message = await prisma.message.create({
+              data: {
+                tenantId,
+                conversationId: conv.id,
+                direction: "OUTBOUND",
+                body: config.reminderMessage,
+                messageType: "text",
+                senderName: conv.assignedAgent?.name || "System",
+                status: "PENDING",
+              },
+            });
+
+            await outgoingMessageQueue.add("send", {
+              tenantId,
+              conversationId: conv.id,
+              channel: conv.channelAccount.channel,
+              channelAccountId: conv.channelAccount.id,
+              recipientExternalId: conv.customerExternalId,
+              body: config.reminderMessage,
+              messageType: "text",
+              senderName: conv.assignedAgent?.name || "System",
+              messageId: message.id,
+            }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
+          }
+
+          // Mark reminder as sent
+          await prisma.conversation.update({
+            where: { id: conv.id },
+            data: { reminderSentAt: new Date() },
+          });
+
+          publishEvent({
+            event: "conversation:updated",
+            tenantId,
+            data: { id: conv.id },
+          }).catch(() => {});
+
+          if (reminderAllowed) {
+            reminders++;
+            console.log(`[idle-check] Sent reminder for conversation ${conv.id} (idle ${Math.round(elapsedMinutes)}m)`);
+          }
+        } catch (err) {
+          console.error(`[idle-check] Reminder failed for ${conv.id}:`, err);
+        }
+      }
+    }
+  }
+  return { reminders, closes, skippedOutsideWindow };
 }
 
 // ─── Setup Repeatable Job + Start Worker ────────────────────

@@ -758,8 +758,9 @@ const idleAutomationSchema = z.object({
 
 router.get("/settings/idle-automation", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
-    const redis = getRedis();
-    const raw = await redis.get(`tenant:${req.tenantId!}:idleAutomation`);
+    // Durable (TenantSetting, read cache-first under the same Redis key the
+    // value used to live in alone), 2026-10-12: a Redis flush lost it.
+    const raw = await readDurableSetting(req.tenantId!, "idleAutomation");
     if (!raw) {
       res.json({
         reminderEnabled: false,
@@ -780,8 +781,7 @@ router.get("/settings/idle-automation", requireRole("ADMIN"), async (req: Reques
 
 router.put("/settings/idle-automation", requireRole("ADMIN"), validate(idleAutomationSchema), async (req: Request, res: Response) => {
   try {
-    const redis = getRedis();
-    await redis.set(`tenant:${req.tenantId!}:idleAutomation`, JSON.stringify(req.body));
+    await writeDurableSetting(req.tenantId!, "idleAutomation", JSON.stringify(req.body), req.user?.userId);
     res.json(req.body);
   } catch (err) {
     console.error("Update idle automation error:", err);
