@@ -1,3 +1,4 @@
+import { integrationSchema } from '@/api/contracts/integrations';
 import type { ReactElement, ReactNode } from 'react';
 import { isValidElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -23,9 +24,13 @@ vi.mock('@/features/employees/load-employees', () => ({
   loadIntegrationAccess,
   loadReachability,
 }));
-const caps = vi.hoisted(() => ({ value: [] as unknown[] }));
+const caps = vi.hoisted(() => ({ value: [] as unknown[], integrations: [] as unknown[] }));
 vi.mock('@/features/capabilities/load-capabilities', () => ({
-  loadCapabilities: async () => ({ capabilities: caps.value, usage: null, integrations: [] }),
+  loadCapabilities: async () => ({
+    capabilities: caps.value,
+    usage: null,
+    integrations: caps.integrations,
+  }),
 }));
 const tools = vi.hoisted(() => ({ value: null as unknown }));
 vi.mock('@/features/skills/skill-actions', () => ({ readTools: async () => tools.value }));
@@ -229,6 +234,24 @@ describe('★★ actions in words, by integration (Omer, 2026-10-07: "WooCommerc
     const tree = await page([employee('a')], { employee: 'a', edit: '1' });
     const sheet = find<{ mayDo: { label: string }[] }>(tree, EditSheet);
     expect(sheet?.mayDo.map((m) => m.label)).toEqual(['WooCommerce · Get customer']);
+  });
+
+  it('★★ H2 - in the catalogue’s own words, as the platform answered them (Hebrew on a Hebrew page)', async () => {
+    await setUp();
+    caps.integrations = [
+      integrationSchema.parse({
+        id: 'i1',
+        slug: 'woocommerce',
+        name: 'WooCommerce',
+        catalogTools: [
+          { id: 'c1', toolName: 'get_customer', slug: 'get_customer', name: 'שליפת לקוח' },
+        ],
+      }),
+    ];
+    const tree = await page([employee('a')], { hire: '1', step: '2' });
+    const props = find<{ tools: { label: string }[] }>(tree, HireSheet);
+    expect(props?.tools.map((tool) => tool.label)).toEqual(['שליפת לקוח']);
+    caps.integrations = [];
   });
 
   it('the hire flow: each action with its provider, to group by', async () => {

@@ -10,7 +10,7 @@ import {
   resolveAvailability,
 } from '@/api/contracts/capabilities';
 import { loadCapabilities } from '@/features/capabilities/load-capabilities';
-import { isConnected, isFailing } from '@/api/contracts/integrations';
+import { catalogName, isConnected, isFailing } from '@/api/contracts/integrations';
 import { EditSheet } from '@/features/employees/edit/EditSheet';
 import { HireSheet } from '@/features/employees/hire/HireSheet';
 import { loadViewerId } from '@/features/roles/load-person';
@@ -100,8 +100,18 @@ export default async function Page({
     hiring || editingWanted ? readTools() : Promise.resolve(null),
   ]);
   const wordsOf = (toolName: string) => toolWords?.find((tool) => tool.name === toolName) ?? null;
+  /*
+    ★ H2 (Omer, 2026-10-13): an integration's action in the reader's
+    language - the catalogue's own name from the integrations read, which the
+    platform answers in the interface language (Accept-Language), so
+    WooCommerce's limits read in Hebrew on a Hebrew page. Never hard-coded:
+    a new tool in the catalogue is named the day it ships.
+  */
+  const integrationOf = (slug: string | null | undefined) =>
+    (slug ? integrations?.find((integration) => integration.slug === slug) : null) ?? null;
   /** "WooCommerce · Get customer"; our own words or the name made readable when the catalogue is silent. */
-  const actionLabel = (toolName: string) =>
+  const actionLabel = (toolName: string, integration?: string | null) =>
+    catalogName(toolName, integrationOf(integration)) ??
     wordsOf(toolName)?.actionLabel ??
     (hasOwnWords(toolName)
       ? tc(`tool.${toolName}` as 'tool.send_message')
@@ -116,7 +126,7 @@ export default async function Page({
           const provider = words?.provider ?? c.integration ?? null;
           return {
             toolName: c.toolName,
-            label: actionLabel(c.toolName),
+            label: actionLabel(c.toolName, c.integration),
             provider,
             providerLabel: words?.providerLabel ?? provider,
             choices: choicesFor(c),
@@ -241,8 +251,8 @@ export default async function Page({
                   .map((c) => ({
                     toolName: c.toolName,
                     label: wordsOf(c.toolName)?.providerLabel
-                      ? `${wordsOf(c.toolName)!.providerLabel} · ${actionLabel(c.toolName)}`
-                      : actionLabel(c.toolName),
+                      ? `${wordsOf(c.toolName)!.providerLabel} · ${actionLabel(c.toolName, c.integration)}`
+                      : actionLabel(c.toolName, c.integration),
                     stance: capabilityStance(c),
                   }))
               : null
