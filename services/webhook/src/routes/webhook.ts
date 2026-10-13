@@ -244,12 +244,22 @@ router.post("/", async (req: Request, res: Response) => {
           continue;
         }
 
-        const whereTemplate = (name: string) => ({
+        // Meta's own id first; otherwise name AND language on this number (or
+        // an unbound one). By name alone, a status for the English template
+        // overwrote the Hebrew one of the same name (2026-10-13).
+        const whereTemplate = (name: string, language: string | null, metaTemplateId: string | null) => ({
           tenantId: matchedAccount!.tenantId,
           channel: "WHATSAPP" as const,
           OR: [
-            { channelAccountId: matchedAccount!.id, name },
-            { channelAccountId: null, name },
+            ...(metaTemplateId ? [{ metaTemplateId }] : []),
+            {
+              AND: [
+                { name },
+                ...(language ? [{ language }] : []),
+                ...(metaTemplateId ? [{ metaTemplateId: null }] : []),
+                { OR: [{ channelAccountId: matchedAccount!.id }, { channelAccountId: null }] },
+              ],
+            },
           ],
         });
 
@@ -271,11 +281,18 @@ router.post("/", async (req: Request, res: Response) => {
                   PENDING_DELETION: "APPROVED",
                   DISABLED: "REJECTED",
                   FLAGGED: "REJECTED",
+                  // A paused template cannot be sent; it used to be ignored
+                  // and stayed APPROVED, so it was still offered.
+                  PAUSED: "REJECTED",
                 };
                 const newStatus = statusMap[tu.event];
                 if (!newStatus) continue;
                 data.status = newStatus;
-                if (tu.reason) data.rejectionReason = tu.reason;
+                // The exact Meta state rides in front of the reason ("[PAUSED]
+                // ..."), as lastError codes do: our enum has no PAUSED/DISABLED.
+                const precise = tu.event === "REJECTED" || newStatus === "APPROVED" ? null : String(tu.event);
+                if (precise) data.rejectionReason = `[${precise}] ${tu.reason ? String(tu.reason) : ""}`.trim();
+                else if (tu.reason) data.rejectionReason = tu.reason;
                 else if (newStatus === "APPROVED") data.rejectionReason = null;
                 break;
               }
@@ -306,8 +323,9 @@ router.post("/", async (req: Request, res: Response) => {
 
             if (Object.keys(data).length === 0) continue;
 
+            const metaLanguage = tu.message_template_language ? String(tu.message_template_language) : null;
             await prisma.messageTemplate.updateMany({
-              where: whereTemplate(metaTemplateName),
+              where: whereTemplate(metaTemplateName, metaLanguage, metaTemplateId),
               data,
             });
             console.log(`[WEBHOOK] Template "${metaTemplateName}" updated via ${change.field}:`, data);
