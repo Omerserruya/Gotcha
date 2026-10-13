@@ -4,9 +4,12 @@ import { FactRows } from '@/features/workspace/FactRows';
 import { HoursDrawer } from '@/features/workspace/HoursDrawer';
 import { LanguageDrawer } from '@/features/workspace/LanguageDrawer';
 import { loadLanguages } from '@/features/workspace/load-languages';
+import { loadIdleSetup } from '@/features/workspace/load-idle';
 import { loadDepartmentSlas, loadSlaSetup } from '@/features/workspace/load-sla-setup';
 import { loadWebsiteScan, loadWorkspace } from '@/features/workspace/load-workspace';
 import { ProhibitedClaims } from '@/features/workspace/ProhibitedClaims';
+import { IdleDrawer } from '@/features/workspace/IdleDrawer';
+import { IdleRow } from '@/features/workspace/IdleRow';
 import { SlaDrawer } from '@/features/workspace/SlaDrawer';
 import { SlaRow } from '@/features/workspace/SlaRow';
 import { VoiceEditor } from '@/features/workspace/VoiceEditor';
@@ -33,11 +36,12 @@ export default async function Page({
 }) {
   const t = await getTranslations('workspace');
   const panel = (await searchParams)?.panel;
-  const [{ workspace, voice, claims }, languages, scan, sla] = await Promise.all([
+  const [{ workspace, voice, claims }, languages, scan, sla, idle] = await Promise.all([
     loadWorkspace(),
     loadLanguages(),
     loadWebsiteScan(),
     loadSlaSetup(),
+    loadIdleSetup(),
   ]);
   // W2: the departments' own targets - read only with the drawer open.
   const slaDepartments =
@@ -60,6 +64,7 @@ export default async function Page({
           scan={scan}
           systemLocale={languages.systemLocale}
           sla={<SlaRow setup={sla} />}
+          idle={<IdleRow setup={idle} />}
         />
       ) : (
         <p>{t('unavailable')}</p>
@@ -97,6 +102,15 @@ export default async function Page({
           testId="drawer-sla"
         >
           <SlaDrawer settings={sla.settings} departments={slaDepartments} />
+        </Drawer>
+      ) : panel === 'idle' && idle.kind === 'owner' ? (
+        <Drawer
+          title={t('idleDrawer.title')}
+          line={t('idleDrawer.line')}
+          closeHref="/settings/workspace"
+          testId="drawer-idle"
+        >
+          <IdleDrawer settings={idle.settings} />
         </Drawer>
       ) : null}
     </SettingsSection>

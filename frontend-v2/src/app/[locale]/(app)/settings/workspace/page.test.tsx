@@ -42,6 +42,22 @@ vi.mock('@/features/workspace/load-languages', () => ({
 }));
 vi.mock('@/features/workspace/SlaDrawer', () => ({ SlaDrawer: stub('sla') }));
 vi.mock('@/features/workspace/SlaRow', () => ({ SlaRow: stub('sla-row') }));
+vi.mock('@/features/workspace/IdleDrawer', () => ({ IdleDrawer: stub('idle') }));
+vi.mock('@/features/workspace/IdleRow', () => ({ IdleRow: stub('idle-row') }));
+const idle = vi.hoisted(() => ({
+  setup: {
+    kind: 'owner',
+    settings: {
+      reminderEnabled: false,
+      reminderDelayMinutes: 60,
+      reminderMessage: 'Hi',
+      autoCloseEnabled: false,
+      autoCloseDelayMinutes: 1440,
+      autoCloseMessage: '',
+    },
+  } as { kind: string; settings?: unknown },
+}));
+vi.mock('@/features/workspace/load-idle', () => ({ loadIdleSetup: async () => idle.setup }));
 const sla = vi.hoisted(() => ({
   setup: { kind: 'owner', settings: { enabled: true, slaMinutes: 30, warningThreshold: 70 } } as {
     kind: string;
@@ -157,5 +173,29 @@ describe('★★ W1 - the system language reaches the row and the drawer', () =>
   it('the drawer gets it, and nothing else', async () => {
     await open('language');
     expect(languageDrawer.mock.calls.at(-1)![0]).toEqual({ systemLocale: 'he' });
+  });
+});
+
+describe('★★ S3 - follow-up and auto-close: a row, and its drawer for an Owner', () => {
+  it('the row is drawn in the facts card', async () => {
+    await open();
+    expect((factRows.mock.calls.at(-1)![0] as { idle?: unknown }).idle).toBeTruthy();
+  });
+
+  it('★★ ?panel=idle opens it for an Owner', async () => {
+    await open('idle');
+    expect(screen.getByTestId('drawer-idle')).toHaveAttribute(
+      'aria-label',
+      'Follow-up and auto-close',
+    );
+    expect(screen.getByTestId('idle')).toBeInTheDocument();
+  });
+
+  it('★★ anyone else: no drawer', async () => {
+    const was = idle.setup;
+    idle.setup = { kind: 'forbidden' };
+    await open('idle');
+    expect(screen.queryByTestId('drawer-idle')).toBeNull();
+    idle.setup = was;
   });
 });

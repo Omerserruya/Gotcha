@@ -40,7 +40,10 @@ export function FactRows({
   scan = null,
   systemLocale = null,
   sla = null,
+  idle = null,
 }: {
+  /** Follow-up and auto-close's row (S3), after the response target - drawn by the page. */
+  readonly idle?: ReactNode;
   readonly workspace: Workspace;
   /** The workspace's system language (`tenantDefaultLocale`) - the language row's value. */
   readonly systemLocale?: string | null;
@@ -338,6 +341,7 @@ export function FactRows({
         </div>
       )}
       {sla}
+      {idle}
     </div>
   );
 }

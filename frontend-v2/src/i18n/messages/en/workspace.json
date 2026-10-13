@@ -20,7 +20,8 @@
     "website": "Website",
     "language": "System language",
     "currencyTimezone": "Currency & time zone",
-    "sla": "Response target"
+    "sla": "Response target",
+    "idle": "Follow-up and auto-close"
   },
   "hours": {
     "to": "{open}-{close}",
@@ -231,6 +232,49 @@
       "invalid": "One of the values was refused. Check them and try again.",
       "failed": "That didn't save. Try again.",
       "departments": "The workspace's target saved. These departments didn't: {names}. Try again."
+    }
+  },
+  "idle": {
+    "off": "Off",
+    "reminderAfter": "Reminder after {delay}",
+    "closeAfter": "Close after {delay}",
+    "ownerOnly": "Only an Owner can see or change this.",
+    "unavailable": "We couldn't read this just now.",
+    "duration": {
+      "minutes": "{count, plural, one {1 minute} other {# minutes}}",
+      "hours": "{count, plural, one {1 hour} other {# hours}}",
+      "days": "{count, plural, one {1 day} other {# days}}"
+    }
+  },
+  "idleDrawer": {
+    "title": "Follow-up and auto-close",
+    "line": "When a customer stops answering: a reminder after a while, and closing the conversation after a while. Both optional.",
+    "who": "Only in conversations assigned to a person, when the last message is yours and the customer hasn't answered.",
+    "reminderTitle": "Reminder",
+    "reminderEnabled": "Send the customer a reminder",
+    "reminderAfter": "After",
+    "reminderMessage": "Message",
+    "reminderMessageRequired": "Write the reminder. An empty one is not sent.",
+    "whatsappReminder": "On WhatsApp, after 24 hours the reminder is not sent, unless there is an approved follow-up template.",
+    "closeTitle": "Closing",
+    "closeEnabled": "Close the conversation",
+    "closeAfter": "After",
+    "closeMessage": "Closing message",
+    "closeMessageHint": "Empty: the conversation closes without a message. On WhatsApp after 24 hours it closes without it too.",
+    "closeTiming": "The close counts from your last message.",
+    "closeTimingAfterReminder": "The close counts from your last message, and a reminder is one: {reminder} to the reminder, then {close} more.",
+    "unit": "Unit",
+    "units": {
+      "minutes": "minutes",
+      "hours": "hours",
+      "days": "days"
+    },
+    "invalidDelay": "A whole number, up to 7 days.",
+    "fix": "Fix the highlighted values first.",
+    "problem": {
+      "forbidden": "Only an Owner can change this.",
+      "invalid": "One of the values was refused. Check them and try again.",
+      "failed": "That didn't save. Try again."
     }
   }
 }

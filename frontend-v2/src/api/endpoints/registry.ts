@@ -247,6 +247,8 @@ export const workspaceEndpoints = {
   sla: () => endpoint('/api/agents/settings/sla'),
   /** One department's own response target, overriding the workspace's when enabled. */
   slaDepartment: (id: string) => endpoint('/api/agents/settings/sla/department/{id}', { id }),
+  /** Follow-up and auto-close (S3): `GET/PUT` - Owner only, the GET too (auth agents.ts). */
+  idleAutomation: () => endpoint('/api/agents/settings/idle-automation'),
 } as const;
 
 /**
