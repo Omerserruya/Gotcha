@@ -1,7 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
 import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { employeeSchema } from '@/api/contracts/employees';
 import employees from '@/i18n/messages/en/employees.json';
@@ -11,7 +11,9 @@ vi.mock('next-intl/server', () => ({
     createTranslator({ locale: 'en', messages: { employees }, namespace }),
   getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'UTC' }),
 }));
+const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ refresh }),
   Link: ({
     href,
     children,
@@ -38,13 +40,16 @@ vi.mock('../PauseEmployee', () => ({
   ),
 }));
 
+import { READINESS_POLL_MS } from '../page/EmployeeReadiness';
+import type { ReadinessRun } from '../page/readiness';
 import { HiredDialog } from './HiredDialog';
 
 const REC = (type: string, title: string) => ({ type, title, detail: 'Upload the full list.' });
 
-const show = async (over: Record<string, unknown> = {}) =>
+const show = async (over: Record<string, unknown> = {}, run?: ReadinessRun) =>
   render(
     await HiredDialog({
+      run,
       employee: employeeSchema.parse({
         id: 'a',
         name: 'Maya',
@@ -132,5 +137,39 @@ describe('★★ 07e - what is true of the employee, and "-" where nothing backs
   it('a draft has no Pause', async () => {
     await show({ status: 'DRAFT' });
     expect(screen.queryByTestId('pause')).toBeNull();
+  });
+});
+
+describe('★★ 07e opens as the hire completes - while its readiness test runs (H7)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    refresh.mockReset();
+  });
+
+  it('★ stored running: "Checking readiness…", never "No readiness test yet" - and it reads again', async () => {
+    vi.useFakeTimers();
+    await show({ readinessReport: null }, { state: 'running' });
+    expect(screen.getByTestId('hired-checking')).toHaveTextContent('Checking readiness…');
+    expect(screen.queryByTestId('hired-no-gap')).toBeNull();
+    expect(screen.queryByTestId('hired-gap')).toBeNull();
+    act(() => vi.advanceTimersByTime(READINESS_POLL_MS));
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('done: the first recommendation, and nothing reads again', async () => {
+    vi.useFakeTimers();
+    await show({
+      readinessReport: { recommendations: [REC('add_faq', 'Shipping')] },
+    });
+    expect(screen.getByTestId('hired-gap')).toHaveTextContent('Shipping');
+    act(() => vi.advanceTimersByTime(READINESS_POLL_MS * 3));
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('failed: why, in words - not "No readiness test yet"', async () => {
+    await show({ readinessReport: null }, { state: 'failed', failure: 'llm_unavailable' });
+    expect(screen.getByTestId('hired-no-gap')).toHaveTextContent(
+      'The last test did not run: the AI model was not available.',
+    );
   });
 });

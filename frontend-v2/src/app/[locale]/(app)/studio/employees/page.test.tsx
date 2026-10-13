@@ -57,6 +57,11 @@ const { loadChannels, loadEmployeeKnowledge, loadHireSkills, loadHireFunnels } =
 vi.mock('@/features/channels/load-channels', () => ({ loadChannels }));
 vi.mock('@/features/employees/page/load-employee-knowledge', () => ({ loadEmployeeKnowledge }));
 vi.mock('@/features/employees/hire/load-hire-skills', () => ({ loadHireSkills }));
+/* 07e: the readiness run of the employee just hired. */
+const { loadReadinessRun } = vi.hoisted(() => ({
+  loadReadinessRun: vi.fn(async () => ({ state: 'running' })),
+}));
+vi.mock('@/features/employees/page/load-readiness-run', () => ({ loadReadinessRun }));
 vi.mock('@/features/employees/hire/load-hire-funnels', () => ({ loadHireFunnels }));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
@@ -263,7 +268,12 @@ describe('★ 07e - the dialog, by query; no edit sheet', () => {
   it('?hired=<id> is that employee; an unknown id opens nothing', async () => {
     const tree = await page([employee('a'), employee('b')], { hired: 'b' });
     expect(find<{ employee: { id: string } }>(tree, HiredDialog)?.employee.id).toBe('b');
+    // ★ Its readiness run, read for THAT employee - 07e opens while it runs.
+    expect(loadReadinessRun).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'b' }));
+    expect(find<{ run: unknown }>(tree, HiredDialog)?.run).toEqual({ state: 'running' });
+    loadReadinessRun.mockClear();
     expect(find(await page([employee('a')], { hired: 'zz' }), HiredDialog)).toBeNull();
+    expect(loadReadinessRun).not.toHaveBeenCalled();
   });
 });
 

@@ -7,7 +7,8 @@ import { Link } from '@/i18n/navigation';
 
 import hire from '../hire/Hire.module.css';
 import { PauseEmployee } from '../PauseEmployee';
-import { RESOLVE_AT } from '../page/readiness';
+import { RESOLVE_AT, type ReadinessRun } from '../page/readiness';
+import { ReadinessPoll } from '../page/ReadinessPoll';
 import { automationsLink, WhoAnswers, type ReachItem } from '../WhoAnswers';
 import styles from './Hired.module.css';
 
@@ -23,7 +24,11 @@ import styles from './Hired.module.css';
  *                       the employee page's Channels tab
  *   Handover rules      the rules that are on; Adjust opens its Profile tab
  *   The readiness card  the last readiness test's first recommendation,
- *                       persisted by the platform - never a fresh run
+ *                       persisted by the platform - never a fresh run.
+ *                       07e opens as the hire completes, while the test
+ *                       that follows it runs: "Checking readiness…" while
+ *                       it is stored as running, read again every few
+ *                       seconds; a failed one says why (H7's words)
  *
  * ── DRAWN, AND WHY ──
  *   Drafts first        no watch-only mode: `ACTIVE | DRAFT | PAUSED`
@@ -33,10 +38,13 @@ import styles from './Hired.module.css';
 export async function HiredDialog({
   employee,
   reach = null,
+  run = { state: 'idle' },
 }: {
   readonly employee: Employee;
   /** Where it answers, by the playbook; `null` when unread. */
   readonly reach?: readonly ReachItem[] | null;
+  /** The readiness run, by its stored status (load-readiness-run.ts). */
+  readonly run?: ReadinessRun;
 }) {
   const t = await getTranslations('employees.hired');
   const te = await getTranslations('employees');
@@ -131,7 +139,12 @@ export async function HiredDialog({
           </ul>
 
           {/* Amber only for a real finding; no test, or no gap, is quiet. */}
-          {first ? (
+          {run.state === 'running' ? (
+            <div className={styles.quiet} role="status" data-testid="hired-checking">
+              <p className={styles.quietTitle}>{te('readiness.checking')}</p>
+              <ReadinessPoll />
+            </div>
+          ) : first ? (
             <div className={styles.gap} data-testid="hired-gap">
               <span className={styles.gapDot} aria-hidden="true" />
               <div className={styles.gapText}>
@@ -163,7 +176,13 @@ export async function HiredDialog({
             </div>
           ) : (
             <div className={styles.quiet} data-testid="hired-no-gap">
-              <p className={styles.quietTitle}>{report ? t('noGaps') : t('notTested')}</p>
+              <p className={styles.quietTitle}>
+                {run.state === 'failed'
+                  ? te(`readiness.failed.${run.failure}`)
+                  : report
+                    ? t('noGaps')
+                    : t('notTested')}
+              </p>
             </div>
           )}
 

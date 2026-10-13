@@ -15,6 +15,7 @@ import { loadEmployeeTools } from '@/features/employees/page/load-employee-tools
 import { toolLevelRows } from '@/features/employees/page/tool-label';
 import { loadViewerId } from '@/features/roles/load-person';
 import { HiredDialog } from '@/features/employees/hired/HiredDialog';
+import { loadReadinessRun } from '@/features/employees/page/load-readiness-run';
 import { seededGrant, type HireTool } from '@/features/employees/hire/hire-plan';
 import { loadHireFunnels } from '@/features/employees/hire/load-hire-funnels';
 import { loadHireSkills } from '@/features/employees/hire/load-hire-skills';
@@ -194,6 +195,8 @@ export default async function Page({
     (toolName) => tc(`tool.${toolName}` as 'tool.send_message'),
   );
   const hiredReach = hired ? (hired.id === selected?.id ? reach : await reachOf(hired.id)) : null;
+  // 07e opens as the hire completes: is the readiness test that follows it still running?
+  const hiredRun = hired ? await loadReadinessRun(hired) : undefined;
 
   /*
     07, measured: 02's screen header - the title, a line that counts them,
@@ -252,7 +255,7 @@ export default async function Page({
           )
         }
       />
-      {hired ? <HiredDialog employee={hired} reach={hiredReach} /> : null}
+      {hired ? <HiredDialog employee={hired} reach={hiredReach} run={hiredRun} /> : null}
       {hiring ? (
         <HireSheet
           tools={hireTools}
