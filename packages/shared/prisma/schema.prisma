@@ -2870,7 +2870,9 @@ model MessageTemplate {
   channelAccount ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: SetNull)
   broadcasts     Broadcast[]
 
-  @@unique([tenantId, name, language, channel])
+  /// Per WhatsApp number (2026-10-13): two numbers may each have their own
+  /// template of the same name and language. Was [tenantId, name, language, channel].
+  @@unique([tenantId, name, language, channel, channelAccountId], map: "message_templates_tenant_name_lang_channel_account_key")
   @@index([tenantId])
   @@index([tenantId, channel, status])
   @@index([tenantId, channelAccountId])
