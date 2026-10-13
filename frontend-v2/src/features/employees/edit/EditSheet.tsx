@@ -171,18 +171,7 @@ export function EditSheet({
               />
             </section>
 
-            <section className={styles.card} data-testid="edit-handles">
-              <h3 className={styles.cardTitle}>{t('handles')}</h3>
-              <div className={styles.chips}>
-                <span className={styles.none} title={t('handlesNone')}>
-                  -
-                </span>
-                <span className={styles.add} aria-disabled="true" title={t('handlesNone')}>
-                  {t('add')}
-                </span>
-              </div>
-            </section>
-
+            {/* No "What it handles", and no "+ Add" that did nothing (Omer, 2026-10-13, E4). */}
             <section className={styles.card} data-testid="edit-how">
               <h3 className={styles.cardTitle}>{t('how')}</h3>
               <dl className={styles.pairs}>

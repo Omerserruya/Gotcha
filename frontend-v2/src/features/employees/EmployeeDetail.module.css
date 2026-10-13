@@ -214,15 +214,6 @@
     color: var(--text-secondary);
   }
 
-  /* 02's last chip: dashed, faint - here, the whole of what is known. */
-  .chipEmpty {
-    padding: 5px var(--space-10);
-    border: 1px dashed var(--border-strong);
-    border-radius: 7px;
-    font-size: var(--font-size-caption);
-    color: var(--text-faint);
-  }
-
   /* "A reply from today": `#F6F4EF`, radius 10, `padding:10px 12px`. */
   .sample {
     display: flex;

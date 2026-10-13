@@ -100,10 +100,6 @@
       "hebrew": "Hebrew",
       "arabic": "Arabic"
     },
-    "handles": {
-      "title": "What it handles",
-      "none": "Its conversations aren't grouped by topic yet"
-    },
     "mayDo": {
       "title": "What it may do on its own",
       "on_its_own": "Allowed",
@@ -252,9 +248,6 @@
     "applyOpen": "Changes apply from its next reply - in {count, plural, one {its # open conversation} other {its # open conversations}} too",
     "edited": "Last edited {when}",
     "responsible": "Responsible for",
-    "handles": "What it handles",
-    "handlesNone": "Its conversations aren't grouped by topic yet.",
-    "add": "+ Add",
     "how": "How it answers",
     "tone": "Tone",
     "languages": "Languages",

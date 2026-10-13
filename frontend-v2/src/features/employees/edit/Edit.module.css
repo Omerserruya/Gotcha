@@ -89,15 +89,6 @@
     color: var(--text-faint);
   }
 
-  .add {
-    padding: var(--space-6) 11px;
-    border: var(--border-width-thin) dashed var(--border-strong);
-    border-radius: 7px;
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-    cursor: not-allowed;
-  }
-
   .pairs {
     display: flex;
     flex-direction: column;

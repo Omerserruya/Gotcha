@@ -184,13 +184,11 @@ export async function EmployeeDetail({
         </div>
 
         <div className={styles.column}>
-          <section className={styles.card} data-testid="card-handles">
-            <h3 className={styles.cardHead}>{t('detail.handles.title')}</h3>
-            <div className={styles.chips}>
-              <span className={styles.chipEmpty}>{t('detail.handles.none')}</span>
-            </div>
-          </section>
-
+          {/*
+            No "What it handles" (Omer, 2026-10-13, E4): nothing groups an
+            employee's conversations by topic, so the card only ever said so,
+            and its purpose was unclear.
+          */}
           <section className={styles.card} data-testid="card-may-do">
             <h3 className={styles.cardHead}>{t('detail.mayDo.title')}</h3>
             {capabilities === null ? (

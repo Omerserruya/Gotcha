@@ -231,9 +231,11 @@ describe('★★ 07’s detail - what it is, from what the route already sends',
     expect(parsed).toMatchObject({ tone: '', languages: {}, escalationRules: [], identity: null });
   });
 
-  it('drawn in their shape: what it handles, a reply from today, worth changing', async () => {
+  it('drawn in their shape: a reply from today, worth changing', async () => {
     await show();
-    expect(screen.getByTestId('card-handles')).toHaveTextContent("aren't grouped by topic yet");
+    // E4 (Omer, 2026-10-13): "What it handles" is gone, its dead button with it.
+    expect(screen.queryByTestId('card-handles')).toBeNull();
+    expect(document.body).not.toHaveTextContent(/grouped by topic/);
     expect(screen.getByTestId('card-how')).toHaveTextContent('No reply is picked out yet.');
     expect(screen.getByTestId('card-worth')).toHaveTextContent('Nothing to suggest yet.');
   });

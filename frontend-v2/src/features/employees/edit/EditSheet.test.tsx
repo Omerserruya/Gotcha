@@ -159,10 +159,9 @@ describe('★★ 07f - the profile’s sentences, editable; Save drawn, not live
 
   it('drawn in their shape, each with its reason: topics, sign-off, disclosure, target, preview', () => {
     sheet();
-    expect(within(screen.getByTestId('edit-handles')).getByText('-')).toHaveAttribute(
-      'title',
-      expect.stringMatching(/grouped by topic/),
-    );
+    // E4: no "What it handles", and no "+ Add" that did nothing.
+    expect(screen.queryByTestId('edit-handles')).toBeNull();
+    expect(screen.queryByText('+ Add')).toBeNull();
     expect(screen.getByTitle(/No sign-off is stored/)).toHaveTextContent('-');
     expect(screen.getByTitle(/No disclosure rule/)).toHaveTextContent('-');
     expect(screen.getByTitle(/No handover target/)).toHaveTextContent('-');
