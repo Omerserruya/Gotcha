@@ -9,7 +9,7 @@ vi.mock('next/cache', () => ({ revalidatePath }));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ post }) }));
 vi.mock('@/api/client/signed-out', () => ({ signInIfSignedOut: async () => {} }));
 
-import { acceptSuggestion, markNotSame } from './identity-actions';
+import { acceptSuggestion, markNotSame, unlinkContacts } from './identity-actions';
 
 beforeEach(() => {
   post.mockReset();
@@ -57,5 +57,31 @@ describe('★★ "Not the same" marks the pair - never /unlink, which a suggeste
     expect(call().endpoint.path).toBe('/api/identity/not-same');
     expect(call().body).toStrictEqual({ contactIds: ['wa2', 'ig1'] });
     expect(revalidatePath).toHaveBeenCalledWith('/[locale]/(app)/customers', 'page');
+  });
+});
+
+describe('★★ F1 - "ביטול צימוד" posts the link’s own unlink body', () => {
+  it('exactly { contactIds: [a, b] } to /api/identity/unlink', async () => {
+    post.mockResolvedValueOnce({ data: { outcome: 'unlinked' } });
+    expect(await unlinkContacts(['c1', 'c2'])).toEqual({ ok: true });
+    expect(call().endpoint.path).toBe('/api/identity/unlink');
+    expect(call().body).toEqual({ contactIds: ['c1', 'c2'] });
+    expect(revalidatePath).toHaveBeenCalled();
+  });
+
+  it('★ not a pair: nothing is sent', async () => {
+    for (const ids of [[], ['c1'], ['c1', 'c1'], ['a', 'b', 'c']]) {
+      expect(await unlinkContacts(ids)).toEqual({ ok: false, reason: 'failed' });
+    }
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('404 is "no longer linked", 403 is permission, anything else failed', async () => {
+    post.mockRejectedValueOnce(new ApiError({ status: 404, kind: 'not_found' }));
+    expect(await unlinkContacts(['a', 'b'])).toEqual({ ok: false, reason: 'not_linked' });
+    post.mockRejectedValueOnce(new ApiError({ status: 403, kind: 'authorization' }));
+    expect(await unlinkContacts(['a', 'b'])).toEqual({ ok: false, reason: 'forbidden' });
+    post.mockRejectedValueOnce(new Error('down'));
+    expect(await unlinkContacts(['a', 'b'])).toEqual({ ok: false, reason: 'failed' });
   });
 });

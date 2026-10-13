@@ -193,6 +193,68 @@ const evidenceSchema = z
   .nullish()
   .catch(null);
 export type SuggestionEvidence = NonNullable<z.infer<typeof evidenceSchema>>;
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ WHO THIS CUSTOMER IS LINKED TO, AND HOW (F1, Backend 196fea72)
+ * ════════════════════════════════════════════════════════════════════════════
+ * `GET /api/identity/links/:contactId` (`crm:contacts:read`):
+ * `{ personId, linked: [{ contactId, label, channel, link, unlink }] }`.
+ *
+ * - `link`: the record that joined this contact to the person - its signal,
+ *   evidence, whether it was automatic, when, and `direct: false` when it
+ *   joined through ANOTHER contact (its `contactIds` then name that pair).
+ * - `unlink`: the exact body for `POST /api/identity/unlink`; `null` when the
+ *   link cannot be undone, and then there is no button.
+ *
+ * Per row and per field: a row that does not parse is left out, never the
+ * whole list; a field it cannot read is null.
+ */
+const pairSchema = z.tuple([z.string().min(1), z.string().min(1)]);
+const linkRowSchema = z.object({
+  contactId: z.string().min(1),
+  label: z.string().nullish().catch(null),
+  channel: z.string().nullish().catch(null),
+  link: z
+    .object({
+      id: z.string().nullish().catch(null),
+      contactIds: pairSchema,
+      signal: z.string().nullish().catch(null),
+      automatic: z.boolean().catch(false).default(false),
+      at: z.string().nullish().catch(null),
+      direct: z.boolean().catch(true).default(true),
+      evidence: evidenceSchema,
+    })
+    .nullish()
+    .catch(null),
+  unlink: z.object({ contactIds: pairSchema }).nullish().catch(null),
+});
+export type IdentityLink = z.infer<typeof linkRowSchema>;
+
+export const identityLinksSchema = z.object({
+  personId: z.string().nullish().catch(null),
+  linked: z
+    .array(z.unknown())
+    .catch([])
+    .transform((rows) =>
+      rows.flatMap((row): IdentityLink[] => {
+        const item = linkRowSchema.safeParse(row);
+        return item.success ? [item.data] : [];
+      }),
+    ),
+});
+export type IdentityLinks = z.infer<typeof identityLinksSchema>;
+
+/** How a link was made, in the duplicates card's words (`customers.dupes.why`). */
+export function linkMatch(
+  link: NonNullable<IdentityLink['link']>,
+): 'sameName' | 'similarName' | 'phone' | 'email' | 'shopifyCustomer' | 'other' {
+  if (link.signal === 'same_name') return 'sameName';
+  if (link.signal === 'similar_name') return 'similarName';
+  if (link.signal === 'shopify_customer') return 'shopifyCustomer';
+  const type = link.evidence?.type;
+  return type === 'phone' || type === 'email' ? type : 'other';
+}
 const suggestionSchema = z.object({
   id: z.string().min(1),
   source: z.string().nullish().catch(null),

@@ -8,6 +8,9 @@ vi.mock('@/features/customers/load-customer', () => ({
 }));
 vi.mock('next-intl/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('server-only', () => ({}));
+/* F1's links read: none here - LinkedAccounts' own tests cover the block. */
+const loadIdentityLinks = vi.hoisted(() => vi.fn(async () => ({ personId: null, linked: [] })));
+vi.mock('@/features/customers/load-links', () => ({ loadIdentityLinks }));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
 import { ActionFilters, ActionsSide, CustomerActions } from '@/features/customers/CustomerActions';
@@ -194,5 +197,23 @@ describe('★★ 04f - its filters, its side, the name for the composer', () => 
     const props = propsOf<{ filter: string; customerName: string | null }>(tree, CustomerNotes);
     expect(props?.filter).toBe('teamOnly');
     expect(props?.customerName).toBeTruthy();
+  });
+});
+
+describe('★★ F1 - the linked accounts are read on "All" only, and handed to its side', () => {
+  it('"All": read once for this customer, and passed to the side', async () => {
+    loadIdentityLinks.mockClear();
+    const tree = await page();
+    expect(loadIdentityLinks).toHaveBeenCalledWith('k1');
+    expect(propsOf<{ links?: unknown }>(tree, CustomerSide)?.links).toEqual({
+      personId: null,
+      linked: [],
+    });
+  });
+
+  it('another tab: not read', async () => {
+    loadIdentityLinks.mockClear();
+    await page('orders');
+    expect(loadIdentityLinks).not.toHaveBeenCalled();
   });
 });

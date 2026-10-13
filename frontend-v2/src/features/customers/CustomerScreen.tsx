@@ -12,6 +12,8 @@ import styles from './Customers.module.css';
 import { displayHandle } from './phone';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { PersonName } from './PersonName';
+import { LinkedAccounts } from './LinkedAccounts';
+import type { IdentityLinks } from '@/api/contracts/identity';
 import { storedShopper } from '@/lib/shopper-name';
 
 /**
@@ -412,8 +414,15 @@ export async function CustomerTimelineList({
   );
 }
 
-/** 02's side: WORTH, GOTCHA REMEMBERS, REACH, and the pinned note. */
-export async function CustomerSide({ detail }: { readonly detail: CustomerDetail }) {
+/** 02's side: WORTH, GOTCHA REMEMBERS, REACH, the linked accounts (F1), and the pinned note. */
+export async function CustomerSide({
+  detail,
+  links,
+}: {
+  readonly detail: CustomerDetail;
+  /** F1: who this customer is linked to; `undefined` - not read here, nothing drawn. */
+  readonly links?: IdentityLinks | null;
+}) {
   const t = await getTranslations('customers');
   const channels = await getTranslations('channels');
   const format = await getFormatter();
@@ -483,6 +492,8 @@ export async function CustomerSide({ detail }: { readonly detail: CustomerDetail
           <p className={styles.sideNone}>{t('card.reachNone')}</p>
         )}
       </section>
+
+      {links === undefined ? null : <LinkedAccounts links={links} />}
 
       {/* 02 pins the newest note at the foot of the column. */}
       <section className={styles.pinnedNote} data-testid="customer-pinned-note">

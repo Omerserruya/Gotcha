@@ -175,7 +175,7 @@ export function DuplicateCard({ suggestion }: { readonly suggestion: IdentitySug
  * A proof with nothing to say - a missing name, a Shopify proof of a kind we
  * have no words for - is no line at all, never a dash or a blank.
  */
-function Proof({ evidence }: { readonly evidence: SuggestionEvidence }) {
+export function Proof({ evidence }: { readonly evidence: SuggestionEvidence }) {
   const t = useTranslations('customers.dupes.evidence');
   let line: ReactNode = null;
   if (evidence.type === 'name') {

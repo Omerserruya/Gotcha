@@ -35,6 +35,7 @@ import {
 } from '@/features/customers/CustomerSubtabs';
 import styles from '@/features/customers/Customers.module.css';
 import { loadCustomer } from '@/features/customers/load-customer';
+import { loadIdentityLinks } from '@/features/customers/load-links';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -76,7 +77,11 @@ export default async function Page({
     keep the route's default page.
   */
   const more = tab === 'conversations' ? parseMore(query.more) : 0;
-  const detail = await loadCustomer(id, more > 0 ? { limit: timelineLimit(more) } : {});
+  // F1: the linked accounts are 04b's side - read only on "All", beside the customer.
+  const [detail, links] = await Promise.all([
+    loadCustomer(id, more > 0 ? { limit: timelineLimit(more) } : {}),
+    tab === 'everything' ? loadIdentityLinks(id) : Promise.resolve(null),
+  ]);
 
   if (tab === 'everything') {
     return (
@@ -94,7 +99,7 @@ export default async function Page({
               <CustomerTimelineList detail={detail} />
             </div>
             <aside className={styles.cardSide}>
-              <CustomerSide detail={detail} />
+              <CustomerSide detail={detail} links={links} />
             </aside>
           </div>
         </div>

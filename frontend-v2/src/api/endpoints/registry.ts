@@ -1191,6 +1191,13 @@ export const identityEndpoints = {
    * CONTACT_NOT_FOUND, 409 NOT_SAME. Both contacts stay; no field changes.
    */
   acceptSuggestion: () => endpoint('/api/identity/suggestions/accept'),
+  /** F1 (Backend 196fea72): who this customer is linked to, and how (`crm:contacts:read`). */
+  links: (contactId: string) => endpoint('/api/identity/links/{contactId}', { contactId }),
+  /**
+   * POST `{ contactIds: [a, b] }` - the link row's own `unlink` body
+   * (`crm:contacts:update`). 404 NOT_LINKED, 400 TWO_CONTACTS_REQUIRED.
+   */
+  unlink: () => endpoint('/api/identity/unlink'),
   timeline: (id: string) => endpoint('/api/identity/{id}/timeline', { id }),
 } as const;
 

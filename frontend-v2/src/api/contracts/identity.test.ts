@@ -251,3 +251,24 @@ describe('★★ the proof for a pair (Backend 3ac2a71e)', () => {
     expect(item?.contacts.map((c) => c.contactId ?? null)).toEqual([null, null]);
   });
 });
+
+describe('★★ F1 - the links read, per row', () => {
+  it('a row that does not parse is left out - never the whole list', async () => {
+    const { identityLinksSchema } = await import('./identity');
+    const read = identityLinksSchema.parse({
+      personId: 'p1',
+      linked: [{ contactId: 'a', label: 'A', channel: 'WHATSAPP' }, { contactId: 42 }],
+    });
+    expect(read.linked.map((row) => row.contactId)).toEqual(['a']);
+  });
+
+  it('a link or an unlink it cannot read is null - no button', async () => {
+    const { identityLinksSchema } = await import('./identity');
+    const [row] = identityLinksSchema.parse({
+      personId: 'p1',
+      linked: [{ contactId: 'a', link: { contactIds: ['x'] }, unlink: { contactIds: 'x' } }],
+    }).linked;
+    expect(row!.link).toBeNull();
+    expect(row!.unlink).toBeNull();
+  });
+});

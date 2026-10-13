@@ -536,5 +536,24 @@
       "forbidden": "You don’t have permission to tag customers.",
       "failed": "Nobody was tagged - try again."
     }
+  },
+  "links": {
+    "title": "Linked accounts",
+    "unavailable": "We couldn't read the linked accounts just now.",
+    "unnamed": "Unnamed",
+    "automatic": "Linked automatically",
+    "byPerson": "Linked by a person",
+    "on": "on {date}",
+    "through": "through {name}",
+    "unlink": "Unlink",
+    "confirm": "Unlink {name}? They will show as a separate customer again.",
+    "confirmYes": "Unlink",
+    "cancel": "Cancel",
+    "undone": "Unlinked. They show as a separate customer again.",
+    "problem": {
+      "not_linked": "This link no longer exists.",
+      "forbidden": "You don't have permission to unlink customers.",
+      "failed": "That didn't work. Try again."
+    }
   }
 }

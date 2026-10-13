@@ -87,3 +87,37 @@ export async function markNotSame(a: string, b: string): Promise<NotSameResult> 
     return { ok: false, reason: 'failed' };
   }
 }
+
+export type UnlinkResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'not_linked' | 'forbidden' | 'failed' };
+
+/**
+ * F1's "ביטול צימוד" (Omer, 2026-10-13): undoes one link, with exactly the
+ * body the links read offered for it (`unlink.contactIds`). The customer's
+ * page asks first; this is the write.
+ */
+export async function unlinkContacts(contactIds: readonly string[]): Promise<UnlinkResult> {
+  const [a, b] = contactIds;
+  if (contactIds.length !== 2 || !a || !b || a === b) return { ok: false, reason: 'failed' };
+  try {
+    await serverApi().post({
+      endpoint: identityEndpoints.unlink(),
+      payload: z.unknown(),
+      body: { contactIds: [a, b] },
+      raw: true,
+    });
+    revalidatePath('/[locale]/(app)/customers', 'layout');
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('customers.unlink_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    if (isApiError(cause)) {
+      if (cause.status === 404) return { ok: false, reason: 'not_linked' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    }
+    return { ok: false, reason: 'failed' };
+  }
+}
