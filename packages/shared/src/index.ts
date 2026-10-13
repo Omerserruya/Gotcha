@@ -1277,3 +1277,15 @@ export {
 // The business's real conversations (no rehearsals, no test rows): one definition.
 export { REAL_CONVERSATION } from "./lib/real-conversation";
 export { isWorkspaceDay, dayStart, dayOf, nextWorkspaceDay, workspaceDayWindow } from "./lib/workspace-days";
+
+// The customer-service window (WhatsApp 24h then template only; Instagram/Messenger 24h then closed).
+export {
+  REPLY_WINDOW_MS,
+  hasReplyWindow,
+  replyWindowFor,
+  sendAllowed,
+  lastInboundAtForRecipient,
+  replyWindowsFor,
+} from "./lib/reply-window";
+export type { ReplyWindow, ReplyWindowMode, ReplyWindowRefusal } from "./lib/reply-window";
+export { buildTemplateComponents, renderTemplateText, extractPlaceholders as templatePlaceholders } from "./lib/template-components";

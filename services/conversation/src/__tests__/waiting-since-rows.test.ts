@@ -16,6 +16,8 @@ const H = vi.hoisted(() => ({
   waiting: new Map<string, string | null>(),
   calls: [] as any[],
   fail: false,
+  windows: new Map<string, any>(),
+  windowCalls: [] as any[],
 }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
@@ -33,6 +35,11 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "t1"; n(); },
     requireActiveTenant: () => (_q: any, _s: any, n: any) => n(),
     requireRole: () => (_q: any, _s: any, n: any) => n(),
+    replyWindowsFor: vi.fn(async (tenantId: string, ids: string[]) => {
+      H.windowCalls.push({ tenantId, ids });
+      if (H.fail) throw new Error("db down");
+      return new Map(ids.filter((id) => H.windows.has(id)).map((id) => [id, H.windows.get(id)]));
+    }),
   };
 });
 vi.mock("../lib/require-visible-conversation", () => ({ requireVisibleConversation: (_q: any, _s: any, n: any) => n() }));
@@ -60,6 +67,8 @@ beforeEach(() => {
   H.waiting = new Map([["c1", "2026-10-12T09:41:00.000Z"], ["c2", null]]);
   H.calls = [];
   H.fail = false;
+  H.windows = new Map([["c1", { channel: "WHATSAPP", open: false, closesAt: null, mode: "template_only" }]]);
+  H.windowCalls = [];
 });
 
 describe("list rows carry waitingSince", () => {
@@ -85,5 +94,20 @@ describe("list rows carry waitingSince", () => {
     const res = await request(app).get("/conversations?cursor=&view=queue");
     expect(res.status).toBe(200);
     expect(res.body.data.every((r: any) => r.waitingSince === null)).toBe(true);
+  });
+});
+
+describe("list rows carry replyWindow (B7, 2026-10-12)", () => {
+  it("from ONE batched read for the page; null where it is unknown", async () => {
+    const res = await request(app).get("/conversations?cursor=&view=queue");
+    expect(res.body.data.map((r: any) => [r.id, r.replyWindow?.mode ?? null])).toEqual([["c1", "template_only"], ["c2", null], ["c3", null]]);
+    expect(H.windowCalls).toEqual([{ tenantId: "t1", ids: ["c1", "c2", "c3"] }]);
+  });
+
+  it("decoration: if the read fails, the list loads with replyWindow null", async () => {
+    H.fail = true;
+    const res = await request(app).get("/conversations?cursor=&view=queue");
+    expect(res.status).toBe(200);
+    expect(res.body.data.every((r: any) => r.replyWindow === null)).toBe(true);
   });
 });

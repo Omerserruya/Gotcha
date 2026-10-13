@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { authenticate, resolveTenant, requireRole, requireActiveTenant, prisma, latestHandover } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireRole, requireActiveTenant, prisma, latestHandover, replyWindowsFor } from "@chatcenter/shared";
 import { requireVisibleConversation } from "../lib/require-visible-conversation";
 import * as conversationService from "../services/conversation.service";
 import { getIO } from "../lib/socket";
@@ -197,7 +197,13 @@ router.get("/:id", async (req: Request, res: Response) => {
   try {
     const conversation = await conversationService.getById(req.tenantId!, req.params.id as string);
     if (!conversation) { res.status(404).json({ error: "Conversation not found" }); return; }
-    res.json({ data: conversation });
+    // What may be sent now (B7): free text, a template only, or nothing.
+    // null if it cannot be read; the send routes still decide.
+    const windows = await Promise.resolve().then(() => replyWindowsFor(req.tenantId!, [conversation.id])).catch((err: any) => {
+      console.warn("[conversations] reply window unavailable:", err?.message);
+      return new Map();
+    });
+    res.json({ data: { ...conversation, replyWindow: windows.get(conversation.id) ?? null } });
   } catch (err) {
     console.error("Get conversation error:", err);
     res.status(500).json({ error: "Failed to get conversation" });

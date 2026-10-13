@@ -1,6 +1,6 @@
 import { getInternalServiceKey, readDurableSetting, recordHandover, waitingForPersonClause, parseBusinessHours, isWorkspaceDay, dayStart, nextWorkspaceDay } from "@chatcenter/shared";
 import { randomUUID } from "crypto";
-import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords, notificationsQueue } from "@chatcenter/shared";
+import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords, notificationsQueue, replyWindowsFor, type ReplyWindow } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
 import { visibilityClause } from "../lib/conversation-visibility";
 import { contactIdsFor, contactIdOf } from "../lib/conversation-contact";
@@ -352,7 +352,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   // Flatten last message info, and the contact behind each row (one batched,
   // read-only lookup for the page - see lib/conversation-contact.ts).
   const rows = keyset ? pageRows : conversations;
-  const [contactMap, unread, waiting] = await Promise.all([
+  const [contactMap, unread, waiting, windows] = await Promise.all([
     contactIdsFor(tenantId, rows as any[]),
     // The VIEWER's read state, one query for the page (lib/unread-state.ts).
     // Decoration: if it fails the inbox still loads, its rows served as read.
@@ -367,6 +367,12 @@ export async function list(tenantId: string, filters: ConversationFilters) {
     waitingSinceFor(tenantId, rows.map((c) => c.id)).catch((err) => {
       console.warn("[conversations] waitingSince unavailable:", (err as Error)?.message);
       return new Map<string, string | null>();
+    }),
+    // What may be sent now (B7), one query for the page. null if unreadable.
+    // Through a promise so even a synchronous throw stays decoration.
+    Promise.resolve().then(() => replyWindowsFor(tenantId, rows.map((c) => c.id))).catch((err) => {
+      console.warn("[conversations] reply windows unavailable:", (err as Error)?.message);
+      return new Map<string, ReplyWindow>();
     }),
   ]);
   const data = rows.map((c) => {
@@ -383,6 +389,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
       unreadCount: state?.unreadCount ?? 0,
       lastReadAt: state?.lastReadAt ?? null,
       waitingSince: waiting.get(c.id) ?? null,
+      replyWindow: windows.get(c.id) ?? null,
     };
   });
 

@@ -4,11 +4,12 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { prisma, authenticate, resolveTenant, validate, outgoingMessageQueue, decryptCredentials, requireActiveTenant,
-  withHistoricalRecords, type EmailThreadContext,
+  withHistoricalRecords, type EmailThreadContext, buildTemplateComponents, renderTemplateText, templatePlaceholders,
 } from "@chatcenter/shared";
 import * as messageService from "../services/message.service";
 import { safeUploadExtension } from "@chatcenter/shared/src/lib/upload-safety";
 import { requireVisibleConversation } from "../lib/require-visible-conversation";
+import { replyWindowRefusal } from "../lib/reply-window-gate";
 import { mediaNotFound, serveStoredUpload } from "../lib/media-serving";
 import { STORED_UPLOAD_NAME, storedUploadName } from "@chatcenter/shared/src/lib/media-url";
 
@@ -153,6 +154,10 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
       res.status(400).json({ error: "Channel not configured for this tenant" }); return;
     }
 
+    // The customer-service window, before anything is written (B7).
+    const refused = await replyWindowRefusal(conversation as any);
+    if (refused) { res.status(refused.status).json(refused.body); return; }
+
     // ── Email threading ──
     //
     // The route carries the agent's CHOICE; the outgoing worker does the
@@ -208,6 +213,121 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
   }
 });
 
+// ─── Templates in a conversation (B7, 2026-10-12) ───────────
+//
+// Past WhatsApp's 24h window only an approved template may be sent; it is
+// also what reopens the window when the customer answers. The template list
+// in Outreach (/api/templates) is for admins, so the people answering
+// conversations had no way to see or send one here.
+
+/** The approved templates of this conversation's WhatsApp number. */
+async function usableTemplates(tenantId: string, conversation: { channel: string | null; channelAccountId: string | null }) {
+  if ((conversation.channel || "WHATSAPP") !== "WHATSAPP") return [];
+  return prisma.messageTemplate.findMany({
+    where: {
+      tenantId,
+      status: "APPROVED",
+      isActive: true,
+      OR: [{ channel: "WHATSAPP" as any }, { channel: null }],
+      // Bound to this number, or to none (a template from before numbers were bound).
+      AND: [{ OR: [{ channelAccountId: conversation.channelAccountId }, { channelAccountId: null }] }],
+    },
+    orderBy: [{ name: "asc" }, { language: "asc" }],
+  });
+}
+
+router.get("/:conversationId/reply-templates", async (req: Request, res: Response) => {
+  try {
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: req.params.conversationId as string, tenantId: req.tenantId! },
+      select: { channel: true, channelAccountId: true },
+    });
+    if (!conversation) { res.status(404).json({ error: "Conversation not found" }); return; }
+    const templates = await usableTemplates(req.tenantId!, conversation as any);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({
+      data: templates.map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        language: t.language,
+        category: t.category,
+        body: t.body,
+        headerType: t.headerType ?? null,
+        headerContent: t.headerType === "TEXT" ? t.headerContent ?? null : null,
+        footer: t.footer ?? null,
+        buttons: t.buttons ?? [],
+        // What the agent fills in, in order, with the sample the form can show.
+        placeholders: templatePlaceholders(`${t.headerType === "TEXT" ? t.headerContent ?? "" : ""} ${t.body ?? ""}`).map((key) => ({
+          key,
+          sample: (Array.isArray(t.variables) ? (t.variables as any[]).find((v) => v?.key === key)?.sample : null) ?? null,
+        })),
+      })),
+    });
+  } catch (err) {
+    console.error("List reply templates error:", err);
+    res.status(500).json({ error: "Failed to list templates" });
+  }
+});
+
+const sendTemplateSchema = z.object({
+  templateId: z.string().min(1),
+  variables: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+});
+
+router.post("/:conversationId/messages/template", validate(sendTemplateSchema), async (req: Request, res: Response) => {
+  try {
+    const conversationId = req.params.conversationId as string;
+    const { templateId, variables } = req.body as { templateId: string; variables?: Record<string, string | number> };
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId: req.tenantId! },
+      include: { channelAccount: true },
+    });
+    if (!conversation) { res.status(404).json({ error: "Conversation not found" }); return; }
+    if ((conversation.channel || "WHATSAPP") !== "WHATSAPP") {
+      res.status(400).json({ error: "Templates are sent on WhatsApp only", code: "TEMPLATES_WHATSAPP_ONLY" }); return;
+    }
+    if (!conversation.channelAccount) { res.status(400).json({ error: "Channel not configured for this tenant" }); return; }
+    const rawCreds = conversation.channelAccount.credentials;
+    const creds = typeof rawCreds === "string" ? decryptCredentials(rawCreds) : (rawCreds as any);
+    if (!creds?.accessToken) { res.status(400).json({ error: "Channel not configured for this tenant" }); return; }
+
+    const tmpl = (await usableTemplates(req.tenantId!, conversation as any)).find((t: any) => t.id === templateId);
+    if (!tmpl) {
+      res.status(409).json({ error: "This template is not approved for this number", code: "TEMPLATE_NOT_USABLE" }); return;
+    }
+
+    const values = Object.fromEntries(Object.entries(variables ?? {}).map(([k, v]) => [k, String(v)]));
+    const body = renderTemplateText(tmpl as any, values);
+    const message = await messageService.create({
+      tenantId: req.tenantId!,
+      conversationId,
+      direction: "OUTBOUND",
+      body,
+      messageType: "template",
+      senderName: req.user!.email,
+      metadata: { template: { id: tmpl.id, name: tmpl.name, language: tmpl.language } },
+    });
+    await outgoingMessageQueue.add("send", {
+      tenantId: req.tenantId!,
+      conversationId,
+      channel: "WHATSAPP",
+      channelAccountId: conversation.channelAccountId!,
+      recipientExternalId: conversation.customerExternalId,
+      body,
+      messageType: "template",
+      senderName: req.user!.email,
+      messageId: message.id,
+      templateName: tmpl.name,
+      templateLanguage: tmpl.language || "en",
+      templateComponents: buildTemplateComponents(tmpl as any, values),
+    } as any, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
+    res.status(201).json({ data: message });
+  } catch (err) {
+    console.error("Send template error:", err);
+    res.status(500).json({ error: "Failed to send template" });
+  }
+});
+
 // ─── Send Media Message (file upload) ────────────────────────
 router.post("/:conversationId/messages/media", async (req: Request, res: Response) => {
   try {
@@ -223,6 +343,10 @@ router.post("/:conversationId/messages/media", async (req: Request, res: Respons
     const rawCreds = conversation.channelAccount.credentials;
     const creds = typeof rawCreds === "string" ? decryptCredentials(rawCreds) : (rawCreds as any);
     if (!creds?.accessToken) { res.status(400).json({ error: "Channel not configured" }); return; }
+
+    // The window first: a refused send stores no file and no row (B7).
+    const refused = await replyWindowRefusal(conversation as any);
+    if (refused) { res.status(refused.status).json(refused.body); return; }
 
     // Parse multipart form data manually using built-in approach
     const contentType = req.headers["content-type"] || "";
