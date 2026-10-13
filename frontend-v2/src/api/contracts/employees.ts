@@ -448,6 +448,14 @@ const employeeToolSchema = z.object({
   ownLevel: toolLevel.nullish().catch(null),
   employeeLevel: toolLevel,
   allowedLevels: z.array(toolLevel).catch([]),
+  /**
+   * Is this integration action GIVEN to this employee (Backend 9339ca26)? An
+   * integration's action reaches an employee only when given to it. `null`
+   * for a built-in, which needs no grant - and for a server that does not say.
+   */
+  granted: z.boolean().nullable().catch(null).default(null),
+  /** It can be given: the workspace has set it up. Absent reads as no. */
+  grantable: z.boolean().catch(false).default(false),
 });
 export type EmployeeTool = z.infer<typeof employeeToolSchema>;
 

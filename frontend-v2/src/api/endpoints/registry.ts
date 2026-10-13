@@ -1357,6 +1357,13 @@ export const builderEndpoints = {
    * its run status; answers `{ data: report }` when stored (404, 502).
    */
   readinessTest: (id: string) => endpoint('/api/ai-agents/builder/{id}/readiness-test', { id }),
+  /**
+   * POST `{ toolName, attach? }` - give one integration action to an employee
+   * (any status, not only a draft), or take it away with `attach: false`. By
+   * name, resolved to the CONNECTED connection's tool; 404 with code
+   * TOOL_NOT_PROVISIONED when the workspace has not set it up. Admin and up.
+   */
+  tool: (id: string) => endpoint('/api/ai-agents/builder/{id}/tool', { id }),
 } as const;
 
 /**

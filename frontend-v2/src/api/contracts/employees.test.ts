@@ -5,6 +5,7 @@ import {
   canPause,
   canResume,
   employeeSchema,
+  employeeToolsSchema,
   readinessRunStatusSchema,
   EMPLOYEE_STATUSES,
   type Employee,
@@ -215,5 +216,31 @@ describe('★★ H7 - the stored run status: absent, null and a value are three 
 
   it('a state we do not know reads as an older server - never as running or done', () => {
     expect(read({ readinessStatus: 'queued' }).readinessStatus).toBeUndefined();
+  });
+});
+
+describe('★★ an employee’s tools say which are given to it (Backend 9339ca26)', () => {
+  const row = {
+    toolName: 'woocommerce.create_coupon',
+    workspaceLevel: 'ask',
+    employeeLevel: 'ask',
+    allowedLevels: ['ask', 'never'],
+  };
+
+  it('granted and grantable are kept; a built-in’s null stays null', () => {
+    expect(
+      employeeToolsSchema.parse({ tools: [{ ...row, granted: true, grantable: true }] })[0],
+    ).toMatchObject({ granted: true, grantable: true });
+    expect(
+      employeeToolsSchema.parse({
+        tools: [{ ...row, toolName: 'send_message', granted: null, grantable: false }],
+      })[0],
+    ).toMatchObject({ granted: null, grantable: false });
+  });
+
+  it('★ an older server says neither: not given, and not givable - never a switch that cannot work', () => {
+    const tool = employeeToolsSchema.parse({ tools: [row] })[0]!;
+    expect(tool.granted).toBeNull();
+    expect(tool.grantable).toBe(false);
   });
 });
