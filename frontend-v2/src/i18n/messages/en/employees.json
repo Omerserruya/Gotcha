@@ -170,7 +170,8 @@
       "title": "What should it be responsible for?",
       "sub": "Pick the closest job. You can sharpen it later.",
       "goal": "The job, in your own words",
-      "callIt": "Call it"
+      "callIt": "Call it",
+      "namePlaceholder": "Ronnie"
     },
     "channel": {
       "WHATSAPP": "WhatsApp",

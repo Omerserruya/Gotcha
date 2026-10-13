@@ -171,7 +171,11 @@ export function HireSheet({
                     className={`${drawer.box} ${styles.nameInput}`}
                     value={plan.name}
                     maxLength={120}
-                    placeholder={plan.job ? t(`job.${plan.job}.name`) : ''}
+                    /*
+                      A person's name, whatever the job (Omer, 2026-10-13, H1):
+                      the job's title ("תיאום תורים") read as what to type.
+                    */
+                    placeholder={t('one.namePlaceholder')}
                     data-testid="hire-name"
                     onChange={(e) => set({ name: e.target.value })}
                   />

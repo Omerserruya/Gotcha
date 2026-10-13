@@ -53,6 +53,12 @@ describe('★ 07b - the job, where it works, its name; nothing written', () => {
     expect(screen.getByTestId('hire-continue')).toBeEnabled();
   });
 
+  it('★ the name’s placeholder is a person’s name, never the job’s title (Omer, 2026-10-13, H1)', async () => {
+    sheet();
+    await userEvent.click(screen.getByTestId('hire-job-booking'));
+    expect(screen.getByTestId('hire-name')).toHaveAttribute('placeholder', 'Ronnie');
+  });
+
   it('"It already knows" is the knowledge read', () => {
     sheet();
     expect(screen.getByTestId('hire-knows')).toHaveTextContent('Returns policy');

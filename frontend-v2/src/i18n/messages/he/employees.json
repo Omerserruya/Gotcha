@@ -170,7 +170,8 @@
       "title": "על מה הוא אחראי?",
       "sub": "בחרו את התפקיד הקרוב ביותר. אפשר לחדד אחר כך.",
       "goal": "התפקיד, במילים שלכם",
-      "callIt": "שם"
+      "callIt": "שם",
+      "namePlaceholder": "רוני"
     },
     "channel": {
       "WHATSAPP": "WhatsApp",
