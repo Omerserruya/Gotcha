@@ -67,13 +67,22 @@ export async function upsertSyncedDocument(params: {
   });
 
   if (existing) {
-    const prevKey = (existing.metadata as any)?.syncChangeKey;
+    const prev = ((existing.metadata as Record<string, unknown> | null) ?? {});
+    const prevKey = (prev as any).syncChangeKey;
     // Unchanged at the source - nothing to do (avoids needless re-embedding).
     if (prevKey && changeKey && prevKey === changeKey) return "skipped";
+    // A person's edit outranks the source (K11, 2026-10-13): the same rule the
+    // website re-scan follows. Reported as skipped so callers' counts hold.
+    if ((prev as any).manualEdit === true) {
+      console.log(`[KnowledgeSync] ${existing.id} kept: edited by a person`);
+      return "skipped";
+    }
 
+    // Merged, not replaced: the summary and provenance stay (an old error goes).
+    const { error: _staleError, ...kept } = prev as Record<string, unknown>;
     await prisma.knowledgeDocument.update({
       where: { id: existing.id },
-      data: { title, content, sourceType, metadata, status: "pending" },
+      data: { title, content, sourceType, metadata: { ...kept, ...metadata } as any, status: "pending" },
     });
     await processDocument(existing.id).catch((err) => {
       console.error(`[KnowledgeSync] Failed to re-embed ${existing.id}:`, err.message);
