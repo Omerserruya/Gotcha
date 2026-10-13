@@ -2,13 +2,13 @@
 
 import { X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { AdminChoice } from '@/api/contracts/capabilities';
 import { pressSheetClose, useSheetFocus } from '@/design-system/primitives/overlay/use-sheet-focus';
 import drawer from '@/design-system/styles/drawer.module.css';
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
-import { Link } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 
 import {
   emptyPlan,
@@ -20,6 +20,7 @@ import {
   type HirePlan,
   type HireTool,
 } from './hire-plan';
+import { clearDraft, hasEntries, loadDraft, saveDraft } from './hire-draft';
 import styles from './Hire.module.css';
 
 type Step = 1 | 2 | 3;
@@ -46,7 +47,10 @@ export function HireSheet({
   knowledge,
   initialStep = 1,
   systems = null,
+  viewerId = null,
 }: {
+  /** Who is hiring (`User.id`, per workspace): their draft is kept under it (H6). `null`: none kept. */
+  readonly viewerId?: string | null;
   readonly tools: readonly HireTool[];
   /** Knowledge source names, or null when they could not be read. */
   readonly knowledge: readonly string[] | null;
@@ -56,9 +60,52 @@ export function HireSheet({
 }) {
   const t = useTranslations('employees.hireFlow');
   const [step, setStep] = useState<Step>(initialStep);
-  const [plan, setPlan] = useState<HirePlan>(() =>
-    emptyPlan(tools, systems?.map((system) => system.slug) ?? []),
-  );
+  const setUp = systems?.map((system) => system.slug) ?? [];
+  const [plan, setPlan] = useState<HirePlan>(() => emptyPlan(tools, setUp));
+  /*
+    ★★ H6 (Omer, 2026-10-13): a hire that was closed continues where it
+    stopped - see `hire-draft.ts`. Read after mounting (there is no storage
+    on the server), and nothing is written until it has been read, so the
+    first render's empty plan never wipes a stored one.
+  */
+  const [loaded, setLoaded] = useState(false);
+  const [restored, setRestored] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const router = useRouter();
+  useEffect(() => {
+    const draft = loadDraft(viewerId, tools, setUp);
+    const id = window.setTimeout(() => {
+      if (draft) {
+        setPlan(draft.plan);
+        setStep(draft.step);
+        setRestored(true);
+      }
+      setLoaded(true);
+    }, 0);
+    return () => window.clearTimeout(id);
+    // Once, on opening: the draft is read for the sheet as it opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const entered = hasEntries(plan, emptyPlan(tools, setUp));
+  useEffect(() => {
+    if (!loaded) return;
+    if (entered) saveDraft(viewerId, { step, plan });
+    else clearDraft(viewerId);
+  }, [loaded, entered, viewerId, step, plan]);
+
+  /* × , the scrim and Escape (a press on ×) ask first when anything was entered. */
+  const closing = (event: { preventDefault: () => void }) => {
+    if (!entered) return;
+    event.preventDefault();
+    setAsking(true);
+  };
+  const startOver = () => {
+    clearDraft(viewerId);
+    setPlan(emptyPlan(tools, setUp));
+    setRestored(false);
+    setAsking(false);
+    go(1);
+  };
   const failing = new Set(systems?.filter((s) => s.failing).map((s) => s.slug) ?? []);
   /* From step 2, the head's line is the plan so far: the job. */
   const summary =
@@ -91,6 +138,7 @@ export function HireSheet({
         className={styles.scrim}
         aria-label={t('close')}
         tabIndex={-1}
+        onClick={closing}
       />
       <section
         ref={sheetRef}
@@ -124,10 +172,49 @@ export function HireSheet({
             className={styles.close}
             aria-label={t('close')}
             data-sheet-close
+            data-testid="hire-close"
+            onClick={closing}
           >
             <X size={16} aria-hidden="true" />
           </Link>
         </header>
+
+        {asking ? (
+          <div className={styles.draftBar} role="alertdialog" data-testid="hire-close-ask">
+            <span>{t('draft.closeAsk')}</span>
+            <button
+              type="button"
+              className={styles.draftPrimary}
+              data-testid="hire-close-yes"
+              onClick={() => {
+                setAsking(false);
+                router.push('/studio/employees');
+              }}
+            >
+              {t('draft.closeYes')}
+            </button>
+            <button
+              type="button"
+              className={styles.draftSecondary}
+              data-testid="hire-close-no"
+              onClick={() => setAsking(false)}
+            >
+              {t('draft.closeNo')}
+            </button>
+          </div>
+        ) : restored ? (
+          <div className={styles.draftBar} data-testid="hire-restored">
+            <span>{t('draft.restored')}</span>
+            <button
+              type="button"
+              className={styles.draftSecondary}
+              data-testid="hire-start-over"
+              onClick={startOver}
+            >
+              {t('draft.startOver')}
+            </button>
+          </div>
+        ) : null}
 
         <div className={styles.body}>
           <div className={styles.main}>

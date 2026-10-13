@@ -13,6 +13,7 @@ import { loadCapabilities } from '@/features/capabilities/load-capabilities';
 import { isConnected, isFailing } from '@/api/contracts/integrations';
 import { EditSheet } from '@/features/employees/edit/EditSheet';
 import { HireSheet } from '@/features/employees/hire/HireSheet';
+import { loadViewerId } from '@/features/roles/load-person';
 import { HiredDialog } from '@/features/employees/hired/HiredDialog';
 import type { HireTool } from '@/features/employees/hire/hire-plan';
 import { loadKnowledge } from '@/features/knowledge/load-knowledge';
@@ -85,6 +86,8 @@ export default async function Page({
   const tc = await getTranslations('capabilities');
   const params = (await searchParams) ?? {};
   const hiring = params.hire === '1';
+  // H6: whose hire draft this is - read only while hiring.
+  const viewerId = hiring ? await loadViewerId() : null;
   // The detail's permissions and connected tools are the business's, read once.
   const editingWanted = params.edit === '1';
   const [employees, { capabilities, integrations }, knowledgeData, toolWords] = await Promise.all([
@@ -254,6 +257,7 @@ export default async function Page({
             knowledgeData?.sources ? knowledgeData.sources.map((k) => k.name).filter(Boolean) : null
           }
           initialStep={step}
+          viewerId={viewerId}
           // Every system the workspace has set up, in any state - a new
           // employee may use each of them unless switched off here.
           systems={

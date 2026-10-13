@@ -239,6 +239,13 @@
       "1": "Nothing goes live until you've tried it in step 3",
       "2": "Nothing is live until you have seen step 3",
       "3": "Nothing is created yet"
+    },
+    "draft": {
+      "closeAsk": "Close for now? What you've filled in is kept, and next time you continue from here.",
+      "closeYes": "Close",
+      "closeNo": "Keep going",
+      "restored": "Continuing the hire you started.",
+      "startOver": "Start over"
     }
   },
   "edit": {

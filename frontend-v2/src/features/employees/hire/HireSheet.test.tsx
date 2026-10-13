@@ -1,12 +1,14 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import employees from '@/i18n/messages/en/employees.json';
 
+const push = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ push }),
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
     <a href={href} {...rest}>
       {children}
@@ -208,5 +210,80 @@ describe('★ Escape closes it, as the ×; it is a modal dialog', () => {
     close.addEventListener('click', pressed);
     await userEvent.keyboard('{Escape}');
     expect(pressed).toHaveBeenCalledTimes(1);
+  });
+});
+
+/*
+ * H6 (Omer, 2026-10-13): "X during hiring closes without asking, and
+ * reopening starts from zero." The draft is this browser's, per person.
+ */
+describe('★★ H6 - a hire that was closed continues where it stopped', () => {
+  const KEY = 'gotcha:hire-draft:v1:u1';
+  beforeEach(() => {
+    window.localStorage.clear();
+    push.mockClear();
+  });
+
+  it('★★ nothing entered: × closes at once, nothing kept', async () => {
+    sheet({ viewerId: 'u1' });
+    const close = screen.getByTestId('hire-close');
+    const clicked = fireEvent.click(close);
+    expect(clicked).toBe(true); // not prevented: the link navigates
+    expect(screen.queryByTestId('hire-close-ask')).toBeNull();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it('★★ something entered: × asks; "Keep going" stays, "Close" leaves', async () => {
+    sheet({ viewerId: 'u1' });
+    await userEvent.click(screen.getByTestId('hire-job-sales'));
+    expect(fireEvent.click(screen.getByTestId('hire-close'))).toBe(false);
+    expect(screen.getByTestId('hire-close-ask')).toHaveTextContent('Close for now?');
+    await userEvent.click(screen.getByTestId('hire-close-no'));
+    expect(screen.queryByTestId('hire-close-ask')).toBeNull();
+    expect(push).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('hire-close'));
+    await userEvent.click(screen.getByTestId('hire-close-yes'));
+    expect(push).toHaveBeenCalledWith('/studio/employees');
+  });
+
+  it('★★ what was entered is kept, under this person, and read back on reopening', async () => {
+    const { unmount } = sheet({ viewerId: 'u1' });
+    await userEvent.click(screen.getByTestId('hire-job-sales'));
+    await userEvent.type(screen.getByTestId('hire-name'), 'Noa');
+    await waitFor(() => expect(window.localStorage.getItem(KEY)).toContain('"name":"Noa"'));
+    unmount();
+    sheet({ viewerId: 'u1' });
+    await waitFor(() => expect(screen.getByTestId('hire-name')).toHaveValue('Noa'));
+    expect(screen.getByTestId('hire-restored')).toHaveTextContent(
+      'Continuing the hire you started.',
+    );
+    // Another person in this browser does not get it.
+    unmount();
+  });
+
+  it('another person: not theirs', async () => {
+    window.localStorage.setItem(
+      KEY,
+      JSON.stringify({ step: 1, plan: { job: 'sales', name: 'Noa' } }),
+    );
+    sheet({ viewerId: 'u2' });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(screen.getByTestId('hire-name')).toHaveValue('');
+    expect(screen.queryByTestId('hire-restored')).toBeNull();
+  });
+
+  it('★ "Start over" clears it, back to step 1', async () => {
+    window.localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        step: 2,
+        plan: { job: 'sales', goal: '', name: 'Noa', choices: {}, access: [], handover: [] },
+      }),
+    );
+    sheet({ viewerId: 'u1' });
+    await waitFor(() => expect(screen.getByTestId('hire-restored')).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId('hire-start-over'));
+    expect(screen.getByTestId('hire-name')).toHaveValue('');
+    await waitFor(() => expect(window.localStorage.getItem(KEY)).toBeNull());
   });
 });

@@ -573,4 +573,34 @@
   .groupHead > :last-child {
     margin-inline-start: auto;
   }
+
+  /* H6: the ask before closing, and "continuing the hire you started". */
+  .draftBar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8) var(--space-12);
+    padding: var(--space-10) var(--space-18);
+    border-block-end: var(--border-width-thin) solid var(--border-subtle);
+    background-color: var(--panel-inset);
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  .draftPrimary,
+  .draftSecondary {
+    padding: var(--space-4) var(--space-12);
+    border-radius: 7px;
+    font-size: var(--font-size-meta);
+  }
+
+  .draftPrimary {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .draftSecondary {
+    border: var(--border-width-thin) solid var(--border-default);
+    color: var(--text-subtle);
+  }
 }
