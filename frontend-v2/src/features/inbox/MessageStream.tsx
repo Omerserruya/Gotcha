@@ -323,7 +323,15 @@ export async function MessageStream({
                 if (delivery === 'failed')
                   return (
                     <span className={styles.streamFailed} data-testid={`failed-${message.id}`}>
-                      {t('stream.failed')}
+                      {/*
+                        ★ The window's two refusals are said in words (Backend
+                          47e376a4): the reason is the 24 hours, not a fault.
+                      */}
+                      {message.metadata?.sendError?.type === 'TEMPLATE_REQUIRED'
+                        ? t('stream.failedTemplateRequired')
+                        : message.metadata?.sendError?.type === 'REPLY_WINDOW_CLOSED'
+                          ? t('stream.failedWindowClosed')
+                          : t('stream.failed')}
                     </span>
                   );
                 if (delivery === 'sent')

@@ -128,3 +128,27 @@ describe('★ 02’s Reply - the target travels as `replyToMessageId`', () => {
     expect(post.mock.calls[0]![0].body).toEqual({ body: 'Hello' });
   });
 });
+
+describe('★★ the 24-hour window (Backend 47e376a4): a 409 with a code, nothing stored', () => {
+  const conflict = (code?: string) =>
+    post.mockRejectedValue(
+      new ApiError({ kind: 'conflict', status: 409, code, developerMessage: 'More than 24 hours' }),
+    );
+
+  it('TEMPLATE_REQUIRED is the WhatsApp window', async () => {
+    conflict('TEMPLATE_REQUIRED');
+    await expect(send('Hello')).resolves.toEqual({ ok: false, reason: 'template_required' });
+  });
+
+  it('REPLY_WINDOW_CLOSED is the Instagram/Messenger window', async () => {
+    conflict('REPLY_WINDOW_CLOSED');
+    await expect(send('Hello')).resolves.toEqual({ ok: false, reason: 'window_closed' });
+  });
+
+  it('a 409 without one of those codes is an ordinary failure', async () => {
+    conflict('SOMETHING_ELSE');
+    await expect(send('Hello')).resolves.toEqual({ ok: false, reason: 'failed' });
+    conflict(undefined);
+    await expect(send('Hello')).resolves.toEqual({ ok: false, reason: 'failed' });
+  });
+});

@@ -5,6 +5,8 @@ import { browserApi } from '@/api/client/browser-api';
 import { inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
+import { windowRefusalOf, type WindowRefusal } from './reply-window';
+
 /**
  * Sending a file - 02's image and paperclip.
  *
@@ -36,6 +38,8 @@ export type MediaResult =
   | { readonly ok: false; readonly reason: 'too_large' }
   | { readonly ok: false; readonly reason: 'not_found' }
   | { readonly ok: false; readonly reason: 'channel_not_configured' }
+  /** 409 - the window closed (Backend 47e376a4). No file was stored and nothing went. */
+  | { readonly ok: false; readonly reason: WindowRefusal }
   | { readonly ok: false; readonly reason: 'failed' };
 
 const unchecked = z.unknown();
@@ -69,6 +73,8 @@ export async function sendMedia(
     });
     if (!isApiError(cause)) return { ok: false, reason: 'failed' };
     if (cause.status === 404) return { ok: false, reason: 'not_found' };
+    const refusal = windowRefusalOf(cause);
+    if (refusal) return { ok: false, reason: refusal };
     if (
       cause.status === 400 &&
       (cause.developerMessage?.toLowerCase() ?? '').includes('channel not configured')

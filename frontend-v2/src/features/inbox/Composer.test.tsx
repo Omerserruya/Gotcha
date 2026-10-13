@@ -44,6 +44,20 @@ const compose = vi.hoisted(() =>
   vi.fn<(id: string, kind: string, draft: string) => Promise<ComposeResult>>(),
 );
 vi.mock('./compose-actions', () => ({ composeDraft: compose }));
+/* The window's two actions (B7) - a template send and a close - are never reached here. */
+vi.mock('./template-actions', () => ({
+  loadReplyTemplates: () => {
+    throw new Error('a test must never call loadReplyTemplates here');
+  },
+  sendTemplate: () => {
+    throw new Error('a test must never call sendTemplate');
+  },
+}));
+vi.mock('./conversation-actions', () => ({
+  closeConversation: () => {
+    throw new Error('a test must never call closeConversation here');
+  },
+}));
 const refresh = vi.hoisted(() => vi.fn());
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }));
 vi.mock('@/i18n/navigation', () => ({

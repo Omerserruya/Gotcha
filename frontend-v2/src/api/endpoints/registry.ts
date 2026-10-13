@@ -1654,12 +1654,16 @@ export const inboxEndpoints = {
    * had to reach the contract before this endpoint was worth having.
    *
    * ★★ AND THE ROUTE CHECKS LESS THAN YOU WOULD EXPECT. No assignment check -
-   * an agent who has not taken the conversation can send. No send-window check;
-   * WhatsApp's 24-hour rule is enforced by the provider, after the queue, so a
-   * refusal for it never reaches the caller of this endpoint.
+   * an agent who has not taken the conversation can send.
    *
-   * Its four outcomes: 201; 404 no such conversation; 400 the quoted message is
-   * not in this conversation; 400 the channel is not configured for this tenant.
+   * ★ THE SEND WINDOW IS CHECKED NOW (Backend 47e376a4): outside it the route
+   *   answers 409 `{ code: "TEMPLATE_REQUIRED" | "REPLY_WINDOW_CLOSED",
+   *   replyWindow }` and stores nothing. Failing open: an unreadable window
+   *   lets the send go, and the outgoing worker (and Meta) still decide.
+   *
+   * Its outcomes: 201; 404 no such conversation; 400 the quoted message is
+   * not in this conversation; 400 the channel is not configured for this
+   * tenant; 409 the window, above.
    */
   sendMessage: (conversationId: string) =>
     endpoint('/api/conversations/{conversationId}/messages', { conversationId }),
@@ -1682,6 +1686,28 @@ export const inboxEndpoints = {
    */
   sendMedia: (conversationId: string) =>
     endpoint('/api/conversations/{conversationId}/messages/media', { conversationId }),
+
+  /**
+   * The approved templates of this conversation's WhatsApp number (Backend
+   * 47e376a4): `{ data: [{ id, name, language, category, body, headerType,
+   * headerContent, footer, buttons, placeholders: [{ key, sample }] }] }`,
+   * `[]` when the channel is not WhatsApp. A read.
+   */
+  replyTemplates: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}/reply-templates', { conversationId }),
+
+  /**
+   * ⚠⚠ SENDS AN APPROVED WHATSAPP TEMPLATE TO A REAL PERSON (Backend 47e376a4).
+   *
+   * `{ templateId, variables?: { "1": "Dana" } }` → 201 `{ data: message }`
+   * (queued, like every send); 409 `TEMPLATE_NOT_USABLE` (not approved for
+   * this number); 400 `TEMPLATES_WHATSAPP_ONLY`; 400 channel not configured;
+   * 404. No window check: a template is what may go out past it. A blank
+   * variable is filled by the route with its sample, then "-", so the
+   * composer refuses to send one blank.
+   */
+  sendTemplate: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}/messages/template', { conversationId }),
 
   /* ── Screen 02's three verbs ─────────────────────────────────────────── */
 

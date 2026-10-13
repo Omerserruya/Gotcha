@@ -9,6 +9,8 @@ import { inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
+import { windowRefusalOf, type WindowRefusal } from './reply-window';
+
 /**
  * Sending a reply.
  *
@@ -63,6 +65,12 @@ export type SendResult =
   | { readonly ok: false; readonly reason: 'channel_not_configured' }
   /** 400 - the quoted message is not in this conversation. */
   | { readonly ok: false; readonly reason: 'quote_not_here' }
+  /**
+   * 409 - the customer-service window closed while the page was open
+   * (Backend 47e376a4). Nothing was stored; the composer switches to the
+   * window's state and keeps the draft.
+   */
+  | { readonly ok: false; readonly reason: WindowRefusal }
   | { readonly ok: false; readonly reason: 'failed' };
 
 /**
@@ -112,6 +120,8 @@ export async function sendReply(
 
     if (!isApiError(cause)) return { ok: false, reason: 'failed' };
     if (cause.status === 404) return { ok: false, reason: 'not_found' };
+    const refusal = windowRefusalOf(cause);
+    if (refusal) return { ok: false, reason: refusal };
     /*
      * ★★ TWO 400s WITH DIFFERENT MEANINGS AND NO `code` ON EITHER.
      *

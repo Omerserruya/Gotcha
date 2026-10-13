@@ -80,3 +80,19 @@ describe('★ the route’s refusals, by name', () => {
     expect(await sendMedia('c1', fileOf(1), '')).toEqual({ ok: false, reason: 'failed' });
   });
 });
+
+describe('★★ the 24-hour window refuses a file the same way (Backend 47e376a4)', () => {
+  it('409 TEMPLATE_REQUIRED and REPLY_WINDOW_CLOSED are their own reasons', async () => {
+    post.mockRejectedValueOnce(
+      new ApiError({ kind: 'conflict', status: 409, code: 'TEMPLATE_REQUIRED' }),
+    );
+    expect(await sendMedia('c1', fileOf(10), '')).toEqual({
+      ok: false,
+      reason: 'template_required',
+    });
+    post.mockRejectedValueOnce(
+      new ApiError({ kind: 'conflict', status: 409, code: 'REPLY_WINDOW_CLOSED' }),
+    );
+    expect(await sendMedia('c1', fileOf(10), '')).toEqual({ ok: false, reason: 'window_closed' });
+  });
+});

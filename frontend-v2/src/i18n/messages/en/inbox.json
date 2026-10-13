@@ -50,6 +50,8 @@
     "pending": "Still sending",
     "sent": "Handed to the channel, not confirmed delivered",
     "failed": "This did not send. The customer never received it.",
+    "failedTemplateRequired": "This did not send: 24 hours had passed since the customer last wrote, and WhatsApp then allows only an approved template.",
+    "failedWindowClosed": "This did not send: 24 hours had passed since the customer last wrote, and nothing more can go out until they write again.",
     "deliveryUnknown": "We can’t tell whether this arrived.",
     "quote": {
       "customer": "Customer",
@@ -269,7 +271,36 @@
     "replyingTo": "Replying to {who}",
     "cancelReply": "Don’t reply to this message",
     "noFileOnReply": "A file can’t be sent as a reply to a message",
-    "attachedCount": "{count} of {max} · sent when you press send"
+    "attachedCount": "{count} of {max} · sent when you press send",
+    "window": {
+      "templateOnly": "The 24-hour window has closed. To pick the conversation back up, send an approved template.",
+      "closed": "This conversation can’t continue: 24 hours have passed since the customer’s last message. It’s best to close it.",
+      "close": "Close the conversation",
+      "closing": "Closing…",
+      "closeFailed": "The conversation wasn’t closed. Try again in a moment.",
+      "closesInHours": "The reply window closes in {count, plural, one {# hour} other {# hours}}",
+      "closesInMinutes": "The reply window closes in {count, plural, one {# minute} other {# minutes}}"
+    },
+    "template": {
+      "open": "Send a template",
+      "title": "Choose an approved template",
+      "loading": "Reading the templates…",
+      "loadFailed": "We couldn’t read the templates just now.",
+      "retry": "Try again",
+      "none": "No approved template yet.",
+      "noneLink": "You can create one in Outreach > Templates",
+      "field": "Variable {key}",
+      "preview": "What the customer will receive",
+      "send": "Send the template to the customer",
+      "sending": "Sending…",
+      "cancel": "Close",
+      "blank": "Fill in every variable before sending.",
+      "error": {
+        "notUsable": "This template is no longer approved for this number. Nothing was sent.",
+        "whatsappOnly": "Templates are sent on WhatsApp only. Nothing was sent.",
+        "failed": "That didn’t go through. Try again in a moment."
+      }
+    }
   },
   "clear": {
     "title": "The queue is clear",

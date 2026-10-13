@@ -187,8 +187,85 @@ export const conversationRowSchema = z.object({
   unreadCount: z.number().int().nonnegative().optional().catch(undefined),
   /** When this person last opened it. Named so it is not stripped; nothing draws it yet. */
   lastReadAt: z.string().nullable().optional().catch(undefined),
+  /**
+   * What may be sent now (Backend 47e376a4, B7): the list rows and
+   * `GET /api/conversations/:id` both carry it - and the open conversation
+   * is parsed with THIS schema, so one field covers both. Read through
+   * `replyWindowOf`, never directly.
+   *
+   * ★ ABSENT, NULL AND MALFORMED ARE ALL "FREE". The server fails open (an
+   *   unreadable window is `null` and the send goes ahead), so the composer
+   *   must not be stricter than the route that decides.
+   */
+  replyWindow: z
+    .object({
+      channel: z.string().nullish().catch(null),
+      open: z.boolean().optional().catch(undefined),
+      closesAt: z.string().nullish().catch(null),
+      /** A free string here: an unknown mode is "free", never a rejected row. */
+      mode: z.string().optional().catch(undefined),
+    })
+    .nullish()
+    .catch(null),
 });
 export type ConversationRow = z.infer<typeof conversationRowSchema>;
+
+/* ── The customer-service window (B7) ────────────────────────────────────── */
+
+export type ReplyMode = 'free' | 'template_only' | 'closed';
+
+/**
+ * The window as the composer acts on it. `template_only`: WhatsApp past 24h,
+ * only an approved template. `closed`: Instagram/Messenger past 24h, nothing.
+ * Anything else, or nothing, is `free` - the server fails open.
+ */
+export function replyWindowOf(row: Pick<ConversationRow, 'replyWindow'>): {
+  readonly mode: ReplyMode;
+  /** When free text stops being allowed; `null` when unknown or not windowed. */
+  readonly closesAt: string | null;
+} {
+  const window = row.replyWindow;
+  if (!window) return { mode: 'free', closesAt: null };
+  const mode = window.mode === 'template_only' || window.mode === 'closed' ? window.mode : 'free';
+  return { mode, closesAt: mode === 'free' ? (window.closesAt ?? null) : null };
+}
+
+/**
+ * One approved template of this conversation's WhatsApp number -
+ * `GET /api/conversations/:id/reply-templates` (Backend 47e376a4). `[]` when
+ * the channel is not WhatsApp. Only the fields the picker reads are named.
+ */
+export const replyTemplateSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  language: z.string().nullish().catch(null).default(null),
+  body: z
+    .string()
+    .nullish()
+    .transform((body) => body ?? ''),
+  /** `TEXT` is the only header whose content the route sends. */
+  headerType: z.string().nullish().catch(null).default(null),
+  headerContent: z.string().nullish().catch(null).default(null),
+  footer: z.string().nullish().catch(null).default(null),
+  buttons: z
+    .array(z.object({ text: z.string().nullish().catch(null).default(null) }))
+    .catch([])
+    .default([]),
+  /** What the agent fills in, in order: `{{1}}` or `{{name}}`, and its sample. */
+  placeholders: z
+    .array(z.object({ key: z.string(), sample: z.string().nullish().catch(null).default(null) }))
+    .catch([])
+    .default([]),
+});
+export type ReplyTemplate = z.infer<typeof replyTemplateSchema>;
+export const replyTemplateListSchema = z.array(replyTemplateSchema);
+
+/** The template's text with its placeholders filled - the same `{{ key }}` rule as the route. */
+export function fillTemplate(text: string, values: Readonly<Record<string, string>>): string {
+  return text.replace(/\{\{\s*([\w-]+)\s*\}\}/g, (match, key: string) =>
+    values[key] !== undefined && values[key] !== '' ? values[key] : match,
+  );
+}
 
 /**
  * How long since the last message, in minutes, or `null`.
@@ -593,6 +670,17 @@ export const messageSchema = z.object({
        * `escalationSummary` is the platform's English and is not named here.
        */
       escalationCase: z.string().optional().catch(undefined),
+      /**
+       * Why a send failed (Backend 47e376a4): `{ channel, phase, type,
+       * message, retryable, at }`, written by the outgoing worker and the flow
+       * executor. Only `type` is read - `TEMPLATE_REQUIRED` and
+       * `REPLY_WINDOW_CLOSED` are said in words; `message` is the platform's
+       * English and is never shown.
+       */
+      sendError: z
+        .object({ type: z.string().optional().catch(undefined) })
+        .optional()
+        .catch(undefined),
       /** The attachment could not be fetched (WhatsApp media expires) - said, never blank. */
       mediaError: z.string().optional().catch(undefined),
       /**

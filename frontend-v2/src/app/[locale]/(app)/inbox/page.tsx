@@ -404,6 +404,10 @@ export default async function Page({
                   <Composer
                     conversationId={data.open.id}
                     channelName={channelName(data.open.channel, channelNames)}
+                    /* What may be sent now (B7): free, a template only, or nothing. */
+                    replyWindow={data.open.replyWindow}
+                    customerName={data.open.customerName}
+                    resolved={data.open.status === 'CLOSED'}
                   />
                 </>
               )}

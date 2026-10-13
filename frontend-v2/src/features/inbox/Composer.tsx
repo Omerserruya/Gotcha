@@ -6,7 +6,12 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 
 import { ArrowUp, Image as ImageIcon, Paperclip, X } from 'lucide-react';
 
+import { replyWindowOf, type ConversationRow, type ReplyMode } from '@/api/contracts/inbox';
+
 import { composeDraft, type ComposeResult } from './compose-actions';
+import { closeConversation, type VerbResult } from './conversation-actions';
+import { closingSoon, modeOfRefusal, type WindowRefusal } from './reply-window';
+import { TemplatePicker } from './TemplatePicker';
 import {
   FILL_COMPOSER_EVENT,
   REPLY_TO_EVENT,
@@ -62,14 +67,56 @@ import { UserText } from '@/design-system/primitives/text/UserText';
 export function Composer({
   conversationId,
   channelName,
+  replyWindow = null,
+  customerName = null,
+  resolved = false,
 }: {
   readonly conversationId: string;
   /** Already-named channel, for the sentence about where this goes. */
   readonly channelName: string | null;
+  /** The row's window (Backend 47e376a4). Absent, null or unknown is free. */
+  readonly replyWindow?: ConversationRow['replyWindow'];
+  /** For a template's name variable. */
+  readonly customerName?: string | null;
+  /** Already closed: no "close the conversation" action. */
+  readonly resolved?: boolean;
 }) {
   const t = useTranslations('inbox.composer');
   const router = useRouter();
   const [text, setText] = useState('');
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ THE CUSTOMER-SERVICE WINDOW (B7)
+   * ════════════════════════════════════════════════════════════════════════
+   * The row says what may be sent now. A 409 from a send says the window
+   * closed while the page was open, and wins - for this conversation, and
+   * only until the row itself says something new (a re-read after the
+   * customer writes again opens it). The draft is kept either way.
+   */
+  const server = replyWindowOf({ replyWindow });
+  const [refused, setRefused] = useState<{
+    readonly conversationId: string;
+    readonly serverMode: ReplyMode;
+    readonly mode: ReplyMode;
+  } | null>(null);
+  const mode =
+    refused !== null &&
+    refused.conversationId === conversationId &&
+    refused.serverMode === server.mode
+      ? refused.mode
+      : server.mode;
+  const locked = mode !== 'free';
+  const refuse = (reason: WindowRefusal) => {
+    setRefused({ conversationId, serverMode: server.mode, mode: modeOfRefusal(reason) });
+    setResult(null);
+  };
+  const [picking, setPicking] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [closed, setClosed] = useState<VerbResult | null>(null);
+  /* The minute, for "closes in ...": null on the server and the first render. */
+  const minute = useSyncExternalStore(everyMinute, currentMinute, () => null);
+  const soon =
+    mode === 'free' && minute !== null ? closingSoon(server.closesAt, minute * 60_000) : null;
   /*
    * ★ A DRAFT IS KEPT PER CONVERSATION, so Esc can close one without losing
    *   it and opening another does not carry it there. In this tab only.
@@ -86,6 +133,8 @@ export function Composer({
   if (hydrated && draftOf !== conversationId) {
     setDraftOf(conversationId);
     setText(readDraft(conversationId));
+    setPicking(false);
+    setClosed(null);
   }
   useEffect(() => {
     if (draftOf === conversationId) writeDraft(conversationId, text);
@@ -225,7 +274,7 @@ export function Composer({
       data-testid="composer"
       onSubmit={(event) => {
         event.preventDefault();
-        if ((empty && file === null) || busy || conflict) return;
+        if ((empty && file === null) || busy || conflict || locked) return;
         setPending(true);
         void (async () => {
           try {
@@ -251,7 +300,8 @@ export function Composer({
                 router.refresh();
               }
             }
-            setResult(outcome);
+            if (!outcome.ok && isWindowRefusal(outcome.reason)) refuse(outcome.reason);
+            else setResult(outcome);
             /*
              * Cleared only on success. A failed send that empties the box loses
              * somebody's words and gives them nothing to retry with - and the
@@ -308,6 +358,78 @@ export function Composer({
         </div>
       )}
 
+      {/*
+        ★★ PAST THE WINDOW THE BOX SAYS WHY, AND OFFERS THE ONE THING LEFT.
+        WhatsApp: an approved template. Instagram and Messenger: nothing more
+        can go, so closing the conversation. The draft stays in the box.
+      */}
+      {mode === 'template_only' ? (
+        <div className={styles.composerWindow} data-testid="composer-window">
+          <p className={styles.composerNote} data-testid="composer-window-template">
+            {t('window.templateOnly')}
+          </p>
+          <button
+            type="button"
+            className={styles.composerChip}
+            data-testid="composer-template-open"
+            aria-expanded={picking}
+            onClick={() => {
+              setResult(null);
+              setPicking(true);
+            }}
+          >
+            {t('template.open')}
+          </button>
+        </div>
+      ) : mode === 'closed' ? (
+        <div className={styles.composerWindow} data-testid="composer-window">
+          <p className={styles.composerNote} data-testid="composer-window-closed">
+            {t('window.closed')}
+          </p>
+          {resolved ? null : (
+            <button
+              type="button"
+              className={styles.composerChip}
+              data-testid="composer-close-conversation"
+              disabled={closing}
+              onClick={() => {
+                setClosing(true);
+                setClosed(null);
+                void closeConversation(conversationId)
+                  .catch((): VerbResult => ({ ok: false, reason: 'failed' }))
+                  .then((outcome) => setClosed(outcome))
+                  .finally(() => setClosing(false));
+              }}
+            >
+              {closing ? t('window.closing') : t('window.close')}
+            </button>
+          )}
+          {closed && !closed.ok ? (
+            <p className={styles.composerProblem} data-testid="composer-close-failed">
+              {t('window.closeFailed')}
+            </p>
+          ) : null}
+        </div>
+      ) : soon ? (
+        <p className={styles.composerSoon} data-testid="composer-closing-soon">
+          {soon.unit === 'hours'
+            ? t('window.closesInHours', { count: soon.count })
+            : t('window.closesInMinutes', { count: soon.count })}
+        </p>
+      ) : null}
+
+      {mode === 'template_only' && picking ? (
+        <TemplatePicker
+          conversationId={conversationId}
+          customerName={customerName}
+          onQueued={() => {
+            setPicking(false);
+            setResult({ ok: true });
+          }}
+          onClose={() => setPicking(false)}
+        />
+      ) : null}
+
       <textarea
         ref={body}
         id="composer-body"
@@ -315,7 +437,7 @@ export function Composer({
         data-testid="composer-body"
         value={text}
         rows={1}
-        disabled={busy}
+        disabled={busy || locked}
         placeholder={t('placeholder')}
         onChange={(event) => setText(event.target.value)}
       />
@@ -393,7 +515,7 @@ export function Composer({
           data-testid="composer-attach-image"
           aria-label={t('attachImage')}
           title={t('attachImage')}
-          disabled={busy || files.length >= MAX_FILES}
+          disabled={busy || locked || files.length >= MAX_FILES}
           onClick={() => imageInput.current?.click()}
         >
           <ImageIcon size={15} aria-hidden="true" />
@@ -404,7 +526,7 @@ export function Composer({
           data-testid="composer-attach-file"
           aria-label={t('attachFile')}
           title={t('attachFile')}
-          disabled={busy || files.length >= MAX_FILES}
+          disabled={busy || locked || files.length >= MAX_FILES}
           onClick={() => fileInput.current?.click()}
         >
           <Paperclip size={15} aria-hidden="true" />
@@ -423,7 +545,7 @@ export function Composer({
               type="button"
               className={styles.composerChip}
               data-testid={`compose-${kind}`}
-              disabled={empty || busy}
+              disabled={empty || busy || locked}
               onClick={() => rework(kind)}
             >
               {t(`compose.${kind}`)}
@@ -473,7 +595,7 @@ export function Composer({
           type="submit"
           className={styles.composerSend}
           data-testid="composer-send"
-          disabled={(empty && file === null) || busy || conflict}
+          disabled={(empty && file === null) || busy || conflict || locked}
         >
           <ArrowUp size={15} strokeWidth={2.2} aria-hidden="true" />
           <span className="srOnly">{isPending ? t('sending') : t('send')}</span>
@@ -581,3 +703,14 @@ function writeDraft(conversationId: string, text: string): void {
 }
 
 const noSubscription = () => () => {};
+
+function isWindowRefusal(reason: string): reason is WindowRefusal {
+  return reason === 'template_required' || reason === 'window_closed';
+}
+
+/* A minute clock for "closes in ...": the snapshot changes once a minute. */
+function everyMinute(onChange: () => void): () => void {
+  const id = window.setInterval(onChange, 15_000);
+  return () => window.clearInterval(id);
+}
+const currentMinute = () => Math.floor(Date.now() / 60_000);

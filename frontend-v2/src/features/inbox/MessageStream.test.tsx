@@ -174,6 +174,43 @@ describe('★★ a message the customer never received', () => {
     expect(screen.getByTestId('failed-m1')).toHaveTextContent(/never received it/i);
   });
 
+  it('★★ a send refused by the 24-hour window says so in words (B7)', async () => {
+    /*
+     * The outgoing worker writes `metadata.sendError = { channel, phase, type,
+     * message, retryable, at }` (Backend 47e376a4). The two window refusals
+     * are the 24 hours, not a fault, and the sentence says which; any other
+     * type keeps the plain failure. `message` is the platform's English and
+     * never reaches the screen.
+     */
+    const failed = (id: string, type: string) =>
+      message({
+        id,
+        direction: 'OUTBOUND',
+        status: 'FAILED',
+        metadata: {
+          sendError: {
+            channel: 'WHATSAPP',
+            phase: 'send',
+            type,
+            message: 'More than 24 hours since the customer last wrote',
+            retryable: false,
+            at: '2026-10-13T08:00:00.000Z',
+          },
+        },
+      });
+    await show([
+      failed('m1', 'TEMPLATE_REQUIRED'),
+      failed('m2', 'REPLY_WINDOW_CLOSED'),
+      failed('m3', 'PROVIDER_ERROR'),
+    ]);
+    expect(screen.getByTestId('failed-m1')).toHaveTextContent(
+      messages.stream.failedTemplateRequired,
+    );
+    expect(screen.getByTestId('failed-m2')).toHaveTextContent(messages.stream.failedWindowClosed);
+    expect(screen.getByTestId('failed-m3')).toHaveTextContent(messages.stream.failed);
+    expect(screen.queryByText(/More than 24 hours since/)).toBeNull();
+  });
+
   it('★★ a failure outranks a delivery timestamp recorded before it', async () => {
     await show([
       message({
