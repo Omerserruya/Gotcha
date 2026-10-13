@@ -7,6 +7,8 @@ type Reach = NonNullable<Reachability['channels']>[number];
 export interface FoldedReach {
   readonly channel: string;
   readonly reach: Reach['reach'];
+  /** E1: the channel's own accounts, as read - absent from an older service, and on the widget's row. */
+  readonly accounts?: Reach['accounts'];
   /** The Website widget's row: the web chat and the Shopify chats, folded. */
   readonly widget: boolean;
 }

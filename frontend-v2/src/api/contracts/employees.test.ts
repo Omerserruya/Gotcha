@@ -107,3 +107,25 @@ describe('an employee carries no field that could become a false claim', () => {
     expect(employeeSchema.parse(employee()).openConversations).toBe(3);
   });
 });
+
+describe('★ E1 - reachability keeps each channel’s accounts', () => {
+  it('named, per field; absent stays absent', async () => {
+    const { reachabilitySchema } = await import('./employees');
+    const read = reachabilitySchema.parse({
+      hasCanvas: true,
+      reachable: true,
+      channels: [
+        {
+          channel: 'WHATSAPP',
+          reach: 'always',
+          accounts: [{ channelAccountId: 'w1', displayName: 'שירות לקוחות', detail: 7 }],
+        },
+        { channel: 'INSTAGRAM', reach: 'sometimes' },
+      ],
+    });
+    expect(read.channels![0]!.accounts).toEqual([
+      { channelAccountId: 'w1', displayName: 'שירות לקוחות', detail: null },
+    ]);
+    expect(read.channels![1]!.accounts).toBeUndefined();
+  });
+});

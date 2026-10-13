@@ -14,7 +14,9 @@ import { PageContainer } from '@/shell/PageContainer';
 const loadEmployees = vi.hoisted(() => vi.fn());
 const loadIntegrationAccess = vi.hoisted(() => vi.fn(async () => null));
 const loadReachability = vi.hoisted(() =>
-  vi.fn(async (): Promise<{ channel: string; reach: string }[] | null> => null),
+  vi.fn(
+    async (): Promise<{ channel: string; reach: string; accounts?: unknown[] }[] | null> => null,
+  ),
 );
 vi.mock('@/features/employees/load-employees', () => ({
   loadEmployees,
@@ -154,6 +156,39 @@ describe('★ 07e / 07f - the dialog and the sheet, by query', () => {
     ];
     expect(find<{ reach: unknown }>(tree, EmployeeDetail)?.reach).toEqual(reach);
     expect(find<{ reach: unknown }>(tree, EditSheet)?.reach).toEqual(reach);
+  });
+
+  it('★★ E1 - the platform, then the account’s own name, one line per account (Omer, 2026-10-13)', async () => {
+    loadReachability.mockResolvedValueOnce([
+      {
+        channel: 'WHATSAPP',
+        reach: 'always',
+        accounts: [
+          { channelAccountId: 'w1', displayName: 'שירות לקוחות', detail: '+972 50-123-4567' },
+          { channelAccountId: 'w2', displayName: null, detail: '+972 52-000-0000' },
+          { channelAccountId: 'w3', displayName: null, detail: null },
+        ],
+      },
+      { channel: 'INSTAGRAM', reach: 'sometimes', accounts: [] },
+    ]);
+    const tree = await page([employee('a')], { employee: 'a' });
+    expect(find<{ reach: unknown }>(tree, EmployeeDetail)?.reach).toEqual([
+      {
+        key: 'w1',
+        channel: 'WHATSAPP',
+        name: 'name.WHATSAPP · שירות לקוחות',
+        when: 'reach.always',
+      },
+      // No display name: its phone, isolated so it reads left to right.
+      {
+        key: 'w2',
+        channel: 'WHATSAPP',
+        name: 'name.WHATSAPP · \u2066+972 52-000-0000\u2069',
+        when: 'reach.always',
+      },
+      // An account with neither adds no line; a channel with no named account is the channel.
+      { channel: 'INSTAGRAM', name: 'name.INSTAGRAM', when: 'reach.sometimes' },
+    ]);
   });
 
   it('unread: null all the way down - the screens keep the line that says where it is decided', async () => {

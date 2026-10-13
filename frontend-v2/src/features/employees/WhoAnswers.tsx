@@ -12,6 +12,8 @@ export const automationsLink = (chunks: ReactNode) => (
 
 /** One channel this employee answers on, in the caller's words. */
 export interface ReachItem {
+  /** Unique per line: one line per account (E1), else per channel. */
+  readonly key?: string;
   readonly channel: string;
   /** The channel's name ("WhatsApp"). */
   readonly name: string;
@@ -64,7 +66,11 @@ export function WhoAnswers({
       ) : (
         <ul className={styles.list} data-testid="who-answers-channels">
           {reach.map((item) => (
-            <li key={item.channel} className={styles.item} data-testid={`reach-${item.channel}`}>
+            <li
+              key={item.key ?? item.channel}
+              className={styles.item}
+              data-testid={`reach-${item.key ?? item.channel}`}
+            >
               {/* Decorative: the channel's name is the next words. */}
               <ChannelPlate channel={item.channel} size="sm" decorative />
               <span className={styles.name}>{item.name}</span>

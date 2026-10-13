@@ -329,7 +329,27 @@ export const reachabilitySchema = z.object({
   hasCanvas: z.boolean().catch(false),
   reachable: z.boolean().catch(false),
   channels: z
-    .array(z.object({ channel: z.string(), reach: z.enum(['always', 'sometimes']) }))
+    .array(
+      z.object({
+        channel: z.string(),
+        reach: z.enum(['always', 'sometimes']),
+        /**
+         * E1 (Backend bf1655c3): the channel's own accounts - a WhatsApp number's
+         * display name, its phone as `detail`. Optional: an older service sends
+         * none, and the line is then the channel alone.
+         */
+        accounts: z
+          .array(
+            z.object({
+              channelAccountId: z.string(),
+              displayName: z.string().nullish().catch(null),
+              detail: z.string().nullish().catch(null),
+            }),
+          )
+          .optional()
+          .catch(undefined),
+      }),
+    )
     .optional(),
 });
 export type Reachability = z.infer<typeof reachabilitySchema>;

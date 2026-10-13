@@ -27,6 +27,7 @@ import {
 } from '@/features/employees/load-employees';
 import { foldWidget } from '@/features/employees/reach';
 import type { ReachItem } from '@/features/employees/WhoAnswers';
+import { ltr } from '@/lib/bidi';
 import { channelName } from '@/api/contracts/inbox';
 import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
@@ -135,15 +136,33 @@ export default async function Page({
   const reachOf = async (id: string): Promise<readonly ReachItem[] | null> => {
     const channels = await loadReachability(id);
     // The Website widget is one row, as the channel list draws it.
+    /*
+      ★ E1 (Omer, 2026-10-13): the platform, then the channel's own name -
+      "וואטסאפ · שירות לקוחות" - one line per account. The name is the
+      account's display name, else its phone (isolated, so it reads left to
+      right), else the channel alone. The widget stays one row.
+    */
     return channels
-      ? foldWidget(channels).map((c) => ({
-          // The widget's row wears the web chat's globe, as the channel list does.
-          channel: c.widget ? 'WEBCHAT' : c.channel,
-          name: c.widget
-            ? tch('widgetRow.name')
-            : (channelName(c.channel, tch) ?? tch('name.other')),
-          when: t(`reach.${c.reach}`),
-        }))
+      ? foldWidget(channels).flatMap((c): ReachItem[] => {
+          const when = t(`reach.${c.reach}`);
+          if (c.widget) {
+            // The widget's row wears the web chat's globe, as the channel list does.
+            return [{ channel: 'WEBCHAT', name: tch('widgetRow.name'), when }];
+          }
+          const platform = channelName(c.channel, tch) ?? tch('name.other');
+          const named = (c.accounts ?? []).flatMap((a) => {
+            const own = a.displayName?.trim() || (a.detail?.trim() ? ltr(a.detail.trim()) : '');
+            return own ? [{ key: a.channelAccountId, own }] : [];
+          });
+          return named.length === 0
+            ? [{ channel: c.channel, name: platform, when }]
+            : named.map((a) => ({
+                key: a.key,
+                channel: c.channel,
+                name: `${platform} · ${a.own}`,
+                when,
+              }));
+        })
       : null;
   };
   const reach = selected ? await reachOf(selected.id) : null;
