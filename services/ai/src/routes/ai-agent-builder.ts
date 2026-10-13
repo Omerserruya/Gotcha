@@ -227,11 +227,34 @@ router.post("/:id/tool", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId! as string;
     const agentId = req.params.id as string;
-    const { tenantToolId, attach } = req.body || {};
+    const { tenantToolId, toolName, attach } = req.body || {};
     const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true } });
     if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
-    const tt = await prisma.tenantTool.findFirst({ where: { id: String(tenantToolId), tenantId }, select: { id: true } });
-    if (!tt) { res.status(404).json({ error: "tool not found" }); return; }
+    // By tenantToolId, or by the tool's name ("woocommerce.create_coupon"),
+    // the key the employee's tools page lists. A name resolves to the tool of
+    // the CONNECTED connection.
+    let tt: { id: string } | null = null;
+    if (typeof toolName === "string" && toolName.includes(".")) {
+      const dot = toolName.indexOf(".");
+      tt = await prisma.tenantTool.findFirst({
+        where: {
+          tenantId,
+          catalogTool: { slug: toolName.slice(dot + 1) },
+          tenantIntegration: { status: "CONNECTED", integration: { slug: toolName.slice(0, dot) } },
+        },
+        select: { id: true },
+      });
+      if (!tt) {
+        res.status(404).json({
+          error: `"${toolName}" is not set up in this workspace: give it a workspace level first, or connect its integration.`,
+          code: "TOOL_NOT_PROVISIONED",
+        });
+        return;
+      }
+    } else {
+      tt = await prisma.tenantTool.findFirst({ where: { id: String(tenantToolId), tenantId }, select: { id: true } });
+      if (!tt) { res.status(404).json({ error: "tool not found" }); return; }
+    }
 
     if (attach !== false) {
       const existing = await prisma.agentToolPermission.findFirst({ where: { tenantId, aiAgentId: agentId, tenantToolId: tt.id }, select: { id: true } });

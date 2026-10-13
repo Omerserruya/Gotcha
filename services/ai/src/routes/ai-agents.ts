@@ -76,10 +76,20 @@ function normalizeSalesContext(raw: unknown): Record<string, unknown> | null {
 }
 
 // ─── List AI Agents ──────────────────────────────────────────
+export const STALE_DRAFT_DAYS = 7;
+
 router.get("/", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
+    // A hire stopped and never resumed leaves a DRAFT behind. One untouched
+    // for STALE_DRAFT_DAYS is not listed (it is kept, not deleted: starting a
+    // new hire still resumes the latest draft). ?includeStaleDrafts=1 lists it.
+    const includeStale = String(req.query.includeStaleDrafts ?? "") === "1";
+    const staleBefore = new Date(Date.now() - STALE_DRAFT_DAYS * 24 * 60 * 60 * 1000);
     const agents = await prisma.aIAgent.findMany({
-      where: { tenantId: req.tenantId! as string },
+      where: {
+        tenantId: req.tenantId! as string,
+        ...(includeStale ? {} : { NOT: { status: "DRAFT", updatedAt: { lt: staleBefore } } }),
+      },
       include: {
         knowledgeBases: {
           include: { knowledgeBase: { select: { id: true, name: true, isActive: true } } },
@@ -972,11 +982,16 @@ router.get("/:id/tools", authenticate, resolveTenant, requireActiveTenant(), req
     const tenantId = req.tenantId!;
     const agent = await prisma.aIAgent.findFirst({ where: { id: req.params.id as string, tenantId }, select: { id: true } });
     if (!agent) { res.status(404).json({ error: "AI employee not found" }); return; }
-    const [rows, levels, locale] = await Promise.all([
+    const [rows, levels, locale, grants] = await Promise.all([
       listWorkspaceTools(tenantId),
       readAgentToolLevels(tenantId, agent.id),
       readerLocale(req),
+      prisma.agentToolPermission.findMany({
+        where: { tenantId, aiAgentId: agent.id, isAllowed: true },
+        select: { tenantTool: { select: { catalogToolId: true } } },
+      }),
     ]);
+    const grantedCatalogIds = new Set(grants.map((g: any) => g.tenantTool?.catalogToolId).filter(Boolean));
     // Only what can run: built-ins, and the tools of integrations that are
     // CONNECTED. A disconnected (or failing) store's tools cannot run, so
     // listing ~80 of them only confuses. An own level already stored for one
@@ -1000,6 +1015,12 @@ router.get("/:id/tools", authenticate, resolveTenant, requireActiveTenant(), req
         // tightened after the employee was set still wins.
         employeeLevel: stricterLevel(workspaceLevel, employeeLevel),
         allowedLevels: allowedEmployeeLevels(workspaceLevel),
+        // Integration tools reach an employee only when granted to it
+        // (POST /builder/:id/tool, by toolName or tenantToolId). Built-ins
+        // need no grant: null. A catalogue action the workspace has not set up
+        // yet cannot be granted until it has a workspace level.
+        granted: r.integration ? (!!r.catalogToolId && grantedCatalogIds.has(r.catalogToolId)) : null,
+        grantable: r.integration ? r.state !== "not_provisioned" : false,
       };
     });
     res.setHeader("Cache-Control", "private, no-store");

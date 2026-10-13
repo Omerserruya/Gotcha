@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
-const H = vi.hoisted(() => ({ levels: {} as Record<string, string>, writes: [] as any[], audits: [] as any[], rows: [] as any[] }));
+const H = vi.hoisted(() => ({ levels: {} as Record<string, string>, writes: [] as any[], audits: [] as any[], rows: [] as any[], grants: [] as any[] }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -28,7 +28,12 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       return { ...H.levels };
     }),
     writeAudit: vi.fn(async (e: any) => { H.audits.push(e); }),
-    prisma: { aIAgent: { findFirst: async (a: any) => (a.where.id === "maya" && a.where.tenantId === "T" ? { id: "maya" } : null) } },
+    prisma: {
+      aIAgent: { findFirst: async (a: any) => (a.where.id === "maya" && a.where.tenantId === "T" ? { id: "maya" } : null) },
+      agentToolPermission: {
+        findMany: async (a: any) => (a.where.tenantId === "T" && a.where.aiAgentId === "maya" && a.where.isAllowed === true ? H.grants : []),
+      },
+    },
   };
 });
 vi.mock("../routes/tool-permissions", () => ({ listWorkspaceTools: vi.fn(async () => H.rows), default: (_q: any, _s: any, n: any) => n() }));
@@ -43,7 +48,7 @@ const row = (toolName: string, enabled: boolean, requiresApproval: boolean, over
   ({ toolName, enabled, requiresApproval, description: `${toolName} desc`, integration: null, riskGroup: "create_update", ...over });
 
 beforeEach(() => {
-  H.levels = {}; H.writes = []; H.audits = [];
+  H.levels = {}; H.writes = []; H.audits = []; H.grants = [];
   H.rows = [
     row("send_message", true, false),
     row("woocommerce.create_coupon", true, true, { integration: "woocommerce", integrationConnected: true, riskGroup: "financial" }),
@@ -78,6 +83,21 @@ describe("GET /:id/tools", () => {
     );
     const names = (await request(app).get("/api/ai-agents/maya/tools")).body.data.tools.map((t: any) => t.toolName);
     expect(names.sort()).toEqual(["delete_note", "send_message", "woocommerce.create_coupon"]);
+  });
+
+  it("★ each integration tool says whether THIS employee was given it; built-ins need no grant", async () => {
+    H.rows = [
+      row("send_message", true, false),
+      row("woocommerce.create_coupon", true, true, { integration: "woocommerce", integrationConnected: true, catalogToolId: "c1", state: "enabled" }),
+      row("woocommerce.get_order", true, false, { integration: "woocommerce", integrationConnected: true, catalogToolId: "c2", state: "enabled" }),
+      row("woocommerce.create_refund", false, true, { integration: "woocommerce", integrationConnected: true, catalogToolId: "c3", state: "not_provisioned" }),
+    ];
+    H.grants = [{ tenantTool: { catalogToolId: "c1" } }];
+    const by = Object.fromEntries((await request(app).get("/api/ai-agents/maya/tools")).body.data.tools.map((t: any) => [t.toolName, t]));
+    expect(by.send_message).toMatchObject({ granted: null, grantable: false });
+    expect(by["woocommerce.create_coupon"]).toMatchObject({ granted: true, grantable: true });
+    expect(by["woocommerce.get_order"]).toMatchObject({ granted: false, grantable: true });
+    expect(by["woocommerce.create_refund"]).toMatchObject({ granted: false, grantable: false });
   });
 
   it("another tenant's employee: 404", async () => {

@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 
-const H = vi.hoisted(() => ({ settings: new Map<string, string>() }));
+const H = vi.hoisted(() => ({ settings: new Map<string, string>(), listWhere: null as any }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -25,7 +25,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     requireCapacity: () => pass,
     prisma: new Proxy({}, {
       get: (_t, name: string) => name === "aIAgent"
-        ? { ...generic, findMany: async () => [agent], findFirst: async () => agent }
+        ? { ...generic, findMany: async (a: any) => { H.listWhere = a?.where; return [agent]; }, findFirst: async () => agent }
         : generic,
     }),
   };
@@ -64,5 +64,22 @@ describe("★ the detail carries the readiness status (H7)", () => {
     expect((await request(app()).get("/api/ai-agents/maya")).body.data).toMatchObject({ readinessStatus: "failed", readinessError: "no_knowledge" });
     H.settings.clear();
     expect((await request(app()).get("/api/ai-agents/maya")).body.data).toMatchObject({ readinessStatus: null, readinessStartedAt: null });
+  });
+});
+
+describe("★ a hire stopped over 7 days ago is not listed (kept, not deleted)", () => {
+  it("the list leaves out DRAFTs untouched for 7 days, and only those", async () => {
+    const before = Date.now();
+    await request(app()).get("/api/ai-agents");
+    expect(H.listWhere.tenantId).toBe("T");
+    expect(H.listWhere.NOT.status).toBe("DRAFT");
+    const cutoff = H.listWhere.NOT.updatedAt.lt.getTime();
+    expect(before - cutoff).toBeGreaterThanOrEqual(7 * 24 * 3600_000 - 1000);
+    expect(before - cutoff).toBeLessThan(7 * 24 * 3600_000 + 60_000);
+  });
+
+  it("?includeStaleDrafts=1 lists them", async () => {
+    await request(app()).get("/api/ai-agents?includeStaleDrafts=1");
+    expect(H.listWhere).toEqual({ tenantId: "T" });
   });
 });
