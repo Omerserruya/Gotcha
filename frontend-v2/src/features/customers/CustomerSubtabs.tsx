@@ -5,7 +5,13 @@ import type { TimelineEvent } from '@/api/contracts/customer-detail';
 import { channelName } from '@/api/contracts/inbox';
 import { Link } from '@/i18n/navigation';
 
-import { CUSTOMER_TABS, customerFacts, initialsOf, shortDate } from './CustomerScreen';
+import {
+  CUSTOMER_TABS,
+  CustomersCrumb,
+  customerFacts,
+  initialsOf,
+  shortDate,
+} from './CustomerScreen';
 import type { CustomerDetail } from './load-customer';
 import styles from './Customers.module.css';
 import { ChannelPlate } from '@/design-system/brand/channel-plate';
@@ -35,9 +41,7 @@ export async function CustomerTopBar({
 
   return (
     <header className={styles.topBar} data-testid="customer-top-bar">
-      <Link href="/customers" className={styles.crumb}>
-        {t('card.crumb')}
-      </Link>
+      <CustomersCrumb label={t('card.crumb')} />
       <span className={styles.crumbSlash} aria-hidden="true">
         /
       </span>

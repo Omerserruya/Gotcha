@@ -79,6 +79,8 @@ describe('★★ 04c-04f’s compact header', () => {
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     const bar = screen.getByTestId('customer-top-bar');
     expect(bar.querySelector('a[href="/customers"]')).toHaveTextContent('Customers');
+    // The same crumb as 04b's header draws (C2): one component, two headers.
+    expect(screen.getByTestId('customers-crumb')).toHaveAttribute('href', '/customers');
     expect(screen.getByTestId('customer-add-note')).toHaveAttribute(
       'href',
       '/customers/k1?tab=notes',

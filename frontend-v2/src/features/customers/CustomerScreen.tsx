@@ -109,6 +109,19 @@ export function shortDate(
     : format.dateTime(at, { month: 'short', year: '2-digit' });
 }
 
+/**
+ * ★★ THE WAY BACK TO THE LIST, IN EVERY HEADER (Omer, 2026-10-13, C2).
+ * "Customers" was in the compact header only, so "All" (04b's large header)
+ * had no way back. One link, drawn by both headers, so the two cannot drift.
+ */
+export function CustomersCrumb({ label }: { readonly label: string }) {
+  return (
+    <Link href="/customers" className={styles.crumb} data-testid="customers-crumb">
+      {label}
+    </Link>
+  );
+}
+
 /** 02's header: a 64px disc, the name at 30px, a line of facts, the summary in serif italic. */
 export async function CustomerHeader({
   detail,
@@ -129,6 +142,7 @@ export async function CustomerHeader({
         {initialsOf(name)}
       </span>
       <div className={styles.cardWho}>
+        <CustomersCrumb label={t('card.crumb')} />
         {/* A name, or a handle standing in for one: isolated, so a phone reads left to right. */}
         <h1 className={styles.cardName}>{name ? <PersonName name={name} /> : t('list.unnamed')}</h1>
         <p className={styles.cardFacts}>{facts.length > 0 ? facts.join(' · ') : '-'}</p>

@@ -17,10 +17,17 @@ vi.mock('@/i18n/navigation', () => ({
     children,
     ...rest
   }: {
-    href: { pathname: string; query?: Record<string, string> };
+    href: string | { pathname: string; query?: Record<string, string> };
     children: ReactNode;
   }) => (
-    <a href={`${href.pathname}?${new URLSearchParams(href.query ?? {})}`} {...rest}>
+    <a
+      href={
+        typeof href === 'string'
+          ? href
+          : `${href.pathname}?${new URLSearchParams(href.query ?? {})}`
+      }
+      {...rest}
+    >
       {children}
     </a>
   ),
@@ -86,6 +93,18 @@ describe('★★ 04b’s header', () => {
     unmount();
     render(await CustomerHeader({ detail: detail({ conversationId: null }), contactId: 'k1' }));
     expect(screen.getByTestId('customer-message')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('★★ "All" has the way back to the list too (Omer, 2026-10-13, C2)', async () => {
+    /*
+     * The crumb was the compact header's only, so 04b's "All" - this header -
+     * had no way back. The page test proves every tab mounts one of the two
+     * headers; each draws the same crumb.
+     */
+    render(await CustomerHeader({ detail: detail(), contactId: 'k1' }));
+    const crumb = screen.getByTestId('customers-crumb');
+    expect(crumb).toHaveAttribute('href', '/customers');
+    expect(crumb).toHaveTextContent(/^Customers$/);
   });
 
   it('Add note leads to the notes tab', async () => {
