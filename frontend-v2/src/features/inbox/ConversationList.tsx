@@ -23,6 +23,7 @@ import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
 import { Link } from '@/i18n/navigation';
+import { listTime } from '@/lib/list-time';
 
 import {
   inboxQuery,
@@ -344,22 +345,13 @@ export async function ConversationList({
               */}
               {conversation.lastMessageAt === null ? null : (
                 <span className={styles.rowTime} data-testid={`time-${conversation.id}`}>
-                  {format.dateTime(new Date(conversation.lastMessageAt), {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    /*
-                     * ⚠⚠ 24-HOUR, STATED RATHER THAN INHERITED. `hour12`
-                     *   follows the LOCALE by default, so `en` rendered
-                     *   "07:48 PM" and `he` would render "19:48" - the two
-                     *   locales disagreeing about a thing 02 states once, on
-                     *   every row, as `09:29`.
-                     *
-                     * ★ Pinning the zone was right and was not enough: the
-                     *   zone and the format are two separate defaults, and
-                     *   only one of them was wrong at a time.
-                     */
-                    hour12: false,
-                  })}
+                  {/*
+                    ★ BY AGE (Omer, 2026-10-13, I4): the time within 24 hours
+                      (24-hour, as before), the weekday within a week, the
+                      date after - `listTime`. A bare "09:12" on a row from
+                      last month read as today.
+                  */}
+                  {listTime(conversation.lastMessageAt, now, format)}
                 </span>
               )}
             </span>

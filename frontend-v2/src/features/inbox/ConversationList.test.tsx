@@ -1761,3 +1761,26 @@ describe('★★ I2 - the chips the page hands over are the row', () => {
     expect(head.querySelector('[data-glyph="woocommerce"]')).not.toBeNull();
   });
 });
+
+describe('★★ I4 - a row’s time by its age (Omer, 2026-10-13)', () => {
+  it('the time today, the weekday this week, the date before', async () => {
+    // NOW is Friday 25 September 2026, 15:00 in Jerusalem.
+    render(
+      await ConversationList({
+        rows: [
+          row({ id: 'today', lastMessageAt: '2026-09-25T10:46:00.000Z' }),
+          row({ id: 'week', lastMessageAt: '2026-09-22T10:46:00.000Z' }),
+          row({ id: 'old', lastMessageAt: '2026-09-01T10:46:00.000Z' }),
+          row({ id: 'lastYear', lastMessageAt: '2025-12-30T10:46:00.000Z' }),
+        ],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    expect(screen.getByTestId('time-today')).toHaveTextContent(/^13:46$/);
+    expect(screen.getByTestId('time-week')).toHaveTextContent(/^Tue$/);
+    expect(screen.getByTestId('time-old')).toHaveTextContent(/^01\.09$/);
+    expect(screen.getByTestId('time-lastYear')).toHaveTextContent(/^30\.12\.25$/);
+  });
+});
