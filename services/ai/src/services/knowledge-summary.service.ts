@@ -41,9 +41,26 @@ export function summaryOf(metadata: unknown): string | null {
   return typeof s?.text === "string" && s.text.trim() ? s.text : null;
 }
 
-/** One line, no dashes, at most SUMMARY_MAX characters, cut on a word. */
+/**
+ * Markdown read as plain text: a summary is shown as a line of text, so
+ * "## Returns" or "**14 days**" would show its marks. Headings, list and quote
+ * markers, emphasis, inline code, links and images keep only their words.
+ */
+export function plainText(raw: string): string {
+  return String(raw ?? "")
+    .replace(/^[ \t]*(?:[-*_][ \t]*){3,}$/gm, "")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^[ \t]*(?:#{1,6}[ \t]+|>[ \t]?|[-*+][ \t]+|\d+[.)][ \t]+)/gm, "")
+    .replace(/(\*\*|__)(?=\S)([\s\S]*?\S)\1/g, "$2")
+    .replace(/(^|[^\w*])\*(?=\S)([^*\n]*?\S)\*(?![\w*])/g, "$1$2")
+    .replace(/(^|[^\w])_(?=\S)([^_\n]*?\S)_(?!\w)/g, "$1$2")
+    .replace(/`([^`\n]+)`/g, "$1");
+}
+
+/** One line of plain text, no dashes, at most SUMMARY_MAX characters, cut on a word. */
 export function cleanSummary(raw: string): string {
-  let t = String(raw ?? "")
+  let t = plainText(raw)
     .replace(/[\u2013\u2014\u2015]/g, "-")
     .replace(/\s+/g, " ")
     .trim()

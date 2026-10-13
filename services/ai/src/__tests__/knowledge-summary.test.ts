@@ -31,7 +31,7 @@ vi.mock("../services/ai.service", () => ({
 }));
 vi.mock("../services/qdrant.service", () => ({ upsertChunks: H.qdrant, deleteByDocumentId: async () => undefined }));
 
-import { ensureDocumentSummary, cleanSummary, contentHash, summaryOf, SUMMARY_MAX } from "../services/knowledge-summary.service";
+import { ensureDocumentSummary, cleanSummary, plainText, contentHash, summaryOf, SUMMARY_MAX } from "../services/knowledge-summary.service";
 import { processDocument } from "../services/embedding.service";
 
 const LONG = "Returns within 14 days of delivery, unused and in the original packaging. Refunds go back to the card used.";
@@ -101,6 +101,15 @@ describe("ensureDocumentSummary", () => {
     expect(await ensureDocumentSummary("d1")).toBe("fresh");
   });
 
+  it("★ short markdown content is stored as plain text, and a stored marked-up one is rewritten", async () => {
+    H.docs.get("d1").content = "## Hours\n**Sun-Thu** 9-17";
+    H.docs.get("d1").metadata.summary = { text: "## Hours **Sun-Thu** 9-17", lang: "he", hash: contentHash("## Hours\n**Sun-Thu** 9-17"), at: "x" };
+    expect(await ensureDocumentSummary("d1")).toBe("created");
+    expect(H.llm).not.toHaveBeenCalled();
+    expect(H.docs.get("d1").metadata.summary.text).toBe("Hours Sun-Thu 9-17");
+    expect(await ensureDocumentSummary("d1")).toBe("fresh");
+  });
+
   it("★ a model that finds no real content says NONE, and nothing is stored", async () => {
     H.llm.mockResolvedValueOnce({ content: "NONE" } as any);
     expect(await ensureDocumentSummary("d1")).toBe("empty");
@@ -118,6 +127,17 @@ describe("ensureDocumentSummary", () => {
     H.llm.mockImplementationOnce(async () => { H.docs.get("d1").content = "new text"; return { content: "old summary" }; });
     expect(await ensureDocumentSummary("d1")).toBe("failed");
     expect(H.updates).toHaveLength(0);
+  });
+});
+
+describe("plainText", () => {
+  it("★ markdown keeps only its words", () => {
+    expect(cleanSummary("## מדיניות החזרות\n- **14 ימים** להחזרה\n- ראו [התקנון](https://x.co/t)")).toBe("מדיניות החזרות 14 ימים להחזרה ראו התקנון");
+    expect(plainText("> *Note*: use `code` and __bold__\n1. first\n---\n![logo](a.png)")).toBe("Note: use code and bold\nfirst\n\nlogo");
+  });
+
+  it("plain text is left as it is: snake_case, 2*3*4, a lone star", () => {
+    expect(plainText("set max_items to 5; 2*3*4 = 24; rated 5 * good")).toBe("set max_items to 5; 2*3*4 = 24; rated 5 * good");
   });
 });
 
