@@ -370,6 +370,20 @@ describe('★★ K10 - numbered items, each a title over what it contains', () =
     expect(screen.getByTestId('doc-a')).toContainElement(line);
   });
 
+  it('★★ markdown in a summary reads as plain text (dev, 2026-10-13)', async () => {
+    await renderScreen([
+      parsed('k', [
+        doc('md', { summary: '**אפשר להחליף מידה?** כן בטח\n- תוך 14 יום' }),
+        doc('marks', { summary: '** **' }),
+      ]),
+    ]);
+    expect(screen.getByTestId('doc-summary-md')).toHaveTextContent(
+      /^אפשר להחליף מידה\? כן בטח · תוך 14 יום$/,
+    );
+    // Only markers: nothing left to say, so no line.
+    expect(screen.queryByTestId('doc-summary-marks')).toBeNull();
+  });
+
   it('★★ absent, null, empty or only spaces: no line at all - and nothing put in its place', async () => {
     await renderScreen([
       parsed('k', [

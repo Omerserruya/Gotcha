@@ -23,6 +23,7 @@ import {
   SCANNED_SOURCE_TYPES,
   WEBSITE_SOURCE_TYPES,
 } from './knowledge-type';
+import { plainPreview } from './DocumentText';
 import { ResolveConflict } from './ResolveConflict';
 import styles from './Knowledge.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
@@ -301,7 +302,13 @@ export async function KnowledgeScreen({
                                 const state = documentState(document);
                                 const updated = date(document.updatedAt);
                                 const type = knowledgeTypeOf(document.sourceType);
-                                const summary = documentSummary(document);
+                                /*
+                                  As plain text (supervisor, dev 2026-10-13): a short
+                                  document is its own summary, markers and all -
+                                  "**אפשר להחליף מידה?** כן…". K6's preview helper.
+                                */
+                                const stored = documentSummary(document);
+                                const summary = stored ? plainPreview(stored) || null : null;
                                 return (
                                   <li
                                     key={document.id}
