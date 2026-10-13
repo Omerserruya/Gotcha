@@ -7,6 +7,8 @@
  *   PATCH  /funnels/:id
  *   DELETE /funnels/:id
  *   POST   /funnels/:id/activate    - sets isActive=true and deactivates siblings in same departmentId
+ *   GET    /funnels/templates       - ready-made funnels, in the reader's language
+ *   POST   /funnels {template}      - create one from a template (stages server-side)
  *
  * The cache in funnel-config.repo.ts is invalidated on writes so BEL picks
  * up changes within one request. ADMIN role required.
@@ -15,6 +17,8 @@
 import { Router, type Request, type Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
 import { invalidateFunnelCache } from "../services/funnel-config.repo";
+import { readerLocale } from "../lib/reader-locale";
+import { FUNNEL_TEMPLATES, funnelFromTemplate, listFunnelTemplates, templateLanguage } from "../lib/funnel-templates";
 
 const router = Router();
 
@@ -39,6 +43,12 @@ router.get("/funnels", requireRole("ADMIN"), async (req: Request, res: Response)
   res.json({ data: rows });
 });
 
+// Declared before /funnels/:id, which would otherwise read "templates" as an id.
+router.get("/funnels/templates", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  const lang = templateLanguage(await readerLocale(req));
+  res.json({ data: listFunnelTemplates(lang) });
+});
+
 router.get("/funnels/:id", requireRole("ADMIN"), async (req: Request, res: Response) => {
   const row = await (prisma as any).tenantFunnel.findFirst({
     where: { id: req.params.id, tenantId: req.tenantId },
@@ -54,6 +64,10 @@ router.get("/funnels/:id", requireRole("ADMIN"), async (req: Request, res: Respo
 
 router.post("/funnels", requireRole("ADMIN"), async (req: Request, res: Response) => {
   const b = req.body || {};
+  if (b.template !== undefined) {
+    await createFromTemplate(req, res, b);
+    return;
+  }
   for (const k of ["funnelId", "stages"]) {
     if (b[k] === undefined || b[k] === null || b[k] === "") {
       res.status(400).json({ error: `${k} is required` });
@@ -89,6 +103,42 @@ router.post("/funnels", requireRole("ADMIN"), async (req: Request, res: Response
     res.status(500).json({ error: err?.message || "create failed" });
   }
 });
+
+/**
+ * A funnel from a template (a hire's "Sales" path): the stages come from the
+ * server, labelled in the WORKSPACE's language (what its team and AI read),
+ * not the requester's.
+ *
+ * Created INACTIVE unless isActive:true is sent: the workspace's active default
+ * funnel steers every conversation, while a funnel bound to one employee
+ * (AIAgent.funnelId) is read by id and needs no activation. The same template
+ * twice returns the funnel already made (200, created:false), so a second
+ * Sales hire shares it.
+ */
+async function createFromTemplate(req: Request, res: Response, b: any) {
+  const id = String(b.template);
+  if (!FUNNEL_TEMPLATES[id]) {
+    res.status(400).json({ error: `unknown template "${id}"`, code: "UNKNOWN_TEMPLATE", templates: Object.keys(FUNNEL_TEMPLATES) });
+    return;
+  }
+  const departmentId = b.departmentId != null ? String(b.departmentId) : null;
+  const tenant = await prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { defaultLocale: true } }).catch(() => null);
+  const f = funnelFromTemplate(id, templateLanguage(tenant?.defaultLocale))!;
+  const existing = await (prisma as any).tenantFunnel.findFirst({ where: { tenantId: req.tenantId, funnelId: f.funnelId, departmentId } });
+  if (existing) {
+    res.json({ data: existing, created: false });
+    return;
+  }
+  try {
+    const row = await (prisma as any).tenantFunnel.create({
+      data: { tenantId: req.tenantId, departmentId, isActive: b.isActive === true, ...f },
+    });
+    invalidateFunnelCache(req.tenantId!);
+    res.status(201).json({ data: row, created: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "create failed" });
+  }
+}
 
 // ─── Update ──────────────────────────────────────────────
 
