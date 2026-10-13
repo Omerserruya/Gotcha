@@ -75,8 +75,19 @@ async function loadContext(tenantId: string, agentId: string): Promise<Readiness
       where: { aiAgentId: agentId },
       select: { knowledgeBase: { select: { id: true, name: true } } },
     }),
+    // Only tools that can run: a CONNECTED connection and an enabled tool.
+    // Grants on a disconnected store stay on the employee but do nothing, and
+    // counting them scored Maya 67 on returns and exchanges she could not do
+    // (68 dead Shopify grants; the employee hired after her scored 34).
+    // Ordered by name so the MAX_TOOLS cap keeps the same tools every run.
     prisma.agentToolPermission.findMany({
-      where: { tenantId, aiAgentId: agentId, isAllowed: true },
+      where: {
+        tenantId,
+        aiAgentId: agentId,
+        isAllowed: true,
+        tenantTool: { isEnabled: true, tenantIntegration: { status: "CONNECTED" } },
+      },
+      orderBy: [{ tenantTool: { catalogTool: { name: "asc" } } }, { id: "asc" }],
       select: {
         tenantTool: {
           select: {
