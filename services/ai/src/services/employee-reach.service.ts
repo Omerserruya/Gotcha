@@ -57,21 +57,45 @@ export function reachFrom(entryId: string, nodes: any[], edges: any[], agentId: 
   return null;
 }
 
-/** Per channel the workspace has, whether this employee answers there. */
-export async function whereEmployeeAnswers(tenantId: string, agentId: string): Promise<Array<{ channel: string; reach: Reach }>> {
+export interface ReachAccount {
+  channelAccountId: string;
+  /** The channel's own name: a WhatsApp number's verified name, "@handle", a page name. */
+  displayName: string | null;
+  /** WhatsApp: the number as shown; otherwise null. */
+  detail: string | null;
+}
+
+/**
+ * Per channel the workspace has, whether this employee answers there, and the
+ * accounts of that channel (A7, 2026-10-13). The playbook routes by channel
+ * TYPE (the flow executor matches channel_entry by type), so every active
+ * account of a reached channel is reached the same way.
+ */
+export async function whereEmployeeAnswers(tenantId: string, agentId: string): Promise<Array<{ channel: string; reach: Reach; accounts: ReachAccount[] }>> {
   const [canvas, accounts] = await Promise.all([
     (prisma as any).flowCanvas.findUnique({ where: { tenantId }, select: { nodes: true, edges: true } }),
-    prisma.channelAccount.findMany({ where: { tenantId, isActive: true }, select: { channel: true } }),
+    prisma.channelAccount.findMany({ where: { tenantId, isActive: true }, select: { id: true, channel: true, displayName: true, platformMeta: true } as any }),
   ]);
   const nodes: any[] = Array.isArray(canvas?.nodes) ? canvas.nodes : [];
   const edges: any[] = Array.isArray(canvas?.edges) ? canvas.edges : [];
   const channels = [...new Set((accounts as any[]).map((a) => String(a.channel)))].sort();
-  const out: Array<{ channel: string; reach: Reach }> = [];
+  const out: Array<{ channel: string; reach: Reach; accounts: ReachAccount[] }> = [];
   for (const ch of channels) {
     const entry = entryFor(nodes, ch);
     if (!entry) continue;
     const reach = reachFrom(entry.id, nodes, edges, agentId);
-    if (reach) out.push({ channel: ch, reach });
+    if (!reach) continue;
+    const ofChannel = (accounts as any[])
+      .filter((a) => String(a.channel) === ch)
+      .map((a) => {
+        const meta = a.platformMeta && typeof a.platformMeta === "object" ? (a.platformMeta as Record<string, any>) : {};
+        return {
+          channelAccountId: String(a.id),
+          displayName: (a.displayName as string | null) ?? meta.verifiedName ?? null,
+          detail: ch === "WHATSAPP" ? (meta.displayPhoneNumber ?? null) : null,
+        };
+      });
+    out.push({ channel: ch, reach, accounts: ofChannel });
   }
   return out;
 }

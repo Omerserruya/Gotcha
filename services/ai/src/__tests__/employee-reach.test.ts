@@ -84,7 +84,8 @@ describe("★ GET /:id/reachability says where", () => {
     expect(r.status).toBe(200);
     expect(r.body.data).toMatchObject({ hasCanvas: true, reachable: true });
     // Instagram has no entry: the first one (WhatsApp's) takes it, so Maya always answers there too.
-    expect(r.body.data.channels).toEqual([
+    // (Each channel also lists its accounts since A7; pinned in its own case.)
+    expect(r.body.data.channels.map(({ channel, reach }: any) => ({ channel, reach }))).toEqual([
       { channel: "INSTAGRAM", reach: "always" },
       { channel: "WEBCHAT", reach: "sometimes" },
       { channel: "WHATSAPP", reach: "always" },
@@ -93,9 +94,24 @@ describe("★ GET /:id/reachability says where", () => {
 
   it("★ a playbook with only a start node (no channel entries) routes every channel from it", async () => {
     H.canvas = { nodes: [n("s", "start"), n("toMaya", "route_target", { routeType: "agent", targetId: "maya" })], edges: [e("s", "toMaya")] };
-    expect((await request(app()).get("/api/ai-agents/maya/reachability")).body.data.channels).toEqual([
+    expect((await request(app()).get("/api/ai-agents/maya/reachability")).body.data.channels.map(({ channel, reach }: any) => ({ channel, reach }))).toEqual([
       { channel: "INSTAGRAM", reach: "always" }, { channel: "WEBCHAT", reach: "always" }, { channel: "WHATSAPP", reach: "always" },
     ]);
+  });
+
+  it("★ A7: each reached channel names its accounts (WhatsApp with its number)", async () => {
+    H.accounts = [
+      { id: "wa1", tenantId: "T", channel: "WHATSAPP", isActive: true, displayName: "Urban Supply", platformMeta: { displayPhoneNumber: "+972 54-111-1111" } },
+      { id: "wa2", tenantId: "T", channel: "WHATSAPP", isActive: true, displayName: null, platformMeta: { verifiedName: "Urban Outlet", displayPhoneNumber: "+972 54-222-2222" } },
+      { id: "ig1", tenantId: "T", channel: "INSTAGRAM", isActive: true, displayName: "@urbansupply", platformMeta: {} },
+      { id: "off", tenantId: "T", channel: "WHATSAPP", isActive: false, displayName: "Old" },
+    ];
+    const by = Object.fromEntries((await request(app()).get("/api/ai-agents/maya/reachability")).body.data.channels.map((c: any) => [c.channel, c.accounts]));
+    expect(by.WHATSAPP).toEqual([
+      { channelAccountId: "wa1", displayName: "Urban Supply", detail: "+972 54-111-1111" },
+      { channelAccountId: "wa2", displayName: "Urban Outlet", detail: "+972 54-222-2222" },
+    ]);
+    expect(by.INSTAGRAM).toEqual([{ channelAccountId: "ig1", displayName: "@urbansupply", detail: null }]);
   });
 
   it("no playbook: nowhere", async () => {
