@@ -798,13 +798,13 @@ export async function executeAdapterTool(opts: {
 
   // ── Cross-customer access guard (customer channel only) ─────────────────
   let guardIdentity: import("./customer-access-guard").RequesterIdentity | null = null;
-  if (opts.accessScope === "customer" && slug === "shopify" && opts.conversationId) {
+  if (opts.accessScope === "customer" && (slug === "shopify" || slug === "woocommerce") && opts.conversationId) {
     const guard = await import("./customer-access-guard");
     // Self-scoped tools carry no selector in their schema, so there is nothing
     // to verify - only something to supply. Whatever the model sent that looks
     // like a selector is discarded here, before the adapter, and replaced with
     // the identity the channel authenticated.
-    if (guard.SELF_SCOPED_SHOPIFY_TOOLS.has(toolName)) {
+    if (slug === "shopify" && guard.SELF_SCOPED_SHOPIFY_TOOLS.has(toolName)) {
       guardIdentity = await guard.resolveRequesterIdentity(opts.tenantId, opts.conversationId);
       const scoped = guardIdentity ? guard.applySelfScope(guardIdentity, opts.args as Record<string, any>) : null;
       if (!guardIdentity || !scoped) {
@@ -827,7 +827,7 @@ export async function executeAdapterTool(opts: {
       }
       opts.args = scoped.args;
     }
-    if (guard.PROTECTED_SHOPIFY_TOOLS.has(toolName)) {
+    if (guard.protectedToolsFor(slug)?.has(toolName)) {
       guardIdentity = await guard.resolveRequesterIdentity(opts.tenantId, opts.conversationId);
       if (!guardIdentity) {
         return { ok: false, reason: "access_denied: requester identity could not be resolved for this conversation" };
@@ -919,6 +919,43 @@ export async function executeAdapterTool(opts: {
     return { ok: false, reason };
   }
 
+  // A WooCommerce WRITE on an order, in a customer conversation: the order is
+  // fetched and must belong to the requester BEFORE anything changes
+  // (2026-10-13). The post-flight check only sees the result of a write that
+  // already happened, and a tool can now be set to run without approval.
+  if (slug === "woocommerce" && guardIdentity && opts.conversationId && toolDef.category !== "READ" && (opts.args as any)?.order_id != null) {
+    const guard = await import("./customer-access-guard");
+    let ownedOrder = false;
+    try {
+      const order = await adapter.execute({
+        ctx: { tenantId: opts.tenantId, tenantIntegrationId: conn.tenantIntegrationId, conversationId: opts.conversationId, contactId: opts.contactId },
+        toolName: "get_order",
+        args: { order_id: (opts.args as any).order_id },
+        credentials: fresh,
+        config: conn.config,
+      });
+      ownedOrder = guard.wooOrderOwned(guardIdentity, order);
+    } catch {
+      ownedOrder = false;
+    }
+    if (!ownedOrder) {
+      await guard.recordSecurityDenial({
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        channelSenderId: guardIdentity.channelSenderId,
+        toolName,
+        reason: "write_order_not_owned",
+        args: opts.args as Record<string, any>,
+      });
+      return {
+        ok: false,
+        reason:
+          "access_denied_cross_customer: this order could not be confirmed as the customer's own, so nothing was changed. " +
+          "Do NOT reveal anything about it. Offer identity verification or a human agent.",
+      };
+    }
+  }
+
   const runExecute = (creds: Record<string, any>) =>
     withAdapterTimeout(
       slug,
@@ -981,7 +1018,7 @@ export async function executeAdapterTool(opts: {
     // requester's own entries.
     if (guardIdentity && opts.conversationId) {
       const guard = await import("./customer-access-guard");
-      const post = guard.checkResultAllowed(guardIdentity, toolName, result);
+      const post = guard.checkResultAllowed(guardIdentity, toolName, result, slug === "woocommerce" ? "woocommerce" : "shopify");
       if (!post.allowed) {
         await guard.recordSecurityDenial({
           tenantId: opts.tenantId,
