@@ -28,7 +28,7 @@ vi.mock("@chatcenter/shared", () => ({
   assertPublicUrl: vi.fn(async () => {}),
 }));
 
-import { executeAdapterTool } from "../services/connectors/integration-framework";
+import { executeAdapterTool, __resetRateLimits } from "../services/connectors/integration-framework";
 import { checkResultAllowed, resolveRequesterIdentity, wooOrderOwned } from "../services/connectors/customer-access-guard";
 import "../services/connectors/woocommerce.adapter";
 
@@ -49,6 +49,7 @@ function store(byPath: Record<string, unknown>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  __resetRateLimits();
   prismaMock.conversation.findFirst.mockResolvedValue({ customerExternalId: DANA_WA });
   prismaMock.contact.findFirst.mockResolvedValue({ phone: "+972541113421", email: null, metadata: {} });
   prismaMock.customerVerification.findMany.mockResolvedValue([]);
@@ -121,6 +122,32 @@ describe("the ownership rules", () => {
   it("the internal channel (an agent in the inbox) is not limited to one customer", async () => {
     store({ "/orders/1002": NOA_ORDER });
     const r = await executeAdapterTool({ tenantId: "t1", toolFunctionName: "woocommerce.get_order", args: { order_id: "1002" }, accessScope: "internal" });
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("★ the new order-scoped tools are owner-checked first (2026-10-13)", () => {
+  for (const [tool, args] of [
+    ["list_refunds", { order_id: "1002" }],
+    ["list_order_notes", { order_id: "1002" }],
+    ["get_shipment_tracking", { order_id: "1002" }],
+    ["create_refund", { order_id: "1002", amount: "10" }],
+    ["cancel_order", { order_id: "1002" }],
+    ["add_order_note", { order_id: "1002", note: "x" }],
+    ["update_shipping_address", { order_id: "1002", address_1: "a", city: "b" }],
+  ] as const) {
+    it(`${tool} on someone else's order: refused after the ownership read only`, async () => {
+      store({ "/orders/1002": NOA_ORDER });
+      const r = await run(tool, args as any);
+      expect(r.ok).toBe(false);
+      expect((r as any).reason).toContain("access_denied_cross_customer");
+      expect(calls.map((c) => `${c.method} ${new URL(c.url).pathname.split("/v3")[1]}`)).toEqual(["GET /orders/1002"]);
+    });
+  }
+
+  it("refunds of the requester's own order are returned", async () => {
+    store({ "/orders/1001": DANA_ORDER, "/orders/1001/refunds": [{ id: 1, amount: "10.00" }] });
+    const r = await run("list_refunds", { order_id: "1001" });
     expect(r.ok).toBe(true);
   });
 });

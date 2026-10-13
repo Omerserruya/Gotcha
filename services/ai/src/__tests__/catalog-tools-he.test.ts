@@ -86,7 +86,7 @@ describe("★ the Hebrew itself keeps the house rules", () => {
 
   it("every one of the catalogue's actions, name and description", () => {
     const entries = Object.entries(CATALOG_TOOL_HE);
-    expect(entries.length).toBe(156); // +3 Shopify (get_shop, complementary_products, get_product_images), 2026-10-13
+    expect(entries.length).toBe(171); // +3 Shopify, +15 WooCommerce (2026-10-13)
     const violations = entries.flatMap(([k, v]) => [...hebrewHouseRuleViolations(`${k} name`, v.name), ...hebrewHouseRuleViolations(`${k} description`, v.description)]);
     expect(violations).toEqual([]);
   });

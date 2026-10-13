@@ -977,11 +977,13 @@ export async function executeAdapterTool(opts: {
     return { ok: false, failure: "errored", reason };
   }
 
-  // A WooCommerce WRITE on an order, in a customer conversation: the order is
-  // fetched and must belong to the requester BEFORE anything changes
-  // (2026-10-13). The post-flight check only sees the result of a write that
-  // already happened, and a tool can now be set to run without approval.
-  if (slug === "woocommerce" && guardIdentity && opts.conversationId && toolDef.category !== "READ" && (opts.args as any)?.order_id != null) {
+  // A WooCommerce tool that names an order, in a customer conversation: the
+  // order is fetched and must belong to the requester BEFORE the tool runs
+  // (2026-10-13). For a write, the post-flight check would only see a change
+  // that already happened (and a tool can now run without approval); for a
+  // read of refunds, notes or tracking, the result carries no owner fields to
+  // check. get_order itself is checked on its own result.
+  if (slug === "woocommerce" && guardIdentity && opts.conversationId && toolName !== "get_order" && (opts.args as any)?.order_id != null) {
     const guard = await import("./customer-access-guard");
     let ownedOrder = false;
     try {

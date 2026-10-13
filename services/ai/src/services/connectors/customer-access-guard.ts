@@ -53,7 +53,7 @@ export const PROTECTED_SHOPIFY_TOOLS = new Set([
 export const PROTECTED_WOO_TOOLS = new Set([
   "get_order", "list_orders", "get_customer", "search_customers", "update_order_status",
   "list_order_notes", "add_order_note", "list_refunds", "create_refund", "cancel_order",
-  "update_shipping_address", "update_customer", "orders_by_customer", "get_shipment_tracking",
+  "update_shipping_address", "update_customer", "list_customer_orders", "get_shipment_tracking",
 ]);
 
 export type GuardedProvider = "shopify" | "woocommerce";

@@ -114,7 +114,7 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: "woocommerce.create_coupon",
-    description: "Create a percentage-off discount coupon.",
+    description: "Create a discount coupon: a percentage off, or a fixed amount off the cart.",
     whenToUse: "Customer is being offered a documented discount. Approval is handled by the system: calling this tool is what RAISES the approval, so call it whenever the customer's request warrants it. Never wait for approval before calling, and never hand the conversation to a human merely because approval is needed.",
     whenNotToUse: "Speculative or unconfirmed discount offers.",
     category: "WRITE",
@@ -124,12 +124,186 @@ const TOOLS: ToolDefinition[] = [
       type: "object",
       properties: {
         code: { type: "string", description: "Coupon code customers will type." },
-        amount: { type: "string", description: "Percentage (e.g. '10' for 10%)." },
+        amount: { type: "string", description: "Percentage ('10' = 10%), or a fixed amount in the store's currency when discount_type is fixed_cart." },
+        discount_type: { type: "string", enum: ["percent", "fixed_cart"], description: "percent (default) or a fixed amount off the cart." },
         usage_limit: { type: "number", description: "Max redemptions. Default 1." },
         expires_iso: { type: "string", description: "ISO8601 expiry date." },
       },
       required: ["code", "amount"],
     },
+  },
+  // ── Added 2026-10-13 (Omer: "everything that's missing") ──────────────
+  {
+    name: "woocommerce.list_order_notes",
+    description: "The notes on an order: what the store and the customer wrote, and system notes.",
+    whenToUse: "The customer asks what happened with their order, or you need the store's notes on it.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: { type: "object", properties: { order_id: { type: "string" } }, required: ["order_id"] },
+  },
+  {
+    name: "woocommerce.add_order_note",
+    description: "Add a note to an order. A customer-visible note is emailed to the customer by WooCommerce.",
+    whenToUse: "Something about the order should be recorded for the store, or told to the customer in writing.",
+    category: "WRITE",
+    riskLevel: "MEDIUM",
+    sideEffects: "Adds a note to the order; a customer note is emailed to the customer.",
+    parameters: {
+      type: "object",
+      properties: {
+        order_id: { type: "string" },
+        note: { type: "string" },
+        customer_visible: { type: "boolean", description: "true = the customer sees it (and gets an email). Default false." },
+      },
+      required: ["order_id", "note"],
+    },
+  },
+  {
+    name: "woocommerce.list_refunds",
+    description: "The refunds already made on an order, with amounts and reasons.",
+    whenToUse: "The customer asks whether, or how much, they were refunded.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: { type: "object", properties: { order_id: { type: "string" } }, required: ["order_id"] },
+  },
+  {
+    name: "woocommerce.create_refund",
+    description: "Refund an order, fully or partly, through the store's payment gateway.",
+    whenToUse: "A refund the store's policy allows has been agreed. Approval is handled by the system: calling this tool is what raises it.",
+    whenNotToUse: "The amount or the order is not confirmed with the customer.",
+    category: "WRITE",
+    riskLevel: "HIGH",
+    sideEffects: "Moves money back to the customer through the payment gateway and records a refund on the order.",
+    parameters: {
+      type: "object",
+      properties: {
+        order_id: { type: "string" },
+        amount: { type: "string", description: "Amount to refund in the order's currency, e.g. '49.90'." },
+        reason: { type: "string" },
+      },
+      required: ["order_id", "amount"],
+    },
+  },
+  {
+    name: "woocommerce.cancel_order",
+    description: "Cancel an order that has not been fulfilled.",
+    whenToUse: "The customer asks to cancel and the order can still be cancelled. Approval is handled by the system.",
+    whenNotToUse: "The order already shipped or completed: offer a return or a refund instead.",
+    category: "WRITE",
+    riskLevel: "HIGH",
+    sideEffects: "Sets the order to cancelled; stock is restored and the customer may be emailed.",
+    parameters: {
+      type: "object",
+      properties: { order_id: { type: "string" }, note: { type: "string", description: "Optional customer-visible note." } },
+      required: ["order_id"],
+    },
+  },
+  {
+    name: "woocommerce.update_shipping_address",
+    description: "Change the shipping address of an order that has not shipped.",
+    whenToUse: "The customer gives a corrected delivery address before the order ships.",
+    category: "WRITE",
+    riskLevel: "MEDIUM",
+    sideEffects: "Changes where the order is delivered.",
+    parameters: {
+      type: "object",
+      properties: {
+        order_id: { type: "string" },
+        address_1: { type: "string" }, address_2: { type: "string" }, city: { type: "string" },
+        postcode: { type: "string" }, country: { type: "string" }, state: { type: "string" },
+        first_name: { type: "string" }, last_name: { type: "string" }, phone: { type: "string" },
+      },
+      required: ["order_id", "address_1", "city"],
+    },
+  },
+  {
+    name: "woocommerce.update_customer",
+    description: "Update a customer's name, email or phone.",
+    whenToUse: "The customer asks to correct their details.",
+    category: "WRITE",
+    riskLevel: "MEDIUM",
+    sideEffects: "Changes the customer's record in the store.",
+    parameters: {
+      type: "object",
+      properties: {
+        customer_id: { type: "string" },
+        first_name: { type: "string" }, last_name: { type: "string" }, email: { type: "string" }, phone: { type: "string" },
+      },
+      required: ["customer_id"],
+    },
+  },
+  {
+    name: "woocommerce.create_customer",
+    description: "Create a customer account in the store.",
+    whenToUse: "A new customer asks to be registered and gave at least an email.",
+    category: "WRITE",
+    riskLevel: "MEDIUM",
+    sideEffects: "Creates a customer account (WooCommerce may email them).",
+    parameters: {
+      type: "object",
+      properties: { email: { type: "string" }, first_name: { type: "string" }, last_name: { type: "string" }, phone: { type: "string" } },
+      required: ["email"],
+    },
+  },
+  {
+    name: "woocommerce.get_product",
+    description: "One product with its price and stock (quantity and in-stock status).",
+    whenToUse: "The customer asks about a specific product, its price or whether it is in stock.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: { type: "object", properties: { product_id: { type: "string" } }, required: ["product_id"] },
+  },
+  {
+    name: "woocommerce.list_product_variations",
+    description: "The variations of a product (size, color...) with price and stock for each.",
+    whenToUse: "The customer asks which sizes or colors are available, or in stock.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: { type: "object", properties: { product_id: { type: "string" }, per_page: { type: "number" } }, required: ["product_id"] },
+  },
+  {
+    name: "woocommerce.list_coupons",
+    description: "The store's coupons.",
+    whenToUse: "You need to see which coupons exist.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: { type: "object", properties: { per_page: { type: "number" } } },
+  },
+  {
+    name: "woocommerce.get_coupon",
+    description: "Check a coupon code: whether it exists and is still valid (expiry, usage left), and what it gives.",
+    whenToUse: "The customer asks whether a coupon code works.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: { type: "object", properties: { code: { type: "string" } }, required: ["code"] },
+  },
+  {
+    name: "woocommerce.disable_coupon",
+    description: "Stop a coupon from being used.",
+    whenToUse: "The store asks to withdraw a coupon.",
+    category: "WRITE",
+    riskLevel: "MEDIUM",
+    sideEffects: "The coupon can no longer be applied.",
+    parameters: { type: "object", properties: { coupon_id: { type: "string" }, code: { type: "string" } } },
+  },
+  {
+    name: "woocommerce.list_customer_orders",
+    description: "A customer's orders, newest first.",
+    whenToUse: "The customer asks about their orders without an order number.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: {
+      type: "object",
+      properties: { customer_id: { type: "string" }, email: { type: "string" }, per_page: { type: "number" } },
+    },
+  },
+  {
+    name: "woocommerce.get_shipment_tracking",
+    description: "Tracking numbers and links for an order (needs the WooCommerce Shipment Tracking extension).",
+    whenToUse: "The customer asks where their package is.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: { type: "object", properties: { order_id: { type: "string" } }, required: ["order_id"] },
   },
 ];
 
@@ -280,13 +454,130 @@ const WooCommerceAdapter: ProviderAdapter = {
       case "create_coupon": {
         const body: any = {
           code: String(args.code),
-          discount_type: "percent",
+          discount_type: args.discount_type === "fixed_cart" ? "fixed_cart" : "percent",
           amount: String(args.amount),
           usage_limit: Number(args.usage_limit ?? 1),
           individual_use: true,
         };
         if (args.expires_iso) body.date_expires = String(args.expires_iso);
         return await wooRequest(auth, "POST", `${base}/coupons`, body);
+      }
+      case "list_order_notes":
+        return await wooRequest(auth, "GET", `${base}/orders/${encodeURIComponent(String(args.order_id))}/notes`);
+      case "add_order_note":
+        return await wooRequest(auth, "POST", `${base}/orders/${encodeURIComponent(String(args.order_id))}/notes`, {
+          note: String(args.note),
+          customer_note: args.customer_visible === true,
+        });
+      case "list_refunds":
+        return await wooRequest(auth, "GET", `${base}/orders/${encodeURIComponent(String(args.order_id))}/refunds`);
+      case "create_refund": {
+        const amount = String(args.amount ?? "").trim();
+        if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) throw new Error("invalid_refund_amount");
+        // api_refund: through the payment gateway, so money actually moves
+        // (false would only record a manual refund in WooCommerce).
+        return await wooRequest(auth, "POST", `${base}/orders/${encodeURIComponent(String(args.order_id))}/refunds`, {
+          amount,
+          reason: args.reason ? String(args.reason) : undefined,
+          api_refund: true,
+        });
+      }
+      case "cancel_order": {
+        const id = encodeURIComponent(String(args.order_id));
+        const current: any = await wooRequest(auth, "GET", `${base}/orders/${id}`);
+        if (current && ["completed", "cancelled", "refunded"].includes(String(current.status))) {
+          throw new Error(`order_not_cancellable:${current.status}`);
+        }
+        const order = await wooRequest(auth, "PUT", `${base}/orders/${id}`, { status: "cancelled" });
+        if (args.note) {
+          await wooRequest(auth, "POST", `${base}/orders/${id}/notes`, { note: String(args.note), customer_note: true });
+        }
+        return order;
+      }
+      case "update_shipping_address": {
+        const id = encodeURIComponent(String(args.order_id));
+        const current: any = await wooRequest(auth, "GET", `${base}/orders/${id}`);
+        if (current && ["completed", "cancelled", "refunded"].includes(String(current.status))) {
+          throw new Error(`order_already_${current.status}`);
+        }
+        const shipping: Record<string, string> = {};
+        for (const k of ["first_name", "last_name", "address_1", "address_2", "city", "postcode", "country", "state", "phone"]) {
+          if (args[k] != null && String(args[k]).trim()) shipping[k] = String(args[k]).trim();
+        }
+        return await wooRequest(auth, "PUT", `${base}/orders/${id}`, { shipping });
+      }
+      case "update_customer": {
+        const body: any = {};
+        if (args.first_name) body.first_name = String(args.first_name);
+        if (args.last_name) body.last_name = String(args.last_name);
+        if (args.email) body.email = String(args.email);
+        if (args.phone) body.billing = { phone: String(args.phone) };
+        if (!Object.keys(body).length) throw new Error("nothing_to_update");
+        return await wooRequest(auth, "PUT", `${base}/customers/${encodeURIComponent(String(args.customer_id))}`, body);
+      }
+      case "create_customer": {
+        const body: any = { email: String(args.email) };
+        if (args.first_name) body.first_name = String(args.first_name);
+        if (args.last_name) body.last_name = String(args.last_name);
+        if (args.phone) body.billing = { phone: String(args.phone), email: String(args.email) };
+        return await wooRequest(auth, "POST", `${base}/customers`, body);
+      }
+      case "get_product":
+        return await wooRequest(auth, "GET", `${base}/products/${encodeURIComponent(String(args.product_id))}`);
+      case "list_product_variations": {
+        const per = Math.min(100, Number(args.per_page ?? 50));
+        return await wooRequest(auth, "GET", `${base}/products/${encodeURIComponent(String(args.product_id))}/variations?per_page=${per}`);
+      }
+      case "list_coupons": {
+        const per = Math.min(100, Number(args.per_page ?? 20));
+        return await wooRequest(auth, "GET", `${base}/coupons?per_page=${per}`);
+      }
+      case "get_coupon": {
+        const list: any = await wooRequest(auth, "GET", `${base}/coupons?code=${encodeURIComponent(String(args.code))}`);
+        const c = Array.isArray(list) ? list[0] : null;
+        if (!c) return { code: String(args.code), exists: false, valid: false, reason: "not_found" };
+        const expired = !!c.date_expires_gmt && Date.parse(`${c.date_expires_gmt}Z`) < Date.now();
+        const usedUp = c.usage_limit != null && Number(c.usage_count ?? 0) >= Number(c.usage_limit);
+        const active = (c.status ?? "publish") === "publish";
+        return {
+          code: c.code, exists: true,
+          valid: active && !expired && !usedUp,
+          reason: !active ? "disabled" : expired ? "expired" : usedUp ? "used_up" : null,
+          discount_type: c.discount_type, amount: c.amount,
+          expires: c.date_expires ?? null, usage_count: c.usage_count ?? 0, usage_limit: c.usage_limit ?? null,
+          minimum_amount: c.minimum_amount ?? null,
+        };
+      }
+      case "disable_coupon": {
+        let id = args.coupon_id ? String(args.coupon_id) : null;
+        if (!id && args.code) {
+          const list: any = await wooRequest(auth, "GET", `${base}/coupons?code=${encodeURIComponent(String(args.code))}`);
+          id = Array.isArray(list) && list[0] ? String(list[0].id) : null;
+        }
+        if (!id) throw new Error("coupon_not_found");
+        // Draft = cannot be applied, and can be published again (not deleted).
+        return await wooRequest(auth, "PUT", `${base}/coupons/${encodeURIComponent(id)}`, { status: "draft" });
+      }
+      case "list_customer_orders": {
+        const params = new URLSearchParams();
+        params.set("per_page", String(Math.min(100, Number(args.per_page ?? 10))));
+        params.set("orderby", "date");
+        params.set("order", "desc");
+        if (args.customer_id) params.set("customer", String(args.customer_id));
+        else if (args.email) params.set("search", String(args.email));
+        else throw new Error("customer_id_or_email_required");
+        return await wooRequest(auth, "GET", `${base}/orders?${params}`);
+      }
+      case "get_shipment_tracking": {
+        try {
+          return await wooRequest(auth, "GET", `${base}/orders/${encodeURIComponent(String(args.order_id))}/shipment-trackings`);
+        } catch (err: any) {
+          // No Shipment Tracking extension on the store: say so, do not fail.
+          if (/woocommerce_404/.test(String(err?.message))) {
+            return { supported: false, reason: "The store does not have the WooCommerce Shipment Tracking extension, so no tracking is available." };
+          }
+          throw err;
+        }
       }
       default:
         throw new Error(`unknown_woocommerce_tool:${toolName}`);
