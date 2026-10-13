@@ -45,6 +45,27 @@ export const PROTECTED_SHOPIFY_TOOLS = new Set([
 ]);
 
 /**
+ * WooCommerce tools on customer or order data (2026-10-13). Before this the
+ * guard ran for Shopify only, so on a Woo store a customer in chat could ask
+ * for another customer's order by number and get it. Store-scoped tools
+ * (products, coupons) stay unguarded.
+ */
+export const PROTECTED_WOO_TOOLS = new Set([
+  "get_order", "list_orders", "get_customer", "search_customers", "update_order_status",
+  "list_order_notes", "add_order_note", "list_refunds", "create_refund", "cancel_order",
+  "update_shipping_address", "update_customer", "orders_by_customer", "get_shipment_tracking",
+]);
+
+export type GuardedProvider = "shopify" | "woocommerce";
+
+/** The protected set for a provider, or null when the provider is not guarded. */
+export function protectedToolsFor(provider: string): Set<string> | null {
+  if (provider === "shopify") return PROTECTED_SHOPIFY_TOOLS;
+  if (provider === "woocommerce") return PROTECTED_WOO_TOOLS;
+  return null;
+}
+
+/**
  * Tools that act on the REQUESTER'S OWN record, and no one else's.
  *
  * These carry no customer selector in their schema at all. The difference from
@@ -305,6 +326,30 @@ export async function rememberShopifyCustomer(
   }
 }
 
+/**
+ * WooCommerce keeps an order's owner in billing/shipping, and a customer's in
+ * email + billing. Its customer ids are never trusted as proof here: the
+ * identity's customer ids are Shopify's, and a guest order has customer_id 0.
+ */
+function wooOwnerMatches(identity: RequesterIdentity, obj: Record<string, any>): boolean {
+  const phones = [obj.billing?.phone, obj.shipping?.phone, obj.phone];
+  const emails = [obj.billing?.email, obj.email];
+  return phones.some((p) => ownsPhone(identity, p)) || emails.some((e) => ownsEmail(identity, e));
+}
+
+/** For a WRITE: the order must positively match the requester (no owner fields is not enough). */
+export function wooOrderOwned(identity: RequesterIdentity, order: unknown): boolean {
+  return !!order && typeof order === "object" && !Array.isArray(order) && wooOwnerMatches(identity, order as Record<string, any>);
+}
+
+function wooLooksCustomerScoped(obj: Record<string, any>): boolean {
+  return obj.billing !== undefined || obj.email !== undefined || obj.customer_id !== undefined || obj.shipping !== undefined;
+}
+
+function wooHasOwnerFields(obj: Record<string, any>): boolean {
+  return obj.billing?.email != null || obj.billing?.phone != null || obj.email != null || obj.shipping?.phone != null;
+}
+
 /** Extract owner identifiers from a Shopify order/customer-shaped object. */
 function ownerMatches(identity: RequesterIdentity, obj: Record<string, any>): boolean {
   const phones = [obj.phone, obj.customer?.phone, obj.customer?.default_address?.phone,
@@ -335,8 +380,24 @@ export function checkResultAllowed(
   identity: RequesterIdentity,
   toolName: string,
   result: unknown,
+  provider: GuardedProvider = "shopify",
 ): { allowed: true; result: unknown } | { allowed: false; reason: string } {
   if (result == null || typeof result !== "object") return { allowed: true, result };
+
+  if (provider === "woocommerce") {
+    if (Array.isArray(result)) {
+      const scoped = result.filter((x) => x && typeof x === "object" && wooLooksCustomerScoped(x));
+      if (!scoped.length) return { allowed: true, result };
+      const owned = result.filter((x) => !(x && typeof x === "object" && wooLooksCustomerScoped(x)) || wooOwnerMatches(identity, x));
+      if (!owned.length) return { allowed: false, reason: `result_not_owned:${toolName}` };
+      return { allowed: true, result: owned };
+    }
+    const obj = result as Record<string, any>;
+    if (wooLooksCustomerScoped(obj) && wooHasOwnerFields(obj) && !wooOwnerMatches(identity, obj)) {
+      return { allowed: false, reason: `result_not_owned:${toolName}` };
+    }
+    return { allowed: true, result };
+  }
 
   if (Array.isArray(result)) {
     const scoped = result.filter((x) => x && typeof x === "object" && looksCustomerScoped(x));
