@@ -78,10 +78,15 @@ describe('★★ 07e - what is true of the employee, and "-" where nothing backs
     expect(screen.getByTestId('hired-answers')).toHaveTextContent(row);
   });
 
-  it('★ no watch-only mode: the row is drawn, its value "-" with the reason', async () => {
+  it('★ no watch-only mode: the row is drawn, and says so - no "-" pill', async () => {
     await show();
     expect(screen.getByTestId('hired-watch')).toHaveTextContent('Drafts first, and tells you');
-    expect(screen.getByTitle(/no watch-only mode/)).toHaveTextContent('-');
+    // The reason, said as the row's line - never a bare "-" pill at its end.
+    expect(screen.getByTestId('hired-watch-none')).toHaveTextContent(/no watch-only mode/);
+    const lone = [...screen.getByTestId('hired-watch').querySelectorAll('*')].filter(
+      (element) => element.textContent?.trim() === '-',
+    );
+    expect(lone).toEqual([]);
   });
 
   it('where it answers, and its handover rules; Change and Adjust open the employee page', async () => {

@@ -99,14 +99,6 @@
     color: var(--text-muted);
   }
 
-  .pill {
-    padding: var(--space-4) var(--space-9);
-    border-radius: 6px;
-    background-color: var(--panel-well);
-    font-size: var(--font-size-micro);
-    color: var(--text-subtle);
-  }
-
   .small {
     padding: var(--space-4) var(--space-9);
     border: var(--border-width-thin) solid var(--border-default);

@@ -102,11 +102,15 @@ export async function HiredDialog({
             <li className={styles.row} data-testid="hired-watch">
               <div className={styles.rowText}>
                 <span className={styles.rowTitle}>{t('watch')}</span>
-                <span className={styles.rowSub}>-</span>
+                {/*
+                  No watch-only mode exists, so the reason is the row's line,
+                  said - never a "-" pill at its end that looks like an action
+                  (dev, 2026-10-13).
+                */}
+                <span className={styles.rowSub} data-testid="hired-watch-none">
+                  {t('watchNone')}
+                </span>
               </div>
-              <span className={styles.pill} title={t('watchNone')}>
-                -
-              </span>
             </li>
             <li className={styles.row} data-testid="hired-answers">
               <div className={styles.rowText}>
