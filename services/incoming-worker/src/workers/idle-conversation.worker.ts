@@ -6,6 +6,8 @@ import {
   outgoingMessageQueue,
   publishEvent,
   readDurableSetting,
+  buildTemplateComponents,
+  renderTemplateText,
 } from "@chatcenter/shared";
 import { hasReplyWindow, lastInboundAtForRecipient, replyWindowFor } from "@chatcenter/shared/src/lib/reply-window";
 
@@ -217,16 +219,46 @@ async function processIdleConversations(job: Job<IdleConversationJob>): Promise<
  * logged; the close itself still happens. Free text there failed at Meta
  * (131047). An unreadable window allows the message, as before.
  */
-async function messageAllowed(conv: { tenantId: string; channel: string | null; channelAccountId: string | null; customerExternalId: string }): Promise<boolean> {
+async function windowMode(conv: { tenantId: string; channel: string | null; channelAccountId: string | null; customerExternalId: string }): Promise<"free" | "template_only" | "closed"> {
   try {
     const channel = conv.channel || "WHATSAPP";
-    if (!hasReplyWindow(channel)) return true;
+    if (!hasReplyWindow(channel)) return "free";
     const last = await lastInboundAtForRecipient({ tenantId: conv.tenantId, channel, channelAccountId: conv.channelAccountId, customerExternalId: conv.customerExternalId });
-    return replyWindowFor(channel, last).mode === "free";
+    return replyWindowFor(channel, last).mode;
   } catch (err: any) {
     console.warn(`[idle-check] reply window unreadable for ${conv.customerExternalId.slice(0, 4)}***, allowing: ${err?.message}`);
-    return true;
+    return "free";
   }
+}
+
+async function messageAllowed(conv: { tenantId: string; channel: string | null; channelAccountId: string | null; customerExternalId: string }): Promise<boolean> {
+  return (await windowMode(conv)) === "free";
+}
+
+/**
+ * The approved WhatsApp follow-up template for this number (B9, 2026-10-13):
+ * past the 24h window the idle reminder goes out as this template instead of
+ * being skipped. Its name is the "followup" role of conversation
+ * lib/required-templates.ts. This number's own first, else an unbound one,
+ * in the workspace's language when there is a choice.
+ */
+const FOLLOWUP_TEMPLATE_NAME = "gotcha_followup";
+async function followupTemplate(tenantId: string, channelAccountId: string | null) {
+  const rows = await prisma.messageTemplate.findMany({
+    where: {
+      tenantId,
+      name: FOLLOWUP_TEMPLATE_NAME,
+      status: "APPROVED",
+      isActive: true,
+      channel: "WHATSAPP" as any,
+      OR: [{ channelAccountId }, { channelAccountId: null }],
+    },
+  });
+  if (rows.length === 0) return null;
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { defaultLocale: true } }).catch(() => null);
+  const lang = String(tenant?.defaultLocale ?? "").toLowerCase().startsWith("he") ? "he" : "en";
+  const rank = (t: any) => (t.channelAccountId === channelAccountId ? 0 : 2) + (t.language === lang ? 0 : 1);
+  return [...rows].sort((a: any, b: any) => rank(a) - rank(b))[0]!;
 }
 
 /**
@@ -366,8 +398,44 @@ export async function idleAutomationForTenant(tenantId: string): Promise<{ remin
           // and marked handled for this silence so it is not retried every
           // five minutes. (An approved follow-up template will be used here
           // once the WhatsApp required templates exist.)
-          const reminderAllowed = !!(config.reminderMessage && conv.channelAccount) && (await messageAllowed(conv as any));
-          if (config.reminderMessage && conv.channelAccount && !reminderAllowed) {
+          const mode = config.reminderMessage && conv.channelAccount ? await windowMode(conv as any) : "free";
+          const reminderAllowed = !!(config.reminderMessage && conv.channelAccount) && mode === "free";
+          // Past WhatsApp's window: the approved follow-up template, if there is one.
+          const tpl = !reminderAllowed && mode === "template_only" && conv.channelAccount
+            ? await followupTemplate(tenantId, conv.channelAccountId)
+            : null;
+          if (tpl && conv.channelAccount) {
+            const values = { "1": (conv as any).customerName || "" };
+            const body = renderTemplateText(tpl as any, values);
+            const message = await prisma.message.create({
+              data: {
+                tenantId,
+                conversationId: conv.id,
+                direction: "OUTBOUND",
+                body,
+                messageType: "template",
+                senderName: conv.assignedAgent?.name || "System",
+                status: "PENDING",
+                metadata: { template: { id: tpl.id, name: tpl.name, language: tpl.language }, source: "idle_followup" },
+              },
+            });
+            await outgoingMessageQueue.add("send", {
+              tenantId,
+              conversationId: conv.id,
+              channel: conv.channelAccount.channel,
+              channelAccountId: conv.channelAccount.id,
+              recipientExternalId: conv.customerExternalId,
+              body,
+              messageType: "template",
+              senderName: conv.assignedAgent?.name || "System",
+              messageId: message.id,
+              templateName: tpl.name,
+              templateLanguage: tpl.language || "en",
+              templateComponents: buildTemplateComponents(tpl as any, values),
+            } as any, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
+            reminders++;
+            console.log(`[idle-check] Sent follow-up template ${tpl.name}/${tpl.language} for ${conv.id}`);
+          } else if (config.reminderMessage && conv.channelAccount && !reminderAllowed) {
             skippedOutsideWindow++;
             console.log(`[idle-check] Reminder skipped for ${conv.id}: outside the reply window`);
           }

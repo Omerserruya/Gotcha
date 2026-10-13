@@ -16,10 +16,21 @@ const H = vi.hoisted(() => ({
   updates: [] as any[],
   lastInbound: null as Date | null,
   lookups: [] as any[],
+  templates: [] as any[],
+  locale: "he",
 }));
 
-vi.mock("@chatcenter/shared", () => ({
+vi.mock("@chatcenter/shared", async () => {
+  const tc = await vi.importActual<any>("../../../../packages/shared/src/lib/template-components");
+  return {
+  buildTemplateComponents: tc.buildTemplateComponents,
+  renderTemplateText: tc.renderTemplateText,
   prisma: {
+    tenant: { findUnique: vi.fn(async () => ({ defaultLocale: H.locale })) },
+    messageTemplate: {
+      findMany: vi.fn(async (a: any) => H.templates.filter((t) => t.tenantId === a.where.tenantId && t.name === a.where.name && t.status === a.where.status
+        && t.isActive === a.where.isActive && a.where.OR.some((o: any) => o.channelAccountId === t.channelAccountId))),
+    },
     conversation: {
       findMany: vi.fn(async (a: any) => H.convs.filter((c) => c.tenantId === a.where.tenantId)),
       update: vi.fn(async (a: any) => { H.updates.push({ id: a.where.id, ...a.data }); return {}; }),
@@ -31,7 +42,8 @@ vi.mock("@chatcenter/shared", () => ({
   outgoingMessageQueue: { add: vi.fn(async (_n: string, d: any) => { H.queued.push(d); }) },
   publishEvent: vi.fn(async () => undefined),
   readDurableSetting: vi.fn(async (t: string, k: string) => { H.reads.push([t, k]); return H.config ? JSON.stringify(H.config) : null; }),
-}));
+  };
+});
 vi.mock("@chatcenter/shared/src/lib/reply-window", async () => {
   const actual = await vi.importActual<any>("../../../../packages/shared/src/lib/reply-window");
   return { ...actual, lastInboundAtForRecipient: vi.fn(async (a: any) => { H.lookups.push(a); return H.lastInbound; }) };
@@ -52,6 +64,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   H.reads = []; H.created = []; H.queued = []; H.updates = []; H.lookups = [];
   H.lastInbound = null;
+  H.templates = [];
+  H.locale = "he";
   H.config = { reminderEnabled: true, reminderDelayMinutes: 60, reminderMessage: "Still there?", autoCloseEnabled: true, autoCloseDelayMinutes: 48 * 60, autoCloseMessage: "Closing this chat." };
 });
 
@@ -116,5 +130,48 @@ describe("settings", () => {
     H.config = { reminderEnabled: false, autoCloseEnabled: false };
     expect(await idleAutomationForTenant("T")).toEqual({ reminders: 0, closes: 0, skippedOutsideWindow: 0 });
     expect(H.updates).toHaveLength(0);
+  });
+});
+
+describe("★ past WhatsApp's window, the approved follow-up template (B9, 2026-10-13)", () => {
+  const tpl = (over: any) => ({ id: "t", tenantId: "T", name: "gotcha_followup", status: "APPROVED", isActive: true, channel: "WHATSAPP", channelAccountId: "ca1", language: "he",
+    body: "היי {{1}}, לא שמענו ממך.", variables: [{ key: "1", sample: "דנה" }], ...over });
+
+  it("sends the template in place of the free-text reminder, with the customer's name", async () => {
+    H.convs = [conv("WHATSAPP", 2 * HOUR, { customerName: "נועה" })];
+    H.lastInbound = ago(30 * HOUR);
+    H.templates = [tpl({})];
+    const r = await idleAutomationForTenant("T");
+    expect(r).toEqual({ reminders: 1, closes: 0, skippedOutsideWindow: 0 });
+    expect(H.queued).toEqual([expect.objectContaining({
+      messageType: "template", templateName: "gotcha_followup", templateLanguage: "he", body: "היי נועה, לא שמענו ממך.",
+      templateComponents: [{ type: "body", parameters: [{ type: "text", text: "נועה" }] }],
+    })]);
+    expect(H.created[0]).toMatchObject({ messageType: "template", metadata: { source: "idle_followup", template: { id: "t", name: "gotcha_followup", language: "he" } } });
+    expect(H.updates[0]).toMatchObject({ reminderSentAt: expect.any(Date) });
+  });
+
+  it("this number's own template first, in the workspace's language", async () => {
+    H.convs = [conv("WHATSAPP", 2 * HOUR)];
+    H.lastInbound = ago(30 * HOUR);
+    H.templates = [tpl({ id: "unbound-he", channelAccountId: null }), tpl({ id: "mine-en", language: "en" }), tpl({ id: "mine-he" })];
+    await idleAutomationForTenant("T");
+    expect(H.created[0].metadata.template.id).toBe("mine-he");
+  });
+
+  it("no approved follow-up: skipped as before", async () => {
+    H.convs = [conv("WHATSAPP", 2 * HOUR)];
+    H.lastInbound = ago(30 * HOUR);
+    H.templates = [tpl({ status: "PENDING_APPROVAL" }), tpl({ id: "x", channelAccountId: "ca9" })];
+    expect(await idleAutomationForTenant("T")).toEqual({ reminders: 0, closes: 0, skippedOutsideWindow: 1 });
+    expect(H.queued).toHaveLength(0);
+  });
+
+  it("Instagram past the window: no template exists there, skipped", async () => {
+    H.convs = [conv("INSTAGRAM", 2 * HOUR)];
+    H.lastInbound = ago(30 * HOUR);
+    H.templates = [tpl({})];
+    expect((await idleAutomationForTenant("T")).skippedOutsideWindow).toBe(1);
+    expect(H.queued).toHaveLength(0);
   });
 });
