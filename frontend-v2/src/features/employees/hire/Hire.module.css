@@ -644,4 +644,47 @@
     font-weight: 600;
     color: var(--text-primary);
   }
+
+  /* H8: "Give it this" beside an integration action, and the AI-disclosure switch. */
+  .give {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-6);
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .row[data-grantable='false'] .rowName {
+    color: var(--text-subtle);
+  }
+
+  .switchRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8) var(--space-12);
+  }
+
+  /* H8c: ready-made funnels, each a card with its stages as chips. */
+  .templates {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-8);
+  }
+
+  .stages {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    margin-block-start: var(--space-6);
+  }
+
+  .stage {
+    padding: 2px var(--space-8);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-chip);
+    font-size: var(--font-size-counter);
+    color: var(--text-secondary);
+  }
 }

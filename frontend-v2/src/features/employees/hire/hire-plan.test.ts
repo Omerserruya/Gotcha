@@ -10,7 +10,9 @@ import {
   hireRequest,
   knowledgeDefault,
   stepOneDone,
-  ungranted,
+  hireGrants,
+  needsFunnel,
+  seededGrant,
   withAccess,
   writesOf,
   type HirePlan,
@@ -24,6 +26,7 @@ const tool = (provider: string | null): HireTool => ({
   providerLabel: provider,
   choices: ['ask_me'],
   current: 'ask_me',
+  grant: provider ? { grantable: true, seeded: true } : null,
 });
 
 describe('★ the plan’s systems start where the server starts a new employee', () => {
@@ -87,15 +90,6 @@ describe('★★ H5 - limits: the same as the business, or stricter', () => {
       { toolName: 'x.do_it', level: 'never' },
     ]);
   });
-
-  it('★ what hiring cannot grant: a riskier action left on, on a system it may use', () => {
-    const risky = t('ask_me', ['ask_me', 'never']);
-    const plan = emptyPlan([risky]);
-    expect(ungranted(plan, [risky])).toEqual([risky]);
-    expect(ungranted({ ...plan, choices: { [risky.toolName]: 'never' } }, [risky])).toEqual([]);
-    expect(ungranted({ ...plan, access: [] }, [risky])).toEqual([]);
-    expect(ungranted(plan, [t('do_it')])).toEqual([]);
-  });
 });
 
 describe('★★ H5 - what holds the hire, and what it sends', () => {
@@ -116,7 +110,7 @@ describe('★★ H5 - what holds the hire, and what it sends', () => {
 
   it('each block in words, none when ready', () => {
     expect(hireBlocks(ready, SOURCES)).toEqual([]);
-    expect(hireBlocks({ ...ready, job: 'sales' }, SOURCES)).toEqual(['salesPipeline']);
+    expect(hireBlocks({ ...ready, job: 'sales' }, SOURCES)).toEqual(['noFunnel']);
     expect(hireBlocks(ready, null)).toEqual(['knowledgeUnread']);
     expect(hireBlocks({ ...ready, knowledge: [] }, [SOURCES[1]!])).toEqual(['noKnowledge']);
     expect(hireBlocks({ ...ready, rules: [{ label: '', enabled: true }] }, SOURCES)).toEqual([
@@ -139,10 +133,102 @@ describe('★★ H5 - what holds the hire, and what it sends', () => {
       escalationRules: [{ label: 'vip', enabled: false }],
       integrationAccess: ['shopify'],
       knowledgeBaseIds: ['all', 'other'],
+      disclosesAi: true,
+      funnel: null,
+      grants: [],
       skillIds: ['s1'],
       levels: [],
       locale: 'he',
     });
     expect(writesOf(request)).toEqual(['draft', 'settings', 'name', 'skills', 'hired']);
+  });
+});
+
+describe('★★ H8a - what is given to it: the seed’s rule, then the plan', () => {
+  it('the seed gives an enabled action that is not high risk; nothing not set up', () => {
+    expect(seededGrant({ state: 'enabled', riskLevel: 'LOW' })).toBe(true);
+    expect(seededGrant({ state: 'enabled', riskLevel: null })).toBe(true);
+    expect(seededGrant({ state: 'enabled', riskLevel: 'HIGH' })).toBe(false);
+    expect(seededGrant({ state: 'disabled', riskLevel: 'LOW' })).toBe(false);
+    expect(seededGrant({ state: 'not_provisioned', riskLevel: 'LOW' })).toBe(false);
+  });
+
+  it('a hire starts as the seed; a built-in has no grant; one not set up starts off', () => {
+    const tools: HireTool[] = [
+      { ...tool('shop'), toolName: 'shop.a', grant: { grantable: true, seeded: true } },
+      { ...tool('shop'), toolName: 'shop.b', grant: { grantable: true, seeded: false } },
+      { ...tool('shop'), toolName: 'shop.c', grant: { grantable: false, seeded: true } },
+      tool(null),
+    ];
+    const plan = emptyPlan(tools);
+    expect(plan.grants).toEqual({ 'shop.a': true, 'shop.b': false, 'shop.c': false });
+    // Sent: every grantable action, given or not; never one not set up, never a built-in.
+    expect(hireGrants({ ...plan, grants: { ...plan.grants, 'shop.b': true } }, tools)).toEqual([
+      { toolName: 'shop.a', give: true },
+      { toolName: 'shop.b', give: true },
+    ]);
+  });
+});
+
+describe('★★ H8c - Sales follows a funnel', () => {
+  const sales: HirePlan = { ...emptyPlan([], [], { knowledge: ['all'] }), job: 'sales', name: 'N' };
+  const FUNNELS = [{ id: 'f1', name: 'B2b sales' }];
+  const TEMPLATES = [
+    {
+      id: 'saas-default',
+      name: 'Software',
+      description: 'd',
+      stages: [{ id: 'lead', label: 'Lead' }],
+    },
+  ];
+
+  it('only Sales needs one (the hire offers no sdr or recruiting)', () => {
+    expect(needsFunnel('sales')).toBe(true);
+    expect(needsFunnel('booking')).toBe(false);
+    expect(needsFunnel(null)).toBe(false);
+  });
+
+  it('each state its own block: refused, unread, none, not picked; picked holds nothing', () => {
+    expect(hireBlocks(sales, SOURCES, 'forbidden')).toEqual(['funnelsForbidden']);
+    expect(hireBlocks(sales, SOURCES, 'failed')).toEqual(['funnelsUnread']);
+    expect(hireBlocks(sales, SOURCES, [])).toEqual(['noFunnel']);
+    expect(hireBlocks(sales, SOURCES, FUNNELS)).toEqual(['pickFunnel']);
+    expect(hireBlocks({ ...sales, funnelId: 'gone' }, SOURCES, FUNNELS)).toEqual(['pickFunnel']);
+    expect(hireBlocks({ ...sales, funnelId: 'f1' }, SOURCES, FUNNELS)).toEqual([]);
+  });
+
+  it('★ the funnel is sent only with Sales, with the role, beside disclosesAi', () => {
+    const args = {
+      goal: 'g',
+      tools: [],
+      sources: SOURCES,
+      skills: [],
+      locale: 'en',
+      funnels: FUNNELS,
+      templates: TEMPLATES,
+    };
+    const request = hireRequest({ ...sales, funnelId: 'f1', disclosesAi: false }, args);
+    expect(request).toMatchObject({ role: 'sales', funnel: { id: 'f1' }, disclosesAi: false });
+    expect(writesOf(request)).not.toContain('funnel');
+    expect(hireRequest({ ...sales, job: 'booking', funnelId: 'f1' }, args).funnel).toBeNull();
+    // A template: created on the hire's "yes", a write of its own.
+    const fromTemplate = hireRequest({ ...sales, funnelTemplate: 'saas-default' }, args);
+    expect(fromTemplate.funnel).toEqual({ template: 'saas-default' });
+    expect(writesOf(fromTemplate).slice(0, 3)).toEqual(['draft', 'funnel', 'settings']);
+  });
+
+  it('★ templates: picked, nothing holds it; with no funnels, each failure said as itself', () => {
+    expect(hireBlocks(sales, SOURCES, [], TEMPLATES)).toEqual(['pickFunnel']);
+    expect(
+      hireBlocks({ ...sales, funnelTemplate: 'saas-default' }, SOURCES, [], TEMPLATES),
+    ).toEqual([]);
+    expect(hireBlocks({ ...sales, funnelTemplate: 'gone' }, SOURCES, [], TEMPLATES)).toEqual([
+      'pickFunnel',
+    ]);
+    expect(hireBlocks(sales, SOURCES, [], 'failed')).toEqual(['noFunnelTemplatesUnread']);
+    expect(hireBlocks(sales, SOURCES, 'failed', 'failed')).toEqual(['funnelsUnread']);
+    expect(hireBlocks(sales, SOURCES, [], 'forbidden')).toEqual(['funnelsForbidden']);
+    // One read failing leaves the other offered.
+    expect(hireBlocks(sales, SOURCES, 'failed', TEMPLATES)).toEqual(['pickFunnel']);
   });
 });

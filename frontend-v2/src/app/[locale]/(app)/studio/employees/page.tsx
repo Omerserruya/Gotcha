@@ -15,7 +15,8 @@ import { loadEmployeeTools } from '@/features/employees/page/load-employee-tools
 import { toolLevelRows } from '@/features/employees/page/tool-label';
 import { loadViewerId } from '@/features/roles/load-person';
 import { HiredDialog } from '@/features/employees/hired/HiredDialog';
-import type { HireTool } from '@/features/employees/hire/hire-plan';
+import { seededGrant, type HireTool } from '@/features/employees/hire/hire-plan';
+import { loadHireFunnels } from '@/features/employees/hire/load-hire-funnels';
 import { loadHireSkills } from '@/features/employees/hire/load-hire-skills';
 import { loadEmployeeKnowledge } from '@/features/employees/page/load-employee-knowledge';
 import { Link } from '@/i18n/navigation';
@@ -84,7 +85,7 @@ export default async function Page({
   // H6: whose hire draft this is - read only while hiring.
   const viewerId = hiring ? await loadViewerId() : null;
   // The detail's permissions and connected tools are the business's, read once.
-  const [employees, { capabilities, integrations }, knowledge, skills, toolWords] =
+  const [employees, { capabilities, integrations }, knowledge, skills, toolWords, funnels] =
     await Promise.all([
       loadEmployees(),
       loadCapabilities(),
@@ -95,6 +96,8 @@ export default async function Page({
       // Each action's provider and words ("WooCommerce · Get customer"), for the
       // hire flow's Limits - the tool catalogue, as Skills reads it.
       hiring ? readTools() : Promise.resolve(null),
+      // What a Sales hire may follow (H8c): the funnels, and ready-made ones. ADMIN only.
+      hiring ? loadHireFunnels() : Promise.resolve(null),
     ]);
   const wordsOf = (toolName: string) => toolWords?.find((tool) => tool.name === toolName) ?? null;
   /*
@@ -128,6 +131,14 @@ export default async function Page({
             providerLabel: words?.providerLabel ?? provider,
             choices: choicesFor(c),
             current: currentChoice(c),
+            /*
+              H8a: an integration action is given to an employee or not;
+              a built-in needs no grant. Not set up in the workspace
+              (`not_provisioned`): not grantable until it is.
+            */
+            grant: c.integration
+              ? { grantable: c.state !== 'not_provisioned', seeded: seededGrant(c) }
+              : null,
           };
         })
     : [];
@@ -247,6 +258,8 @@ export default async function Page({
           tools={hireTools}
           knowledge={knowledge}
           skills={skills}
+          funnels={funnels?.funnels ?? 'failed'}
+          templates={funnels?.templates ?? 'failed'}
           initialStep={step}
           viewerId={viewerId}
           // Every system the workspace has CONNECTED - a new employee may use

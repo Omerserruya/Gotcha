@@ -43,6 +43,7 @@ const TOOLS: readonly HireTool[] = [
     providerLabel: null,
     choices: ['do_it', 'ask_me', 'never'],
     current: 'do_it',
+    grant: null,
   },
   {
     toolName: 'shopify.process_refund',
@@ -51,8 +52,25 @@ const TOOLS: readonly HireTool[] = [
     providerLabel: 'Shopify',
     choices: ['ask_me', 'never'],
     current: 'ask_me',
+    // High risk: the seed does not give it.
+    grant: { grantable: true, seeded: false },
   },
 ];
+/* H8a: one the seed gives, and one the workspace has not set up. */
+const GET_ORDER: HireTool = {
+  ...TOOLS[1]!,
+  toolName: 'shopify.get_order',
+  label: 'Get an order',
+  choices: ['do_it', 'ask_me', 'never'],
+  current: 'do_it',
+  grant: { grantable: true, seeded: true },
+};
+const NOT_SET_UP: HireTool = {
+  ...TOOLS[1]!,
+  toolName: 'shopify.cancel_order',
+  label: 'Cancel an order',
+  grant: { grantable: false, seeded: false },
+};
 
 const sheet = (props: Partial<Parameters<typeof HireSheet>[0]> = {}) =>
   render(
@@ -77,14 +95,44 @@ describe('★ 07b - the job, where it works, its name; nothing written', () => {
     expect(screen.queryByTestId('hire-name-needed')).toBeNull();
   });
 
-  it('★ Sales says where it is chosen that it cannot be hired from here yet', async () => {
-    sheet();
+  it('★★ H8c: Sales picks the funnel it follows, by the row’s id, named readably', async () => {
+    sheet({
+      funnels: [
+        { id: 'f1', name: 'B2b sales' },
+        { id: 'f2', name: 'Wholesale' },
+      ],
+    });
+    expect(screen.queryByTestId('hire-funnels')).toBeNull();
     await userEvent.click(screen.getByTestId('hire-job-sales'));
-    expect(screen.getByTestId('hire-sales-note')).toHaveTextContent(
-      'A sales employee needs a sales pipeline',
-    );
+    expect(screen.getByTestId('hire-funnels')).toHaveTextContent('Sales funnel');
+    await userEvent.click(screen.getByTestId('hire-funnel-f2'));
+    expect(screen.getByTestId('hire-funnel-f2')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('hire-funnel-f1')).toHaveAttribute('aria-checked', 'false');
     await userEvent.click(screen.getByTestId('hire-job-booking'));
-    expect(screen.queryByTestId('hire-sales-note')).toBeNull();
+    expect(screen.queryByTestId('hire-funnels')).toBeNull();
+  });
+
+  it.each([
+    [[], 'hire-funnels-none', "There's no sales funnel in this workspace yet"],
+    ['failed', 'hire-funnels-failed', "The sales funnels couldn't be read just now."],
+    ['forbidden', 'hire-funnels-forbidden', 'Only an admin can see the sales funnels'],
+  ] as const)('★ funnels %s: said as itself, never as another', async (funnels, id, words) => {
+    sheet({ funnels });
+    await userEvent.click(screen.getByTestId('hire-job-sales'));
+    expect(screen.getByTestId(id)).toHaveTextContent(words);
+    expect(screen.queryAllByTestId(/^hire-funnels-/)).toHaveLength(1);
+  });
+
+  it('★★ H8b: "Says it\'s AI when asked" - the Profile tab’s words, on by default', async () => {
+    sheet();
+    const on = screen.getByTestId('hire-discloses');
+    expect(on).toBeChecked();
+    expect(on).toHaveAccessibleName('Transparency');
+    expect(screen.getByTestId('hire-discloses-says')).toHaveTextContent("Says it's AI when asked");
+    await userEvent.click(on);
+    expect(screen.getByTestId('hire-discloses-says')).toHaveTextContent(
+      "Doesn't bring it up, and never pretends to be a person",
+    );
   });
 
   it('★ the name’s placeholder is a person’s name, never the job’s title (Omer, 2026-10-13, H1)', async () => {
@@ -151,6 +199,7 @@ describe('★ 07b-07d corrections (measurement of aca09ea)', () => {
       providerLabel: 'WooCommerce',
       choices: ['do_it', 'ask_me', 'never'],
       current: 'ask_me',
+      grant: { grantable: true, seeded: true },
     });
     sheet({
       initialStep: 2,
@@ -513,25 +562,13 @@ describe('★★ H4 - the summary: the whole employee, each part with an Edit ba
     expect(screen.getByTestId('hire-sheet')).toHaveAttribute('data-step', to);
   });
 
-  it('★ what hiring here cannot give it is said, not dropped', async () => {
-    await atSummary();
-    expect(screen.getByTestId('hire-ungranted')).toHaveTextContent(
-      "Riskier ones, like refunds, aren't given to it from here yet",
-    );
-  });
-
-  it('…and not said when nothing needs it', async () => {
-    await atSummary({ choices: { 'shopify.process_refund': 'never' } });
-    expect(screen.queryByTestId('hire-ungranted')).toBeNull();
-  });
-
   it('★ what holds the hire, in words, and Hire waits: sales, no knowledge', async () => {
     await atSummary({ job: 'sales' }, { knowledge: [SOURCES[1]!] });
     await userEvent.click(screen.getByTestId('hire-edit-knowledge'));
     await userEvent.click(screen.getByTestId('hire-knows-faq-on'));
     await userEvent.click(screen.getByTestId('hire-continue'));
-    expect(screen.getByTestId('hire-block-salesPipeline')).toHaveTextContent(
-      'A sales employee needs a sales pipeline',
+    expect(screen.getByTestId('hire-block-noFunnel')).toHaveTextContent(
+      "There's no sales funnel yet.",
     );
     expect(screen.getByTestId('hire-block-noKnowledge')).toHaveTextContent(
       'An employee needs at least one knowledge source to be hired.',
@@ -566,6 +603,9 @@ describe('★★ H5 - "לגייס": asked first, then created', () => {
     escalationRules: [{ label: 'they ask for a person', enabled: true }],
     integrationAccess: ['shopify'],
     knowledgeBaseIds: ['faq', 'returns'],
+    disclosesAi: true,
+    funnel: null,
+    grants: [{ toolName: 'shopify.process_refund', give: false }],
     skillIds: ['s1'],
     levels: [{ toolName: 'send_message', level: 'never' }],
     locale: 'en',
@@ -613,10 +653,11 @@ describe('★★ H5 - "לגייס": asked first, then created', () => {
     hireEmployee.mockResolvedValueOnce({
       ok: false,
       id: 'd1',
-      saved: ['draft', 'settings', 'name'],
+      saved: ['draft', 'settings', 'name', 'grants'],
       failed: 'skills',
       reason: 'failed',
       levels: { saved: 0, total: 1 },
+      grants: { saved: 0, total: 0 },
     });
     await atSummary(PLAN);
     await userEvent.click(screen.getByTestId('hire-it'));
@@ -626,7 +667,7 @@ describe('★★ H5 - "לגייס": asked first, then created', () => {
       'Not hired yet. Something went wrong on our side. Try again in a moment.',
     );
     expect(screen.getByTestId('hire-failed-saved')).toHaveTextContent(
-      'the draftits job, handoff conditions, systems and knowledgeits name',
+      "the draftits job, handoff conditions, systems, knowledge and whether it says it's AIits namethe actions it is given",
     );
     expect(screen.getByTestId('hire-failed-not-saved')).toHaveTextContent(
       'its skillsits limits on actionsthe hire itself',
@@ -652,6 +693,7 @@ describe('★★ H5 - "לגייס": asked first, then created', () => {
       failed: 'draft',
       reason: 'forbidden',
       levels: { saved: 0, total: 1 },
+      grants: { saved: 0, total: 0 },
     });
     await atSummary(PLAN);
     await userEvent.click(screen.getByTestId('hire-it'));
@@ -668,5 +710,233 @@ describe('★★ H5 - "לגייס": asked first, then created', () => {
     await userEvent.click(screen.getByTestId('hire-it'));
     await userEvent.click(screen.getByTestId('hire-confirm-yes'));
     await waitFor(() => expect(hireEmployee).toHaveBeenCalledWith(REQUEST, 'd9'));
+  });
+});
+
+describe('★★ H8a - "Give it this": which integration actions are given to it', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    hireEmployee.mockReset();
+  });
+  const tools = [TOOLS[0]!, TOOLS[1]!, GET_ORDER, NOT_SET_UP];
+
+  it('starts as the seed: on where it gives, off for high risk; a built-in has no switch', () => {
+    sheet({ initialStep: 2, tools });
+    expect(screen.getByTestId('hire-give-shopify.get_order')).toBeChecked();
+    expect(screen.getByTestId('hire-give-shopify.process_refund')).not.toBeChecked();
+    expect(screen.getByTestId('hire-give-shopify.process_refund')).toHaveAccessibleName(
+      'Give it Refund an order',
+    );
+    expect(screen.queryByTestId('hire-give-send_message')).toBeNull();
+  });
+
+  it('switched: given, or taken away', async () => {
+    sheet({ initialStep: 2, tools });
+    await userEvent.click(screen.getByTestId('hire-give-shopify.process_refund'));
+    expect(screen.getByTestId('hire-give-shopify.process_refund')).toBeChecked();
+    await userEvent.click(screen.getByTestId('hire-give-shopify.get_order'));
+    expect(screen.getByTestId('hire-give-shopify.get_order')).not.toBeChecked();
+  });
+
+  it('★ not set up in the workspace: greyed, and why', () => {
+    sheet({ initialStep: 2, tools });
+    const give = screen.getByTestId('hire-give-shopify.cancel_order');
+    expect(give).toBeDisabled();
+    expect(give).not.toBeChecked();
+    expect(screen.getByTestId('hire-row-shopify.cancel_order')).toHaveAttribute(
+      'data-grantable',
+      'false',
+    );
+    expect(screen.getByTestId('hire-not-set-up-shopify.cancel_order')).toHaveTextContent(
+      'Not set up in this workspace yet',
+    );
+  });
+
+  it('★ where levels are offered, it says a level is never looser than the business’s', () => {
+    sheet({ initialStep: 2 });
+    expect(screen.getByTestId('hire-stricter')).toHaveTextContent(
+      "An employee's level is never looser than your business's, by design",
+    );
+  });
+
+  it('★★ the summary lists what it is given; Yes sends every grantable action, as switched', async () => {
+    hireEmployee.mockResolvedValue({ ok: true, id: 'e1' });
+    await atSummary(
+      { grants: { 'shopify.process_refund': true, 'shopify.get_order': false } },
+      { tools },
+    );
+    expect(screen.getByTestId('hire-sum-given')).toHaveTextContent('Shopify · Refund an order');
+    expect(screen.getByTestId('hire-sum-given')).not.toHaveTextContent('Get an order');
+    expect(screen.queryByText(/aren't given to it from here yet/)).toBeNull();
+    await userEvent.click(screen.getByTestId('hire-it'));
+    await userEvent.click(screen.getByTestId('hire-confirm-yes'));
+    await waitFor(() => expect(hireEmployee).toHaveBeenCalledTimes(1));
+    expect(hireEmployee.mock.calls[0]![0].grants).toEqual([
+      { toolName: 'shopify.process_refund', give: true },
+      { toolName: 'shopify.get_order', give: false },
+    ]);
+  });
+
+  it('★ a grant refused: said, with what was saved', async () => {
+    hireEmployee.mockResolvedValue({
+      ok: false,
+      id: 'd1',
+      saved: ['draft', 'settings', 'name'],
+      failed: 'grants',
+      reason: 'not_provisioned',
+      levels: { saved: 0, total: 0 },
+      grants: { saved: 1, total: 2 },
+    });
+    await atSummary({}, { tools });
+    await userEvent.click(screen.getByTestId('hire-it'));
+    await userEvent.click(screen.getByTestId('hire-confirm-yes'));
+    expect(await screen.findByTestId('hire-failed')).toHaveTextContent(
+      "An action it was given isn't set up in this workspace anymore.",
+    );
+    expect(screen.getByTestId('hire-failed-saved')).toHaveTextContent(
+      'the actions it is given (1 of 2)',
+    );
+    expect(screen.getByTestId('hire-failed-not-saved')).toHaveTextContent(
+      'the actions it is given',
+    );
+  });
+});
+
+describe('★★ H8 - the summary says the funnel and the transparency; Yes sends them', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    hireEmployee.mockReset();
+  });
+
+  it('Sales with its funnel: shown, nothing holds it, sent with the role', async () => {
+    hireEmployee.mockResolvedValue({ ok: true, id: 'e1' });
+    await atSummary(
+      { job: 'sales', funnelId: 'f2', disclosesAi: false },
+      { funnels: [{ id: 'f2', name: 'Wholesale' }] },
+    );
+    expect(screen.getByTestId('hire-sum-funnel')).toHaveTextContent('Wholesale');
+    expect(screen.getByTestId('hire-sum-discloses')).toHaveTextContent(
+      "Doesn't bring it up, and never pretends to be a person",
+    );
+    expect(screen.queryByTestId('hire-blocked')).toBeNull();
+    await userEvent.click(screen.getByTestId('hire-it'));
+    await userEvent.click(screen.getByTestId('hire-confirm-yes'));
+    await waitFor(() => expect(hireEmployee).toHaveBeenCalledTimes(1));
+    expect(hireEmployee.mock.calls[0]![0]).toMatchObject({
+      role: 'sales',
+      funnel: { id: 'f2' },
+      disclosesAi: false,
+    });
+  });
+
+  it.each([
+    [[{ id: 'f2', name: 'Wholesale' }], 'pickFunnel', 'Pick the sales funnel it follows'],
+    ['forbidden', 'funnelsForbidden', 'Only an admin can see the sales funnels'],
+    ['failed', 'funnelsUnread', "The sales funnels couldn't be read."],
+  ] as const)('Sales with funnels %j: held, as %s', async (funnels, block, words) => {
+    await atSummary({ job: 'sales' }, { funnels });
+    expect(screen.getByTestId(`hire-block-${block}`)).toHaveTextContent(words);
+    expect(screen.getByTestId('hire-it')).toBeDisabled();
+  });
+});
+
+describe('★★ H8c - "Start from a template": a ready-made funnel, created only on Yes', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    hireEmployee.mockReset();
+  });
+  const TEMPLATES = [
+    {
+      id: 'saas-default',
+      name: 'Software and digital products',
+      description: 'From a new lead, through a demo, to closing',
+      stages: [
+        { id: 'lead', label: 'New lead' },
+        { id: 'demo', label: 'Demo booked' },
+      ],
+    },
+    {
+      id: 'service-default',
+      name: 'Services and quotes',
+      description: 'From an inquiry, through a quote, to a booking',
+      stages: [{ id: 'inquiry', label: 'Inquiry' }],
+    },
+  ];
+
+  it('each card: its name, description and stages; picking one unpicks a funnel', async () => {
+    sheet({ funnels: [{ id: 'f1', name: 'B2b sales' }], templates: TEMPLATES });
+    await userEvent.click(screen.getByTestId('hire-job-sales'));
+    const card = screen.getByTestId('hire-template-saas-default');
+    expect(card).toHaveTextContent(
+      'Software and digital productsFrom a new lead, through a demo, to closingNew leadDemo booked',
+    );
+    await userEvent.click(screen.getByTestId('hire-funnel-f1'));
+    await userEvent.click(card);
+    expect(card).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('hire-funnel-f1')).toHaveAttribute('aria-checked', 'false');
+    await userEvent.click(screen.getByTestId('hire-funnel-f1'));
+    expect(card).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('no funnels yet: the templates are the way, and nothing is created on choosing', async () => {
+    sheet({ funnels: [], templates: TEMPLATES });
+    await userEvent.click(screen.getByTestId('hire-job-sales'));
+    expect(screen.getByTestId('hire-funnels-none')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('hire-template-service-default'));
+    expect(hireEmployee).not.toHaveBeenCalled();
+  });
+
+  it('templates unread: said as itself', async () => {
+    sheet({ funnels: [], templates: 'failed' });
+    await userEvent.click(screen.getByTestId('hire-job-sales'));
+    expect(screen.getByTestId('hire-templates-failed')).toHaveTextContent(
+      "The ready-made funnels couldn't be read just now.",
+    );
+  });
+
+  it('★★ the summary says it is created when you hire; Yes sends the template', async () => {
+    hireEmployee.mockResolvedValue({ ok: true, id: 'e1' });
+    await atSummary(
+      { job: 'sales', funnelTemplate: 'saas-default' },
+      { funnels: [], templates: TEMPLATES },
+    );
+    expect(screen.getByTestId('hire-sum-funnel')).toHaveTextContent(
+      'Software and digital products (created when you hire)',
+    );
+    expect(screen.queryByTestId('hire-blocked')).toBeNull();
+    await userEvent.click(screen.getByTestId('hire-it'));
+    await userEvent.click(screen.getByTestId('hire-confirm-yes'));
+    await waitFor(() => expect(hireEmployee).toHaveBeenCalledTimes(1));
+    expect(hireEmployee.mock.calls[0]![0].funnel).toEqual({ template: 'saas-default' });
+  });
+
+  it('no funnels and the templates unread: held, saying which', async () => {
+    await atSummary({ job: 'sales' }, { funnels: [], templates: 'failed' });
+    expect(screen.getByTestId('hire-block-noFunnelTemplatesUnread')).toHaveTextContent(
+      "There's no sales funnel yet, and the ready-made ones couldn't be read.",
+    );
+    expect(screen.getByTestId('hire-it')).toBeDisabled();
+  });
+
+  it('a template that failed on Yes: said, with what was saved', async () => {
+    hireEmployee.mockResolvedValue({
+      ok: false,
+      id: 'd1',
+      saved: ['draft'],
+      failed: 'funnel',
+      reason: 'unknown_template',
+      levels: { saved: 0, total: 0 },
+      grants: { saved: 0, total: 0 },
+    });
+    await atSummary(
+      { job: 'sales', funnelTemplate: 'saas-default' },
+      { funnels: [], templates: TEMPLATES },
+    );
+    await userEvent.click(screen.getByTestId('hire-it'));
+    await userEvent.click(screen.getByTestId('hire-confirm-yes'));
+    expect(await screen.findByTestId('hire-failed')).toHaveTextContent(
+      "That ready-made funnel isn't offered anymore.",
+    );
+    expect(screen.getByTestId('hire-failed-not-saved')).toHaveTextContent('the sales funnel');
   });
 });

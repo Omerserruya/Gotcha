@@ -42,7 +42,11 @@ export function hasEntries(plan: HirePlan, fresh: HirePlan): boolean {
     JSON.stringify([...plan.access].sort()) !== JSON.stringify([...fresh.access].sort()) ||
     JSON.stringify(plan.rules) !== JSON.stringify(fresh.rules) ||
     JSON.stringify([...plan.knowledge].sort()) !== JSON.stringify([...fresh.knowledge].sort()) ||
-    plan.skills.length > 0
+    plan.skills.length > 0 ||
+    JSON.stringify(plan.grants) !== JSON.stringify(fresh.grants) ||
+    plan.disclosesAi !== fresh.disclosesAi ||
+    plan.funnelId !== fresh.funnelId ||
+    plan.funnelTemplate !== fresh.funnelTemplate
   );
 }
 
@@ -108,6 +112,20 @@ export function readDraft(
     // Ids as stored; the sheet keeps only those still offered when it sends.
     knowledge: list(plan.knowledge) ?? fresh.knowledge,
     skills: [...new Set(list(plan.skills) ?? [])],
+    // A grant is kept only for an action still grantable; the rest start where a hire starts.
+    grants: Object.fromEntries(
+      Object.entries(fresh.grants).map(([toolName, start]) => {
+        const kept = (plan.grants as Record<string, unknown> | undefined)?.[toolName];
+        const grantable = tools.find((tool) => tool.toolName === toolName)?.grant?.grantable;
+        return [toolName, grantable && typeof kept === 'boolean' ? kept : start];
+      }),
+    ),
+    disclosesAi: typeof plan.disclosesAi === 'boolean' ? plan.disclosesAi : fresh.disclosesAi,
+    funnelId: isString(plan.funnelId) && plan.funnelId !== '' ? plan.funnelId : null,
+    funnelTemplate:
+      isString(plan.funnelTemplate) && plan.funnelTemplate !== '' && !isString(plan.funnelId)
+        ? plan.funnelTemplate
+        : null,
   };
   if (!hasEntries(draft, fresh)) return null;
   // A later step needs step 1 done; otherwise it starts at step 1.

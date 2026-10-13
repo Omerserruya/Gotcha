@@ -6,9 +6,16 @@ import { z } from 'zod';
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { signInIfSignedOut } from '@/api/client/signed-out';
-import { builderEndpoints, employeeEndpoints, skillEndpoints } from '@/api/endpoints/registry';
+import { employeeToolsSchema } from '@/api/contracts/employees';
+import {
+  builderEndpoints,
+  employeeEndpoints,
+  funnelEndpoints,
+  skillEndpoints,
+} from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
+import { setEmployeeToolGrant } from '../page/tool-grant-actions';
 import type { HireRequest, HireResult, HireWrite } from './hire-plan';
 
 /**
@@ -26,6 +33,12 @@ import type { HireRequest, HireResult, HireWrite } from './hire-plan';
  *             would be written over it. The goal seeds the draft: a role
  *             guessed from it, every active knowledge base attached, every
  *             lower-risk action of a connected system granted.
+ *   funnel    POST /api/funnels { template } - only for a Sales hire starting
+ *             from a ready-made funnel. Never `isActive`: an active funnel
+ *             becomes the workspace's default for every conversation, and an
+ *             employee binds one by id without it. The same template again
+ *             answers the funnel already made (200, created: false), so a
+ *             retry is safe. 400 UNKNOWN_TEMPLATE.
  *   settings  PATCH /api/ai-agents/:id { status: 'DRAFT', role, goal,
  *             escalationRules, integrationAccess, knowledgeBaseIds }
  *             `status: 'DRAFT'` on purpose: a PATCH on an unfinished
@@ -35,7 +48,15 @@ import type { HireRequest, HireResult, HireWrite } from './hire-plan';
  *             the seed's guesses; `knowledgeBaseIds` replaces the seed's
  *             attach-everything with the plan's. It also clears the
  *             builder's resume pointer, so the old builder never resumes it.
+ *             It also carries `disclosesAi`, and for Sales `funnelId` WITH
+ *             `role` - apart, the route answers 422 funnel_required_for_role.
  *   name      POST /api/ai-agents/builder/:id/refinements { name }
+ *   grants    GET  /api/ai-agents/:id/tools - the draft's real `granted` per
+ *             tool, after the seed - then, only where it differs from the plan,
+ *             POST /api/ai-agents/builder/:id/tool { toolName } to give,
+ *             { toolName, attach: false } to take away (404
+ *             TOOL_NOT_PROVISIONED: not set up in the workspace) - through
+ *             the employee page's `setEmployeeToolGrant`, never a copy
  *   skills    PUT  /api/ai-agents/:id/skills [{ skillId, mode: 'watch', order }]
  *             only when skills were chosen
  *   levels    PUT  /api/ai-agents/:id/tool-levels/:toolName { level }
@@ -50,7 +71,16 @@ import type { HireRequest, HireResult, HireWrite } from './hire-plan';
  * replaces, so a repeat is harmless) instead of leaving another behind.
  */
 const startedSchema = z.object({ agentId: z.string().min(1) });
+/** The funnel row (`data`, unwrapped); only its id is used, so `created` beside it is not read. */
+const funnelRowSchema = z.object({ id: z.string().min(1) });
 const anything = z.unknown();
+
+/** A grant the shared action refused, carried to the one catch with its reason. */
+class GrantRefused extends Error {
+  constructor(readonly reason: 'not_provisioned' | 'forbidden' | 'failed') {
+    super(reason);
+  }
+}
 
 /**
  * Why it stopped. `changed`: the actions or skills moved under the plan - an
@@ -59,8 +89,11 @@ const anything = z.unknown();
  * the draft is still there. `gone`: the draft itself is (404).
  */
 function reasonOf(cause: unknown): Extract<HireResult, { ok: false }>['reason'] {
+  if (cause instanceof GrantRefused) return cause.reason;
   if (!isApiError(cause)) return 'failed';
   if (cause.status === 403) return 'forbidden';
+  if (cause.code === 'TOOL_NOT_PROVISIONED') return 'not_provisioned';
+  if (cause.code === 'UNKNOWN_TEMPLATE') return 'unknown_template';
   if (['UNKNOWN_TOOL', 'LOOSER_THAN_WORKSPACE', 'INVALID_SKILLS'].includes(cause.code ?? '')) {
     return 'changed';
   }
@@ -80,6 +113,8 @@ export async function hireEmployee(
   let id = draftId;
   let at: HireWrite = 'draft';
   let levelsSaved = 0;
+  let grantsSaved = 0;
+  let grantsTotal = 0;
   try {
     if (id === null) {
       const started = await api.post({
@@ -91,6 +126,20 @@ export async function hireEmployee(
     }
     saved.push('draft');
 
+    let funnelId: string | null = null;
+    if (request.funnel !== null && 'template' in request.funnel) {
+      at = 'funnel';
+      const row = await api.post({
+        endpoint: funnelEndpoints.create(),
+        body: { template: request.funnel.template },
+        payload: funnelRowSchema,
+      });
+      funnelId = row.id;
+      saved.push('funnel');
+    } else if (request.funnel !== null) {
+      funnelId = request.funnel.id;
+    }
+
     at = 'settings';
     await api.patch({
       endpoint: employeeEndpoints.update(id),
@@ -101,6 +150,9 @@ export async function hireEmployee(
         escalationRules: request.escalationRules,
         integrationAccess: request.integrationAccess,
         knowledgeBaseIds: request.knowledgeBaseIds,
+        disclosesAi: request.disclosesAi,
+        // With the role, in this one PATCH: apart, 422 funnel_required_for_role.
+        ...(funnelId !== null ? { funnelId } : {}),
       },
       payload: anything,
     });
@@ -113,6 +165,24 @@ export async function hireEmployee(
       payload: anything,
     });
     saved.push('name');
+
+    if (request.grants.length > 0) {
+      at = 'grants';
+      const tools = await api.get({
+        endpoint: employeeEndpoints.tools(id),
+        payload: employeeToolsSchema,
+      });
+      const granted = new Map(tools.map((tool) => [tool.toolName, tool.granted === true]));
+      const changes = request.grants.filter((g) => (granted.get(g.toolName) ?? false) !== g.give);
+      grantsTotal = changes.length;
+      for (const { toolName, give } of changes) {
+        // The employee page's own grant action (POST /builder/:id/tool), shared.
+        const result = await setEmployeeToolGrant(id, toolName, give);
+        if (!result.ok) throw new GrantRefused(result.reason);
+        grantsSaved += 1;
+      }
+      saved.push('grants');
+    }
 
     if (request.skillIds.length > 0) {
       at = 'skills';
@@ -162,6 +232,7 @@ export async function hireEmployee(
       failed: at,
       reason,
       levels: { saved: levelsSaved, total: request.levels.length },
+      grants: { saved: grantsSaved, total: grantsTotal },
     };
   }
 }

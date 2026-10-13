@@ -12,6 +12,7 @@ const TOOLS: HireTool[] = [
     providerLabel: null,
     choices: ['do_it', 'ask_me', 'never'],
     current: 'do_it',
+    grant: null,
   },
   {
     toolName: 'b.refund',
@@ -20,6 +21,7 @@ const TOOLS: HireTool[] = [
     providerLabel: 'Shop',
     choices: ['ask_me', 'never'],
     current: 'ask_me',
+    grant: { grantable: true, seeded: false },
   },
 ];
 const FRESH = emptyPlan(TOOLS, ['shop'], {
@@ -113,5 +115,42 @@ describe('★★ a stored hire is made safe before it is used', () => {
     expect(read('{not json')).toBeNull();
     expect(read({ step: 1 })).toBeNull();
     expect(readDraft(null, TOOLS, FRESH)).toBeNull();
+  });
+
+  it('★ H8: grants kept only for actions still grantable; disclosesAi and the funnel read back', () => {
+    const draft = read({
+      step: 2,
+      plan: {
+        job: 'sales',
+        name: 'N',
+        grants: { 'b.refund': true, 'a.get': true, gone: true },
+        disclosesAi: false,
+        funnelId: 'f1',
+      },
+    });
+    expect(draft!.plan.grants).toEqual({ 'b.refund': true });
+    expect(draft!.plan.disclosesAi).toBe(false);
+    expect(draft!.plan.funnelId).toBe('f1');
+    // One the workspace no longer has set up starts off, whatever was kept.
+    const unset: HireTool[] = [{ ...TOOLS[1]!, grant: { grantable: false, seeded: false } }];
+    const kept = readDraft(
+      JSON.stringify({
+        step: 2,
+        plan: { job: 'booking', name: 'N', grants: { 'b.refund': true } },
+      }),
+      unset,
+      emptyPlan(unset, []),
+    );
+    expect(kept!.plan.grants).toEqual({ 'b.refund': false });
+    const plain = read({ step: 1, plan: { name: 'N', grants: { 'b.refund': 'yes' } } });
+    expect(plain!.plan.grants).toEqual({ 'b.refund': false });
+    expect(plain!.plan.disclosesAi).toBe(true);
+    expect(plain!.plan.funnelId).toBeNull();
+    expect(plain!.plan.funnelTemplate).toBeNull();
+    const template = read({
+      step: 1,
+      plan: { job: 'sales', name: 'N', funnelTemplate: 'saas-default' },
+    });
+    expect(template!.plan.funnelTemplate).toBe('saas-default');
   });
 });

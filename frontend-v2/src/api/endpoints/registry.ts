@@ -1340,6 +1340,24 @@ export const employeeEndpoints = {
 } as const;
 
 /**
+ * Sales funnels (`services/ai/src/routes/funnel-admin.ts`), ADMIN only. `list`
+ * answers every `TenantFunnel` row: `{ id, funnelId (a slug), isActive,
+ * departmentId, stages, … }` - no name of its own. An employee binds `id`.
+ */
+export const funnelEndpoints = {
+  list: () => endpoint('/api/funnels'),
+  /**
+   * POST `{ template }` - a funnel from a ready-made one, INACTIVE unless
+   * `isActive: true` is sent (never by the hire). 201 `{ data, created: true }`,
+   * or 200 `{ data, created: false }` when made before; 400 UNKNOWN_TEMPLATE.
+   * `created` sits beside `data`: read it only with `raw: true`.
+   */
+  create: () => endpoint('/api/funnels'),
+  /** GET - `[{ id, name, description, stages: [{ id, label }] }]`, in the reader's language. */
+  templates: () => endpoint('/api/funnels/templates'),
+} as const;
+
+/**
  * The AI employee builder (`services/ai/src/routes/ai-agent-builder.ts`),
  * mounted before the employees router. The hire flow's writes (H5):
  *

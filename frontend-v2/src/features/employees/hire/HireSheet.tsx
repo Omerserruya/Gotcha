@@ -20,7 +20,8 @@ import {
   hireSkillIds,
   knowledgeDefault,
   NEW_HIRE,
-  ungranted,
+  needsFunnel,
+  chosenFunnel,
   withAccess,
   writesOf,
   HANDOVER_SUGGESTIONS,
@@ -28,6 +29,8 @@ import {
   stepOneDone,
   toolGroups,
   type HirePlan,
+  type HireFunnels,
+  type HireTemplates,
   type HireResult,
   type HireSkill,
   type HireSource,
@@ -58,8 +61,11 @@ const STEPS = [1, 2, 3, 4] as const;
  * draft is kept, and hiring again continues it. Success clears the local
  * hire and opens 07e's "Hired".
  *
- * The summary is editable by its "Edit"s, each back to its step. What the
- * plan holds that no route here can save is said there, in words.
+ * The summary is editable by its "Edit"s, each back to its step.
+ *
+ * ★ H8 (Backend 9339ca26): each integration action is given to it or not
+ * ("Give it this"), "Says it's AI when asked" is the Profile tab's switch,
+ * and a Sales hire picks the funnel it follows.
  *
  * Step 2's rows are the business's own actions as 10 reads them, with 10's
  * three answers and its ceiling ("Do it" is not offered where orders or
@@ -71,6 +77,8 @@ export function HireSheet({
   tools,
   knowledge,
   skills = null,
+  funnels = [],
+  templates = [],
   initialStep = 1,
   systems = null,
   viewerId = null,
@@ -82,6 +90,10 @@ export function HireSheet({
   readonly knowledge: readonly HireSource[] | null;
   /** The business skills it may carry; `null` when unread. */
   readonly skills?: readonly HireSkill[] | null;
+  /** The active sales funnels, or why they are not known (ADMIN only). */
+  readonly funnels?: HireFunnels;
+  /** The ready-made funnels a Sales hire may start from, or why they are not known. */
+  readonly templates?: HireTemplates;
   readonly initialStep?: Step;
   /** The systems the workspace has set up (any state); `null` when unread. */
   readonly systems?:
@@ -179,7 +191,31 @@ export function HireSheet({
   const groups = toolGroups(tools);
   const goal =
     plan.job === null ? '' : plan.job === 'custom' ? plan.goal.trim() : t(`job.${plan.job}.dayOne`);
-  const blocks = hireBlocks(plan, knowledge);
+  const blocks = hireBlocks(plan, knowledge, funnels, templates);
+  const given = tools.filter((tool) => tool.grant?.grantable && plan.grants[tool.toolName]);
+  const chosen = chosenFunnel(plan, funnels, templates);
+  const funnelName =
+    chosen === null
+      ? null
+      : 'id' in chosen
+        ? ((typeof funnels === 'string' ? null : funnels.find((f) => f.id === chosen.id)?.name) ??
+          null)
+        : t('four.fromTemplate', {
+            name:
+              (typeof templates === 'string'
+                ? null
+                : templates.find((x) => x.id === chosen.template)?.name) ?? chosen.template,
+          });
+  const requestOf = () =>
+    hireRequest(plan, {
+      goal,
+      tools,
+      sources: knowledge ?? [],
+      skills,
+      locale,
+      funnels,
+      templates,
+    });
   const connected = knowledge ? hireKnowledgeIds(plan, knowledge) : [];
   const carried = skills ? hireSkillIds(plan, skills) : plan.skills;
   const systemName = (slug: string) =>
@@ -193,10 +229,7 @@ export function HireSheet({
   const hire = () =>
     startHiring(async () => {
       setFailed(null);
-      const result = await hireEmployee(
-        hireRequest(plan, { goal, tools, sources: knowledge ?? [], skills, locale }),
-        agentId,
-      );
+      const result = await hireEmployee(requestOf(), agentId);
       setConfirming(false);
       if (!result.ok) {
         setAgentId(result.id);
@@ -356,12 +389,113 @@ export function HireSheet({
                     {t('one.nameNeeded')}
                   </p>
                 ) : null}
-                {/* Said where it is chosen, not first at the summary (H5). */}
-                {plan.job === 'sales' ? (
-                  <p className={styles.notice} data-testid="hire-sales-note">
-                    {t('one.salesNote')}
-                  </p>
+                {/*
+                  ★ H8c: a Sales employee follows a funnel - the role and the
+                  funnel go together in the one PATCH. Its row's id is bound,
+                  never the slug. None, unread and refused are each said.
+                */}
+                {needsFunnel(plan.job) ? (
+                  <section className={styles.block} data-testid="hire-funnels">
+                    <h4 className={styles.blockTitle}>{t('one.funnel')}</h4>
+                    <p className={styles.sub}>{t('one.funnelLead')}</p>
+                    {funnels === 'forbidden' || templates === 'forbidden' ? (
+                      <p className={styles.notice} data-testid="hire-funnels-forbidden">
+                        {t('one.funnelForbidden')}
+                      </p>
+                    ) : null}
+                    {funnels === 'failed' ? (
+                      <p className={styles.notice} data-testid="hire-funnels-failed">
+                        {t('one.funnelFailed')}
+                      </p>
+                    ) : funnels === 'forbidden' ? null : funnels.length === 0 ? (
+                      <p className={styles.sub} data-testid="hire-funnels-none">
+                        {t('one.funnelNone')}
+                      </p>
+                    ) : (
+                      <div className={styles.chips} role="radiogroup" aria-label={t('one.funnel')}>
+                        {funnels.map((funnel) => (
+                          <button
+                            key={funnel.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={plan.funnelId === funnel.id}
+                            className={styles.chip}
+                            data-testid={`hire-funnel-${funnel.id}`}
+                            onClick={() => set({ funnelId: funnel.id, funnelTemplate: null })}
+                          >
+                            <bdi dir="auto">{funnel.name}</bdi>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {/*
+                      Or start from a ready-made funnel: chosen here, created
+                      only on the hire's "yes" (inactive - never the
+                      workspace's default).
+                    */}
+                    {templates === 'forbidden' ? null : (
+                      <>
+                        <h4 className={styles.blockTitle}>{t('one.funnelTemplates')}</h4>
+                        {templates === 'failed' ? (
+                          <p className={styles.notice} data-testid="hire-templates-failed">
+                            {t('one.funnelTemplatesFailed')}
+                          </p>
+                        ) : (
+                          <>
+                            <p className={styles.sub}>{t('one.funnelTemplatesLead')}</p>
+                            <div
+                              className={styles.templates}
+                              role="radiogroup"
+                              aria-label={t('one.funnelTemplates')}
+                            >
+                              {templates.map((template) => (
+                                <button
+                                  key={template.id}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={plan.funnelTemplate === template.id}
+                                  className={styles.job}
+                                  data-testid={`hire-template-${template.id}`}
+                                  onClick={() =>
+                                    set({ funnelTemplate: template.id, funnelId: null })
+                                  }
+                                >
+                                  <span className={styles.jobName}>{template.name}</span>
+                                  <span className={styles.jobText}>{template.description}</span>
+                                  <span className={styles.stages}>
+                                    {template.stages.map((stage) => (
+                                      <span key={stage.id} className={styles.stage}>
+                                        {stage.label}
+                                      </span>
+                                    ))}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </section>
                 ) : null}
+                {/* ★ H8b: the Profile tab's switch and words, reused. */}
+                <div className={styles.switchRow}>
+                  <span className={styles.blockTitle} id="hire-discloses-label">
+                    {tp('disclose.title')}
+                  </span>
+                  <span className={styles.sub} data-testid="hire-discloses-says">
+                    {plan.disclosesAi ? tp('disclose.on') : tp('disclose.off')}
+                  </span>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    className={styles.switch}
+                    checked={plan.disclosesAi}
+                    aria-labelledby="hire-discloses-label"
+                    data-testid="hire-discloses"
+                    onChange={(e) => set({ disclosesAi: e.target.checked })}
+                  />
+                </div>
               </>
             ) : step === 2 ? (
               <>
@@ -371,6 +505,10 @@ export function HireSheet({
                   {/* Backend's rule, said before it surprises anyone. */}
                   <p className={styles.sub} data-testid="hire-later">
                     {t('two.later')}
+                  </p>
+                  {/* By design, said where the levels are offered (H8a). */}
+                  <p className={styles.sub} data-testid="hire-stricter">
+                    {t('two.stricter')}
                   </p>
                 </div>
                 {tools.length === 0 ? (
@@ -425,8 +563,49 @@ export function HireSheet({
                       ) : null}
                       <ul className={styles.rows}>
                         {group.tools.map((tool) => (
-                          <li key={tool.toolName} className={styles.row}>
-                            <span className={styles.rowName}>{tool.label}</span>
+                          <li
+                            key={tool.toolName}
+                            className={styles.row}
+                            data-grantable={tool.grant ? String(tool.grant.grantable) : undefined}
+                            data-testid={`hire-row-${tool.toolName}`}
+                          >
+                            <span className={styles.rowName}>
+                              {tool.label}
+                              {tool.grant && !tool.grant.grantable ? (
+                                <span
+                                  className={styles.rowState}
+                                  data-testid={`hire-not-set-up-${tool.toolName}`}
+                                >
+                                  {t('two.notSetUp')}
+                                </span>
+                              ) : null}
+                            </span>
+                            {/*
+                              ★ H8a: an integration action reaches it only when
+                              given; a built-in needs nothing, so has no switch.
+                            */}
+                            {tool.grant ? (
+                              <label className={styles.give}>
+                                <span>{t('two.give')}</span>
+                                <input
+                                  type="checkbox"
+                                  role="switch"
+                                  className={styles.switch}
+                                  checked={
+                                    tool.grant.grantable && plan.grants[tool.toolName] === true
+                                  }
+                                  disabled={!tool.grant.grantable}
+                                  title={tool.grant.grantable ? undefined : t('two.notSetUp')}
+                                  aria-label={t('two.giveFor', { name: tool.label })}
+                                  data-testid={`hire-give-${tool.toolName}`}
+                                  onChange={(e) =>
+                                    set({
+                                      grants: { ...plan.grants, [tool.toolName]: e.target.checked },
+                                    })
+                                  }
+                                />
+                              </label>
+                            ) : null}
                             <span
                               className={styles.segmented}
                               role="radiogroup"
@@ -684,6 +863,18 @@ export function HireSheet({
                         <dd data-testid="hire-sum-name">
                           <bdi dir="auto">{plan.name.trim()}</bdi>
                         </dd>
+                        {needsFunnel(plan.job) ? (
+                          <>
+                            <dt>{t('one.funnel')}</dt>
+                            <dd data-testid="hire-sum-funnel">
+                              {funnelName ? <bdi dir="auto">{funnelName}</bdi> : t('four.none')}
+                            </dd>
+                          </>
+                        ) : null}
+                        <dt>{tp('disclose.title')}</dt>
+                        <dd data-testid="hire-sum-discloses">
+                          {plan.disclosesAi ? tp('disclose.on') : tp('disclose.off')}
+                        </dd>
                       </dl>
                     ) : part === 'limits' ? (
                       <dl className={styles.pairs}>
@@ -699,6 +890,19 @@ export function HireSheet({
                                 never: tools.filter((x) => plan.choices[x.toolName] === 'never')
                                   .length,
                               })}
+                        </dd>
+                        <dt>{t('four.given')}</dt>
+                        <dd data-testid="hire-sum-given">
+                          {given.length === 0
+                            ? t('four.none')
+                            : given.map((tool, i) => (
+                                <span key={tool.toolName}>
+                                  {i > 0 ? ', ' : null}
+                                  {tool.providerLabel
+                                    ? `${tool.providerLabel} · ${tool.label}`
+                                    : tool.label}
+                                </span>
+                              ))}
                         </dd>
                         <dt>{t('four.systems')}</dt>
                         <dd data-testid="hire-sum-systems">
@@ -760,12 +964,6 @@ export function HireSheet({
                     )}
                   </section>
                 ))}
-                {/* What the plan holds that hiring here cannot save: said, never dropped. */}
-                {ungranted(plan, tools).length > 0 ? (
-                  <p className={styles.notice} data-testid="hire-ungranted">
-                    {t('four.ungranted')}
-                  </p>
-                ) : null}
                 {blocks.length > 0 ? (
                   <div className={styles.notice} data-testid="hire-blocked">
                     <p className={styles.noticeTitle}>{t('four.blocked')}</p>
@@ -793,6 +991,9 @@ export function HireSheet({
                           {failed.saved.map((w) => (
                             <li key={w}>{t(`failed.write.${w}`)}</li>
                           ))}
+                          {failed.failed === 'grants' && failed.grants.saved > 0 ? (
+                            <li>{t('failed.grantsPart', failed.grants)}</li>
+                          ) : null}
                           {failed.failed === 'levels' && failed.levels.saved > 0 ? (
                             <li>{t('failed.levelsPart', failed.levels)}</li>
                           ) : null}
@@ -803,15 +1004,7 @@ export function HireSheet({
                       <>
                         <p>{t('failed.notSaved')}</p>
                         <ul className={styles.summaryList} data-testid="hire-failed-not-saved">
-                          {writesOf(
-                            hireRequest(plan, {
-                              goal,
-                              tools,
-                              sources: knowledge ?? [],
-                              skills,
-                              locale,
-                            }),
-                          )
+                          {writesOf(requestOf())
                             .filter((w: HireWrite) => !failed.saved.includes(w))
                             .map((w) => (
                               <li key={w}>{t(`failed.write.${w}`)}</li>

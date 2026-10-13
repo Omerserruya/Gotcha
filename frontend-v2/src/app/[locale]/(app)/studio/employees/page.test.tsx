@@ -40,7 +40,11 @@ const employeeTools = vi.hoisted(() => ({ value: null as unknown }));
 vi.mock('@/features/employees/page/load-employee-tools', () => ({
   loadEmployeeTools: async () => employeeTools.value,
 }));
-const { loadChannels, loadEmployeeKnowledge, loadHireSkills } = vi.hoisted(() => ({
+const { loadChannels, loadEmployeeKnowledge, loadHireSkills, loadHireFunnels } = vi.hoisted(() => ({
+  loadHireFunnels: vi.fn(async () => ({
+    funnels: [{ id: 'f1', name: 'B2b sales' }],
+    templates: 'forbidden' as const,
+  })),
   loadChannels: vi.fn(async () => ({
     channels: [
       { channel: 'WHATSAPP', connectionStatus: 'CONNECTED' },
@@ -53,6 +57,7 @@ const { loadChannels, loadEmployeeKnowledge, loadHireSkills } = vi.hoisted(() =>
 vi.mock('@/features/channels/load-channels', () => ({ loadChannels }));
 vi.mock('@/features/employees/page/load-employee-knowledge', () => ({ loadEmployeeKnowledge }));
 vi.mock('@/features/employees/hire/load-hire-skills', () => ({ loadHireSkills }));
+vi.mock('@/features/employees/hire/load-hire-funnels', () => ({ loadHireFunnels }));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
 const employee = (id: string, status = 'ACTIVE') =>
@@ -135,11 +140,13 @@ describe('★ 07b - Hire opens the sheet; its reads only then', () => {
     loadChannels.mockClear();
     loadEmployeeKnowledge.mockClear();
     loadHireSkills.mockClear();
+    loadHireFunnels.mockClear();
     const tree = await page([employee('a')]);
     expect(find(tree, HireSheet)).toBeNull();
     expect(loadChannels).not.toHaveBeenCalled();
     expect(loadEmployeeKnowledge).not.toHaveBeenCalled();
     expect(loadHireSkills).not.toHaveBeenCalled();
+    expect(loadHireFunnels).not.toHaveBeenCalled();
   });
 
   it("?hire=1&step=2: the sheet at step 2, and no channels - where it works is not the hire flow's", async () => {
@@ -153,6 +160,9 @@ describe('★ 07b - Hire opens the sheet; its reads only then', () => {
     // H4: the knowledge bases with their scope, and the skills it may carry.
     expect(props?.knowledge).toEqual([{ id: 'k1', name: 'Returns policy' }]);
     expect(props?.skills).toEqual([{ id: 's1', name: 'Refunds' }]);
+    // H8c: the sales funnels, read only while hiring.
+    expect((props as { funnels?: unknown })?.funnels).toEqual([{ id: 'f1', name: 'B2b sales' }]);
+    expect((props as { templates?: unknown })?.templates).toBe('forbidden');
   });
 
   it('★ H4: ?step=4 is the summary', async () => {
@@ -302,6 +312,28 @@ describe('★★ actions in words, by integration (Omer, 2026-10-07: "WooCommerc
     expect(props?.tools.map((tool) => [tool.label, tool.provider])).toEqual([
       ['Get customer', 'woocommerce'],
     ]);
+  });
+
+  it('★★ H8a: an integration action carries its grant - the seed’s rule; a built-in none', async () => {
+    const { capabilitySchema } = await import('@/api/contracts/capabilities');
+    const cap = (over: Record<string, unknown>) =>
+      capabilitySchema.parse({ kind: 'action', integration: 'woocommerce', ...over });
+    caps.value = [
+      cap({ toolName: 'woocommerce.get_customer', state: 'enabled', riskLevel: 'LOW' }),
+      cap({ toolName: 'woocommerce.refund', state: 'enabled', riskLevel: 'HIGH' }),
+      cap({ toolName: 'woocommerce.new_coupon', state: 'not_provisioned', riskLevel: 'LOW' }),
+      capabilitySchema.parse({ toolName: 'send_message', kind: 'system' }),
+    ];
+    tools.value = null;
+    const tree = await page([employee('a')], { hire: '1', step: '2' });
+    const props = find<{ tools: { toolName: string; grant: unknown }[] }>(tree, HireSheet);
+    expect(Object.fromEntries(props!.tools.map((tool) => [tool.toolName, tool.grant]))).toEqual({
+      'woocommerce.get_customer': { grantable: true, seeded: true },
+      'woocommerce.refund': { grantable: true, seeded: false },
+      'woocommerce.new_coupon': { grantable: false, seeded: false },
+      send_message: null,
+    });
+    caps.value = [];
   });
 });
 

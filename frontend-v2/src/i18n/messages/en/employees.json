@@ -162,7 +162,14 @@
       "callIt": "Call it",
       "namePlaceholder": "Ronnie",
       "nameNeeded": "It needs a name to be hired.",
-      "salesNote": "A sales employee needs a sales pipeline, and choosing one isn't part of hiring here yet, so it can't be hired from here."
+      "funnel": "Sales funnel",
+      "funnelLead": "A sales employee works through a sales funnel's stages. Pick yours, or start from a ready-made one.",
+      "funnelNone": "There's no sales funnel in this workspace yet.",
+      "funnelFailed": "The sales funnels couldn't be read just now. Close and reopen hiring to try again.",
+      "funnelForbidden": "Only an admin can see the sales funnels, so a sales employee can't be hired from here.",
+      "funnelTemplates": "Start from a template",
+      "funnelTemplatesLead": "It's created when you hire, and doesn't become your workspace's default.",
+      "funnelTemplatesFailed": "The ready-made funnels couldn't be read just now."
     },
     "channel": {
       "WHATSAPP": "WhatsApp",
@@ -197,7 +204,11 @@
       "failing": "{name} is connected but failing right now, so nothing here can use it until it's fixed in Studio · Integrations.",
       "offForIt": "Off: this employee won't use {name} at all, whatever is set below.",
       "suggest": "Quick add:",
-      "looser": "Your business has this set to “{current}” for everyone. An employee can only be stricter; change it for everyone in Studio · Integrations."
+      "looser": "Your business has this set to “{current}” for everyone. An employee can only be stricter; change it for everyone in Studio · Integrations.",
+      "give": "Give it this",
+      "giveFor": "Give it {name}",
+      "notSetUp": "Not set up in this workspace yet: give it a level for everyone in Studio · Integrations first.",
+      "stricter": "An employee's level is never looser than your business's, by design: here you can only make it stricter."
     },
     "three": {
       "title": "What should it know, and what can it do?",
@@ -260,16 +271,21 @@
       "none": "None yet",
       "off": "(off)",
       "watch": "Each starts in Watch.",
-      "ungranted": "Hiring here gives it only the lower-risk actions of its systems. Riskier ones, like refunds, aren't given to it from here yet, whatever Limits says.",
       "blocked": "Before hiring:",
       "block": {
         "rules": "A handoff condition has no words. Write them, or remove it, in Limits.",
-        "salesPipeline": "A sales employee needs a sales pipeline, and choosing one isn't part of hiring here yet. To hire from here, pick another job in Profile.",
         "knowledgeUnread": "The knowledge couldn't be read, and an employee needs at least one knowledge source to be hired. Close and reopen hiring to try again.",
-        "noKnowledge": "An employee needs at least one knowledge source to be hired. Connect one in Knowledge and skills, or add knowledge first."
+        "noKnowledge": "An employee needs at least one knowledge source to be hired. Connect one in Knowledge and skills, or add knowledge first.",
+        "funnelsForbidden": "Only an admin can see the sales funnels a sales employee needs.",
+        "funnelsUnread": "The sales funnels couldn't be read. Close and reopen hiring to try again.",
+        "noFunnel": "There's no sales funnel yet. To hire from here, pick another job in Profile.",
+        "pickFunnel": "Pick the sales funnel it follows, or a template, in Profile.",
+        "noFunnelTemplatesUnread": "There's no sales funnel yet, and the ready-made ones couldn't be read. Close and reopen hiring to try again."
       },
       "hire": "Hire",
-      "hiring": "Hiring…"
+      "hiring": "Hiring…",
+      "given": "Given to it",
+      "fromTemplate": "{name} (created when you hire)"
     },
     "confirm": {
       "ask": "Have you gone over the whole summary of the employee?",
@@ -285,11 +301,13 @@
       "levelsPart": "its limits on actions ({saved} of {total})",
       "write": {
         "draft": "the draft",
-        "settings": "its job, handoff conditions, systems and knowledge",
+        "settings": "its job, handoff conditions, systems, knowledge and whether it says it's AI",
         "name": "its name",
         "skills": "its skills",
         "levels": "its limits on actions",
-        "hired": "the hire itself"
+        "hired": "the hire itself",
+        "grants": "the actions it is given",
+        "funnel": "the sales funnel"
       },
       "reason": {
         "forbidden": "You don't have permission to hire AI employees.",
@@ -298,8 +316,11 @@
         "invalid_rules": "A handoff condition was refused. Check that each has words, at most 300 characters.",
         "changed": "An action or a skill changed meanwhile. Close and reopen hiring to read them again.",
         "not_ready": "GOTCHA says it isn't ready to work yet: it needs a name, a job and at least one knowledge source.",
-        "failed": "Something went wrong on our side. Try again in a moment."
-      }
+        "failed": "Something went wrong on our side. Try again in a moment.",
+        "not_provisioned": "An action it was given isn't set up in this workspace anymore. Close and reopen hiring to read them again.",
+        "unknown_template": "That ready-made funnel isn't offered anymore. Pick another in Profile."
+      },
+      "grantsPart": "the actions it is given ({saved} of {total})"
     }
   },
   "hired": {
