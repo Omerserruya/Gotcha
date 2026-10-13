@@ -224,6 +224,7 @@ import {
   refreshCapabilityState,
   getToolPriority,
 } from "./connectors/integration-framework";
+import { SHIPMENT_TRACKING_TOOL, shipmentTrackingVisible } from "./connectors/woo-shipment-tracking";
 import {
   loadActionContracts,
   loadContractProgress,
@@ -2174,6 +2175,13 @@ async function generateAIBotReplyInner(
         // store could actually do.
         if (toolCannotExecute(def)) {
           console.log(`[ai-bot][tool-surface] hiding ${def.name}: provider declares it unsupported`);
+          continue;
+        }
+        // Capability gate, part three: a tool that needs a store extension is
+        // offered only where the extension was seen (cached per store; an
+        // unknown store is probed in the background and the tool waits).
+        if (def.name === SHIPMENT_TRACKING_TOOL && !(await shipmentTrackingVisible(String(cfg.storeUrl ?? "")))) {
+          console.log(`[ai-bot][tool-surface] hiding ${def.name}: the store has no Shipment Tracking extension (or it is not known yet)`);
           continue;
         }
         tools.push({

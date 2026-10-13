@@ -20,6 +20,7 @@
 
 import { assertPublicUrl } from "@chatcenter/shared";
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
+import { SHIPMENT_TRACKING_NAMESPACE, recordShipmentTracking } from "./woo-shipment-tracking";
 
 const TOOLS: ToolDefinition[] = [
   {
@@ -569,11 +570,19 @@ const WooCommerceAdapter: ProviderAdapter = {
         return await wooRequest(auth, "GET", `${base}/orders?${params}`);
       }
       case "get_shipment_tracking": {
+        // The extension serves its own namespace, not wc/v3: the wc/v3 path
+        // answered 404 on a store that HAS the extension, so the tool said
+        // "no tracking" everywhere.
         try {
-          return await wooRequest(auth, "GET", `${base}/orders/${encodeURIComponent(String(args.order_id))}/shipment-trackings`);
+          const out = await wooRequest(auth, "GET", `${storeUrl}/wp-json/${SHIPMENT_TRACKING_NAMESPACE}/orders/${encodeURIComponent(String(args.order_id))}/shipment-trackings`);
+          void recordShipmentTracking(storeUrl, true);
+          return out;
         } catch (err: any) {
-          // No Shipment Tracking extension on the store: say so, do not fail.
-          if (/woocommerce_404/.test(String(err?.message))) {
+          // No such route = no Shipment Tracking extension on the store: say so,
+          // do not fail, and stop offering the tool. A 404 for an unknown order
+          // is a different answer and is thrown as it is.
+          if (/woocommerce_404/.test(String(err?.message)) && /rest_no_route/.test(String(err?.message))) {
+            void recordShipmentTracking(storeUrl, false);
             return { supported: false, reason: "The store does not have the WooCommerce Shipment Tracking extension, so no tracking is available." };
           }
           throw err;

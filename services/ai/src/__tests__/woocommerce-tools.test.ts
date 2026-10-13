@@ -4,9 +4,17 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+const R = vi.hoisted(() => ({ kv: new Map<string, string>() }));
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
-  return { ...actual, assertPublicUrl: vi.fn(async () => undefined) };
+  return {
+    ...actual,
+    assertPublicUrl: vi.fn(async () => undefined),
+    getRedis: () => ({
+      get: async (k: string) => R.kv.get(k) ?? null,
+      set: async (k: string, v: string) => { R.kv.set(k, v); return "OK"; },
+    }),
+  };
 });
 
 import Woo from "../services/connectors/woocommerce.adapter";
@@ -140,9 +148,28 @@ describe("★ the new WooCommerce tools (2026-10-13), stubbed store", () => {
     await expect(run("list_customer_orders", {})).rejects.toThrow("customer_id_or_email_required");
   });
 
-  it("get_shipment_tracking: without the extension, says so instead of failing", async () => {
-    store({}, ["GET /orders/3/shipment-trackings"]);
+  it("★ get_shipment_tracking asks the extension's own namespace, and a 200 records the store as having it", async () => {
+    R.kv.clear();
+    store({});
+    await run("get_shipment_tracking", { order_id: "3" });
+    expect(H.calls[0].url).toBe("https://shop.example.com/wp-json/wc-shipment-tracking/v3/orders/3/shipment-trackings");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(R.kv.get("woo:shipment-tracking:https://shop.example.com")).toBe("1");
+  });
+
+  it("★ get_shipment_tracking: without the extension, says so instead of failing, and the store is recorded as without it", async () => {
+    R.kv.clear();
+    store({}, ["GET /wp-json/wc-shipment-tracking/v3/orders/3/shipment-trackings"]);
     expect(await run("get_shipment_tracking", { order_id: "3" })).toMatchObject({ supported: false });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(R.kv.get("woo:shipment-tracking:https://shop.example.com")).toBe("0");
+  });
+
+  it("get_shipment_tracking: a 404 for an unknown order is not \"no extension\"", async () => {
+    R.kv.clear();
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}), text: async () => '{"code":"woocommerce_rest_shop_order_invalid_id"}' })));
+    await expect(run("get_shipment_tracking", { order_id: "999" })).rejects.toThrow("woocommerce_404");
+    expect(R.kv.size).toBe(0);
   });
 
   it("★ risk groups: refund and coupons financial, address/customer sensitive, reads read", () => {
