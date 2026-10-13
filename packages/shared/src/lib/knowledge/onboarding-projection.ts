@@ -266,12 +266,23 @@ export function reconcile(
     if (!meta || meta.origin !== "onboarding" || !meta.dedupeKey) continue;
     // First writer wins: if a historical bug produced two documents under one
     // key, we refresh the first and report the rest as removable duplicates
-    // rather than updating an arbitrary one of them.
-    if (owned.has(meta.dedupeKey)) {
+    // rather than updating an arbitrary one of them. A person's edit outranks
+    // that order: an edited copy is the one kept, and an edited duplicate is
+    // never removed (2026-10-12, K11).
+    const kept = owned.get(meta.dedupeKey);
+    if (kept) {
+      const editedNow = meta.manualEdit === true;
+      const editedKept = readMeta(kept.metadata)?.manualEdit === true;
+      if (editedNow && editedKept) {
+        items.push({ action: "preserved", dedupeKey: meta.dedupeKey, existingId: doc.id, reason: "manual_edit" });
+        continue;
+      }
+      const loser = editedNow ? kept : doc;
+      if (editedNow) owned.set(meta.dedupeKey, doc);
       items.push({
         action: "remove",
         dedupeKey: meta.dedupeKey,
-        existingId: doc.id,
+        existingId: loser.id,
         reason: "duplicate",
       });
       continue;
@@ -320,6 +331,11 @@ export function reconcile(
       if (seen.has(key)) continue;
       const meta = readMeta(doc.metadata)!;
       if (scope && !scope.includes(meta.sourceType as KbSourceType)) continue;
+      // A page gone from the site does not take a person's correction with it.
+      if (meta.manualEdit === true) {
+        items.push({ action: "preserved", dedupeKey: key, existingId: doc.id, reason: "manual_edit" });
+        continue;
+      }
       items.push({ action: "remove", dedupeKey: key, existingId: doc.id, reason: "no_longer_found" });
     }
   }

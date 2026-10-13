@@ -416,6 +416,48 @@ describe("reconcile - a re-scan updates, it does not duplicate", () => {
   });
 });
 
+describe("reconcile - a person's edit survives the page going away and duplicate cleanup (K11, 2026-10-12)", () => {
+  const first = projectDiscoveryTopics(DISCOVERY, PROFILE, CTX);
+  const pages = projectPages(
+    [
+      { url: "https://a.com/one", content: "x".repeat(80) },
+      { url: "https://a.com/two", content: "y".repeat(80) },
+    ],
+    CTX,
+  );
+  const edited = (d: ExistingDoc): ExistingDoc => ({ ...d, metadata: { ...(d.metadata as any), manualEdit: true } });
+
+  it("★ an edited page no longer on the site is preserved, not removed", () => {
+    const existing = asExisting(pages, "page").map((d) => (d.id === "page-1" ? edited(d) : d));
+    const plan = reconcile(pages.slice(0, 1), existing, { removeMissing: true, removeScope: ["url"] });
+    expect(plan.items.filter((i) => i.action === "remove")).toHaveLength(0);
+    expect(plan.items.find((i) => i.existingId === "page-1")).toMatchObject({ action: "preserved", reason: "manual_edit" });
+    expect(plan.summary).toMatchObject({ removed: 0, preserved: 1 });
+  });
+
+  it("an unedited page no longer on the site is still removed", () => {
+    const existing = asExisting(pages, "page").map((d) => (d.id === "page-0" ? edited(d) : d));
+    const plan = reconcile([], existing, { removeMissing: true, removeScope: ["url"] });
+    expect(plan.items.filter((i) => i.action === "remove").map((i) => i.existingId)).toEqual(["page-1"]);
+  });
+
+  it("★ of two copies under one key, the edited one is kept and the other removed", () => {
+    const dup = asExisting(first);
+    const plan = reconcile(first, [dup[0], edited({ ...dup[0], id: "edited-copy" }), ...dup.slice(1)], {});
+    const removals = plan.items.filter((i) => i.action === "remove");
+    expect(removals.map((i) => i.existingId)).toEqual([dup[0].id]);
+    // The kept copy is the edited one, so the scan preserves it.
+    expect(plan.items.find((i) => i.existingId === "edited-copy")).toMatchObject({ action: "preserved", reason: "manual_edit" });
+  });
+
+  it("two edited copies: neither is removed", () => {
+    const dup = asExisting(first);
+    const plan = reconcile(first, [edited(dup[0]), edited({ ...dup[0], id: "edited-copy" }), ...dup.slice(1)], {});
+    expect(plan.items.filter((i) => i.action === "remove")).toHaveLength(0);
+    expect(plan.items.filter((i) => i.action === "preserved").map((i) => i.existingId).sort()).toEqual([dup[0].id, "edited-copy"].sort());
+  });
+});
+
 describe("buildEntry", () => {
   it("round-trips content normalization into the checksum", () => {
     const a = buildEntry({ topic: "faq", title: "T", content: "a   b", sourceType: "onboarding_scan", language: "en", now: CTX.now });
