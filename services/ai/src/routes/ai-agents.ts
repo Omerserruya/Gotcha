@@ -23,6 +23,7 @@ import { isBrandArchetype } from "../services/brand-archetypes";
 import { loadToolGrants, deriveAllowedOperations } from "../services/agent-loop/permissions-bridge";
 import { ensureCapabilitiesRegistered, describeAllWorlds } from "../services/capability-plane";
 import { withoutWideDashes } from "../lib/wide-dash";
+import { readReadinessStatus } from "../services/readiness-status";
 
 const router = Router();
 
@@ -415,6 +416,8 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requirePe
     // Single calendar-capability signal so the builder can warn accurately
     // when calendar tools are enabled but the agent cannot actually book.
     const calendarCapability = await computeCalendarCapability(req.tenantId! as string, agent.id);
+    // Is the readiness report being made now? Read, never guessed (H7).
+    const readiness = await readReadinessStatus(req.tenantId! as string, agent.id).catch(() => null);
 
     res.json({
       data: {
@@ -422,6 +425,10 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requirePe
         knowledgeSources: agent.knowledgeBases.map((ak: any) => ak.knowledgeBase),
         tools,
         calendarCapability,
+        readinessStatus: readiness?.status ?? null,
+        readinessStartedAt: readiness?.startedAt ?? null,
+        readinessFinishedAt: readiness?.finishedAt ?? null,
+        readinessError: readiness?.error ?? null,
       },
     });
   } catch (err) {

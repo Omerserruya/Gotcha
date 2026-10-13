@@ -27,6 +27,7 @@ import {
   type SeededDraftContext,
 } from "../services/agent-builder.service";
 import { generateReadinessReport } from "../services/agent-readiness.service";
+import { markReadinessRunning, markReadinessFinished } from "../services/readiness-status";
 import { generateSalesContext } from "../services/sales-context-generator.service";
 
 const router = Router();
@@ -449,8 +450,11 @@ router.post("/:id/complete", async (req: Request, res: Response) => {
     // route re-runs it. Never blocks or fails the hire.
     const hired = agent.status === "DRAFT";
     if (hired) {
+      // "running" is written BEFORE the answer, so the page's first read of
+      // the employee already shows the check in progress.
+      const runId = await markReadinessRunning(tenantId, agentId);
       void resolveLocale(tenantId, req.body?.locale)
-        .then((locale) => runAndStoreReadiness(tenantId, agentId, locale))
+        .then((locale) => runAndStoreReadiness(tenantId, agentId, locale, runId))
         .then((r) => { if ("error" in r) console.warn(`[readiness] after hire ${agentId}: ${r.error}`); })
         .catch((err: any) => console.warn(`[readiness] after hire ${agentId} failed:`, err?.message));
     }
@@ -500,14 +504,30 @@ router.post("/:id/finalize", async (req: Request, res: Response) => {
  * Persisting is best-effort: a failure never blocks returning the report.
  * Shared by the manual route and the automatic run after a hire.
  */
-export async function runAndStoreReadiness(tenantId: string, agentId: string, locale: string) {
-  const report = await generateReadinessReport(tenantId, agentId, locale);
-  if ("error" in report) return report;
+export async function runAndStoreReadiness(tenantId: string, agentId: string, locale: string, runId?: string) {
+  // The run's status (running / done / failed) is stored beside the report,
+  // so the page shows the truth instead of guessing how long a check takes.
+  const run = runId ?? (await markReadinessRunning(tenantId, agentId));
+  let report: Awaited<ReturnType<typeof generateReadinessReport>>;
+  try {
+    report = await generateReadinessReport(tenantId, agentId, locale);
+  } catch (err) {
+    await markReadinessFinished(tenantId, agentId, run, { ok: false, error: "internal_error" });
+    throw err;
+  }
+  if ("error" in report) {
+    await markReadinessFinished(tenantId, agentId, run, { ok: false, error: String(report.error) });
+    return report;
+  }
   try {
     await prisma.aIAgent.update({ where: { id: agentId }, data: { readinessReport: report as any } });
   } catch (persistErr: any) {
     console.warn("[readiness-test] persist failed (non-fatal):", persistErr?.message);
+    // The report was made but not kept: the page has nothing new to show.
+    await markReadinessFinished(tenantId, agentId, run, { ok: false, error: "persist_failed" });
+    return report;
   }
+  await markReadinessFinished(tenantId, agentId, run, { ok: true });
   return report;
 }
 

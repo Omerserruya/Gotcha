@@ -7,6 +7,8 @@ import { describe, it, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 
+const H = vi.hoisted(() => ({ settings: new Map<string, string>() }));
+
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
   const pass = (_q: any, _s: any, n: any) => n();
@@ -14,6 +16,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   const generic = { findMany: async () => [], findFirst: async () => null, findUnique: async () => null, count: async () => 0, groupBy: async () => [] };
   return {
     ...actual,
+    readDurableSetting: async (t: string, k: string) => H.settings.get(`${t}:${k}`) ?? null,
     authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1", role: "ADMIN" }; n(); },
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },
     requireActiveTenant: () => pass,
@@ -45,5 +48,21 @@ describe("★ channels is not returned", () => {
     expect(r.status).toBe(200);
     expect(r.body.data.id).toBe("maya");
     expect(r.body.data).not.toHaveProperty("channels");
+  });
+});
+
+describe("★ the detail carries the readiness status (H7)", () => {
+  it("running, with when it started", async () => {
+    const startedAt = new Date().toISOString();
+    H.settings.set("T:agent:readiness:maya", JSON.stringify({ runId: "r", status: "running", startedAt, finishedAt: null, error: null }));
+    const d = (await request(app()).get("/api/ai-agents/maya")).body.data;
+    expect(d).toMatchObject({ readinessStatus: "running", readinessStartedAt: startedAt, readinessFinishedAt: null, readinessError: null });
+  });
+
+  it("failed keeps its code; never run is null", async () => {
+    H.settings.set("T:agent:readiness:maya", JSON.stringify({ runId: "r", status: "failed", startedAt: "2026-10-13T10:00:00.000Z", finishedAt: "2026-10-13T10:01:00.000Z", error: "no_knowledge" }));
+    expect((await request(app()).get("/api/ai-agents/maya")).body.data).toMatchObject({ readinessStatus: "failed", readinessError: "no_knowledge" });
+    H.settings.clear();
+    expect((await request(app()).get("/api/ai-agents/maya")).body.data).toMatchObject({ readinessStatus: null, readinessStartedAt: null });
   });
 });
