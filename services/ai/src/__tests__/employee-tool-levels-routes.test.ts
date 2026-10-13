@@ -46,7 +46,7 @@ beforeEach(() => {
   H.levels = {}; H.writes = []; H.audits = [];
   H.rows = [
     row("send_message", true, false),
-    row("woocommerce.create_coupon", true, true, { integration: "woocommerce", riskGroup: "financial" }),
+    row("woocommerce.create_coupon", true, true, { integration: "woocommerce", integrationConnected: true, riskGroup: "financial" }),
     row("delete_note", false, true, { riskGroup: "delete" }),
   ];
 });
@@ -69,6 +69,15 @@ describe("GET /:id/tools", () => {
     H.rows[0].enabled = false;
     const t = (await request(app).get("/api/ai-agents/maya/tools")).body.data.tools[0];
     expect(t).toMatchObject({ workspaceLevel: "never", employeeLevel: "never" });
+  });
+
+  it("★ only tools that can run: a disconnected or failing store's tools are not listed", async () => {
+    H.rows.push(
+      row("shopify.create_discount", true, true, { integration: "shopify", integrationConnected: false, riskGroup: "financial" }),
+      row("hubspot.create_contact", true, false, { integration: "hubspot", riskGroup: "create_update" }),
+    );
+    const names = (await request(app).get("/api/ai-agents/maya/tools")).body.data.tools.map((t: any) => t.toolName);
+    expect(names.sort()).toEqual(["delete_note", "send_message", "woocommerce.create_coupon"]);
   });
 
   it("another tenant's employee: 404", async () => {

@@ -970,7 +970,11 @@ router.get("/:id/tools", authenticate, resolveTenant, requireActiveTenant(), req
       readAgentToolLevels(tenantId, agent.id),
       readerLocale(req),
     ]);
-    const tools = rows.map((r) => {
+    // Only what can run: built-ins, and the tools of integrations that are
+    // CONNECTED. A disconnected (or failing) store's tools cannot run, so
+    // listing ~80 of them only confuses. An own level already stored for one
+    // stays stored and applies again once the store reconnects.
+    const tools = rows.filter((r) => !r.integration || r.integrationConnected === true).map((r) => {
       const workspaceLevel = workspaceLevelOf(r);
       const own = levels[r.toolName] ?? null;
       const employeeLevel: ToolLevel = own ?? workspaceLevel;
