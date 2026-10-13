@@ -188,12 +188,12 @@
         "vip": "a VIP writes",
         "askedTwice": "someone asks twice about the same thing"
       },
-      "addAnother": "add another",
       "own": "GOTCHA's own actions",
       "mayUse": "This employee may use {name}",
       "later": "A system you connect later is off for every employee until you turn it on for them.",
       "failing": "{name} is connected but failing right now, so nothing here can use it until it's fixed in Studio · Integrations.",
-      "offForIt": "Off: this employee won't use {name} at all, whatever is set below."
+      "offForIt": "Off: this employee won't use {name} at all, whatever is set below.",
+      "suggest": "Quick add:"
     },
     "three": {
       "title": "See it answer eight real ones",
@@ -314,7 +314,7 @@
       "onFor": "Condition {n} is on",
       "labelFor": "Condition {n}",
       "removeFor": "Remove condition {n}",
-      "empty": "Every condition needs words before you save.",
+      "empty": "Every condition needs words. Write them, or remove it.",
       "full": "{max} conditions, the most it keeps."
     },
     "save": "Save changes",

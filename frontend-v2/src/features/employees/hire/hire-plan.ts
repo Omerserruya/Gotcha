@@ -1,5 +1,7 @@
 import type { AdminChoice } from '@/api/contracts/capabilities';
 
+import type { DraftRule } from '../page/profile-plan';
+
 /**
  * 07b-07d's choices, held locally while the flow is read-only.
  *
@@ -12,7 +14,7 @@ import type { AdminChoice } from '@/api/contracts/capabilities';
  *   name           → POST /:id/refinements { name }
  *   choices        → the tool permissions, per tool, as 10 writes them
  *   access         → POST create { integrationAccess } (Backend 00c6c229)
- *   handover       → POST /:id/refinements { customGuardrails }
+ *   rules          → PATCH /api/ai-agents/:id { escalationRules } (H3)
  *   step 3         → POST /:id/readiness-test         (LLM, costs tokens)
  *   Hire it        → POST /:id/complete               (DRAFT → ACTIVE)
  */
@@ -28,14 +30,22 @@ export interface HirePlan {
    * system the workspace has set up today, in any state.
    */
   readonly access: readonly string[];
-  readonly handover: readonly string[];
+  /**
+   * "Always hand over to a person when…" (H3): the conditions, in the
+   * employee page's own model (`profile-plan.ts`) - each its words and
+   * whether it is on. Sent as `escalationRules`, at most 50, 1-300 each.
+   */
+  readonly rules: readonly DraftRule[];
 }
 
 /** The builder's roles (`agent-builder.service.ts`), plus the free-text job. */
 export const HIRE_JOBS = ['customer_support', 'sales', 'booking', 'custom'] as const;
 export type HireJob = (typeof HIRE_JOBS)[number];
 
-/** 02's suggested "Always hand over to a person when…" chips. */
+/**
+ * 02's suggested "Always hand over to a person when…" chips: quick adds, each
+ * adding a condition in its words (H3). The first is where a hire starts.
+ */
 export const HANDOVER_SUGGESTIONS = ['askPerson', 'annoyed', 'vip', 'askedTwice'] as const;
 
 /** One of the business's actions, as step 2 draws it. */
@@ -86,7 +96,12 @@ export function stepOneDone(plan: HirePlan): boolean {
  *   the playbook's and the automations' to decide, not a field on it - so the
  *   plan holds no channels and the builder is never sent any.
  */
-export function emptyPlan(tools: readonly HireTool[], setUp: readonly string[] = []): HirePlan {
+export function emptyPlan(
+  tools: readonly HireTool[],
+  setUp: readonly string[] = [],
+  /** The conditions a hire starts with - the first chip, in the reader's words. */
+  rules: readonly DraftRule[] = [],
+): HirePlan {
   const providers = tools.map((tool) => tool.provider).filter((p): p is string => p !== null);
   return {
     job: null,
@@ -94,7 +109,7 @@ export function emptyPlan(tools: readonly HireTool[], setUp: readonly string[] =
     name: '',
     choices: Object.fromEntries(tools.map((tool) => [tool.toolName, tool.current])),
     access: [...new Set([...setUp, ...providers])].sort(),
-    handover: ['askPerson'],
+    rules,
   };
 }
 

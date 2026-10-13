@@ -1,6 +1,5 @@
 'use client';
 
-import { Plus, X } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState, useTransition, type ReactNode } from 'react';
 
@@ -23,12 +22,10 @@ import {
   draftOf,
   editPatch,
   MAX_RULE_LABEL,
-  MAX_RULES,
-  newRule,
   rulesProblem,
-  type DraftRule,
   type ProfileDraft,
 } from './profile-plan';
+import { HandoverRules } from './HandoverRules';
 import styles from './EmployeePage.module.css';
 import { EmployeeToolLevels, type ToolLevelRow } from './EmployeeToolLevels';
 
@@ -71,8 +68,6 @@ export function EmployeeProfile({
   const stored = access?.allowed ?? null;
   const [draft, setDraft] = useState<ProfileDraft>(() => draftOf(employee, stored));
   const set = (patch: Partial<ProfileDraft>) => setDraft((d) => ({ ...d, ...patch }));
-  const setRule = (i: number, patch: Partial<DraftRule>) =>
-    set({ rules: draft.rules.map((rule, j) => (j === i ? { ...rule, ...patch } : rule)) });
   const changes = changesIn(employee, draft, stored);
   const problem = rulesProblem(draft.rules);
   const [confirming, setConfirming] = useState(false);
@@ -280,67 +275,7 @@ export function EmployeeProfile({
           <section className={styles.section} data-testid="profile-handover">
             <h2 className={styles.title}>{t('handover.title')}</h2>
             <p className={styles.quiet}>{t('handover.lead')}</p>
-            {draft.rules.length === 0 ? (
-              <p className={styles.quiet} data-testid="profile-rules-none">
-                {t('handover.none')}
-              </p>
-            ) : (
-              <ol className={styles.rules} data-testid="profile-rules">
-                {draft.rules.map((rule, i) => (
-                  <li key={i} className={styles.rule} data-testid={`profile-rule-${i}`}>
-                    <input
-                      type="checkbox"
-                      className={styles.ruleOn}
-                      checked={rule.enabled}
-                      aria-label={t('handover.onFor', { n: i + 1 })}
-                      data-testid={`profile-rule-${i}-on`}
-                      onChange={(e) => setRule(i, { enabled: e.target.checked })}
-                    />
-                    <input
-                      type="text"
-                      className={styles.ruleLabel}
-                      value={rule.label}
-                      maxLength={MAX_RULE_LABEL}
-                      dir={typedDir(rule.label)}
-                      placeholder={t('handover.placeholder')}
-                      aria-label={t('handover.labelFor', { n: i + 1 })}
-                      aria-invalid={rule.label.trim() === '' ? true : undefined}
-                      data-testid={`profile-rule-${i}-label`}
-                      onChange={(e) => setRule(i, { label: e.target.value })}
-                    />
-                    <button
-                      type="button"
-                      className={styles.ruleRemove}
-                      aria-label={t('handover.removeFor', { n: i + 1 })}
-                      data-testid={`profile-rule-${i}-remove`}
-                      onClick={() => set({ rules: draft.rules.filter((_, j) => j !== i) })}
-                    >
-                      <X size={14} aria-hidden="true" />
-                    </button>
-                  </li>
-                ))}
-              </ol>
-            )}
-            {problem === 'empty' ? (
-              <p className={styles.problem} role="status" data-testid="profile-rules-problem">
-                {t('handover.empty')}
-              </p>
-            ) : null}
-            {draft.rules.length >= MAX_RULES ? (
-              <p className={styles.quiet} data-testid="profile-rules-full">
-                {t('handover.full', { max: MAX_RULES })}
-              </p>
-            ) : (
-              <button
-                type="button"
-                className={styles.add}
-                data-testid="profile-rule-add"
-                onClick={() => set({ rules: [...draft.rules, newRule()] })}
-              >
-                <Plus size={14} aria-hidden="true" />
-                {t('handover.add')}
-              </button>
-            )}
+            <HandoverRules id="profile" rules={draft.rules} onChange={(rules) => set({ rules })} />
           </section>
         </div>
       </div>

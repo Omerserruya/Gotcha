@@ -277,7 +277,7 @@ describe('★★ H6 - a hire that was closed continues where it stopped', () => 
       KEY,
       JSON.stringify({
         step: 2,
-        plan: { job: 'sales', goal: '', name: 'Noa', choices: {}, access: [], handover: [] },
+        plan: { job: 'sales', goal: '', name: 'Noa', choices: {}, access: [], rules: [] },
       }),
     );
     sheet({ viewerId: 'u1' });
@@ -285,5 +285,108 @@ describe('★★ H6 - a hire that was closed continues where it stopped', () => 
     await userEvent.click(screen.getByTestId('hire-start-over'));
     expect(screen.getByTestId('hire-name')).toHaveValue('');
     await waitFor(() => expect(window.localStorage.getItem(KEY)).toBeNull());
+  });
+});
+
+/*
+ * H3 (Omer, 2026-10-13): "להעביר תמיד לאדם כש…" - its Add did nothing. Now a
+ * section of its own: the conditions as a list (the employee page's editor),
+ * the chips as quick adds.
+ */
+describe('★★ H3 - handoff to a person: a list to add, edit and remove', () => {
+  const KEY = 'gotcha:hire-draft:v1:u1';
+  beforeEach(() => window.localStorage.clear());
+  const labels = () =>
+    screen
+      .queryAllByTestId(/^hire-rule-\d+-label$/)
+      .map((input) => (input as HTMLInputElement).value);
+
+  it('a hire starts with one condition, the first chip’s; that chip is not offered again', () => {
+    sheet({ initialStep: 2 });
+    expect(screen.getByTestId('hire-handover')).toHaveTextContent(
+      'Always hand over to a person when…',
+    );
+    expect(labels()).toEqual(['they ask for a person']);
+    expect(screen.getByTestId('hire-rule-0-on')).toBeChecked();
+    expect(screen.queryByTestId('hire-handover-askPerson')).toBeNull();
+    expect(screen.getByTestId('hire-handover-vip')).toBeEnabled();
+  });
+
+  it('★ Add works: an empty condition, Continue held and why, until it has words', async () => {
+    sheet({ initialStep: 2 });
+    await userEvent.click(screen.getByTestId('hire-rule-add'));
+    expect(labels()).toEqual(['they ask for a person', '']);
+    expect(screen.getByTestId('hire-rules-problem')).toHaveTextContent(
+      'Every condition needs words. Write them, or remove it.',
+    );
+    expect(screen.getByTestId('hire-continue')).toBeDisabled();
+    await userEvent.type(screen.getByTestId('hire-rule-1-label'), 'the order is over 2000');
+    expect(screen.queryByTestId('hire-rules-problem')).toBeNull();
+    expect(screen.getByTestId('hire-continue')).toBeEnabled();
+    expect(labels()).toEqual(['they ask for a person', 'the order is over 2000']);
+  });
+
+  it('edit: reworded, switched off; remove: gone, and its chip is back', async () => {
+    sheet({ initialStep: 2 });
+    const label = screen.getByTestId('hire-rule-0-label');
+    await userEvent.clear(label);
+    await userEvent.type(label, 'they ask for a manager');
+    await userEvent.click(screen.getByTestId('hire-rule-0-on'));
+    expect(labels()).toEqual(['they ask for a manager']);
+    expect(screen.getByTestId('hire-rule-0-on')).not.toBeChecked();
+    // Reworded, the first chip's words are no longer a condition: offered again.
+    expect(screen.getByTestId('hire-handover-askPerson')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('hire-rule-0-remove'));
+    expect(labels()).toEqual([]);
+    expect(screen.getByTestId('hire-rules-none')).toHaveTextContent('No conditions yet.');
+  });
+
+  it('★ a chip is a quick add: its words become a condition, on, and the chip goes', async () => {
+    sheet({ initialStep: 2 });
+    await userEvent.click(screen.getByTestId('hire-handover-vip'));
+    expect(labels()).toEqual(['they ask for a person', 'a VIP writes']);
+    expect(screen.getByTestId('hire-rule-1-on')).toBeChecked();
+    expect(screen.queryByTestId('hire-handover-vip')).toBeNull();
+    await userEvent.click(screen.getByTestId('hire-rule-1-remove'));
+    expect(screen.getByTestId('hire-handover-vip')).toBeInTheDocument();
+  });
+
+  it('★ 300: a condition’s words stop at the route’s limit', () => {
+    sheet({ initialStep: 2 });
+    expect(screen.getByTestId('hire-rule-0-label')).toHaveAttribute('maxLength', '300');
+  });
+
+  it('★ 50: at the route’s limit there is no Add and no chip, and the line says why', async () => {
+    window.localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        step: 2,
+        plan: {
+          job: 'sales',
+          rules: Array.from({ length: 49 }, (_, i) => ({ label: `r${i}`, enabled: true })),
+        },
+      }),
+    );
+    sheet({ initialStep: 2, viewerId: 'u1' });
+    await waitFor(() => expect(labels()).toHaveLength(49));
+    expect(screen.queryByTestId('hire-rules-full')).toBeNull();
+    await userEvent.click(screen.getByTestId('hire-handover-vip'));
+    expect(labels()).toHaveLength(50);
+    expect(screen.queryByTestId('hire-rule-add')).toBeNull();
+    expect(screen.queryByTestId('hire-suggestions')).toBeNull();
+    expect(screen.getByTestId('hire-rules-full')).toHaveTextContent(
+      '50 conditions, the most it keeps.',
+    );
+  });
+
+  it('the conditions are kept with the hire, as written', async () => {
+    sheet({ initialStep: 2, viewerId: 'u1' });
+    await userEvent.click(screen.getByTestId('hire-handover-annoyed'));
+    await waitFor(() =>
+      expect(JSON.parse(window.localStorage.getItem(KEY)!).plan.rules).toEqual([
+        { label: 'they ask for a person', enabled: true },
+        { label: 'they sound annoyed', enabled: true },
+      ]),
+    );
   });
 });

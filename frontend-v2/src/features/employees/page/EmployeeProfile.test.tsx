@@ -235,7 +235,7 @@ describe('★★ the handoff: add, edit, remove - the WHOLE array is sent', () =
     profile();
     await userEvent.click(screen.getByTestId('profile-rule-add'));
     expect(screen.getByTestId('profile-rules-problem')).toHaveTextContent(
-      'Every condition needs words before you save.',
+      'Every condition needs words. Write them, or remove it.',
     );
     expect(screen.getByTestId('profile-save')).toBeDisabled();
     await userEvent.type(screen.getByTestId('profile-rule-2-label'), 'x');

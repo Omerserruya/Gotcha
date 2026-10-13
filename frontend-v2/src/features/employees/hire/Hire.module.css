@@ -193,8 +193,7 @@
     margin: 0;
   }
 
-  .chip,
-  .chipQuiet {
+  .chip {
     padding-block: 7px;
     padding-inline: 13px;
     border: var(--border-width-thin) solid var(--border-default);
@@ -210,12 +209,6 @@
     border-color: var(--action-base);
     background-color: var(--action-base);
     color: var(--action-text);
-  }
-
-  .chipQuiet {
-    border-style: dashed;
-    color: var(--text-subtle);
-    cursor: not-allowed;
   }
 
   .nameInput {
@@ -299,10 +292,27 @@
     cursor: not-allowed;
   }
 
+  /* H3: handoff to a person, a section of its own - a card, as each group above. */
   .handover {
     display: flex;
     flex-direction: column;
     gap: var(--space-10);
+    padding: var(--space-14) var(--space-16);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .suggest {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .suggestLabel {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
   }
 
   .strip {

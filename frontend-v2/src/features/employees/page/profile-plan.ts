@@ -62,6 +62,15 @@ export function newRule(): DraftRule {
 }
 
 /**
+ * `escalationRules` as the route takes it: every condition, in order, its
+ * words trimmed, everything else as read. The page's Save and the hire send
+ * this same body.
+ */
+export function rulesBody(rules: readonly DraftRule[]): Record<string, unknown>[] {
+  return rules.map((rule) => ({ ...rule, label: rule.label.trim() }));
+}
+
+/**
  * Why the conditions cannot be saved as they are, or `null`: a condition
  * with no words (the route refuses an empty label), or more than it keeps.
  */
@@ -107,7 +116,7 @@ export function editPatch(
       patch.integrationAccess = [...(draft.access ?? [])].sort();
     } else {
       // The whole array: PATCH replaces it, so a rule left out is removed.
-      patch.escalationRules = draft.rules.map((rule) => ({ ...rule, label: rule.label.trim() }));
+      patch.escalationRules = rulesBody(draft.rules);
     }
   }
   return patch;

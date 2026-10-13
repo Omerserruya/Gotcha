@@ -1,10 +1,5 @@
-import {
-  HANDOVER_SUGGESTIONS,
-  HIRE_JOBS,
-  emptyPlan,
-  type HirePlan,
-  type HireTool,
-} from './hire-plan';
+import { MAX_RULE_LABEL, MAX_RULES, type DraftRule } from '../page/profile-plan';
+import { HIRE_JOBS, type HirePlan, type HireTool } from './hire-plan';
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -40,15 +35,30 @@ export function hasEntries(plan: HirePlan, fresh: HirePlan): boolean {
     plan.name.trim() !== '' ||
     JSON.stringify(plan.choices) !== JSON.stringify(fresh.choices) ||
     JSON.stringify([...plan.access].sort()) !== JSON.stringify([...fresh.access].sort()) ||
-    JSON.stringify([...plan.handover].sort()) !== JSON.stringify([...fresh.handover].sort())
+    JSON.stringify(plan.rules) !== JSON.stringify(fresh.rules)
   );
 }
 
-/** The draft as stored, made safe against today's actions; `null` when there is none to use. */
+/** Stored conditions, each made safe: words (at most the route's 300) and a switch; at most 50. */
+function readRules(value: unknown): DraftRule[] | null {
+  if (!Array.isArray(value)) return null;
+  return value
+    .filter(
+      (r): r is { label: string; enabled?: unknown } =>
+        typeof r === 'object' && r !== null && isString((r as { label?: unknown }).label),
+    )
+    .map((r) => ({ label: r.label.slice(0, MAX_RULE_LABEL), enabled: r.enabled !== false }))
+    .slice(0, MAX_RULES);
+}
+
+/**
+ * The draft as stored, made safe against today's actions; `null` when there
+ * is none to use. `fresh`: where a new hire starts, today.
+ */
 export function readDraft(
   raw: string | null,
   tools: readonly HireTool[],
-  setUp: readonly string[],
+  fresh: HirePlan,
 ): HireDraft | null {
   if (!raw) return null;
   let data: unknown;
@@ -60,7 +70,6 @@ export function readDraft(
   if (typeof data !== 'object' || data === null) return null;
   const { step, plan } = data as { step?: unknown; plan?: Record<string, unknown> };
   if (typeof plan !== 'object' || plan === null) return null;
-  const fresh = emptyPlan(tools, setUp);
   const job = (HIRE_JOBS as readonly unknown[]).includes(plan.job)
     ? (plan.job as HirePlan['job'])
     : null;
@@ -83,9 +92,8 @@ export function readDraft(
     name: isString(plan.name) ? plan.name.slice(0, 120) : '',
     choices,
     access: list(plan.access) ?? fresh.access,
-    handover: (list(plan.handover) ?? fresh.handover).filter((h) =>
-      (HANDOVER_SUGGESTIONS as readonly string[]).includes(h),
-    ),
+    // A draft kept before H3 holds chip keys (`handover`), not conditions: it starts fresh.
+    rules: readRules(plan.rules) ?? fresh.rules,
   };
   if (!hasEntries(draft, fresh)) return null;
   // A later step needs step 1 done; otherwise it starts at step 1.
@@ -104,11 +112,11 @@ function store(): Storage | null {
 export function loadDraft(
   userId: string | null,
   tools: readonly HireTool[],
-  setUp: readonly string[],
+  fresh: HirePlan,
 ): HireDraft | null {
   if (!userId) return null;
   try {
-    return readDraft(store()?.getItem(KEY(userId)) ?? null, tools, setUp);
+    return readDraft(store()?.getItem(KEY(userId)) ?? null, tools, fresh);
   } catch {
     return null;
   }

@@ -21,6 +21,8 @@ import {
   type HireTool,
 } from './hire-plan';
 import { clearDraft, hasEntries, loadDraft, saveDraft } from './hire-draft';
+import { HandoverRules } from '../page/HandoverRules';
+import { MAX_RULES, rulesProblem } from '../page/profile-plan';
 import styles from './Hire.module.css';
 
 type Step = 1 | 2 | 3;
@@ -59,9 +61,13 @@ export function HireSheet({
   readonly systems?: readonly { readonly slug: string; readonly failing: boolean }[] | null;
 }) {
   const t = useTranslations('employees.hireFlow');
+  const tp = useTranslations('employees.profile');
   const [step, setStep] = useState<Step>(initialStep);
   const setUp = systems?.map((system) => system.slug) ?? [];
-  const [plan, setPlan] = useState<HirePlan>(() => emptyPlan(tools, setUp));
+  /* Where a new hire starts: the first chip's condition, in the reader's words. */
+  const fresh = () =>
+    emptyPlan(tools, setUp, [{ label: t(`two.when.${HANDOVER_SUGGESTIONS[0]}`), enabled: true }]);
+  const [plan, setPlan] = useState<HirePlan>(fresh);
   /*
     ★★ H6 (Omer, 2026-10-13): a hire that was closed continues where it
     stopped - see `hire-draft.ts`. Read after mounting (there is no storage
@@ -73,7 +79,7 @@ export function HireSheet({
   const [asking, setAsking] = useState(false);
   const router = useRouter();
   useEffect(() => {
-    const draft = loadDraft(viewerId, tools, setUp);
+    const draft = loadDraft(viewerId, tools, fresh());
     const id = window.setTimeout(() => {
       if (draft) {
         setPlan(draft.plan);
@@ -86,7 +92,7 @@ export function HireSheet({
     // Once, on opening: the draft is read for the sheet as it opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const entered = hasEntries(plan, emptyPlan(tools, setUp));
+  const entered = hasEntries(plan, fresh());
   useEffect(() => {
     if (!loaded) return;
     if (entered) saveDraft(viewerId, { step, plan });
@@ -101,7 +107,7 @@ export function HireSheet({
   };
   const startOver = () => {
     clearDraft(viewerId);
-    setPlan(emptyPlan(tools, setUp));
+    setPlan(fresh());
     setRestored(false);
     setAsking(false);
     go(1);
@@ -116,8 +122,10 @@ export function HireSheet({
         : t(`job.${plan.job}.name`);
 
   const set = (patch: Partial<HirePlan>) => setPlan((p) => ({ ...p, ...patch }));
-  const toggle = (list: readonly string[], value: string) =>
-    list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+  /* The chips not already a condition, word for word: each one a quick add (H3). */
+  const suggestions = HANDOVER_SUGGESTIONS.filter(
+    (h) => !plan.rules.some((rule) => rule.label.trim() === t(`two.when.${h}`)),
+  );
 
   const go = (next: Step) => {
     setStep(next);
@@ -373,25 +381,40 @@ export function HireSheet({
                     </section>
                   ))
                 )}
-                <section className={styles.handover}>
+                {/*
+                  ★ H3 (Omer, 2026-10-13): handoff has real weight - its own
+                  section, the conditions as a list to add, reword, switch and
+                  remove, in the employee page's own editor. The chips stay,
+                  as quick adds.
+                */}
+                <section className={styles.handover} data-testid="hire-handover">
                   <h4 className={styles.blockTitle}>{t('two.handover')}</h4>
-                  <p className={styles.chips}>
-                    {HANDOVER_SUGGESTIONS.map((h) => (
-                      <button
-                        key={h}
-                        type="button"
-                        aria-pressed={plan.handover.includes(h)}
-                        className={styles.chip}
-                        data-testid={`hire-handover-${h}`}
-                        onClick={() => set({ handover: toggle(plan.handover, h) })}
-                      >
-                        {t(`two.when.${h}`)}
-                      </button>
-                    ))}
-                    <span className={styles.chipQuiet} aria-disabled="true" title={t('notYet')}>
-                      {t('two.addAnother')}
-                    </span>
-                  </p>
+                  <p className={styles.sub}>{tp('handover.lead')}</p>
+                  <HandoverRules
+                    id="hire"
+                    rules={plan.rules}
+                    onChange={(rules) => set({ rules })}
+                  />
+                  {suggestions.length > 0 && plan.rules.length < MAX_RULES ? (
+                    <div className={styles.suggest} data-testid="hire-suggestions">
+                      <span className={styles.suggestLabel}>{t('two.suggest')}</span>
+                      {suggestions.map((h) => (
+                        <button
+                          key={h}
+                          type="button"
+                          className={styles.chip}
+                          data-testid={`hire-handover-${h}`}
+                          onClick={() =>
+                            set({
+                              rules: [...plan.rules, { label: t(`two.when.${h}`), enabled: true }],
+                            })
+                          }
+                        >
+                          {t(`two.when.${h}`)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </section>
               </>
             ) : (
@@ -451,7 +474,10 @@ export function HireSheet({
                 <button
                   type="button"
                   className={styles.primary}
-                  disabled={step === 1 && !stepOneDone(plan)}
+                  disabled={
+                    (step === 1 && !stepOneDone(plan)) ||
+                    (step === 2 && rulesProblem(plan.rules) !== null)
+                  }
                   data-testid="hire-continue"
                   onClick={() => go((step + 1) as Step)}
                 >
