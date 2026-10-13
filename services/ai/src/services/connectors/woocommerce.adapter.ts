@@ -244,9 +244,16 @@ const WooCommerceAdapter: ProviderAdapter = {
       case "get_order":
         return await wooRequest(auth, "GET", `${base}/orders/${encodeURIComponent(String(args.order_id))}`);
       case "update_order_status": {
-        const body: any = { status: String(args.status) };
-        if (args.note) body.customer_note = String(args.note);
-        return await wooRequest(auth, "PUT", `${base}/orders/${encodeURIComponent(String(args.order_id))}`, body);
+        const id = encodeURIComponent(String(args.order_id));
+        const order = await wooRequest(auth, "PUT", `${base}/orders/${id}`, { status: String(args.status) });
+        // The note is an order note the customer sees (POST /orders/:id/notes).
+        // It was written into customer_note, which OVERWROTE the note the
+        // customer left on their own order (2026-10-13).
+        if (args.note) {
+          const note = await wooRequest(auth, "POST", `${base}/orders/${id}/notes`, { note: String(args.note), customer_note: true });
+          return { ...(order as Record<string, unknown>), added_note: note };
+        }
+        return order;
       }
       case "get_customer": {
         if (args.customer_id) {
