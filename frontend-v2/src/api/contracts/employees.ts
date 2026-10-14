@@ -373,18 +373,23 @@ export type IntegrationAccess = z.infer<typeof integrationAccessSchema>;
  * A choice's state in the screen's terms:
  *
  *   working   connected (or an active custom tool)
- *   failing   connected and broken - ERROR, DISCONNECTED
- *   off       a custom tool switched off
- *   waiting   not finished connecting (PENDING, TESTING), or a state not known here
+ *   failing       connected and broken - ERROR
+ *   disconnected  someone disconnected it (or Shopify's uninstall) - never
+ *                 "connected, but failing" (dev, 2026-10-14: Shopify read so)
+ *   off           a custom tool switched off
+ *   waiting       not finished connecting (PENDING, TESTING), or a state not known here
  */
-export function accessState(choice: AccessChoice): 'working' | 'failing' | 'off' | 'waiting' {
+export function accessState(
+  choice: AccessChoice,
+): 'working' | 'failing' | 'disconnected' | 'off' | 'waiting' {
   switch (choice.status) {
     case 'CONNECTED':
     case 'ACTIVE':
       return 'working';
     case 'ERROR':
-    case 'DISCONNECTED':
       return 'failing';
+    case 'DISCONNECTED':
+      return 'disconnected';
     case 'INACTIVE':
       return 'off';
     default:

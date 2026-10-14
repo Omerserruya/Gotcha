@@ -2,6 +2,7 @@
 
 import { Plus, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { useState } from 'react';
 
 import { typedDir } from '@/lib/typed-dir';
 
@@ -29,6 +30,12 @@ export function EmployeeLimits({
   readonly refusedAt?: number | null;
 }) {
   const t = useTranslations('employees.profile.limits');
+  /*
+    A rule just added is empty by design: "needs words" is said once a rule
+    has been left, never as it appears (dev, 2026-10-14). Save stays disabled
+    meanwhile. Too long and too many are said at once - typing made them.
+  */
+  const [left, setLeft] = useState(false);
   if (limits === null) {
     return (
       <p className={styles.quiet} data-testid="profile-limits-unread">
@@ -36,7 +43,8 @@ export function EmployeeLimits({
       </p>
     );
   }
-  const problem = limitsProblem(limits);
+  const found = limitsProblem(limits);
+  const problem = found === 'empty' && !left ? null : found;
 
   return (
     <>
@@ -57,10 +65,13 @@ export function EmployeeLimits({
                 placeholder={t('placeholder')}
                 aria-label={t('labelFor', { n: i + 1 })}
                 aria-invalid={
-                  rule.trim() === '' || rule.trim().length > MAX_LIMIT_LENGTH || refusedAt === i
+                  (left && rule.trim() === '') ||
+                  rule.trim().length > MAX_LIMIT_LENGTH ||
+                  refusedAt === i
                     ? true
                     : undefined
                 }
+                onBlur={() => setLeft(true)}
                 data-testid={`profile-limit-${i}-text`}
                 onChange={(e) => onChange(limits.map((r, j) => (j === i ? e.target.value : r)))}
               />

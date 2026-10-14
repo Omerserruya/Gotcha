@@ -356,11 +356,17 @@ describe('★★ E4 (2026-10-14) - "Limits": its own rules, saved with the rest'
   it('a rule with no words, or over 280, cannot be saved - and says why', async () => {
     profile(RULES);
     await userEvent.click(screen.getByTestId('profile-limit-add'));
+    // Just added: empty by design - Save disabled, nothing said yet (dev, 2026-10-14).
+    expect(screen.getByTestId('profile-save')).toBeDisabled();
+    expect(screen.queryByTestId('profile-limits-problem')).toBeNull();
+    expect(screen.getByTestId('profile-limit-2-text')).not.toHaveAttribute('aria-invalid');
+    // Left empty: now said.
+    fireEvent.blur(screen.getByTestId('profile-limit-2-text'));
     expect(screen.getByTestId('profile-limits-problem')).toHaveTextContent(
       'Every rule needs words',
     );
-    expect(screen.getByTestId('profile-save')).toBeDisabled();
     expect(screen.getByTestId('profile-limit-2-text')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByTestId('profile-save')).toBeDisabled();
     fireEvent.change(screen.getByTestId('profile-limit-2-text'), {
       target: { value: 'x'.repeat(281) },
     });
@@ -412,5 +418,26 @@ describe('★★ E4 (2026-10-14) - "Limits": its own rules, saved with the rest'
     await userEvent.click(screen.getByTestId('profile-save'));
     await userEvent.click(await screen.findByTestId('profile-confirm-save'));
     expect(await screen.findByTestId('profile-save-failed')).toHaveTextContent('עד 20 כללים.');
+  });
+});
+
+describe('★ a business system someone disconnected reads "Disconnected" - never "connected, but failing"', () => {
+  it('DISCONNECTED and ERROR are two different sentences (dev, 2026-10-14)', () => {
+    profile(
+      {},
+      {
+        access: {
+          allowed: [],
+          choices: [
+            { key: 'shopify', kind: 'integration', name: 'Shopify', status: 'DISCONNECTED' },
+            { key: 'woocommerce', kind: 'integration', name: 'WooCommerce', status: 'ERROR' },
+          ],
+        },
+      },
+      'he',
+    );
+    expect(screen.getByTestId('profile-system-shopify')).toHaveTextContent('מנותקת');
+    expect(screen.getByTestId('profile-system-shopify')).not.toHaveTextContent('נכשלת');
+    expect(screen.getByTestId('profile-system-woocommerce')).toHaveTextContent('מחוברת, אבל נכשלת');
   });
 });

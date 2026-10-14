@@ -382,6 +382,7 @@
       "state": {
         "working": "Connected",
         "failing": "Connected, but failing",
+        "disconnected": "Disconnected",
         "off": "Switched off",
         "waiting": "Not connected yet"
       },
