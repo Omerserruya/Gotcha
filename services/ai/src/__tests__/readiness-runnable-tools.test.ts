@@ -12,6 +12,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   return {
     ...actual,
     readDurableSetting: async () => null,
+    writeDurableSetting: async () => {},
     prisma: {
       knowledgeBase: { findMany: async () => [] },
       aIAgent: { findFirst: async () => ({ id: "a1", name: "Noa", role: "customer_support", goal: "help", successCriteria: "", identity: {} }) },
@@ -36,7 +37,13 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   };
 });
 vi.mock("../services/ai.service", () => ({
-  generateResponse: vi.fn(async (o: any) => { H.prompt = o.messages[1].content; return { content: JSON.stringify({ questions: [], recommendations: [] }) }; }),
+  // Two calls since B6: the question set (once), then the judge, whose prompt
+  // is the one that lists the tools.
+  generateResponse: vi.fn(async (o: any) => {
+    if (o.metadata?.type === "agent_readiness_questions") return { content: JSON.stringify({ questions: ["Where is my order?"] }) };
+    H.prompt = o.messages[1].content;
+    return { content: JSON.stringify({ judgements: [], recommendations: [] }) };
+  }),
 }));
 
 import { generateReadinessReport } from "../services/agent-readiness.service";

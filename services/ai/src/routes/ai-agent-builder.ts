@@ -665,13 +665,13 @@ router.post("/:id/finalize", async (req: Request, res: Response) => {
  * Persisting is best-effort: a failure never blocks returning the report.
  * Shared by the manual route and the automatic run after a hire.
  */
-export async function runAndStoreReadiness(tenantId: string, agentId: string, locale: string, runId?: string) {
+export async function runAndStoreReadiness(tenantId: string, agentId: string, locale: string, runId?: string, opts: { regenerateQuestions?: boolean } = {}) {
   // The run's status (running / done / failed) is stored beside the report,
   // so the page shows the truth instead of guessing how long a check takes.
   const run = runId ?? (await markReadinessRunning(tenantId, agentId));
   let report: Awaited<ReturnType<typeof generateReadinessReport>>;
   try {
-    report = await generateReadinessReport(tenantId, agentId, locale);
+    report = await generateReadinessReport(tenantId, agentId, locale, opts);
   } catch (err) {
     await markReadinessFinished(tenantId, agentId, run, { ok: false, error: "internal_error" });
     throw err;
@@ -702,7 +702,9 @@ router.post("/:id/readiness-test", async (req: Request, res: Response) => {
     if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
 
     const locale = await resolveLocale(tenantId, req.body?.locale);
-    const report = await runAndStoreReadiness(tenantId, agentId, locale);
+    // regenerateQuestions: a fresh question set; otherwise the stored one is
+    // judged again, and an unchanged input returns the same report (B6).
+    const report = await runAndStoreReadiness(tenantId, agentId, locale, undefined, { regenerateQuestions: req.body?.regenerateQuestions === true });
     if ("error" in report) {
       res.status(report.error === "agent_not_found" ? 404 : 502).json({ error: report.error });
       return;

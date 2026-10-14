@@ -17,7 +17,7 @@ vi.mock("bullmq", () => ({ Queue: class { add = vi.fn(); }, Worker: class {}, Jo
 const H = vi.hoisted(() => ({
   user: { userId: "owner", role: "ADMIN", perms: [] as string[] },
   agents: [] as any[], kbs: [] as any[], docs: [] as any[], links: [] as any[], questions: [] as any[],
-  settings: new Map<string, string>(), embedFails: false, n: 0, prompt: "", modelQuestions: [] as any[],
+  settings: new Map<string, string>(), embedFails: false, n: 0, prompt: "", judgePrompt: "", modelQuestions: [] as any[],
 }));
 
 const inList = (v: any, c: any) => (c && typeof c === "object" && "in" in c ? c.in.includes(v) : c === undefined || c === v);
@@ -48,8 +48,9 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       knowledgeDocument: {
         findFirst: async (a: any) => H.docs.find((d) => d.tenantId === a.where.tenantId && d.metadata?.dedupeKey === a.where.metadata.equals) ?? null,
         findMany: async (a: any) => H.docs.filter((d) => d.tenantId === a.where.tenantId && inList(d.knowledgeBaseId, a.where.knowledgeBaseId)),
-        create: async (a: any) => { const d = { id: `doc_${++H.n}`, ...a.data }; H.docs.push(d); return d; },
-        update: async (a: any) => { const d = H.docs.find((x) => x.id === a.where.id); Object.assign(d, a.data); return d; },
+        // updatedAt as Prisma's @updatedAt keeps it.
+        create: async (a: any) => { const d = { id: `doc_${++H.n}`, updatedAt: new Date(), ...a.data }; H.docs.push(d); return d; },
+        update: async (a: any) => { const d = H.docs.find((x) => x.id === a.where.id); Object.assign(d, a.data, { updatedAt: new Date() }); return d; },
       },
       unansweredQuestion: {
         findFirst: async (a: any) => H.questions.find((q) => q.tenantId === a.where.tenantId && q.clusterKey === a.where.clusterKey && q.resolvedAt === null) ?? null,
@@ -69,7 +70,20 @@ vi.mock("../services/embedding.service", () => ({
 }));
 vi.mock("../services/qdrant.service", () => ({ deleteByDocumentId: async () => {} }));
 vi.mock("../services/ai.service", () => ({
-  generateResponse: vi.fn(async (o: any) => { H.prompt = o.messages[1].content; return { content: JSON.stringify({ questions: H.modelQuestions, recommendations: [] }) }; }),
+  // B6: the question set first, then the judge of the fixed list.
+  generateResponse: vi.fn(async (o: any) => {
+    const prompt = o.messages[1].content as string;
+    if (o.metadata?.type === "agent_readiness_questions") {
+      H.prompt = prompt;
+      return { content: JSON.stringify({ questions: H.modelQuestions.map((q: any) => q.question) }) };
+    }
+    H.judgePrompt = prompt;
+    const judgements = [...prompt.matchAll(/^- \[(q_[0-9a-f]+)\] (.+)$/gm)].map(([, id, text]) => {
+      const m = H.modelQuestions.find((q: any) => q.question === text);
+      return { id, coverage: m?.coverage ?? "none", gapType: m?.gapType ?? "knowledge", reason: "r" };
+    });
+    return { content: JSON.stringify({ judgements, recommendations: [] }) };
+  }),
 }));
 
 import { clusterKeyFor } from "@chatcenter/shared";
@@ -92,10 +106,10 @@ beforeEach(() => {
     { id: "kb_sales", tenantId: "T", name: "Sales", isActive: true, scope: "department", scopeDepartmentId: "d2" },
     { id: "kb_off", tenantId: "T", name: "Old", isActive: false, scope: "all" },
   ];
-  H.docs = H.kbs.map((k, i) => ({ id: `seed_${i}`, tenantId: "T", knowledgeBaseId: k.id, title: `doc in ${k.id}`, content: "x", metadata: {} }));
+  H.docs = H.kbs.map((k, i) => ({ id: `seed_${i}`, tenantId: "T", knowledgeBaseId: k.id, title: `doc in ${k.id}`, content: "x", metadata: {}, updatedAt: new Date("2026-10-01") }));
   H.links = [];
   H.questions = [{ id: "uq1", tenantId: "T", question: "Do you ship to Eilat?", clusterKey: clusterKeyFor("Do you ship to Eilat?"), resolvedAt: null }];
-  H.settings = new Map(); H.embedFails = false; H.n = 0; H.prompt = ""; H.modelQuestions = [];
+  H.settings = new Map(); H.embedFails = false; H.n = 0; H.prompt = ""; H.judgePrompt = ""; H.modelQuestions = [];
 });
 
 describe("POST /:id/readiness-questions/answer", () => {
@@ -147,6 +161,19 @@ describe("POST /:id/readiness-questions/answer", () => {
     expect(H.docs.filter((d) => d.id.startsWith("doc_"))).toEqual([]);
   });
 
+  it("★ by questionId: the question of the employee's stable set (B6); an unknown id is 404", async () => {
+    const { questionIdFor, questionSetKey } = await import("../services/agent-readiness.service");
+    const id = questionIdFor("Do you ship to Eilat?");
+    H.settings.set(`T:${questionSetKey("maya")}`, JSON.stringify({ fingerprint: "f", locale: "en", generatedAt: "2026-10-14", questions: [{ id, question: "Do you ship to Eilat?" }] }));
+    const r = await answer("maya", { questionId: id, answer: "Yes." });
+    expect(r.status).toBe(200);
+    expect(H.docs.find((d) => d.id === r.body.data.documentId)?.title).toBe("Do you ship to Eilat?");
+    expect(JSON.parse(H.settings.get("T:agent:readiness-answered:maya")!)[0].question).toBe("Do you ship to Eilat?");
+    const bad = await answer("maya", { questionId: "q_000000000000", answer: "Yes." });
+    expect(bad.status).toBe(404);
+    expect(bad.body.code).toBe("QUESTION_NOT_FOUND");
+  });
+
   it("without the knowledge write permission: 403", async () => {
     H.user = { userId: "agent1", role: "AGENT", perms: ["ai:knowledge:read"] };
     expect((await answer("maya", { question: "Q?", answer: "Yes." })).status).toBe(403);
@@ -177,8 +204,9 @@ describe("the next readiness report", () => {
   });
 
   it("★ reads the knowledge the employee reads at runtime, not only what is attached", async () => {
+    H.modelQuestions = [{ question: "What sizes do you have?", coverage: "none", gapType: "data", reason: "r" }];
     await generateReadinessReport("T", "maya", "en");
-    for (const kb of ["kb_all", "kb_dept", "kb_mine"]) expect(H.prompt).toContain(`doc in ${kb}`);
-    for (const kb of ["kb_theirs", "kb_sales", "kb_off"]) expect(H.prompt).not.toContain(`doc in ${kb}`);
+    for (const kb of ["kb_all", "kb_dept", "kb_mine"]) expect(H.judgePrompt).toContain(`doc in ${kb}`);
+    for (const kb of ["kb_theirs", "kb_sales", "kb_off"]) expect(H.judgePrompt).not.toContain(`doc in ${kb}`);
   });
 });

@@ -2,16 +2,35 @@
  * AI Employee Readiness Test.
  *
  * After the builder wizard, we run a "will this employee actually cope?" audit:
- * generate the realistic customer questions this employee will face (from the
- * business, its role/goal, its attached knowledge, and its granted tools),
- * then judge how well it's covered and where the gaps are.
+ * the realistic customer questions this employee will face (from the business
+ * and its role/goal), judged against what it can actually use (its knowledge
+ * and its runnable tools), with the gaps and how to close them.
  *
- * One JSON-mode LLM call (lives in services/ai - the only service allowed to
- * make new LLM calls). The score is computed deterministically from the
- * per-question coverage so it can't drift with the model's mood.
+ * Lives in services/ai - the only service allowed to make new LLM calls. The
+ * score is computed deterministically from the per-question coverage.
+ *
+ * STABLE BY DESIGN (B6, 2026-10-14). One call at temperature 0.5 used to both
+ * invent the questions and judge them, so Maya scored 34 then 45 with nothing
+ * changed. Now:
+ *  - The QUESTION SET is made once and stored (TenantSetting
+ *    "agent:readiness-questions:<id>"), each question with a stable id. It is
+ *    remade only when what a CUSTOMER would ask changes: role, goal, success
+ *    criteria, the business, the language (questionFingerprint), or on request
+ *    (regenerateQuestions). Knowledge and tools are NOT in it on purpose: the
+ *    point is to re-judge the same questions after knowledge is added.
+ *  - Each run JUDGES that fixed set at temperature 0.
+ *  - The judgement is keyed by everything it depends on (inputFingerprint:
+ *    the question set, the readable knowledge, the runnable tools, the
+ *    answered questions). When that is unchanged the stored report is returned
+ *    as it is, with no model call (unchanged: true): nothing changed, same score.
+ *  - A question a person answered (readiness-answers) is covered by that
+ *    answer: it joins the set if it is not in it, and is marked full without
+ *    asking the judge.
+ * No migration: two TenantSetting keys; the report stays in AIAgent.readinessReport.
  */
 
-import { prisma, clusterKeyFor } from "@chatcenter/shared";
+import crypto from "crypto";
+import { prisma, clusterKeyFor, readDurableSetting, writeDurableSetting } from "@chatcenter/shared";
 import { generateResponse } from "./ai.service";
 import { readableKnowledgeBaseIds } from "./knowledge.service";
 import { readAnsweredQuestions } from "./readiness-answers";
@@ -20,12 +39,14 @@ import { withoutWideDashes } from "../lib/wide-dash";
 export type Coverage = "full" | "partial" | "none";
 
 export interface ReadinessQuestion {
+  /** Stable across runs: a hash of the question's cluster key. */
+  id: string;
   question: string;
   coverage: Coverage;
   reason: string;
   /** What's missing for the uncovered/partly-covered ones. */
   gapType: "knowledge" | "tool" | "data" | "none";
-  /** True for a question a person answered from an earlier report (B2): covered by that answer. */
+  /** True for a question a person answered (B2): covered by that answer. */
   answered?: boolean;
 }
 
@@ -42,12 +63,40 @@ export interface ReadinessReport {
   questions: ReadinessQuestion[];
   recommendations: ReadinessRecommendation[];
   generatedAt: string;
+  /** When the question set being judged was made. */
+  questionSetGeneratedAt?: string;
+  /** Everything the judgement depends on; equal means nothing changed. */
+  inputFingerprint?: string;
+  /** True when this run found nothing changed and returned the stored report. */
+  unchanged?: boolean;
+}
+
+export interface StoredQuestionSet {
+  fingerprint: string;
+  locale: string;
+  generatedAt: string;
+  questions: Array<{ id: string; question: string }>;
 }
 
 const LANG_NAMES: Record<string, string> = { en: "English", he: "Hebrew (עברית)", ar: "Arabic (العربية)" };
 
 const MAX_KB_DOCS = 40;
 const MAX_TOOLS = 60;
+/** Bumped when the judging prompt changes, so old judgements are not reused. */
+const JUDGE_VERSION = "1";
+
+export function questionSetKey(aiAgentId: string): string {
+  return `agent:readiness-questions:${aiAgentId}`;
+}
+
+/** A question's stable id: the same question (by cluster key) always has the same id. */
+export function questionIdFor(question: string): string {
+  return "q_" + crypto.createHash("sha256").update(clusterKeyFor(question)).digest("hex").slice(0, 12);
+}
+
+function hashOf(v: unknown): string {
+  return crypto.createHash("sha256").update(JSON.stringify(v)).digest("hex").slice(0, 32);
+}
 
 interface ReadinessContext {
   agentName: string;
@@ -59,16 +108,19 @@ interface ReadinessContext {
   industry: string;
   businessDescription: string;
   knowledgeDocs: Array<{ kb: string; title: string; snippet: string }>;
+  /** Every readable document by id and last change: what the knowledge part of the fingerprint is. */
+  knowledgeVersion: Array<[string, string]>;
   tools: Array<{ name: string; integration: string; description: string }>;
   knowledgeCount: number;
-  /** Questions a person answered from an earlier report: counted as covered, never asked again. */
+  /** Questions a person answered: always covered. */
   answered: string[];
+  previousReport: ReadinessReport | null;
 }
 
 async function loadContext(tenantId: string, agentId: string): Promise<ReadinessContext | null> {
   const agent = await prisma.aIAgent.findFirst({
     where: { id: agentId, tenantId },
-    select: { id: true, name: true, role: true, goal: true, successCriteria: true, identity: true },
+    select: { id: true, name: true, role: true, goal: true, successCriteria: true, identity: true, readinessReport: true },
   });
   if (!agent) return null;
 
@@ -78,9 +130,7 @@ async function loadContext(tenantId: string, agentId: string): Promise<Readiness
       select: { organizationName: true, industry: true, businessDescription: true },
     }),
     // The bases the employee can actually retrieve from at runtime: attached,
-    // tenant-wide, its department's and its own (B2). Only the attached ones
-    // were read here, so company-wide knowledge (and every answer an owner
-    // gave to a question) never counted.
+    // tenant-wide, its department's and its own (B2).
     readableKnowledgeBaseIds(tenantId, agentId),
     // Only tools that can run: a CONNECTED connection and an enabled tool.
     // Grants on a disconnected store stay on the employee but do nothing, and
@@ -108,9 +158,12 @@ async function loadContext(tenantId: string, agentId: string): Promise<Readiness
   ]);
 
   const kbIds: string[] = readableKbIds;
-  const [kbRows, answered] = await Promise.all([
+  const [kbRows, answered, versions] = await Promise.all([
     kbIds.length ? prisma.knowledgeBase.findMany({ where: { tenantId, id: { in: kbIds } }, select: { id: true, name: true } }) : Promise.resolve([] as Array<{ id: string; name: string }>),
     readAnsweredQuestions(tenantId, agentId),
+    kbIds.length
+      ? prisma.knowledgeDocument.findMany({ where: { tenantId, knowledgeBaseId: { in: kbIds } }, select: { id: true, updatedAt: true }, orderBy: { id: "asc" } })
+      : Promise.resolve([] as Array<{ id: string; updatedAt: Date }>),
   ]);
   const kbNameById = new Map<string, string>(kbRows.map((k: any) => [k.id, k.name]));
 
@@ -120,7 +173,7 @@ async function loadContext(tenantId: string, agentId: string): Promise<Readiness
       where: { tenantId, knowledgeBaseId: { in: kbIds } },
       select: { knowledgeBaseId: true, title: true, content: true },
       take: MAX_KB_DOCS,
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     });
     knowledgeDocs = docs.map((d: any) => ({
       kb: kbNameById.get(d.knowledgeBaseId) || "Knowledge",
@@ -130,6 +183,7 @@ async function loadContext(tenantId: string, agentId: string): Promise<Readiness
   }
 
   const identity = (agent.identity as any) || {};
+  const prev = agent.readinessReport as any;
   return {
     agentName: agent.name,
     role: agent.role,
@@ -140,6 +194,7 @@ async function loadContext(tenantId: string, agentId: string): Promise<Readiness
     industry: profile?.industry || "",
     businessDescription: profile?.businessDescription || "",
     knowledgeDocs,
+    knowledgeVersion: versions.map((v: any) => [v.id, new Date(v.updatedAt).toISOString()] as [string, string]),
     tools: toolRows.map((t: any) => ({
       name: t.tenantTool.catalogTool.name,
       integration: t.tenantTool.tenantIntegration.integration.name,
@@ -147,23 +202,24 @@ async function loadContext(tenantId: string, agentId: string): Promise<Readiness
     })),
     knowledgeCount: kbIds.length,
     answered: answered.map((a) => a.question),
+    previousReport: prev && typeof prev === "object" && Array.isArray(prev.questions) ? (prev as ReadinessReport) : null,
   };
 }
 
-function buildPrompt(ctx: ReadinessContext, locale: string): string {
-  const lang = LANG_NAMES[locale] || "English";
-  const kbBlock = ctx.knowledgeDocs.length
-    ? ctx.knowledgeDocs.map((d) => `- [${d.kb}] ${d.title}: ${d.snippet}`).join("\n")
-    : "(no knowledge documents attached)";
-  const toolBlock = ctx.tools.length
-    ? ctx.tools.map((t) => `- ${t.name} (${t.integration})${t.description ? `: ${t.description}` : ""}`).join("\n")
-    : "(no action tools granted)";
-  // Already answered by a person and counted as covered (B2): asking them again
-  // would only count them twice.
-  const answeredBlock = ctx.answered.length
-    ? `\n## Questions the business already answered (do NOT include these or near-duplicates)\n${ctx.answered.map((q) => `- ${q}`).join("\n")}\n`
-    : "";
+/** What a customer would ask depends on these, and only these. */
+function questionFingerprint(ctx: ReadinessContext, locale: string): string {
+  return hashOf({
+    role: ctx.role,
+    goal: ctx.goal,
+    successCriteria: ctx.successCriteria,
+    organizationName: ctx.organizationName,
+    industry: ctx.industry,
+    business: ctx.businessDescription || ctx.companyOverview,
+    locale,
+  });
+}
 
+function businessBlock(ctx: ReadinessContext): string {
   return `## Business
 Organization: ${ctx.organizationName || "unknown"}
 Industry: ${ctx.industry || "unknown"}
@@ -173,27 +229,53 @@ What they do: ${ctx.businessDescription || ctx.companyOverview || "unknown"}
 Name: ${ctx.agentName}
 Role: ${ctx.role}
 Goal: ${ctx.goal || "(not set)"}
-Success criteria: ${ctx.successCriteria || "(not set)"}
+Success criteria: ${ctx.successCriteria || "(not set)"}`;
+}
+
+function buildQuestionsPrompt(ctx: ReadinessContext, locale: string): string {
+  const lang = LANG_NAMES[locale] || "English";
+  const answeredBlock = ctx.answered.length
+    ? `\n## Questions the business already answered (do NOT include these or near-duplicates)\n${ctx.answered.map((q) => `- ${q}`).join("\n")}\n`
+    : "";
+  return `${businessBlock(ctx)}
+${answeredBlock}
+## Your task
+Generate 28-36 realistic questions a real customer would ask THIS employee, given the business, industry and the employee's role. Cover the full spread: high-frequency everyday questions, edge cases, awkward/angry customers, pricing, logistics, policy, and post-sale - not just easy ones. Do not pad with near-duplicates; each question must be meaningfully distinct. Do not judge whether the employee can answer them.
+
+Respond ONLY with JSON of exactly this shape:
+{"questions":["...","..."]}
+Write the questions in ${lang}.`;
+}
+
+function buildJudgePrompt(ctx: ReadinessContext, questions: Array<{ id: string; question: string }>, locale: string): string {
+  const lang = LANG_NAMES[locale] || "English";
+  const kbBlock = ctx.knowledgeDocs.length
+    ? ctx.knowledgeDocs.map((d) => `- [${d.kb}] ${d.title}: ${d.snippet}`).join("\n")
+    : "(no knowledge documents available)";
+  const toolBlock = ctx.tools.length
+    ? ctx.tools.map((t) => `- ${t.name} (${t.integration})${t.description ? `: ${t.description}` : ""}`).join("\n")
+    : "(no action tools granted)";
+  return `${businessBlock(ctx)}
 
 ## Knowledge base documents available to it
 ${kbBlock}
 
 ## Action tools available to it
 ${toolBlock}
-${answeredBlock}
-## Your task
-Generate 28-36 realistic questions a real customer would ask THIS employee, given the business, industry and the employee's role. Cover the full spread: high-frequency everyday questions, edge cases, awkward/angry customers, pricing, logistics, policy, and post-sale - not just easy ones. Do not pad with near-duplicates; each question must be meaningfully distinct.
 
-For EACH question decide:
+## Customer questions to judge (fixed list; judge every id, add none)
+${questions.map((q) => `- [${q.id}] ${q.question}`).join("\n")}
+
+## Your task
+For EACH question id decide:
 - coverage: "full" (answerable now from the knowledge above and/or an available tool), "partial" (only some of it is covered, or it needs data we don't clearly have), or "none" (cannot be handled).
 - gapType: if not full, the single biggest missing thing - "knowledge" (missing info/policy/FAQ), "tool" (needs an action/integration we don't have, e.g. order lookup, shipping, refund), or "data" (needs structured business data, e.g. price list, size/measurement table, product catalog). Use "none" only when coverage is "full".
 - reason: one short sentence in ${lang}.
 
-Then produce "recommendations": concrete, deduplicated fixes for the gaps you found. Each has a "type" from: "add_knowledge", "connect_tool", "add_business_data", "add_faq", "create_workflow", "other". Examples: add shipping provider integration, upload return policy, add size/measurement table, add product catalog, connect Shopify orders, add FAQ content, create refund workflow. title + detail in ${lang}.
+Then produce "recommendations": concrete, deduplicated fixes for the gaps you found. Each has a "type" from: "add_knowledge", "connect_tool", "add_business_data", "add_faq", "create_workflow", "other". title + detail in ${lang}.
 
 Respond ONLY with JSON of exactly this shape:
-{"questions":[{"question":"...","coverage":"full|partial|none","gapType":"knowledge|tool|data|none","reason":"..."}],"recommendations":[{"type":"...","title":"...","detail":"..."}]}
-Write all customer-facing text (questions, reasons, titles, details) in ${lang}.`;
+{"judgements":[{"id":"q_...","coverage":"full|partial|none","gapType":"knowledge|tool|data|none","reason":"..."}],"recommendations":[{"type":"...","title":"...","detail":"..."}]}`;
 }
 
 function computeScore(questions: ReadinessQuestion[]): { score: number; totals: ReadinessReport["totals"] } {
@@ -211,74 +293,192 @@ const ANSWERED_REASON: Record<string, string> = {
   en: "Answered by the team; the answer is in the knowledge.",
   he: "הצוות ענה על השאלה, והתשובה נמצאת בידע.",
 };
+const NOT_JUDGED_REASON: Record<string, string> = {
+  en: "The check did not return a verdict for this question.",
+  he: "הבדיקה לא החזירה תשובה לשאלה הזו.",
+};
 
 const VALID_COVERAGE = new Set<Coverage>(["full", "partial", "none"]);
 const VALID_GAP = new Set(["knowledge", "tool", "data", "none"]);
 const VALID_REC = new Set(["add_knowledge", "connect_tool", "add_business_data", "add_faq", "create_workflow", "other"]);
 
+export async function readQuestionSet(tenantId: string, aiAgentId: string): Promise<StoredQuestionSet | null> {
+  try {
+    const raw = await readDurableSetting(tenantId, questionSetKey(aiAgentId));
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    if (!v || typeof v.fingerprint !== "string" || !Array.isArray(v.questions)) return null;
+    return v as StoredQuestionSet;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A failed write never fails the run: the report is still right, the set is
+ * only made again next time (and the score may then move, as before B6).
+ */
+async function storeQuestionSet(tenantId: string, aiAgentId: string, set: StoredQuestionSet): Promise<void> {
+  try {
+    await writeDurableSetting(tenantId, questionSetKey(aiAgentId), JSON.stringify(set), "readiness");
+  } catch (err: any) {
+    console.warn(`[readiness] question set write failed for ${aiAgentId}:`, err?.message);
+  }
+}
+
+/** Keep each question once (by id), in order. */
+function uniqueQuestions(qs: Array<{ id: string; question: string }>): Array<{ id: string; question: string }> {
+  const seen = new Set<string>();
+  return qs.filter((q) => (seen.has(q.id) ? false : (seen.add(q.id), true)));
+}
+
+/**
+ * The question set to judge: the stored one when it still fits, else a new
+ * one. Answered questions are always in it (an older answer, from before the
+ * set existed, joins it here).
+ */
+async function questionSetFor(
+  tenantId: string,
+  agentId: string,
+  ctx: ReadinessContext,
+  locale: string,
+  regenerate: boolean,
+): Promise<StoredQuestionSet | { error: string }> {
+  const fingerprint = questionFingerprint(ctx, locale);
+  const answered = ctx.answered.map((q) => ({ id: questionIdFor(q), question: q }));
+  let set = regenerate ? null : await readQuestionSet(tenantId, agentId);
+  if (set && set.fingerprint !== fingerprint) set = null;
+
+  if (!set) {
+    let raw: string;
+    try {
+      const res = await generateResponse({
+        tenantId,
+        messages: [
+          { role: "system", content: "You write the realistic questions customers ask a business. You output only valid JSON." },
+          { role: "user", content: buildQuestionsPrompt(ctx, locale) },
+        ],
+        temperature: 0.5,
+        maxTokens: 3000,
+        responseFormat: { type: "json_object" },
+        metadata: { type: "agent_readiness_questions", aiAgentId: agentId },
+      } as any);
+      raw = (res as any)?.content || "";
+    } catch (err: any) {
+      console.error("[readiness] question generation failed:", err?.message);
+      return { error: "llm_unavailable" };
+    }
+    let parsed: any;
+    try {
+      parsed = withoutWideDashes(JSON.parse(raw));
+    } catch {
+      return { error: "bad_model_output" };
+    }
+    const made = (Array.isArray(parsed.questions) ? parsed.questions : [])
+      .map((q: any) => String(typeof q === "string" ? q : q?.question || "").trim().slice(0, 400))
+      .filter(Boolean)
+      .map((q: string) => ({ id: questionIdFor(q), question: q }));
+    set = { fingerprint, locale, generatedAt: new Date().toISOString(), questions: uniqueQuestions([...made, ...answered]) };
+    await storeQuestionSet(tenantId, agentId, set);
+    return set;
+  }
+
+  const have = new Set(set.questions.map((q) => q.id));
+  const missing = answered.filter((a) => !have.has(a.id));
+  if (missing.length) {
+    set = { ...set, questions: [...set.questions, ...missing] };
+    await storeQuestionSet(tenantId, agentId, set);
+  }
+  return set;
+}
+
 export async function generateReadinessReport(
   tenantId: string,
   agentId: string,
   locale = "en",
+  opts: { regenerateQuestions?: boolean } = {},
 ): Promise<ReadinessReport | { error: string }> {
   const ctx = await loadContext(tenantId, agentId);
   if (!ctx) return { error: "agent_not_found" };
 
-  let raw: string;
-  try {
-    const res = await generateResponse({
-      tenantId,
-      messages: [
-        { role: "system", content: "You are a meticulous QA auditor for AI customer-service employees. You output only valid JSON." },
-        { role: "user", content: buildPrompt(ctx, locale) },
-      ],
-      temperature: 0.5,
-      maxTokens: 4500,
-      responseFormat: { type: "json_object" },
-      metadata: { type: "agent_readiness", aiAgentId: agentId },
-    } as any);
-    raw = (res as any)?.content || "";
-  } catch (err: any) {
-    console.error("[readiness] LLM call failed:", err?.message);
-    return { error: "llm_unavailable" };
+  const set = await questionSetFor(tenantId, agentId, ctx, locale, !!opts.regenerateQuestions);
+  if ("error" in set) return set;
+
+  const answeredIds = new Set(ctx.answered.map((q) => questionIdFor(q)));
+  const inputFingerprint = hashOf({
+    v: JUDGE_VERSION,
+    set: [set.fingerprint, set.generatedAt, set.questions.map((q) => q.id)],
+    knowledge: ctx.knowledgeVersion,
+    tools: ctx.tools.map((t) => [t.name, t.integration]),
+    answered: [...answeredIds].sort(),
+    locale,
+  });
+  // Nothing it depends on changed: the same report, with no model call.
+  if (ctx.previousReport && ctx.previousReport.inputFingerprint === inputFingerprint) {
+    return { ...ctx.previousReport, unchanged: true };
   }
 
-  let parsed: any;
-  try {
-    parsed = withoutWideDashes(JSON.parse(raw));
-  } catch {
-    return { error: "bad_model_output" };
+  const toJudge = set.questions.filter((q) => !answeredIds.has(q.id));
+  const judged = new Map<string, { coverage: Coverage; gapType: ReadinessQuestion["gapType"]; reason: string }>();
+  let recommendations: ReadinessRecommendation[] = [];
+  if (toJudge.length) {
+    let raw: string;
+    try {
+      const res = await generateResponse({
+        tenantId,
+        messages: [
+          { role: "system", content: "You are a meticulous QA auditor for AI customer-service employees. You output only valid JSON." },
+          { role: "user", content: buildJudgePrompt(ctx, toJudge, locale) },
+        ],
+        // Judging, not inventing: the same input should get the same verdict.
+        temperature: 0,
+        maxTokens: 4500,
+        responseFormat: { type: "json_object" },
+        metadata: { type: "agent_readiness", aiAgentId: agentId },
+      } as any);
+      raw = (res as any)?.content || "";
+    } catch (err: any) {
+      console.error("[readiness] LLM call failed:", err?.message);
+      return { error: "llm_unavailable" };
+    }
+    let parsed: any;
+    try {
+      parsed = withoutWideDashes(JSON.parse(raw));
+    } catch {
+      return { error: "bad_model_output" };
+    }
+    for (const j of Array.isArray(parsed.judgements) ? parsed.judgements : []) {
+      if (typeof j?.id !== "string") continue;
+      const coverage: Coverage = VALID_COVERAGE.has(j.coverage) ? j.coverage : "none";
+      const gapType = VALID_GAP.has(j.gapType) ? j.gapType : (coverage === "full" ? "none" : "knowledge");
+      judged.set(j.id, { coverage, gapType, reason: String(j.reason || "").slice(0, 400) });
+    }
+    recommendations = (Array.isArray(parsed.recommendations) ? parsed.recommendations : [])
+      .map((r: any) => ({
+        type: (VALID_REC.has(r?.type) ? r.type : "other") as ReadinessRecommendation["type"],
+        title: String(r?.title || "").slice(0, 200),
+        detail: String(r?.detail || "").slice(0, 500),
+      }))
+      .filter((r: ReadinessRecommendation) => r.title);
   }
 
-  const answeredKeys = new Set(ctx.answered.map((q) => clusterKeyFor(q)));
-  const questions: ReadinessQuestion[] = (Array.isArray(parsed.questions) ? parsed.questions : [])
-    .map((q: any) => {
-      const coverage: Coverage = VALID_COVERAGE.has(q?.coverage) ? q.coverage : "none";
-      const gapType = VALID_GAP.has(q?.gapType) ? q.gapType : (coverage === "full" ? "none" : "knowledge");
-      return {
-        question: String(q?.question || "").slice(0, 400),
-        coverage,
-        gapType: gapType as ReadinessQuestion["gapType"],
-        reason: String(q?.reason || "").slice(0, 400),
-      };
-    })
-    .filter((q: ReadinessQuestion) => q.question)
-    // One the model asked again anyway is the answered one, not a new gap.
-    .filter((q: ReadinessQuestion) => !answeredKeys.has(clusterKeyFor(q.question)));
-  // Each answered question is covered: its answer is knowledge the employee
-  // retrieves. Counted once, as the person asked it.
-  for (const question of ctx.answered) {
-    questions.push({ question, coverage: "full", gapType: "none", reason: ANSWERED_REASON[locale] ?? ANSWERED_REASON.en!, answered: true });
-  }
-
-  const recommendations: ReadinessRecommendation[] = (Array.isArray(parsed.recommendations) ? parsed.recommendations : [])
-    .map((r: any) => ({
-      type: (VALID_REC.has(r?.type) ? r.type : "other") as ReadinessRecommendation["type"],
-      title: String(r?.title || "").slice(0, 200),
-      detail: String(r?.detail || "").slice(0, 500),
-    }))
-    .filter((r: ReadinessRecommendation) => r.title);
+  const questions: ReadinessQuestion[] = set.questions.map((q) => {
+    if (answeredIds.has(q.id)) {
+      return { id: q.id, question: q.question, coverage: "full", gapType: "none", reason: ANSWERED_REASON[locale] ?? ANSWERED_REASON.en!, answered: true };
+    }
+    // A question the judge skipped is counted as not handled, and says so.
+    const j = judged.get(q.id) ?? { coverage: "none" as Coverage, gapType: "knowledge" as const, reason: NOT_JUDGED_REASON[locale] ?? NOT_JUDGED_REASON.en! };
+    return { id: q.id, question: q.question, ...j };
+  });
 
   const { score, totals } = computeScore(questions);
-  return { score, totals, questions, recommendations, generatedAt: new Date().toISOString() };
+  return {
+    score,
+    totals,
+    questions,
+    recommendations,
+    generatedAt: new Date().toISOString(),
+    questionSetGeneratedAt: set.generatedAt,
+    inputFingerprint,
+  };
 }

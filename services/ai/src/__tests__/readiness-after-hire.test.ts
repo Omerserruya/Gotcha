@@ -64,7 +64,7 @@ describe("after a hire", () => {
     expect(r.status).toBe(200);
     expect(r.body.data.readinessQueued).toBe(true);
     await settle();
-    expect(H.generate).toHaveBeenCalledWith("T", "maya", "he");
+    expect(H.generate).toHaveBeenCalledWith("T", "maya", "he", {});
     expect(H.updates).toContainEqual({ readinessReport: REPORT });
     expect(H.updates[0]).toMatchObject({ status: "ACTIVE" });
   });
@@ -101,7 +101,7 @@ describe("the manual re-run", () => {
     const r = await request(app).post("/api/ai-agents/builder/maya/readiness-test").send({ locale: "en" });
     expect(r.status).toBe(200);
     expect(r.body.data).toEqual(REPORT);
-    expect(H.generate).toHaveBeenCalledWith("T", "maya", "en");
+    expect(H.generate).toHaveBeenCalledWith("T", "maya", "en", { regenerateQuestions: false });
     expect(H.updates).toEqual([{ readinessReport: REPORT }]);
   });
 });

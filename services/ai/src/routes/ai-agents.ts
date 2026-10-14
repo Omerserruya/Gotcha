@@ -6,6 +6,7 @@ import { catalogTool } from "../lib/catalog-tools-he";
 import { toolDomain, toolDomainLabel } from "../lib/tool-domains";
 import { answerReadinessQuestion, ReadinessAnswerError, MAX_QUESTION } from "../services/readiness-answers";
 import { GapAnswerError, MAX_ANSWER } from "../services/knowledge-gap-answer.service";
+import { readQuestionSet } from "../services/agent-readiness.service";
 import { readerLocale } from "../lib/reader-locale";
 import { whereEmployeeAnswers } from "../services/employee-reach.service";
 
@@ -667,7 +668,16 @@ router.put("/:id/rules", authenticate, resolveTenant, requireActiveTenant(), req
 // The report's questions have no id (the model makes them each run), so the
 // question travels by its text. Open during onboarding, like the hire itself.
 router.post("/:id/readiness-questions/answer", authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
-  const question = typeof req.body?.question === "string" ? req.body.question.trim() : "";
+  // By the question's text, or by its id in the employee's stable question
+  // set (B6): ids are stable across runs.
+  const questionId = typeof req.body?.questionId === "string" ? req.body.questionId.trim() : "";
+  let question = typeof req.body?.question === "string" ? req.body.question.trim() : "";
+  if (questionId) {
+    const set = await readQuestionSet(req.tenantId! as string, req.params.id as string).catch(() => null);
+    const hit = set?.questions.find((q) => q.id === questionId);
+    if (!hit) { res.status(404).json({ error: "No such question in this employee's readiness questions", code: "QUESTION_NOT_FOUND" }); return; }
+    question = hit.question;
+  }
   // Kept as the owner wrote it; only the ends are trimmed.
   const answer = typeof req.body?.answer === "string" ? req.body.answer.trim() : "";
   if (!question) { res.status(400).json({ error: "A question is required", code: "QUESTION_REQUIRED" }); return; }
