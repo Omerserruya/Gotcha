@@ -29,6 +29,9 @@ vi.mock('@/features/workspace/load-workspace', () => ({
   loadWorkspaceFacts: async () => facts.value,
 }));
 vi.mock('@/features/knowledge/ScanPanel', () => ({ ScanPanel: () => null }));
+/* The last rescan, read with the page (2026-10-14). */
+const lastScan = vi.hoisted(() => ({ value: null as unknown }));
+vi.mock('@/features/knowledge/load-scan-run', () => ({ loadScanRun: async () => lastScan.value }));
 /* K6: the item's read is a spy - its own outcomes have their own tests. */
 const loadDoc = vi.hoisted(() => vi.fn());
 vi.mock('@/features/knowledge/load-document', () => ({ loadKnowledgeDocument: loadDoc }));
@@ -173,6 +176,17 @@ describe('★ "Scan again" lives here now - moved from Settings · Workspace (Om
       'props.domain',
       null,
     );
+  });
+
+  it('★★ a rescan still running when the page opens is handed on, to be followed; an ended one is not', async () => {
+    const running = { status: 'running', offer: [], applied: [] };
+    lastScan.value = running;
+    expect(await rescanOf()).toHaveProperty('props.running', running);
+    // An ended run's offers may be stale: the panel waits for a press.
+    lastScan.value = { status: 'done', offer: [], applied: [] };
+    expect(await rescanOf()).toHaveProperty('props.running', null);
+    lastScan.value = null;
+    expect(await rescanOf()).toHaveProperty('props.running', null);
   });
 
   it('★ the gate it had on Workspace: the workspace read failed, no rescan', async () => {

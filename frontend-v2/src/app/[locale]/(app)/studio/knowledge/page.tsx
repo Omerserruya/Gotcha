@@ -18,6 +18,7 @@ import { loadKnowledge } from '@/features/knowledge/load-knowledge';
 import { loadKnowledgeDocument } from '@/features/knowledge/load-document';
 import styles from '@/features/knowledge/Knowledge.module.css';
 import { ScanPanel } from '@/features/knowledge/ScanPanel';
+import { loadScanRun } from '@/features/knowledge/load-scan-run';
 import { loadWorkspaceFacts } from '@/features/workspace/load-workspace';
 import { Link } from '@/i18n/navigation';
 import { Drawer } from '@/shell/Drawer';
@@ -65,16 +66,23 @@ export default async function Page({
 } = {}) {
   const params = (await searchParams) ?? {};
   const t = await getTranslations('knowledge');
-  const [{ sources, unanswered, conflicts, everImported }, workspace] = await Promise.all([
+  const [{ sources, unanswered, conflicts, everImported }, workspace, scanRun] = await Promise.all([
     loadKnowledge(),
     loadWorkspaceFacts(),
+    loadScanRun(),
   ]);
   /*
     "Scan again" (11b), moved here from Settings · Workspace (Omer,
     2026-10-11). Drawn only when the workspace read answers - the gate it had
     there - and it names the website that read gives.
   */
-  const rescan = workspace ? <ScanPanel domain={workspace.websiteDomain ?? null} /> : null;
+  const rescan = workspace ? (
+    <ScanPanel
+      domain={workspace.websiteDomain ?? null}
+      // A rescan still running is followed from where it is (2026-10-14).
+      running={scanRun?.status === 'running' ? scanRun : null}
+    />
+  ) : null;
   /*
     K6: the item's drawer. Its base comes from the list just read - the route
     is scoped by base AND tenant - so an id in no listed source is "not

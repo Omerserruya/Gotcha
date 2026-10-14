@@ -1,29 +1,36 @@
 import { readFileSync } from 'node:fs';
 
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { ScanRun } from '@/api/contracts/workspace';
 
 import messages from '@/i18n/messages/en/knowledge.json';
 
-import { ScanPanel } from './ScanPanel';
+import { MAX_MISSED_READS, SCAN_POLL_MS, ScanPanel } from './ScanPanel';
 
 /*
  * The SAME actions as on Workspace: the panel moved to Knowledge (Omer,
  * 2026-10-11), its writes did not. Mocked at the workspace module's path, so
  * a panel that called anything else would reach a real server action here.
  */
-const { runWorkspaceScan, acceptScanFields } = vi.hoisted(() => ({
-  runWorkspaceScan: vi.fn(),
+const { startWorkspaceScan, readWorkspaceScan, acceptScanFields } = vi.hoisted(() => ({
+  startWorkspaceScan: vi.fn(),
+  readWorkspaceScan: vi.fn(),
   acceptScanFields: vi.fn(),
 }));
-vi.mock('@/features/workspace/actions', () => ({ runWorkspaceScan, acceptScanFields }));
+vi.mock('@/features/workspace/actions', () => ({
+  startWorkspaceScan,
+  readWorkspaceScan,
+  acceptScanFields,
+}));
 
 /**
  * Screen 11b, on Studio · Knowledge.
  *
- * ★ The live path is NEVER exercised here. `runWorkspaceScan` re-crawls a
+ * ★ The live path is NEVER exercised here. `startWorkspaceScan` re-crawls a
  * real website and `acceptScanFields` writes provenance; both are mocked.
  *
  * And the state that matters most to this screen is unreachable on this
@@ -35,18 +42,39 @@ vi.mock('@/features/workspace/actions', () => ({ runWorkspaceScan, acceptScanFie
  */
 
 beforeEach(() => {
-  runWorkspaceScan.mockReset();
+  startWorkspaceScan.mockReset();
+  readWorkspaceScan.mockReset();
   acceptScanFields.mockReset();
 });
+afterEach(() => vi.useRealTimers());
 
-const renderPanel = (domain: string | null = 'urban-supply.example') =>
+const renderPanel = (
+  domain: string | null = 'urban-supply.example',
+  running: ScanRun | null = null,
+) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ knowledge: messages }}>
-      <ScanPanel domain={domain} />
+      <ScanPanel domain={domain} running={running} />
     </NextIntlClientProvider>,
   );
 
-const offer = (over: Record<string, unknown> = {}) => ({
+/** A run as the server keeps it (auth 8d01252f). */
+const run = (over: Partial<ScanRun> = {}): ScanRun => ({
+  status: 'done',
+  startedAt: '2026-10-14T10:00:00Z',
+  finishedAt: '2026-10-14T10:00:26Z',
+  reason: null,
+  applied: [],
+  offer: [],
+  reach: null,
+  knowledge: null,
+  ...over,
+});
+/** A start that comes back with the run already ended - the result views, without the wait. */
+const started = (over: Partial<ScanRun> = {}) => ({ ok: true, run: run(over) });
+
+type Offer = ScanRun['offer'][number];
+const offer = (over: Partial<Offer> = {}): Offer => ({
   field: 'businessDescription',
   current: 'Linen bedding',
   proposed: 'Linen bedding and bath textiles',
@@ -81,8 +109,10 @@ describe('★ what the scan will do is said before the button', () => {
     expect(intro).toHaveTextContent(/urban-supply\.example/);
     // Names the marking, and where the marked details live.
     expect(intro).toHaveTextContent(/marked “From your website” in Settings · Workspace/);
-    // ★ Its place beside the website pages must not read as re-importing them.
-    expect(intro).toHaveTextContent(/does not change the pages listed here/i);
+    // ★ Since auth 8d01252f it refreshes the pages it made here too - and says so.
+    expect(intro).toHaveTextContent(/refreshes the pages it made from your site/i);
+    expect(intro).toHaveTextContent(/keeps any page you edited/i);
+    expect(intro).not.toHaveTextContent(/does not change the pages/i);
   });
 
   it('drops the domain clause when there is no website', () => {
@@ -92,37 +122,41 @@ describe('★ what the scan will do is said before the button', () => {
     expect(intro).not.toHaveTextContent(/from\s+·/i);
   });
 
-  it('★ Scan again calls the workspace scan - once, with nothing else sent', async () => {
-    runWorkspaceScan.mockResolvedValue({
-      ok: true,
-      applied: [],
-      offer: [],
-      reach: null,
-      fieldSources: {},
-    });
+  it('★ Scan again starts the workspace scan - once, in the reader’s language', async () => {
+    startWorkspaceScan.mockResolvedValue(
+      started({
+        applied: [],
+        offer: [],
+        reach: null,
+      }),
+    );
     renderPanel();
     await userEvent.click(screen.getByTestId('scan-run'));
     await screen.findByTestId('scan-result');
-    expect(runWorkspaceScan).toHaveBeenCalledTimes(1);
-    expect(runWorkspaceScan).toHaveBeenCalledWith();
+    expect(startWorkspaceScan).toHaveBeenCalledTimes(1);
+    // The reader's language, so the pages it writes are in it.
+    expect(startWorkspaceScan).toHaveBeenCalledWith('en');
     expect(acceptScanFields).not.toHaveBeenCalled();
   });
 });
 
-describe('★ five refusals, five sentences', () => {
+describe('★ six failures, six sentences', () => {
   it.each([
     ['no_domain', /does not have your website address/i],
     ['fetch_failed', /did not answer/i],
     ['scan_failed', /could not make sense of it/i],
-    ['scan_in_progress', /already running/i],
     ['no_profile', /no business profile yet/i],
+    ['internal_error', /went wrong on our side/i],
+    ['timed_out', /took too long/i],
+    // One the screen does not know: still a sentence, never a blank.
+    ['new_reason', /scan didn't run|could not run|did not run/i],
   ])('says the right thing for %s', async (reason, expected) => {
     /*
      * "You have not told us your website" and "the site did not answer" need
      * different actions from the reader. One "scan failed" would serve
      * neither.
      */
-    runWorkspaceScan.mockResolvedValue({ ok: false, reason, reach: null });
+    startWorkspaceScan.mockResolvedValue(started({ status: 'failed', reason }));
     renderPanel();
     await userEvent.click(screen.getByTestId('scan-run'));
     expect(await screen.findByTestId('scan-refusal')).toHaveTextContent(expected);
@@ -135,13 +169,13 @@ describe('★ the login-wall caveat appears because a measurement says so', () =
      * Measured on this tenant: 17 requested, 17 returned, 1 distinct. Anything
      * proposed from such a crawl was inferred from a login screen.
      */
-    runWorkspaceScan.mockResolvedValue({
-      ok: true,
-      applied: [],
-      offer: [offer()],
-      reach: { requested: 17, pagesRead: 17, distinctTextPages: 1 },
-      fieldSources: {},
-    });
+    startWorkspaceScan.mockResolvedValue(
+      started({
+        applied: [],
+        offer: [offer()],
+        reach: { requested: 17, pagesRead: 17, distinctTextPages: 1 },
+      }),
+    );
     renderPanel();
     await userEvent.click(screen.getByTestId('scan-run'));
     const caveat = await screen.findByTestId('scan-unreadable');
@@ -150,13 +184,13 @@ describe('★ the login-wall caveat appears because a measurement says so', () =
   });
 
   it('says nothing when the site was genuinely readable', async () => {
-    runWorkspaceScan.mockResolvedValue({
-      ok: true,
-      applied: [],
-      offer: [offer()],
-      reach: { requested: 12, pagesRead: 11, distinctTextPages: 9 },
-      fieldSources: {},
-    });
+    startWorkspaceScan.mockResolvedValue(
+      started({
+        applied: [],
+        offer: [offer()],
+        reach: { requested: 12, pagesRead: 11, distinctTextPages: 9 },
+      }),
+    );
     renderPanel();
     await userEvent.click(screen.getByTestId('scan-run'));
     await screen.findByTestId('scan-result');
@@ -166,26 +200,26 @@ describe('★ the login-wall caveat appears because a measurement says so', () =
 
 describe('★ the two reasons a field was not taken are different admissions', () => {
   it('says the merchant edited it', async () => {
-    runWorkspaceScan.mockResolvedValue({
-      ok: true,
-      applied: [],
-      offer: [offer({ because: 'human_edited' })],
-      reach: null,
-      fieldSources: {},
-    });
+    startWorkspaceScan.mockResolvedValue(
+      started({
+        applied: [],
+        offer: [offer({ because: 'human_edited' })],
+        reach: null,
+      }),
+    );
     renderPanel();
     await userEvent.click(screen.getByTestId('scan-run'));
     expect(await screen.findByTestId('scan-offer-because')).toHaveTextContent(/you edited this/i);
   });
 
   it('says nobody recorded who wrote it - which is every field on this estate', async () => {
-    runWorkspaceScan.mockResolvedValue({
-      ok: true,
-      applied: [],
-      offer: [offer()],
-      reach: null,
-      fieldSources: {},
-    });
+    startWorkspaceScan.mockResolvedValue(
+      started({
+        applied: [],
+        offer: [offer()],
+        reach: null,
+      }),
+    );
     renderPanel();
     await userEvent.click(screen.getByTestId('scan-run'));
     const because = await screen.findByTestId('scan-offer-because');
@@ -195,13 +229,13 @@ describe('★ the two reasons a field was not taken are different admissions', (
   });
 
   it('shows both values, so the choice is visible', async () => {
-    runWorkspaceScan.mockResolvedValue({
-      ok: true,
-      applied: [],
-      offer: [offer()],
-      reach: null,
-      fieldSources: {},
-    });
+    startWorkspaceScan.mockResolvedValue(
+      started({
+        applied: [],
+        offer: [offer()],
+        reach: null,
+      }),
+    );
     renderPanel();
     await userEvent.click(screen.getByTestId('scan-run'));
     expect(await screen.findByTestId('scan-offer-current')).toHaveTextContent('Linen bedding');
@@ -215,13 +249,13 @@ describe('★ accepting says what it means before the click', () => {
      * The endpoint stamps `scan`, not `human`. That is the consent being
      * collected, and "use this value" would not have collected it.
      */
-    runWorkspaceScan.mockResolvedValue({
-      ok: true,
-      applied: [],
-      offer: [offer()],
-      reach: null,
-      fieldSources: {},
-    });
+    startWorkspaceScan.mockResolvedValue(
+      started({
+        applied: [],
+        offer: [offer()],
+        reach: null,
+      }),
+    );
     renderPanel();
     await userEvent.click(screen.getByTestId('scan-run'));
     expect(await screen.findByTestId('scan-offer-intro')).toHaveTextContent(
@@ -232,13 +266,13 @@ describe('★ accepting says what it means before the click', () => {
   it('sends field NAMES only, never the value', async () => {
     // The body carries field names so a client cannot mark arbitrary text as
     // website-owned. Asserted, because the obvious shape is to send both.
-    runWorkspaceScan.mockResolvedValue({
-      ok: true,
-      applied: [],
-      offer: [offer()],
-      reach: null,
-      fieldSources: {},
-    });
+    startWorkspaceScan.mockResolvedValue(
+      started({
+        applied: [],
+        offer: [offer()],
+        reach: null,
+      }),
+    );
     acceptScanFields.mockResolvedValue({ accepted: ['businessDescription'], skipped: [] });
     renderPanel();
     await userEvent.click(screen.getByTestId('scan-run'));
@@ -247,13 +281,13 @@ describe('★ accepting says what it means before the click', () => {
   });
 
   it('reports a proposal that had gone stale rather than claiming success', async () => {
-    runWorkspaceScan.mockResolvedValue({
-      ok: true,
-      applied: [],
-      offer: [offer()],
-      reach: null,
-      fieldSources: {},
-    });
+    startWorkspaceScan.mockResolvedValue(
+      started({
+        applied: [],
+        offer: [offer()],
+        reach: null,
+      }),
+    );
     acceptScanFields.mockResolvedValue({
       accepted: [],
       skipped: [{ field: 'businessDescription', reason: 'not_proposed' }],
@@ -267,13 +301,13 @@ describe('★ accepting says what it means before the click', () => {
 
 describe('nothing marked means nothing refreshed, and it says so', () => {
   it('reports an empty apply set as the estate-wide state it is', async () => {
-    runWorkspaceScan.mockResolvedValue({
-      ok: true,
-      applied: [],
-      offer: [offer()],
-      reach: null,
-      fieldSources: {},
-    });
+    startWorkspaceScan.mockResolvedValue(
+      started({
+        applied: [],
+        offer: [offer()],
+        reach: null,
+      }),
+    );
     renderPanel();
     await userEvent.click(screen.getByTestId('scan-run'));
     expect(await screen.findByTestId('scan-applied')).toHaveTextContent(
@@ -282,13 +316,13 @@ describe('nothing marked means nothing refreshed, and it says so', () => {
   });
 
   it('says the site agrees when there is nothing at all to do', async () => {
-    runWorkspaceScan.mockResolvedValue({
-      ok: true,
-      applied: [],
-      offer: [],
-      reach: null,
-      fieldSources: {},
-    });
+    startWorkspaceScan.mockResolvedValue(
+      started({
+        applied: [],
+        offer: [],
+        reach: null,
+      }),
+    );
     renderPanel();
     await userEvent.click(screen.getByTestId('scan-run'));
     expect(await screen.findByTestId('scan-no-changes')).toHaveTextContent(/says the same/i);
@@ -318,5 +352,99 @@ describe('★ every class the panel names is defined in its stylesheet', () => {
     const rule = css.match(/\.provenanceBasis\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(rule).toMatch(/font-size:\s*var\(--font-size-caption\)/);
     expect(rule).toMatch(/color:\s*var\(--text-subtle\)/);
+  });
+});
+
+describe('★★ a rescan is a run: started, followed, ended (2026-10-14)', () => {
+  it('★★ started: "running" while it runs, read every few seconds, then the result', async () => {
+    vi.useFakeTimers();
+    startWorkspaceScan.mockResolvedValue({ ok: true, run: run({ status: 'running' }) });
+    readWorkspaceScan
+      .mockResolvedValueOnce(run({ status: 'running' }))
+      .mockResolvedValueOnce(run({ applied: ['industry'] }));
+    renderPanel();
+    await act(async () => screen.getByTestId('scan-run').click());
+    expect(screen.getByTestId('scan-running')).toHaveTextContent(/usually takes under a minute/i);
+    expect(screen.getByTestId('scan-run')).toBeDisabled();
+    expect(readWorkspaceScan).not.toHaveBeenCalled();
+    await act(async () => vi.advanceTimersByTime(SCAN_POLL_MS));
+    expect(readWorkspaceScan).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('scan-running')).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTime(SCAN_POLL_MS));
+    expect(readWorkspaceScan).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId('scan-running')).toBeNull();
+    expect(screen.getByTestId('scan-applied')).toHaveTextContent(/one field was refreshed/i);
+    expect(screen.getByTestId('scan-run')).toBeEnabled();
+    // Ended: never read again.
+    await act(async () => vi.advanceTimersByTime(SCAN_POLL_MS * 4));
+    expect(readWorkspaceScan).toHaveBeenCalledTimes(2);
+  });
+
+  it('★★ one already running when the page opens is followed from where it is', async () => {
+    vi.useFakeTimers();
+    readWorkspaceScan.mockResolvedValue(run({ status: 'failed', reason: 'timed_out' }));
+    renderPanel('urban-supply.example', run({ status: 'running' }));
+    expect(screen.getByTestId('scan-running')).toBeInTheDocument();
+    expect(startWorkspaceScan).not.toHaveBeenCalled();
+    await act(async () => vi.advanceTimersByTime(SCAN_POLL_MS));
+    expect(screen.getByTestId('scan-refusal')).toHaveTextContent(/took too long/i);
+  });
+
+  it('★ a read that fails is tried again; three in a row and it says it lost track - never spins', async () => {
+    vi.useFakeTimers();
+    readWorkspaceScan.mockResolvedValue(undefined);
+    renderPanel('urban-supply.example', run({ status: 'running' }));
+    for (let i = 1; i < MAX_MISSED_READS; i += 1) {
+      await act(async () => vi.advanceTimersByTime(SCAN_POLL_MS));
+      expect(screen.getByTestId('scan-running')).toBeInTheDocument();
+    }
+    await act(async () => vi.advanceTimersByTime(SCAN_POLL_MS));
+    expect(screen.getByTestId('scan-lost')).toHaveTextContent(/reload the page/i);
+    expect(screen.queryByTestId('scan-running')).toBeNull();
+    expect(screen.getByTestId('scan-run')).toBeEnabled();
+    await act(async () => vi.advanceTimersByTime(SCAN_POLL_MS * 4));
+    expect(readWorkspaceScan).toHaveBeenCalledTimes(MAX_MISSED_READS);
+  });
+
+  it('a start refused for permission says so; any other, that it did not run', async () => {
+    startWorkspaceScan.mockResolvedValueOnce({ ok: false, reason: 'forbidden' });
+    renderPanel();
+    await userEvent.click(screen.getByTestId('scan-run'));
+    expect(await screen.findByTestId('scan-failed')).toHaveTextContent(/permission/i);
+    startWorkspaceScan.mockResolvedValueOnce({ ok: false, reason: 'failed' });
+    await userEvent.click(screen.getByTestId('scan-run'));
+    await waitFor(() =>
+      expect(screen.getByTestId('scan-failed')).not.toHaveTextContent(/permission/i),
+    );
+  });
+});
+
+describe('★★ what it did to the pages it made, in counts', () => {
+  it('each count that is not zero, in words; the zeros left out', async () => {
+    startWorkspaceScan.mockResolvedValue(
+      started({
+        knowledge: { created: 0, updated: 2, unchanged: 0, preserved: 1, removed: 0, failed: 0 },
+      }),
+    );
+    renderPanel();
+    await userEvent.click(screen.getByTestId('scan-run'));
+    expect(await screen.findByTestId('scan-knowledge')).toHaveTextContent(
+      /^2 pages updated, 1 page kept because you edited it\.$/,
+    );
+    // Pages changed: "the site says the same" would be false.
+    expect(screen.queryByTestId('scan-no-changes')).toBeNull();
+  });
+
+  it('nothing counted: no line at all', async () => {
+    startWorkspaceScan.mockResolvedValue(
+      started({
+        knowledge: { created: 0, updated: 0, unchanged: 0, preserved: 0, removed: 0, failed: 0 },
+      }),
+    );
+    renderPanel();
+    await userEvent.click(screen.getByTestId('scan-run'));
+    await screen.findByTestId('scan-result');
+    expect(screen.queryByTestId('scan-knowledge')).toBeNull();
+    expect(screen.getByTestId('scan-no-changes')).toBeInTheDocument();
   });
 });

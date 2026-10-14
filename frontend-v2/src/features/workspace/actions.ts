@@ -8,9 +8,10 @@ import { serverApi } from '@/api/client/server-api';
 import {
   acceptResultSchema,
   prohibitedClaimsSchema,
-  scanResultSchema,
+  scanRunSchema,
+  scanStateSchema,
   type AcceptResult,
-  type ScanResult,
+  type ScanRun,
   type Workspace,
   type WorkspaceVoice,
   voiceSampleSchema,
@@ -170,35 +171,67 @@ export async function saveProhibitedClaims(
   }
 }
 
+/** How a rescan start went: the run it started (or found running), or why not. */
+export type ScanStart =
+  | { readonly ok: true; readonly run: ScanRun }
+  | { readonly ok: false; readonly reason: 'forbidden' | 'failed' };
+
 /**
- * Scan the website again - screen 11b.
+ * Scan the website again - screen 11b, as a run (2026-10-14).
  *
- * ★ THIS RE-CRAWLS A LIVE SITE. It is not free and it is not instant, but it
- * is safe in the one way that matters: `planRescan` writes only fields the
- * scan already owns, and everything else comes back as a proposal. On a
- * tenant whose provenance map is empty - which is every tenant on this
- * database - it therefore writes nothing at all.
+ * ★ THIS RE-CRAWLS A LIVE SITE. Safe in the one way that matters: it writes
+ * only fields the scan already owns, offers the rest, and refreshes only the
+ * knowledge it generated - a document a person edited is kept.
  *
- * Refusals arrive as `{ ok: false, reason }` with a 200, because "you have not
- * told us your website yet" and "the site did not answer" are sentences the
- * screen shows rather than errors it has to decode. The one exception is a
- * scan already running, which is a 409.
+ * ★ IT ANSWERS AT ONCE. A crawl and a model call take 25-40 seconds, and the
+ * browser and the BFF stopped waiting at 20: the screen said "the scan did
+ * not run" while it finished. So POST only starts it (202) and the screen
+ * reads `readWorkspaceScan` until it ends. A scan already running (409
+ * SCAN_IN_PROGRESS) carries that run: it is followed, not refused.
  */
-export async function runWorkspaceScan(): Promise<ScanResult | null> {
+export async function startWorkspaceScan(locale?: string): Promise<ScanStart> {
   try {
-    const data = await serverApi().post({
+    const run = await serverApi().post({
       endpoint: workspaceEndpoints.scan(),
-      payload: scanResultSchema,
-      body: {},
+      payload: scanRunSchema,
+      body: locale ? { locale } : {},
     });
-    revalidatePath('/[locale]/settings/workspace', 'page');
-    return data;
+    return { ok: true, run };
   } catch (cause) {
     await signInIfSignedOut(cause);
-    // A 409 lands here too. Reported as a refusal rather than a crash, since
-    // "try again shortly" is the action either way.
+    if (isApiError(cause) && cause.code === 'SCAN_IN_PROGRESS') {
+      const running = scanRunSchema.safeParse(cause.errorData);
+      return {
+        ok: true,
+        run: running.success ? running.data : scanRunSchema.parse({ status: 'running' }),
+      };
+    }
     logger.warn('workspace.scan_failed', { cause });
-    return null;
+    return {
+      ok: false,
+      reason: isApiError(cause) && cause.status === 403 ? 'forbidden' : 'failed',
+    };
+  }
+}
+
+/**
+ * The last rescan, as the server has it: running, done or failed - or `null`
+ * when none was ever started. `undefined` when it could not be read.
+ */
+export async function readWorkspaceScan(): Promise<ScanRun | null | undefined> {
+  try {
+    const state = await serverApi().get({
+      endpoint: workspaceEndpoints.scan(),
+      payload: scanStateSchema,
+    });
+    if (state.run && state.run.status !== 'running') {
+      revalidatePath('/[locale]/settings/workspace', 'page');
+    }
+    return state.run;
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('workspace.scan_read_failed', { cause });
+    return undefined;
   }
 }
 

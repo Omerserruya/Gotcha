@@ -263,33 +263,68 @@ export const crawlReachSchema = z.object({
 
 export type CrawlReach = z.infer<typeof crawlReachSchema>;
 
-/** Every way a scan declines, each needing a different sentence. */
-export const SCAN_REFUSALS = [
+/* ── The rescan as a run (2026-10-14): started, then read until it ends ── */
+
+/**
+ * Why a run failed (`GET /workspace/scan`, auth 8d01252f), each its own
+ * sentence. `timed_out`: the server's three minutes passed.
+ */
+export const SCAN_FAILURES = [
   'no_domain',
+  'no_profile',
   'fetch_failed',
   'scan_failed',
-  'scan_in_progress',
-  'no_profile',
+  'internal_error',
+  'timed_out',
 ] as const;
-export type ScanRefusal = (typeof SCAN_REFUSALS)[number];
+export type ScanFailure = (typeof SCAN_FAILURES)[number];
 
-export const scanResultSchema = z.union([
-  z.object({
-    ok: z.literal(true),
-    /** Written silently, because the scan already owned these fields. */
-    applied: z.array(z.string()).default([]),
-    offer: z.array(scanOfferSchema).default([]),
-    reach: crawlReachSchema.nullable().default(null),
-    fieldSources: z.record(z.string(), z.enum(['scan', 'human']).nullable()).default({}),
-  }),
-  z.object({
-    ok: z.literal(false),
-    reason: z.enum(SCAN_REFUSALS),
-    reach: crawlReachSchema.nullable().default(null),
-  }),
-]);
+const count = z.number().int().nonnegative().catch(0).default(0);
 
-export type ScanResult = z.infer<typeof scanResultSchema>;
+/** What the rescan did to the knowledge it generated (it keeps what a person edited). */
+export const scanKnowledgeSchema = z.object({
+  created: count,
+  updated: count,
+  unchanged: count,
+  preserved: count,
+  removed: count,
+  failed: count,
+});
+export type ScanKnowledge = z.infer<typeof scanKnowledgeSchema>;
+
+/**
+ * One rescan. POST starts it and answers at once (202, or 409
+ * SCAN_IN_PROGRESS with the run already going); GET reads it until it is
+ * done or failed. A crawl and a model call, 25-40 seconds: longer than the
+ * browser and the BFF ever waited, so it is never awaited in one request.
+ *
+ * Per offer: one that does not parse is left out, never the run.
+ */
+export const scanRunSchema = z.object({
+  status: z.enum(['running', 'done', 'failed']),
+  startedAt: z.string().nullable().catch(null).default(null),
+  finishedAt: z.string().nullable().catch(null).default(null),
+  reason: z.string().nullable().catch(null).default(null),
+  applied: z.array(z.string()).catch([]).default([]),
+  offer: z
+    .array(z.unknown())
+    .catch([])
+    .default([])
+    .transform((rows) =>
+      rows.flatMap((row): ScanOffer[] => {
+        const item = scanOfferSchema.safeParse(row);
+        return item.success ? [item.data] : [];
+      }),
+    ),
+  reach: crawlReachSchema.nullable().catch(null).default(null),
+  knowledge: scanKnowledgeSchema.nullable().catch(null).default(null),
+});
+export type ScanRun = z.infer<typeof scanRunSchema>;
+
+/** `GET /workspace/scan`: the last run (`null`: none ever started). */
+export const scanStateSchema = z.object({
+  run: scanRunSchema.nullable().catch(null).default(null),
+});
 
 export const acceptResultSchema = z.object({
   accepted: z.array(z.string()).default([]),

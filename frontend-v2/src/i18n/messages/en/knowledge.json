@@ -204,12 +204,12 @@
   },
   "scan": {
     "intro": {
-      "withSite": "Your business details were read from {domain} when you signed up. Scanning again refreshes the ones marked “From your website” in Settings · Workspace. It does not change the pages listed here.",
+      "withSite": "Your business details were read from {domain} when you signed up. Scanning again refreshes the ones marked “From your website” in Settings · Workspace. It also refreshes the pages it made from your site, listed here, and keeps any page you edited.",
       "noSite": "Your business details were filled in when you signed up."
     },
     "button": "Scan again",
     "running": "Reading your website…",
-    "beforeYouStart": "The scan reads {domain} again. Nothing is changed without you: fields you have never marked come back as suggestions, and only fields the website already owns are refreshed on their own.",
+    "beforeYouStart": "The scan reads {domain} again. Fields you have never marked come back as suggestions, and only fields the website already owns are refreshed on their own. Pages it made from your site are refreshed too, and a page you edited is kept as it is.",
     "appliedNone": "Nothing was refreshed on its own - no field is marked as coming from your website yet.",
     "applied": "{count, plural, =1 {One field was refreshed from your site.} other {# fields were refreshed from your site.}}",
     "noChanges": "Your site says the same as what is stored. Nothing to change.",
@@ -229,8 +229,20 @@
       "no_domain": "GOTCHA does not have your website address, so there is nothing to scan.",
       "fetch_failed": "Your site did not answer. Nothing was changed.",
       "scan_failed": "We reached your site but could not make sense of it. Nothing was changed.",
-      "scan_in_progress": "A scan is already running. Try again in a moment.",
+      "internal_error": "Something went wrong on our side, and the scan stopped. Nothing changed.",
+      "timed_out": "The scan took too long and was stopped. Nothing changed. Try again.",
       "no_profile": "This workspace has no business profile yet, so there is nothing to update."
+    },
+    "runningLine": "Reading your website. This usually takes under a minute; you can leave this page and come back.",
+    "forbidden": "You don't have permission to scan the website again.",
+    "lost": "We couldn't read how the scan is going. Reload the page to see where it is.",
+    "pages": {
+      "created": "{count, plural, one {1 page added} other {# pages added}}",
+      "updated": "{count, plural, one {1 page updated} other {# pages updated}}",
+      "preserved": "{count, plural, one {1 page kept because you edited it} other {# pages kept because you edited them}}",
+      "removed": "{count, plural, one {1 page removed} other {# pages removed}}",
+      "failed": "{count, plural, one {1 page couldn't be read} other {# pages couldn't be read}}",
+      "unchanged": "{count, plural, one {1 page unchanged} other {# pages unchanged}}"
     },
     "failed": "The scan could not run. Nothing was changed."
   },
