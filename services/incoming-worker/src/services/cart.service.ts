@@ -93,15 +93,18 @@ const digits = (p: string | null | undefined) => String(p ?? "").replace(/\D/g, 
  * `create: false`: never open a new conversation (no listening automation may
  * write on WhatsApp, so a new one would only be left empty).
  */
-export async function resolveCartTarget(tenantId: string, customer: CartEventJob["customer"], opts: { whatsappOnly?: boolean; create?: boolean } = {}) {
+export async function resolveCartTarget(tenantId: string, customer: CartEventJob["customer"], opts: { whatsappOnly?: boolean; create?: boolean; via?: CartVia | null } = {}) {
+  if (opts.via === "email") return resolveEmailTarget(tenantId, customer, { create: opts.create !== false });
   const phone = digits(customer?.phone);
   const email = String(customer?.email ?? "").trim().toLowerCase();
   const or: any[] = [];
   if (phone.length >= 7) or.push({ phone: { contains: phone.slice(-9) } }, { externalId: phone });
+  // Reached by WhatsApp: a contact found by email still has to be a WhatsApp one.
   if (email) or.push({ email: { equals: email, mode: "insensitive" } });
+  const whatsappOnly = opts.whatsappOnly || opts.via === "whatsapp";
   if (or.length) {
     const contacts = await prisma.contact.findMany({
-      where: { tenantId, OR: or, channel: opts.whatsappOnly ? ("WHATSAPP" as any) : { not: "VOICE" as any } },
+      where: { tenantId, OR: or, channel: whatsappOnly ? ("WHATSAPP" as any) : { not: "VOICE" as any } },
       select: { id: true, channel: true, externalId: true, optOutChannels: true },
       take: 10,
     });
@@ -127,6 +130,81 @@ export async function resolveCartTarget(tenantId: string, customer: CartEventJob
     select: { id: true, channel: true, customerExternalId: true, assignedAgentId: true, isHandedOver: true, automationRunId: true },
   });
   return { contact: contact ? { id: contact.id, channel: "WHATSAPP", externalId: phone, optOutChannels: (contact as any).optOutChannels ?? [] } : null, conversation: conv };
+}
+
+export type CartVia = "whatsapp" | "email";
+const EMAIL_CHANNELS = ["GMAIL", "OUTLOOK", "EMAIL"];
+
+/**
+ * Reached by email (2026-10-14): the customer's existing email conversation,
+ * else - when allowed - a new one on the workspace's connected email account,
+ * addressed to the checkout email. Null without an email or an account.
+ */
+export async function resolveEmailTarget(tenantId: string, customer: CartEventJob["customer"], opts: { create: boolean }) {
+  const email = String(customer?.email ?? "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  const select = { id: true, channel: true, customerExternalId: true, assignedAgentId: true, isHandedOver: true, automationRunId: true } as const;
+  const contacts = await prisma.contact.findMany({
+    where: { tenantId, channel: { in: EMAIL_CHANNELS as any }, OR: [{ externalId: email }, { email: { equals: email, mode: "insensitive" } }] },
+    select: { id: true, channel: true, externalId: true, optOutChannels: true },
+    take: 5,
+  });
+  for (const c of contacts as any[]) {
+    const conv = await prisma.conversation.findFirst({
+      where: { tenantId, channel: c.channel, customerExternalId: c.externalId },
+      orderBy: { createdAt: "desc" },
+      select,
+    });
+    if (conv) return { contact: c, conversation: conv };
+  }
+  if (!opts.create) return null;
+  const account = await prisma.channelAccount.findFirst({
+    where: { tenantId, channel: { in: EMAIL_CHANNELS as any }, isActive: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, channel: true },
+  });
+  if (!account) return null;
+  const contact = await ensureContactForInbound({ tenantId, channel: account.channel as any, externalId: email, displayName: customer?.firstName ?? null });
+  const conv = await prisma.conversation.create({
+    data: { tenantId, channel: account.channel as any, channelAccountId: account.id, customerExternalId: email, customerName: customer?.firstName ?? null, status: "OPEN" as any },
+    select,
+  });
+  return { contact: contact ? { id: contact.id, channel: account.channel, externalId: email, optOutChannels: (contact as any).optOutChannels ?? [] } : null, conversation: conv };
+}
+
+const SEND_TYPES = new Set(["send_message_text", "send_message_file", "send_message_image", "send_buttons", "send_list", "send_message_template", "send_message_quick_reply", "send_message_interactive", "collect_input", "ai_generate"]);
+
+/** How a send step reaches the customer: a template is WhatsApp; others say so in data.via. */
+export function viaOf(node: { type: string; data?: any } | null | undefined): CartVia | null {
+  if (!node) return null;
+  if (node.type === "send_message_template") return "whatsapp";
+  const v = String(node.data?.via ?? "").toLowerCase();
+  return v === "whatsapp" || v === "email" ? v : null;
+}
+
+/**
+ * The first send step on the path from the trigger, and the step its
+ * "unreachable" exit leads to (2026-10-14). The first send step decides how a
+ * cart run reaches the customer; its unreachable branch is tried when that
+ * channel cannot.
+ */
+export function cartReachPlan(nodes: Array<{ id: string; type: string; data?: any }>, edges: Array<{ source: string; target: string; sourceHandle?: string | null }>) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const start = nodes.find((n) => n.type === "automation_trigger");
+  const seen = new Set<string>();
+  const queue = start ? [start.id] : [];
+  let first: { id: string; type: string; data?: any } | null = null;
+  while (queue.length && !first) {
+    const id = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const n = byId.get(id);
+    if (n && SEND_TYPES.has(n.type)) { first = n; break; }
+    for (const e of edges) if (e.source === id && e.sourceHandle !== "unreachable") queue.push(e.target);
+  }
+  const fallbackId = first ? edges.find((e) => e.source === first!.id && e.sourceHandle === "unreachable")?.target ?? null : null;
+  const fallback = fallbackId ? byId.get(fallbackId) ?? null : null;
+  return { first, via: viaOf(first), fallback, fallbackVia: viaOf(fallback) };
 }
 
 /** Has this customer ever written to the business, on any channel? (Read-only.) */
@@ -191,16 +269,30 @@ export async function onCartCheck(job: CartCheckJob): Promise<{ outcome: string 
   if (await isCheckoutDone(job.tenantId, job.checkoutId)) return { outcome: "purchased" };
   const flow = await prisma.chatbotFlow.findFirst({
     where: { id: job.flowId, tenantId: job.tenantId, isActive: true, triggerType: "cart_abandoned" },
-    select: { id: true, triggerConfig: true },
+    select: { id: true, name: true, triggerConfig: true, nodes: true, edges: true },
   });
   if (!flow) return { outcome: "automation_inactive" };
   const eventKey = `cart:${job.checkoutId}`;
 
-  // A new WhatsApp conversation is opened only for a customer who may be
-  // written to (prior contact or the store's consent for the phone).
+  // How the customer is reached (2026-10-14): the first send step's channel,
+  // then its "unreachable" branch's. A new conversation is opened only for a
+  // customer who may be written to on THAT channel (prior contact, or the
+  // store's consent: sms for WhatsApp, email for email).
+  const plan = cartReachPlan(((flow as any).nodes ?? []) as any[], ((flow as any).edges ?? []) as any[]);
   const prior = await hasPriorInbound(job.tenantId, ev.customer);
-  const target = await resolveCartTarget(job.tenantId, ev.customer, { create: (prior || ev.marketingConsent?.sms === true) && mayWriteWhatsApp([flow]) });
-  const consent = target ? await marketingGate(job.tenantId, ev, target, prior) : { ok: false, reason: "no_reachable_customer" };
+  const tryReach = async (via: CartVia | null) => {
+    const mayCreate = prior || (via === "email" ? ev.marketingConsent?.email === true : ev.marketingConsent?.sms === true);
+    // No via (an automation from before the model): as before, WhatsApp when the trigger allowed it.
+    const target = await resolveCartTarget(job.tenantId, ev.customer, via ? { via, create: mayCreate } : { create: mayCreate && mayWriteWhatsApp([flow]) });
+    const consent = target ? await marketingGate(job.tenantId, ev, target, prior) : { ok: false, reason: "no_reachable_customer" };
+    return { target, consent };
+  };
+  let { target, consent } = await tryReach(plan.via);
+  let fellBack = false;
+  if ((!target || !consent.ok) && plan.fallback && plan.fallbackVia && plan.fallbackVia !== plan.via) {
+    const second = await tryReach(plan.fallbackVia);
+    if (second.target && second.consent.ok) { target = second.target; consent = second.consent; fellBack = true; }
+  }
   if (!target || !consent.ok) {
     // Recorded, so the run log says why nobody was written to.
     await prisma.automationRun.create({
@@ -225,7 +317,9 @@ export async function onCartCheck(job: CartCheckJob): Promise<{ outcome: string 
     contactId: target.contact?.id ?? null,
     channel: String(target.conversation.channel).toLowerCase(),
     message: "",
-    vars: cartVariables(ev),
+    vars: { ...cartVariables(ev), __emailSubject: (flow as any).name ?? "", __reach: { reachedVia: EMAIL_CHANNELS.includes(String(target.conversation.channel).toUpperCase()) ? "email" : String(target.conversation.channel).toLowerCase(), fellBack } },
+    // Reached on the second channel: the walk starts on the unreachable branch.
+    startNodeId: fellBack ? plan.fallback!.id : null,
   });
   return { outcome: r.runs.length ? r.runs[0]!.status : "duplicate" };
 }

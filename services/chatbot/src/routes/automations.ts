@@ -15,7 +15,7 @@ import {
   visibilityClause, viewerOf,
 } from "@chatcenter/shared";
 import {
-  AutomationInputError, normalizeTrigger, validateAutomation, catalogFor, pathOf, pathChannelOf, beforeFirstWait,
+  AutomationInputError, normalizeTrigger, validateAutomation, catalogFor, pathOf, pathChannelOf, beforeFirstWait, cartPlanOf, type Via,
   TRIGGER_TYPES, CHANNELS, type Channel, type TriggerType, type ANode, type AEdge,
 } from "../lib/automation-catalog";
 
@@ -45,6 +45,21 @@ const arr = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 async function voiceConnected(tenantId: string): Promise<boolean> {
   const n = await prisma.communicationChannel.count({ where: { tenantId, channelType: "VOICE" as any, status: "ACTIVE" as any } }).catch(() => 0);
   return n > 0;
+}
+
+/** Which channels a cart run could reach a customer on: a connected WhatsApp number, a connected mail account. */
+async function reachOf(tenantId: string): Promise<{ whatsapp: boolean; email: boolean }> {
+  const rows = await prisma.channelAccount.findMany({
+    where: { tenantId, isActive: true, channel: { in: ["WHATSAPP", "GMAIL", "OUTLOOK", "EMAIL"] as any } },
+    select: { channel: true },
+  }).catch(() => [] as Array<{ channel: string }>);
+  const ch = new Set(rows.map((r: any) => String(r.channel)));
+  return { whatsapp: ch.has("WHATSAPP"), email: ch.has("GMAIL") || ch.has("OUTLOOK") || ch.has("EMAIL") };
+}
+
+async function validationCtx(tenantId: string) {
+  const [voice, reach] = await Promise.all([voiceConnected(tenantId), reachOf(tenantId)]);
+  return { voiceConnected: voice, reach };
 }
 
 /** The API shape. `full` adds the graph (the list carries `path` instead). */
@@ -149,11 +164,16 @@ router.get("/catalog", CAN_READ, async (req: Request, res: Response) => {
     let afterNodeType: string | null = null;
     let firstStep = true;
     let onComment = false;
+    let cart: { firstSendStepId: string | null; via: Via | null; fallbackStepId: string | null; fallbackVia: Via | null } | null = null;
     if (typeof q.automationId === "string" && q.automationId) {
       const f = await findAutomation(req.tenantId!, q.automationId);
       if (!f) { res.status(404).json({ error: "Automation not found" }); return; }
       triggerType = (TRIGGER_TYPES as readonly string[]).includes(f.triggerType ?? "") ? (f.triggerType as TriggerType) : null;
-      channel = channel ?? pathChannelOf({ type: f.triggerType ?? "", config: f.triggerConfig });
+      channel = channel ?? pathChannelOf({ type: f.triggerType ?? "", config: f.triggerConfig }, arr(f.nodes) as ANode[], arr(f.edges) as AEdge[]);
+      if (triggerType === "cart_abandoned") {
+        const plan = cartPlanOf(arr(f.nodes) as ANode[], arr(f.edges) as AEdge[]);
+        cart = { firstSendStepId: plan.first?.id ?? null, via: plan.via, fallbackStepId: plan.fallback?.id ?? null, fallbackVia: plan.fallbackVia };
+      }
       if (typeof q.after === "string" && q.after) {
         const n = arr(f.nodes).find((x: any) => x?.id === q.after);
         afterNodeType = n?.type ?? null;
@@ -167,7 +187,8 @@ router.get("/catalog", CAN_READ, async (req: Request, res: Response) => {
     } else if (typeof q.after === "string" && q.after) {
       firstStep = false;
     }
-    res.json({ data: catalogFor({ channel, firstStep, triggerType, afterNodeType, onComment, voiceConnected: await voiceConnected(req.tenantId!) }) });
+    const { voiceConnected: voice, reach } = await validationCtx(req.tenantId!);
+    res.json({ data: catalogFor({ channel, firstStep, triggerType, afterNodeType, onComment, voiceConnected: voice, reach, cart }) });
   } catch (err) { fail(res, err, "read the catalogue"); }
 });
 
@@ -229,7 +250,7 @@ router.put("/:id", CAN_WRITE, async (req: Request, res: Response) => {
       const next = { ...existing, ...data } as FlowRow;
       const { errors, warnings } = validateAutomation(
         { type: next.triggerType ?? "", config: next.triggerConfig }, arr(next.nodes), arr(next.edges),
-        { voiceConnected: await voiceConnected(req.tenantId!) },
+        await validationCtx(req.tenantId!),
       );
       if (errors.length) { res.status(422).json({ error: "validation_failed", errors, warnings }); return; }
     }
@@ -245,7 +266,7 @@ router.post("/:id/validate", CAN_READ, async (req: Request, res: Response) => {
     const trigger = req.body?.trigger ? normalizeTrigger(req.body.trigger) : { type: existing.triggerType ?? "", config: existing.triggerConfig };
     const nodes = Array.isArray(req.body?.nodes) ? req.body.nodes : arr(existing.nodes);
     const edges = Array.isArray(req.body?.edges) ? req.body.edges : arr(existing.edges);
-    res.json(validateAutomation(trigger, nodes, edges, { voiceConnected: await voiceConnected(req.tenantId!) }));
+    res.json(validateAutomation(trigger, nodes, edges, await validationCtx(req.tenantId!)));
   } catch (err) { fail(res, err, "validate the automation"); }
 });
 
@@ -255,7 +276,7 @@ router.post("/:id/activate", CAN_PUBLISH, async (req: Request, res: Response) =>
     if (!existing) { res.status(404).json({ error: "Automation not found" }); return; }
     const { errors, warnings } = validateAutomation(
       { type: existing.triggerType ?? "", config: existing.triggerConfig }, arr(existing.nodes), arr(existing.edges),
-      { voiceConnected: await voiceConnected(req.tenantId!) },
+      await validationCtx(req.tenantId!),
     );
     if (errors.length) { res.status(422).json({ error: "validation_failed", errors, warnings }); return; }
     const flow = await prisma.chatbotFlow.update({

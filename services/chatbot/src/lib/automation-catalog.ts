@@ -60,7 +60,8 @@ const TRIGGERS: TriggerDef[] = [
   { type: "comment_received", label: "Comment on a post", description: "Instagram or Facebook, any post or chosen ones, optional keywords", channels: ["INSTAGRAM", "MESSENGER"], synonyms: ["comment", "post", "instagram", "facebook", "dm", "comment to dm"] },
   { type: "button_tapped", label: "Button tapped", description: "A button in a template or campaign, outside a flow", channels: ["WHATSAPP", "MESSENGER", "INSTAGRAM"], synonyms: ["button", "tap", "quick reply", "template button", "postback"] },
   { type: "order_event", label: "Order event", description: "A Shopify or WooCommerce order is created, paid, shipped or cancelled", channels: [], synonyms: ["order", "paid", "shipped", "delivered", "store"] },
-  { type: "cart_abandoned", label: "Cart left behind", description: "After a delay you set. Sends only to customers who agreed to marketing", channels: ["WHATSAPP", "EMAIL"], synonyms: ["cart", "abandoned", "checkout", "recover", "reminder"] },
+  // No channels: the first send step decides how the customer is reached (2026-10-14).
+  { type: "cart_abandoned", label: "Cart left behind", description: "After a delay you set. Sends only to customers who agreed to marketing", channels: [], synonyms: ["cart", "abandoned", "checkout", "recover", "reminder"] },
   { type: "form_submitted", label: "Form submitted", description: "Website or Instagram lead form", channels: ["WEBCHAT", "INSTAGRAM"], synonyms: ["form", "lead"] },
   { type: "story_mention", label: "Story mention", description: "Someone mentions you in their Instagram story", channels: ["INSTAGRAM"], synonyms: ["story", "mention", "instagram"] },
   { type: "tag_added", label: "Tag added", description: "On a customer or conversation", channels: [], synonyms: ["tag", "label"] },
@@ -151,7 +152,7 @@ export function normalizeTrigger(input: any): { type: TriggerType; config: Recor
       break;
     }
     case "cart_abandoned": {
-      const ch = channels(c.channels); if (ch?.length) config.channels = ch;
+      // A stored or sent `channels` is dropped: the first send step's `via` decides.
       if (c.delayMinutes != null) {
         const n = Number(c.delayMinutes);
         if (!Number.isFinite(n) || n < 15 || n > 2880) throw new AutomationInputError("trigger.config.delayMinutes", "the delay is 15 minutes to 2 days");
@@ -249,6 +250,10 @@ export interface CatalogContext {
   voiceConnected: boolean;
   /** A comment automation's step that comes before any Wait for reply (runs on the comment). */
   onComment?: boolean;
+  /** Connected channels a cart run could reach the customer on. */
+  reach?: { whatsapp: boolean; email: boolean };
+  /** A cart automation's reach plan: its first send step and that step's unreachable branch. */
+  cart?: { firstSendStepId: string | null; via: Via | null; fallbackStepId: string | null; fallbackVia: Via | null } | null;
 }
 
 export interface CatalogItem {
@@ -259,6 +264,8 @@ export interface CatalogItem {
   sends: boolean;
   /** May run on the comment itself, before the first wait, in a comment automation. */
   commentSafe: boolean;
+  /** Cart automations: the channels this step can reach the customer on (`data.via`). */
+  viaOptions?: Via[];
 }
 
 export function triggerAvailability(type: TriggerType, ctx: Pick<CatalogContext, "voiceConnected">): { available: boolean; reason: Reason | null } {
@@ -300,12 +307,19 @@ export function catalogFor(ctx: CatalogContext) {
         // Facts for the builder (2026-10-14), so it does not hardcode them:
         // which steps send, and which may run on the comment itself.
         sends: !!n.sends, commentSafe: COMMENT_WALK_TYPES.has(n.type),
+        ...(ctx.triggerType === "cart_abandoned" && (VIA_TYPES.has(n.type) || n.type === "send_message_template")
+          ? { viaOptions: (n.type === "send_message_template" ? ["whatsapp"] : ["whatsapp", "email"]).filter((v) => !ctx.reach || ctx.reach[v as Via]) as Via[] }
+          : {}),
       };
     }),
   });
   const hasCustomer = !(ctx.triggerType && CUSTOMERLESS_TRIGGERS.has(ctx.triggerType));
   return {
-    context: { channel: ctx.channel, firstStep: ctx.firstStep, hasCustomer, afterNodeType: ctx.afterNodeType },
+    context: {
+      channel: ctx.channel, firstStep: ctx.firstStep, hasCustomer, afterNodeType: ctx.afterNodeType,
+      ...(ctx.reach ? { reach: ctx.reach } : {}),
+      ...(ctx.cart ? { cart: ctx.cart } : {}),
+    },
     groups: [
       { key: "trigger", label: "Triggers", note: "first step only", items: trig },
       group("logic", "Logic"),
@@ -341,8 +355,68 @@ export interface ANode { id: string; type: string; data?: any; position?: any }
 export interface AEdge { id?: string; source: string; target: string; sourceHandle?: string | null }
 
 /** The channel a single-channel trigger pins its path to (null = several or any). */
-export function pathChannelOf(trigger: { type: string; config?: any } | null): Channel | null {
+// ── Cart reach (2026-10-14) ────────────────────────────────────────────────
+// A cart run has no conversation to start from: its FIRST send step decides
+// how the customer is reached (a template is WhatsApp; other sends say so in
+// data.via), and that step's optional "unreachable" exit leads to the steps
+// tried on the other channel. Mirrors incoming-worker cart.service.
+
+export type Via = "whatsapp" | "email";
+export const UNREACHABLE_HANDLE = "unreachable";
+const CART_SEND_TYPES = new Set(["send_message_text", "send_message_file", "send_message_image", "send_buttons", "send_list", "send_message_template", "send_message_quick_reply", "send_message_interactive", "collect_input", "ai_generate"]);
+/** Send steps that take a `via` (a template is always WhatsApp). */
+export const VIA_TYPES = new Set(["send_message_text", "send_message_file", "send_buttons"]);
+
+export function viaOf(node: ANode | null | undefined): Via | null {
+  if (!node) return null;
+  if (node.type === "send_message_template") return "whatsapp";
+  const v = String(node.data?.via ?? "").toLowerCase();
+  return v === "whatsapp" || v === "email" ? v : null;
+}
+
+export function viaChannel(via: Via | null): Channel | null {
+  return via === "whatsapp" ? "WHATSAPP" : via === "email" ? "EMAIL" : null;
+}
+
+function reachableFrom(startId: string | null, edges: AEdge[], skipUnreachable: boolean): Set<string> {
+  const out = new Set<string>();
+  const stack = startId ? [startId] : [];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (out.has(id)) continue;
+    out.add(id);
+    for (const e of edges) if (e.source === id && !(skipUnreachable && e.sourceHandle === UNREACHABLE_HANDLE)) stack.push(e.target);
+  }
+  return out;
+}
+
+/** The first send step, its via, the step its "unreachable" exit leads to, and which steps each channel's path holds. */
+export function cartPlanOf(nodes: ANode[], edges: AEdge[]) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const start = nodes.find((n) => n.type === TRIGGER_NODE_TYPE);
+  let first: ANode | null = null;
+  const seen = new Set<string>();
+  const queue = start ? [start.id] : [];
+  while (queue.length && !first) {
+    const id = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const n = byId.get(id);
+    if (n && CART_SEND_TYPES.has(n.type)) { first = n; break; }
+    for (const e of edges) if (e.source === id && e.sourceHandle !== UNREACHABLE_HANDLE) queue.push(e.target);
+  }
+  const fallbackId = first ? edges.find((e) => e.source === first!.id && e.sourceHandle === UNREACHABLE_HANDLE)?.target ?? null : null;
+  const fallback = fallbackId ? byId.get(fallbackId) ?? null : null;
+  return {
+    first, via: viaOf(first), fallback, fallbackVia: viaOf(fallback),
+    mainPath: reachableFrom(start?.id ?? null, edges, true),
+    fallbackPath: reachableFrom(fallback?.id ?? null, edges, true),
+  };
+}
+
+export function pathChannelOf(trigger: { type: string; config?: any } | null, nodes?: ANode[], edges?: AEdge[]): Channel | null {
   if (!trigger) return null;
+  if (trigger.type === "cart_abandoned") return nodes && edges ? viaChannel(cartPlanOf(nodes, edges).via) : null;
   if (VOICE_TRIGGERS.has(trigger.type as TriggerType)) return "WHATSAPP"; // the reply goes to the caller on WhatsApp
   if (trigger.type === "story_mention") return "INSTAGRAM";
   const ch = Array.isArray(trigger.config?.channels) ? trigger.config.channels : [];
@@ -412,7 +486,8 @@ function nodeIssues(n: ANode, trigger: { type: string; config?: any } | null, ch
   // trigger's channels do not rule WhatsApp out, a free-form send is refused.
   if (def?.needsWindow && trigger && WINDOW_CLOSED_TRIGGERS.has(trigger.type as TriggerType)) {
     const chs: string[] = Array.isArray(trigger.config?.channels) ? trigger.config.channels : [];
-    if (!chs.length || chs.includes("WHATSAPP")) {
+    // The step's own channel when it is known (a cart step's via), else the trigger's.
+    if (channel ? channel === "WHATSAPP" : !chs.length || chs.includes("WHATSAPP")) {
       out.push(err("needs_24h_window", `"${def.label}" cannot reach a WhatsApp customer who has not written in 24 hours. Use a template, or limit this automation to other channels.`));
     }
   }
@@ -501,6 +576,31 @@ export function beforeFirstWait(nodes: ANode[], edges: AEdge[]): Set<string> {
 /** Older walker node types an automation may still contain (validated by validateGraph's own rules). */
 const LEGACY_RUNNABLE = new Set(["set_variable", "collect_input", "send_message_image", "send_message_quick_reply", "send_message_interactive", "bring_user_data", "end"]);
 
+function cartIssues(cart: ReturnType<typeof cartPlanOf>, nodes: ANode[], edges: AEdge[], reach?: { whatsapp: boolean; email: boolean }): GraphIssue[] {
+  const out: GraphIssue[] = [];
+  const err = (code: string, nodeId: string | undefined, message: string) => out.push({ severity: "error", code, ...(nodeId ? { nodeId } : {}), message });
+  if (cart.first && !cart.via) err("via_required", cart.first.id, "Choose how this first message reaches the customer: WhatsApp or email.");
+  for (const [via, node] of [[cart.via, cart.first], [cart.fallbackVia, cart.fallback]] as const) {
+    if (via && node && reach && !reach[via]) err("via_not_connected", node.id, via === "email" ? "Connect an email account to send by email." : "Connect a WhatsApp number to send on WhatsApp.");
+  }
+  if (cart.fallback) {
+    if (!cart.fallbackVia) err("via_required", cart.fallback.id, "Choose how this message reaches the customer: WhatsApp or email.");
+    else if (cart.fallbackVia === cart.via) err("unreachable_same_channel", cart.fallback.id, "\"If they can't be reached\" has to try the other channel.");
+  }
+  for (const e of edges) {
+    if (e.sourceHandle === UNREACHABLE_HANDLE && e.source !== cart.first?.id) err("unreachable_only_on_first_send", e.source, "\"If they can't be reached\" exists only on the first message.");
+  }
+  // One channel per run: a later step that names the other channel cannot send there.
+  for (const n of nodes) {
+    const v = viaOf(n);
+    if (!v || n.type === "send_message_template") continue;
+    const onMain = cart.mainPath.has(n.id), onFallback = cart.fallbackPath.has(n.id) && !onMain;
+    const expected = onFallback ? cart.fallbackVia : onMain ? cart.via : null;
+    if (expected && v !== expected) err("via_mismatch", n.id, "Every message in a run goes out on the channel the customer was reached on.");
+  }
+  return out;
+}
+
 /**
  * Can this automation go live? `errors` block; `warnings` do not. The shared
  * graph rules (validateGraph) plus the automation's own: one trigger, a known
@@ -510,7 +610,7 @@ export function validateAutomation(
   trigger: { type: string; config?: any } | null,
   nodes: ANode[],
   edges: AEdge[],
-  ctx: { voiceConnected: boolean } = { voiceConnected: true },
+  ctx: { voiceConnected: boolean; reach?: { whatsapp: boolean; email: boolean } } = { voiceConnected: true },
 ): { errors: GraphIssue[]; warnings: GraphIssue[] } {
   const { errors, warnings } = validateGraph(nodes as any, edges as any);
   if (!trigger || !(TRIGGER_TYPES as readonly string[]).includes(trigger.type)) {
@@ -524,9 +624,16 @@ export function validateAutomation(
   else if (!(edges ?? []).some((e) => e.source === triggers[0].id)) {
     errors.push({ severity: "error", code: "no_steps", nodeId: triggers[0].id, message: "Add a step after the trigger." });
   }
-  const channel = pathChannelOf(trigger);
+  const channel = pathChannelOf(trigger, nodes ?? [], edges ?? []);
   const byId = new Map((nodes ?? []).map((n) => [n.id, n]));
-  for (const n of nodes ?? []) errors.push(...nodeIssues(n, trigger, channel));
+  const cart = trigger?.type === "cart_abandoned" ? cartPlanOf(nodes ?? [], edges ?? []) : null;
+  // A cart automation's unreachable branch runs on the other channel.
+  const channelOfNode = (id: string) => (cart && cart.fallbackPath.has(id) && !cart.mainPath.has(id) ? viaChannel(cart.fallbackVia) : channel);
+  for (const n of nodes ?? []) errors.push(...nodeIssues(n, trigger, channelOfNode(n.id)));
+  if (cart) errors.push(...cartIssues(cart, nodes ?? [], edges ?? [], ctx.reach));
+  else for (const e of edges ?? []) {
+    if (e.sourceHandle === UNREACHABLE_HANDLE) errors.push({ severity: "error", code: "unreachable_only_on_first_send", nodeId: e.source, message: "\"If they can't be reached\" exists only on the first message of a cart automation." });
+  }
   for (const e of edges ?? []) {
     const s = byId.get(e.source);
     if (!s) continue;

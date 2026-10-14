@@ -218,6 +218,8 @@ export async function runAutomationsForEvent(ev: {
   onlyFlowIds?: string[];
   /** The event's variables for the walk ({{cart_url}}, ...). */
   vars?: Record<string, unknown>;
+  /** Start at this node, not the trigger (a cart run on its "unreachable" branch). */
+  startNodeId?: string | null;
 }): Promise<{ answered: boolean; runs: Array<{ id: string; flowId: string; status: string }> }> {
   const out = { answered: false, runs: [] as Array<{ id: string; flowId: string; status: string }> };
   const flows = await prisma.chatbotFlow.findMany({
@@ -264,7 +266,7 @@ export async function runAutomationsForEvent(ev: {
       result = ev.conversationId
         ? await executeSubFlow({
             tenantId: ev.tenantId, conversationId: ev.conversationId, message: ev.message, channel: ev.channel,
-            flowId: flow.id, replyPayload: ev.replyPayload ?? null, run, vars: ev.vars,
+            flowId: flow.id, replyPayload: ev.replyPayload ?? null, run, vars: ev.vars, startNodeId: ev.startNodeId ?? null,
           })
         : await executeWebhookFlow({ tenantId: ev.tenantId, workflowId: flow.id, payload: {}, run });
     } catch (err) {

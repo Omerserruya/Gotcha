@@ -25,7 +25,7 @@
  * RouterRule-list evaluator in routing.service.ts. That is the only escape hatch.
  */
 
-import { prisma, getOutboundAdapter, decryptCredentials, publishEvent, flowResumeQueue, describeSendError, safeFetch as sharedSafeFetch } from "@chatcenter/shared";
+import { prisma, getOutboundAdapter, decryptCredentials, publishEvent, flowResumeQueue, describeSendError, safeFetch as sharedSafeFetch, resolveEmailThread } from "@chatcenter/shared";
 import type { ChannelCredentials } from "@chatcenter/shared";
 import { processAIBot, getBusinessHoursState } from "./ai-bot.service";
 import { tryLinkIdentifierFromInbound } from "./identity-link.service";
@@ -268,6 +268,12 @@ export async function executeSubFlow(opts: {
   run?: AutomationRunCtx;
   /** The triggering event's variables ({{cart_url}}, {{order_number}}, ...). */
   vars?: Record<string, unknown>;
+  /**
+   * Start the walk at this node instead of the trigger: a cart automation whose
+   * first channel could not reach the customer starts on its "unreachable"
+   * branch (2026-10-14).
+   */
+  startNodeId?: string | null;
 }): Promise<FlowExecutionResult> {
   const flow = await prisma.chatbotFlow.findFirst({
     where: { id: opts.flowId, tenantId: opts.tenantId, isActive: true },
@@ -330,6 +336,9 @@ export async function executeSubFlow(opts: {
       }
     }
   }
+  if (!startId && !opts.resumeNodeId && opts.startNodeId && nodes.some((n) => n.id === opts.startNodeId)) {
+    startId = opts.startNodeId;
+  }
   if (!startId && !opts.resumeNodeId) {
     // An automation enters at its trigger step; a playbook sub-flow at Start.
     const startNode = nodes.find((n) => n.type === "automation_trigger") ?? nodes.find((n) => n.type === "start");
@@ -346,6 +355,13 @@ export async function executeSubFlow(opts: {
   ctx.run = opts.run;
   if (opts.run) Object.assign(ctx.vars, await runVariables(ctx), opts.vars ?? {});
   ctx.trace.push(...resumeTrace);
+  // Started past the trigger (a cart run on its unreachable branch): the
+  // trigger step is still recorded, with how the customer was reached.
+  if (opts.startNodeId && startId === opts.startNodeId) {
+    const trig = nodes.find((n) => n.type === "automation_trigger");
+    const reach = ctx.vars?.__reach;
+    if (trig) ctx.trace.push({ nodeId: trig.id, type: trig.type, action: "trigger_enter", ...(reach && typeof reach === "object" ? { detail: reach as Record<string, unknown> } : {}) });
+  }
   return walk(startId, nodes, edges, ctx);
 }
 
@@ -876,7 +892,9 @@ async function walk(
       return { executed: true, halted: true, trace: ctx.trace };
     }
 
-    const outgoing = edges.filter((e) => e.source === currentId);
+    // The "unreachable" exit is taken only by the cart runner, before the walk:
+    // never as a step's next.
+    const outgoing = edges.filter((e) => e.source === currentId && e.sourceHandle !== "unreachable");
 
     switch (node.type) {
       case "channel_entry":
@@ -905,7 +923,7 @@ async function walk(
         // webhook runs carry no sendCtx - resolve an explicit recipient from the
         // node so the text still dispatches through the existing outbound path.
         const sendCtx = ctx.sendCtx ?? (await buildExplicitSendCtx(node.data || {}, ctx));
-        const textOutcome = await sendText(String(node.data?.text || ""), ctx, sendCtx);
+        const textOutcome = await sendText(String(node.data?.text || ""), ctx, sendCtx, { subject: node.data?.subject });
         ctx.trace.push({ nodeId: node.id, type: node.type, action: textOutcome ?? "sent" });
         // Optional pause: when the author flipped "Wait for user reply", halt
         // here and resume on next inbound. Resume path (executeMainFlow's
@@ -1260,7 +1278,9 @@ async function walk(
 
       // ─── Automations (Studio > Automations) ────────────────────
       case "automation_trigger": {
-        ctx.trace.push({ nodeId: node.id, type: node.type, action: "trigger_enter" });
+        // How a cart run reached the customer, for the run log.
+        const reach = ctx.vars?.__reach;
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: "trigger_enter", ...(reach && typeof reach === "object" ? { detail: reach as Record<string, unknown> } : {}) });
         currentId = outgoing[0]?.target || null;
         break;
       }
@@ -1587,10 +1607,39 @@ async function refuseOutsideWindow(
 // `sendCtx` defaults to the conversation-bound context (ctx.sendCtx). Context-free
 // callers (webhook runs with an explicit recipient) pass a one-off context built
 // by buildExplicitSendCtx so the same dispatch + persist path is reused verbatim.
+const EMAIL_SEND_CHANNELS = new Set(["EMAIL", "GMAIL", "OUTLOOK"]);
+
+/**
+ * The thread an automation email goes out on (2026-10-14): a step with its own
+ * subject opens a new thread under it; any other email continues the
+ * conversation's thread (as the outgoing worker resolves it), so a cart run's
+ * second email arrives as a reply to its first.
+ */
+async function emailThreadFor(ctx: FlowExecCtx, sendCtx: ChannelSendContext, subject?: unknown) {
+  if (!EMAIL_SEND_CHANNELS.has(String(sendCtx.channel).toUpperCase())) return undefined;
+  const s = typeof subject === "string" ? interpolate(subject, ctx.vars).trim() : "";
+  if (s) return { subject: s.slice(0, 200) };
+  const history = ctx.conversationId
+    ? await prisma.message.findMany({
+        where: { tenantId: ctx.tenantId, conversationId: ctx.conversationId },
+        select: { direction: true, metadata: true },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }).catch(() => [])
+    : [];
+  const thread = resolveEmailThread(history as any);
+  if (thread) return thread;
+  // No thread yet and no subject on the step: the run's default (a cart
+  // automation's name), never the generic one.
+  const fallback = typeof ctx.vars?.__emailSubject === "string" ? String(ctx.vars.__emailSubject).trim() : "";
+  return fallback ? { subject: fallback.slice(0, 200) } : undefined;
+}
+
 async function sendText(
   text: string,
   ctx: FlowExecCtx,
   sendCtx: ChannelSendContext | null = ctx.sendCtx,
+  opts: { subject?: unknown } = {},
 ) {
   const interpolated = interpolate(text, ctx.vars);
   if (!interpolated || !interpolated.trim() || !sendCtx) return;
@@ -1605,12 +1654,11 @@ async function sendText(
   await refuseOutsideWindow(ctx, sendCtx, resolved, "text");
   let extId: string | null;
   try {
-    extId = await adapter.sendTextMessage(
-      sendCtx.credentials,
-      sendCtx.channelAccountExternalId,
-      sendCtx.recipientId,
-      resolved,
-    );
+    // Email only: its subject and thread (other channels' calls are unchanged).
+    const thread = await emailThreadFor(ctx, sendCtx, opts.subject);
+    extId = thread
+      ? await adapter.sendTextMessage(sendCtx.credentials, sendCtx.channelAccountExternalId, sendCtx.recipientId, resolved, undefined, thread)
+      : await adapter.sendTextMessage(sendCtx.credentials, sendCtx.channelAccountExternalId, sendCtx.recipientId, resolved);
   } catch (err: any) {
     // Persist a FAILED row with the full provider error before rethrowing, so
     // the flow's history shows a diagnosable failure instead of a silent drop.

@@ -444,21 +444,63 @@ describe("★ cart left behind", () => {
   it("is live, says it needs consent, and keeps a 15 min - 2 day delay", async () => {
     const it0 = Object.fromEntries((await request(app).get("/api/automations/catalog")).body.data.groups.flatMap((g: any) => g.items.map((i: any) => [i.type, i])));
     expect(it0["trigger:cart_abandoned"]).toMatchObject({ available: true, description: expect.stringMatching(/agreed to marketing/) });
-    expect(normalizeTrigger({ type: "cart_abandoned", config: { delayMinutes: 90, channels: ["WHATSAPP"] } })).toEqual({ type: "cart_abandoned", config: { channels: ["WHATSAPP"], delayMinutes: 90 } });
+    // No channel on the trigger (2026-10-14): the first send step decides.
+    expect(normalizeTrigger({ type: "cart_abandoned", config: { delayMinutes: 90, channels: ["WHATSAPP"] } })).toEqual({ type: "cart_abandoned", config: { delayMinutes: 90 } });
+    expect(it0["trigger:cart_abandoned"].channels).toEqual([]);
     expect(() => normalizeTrigger({ type: "cart_abandoned", config: { delayMinutes: 5 } })).toThrow(/15 minutes/);
   });
 
-  it("★ on WhatsApp (or unspecified channels) only a template: a plain message is refused with the reason", () => {
-    const g = cartGraph("send_message_text", { text: "You left something behind" });
-    for (const config of [{}, { channels: ["WHATSAPP"] }]) {
-      const errs = validateAutomation({ type: "cart_abandoned", config }, g.nodes as any, g.edges as any).errors;
-      expect(errs.map((e) => e.code)).toContain("needs_24h_window");
-      expect(errs.find((e) => e.code === "needs_24h_window")!.message).toMatch(/template/);
-    }
+  it("★ on WhatsApp only a template: a plain message is refused with the reason; by email free text is fine", () => {
+    const wa = cartGraph("send_message_text", { text: "You left something behind", via: "whatsapp" });
+    const errs = validateAutomation({ type: "cart_abandoned", config: {} }, wa.nodes as any, wa.edges as any).errors;
+    expect(errs.map((e) => e.code)).toContain("needs_24h_window");
+    expect(errs.find((e) => e.code === "needs_24h_window")!.message).toMatch(/template/);
     const t = cartGraph("send_message_template", { templateId: "tpl1" });
     expect(validateAutomation({ type: "cart_abandoned", config: {} }, t.nodes as any, t.edges as any).errors).toEqual([]);
-    // Email-only cart reminders may be free text.
-    expect(validateAutomation({ type: "cart_abandoned", config: { channels: ["EMAIL"] } }, g.nodes as any, g.edges as any).errors).toEqual([]);
+    const mail = cartGraph("send_message_text", { text: "You left something behind", via: "email", subject: "Your cart" });
+    expect(validateAutomation({ type: "cart_abandoned", config: {} }, mail.nodes as any, mail.edges as any).errors).toEqual([]);
+    // No via on a plain first message: it has to say how it reaches the customer.
+    const none = cartGraph("send_message_text", { text: "You left something behind" });
+    expect(validateAutomation({ type: "cart_abandoned", config: {} }, none.nodes as any, none.edges as any).errors.map((e) => e.code)).toContain("via_required");
+  });
+
+  it("★ the unreachable branch: tried on the other channel, and only from the first message", () => {
+    const cart = { type: "cart_abandoned", config: {} };
+    const nodes = [
+      { id: "t", type: "automation_trigger", data: {} },
+      { id: "wa", type: "send_message_template", data: { templateId: "tpl1" } },
+      { id: "em", type: "send_message_text", data: { text: "Your cart", via: "email", subject: "Cart" } },
+      { id: "em2", type: "send_message_text", data: { text: "Still there?", via: "email" } },
+    ];
+    const edges = [
+      { id: "1", source: "t", target: "wa" },
+      { id: "2", source: "wa", target: "em", sourceHandle: "unreachable" },
+      { id: "3", source: "em", target: "em2" },
+    ];
+    // The email branch is judged as email: free text there is fine.
+    expect(validateAutomation(cart, nodes as any, edges as any).errors).toEqual([]);
+    const codes = (n: any[], e: any[], reach?: any) => validateAutomation(cart, n as any, e as any, { voiceConnected: true, reach }).errors.map((x) => x.code);
+    // Same channel on the branch.
+    expect(codes(nodes.map((n) => (n.id === "em" ? { ...n, data: { ...n.data, via: "whatsapp" } } : n)), edges)).toContain("unreachable_same_channel");
+    // A later step on the branch naming the other channel.
+    expect(codes(nodes.map((n) => (n.id === "em2" ? { ...n, data: { ...n.data, via: "whatsapp" } } : n)), edges)).toContain("via_mismatch");
+    // "unreachable" from a later step.
+    expect(codes(nodes, [...edges, { id: "4", source: "em", target: "em2", sourceHandle: "unreachable" }])).toContain("unreachable_only_on_first_send");
+    // No mail account: the email branch cannot run.
+    expect(codes(nodes, edges, { whatsapp: true, email: false })).toContain("via_not_connected");
+    // Outside a cart automation there is no such exit.
+    expect(validateAutomation({ type: "message_received", config: {} }, nodes as any, edges as any).errors.map((x) => x.code)).toContain("unreachable_only_on_first_send");
+  });
+
+  it("★ the catalogue of a cart automation: reach, its plan, and the channels each send step can use", async () => {
+    H.db.channelAccount.push({ id: "wa1", tenantId: "T", channel: "WHATSAPP", isActive: true }, { id: "gm1", tenantId: "T", channel: "GMAIL", isActive: true });
+    const g = cartGraph("send_message_text", { text: "hi", via: "email", subject: "Cart" });
+    const c = await create({ ...g, trigger: { type: "cart_abandoned", config: {} } });
+    const d = (await request(app).get(`/api/automations/catalog?automationId=${c.id}&after=s`)).body.data;
+    expect(d.context).toMatchObject({ channel: "EMAIL", reach: { whatsapp: true, email: true }, cart: { firstSendStepId: "s", via: "email", fallbackStepId: null } });
+    const items = Object.fromEntries(d.groups.flatMap((gr: any) => gr.items.map((i: any) => [i.type, i])));
+    expect(items.send_message_text.viaOptions).toEqual(["whatsapp", "email"]);
+    expect(items.send_message_template.viaOptions).toEqual(["whatsapp"]);
   });
 
   it("the catalogue offers the cart variables", async () => {
