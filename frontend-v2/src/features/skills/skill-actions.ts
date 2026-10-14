@@ -82,7 +82,7 @@ export async function saveSkill(
       payload: skillOneSchema,
       raw: true,
     });
-    revalidatePath('/[locale]/studio/skills', 'layout');
+    // No revalidate (AU2): its tree would abort the screen's navigation after this; the screen navigates or refreshes.
     return { ok: true, skill: data };
   } catch (cause) {
     await signInIfSignedOut(cause);
@@ -102,7 +102,7 @@ export async function archiveSkill(id: string): Promise<boolean> {
       payload: skillOneSchema,
       raw: true,
     });
-    revalidatePath('/[locale]/studio/skills', 'layout');
+    // No revalidate (AU2): its tree would abort the screen's navigation after this; the screen navigates or refreshes.
     return true;
   } catch (cause) {
     await signInIfSignedOut(cause);

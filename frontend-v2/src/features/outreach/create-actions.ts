@@ -1,6 +1,5 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { isApiError } from '@/api/client/api-error';
@@ -71,7 +70,7 @@ export async function createCampaignDraft(draft: CampaignDraft): Promise<CreateR
           : {}),
       },
     });
-    revalidatePath('/[locale]/(app)/outreach', 'page');
+    // No revalidate (AU2): its tree would abort the screen's navigation after this; the screen navigates or refreshes.
     return { ok: true, id: result.id };
   } catch (cause) {
     await signInIfSignedOut(cause);
@@ -105,7 +104,7 @@ export async function createTemplate(draft: TemplateDraft): Promise<CreateResult
         ...(draft.footer?.trim() ? { footer: draft.footer.trim() } : {}),
       },
     });
-    revalidatePath('/[locale]/(app)/outreach/templates', 'page');
+    // No revalidate (AU2): its tree would abort the screen's navigation after this; the screen navigates or refreshes.
     return { ok: true, id: result.id };
   } catch (cause) {
     await signInIfSignedOut(cause);
@@ -121,7 +120,7 @@ export async function duplicateTemplate(id: string): Promise<CreateResult> {
       payload: created,
       body: {},
     });
-    revalidatePath('/[locale]/(app)/outreach/templates', 'page');
+    // No revalidate (AU2): its tree would abort the screen's navigation after this; the screen navigates or refreshes.
     return { ok: true, id: result.id };
   } catch (cause) {
     await signInIfSignedOut(cause);

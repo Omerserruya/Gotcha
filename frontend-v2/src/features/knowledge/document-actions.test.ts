@@ -88,13 +88,13 @@ describe('★★ K11 save, at the wire', () => {
 });
 
 describe('★★ K11 delete, at the wire', () => {
-  it('DELETE the same path; the list is read again', async () => {
+  it('DELETE the same path; nothing revalidated - the drawer goes back to the list, read fresh (AU2)', async () => {
     del.mockImplementationOnce(async ({ payload }: Call) => payload.parse({ deleted: true }));
     expect(await deleteDocument('kb-1', 'd1')).toEqual({ ok: true });
     const call = del.mock.calls[0]![0] as Call;
     expect(call.endpoint.path).toBe('/api/knowledge-bases/kb-1/documents/d1');
     expect(call.body).toBeUndefined();
-    expect(revalidatePath).toHaveBeenCalledWith('/[locale]/(app)/studio/knowledge', 'page');
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it.each([

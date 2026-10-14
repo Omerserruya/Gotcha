@@ -247,7 +247,7 @@ export async function updateRole(
     return { ok: false, reason: 'failed' };
   }
   if (input.isSystem) {
-    revalidatePath('/[locale]/settings/people/roles', 'page');
+    // No revalidate (AU2): its tree would abort the screen's navigation after this; the screen navigates or refreshes.
     return { ok: true };
   }
   try {
@@ -260,7 +260,6 @@ export async function updateRole(
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('roles.update_name_failed', { cause });
-    revalidatePath('/[locale]/settings/people/roles', 'page');
     if (isApiError(cause)) {
       if (cause.code === 'SYSTEM_ROLE' || cause.status === 403)
         return { ok: false, reason: 'system' };
@@ -270,7 +269,6 @@ export async function updateRole(
     }
     return { ok: false, reason: 'partial' };
   }
-  revalidatePath('/[locale]/settings/people/roles', 'page');
   return { ok: true };
 }
 

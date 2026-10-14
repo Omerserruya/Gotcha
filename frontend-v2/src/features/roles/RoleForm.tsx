@@ -190,7 +190,9 @@ export function RoleForm({
           isSystem: editing.isSystem,
         });
         if (result.ok) router.push('/settings/people/roles');
-        else
+        else {
+          // Partly saved: the capabilities are stored, so read the role again (no revalidate - AU2).
+          if (result.reason === 'partial') router.refresh();
           setError(
             isRoleRuleReason(result)
               ? roleRule(result)
@@ -198,6 +200,7 @@ export function RoleForm({
                 ? ceiling(result)
                 : t(`form.edit.error.${result.reason}`),
           );
+        }
       });
       return;
     }

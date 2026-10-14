@@ -1,6 +1,5 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { isApiError } from '@/api/client/api-error';
@@ -60,7 +59,7 @@ export async function addCustomer(input: {
         ...(input.email.trim() ? { email: input.email.trim() } : {}),
       },
     });
-    revalidatePath('/[locale]/(app)/customers', 'page');
+    // No revalidate (AU2): its tree would abort the screen's navigation after this; the screen navigates or refreshes.
     return { ok: true, id: created.id, existed: false };
   } catch (cause) {
     await signInIfSignedOut(cause);

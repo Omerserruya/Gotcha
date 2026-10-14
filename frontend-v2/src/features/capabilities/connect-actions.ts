@@ -176,8 +176,7 @@ export async function disconnectSystem(slug: string): Promise<DisconnectResult> 
       }),
       raw: true,
     });
-    revalidatePath('/[locale]/(app)/studio/capabilities', 'page');
-    revalidatePath('/[locale]/(app)/settings/systems', 'page');
+    // No revalidate (AU2): its tree would abort the screen's navigation after this; the screen navigates or refreshes.
     return { ok: true, chatDisabled: answer.chatDisabled };
   } catch (cause) {
     await signInIfSignedOut(cause);

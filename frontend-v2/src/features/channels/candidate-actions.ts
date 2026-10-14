@@ -95,7 +95,7 @@ export async function rerunAnalysis(importId: string): Promise<RerunResult> {
       body: {},
       raw: true,
     });
-    revalidatePath(CHANNELS, 'page');
+    // No revalidate (AU2): its tree would abort the screen's navigation after this; the screen navigates or refreshes.
     return { ok: true };
   } catch (cause) {
     await signInIfSignedOut(cause);

@@ -78,7 +78,7 @@ export async function connectWebChat(name: string): Promise<ChannelWriteResult<C
       payload: channelSchema,
       body: name.trim() ? { name: name.trim() } : {},
     });
-    revalidatePath('/[locale]/settings/channels', 'page');
+    // No revalidate (AU2): its tree would abort the screen's navigation after this; the screen navigates or refreshes.
     return { ok: true, data };
   } catch (cause) {
     await signInIfSignedOut(cause);

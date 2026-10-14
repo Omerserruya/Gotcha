@@ -96,7 +96,7 @@ export async function deleteDocument(baseId: string, docId: string): Promise<Doc
       endpoint: knowledgeEndpoints.document(baseId, docId),
       payload: z.unknown(),
     });
-    revalidatePath('/[locale]/(app)/studio/knowledge', 'page');
+    // No revalidate (AU2): its tree would abort the screen's navigation after this; the screen navigates or refreshes.
     return { ok: true };
   } catch (cause) {
     await signInIfSignedOut(cause);
