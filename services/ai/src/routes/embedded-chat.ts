@@ -19,6 +19,7 @@ import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef, connectedWooS
 import { translateWidgetTexts } from "../services/widget-text-translation.service";
 import { executeAdapterTool } from "../services/connectors/integration-framework";
 import { listActivePromotions } from "../services/widget-promotions.service";
+import { resolveWooCurrency } from "../services/discovery-integration.service";
 
 const router = Router();
 
@@ -209,6 +210,11 @@ async function withHandoff(tenantId: string, config: WebchatConfig, offline = fa
   const promotions = storeConnected && config.commerce.promotions.couponIds.length
     ? await withCrossTenantAccess(() => listActivePromotions(tenantId, config.commerce.promotions.couponIds)).catch(() => [])
     : [];
+  // A fixed-amount coupon needs the store's currency to read "₪20 off":
+  // the store's own (cached on the connection), never guessed. Null if unknown.
+  const promotionCurrency = promotions.length
+    ? (await withCrossTenantAccess(() => resolveWooCurrency(tenantId)).catch(() => ({ currency: undefined }))).currency ?? null
+    : null;
   const target = await withCrossTenantAccess(() => handoffTarget(tenantId, config.ux)).catch(() => null);
   const lang = config.appearance.language === "he" ? "he" : "en";
   if (config.ux.kind === "whatsapp" && !target) return null;
@@ -217,7 +223,7 @@ async function withHandoff(tenantId: string, config: WebchatConfig, offline = fa
   return {
     ...base,
     brand,
-    promotions: promotions.map(({ id: _id, ...p }) => p),
+    promotions: promotions.map(({ id: _id, ...p }) => ({ ...p, currency: promotionCurrency })),
     features: { ...base.features, whatsappHandoff: !!target },
     ...(target ? { whatsapp: { label: handoffButtonLabel(lang) } } : {}),
   };

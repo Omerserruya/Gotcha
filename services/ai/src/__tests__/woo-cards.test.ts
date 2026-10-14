@@ -17,7 +17,7 @@ const STORE = "https://demo-store.example.com";
 const H = vi.hoisted(() => ({
   accounts: [] as any[], conv: null as any, integration: null as any, messages: [] as any[],
   products: {} as Record<string, any>, variations: {} as Record<string, any[]>, adapterCalls: [] as any[],
-  coupons: [] as any[], kv: new Map<string, string>(),
+  coupons: [] as any[], kv: new Map<string, string>(), storeCurrency: "ILS" as string | null,
 }));
 
 vi.mock("express-rate-limit", () => ({ default: () => (_q: any, _r: any, n: any) => n() }));
@@ -58,7 +58,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
 });
 vi.mock("../services/connectors/integration-framework", async (importOriginal) => ({
   ...(await importOriginal<any>()),
-  loadConnection: async () => ({ tenantIntegrationId: "ti_woo", credentials: {}, config: { storeUrl: STORE, storeCurrency: "ILS" }, status: "CONNECTED", expiresAt: null }),
+  loadConnection: async () => ({ tenantIntegrationId: "ti_woo", credentials: {}, config: { storeUrl: STORE, ...(H.storeCurrency ? { storeCurrency: H.storeCurrency } : {}) }, status: "CONNECTED", expiresAt: null }),
   executeAdapterTool: async (o: any) => {
     H.adapterCalls.push(o);
     if (o.toolFunctionName === "woocommerce.get_product") {
@@ -91,7 +91,7 @@ beforeEach(() => {
   H.accounts = [web()];
   H.conv = { id: "conv1", tenantId: "T", channel: "WEBCHAT", channelAccountId: "ca_web", customerExternalId: "tok_1", customerName: "V" };
   H.integration = { status: "CONNECTED", config: { storeUrl: STORE } };
-  H.messages = []; H.adapterCalls = []; H.kv.clear();
+  H.messages = []; H.adapterCalls = []; H.kv.clear(); H.storeCurrency = "ILS";
   const future = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 19);
   const past = new Date(Date.now() - 864e5).toISOString().slice(0, 19);
   H.coupons = [
@@ -246,10 +246,23 @@ describe("★ promotions (phase d): only the chosen coupons, only while live", (
     H.accounts = [chosen(["11", "8", "9", "10", "7"])];
     const w = await boot();
     expect(w.promotions).toEqual([
-      { code: "FREESHIP", amount: "0", discountType: "fixed_cart", expiresAt: null, minimumAmount: null },
-      { code: "WELCOME10", amount: "10.00", discountType: "percent", expiresAt: expect.stringMatching(/Z$/), minimumAmount: "200.00" },
+      { code: "FREESHIP", amount: "0", discountType: "fixed_cart", expiresAt: null, minimumAmount: null, currency: "ILS" },
+      { code: "WELCOME10", amount: "10.00", discountType: "percent", expiresAt: expect.stringMatching(/Z$/), minimumAmount: "200.00", currency: "ILS" },
     ]);
     expect(H.adapterCalls.find((c) => c.toolFunctionName === "woocommerce.list_coupons")!.args).toEqual({ ids: ["11", "8", "9", "10", "7"], per_page: 5 });
+  });
+
+  it("each promotion carries the store's currency (for \"₪20 off\"); unknown is null, never a guess", async () => {
+    H.accounts = [chosen(["11"])];
+    expect((await boot()).promotions[0].currency).toBe("ILS");
+    H.kv.clear();
+    H.storeCurrency = null;
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}), text: async () => "" })));
+    try {
+      expect((await boot()).promotions[0].currency).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("★ nothing chosen, or the store not connected: none shown, the store never asked", async () => {
