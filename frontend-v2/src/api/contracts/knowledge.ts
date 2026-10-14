@@ -308,3 +308,36 @@ export const GAP_ANSWER_MAX = 20000;
 export function isOpen(question: UnansweredQuestion): boolean {
   return question.resolvedAt === null;
 }
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ K1 - SEARCH (ai, live 2026-10-14)
+ * ════════════════════════════════════════════════════════════════════════════
+ * `GET /api/knowledge-bases/search?q=&limit=` (q 2-200 characters, limit at
+ * most 50, default 20): `{ data: hits[], q, hasMore }` - `data` beside
+ * siblings, so it is read `raw`. Title matches first, then by recency. A hit
+ * that does not parse is left out rather than failing the search.
+ */
+export const KNOWLEDGE_SEARCH_MIN = 2;
+export const KNOWLEDGE_SEARCH_MAX = 200;
+
+export const knowledgeSearchHitSchema = z.object({
+  id: z.string().min(1),
+  knowledgeBaseId: z.string().default(''),
+  knowledgeBaseName: z.string().nullable().catch(null).default(null),
+  title: z.string().default(''),
+  matchIn: z.enum(['title', 'content']).catch('content'),
+  snippet: z.string().nullable().catch(null).default(null),
+  updatedAt: z.string().nullable().catch(null).default(null),
+});
+export type KnowledgeSearchHit = z.infer<typeof knowledgeSearchHitSchema>;
+
+export const knowledgeSearchSchema = z.object({
+  data: z.array(z.unknown()).transform((rows) =>
+    rows.flatMap((row) => {
+      const hit = knowledgeSearchHitSchema.safeParse(row);
+      return hit.success ? [hit.data] : [];
+    }),
+  ),
+  hasMore: z.boolean().catch(false).default(false),
+});

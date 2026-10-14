@@ -15,6 +15,7 @@ import { DocumentDrawer, DocumentTypeLead } from '@/features/knowledge/DocumentD
 import { FocusSection } from '@/features/knowledge/FocusSection';
 import { KnowledgeScreen } from '@/features/knowledge/KnowledgeScreen';
 import { isKnowledgeKind } from '@/features/knowledge/knowledge-type';
+import { searchKnowledge } from '@/features/knowledge/search-knowledge';
 import { loadKnowledge } from '@/features/knowledge/load-knowledge';
 import { loadKnowledgeDocument } from '@/features/knowledge/load-document';
 import styles from '@/features/knowledge/Knowledge.module.css';
@@ -65,10 +66,13 @@ export default async function Page({
     readonly doc?: string;
     /** K1: only the items of one kind (where they came from). Anything else: all. */
     readonly kind?: string;
+    /** K1: a search over titles and text. */
+    readonly q?: string;
   }>;
 } = {}) {
   const params = (await searchParams) ?? {};
   const kind = isKnowledgeKind(params.kind) ? params.kind : null;
+  const search = params.q !== undefined ? await searchKnowledge(params.q) : null;
   const t = await getTranslations('knowledge');
   const [{ sources, unanswered, conflicts, everImported }, workspace, scanRun] = await Promise.all([
     loadKnowledge(),
@@ -137,6 +141,7 @@ export default async function Page({
           everImported={everImported}
           rescan={rescan}
           kind={kind}
+          search={search}
         />
       )}
       {docRead ? (
@@ -152,7 +157,13 @@ export default async function Page({
             docRead.state === 'ok' ? <DocumentTypeLead type={docRead.document.type} /> : undefined
           }
           // Back to the list as it was filtered.
-          closeHref={kind ? `/studio/knowledge?kind=${kind}` : '/studio/knowledge'}
+          closeHref={
+            search
+              ? `/studio/knowledge?q=${encodeURIComponent(search.q)}`
+              : kind
+                ? `/studio/knowledge?kind=${kind}`
+                : '/studio/knowledge'
+          }
           width={600}
           testId="knowledge-doc-drawer"
         >

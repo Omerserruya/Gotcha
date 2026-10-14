@@ -36,6 +36,8 @@ vi.mock('@/features/knowledge/load-scan-run', () => ({ loadScanRun: async () => 
 const loadDoc = vi.hoisted(() => vi.fn());
 vi.mock('@/features/knowledge/load-document', () => ({ loadKnowledgeDocument: loadDoc }));
 vi.mock('server-only', () => ({}));
+const searched = vi.hoisted(() => vi.fn());
+vi.mock('@/features/knowledge/search-knowledge', () => ({ searchKnowledge: searched }));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
 function find<P>(node: ReactNode, type: unknown): P | null {
@@ -305,5 +307,17 @@ describe('★ K1: ?kind= narrows the list - one of the eight, else all', () => {
     expect(await kindOf({ kind: 'answers' })).toBe('answers');
     expect(await kindOf({ kind: 'drafts' })).toBeNull();
     expect(await kindOf({})).toBeNull();
+  });
+});
+
+describe('★ K1: ?q= searches, and the answer goes to the screen', () => {
+  it('searched with the words asked; none asked, no search', async () => {
+    searched.mockResolvedValue({ state: 'ok', q: 'cancel', hits: [], hasMore: false });
+    const got = find<{ search: unknown }>(await page({ q: 'cancel' }), KnowledgeScreen)?.search;
+    expect(searched).toHaveBeenCalledWith('cancel');
+    expect(got).toEqual({ state: 'ok', q: 'cancel', hits: [], hasMore: false });
+    searched.mockClear();
+    expect(find<{ search: unknown }>(await page({}), KnowledgeScreen)?.search).toBeNull();
+    expect(searched).not.toHaveBeenCalled();
   });
 });

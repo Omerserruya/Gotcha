@@ -335,5 +335,18 @@
     "conversations": "Past conversations",
     "other": "Other",
     "none": "Nothing of this kind yet."
+  },
+  "search": {
+    "label": "Search what GOTCHA knows",
+    "placeholder": "Search titles and text",
+    "submit": "Search",
+    "results": "{count, plural, =0 {Nothing matches “{q}”} one {# result for “{q}”} other {# results for “{q}”}}",
+    "more": "Showing the first {count}. Search for something more specific to narrow it.",
+    "inTitle": "In the title",
+    "inText": "In the text",
+    "clear": "Clear the search",
+    "short": "Type at least 2 characters to search.",
+    "long": "That's too long to search: up to 200 characters.",
+    "failed": "Couldn't search just now. Try again in a moment."
   }
 }

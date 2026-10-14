@@ -2,20 +2,23 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 
 import {
+  KNOWLEDGE_SEARCH_MAX,
   documentState,
   documentSummary,
   hasAmbiguousName,
   lastRefreshed,
   notReadyCount,
   undatedSources,
+  type KnowledgeSearchHit,
   type KnowledgeSource,
   type UnansweredQuestion,
 } from '@/api/contracts/knowledge';
 import { lastHeardFor, variantsOf, type Candidate } from '@/api/contracts/knowledge-candidates';
 
-import { BookOpen, Layers, ListChecks, MessagesSquare, Shapes, Upload } from 'lucide-react';
+import { BookOpen, Layers, ListChecks, MessagesSquare, Search, Shapes, Upload } from 'lucide-react';
 
 import { GapRow } from './GapRow';
+import type { KnowledgeSearch } from './search-knowledge';
 import {
   KNOWLEDGE_KINDS,
   KNOWLEDGE_TYPE_ICONS,
@@ -82,7 +85,10 @@ export async function KnowledgeScreen({
   everImported,
   rescan = null,
   kind = null,
+  search = null,
 }: {
+  /** K1: a search asked for (`?q=`) and its answer; `null`, the list. */
+  readonly search?: KnowledgeSearch | null;
   readonly sources: readonly KnowledgeSource[] | null;
   /** K1: only the items of this kind (`?kind=`); `null`, all of them. */
   readonly kind?: KnowledgeKind | null;
@@ -265,99 +271,130 @@ export async function KnowledgeScreen({
               </div>
             ) : (
               <>
-                {/* K1: the inbox's way - all, then each kind there is, with its count. */}
-                <nav
-                  className={styles.kinds}
-                  aria-label={t('kinds.label')}
-                  data-testid="knowledge-kinds"
+                {/*
+                  ★★ K1: search titles and text (GET /api/knowledge-bases/search).
+                  A plain GET form: it works before any script, and the address
+                  is the search - shareable, and the way back from an item.
+                */}
+                <form
+                  className={styles.search}
+                  method="get"
+                  role="search"
+                  data-testid="knowledge-search"
                 >
-                  <Link
-                    href="/studio/knowledge"
-                    className={styles.kind}
-                    aria-current={kind ? undefined : 'page'}
-                    data-testid="kind-all"
-                  >
-                    {t('kinds.all')}
-                    <span className={styles.kindCount}>{format.number(total)}</span>
-                  </Link>
-                  {KNOWLEDGE_KINDS.filter((k) => (counts.get(k) ?? 0) > 0 || k === kind).map(
-                    (k) => (
+                  <label className={styles.searchField}>
+                    <Search size={13} aria-hidden="true" />
+                    <input
+                      type="search"
+                      name="q"
+                      defaultValue={search?.q ?? ''}
+                      placeholder={t('search.placeholder')}
+                      aria-label={t('search.label')}
+                      maxLength={KNOWLEDGE_SEARCH_MAX}
+                      data-testid="knowledge-search-input"
+                    />
+                  </label>
+                  <button type="submit" className={styles.searchGo}>
+                    {t('search.submit')}
+                  </button>
+                </form>
+                {search ? (
+                  <SearchResults search={search} date={date} t={t} />
+                ) : (
+                  <>
+                    {/* K1: the inbox's way - all, then each kind there is, with its count. */}
+                    <nav
+                      className={styles.kinds}
+                      aria-label={t('kinds.label')}
+                      data-testid="knowledge-kinds"
+                    >
                       <Link
-                        key={k}
-                        href={{ pathname: '/studio/knowledge', query: { kind: k } }}
+                        href="/studio/knowledge"
                         className={styles.kind}
-                        aria-current={kind === k ? 'page' : undefined}
-                        data-testid={`kind-${k}`}
+                        aria-current={kind ? undefined : 'page'}
+                        data-testid="kind-all"
                       >
-                        {t(`kinds.${k}`)}
-                        <span className={styles.kindCount}>
-                          {format.number(counts.get(k) ?? 0)}
-                        </span>
+                        {t('kinds.all')}
+                        <span className={styles.kindCount}>{format.number(total)}</span>
                       </Link>
-                    ),
-                  )}
-                </nav>
-                {groups.length === 0 ? (
-                  <p className={styles.emptyBody} data-testid="kind-none">
-                    {t('kinds.none')}
-                  </p>
-                ) : null}
-                {groups.map((group) => (
-                  <div key={group.way} data-testid={`way-${group.way}`}>
-                    <p className={styles.wayHead}>
-                      <WayIcon way={group.way} />
-                      <span className={styles.wayName}>
-                        {t(`way.${group.way}` as 'way.website')}
-                      </span>
-                      {/* Only where it is true: every document came from the scan. */}
-                      {group.way === 'website' && group.sources.every(scannedOnly) ? (
-                        <span className={styles.wayNote}>{t('way.scanned')}</span>
-                      ) : null}
-                    </p>
-                    {/* 02's "Your website · scanned automatically" - and its rescan. */}
-                    {group.way === 'website' ? rescanBlock : null}
-                    <ul className={styles.sources}>
-                      {group.sources.map((source) => {
-                        const refreshed = date(lastRefreshed(source));
-                        const pending = notReadyCount(source);
-                        const first = firstNumber.get(source.id) ?? 1;
-                        return (
-                          <li key={source.id}>
-                            <div className={styles.source} data-testid={`source-${source.id}`}>
-                              <span className={styles.sourceText}>
-                                <span className={styles.sourceName}>
-                                  {source.name || t('sources.unnamed')}
-                                  {/* A shared name says what tells the two apart. */}
-                                  {hasAmbiguousName(source, sources) ? (
+                      {KNOWLEDGE_KINDS.filter((k) => (counts.get(k) ?? 0) > 0 || k === kind).map(
+                        (k) => (
+                          <Link
+                            key={k}
+                            href={{ pathname: '/studio/knowledge', query: { kind: k } }}
+                            className={styles.kind}
+                            aria-current={kind === k ? 'page' : undefined}
+                            data-testid={`kind-${k}`}
+                          >
+                            {t(`kinds.${k}`)}
+                            <span className={styles.kindCount}>
+                              {format.number(counts.get(k) ?? 0)}
+                            </span>
+                          </Link>
+                        ),
+                      )}
+                    </nav>
+                    {groups.length === 0 ? (
+                      <p className={styles.emptyBody} data-testid="kind-none">
+                        {t('kinds.none')}
+                      </p>
+                    ) : null}
+                    {groups.map((group) => (
+                      <div key={group.way} data-testid={`way-${group.way}`}>
+                        <p className={styles.wayHead}>
+                          <WayIcon way={group.way} />
+                          <span className={styles.wayName}>
+                            {t(`way.${group.way}` as 'way.website')}
+                          </span>
+                          {/* Only where it is true: every document came from the scan. */}
+                          {group.way === 'website' && group.sources.every(scannedOnly) ? (
+                            <span className={styles.wayNote}>{t('way.scanned')}</span>
+                          ) : null}
+                        </p>
+                        {/* 02's "Your website · scanned automatically" - and its rescan. */}
+                        {group.way === 'website' ? rescanBlock : null}
+                        <ul className={styles.sources}>
+                          {group.sources.map((source) => {
+                            const refreshed = date(lastRefreshed(source));
+                            const pending = notReadyCount(source);
+                            const first = firstNumber.get(source.id) ?? 1;
+                            return (
+                              <li key={source.id}>
+                                <div className={styles.source} data-testid={`source-${source.id}`}>
+                                  <span className={styles.sourceText}>
+                                    <span className={styles.sourceName}>
+                                      {source.name || t('sources.unnamed')}
+                                      {/* A shared name says what tells the two apart. */}
+                                      {hasAmbiguousName(source, sources) ? (
+                                        <span
+                                          className={styles.disambiguate}
+                                          data-testid={`same-name-${source.id}`}
+                                        >
+                                          {t('sources.sameName')}
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                    {/* WHEN, not whether that is good: no staleness policy exists. */}
                                     <span
-                                      className={styles.disambiguate}
-                                      data-testid={`same-name-${source.id}`}
+                                      className={styles.sourceMeta}
+                                      data-testid={`docs-${source.id}`}
                                     >
-                                      {t('sources.sameName')}
+                                      {t('sources.documents', { count: source.documents.length })}
+                                      {refreshed
+                                        ? ` · ${t('sources.refreshed', { date: refreshed })}`
+                                        : null}
+                                    </span>
+                                  </span>
+                                  {pending > 0 ? (
+                                    <span
+                                      className={styles.pending}
+                                      data-testid={`pending-${source.id}`}
+                                    >
+                                      {t('sources.pending', { count: pending })}
                                     </span>
                                   ) : null}
-                                </span>
-                                {/* WHEN, not whether that is good: no staleness policy exists. */}
-                                <span
-                                  className={styles.sourceMeta}
-                                  data-testid={`docs-${source.id}`}
-                                >
-                                  {t('sources.documents', { count: source.documents.length })}
-                                  {refreshed
-                                    ? ` · ${t('sources.refreshed', { date: refreshed })}`
-                                    : null}
-                                </span>
-                              </span>
-                              {pending > 0 ? (
-                                <span
-                                  className={styles.pending}
-                                  data-testid={`pending-${source.id}`}
-                                >
-                                  {t('sources.pending', { count: pending })}
-                                </span>
-                              ) : null}
-                            </div>
-                            {/*
+                                </div>
+                                {/*
                             ★★ K5 (Omer, 2026-10-11): what is IN it, a row each -
                             newest first, as the route orders them. A source row
                             alone turned an added document into "13 documents"
@@ -369,107 +406,111 @@ export async function KnowledgeScreen({
                             name, large, as the title; under it the stored
                             summary, or no line at all.
                           */}
-                            {source.documents.length > 0 ? (
-                              <ol className={styles.docs} start={first}>
-                                {source.documents.map((document, index) => {
-                                  const state = documentState(document);
-                                  const updated = date(document.updatedAt);
-                                  const type = knowledgeTypeOf(document.sourceType);
-                                  /*
+                                {source.documents.length > 0 ? (
+                                  <ol className={styles.docs} start={first}>
+                                    {source.documents.map((document, index) => {
+                                      const state = documentState(document);
+                                      const updated = date(document.updatedAt);
+                                      const type = knowledgeTypeOf(document.sourceType);
+                                      /*
                                   As plain text (supervisor, dev 2026-10-13): a short
                                   document is its own summary, markers and all -
                                   "**אפשר להחליף מידה?** כן…". K6's preview helper.
                                 */
-                                  const stored = documentSummary(document);
-                                  const summary = stored ? plainPreview(stored) || null : null;
-                                  return (
-                                    <li
-                                      key={document.id}
-                                      className={`${styles.doc} ${rowLink.row}`}
-                                      data-testid={`doc-${document.id}`}
-                                      data-state={state}
-                                    >
-                                      <span
-                                        className={styles.docNumber}
-                                        data-testid={`doc-number-${document.id}`}
-                                      >
-                                        {format.number(first + index)}
-                                      </span>
-                                      {/*
+                                      const stored = documentSummary(document);
+                                      const summary = stored ? plainPreview(stored) || null : null;
+                                      return (
+                                        <li
+                                          key={document.id}
+                                          className={`${styles.doc} ${rowLink.row}`}
+                                          data-testid={`doc-${document.id}`}
+                                          data-state={state}
+                                        >
+                                          <span
+                                            className={styles.docNumber}
+                                            data-testid={`doc-number-${document.id}`}
+                                          >
+                                            {format.number(first + index)}
+                                          </span>
+                                          {/*
                                       K8: its kind's one icon (the Add sheet's and
                                       the drawer's); none of the four, an empty slot.
                                     */}
-                                      {type ? (
-                                        <KnowledgeTypeIcon
-                                          type={type}
-                                          size={16}
-                                          className={styles.docIcon}
-                                        />
-                                      ) : (
-                                        <span className={styles.docIcon} aria-hidden="true" />
-                                      )}
-                                      {/*
+                                          {type ? (
+                                            <KnowledgeTypeIcon
+                                              type={type}
+                                              size={16}
+                                              className={styles.docIcon}
+                                            />
+                                          ) : (
+                                            <span className={styles.docIcon} aria-hidden="true" />
+                                          )}
+                                          {/*
                                       K6: the row's one link, stretched over the
                                       row (row-link) - one tab stop, the drawer.
                                     */}
-                                      <Link
-                                        href={{
-                                          pathname: '/studio/knowledge',
-                                          query: kind
-                                            ? { doc: document.id, kind }
-                                            : { doc: document.id },
-                                        }}
-                                        className={`${styles.docTitle} ${rowLink.link}`}
-                                        scroll={false}
-                                        data-testid={`doc-open-${document.id}`}
-                                      >
-                                        {document.title ? (
-                                          <UserText>{document.title}</UserText>
-                                        ) : (
-                                          t('sources.untitled')
-                                        )}
-                                      </Link>
-                                      {/* What it contains, as stored - never made up here. */}
-                                      {summary ? (
-                                        <span
-                                          className={styles.docSummary}
-                                          data-testid={`doc-summary-${document.id}`}
-                                        >
-                                          <UserText>{summary}</UserText>
-                                        </span>
-                                      ) : null}
-                                      <span className={styles.docEnd}>
-                                        {state === 'ready' ? null : (
-                                          <span
-                                            className={
-                                              state === 'failed' ? styles.docFailed : styles.pending
-                                            }
-                                            data-testid={`doc-state-${document.id}`}
+                                          <Link
+                                            href={{
+                                              pathname: '/studio/knowledge',
+                                              query: kind
+                                                ? { doc: document.id, kind }
+                                                : { doc: document.id },
+                                            }}
+                                            className={`${styles.docTitle} ${rowLink.link}`}
+                                            scroll={false}
+                                            data-testid={`doc-open-${document.id}`}
                                           >
-                                            {t(
-                                              state === 'failed'
-                                                ? 'sources.docFailed'
-                                                : 'sources.docReading',
+                                            {document.title ? (
+                                              <UserText>{document.title}</UserText>
+                                            ) : (
+                                              t('sources.untitled')
                                             )}
+                                          </Link>
+                                          {/* What it contains, as stored - never made up here. */}
+                                          {summary ? (
+                                            <span
+                                              className={styles.docSummary}
+                                              data-testid={`doc-summary-${document.id}`}
+                                            >
+                                              <UserText>{summary}</UserText>
+                                            </span>
+                                          ) : null}
+                                          <span className={styles.docEnd}>
+                                            {state === 'ready' ? null : (
+                                              <span
+                                                className={
+                                                  state === 'failed'
+                                                    ? styles.docFailed
+                                                    : styles.pending
+                                                }
+                                                data-testid={`doc-state-${document.id}`}
+                                              >
+                                                {t(
+                                                  state === 'failed'
+                                                    ? 'sources.docFailed'
+                                                    : 'sources.docReading',
+                                                )}
+                                              </span>
+                                            )}
+                                            {updated ? (
+                                              <span className={styles.sourceMeta}>
+                                                {t('sources.docUpdated', { date: updated })}
+                                              </span>
+                                            ) : null}
                                           </span>
-                                        )}
-                                        {updated ? (
-                                          <span className={styles.sourceMeta}>
-                                            {t('sources.docUpdated', { date: updated })}
-                                          </span>
-                                        ) : null}
-                                      </span>
-                                    </li>
-                                  );
-                                })}
-                              </ol>
-                            ) : null}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))}
+                                        </li>
+                                      );
+                                    })}
+                                  </ol>
+                                ) : null}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ))}
+                  </>
+                )}
               </>
             )}
           </div>
@@ -625,4 +666,97 @@ const WAY_ICONS = {
 function WayIcon({ way }: { readonly way: WayIn }) {
   const Icon = WAY_ICONS[way];
   return <Icon className={styles.wayIcon} size={13} aria-hidden="true" />;
+}
+
+/** K1: the search's answer - its hits, or why there are none. */
+function SearchResults({
+  search,
+  date,
+  t,
+}: {
+  readonly search: KnowledgeSearch;
+  readonly date: (iso: string | null) => string | null;
+  readonly t: Awaited<ReturnType<typeof getTranslations<'knowledge'>>>;
+}) {
+  const head =
+    search.state === 'ok'
+      ? t('search.results', { count: search.hits.length, q: search.q })
+      : t(`search.${search.state}`);
+  return (
+    <div className={styles.searchResults} data-testid="search-results">
+      <p className={styles.searchHead} role="status" data-testid="search-head">
+        <span>{head}</span>
+        <Link href="/studio/knowledge" className={styles.searchClear} data-testid="search-clear">
+          {t('search.clear')}
+        </Link>
+      </p>
+      {search.state === 'ok' && search.hits.length > 0 ? (
+        <ul className={styles.hits}>
+          {search.hits.map((hit) => (
+            <SearchHit key={hit.id} hit={hit} q={search.q} date={date} t={t} />
+          ))}
+        </ul>
+      ) : null}
+      {search.state === 'ok' && search.hasMore ? (
+        <p className={styles.emptyBody} data-testid="search-more">
+          {t('search.more', { count: search.hits.length })}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function SearchHit({
+  hit,
+  q,
+  date,
+  t,
+}: {
+  readonly hit: KnowledgeSearchHit;
+  readonly q: string;
+  readonly date: (iso: string | null) => string | null;
+  readonly t: Awaited<ReturnType<typeof getTranslations<'knowledge'>>>;
+}) {
+  const updated = date(hit.updatedAt);
+  return (
+    <li className={`${styles.hit} ${rowLink.row}`} data-testid={`hit-${hit.id}`}>
+      <Link
+        className={`${styles.hitTitle} ${rowLink.link}`}
+        href={{ pathname: '/studio/knowledge', query: { doc: hit.id, q } }}
+        scroll={false}
+      >
+        <UserText>{hit.title || t('sources.unnamed')}</UserText>
+      </Link>
+      <span className={styles.hitMeta}>
+        {[
+          hit.knowledgeBaseName,
+          t(hit.matchIn === 'title' ? 'search.inTitle' : 'search.inText'),
+          updated,
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+      </span>
+      {hit.snippet ? (
+        <span className={styles.hitSnippet} data-testid={`hit-snippet-${hit.id}`}>
+          <UserText>{marked(plainPreview(hit.snippet) || hit.snippet, q)}</UserText>
+        </span>
+      ) : null}
+    </li>
+  );
+}
+
+/** The snippet with each place the search matched marked - case aside, as the route matches. */
+function marked(text: string, q: string): ReactNode {
+  const needle = q.toLowerCase();
+  if (!needle) return text;
+  const lower = text.toLowerCase();
+  const parts: ReactNode[] = [];
+  let at = 0;
+  for (let i = lower.indexOf(needle); i !== -1; i = lower.indexOf(needle, at)) {
+    if (i > at) parts.push(text.slice(at, i));
+    parts.push(<mark key={i}>{text.slice(i, i + needle.length)}</mark>);
+    at = i + needle.length;
+  }
+  if (at < text.length) parts.push(text.slice(at));
+  return parts;
 }

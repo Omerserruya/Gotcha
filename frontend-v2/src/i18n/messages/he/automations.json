@@ -290,7 +290,7 @@
     },
     "library": "צעדים",
     "find": "חיפוש צעד",
-    "addsAfter": "נוסף אחרי „{step}”",
+    "addsAfter": "יתווסף אחרי „{step}”",
     "canvas": "קנבס",
     "addAfter": "הוספת צעד אחרי {step}",
     "addOn": "הוספת צעד בענף {branch} של {step}",

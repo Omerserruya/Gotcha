@@ -505,3 +505,71 @@ describe('★★ K1: the list, filtered by where each item came from', () => {
     expect(screen.getByTestId('kind-drive')).toHaveTextContent('Drive and Confluence0');
   });
 });
+
+describe('★★ K1: search over titles and text', () => {
+  const one = (): KnowledgeSource[] => [
+    knowledgeSourceSchema.parse({
+      id: 'kb',
+      name: 'FAQ',
+      documents: [{ id: 'd1', title: 'Doc', status: 'ready', sourceType: 'text' }],
+    }),
+  ];
+  const show = async (search: Parameters<typeof KnowledgeScreen>[0]['search']) =>
+    render(
+      await KnowledgeScreen({
+        sources: one(),
+        unanswered: [],
+        conflicts: [],
+        everImported: false,
+        search,
+      }),
+    );
+
+  it('★ the hits: each opening its item with the search kept, where it matched, the match marked', async () => {
+    await show({
+      state: 'ok',
+      q: 'cancel',
+      hasMore: false,
+      hits: [
+        {
+          id: 'd1',
+          knowledgeBaseId: 'kb',
+          knowledgeBaseName: 'FAQ',
+          title: 'Cancelling an order',
+          matchIn: 'content',
+          snippet: 'You can Cancel within 24 hours; cancel again later.',
+          updatedAt: null,
+        },
+      ],
+    });
+    expect(screen.getByTestId('search-head')).toHaveTextContent('1 result for “cancel”');
+    const hit = screen.getByTestId('hit-d1');
+    expect(hit.querySelector('a')).toHaveAttribute('href', '/studio/knowledge?doc=d1&q=cancel');
+    expect(hit).toHaveTextContent('FAQ · In the text');
+    const marks = Array.from(screen.getByTestId('hit-snippet-d1').querySelectorAll('mark')).map(
+      (m) => m.textContent,
+    );
+    expect(marks).toEqual(['Cancel', 'cancel']);
+    // The list and its kinds give way to the results.
+    expect(screen.queryByTestId('knowledge-kinds')).toBeNull();
+    expect(screen.getByTestId('knowledge-search-input')).toHaveValue('cancel');
+    expect(screen.getByTestId('search-clear')).toHaveAttribute('href', '/studio/knowledge');
+  });
+
+  it('nothing matches; more than shown; too short - each said', async () => {
+    const { unmount } = await show({ state: 'ok', q: 'zzz', hasMore: false, hits: [] });
+    expect(screen.getByTestId('search-head')).toHaveTextContent('Nothing matches “zzz”');
+    unmount();
+    await show({ state: 'short', q: 'a' });
+    expect(screen.getByTestId('search-head')).toHaveTextContent(
+      'Type at least 2 characters to search.',
+    );
+  });
+
+  it('no search: the form, and the list with its kinds', async () => {
+    await show(null);
+    expect(screen.getByTestId('knowledge-search')).toHaveAttribute('method', 'get');
+    expect(screen.getByTestId('knowledge-kinds')).toBeInTheDocument();
+    expect(screen.queryByTestId('search-results')).toBeNull();
+  });
+});

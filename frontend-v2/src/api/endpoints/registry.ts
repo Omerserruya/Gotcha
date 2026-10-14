@@ -1425,6 +1425,8 @@ export const knowledgeEndpoints = {
    * for a whole screen before a capture found it.
    */
   sources: () => endpoint('/api/knowledge-bases'),
+  /** K1: `?q=&limit=` over titles and text - `{ data: hits[], q, hasMore }` (read `raw`). */
+  search: () => endpoint('/api/knowledge-bases/search'),
   unanswered: () => endpoint('/api/knowledge/unanswered-questions'),
   /**
    * 08's Answer (Backend c5c5d6ed + d645751f): `{ answer }` (1-20000, kept as

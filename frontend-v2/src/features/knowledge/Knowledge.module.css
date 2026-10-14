@@ -615,4 +615,113 @@
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
+
+  /* ★ K1: search titles and text. */
+  .search {
+    display: flex;
+    gap: var(--space-8);
+    margin-block-end: var(--space-8);
+  }
+
+  .searchField {
+    display: flex;
+    flex: 1;
+    gap: 6px;
+    align-items: center;
+    min-inline-size: 0;
+    padding: 5px 10px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 8px;
+    background-color: var(--panel-field);
+    color: var(--text-subtle);
+  }
+
+  .searchField input {
+    flex: 1;
+    min-inline-size: 0;
+    border: 0;
+    background: none;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: var(--font-size-label);
+    outline: none;
+  }
+
+  .searchField:focus-within {
+    border-color: var(--text-secondary);
+  }
+
+  .searchGo {
+    padding: 5px 12px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 8px;
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: var(--font-size-label);
+    cursor: pointer;
+  }
+
+  .searchResults {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .searchHead {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    align-items: baseline;
+    margin: 0;
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+  }
+
+  .searchClear {
+    color: var(--text-secondary);
+  }
+
+  .hits {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .hit {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-block: var(--space-8);
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .hit:first-child {
+    border-block-start: 0;
+  }
+
+  .hitTitle {
+    color: var(--text-primary);
+    font-weight: var(--font-weight-semibold);
+    text-decoration: none;
+  }
+
+  .hitMeta {
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+  }
+
+  .hitSnippet {
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+  }
+
+  .hitSnippet mark {
+    border-radius: 2px;
+    background-color: var(--panel-inset);
+    color: var(--text-primary);
+    font-weight: var(--font-weight-semibold);
+  }
 }
