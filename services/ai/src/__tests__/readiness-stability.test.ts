@@ -15,6 +15,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const H = vi.hoisted(() => ({
   agent: null as any, docs: [] as any[], settings: new Map<string, string>(), calls: [] as any[],
   generated: [] as string[], verdict: (_q: string): string => "none",
+  retrieve: (async () => []) as (...a: any[]) => Promise<any[]>, retrieveCalls: [] as any[][],
+}));
+vi.mock("../services/knowledge.service", async (importOriginal) => ({
+  ...(await importOriginal<any>()),
+  retrieveRelevantChunks: vi.fn(async (...a: any[]) => { H.retrieveCalls.push(a); return H.retrieve(...a); }),
 }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
@@ -60,7 +65,7 @@ const types = () => H.calls.map((c) => c.type);
 beforeEach(() => {
   H.agent = { id: "maya", name: "Maya", role: "customer_support", goal: "help", successCriteria: "", identity: {}, readinessReport: null, departmentId: null };
   H.docs = [{ id: "d1", title: "Shipping", content: "3-5 days", updatedAt: new Date("2026-10-01") }];
-  H.settings = new Map(); H.calls = [];
+  H.settings = new Map(); H.calls = []; H.retrieve = async () => []; H.retrieveCalls = [];
   H.generated = ["Do you ship to Eilat?", "What sizes do you have?", "Can I return shoes?", "Do you ship to Eilat?"];
   H.verdict = (q) => (q.includes("Eilat") ? "full" : "none");
 });
@@ -291,5 +296,46 @@ describe("★ a judge batch cut off while reasoning is retried with more room (2
     } finally {
       (generateResponse as any).mockImplementation(real);
     }
+  });
+});
+
+describe("★ each question is judged on what the employee would retrieve for it (2026-10-14)", () => {
+  // Maya's FAQ answers sat past the first 200 characters of the document, which
+  // was all the judge saw: "can I cancel my order?" read as none.
+  const CANCEL = "Orders can be changed or cancelled until they are packed - usually within two hours.";
+  const longFaq = () => ({ id: "faq", title: "FAQ", content: "Intro about the brand and its story. ".repeat(20) + CANCEL, updatedAt: new Date("2026-10-05") });
+
+  it("★ an answer past the old 200-character cut reaches the judge, under its question", async () => {
+    H.docs = [longFaq()];
+    H.generated = ["Can I cancel my order?", "Do you sell gift cards?"];
+    H.retrieve = async (_t: string, q: string) => (q.includes("cancel") ? [{ documentTitle: "FAQ", content: CANCEL }] : []);
+    await run();
+    const judge = H.calls.find((c) => c.type === "agent_readiness")!.prompt as string;
+    const cancelAt = judge.indexOf("Can I cancel my order?");
+    expect(judge.indexOf(CANCEL)).toBeGreaterThan(cancelAt);
+    expect(judge).toContain("(the employee finds nothing in its knowledge for this)");
+    // The document list is titles only: the text comes from retrieval.
+    expect(judge).not.toContain("Intro about the brand");
+  });
+
+  it("★ retrieval is the live chat's call: once per question, top 5, this employee, no gap recorded", async () => {
+    H.generated = ["Can I cancel my order?", "Do you sell gift cards?"];
+    H.retrieve = async () => [{ documentTitle: "Shipping", content: "3-5 days" }];
+    await run();
+    expect(H.retrieveCalls.map((c) => [c[0], c[1], c[2], c[3], c[4]])).toEqual([
+      ["T", "Can I cancel my order?", 5, "maya", { record: false }],
+      ["T", "Do you sell gift cards?", 5, "maya", { record: false }],
+    ]);
+  });
+
+  it("retrieval finds nothing at all while documents exist: the judge reads the documents in full", async () => {
+    H.docs = [longFaq()];
+    H.generated = ["Can I cancel my order?"];
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await run();
+    const judge = H.calls.find((c) => c.type === "agent_readiness")!.prompt as string;
+    expect(judge).toContain(CANCEL);
+    expect(warn.mock.calls.some((c) => String(c[0]).includes("retrieval found nothing"))).toBe(true);
+    warn.mockRestore();
   });
 });

@@ -35,13 +35,19 @@
  *  - A question a person answered (readiness-answers) is covered by that
  *    answer: it joins the set if it is not in it, and is marked full without
  *    asking the judge.
+ *  - Each question is judged against what the employee would RETRIEVE for it
+ *    (2026-10-14): the same retrieveRelevantChunks call, top 5, scoped to the
+ *    employee, as a live chat. The judge used to see the first 200 characters
+ *    of each document, so an FAQ answer past them read as "none". If retrieval
+ *    finds nothing for any question while documents exist (the index down),
+ *    the judge gets the documents' full text instead, up to FULL_TEXT_BUDGET.
  * No migration: two TenantSetting keys; the report stays in AIAgent.readinessReport.
  */
 
 import crypto from "crypto";
 import { prisma, clusterKeyFor, readDurableSetting, writeDurableSetting } from "@chatcenter/shared";
 import { generateResponse } from "./ai.service";
-import { readableKnowledgeBaseIds } from "./knowledge.service";
+import { readableKnowledgeBaseIds, retrieveRelevantChunks } from "./knowledge.service";
 import { readAnsweredQuestions } from "./readiness-answers";
 import { withoutWideDashes } from "../lib/wide-dash";
 
@@ -96,6 +102,10 @@ export interface StoredQuestionSet {
 const LANG_NAMES: Record<string, string> = { en: "English", he: "Hebrew (עברית)", ar: "Arabic (العربية)" };
 
 const MAX_KB_DOCS = 40;
+/** Chunks per question, as the live chat retrieves them (ai-bot.service). */
+export const RETRIEVE_PER_QUESTION = 5;
+/** The fallback when retrieval is unavailable: all documents' text, up to this many characters. */
+export const FULL_TEXT_BUDGET = 30_000;
 const MAX_TOOLS = 60;
 /** Bumped when the judging prompt changes, so old judgements are not reused. */
 const JUDGE_VERSION = "3";
@@ -130,7 +140,7 @@ interface ReadinessContext {
   organizationName: string;
   industry: string;
   businessDescription: string;
-  knowledgeDocs: Array<{ kb: string; title: string; snippet: string }>;
+  knowledgeDocs: Array<{ kb: string; title: string; snippet: string; content: string }>;
   /** Every readable document by id and last change: what the knowledge part of the fingerprint is. */
   knowledgeVersion: Array<[string, string]>;
   tools: Array<{ name: string; integration: string; description: string }>;
@@ -202,6 +212,7 @@ async function loadContext(tenantId: string, agentId: string): Promise<Readiness
       kb: kbNameById.get(d.knowledgeBaseId) || "Knowledge",
       title: d.title,
       snippet: (d.content || "").replace(/\s+/g, " ").slice(0, 200),
+      content: String(d.content || ""),
     }));
   }
 
@@ -270,14 +281,42 @@ Respond ONLY with JSON of exactly this shape:
 Write the questions in ${lang}.`;
 }
 
-function buildJudgePrompt(ctx: ReadinessContext, questions: Array<{ id: string; question: string }>, locale: string): string {
+/** What the judge reads for each question: what retrieval found for it, or (fallback) every document in full. */
+export type JudgeKnowledge =
+  | { mode: "retrieved"; byQuestion: Map<string, Array<{ title: string; text: string }>> }
+  | { mode: "full_text" };
+
+function fullTextBlock(ctx: ReadinessContext): string {
+  let left = FULL_TEXT_BUDGET;
+  const parts: string[] = [];
+  for (const d of ctx.knowledgeDocs) {
+    if (left <= 0) break;
+    const text = d.content.replace(/\s+/g, " ").trim().slice(0, left);
+    left -= text.length;
+    parts.push(`### doc "${d.title}" [${d.kb}]\n${text}`);
+  }
+  return parts.join("\n\n");
+}
+
+export function buildJudgePrompt(ctx: ReadinessContext, questions: Array<{ id: string; question: string }>, locale: string, knowledge: JudgeKnowledge = { mode: "full_text" }): string {
   const lang = LANG_NAMES[locale] || "English";
-  const kbBlock = ctx.knowledgeDocs.length
-    ? ctx.knowledgeDocs.map((d) => `- doc "${d.title}" [${d.kb}]: ${d.snippet}`).join("\n")
+  const titles = ctx.knowledgeDocs.length
+    ? ctx.knowledgeDocs.map((d) => `- doc "${d.title}" [${d.kb}]`).join("\n")
     : "(no knowledge documents available)";
+  const kbBlock = knowledge.mode === "retrieved"
+    ? `${titles}\n(For each question below, the knowledge the employee finds when a customer asks it is listed under the question. Judge by that.)`
+    : ctx.knowledgeDocs.length ? `${titles}\n\n${fullTextBlock(ctx)}` : titles;
   const toolBlock = ctx.tools.length
     ? ctx.tools.map((t) => `- tool "${t.name}" (${t.integration})${t.description ? `: ${t.description}` : ""}`).join("\n")
     : "(no action tools granted)";
+  const questionLines = questions.map((q) => {
+    if (knowledge.mode !== "retrieved") return `- [${q.id}] ${q.question}`;
+    const found = knowledge.byQuestion.get(q.id) ?? [];
+    const kb = found.length
+      ? found.map((c) => `    > doc "${c.title}": ${c.text.replace(/\s+/g, " ").trim()}`).join("\n")
+      : "    > (the employee finds nothing in its knowledge for this)";
+    return `- [${q.id}] ${q.question}\n${kb}`;
+  }).join("\n");
   return `${businessBlock(ctx)}
 
 ## Knowledge base documents available to it
@@ -287,7 +326,7 @@ ${kbBlock}
 ${toolBlock}
 
 ## Customer questions to judge (fixed list; judge every id, add none)
-${questions.map((q) => `- [${q.id}] ${q.question}`).join("\n")}
+${questionLines}
 
 ## Your task
 For EACH question id decide:
@@ -352,6 +391,29 @@ async function storeQuestionSet(tenantId: string, aiAgentId: string, set: Stored
   } catch (err: any) {
     console.warn(`[readiness] question set write failed for ${aiAgentId}:`, err?.message);
   }
+}
+
+/**
+ * Retrieval per question, the live chat's call (record:false: a readiness test
+ * is not a customer, its misses are not gaps). Nothing found for any question
+ * while documents exist means the index could not answer: fall back to the
+ * full text, and say so in the log.
+ */
+async function judgeKnowledgeFor(tenantId: string, agentId: string, ctx: ReadinessContext, questions: Array<{ id: string; question: string }>): Promise<JudgeKnowledge> {
+  if (!questions.length || !ctx.knowledgeDocs.length) return { mode: "retrieved", byQuestion: new Map() };
+  const found = await Promise.all(questions.map(async (q) => {
+    try {
+      const chunks = await retrieveRelevantChunks(tenantId, q.question, RETRIEVE_PER_QUESTION, agentId, { record: false });
+      return [q.id, (chunks as any[]).map((c) => ({ title: String(c?.documentTitle ?? c?.title ?? "Knowledge"), text: String(c?.content ?? "") })).filter((c) => c.text.trim())] as const;
+    } catch {
+      return [q.id, []] as const;
+    }
+  }));
+  if (found.every(([, c]) => c.length === 0)) {
+    console.warn(`[readiness] ${agentId}: retrieval found nothing for any of ${questions.length} questions; judging on the documents' full text`);
+    return { mode: "full_text" };
+  }
+  return { mode: "retrieved", byQuestion: new Map(found.map(([id, c]) => [id, [...c]])) };
 }
 
 /** Keep each question once (by id), in order. */
@@ -455,6 +517,8 @@ export async function generateReadinessReport(
   const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
   const docNames = new Map(ctx.knowledgeDocs.map((d) => [norm(d.title), d.title]));
   const toolNames = new Map(ctx.tools.map((t) => [norm(t.name), t.name]));
+  // What the employee would find for each question, as in a live chat.
+  const knowledge = await judgeKnowledgeFor(tenantId, agentId, ctx, toJudge);
   const batches: Array<Array<{ id: string; question: string }>> = [];
   for (let i = 0; i < toJudge.length; i += JUDGE_BATCH) batches.push(toJudge.slice(i, i + JUDGE_BATCH));
 
@@ -471,7 +535,7 @@ export async function generateReadinessReport(
           tenantId,
           messages: [
             { role: "system", content: "You are a meticulous QA auditor for AI customer-service employees. You output only valid JSON." },
-            { role: "user", content: buildJudgePrompt(ctx, batch, locale) },
+            { role: "user", content: buildJudgePrompt(ctx, batch, locale, knowledge) },
           ],
           // Ignored by the gpt-5 models (see the header); harmless elsewhere.
           temperature: 0,
