@@ -68,14 +68,18 @@ describe("hasPermission: role layer via explicit assignment", () => {
     expect(await hasPermission(u, "settings:members:manage")).toBe(false);
   });
 
-  it("expands wildcard role permissions", async () => {
+  it("expands wildcard role permissions, under the Agent ceiling", async () => {
     db.userRoleAssignment.push({
       userId: "u2",
       scope: null,
       role: { defaultScope: "WORKSPACE", features: [{ feature: "*" }] },
     });
     const u: PermissionPrincipal = { userId: "u2", tenantId: "t1", role: "AGENT" };
-    expect(await hasPermission(u, "settings:roles:manage")).toBe(true);
+    // The "*" expands to what the Agent may hold...
+    expect(await hasPermission(u, "conversation:messages:reply")).toBe(true);
+    // ...and never past the ceiling: since 30d610da (2026-10-11) a grant, a "*"
+    // or a custom role never lifts it, and roles management is on it.
+    expect(await hasPermission(u, "settings:roles:manage")).toBe(false);
   });
 });
 
@@ -131,10 +135,12 @@ describe("license layer: default-allow, explicit-disable blocks", () => {
 });
 
 describe("migration bridge: no assignment → derive from legacy enum (parity)", () => {
-  it("legacy ADMIN gets all-but-owner-only", async () => {
+  it("legacy ADMIN is the Owner", async () => {
+    // Owner and Admin are one role since 30d610da (2026-10-11): a legacy ADMIN
+    // derives the Owner's set, billing included.
     const u: PermissionPrincipal = { userId: "legacyAdmin", tenantId: "t1", role: "ADMIN" };
     expect(await hasPermission(u, "settings:members:manage")).toBe(true);
-    expect(await hasPermission(u, "settings:billing:manage")).toBe(false);
+    expect(await hasPermission(u, "settings:billing:manage")).toBe(true);
   });
 
   it("legacy AGENT gets agent set only", async () => {
