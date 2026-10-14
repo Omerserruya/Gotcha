@@ -202,13 +202,23 @@ export function Builder({
    */
   const [checked, setChecked] = useState<ReadonlyMap<string, Issue>>(new Map());
   useEffect(() => {
+    /*
+     * Only the answer for the canvas as it is now. An earlier check still on
+     * its way (WhatsApp, before the step chose email) is dropped; one that
+     * failed clears: the issues it would replace were about another canvas.
+     */
+    let current = true;
     const timer = setTimeout(() => {
       void checkGraph(automation.id, {
         trigger: { type: trigger.type ?? '', config: trigger.config },
         nodes: graph.nodes,
         edges: graph.edges,
       }).then((result) => {
-        if (!result) return;
+        if (!current) return;
+        if (!result) {
+          setChecked(new Map());
+          return;
+        }
         const byNode = new Map<string, Issue>();
         for (const issue of result.errors) {
           if (issue.nodeId && issue.code !== 'missing_config' && !byNode.has(issue.nodeId)) {
@@ -218,7 +228,10 @@ export function Builder({
         setChecked(byNode);
       });
     }, CHECK_AFTER_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
   }, [automation.id, graph, trigger]);
 
   // Closing the tab with changes not yet published asks first.

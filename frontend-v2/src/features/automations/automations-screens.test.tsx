@@ -1117,6 +1117,68 @@ describe('★★ the new triggers and steps (Backend 972ae66d), edited where the
     );
     expect(screen.getByTestId('node-m')).toHaveAttribute('data-marked');
   });
+
+  describe('★★ AU4 on dev: the issues are the canvas as it is now', () => {
+    const windowIssue = {
+      errors: [
+        issueSchema.parse({
+          severity: 'error',
+          code: 'needs_24h_window',
+          nodeId: 'm',
+          message: 'x',
+        }),
+      ],
+      warnings: [],
+    };
+    const cart = () =>
+      showBuilder(
+        draftOf(
+          { type: 'cart_abandoned', config: {} },
+          [
+            { id: 't', type: 'automation_trigger', data: {} },
+            { id: 'm', type: 'send_message_text', data: { text: 'Hi' } },
+          ],
+          [{ id: 'e', source: 't', target: 'm', sourceHandle: null }],
+        ),
+      );
+    const tick = () =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(800);
+      });
+
+    it('★ a check still on its way when the step chose email never lands after the answer for email', async () => {
+      vi.useFakeTimers();
+      let late: (v: typeof windowIssue) => void = () => {};
+      actions.checkGraph
+        .mockImplementationOnce(() => new Promise((resolve) => (late = resolve)))
+        .mockResolvedValue({ errors: [], warnings: [] });
+      cart();
+      await tick();
+      fireEvent.click(screen.getByTestId('node-m'));
+      fireEvent.click(screen.getByTestId('inspector-via-email'));
+      await tick();
+      await act(async () => {
+        late(windowIssue);
+      });
+      vi.useRealTimers();
+      expect(actions.checkGraph).toHaveBeenCalledTimes(2);
+      expect(screen.queryByTestId('issue-m')).toBeNull();
+      expect(screen.getByTestId('node-m')).not.toHaveAttribute('data-marked');
+    });
+
+    it('a check that failed clears the issue it would have replaced', async () => {
+      vi.useFakeTimers();
+      actions.checkGraph.mockResolvedValueOnce(windowIssue).mockResolvedValue(null);
+      cart();
+      await tick();
+      expect(screen.getByTestId('issue-m')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('node-m'));
+      fireEvent.click(screen.getByTestId('inspector-via-email'));
+      await tick();
+      vi.useRealTimers();
+      expect(screen.queryByTestId('issue-m')).toBeNull();
+    });
+  });
 });
 
 describe('★★ a duration in the largest unit it fills whole (dev: "1,440 minutes")', () => {
