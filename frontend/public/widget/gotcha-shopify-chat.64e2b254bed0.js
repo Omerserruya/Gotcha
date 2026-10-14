@@ -216,6 +216,11 @@ window.__gotchaShopifyChatApp = function (boot) {
       cartDisabled: "Add to cart is switched off for this store right now.",
       cartSessionExpired: "This chat session has expired. Refresh the page and try again.",
       cartStoreBusy: "The store did not answer. Please try again in a moment.",
+      notForSale: "This product isn't for sale right now.",
+      outOfStock: "This one is sold out.",
+      chooseVariantFirst: "Choose an option first.",
+      variantGone: "That option isn't available anymore.",
+      chooseOnPage: "Opening the product page to choose the options.",
       viewProduct: "View product",
       viewCart: "View cart",
       keepShopping: "Keep shopping",
@@ -272,6 +277,11 @@ window.__gotchaShopifyChatApp = function (boot) {
       cartDisabled: "ההוספה לסל כבויה בחנות הזו כרגע.",
       cartSessionExpired: "החיבור לצ׳אט פג. רעננו את הדף ונסו שוב.",
       cartStoreBusy: "החנות לא הגיבה. אפשר לנסות שוב עוד רגע.",
+      notForSale: "המוצר הזה לא למכירה כרגע.",
+      outOfStock: "המוצר הזה אזל מהמלאי.",
+      chooseVariantFirst: "צריך לבחור אפשרות קודם.",
+      variantGone: "האפשרות הזו כבר לא זמינה.",
+      chooseOnPage: "פותחים את דף המוצר כדי לבחור אפשרויות.",
       viewProduct: "למוצר",
       viewCart: "לסל הקניות",
       keepShopping: "להמשיך לגלוש",
@@ -1062,6 +1072,12 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".panel[data-look='gotcha'] .tl[data-act='dock'][aria-pressed='true']{background:#EDE5D9;}",
     ".panel[data-look='gotcha'][data-view='welcome'] .tl[data-act='dock'][aria-pressed='true']{background:#fff;}",
     "@media (max-width: 899px){.panel[data-look='gotcha'] .tl[data-act='dock']{display:none;}}",
+    // Product cards (design 7): warm rules, the main colour's ink on its buttons.
+    ".panel[data-look='gotcha'] .card{border-color:#ECE4D8;border-radius:14px;}",
+    ".panel[data-look='gotcha'] .btn-p{background:" + brand + ";color:" + inkOn(brand) + ";border-radius:9px;}",
+    ".panel[data-look='gotcha'] .btn-s{border-color:#E3DACE;color:#2B2622;border-radius:9px;}",
+    ".panel[data-look='gotcha'] .chip{border-color:#E3DACE;}",
+    ".panel[data-look='gotcha'] .chip[aria-pressed='true']{color:" + inkOn(brand) + ";}",
     "@media (prefers-reduced-motion: reduce){.panel[data-look='gotcha'] .hd-dot::after,.panel[data-look='gotcha'] .disc-on::after{animation:none;opacity:0}.panel[data-look='gotcha'] .q,.panel[data-look='gotcha'] .tl{transition:none}}",
   ].join("\n");
 
@@ -2167,9 +2183,13 @@ window.__gotchaShopifyChatApp = function (boot) {
         ok.appendChild(el("span", null, "✓ " + T.added));
         card.appendChild(ok);
         var after = el("div", "acts");
-        var cart = el("a", "btn btn-s", T.viewCart);
-        attr(cart, { href: storefrontRoute("cart"), target: "_top" });
-        after.appendChild(cart);
+        // Only where the cart page is known (the storefront's; a web chat
+        // store's is not, so it offers none rather than a guess).
+        if (vState.cartPage) {
+          var cart = el("a", "btn btn-s", T.viewCart);
+          attr(cart, { href: vState.cartPage, target: "_top" });
+          after.appendChild(cart);
+        }
         var keep = el("button", "btn btn-s", T.keepShopping);
         attr(keep, { type: "button" });
         on(keep, "click", function () { vState.done = false; paint(); });
@@ -2309,6 +2329,14 @@ window.__gotchaShopifyChatApp = function (boot) {
     })
       .then(function (res) {
         var v = res.data;
+        // A host whose store is not Shopify completes the line its own way
+        // (the web chat: the store's ?add-to-cart= link, W9c).
+        if (typeof boot.addToCart === "function") {
+          return boot.addToCart(v).then(function (done) {
+            vState.cartPage = done && done.cartPage ? safeUrl(done.cartPage) : null;
+          });
+        }
+        vState.cartPage = storefrontRoute("cart");
         return fetch(storefrontRoute("cart/add.js"), {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -2347,6 +2375,12 @@ window.__gotchaShopifyChatApp = function (boot) {
         repaint();
         scrollToEnd();
         api("/cart/result", { ok: false }).catch(function () {});
+        // An option the link cannot name ("any size"): the product's own page asks it.
+        var code = err && ((err.body && err.body.error) || err.message);
+        var page = safeUrl(product.productUrl);
+        if (code === "choose_on_product_page" && page) {
+          try { window.top.location.href = page; } catch (e) { window.location.href = page; }
+        }
       });
   }
 
@@ -2370,7 +2404,13 @@ window.__gotchaShopifyChatApp = function (boot) {
     if (err.storefront && err.message) return err.message;
     if (err.status === 409 && err.message) return err.message;
     var code = (err.body && err.body.error) || err.message;
-    if (code === "add_to_cart_disabled") return T.cartDisabled;
+    if (code === "add_to_cart_disabled" || code === "cart_disabled") return T.cartDisabled;
+    // The web chat's store (WooCommerce) names its refusals by code (W9c).
+    if (code === "not_for_sale") return T.notForSale;
+    if (code === "out_of_stock") return T.outOfStock;
+    if (code === "choose_variant") return T.chooseVariantFirst;
+    if (code === "variant_not_found" || code === "product_not_found") return T.variantGone;
+    if (code === "choose_on_product_page") return T.chooseOnPage;
     if (code === "session_expired") return T.cartSessionExpired;
     if (code === "unavailable") return T.cartStoreBusy;
     return T.failed;

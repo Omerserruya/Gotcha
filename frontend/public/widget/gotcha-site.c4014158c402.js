@@ -416,7 +416,8 @@ window.__gotchaSiteMount = function (opts) {
         author: m.author || m.senderDisplayName || null,
         authorKind: m.direction === "INBOUND" ? "visitor" : m.authorKind || "ai",
         createdAt: m.createdAt || m.timestamp || new Date().toISOString(),
-        commerce: null,
+        // Product cards (W9b): the same shape as the storefront's.
+        commerce: m.commerce || (m.metadata && m.metadata.commerce) || null,
       };
     });
   }
@@ -465,6 +466,18 @@ window.__gotchaSiteMount = function (opts) {
             },
           };
         });
+      });
+    }
+
+    // Add to cart (W9c): the server checks the line against the store and
+    // answers with the store's own add-to-cart link.
+    if (path === "/cart/validate") {
+      return post(API_PATH + "/cart/validate", {
+        sessionId: store.get("conversation"),
+        sessionToken: store.get("token"),
+        productId: body && body.productId,
+        variantId: body && body.variantId != null ? body.variantId : undefined,
+        quantity: body && body.quantity,
       });
     }
 
@@ -597,6 +610,25 @@ window.__gotchaSiteMount = function (opts) {
       // The socket instead of polling: this channel's visitor proves itself
       // with the session token from /init, and its pushed messages get the
       // same shape as polled ones.
+      // Add to cart on the store (W9c): on the store's own host the link is
+      // followed in place, so the visitor stays where they are and the line
+      // lands in their cart; anywhere else the page goes to the store's link.
+      // The cart page itself is not known, so none is offered.
+      addToCart: function (line) {
+        var target;
+        try { target = new URL(line && line.cartUrl, window.location.href); } catch (e) { target = null; }
+        if (!target || (target.protocol !== "https:" && target.protocol !== "http:")) return Promise.reject(new Error("unavailable"));
+        if (target.origin === window.location.origin) {
+          return fetch(target.toString(), { credentials: "same-origin", redirect: "follow" }).then(function (res) {
+            if (!res.ok) throw new Error("unavailable");
+            // WooCommerce themes refresh their mini-cart on this event.
+            try { if (window.jQuery) window.jQuery(document.body).trigger("wc_fragment_refresh"); } catch (e) {}
+            return { cartPage: null };
+          });
+        }
+        try { window.top.location.href = target.toString(); } catch (e) { window.location.href = target.toString(); }
+        return new Promise(function () {});
+      },
       // Docked (design 7): the panel is the chat's place; the bubble and any
       // pop-up step aside until it is undocked.
       onDock: function (docked) {

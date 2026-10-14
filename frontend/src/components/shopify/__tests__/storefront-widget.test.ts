@@ -78,6 +78,8 @@ async function boot(
     resetConversation?: () => void;
     /** A host that can step its bubble aside for a docked panel (the code snippet). */
     onDock?: (docked: boolean) => void;
+    /** A host that completes Add to cart its own way (the web chat's store, W9c). */
+    addToCart?: (line: any) => Promise<{ cartPage: string | null }>;
   } = {},
 ): Promise<Harness> {
   const host = document.createElement("div");
@@ -117,6 +119,7 @@ async function boot(
     ...(options.preview ? { preview: true } : {}),
     ...(options.resetConversation ? { resetConversation: options.resetConversation } : {}),
     ...(options.onDock ? { onDock: options.onDock } : {}),
+    ...(options.addToCart ? { addToCart: options.addToCart } : {}),
     setUnread: vi.fn(),
     onOpened: vi.fn(),
     onClosed: vi.fn(),
@@ -1667,5 +1670,65 @@ describe("★★ design 7's docking (live widget L3)", () => {
     wide(true);
     const h = await boot({ messages: [] });
     expect(h.shadow.querySelector('[data-act="dock"]')).toBeNull();
+  });
+});
+
+describe("★★ Add to cart on a web chat's store (live widget L6, W9c)", () => {
+  const card = {
+    id: "w1",
+    direction: "OUTBOUND",
+    body: "This one",
+    messageType: "woo_product",
+    author: "AI",
+    authorKind: "ai",
+    createdAt: new Date().toISOString(),
+    commerce: { addToCartEnabled: true, products: [makeProduct({ selectedVariantId: "9001", productUrl: "https://shop.example/product/runner/" })] },
+  };
+  const addBtn = (shadow: ShadowRoot) =>
+    Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Add to cart") as HTMLButtonElement;
+
+  it("the host completes the line with the server's answer; no Shopify cart, and no cart page it doesn't know", async () => {
+    const addToCart = vi.fn(async () => ({ cartPage: null }));
+    const { shadow, post, fetchMock } = await boot({ messages: [card], addToCart });
+    addBtn(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(post.mock.calls.some((c) => String(c[0]).includes("/cart/validate"))).toBe(true);
+    expect(addToCart).toHaveBeenCalledWith(expect.objectContaining({ variantId: "9001", quantity: 1 }));
+    expect(fetchMock.mock.calls.some((c: any[]) => String(c[0]).includes("/cart/add.js"))).toBe(false);
+    expect(shadow.textContent).toContain("Added to cart");
+    expect(Array.from(shadow.querySelectorAll("a")).some((a) => a.textContent === "View cart")).toBe(false);
+    expect(Array.from(shadow.querySelectorAll("button")).some((b) => b.textContent === "Keep shopping")).toBe(true);
+  });
+
+  it("the storefront keeps its cart page", async () => {
+    const { shadow } = await boot({ messages: [card] });
+    addBtn(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+    const view = Array.from(shadow.querySelectorAll("a")).find((a) => a.textContent === "View cart")!;
+    expect(view.getAttribute("href")).toBe("/cart");
+  });
+
+  it.each([
+    ["cart_disabled", "Add to cart is switched off for this store right now."],
+    ["not_for_sale", "This product isn't for sale right now."],
+    ["out_of_stock", "This one is sold out."],
+    ["choose_variant", "Choose an option first."],
+    ["variant_not_found", "That option isn't available anymore."],
+    ["product_not_found", "That option isn't available anymore."],
+    ["choose_on_product_page", "Opening the product page to choose the options."],
+  ])("the store's refusal %s, in words", async (code, sentence) => {
+    const { shadow, post } = await boot({ messages: [card], addToCart: vi.fn() as any });
+    post.mockImplementation(async (p: string) => {
+      if (String(p).includes("/cart/validate")) {
+        // The web chat adapter's error: the code as the message, no body.
+        const err: any = new Error(code);
+        err.status = code === "cart_disabled" ? 403 : 422;
+        throw err;
+      }
+      return { data: {} };
+    });
+    addBtn(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(shadow.querySelector(".cart-err")!.textContent).toBe(sentence);
   });
 });

@@ -100,7 +100,7 @@ const browser = await chromium.launch({
  */
 async function openSite({ widgetExists, widget = widgetConfig(), availability = "online", lang = "en",
   stored = null, history = [], wait = 1800, ctx: given = null, waStart = null, blockPopups = false,
-  pagePath = "/", bodyClass = "" }) {
+  pagePath = "/", bodyClass = "", cart = null }) {
   const ctx = given || await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   const calls = [];
@@ -113,6 +113,8 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
 
   const inits = [];
   const starts = [];
+  const validates = [];
+  const adds = [];
   if (blockPopups) await page.addInitScript(() => { window.open = () => null; });
   // wa.me is never reached: a popup pointed at it gets an empty page.
   await ctx.route("https://wa.me/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<title>wa</title>" }));
@@ -120,6 +122,16 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
     const url = new URL(route.request().url());
     calls.push(url.pathname);
     if (url.pathname === "/api/embedded-chat/init") inits.push(JSON.parse(route.request().postData() || "{}"));
+    if (url.pathname === "/api/embedded-chat/cart/validate") {
+      validates.push(JSON.parse(route.request().postData() || "{}"));
+      const answer = cart || { status: 200, body: { data: { cartUrl: `${ORIGIN}/?add-to-cart=111&quantity=1`, productId: "111", variantId: "9001", quantity: 1 } } };
+      return route.fulfill({ status: answer.status, contentType: "application/json", body: JSON.stringify(answer.body) });
+    }
+    // The store's add-to-cart link, followed in place on the store's host.
+    if (url.searchParams.has("add-to-cart")) {
+      adds.push({ url: url.toString(), credentials: route.request().headers()["sec-fetch-mode"] || "" });
+      return route.fulfill({ status: 200, contentType: "text/html", body: "<p>added</p>" });
+    }
     if (url.pathname === "/api/embedded-chat/whatsapp-start") {
       starts.push(JSON.parse(route.request().postData() || "{}"));
       const answer = waStart || { status: 200, body: { data: { url: "https://wa.me/972500000000?text=hi%20(ref)", ref: "ref" } } };
@@ -157,7 +169,7 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
     }
     if (url.pathname === "/api/embedded-chat/init") {
       return route.fulfill({ status: 200, contentType: "application/json",
-        body: JSON.stringify({ data: { sessionId: "conv_1", visitorId: "v1", sessionToken: "conv_1" } }) });
+        body: JSON.stringify({ data: { sessionId: "conv_1", visitorId: "v1", sessionToken: "tok_1" } }) });
     }
     if (url.pathname.startsWith("/api/embedded-chat/messages")) {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { messages: history } }) });
@@ -176,7 +188,7 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
 
   await page.goto(new URL(pagePath, ORIGIN).toString(), { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(wait);
-  return { ctx, page, calls, errors, inits, starts };
+  return { ctx, page, calls, errors, inits, starts, validates, adds };
 }
 
 // ── A widget that no longer exists ──
@@ -689,6 +701,77 @@ for (const [label, pagePath, bodyClass, want] of [
   await page.waitForTimeout(400);
   const got = starts[0] && starts[0].context;
   check(`L4 page context, ${label}`, JSON.stringify(got) === JSON.stringify(want), JSON.stringify(got));
+  await ctx.close();
+}
+
+// ── Woo product cards and Add to cart (live widget L6, W9b/c) ──
+const wooHistory = [
+  { id: "m1", direction: "INBOUND", body: "Running shoes?", createdAt: "2026-10-14T08:00:00.000Z" },
+  { id: "m2", direction: "OUTBOUND", body: "Cloud Pro Runner", messageType: "woo_product", createdAt: "2026-10-14T08:00:05.000Z",
+    commerce: { addToCartEnabled: true, products: [{ productId: "111", handle: "cloud-pro", title: "Cloud Pro Runner", imageUrl: null,
+      productUrl: `${ORIGIN}/product/cloud-pro/`, currency: "ILS", price: "120", compareAtPrice: null, available: true, published: true,
+      selectedVariantId: "9001", optionNames: [], reason: "Light and quick.",
+      variants: [{ variantId: "9001", title: "Default", price: "120", compareAtPrice: null, available: true, options: [], requiresSellingPlan: false }] }] } },
+];
+const wooWidget = () => { const w = widgetConfig(); w.features = { ...w.features, productMessaging: true, addToCart: true }; return w; };
+const addToCartClick = (page) => page.evaluate(() => {
+  const s = document.getElementById("gotcha-chat-root").shadowRoot;
+  Array.from(s.querySelectorAll("button")).find((b) => b.textContent === "Add to cart").click();
+});
+
+{
+  const { ctx, page, validates, adds, errors } = await openSite({ widgetExists: true, widget: wooWidget(), wait: 1000,
+    stored: { conversation: "conv_1", token: "tok_1", session: "conv_1" }, history: wooHistory });
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(900);
+  const card = await page.evaluate(() => {
+    const s = document.getElementById("gotcha-chat-root").shadowRoot;
+    const c = s.querySelector(".card");
+    return c ? { title: (c.querySelector(".card-ti") || {}).textContent, price: (c.querySelector(".pr") || {}).textContent } : null;
+  });
+  check("L6 a Woo product card from the conversation (commerce passed through)", card && card.title === "Cloud Pro Runner" && /120/.test(card.price), JSON.stringify(card));
+  await addToCartClick(page);
+  await page.waitForTimeout(800);
+  check("L6 /cart/validate with the visitor's conversation, token and the line",
+    validates.length === 1 && validates[0].sessionId === "conv_1" && validates[0].sessionToken === "tok_1" && validates[0].productId === "111" && validates[0].variantId === "9001" && validates[0].quantity === 1,
+    JSON.stringify(validates));
+  // A page that navigated away has no widget to read: that is the failure.
+  const after = await page.evaluate(() => {
+    const s = document.getElementById("gotcha-chat-root").shadowRoot;
+    return { text: s.textContent, viewCart: Array.from(s.querySelectorAll("a")).some((a) => a.textContent === "View cart"), url: location.href };
+  }).catch(() => ({ text: "", viewCart: false, url: page.url() }));
+  check("L6 on the store's own host: the link is followed in place, the visitor stays, 'Added to cart'",
+    adds.length === 1 && adds[0].url.includes("add-to-cart=111") && after.text.includes("Added to cart") && after.url === `${ORIGIN}/` && !after.viewCart,
+    JSON.stringify({ adds, u: after.url, v: after.viewCart }));
+  check("L6: logs nothing", errors.length === 0, errors.slice(0, 2).join(" | "));
+  await ctx.close();
+}
+
+{
+  const other = "https://another-store.test";
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await ctx.route(`${other}/**`, (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<p>store</p>" }));
+  const { page } = await openSite({ widgetExists: true, widget: wooWidget(), wait: 1000, ctx,
+    stored: { conversation: "conv_1", token: "tok_1", session: "conv_1" }, history: wooHistory,
+    cart: { status: 200, body: { data: { cartUrl: `${other}/?add-to-cart=111&quantity=1`, productId: "111", variantId: "9001", quantity: 1 } } } });
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(900);
+  await addToCartClick(page);
+  await page.waitForURL(/another-store/, { timeout: 5000 }).catch(() => {});
+  check("L6 on another host: the page goes to the store's add-to-cart link", page.url().startsWith(`${other}/?add-to-cart=111`), page.url());
+  await ctx.close();
+}
+
+{
+  const { ctx, page } = await openSite({ widgetExists: true, widget: wooWidget(), wait: 1000,
+    stored: { conversation: "conv_1", token: "tok_1", session: "conv_1" }, history: wooHistory,
+    cart: { status: 422, body: { error: "out_of_stock" } } });
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(900);
+  await addToCartClick(page);
+  await page.waitForTimeout(600);
+  const err = await page.evaluate(() => (document.getElementById("gotcha-chat-root").shadowRoot.querySelector(".cart-err") || {}).textContent);
+  check("L6 a refusal in words (422 out_of_stock)", err === "This one is sold out.", err);
   await ctx.close();
 }
 
