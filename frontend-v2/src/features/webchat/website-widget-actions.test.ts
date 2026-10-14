@@ -57,6 +57,11 @@ describe('★★ the widget save, stage A and stage B', () => {
       new ApiError({ kind: 'validation', status: 422, code: 'WHATSAPP_NUMBER_NOT_FOUND' }),
     );
     expect(await saveWebsiteWidget(SETTINGS, true)).toEqual({ ok: false, reason: 'number' });
+    // W1: a WhatsApp widget with no number that can take it - its own words.
+    put.mockRejectedValueOnce(
+      new ApiError({ kind: 'validation', status: 422, code: 'WHATSAPP_KIND_NEEDS_NUMBER' }),
+    );
+    expect(await saveWebsiteWidget(SETTINGS, true)).toEqual({ ok: false, reason: 'kindNumber' });
     put.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 500 }));
     expect(await saveWebsiteWidget(SETTINGS, true)).toEqual({ ok: false, reason: 'failed' });
   });

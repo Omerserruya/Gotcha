@@ -658,7 +658,8 @@
       "saved": "Saved",
       "failed": "Not saved. Change it again to retry",
       "nowhere": "Not saved: the widget isn't installed anywhere yet. Get the code under Install first",
-      "number": "Not saved: that WhatsApp number isn't one of this workspace's. Choose another"
+      "number": "Not saved: that WhatsApp number isn't one of this workspace's. Choose another",
+      "kindNumber": "Not saved: a WhatsApp widget needs a connected WhatsApp number. Choose one."
     },
     "unread": "Couldn't read the widget's settings. Try again in a moment.",
     "appearance": {
@@ -688,7 +689,8 @@
       },
       "lookWhy": "Choosing the WhatsApp look isn't available yet: it comes with the next widget update",
       "colourWaLook": "The WhatsApp look uses WhatsApp's colours. Your main colour is used in the GOTCHA look",
-      "coverWaLook": "The WhatsApp look shows no cover image. Yours is used in the GOTCHA look"
+      "coverWaLook": "The WhatsApp look shows no cover image. Yours is used in the GOTCHA look",
+      "waKindLook": "A WhatsApp widget looks like WhatsApp: there's no colour, logo or cover to set. Only its side."
     },
     "conversation": {
       "name": "Assistant name",
@@ -741,7 +743,10 @@
           "forbidden": "Only an admin can change who answers the widget.",
           "failed": "Not changed. Try again."
         }
-      }
+      },
+      "greeting": "Greeting",
+      "greetingHint": "The first message in the WhatsApp panel",
+      "teaser": "Line above the button"
     },
     "behaviour": {
       "popup": "Pop-up message",
@@ -871,7 +876,26 @@
     },
     "notYet": "Not available yet",
     "comingSoon": "Coming soon",
-    "notInLook": "Not in this look"
+    "notInLook": "Not in this look",
+    "kind": {
+      "label": "Which widget",
+      "chat": {
+        "name": "Chat widget with an AI employee",
+        "hint": "Answers on your site, with your AI employee"
+      },
+      "whatsapp": {
+        "name": "WhatsApp widget",
+        "hint": "Takes the customer to a WhatsApp conversation with you"
+      },
+      "number": "On WhatsApp with {name} {phone}.",
+      "changeNumber": "Change number",
+      "pickNumber": "Which WhatsApp number it continues on",
+      "noNumber": "A WhatsApp widget needs a connected WhatsApp number. Connect one in <channels>Settings · Channels</channels>.",
+      "numberWhy": {
+        "not_connected": "Not connected",
+        "number_unknown": "Its phone number isn't known yet"
+      }
+    }
   },
   "widgetRow": {
     "name": "Website widget",

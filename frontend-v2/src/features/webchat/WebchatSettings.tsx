@@ -26,10 +26,10 @@ import {
   WEBCHAT_LANGUAGES,
   isHex,
   isHttpsUrl,
-  WIDGET_LOOKS,
+  WIDGET_KINDS,
   type WebchatConfig,
   type WebchatTab,
-  type WidgetLook,
+  type WidgetKind,
 } from '@/api/contracts/webchat';
 import {
   WIDGET_PATH,
@@ -59,7 +59,7 @@ import { WooPlugin } from './WooPlugin';
 /** How long the editor waits after the last change before saving it. */
 export const SAVE_AFTER_MS = 700;
 
-type Saving = 'idle' | 'saving' | 'saved' | 'failed' | 'nowhere' | 'number';
+type Saving = 'idle' | 'saving' | 'saved' | 'failed' | 'nowhere' | 'number' | 'kindNumber';
 
 interface Setters {
   readonly colour: (hex: string) => void;
@@ -70,7 +70,10 @@ interface Setters {
   readonly questions: (questions: readonly string[]) => void;
   readonly language: (language: WebchatConfig['appearance']['language']) => void;
   readonly popup: (patch: Partial<WebchatConfig['ux']['proactive']>) => void;
-  readonly look: (look: WidgetLook) => void;
+  /** W1: the widget's kind - its look follows; a WhatsApp widget with the number it uses. */
+  readonly kind: (kind: WidgetKind, number?: string) => void;
+  /** W1: the WhatsApp widget's greeting bubble (`ux.welcome.title`). */
+  readonly greeting: (title: string) => void;
   readonly whatsapp: (patch: Partial<WebchatConfig['ux']['whatsapp']>) => void;
 }
 
@@ -191,7 +194,13 @@ export function WebchatSettings({
       ux({ welcome: { ...config.ux.welcome, suggestedQuestions: [...suggestedQuestions] } }),
     language: (language) => appearance({ language }),
     popup: (patch) => ux({ proactive: { ...config.ux.proactive, ...patch } }),
-    look: (look) => ux({ look }),
+    kind: (kind, number) =>
+      ux({
+        kind,
+        look: kind === 'whatsapp' ? 'whatsapp' : 'gotcha',
+        ...(number ? { whatsapp: { enabled: true, channelAccountId: number } } : {}),
+      }),
+    greeting: (title) => ux({ welcome: { ...config.ux.welcome, title } }),
     whatsapp: (patch) => ux({ whatsapp: { ...config.ux.whatsapp, ...patch } }),
   };
   /* The number "Continue on WhatsApp" would use - the button shows only when it can take it. */
@@ -240,6 +249,7 @@ export function WebchatSettings({
             </Link>
           )}
         </div>
+        {stageB ? <KindChoice config={config} numbers={handoffNumbers ?? []} set={set} /> : null}
         <nav className={styles.tabs} aria-label={t('tabsLabel')}>
           {WEBCHAT_TABS.map((name) => (
             <Link
@@ -267,7 +277,7 @@ export function WebchatSettings({
       <div className={styles.columns}>
         <div className={styles.stack}>
           {tab === 'appearance' ? (
-            <Appearance config={config} set={set} stageB={stageB} />
+            <Appearance config={config} set={set} />
           ) : tab === 'conversation' ? (
             <Conversation config={config} set={set} assigned={assigned} assignment={assignment} />
           ) : tab === 'behaviour' ? (
@@ -365,16 +375,7 @@ function Toggle({
   );
 }
 
-function Appearance({
-  config,
-  set,
-  stageB,
-}: {
-  readonly config: WebchatConfig;
-  readonly set: Setters;
-  /** The service has stage B: the look can be chosen and saved. */
-  readonly stageB: boolean;
-}) {
+function Appearance({ config, set }: { readonly config: WebchatConfig; readonly set: Setters }) {
   const t = useTranslations('channels.webchat.appearance');
   const tw = useTranslations('channels.webchat');
   const colour = config.appearance.primaryColor;
@@ -397,158 +398,144 @@ function Appearance({
 
   return (
     <section className={styles.card}>
-      {/* Stage B (design 7): what the customer sees - GOTCHA's panel, or WhatsApp's. */}
-      {stageB ? (
-        <Row label={t('look')} hint={t('lookHint')} testid="webchat-look">
-          <span className={styles.segments} role="radiogroup" aria-label={t('look')}>
-            {WIDGET_LOOKS.map((look) => (
-              <button
-                key={look}
-                type="button"
-                role="radio"
-                aria-checked={config.ux.look === look}
-                className={styles.segment}
-                onClick={() => set.look(look)}
-                data-testid={`webchat-look-${look}`}
-              >
-                {t(`looks.${look}`)}
-              </button>
-            ))}
-          </span>
-        </Row>
+      {/*
+        ★★ W1: a WhatsApp widget wears WhatsApp's own look - no colour, logo
+        or cover to set; only its side.
+      */}
+      {config.ux.kind === 'whatsapp' ? (
+        <p className={styles.rowHint} data-testid="webchat-wa-look-note">
+          {t('waKindLook')}
+        </p>
       ) : (
-        <Row label={t('look')} testid="webchat-look">
-          <UnavailableItem
-            title={t('look')}
-            tag={tw('notYet')}
-            why={t('lookWhy')}
-            testid="webchat-look-unavailable"
-          />
-        </Row>
-      )}
-      {config.ux.look === 'whatsapp' ? (
-        /*
+        <>
+          {config.ux.look === 'whatsapp' ? (
+            /*
           The WhatsApp look wears WhatsApp's own colours (Backend 09a1105b: a
           fixed green header, send and launcher) - the main colour does nothing
           there, so it is a status, not a picker that changes nothing.
         */
-        <Row label={t('colour')} testid="webchat-colour">
-          <UnavailableItem
-            title={t('colour')}
-            tag={tw('notInLook')}
-            why={t('colourWaLook')}
-            testid="webchat-colour-wa-look"
-          />
-        </Row>
-      ) : (
-        <Row label={t('colour')} testid="webchat-colour">
-          <div className={styles.swatches} role="radiogroup" aria-label={t('colour')}>
-            {PALETTE.map((p) => (
-              <button
-                key={p}
-                type="button"
-                role="radio"
-                aria-checked={p.toLowerCase() === colour.toLowerCase()}
-                aria-label={p}
-                className={styles.swatch}
-                style={{ backgroundColor: p }}
-                onClick={() => choose(p)}
-                data-testid={`webchat-swatch-${p.slice(1)}`}
+            <Row label={t('colour')} testid="webchat-colour">
+              <UnavailableItem
+                title={t('colour')}
+                tag={tw('notInLook')}
+                why={t('colourWaLook')}
+                testid="webchat-colour-wa-look"
               />
-            ))}
-            <span
-              className={styles.swatch}
-              data-custom=""
-              data-checked={custom ? '' : undefined}
-              title={t('custom')}
-              aria-hidden="true"
-            />
-          </div>
-          <div className={styles.picker}>
-            <div className={styles.pickerArea}>
-              <div
-                ref={square}
-                className={styles.square}
-                style={{ backgroundColor: hsvToHex({ h: hsv.h, s: 1, v: 1 }) }}
-                onPointerDown={(e) => {
-                  e.currentTarget.setPointerCapture?.(e.pointerId);
-                  pick(e);
-                }}
-                onPointerMove={pick}
-                aria-hidden="true"
-              >
+            </Row>
+          ) : (
+            <Row label={t('colour')} testid="webchat-colour">
+              <div className={styles.swatches} role="radiogroup" aria-label={t('colour')}>
+                {PALETTE.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    role="radio"
+                    aria-checked={p.toLowerCase() === colour.toLowerCase()}
+                    aria-label={p}
+                    className={styles.swatch}
+                    style={{ backgroundColor: p }}
+                    onClick={() => choose(p)}
+                    data-testid={`webchat-swatch-${p.slice(1)}`}
+                  />
+                ))}
                 <span
-                  className={styles.knob}
-                  style={{
-                    insetInlineStart: `${hsv.s * 100}%`,
-                    insetBlockStart: `${(1 - hsv.v) * 100}%`,
-                  }}
+                  className={styles.swatch}
+                  data-custom=""
+                  data-checked={custom ? '' : undefined}
+                  title={t('custom')}
+                  aria-hidden="true"
                 />
               </div>
-              <input
-                type="range"
-                min={0}
-                max={359}
-                value={Math.round(hsv.h)}
-                onChange={(e) =>
-                  choose(hsvToHex({ h: Number(e.target.value), s: hsv.s || 0.6, v: hsv.v || 0.8 }))
-                }
-                className={styles.hue}
-                aria-label={t('hue')}
-              />
-            </div>
-            <label className={styles.code}>
-              <span className={styles.rowHint}>{t('code')}</span>
-              <span className={styles.codeField}>
-                <span
-                  className={styles.codeChip}
-                  style={{ backgroundColor: isHex(code) ? code : colour }}
-                />
-                <input
-                  value={code}
-                  onChange={(e) => {
-                    setCode(e.target.value);
-                    if (isHex(e.target.value)) set.colour(e.target.value.toUpperCase());
-                  }}
-                  aria-invalid={!isHex(code)}
-                  spellCheck={false}
-                  data-testid="webchat-hex"
-                />
-                <Pencil size={13} aria-hidden="true" />
-              </span>
-              <span className={styles.rowHint}>{isHex(code) ? t('codeHint') : t('codeBad')}</span>
-            </label>
-          </div>
-        </Row>
-      )}
+              <div className={styles.picker}>
+                <div className={styles.pickerArea}>
+                  <div
+                    ref={square}
+                    className={styles.square}
+                    style={{ backgroundColor: hsvToHex({ h: hsv.h, s: 1, v: 1 }) }}
+                    onPointerDown={(e) => {
+                      e.currentTarget.setPointerCapture?.(e.pointerId);
+                      pick(e);
+                    }}
+                    onPointerMove={pick}
+                    aria-hidden="true"
+                  >
+                    <span
+                      className={styles.knob}
+                      style={{
+                        insetInlineStart: `${hsv.s * 100}%`,
+                        insetBlockStart: `${(1 - hsv.v) * 100}%`,
+                      }}
+                    />
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={359}
+                    value={Math.round(hsv.h)}
+                    onChange={(e) =>
+                      choose(
+                        hsvToHex({ h: Number(e.target.value), s: hsv.s || 0.6, v: hsv.v || 0.8 }),
+                      )
+                    }
+                    className={styles.hue}
+                    aria-label={t('hue')}
+                  />
+                </div>
+                <label className={styles.code}>
+                  <span className={styles.rowHint}>{t('code')}</span>
+                  <span className={styles.codeField}>
+                    <span
+                      className={styles.codeChip}
+                      style={{ backgroundColor: isHex(code) ? code : colour }}
+                    />
+                    <input
+                      value={code}
+                      onChange={(e) => {
+                        setCode(e.target.value);
+                        if (isHex(e.target.value)) set.colour(e.target.value.toUpperCase());
+                      }}
+                      aria-invalid={!isHex(code)}
+                      spellCheck={false}
+                      data-testid="webchat-hex"
+                    />
+                    <Pencil size={13} aria-hidden="true" />
+                  </span>
+                  <span className={styles.rowHint}>
+                    {isHex(code) ? t('codeHint') : t('codeBad')}
+                  </span>
+                </label>
+              </div>
+            </Row>
+          )}
 
-      <ImageRow
-        label={t('logo')}
-        hint={t('logoHint')}
-        value={config.appearance.logoUrl}
-        onSave={set.logo}
-        testid="webchat-logo"
-      />
-      {config.ux.look === 'whatsapp' ? (
-        // The WhatsApp look shows no cover (the bundle hides it).
-        <Row label={t('cover')} testid="webchat-cover">
-          <UnavailableItem
-            title={t('cover')}
-            tag={tw('notInLook')}
-            why={t('coverWaLook')}
-            testid="webchat-cover-wa-look"
+          <ImageRow
+            label={t('logo')}
+            hint={t('logoHint')}
+            value={config.appearance.logoUrl}
+            onSave={set.logo}
+            testid="webchat-logo"
           />
-        </Row>
-      ) : (
-        <ImageRow
-          label={t('cover')}
-          hint={t('coverHint')}
-          value={config.ux.hero.mediaUrl}
-          onSave={set.cover}
-          testid="webchat-cover"
-        />
+          {config.ux.look === 'whatsapp' ? (
+            // The WhatsApp look shows no cover (the bundle hides it).
+            <Row label={t('cover')} testid="webchat-cover">
+              <UnavailableItem
+                title={t('cover')}
+                tag={tw('notInLook')}
+                why={t('coverWaLook')}
+                testid="webchat-cover-wa-look"
+              />
+            </Row>
+          ) : (
+            <ImageRow
+              label={t('cover')}
+              hint={t('coverHint')}
+              value={config.ux.hero.mediaUrl}
+              onSave={set.cover}
+              testid="webchat-cover"
+            />
+          )}
+        </>
       )}
-
       <Row label={t('position')} testid="webchat-position">
         <span className={styles.segments} role="radiogroup" aria-label={t('position')}>
           {(['right', 'left'] as const).map((side) => (
@@ -652,79 +639,100 @@ function Conversation({
   return (
     <>
       <section className={styles.card}>
-        <Row label={t('name')} testid="webchat-name">
+        {config.ux.kind === 'whatsapp' ? (
+          /* W1: the WhatsApp widget's greeting bubble, in its panel. */
+          <Row label={t('greeting')} hint={t('greetingHint')} testid="webchat-greeting">
+            <TextField
+              label={t('greeting')}
+              value={config.ux.welcome.title}
+              onChange={set.greeting}
+              max={60}
+              testid="webchat-greeting-input"
+            />
+          </Row>
+        ) : (
+          <Row label={t('name')} testid="webchat-name">
+            <TextField
+              label={t('name')}
+              value={config.ux.welcome.assistantName}
+              onChange={set.assistantName}
+              max={40}
+              testid="webchat-name-input"
+            />
+          </Row>
+        )}
+        <Row
+          label={config.ux.kind === 'whatsapp' ? t('teaser') : t('popup')}
+          testid="webchat-popup-text"
+        >
           <TextField
-            label={t('name')}
-            value={config.ux.welcome.assistantName}
-            onChange={set.assistantName}
-            max={40}
-            testid="webchat-name-input"
-          />
-        </Row>
-        <Row label={t('popup')} testid="webchat-popup-text">
-          <TextField
-            label={t('popup')}
+            label={config.ux.kind === 'whatsapp' ? t('teaser') : t('popup')}
             value={config.ux.proactive.message}
             onChange={(message) => set.popup({ message })}
             max={200}
             testid="webchat-popup-input"
           />
         </Row>
-        <Row label={t('questions')} testid="webchat-questions">
-          {questions.map((q, i) => (
-            <TextField
-              key={i}
-              label={t('question', { n: i + 1 })}
-              value={q}
-              onChange={(value) => {
-                const next = [...questions];
-                next[i] = value;
-                set.questions(next);
-              }}
-              max={120}
-              testid={`webchat-question-${i}`}
-            />
-          ))}
-          <span className={styles.rowHint}>{t('questionsHint')}</span>
-        </Row>
+        {config.ux.kind === 'whatsapp' ? null : (
+          <Row label={t('questions')} testid="webchat-questions">
+            {questions.map((q, i) => (
+              <TextField
+                key={i}
+                label={t('question', { n: i + 1 })}
+                value={q}
+                onChange={(value) => {
+                  const next = [...questions];
+                  next[i] = value;
+                  set.questions(next);
+                }}
+                max={120}
+                testid={`webchat-question-${i}`}
+              />
+            ))}
+            <span className={styles.rowHint}>{t('questionsHint')}</span>
+          </Row>
+        )}
       </section>
 
-      <div className={styles.pair}>
-        <section className={styles.card} data-pad="" data-testid="webchat-employee">
-          <h2 className={styles.cardTitle}>
-            {t('employee')} <span className={styles.required}>{t('required')}</span>
-          </h2>
-          <p className={styles.rowHint}>{t('employeeHint')}</p>
-          {/*
+      {/* W1: a WhatsApp widget has no AI employee on the site, and no language to choose. */}
+      {config.ux.kind === 'whatsapp' ? null : (
+        <div className={styles.pair}>
+          <section className={styles.card} data-pad="" data-testid="webchat-employee">
+            <h2 className={styles.cardTitle}>
+              {t('employee')} <span className={styles.required}>{t('required')}</span>
+            </h2>
+            <p className={styles.rowHint}>{t('employeeHint')}</p>
+            {/*
             Who answers is decided in one place, the playbook - and since Omer's
             2026-10-08 decision, an admin can set it from here, written to it.
           */}
-          <WidgetAssignmentCard read={assignment} assigned={assigned} />
-        </section>
-        <section
-          className={styles.card}
-          data-pad=""
-          role="radiogroup"
-          aria-labelledby="webchat-language-title"
-          data-testid="webchat-language"
-        >
-          <h2 className={styles.cardTitle} id="webchat-language-title">
-            {t('language')}
-          </h2>
-          {WEBCHAT_LANGUAGES.map((lang) => (
-            <label key={lang} className={styles.radio}>
-              <input
-                type="radio"
-                name="webchat-language"
-                checked={config.appearance.language === lang}
-                onChange={() => set.language(lang)}
-                data-testid={`webchat-language-${lang}`}
-              />
-              {t(`languages.${lang}`)}
-            </label>
-          ))}
-        </section>
-      </div>
+            <WidgetAssignmentCard read={assignment} assigned={assigned} />
+          </section>
+          <section
+            className={styles.card}
+            data-pad=""
+            role="radiogroup"
+            aria-labelledby="webchat-language-title"
+            data-testid="webchat-language"
+          >
+            <h2 className={styles.cardTitle} id="webchat-language-title">
+              {t('language')}
+            </h2>
+            {WEBCHAT_LANGUAGES.map((lang) => (
+              <label key={lang} className={styles.radio}>
+                <input
+                  type="radio"
+                  name="webchat-language"
+                  checked={config.appearance.language === lang}
+                  onChange={() => set.language(lang)}
+                  data-testid={`webchat-language-${lang}`}
+                />
+                {t(`languages.${lang}`)}
+              </label>
+            ))}
+          </section>
+        </div>
+      )}
     </>
   );
 }
@@ -805,7 +813,8 @@ function Behaviour({
           </span>
         </Row>
       ) : null}
-      {handoffNumbers === null ? (
+      {/* W1: the WhatsApp widget IS the hand-off: its number is chosen with its kind. */}
+      {config.ux.kind === 'whatsapp' ? null : handoffNumbers === null ? (
         // A stage A service: not there yet, and nothing is sent for it.
         <Toggle
           label={t('whatsapp')}
@@ -909,36 +918,40 @@ function Behaviour({
         in a Shopify shop yes, from the code snippet no - a status, not a
         switch. Deals have no source anywhere yet.
       */}
-      {(['products', 'cart'] as const).map((k) =>
-        selling ? (
-          <div className={styles.toggleRow} key={k} data-testid={`webchat-${k}`}>
-            <span className={styles.toggleText}>
-              <span>{t(`${k}.label`)}</span>
-              <span className={styles.rowHint}>{t(`${k}.hint`)}</span>
-              <span className={styles.rowHint}>{t('codeNoProducts')}</span>
-            </span>
-            <span className={styles.onTag} data-testid={`webchat-${k}-on`}>
-              {t('onInShopify')}
-            </span>
-          </div>
-        ) : (
-          <Toggle
-            key={k}
-            label={t(`${k}.label`)}
-            hint={t(`${k}.hint`)}
-            on={false}
-            why={t('noCatalogue')}
-            testid={`webchat-${k}`}
-          />
-        ),
+      {config.ux.kind === 'whatsapp'
+        ? null
+        : (['products', 'cart'] as const).map((k) =>
+            selling ? (
+              <div className={styles.toggleRow} key={k} data-testid={`webchat-${k}`}>
+                <span className={styles.toggleText}>
+                  <span>{t(`${k}.label`)}</span>
+                  <span className={styles.rowHint}>{t(`${k}.hint`)}</span>
+                  <span className={styles.rowHint}>{t('codeNoProducts')}</span>
+                </span>
+                <span className={styles.onTag} data-testid={`webchat-${k}-on`}>
+                  {t('onInShopify')}
+                </span>
+              </div>
+            ) : (
+              <Toggle
+                key={k}
+                label={t(`${k}.label`)}
+                hint={t(`${k}.hint`)}
+                on={false}
+                why={t('noCatalogue')}
+                testid={`webchat-${k}`}
+              />
+            ),
+          )}
+      {config.ux.kind === 'whatsapp' ? null : (
+        <Toggle
+          label={t('deals.label')}
+          hint={t('deals.hint')}
+          on={false}
+          why={t('noDeals')}
+          testid="webchat-deals"
+        />
       )}
-      <Toggle
-        label={t('deals.label')}
-        hint={t('deals.hint')}
-        on={false}
-        why={t('noDeals')}
-        testid="webchat-deals"
-      />
     </section>
   );
 }
@@ -1361,5 +1374,118 @@ function PoweredBy() {
         alt="GOTCHA"
       />
     </span>
+  );
+}
+
+/**
+ * ★★ W1 (Omer, 2026-10-14): what the widget IS, chosen before anything else -
+ * a chat on the site with an AI employee, or a WhatsApp widget that starts
+ * the conversation on WhatsApp. Each shows only its own settings.
+ *
+ * A WhatsApp widget needs a number that can take it (else 422
+ * WHATSAPP_KIND_NEEDS_NUMBER): it is chosen here, in place - one that can be
+ * used is offered, one that cannot says why - and the kind is saved only with
+ * one. No usable number at all: said, with where to connect one.
+ */
+function KindChoice({
+  config,
+  numbers,
+  set,
+}: {
+  readonly config: WebchatConfig;
+  readonly numbers: readonly HandoffNumber[];
+  readonly set: Setters;
+}) {
+  const t = useTranslations('channels.webchat.kind');
+  const [picking, setPicking] = useState(false);
+  const usable = numbers.filter((n) => n.available);
+  const current = numbers.find((n) => n.channelId === config.ux.whatsapp.channelAccountId) ?? null;
+  const ready = config.ux.whatsapp.enabled && current?.available === true;
+  const choose = (kind: WidgetKind) => {
+    if (kind === config.ux.kind && !(kind === 'whatsapp' && !ready)) return;
+    if (kind === 'chat') {
+      setPicking(false);
+      set.kind('chat');
+      return;
+    }
+    if (ready) set.kind('whatsapp');
+    else if (usable.length === 1) set.kind('whatsapp', usable[0]!.channelId);
+    else setPicking(true);
+  };
+  return (
+    <section className={styles.kinds} data-testid="webchat-kind">
+      <span className={styles.kindLabel} id="webchat-kind-label">
+        {t('label')}
+      </span>
+      <span className={styles.kindOptions} role="radiogroup" aria-labelledby="webchat-kind-label">
+        {WIDGET_KINDS.map((kind) => (
+          <button
+            key={kind}
+            type="button"
+            role="radio"
+            aria-checked={config.ux.kind === kind}
+            className={styles.kindOption}
+            onClick={() => choose(kind)}
+            data-testid={`webchat-kind-${kind}`}
+          >
+            <span className={styles.kindName}>{t(`${kind}.name`)}</span>
+            <span className={styles.rowHint}>{t(`${kind}.hint`)}</span>
+          </button>
+        ))}
+      </span>
+      {config.ux.kind === 'whatsapp' && current && !picking ? (
+        <p className={styles.rowHint} data-testid="webchat-kind-number">
+          {t('number', { name: current.name, phone: current.phone ?? '' })}{' '}
+          <button
+            type="button"
+            className={styles.linkButton}
+            onClick={() => setPicking(true)}
+            data-testid="webchat-kind-change-number"
+          >
+            {t('changeNumber')}
+          </button>
+        </p>
+      ) : null}
+      {picking ? (
+        usable.length === 0 ? (
+          <p className={styles.rowHint} role="status" data-testid="webchat-kind-no-number">
+            {t.rich('noNumber', {
+              channels: (chunks) => <Link href="/settings/channels">{chunks}</Link>,
+            })}
+          </p>
+        ) : (
+          <span
+            className={styles.kindNumbers}
+            role="radiogroup"
+            aria-label={t('pickNumber')}
+            data-testid="webchat-kind-numbers"
+          >
+            <span className={styles.rowHint}>{t('pickNumber')}</span>
+            {numbers.map((n) => (
+              <label key={n.channelId} className={styles.radio}>
+                <input
+                  type="radio"
+                  name="webchat-kind-number"
+                  disabled={!n.available}
+                  checked={config.ux.kind === 'whatsapp' && current?.channelId === n.channelId}
+                  onChange={() => {
+                    setPicking(false);
+                    set.kind('whatsapp', n.channelId);
+                  }}
+                  data-testid={`webchat-kind-number-${n.channelId}`}
+                />
+                <bdi dir="auto">{n.name}</bdi>
+                {n.phone ? <span dir="ltr">{n.phone}</span> : null}
+                {n.available ? null : (
+                  <span className={styles.rowHint}>
+                    {t(`numberWhy.${n.reason ?? 'not_connected'}`)}
+                  </span>
+                )}
+              </label>
+            ))}
+          </span>
+        )
+      ) : null}
+    </section>
   );
 }

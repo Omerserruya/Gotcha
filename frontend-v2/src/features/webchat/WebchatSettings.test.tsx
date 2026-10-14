@@ -582,20 +582,23 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
 
   it('★ a stage A service: both are drawn unavailable, with why - and never sent', async () => {
     show('appearance');
-    expect(screen.getByTestId('webchat-look-unavailable')).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.queryByTestId('webchat-look-whatsapp')).toBeNull();
+    // No kind to choose on a service that cannot keep it (W1).
+    expect(screen.queryByTestId('webchat-kind')).toBeNull();
     fireEvent.click(screen.getByTestId('webchat-position-left'));
     await pause();
     expect(lastStageB()).toBe(false);
     expect(bodyOfWidget(sentAt())).not.toHaveProperty('ux.look');
+    expect(bodyOfWidget(sentAt())).not.toHaveProperty('ux.kind');
     expect(bodyOfWidget(sentAt())).not.toHaveProperty('ux.whatsapp');
   });
 
-  it('★★ the look: WhatsApp’s panel and green launcher in the preview, and saved with the rest', async () => {
+  it('★★ W1: the WhatsApp widget, chosen above the tabs - its look, its one usable number, saved together', async () => {
     show('appearance', { numbers: NUMBERS });
-    expect(screen.getByTestId('webchat-look-gotcha')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('webchat-kind-chat')).toHaveAttribute('aria-checked', 'true');
     expect(screen.queryByTestId('webchat-preview-wa')).toBeNull();
-    fireEvent.click(screen.getByTestId('webchat-look-whatsapp'));
+    // The Look segment is gone: the kind decides it.
+    expect(screen.queryByTestId('webchat-look-whatsapp')).toBeNull();
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
     const panel = screen.getByTestId('webchat-preview-wa');
     expect(panel).toHaveTextContent('Chat with us');
     expect(panel).toHaveTextContent("Write here and we'll continue on WhatsApp.");
@@ -604,7 +607,101 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     expect(screen.getByTestId('webchat-preview-launcher')).toHaveAttribute('data-look', 'whatsapp');
     await pause();
     expect(lastStageB()).toBe(true);
-    expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({ look: 'whatsapp' });
+    expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({
+      kind: 'whatsapp',
+      look: 'whatsapp',
+      // The only number that can take it: chosen with the kind.
+      whatsapp: { enabled: true, channelAccountId: 'wa1' },
+    });
+    expect(screen.getByTestId('webchat-kind-number')).toHaveTextContent('Lumière');
+  });
+
+  it('★★ W1: two usable numbers - picked in place; one that cannot be used says why and cannot be picked', async () => {
+    const two = [
+      ...NUMBERS,
+      { channelId: 'wa4', name: 'Second', phone: '+972 50 1', available: true },
+    ];
+    show('behaviour', { numbers: two });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    // Not saved yet: a WhatsApp widget is never saved without its number.
+    await pause();
+    expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
+    expect(screen.getByTestId('webchat-kind-number-wa2')).toBeDisabled();
+    expect(screen.getByTestId('webchat-kind-numbers')).toHaveTextContent(
+      "Its phone number isn't known yet",
+    );
+    fireEvent.click(screen.getByTestId('webchat-kind-number-wa4'));
+    await pause();
+    expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({
+      kind: 'whatsapp',
+      whatsapp: { enabled: true, channelAccountId: 'wa4' },
+    });
+  });
+
+  it('W1: no number that can take it - said, with where to connect one, nothing saved', async () => {
+    show('appearance', { numbers: NUMBERS.filter((n) => !n.available) });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    expect(screen.getByTestId('webchat-kind-no-number')).toHaveTextContent(
+      'A WhatsApp widget needs a connected WhatsApp number',
+    );
+    await pause();
+    expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
+  });
+
+  it('★★ W1: a WhatsApp widget shows only its own settings, in every tab', () => {
+    const wa = {
+      ...config,
+      ux: {
+        ...config.ux,
+        kind: 'whatsapp' as const,
+        look: 'whatsapp' as const,
+        whatsapp: { enabled: true, channelAccountId: 'wa1' },
+      },
+    };
+    const appearance = show('appearance', { numbers: NUMBERS, initial: wa });
+    expect(screen.getByTestId('webchat-wa-look-note')).toBeInTheDocument();
+    expect(screen.queryByTestId('webchat-colour')).toBeNull();
+    expect(screen.getByTestId('webchat-position')).toBeInTheDocument();
+    appearance.unmount();
+    const conversation = show('conversation', { numbers: NUMBERS, initial: wa });
+    expect(screen.getByTestId('webchat-greeting')).toBeInTheDocument();
+    expect(screen.getByTestId('webchat-popup-text')).toHaveTextContent('Line above the button');
+    expect(screen.queryByTestId('webchat-name')).toBeNull();
+    expect(screen.queryByTestId('webchat-questions')).toBeNull();
+    expect(screen.queryByTestId('webchat-employee')).toBeNull();
+    expect(screen.queryByTestId('webchat-language')).toBeNull();
+    conversation.unmount();
+    show('behaviour', { numbers: NUMBERS, initial: wa });
+    expect(screen.getByTestId('webchat-popup')).toBeInTheDocument();
+    expect(screen.getByTestId('webchat-powered')).toBeInTheDocument();
+    expect(screen.queryByTestId('webchat-whatsapp')).toBeNull();
+    expect(screen.queryByTestId('webchat-products')).toBeNull();
+    expect(screen.queryByTestId('webchat-deals')).toBeNull();
+  });
+
+  it('W1: the WhatsApp greeting is saved as the welcome title', async () => {
+    const wa = {
+      ...config,
+      ux: { ...config.ux, kind: 'whatsapp' as const, look: 'whatsapp' as const },
+    };
+    show('conversation', { numbers: NUMBERS, initial: wa });
+    fireEvent.change(screen.getByTestId('webchat-greeting-input'), {
+      target: { value: 'Hi there' },
+    });
+    await pause();
+    expect(bodyOfWidget(sentAt(), { stageB: true }).ux.welcome).toMatchObject({
+      title: 'Hi there',
+    });
+  });
+
+  it('W1: the server refusing a WhatsApp widget without a number says so in words', async () => {
+    actions.saveWebsiteWidget.mockResolvedValue({ ok: false, reason: 'kindNumber' });
+    show('appearance', { numbers: NUMBERS });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    await pause();
+    expect(screen.getByTestId('webchat-saving')).toHaveTextContent(
+      'a WhatsApp widget needs a connected WhatsApp number',
+    );
   });
 
   it('★ in the WhatsApp look the main colour and the cover say they are not used - no picker that changes nothing', () => {

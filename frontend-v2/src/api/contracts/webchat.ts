@@ -18,6 +18,14 @@ export const WEBCHAT_LANGUAGES = ['auto', 'he', 'en'] as const;
 /** Stage B's two customer-side looks (website-widget-v1 §1). */
 export const WIDGET_LOOKS = ['gotcha', 'whatsapp'] as const;
 export type WidgetLook = (typeof WIDGET_LOOKS)[number];
+
+/**
+ * W1 (Omer, 2026-10-14; Backend 2a2ab2af): what the widget IS - a chat on the
+ * site with an AI employee, or a WhatsApp widget that starts the
+ * conversation on WhatsApp (no chat on the site). The look follows it.
+ */
+export const WIDGET_KINDS = ['chat', 'whatsapp'] as const;
+export type WidgetKind = (typeof WIDGET_KINDS)[number];
 export type WebchatLanguage = (typeof WEBCHAT_LANGUAGES)[number];
 
 /** 13i's "When to show": right away, 5s, 15s, 30s - a time-on-page delay. */
@@ -38,6 +46,8 @@ export const webchatConfigSchema = z.object({
   }),
   ux: z.object({
     welcome: z.object({
+      /** The welcome's first line; the WhatsApp widget's greeting bubble (W1). */
+      title: z.string().catch('').default(''),
       assistantName: z.string().catch(''),
       suggestedQuestions: z.array(z.string()).catch([]),
     }),
@@ -54,6 +64,8 @@ export const webchatConfigSchema = z.object({
     }),
     /** Stage B: the customer-side panel style. Absent (stage A) or unknown: GOTCHA's. */
     look: z.enum(WIDGET_LOOKS).catch('gotcha').default('gotcha'),
+    /** W1: chat (the default, and anything unknown) or WhatsApp. */
+    kind: z.enum(WIDGET_KINDS).catch('chat').default('chat'),
     /** Stage B: "Continue on WhatsApp" - on, and the workspace's number it continues on. */
     whatsapp: z
       .object({
@@ -83,6 +95,7 @@ export function bodyOfConfig(config: WebchatConfig) {
     },
     ux: {
       welcome: {
+        title: config.ux.welcome.title,
         assistantName: config.ux.welcome.assistantName,
         suggestedQuestions: config.ux.welcome.suggestedQuestions
           .map((q) => q.trim())

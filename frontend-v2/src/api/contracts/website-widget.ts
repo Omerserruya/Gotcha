@@ -38,6 +38,7 @@ export function bodyOfWidget(settings: WidgetSettings, { stageB = false } = {}) 
     ux: {
       ...body.ux,
       look: settings.ux.look,
+      kind: settings.ux.kind,
       whatsapp: {
         enabled: settings.ux.whatsapp.enabled,
         channelAccountId: settings.ux.whatsapp.channelAccountId,

@@ -20,7 +20,9 @@ export type WidgetSave =
   /** `nowhere`: no place exists yet (409 WIDGET_NOT_CREATED) - the code is created first. */
   | { readonly ok: false; readonly reason: 'nowhere' | 'failed' }
   /** 422 WHATSAPP_NUMBER_NOT_FOUND: the number is not one of this workspace's (stage B). */
-  | { readonly ok: false; readonly reason: 'number' };
+  | { readonly ok: false; readonly reason: 'number' }
+  /** 422 WHATSAPP_KIND_NEEDS_NUMBER: a WhatsApp widget needs a number that can take it (W1). */
+  | { readonly ok: false; readonly reason: 'kindNumber' };
 
 /**
  * A change to the widget, written to every place it is installed. The answer
@@ -47,6 +49,9 @@ export async function saveWebsiteWidget(
     await signInIfSignedOut(cause);
     if (isApiError(cause) && cause.status === 409 && cause.code === 'WIDGET_NOT_CREATED') {
       return { ok: false, reason: 'nowhere' };
+    }
+    if (isApiError(cause) && cause.code === 'WHATSAPP_KIND_NEEDS_NUMBER') {
+      return { ok: false, reason: 'kindNumber' };
     }
     if (isApiError(cause) && cause.code === 'WHATSAPP_NUMBER_NOT_FOUND') {
       return { ok: false, reason: 'number' };
