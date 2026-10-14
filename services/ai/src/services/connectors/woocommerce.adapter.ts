@@ -101,7 +101,7 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: "woocommerce.list_products",
-    description: "Search WooCommerce products by name/SKU.",
+    description: "Search the store's published WooCommerce products by name/SKU, optionally within a price range or in stock only.",
     whenToUse: "Customer asks about a product, or you need to surface options.",
     category: "READ",
     riskLevel: "LOW",
@@ -110,6 +110,9 @@ const TOOLS: ToolDefinition[] = [
       properties: {
         query: { type: "string", description: "Product name or SKU fragment." },
         per_page: { type: "number", description: "Default 10, max 100." },
+        price_min: { type: "number", description: "Lowest price, in the store's currency." },
+        price_max: { type: "number", description: "Highest price (the customer's budget), in the store's currency." },
+        in_stock: { type: "boolean", description: "true = only products in stock." },
       },
     },
   },
@@ -450,7 +453,14 @@ const WooCommerceAdapter: ProviderAdapter = {
         const params = new URLSearchParams();
         params.set("per_page", String(Math.min(100, Number(args.per_page ?? 10))));
         if (args.query) params.set("search", String(args.query));
-        return await wooRequest(auth, "GET", `${base}/products?${params}`);
+        // Only what the store itself shows: published, not hidden (W9).
+        params.set("status", "publish");
+        const price = (v: unknown) => (typeof v === "number" || typeof v === "string") && Number.isFinite(Number(v)) && Number(v) >= 0 ? String(Number(v)) : null;
+        if (price(args.price_min)) params.set("min_price", price(args.price_min)!);
+        if (price(args.price_max)) params.set("max_price", price(args.price_max)!);
+        if (args.in_stock === true) params.set("stock_status", "instock");
+        const list: any = await wooRequest(auth, "GET", `${base}/products?${params}`);
+        return Array.isArray(list) ? list.filter((p: any) => p?.catalog_visibility !== "hidden") : list;
       }
       case "create_coupon": {
         const body: any = {
@@ -593,6 +603,26 @@ const WooCommerceAdapter: ProviderAdapter = {
     }
   },
 };
+
+/**
+ * The store's currency (ISO code), for pricing product cards and comparing a
+ * budget. Internal only (not a tool the model can call): read once, cached on
+ * the connection by the caller. Null when the store does not answer.
+ */
+export async function fetchWooStoreCurrency(credentials: Record<string, any>, config: Record<string, any>): Promise<string | null> {
+  const consumerKey = credentials.consumerKey || credentials.consumer_key;
+  const consumerSecret = credentials.consumerSecret || credentials.consumer_secret;
+  const storeUrl = String(config.storeUrl || credentials.storeUrl || credentials.store_url || "").replace(/\/$/, "");
+  if (!consumerKey || !consumerSecret || !storeUrl) return null;
+  const auth = `Basic ${Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64")}`;
+  try {
+    const cur: any = await wooRequest(auth, "GET", `${storeUrl}/wp-json/wc/v3/data/currencies/current`);
+    const code = typeof cur?.code === "string" ? cur.code.toUpperCase() : "";
+    return /^[A-Z]{3}$/.test(code) ? code : null;
+  } catch {
+    return null;
+  }
+}
 
 async function wooRequest(authHeader: string, method: string, url: string, body?: unknown): Promise<unknown> {
   // SSRF guard: storeUrl is free-form tenant config. Block private/metadata

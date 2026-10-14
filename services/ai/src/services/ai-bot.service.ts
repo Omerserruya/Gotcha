@@ -2621,7 +2621,10 @@ async function generateAIBotReplyInner(
             // model that filters after the fact is a model that receives the
             // first N rows of the catalogue and then writes prose about a
             // budget it never applied.
-            `Everything else goes in ARGUMENTS, not in the query and not in your head: price_max for a budget, plus product_type / vendor / tag / option_name+option_value from the catalogue block above. ` +
+            (disc.decision.tool.startsWith("woocommerce.")
+              // The WooCommerce search filters by price and stock only.
+              ? `Everything else goes in ARGUMENTS, not in the query and not in your head: price_max for a budget (price_min for a floor), in_stock true when they want only what is available. `
+              : `Everything else goes in ARGUMENTS, not in the query and not in your head: price_max for a budget, plus product_type / vendor / tag / option_name+option_value from the catalogue block above. `) +
             `Do NOT ask more questions and do NOT describe products from general knowledge - only real results from the tool may be shown.`,
         });
       } else if (disc.decision?.kind === "blocked_no_tool") {
