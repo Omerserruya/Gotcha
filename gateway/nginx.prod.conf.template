@@ -1351,11 +1351,37 @@ http {
             add_header Access-Control-Allow-Origin "*" always;
             add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
 
-            # The filename carries no content hash, so a long TTL would pin
-            # a broken widget in every shopper's cache until it expired.
-            # Short TTL plus revalidation until the assets are versioned.
-            # Content-hashed filenames: new bytes are a new URL, so this
-            # can be cached for a year without ever going stale.
+            # Everything here WITHOUT a content hash in its name - the snippet
+            # loader every customer site embeds (chatcenter-widget.js), the
+            # manifest it reads to find the current bundle, vendor files - is
+            # revalidated on every use: a cached copy costs a 304, and a fix
+            # reaches visitors on their next page view. It was "immutable for
+            # a year" (2026-10-14), so a loader or manifest fix would have
+            # reached a visitor only after a year. Hashed bundles: below.
+            add_header Cache-Control "public, no-cache, must-revalidate" always;
+
+            # Security headers repeated: this location declares add_header,
+            # which cancels server-level inheritance, so ALL six must be re-emitted.
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        }
+
+        # Content-hashed bundles (gotcha-shopify-chat.<12 hex>.js): new bytes
+        # are a new URL, so they are cached for a year and never go stale.
+        location ~ "^/widget/[A-Za-z0-9_-]+\.[0-9a-f]{12}\.js$" {
+            # Served from the static export baked into THIS image - there is
+            # no `frontend` container in production. Proxying to one made nginx
+            # refuse to start outright ("host not found in upstream frontend"),
+            # which took the whole gateway down, not just the widget.
+            try_files $uri =404;
+
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+
             add_header Cache-Control "public, max-age=31536000, immutable" always;
 
             # Security headers repeated: this location declares add_header,
