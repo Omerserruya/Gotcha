@@ -43,6 +43,7 @@ export default async function Page({
       shopifyData={read.shopifyData}
       shopifyAvailability={read.shopifyAvailability}
       business={read.business}
+      website={read.website}
       tab={tab}
       // Stage B's numbers - absent from a stage A service, which keeps its parts unavailable.
       handoffNumbers={read.widget.whatsappNumbers ?? null}

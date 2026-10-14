@@ -131,6 +131,8 @@ export const installPlatformSchema = z.object({
   /** An unknown state is not offered: never an install path on a guess. */
   data: z.enum(['connected', 'connecting', 'error', 'not_connected']).catch('not_connected'),
   dataErrorCode: z.string().nullable().catch(null).default(null),
+  /** The platform's stores (a Shopify domain, a Woo site URL); the preview's address. */
+  stores: z.array(z.string()).catch([]).default([]),
 });
 export type InstallPlatform = z.infer<typeof installPlatformSchema>;
 
@@ -193,6 +195,31 @@ export const widgetInstallSchema = z.object({
 export type WidgetInstall = z.infer<typeof widgetInstallSchema>['data'];
 export type ShopifyPlace = WidgetInstall['shopify'][number];
 export type WooSite = WidgetInstall['woocommerce']['sites'][number];
+
+/** A store's address as a host: "https://demo-store.example/" → "demo-store.example". */
+function hostOf(address: string): string | null {
+  try {
+    return new URL(address.includes('://') ? address : `https://${address}`).hostname || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The preview's address line (supervisor, dev 2026-10-14: it named a Shopify
+ * shop whose connection had failed): the first store of a platform connected
+ * to GOTCHA, else the workspace's website, else the site the code was last
+ * seen on.
+ */
+export function previewSite(install: WidgetInstall | null, website: string | null): string | null {
+  for (const platform of install?.platforms ?? []) {
+    if (platform.data !== 'connected') continue;
+    const host = platform.stores.map(hostOf).find((h): h is string => !!h);
+    if (host) return host;
+  }
+  const site = website ? hostOf(website.trim()) : null;
+  return site ?? install?.code?.lastHost ?? null;
+}
 
 /** Where the widget answers visitors now: the code seen on a page, or a shop with its embed loading. */
 export function isLive(install: WidgetInstall): boolean {

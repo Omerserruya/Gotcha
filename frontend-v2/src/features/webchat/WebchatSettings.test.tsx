@@ -1217,13 +1217,15 @@ describe('★ dev, 2026-10-14: after an upload, Remove is still there - and the 
 });
 
 describe('★★ W2 (2026-10-14) - the preview is design 7’s', () => {
-  it('★ the chat widget: cover, logo disc, name, the questions as rows (no arrows), the composer and powered-by', () => {
+  it('★ the chat widget: cover, logo disc, name, the questions as rows with the live widget’s arrow, the composer and powered-by', () => {
     show('appearance');
     const widget = screen.getByTestId('webchat-preview-widget');
     expect(widget).toContainElement(screen.getByTestId('webchat-preview-cover'));
     expect(widget).toContainElement(screen.getByTestId('webchat-preview-logo'));
     expect(screen.getByTestId('webchat-preview-questions').querySelectorAll('li')).toHaveLength(1);
-    expect(screen.getByTestId('webchat-preview-questions').querySelector('svg')).toBeNull();
+    // The live widget's rows carry an arrow; the preview matches it (supervisor, dev).
+    const rows = screen.getByTestId('webchat-preview-questions').querySelectorAll('li');
+    expect(Array.from(rows).every((li) => li.querySelector('svg') !== null)).toBe(true);
     expect(widget).toContainElement(screen.getByTestId('webchat-preview-powered'));
     // The pop-up and the button sit on the stage, outside the widget.
     expect(widget).not.toContainElement(screen.getByTestId('webchat-preview-bubble'));
@@ -1285,6 +1287,10 @@ describe('★★ the bubble and the pop-up carry the brand, as the live widget d
     const launcher = screen.getByTestId('webchat-preview-launcher');
     expect(launcher).toHaveTextContent(/^A$/);
     expect(launcher).toHaveStyle({ backgroundColor: '#f5e6c8', color: '#2B2622' });
+    expect(screen.getByTestId('webchat-preview-send')).toHaveStyle({
+      backgroundColor: '#f5e6c8',
+      color: '#2B2622',
+    });
     expect(launcher.querySelector('span[aria-hidden="true"]')).not.toBeNull();
   });
 

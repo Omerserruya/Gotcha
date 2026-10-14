@@ -47,6 +47,8 @@ export interface WebsiteWidgetRead {
   readonly shopifyAvailability: ShopifyAvailability | null;
   /** The business's name - the preview's logo and launcher, as the design draws them. */
   readonly business: string | null;
+  /** The workspace's website (the business profile's) - the preview's address when no store is connected. */
+  readonly website: string | null;
 }
 
 /**
@@ -66,7 +68,7 @@ export async function loadWebsiteWidget({
   readonly installTab: boolean;
 }): Promise<WebsiteWidgetRead> {
   const api = serverApi();
-  const [widget, install, shopifyData, shopifyAvailability, business] = await Promise.all([
+  const [widget, install, shopifyData, shopifyAvailability, profile] = await Promise.all([
     api
       .get({ endpoint: channelEndpoints.websiteWidget(), payload: websiteWidgetSchema, raw: true })
       .then((r) => r.data)
@@ -92,13 +94,16 @@ export async function loadWebsiteWidget({
     // unwraps `data` first and every read failed into the assistant's name (dev).
     api
       .get({ endpoint: onboardingEndpoints.status(), payload: onboardingStatusSchema, raw: true })
-      .then((status) => businessName(status.data))
+      .then((status) => ({
+        business: businessName(status.data),
+        website: status.data.businessProfile?.websiteDomain?.trim() || null,
+      }))
       .catch((cause: unknown) => {
         logger.warn('website_widget.business_name_failed', { cause });
-        return null;
+        return { business: null, website: null };
       }),
   ]);
-  return { widget, install, shopifyData, shopifyAvailability, business };
+  return { widget, install, shopifyData, shopifyAvailability, ...profile };
 }
 
 /** Where the widget is installed - also the channels list's status for its one row. */

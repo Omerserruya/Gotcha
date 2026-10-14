@@ -101,5 +101,34 @@ describe('★ the business name is read through the client as it really behaves 
     );
     const read = await loadWebsiteWidget({ installTab: false });
     expect(read.business).toBe('Urban Supply - GOTCHA Demo');
+    expect(read.website).toBeNull();
+  });
+});
+
+describe("★ the workspace's website comes with the name (the preview's address)", () => {
+  it('the business profile websiteDomain, trimmed', async () => {
+    get.mockImplementation(
+      async ({
+        endpoint,
+        payload,
+        raw,
+      }: {
+        endpoint: { path: string };
+        payload: { parse: (v: unknown) => unknown };
+        raw?: boolean;
+      }) => {
+        if (endpoint.path !== '/api/onboarding/status')
+          throw new Error(`unexpected ${endpoint.path}`);
+        const body = {
+          data: {
+            tenant: { name: 'W', status: 'ACTIVE' },
+            businessProfile: { organizationName: 'Urban', websiteDomain: ' urban.example ' },
+          },
+        };
+        return payload.parse(raw ? body : body.data);
+      },
+    );
+    const read = await loadWebsiteWidget({ installTab: false });
+    expect(read.website).toBe('urban.example');
   });
 });

@@ -37,6 +37,7 @@ import {
   WIDGET_PATH,
   isLive,
   platformOffer,
+  previewSite,
   type HandoffNumber,
   type ShopifyPlace,
   type WebsiteWidget,
@@ -113,6 +114,7 @@ export function WebchatSettings({
   shopifyData,
   shopifyAvailability,
   business,
+  website = null,
   tab,
   handoffNumbers = null,
   assignment = null,
@@ -135,12 +137,14 @@ export function WebchatSettings({
   readonly shopifyData: ShopifyData | null;
   readonly shopifyAvailability: ShopifyAvailability | null;
   readonly business: string | null;
+  /** The workspace's website, for the preview's address when no store is connected. */
+  readonly website?: string | null;
   readonly tab: WebchatTab;
 }) {
   const t = useTranslations('channels.webchat');
   const live = install ? isLive(install) : null;
-  // The preview's address line: a shop, else the site the code was last seen on.
-  const site = install?.shopify[0]?.shopDomain ?? install?.code?.lastHost ?? null;
+  // The preview's address line: a connected store, else the website, else where the code was seen.
+  const site = previewSite(install, website);
   /* Products and cart: on where a shop runs it and its catalogue answers (Backend, stage A). */
   const selling = Boolean(
     install?.shopify.some((shop) => shop.status === 'active') && shopifyData === 'ok',
@@ -1496,6 +1500,8 @@ function Preview({
               {questions.map((q, i) => (
                 <li key={i}>
                   <bdi dir="auto">{q}</bdi>
+                  {/* The live widget's rows carry an arrow (supervisor, dev). */}
+                  <ArrowLeft size={12} aria-hidden="true" />
                 </li>
               ))}
             </ul>
@@ -1504,8 +1510,9 @@ function Preview({
                 <span>{t('type')}</span>
                 <span
                   className={styles.send}
-                  style={{ backgroundColor: colour }}
+                  style={{ backgroundColor: colour, color: ink }}
                   aria-hidden="true"
+                  data-testid="webchat-preview-send"
                 >
                   <ArrowLeft size={14} />
                 </span>

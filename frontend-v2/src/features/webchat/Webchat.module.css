@@ -1100,12 +1100,30 @@
   }
 
   .questions li {
-    overflow: hidden;
+    display: flex;
+    gap: 8px;
+    align-items: center;
     padding-block: 9px;
     font-size: 12px;
     line-height: 1.4;
+  }
+
+  .questions li bdi {
+    overflow: hidden;
+    flex: 1;
+    min-inline-size: 0;
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+
+  /* The live widget's arrow: onward in reading order. */
+  .questions li svg {
+    flex: none;
+    color: var(--widget-look-arrow);
+  }
+
+  .questions li svg:dir(ltr) {
+    transform: scaleX(-1);
   }
 
   .questions li + li {
