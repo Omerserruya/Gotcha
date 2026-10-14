@@ -109,7 +109,11 @@ export function NewAutomation({
       ...(graph ? { nodes: graph.nodes, edges: graph.edges } : {}),
     });
     if (result.ok) {
-      // Still "creating" until the builder replaces this sheet.
+      /*
+        The action itself opens the builder (redirect) - this is only a
+        fallback for a server that answered without it. Still "creating"
+        until the builder replaces this sheet.
+      */
       router.push(`/studio/automations/${result.automation.id}`);
       return;
     }

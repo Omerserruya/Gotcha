@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getLocale } from 'next-intl/server';
 import { z } from 'zod';
 
 import { isApiError } from '@/api/client/api-error';
@@ -24,6 +25,7 @@ import {
   type WebhookTrigger,
 } from '@/api/contracts/automations';
 import { automationEndpoints } from '@/api/endpoints/registry';
+import { redirect } from '@/i18n/navigation';
 import { logger } from '@/observability/logger';
 
 export type LiveResult =
@@ -109,7 +111,18 @@ export type CreateResult =
   | { readonly ok: false; readonly reason: 'invalid'; readonly field: string | null }
   | { readonly ok: false; readonly reason: 'limit' | 'forbidden' | 'failed' };
 
-/** New automation: always a draft, with its trigger step on the canvas. */
+/**
+ * New automation: always a draft, with its trigger step on the canvas - and,
+ * made, its builder opened BY THIS ACTION (`redirect`), never by the screen.
+ *
+ * ★★ AU2 (dev, 2026-10-14, measured): the screen pushed to the new builder as
+ * soon as the result reached it - streamed, before the action finished - and
+ * then the action's `revalidatePath(layout)` payload (780 KB, the whole tree)
+ * landed and replaced the router's state, aborting that navigation. The URL
+ * stayed on ?new=1 for ever and every retry made another draft. Now nothing is
+ * revalidated (the builder reads its automation fresh, and the list is
+ * dynamic) and the navigation IS the action's response.
+ */
 export async function createAutomation(body: {
   readonly name: string;
   readonly trigger: { readonly type: TriggerType; readonly config: Record<string, unknown> };
@@ -117,6 +130,7 @@ export async function createAutomation(body: {
   readonly nodes?: readonly unknown[];
   readonly edges?: readonly unknown[];
 }): Promise<CreateResult> {
+  let made: Automation;
   try {
     const answer = await serverApi().post({
       endpoint: automationEndpoints.create(),
@@ -124,8 +138,7 @@ export async function createAutomation(body: {
       payload: automationOneSchema,
       raw: true,
     });
-    revalidatePath('/[locale]/studio/automations', 'layout');
-    return { ok: true, automation: answer.data };
+    made = answer.data;
   } catch (cause) {
     await signInIfSignedOut(cause);
     if (isApiError(cause)) {
@@ -138,6 +151,9 @@ export async function createAutomation(body: {
     });
     return { ok: false, reason: 'failed' };
   }
+  // Outside the try: a redirect is thrown, and the catch above would swallow it.
+  redirect({ href: `/studio/automations/${made.id}`, locale: await getLocale() });
+  return { ok: true, automation: made };
 }
 
 export type SaveResult =
@@ -282,7 +298,11 @@ export async function deleteAutomation(id: string): Promise<boolean> {
       payload: z.unknown(),
       raw: true,
     });
-    revalidatePath('/[locale]/studio/automations', 'layout');
+    /*
+      No revalidate (AU2): its tree in this response would replace the
+      router's state under the builder's push back to the list. The list
+      drops deleted rows itself, and reads fresh when it is opened.
+    */
     return true;
   } catch (cause) {
     await signInIfSignedOut(cause);
