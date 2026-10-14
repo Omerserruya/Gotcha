@@ -42,7 +42,11 @@ vi.mock("../services/field-provenance.service", async () => {
   return { ...real, readProvenance: provenanceMock.readProvenance, stampProvenance: provenanceMock.stampProvenance };
 });
 
-import { mapReportToProfileFields, runProfileRescan, acceptScanProposal, SCAN_PROPOSAL_KEY } from "../services/business-scan.service";
+import { mapReportToProfileFields, runProfileRescan, acceptScanProposal, SCAN_PROPOSAL_KEY, startProfileRescan, readScanRun, SCAN_RUN_KEY } from "../services/business-scan.service";
+
+/** The discovery writes that record what the crawl saw (the others record the status). */
+const crawlWrites = () => (prismaMock.businessDiscovery.updateMany.mock.calls as any[]).map((c) => c[0]).filter((a) => a.data.crawl);
+const statusWrites = () => (prismaMock.businessDiscovery.updateMany.mock.calls as any[]).map((c) => c[0].data.status).filter(Boolean);
 
 const PROFILE = {
   websiteDomain: "https://shop.example.com",
@@ -299,8 +303,8 @@ describe("what the crawl saw is PERSISTED, not only returned", () => {
 
     await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
 
-    expect(prismaMock.businessDiscovery.updateMany).toHaveBeenCalledTimes(1);
-    const written = (prismaMock.businessDiscovery.updateMany.mock.calls[0] as any[])[0];
+    expect(crawlWrites()).toHaveLength(1);
+    const written = crawlWrites()[0];
     expect(written.where).toEqual({ tenantId: "t1" });
     expect(written.data.crawl.distinctTextPages).toBe(1);
     expect(written.data.crawl.pagesRead).toBe(17);
@@ -317,7 +321,7 @@ describe("what the crawl saw is PERSISTED, not only returned", () => {
     const outcome = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: failing });
 
     expect(outcome.ok).toBe(false);
-    expect(prismaMock.businessDiscovery.updateMany).toHaveBeenCalledTimes(1);
+    expect(crawlWrites()).toHaveLength(1);
   });
 
   it("does not record anything when the site could not be read at all", async () => {
@@ -327,7 +331,7 @@ describe("what the crawl saw is PERSISTED, not only returned", () => {
 
     // Nothing was read, so there is no measurement. Writing zeros would claim
     // one that never happened - the same reason the column has no default.
-    expect(prismaMock.businessDiscovery.updateMany).not.toHaveBeenCalled();
+    expect(crawlWrites()).toEqual([]);
   });
 
   it("a missing discovery row does not fail the scan", async () => {
@@ -459,5 +463,106 @@ describe("accepting a proposal is how scan ownership becomes reachable", () => {
     const stored = JSON.parse(settings.store[SCAN_PROPOSAL_KEY]!);
     expect(Array.isArray(stored.offer)).toBe(true);
     expect(stored.offer.length).toBeGreaterThan(0);
+  });
+});
+
+describe("★ the discovery row says what the last scan did (2026-10-14)", () => {
+  it("success: SCANNING with the site, then COMPLETE", async () => {
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+    expect(statusWrites()).toEqual(["SCANNING", "COMPLETE"]);
+    const first = (prismaMock.businessDiscovery.updateMany.mock.calls[0] as any[])[0];
+    expect(first).toEqual({ where: { tenantId: "t1" }, data: { status: "SCANNING", scanPhase: "pages", websiteDomain: "https://shop.example.com" } });
+  });
+
+  it("the model failing: FAILED, and the log says why", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const failing = vi.fn(async () => ({ ok: false, status: 401, text: async () => "no tenant", json: async () => ({}) }) as any);
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: failing });
+    expect(statusWrites()).toEqual(["SCANNING", "FAILED"]);
+    const lines = warn.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes("discover-business answered 401: no tenant"))).toBe(true);
+    expect(lines.some((l) => l.includes("the analysis of https://shop.example.com failed"))).toBe(true);
+    warn.mockRestore();
+  });
+
+  it("a report-less answer is logged too", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const empty = vi.fn(async () => ({ ok: true, json: async () => ({ data: { ok: false } }) }) as any);
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: empty });
+    expect(warn.mock.calls.some((c) => String(c[0]).includes("returned no report"))).toBe(true);
+    warn.mockRestore();
+  });
+
+  it("the site unreadable: FAILED", async () => {
+    crawlMock.mockResolvedValue(null);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+    expect(statusWrites()).toEqual(["SCANNING", "FAILED"]);
+  });
+
+  it("refusals before the crawl write no status", async () => {
+    prismaMock.businessProfile.findUnique.mockResolvedValue({ ...PROFILE, websiteDomain: "" });
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+    expect(statusWrites()).toEqual([]);
+  });
+});
+
+describe("★ the rescan runs in the background and is read back (2026-10-14)", () => {
+  const flush = () => new Promise((r) => setTimeout(r, 10));
+
+  it("starts at once as running, and ends done with what was applied and offered", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const slow = vi.fn(async () => { await gate; return { ok: true, json: async () => ({ data: { ok: true, report: REPORT } }) }; }) as any;
+    const started = await startProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: slow });
+    expect(started.started).toBe(true);
+    expect((await readScanRun("t1"))?.status).toBe("running");
+    release();
+    await flush();
+    const run = await readScanRun("t1");
+    expect(run).toMatchObject({ status: "done", reason: null });
+    expect(run!.offer.length).toBeGreaterThan(0);
+    expect(typeof run!.finishedAt).toBe("string");
+  });
+
+  it("★ a second start while one runs is refused, and the first is untouched", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const slow = vi.fn(async () => { await gate; return { ok: true, json: async () => ({ data: { ok: true, report: REPORT } }) }; }) as any;
+    const a = await startProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: slow });
+    const b = await startProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: slow });
+    expect(b).toMatchObject({ started: false, reason: "scan_in_progress" });
+    expect(b.run.startedAt).toBe(a.run.startedAt);
+    release();
+    await flush();
+  });
+
+  it("a failed run says why", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const failing = vi.fn(async () => ({ ok: false, status: 502, text: async () => "", json: async () => ({}) }) as any);
+    await startProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: failing });
+    await flush();
+    expect(await readScanRun("t1")).toMatchObject({ status: "failed", reason: "scan_failed" });
+  });
+
+  it("a crash is a failed run (internal_error), logged", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    crawlMock.mockRejectedValue(new Error("boom"));
+    await startProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+    await flush();
+    expect(await readScanRun("t1")).toMatchObject({ status: "failed", reason: "internal_error" });
+    expect(err.mock.calls.some((c) => String(c[0]).includes("rescan crashed"))).toBe(true);
+  });
+
+  it("★ a run left running past 3 minutes reads as failed timed_out, and a new one may start", async () => {
+    settings.store[SCAN_RUN_KEY] = JSON.stringify({ runId: "old", status: "running", startedAt: new Date(Date.now() - 4 * 60_000).toISOString(), finishedAt: null, reason: null, applied: [], offer: [], reach: null });
+    expect(await readScanRun("t1")).toMatchObject({ status: "failed", reason: "timed_out" });
+    const again = await startProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+    expect(again.started).toBe(true);
+    await flush();
+  });
+
+  it("never started: null", async () => {
+    expect(await readScanRun("t1")).toBeNull();
   });
 });

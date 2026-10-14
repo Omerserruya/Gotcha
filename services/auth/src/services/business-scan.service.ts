@@ -1,3 +1,4 @@
+import crypto from "crypto";
 /**
  * "Scan again" - re-read the business's website and update only what the scan
  * owns.
@@ -63,9 +64,17 @@ export async function callDiscoverBusiness(
       headers: { "Content-Type": "application/json", Authorization: authHeader },
       body: JSON.stringify(body),
     }, 60000);
-    if (!res.ok) return null;
+    // Every null says why in the log: a failed scan used to leave no line at all.
+    if (!res.ok) {
+      const text = await (res as any).text?.().catch(() => "") ?? "";
+      console.warn(`[business-scan] discover-business answered ${res.status}: ${String(text).slice(0, 200)}`);
+      return null;
+    }
     const json = (await res.json()) as { data?: { ok?: boolean; report?: any } };
-    if (!json?.data?.ok || !json.data.report) return null;
+    if (!json?.data?.ok || !json.data.report) {
+      console.warn("[business-scan] discover-business returned no report (the model step found nothing usable)");
+      return null;
+    }
     return json.data.report;
   } catch (err: any) {
     console.warn("[business-scan] discover-business failed:", err?.message);
@@ -291,8 +300,17 @@ export async function runProfileRescan(args: {
     return { ok: false, reason: "scan_in_progress" };
   }
 
+  // The discovery row says what the last scan of the site did, whichever path
+  // ran it: onboarding's and this one used to disagree, and a profile rescan
+  // left "FAILED" from an earlier discover standing after it succeeded.
+  await setDiscoveryStatus(tenantId, { status: "SCANNING", scanPhase: "pages", websiteDomain: origin });
+
   const crawl = await crawlSite(origin);
-  if (!crawl) return { ok: false, reason: "fetch_failed" };
+  if (!crawl) {
+    console.warn(`[business-scan] ${tenantId}: the site ${origin} could not be read`);
+    await setDiscoveryStatus(tenantId, { status: "FAILED", scanPhase: "failed" });
+    return { ok: false, reason: "fetch_failed" };
+  }
 
   const reach: CrawlReach = {
     requested: crawl.requested.length,
@@ -318,7 +336,11 @@ export async function runProfileRescan(args: {
     },
     fetchWithTimeoutFn,
   );
-  if (!report) return { ok: false, reason: "scan_failed", reach };
+  if (!report) {
+    console.warn(`[business-scan] ${tenantId}: the analysis of ${origin} failed (see the discover-business line above)`);
+    await setDiscoveryStatus(tenantId, { status: "FAILED", scanPhase: "failed" });
+    return { ok: false, reason: "scan_failed", reach };
+  }
 
   const provenance = await readProvenance(tenantId);
   const plan = planRescan(provenance, mapReportToProfileFields(report), {
@@ -350,5 +372,107 @@ export async function runProfileRescan(args: {
     await stampProvenance(tenantId, applied, "scan", actorId);
   }
 
+  await setDiscoveryStatus(tenantId, { status: "COMPLETE", scanPhase: "done" });
   return { ok: true, plan, applied, reach };
+}
+
+/** The discovery row's status, when there is a row. A missed write only costs the status. */
+async function setDiscoveryStatus(tenantId: string, data: { status: string; scanPhase: string; websiteDomain?: string }): Promise<void> {
+  try {
+    await prisma.businessDiscovery.updateMany({ where: { tenantId }, data: data as never });
+  } catch (err: any) {
+    console.error(`[business-scan] could not record the scan status for ${tenantId}:`, err?.message ?? err);
+  }
+}
+
+// ─── The rescan as a background run (2026-10-14) ──────────────────────────
+//
+// A rescan is a crawl plus a model call: 25-40 seconds. The browser and the
+// BFF stop waiting at 20, so the screen said "the scan did not run" while the
+// scan finished and stored its proposal 20 seconds later. Now POST starts the
+// run and answers at once, and GET reports it: running, done (with what was
+// applied and offered) or failed (with why).
+//
+// Kept as TenantSetting "profileScanRun" (no migration). A run still "running"
+// after SCAN_STALE_MS died with its process and reads as failed "timed_out".
+
+export const SCAN_RUN_KEY = "profileScanRun";
+
+export type ScanRunStatus = "running" | "done" | "failed";
+
+export interface ScanRun {
+  runId: string;
+  status: ScanRunStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  reason: string | null;
+  applied: string[];
+  offer: unknown[];
+  reach: CrawlReach | null;
+}
+
+async function writeRun(tenantId: string, run: ScanRun): Promise<void> {
+  try {
+    await writeDurableSetting(tenantId, SCAN_RUN_KEY, JSON.stringify(run));
+  } catch (err: any) {
+    console.error(`[business-scan] could not store the scan run for ${tenantId}:`, err?.message ?? err);
+  }
+}
+
+/** The last run, or null when none was ever started. */
+export async function readScanRun(tenantId: string, now: Date = new Date()): Promise<ScanRun | null> {
+  try {
+    const raw = await readDurableSetting(tenantId, SCAN_RUN_KEY);
+    if (!raw) return null;
+    const run = JSON.parse(raw) as ScanRun;
+    if (!run || typeof run.startedAt !== "string" || !["running", "done", "failed"].includes(run.status)) return null;
+    if (run.status === "running" && now.getTime() - Date.parse(run.startedAt) > SCAN_STALE_MS) {
+      return { ...run, status: "failed", reason: "timed_out", finishedAt: null };
+    }
+    return run;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Start a rescan and return at once. Refused (scan_in_progress) while another
+ * run is running. The run finishes into readScanRun; any failure is logged.
+ */
+export async function startProfileRescan(args: Parameters<typeof runProfileRescan>[0]): Promise<{ started: true; run: ScanRun } | { started: false; reason: "scan_in_progress"; run: ScanRun }> {
+  const current = await readScanRun(args.tenantId);
+  if (current?.status === "running") return { started: false, reason: "scan_in_progress", run: current };
+
+  const run: ScanRun = {
+    runId: crypto.randomUUID(),
+    status: "running",
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    reason: null,
+    applied: [],
+    offer: [],
+    reach: null,
+  };
+  await writeRun(args.tenantId, run);
+
+  const finish = async (patch: Partial<ScanRun>) => {
+    // A newer run owns the record now: leave it alone.
+    const latest = await readScanRun(args.tenantId);
+    if (latest && latest.runId !== run.runId) return;
+    await writeRun(args.tenantId, { ...run, ...patch, finishedAt: new Date().toISOString() });
+  };
+  void runProfileRescan(args)
+    .then(async (outcome) => {
+      if (outcome.ok) {
+        await finish({ status: "done", applied: outcome.applied, offer: outcome.plan.offer, reach: outcome.reach });
+      } else {
+        console.warn(`[business-scan] ${args.tenantId}: rescan ended ${outcome.reason}`);
+        await finish({ status: "failed", reason: outcome.reason, reach: outcome.reach ?? null });
+      }
+    })
+    .catch(async (err: any) => {
+      console.error(`[business-scan] ${args.tenantId}: rescan crashed:`, err?.message ?? err);
+      await finish({ status: "failed", reason: "internal_error" });
+    });
+  return { started: true, run };
 }

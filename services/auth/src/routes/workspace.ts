@@ -44,7 +44,7 @@ const WRITE = requirePermission("settings:workspace:update");
 
 const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || "http://ai:4006").replace(/\/$/, "");
 import { readProvenance, fieldSources, stampProvenance } from "../services/field-provenance.service";
-import { runProfileRescan, acceptScanProposal } from "../services/business-scan.service";
+import { startProfileRescan, readScanRun, acceptScanProposal, type ScanRun } from "../services/business-scan.service";
 const VOICE_MIN = 40;
 const VOICE_MAX = 1800;
 
@@ -533,46 +533,59 @@ router.post("/workspace/voice/sample", WRITE, async (req: Request, res: Response
  * both drive the same crawl into the same row.
  */
 router.post("/workspace/scan", WRITE, async (req: Request, res: Response) => {
+  // ★ ANSWERS AT ONCE (2026-10-14). A rescan is a crawl plus a model call,
+  // 25-40 seconds, and the browser and the BFF stop waiting at 20: the screen
+  // said "the scan did not run" while it finished 20 seconds later. POST starts
+  // it (202); GET /workspace/scan reports running, done or failed.
   try {
-    const outcome = await runProfileRescan({
+    const started = await startProfileRescan({
       tenantId: req.tenantId!,
       authHeader: req.headers.authorization ?? "",
       actorId: (req as any).user?.userId,
       locale: typeof (req.body ?? {}).locale === "string" ? (req.body as any).locale : undefined,
     });
-
-    if (!outcome.ok) {
-      if (outcome.reason === "scan_in_progress") {
-        res.status(409).json({ error: "A scan is already running", code: "SCAN_IN_PROGRESS" });
-        return;
-      }
-      // `reach` travels with a post-crawl failure: the measurement already
-      // exists, and "we could not read your site" is more use to the reader
-      // than "the scan failed".
-      res.json({ data: { ok: false, reason: outcome.reason, ...(outcome.reach ? { reach: outcome.reach } : {}) } });
+    if (!started.started) {
+      res.status(409).json({ error: "A scan is already running", code: "SCAN_IN_PROGRESS", data: scanRunView(started.run) });
       return;
     }
-
-    res.json({
-      data: {
-        ok: true,
-        // What changed by itself, and what is waiting for the owner to decide.
-        applied: outcome.applied,
-        offer: outcome.plan.offer,
-        // What the crawl could SEE. `reach.distinctTextPages === 1` means the
-        // site answered every request with the same page - a login wall - so the
-        // screen must say the site could not be read rather than quoting
-        // `pagesRead`. A caveat that appears because a measurement says so is
-        // information; one that is always there is wallpaper.
-        reach: outcome.reach,
-        fieldSources: fieldSources(await readProvenance(req.tenantId!)),
-      },
-    });
+    res.status(202).json({ data: scanRunView(started.run) });
   } catch (err) {
     console.error("workspace scan error:", (err as Error).message);
     res.status(503).json({ error: "Could not scan the website right now", code: "SCAN_UNAVAILABLE" });
   }
 });
+
+/**
+ * GET /api/workspace/scan - the last rescan: running, done or failed.
+ *
+ * done carries what was applied silently and what is offered to accept (the
+ * same `applied` / `offer` the POST used to return), and `reach`: what the
+ * crawl could see. failed carries the reason (no_domain, fetch_failed,
+ * scan_failed, no_profile, internal_error, or timed_out for a run that never
+ * finished). `run` is null when no rescan was ever started.
+ */
+router.get("/workspace/scan", READ, async (req: Request, res: Response) => {
+  try {
+    const run = await readScanRun(req.tenantId!);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({ data: { run: run ? scanRunView(run) : null, fieldSources: fieldSources(await readProvenance(req.tenantId!)) } });
+  } catch (err) {
+    console.error("workspace scan status error:", (err as Error).message);
+    res.status(500).json({ error: "Failed to read the scan status" });
+  }
+});
+
+function scanRunView(run: ScanRun) {
+  return {
+    status: run.status,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt,
+    reason: run.reason,
+    applied: run.applied,
+    offer: run.offer,
+    reach: run.reach,
+  };
+}
 
 /**
  * POST /api/workspace/scan/accept - take the website's value for offered fields.
