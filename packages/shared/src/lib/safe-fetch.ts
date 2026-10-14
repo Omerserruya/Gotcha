@@ -250,3 +250,70 @@ export async function safeFetch(rawUrl: string, options: SafeFetchOptions = {}):
     return { ok: false, status: 0, text: "", error: msg };
   }
 }
+
+export interface SafeFetchBufferResult {
+  ok: boolean;
+  status: number;
+  buffer: Buffer | null;
+  contentType?: string;
+  /** The body went past maxBytes (it is not returned). */
+  tooLarge?: boolean;
+  error?: string;
+}
+
+/**
+ * safeFetch for binary bodies (an image to re-host): the same public-address
+ * check on every redirect hop, a GET only, and a body read as bytes with a
+ * hard cap. The cap is enforced while reading (a declared Content-Length over
+ * it stops before the body; a body that runs past it is cancelled), never by
+ * cutting what was already buffered, so a huge file never sits in memory.
+ */
+export async function safeFetchBuffer(rawUrl: string, options: { timeoutMs?: number; maxRedirects?: number; maxBytes: number }): Promise<SafeFetchBufferResult> {
+  const { timeoutMs = 10_000, maxRedirects = 5, maxBytes } = options;
+  let currentUrl = rawUrl;
+  try {
+    for (let hop = 0; hop <= maxRedirects; hop++) {
+      const parsed = await assertPublicUrl(currentUrl);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(parsed.toString(), { method: "GET", redirect: "manual", signal: controller.signal });
+        if (res.status >= 300 && res.status < 400) {
+          const location = res.headers.get("location");
+          await res.body?.cancel().catch(() => undefined);
+          if (!location) return { ok: false, status: res.status, buffer: null, error: "redirect without location" };
+          currentUrl = new URL(location, parsed).toString();
+          continue;
+        }
+        const contentType = res.headers.get("content-type") ?? undefined;
+        const declared = Number(res.headers.get("content-length"));
+        if (Number.isFinite(declared) && declared > maxBytes) {
+          await res.body?.cancel().catch(() => undefined);
+          return { ok: false, status: res.status, buffer: null, contentType, tooLarge: true };
+        }
+        const chunks: Buffer[] = [];
+        let total = 0;
+        if (res.body) {
+          const reader = res.body.getReader();
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            total += value.byteLength;
+            if (total > maxBytes) {
+              await reader.cancel().catch(() => undefined);
+              return { ok: false, status: res.status, buffer: null, contentType, tooLarge: true };
+            }
+            chunks.push(Buffer.from(value));
+          }
+        }
+        return { ok: res.ok, status: res.status, buffer: Buffer.concat(chunks), contentType };
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    return { ok: false, status: 0, buffer: null, error: "too many redirects" };
+  } catch (err) {
+    const msg = err instanceof SsrfError ? err.message : (err as Error).message;
+    return { ok: false, status: 0, buffer: null, error: msg };
+  }
+}

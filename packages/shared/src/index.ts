@@ -347,7 +347,22 @@ export { getOAuthStateSecret } from "./lib/oauth-state";
 export { mintOAuthState, consumeOAuthState, returnPathForFlow } from "./lib/oauth-state-store";
 export type { OAuthStateClaims, MintedState, ConsumeResult } from "./lib/oauth-state-store";
 export { verifyInternalServiceKey, requireInternalKey, getInternalServiceKey } from "./lib/internal-key";
-export { safeFetch, assertPublicUrl, isBlockedIp, SsrfError } from "./lib/safe-fetch";
+export { safeFetch, safeFetchBuffer, assertPublicUrl, isBlockedIp, SsrfError } from "./lib/safe-fetch";
+export type { SafeFetchBufferResult } from "./lib/safe-fetch";
+// Widget logo and cover: checked from the bytes, re-hosted (W3/W4).
+export {
+  WIDGET_IMAGE_LIMITS,
+  WIDGET_IMAGE_MAX_BYTES,
+  WIDGET_IMAGE_EXTENSION,
+  isWidgetImageSlot,
+  probeImage,
+  checkWidgetImage,
+  driveDirectUrl,
+  type WidgetImageSlot,
+  type WidgetImageType,
+  type ImageFacts,
+  type WidgetImageRefusal,
+} from "./lib/widget-image";
 export type { SafeFetchOptions, SafeFetchResult } from "./lib/safe-fetch";
 export { verifyWebhookSignature, verifySharedSecretToken, timingSafeEqualStr } from "./lib/webhook-verify";
 export type { WebhookVerifyResult } from "./lib/webhook-verify";

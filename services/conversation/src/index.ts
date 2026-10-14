@@ -23,6 +23,7 @@ import voiceChannelsRoutes from "./routes/voice-channels";
 import autoBuyRoutes from "./routes/auto-buy";
 import { handleVoiceSessionEnded } from "./subscribers/voice-auto-close";
 import { uploadsStatic } from "./lib/uploads-static";
+import { widgetImagesRouter } from "./routes/widget-images";
 import { signedMediaHandler } from "./lib/media-serving";
 import { relayBusEvent } from "./lib/socket-bridge";
 import { relayToVisitor, relayConversationState } from "./subscribers/shopify-visitor-relay";
@@ -101,6 +102,8 @@ if (!uploadsProbe.ok) {
   console.log(describeUploadsProbe(uploadsProbe, "conversation"));
 }
 
+// The widget's logo and cover (W3/W4): a signed-in POST, before the static files.
+app.use("/api/uploads", widgetImagesRouter(uploadsDir));
 app.use("/api/uploads", uploadsStatic(uploadsDir));
 // Short-lived signed media links for providers that fetch with no login (Meta,
 // Slack); before any auth on purpose (2026-10-10). Rate limited by the app-wide
