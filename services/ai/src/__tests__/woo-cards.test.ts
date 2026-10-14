@@ -190,3 +190,37 @@ describe("★ one store per web chat turn", () => {
     expect(cardsMatchTurn("woocommerce", null)).toBe(false);
   });
 });
+
+describe("★ POST /cart/validate (phase c)", () => {
+  const cart = (body: any) => request(app()).post("/api/embedded-chat/cart/validate").send({ sessionId: "conv1", sessionToken: "tok_1", ...body });
+
+  it("a simple product: the store's own add-to-cart link, checked against the store", async () => {
+    const r = await cart({ productId: "41", variantId: "41", quantity: 3 });
+    expect(r.status).toBe(200);
+    expect(r.body.data).toEqual({ cartUrl: `${STORE}/?add-to-cart=41&quantity=3`, productId: "41", variantId: "41", quantity: 3 });
+    expect(H.adapterCalls.map((c) => [c.toolFunctionName, c.accessScope])).toEqual([["woocommerce.get_product", "internal"]]);
+  });
+
+  it("a variation of this product; one that is not its own is refused", async () => {
+    expect((await cart({ productId: "50", variantId: "51", quantity: 1 })).body.data.cartUrl).toBe(`${STORE}/?add-to-cart=50&variation_id=51&quantity=1`);
+    expect((await cart({ productId: "50", variantId: "999" })).body).toEqual({ error: "variant_not_found" });
+    expect((await cart({ productId: "50" })).body).toEqual({ error: "choose_variant" });
+  });
+
+  it("★ refused: a draft or hidden product (422), an unknown one (404), junk ids (400), a wrong session (404)", async () => {
+    expect((await cart({ productId: "42" })).body).toEqual({ error: "not_for_sale" });
+    expect((await cart({ productId: "43" })).body).toEqual({ error: "not_for_sale" });
+    expect((await cart({ productId: "999" })).status).toBe(404);
+    expect((await cart({ productId: "41;drop" })).status).toBe(400);
+    expect((await cart({ productId: "41", sessionToken: "guess" })).status).toBe(404);
+  });
+
+  it("★ the switch off or the store not connected: 403 cart_disabled, the store never asked", async () => {
+    H.accounts = [web({ productMessagingEnabled: true, addToCartEnabled: false })];
+    expect((await cart({ productId: "41" })).body).toEqual({ error: "cart_disabled" });
+    H.accounts = [web()];
+    H.integration = null;
+    expect((await cart({ productId: "41" })).status).toBe(403);
+    expect(H.adapterCalls).toEqual([]);
+  });
+});

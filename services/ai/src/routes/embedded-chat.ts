@@ -10,13 +10,14 @@ import {
   BUSINESS_HOURS_KEY,
   parseBusinessHours,
   evaluateBusinessHours, readDurableSetting, normalizeStorefrontContext,
-  visitorLocaleOf, widgetTextsOf, isWidgetLocale, projectWooCommerce,
+  visitorLocaleOf, widgetTextsOf, isWidgetLocale, projectWooCommerce, wooCartLine,
   HANDOFF_TTL_SECONDS, handoffRefKey, handoffConversationKey, newHandoffRef, handoffMessage, handoffButtonLabel, waMeUrl,
   type HandoffRecord, type WebchatConfig } from "@chatcenter/shared";
 import crypto from "crypto";
 import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanitizer.service";
 import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef, connectedWooStore } from "../services/website-widget.service";
 import { translateWidgetTexts } from "../services/widget-text-translation.service";
+import { executeAdapterTool } from "../services/connectors/integration-framework";
 
 const router = Router();
 
@@ -351,6 +352,55 @@ router.post("/texts", initLimiter, async (req: Request, res: Response) => {
     res.json({ data: { locale, texts } });
   } catch (err) {
     console.error("Embedded chat texts error:", (err as Error)?.message);
+    res.status(500).json({ error: "unavailable" });
+  }
+});
+
+/**
+ * POST /cart/validate { sessionId, sessionToken, productId, variantId?, quantity? }
+ *   -> { cartUrl, productId, variantId, quantity }
+ * Add to cart from a product card (W9 phase c). The line is checked against
+ * the store's own answer (published, for sale, in stock, the variation is
+ * this product's), never the browser's word, and answered as the store's own
+ * `?add-to-cart=` link: following it adds the line to the visitor's cart on
+ * the store. No order is created. Refusals: 404 (session / product),
+ * 403 cart_disabled (switch off or store not connected), 422 with the reason.
+ */
+router.post("/cart/validate", messageLimiter, async (req: Request, res: Response) => {
+  try {
+    const conv = await withCrossTenantAccess(() => visitorConversation(String(req.body?.sessionId ?? ""), req.body?.sessionToken));
+    if (!conv || !conv.channelAccountId) { res.status(404).json({ error: "unavailable" }); return; }
+    const account = await withCrossTenantAccess(() => prisma.channelAccount.findFirst({
+      where: { id: conv.channelAccountId!, tenantId: conv.tenantId, channel: "WEBCHAT" },
+      select: { credentials: true },
+    }));
+    if (!account) { res.status(404).json({ error: "unavailable" }); return; }
+    const config = normalizeWebchatConfig(account.credentials);
+    const store = config.commerce.addToCartEnabled
+      ? await withCrossTenantAccess(() => connectedWooStore(conv.tenantId)).catch(() => null)
+      : null;
+    if (!store) { res.status(403).json({ error: "cart_disabled" }); return; }
+
+    const productId = String(req.body?.productId ?? "").trim();
+    const variantId = req.body?.variantId == null || req.body.variantId === "" ? null : String(req.body.variantId).trim();
+    if (!/^\d{1,12}$/.test(productId) || (variantId !== null && !/^\d{1,12}$/.test(variantId))) {
+      res.status(400).json({ error: "productId and variantId are the store's numeric ids" });
+      return;
+    }
+    const got = await withCrossTenantAccess(() => executeAdapterTool({ tenantId: conv.tenantId, toolFunctionName: "woocommerce.get_product", args: { product_id: productId }, accessScope: "internal" }));
+    if (!got.ok) { res.status(404).json({ error: "product_not_found" }); return; }
+    const product: any = got.result;
+    let variation: any = null;
+    if (product?.type === "variable" && variantId) {
+      const v = await withCrossTenantAccess(() => executeAdapterTool({ tenantId: conv.tenantId, toolFunctionName: "woocommerce.list_product_variations", args: { product_id: productId, per_page: 100 }, accessScope: "internal" }));
+      variation = v.ok && Array.isArray(v.result) ? (v.result as any[]).find((x) => String(x?.id) === variantId) ?? null : null;
+    }
+    const line = wooCartLine({ storeUrl: store.storeUrl, product, variation, variantId, quantity: req.body?.quantity });
+    if (!line.ok) { res.status(422).json({ error: line.reason }); return; }
+    const { ok: _ok, ...data } = line;
+    res.json({ data });
+  } catch (err) {
+    console.error("Embedded chat cart validate error:", (err as Error)?.message);
     res.status(500).json({ error: "unavailable" });
   }
 });

@@ -7,7 +7,7 @@
  *   - products are opt-in on the widget, and served only while the store is connected
  */
 import { describe, it, expect } from "vitest";
-import { buildWooProductCard, projectWooCommerce, summarizeWooCards } from "../woo-commerce-cards";
+import { buildWooProductCard, projectWooCommerce, summarizeWooCards, wooCartLine } from "../woo-commerce-cards";
 import { normalizeWebchatConfig, publicWebchatConfig } from "../webchat-widget";
 
 const STORE = "https://demo-store.example.com";
@@ -87,5 +87,33 @@ describe("★ the widget's products are opt-in and need the store", () => {
     expect(publicWebchatConfig(on, { offline: false, storeConnected: true }).features).toMatchObject({ productMessaging: true, addToCart: true });
     expect(publicWebchatConfig(on, { offline: false, storeConnected: false }).features).toMatchObject({ productMessaging: false, addToCart: false });
     expect(publicWebchatConfig(normalizeWebchatConfig(null), { offline: false, storeConnected: true }).features).toMatchObject({ productMessaging: false, addToCart: false });
+  });
+});
+
+describe("★ wooCartLine (phase c): the store's own add-to-cart link, after the store's answer", () => {
+  it("a simple product: ?add-to-cart=<id>&quantity, quantity clamped to 1-10", () => {
+    expect(wooCartLine({ storeUrl: STORE, product: simple(), variation: null, variantId: "41", quantity: 2 }))
+      .toEqual({ ok: true, cartUrl: `${STORE}/?add-to-cart=41&quantity=2`, productId: "41", variantId: "41", quantity: 2 });
+    expect((wooCartLine({ storeUrl: STORE + "/shop/", product: simple(), variation: null, variantId: null, quantity: 99 }) as any).cartUrl).toBe(`${STORE}/shop/?add-to-cart=41&quantity=10`);
+    expect((wooCartLine({ storeUrl: STORE, product: simple(), variation: null, variantId: null, quantity: "x" }) as any).quantity).toBe(1);
+    expect((wooCartLine({ storeUrl: STORE, product: simple(), variation: null, variantId: null, quantity: -3 }) as any).quantity).toBe(1);
+  });
+
+  it("a variation: variation_id; it must be this product's, published, in stock, with every option set", () => {
+    const v = variation(51, "M");
+    expect(wooCartLine({ storeUrl: STORE, product: variable(), variation: v, variantId: "51", quantity: 1 }))
+      .toEqual({ ok: true, cartUrl: `${STORE}/?add-to-cart=50&variation_id=51&quantity=1`, productId: "50", variantId: "51", quantity: 1 });
+    expect(wooCartLine({ storeUrl: STORE, product: variable(), variation: null, variantId: null, quantity: 1 })).toEqual({ ok: false, reason: "choose_variant" });
+    expect(wooCartLine({ storeUrl: STORE, product: variable(), variation: v, variantId: "52", quantity: 1 })).toEqual({ ok: false, reason: "variant_not_found" });
+    expect(wooCartLine({ storeUrl: STORE, product: variable(), variation: variation(51, "M", { status: "private" }), variantId: "51", quantity: 1 })).toEqual({ ok: false, reason: "variant_not_found" });
+    expect(wooCartLine({ storeUrl: STORE, product: variable(), variation: variation(51, "M", { stock_status: "outofstock" }), variantId: "51", quantity: 1 })).toEqual({ ok: false, reason: "out_of_stock" });
+    expect(wooCartLine({ storeUrl: STORE, product: variable(), variation: variation(51, ""), variantId: "51", quantity: 1 })).toEqual({ ok: false, reason: "choose_on_product_page" });
+  });
+
+  it("★ nothing the store would not sell: draft, hidden, external, not purchasable, out of stock", () => {
+    for (const o of [{ status: "draft" }, { catalog_visibility: "hidden" }, { type: "external" }, { purchasable: false }]) {
+      expect(wooCartLine({ storeUrl: STORE, product: simple(o), variation: null, variantId: "41", quantity: 1 })).toEqual({ ok: false, reason: "not_for_sale" });
+    }
+    expect(wooCartLine({ storeUrl: STORE, product: simple({ stock_status: "outofstock" }), variation: null, variantId: "41", quantity: 1 })).toEqual({ ok: false, reason: "out_of_stock" });
   });
 });
