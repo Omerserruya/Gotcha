@@ -209,6 +209,12 @@ window.__gotchaSiteMount = function (opts) {
       // The socket instead of polling: this channel's visitor proves itself
       // with the session token from /init, and its pushed messages get the
       // same shape as polled ones.
+      // Docked (design 7): the panel is the chat's place; the bubble and any
+      // pop-up step aside until it is undocked.
+      onDock: function (docked) {
+        if (docked) hidePopup();
+        if (launcherButton) launcherButton.style.display = docked ? "none" : "";
+      },
       // "New conversation": this channel starts one when /init has no token.
       resetConversation: function () {
         store.del("conversation");

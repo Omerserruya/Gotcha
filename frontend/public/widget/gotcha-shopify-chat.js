@@ -182,6 +182,8 @@ window.__gotchaShopifyChatApp = function (boot) {
       replies: "Replies right away",
       minimise: "Minimise",
       newChat: "New conversation",
+      dock: "Dock to the side of the screen",
+      undock: "Undock",
       continueWa: "Continue on WhatsApp",
       waTitle: "Chat with us",
       waSub: "Write here and we'll continue on WhatsApp.",
@@ -240,6 +242,8 @@ window.__gotchaShopifyChatApp = function (boot) {
       replies: "עונה מיד",
       minimise: "מזעור",
       newChat: "שיחה חדשה",
+      dock: "הצמדה לצד המסך",
+      undock: "ביטול ההצמדה",
       continueWa: "המשך בוואטסאפ",
       waTitle: "דברו איתנו",
       waSub: "כתבו כאן ונמשיך בוואטסאפ.",
@@ -355,6 +359,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     lastCursor: null,
     unread: 0,
     waLink: null, // the WhatsApp link after a handoff, kept in the chat
+    docked: false,
   };
 
   var socket = null;
@@ -1047,6 +1052,16 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".pwl img{height:12px;width:auto;display:block;opacity:.7;}",
     ".panel[data-look='whatsapp'] .pwl{color:#667781;font-size:11px;}",
     ".panel[data-look='whatsapp'] .pwl img{height:14px;opacity:1;}",
+    // Docked (design 7): the full height of the screen, flush to its side,
+    // the page making room beside it.
+    "@media (min-width: 900px){",
+    "  .panel[data-look='gotcha'][data-docked='1']{top:0;bottom:0;" + side + ":0;width:400px;max-width:400px;height:100vh;",
+    "    border-radius:0;animation:none;box-shadow:" + (side === "right" ? "-1px 0 0 #E6DDD0,-12px 0 40px rgba(43,38,34,.08)" : "1px 0 0 #E6DDD0,12px 0 40px rgba(43,38,34,.08)") + ";}",
+    "  .panel[data-look='gotcha'][data-docked='1'][data-view='welcome']{height:100vh;}",
+    "}",
+    ".panel[data-look='gotcha'] .tl[data-act='dock'][aria-pressed='true']{background:#EDE5D9;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tl[data-act='dock'][aria-pressed='true']{background:#fff;}",
+    "@media (max-width: 899px){.panel[data-look='gotcha'] .tl[data-act='dock']{display:none;}}",
     "@media (prefers-reduced-motion: reduce){.panel[data-look='gotcha'] .hd-dot::after,.panel[data-look='gotcha'] .disc-on::after{animation:none;opacity:0}.panel[data-look='gotcha'] .q,.panel[data-look='gotcha'] .tl{transition:none}}",
   ].join("\n");
 
@@ -1160,6 +1175,7 @@ window.__gotchaShopifyChatApp = function (boot) {
   // conversation (where the host can start one), mute, and minimise - the
   // one close control, so `data-act="close"` still names it. Glass circles
   // over the cover, quiet squares in the header.
+  var dockBtn = null;
   if (LOOK === "gotcha") {
     var tools = el("div", "tools");
     closeBtn.className = "tl";
@@ -1173,12 +1189,66 @@ window.__gotchaShopifyChatApp = function (boot) {
       on(newBtn, "click", newConversation);
       tools.appendChild(newBtn);
     }
+    // Docking needs a host that can step its bubble aside (the snippet), and
+    // a screen wide enough to keep the page beside the panel.
+    if (typeof boot.onDock === "function") {
+      dockBtn = el("button", "tl");
+      attr(dockBtn, { type: "button", "data-act": "dock" });
+      dockBtn.innerHTML = side === "right"
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>';
+      on(dockBtn, "click", function () { setDocked(!S.docked); });
+      tools.appendChild(dockBtn);
+      paintDock();
+    }
     if (muteBtn) { muteBtn.className = "tl"; tools.appendChild(muteBtn); }
     tools.appendChild(closeBtn);
     panel.appendChild(tools);
     // The header keeps its text clear of them.
     panel.style.setProperty("--tools", tools.children.length * 38 + 12 + "px");
   }
+
+  /**
+   * Design 7's docking: the panel takes the full height of the screen on
+   * its side and the page makes room for it - a padding on <html>, restored
+   * to exactly what it was. Undone by Minimise, Escape, and a screen too
+   * narrow to keep the page beside it.
+   */
+  var pagePad = null;
+  var padSide = side === "right" ? "paddingRight" : "paddingLeft";
+  function wideEnough() {
+    try { return window.matchMedia("(min-width: 900px)").matches; } catch (e) { return false; }
+  }
+  function paintDock() {
+    if (!dockBtn) return;
+    var label = S.docked ? T.undock : T.dock;
+    attr(dockBtn, { "aria-label": label, title: label, "aria-pressed": S.docked ? "true" : "false" });
+  }
+  function setDocked(docked) {
+    docked = !!docked && wideEnough();
+    if (docked === !!S.docked) return;
+    S.docked = docked;
+    var root = document.documentElement;
+    if (docked) {
+      pagePad = { value: root.style[padSide], transition: root.style.transition };
+      root.style.transition = "padding .32s ease";
+      root.style[padSide] = "400px";
+      panel.setAttribute("data-docked", "1");
+    } else {
+      panel.removeAttribute("data-docked");
+      if (pagePad) {
+        root.style[padSide] = pagePad.value;
+        var before = pagePad.transition;
+        setTimeout(function () { root.style.transition = before; }, 400);
+      }
+      pagePad = null;
+    }
+    paintDock();
+    if (typeof boot.onDock === "function") boot.onDock(docked);
+  }
+  window.addEventListener("resize", function () {
+    if (S.docked && !wideEnough()) setDocked(false);
+  });
 
   var banner = el("div", "banner");
   banner.hidden = true;
@@ -2781,6 +2851,8 @@ window.__gotchaShopifyChatApp = function (boot) {
   }
 
   function close(reason) {
+    // A docked panel minimised gives the page its room back.
+    setDocked(false);
     setPanelOpen(false);
     // An explicit shopper close is a decision that outlives this render:
     // nothing may auto-open the panel again for the rest of the page

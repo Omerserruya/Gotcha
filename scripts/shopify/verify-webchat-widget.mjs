@@ -451,7 +451,7 @@ const panelLook = (page) => page.evaluate(() => {
     a.cover.h === 168 && a.disc.w === 100 && a.disc.y === a.cover.y + 168 - 56 && a.discOn, JSON.stringify({ c: a.cover, d: a.disc }));
   check("L2 welcome: the questions are 52px rows", a.rows.length === 3 && a.rows.every((h) => h >= 52), JSON.stringify(a.rows));
   check("L2 welcome: no header; the tools are 34px glass circles 12px from the corner, minimise last",
-    !a.headerShown && a.tools.filter((t) => t.visible).map((t) => t.act).join() === "close" && a.tools.find((t) => t.act === "close").w === 34 && a.tools.find((t) => t.act === "close").y === a.panel.y + 12,
+    !a.headerShown && a.tools.filter((t) => t.visible).map((t) => t.act).join() === "dock,close" && a.tools.find((t) => t.act === "close").w === 34 && a.tools.find((t) => t.act === "close").y === a.panel.y + 12,
     JSON.stringify(a.tools));
   check("L2 composer: a 40px round send, #D6CCBF while empty", a.send.w === 40 && a.send.h === 40 && a.sendRadius === "50%" && a.sendBg === "rgb(214, 204, 191)", JSON.stringify({ ...a.send, bg: a.sendBg, r: a.sendRadius }));
   check("L2 powered by: the words and our logo, linked", a.powered && a.powered.href === "https://gotcha.co.il" && a.powered.text === "Powered by" && a.powered.logo > 0, JSON.stringify(a.powered));
@@ -471,7 +471,7 @@ const panelLook = (page) => page.evaluate(() => {
   // 12 + the 38px avatar + 12, and its 1px rule (design 7).
   check("L2 conversation: the header, 63px, the 38px avatar, and who answers", c.view === "conversation" && c.headerShown && c.header.h === 63 && c.avatar.w === 38 && /Typing|Replies right away/.test(c.status), JSON.stringify({ v: c.view, h: c.header, a: c.avatar, s: c.status }));
   check("L2 conversation: the visitor's bubble in the main colour, cream on it", c.mine && c.mine.bg === "rgb(43, 38, 34)" && c.mine.fg === "rgb(251, 248, 243)", JSON.stringify(c.mine));
-  check("L2 conversation: the tools in the header: new conversation, then minimise", c.tools.filter((t) => t.visible).map((t) => t.act).join() === "new,close" && c.tools[0].w === 32, JSON.stringify(c.tools));
+  check("L2 conversation: the tools in the header: new conversation, dock, then minimise", c.tools.filter((t) => t.visible).map((t) => t.act).join() === "new,dock,close" && c.tools[0].w === 32, JSON.stringify(c.tools));
   await page.screenshot({ path: path.join(os.homedir(), ".cache/cc-work/shots/webchat-l2-conversation.png") }).catch(() => {});
 
   const before = inits.length;
@@ -503,6 +503,67 @@ const panelLook = (page) => page.evaluate(() => {
   check("L2 Hebrew, left: the panel 22px from the left, the tools in the left corner",
     a.panel.x === 22 && a.tools.find((t) => t.act === "close").x === a.panel.x + 12, JSON.stringify({ p: a.panel.x, t: a.tools }));
   await page.screenshot({ path: path.join(os.homedir(), ".cache/cc-work/shots/webchat-l2-he.png") }).catch(() => {});
+  await ctx.close();
+}
+
+// ── Design 7: docking (live widget L3) ──
+const dockLook = (page) => page.evaluate(() => {
+  const s = document.getElementById("gotcha-chat-root").shadowRoot;
+  const p = s.querySelector(".panel");
+  const r = p.getBoundingClientRect();
+  const b = s.querySelector('[data-act="launcher"]');
+  const cs = getComputedStyle(document.documentElement);
+  return {
+    docked: p.getAttribute("data-docked"), state: p.getAttribute("data-state"),
+    panel: { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) },
+    radius: getComputedStyle(p).borderTopLeftRadius,
+    padR: cs.paddingRight, padL: cs.paddingLeft,
+    bubble: b ? getComputedStyle(b).display : null,
+    dock: (s.querySelector('[data-act="dock"]') || {}).getAttribute?.("aria-pressed") ?? null,
+  };
+});
+
+{
+  const w = widgetConfig({ brand: { name: "Urban Supply", initial: "U" } });
+  const { ctx, page, errors } = await openSite({ widgetExists: true, widget: w, wait: 1200 });
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(600);
+  await shadowClick(page, '[data-act="dock"]');
+  await page.waitForTimeout(500);
+  const d = await dockLook(page);
+  check("L3 docked: the full height, flush right, 400px wide, square", d.docked === "1" && d.panel.x === 880 && d.panel.y === 0 && d.panel.w === 400 && d.panel.h === 900 && d.radius === "0px", JSON.stringify(d));
+  check("L3 docked: the page makes 400px of room; the bubble steps aside", d.padR === "400px" && d.bubble === "none" && d.dock === "true", JSON.stringify({ p: d.padR, b: d.bubble }));
+  await page.screenshot({ path: path.join(os.homedir(), ".cache/cc-work/shots/webchat-l3-docked.png") }).catch(() => {});
+  await shadowClick(page, '[data-act="dock"]');
+  await page.waitForTimeout(500);
+  const u = await dockLook(page);
+  check("L3 undocked: back to the floating panel, the page as it was", !u.docked && u.panel.h === 680 && u.padR === "0px" && u.bubble !== "none", JSON.stringify(u));
+  await shadowClick(page, '[data-act="dock"]');
+  await page.waitForTimeout(300);
+  await shadowClick(page, '[data-act="close"]');
+  await page.waitForTimeout(500);
+  const m = await dockLook(page);
+  check("L3 minimised while docked: closed, the page's room returned, the bubble back", m.state === "closed" && m.padR === "0px" && m.bubble !== "none", JSON.stringify(m));
+  await page.setViewportSize({ width: 800, height: 900 });
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(500);
+  const narrow = await page.evaluate(() => getComputedStyle(document.getElementById("gotcha-chat-root").shadowRoot.querySelector('[data-act="dock"]')).display);
+  check("L3 narrow screen: no dock offered", narrow === "none", narrow);
+  check("L3: logs nothing (docking)", errors.length === 0, errors.slice(0, 2).join(" | "));
+  await ctx.close();
+}
+
+{
+  const he = widgetConfig();
+  he.appearance = { ...he.appearance, language: "he", direction: "auto", launcherPosition: "left" };
+  he.ux = { ...he.ux, launcher: { ...he.ux.launcher, position: "left", mobilePosition: "left" } };
+  const { ctx, page } = await openSite({ widgetExists: true, widget: he, lang: "he", wait: 1200 });
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(600);
+  await shadowClick(page, '[data-act="dock"]');
+  await page.waitForTimeout(500);
+  const d = await dockLook(page);
+  check("L3 docked on the left: flush left, the page's room on the left", d.panel.x === 0 && d.padL === "400px" && d.padR === "0px", JSON.stringify(d));
   await ctx.close();
 }
 

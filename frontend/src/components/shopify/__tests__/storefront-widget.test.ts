@@ -76,6 +76,8 @@ async function boot(
     brand?: { name: string; initial: string } | null;
     /** A host that can start a fresh conversation (the code snippet). */
     resetConversation?: () => void;
+    /** A host that can step its bubble aside for a docked panel (the code snippet). */
+    onDock?: (docked: boolean) => void;
   } = {},
 ): Promise<Harness> {
   const host = document.createElement("div");
@@ -114,6 +116,7 @@ async function boot(
     shadow,
     ...(options.preview ? { preview: true } : {}),
     ...(options.resetConversation ? { resetConversation: options.resetConversation } : {}),
+    ...(options.onDock ? { onDock: options.onDock } : {}),
     setUnread: vi.fn(),
     onOpened: vi.fn(),
     onClosed: vi.fn(),
@@ -1603,5 +1606,66 @@ describe("★★ design 7's panel (live widget L2)", () => {
     expect(h.shadow.querySelector(".cv")).toBeNull();
     expect(h.shadow.querySelector(".tools")).toBeNull();
     expect(h.shadow.querySelector('[data-act="close"]')!.className).toBe("x");
+  });
+});
+
+describe("★★ design 7's docking (live widget L3)", () => {
+  const wide = (yes: boolean) => {
+    (window as any).matchMedia = vi.fn().mockImplementation((q: string) => ({
+      matches: q === "(min-width: 900px)" ? yes : false,
+      media: q, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(),
+    }));
+  };
+  afterEach(() => {
+    document.documentElement.style.paddingRight = "";
+    document.documentElement.style.transition = "";
+  });
+
+  it("a host that can step its bubble aside offers it; the page makes 400px of room, and gets back exactly what it had", async () => {
+    wide(true);
+    document.documentElement.style.paddingRight = "7px";
+    const onDock = vi.fn();
+    const h = await boot({ messages: [], onDock });
+    const dock = h.shadow.querySelector('[data-act="dock"]') as HTMLButtonElement;
+    expect(dock.getAttribute("aria-label")).toBe("Dock to the side of the screen");
+    expect(Array.from(h.shadow.querySelectorAll(".tools > button")).map((b) => b.getAttribute("data-act"))).toEqual(["dock", "close"]);
+    dock.click();
+    const panel = h.shadow.querySelector(".panel")!;
+    expect(panel.getAttribute("data-docked")).toBe("1");
+    expect(document.documentElement.style.paddingRight).toBe("400px");
+    expect(dock.getAttribute("aria-pressed")).toBe("true");
+    expect(dock.getAttribute("aria-label")).toBe("Undock");
+    expect(onDock).toHaveBeenLastCalledWith(true);
+    dock.click();
+    expect(panel.hasAttribute("data-docked")).toBe(false);
+    expect(document.documentElement.style.paddingRight).toBe("7px");
+    expect(onDock).toHaveBeenLastCalledWith(false);
+  });
+
+  it("minimising a docked panel gives the page its room back", async () => {
+    wide(true);
+    const onDock = vi.fn();
+    const h = await boot({ messages: [], onDock });
+    (h.shadow.querySelector('[data-act="dock"]') as HTMLButtonElement).click();
+    (h.shadow.querySelector('[data-act="close"]') as HTMLButtonElement).click();
+    expect(document.documentElement.style.paddingRight).toBe("");
+    expect(h.shadow.querySelector(".panel")!.hasAttribute("data-docked")).toBe(false);
+    expect(onDock).toHaveBeenLastCalledWith(false);
+  });
+
+  it("a screen too narrow keeps the page beside it: no docking", async () => {
+    wide(false);
+    const onDock = vi.fn();
+    const h = await boot({ messages: [], onDock });
+    (h.shadow.querySelector('[data-act="dock"]') as HTMLButtonElement).click();
+    expect(h.shadow.querySelector(".panel")!.hasAttribute("data-docked")).toBe(false);
+    expect(document.documentElement.style.paddingRight).toBe("");
+    expect(onDock).not.toHaveBeenCalled();
+  });
+
+  it("a host that cannot step its bubble aside is not offered it (the storefront)", async () => {
+    wide(true);
+    const h = await boot({ messages: [] });
+    expect(h.shadow.querySelector('[data-act="dock"]')).toBeNull();
   });
 });
