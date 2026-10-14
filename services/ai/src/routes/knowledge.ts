@@ -77,6 +77,72 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 /*
+ * GET /api/knowledge-bases/search?q=&limit= - find knowledge by what it says
+ * (2026-10-14): the documents whose title or content contain q, this
+ * workspace's only, with a short snippet around the first match.
+ *
+ * A plain case-insensitive contains (ILIKE), which works for Hebrew as for
+ * English: a person searching Knowledge Center types words they expect to
+ * see. Meaning-based search (the vector index) answers a different question
+ * and can come later as its own mode. Title matches first, then the most
+ * recently changed. Same gate as the list (ai:knowledge:read).
+ */
+export const SEARCH_MAX_Q = 200;
+export const SEARCH_MAX_LIMIT = 50;
+const SNIPPET_SIDE = 60;
+
+/** The text around the first match of q in content ("...before MATCH after..."), whitespace collapsed. */
+export function snippetAround(content: string, q: string, side = SNIPPET_SIDE): string | null {
+  const text = String(content ?? "").replace(/\s+/g, " ").trim();
+  const at = text.toLowerCase().indexOf(q.toLowerCase());
+  if (at < 0) return null;
+  const start = Math.max(0, at - side);
+  const end = Math.min(text.length, at + q.length + side);
+  return `${start > 0 ? "..." : ""}${text.slice(start, end).trim()}${end < text.length ? "..." : ""}`;
+}
+
+router.get("/search", async (req: Request, res: Response) => {
+  const q = typeof req.query.q === "string" ? req.query.q.replace(/\s+/g, " ").trim() : "";
+  if (q.length < 2) { res.status(400).json({ error: "Search for at least 2 characters", code: "QUERY_TOO_SHORT" }); return; }
+  if (q.length > SEARCH_MAX_Q) { res.status(400).json({ error: "The search is too long", code: "QUERY_TOO_LONG", max: SEARCH_MAX_Q }); return; }
+  const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, SEARCH_MAX_LIMIT) : 20;
+  try {
+    const rows = await prisma.knowledgeDocument.findMany({
+      where: {
+        tenantId: req.tenantId!,
+        OR: [{ title: { contains: q, mode: "insensitive" } }, { content: { contains: q, mode: "insensitive" } }],
+      },
+      select: { id: true, knowledgeBaseId: true, title: true, content: true, updatedAt: true, knowledgeBase: { select: { name: true } } },
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      take: 200,
+    });
+    const lower = q.toLowerCase();
+    const hits = rows
+      .map((d: any) => {
+        const inTitle = String(d.title ?? "").toLowerCase().includes(lower);
+        return {
+          id: d.id,
+          knowledgeBaseId: d.knowledgeBaseId,
+          knowledgeBaseName: d.knowledgeBase?.name ?? null,
+          title: d.title,
+          matchIn: inTitle ? "title" : "content",
+          // The content around the match; for a title-only match, the opening.
+          snippet: snippetAround(d.content ?? "", q) ?? (String(d.content ?? "").replace(/\s+/g, " ").trim().slice(0, SNIPPET_SIDE * 2) || null),
+          updatedAt: d.updatedAt,
+        };
+      })
+      // Title matches first; the rest keep the recency order.
+      .sort((a, b) => (a.matchIn === b.matchIn ? 0 : a.matchIn === "title" ? -1 : 1));
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({ data: hits.slice(0, limit), q, hasMore: hits.length > limit });
+  } catch (err) {
+    console.error("Knowledge search error:", err);
+    res.status(500).json({ error: "Failed to search knowledge" });
+  }
+});
+
+/*
  * One document, for the Knowledge center's detail drawer (K6, 2026-10-11).
  * Same permission as the list (the router's ai:knowledge:read), scoped by
  * tenant AND knowledge base. Only stored text and allowlisted provenance leave
