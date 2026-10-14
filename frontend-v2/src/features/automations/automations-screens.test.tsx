@@ -633,6 +633,27 @@ describe('★★ the new triggers and steps (Backend 972ae66d), edited where the
     expect(screen.queryByTestId('to-fill-s')).toBeNull();
   });
 
+  it('★★ AU5: an edge starts at its card’s measured bottom edge - never a fixed 112px in mid-air', async () => {
+    const tall = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(80);
+    const { container } = showBuilder(
+      draftOf(
+        { type: 'message_received', config: {} },
+        [
+          { id: 't', type: 'automation_trigger', data: {} },
+          { id: 's', type: 'send_message_text', data: { text: 'hi' } },
+        ],
+        [{ id: 'e', source: 't', target: 's', sourceHandle: null }],
+      ),
+    );
+    // Card tops sit 20px into their row; the trigger's row is 0: 20 + 80.
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-testid="builder-canvas"] > svg path')?.getAttribute('d'),
+      ).toMatch(/^M [\d.]+ 100 /),
+    );
+    tall.mockRestore();
+  });
+
   it('★ a file step writes the executor’s `filename`; an old draft’s `fileName` is read, then dropped', async () => {
     showBuilder(
       draftOf(

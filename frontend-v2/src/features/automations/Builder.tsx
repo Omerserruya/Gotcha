@@ -2,7 +2,14 @@
 
 import { ChevronRight, Maximize, Minus, MoreHorizontal, Plus, Search } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
-import { useEffect, useState, useTransition, type MouseEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useTransition,
+  type MouseEvent,
+} from 'react';
 
 import {
   ISSUE_CODES,
@@ -54,6 +61,7 @@ import styles from './Builder.module.css';
 const ZOOMS = [0.6, 0.75, 0.9, 1] as const;
 /** How long the canvas rests before the route checks it. */
 export const CHECK_AFTER_MS = 800;
+/** A card's height before it has been measured (one with a title and a line). */
 const CARD_H = 112;
 
 /**
@@ -135,6 +143,40 @@ export function Builder({
     JSON.stringify(graph) !==
       JSON.stringify({ nodes: automation.nodes ?? [], edges: automation.edges ?? [] });
   const { at, width, height } = layout(graph);
+
+  /*
+    ★★ AU5 (dev, 2026-10-14): a line started at a fixed 112px under its card,
+    and cards are as tall as their words - so most lines began in mid-air,
+    a gap below the card. Each card's rendered height is measured (and
+    re-measured as it changes) and its line starts at its bottom edge.
+    `offsetHeight` is the layout height, unscaled by the canvas zoom.
+  */
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [cardHeights, setCardHeights] = useState<ReadonlyMap<string, number>>(new Map());
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const cards = () =>
+      [...stage.querySelectorAll<HTMLElement>('[data-node-id]')].flatMap((slot) => {
+        const card = slot.firstElementChild;
+        return card instanceof HTMLElement ? [[slot.dataset.nodeId ?? '', card] as const] : [];
+      });
+    const measure = () => {
+      const next = new Map(cards().map(([id, card]) => [id, card.offsetHeight] as const));
+      setCardHeights((was) =>
+        was.size === next.size && [...next].every(([id, h]) => was.get(id) === h) ? was : next,
+      );
+    };
+    const frame = requestAnimationFrame(measure);
+    if (typeof ResizeObserver === 'undefined') return () => cancelAnimationFrame(frame);
+    const observer = new ResizeObserver(measure);
+    for (const [, card] of cards()) observer.observe(card);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [graph]);
+  const bottomOf = (id: string) => cardHeights.get(id) || CARD_H;
 
   /*
    * The route's own validator, on the canvas as it is (debounced): a step it
@@ -583,6 +625,7 @@ export function Builder({
                       blockSize: height + 80,
                     }}
                     data-testid="builder-canvas"
+                    ref={stageRef}
                   >
                     <svg
                       className={styles.lines}
@@ -595,7 +638,8 @@ export function Builder({
                         const to = at.get(edge.target);
                         if (!from || !to) return null;
                         const x1 = from.x + NODE_W / 2 + NODE_W / 2;
-                        const y1 = from.y + CARD_H + 20;
+                        // From the card's own bottom edge (AU5), to the next card's top.
+                        const y1 = from.y + 20 + bottomOf(edge.source);
                         const x2 = to.x + NODE_W / 2 + NODE_W / 2;
                         const y2 = to.y + 20;
                         const mid = (y1 + y2) / 2;
