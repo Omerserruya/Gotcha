@@ -69,6 +69,14 @@ export const errorEnvelopeSchema = z.object({
   /** A 422's field path, where the route names one (`steps[0].kind`, skills' `INVALID_SKILL`). */
   field: z.string().optional().catch(undefined),
   /**
+   * A refusal's own reason, bound and place, where the route names them -
+   * an employee's rules' `400 GUARDRAILS_INVALID { reason, max, index }`
+   * (Backend c0cd7fbc): which rule, and the limit it broke.
+   */
+  reason: z.string().optional().catch(undefined),
+  max: z.number().optional().catch(undefined),
+  index: z.number().int().nonnegative().optional().catch(undefined),
+  /**
    * A validator's refusal (`422 { error: 'validation_failed', errors,
    * warnings }` - automations' activate and live save): the issues, read by
    * the screen's own contract. Declared, or `z.object` strips them.

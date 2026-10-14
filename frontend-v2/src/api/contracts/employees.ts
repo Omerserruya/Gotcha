@@ -110,6 +110,12 @@ export const employeeSchema = z.object({
     )
     .catch([])
     .default([]),
+  /**
+   * E4: its own rules, in the owner's words - always a list since Backend
+   * c0cd7fbc. Absent or malformed is `null`, "not read", never `[]`: Save
+   * sends the whole list, and an empty one would erase rules nobody saw.
+   */
+  customGuardrails: z.array(z.string()).nullable().catch(null).default(null),
   /** `{ role, responsibility, … }` - the responsibility is 07's subline. */
   identity: z
     .object({ responsibility: z.string().nullable().catch(null).default(null) })

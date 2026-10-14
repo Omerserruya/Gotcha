@@ -109,6 +109,9 @@ async function readErrorBody(response: Response): Promise<{
   current?: number;
   retryAfterSeconds?: number;
   field?: string;
+  reason?: string;
+  max?: number;
+  index?: number;
   issues?: { readonly errors: readonly unknown[]; readonly warnings: readonly unknown[] };
 }> {
   let raw: unknown;
@@ -143,6 +146,9 @@ async function readErrorBody(response: Response): Promise<{
         ? { errors: parsed.data.errors ?? [], warnings: parsed.data.warnings ?? [] }
         : undefined,
     field: parsed.data.field,
+    reason: parsed.data.reason,
+    max: parsed.data.max,
+    index: parsed.data.index,
   };
 }
 
@@ -223,6 +229,9 @@ export class HttpClient {
         current,
         retryAfterSeconds,
         field,
+        reason,
+        max,
+        index,
         issues,
       } = await readErrorBody(response);
       const error = fail({
@@ -255,6 +264,9 @@ export class HttpClient {
         current,
         retryAfterSeconds,
         field,
+        reason,
+        max,
+        index,
         issues,
         requestId: effectiveRequestId,
       });

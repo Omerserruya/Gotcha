@@ -105,6 +105,7 @@ describe('★★ the Profile tab is ONE list, top to bottom, Tools and the hando
       'profile-responsible',
       'profile-how',
       'profile-tools',
+      'profile-limits',
       'profile-handover',
     ]);
     expect(within(list).getByTestId('profile-tools')).toHaveTextContent('Tools');
@@ -121,6 +122,7 @@ describe('★★ the Profile tab is ONE list, top to bottom, Tools and the hando
       'profile-responsible',
       'profile-how',
       'profile-tools',
+      'profile-limits',
       'profile-handover',
     ]);
   });
@@ -314,5 +316,101 @@ describe('★ a switch’s words toggle it (dev, 2026-10-13)', () => {
     profile();
     await userEvent.click(screen.getByText('WooCommerce'));
     expect(screen.getByTestId('profile-system-woocommerce-on')).toBeChecked();
+  });
+});
+
+describe('★★ E4 (2026-10-14) - "Limits": its own rules, saved with the rest', () => {
+  const RULES = { customGuardrails: ['Never discuss competitors', 'Never promise a date'] };
+
+  it('★ the stored rules, each its own words; add, reword and remove go out as ONE whole list', async () => {
+    profile(RULES);
+    expect(screen.getByTestId('profile-limits')).toHaveTextContent('Limits');
+    expect(screen.getByTestId('profile-limit-0-text')).toHaveValue('Never discuss competitors');
+    await userEvent.click(screen.getByTestId('profile-limit-1-remove'));
+    const text0 = screen.getByTestId('profile-limit-0-text');
+    await userEvent.clear(text0);
+    await userEvent.type(text0, 'Never name a competitor');
+    await userEvent.click(screen.getByTestId('profile-limit-add'));
+    await userEvent.type(screen.getByTestId('profile-limit-1-text'), '  Always sign as Maya ');
+    expect(screen.getByTestId('profile-changes')).toHaveTextContent('1 change');
+    expect(await saved()).toEqual({
+      customGuardrails: ['Never name a competitor', 'Always sign as Maya'],
+    });
+  });
+
+  it('★★ every rule removed sends [] - it clears them', async () => {
+    profile({ customGuardrails: ['Only one'] });
+    await userEvent.click(screen.getByTestId('profile-limit-0-remove'));
+    expect(screen.getByTestId('profile-limits-none')).toHaveTextContent('No rules yet.');
+    expect(await saved()).toEqual({ customGuardrails: [] });
+  });
+
+  it('★★ unread rules: said, nothing to edit, never sent', async () => {
+    profile({ customGuardrails: 'a string' });
+    expect(screen.getByTestId('profile-limits-unread')).toHaveTextContent("couldn't be read");
+    expect(screen.queryByTestId('profile-limit-add')).toBeNull();
+    await userEvent.click(screen.getByTestId('profile-tone-formal'));
+    expect(await saved()).toEqual({ tone: 'formal' });
+  });
+
+  it('a rule with no words, or over 280, cannot be saved - and says why', async () => {
+    profile(RULES);
+    await userEvent.click(screen.getByTestId('profile-limit-add'));
+    expect(screen.getByTestId('profile-limits-problem')).toHaveTextContent(
+      'Every rule needs words',
+    );
+    expect(screen.getByTestId('profile-save')).toBeDisabled();
+    expect(screen.getByTestId('profile-limit-2-text')).toHaveAttribute('aria-invalid', 'true');
+    fireEvent.change(screen.getByTestId('profile-limit-2-text'), {
+      target: { value: 'x'.repeat(281) },
+    });
+    expect(screen.getByTestId('profile-limits-problem')).toHaveTextContent(
+      'A rule can be up to 280 characters.',
+    );
+    expect(screen.getByTestId('profile-save')).toBeDisabled();
+  });
+
+  it('20 rules: no "Add", and it says so', () => {
+    profile({ customGuardrails: Array.from({ length: 20 }, (_, i) => `Rule ${i}`) });
+    expect(screen.queryByTestId('profile-limit-add')).toBeNull();
+    expect(screen.getByTestId('profile-limits-full')).toHaveTextContent('20 rules');
+  });
+
+  it('★★ refused by the server: which rule, marked in place - and an edit clears the mark', async () => {
+    save.mockResolvedValue({
+      ok: false,
+      reason: 'invalid_limits',
+      why: 'too_long',
+      max: 280,
+      index: 1,
+    });
+    profile(RULES);
+    await userEvent.type(screen.getByTestId('profile-limit-1-text'), '!');
+    await userEvent.click(screen.getByTestId('profile-save'));
+    await userEvent.click(await screen.findByTestId('profile-confirm-save'));
+    expect(await screen.findByTestId('profile-save-failed')).toHaveTextContent(
+      'Rule 2 is too long: up to 280 characters.',
+    );
+    expect(screen.getByTestId('profile-limit-1-text')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByTestId('profile-limit-0-text')).not.toHaveAttribute('aria-invalid');
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    await userEvent.type(screen.getByTestId('profile-limit-0-text'), '.');
+    expect(screen.getByTestId('profile-limit-1-text')).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('Hebrew: מגבלות, and a refusal in its words', async () => {
+    save.mockResolvedValue({
+      ok: false,
+      reason: 'invalid_limits',
+      why: 'too_many',
+      max: 20,
+      index: null,
+    });
+    profile(RULES, {}, 'he');
+    expect(screen.getByTestId('profile-limits')).toHaveTextContent('מגבלות');
+    await userEvent.type(screen.getByTestId('profile-limit-0-text'), '!');
+    await userEvent.click(screen.getByTestId('profile-save'));
+    await userEvent.click(await screen.findByTestId('profile-confirm-save'));
+    expect(await screen.findByTestId('profile-save-failed')).toHaveTextContent('עד 20 כללים.');
   });
 });

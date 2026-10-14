@@ -387,6 +387,22 @@
       },
       "mayUse": "This employee may use {name}"
     },
+    "limits": {
+      "title": "Limits",
+      "lead": "Rules it always keeps, in your words. For example: “Never promise a delivery date.”",
+      "none": "No rules yet.",
+      "unread": "Its rules couldn't be read just now, so they can't be changed here. Reload to try again.",
+      "add": "Add a rule",
+      "placeholder": "For example: never offer a discount on your own",
+      "labelFor": "Rule {n}",
+      "removeFor": "Remove rule {n}",
+      "full": "{max} rules, the most it keeps.",
+      "problem": {
+        "empty": "Every rule needs words. Write them, or remove it.",
+        "tooLong": "A rule can be up to {max} characters.",
+        "tooMany": "Up to {max} rules."
+      }
+    },
     "handover": {
       "title": "Handoff to a person",
       "lead": "It hands the conversation to your team when one of these happens.",
@@ -416,9 +432,15 @@
       "tone": "Its tone",
       "disclosesAi": "Whether it says it's AI",
       "handover": "When it hands over",
-      "access": "The business systems it may use"
+      "access": "The business systems it may use",
+      "limits": "Its rules"
     },
     "saveProblem": {
+      "limits": {
+        "too_long": "Rule {n} is too long: up to {max} characters.",
+        "too_many": "Up to {max} rules.",
+        "other": "One of its rules wasn't saved. Check that each has words."
+      },
       "forbidden": "You don't have permission to change AI employees.",
       "gone": "This employee isn't here any more.",
       "invalid_access": "One of the business systems isn't connected here any more. Reload and choose again.",

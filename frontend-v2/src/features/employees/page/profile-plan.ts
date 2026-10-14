@@ -17,6 +17,11 @@ import { disclosesAi, type Employee } from '@/api/contracts/employees';
  *                    1-300 characters (400 INVALID_ESCALATION_RULES)
  *   access           `integrationAccess` - the business systems it may use,
  *                    the WHOLE list (Backend 00c6c229)
+ *   limits           `customGuardrails` - its own rules in the owner's words,
+ *                    the WHOLE list (E4, Backend c0cd7fbc): at most 20, each
+ *                    at most 280 characters; trimmed and repeats dropped by
+ *                    the route, and over a limit 400 GUARDRAILS_INVALID
+ *                    {reason, max, index}, never cut
  *
  * No languages: it always answers in the customer's language, by rule, so
  * nothing here writes `languages` (Omer, 2026-10-13, E6). No sign-off: no
@@ -26,6 +31,10 @@ import { disclosesAi, type Employee } from '@/api/contracts/employees';
 /** The route's bounds on `escalationRules`. */
 export const MAX_RULES = 50;
 export const MAX_RULE_LABEL = 300;
+
+/** The route's bounds on `customGuardrails` (E4). */
+export const MAX_LIMITS = 20;
+export const MAX_LIMIT_LENGTH = 280;
 
 /** One handover condition: its words and whether it is on; the rest as read. */
 export type DraftRule = Readonly<Record<string, unknown>> & {
@@ -41,9 +50,15 @@ export type ProfileDraft = {
   readonly rules: readonly DraftRule[];
   /** The systems it may use; `null` when they could not be read (then never sent). */
   readonly access: readonly string[] | null;
+  /**
+   * E4: its own rules, in order; `null` when they could not be read - then
+   * never sent, since the list replaces what is stored.
+   */
+  readonly limits: readonly string[] | null;
 };
 
-export type ProfileField = 'responsibility' | 'tone' | 'disclosesAi' | 'handover' | 'access';
+export type ProfileField =
+  'responsibility' | 'tone' | 'disclosesAi' | 'handover' | 'access' | 'limits';
 
 /** `access`: the employee's allowlist as read (`GET /:id/integration-access`), or `null`. */
 export function draftOf(employee: Employee, access: readonly string[] | null = null): ProfileDraft {
@@ -53,6 +68,7 @@ export function draftOf(employee: Employee, access: readonly string[] | null = n
     tone: employee.tone,
     disclosesAi: disclosesAi(employee),
     rules: employee.escalationRules.map((rule) => ({ ...rule })),
+    limits: employee.customGuardrails === null ? null : [...employee.customGuardrails],
   };
 }
 
@@ -80,6 +96,20 @@ export function rulesProblem(rules: readonly DraftRule[]): 'empty' | 'tooMany' |
   return null;
 }
 
+/**
+ * Why its own rules cannot be saved as they are, or `null`: a rule with no
+ * words, one over the route's length, or more than it keeps.
+ */
+export function limitsProblem(
+  limits: readonly string[] | null,
+): 'empty' | 'tooLong' | 'tooMany' | null {
+  if (limits === null) return null;
+  if (limits.some((rule) => rule.trim() === '')) return 'empty';
+  if (limits.some((rule) => rule.trim().length > MAX_LIMIT_LENGTH)) return 'tooLong';
+  if (limits.length > MAX_LIMITS) return 'tooMany';
+  return null;
+}
+
 /** The fields the draft changes, in the page's order. */
 export function changesIn(
   employee: Employee,
@@ -94,6 +124,9 @@ export function changesIn(
   if (!sameRules(draft.rules, stored.rules)) changed.push('handover');
   if (draft.access !== null && stored.access !== null && !sameSet(draft.access, stored.access)) {
     changed.push('access');
+  }
+  if (draft.limits !== null && stored.limits !== null && !sameList(draft.limits, stored.limits)) {
+    changed.push('limits');
   }
   return changed;
 }
@@ -114,6 +147,9 @@ export function editPatch(
       patch.disclosesAi = draft.disclosesAi;
     } else if (field === 'access') {
       patch.integrationAccess = [...(draft.access ?? [])].sort();
+    } else if (field === 'limits') {
+      // The whole list: a rule left out is removed; `[]` clears them.
+      patch.customGuardrails = (draft.limits ?? []).map((rule) => rule.trim());
     } else {
       // The whole array: PATCH replaces it, so a rule left out is removed.
       patch.escalationRules = rulesBody(draft.rules);
@@ -127,6 +163,10 @@ function sameRules(a: readonly DraftRule[], b: readonly DraftRule[]): boolean {
     a.length === b.length &&
     a.every((rule, i) => rule.label.trim() === b[i]!.label.trim() && rule.enabled === b[i]!.enabled)
   );
+}
+
+function sameList(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((rule, i) => rule.trim() === b[i]!.trim());
 }
 
 function sameSet(a: readonly string[], b: readonly string[]): boolean {

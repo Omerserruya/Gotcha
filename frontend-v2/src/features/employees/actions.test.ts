@@ -38,4 +38,45 @@ describe('★ the employee page’s Save at the wire', () => {
     refuse({ kind: 'server', status: 500 });
     expect(await saveEmployeeEdits('a', {})).toEqual({ ok: false, reason: 'failed' });
   });
+
+  it('★★ E4: its own rules refused - which rule, and the limit it broke', async () => {
+    const refuse = (init: ConstructorParameters<typeof ApiError>[0]) =>
+      patch.mockRejectedValueOnce(new ApiError(init));
+    refuse({
+      kind: 'validation',
+      status: 400,
+      code: 'GUARDRAILS_INVALID',
+      reason: 'too_long',
+      max: 280,
+      index: 2,
+    });
+    expect(await saveEmployeeEdits('a', {})).toEqual({
+      ok: false,
+      reason: 'invalid_limits',
+      why: 'too_long',
+      max: 280,
+      index: 2,
+    });
+    refuse({
+      kind: 'validation',
+      status: 400,
+      code: 'GUARDRAILS_INVALID',
+      reason: 'too_many',
+      max: 20,
+    });
+    expect(await saveEmployeeEdits('a', {})).toMatchObject({
+      why: 'too_many',
+      max: 20,
+      index: null,
+    });
+    // A reason it does not know: still its own rules, said plainly.
+    refuse({
+      kind: 'validation',
+      status: 400,
+      code: 'GUARDRAILS_INVALID',
+      reason: 'not_text',
+      index: 0,
+    });
+    expect(await saveEmployeeEdits('a', {})).toMatchObject({ why: 'other', max: null, index: 0 });
+  });
 });

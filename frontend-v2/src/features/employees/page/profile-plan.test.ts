@@ -2,7 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import { employeeSchema } from '@/api/contracts/employees';
 
-import { changesIn, draftOf, editPatch, MAX_RULES, newRule, rulesProblem } from './profile-plan';
+import {
+  changesIn,
+  draftOf,
+  editPatch,
+  limitsProblem,
+  MAX_LIMIT_LENGTH,
+  MAX_LIMITS,
+  MAX_RULES,
+  newRule,
+  rulesProblem,
+} from './profile-plan';
 
 /** As the list route sends it: the stored objects carry more than the page draws. */
 const employee = (over: Record<string, unknown> = {}) =>
@@ -21,6 +31,7 @@ const employee = (over: Record<string, unknown> = {}) =>
       { label: 'Asks for a person', type: 'keyword', value: 'human', enabled: true },
       { label: 'Order over 1000', type: 'amount', value: 1000, enabled: false },
     ],
+    customGuardrails: ['Never discuss competitors'],
     ...over,
   });
 
@@ -50,6 +61,7 @@ describe('★ the draft starts as stored; nothing is a change until it differs',
         disclosesAi: false,
         rules: [],
         access: null,
+        limits: null,
       }),
     ).toEqual(['responsibility', 'tone', 'disclosesAi', 'handover']);
     expect(d.disclosesAi).toBe(true);
@@ -146,21 +158,73 @@ describe('★ nothing writes what the page does not edit', () => {
     expect(Object.keys(d).sort()).toEqual([
       'access',
       'disclosesAi',
+      'limits',
       'responsibility',
       'rules',
       'tone',
     ]);
     const all = editPatch(
       e,
-      { responsibility: 'x', tone: 'formal', disclosesAi: false, rules: [], access: ['a'] },
+      {
+        responsibility: 'x',
+        tone: 'formal',
+        disclosesAi: false,
+        rules: [],
+        access: ['a'],
+        limits: ['Never promise a date'],
+      },
       [],
     );
     expect(Object.keys(all).sort()).toEqual([
+      'customGuardrails',
       'disclosesAi',
       'escalationRules',
       'identity',
       'integrationAccess',
       'tone',
     ]);
+  });
+});
+
+describe('★★ E4 (2026-10-14) - its own rules, the whole list, saved with the rest', () => {
+  it('★ the list as stored is no change; reworded, added or removed, it is - and the WHOLE list is sent, trimmed', () => {
+    const e = employee();
+    expect(changesIn(e, draftOf(e))).toEqual([]);
+    expect(changesIn(e, { ...draftOf(e), limits: ['  Never discuss competitors '] })).toEqual([]);
+    const added = {
+      ...draftOf(e),
+      limits: ['Never discuss competitors', ' Never promise a date '],
+    };
+    expect(changesIn(e, added)).toEqual(['limits']);
+    expect(editPatch(e, added)).toEqual({
+      customGuardrails: ['Never discuss competitors', 'Never promise a date'],
+    });
+  });
+
+  it('★★ every rule removed: [] is sent - it clears them', () => {
+    const e = employee();
+    expect(editPatch(e, { ...draftOf(e), limits: [] })).toEqual({ customGuardrails: [] });
+  });
+
+  it('★★ unread rules (null) are never sent, whatever the draft says', () => {
+    const e = employee({ customGuardrails: 'not a list' });
+    expect(e.customGuardrails).toBeNull();
+    expect(draftOf(e).limits).toBeNull();
+    expect(changesIn(e, { ...draftOf(e), limits: ['x'] })).toEqual([]);
+    expect(editPatch(e, { ...draftOf(e), limits: ['x'] })).toEqual({});
+  });
+
+  it('what cannot be saved: a rule with no words, one over 280, or more than 20', () => {
+    expect(limitsProblem(null)).toBeNull();
+    expect(limitsProblem(['ok'])).toBeNull();
+    expect(limitsProblem(['ok', '  '])).toBe('empty');
+    expect(limitsProblem(['x'.repeat(MAX_LIMIT_LENGTH)])).toBeNull();
+    expect(limitsProblem([`  ${'x'.repeat(MAX_LIMIT_LENGTH)}  `])).toBeNull();
+    expect(limitsProblem(['x'.repeat(MAX_LIMIT_LENGTH + 1)])).toBe('tooLong');
+    expect(limitsProblem(Array.from({ length: MAX_LIMITS }, (_, i) => `r${i}`))).toBeNull();
+    expect(limitsProblem(Array.from({ length: MAX_LIMITS + 1 }, (_, i) => `r${i}`))).toBe(
+      'tooMany',
+    );
+    expect([MAX_LIMITS, MAX_LIMIT_LENGTH]).toEqual([20, 280]);
   });
 });

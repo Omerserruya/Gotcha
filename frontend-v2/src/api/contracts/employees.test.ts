@@ -27,6 +27,7 @@ const employee = (over: Partial<Employee> = {}): Employee => ({
   tone: '',
   languages: {},
   escalationRules: [],
+  customGuardrails: [],
   identity: null,
   goal: null,
   persona: null,

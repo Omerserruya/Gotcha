@@ -180,6 +180,32 @@ describe('★★ the entitlement gate’s own fields survive the envelope', () =
     expect(api.retryAfterSeconds).toBeUndefined();
   });
 
+  it('★★ E4: keeps a refusal’s own reason, bound and place - which rule broke which limit (c0cd7fbc)', async () => {
+    respond(400, {
+      error: 'rule 3 is too long',
+      code: 'GUARDRAILS_INVALID',
+      field: 'customGuardrails',
+      reason: 'too_long',
+      max: 280,
+      index: 2,
+    });
+    const api = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(api.code).toBe('GUARDRAILS_INVALID');
+    expect([api.reason, api.max, api.index, api.field]).toEqual([
+      'too_long',
+      280,
+      2,
+      'customGuardrails',
+    ]);
+  });
+
+  it('★ a bad place is no place - the code and the rest survive', async () => {
+    respond(400, { code: 'GUARDRAILS_INVALID', reason: 7, max: 'many', index: -1 });
+    const api = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(api.code).toBe('GUARDRAILS_INVALID');
+    expect([api.reason, api.max, api.index]).toEqual([undefined, undefined, undefined]);
+  });
+
   it('★ keeps a null `currentPlan`, which means the tenant has no plan at all', async () => {
     /*
      * `.nullable()` and not just `.optional()`: the resolver sends an explicit

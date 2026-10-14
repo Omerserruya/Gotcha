@@ -21,10 +21,12 @@ import {
   changesIn,
   draftOf,
   editPatch,
+  limitsProblem,
   MAX_RULE_LABEL,
   rulesProblem,
   type ProfileDraft,
 } from './profile-plan';
+import { EmployeeLimits } from './EmployeeLimits';
 import { HandoverRules } from './HandoverRules';
 import styles from './EmployeePage.module.css';
 import { EmployeeToolLevels, type ToolLevelRow } from './EmployeeToolLevels';
@@ -74,11 +76,9 @@ export function EmployeeProfile({
   const [draft, setDraft] = useState<ProfileDraft>(() => draftOf(employee, stored));
   const set = (patch: Partial<ProfileDraft>) => setDraft((d) => ({ ...d, ...patch }));
   const changes = changesIn(employee, draft, stored);
-  const problem = rulesProblem(draft.rules);
+  const problem = rulesProblem(draft.rules) ?? limitsProblem(draft.limits);
   const [confirming, setConfirming] = useState(false);
-  const [refused, setRefused] = useState<
-    Exclude<EmployeeEditResult, { ok: true }>['reason'] | null
-  >(null);
+  const [refused, setRefused] = useState<Exclude<EmployeeEditResult, { ok: true }> | null>(null);
   const [saved, setSaved] = useState(false);
   const [saving, startSave] = useTransition();
 
@@ -87,7 +87,7 @@ export function EmployeeProfile({
       setRefused(null);
       const result = await saveEmployeeEdits(employee.id, editPatch(employee, draft, stored));
       if (!result.ok) {
-        setRefused(result.reason);
+        setRefused(result);
         return;
       }
       setConfirming(false);
@@ -279,6 +279,21 @@ export function EmployeeProfile({
             </div>
           </section>
 
+          {/* ★★ E4 (2026-10-14): its own rules, in the owner's words - see EmployeeLimits. */}
+          <section className={styles.section} data-testid="profile-limits">
+            <h2 className={styles.title}>{t('limits.title')}</h2>
+            <p className={styles.quiet}>{t('limits.lead')}</p>
+            <EmployeeLimits
+              limits={draft.limits}
+              refusedAt={refused?.reason === 'invalid_limits' ? refused.index : null}
+              onChange={(limits) => {
+                // A refused rule's place is the list's as sent: an edit moves it.
+                if (refused?.reason === 'invalid_limits') setRefused(null);
+                set({ limits });
+              }}
+            />
+          </section>
+
           <section className={styles.section} data-testid="profile-handover">
             <h2 className={styles.title}>{t('handover.title')}</h2>
             <p className={styles.quiet}>{t('handover.lead')}</p>
@@ -310,7 +325,12 @@ export function EmployeeProfile({
             </ul>
             {refused ? (
               <p className={styles.problem} role="alert" data-testid="profile-save-failed">
-                {t(`saveProblem.${refused}`, { max: MAX_RULE_LABEL })}
+                {refused.reason === 'invalid_limits'
+                  ? t(`saveProblem.limits.${refused.why}`, {
+                      n: (refused.index ?? 0) + 1,
+                      max: refused.max ?? 0,
+                    })
+                  : t(`saveProblem.${refused.reason}`, { max: MAX_RULE_LABEL })}
               </p>
             ) : null}
             <span className={styles.confirmActions}>

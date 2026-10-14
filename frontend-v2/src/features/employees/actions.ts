@@ -65,6 +65,17 @@ export type EmployeeEditResult =
   | {
       readonly ok: false;
       readonly reason: 'forbidden' | 'gone' | 'invalid_access' | 'invalid_rules' | 'failed';
+    }
+  | {
+      /**
+       * E4: its own rules refused (400 GUARDRAILS_INVALID, Backend c0cd7fbc) -
+       * which rule (`index`, in the list sent) and the limit it broke.
+       */
+      readonly ok: false;
+      readonly reason: 'invalid_limits';
+      readonly why: 'too_long' | 'too_many' | 'other';
+      readonly max: number | null;
+      readonly index: number | null;
     };
 
 export async function saveEmployeeEdits(
@@ -88,6 +99,15 @@ export async function saveEmployeeEdits(
       if (cause.code === 'INVALID_INTEGRATION_ACCESS')
         return { ok: false, reason: 'invalid_access' };
       if (cause.code === 'INVALID_ESCALATION_RULES') return { ok: false, reason: 'invalid_rules' };
+      if (cause.code === 'GUARDRAILS_INVALID') {
+        return {
+          ok: false,
+          reason: 'invalid_limits',
+          why: cause.reason === 'too_long' || cause.reason === 'too_many' ? cause.reason : 'other',
+          max: cause.max ?? null,
+          index: cause.index ?? null,
+        };
+      }
     }
     logger.warn('employees.edit_failed', { status: isApiError(cause) ? cause.status : undefined });
     return { ok: false, reason: 'failed' };

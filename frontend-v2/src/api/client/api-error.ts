@@ -107,6 +107,10 @@ export interface ApiErrorInit {
   readonly retryAfterSeconds?: number;
   /** A 422's field path, where the route names one. */
   readonly field?: string;
+  /** A refusal's own reason, bound and place (`GUARDRAILS_INVALID`'s `reason`, `max`, `index`). */
+  readonly reason?: string;
+  readonly max?: number;
+  readonly index?: number;
   /** A validator's refusal: its `errors` and `warnings`, unparsed. */
   readonly issues?: { readonly errors: readonly unknown[]; readonly warnings: readonly unknown[] };
   readonly cause?: unknown;
@@ -142,6 +146,10 @@ export class ApiError extends Error {
   readonly retryAfterSeconds?: number;
   /** A 422's field path, where the route names one. */
   readonly field?: string;
+  /** A refusal's own reason, bound and place (`GUARDRAILS_INVALID`'s `reason`, `max`, `index`). */
+  readonly reason?: string;
+  readonly max?: number;
+  readonly index?: number;
   /** A validator's refusal: its `errors` and `warnings`, unparsed - the screen's contract reads them. */
   readonly issues?: { readonly errors: readonly unknown[]; readonly warnings: readonly unknown[] };
 
@@ -172,6 +180,9 @@ export class ApiError extends Error {
     this.current = init.current;
     this.retryAfterSeconds = init.retryAfterSeconds;
     this.field = init.field;
+    this.reason = init.reason;
+    this.max = init.max;
+    this.index = init.index;
     this.issues = init.issues;
   }
 
