@@ -894,6 +894,16 @@ export async function executeAdapterTool(opts: {
       if (slug === "woocommerce" && toolName === "list_customer_orders") {
         opts.args = guard.withOwnOrderSelectors(guardIdentity, opts.args as Record<string, any>);
       }
+      // From a customer conversation a coupon is only ever a store credit for
+      // one of their own orders, limited to its customer (the adapter sets
+      // the restriction from the order). Never an open code anyone can use.
+      if (slug === "woocommerce" && toolName === "create_coupon" && !String((opts.args as any)?.order_id ?? "").trim()) {
+        return {
+          ok: false,
+          failure: "refused",
+          reason: "store_credit_needs_order: in a customer conversation a coupon is a store credit for one of the customer's orders. Pass that order's order_id.",
+        };
+      }
       const pre = guard.checkArgsAllowed(guardIdentity, toolName, opts.args as Record<string, any>);
       if (!pre.allowed) {
         await guard.recordSecurityDenial({

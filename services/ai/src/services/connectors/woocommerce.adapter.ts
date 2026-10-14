@@ -129,6 +129,7 @@ const TOOLS: ToolDefinition[] = [
     parameters: {
       type: "object",
       properties: {
+        order_id: { type: "string", description: "For a store credit (instead of a refund): the order it replaces. The coupon is then usable only by that order's customer. Required from a customer conversation." },
         code: { type: "string", description: "Coupon code customers will type." },
         amount: { type: "string", description: "Percentage ('10' = 10%), or a fixed amount in the store's currency when discount_type is fixed_cart." },
         discount_type: { type: "string", enum: ["percent", "fixed_cart"], description: "percent (default) or a fixed amount off the cart." },
@@ -485,6 +486,19 @@ const WooCommerceAdapter: ProviderAdapter = {
           individual_use: true,
         };
         if (args.expires_iso) body.date_expires = String(args.expires_iso);
+        // A store credit for an order (2026-10-14: "credit575" was a ₪549
+        // code anyone could redeem): usable only by that order's customer.
+        // The address is the order's own billing email, read here, never one
+        // the model passes; no billing email, no credit.
+        if (args.order_id != null && String(args.order_id).trim()) {
+          const order: any = await wooRequest(auth, "GET", `${base}/orders/${encodeURIComponent(String(args.order_id).trim())}`);
+          const email = typeof order?.billing?.email === "string" ? order.billing.email.trim().toLowerCase() : "";
+          if (!email.includes("@")) {
+            throw new Error("credit_needs_billing_email: this order has no billing email, so a store credit could not be limited to its customer. Offer a refund instead, or hand over to a person.");
+          }
+          body.email_restrictions = [email];
+          body.description = `store credit for order #${order.number ?? order.id}`;
+        }
         return await wooRequest(auth, "POST", `${base}/coupons`, body);
       }
       case "list_order_notes":

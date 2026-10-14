@@ -237,3 +237,51 @@ describe("★ a guest order's other identifier links the contact the shared way"
     expect(row.data.metadata.tool).toBe("woocommerce.get_order");
   });
 });
+
+// ─── Store credits from a customer conversation (2026-10-14) ───
+
+describe("★ a store credit is limited to the order's customer", () => {
+  const posted = () => (globalThis as any).fetch.mock.calls.filter((c: any[]) => c[1]?.method === "POST").map((c: any[]) => JSON.parse(c[1].body));
+
+  it("for their own order: email_restrictions = the ORDER's billing email (never the model's), described as a credit", async () => {
+    store({ "GET /orders/1001": { ...DANA_ORDER, billing: { ...DANA_ORDER.billing, email: "Dana@X.com" } }, "POST /coupons": { id: 9, code: "credit1001" } });
+    const r = await run("create_coupon", { order_id: "1001", code: "credit1001", amount: "100", discount_type: "fixed_cart" });
+    expect(r.ok).toBe(true);
+    expect(posted()).toEqual([expect.objectContaining({ code: "credit1001", amount: "100", discount_type: "fixed_cart", email_restrictions: ["dana@x.com"], description: "store credit for order #1001" })]);
+    // An email the model adds for someone else is refused outright, before the store.
+    store({});
+    const bad = await run("create_coupon", { order_id: "1001", code: "x", amount: "1", email: "attacker@evil.com" });
+    expect(bad.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("★ no order: refused before the store is asked (no open code from a customer chat)", async () => {
+    store({});
+    const r = await run("create_coupon", { code: "free100", amount: "100", discount_type: "fixed_cart" });
+    expect(r.ok).toBe(false);
+    expect((r as any).reason).toMatch(/^store_credit_needs_order/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("★ someone else's order: refused, nothing created", async () => {
+    store({ "/orders/1002": NOA_ORDER });
+    const r = await run("create_coupon", { order_id: "1002", code: "x", amount: "10" });
+    expect(r.ok).toBe(false);
+    expect(calls.map((c) => c.method)).toEqual(["GET"]);
+  });
+
+  it("★ their order without a billing email: no credit (it could not be limited to them)", async () => {
+    store({ "GET /orders/1001": { ...DANA_ORDER, billing: { ...DANA_ORDER.billing, email: "" } } });
+    const r = await run("create_coupon", { order_id: "1001", code: "credit1001", amount: "100" });
+    expect(r.ok).toBe(false);
+    expect((r as any).reason).toMatch(/credit_needs_billing_email/);
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("staff (internal scope) can still create an open promotion code", async () => {
+    store({ "POST /coupons": { id: 10, code: "summer" } });
+    const r = await executeAdapterTool({ tenantId: "t1", accessScope: "internal", toolFunctionName: "woocommerce.create_coupon", args: { code: "summer", amount: "10" } });
+    expect(r.ok).toBe(true);
+    expect(posted()[0]).not.toHaveProperty("email_restrictions");
+  });
+});

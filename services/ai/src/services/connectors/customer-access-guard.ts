@@ -54,6 +54,9 @@ export const PROTECTED_WOO_TOOLS = new Set([
   "get_order", "list_orders", "get_customer", "search_customers", "update_order_status",
   "list_order_notes", "add_order_note", "list_refunds", "create_refund", "cancel_order",
   "update_shipping_address", "update_customer", "list_customer_orders", "get_shipment_tracking",
+  // A coupon from a customer conversation is a store credit for one of THEIR
+  // orders (2026-10-14): guarded so the order it names is checked as theirs.
+  "create_coupon",
 ]);
 
 export type GuardedProvider = "shopify" | "woocommerce";
