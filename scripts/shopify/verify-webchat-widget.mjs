@@ -114,6 +114,7 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
   const inits = [];
   const starts = [];
   const validates = [];
+  const messages = [];
   const adds = [];
   if (blockPopups) await page.addInitScript(() => { window.open = () => null; });
   // wa.me is never reached: a popup pointed at it gets an empty page.
@@ -122,6 +123,7 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
     const url = new URL(route.request().url());
     calls.push(url.pathname);
     if (url.pathname === "/api/embedded-chat/init") inits.push(JSON.parse(route.request().postData() || "{}"));
+    if (url.pathname === "/api/embedded-chat/message") messages.push(JSON.parse(route.request().postData() || "{}"));
     if (url.pathname === "/api/embedded-chat/cart/validate") {
       validates.push(JSON.parse(route.request().postData() || "{}"));
       const answer = cart || { status: 200, body: { data: { cartUrl: `${ORIGIN}/?add-to-cart=111&quantity=1`, productId: "111", variantId: "9001", quantity: 1 } } };
@@ -188,7 +190,7 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
 
   await page.goto(new URL(pagePath, ORIGIN).toString(), { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(wait);
-  return { ctx, page, calls, errors, inits, starts, validates, adds };
+  return { ctx, page, calls, errors, inits, starts, validates, adds, messages };
 }
 
 // ── A widget that no longer exists ──
@@ -689,9 +691,9 @@ const waWidget = (extra = {}) => {
 // The page the visitor is on goes with them to WhatsApp (supervisor: the
 // AI greets about the viewed product).
 for (const [label, pagePath, bodyClass, want] of [
-  ["a Woo product page", "/product/blue-runner/", "single-product postid-12", { pageType: "product", productHandle: "blue-runner", path: "/product/blue-runner/" }],
+  ["a Woo product page: its slug and its id", "/product/blue-runner/", "single-product postid-12", { pageType: "product", productHandle: "blue-runner", path: "/product/blue-runner/", productId: "12" }],
   ["plain permalinks", "/?product=red-cap", "single-product", { pageType: "product", productHandle: "red-cap", path: "/" }],
-  ["a Hebrew slug (the server keeps ASCII handles only)", "/product/%D7%A0%D7%A2%D7%9C/", "single-product", { pageType: "product", productHandle: null, path: "/product/%D7%A0%D7%A2%D7%9C/" }],
+  ["a Hebrew slug, decoded (Backend 2c32a9a1)", "/product/%D7%A0%D7%A2%D7%9C/", "single-product", { pageType: "product", productHandle: "נעל", path: "/product/%D7%A0%D7%A2%D7%9C/" }],
   ["not a product page", "/about/", "page", { pageType: "page", productHandle: null, path: "/about/" }],
 ]) {
   const { ctx, page, starts } = await openSite({ widgetExists: true, widget: waWidget(), wait: 1000, pagePath, bodyClass, blockPopups: true });
@@ -772,6 +774,18 @@ const addToCartClick = (page) => page.evaluate(() => {
   await page.waitForTimeout(600);
   const err = await page.evaluate(() => (document.getElementById("gotcha-chat-root").shadowRoot.querySelector(".cart-err") || {}).textContent);
   check("L6 a refusal in words (422 out_of_stock)", err === "This one is sold out.", err);
+  await ctx.close();
+}
+
+{
+  // The site widget's messages carry the page they were written on (Backend 2c32a9a1).
+  const { ctx, page, messages } = await openSite({ widgetExists: true, widget: widgetConfig(), wait: 1000, pagePath: "/product/blue-runner/", bodyClass: "single-product postid-12" });
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(500);
+  await page.evaluate(() => document.getElementById("gotcha-chat-root").shadowRoot.querySelector(".qs .q").click());
+  await page.waitForTimeout(800);
+  const c = messages[0] && messages[0].context;
+  check("L6 a message carries the page: the product's id and slug", !!c && c.productId === "12" && c.productHandle === "blue-runner" && c.pageType === "product", JSON.stringify(c));
   await ctx.close();
 }
 

@@ -72,6 +72,7 @@ async function openShop({ widget = widgetConfig(), availability = "online", lang
   const page = await ctx.newPage();
   const calls = [];
   const starts = [];
+  const conversations = [];
   await page.addInitScript(() => { window.open = () => null; });
   await page.route(`${ORIGIN}/**`, async (route) => {
     const req = route.request();
@@ -99,7 +100,11 @@ async function openShop({ widget = widgetConfig(), availability = "online", lang
     // The App Proxy, set up, for an anonymous shopper.
     if (url.pathname === "/apps/gotcha-chat/identity") return json(200, { data: { identified: false } });
     if (url.pathname === "/api/shopify-chat/bootstrap") return json(200, { data: { session: { token: "visitor-token" }, availability, widget } });
-    if (url.pathname === "/api/shopify-chat/conversation") return json(200, { data: { conversationId: "c1", status: "OPEN", isHandedOver: false, messages: [] } });
+    if (url.pathname === "/api/shopify-chat/conversation") {
+      const body = JSON.parse(req.postData() || "{}");
+      conversations.push(body);
+      return json(200, { data: { conversationId: body.fresh ? "c2" : "c1", status: "OPEN", isHandedOver: false, messages: [] } });
+    }
     if (url.pathname.startsWith("/api/shopify-chat/messages")) return json(200, { data: { messages: [] } });
     if (url.pathname === "/api/shopify-chat/whatsapp-start") {
       starts.push({ body: JSON.parse(req.postData() || "{}"), token: req.headers()["x-visitor-token"] || null });
@@ -114,7 +119,7 @@ async function openShop({ widget = widgetConfig(), availability = "online", lang
   page.on("response", (r) => { if (r.status() >= 400) errors.push(`${r.status()} ${new URL(r.url()).pathname}`); });
   await page.goto(`${ORIGIN}/`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(wait);
-  return { ctx, page, calls, starts, errors };
+  return { ctx, page, calls, starts, errors, conversations };
 }
 
 const look = (page) => page.evaluate(() => {
@@ -148,8 +153,8 @@ const click = (page, sel) => page.evaluate((q) => document.getElementById("gotch
   await page.waitForTimeout(900);
   const o = await look(page);
   check("S2 open: design 7's panel, and the bubble is the chevron", o.panel === "open" && o.panelRect.w === 400 && o.panelRect.bottom === 96 && o.chevron && !o.dot, JSON.stringify({ p: o.panel, r: o.panelRect, c: o.chevron }));
-  check("S2 open: Dock is offered (the storefront steps its bubble aside); New conversation is not (no contract yet)",
-    o.tools.join() === "dock,close", o.tools.join());
+  check("S2 open: New conversation and Dock are offered on the storefront too",
+    o.tools.join() === "new,dock,close", o.tools.join());
   await click(page, '[data-act="dock"]');
   await page.waitForTimeout(500);
   const d = await look(page);
@@ -239,6 +244,25 @@ const click = (page, sel) => page.evaluate((q) => document.getElementById("gotch
   const a = await look(page);
   check("S8 Hebrew, left: the bubble and the pop-up on the left, in Hebrew", a.bubble.x === 22 && a.pop.x === 22 && a.popText.includes("עונה מיד"), JSON.stringify({ b: a.bubble.x, p: a.pop.x, t: a.popText }));
   await page.screenshot({ path: path.join(SHOTS, "storefront-l5-he.png") }).catch(() => {});
+  await ctx.close();
+}
+
+{
+  // New conversation (Backend 2c32a9a1): the next /conversation is {fresh: true}.
+  const { ctx, page, conversations } = await openShop();
+  await click(page, '[data-act="launcher"]');
+  await page.waitForTimeout(900);
+  await page.evaluate(() => document.getElementById("gotcha-chat-root").shadowRoot.querySelector(".qs .q").click());
+  await page.waitForTimeout(800);
+  await click(page, '[data-act="new"]');
+  await page.waitForTimeout(300);
+  const view = await page.evaluate(() => document.getElementById("gotcha-chat-root").shadowRoot.querySelector(".panel").getAttribute("data-view"));
+  const before = conversations.length;
+  await page.evaluate(() => document.getElementById("gotcha-chat-root").shadowRoot.querySelector(".qs .q").click());
+  await page.waitForTimeout(800);
+  const next = conversations.slice(before);
+  check("S9 New conversation: back to the welcome, and the next message asks for a fresh one",
+    view === "welcome" && next.length >= 1 && next[0].fresh === true, JSON.stringify({ view, next }));
   await ctx.close();
 }
 

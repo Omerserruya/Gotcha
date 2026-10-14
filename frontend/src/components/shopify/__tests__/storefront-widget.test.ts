@@ -1563,6 +1563,12 @@ describe("★★ design 7's panel (live widget L2)", () => {
     expect(reset).toHaveBeenCalledTimes(1);
     expect(h.shadow.querySelector(".panel")!.getAttribute("data-view")).toBe("welcome");
     expect(h.shadow.querySelector(".msgs")).toBeNull();
+    // The next message asks for a fresh conversation, never the one just left.
+    h.post.mockClear();
+    (h.shadow.querySelector(".qs .q") as HTMLButtonElement).click();
+    await new Promise((r) => setTimeout(r, 10));
+    const conv = h.post.mock.calls.find((c) => String(c[0]).endsWith("/conversation"));
+    expect(conv![1]).toEqual({ fresh: true });
   });
 
   it("a host that cannot start a fresh conversation is not offered one (the storefront)", async () => {

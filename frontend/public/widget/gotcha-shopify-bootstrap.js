@@ -55,9 +55,9 @@
   // bootstrap can only ever load the exact bundle it was built against -
   // a hand-typed ?v= let four commits change the bundle without changing
   // its URL, and every cache kept serving the old one.
-  var CHAT_BUNDLE = "gotcha-shopify-chat.64e2b254bed0.js";
+  var CHAT_BUNDLE = "gotcha-shopify-chat.25b75e89f715.js";
   // The shared WhatsApp widget (the WhatsApp kind), stamped the same way.
-  var SITE_BUNDLE = "gotcha-site.c4014158c402.js";
+  var SITE_BUNDLE = "gotcha-site.9d1b1ccedd80.js";
 
   // The App Proxy subpath on the MERCHANT's domain. Must match `subpath`
   // and `prefix` in shopify.app.toml, or the request 404s and every
@@ -780,6 +780,12 @@
     // Open, the bubble minimises the chat (design 7's chevron).
     state.open = true;
     paintFace();
+  };
+  // "New conversation" (Backend 2c32a9a1): forget the conversation here;
+  // the panel's next /conversation goes with {fresh: true}, and the old one
+  // stays open in the inbox.
+  state.resetConversation = function () {
+    store.del("conversation");
   };
   // Docked (design 7): the panel is the chat's place; the bubble and the
   // pop-up step aside until it is undocked.

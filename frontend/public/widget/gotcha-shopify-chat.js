@@ -2544,7 +2544,11 @@ window.__gotchaShopifyChatApp = function (boot) {
 
   function ensureConversation() {
     if (S.conversationId) return Promise.resolve(S.conversationId);
-    return api("/conversation", {}).then(function (res) {
+    // After "New conversation": the next one is a fresh one, not the open
+    // conversation the server would otherwise resume.
+    var fresh = !!S.fresh;
+    return api("/conversation", fresh ? { fresh: true } : {}).then(function (res) {
+      S.fresh = false;
       var data = res.data || {};
       S.conversationId = data.conversationId;
       if (S.conversationId) store.set("conversation", S.conversationId);
@@ -2599,6 +2603,7 @@ window.__gotchaShopifyChatApp = function (boot) {
    */
   function newConversation() {
     boot.resetConversation();
+    S.fresh = true;
     if (socket) { try { socket.disconnect(); } catch (e) {} socket = null; }
     stopPolling();
     S.messages = [];

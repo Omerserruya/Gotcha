@@ -487,6 +487,9 @@ window.__gotchaSiteMount = function (opts) {
         sessionToken: store.get("token"),
         visitorId: visitorId(),
         body: body && body.body,
+        // The page this message was written on (read now: a site can change
+        // page without reloading the widget).
+        context: pageContext(),
       });
     }
 
@@ -530,17 +533,18 @@ window.__gotchaSiteMount = function (opts) {
   }
 
   /**
-   * The page the visitor is on, for the WhatsApp side to greet about: a
-   * WooCommerce product page is `body.single-product`, and its slug is the
-   * last segment of the path (or `?product=` with plain permalinks). The
-   * server keeps only an ASCII handle (HANDLE_RE), so a slug outside it is
-   * not sent.
+   * The page the visitor is on, for the AI and the WhatsApp side to answer
+   * about (Backend 2c32a9a1): a WooCommerce product page is
+   * `body.single-product`; its id is the `postid-<id>` class (the AI
+   * resolves by id first), and its slug the last segment of the path (or
+   * `?product=` with plain permalinks), in any script, up to 120 characters.
    */
   function pageContext() {
     var path = window.location.pathname || "/";
     var body = document.body;
     var product = !!(body && body.classList && body.classList.contains("single-product"));
     var handle = null;
+    var id = null;
     if (product) {
       var query = null;
       try { query = new URLSearchParams(window.location.search).get("product"); } catch (e) { query = null; }
@@ -548,9 +552,13 @@ window.__gotchaSiteMount = function (opts) {
       var slug = query || segments[segments.length - 1] || "";
       try { slug = decodeURIComponent(slug); } catch (e) {}
       slug = slug.trim().toLowerCase();
-      if (/^[a-z0-9][a-z0-9-_]{0,120}$/.test(slug)) handle = slug;
+      if (slug && slug.length <= 120 && slug.indexOf("/") === -1) handle = slug;
+      var m = /(?:^|\s)postid-(\d{1,12})(?:\s|$)/.exec(body.className || "");
+      if (m) id = m[1];
     }
-    return { pageType: product ? "product" : "page", productHandle: handle, path: path };
+    var out = { pageType: product ? "product" : "page", productHandle: handle, path: path };
+    if (id) out.productId = id;
+    return out;
   }
 
   /** The WhatsApp kind: the shared widget, with this channel's start (POST /whatsapp-start). */
