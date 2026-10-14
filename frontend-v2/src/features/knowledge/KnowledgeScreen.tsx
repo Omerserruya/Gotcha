@@ -335,7 +335,7 @@ export async function KnowledgeScreen({
                       )}
                     </nav>
                     {groups.length === 0 ? (
-                      <p className={styles.emptyBody} data-testid="kind-none">
+                      <p className={styles.kindNone} data-testid="kind-none">
                         {t('kinds.none')}
                       </p>
                     ) : null}

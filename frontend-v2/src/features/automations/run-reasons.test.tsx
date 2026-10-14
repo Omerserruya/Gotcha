@@ -14,7 +14,7 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 
 import { RunLog } from './RunLog';
-import { RUN_REASONS, runReason, STEP_REASONS, stepReason } from './run-reasons';
+import { reachOf, RUN_REASONS, runReason, STEP_REASONS, stepReason } from './run-reasons';
 
 beforeEach(() => {
   actions.readRuns.mockReset();
@@ -106,6 +106,23 @@ describe('★★ the run log', () => {
     expect(step).not.toHaveTextContent('Done');
   });
 
+  it('★ AU4: a cart reminder says how it reached them - and when it fell back', async () => {
+    await open({
+      status: 'completed',
+      steps: [
+        {
+          nodeId: 't',
+          nodeType: 'automation_trigger',
+          status: 'ok',
+          output: { reachedVia: 'email', fellBack: true },
+        },
+      ],
+    });
+    expect(screen.getByTestId('run-trace').querySelector('li')).toHaveTextContent(
+      "reached by Email, after WhatsApp couldn't",
+    );
+  });
+
   it('an unknown skip still reads Skipped - with no reason, never the code', async () => {
     await open({
       status: 'completed',
@@ -139,6 +156,37 @@ describe('★★ the run log', () => {
     expect(screen.getByTestId('run-trace').querySelector('li')).toHaveAttribute(
       'data-status',
       'ok',
+    );
+  });
+});
+
+describe('★ AU4: reachOf', () => {
+  it('the channel and whether it fell back; anything else nothing', () => {
+    expect(reachOf({ reachedVia: 'whatsapp', fellBack: false })).toEqual({
+      via: 'whatsapp',
+      fellBack: false,
+    });
+    expect(reachOf({ reachedVia: 'email' })).toEqual({ via: 'email', fellBack: false });
+    expect(reachOf({ reachedVia: 'sms' })).toBeNull();
+    expect(reachOf(null)).toBeNull();
+  });
+});
+
+describe('★ every validation code has words, in both languages (AU4 added five)', () => {
+  it('each ISSUE_CODES entry is said in en and he', async () => {
+    const { ISSUE_CODES } = await import('@/api/contracts/automations');
+    for (const code of ISSUE_CODES) {
+      expect((en.issues as Record<string, string>)[code], `en ${code}`).toBeTruthy();
+      expect((he.issues as Record<string, string>)[code], `he ${code}`).toBeTruthy();
+    }
+    expect(ISSUE_CODES).toEqual(
+      expect.arrayContaining([
+        'via_required',
+        'via_not_connected',
+        'via_mismatch',
+        'unreachable_same_channel',
+        'unreachable_only_on_first_send',
+      ]),
     );
   });
 });

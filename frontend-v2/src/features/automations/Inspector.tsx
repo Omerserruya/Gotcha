@@ -15,12 +15,16 @@ import { UnavailableItem } from '@/design-system/primitives/unavailable/Unavaila
 
 import { provisionWebhook } from './automation-actions';
 import {
+  cartFirstSend,
   changeRefusal,
   changeType,
   fileNameOf,
   TRIGGER_NODE,
+  UNREACHABLE_HANDLE,
+  VIA_TYPES,
   onlyThrough,
   removeStep,
+  viaOf,
   type ChangeRefusal,
   type Graph,
 } from './graph';
@@ -36,8 +40,7 @@ const CHANNELS_OF: Readonly<Record<string, readonly string[]>> = {
   message_from_ad: ['WHATSAPP', 'MESSENGER', 'INSTAGRAM'],
   button_tapped: ['WHATSAPP', 'MESSENGER', 'INSTAGRAM'],
   comment_received: ['INSTAGRAM', 'MESSENGER'],
-  cart_abandoned: ['WHATSAPP', 'EMAIL'],
-  // Where the message goes, as for a cart left behind.
+  // AU4: a cart reminder has none - its first message names the channel.
   order_event: ['WHATSAPP', 'EMAIL'],
 };
 /** The order events the route knows (`ORDER_STATUSES`); none chosen: all. */
@@ -88,10 +91,16 @@ export function Inspector({
   variables,
   choices,
   types = [],
+  reach = null,
+  automationName = '',
   onNode,
   onGraph,
   onTrigger,
 }: {
+  /** AU4: which channels can reach a customer (the catalogue's context); `null`: unknown. */
+  readonly reach?: { readonly whatsapp: boolean; readonly email: boolean } | null;
+  /** AU4: an email's subject starts as the automation's name. */
+  readonly automationName?: string;
   readonly node: AutomationNode;
   readonly graph: Graph;
   readonly trigger: Trigger;
@@ -180,7 +189,16 @@ export function Inspector({
           {t('inspector.notHere')}
         </p>
       ) : (
-        <StepFields node={node} set={set} variables={variables} choices={choices} />
+        <>
+          <CartVia
+            node={node}
+            graph={graph}
+            reach={reach}
+            automationName={automationName}
+            set={set}
+          />
+          <StepFields node={node} set={set} variables={variables} choices={choices} />
+        </>
       )}
 
       <p className={styles.quiet} data-testid="inspector-stats">
@@ -226,6 +244,101 @@ export function Inspector({
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * ★★ AU4 (Backend 0c410009): in a cart reminder the FIRST message decides how
+ * the customer is reached - a template is WhatsApp; a message, file or
+ * buttons step names WhatsApp or email (an email with its subject, starting
+ * as the automation's name). Its "if they can't be reached" step is tried on
+ * the other channel and names its own. A channel that cannot reach anyone
+ * (not connected) is offered with why, never chosen silently.
+ */
+function CartVia({
+  node,
+  graph,
+  reach,
+  automationName,
+  set,
+}: {
+  readonly node: AutomationNode;
+  readonly graph: Graph;
+  readonly reach: { readonly whatsapp: boolean; readonly email: boolean } | null;
+  readonly automationName: string;
+  readonly set: (patch: Record<string, unknown>) => void;
+}) {
+  const t = useTranslations('automations');
+  if (!graph.cart) return null;
+  const first = cartFirstSend(graph);
+  const fallbackId = first
+    ? (graph.edges.find((e) => e.source === first.id && e.sourceHandle === UNREACHABLE_HANDLE)
+        ?.target ?? null)
+    : null;
+  const isFirst = first?.id === node.id;
+  const isFallback = fallbackId === node.id;
+  if (!isFirst && !isFallback) return null;
+  const note = isFallback ? (
+    <p className={styles.quiet} data-testid="inspector-fallback-note">
+      {t('inspector.fallbackNote')}
+    </p>
+  ) : null;
+  if (node.type === 'send_message_template') {
+    return (
+      <>
+        {note}
+        <p className={styles.quiet} data-testid="inspector-template-whatsapp">
+          {t('inspector.templateWhatsapp')}
+        </p>
+      </>
+    );
+  }
+  if (!VIA_TYPES.has(node.type)) return note;
+  const via = viaOf(node);
+  return (
+    <>
+      {note}
+      <div className={styles.checks} role="radiogroup" aria-label={t('inspector.via')}>
+        <span className={styles.fieldLabel}>{t('inspector.via')}</span>
+        {(['whatsapp', 'email'] as const).map((v) => {
+          const off = reach !== null && reach[v] === false;
+          return (
+            <label key={v} className={styles.check}>
+              <input
+                type="radio"
+                name={`via-${node.id}`}
+                checked={via === v}
+                disabled={off && via !== v}
+                onChange={() =>
+                  set(
+                    v === 'email'
+                      ? {
+                          via: 'email',
+                          subject: str(node.data.subject) || automationName.slice(0, 200),
+                        }
+                      : { via: 'whatsapp', subject: undefined },
+                  )
+                }
+                data-testid={`inspector-via-${v}`}
+              />
+              {off ? t('inspector.viaNotConnected', { channel: t(`via.${v}`) }) : t(`via.${v}`)}
+            </label>
+          );
+        })}
+        {via === null ? <span className={styles.why}>{t('inspector.viaChoose')}</span> : null}
+      </div>
+      {via === 'email' ? (
+        <Field label={t('inspector.subject')}>
+          <input
+            value={str(node.data.subject)}
+            maxLength={200}
+            onChange={(e) => set({ subject: e.target.value })}
+            dir="auto"
+            data-testid="inspector-subject"
+          />
+        </Field>
+      ) : null}
+    </>
   );
 }
 
@@ -927,7 +1040,9 @@ function TriggerFields({
       const minutes = typeof c.delayMinutes === 'number' ? c.delayMinutes : 120;
       return (
         <>
-          {channelPicker}
+          <p className={styles.quiet} data-testid="inspector-cart-channel">
+            {t('inspector.cartChannel')}
+          </p>
           <Duration
             label={t('inspector.cartDelay')}
             ms={minutes * 60_000}

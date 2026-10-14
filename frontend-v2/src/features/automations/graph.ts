@@ -36,6 +36,63 @@ const FIXED: Readonly<Record<string, readonly string[]>> = {
 export interface Graph {
   readonly nodes: readonly AutomationNode[];
   readonly edges: readonly AutomationEdge[];
+  /**
+   * AU4: a cart reminder (`cart_abandoned`) - its first send step has an
+   * "unreachable" exit. Carried by every edit (`{ ...graph }`).
+   */
+  readonly cart?: boolean;
+}
+
+/**
+ * ★★ AU4 (Backend 0c410009): in a cart reminder the FIRST send step decides
+ * the channel, and has one more exit - "if they can't be reached" - to the
+ * steps tried on the other channel. Mirrors the route's `cartPlanOf`: the
+ * first step of these types reached from the trigger, not through that exit.
+ */
+export const UNREACHABLE_HANDLE = 'unreachable';
+const CART_SEND_TYPES: ReadonlySet<string> = new Set([
+  'send_message_text',
+  'send_message_file',
+  'send_message_image',
+  'send_buttons',
+  'send_list',
+  'send_message_template',
+  'send_message_quick_reply',
+  'send_message_interactive',
+  'collect_input',
+  'ai_generate',
+]);
+/** Send steps that say their channel (`data.via`); a template is always WhatsApp. */
+export const VIA_TYPES: ReadonlySet<string> = new Set([
+  'send_message_text',
+  'send_message_file',
+  'send_buttons',
+]);
+
+export function cartFirstSend(graph: Graph): AutomationNode | null {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const start = graph.nodes.find((n) => n.type === TRIGGER_NODE);
+  const seen = new Set<string>();
+  const queue = start ? [start.id] : [];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const node = byId.get(id);
+    if (node && CART_SEND_TYPES.has(node.type)) return node;
+    for (const e of graph.edges) {
+      if (e.source === id && e.sourceHandle !== UNREACHABLE_HANDLE) queue.push(e.target);
+    }
+  }
+  return null;
+}
+
+/** The channel a send step names: a template is WhatsApp; otherwise its `data.via`, if any. */
+export function viaOf(node: AutomationNode | null | undefined): 'whatsapp' | 'email' | null {
+  if (!node) return null;
+  if (node.type === 'send_message_template') return 'whatsapp';
+  const via = String(node.data.via ?? '').toLowerCase();
+  return via === 'whatsapp' || via === 'email' ? via : null;
 }
 
 const list = (v: unknown): readonly unknown[] => (Array.isArray(v) ? v : []);
@@ -50,6 +107,11 @@ export function previousOf(id: string, graph: Graph): AutomationNode | null {
 export function outputsOf(node: AutomationNode, graph: Graph): readonly string[] {
   if (node.type === TRIGGER_NODE) return ['next'];
   if (TERMINAL.has(node.type)) return [];
+  const own = ownOutputs(node, graph);
+  return graph.cart && cartFirstSend(graph)?.id === node.id ? [...own, UNREACHABLE_HANDLE] : own;
+}
+
+function ownOutputs(node: AutomationNode, graph: Graph): readonly string[] {
   if (node.type === 'wait_for_reply') {
     const prev = previousOf(node.id, graph);
     const options =
@@ -152,7 +214,7 @@ export function insertAfter(
     target: id,
     sourceHandle: handle === 'next' ? null : handle,
   };
-  return { graph: { nodes: [...graph.nodes, node], edges: [...graph.edges, edge] }, id };
+  return { graph: { ...graph, nodes: [...graph.nodes, node], edges: [...graph.edges, edge] }, id };
 }
 
 /**
@@ -168,6 +230,7 @@ export function removeStep(graph: Graph, id: string): Graph {
   if (outputsOf(node, graph).length === 1 && out.length === 1) {
     const next = out[0]!.target;
     return {
+      ...graph,
       nodes: graph.nodes.filter((n) => n.id !== id),
       edges: graph.edges
         .filter((e) => e.source !== id && e.target !== id)
@@ -176,6 +239,7 @@ export function removeStep(graph: Graph, id: string): Graph {
   }
   const gone = new Set(onlyThrough(graph, id));
   return {
+    ...graph,
     nodes: graph.nodes.filter((n) => !gone.has(n.id)),
     edges: graph.edges.filter((e) => !gone.has(e.source) && !gone.has(e.target)),
   };
@@ -216,6 +280,7 @@ export function duplicateStep(
   return {
     id: copy.id,
     graph: {
+      ...graph,
       nodes: [...graph.nodes, copy],
       edges: [
         // What the original led to, the copy leads to now.
@@ -363,7 +428,11 @@ export function changeRefusal(graph: Graph, id: string, type: string): ChangeRef
   }
   if (TERMINAL.has(type) && out.length > 0) return 'terminal_has_next';
   const changed = { ...node, type, data: changedData(node, type) };
-  const next = { nodes: graph.nodes.map((n) => (n.id === id ? changed : n)), edges: graph.edges };
+  const next = {
+    ...graph,
+    nodes: graph.nodes.map((n) => (n.id === id ? changed : n)),
+    edges: graph.edges,
+  };
   const offers = outputsOf(changed, next);
   const lost = out.some((e) => !offers.includes(e.sourceHandle ?? 'next'));
   return lost ? 'branches_lost' : null;
@@ -381,6 +450,7 @@ function changedData(node: AutomationNode, type: string): Record<string, unknown
 export function changeType(graph: Graph, id: string, type: string): Graph | null {
   if (changeRefusal(graph, id, type) !== null) return null;
   return {
+    ...graph,
     nodes: graph.nodes.map((n) => (n.id === id ? { ...n, type, data: changedData(n, type) } : n)),
     edges: graph.edges,
   };
@@ -433,7 +503,7 @@ export function insertRefusal(
     position: { x: 0, y: 0 },
     data: defaultData(type, () => 'x'),
   };
-  const outs = outputsOf(probe, { nodes: [...graph.nodes, probe], edges: graph.edges });
+  const outs = outputsOf(probe, { ...graph, nodes: [...graph.nodes, probe], edges: graph.edges });
   if (outs.length !== 1 || outs[0] !== 'next') return 'branching';
   if (
     comments.automation &&
@@ -465,6 +535,7 @@ export function insertBetween(
   return {
     id,
     graph: {
+      ...graph,
       nodes: [...graph.nodes, node],
       edges: [
         ...graph.edges.map((e) => (e === edge ? { ...e, target: id } : e)),

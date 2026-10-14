@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import {
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useTransition,
@@ -105,12 +106,15 @@ export function Builder({
   /** Turning on is said first, by what starts it: a draft's publish makes it live. */
   const [confirming, setConfirming] = useState(false);
   const [automation, setAutomation] = useState(initial);
-  const [graph, setGraph] = useState<Graph>({
+  const [stored, setGraph] = useState<Graph>({
     nodes: initial.nodes ?? [],
     edges: initial.edges ?? [],
   });
   const [name, setName] = useState(initial.name);
   const [trigger, setTrigger] = useState<Trigger>(initial.trigger);
+  /* AU4: a cart reminder's first send step has its "unreachable" exit - read from the trigger, never stored. */
+  const cart = trigger.type === 'cart_abandoned';
+  const graph: Graph = useMemo(() => ({ ...stored, cart }), [stored, cart]);
   const [selected, setSelected] = useState<string | null>(
     () => (initial.nodes ?? []).find((n) => n.type === TRIGGER_NODE)?.id ?? null,
   );
@@ -151,7 +155,8 @@ export function Builder({
   const dirty =
     name.trim() !== automation.name ||
     JSON.stringify(trigger) !== JSON.stringify(automation.trigger) ||
-    JSON.stringify(graph) !==
+    // The steps and lines only: `cart` is read from the trigger, never saved.
+    JSON.stringify({ nodes: graph.nodes, edges: graph.edges }) !==
       JSON.stringify({ nodes: automation.nodes ?? [], edges: automation.edges ?? [] });
   const { at, width, height } = layout(graph);
 
@@ -962,6 +967,8 @@ export function Builder({
               statsRead={stats !== null}
               variables={catalog?.variables ?? []}
               choices={choices}
+              reach={catalog?.context.reach ?? null}
+              automationName={name}
               types={
                 catalog?.groups
                   .filter((group) => group.key !== 'trigger')

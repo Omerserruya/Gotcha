@@ -93,7 +93,12 @@
     "invalid_delay": "a wait has no valid time",
     "needs_24h_window": "a step sends a free message outside the 24-hour window: use a template",
     "after_customer_replies": "a step comes before the customer replies: add it after Wait for reply",
-    "comment_automation_only": "a comment reply is only for automations that start from a comment"
+    "comment_automation_only": "a comment reply is only for automations that start from a comment",
+    "via_required": "the first message doesn't say which channel to send on",
+    "via_not_connected": "a message's channel isn't connected",
+    "via_mismatch": "one run's messages go on different channels",
+    "unreachable_same_channel": "“If they can't be reached” tries the same channel again",
+    "unreachable_only_on_first_send": "“If they can't be reached” is only on the first message"
   },
   "nodes": {
     "trigger": {
@@ -353,7 +358,8 @@
     "other": "Other",
     "yes": "Yes",
     "no": "No",
-    "button": "A button"
+    "button": "A button",
+    "unreachable": "If they can't be reached"
   },
   "variables": {
     "first_name": "first_name",
@@ -477,7 +483,14 @@
     },
     "anyOrderStatus": "None chosen: every order event",
     "orderTemplateOnly": "On WhatsApp only an approved template can go, since the customer hasn't written in the last 24 hours",
-    "storyMention": "Instagram only, every story that mentions you. The story link expires with the story, in about 24 hours"
+    "storyMention": "Instagram only, every story that mentions you. The story link expires with the story, in about 24 hours",
+    "via": "Send by",
+    "viaChoose": "Choose WhatsApp or email",
+    "viaNotConnected": "{channel}: not connected",
+    "subject": "Email subject",
+    "cartChannel": "The channel is the first message's: choose it on that step.",
+    "templateWhatsapp": "A template goes on WhatsApp.",
+    "fallbackNote": "Tried when the first message can't reach them - on the other channel."
   },
   "runLog": {
     "reading": "Reading…",
@@ -518,7 +531,9 @@
       "skipped_adapter_unsupported": "this channel can't send a template",
       "skipped_no_send_ctx": "there was no one to send it to",
       "skipped_opted_out": "the customer unsubscribed while it waited"
-    }
+    },
+    "reached": "reached by {via}",
+    "fellBack": "reached by {via}, after {first} couldn't"
   },
   "eyebrow": {
     "trigger": "Trigger",
@@ -584,5 +599,9 @@
     "delete": "Delete",
     "deleteMany": "Delete {count, plural, one {#} other {all #}}",
     "hint": "Click to select · {mod}-click adds · Shift-click a range · {mod}+A all · Delete removes · Right-click for more"
+  },
+  "via": {
+    "whatsapp": "WhatsApp",
+    "email": "Email"
   }
 }

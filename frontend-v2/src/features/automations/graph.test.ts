@@ -5,6 +5,8 @@ import { nodeSchema, type AutomationNode } from '@/api/contracts/automations';
 import {
   NODE_W,
   appendTarget,
+  cartFirstSend,
+  viaOf,
   beforeFirstWait,
   changeRefusal,
   changeType,
@@ -314,5 +316,82 @@ describe('★ AU6: a library step with no step chosen goes after the deepest one
       [edge('t', 'x')],
     );
     expect(appendTarget(closed)).toBeNull();
+  });
+});
+
+describe('★★ AU4: a cart reminder - the first message names the channel, and has "if they can\'t be reached"', () => {
+  const g = (nodes: AutomationNode[], edges: ReturnType<typeof edge>[], cart = true): Graph => ({
+    nodes,
+    edges,
+    cart,
+  });
+  const reminder = () =>
+    g(
+      [
+        node('t', 'automation_trigger'),
+        node('w', 'wait', { delayMs: 60_000 }),
+        node('m', 'send_message_text', { text: 'Your cart', via: 'whatsapp' }),
+        node('n', 'send_message_text', { text: 'Still there?' }),
+      ],
+      [edge('t', 'w'), edge('w', 'm'), edge('m', 'n')],
+    );
+
+  it('the first send step past a wait has the exit; a later one does not', () => {
+    const cart = reminder();
+    expect(cartFirstSend(cart)?.id).toBe('m');
+    expect(outputsOf(cart.nodes[2]!, cart)).toEqual(['next', 'unreachable']);
+    expect(outputsOf(cart.nodes[3]!, cart)).toEqual(['next']);
+    expect(freeHandles(cart.nodes[2]!, cart)).toEqual(['unreachable']);
+  });
+
+  it('not a cart reminder: no such exit', () => {
+    const plain = { ...reminder(), cart: false };
+    expect(outputsOf(plain.nodes[2]!, plain)).toEqual(['next']);
+  });
+
+  it('the step on the exit is never itself "the first message"', () => {
+    const cart = g(
+      [
+        node('t', 'automation_trigger'),
+        node('e', 'send_message_text', { via: 'email' }),
+        node('m', 'send_message_template'),
+      ],
+      [edge('t', 'm'), edge('m', 'e', 'unreachable')],
+    );
+    expect(cartFirstSend(cart)?.id).toBe('m');
+    expect(outputsOf(cart.nodes[1]!, cart)).toEqual(['next']);
+  });
+
+  it('an "unreachable" line from elsewhere (the route refuses it) is never walked to find the first message - as the route', () => {
+    const odd = g(
+      [
+        node('t', 'automation_trigger'),
+        node('h', 'opening_hours'),
+        node('e', 'send_message_text', { via: 'email' }),
+        node('m', 'send_message_text', { via: 'whatsapp' }),
+      ],
+      [edge('t', 'h'), edge('h', 'e', 'unreachable'), edge('h', 'm', 'open')],
+    );
+    expect(cartFirstSend(odd)?.id).toBe('m');
+  });
+
+  it('every edit keeps the reminder a reminder', () => {
+    const cart = reminder();
+    expect(insertAfter(cart, 'n', 'next', 'add_tag', () => 'x').graph.cart).toBe(true);
+    expect(removeStep(cart, 'n').cart).toBe(true);
+    expect(changeType(cart, 'n', 'send_message_file')?.cart).toBe(true);
+    expect(
+      insertBetween(cart, cart.edges[2]!, 'add_tag', () => 'y', {
+        automation: false,
+        safe: () => true,
+      })?.graph.cart,
+    ).toBe(true);
+  });
+
+  it('the channel a step names: a template is WhatsApp; a message its via; none, none', () => {
+    expect(viaOf(node('a', 'send_message_template'))).toBe('whatsapp');
+    expect(viaOf(node('a', 'send_message_text', { via: 'EMAIL' }))).toBe('email');
+    expect(viaOf(node('a', 'send_message_text', {}))).toBeNull();
+    expect(viaOf(node('a', 'send_message_text', { via: 'sms' }))).toBeNull();
   });
 });

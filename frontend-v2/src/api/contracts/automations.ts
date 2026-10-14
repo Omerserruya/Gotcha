@@ -170,6 +170,12 @@ export const ISSUE_CODES = [
   'needs_24h_window',
   'after_customer_replies',
   'comment_automation_only',
+  // AU4 (Backend 0c410009): a cart reminder's channel is its first message's.
+  'via_required',
+  'via_not_connected',
+  'via_mismatch',
+  'unreachable_same_channel',
+  'unreachable_only_on_first_send',
 ] as const;
 
 export const issueSchema = z.looseObject({
@@ -268,6 +274,11 @@ export const catalogItemSchema = z.looseObject({
   synonyms: z.array(z.string()).catch([]),
   available: z.boolean().catch(false),
   reason: z.enum(CATALOG_REASONS).nullable().catch(null).default(null),
+  /** AU4: in a cart reminder, the channels this send step can name (filtered by reach). */
+  viaOptions: z
+    .array(z.enum(['whatsapp', 'email']))
+    .optional()
+    .catch(undefined),
 });
 export type CatalogItem = z.infer<typeof catalogItemSchema>;
 
@@ -278,6 +289,11 @@ export const catalogSchema = z.object({
       firstStep: z.boolean().catch(false),
       hasCustomer: z.boolean().catch(true),
       afterNodeType: text,
+      /** AU4: which channels can reach a customer at all (connected). Absent: unknown. */
+      reach: z
+        .object({ whatsapp: z.boolean().catch(false), email: z.boolean().catch(false) })
+        .optional()
+        .catch(undefined),
     }),
     groups: z.array(
       z.looseObject({

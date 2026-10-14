@@ -8,7 +8,7 @@ import { Link } from '@/i18n/navigation';
 
 import { readRun, readRuns } from './automation-actions';
 import styles from './Builder.module.css';
-import { runReason, stepReason, stepSkipped } from './run-reasons';
+import { reachOf, runReason, stepReason, stepSkipped } from './run-reasons';
 
 const BRANCHES = [
   'next',
@@ -157,6 +157,8 @@ export function RunLog({ automationId }: { readonly automationId: string }) {
                * happened, shown as done.
                */
               const status = stepSkipped(step.output) ? 'skipped' : step.status;
+              // AU4: a cart reminder's trigger says how it reached them.
+              const reach = step.nodeType === 'automation_trigger' ? reachOf(step.output) : null;
               return (
                 <li key={`${step.nodeId}-${i}`} className={styles.traceStep} data-status={status}>
                   <span>
@@ -168,6 +170,16 @@ export function RunLog({ automationId }: { readonly automationId: string }) {
                     {t(`runLog.stepStatus.${status}`)}
                     {why ? ` · ${t(`runLog.stepReason.${why}`)}` : ''}
                     {step.branch ? ` · ${branchWords(step.branch)}` : ''}
+                    {reach
+                      ? ` · ${
+                          reach.fellBack
+                            ? t('runLog.fellBack', {
+                                via: t(`via.${reach.via}`),
+                                first: t(`via.${reach.via === 'email' ? 'whatsapp' : 'email'}`),
+                              })
+                            : t('runLog.reached', { via: t(`via.${reach.via}`) })
+                        }`
+                      : ''}
                   </span>
                 </li>
               );

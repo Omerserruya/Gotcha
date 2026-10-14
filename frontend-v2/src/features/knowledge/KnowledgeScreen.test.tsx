@@ -573,3 +573,17 @@ describe('★★ K1: search over titles and text', () => {
     expect(screen.queryByTestId('search-results')).toBeNull();
   });
 });
+
+describe('★ K1 measured on dev at 1440: the search, the kinds and the results sit inside the card', () => {
+  it('each pads 18px on both sides, as every row of the card does (measured in Chromium)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const css = readFileSync(join(__dirname, 'Knowledge.module.css'), 'utf8');
+    const rule = (name: string) =>
+      new RegExp(`\\n {2}\\.${name} \\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+    expect(rule('search')).toMatch(/padding: var\(--space-10\) 18px var\(--space-8\);/);
+    expect(rule('kinds')).toMatch(/padding-inline: 18px;/);
+    expect(rule('searchResults')).toMatch(/padding-inline: 18px;/);
+    expect(rule('kindNone')).toMatch(/padding: var\(--space-8\) 18px;/);
+  });
+});

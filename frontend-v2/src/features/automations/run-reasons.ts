@@ -62,6 +62,18 @@ export function stepSkipped(output: Readonly<Record<string, unknown>> | null): b
   return typeof action === 'string' && /^skip(ped)?_/.test(action);
 }
 
+/**
+ * AU4: how a cart reminder reached the customer - its trigger step's
+ * `{ reachedVia, fellBack }` (Backend 0c410009). `null` when it says nothing.
+ */
+export function reachOf(
+  output: Readonly<Record<string, unknown>> | null,
+): { readonly via: 'whatsapp' | 'email'; readonly fellBack: boolean } | null {
+  const via = output?.reachedVia;
+  if (via !== 'whatsapp' && via !== 'email') return null;
+  return { via, fellBack: output?.fellBack === true };
+}
+
 /** A step's reason, from `output.action`; `null` when it has none we can name. */
 export function stepReason(output: Readonly<Record<string, unknown>> | null): StepReason | null {
   const action = output?.action;

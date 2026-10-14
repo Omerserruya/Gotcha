@@ -742,13 +742,106 @@ describe('★★ the new triggers and steps (Backend 972ae66d), edited where the
       />,
     );
 
-  it('cart left behind: its channels, the delay in hours, and who it sends to', () => {
+  it('cart left behind: no channels (its first message names it), the delay in hours, who it sends to', () => {
     showBuilder(draftOf({ type: 'cart_abandoned', config: { delayMinutes: 120 } }));
-    expect(screen.getByTestId('inspector-channel-WHATSAPP')).toBeInTheDocument();
-    expect(screen.getByTestId('inspector-channel-EMAIL')).toBeInTheDocument();
-    expect(screen.queryByTestId('inspector-channel-WEBCHAT')).toBeNull();
+    // AU4 (Backend 0c410009): the channel belongs to the first message.
+    expect(screen.queryByTestId('inspector-channel-WHATSAPP')).toBeNull();
+    expect(screen.queryByTestId('inspector-channel-EMAIL')).toBeNull();
+    expect(screen.getByTestId('inspector-cart-channel')).toHaveTextContent(
+      "The channel is the first message's",
+    );
     expect(screen.getByTestId('inspector-cart-delay')).toHaveValue(2);
     expect(screen.getByTestId('inspector-cart-consent')).toHaveTextContent('agreed to marketing');
+  });
+
+  describe("★★ AU4: a cart reminder reaches the customer on its first message's channel", () => {
+    const cartDraft = (nodes: unknown[], edges: unknown[]) =>
+      draftOf({ type: 'cart_abandoned', config: { delayMinutes: 60 } }, nodes, edges);
+    const firstText = [
+      { id: 't', type: 'automation_trigger', data: {} },
+      { id: 'm', type: 'send_message_text', data: { text: 'Your cart is waiting' } },
+    ];
+    const toFirst = [{ id: 'e1', source: 't', target: 'm', sourceHandle: null }];
+
+    it("★ the first message: WhatsApp or email; email asks its subject, starting as the automation's name", () => {
+      showBuilder(cartDraft(firstText, toFirst));
+      fireEvent.click(screen.getByTestId('node-m'));
+      fireEvent.click(screen.getByTestId('inspector-via-email'));
+      expect(screen.getByTestId('inspector-subject')).toHaveValue('A call is missed');
+      fireEvent.change(screen.getByTestId('inspector-subject'), { target: { value: 'Your cart' } });
+      expect(screen.getByTestId('inspector-via-email')).toBeChecked();
+      expect(screen.getByTestId('builder-unsaved')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('inspector-via-whatsapp'));
+      expect(screen.queryByTestId('inspector-subject')).toBeNull();
+    });
+
+    it('its "if they can\'t be reached" exit is on the canvas, named', () => {
+      showBuilder(cartDraft(firstText, toFirst));
+      expect(screen.getByTestId('add-m-unreachable')).toHaveAccessibleName(
+        "Add a step on Message's If they can't be reached branch",
+      );
+    });
+
+    it('a channel that cannot reach anyone is offered with why, not chosen', () => {
+      const read = catalog(false);
+      wrap(
+        <Builder
+          automation={cartDraft(firstText, toFirst)}
+          catalog={{
+            ...read,
+            context: { ...read.context, reach: { whatsapp: true, email: false } },
+          }}
+          stats={{}}
+          webhook={null}
+          choices={{ employees: [], teams: [], members: [], skills: [] }}
+        />,
+      );
+      fireEvent.click(screen.getByTestId('node-m'));
+      expect(screen.getByTestId('inspector-via-email')).toBeDisabled();
+      expect(screen.getByTestId('inspector-via-email').closest('label')).toHaveTextContent(
+        'Email: not connected',
+      );
+      expect(screen.getByTestId('inspector-via-whatsapp')).toBeEnabled();
+    });
+
+    it("the step on the exit says it is the other channel's try, and names its own", () => {
+      showBuilder(
+        cartDraft(
+          [...firstText, { id: 'e', type: 'send_message_text', data: { text: 'By email' } }],
+          [...toFirst, { id: 'e2', source: 'm', target: 'e', sourceHandle: 'unreachable' }],
+        ),
+      );
+      fireEvent.click(screen.getByTestId('node-e'));
+      expect(screen.getByTestId('inspector-fallback-note')).toHaveTextContent("can't reach them");
+      expect(screen.getByTestId('inspector-via-email')).toBeInTheDocument();
+    });
+
+    it('a template first says it goes on WhatsApp; a later message names no channel', () => {
+      showBuilder(
+        cartDraft(
+          [
+            { id: 't', type: 'automation_trigger', data: {} },
+            { id: 'p', type: 'send_message_template', data: {} },
+            { id: 'n', type: 'send_message_text', data: { text: 'later' } },
+          ],
+          [
+            { id: 'e1', source: 't', target: 'p', sourceHandle: null },
+            { id: 'e2', source: 'p', target: 'n', sourceHandle: null },
+          ],
+        ),
+      );
+      fireEvent.click(screen.getByTestId('node-p'));
+      expect(screen.getByTestId('inspector-template-whatsapp')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('node-n'));
+      expect(screen.queryByTestId('inspector-via-whatsapp')).toBeNull();
+    });
+
+    it('not a cart reminder: no channel on a message', () => {
+      showBuilder(draftOf({ type: 'message_received', config: {} }, firstText, toFirst));
+      fireEvent.click(screen.getByTestId('node-m'));
+      expect(screen.queryByTestId('inspector-via-whatsapp')).toBeNull();
+      expect(screen.queryByTestId('add-m-unreachable')).toBeNull();
+    });
   });
 
   it('order event: where it sends, which events, and that WhatsApp takes a template only', () => {
