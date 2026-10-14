@@ -35,9 +35,13 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
 });
 vi.mock("../services/ai.service", () => ({
   generateResponse: vi.fn(async (o: any) => {
-    H.calls.push({ type: o.metadata?.type, temperature: o.temperature, prompt: o.messages[1].content });
+    H.calls.push({ type: o.metadata?.type, temperature: o.temperature, effort: o.reasoningEffort, prompt: o.messages[1].content });
     if (o.metadata?.type === "agent_readiness_questions") return { content: JSON.stringify({ questions: H.generated }) };
-    const judgements = [...String(o.messages[1].content).matchAll(/^- \[(q_[0-9a-f]+)\] (.+)$/gm)].map(([, id, text]) => ({ id, coverage: H.verdict(text), gapType: H.verdict(text) === "full" ? "none" : "knowledge", reason: "r" }));
+    // A "full" verdict names the shipping document as its evidence.
+    const judgements = [...String(o.messages[1].content).matchAll(/^- \[(q_[0-9a-f]+)\] (.+)$/gm)].map(([, id, text]) => ({
+      id, coverage: H.verdict(text), gapType: H.verdict(text) === "full" ? "none" : "knowledge", reason: "r",
+      evidence: H.verdict(text) === "none" ? [] : [{ kind: "doc", name: "Shipping" }],
+    }));
     return { content: JSON.stringify({ judgements, recommendations: [{ type: "add_faq", title: "Add FAQ", detail: "d" }] }) };
   }),
 }));
@@ -62,10 +66,10 @@ beforeEach(() => {
 });
 
 describe("★ the same input gets the same score", () => {
-  it("first run: the set is made once (no duplicates), then judged at temperature 0", async () => {
+  it("first run: the set is made once (no duplicates), then judged at medium reasoning", async () => {
     const r = await run();
     expect(types()).toEqual(["agent_readiness_questions", "agent_readiness"]);
-    expect(H.calls[1].temperature).toBe(0);
+    expect(H.calls[1].effort).toBe("medium");
     expect(r.questions.map((q: any) => q.question)).toEqual(["Do you ship to Eilat?", "What sizes do you have?", "Can I return shoes?"]);
     expect(r.questions[0].id).toBe(questionIdFor("Do you ship to Eilat?"));
     expect(r.score).toBe(33);
@@ -161,9 +165,67 @@ it("a question the judge skipped counts as not handled, and says so", async () =
   (generateResponse as any).mockImplementationOnce(async () => ({ content: JSON.stringify({ questions: ["A?", "B?"] }) }))
     .mockImplementationOnce(async (o: any) => {
       const [first] = [...String(o.messages[1].content).matchAll(/^- \[(q_[0-9a-f]+)\]/gm)];
-      return { content: JSON.stringify({ judgements: [{ id: first![1], coverage: "full", gapType: "none", reason: "ok" }], recommendations: [] }) };
+      return { content: JSON.stringify({ judgements: [{ id: first![1], coverage: "full", gapType: "none", reason: "ok", evidence: [{ kind: "doc", name: "Shipping" }] }], recommendations: [] }) };
     });
   const r = await run();
   expect(r.questions.map((q: any) => q.coverage)).toEqual(["full", "none"]);
   expect(r.questions[1].reason).toMatch(/did not return a verdict/);
+});
+
+describe("★ a verdict counts only with evidence the code can check (B6b)", () => {
+  const judgeOnce = async (judgements: (ids: string[]) => any[], questions = ["Where is my order?", "What is your privacy policy?"]) => {
+    const { generateResponse } = await import("../services/ai.service");
+    (generateResponse as any)
+      .mockImplementationOnce(async () => ({ content: JSON.stringify({ questions }) }))
+      .mockImplementationOnce(async (o: any) => {
+        const ids = [...String(o.messages[1].content).matchAll(/^- \[(q_[0-9a-f]+)\]/gm)].map((m) => m[1]!);
+        return { content: JSON.stringify({ judgements: judgements(ids), recommendations: [] }) };
+      });
+    return run();
+  };
+
+  it("★ \"full\" or \"partial\" with nothing real behind it is \"none\" and says so", async () => {
+    const r = await judgeOnce((ids) => [
+      { id: ids[0], coverage: "partial", gapType: "tool", reason: "hedge", evidence: [] },
+      { id: ids[1], coverage: "full", gapType: "none", reason: "made up", evidence: [{ kind: "tool", name: "Refund Everything" }, { kind: "doc", name: "Privacy" }] },
+    ]);
+    expect(r.questions.map((q: any) => [q.coverage, q.evidence])).toEqual([["none", []], ["none", []]]);
+    expect(r.questions[0].gapType).toBe("tool");
+    expect(r.questions[1].gapType).toBe("knowledge");
+    expect(r.questions[1].reason).toMatch(/No document or tool/);
+  });
+
+  it("★ real evidence keeps the verdict, under its exact name (case and spaces forgiven)", async () => {
+    H.docs.push({ id: "d9", title: "Privacy Policy", content: "We keep data 30 days", updatedAt: new Date("2026-10-02") });
+    const r = await judgeOnce((ids) => [
+      { id: ids[0], coverage: "partial", gapType: "data", reason: "order known, ETA not", evidence: [{ kind: "doc", name: " shipping " }, { kind: "doc", name: "Shipping" }] },
+      { id: ids[1], coverage: "full", gapType: "none", reason: "ok", evidence: [{ kind: "doc", name: "privacy policy" }, { kind: "tool", name: "Nope" }] },
+    ]);
+    expect(r.questions[0]).toMatchObject({ coverage: "partial", gapType: "data", evidence: [{ kind: "doc", name: "Shipping" }] });
+    expect(r.questions[1]).toMatchObject({ coverage: "full", gapType: "none", evidence: [{ kind: "doc", name: "Privacy Policy" }] });
+  });
+
+  it("the judge is told to name its evidence, and the names it may use are quoted", async () => {
+    await run();
+    const judge = H.calls.find((c) => c.type === "agent_readiness")!.prompt;
+    expect(judge).toContain('- doc "Shipping" [Company]');
+    expect(judge).toMatch(/"evidence":\[\{"kind":"doc\|tool"/);
+    expect(judge).toContain('do not hedge with "partial"');
+  });
+});
+
+describe("★ judged in batches of 8", () => {
+  it("20 questions: 3 calls of at most 8, every question judged once", async () => {
+    const words = ["apples", "boots", "candles", "desks", "engines", "flags", "gloves", "hats", "inks", "jackets", "kettles", "lamps", "mugs", "nails", "ovens", "pens", "quilts", "rugs", "socks", "tents"];
+    H.generated = words.map((w) => `Do you sell ${w}?`);
+    H.verdict = () => "full";
+    const r = await run();
+    const judges = H.calls.filter((c) => c.type === "agent_readiness");
+    expect(judges).toHaveLength(3);
+    const counts = judges.map((c) => [...String(c.prompt).matchAll(/^- \[q_/gm)].length);
+    expect(counts).toEqual([8, 8, 4]);
+    expect(r.totals).toEqual({ full: 20, partial: 0, none: 0, total: 20 });
+    // One recommendation per title across the batches.
+    expect(r.recommendations).toEqual([{ type: "add_faq", title: "Add FAQ", detail: "d" }]);
+  });
 });

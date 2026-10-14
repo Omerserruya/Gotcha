@@ -65,16 +65,16 @@ describe("readiness counts only tools that can run", () => {
       perm("Refund", "CONNECTED", true, false),
     ];
     await generateReadinessReport("T", "a1", "en");
-    expect(H.prompt).toContain("Get order (WooCommerce)");
+    expect(H.prompt).toContain('tool "Get order" (WooCommerce)');
     for (const dead of ["Cancel order", "Create return", "Create coupon", "Refund"]) expect(H.prompt).not.toContain(dead);
   });
 
   it("★ the same tools every run: ordered by name before the cap", async () => {
     H.perms = Array.from({ length: 70 }, (_, i) => perm(`Tool ${String(69 - i).padStart(2, "0")}`, "CONNECTED"));
     await generateReadinessReport("T", "a1", "en");
-    expect(H.prompt).toContain("Tool 00 (WooCommerce)");
-    expect(H.prompt).toContain("Tool 59 (WooCommerce)");
-    expect(H.prompt).not.toContain("Tool 60 (WooCommerce)");
+    expect(H.prompt).toContain('tool "Tool 00" (WooCommerce)');
+    expect(H.prompt).toContain('tool "Tool 59" (WooCommerce)');
+    expect(H.prompt).not.toContain('tool "Tool 60" (WooCommerce)');
   });
 
   it("no runnable tool: the auditor is told so", async () => {

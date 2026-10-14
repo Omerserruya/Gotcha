@@ -18,7 +18,16 @@
  *    criteria, the business, the language (questionFingerprint), or on request
  *    (regenerateQuestions). Knowledge and tools are NOT in it on purpose: the
  *    point is to re-judge the same questions after knowledge is added.
- *  - Each run JUDGES that fixed set at temperature 0.
+ *  - Each run JUDGES that fixed set, in batches of JUDGE_BATCH at medium
+ *    reasoning. NOT at "temperature 0": the gpt-5 models this runs on accept
+ *    only the default temperature, and ai.service drops any other value, so
+ *    temperature buys nothing here. The cache below is what makes it stable.
+ *  - A verdict counts only with EVIDENCE the code can check (B6b): the judge
+ *    names the documents and tools it relied on, the code keeps only names that
+ *    were in its input, and a "full" or "partial" with none left becomes
+ *    "none". gpt-5-mini at low effort over 32 questions at once called all 32
+ *    "partial" and said order changes had no tool while Update Order Status
+ *    was in its list.
  *  - The judgement is keyed by everything it depends on (inputFingerprint:
  *    the question set, the readable knowledge, the runnable tools, the
  *    answered questions). When that is unchanged the stored report is returned
@@ -48,6 +57,8 @@ export interface ReadinessQuestion {
   gapType: "knowledge" | "tool" | "data" | "none";
   /** True for a question a person answered (B2): covered by that answer. */
   answered?: boolean;
+  /** The documents and tools the verdict rests on, each checked to exist in the input. */
+  evidence?: Array<{ kind: "doc" | "tool"; name: string }>;
 }
 
 export interface ReadinessRecommendation {
@@ -83,7 +94,9 @@ const LANG_NAMES: Record<string, string> = { en: "English", he: "Hebrew (עבר�
 const MAX_KB_DOCS = 40;
 const MAX_TOOLS = 60;
 /** Bumped when the judging prompt changes, so old judgements are not reused. */
-const JUDGE_VERSION = "1";
+const JUDGE_VERSION = "2";
+/** Questions per judge call: 32 at once came back all "partial". */
+export const JUDGE_BATCH = 8;
 
 export function questionSetKey(aiAgentId: string): string {
   return `agent:readiness-questions:${aiAgentId}`;
@@ -250,10 +263,10 @@ Write the questions in ${lang}.`;
 function buildJudgePrompt(ctx: ReadinessContext, questions: Array<{ id: string; question: string }>, locale: string): string {
   const lang = LANG_NAMES[locale] || "English";
   const kbBlock = ctx.knowledgeDocs.length
-    ? ctx.knowledgeDocs.map((d) => `- [${d.kb}] ${d.title}: ${d.snippet}`).join("\n")
+    ? ctx.knowledgeDocs.map((d) => `- doc "${d.title}" [${d.kb}]: ${d.snippet}`).join("\n")
     : "(no knowledge documents available)";
   const toolBlock = ctx.tools.length
-    ? ctx.tools.map((t) => `- ${t.name} (${t.integration})${t.description ? `: ${t.description}` : ""}`).join("\n")
+    ? ctx.tools.map((t) => `- tool "${t.name}" (${t.integration})${t.description ? `: ${t.description}` : ""}`).join("\n")
     : "(no action tools granted)";
   return `${businessBlock(ctx)}
 
@@ -268,14 +281,15 @@ ${questions.map((q) => `- [${q.id}] ${q.question}`).join("\n")}
 
 ## Your task
 For EACH question id decide:
-- coverage: "full" (answerable now from the knowledge above and/or an available tool), "partial" (only some of it is covered, or it needs data we don't clearly have), or "none" (cannot be handled).
-- gapType: if not full, the single biggest missing thing - "knowledge" (missing info/policy/FAQ), "tool" (needs an action/integration we don't have, e.g. order lookup, shipping, refund), or "data" (needs structured business data, e.g. price list, size/measurement table, product catalog). Use "none" only when coverage is "full".
+- evidence: the documents and tools above that answer it, by their exact quoted name: [{"kind":"doc","name":"<doc title>"}, {"kind":"tool","name":"<tool name>"}]. Only what is listed above; [] when nothing does.
+- coverage: "full" (the evidence answers it completely), "partial" (the evidence answers part of it), or "none" (nothing listed answers it). A tool that does what the customer asks (e.g. looking up or changing their order) IS evidence. With no evidence the coverage is "none" - do not hedge with "partial".
+- gapType: if not full, the single biggest missing thing - "knowledge" (missing info/policy/FAQ), "tool" (needs an action/integration not listed, e.g. refunds when no refund tool is listed), or "data" (needs structured business data, e.g. price list, size/measurement table, product catalog). Use "none" only when coverage is "full".
 - reason: one short sentence in ${lang}.
 
 Then produce "recommendations": concrete, deduplicated fixes for the gaps you found. Each has a "type" from: "add_knowledge", "connect_tool", "add_business_data", "add_faq", "create_workflow", "other". title + detail in ${lang}.
 
 Respond ONLY with JSON of exactly this shape:
-{"judgements":[{"id":"q_...","coverage":"full|partial|none","gapType":"knowledge|tool|data|none","reason":"..."}],"recommendations":[{"type":"...","title":"...","detail":"..."}]}`;
+{"judgements":[{"id":"q_...","evidence":[{"kind":"doc|tool","name":"..."}],"coverage":"full|partial|none","gapType":"knowledge|tool|data|none","reason":"..."}],"recommendations":[{"type":"...","title":"...","detail":"..."}]}`;
 }
 
 function computeScore(questions: ReadinessQuestion[]): { score: number; totals: ReadinessReport["totals"] } {
@@ -292,6 +306,10 @@ function computeScore(questions: ReadinessQuestion[]): { score: number; totals: 
 const ANSWERED_REASON: Record<string, string> = {
   en: "Answered by the team; the answer is in the knowledge.",
   he: "הצוות ענה על השאלה, והתשובה נמצאת בידע.",
+};
+const NO_EVIDENCE_REASON: Record<string, string> = {
+  en: "No document or tool it has answers this.",
+  he: "אין מסמך או כלי שעונים על השאלה הזו.",
 };
 const NOT_JUDGED_REASON: Record<string, string> = {
   en: "The check did not return a verdict for this question.",
@@ -419,55 +437,84 @@ export async function generateReadinessReport(
   }
 
   const toJudge = set.questions.filter((q) => !answeredIds.has(q.id));
-  const judged = new Map<string, { coverage: Coverage; gapType: ReadinessQuestion["gapType"]; reason: string }>();
-  let recommendations: ReadinessRecommendation[] = [];
-  if (toJudge.length) {
-    let raw: string;
+  const judged = new Map<string, { coverage: Coverage; gapType: ReadinessQuestion["gapType"]; reason: string; evidence: Array<{ kind: "doc" | "tool"; name: string }> }>();
+  const recs: ReadinessRecommendation[] = [];
+  // Only names that were in the judge's input count as evidence.
+  const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+  const docNames = new Map(ctx.knowledgeDocs.map((d) => [norm(d.title), d.title]));
+  const toolNames = new Map(ctx.tools.map((t) => [norm(t.name), t.name]));
+  const batches: Array<Array<{ id: string; question: string }>> = [];
+  for (let i = 0; i < toJudge.length; i += JUDGE_BATCH) batches.push(toJudge.slice(i, i + JUDGE_BATCH));
+
+  const outs = await Promise.all(batches.map(async (batch) => {
     try {
       const res = await generateResponse({
         tenantId,
         messages: [
           { role: "system", content: "You are a meticulous QA auditor for AI customer-service employees. You output only valid JSON." },
-          { role: "user", content: buildJudgePrompt(ctx, toJudge, locale) },
+          { role: "user", content: buildJudgePrompt(ctx, batch, locale) },
         ],
-        // Judging, not inventing: the same input should get the same verdict.
+        // Ignored by the gpt-5 models (see the header); harmless elsewhere.
         temperature: 0,
-        maxTokens: 4500,
+        reasoningEffort: "medium",
+        maxTokens: 3000,
         responseFormat: { type: "json_object" },
         metadata: { type: "agent_readiness", aiAgentId: agentId },
       } as any);
-      raw = (res as any)?.content || "";
+      return { raw: String((res as any)?.content || "") };
     } catch (err: any) {
       console.error("[readiness] LLM call failed:", err?.message);
-      return { error: "llm_unavailable" };
+      return { error: "llm_unavailable" as const };
     }
+  }));
+
+  for (const out of outs) {
+    if ("error" in out) return { error: out.error! };
     let parsed: any;
     try {
-      parsed = withoutWideDashes(JSON.parse(raw));
+      parsed = withoutWideDashes(JSON.parse(out.raw));
     } catch {
       return { error: "bad_model_output" };
     }
     for (const j of Array.isArray(parsed.judgements) ? parsed.judgements : []) {
       if (typeof j?.id !== "string") continue;
-      const coverage: Coverage = VALID_COVERAGE.has(j.coverage) ? j.coverage : "none";
-      const gapType = VALID_GAP.has(j.gapType) ? j.gapType : (coverage === "full" ? "none" : "knowledge");
-      judged.set(j.id, { coverage, gapType, reason: String(j.reason || "").slice(0, 400) });
+      const evidence = (Array.isArray(j.evidence) ? j.evidence : [])
+        .map((e: any) => {
+          const kind = e?.kind === "tool" ? "tool" : e?.kind === "doc" ? "doc" : null;
+          const name = kind === "tool" ? toolNames.get(norm(e?.name)) : kind === "doc" ? docNames.get(norm(e?.name)) : undefined;
+          return kind && name ? { kind, name } : null;
+        })
+        .filter((e: any, i: number, all: any[]) => e && all.findIndex((x) => x && x.kind === e.kind && x.name === e.name) === i);
+      let coverage: Coverage = VALID_COVERAGE.has(j.coverage) ? j.coverage : "none";
+      let gapType = VALID_GAP.has(j.gapType) ? j.gapType : (coverage === "full" ? "none" : "knowledge");
+      let reason = String(j.reason || "").slice(0, 400);
+      // A verdict with nothing real behind it is "none".
+      if (coverage !== "none" && evidence.length === 0) {
+        coverage = "none";
+        if (gapType === "none") gapType = "knowledge";
+        reason = NO_EVIDENCE_REASON[locale] ?? NO_EVIDENCE_REASON.en!;
+      }
+      if (coverage !== "full" && gapType === "none") gapType = "knowledge";
+      judged.set(j.id, { coverage, gapType, reason, evidence });
     }
-    recommendations = (Array.isArray(parsed.recommendations) ? parsed.recommendations : [])
-      .map((r: any) => ({
+    for (const r of Array.isArray(parsed.recommendations) ? parsed.recommendations : []) {
+      const rec = {
         type: (VALID_REC.has(r?.type) ? r.type : "other") as ReadinessRecommendation["type"],
         title: String(r?.title || "").slice(0, 200),
         detail: String(r?.detail || "").slice(0, 500),
-      }))
-      .filter((r: ReadinessRecommendation) => r.title);
+      };
+      // One per title across the batches.
+      if (rec.title && !recs.some((x) => norm(x.title) === norm(rec.title))) recs.push(rec);
+    }
   }
+  const recommendations = recs.slice(0, 12);
 
   const questions: ReadinessQuestion[] = set.questions.map((q) => {
     if (answeredIds.has(q.id)) {
       return { id: q.id, question: q.question, coverage: "full", gapType: "none", reason: ANSWERED_REASON[locale] ?? ANSWERED_REASON.en!, answered: true };
     }
     // A question the judge skipped is counted as not handled, and says so.
-    const j = judged.get(q.id) ?? { coverage: "none" as Coverage, gapType: "knowledge" as const, reason: NOT_JUDGED_REASON[locale] ?? NOT_JUDGED_REASON.en! };
+    const j = judged.get(q.id) ?? { coverage: "none" as Coverage, gapType: "knowledge" as const, reason: NOT_JUDGED_REASON[locale] ?? NOT_JUDGED_REASON.en!, evidence: [] };
     return { id: q.id, question: q.question, ...j };
   });
 
