@@ -166,3 +166,100 @@ describe('★★ given to it (Backend 9339ca26): an integration action reaches i
     );
   });
 });
+
+describe('★★ E3 (2026-10-14) - by integration, then by business section, each opened on its own', () => {
+  const ROWS: readonly ToolLevelRow[] = [
+    row({
+      toolName: 'woocommerce.create_coupon',
+      label: 'WooCommerce · Create a coupon',
+      action: 'Create a coupon',
+      integration: 'woocommerce',
+      integrationName: 'WooCommerce',
+      domain: 'coupons',
+      domainIcon: 'coupons',
+      domainLabel: 'Coupons and discounts',
+    }),
+    row({
+      toolName: 'send_message',
+      label: 'Send a message',
+      action: 'Send a message',
+      integration: null,
+      granted: null,
+      domain: 'messaging',
+      domainIcon: 'messaging',
+      domainLabel: 'Messaging',
+    }),
+    row({
+      toolName: 'woocommerce.mystery',
+      label: 'WooCommerce · Mystery',
+      action: 'Mystery',
+      integration: 'woocommerce',
+      integrationName: 'WooCommerce',
+      domain: null,
+      domainIcon: null,
+      domainLabel: null,
+    }),
+  ];
+
+  it('★ GOTCHA’s own first, then each integration, named', () => {
+    show(ROWS);
+    const groups = [...screen.getByTestId('levels-rows').querySelectorAll(':scope > section')];
+    expect(groups.map((g) => g.getAttribute('data-testid'))).toEqual([
+      'levels-integration-gotcha',
+      'levels-integration-woocommerce',
+    ]);
+    expect(groups[0]!.querySelector('h4')).toHaveTextContent("GOTCHA's own actions");
+    expect(groups[1]!.querySelector('h4')).toHaveTextContent('WooCommerce');
+  });
+
+  it('★★ each section closed at first, with its icon, name and count; opened, its actions', () => {
+    show(ROWS);
+    const toggle = screen.getByTestId('levels-domain-toggle-woocommerce-coupons');
+    expect(toggle).toHaveTextContent('Coupons and discounts');
+    expect(toggle).toHaveTextContent('1');
+    // The icon drawn, not a name for it: lucide's own class.
+    expect(toggle.querySelector('svg.lucide-ticket-percent')).not.toBeNull();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const list = document.getElementById(toggle.getAttribute('aria-controls')!)!;
+    expect(list).not.toBeVisible();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(list).toBeVisible();
+    expect(screen.getByTestId('level-woocommerce.create_coupon')).toBeVisible();
+    // The other sections stay as they were.
+    expect(screen.getByTestId('levels-domain-toggle-gotcha-messaging')).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    fireEvent.click(toggle);
+    expect(list).not.toBeVisible();
+  });
+
+  it('★ under its integration, the action’s own name; its switch still names it in full', () => {
+    show(ROWS);
+    const name = screen.getByTestId('level-woocommerce.create_coupon').querySelector('bdi');
+    expect(name).toHaveTextContent(/^Create a coupon$/);
+    expect(screen.getByTestId('level-give-woocommerce.create_coupon')).toHaveAttribute(
+      'aria-label',
+      'Give it WooCommerce · Create a coupon',
+    );
+  });
+
+  it('a row with no section: "Other", with the shapes icon - never a blank heading', () => {
+    show(ROWS);
+    const toggle = screen.getByTestId('levels-domain-toggle-woocommerce-other');
+    expect(toggle).toHaveTextContent('Other');
+    expect(toggle.querySelector('svg.lucide-shapes')).not.toBeNull();
+  });
+
+  it('Hebrew: GOTCHA’s own heading', () => {
+    render(
+      <NextIntlClientProvider locale="he" messages={{ employees: he }}>
+        <EmployeeToolLevels employeeId="e1" rows={ROWS} />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('levels-integration-gotcha').querySelector('h4')).toHaveTextContent(
+      'הפעולות של GOTCHA',
+    );
+  });
+});

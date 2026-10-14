@@ -456,6 +456,17 @@ const employeeToolSchema = z.object({
   granted: z.boolean().nullable().catch(null).default(null),
   /** It can be given: the workspace has set it up. Absent reads as no. */
   grantable: z.boolean().catch(false).default(false),
+  /**
+   * E3 (Backend 0d922065): where it is drawn. The integration's own name
+   * (`null` for GOTCHA's built-ins), and its business section inside it -
+   * `domain` keys it, `domainIcon` picks its icon, `domainLabel` names it in
+   * the reader's language. Free strings: a section the server adds later is
+   * drawn under its own label, never a rejected list.
+   */
+  integrationName: z.string().nullable().catch(null).default(null),
+  domain: z.string().min(1).nullable().catch(null).default(null),
+  domainIcon: z.string().nullable().catch(null).default(null),
+  domainLabel: z.string().nullable().catch(null).default(null),
 });
 export type EmployeeTool = z.infer<typeof employeeToolSchema>;
 

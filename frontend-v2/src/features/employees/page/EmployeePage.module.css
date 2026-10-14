@@ -227,6 +227,77 @@
     font-size: 12px;
   }
 
+  /* E3: by integration, then by business section, each opened on its own. */
+  .toolGroups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .toolIntegration {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .toolIntegrationName {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    margin: 0;
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+
+  .toolDomain {
+    border: var(--border-width-thin) solid var(--border-subtle);
+    border-radius: 10px;
+  }
+
+  .toolDomain > .rows {
+    padding: var(--space-8) var(--space-12) var(--space-12);
+  }
+
+  .toolDomainHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    inline-size: 100%;
+    padding: var(--space-8) var(--space-12);
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 13px;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .toolDomainIcon {
+    flex: none;
+    color: var(--text-secondary);
+  }
+
+  .toolDomainName {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .toolDomainCount {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .toolDomainChevron {
+    flex: none;
+    color: var(--text-secondary);
+    transition: transform 0.15s ease;
+  }
+
+  .toolDomainHead[aria-expanded='true'] .toolDomainChevron {
+    transform: rotate(180deg);
+  }
+
   /* "Give it this": the words toggle the switch, as on every switch here. */
   .giveRow {
     display: inline-flex;

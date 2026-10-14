@@ -244,3 +244,57 @@ describe('★★ an employee’s tools say which are given to it (Backend 9339ca
     expect(tool.grantable).toBe(false);
   });
 });
+
+describe('★★ E3 - an employee’s tools say where they are drawn (Backend 0d922065)', () => {
+  const row = {
+    toolName: 'woocommerce.create_coupon',
+    workspaceLevel: 'ask',
+    employeeLevel: 'ask',
+    allowedLevels: ['ask', 'never'],
+  };
+
+  it('the integration’s name and the business section are kept as sent', () => {
+    expect(
+      employeeToolsSchema.parse({
+        tools: [
+          {
+            ...row,
+            integrationName: 'WooCommerce',
+            category: 'WRITE',
+            domain: 'coupons',
+            domainIcon: 'coupons',
+            domainLabel: 'קופונים והנחות',
+          },
+        ],
+      })[0],
+    ).toMatchObject({
+      integrationName: 'WooCommerce',
+      domain: 'coupons',
+      domainIcon: 'coupons',
+      domainLabel: 'קופונים והנחות',
+    });
+  });
+
+  it('★ a section the server adds later is kept - never a rejected row', () => {
+    const tools = employeeToolsSchema.parse({
+      tools: [
+        { ...row, domain: 'subscriptions', domainIcon: 'subscriptions', domainLabel: 'Subs' },
+      ],
+    });
+    expect(tools).toHaveLength(1);
+    expect(tools[0]!.domain).toBe('subscriptions');
+  });
+
+  it('an older server says none of it: null, and the row stays', () => {
+    const tool = employeeToolsSchema.parse({ tools: [row] })[0]!;
+    expect(tool).toMatchObject({
+      integrationName: null,
+      domain: null,
+      domainIcon: null,
+      domainLabel: null,
+    });
+    expect(
+      employeeToolsSchema.parse({ tools: [{ ...row, domain: 7, domainLabel: '' }] })[0],
+    ).toMatchObject({ domain: null, domainLabel: '' });
+  });
+});

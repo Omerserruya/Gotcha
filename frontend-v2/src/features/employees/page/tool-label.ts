@@ -19,12 +19,24 @@ export function toolLabel(
   integrationName: (slug: string) => string | null,
   ownWords: (toolName: string) => string,
 ): string {
+  const action = toolAction(tool, ownWords);
+  const name = tool.integration ? integrationName(tool.integration) : null;
+  return name && action.fromCatalogue ? `${name} · ${action.name}` : action.name;
+}
+
+/** The action's own name: the catalogue's, else our own words, else the name made readable - never the slug. */
+function toolAction(
+  tool: Pick<EmployeeTool, 'toolName' | 'label' | 'integration'>,
+  ownWords: (toolName: string) => string,
+): { readonly name: string; readonly fromCatalogue: boolean } {
   const label = tool.label?.trim();
   if (tool.integration && label && label !== tool.toolName) {
-    const name = integrationName(tool.integration);
-    return name ? `${name} · ${label}` : label;
+    return { name: label, fromCatalogue: true };
   }
-  return hasOwnWords(tool.toolName) ? ownWords(tool.toolName) : humaniseToolName(tool.toolName);
+  return {
+    name: hasOwnWords(tool.toolName) ? ownWords(tool.toolName) : humaniseToolName(tool.toolName),
+    fromCatalogue: false,
+  };
 }
 
 /** The server's rows, named. */
@@ -37,6 +49,15 @@ export function toolLevelRows(
     ? tools.map((tool) => ({
         toolName: tool.toolName,
         label: toolLabel(tool, integrationName, ownWords),
+        action: toolAction(tool, ownWords).name,
+        integration: tool.integration ?? null,
+        // The server's name (E3), else the systems list's.
+        integrationName:
+          tool.integrationName?.trim() ||
+          (tool.integration ? integrationName(tool.integration) : null),
+        domain: tool.domain,
+        domainIcon: tool.domainIcon,
+        domainLabel: tool.domainLabel,
         workspaceLevel: tool.workspaceLevel,
         ownLevel: tool.ownLevel ?? null,
         employeeLevel: tool.employeeLevel,

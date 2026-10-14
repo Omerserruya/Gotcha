@@ -216,8 +216,9 @@ export function EmployeeProfile({
             </dl>
           </section>
 
-          <section className={styles.section} data-testid="profile-limits">
-            <h2 className={styles.title}>{t('limits.title')}</h2>
+          <section className={styles.section} data-testid="profile-tools">
+            {/* E3 (2026-10-14): its tools, by integration; "Limits" is its own rules now (E4). */}
+            <h2 className={styles.title}>{t('tools.title')}</h2>
 
             {/*
               What it may do: THIS employee's level per action (E5, Backend

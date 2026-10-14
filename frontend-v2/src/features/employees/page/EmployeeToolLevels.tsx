@@ -1,15 +1,54 @@
 'use client';
 
+import {
+  CalendarDays,
+  ChevronDown,
+  CreditCard,
+  Database,
+  Handshake,
+  Headset,
+  MessageSquare,
+  Package,
+  RotateCcw,
+  Shapes,
+  ShoppingBag,
+  StickyNote,
+  TicketPercent,
+  Truck,
+  Users,
+  Workflow,
+  type LucideIcon,
+} from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import { TOOL_LEVELS, type EmployeeTool, type ToolLevel } from '@/api/contracts/employees';
+import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import { useRouter } from '@/i18n/navigation';
 
 import hire from '../hire/Hire.module.css';
 import styles from './EmployeePage.module.css';
 import { setEmployeeToolGrant, type ToolGrantResult } from './tool-grant-actions';
 import { setEmployeeToolLevel, type ToolLevelResult } from './tool-level-actions';
+import { toolSections, type ToolDomainGroup } from './tool-sections';
+
+/** E3: a business section's icon, by the server's `domainIcon`; any other is the shapes. */
+export const DOMAIN_ICONS: Readonly<Record<string, LucideIcon>> = {
+  orders: ShoppingBag,
+  products: Package,
+  customers: Users,
+  coupons: TicketPercent,
+  payments: CreditCard,
+  shipping: Truck,
+  returns: RotateCcw,
+  leads: Handshake,
+  notes: StickyNote,
+  records: Database,
+  calendar: CalendarDays,
+  messaging: MessageSquare,
+  handover: Headset,
+  automation: Workflow,
+};
 
 /** The page's stance colours, by level. */
 const STANCE_OF: Readonly<Record<ToolLevel, string>> = {
@@ -28,7 +67,18 @@ export type ToolLevelRow = Pick<
   | 'allowedLevels'
   | 'granted'
   | 'grantable'
-> & { readonly label: string };
+> & {
+  /** "{integration} · {action}", for a line that names it alone (the 07 card). */
+  readonly label: string;
+  /** E3: the action's own name, under its integration's heading. */
+  readonly action?: string;
+  /** E3: where it is drawn - see `tool-sections.ts`. */
+  readonly integration?: string | null;
+  readonly integrationName?: string | null;
+  readonly domain?: string | null;
+  readonly domainIcon?: string | null;
+  readonly domainLabel?: string | null;
+};
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -73,12 +123,72 @@ export function EmployeeToolLevels({
       <p className={styles.note} data-testid="levels-rule">
         {t('rule')}
       </p>
-      <ul className={styles.rows} data-testid="levels-rows">
-        {rows.map((row) => (
+      {/*
+        ★★ E3 (Omer, 2026-10-14): by integration, then by business section,
+        each section opened and closed on its own - see tool-sections.ts.
+      */}
+      <div className={styles.toolGroups} data-testid="levels-rows">
+        {toolSections(rows).map((group) => {
+          const key = group.integration ?? 'gotcha';
+          return (
+            <section
+              key={key}
+              className={styles.toolIntegration}
+              data-testid={`levels-integration-${key}`}
+            >
+              <h4 className={styles.toolIntegrationName}>
+                {group.integration ? (
+                  <IntegrationLogo slug={group.integration} size="pill" />
+                ) : null}
+                <bdi dir="auto">{group.name ?? t('builtIn')}</bdi>
+              </h4>
+              {group.domains.map((domain) => (
+                <DomainGroup key={domain.domain} employeeId={employeeId} at={key} group={domain} />
+              ))}
+            </section>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+/** One business section: its icon, name and count; its actions shown when opened. */
+function DomainGroup({
+  employeeId,
+  at,
+  group,
+}: {
+  readonly employeeId: string;
+  /** The integration it is under, for its ids. */
+  readonly at: string;
+  readonly group: ToolDomainGroup;
+}) {
+  const t = useTranslations('employees.page.levels');
+  const [open, setOpen] = useState(false);
+  const Icon = (group.icon ? DOMAIN_ICONS[group.icon] : undefined) ?? Shapes;
+  const id = `levels-${at}-${group.domain}`;
+  return (
+    <div className={styles.toolDomain} data-testid={`levels-domain-${at}-${group.domain}`}>
+      <button
+        type="button"
+        className={styles.toolDomainHead}
+        aria-expanded={open}
+        aria-controls={id}
+        data-testid={`levels-domain-toggle-${at}-${group.domain}`}
+        onClick={() => setOpen((was) => !was)}
+      >
+        <Icon className={styles.toolDomainIcon} size={16} strokeWidth={1.8} aria-hidden="true" />
+        <span className={styles.toolDomainName}>{group.label ?? t('otherSection')}</span>
+        <span className={styles.toolDomainCount}>{group.rows.length}</span>
+        <ChevronDown className={styles.toolDomainChevron} size={14} aria-hidden="true" />
+      </button>
+      <ul id={id} className={styles.rows} hidden={!open}>
+        {group.rows.map((row) => (
           <LevelRow key={row.toolName} employeeId={employeeId} row={row} />
         ))}
       </ul>
-    </>
+    </div>
   );
 }
 
@@ -134,7 +244,8 @@ function LevelRow({
   return (
     <li className={`${styles.row} ${styles.levelRow}`} data-testid={`level-${row.toolName}`}>
       <span className={styles.rowName}>
-        <bdi dir="auto">{row.label}</bdi>
+        {/* Under its integration's heading, the action's own name; aria keeps the full one. */}
+        <bdi dir="auto">{row.action ?? row.label}</bdi>
         <span className={styles.state} data-testid={`level-source-${row.toolName}`}>
           {own ? t('own') : t('likeWorkspace')}
         </span>

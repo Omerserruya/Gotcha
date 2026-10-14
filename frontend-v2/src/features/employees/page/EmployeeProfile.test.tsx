@@ -94,7 +94,7 @@ beforeEach(() => {
   router.refresh.mockReset();
 });
 
-describe('★★ the Profile tab is ONE list, top to bottom, Limits and the handoff inside it', () => {
+describe('★★ the Profile tab is ONE list, top to bottom, Tools and the handoff inside it', () => {
   it('four parts, in order, in one column - and no tab or page of their own', () => {
     profile();
     const list = screen.getByTestId('employee-profile');
@@ -104,10 +104,10 @@ describe('★★ the Profile tab is ONE list, top to bottom, Limits and the hand
     expect(parts).toEqual([
       'profile-responsible',
       'profile-how',
-      'profile-limits',
+      'profile-tools',
       'profile-handover',
     ]);
-    expect(within(list).getByTestId('profile-limits')).toHaveTextContent('Limits');
+    expect(within(list).getByTestId('profile-tools')).toHaveTextContent('Tools');
     expect(within(list).getByTestId('profile-handover')).toHaveTextContent('Handoff to a person');
   });
 
@@ -120,7 +120,7 @@ describe('★★ the Profile tab is ONE list, top to bottom, Limits and the hand
       'profile-readiness',
       'profile-responsible',
       'profile-how',
-      'profile-limits',
+      'profile-tools',
       'profile-handover',
     ]);
   });
