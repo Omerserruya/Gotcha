@@ -327,6 +327,22 @@
     color: var(--text-subtle);
   }
 
+  /* ★ AU6 step 2: a step can be dragged from the library; where it may land lights up. */
+  .libItem[draggable='true'] {
+    cursor: grab;
+  }
+
+  .canvasScroll[data-dragging] {
+    outline: 2px dashed var(--border-default);
+    outline-offset: -6px;
+  }
+
+  .canvasScroll[data-dragging] .add,
+  .canvasScroll[data-dragging] .between {
+    outline: var(--focus-ring-width) solid var(--action-base);
+    outline-offset: var(--focus-ring-offset);
+  }
+
   .libItem[data-unavailable] {
     color: var(--text-faint);
     cursor: default;

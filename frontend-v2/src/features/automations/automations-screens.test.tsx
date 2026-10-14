@@ -452,6 +452,102 @@ describe('★★ 09d - the builder', () => {
     expect(screen.queryByTestId('library-send_location-why')).toBeNull();
   });
 
+  describe('★★ AU6 step 2: drag a step from the library', () => {
+    const transfer = () => ({
+      data: {} as Record<string, string>,
+      setData(k: string, v: string) {
+        this.data[k] = v;
+      },
+      getData(k: string) {
+        return this.data[k] ?? '';
+      },
+      effectAllowed: 'all',
+      dropEffect: 'none',
+    });
+    const line = () =>
+      automation({
+        status: 'draft',
+        stats: { runsThisWeek: 0, lastRunAt: null, lastRunStatus: null },
+        nodes: [
+          { id: 't', type: 'automation_trigger', data: {} },
+          { id: 'a', type: 'add_tag', data: { tag: 'vip' } },
+        ],
+        edges: [{ id: 'e1', source: 't', target: 'a', sourceHandle: null }],
+      });
+    const drag = (onto: string) => {
+      const dataTransfer = transfer();
+      fireEvent.dragStart(screen.getByTestId('library-wait'), { dataTransfer });
+      // A browser drops only where dragover was refused its default.
+      expect(fireEvent.dragOver(screen.getByTestId(onto), { dataTransfer })).toBe(false);
+      fireEvent.drop(screen.getByTestId(onto), { dataTransfer });
+    };
+
+    it('onto a free "+": after that step', () => {
+      show(draft());
+      drag('add-t-next');
+      expect(screen.getAllByTestId(/^node-/)).toHaveLength(2);
+      expect(screen.queryByTestId('add-t-next')).toBeNull();
+      expect(screen.getByTestId('builder-unsaved')).toBeInTheDocument();
+    });
+
+    it('onto one branch\'s "+": that branch only - never also where a canvas drop would go', () => {
+      const split = automation({
+        status: 'draft',
+        stats: { runsThisWeek: 0, lastRunAt: null, lastRunStatus: null },
+        nodes: [
+          { id: 't', type: 'automation_trigger', data: {} },
+          { id: 'h', type: 'opening_hours', data: {} },
+          { id: 'a', type: 'add_tag', data: { tag: 'vip' } },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'h', sourceHandle: null },
+          { id: 'e2', source: 'h', target: 'a', sourceHandle: 'open' },
+        ],
+      });
+      show(split);
+      drag('add-h-closed');
+      expect(screen.getAllByTestId(/^node-/)).toHaveLength(4);
+      expect(screen.queryByTestId('add-h-closed')).toBeNull();
+      // The canvas's own spot - after "a" - is untouched.
+      expect(screen.getByTestId('add-a-next')).toBeInTheDocument();
+    });
+
+    it('onto a line\'s "+": between the two steps', () => {
+      show(line());
+      drag('between-t-a');
+      expect(screen.getAllByTestId(/^node-/)).toHaveLength(3);
+      // The line t → a is now t → new → a.
+      expect(screen.queryByTestId('between-t-a')).toBeNull();
+      expect(screen.getAllByTestId(/^between-/)).toHaveLength(2);
+    });
+
+    it('anywhere else on the canvas: where a click would put it (after the last step)', () => {
+      show(line());
+      drag('builder-canvas-area');
+      expect(screen.getAllByTestId(/^node-/)).toHaveLength(3);
+      expect(screen.queryByTestId('add-a-next')).toBeNull();
+      expect(screen.getByTestId('between-t-a')).toBeInTheDocument();
+    });
+
+    it('while it moves the canvas says where it may land; the end of the drag clears it', () => {
+      show(line());
+      const dataTransfer = transfer();
+      fireEvent.dragStart(screen.getByTestId('library-wait'), { dataTransfer });
+      expect(screen.getByTestId('builder-canvas-area')).toHaveAttribute('data-dragging');
+      expect(screen.getByTestId('library-wait')).toHaveAttribute('draggable', 'true');
+      fireEvent.dragEnd(screen.getByTestId('library-wait'), { dataTransfer });
+      expect(screen.getByTestId('builder-canvas-area')).not.toHaveAttribute('data-dragging');
+    });
+
+    it('a drop that did not start in the library adds nothing', () => {
+      show(line());
+      const dataTransfer = transfer();
+      fireEvent.dragOver(screen.getByTestId('builder-canvas-area'), { dataTransfer });
+      fireEvent.drop(screen.getByTestId('builder-canvas-area'), { dataTransfer });
+      expect(screen.getAllByTestId(/^node-/)).toHaveLength(2);
+    });
+  });
+
   it('Test is drawn, off, saying why; never run says so', () => {
     show();
     expect(screen.getByTestId('builder-test')).toHaveAttribute('aria-disabled', 'true');

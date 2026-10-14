@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   useTransition,
+  type DragEvent,
   type MouseEvent,
 } from 'react';
 
@@ -319,6 +320,30 @@ export function Builder({
     setSelected(made.id);
     setPanel('inspector');
   };
+
+  /*
+    ★ AU6 step 2 (Omer, approved): a library step dragged onto the canvas -
+    onto a free "+" (after that step, on that branch), onto a line's "+"
+    (between the two, with AU9's rules), or anywhere else on the canvas
+    (where a click would put it). The drop targets light up while it moves.
+  */
+  const [dragging, setDragging] = useState<CatalogItem | null>(null);
+  const dropOn = (onItem: (item: CatalogItem) => void) => ({
+    onDragOver: (e: DragEvent) => {
+      if (!dragging) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'copy';
+    },
+    onDrop: (e: DragEvent) => {
+      if (!dragging) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const item = dragging;
+      setDragging(null);
+      onItem(item);
+    },
+  });
 
   const openSheet = (after: string, handle: string, edge?: AutomationEdge) => {
     setInsertRefused(null);
@@ -646,6 +671,13 @@ export function Builder({
                               disabled={!can}
                               title={can ? undefined : t('builder.nowhereFree')}
                               onClick={() => target && add(target.id, target.handle, item)}
+                              draggable={can}
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('text/plain', item.type);
+                                e.dataTransfer.effectAllowed = 'copy';
+                                setDragging(item);
+                              }}
+                              onDragEnd={() => setDragging(null)}
                               data-testid={`library-${item.type}`}
                             >
                               <Icon size={13} strokeWidth={1.75} aria-hidden="true" />
@@ -667,6 +699,8 @@ export function Builder({
               <div
                 className={styles.canvasScroll}
                 onContextMenu={onCanvasMenu}
+                {...dropOn((item) => target && add(target.id, target.handle, item))}
+                data-dragging={dragging ? '' : undefined}
                 data-testid="builder-canvas-area"
               >
                 {insertRefused ? (
@@ -740,6 +774,7 @@ export function Builder({
                             to: stepName(graph.nodes.find((n) => n.id === edge.target)!),
                           })}
                           onClick={() => openSheet(edge.source, edge.sourceHandle ?? 'next', edge)}
+                          {...dropOn((item) => addBetween(edge, item))}
                           data-testid={`between-${edge.source}-${edge.target}`}
                         >
                           <Plus size={11} aria-hidden="true" />
@@ -799,6 +834,7 @@ export function Builder({
                                   type="button"
                                   className={styles.add}
                                   onClick={() => openSheet(node.id, handle)}
+                                  {...dropOn((item) => add(node.id, handle, item))}
                                   aria-label={
                                     isLabelled(handle)
                                       ? t('builder.addOn', {
