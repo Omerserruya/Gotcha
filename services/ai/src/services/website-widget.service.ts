@@ -27,6 +27,7 @@ import {
 import { listChannels, saveChannelConfig } from "./shopify-live-chat.service";
 import { activationSnapshot } from "./shopify-chat-install.service";
 import { entryFor } from "./employee-reach.service";
+import { splitErrorCode } from "../lib/error-code";
 
 export interface WidgetSettings {
   appearance: WebchatConfig["appearance"];
@@ -290,7 +291,9 @@ export async function installOf(tenantId: string, now = new Date()) {
       themeEditorUrl: snap?.themeEditorDeepLink ?? null,
     });
   }
+  const woocommerce = await woocommerceInstall(tenantId);
   return {
+    platforms: await commercePlatforms(tenantId, shopify, woocommerce),
     code: webchat
       ? {
           widgetId: webchat.externalId,
@@ -304,8 +307,66 @@ export async function installOf(tenantId: string, now = new Date()) {
     shopify,
     // The plugin's sites (docs/api/woocommerce-plugin-v1.md §5); the code
     // snippet stays the way until one is connected.
-    woocommerce: await woocommerceInstall(tenantId),
+    woocommerce,
   };
+}
+
+const COMMERCE_SLUGS = ["shopify", "woocommerce"] as const;
+type CommercePlatform = (typeof COMMERCE_SLUGS)[number];
+export type DataStatus = "connected" | "connecting" | "error" | "not_connected";
+export type ChatStatus = "active" | "not_enabled" | "uninstalled" | "plugin" | "none";
+
+/** A TenantIntegration status, as the install step needs it. */
+export function dataStatusOf(row: { status: string; lastError: string | null } | null): DataStatus {
+  if (!row) return "not_connected";
+  if (row.status === "CONNECTED") return "connected";
+  if (row.status === "PENDING" || row.status === "TESTING") return "connecting";
+  // ERROR, or DISCONNECTED because something broke (a failed token refresh).
+  return row.status === "ERROR" || row.lastError ? "error" : "not_connected";
+}
+
+/**
+ * W11: which commerce platforms the workspace is connected to, for the
+ * install step. Two facts per platform, never merged, because they can
+ * disagree: `data` is the store connection the AI reads (TenantIntegration),
+ * `chat` is where the widget is installed (the Shopify chat channel, the
+ * WooCommerce plugin). "chat live, data broken" is a state worth showing.
+ */
+async function commercePlatforms(
+  tenantId: string,
+  shopify: Array<{ shopDomain: string | null; status: string }>,
+  woocommerce: { status: "plugin" | "use_code"; sites: Array<{ siteUrl: string; status: string }> },
+) {
+  const rows = await prisma.tenantIntegration.findMany({
+    where: { tenantId, integration: { slug: { in: [...COMMERCE_SLUGS] } } },
+    select: { status: true, lastError: true, config: true, integration: { select: { slug: true } } },
+  });
+  const rowOf = (slug: CommercePlatform) => (rows as any[]).find((r) => r.integration?.slug === slug) ?? null;
+  const errorOf = (row: any) => (row && dataStatusOf(row) === "error" ? splitErrorCode(row.lastError).lastErrorCode : null);
+
+  const sh = rowOf("shopify");
+  const shopChat: ChatStatus = shopify.some((s) => s.status === "active") ? "active"
+    : shopify.some((s) => s.status === "not_enabled") ? "not_enabled"
+    : shopify.some((s) => s.status === "uninstalled") ? "uninstalled"
+    : "none";
+  const wo = rowOf("woocommerce");
+  const storeUrl = typeof (wo?.config as any)?.storeUrl === "string" ? (wo!.config as any).storeUrl as string : null;
+  return [
+    {
+      platform: "shopify" as const,
+      data: dataStatusOf(sh),
+      dataErrorCode: errorOf(sh),
+      chat: shopChat,
+      stores: shopify.map((s) => s.shopDomain).filter((d): d is string => !!d),
+    },
+    {
+      platform: "woocommerce" as const,
+      data: dataStatusOf(wo),
+      dataErrorCode: errorOf(wo),
+      chat: (woocommerce.status === "plugin" ? "plugin" : "none") as ChatStatus,
+      stores: [...new Set([...(storeUrl ? [storeUrl] : []), ...woocommerce.sites.filter((x) => x.status === "connected").map((x) => x.siteUrl)])],
+    },
+  ];
 }
 
 /**

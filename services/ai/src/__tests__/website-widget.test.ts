@@ -24,6 +24,8 @@ const H = vi.hoisted(() => ({
   installs: [] as any[],
   raw: [] as { sql: string; values: any[] }[],
   updates: 0,
+  integrations: [] as any[],
+  integrationWhere: [] as any[],
 }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
@@ -50,6 +52,12 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       flowCanvas: { findUnique: async () => H.canvas },
       aIAgent: { findFirst: async (a: any) => H.agents.find((x) => x.id === a.where.id && x.tenantId === a.where.tenantId) ?? null },
       shopifyChatInstallation: { findMany: async () => H.installs },
+      tenantIntegration: {
+        findMany: async (a: any) => {
+          H.integrationWhere.push(a.where);
+          return H.integrations.filter((r) => r.tenantId === a.where.tenantId && a.where.integration.slug.in.includes(r.integration.slug));
+        },
+      },
       $executeRaw: async (strings: TemplateStringsArray, ...values: any[]) => { H.raw.push({ sql: strings.join("?"), values }); return 1; },
     },
   };
@@ -93,7 +101,7 @@ const shop = (id: string, domain: string, o: any = {}) => ({
 const cfgOf = (id: string) => readShopifyLiveChatConfig(H.accounts.find((a) => a.id === id).platformMeta);
 
 beforeEach(() => {
-  H.accounts = []; H.canvas = null; H.agents = []; H.installs = []; H.raw = []; H.updates = 0;
+  H.accounts = []; H.canvas = null; H.agents = []; H.installs = []; H.raw = []; H.updates = 0; H.integrations = []; H.integrationWhere = [];
   process.env.APP_PUBLIC_URL = "https://dev.gotcha.co.il/";
 });
 
@@ -251,6 +259,47 @@ describe("/install", () => {
     // The plugin's sites (none here) and its download (docs/api/woocommerce-plugin-v1.md §5).
     expect(d.woocommerce).toEqual({ status: "use_code", sites: [], downloadUrl: "/api/woocommerce-plugin/download" });
     expect(d).not.toHaveProperty("shopifyInstallUrl");
+  });
+});
+
+describe("★ /install platforms (W11): data and chat per platform, never merged", () => {
+  const ti = (slug: string, status: string, o: any = {}) => ({ tenantId: "T", status, lastError: null, config: {}, integration: { slug }, ...o });
+  const platforms = async () => {
+    const d = (await get("/api/website-widget/install")).body.data;
+    return Object.fromEntries(d.platforms.map((p: any) => [p.platform, p]));
+  };
+
+  it("nothing connected: both platforms listed, not_connected / none", async () => {
+    H.accounts = [webchat()];
+    const p = await platforms();
+    expect(p.shopify).toEqual({ platform: "shopify", data: "not_connected", dataErrorCode: null, chat: "none", stores: [] });
+    expect(p.woocommerce).toEqual({ platform: "woocommerce", data: "not_connected", dataErrorCode: null, chat: "none", stores: [] });
+    expect(H.integrationWhere[0]).toEqual({ tenantId: "T", integration: { slug: { in: ["shopify", "woocommerce"] } } });
+  });
+
+  it("★ chat live while the data connection is broken: both facts, with the error's code", async () => {
+    H.accounts = [shop("ca_s1", "one.myshopify.com")];
+    H.integrations = [
+      ti("shopify", "DISCONNECTED", { lastError: "[TOKEN_REFRESH_FAILED] The connection's sign-in could not be renewed." }),
+      ti("woocommerce", "CONNECTED", { config: { storeUrl: "https://demo-store.example.com" } }),
+      { ...ti("woocommerce", "CONNECTED"), tenantId: "OTHER", config: { storeUrl: "https://other.example.com" } },
+    ];
+    const p = await platforms();
+    expect(p.shopify).toMatchObject({ data: "error", dataErrorCode: "TOKEN_REFRESH_FAILED", chat: "active", stores: ["one.myshopify.com"] });
+    expect(p.woocommerce).toMatchObject({ data: "connected", dataErrorCode: null, chat: "none", stores: ["https://demo-store.example.com"] });
+  });
+
+  it("statuses: pending is connecting; a plain disconnect is not_connected; ERROR is error; a disabled chat is not_enabled", async () => {
+    const off = shop("ca_off", "off.myshopify.com");
+    off.platformMeta.shopifyLiveChat.enabled = false;
+    H.accounts = [off];
+    H.integrations = [ti("shopify", "PENDING"), ti("woocommerce", "ERROR", { lastError: "boom" })];
+    let p = await platforms();
+    expect(p.shopify).toMatchObject({ data: "connecting", chat: "not_enabled" });
+    expect(p.woocommerce).toMatchObject({ data: "error", dataErrorCode: null });
+    H.integrations = [ti("shopify", "DISCONNECTED")];
+    p = await platforms();
+    expect(p.shopify.data).toBe("not_connected");
   });
 });
 
