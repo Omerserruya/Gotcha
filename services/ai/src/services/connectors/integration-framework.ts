@@ -879,6 +879,7 @@ export async function executeAdapterTool(opts: {
           toolName,
           reason: `self_scope_selector_stripped:${scoped.stripped.join(",")}`,
           args: opts.args as Record<string, any>,
+          provider: "shopify",
         });
       }
       opts.args = scoped.args;
@@ -887,6 +888,11 @@ export async function executeAdapterTool(opts: {
       guardIdentity = await guard.resolveRequesterIdentity(opts.tenantId, opts.conversationId);
       if (!guardIdentity) {
         return { ok: false, failure: "refused", reason: "access_denied: requester identity could not be resolved for this conversation" };
+      }
+      // "Where is my order?" with no phone or email: the customer's OWN proven
+      // ones, never asked for (2026-10-14; guest orders carry only these).
+      if (slug === "woocommerce" && toolName === "list_customer_orders") {
+        opts.args = guard.withOwnOrderSelectors(guardIdentity, opts.args as Record<string, any>);
       }
       const pre = guard.checkArgsAllowed(guardIdentity, toolName, opts.args as Record<string, any>);
       if (!pre.allowed) {
@@ -897,6 +903,7 @@ export async function executeAdapterTool(opts: {
           toolName,
           reason: pre.reason,
           args: opts.args as Record<string, any>,
+          provider: slug === "woocommerce" ? "woocommerce" : "shopify",
         });
         return {
           ok: false,
@@ -1006,6 +1013,7 @@ export async function executeAdapterTool(opts: {
         toolName,
         reason: "write_order_not_owned",
         args: opts.args as Record<string, any>,
+        provider: "woocommerce",
       });
       return {
         ok: false,
@@ -1088,6 +1096,7 @@ export async function executeAdapterTool(opts: {
           toolName,
           reason: post.reason,
           args: opts.args as Record<string, any>,
+          provider: slug === "woocommerce" ? "woocommerce" : "shopify",
         });
         return {
           ok: false,
@@ -1099,6 +1108,12 @@ export async function executeAdapterTool(opts: {
         };
       }
       result = post.result;
+      // A guest order of theirs may carry another identifier of theirs (the
+      // checkout email): link it the way any identifier is linked. Off the
+      // reply's path.
+      if (slug === "woocommerce") {
+        void guard.linkFromWooOrders(opts.tenantId, opts.conversationId, guardIdentity, result);
+      }
       // A self-scoped write may have changed the very identifier ownership is
       // compared against. Record the resolved Shopify customer id on the
       // contact so the next turn still recognises them - the controlled

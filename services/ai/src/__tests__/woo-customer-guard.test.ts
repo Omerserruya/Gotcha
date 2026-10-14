@@ -26,10 +26,14 @@ vi.mock("@chatcenter/shared", () => ({
   encryptCredentials: (v: unknown) => v,
   decryptCredentials: (v: unknown) => v,
   assertPublicUrl: vi.fn(async () => {}),
+  autoLinkByShopifyCustomer: vi.fn(async () => ({ outcome: "no_match" })),
+  autoLinkByIdentifier: vi.fn(async () => ({ outcome: "linked", targetContactId: "c_other" })),
 }));
 
 import { executeAdapterTool, __resetRateLimits } from "../services/connectors/integration-framework";
-import { checkResultAllowed, resolveRequesterIdentity, wooOrderOwned } from "../services/connectors/customer-access-guard";
+import { checkResultAllowed, resolveRequesterIdentity, wooOrderOwned, linkFromWooOrders } from "../services/connectors/customer-access-guard";
+import { orderPhoneSearchTerms } from "../services/connectors/woocommerce.adapter";
+import { autoLinkByIdentifier } from "@chatcenter/shared";
 import "../services/connectors/woocommerce.adapter";
 
 const DANA_WA = "972541113421";
@@ -149,5 +153,87 @@ describe("★ the new order-scoped tools are owner-checked first (2026-10-13)", 
     store({ "/orders/1001": DANA_ORDER, "/orders/1001/refunds": [{ id: 1, amount: "10.00" }] });
     const r = await run("list_refunds", { order_id: "1001" });
     expect(r.ok).toBe(true);
+  });
+});
+
+// ─── Guest orders, by the customer's own phone and email (2026-10-14) ───
+
+/** A store that answers Woo's order search as Woo does: a substring of billing/shipping. */
+function searchingStore(orders: any[]) {
+  calls = [];
+  (globalThis as any).fetch = vi.fn(async (url: string, init: any) => {
+    calls.push({ url: String(url), method: init?.method ?? "GET" });
+    const u = new URL(String(url));
+    const q = u.searchParams.get("search");
+    const body = q == null ? orders : orders.filter((o) => [o.billing?.email, o.billing?.phone, o.shipping?.phone].some((f) => String(f ?? "").includes(q)));
+    return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+  });
+}
+const searched = () => calls.map((c) => new URL(c.url).searchParams.get("search"));
+
+describe("★ guest orders are found by the customer's own phone, however the store saved it", () => {
+  const guest = (phone: string, o: any = {}) => ({ id: 575, number: "575", status: "processing", customer_id: 0, date_created_gmt: "2026-10-14T11:45:00", billing: { email: "other@gmail.com", phone }, shipping: {}, ...o });
+
+  it("no arguments: searched by the sender's own phone (every stored form) and found", async () => {
+    for (const stored of ["0541113421", "+972541113421", "054-111-3421", "+972 54-111-3421", "054 111 3421"]) {
+      searchingStore([guest(stored)]);
+      const r: any = await run("list_customer_orders", {});
+      expect(r.ok, stored).toBe(true);
+      expect(r.result.map((o: any) => o.id), stored).toEqual([575]);
+    }
+    expect(searched()).toEqual(["541113421", "54-111-3421", "54 111 3421"]);
+  });
+
+  it("the sender's stored email is searched too, merged and de-duplicated, newest first", async () => {
+    prismaMock.contact.findFirst.mockResolvedValue({ phone: "+972541113421", email: "dana@x.com", metadata: {} });
+    searchingStore([guest("0541113421"), { ...DANA_ORDER, id: 900, date_created_gmt: "2026-09-01T10:00:00" }, guest("0541113421", { id: 576, date_created_gmt: "2026-10-14T12:00:00" })]);
+    const r: any = await run("list_customer_orders", {});
+    expect(r.result.map((o: any) => o.id)).toEqual([576, 575, 900]);
+    expect(searched()).toContain("dana@x.com");
+  });
+
+  it("★ another customer's order that the fuzzy search also returned is filtered out", async () => {
+    searchingStore([guest("0541113421"), { ...NOA_ORDER, billing: { ...NOA_ORDER.billing, phone: "0541113421-9" } }]);
+    const r: any = await run("list_customer_orders", {});
+    expect(r.result.map((o: any) => o.id)).toEqual([575]);
+    expect(JSON.stringify(r)).not.toContain("noa@y.com");
+  });
+
+  it("★ a phone typed for someone else is refused before the store is asked", async () => {
+    searchingStore([NOA_ORDER]);
+    const r = await run("list_customer_orders", { phone: "052-999-0000" });
+    expect(r.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("the search terms for a phone", () => {
+    expect(orderPhoneSearchTerms("+972 54-568-0665")).toEqual(["545680665", "54-568-0665", "54 568 0665"]);
+    expect(orderPhoneSearchTerms("03-555-1234")).toEqual(["035551234"]);
+    expect(orderPhoneSearchTerms("12345")).toEqual([]);
+    expect(orderPhoneSearchTerms(undefined)).toEqual([]);
+  });
+});
+
+describe("★ a guest order's other identifier links the contact the shared way", () => {
+  it("the checkout email of an order the requester owns is fed to autoLinkByIdentifier; a foreign order's never", async () => {
+    prismaMock.contact.findFirst.mockResolvedValue({ id: "c_dana", phone: "+972541113421", email: null, metadata: {} });
+    const identity = (await resolveRequesterIdentity("t1", "conv1"))!;
+    const own = { id: 575, billing: { email: "Dana.Other@Gmail.com", phone: "0541113421" }, shipping: {} };
+    expect(await linkFromWooOrders("t1", "conv1", identity, [own, NOA_ORDER])).toBe(1);
+    expect((autoLinkByIdentifier as any).mock.calls).toEqual([[{ tenantId: "t1", senderContactId: "c_dana", identifier: { type: "email", value: "dana.other@gmail.com" } }]]);
+  });
+
+  it("nothing new on the order: nothing linked", async () => {
+    prismaMock.contact.findFirst.mockResolvedValue({ id: "c_dana", phone: "+972541113421", email: "dana@x.com", metadata: {} });
+    const identity = (await resolveRequesterIdentity("t1", "conv1"))!;
+    expect(await linkFromWooOrders("t1", "conv1", identity, [DANA_ORDER])).toBe(0);
+    expect(autoLinkByIdentifier).not.toHaveBeenCalled();
+  });
+
+  it("the denial log names the Woo tool as woocommerce.*", async () => {
+    store({ "/orders/1002": NOA_ORDER });
+    await run("get_order", { order_id: "1002" });
+    const row: any = (prismaMock.auditLog.create.mock.calls as any[]).find((c: any[]) => c[0].data.action === "security.cross_customer_access_denied")![0];
+    expect(row.data.metadata.tool).toBe("woocommerce.get_order");
   });
 });

@@ -140,12 +140,12 @@ describe("★ the new WooCommerce tools (2026-10-13), stubbed store", () => {
     expect(H.calls[1].body.discount_type).toBe("percent");
   });
 
-  it("list_customer_orders: by customer id, else by email, newest first", async () => {
+  it("list_customer_orders: by customer id, else by phone / email, newest first", async () => {
     store({});
     await run("list_customer_orders", { customer_id: "7" });
     const u = new URL(H.calls[0].url);
     expect([u.searchParams.get("customer"), u.searchParams.get("orderby"), u.searchParams.get("order")]).toEqual(["7", "date", "desc"]);
-    await expect(run("list_customer_orders", {})).rejects.toThrow("customer_id_or_email_required");
+    await expect(run("list_customer_orders", {})).rejects.toThrow("phone_email_or_customer_id_required");
   });
 
   it("★ get_shipment_tracking asks the extension's own namespace, and a 200 records the store as having it", async () => {

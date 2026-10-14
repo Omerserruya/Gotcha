@@ -24,7 +24,7 @@
  * never open access: the requester context is read from the conversation row,
  * never from tool args.
  */
-import { prisma, autoLinkByShopifyCustomer } from "@chatcenter/shared";
+import { prisma, autoLinkByShopifyCustomer, autoLinkByIdentifier } from "@chatcenter/shared";
 
 // Shopify tools that return or act on customer/order-scoped data. Product,
 // discount-catalog and segment tools are store-scoped and stay unguarded.
@@ -247,6 +247,20 @@ export function deriveSelfSelector(identity: RequesterIdentity): Record<string, 
   return null;
 }
 
+/**
+ * A Woo order lookup the model made without a phone, email or customer id:
+ * filled with the requester's own proven phone (the channel sender) and their
+ * one stored email. Anything the model did pass is left for checkArgsAllowed
+ * to judge.
+ */
+export function withOwnOrderSelectors(identity: RequesterIdentity, args: Record<string, any>): Record<string, any> {
+  if (args.customer_id != null || args.phone != null || args.email != null) return args;
+  const out: Record<string, any> = { ...args };
+  if (identity.channelSenderId && phoneSuffix(identity.channelSenderId)) out.phone = String(identity.channelSenderId);
+  if (identity.emails.size === 1) out.email = [...identity.emails][0];
+  return out;
+}
+
 /** Selector-shaped keys a self-scoped tool must never receive from the model. */
 const SELECTOR_KEYS = ["customer_id", "customerId", "id"];
 
@@ -444,10 +458,13 @@ export async function recordSecurityDenial(opts: {
   toolName: string;
   reason: string;
   args: Record<string, any>;
+  /** The provider the tool belongs to (it was always logged as shopify). */
+  provider?: GuardedProvider;
 }): Promise<void> {
+  const tool = `${opts.provider ?? "shopify"}.${opts.toolName}`;
   console.error(
     `[SECURITY] cross-customer access denied tenant=${opts.tenantId} conv=${opts.conversationId} ` +
-      `sender=${opts.channelSenderId ? mask(opts.channelSenderId) : "?"} tool=shopify.${opts.toolName} reason=${opts.reason}`,
+      `sender=${opts.channelSenderId ? mask(opts.channelSenderId) : "?"} tool=${tool} reason=${opts.reason}`,
   );
   try {
     await (prisma as any).auditLog.create({
@@ -458,7 +475,7 @@ export async function recordSecurityDenial(opts: {
         targetType: "conversation",
         targetId: opts.conversationId,
         metadata: {
-          tool: `shopify.${opts.toolName}`,
+          tool,
           reason: opts.reason,
           channelSender: opts.channelSenderId ? mask(opts.channelSenderId) : null,
           requestedPhone: opts.args.phone ? mask(String(opts.args.phone)) : undefined,
@@ -469,5 +486,46 @@ export async function recordSecurityDenial(opts: {
     });
   } catch (err: any) {
     console.error("[SECURITY] denial audit write failed:", err?.message);
+  }
+}
+
+/**
+ * A Woo order the requester owns (already ownership-checked: its billing or
+ * shipping phone/email is theirs) may carry ANOTHER identifier of theirs: the
+ * guest checkout's email, a second phone. The same person, so feed it to the
+ * shared identifier rules (2026-10-14, Omer: "if a customer orders as a guest,
+ * I still want to find them"): linked to a contact that channel proved that
+ * identifier, only suggested to one where it was merely typed. A display fact:
+ * resolveRequesterIdentity reads this conversation's own contact and never
+ * follows a link, so this grants no access to anyone's orders. Never throws.
+ */
+export async function linkFromWooOrders(tenantId: string, conversationId: string, identity: RequesterIdentity, result: unknown): Promise<number> {
+  try {
+    const orders = (Array.isArray(result) ? result : result && typeof result === "object" ? [result] : [])
+      .filter((o: any) => o && typeof o === "object" && (o.billing || o.shipping) && wooOwnerMatches(identity, o));
+    const ids = new Map<string, { type: "email" | "phone"; value: string }>();
+    for (const o of orders.slice(0, 10) as any[]) {
+      const email = typeof o.billing?.email === "string" ? o.billing.email.trim().toLowerCase() : "";
+      if (email.includes("@") && !identity.emails.has(email)) ids.set(`e:${email}`, { type: "email", value: email });
+      for (const p of [o.billing?.phone, o.shipping?.phone]) {
+        const suffix = phoneSuffix(p);
+        if (suffix && !identity.phoneSuffixes.has(suffix)) ids.set(`p:${suffix}`, { type: "phone", value: String(p) });
+      }
+    }
+    if (!ids.size || !identity.channelSenderId) return 0;
+    const contact = await (prisma as any).contact.findFirst({
+      where: { tenantId, externalId: identity.channelSenderId, mergedIntoId: null },
+      select: { id: true },
+    });
+    if (!contact) return 0;
+    let n = 0;
+    for (const identifier of [...ids.values()].slice(0, 3)) {
+      const r = await autoLinkByIdentifier({ tenantId, senderContactId: contact.id, identifier }).catch(() => null);
+      if (r && r.outcome !== "no_match") n++;
+    }
+    return n;
+  } catch (err: any) {
+    console.warn(`[guard] woo order identifiers not linked conv=${conversationId}: ${err?.message}`);
+    return 0;
   }
 }

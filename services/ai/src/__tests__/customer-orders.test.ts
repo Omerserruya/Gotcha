@@ -161,3 +161,18 @@ describe("which store", () => {
     expect((await request(app).get("/api/commerce-context/customers/nope/orders")).status).toBe(404);
   });
 });
+
+describe("★ guest orders, whichever way the store saved the phone (2026-10-14)", () => {
+  it("the phone is searched in every stored form; a match on the shipping phone counts", async () => {
+    // An earlier case swaps fetch for one that records nothing: put the recording double back.
+    globalThis.fetch = (async (url: string) => {
+      H.fetched.push(url);
+      return { ok: true, status: 200, json: async () => (url.includes("/products?") ? H.products : H.wooOrders), headers: new Map() } as any;
+    }) as any;
+    H.wooOrders = [order(5, { billing: { email: "", phone: "" }, shipping: { phone: "+972 50-123-4567" } })];
+    const r = await get();
+    expect(r.body.orders.map((o: any) => [o.orderNumber, o.matchedBy])).toEqual([["#5", "phone"]]);
+    const searched = H.fetched.filter((u) => u.includes("/orders?")).map((u) => new URL(u).searchParams.get("search"));
+    expect(searched).toEqual(expect.arrayContaining(["501234567", "50-123-4567", "50 123 4567"]));
+  });
+});

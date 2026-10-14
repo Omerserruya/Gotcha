@@ -19,6 +19,8 @@
  */
 
 import { assertPublicUrl } from "@chatcenter/shared";
+import { orderPhoneSearchTerms } from "../../lib/order-phone-search";
+export { orderPhoneSearchTerms };
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
 import { SHIPMENT_TRACKING_NAMESPACE, recordShipmentTracking } from "./woo-shipment-tracking";
 
@@ -86,7 +88,7 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: "woocommerce.search_customers",
-    description: "Search WooCommerce customers by partial email/name.",
+    description: "Search REGISTERED WooCommerce customers by partial email/name. Guest checkouts are not customers and phone is not searched: to find someone's orders use woocommerce.list_customer_orders.",
     whenToUse: "Identifying a customer with partial info.",
     category: "READ",
     riskLevel: "LOW",
@@ -299,13 +301,18 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: "woocommerce.list_customer_orders",
-    description: "A customer's orders, newest first.",
-    whenToUse: "The customer asks about their orders without an order number.",
+    description: "The customer's orders, newest first, found by their phone and/or email on the order itself: this finds guest-checkout orders too.",
+    whenToUse: "The customer asks about their orders without an order number. Call it with no arguments to search by the customer's own phone and email; never by a phone or email given for someone else.",
     category: "READ",
     riskLevel: "LOW",
     parameters: {
       type: "object",
-      properties: { customer_id: { type: "string" }, email: { type: "string" }, per_page: { type: "number" } },
+      properties: {
+        phone: { type: "string", description: "The customer's phone, any format (05x, +972, with dashes)." },
+        email: { type: "string" },
+        customer_id: { type: "string", description: "A registered customer's id. Guest orders have none." },
+        per_page: { type: "number" },
+      },
     },
   },
   {
@@ -585,14 +592,25 @@ const WooCommerceAdapter: ProviderAdapter = {
         return await wooRequest(auth, "PUT", `${base}/coupons/${encodeURIComponent(id)}`, { status: "draft" });
       }
       case "list_customer_orders": {
-        const params = new URLSearchParams();
-        params.set("per_page", String(Math.min(100, Number(args.per_page ?? 10))));
-        params.set("orderby", "date");
-        params.set("order", "desc");
-        if (args.customer_id) params.set("customer", String(args.customer_id));
-        else if (args.email) params.set("search", String(args.email));
-        else throw new Error("customer_id_or_email_required");
-        return await wooRequest(auth, "GET", `${base}/orders?${params}`);
+        const per = Math.min(100, Math.max(1, Number(args.per_page ?? 10) || 10));
+        const query = (extra: Record<string, string>) => {
+          const params = new URLSearchParams({ per_page: String(per), orderby: "date", order: "desc", ...extra });
+          return wooRequest(auth, "GET", `${base}/orders?${params}`) as Promise<any>;
+        };
+        if (args.customer_id) return await query({ customer: String(args.customer_id) });
+        // A guest checkout has no customer: its phone and email live only on
+        // the order. Woo's order search reads billing/shipping, so search
+        // those, in every way a phone is commonly stored, and merge.
+        const terms = [...orderPhoneSearchTerms(args.phone), ...(args.email ? [String(args.email).trim()] : [])];
+        if (!terms.length) throw new Error("phone_email_or_customer_id_required");
+        const found = new Map<string, any>();
+        for (const term of terms) {
+          const rows = await query({ search: term });
+          for (const o of Array.isArray(rows) ? rows : []) if (o?.id != null) found.set(String(o.id), o);
+        }
+        return [...found.values()]
+          .sort((a, b) => String(b?.date_created_gmt ?? "").localeCompare(String(a?.date_created_gmt ?? "")))
+          .slice(0, per);
       }
       case "get_shipment_tracking": {
         // The extension serves its own namespace, not wc/v3: the wc/v3 path

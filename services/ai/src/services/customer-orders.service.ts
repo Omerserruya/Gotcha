@@ -23,6 +23,7 @@
 import { prisma, getRedis, assertPublicUrl } from "@chatcenter/shared";
 import type { OrderCard, OrderDetail, OrderItem, TimelineMilestone, CommerceContextResponse } from "@chatcenter/shared";
 import { loadConnection } from "./connectors/integration-framework";
+import { orderPhoneSearchTerms } from "../lib/order-phone-search";
 import { getSystemForPart } from "./connectors/part-systems";
 import { emailKey, phoneKey } from "./customer-commerce.service";
 import {
@@ -238,7 +239,10 @@ async function wooOrdersFor(tenantId: string, ids: ContactIds, locale: Locale, l
     // Woo's `search` is a fuzzy text search, so every hit is re-checked
     // exactly against the billing email/phone below. One search per
     // identifier; the union is de-duplicated by order id.
-    const terms = [...ids.emails, ...[...ids.phones]].slice(0, 4);
+    // A phone is searched in every form a store commonly saves it (05x, +972,
+    // dashes, spaces: orderPhoneSearchTerms), so a guest checkout is found
+    // whichever way its number was typed.
+    const terms = [...[...ids.emails].slice(0, 2), ...[...ids.phones].slice(0, 2).flatMap((p) => orderPhoneSearchTerms(p))];
     const found = new Map<string, any>();
     for (const term of terms) {
       for (const o of await wooGet(storeUrl, auth, `orders?search=${encodeURIComponent(term)}&per_page=${Math.min(limit * 2, 50)}&orderby=date&order=desc`)) {
@@ -248,7 +252,7 @@ async function wooOrdersFor(tenantId: string, ids: ContactIds, locale: Locale, l
     const matched: Array<{ o: any; by: MatchedBy }> = [];
     for (const o of found.values()) {
       if (ids.emails.has(emailKey(o?.billing?.email) ?? "")) matched.push({ o, by: "email" });
-      else if (ids.phones.has(phoneKey(o?.billing?.phone) ?? "")) matched.push({ o, by: "phone" });
+      else if (ids.phones.has(phoneKey(o?.billing?.phone) ?? "") || ids.phones.has(phoneKey(o?.shipping?.phone) ?? "")) matched.push({ o, by: "phone" });
     }
     matched.sort((a, b) => String(b.o.date_created_gmt).localeCompare(String(a.o.date_created_gmt)));
     const page = matched.slice(0, limit);
