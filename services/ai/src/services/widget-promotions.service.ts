@@ -22,13 +22,23 @@ export interface WidgetPromotion {
   discountType: string;
   expiresAt: string | null;
   minimumAmount: string | null;
+  /** The coupon grants free shipping (its amount may be 0). */
+  freeShipping: boolean;
 }
 
 export interface StoreCoupon extends WidgetPromotion {
   status: string;
   usageCount: number;
   usageLimit: number | null;
-  /** Would show on the widget right now (published, not expired, not used up). */
+  /**
+   * A coupon that belongs to someone, never a public deal (2026-10-14: a
+   * customer's ₪549 store credit, "credit575", was listed as publishable):
+   * restricted to emails, or a single-use code (usage_limit 1: one
+   * redemption in total, a credit or a personal code). A once-per-customer
+   * limit (usage_limit_per_user) is NOT personal: everyone may use it once.
+   */
+  personal: boolean;
+  /** Would show on the widget right now: published, not expired, not used up, not personal. */
   live: boolean;
 }
 
@@ -40,6 +50,8 @@ function toCoupon(c: any, now: number): StoreCoupon | null {
   const usageLimit = c.usage_limit == null ? null : Number(c.usage_limit);
   const usedUp = usageLimit != null && usageCount >= usageLimit;
   const status = String(c.status ?? "publish");
+  const restricted = Array.isArray(c.email_restrictions) ? c.email_restrictions.length > 0 : c.email_restricted === true;
+  const personal = restricted || usageLimit === 1;
   return {
     id: String(c.id),
     code: c.code,
@@ -47,15 +59,17 @@ function toCoupon(c: any, now: number): StoreCoupon | null {
     discountType: String(c.discount_type ?? ""),
     expiresAt: expires ? new Date(expires).toISOString() : null,
     minimumAmount: c.minimum_amount && Number(c.minimum_amount) > 0 ? String(c.minimum_amount) : null,
+    freeShipping: c.free_shipping === true,
     status,
     usageCount,
     usageLimit,
-    live: status === "publish" && !expired && !usedUp,
+    personal,
+    live: status === "publish" && !expired && !usedUp && !personal,
   };
 }
 
 const publicOf = (c: StoreCoupon): WidgetPromotion => ({
-  id: c.id, code: c.code, amount: c.amount, discountType: c.discountType, expiresAt: c.expiresAt, minimumAmount: c.minimumAmount,
+  id: c.id, code: c.code, amount: c.amount, discountType: c.discountType, expiresAt: c.expiresAt, minimumAmount: c.minimumAmount, freeShipping: c.freeShipping,
 });
 
 /** The chosen coupons that are live right now, in the merchant's order. Empty on any failure. */
@@ -77,6 +91,9 @@ export async function listActivePromotions(tenantId: string, couponIds: string[]
     raw = (got.result as any[]).map((c) => ({
       id: c?.id, code: c?.code, amount: c?.amount, discount_type: c?.discount_type, date_expires_gmt: c?.date_expires_gmt,
       minimum_amount: c?.minimum_amount, status: c?.status, usage_count: c?.usage_count, usage_limit: c?.usage_limit,
+      free_shipping: c?.free_shipping === true,
+      // Whether it is restricted, never to whom: the addresses are not cached.
+      email_restricted: Array.isArray(c?.email_restrictions) && c.email_restrictions.length > 0,
     }));
     await redis.set(key, JSON.stringify(raw), "EX", PROMOTIONS_CACHE_SECONDS).catch(() => undefined);
   }
@@ -89,4 +106,17 @@ export async function storeCoupons(tenantId: string, page = 1, now = Date.now())
   const got = await executeAdapterTool({ tenantId, toolFunctionName: "woocommerce.list_coupons", args: { per_page: 100, page }, accessScope: "internal" });
   if (!got.ok || !Array.isArray(got.result)) return null;
   return (got.result as any[]).map((c) => toCoupon(c, now)).filter((c): c is StoreCoupon => !!c);
+}
+
+/**
+ * The ids among `couponIds` that are personal (see StoreCoupon.personal), or
+ * null when the store cannot be read: a coupon cannot be chosen for the
+ * widget without knowing it is not someone's.
+ */
+export async function personalCouponIds(tenantId: string, couponIds: string[], now = Date.now()): Promise<string[] | null> {
+  const ids = couponIds.filter((v) => /^\d{1,12}$/.test(v));
+  if (!ids.length) return [];
+  const got = await executeAdapterTool({ tenantId, toolFunctionName: "woocommerce.list_coupons", args: { ids, per_page: ids.length }, accessScope: "internal" });
+  if (!got.ok || !Array.isArray(got.result)) return null;
+  return (got.result as any[]).map((c) => toCoupon(c, now)).filter((c): c is StoreCoupon => !!c && c.personal).map((c) => c.id);
 }

@@ -103,7 +103,12 @@ beforeEach(() => {
     { id: 8, code: "OLD", amount: "5", discount_type: "fixed_cart", date_expires_gmt: past, status: "publish" },
     { id: 9, code: "DRAFT", amount: "5", discount_type: "fixed_cart", status: "draft" },
     { id: 10, code: "GONE", amount: "5", discount_type: "fixed_cart", status: "publish", usage_count: 3, usage_limit: 3 },
-    { id: 11, code: "FREESHIP", amount: "0", discount_type: "fixed_cart", status: "publish", date_expires_gmt: null, minimum_amount: "0.00" },
+    { id: 11, code: "FREESHIP", amount: "0", discount_type: "fixed_cart", status: "publish", date_expires_gmt: null, minimum_amount: "0.00", free_shipping: true },
+    // A customer's store credit (what create_coupon makes): single use, no restriction.
+    { id: 12, code: "credit575", amount: "549.00", discount_type: "fixed_cart", status: "publish", usage_limit: 1, usage_count: 0, email_restrictions: [] },
+    { id: 13, code: "vip15", amount: "15", discount_type: "percent", status: "publish", email_restrictions: ["vip@example.com"] },
+    // Once per customer, open to everyone: public.
+    { id: 14, code: "welcome10", amount: "10", discount_type: "percent", status: "publish", usage_limit_per_user: 1 },
   ];
   H.products = { "41": product(41), "42": product(42, { status: "draft" }), "43": product(43, { catalog_visibility: "hidden" }), "50": product(50, { type: "variable", attributes: [{ name: "Size", variation: true }] }) };
   H.variations = { "50": [{ id: 51, status: "publish", price: "90", regular_price: "90", stock_status: "instock", attributes: [{ name: "Size", option: "M" }] }] };
@@ -250,8 +255,8 @@ describe("★ promotions (phase d): only the chosen coupons, only while live", (
     H.accounts = [chosen(["11", "8", "9", "10", "7"])];
     const w = await boot();
     expect(w.promotions).toEqual([
-      { code: "FREESHIP", amount: "0", discountType: "fixed_cart", expiresAt: null, minimumAmount: null, currency: "ILS" },
-      { code: "WELCOME10", amount: "10.00", discountType: "percent", expiresAt: expect.stringMatching(/Z$/), minimumAmount: "200.00", currency: "ILS" },
+      { code: "FREESHIP", amount: "0", discountType: "fixed_cart", expiresAt: null, minimumAmount: null, freeShipping: true, currency: "ILS" },
+      { code: "WELCOME10", amount: "10.00", discountType: "percent", expiresAt: expect.stringMatching(/Z$/), minimumAmount: "200.00", freeShipping: false, currency: "ILS" },
     ]);
     expect(H.adapterCalls.find((c) => c.toolFunctionName === "woocommerce.list_coupons")!.args).toEqual({ ids: ["11", "8", "9", "10", "7"], per_page: 5 });
   });
@@ -293,9 +298,27 @@ describe("★ promotions (phase d): only the chosen coupons, only while live", (
   it("the settings picker lists the store's coupons with whether each would show", async () => {
     const r = await request(app()).get("/api/website-widget/promotions/available");
     expect(r.body.data.connected).toBe(true);
-    expect(r.body.data.coupons.map((c: any) => [c.id, c.code, c.live])).toEqual([["7", "WELCOME10", true], ["8", "OLD", false], ["9", "DRAFT", false], ["10", "GONE", false], ["11", "FREESHIP", true]]);
+    expect(r.body.data.currency).toBe("ILS");
+    expect(r.body.data.coupons.map((c: any) => [c.id, c.code, c.live, c.personal, c.freeShipping])).toEqual([
+      ["7", "WELCOME10", true, false, false], ["8", "OLD", false, false, false], ["9", "DRAFT", false, false, false], ["10", "GONE", false, false, false],
+      ["11", "FREESHIP", true, false, true], ["12", "credit575", false, true, false], ["13", "vip15", false, true, false], ["14", "welcome10", true, false, false],
+    ]);
     H.integration = null;
     expect((await request(app()).get("/api/website-widget/promotions/available")).body.data).toEqual({ connected: false, coupons: [] });
+  });
+
+  it("★ a customer's coupon (store credit, email-restricted) is refused on save and never served, even if stored", async () => {
+    H.accounts = [chosen([])];
+    const r = await request(app()).put("/api/website-widget").send({ commerce: { promotions: { couponIds: ["11", "12", "13"] } } });
+    expect(r.status).toBe(400);
+    expect(r.body).toMatchObject({ code: "COUPON_PERSONAL", couponIds: ["12", "13"] });
+    expect(normalizeWebchatConfig(H.accounts[0].credentials).commerce.promotions.couponIds).toEqual([]);
+    expect((await request(app()).put("/api/website-widget").send({ commerce: { promotions: { couponIds: ["11", "14"] } } })).status).toBe(200);
+    // Stored before this rule: still never served, never offered to the AI.
+    H.accounts = [chosen(["12", "13", "11"])];
+    H.kv.clear();
+    expect((await boot()).promotions.map((p: any) => p.code)).toEqual(["FREESHIP"]);
+    expect((await webchatPromotionsFor("T", "conv1")).map((p) => p.code)).toEqual(["FREESHIP"]);
   });
 
   it("★ the AI may mention exactly the live chosen codes, on that web chat only", async () => {

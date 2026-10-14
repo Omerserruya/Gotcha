@@ -14,7 +14,8 @@ import {
   POWERED_BY_LOCKED_CODE,
 } from "@chatcenter/shared";
 import { getWidget, putWidget, installOf, WidgetInputError, connectedWooStore, type WidgetSettings } from "../services/website-widget.service";
-import { storeCoupons } from "../services/widget-promotions.service";
+import { storeCoupons, personalCouponIds } from "../services/widget-promotions.service";
+import { resolveWooCurrency } from "../services/discovery-integration.service";
 import { readAssignment, writeAssignment, AssignmentError } from "../services/widget-assignment.service";
 
 const router = Router();
@@ -50,6 +51,21 @@ router.put("/", requirePermission("channels:manage:update"), async (req: Request
     if (asksToHidePoweredBy((req.body as any)?.appearance)) {
       res.status(403).json({ error: "Powered by GOTCHA cannot be turned off", code: POWERED_BY_LOCKED_CODE, field: "appearance.showPoweredBy" });
       return;
+    }
+    // A coupon that belongs to someone (email-restricted, or single-use like a
+    // customer's store credit) is never published as a widget deal.
+    const chosen = (req.body as any)?.commerce?.promotions?.couponIds;
+    if (Array.isArray(chosen) && chosen.length) {
+      const ids = chosen.map((v: unknown) => String(v ?? "").trim());
+      const personal = await personalCouponIds(req.tenantId!, ids);
+      if (personal === null) {
+        res.status(502).json({ error: "The store's coupons could not be read to check them", code: "STORE_UNREACHABLE" });
+        return;
+      }
+      if (personal.length) {
+        res.status(400).json({ error: "These coupons belong to a customer and cannot be shown on the widget", code: "COUPON_PERSONAL", couponIds: personal });
+        return;
+      }
     }
     const data = await putWidget(req.tenantId!, patchOf(req.body));
     if (!data) {
@@ -89,7 +105,9 @@ router.get("/promotions/available", requirePermission("channels:manage:read"), a
       res.status(502).json({ error: "The store's coupons could not be read", code: "STORE_UNREACHABLE" });
       return;
     }
-    res.json({ data: { connected: true, coupons } });
+    // The store's currency, for "₪20 off" (null when unknown, never guessed).
+    const { currency } = await resolveWooCurrency(req.tenantId!).catch(() => ({ currency: undefined }));
+    res.json({ data: { connected: true, currency: currency ?? null, coupons } });
   } catch (err) {
     console.error("[website-widget] promotions list failed:", (err as Error)?.message);
     res.status(500).json({ error: "Could not list the store's coupons" });
