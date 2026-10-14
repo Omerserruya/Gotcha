@@ -3,6 +3,8 @@ import { prisma, createWorker, OutgoingMessageJob, analyticsQueue, publishEvent,
 import type { ChannelCredentials, ProviderSendError } from "@chatcenter/shared";
 import { recordBroadcastResult } from "./broadcast.worker";
 import { outboundMediaUrl } from "../lib/outbound-media-url";
+// Deep import: the pure rule, because this service's tests mock the barrel.
+import { listUnsubscribeHeaders } from "@chatcenter/shared/src/lib/list-unsubscribe";
 
 const MEDIA_MESSAGE_TYPES = ["image", "video", "document"];
 
@@ -60,6 +62,20 @@ export async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Prom
       take: EMAIL_THREAD_LOOKBACK,
     });
     emailThread = resolveEmailThread(history) || undefined;
+  }
+
+  // An email broadcast is marketing: it names how to unsubscribe in its
+  // headers too (RFC 2369 / 8058), for the recipient's contact on this channel.
+  if (EMAIL_CHANNELS.has(channel) && broadcastId && broadcastRecipientId) {
+    const recipient = await prisma.broadcastRecipient.findUnique({ where: { id: broadcastRecipientId }, select: { contactId: true } }).catch(() => null);
+    const extraHeaders = listUnsubscribeHeaders({
+      subject: { tenantId, contactId: recipient?.contactId ?? "", channel },
+      mailbox: String((credentials as any)?.fromAddress || channelAccount.externalId || ""),
+      // A recipient with no contact row: the mailto alone (its reply creates
+      // the contact and the reply keyword opts it out).
+      ...(recipient?.contactId ? {} : { origin: null }),
+    });
+    if (extraHeaders.length) emailThread = { ...(emailThread ?? { subject: "" }), extraHeaders };
   }
 
   // ── The customer-service window (B7, 2026-10-12) ──

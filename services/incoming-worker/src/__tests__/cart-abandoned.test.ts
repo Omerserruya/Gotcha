@@ -55,7 +55,9 @@ function table(name: string) {
       if (a.orderBy?.createdAt === "desc") r = [...r].sort((x, y) => +y.createdAt - +x.createdAt);
       const x = r[0];
       if (!x) return null;
-      return a.include?.channelAccount ? { ...x, channelAccount: { externalId: "acct", credentials: {} } } : { ...x };
+      // The conversation's own account (its address is the email's sender).
+      const acc = a.include?.channelAccount ? (H.db.channelAccount ?? []).find((c: any) => c.id === x.channelAccountId) : null;
+      return a.include?.channelAccount ? { ...x, channelAccount: { externalId: acc?.externalId ?? "acct", credentials: acc?.credentials ?? {} } } : { ...x };
     },
     findUnique: async (a: any) => { const x = rows().find((r) => r.id === a.where.id); return x ? { ...x } : null; },
     count: async (a: any = {}) => rows().filter((r) => m(r, a.where)).length,
@@ -256,6 +258,7 @@ describe("★ the first send step decides how the customer is reached (2026-10-1
   const mailFirst = () => flow("cart1", [trig, mail], [e("t", "em")], { delayMinutes: 60 });
   const withFallback = () => flow("cart1", [trig, tmpl, mail], [e("t", "wa"), { id: "wa-em", source: "wa", target: "em", sourceHandle: "unreachable" }], { delayMinutes: 60 });
   const arm = async (o: Partial<CartEventJob>) => { await onCartEvent(event(o)); return onCartCheck(checkJob()); };
+  const UNSUB = [{ name: "List-Unsubscribe", value: "<mailto:shop@example.com?subject=unsubscribe&body=unsubscribe>" }];
 
   beforeEach(() => {
     H.db.contact = []; H.db.conversation = []; H.db.consentRecord = [];
@@ -277,10 +280,32 @@ describe("★ the first send step decides how the customer is reached (2026-10-1
     await arm({ customer: { email: "dana@example.com", phone: null, firstName: "Dana" }, marketingConsent: { email: true, sms: null } as any });
     const conv = H.db.conversation.find((c) => c.customerExternalId === "dana@example.com");
     expect(conv).toMatchObject({ channel: "GMAIL", channelAccountId: "gm_acc" });
-    expect(H.threads).toEqual([{ to: "dana@example.com", thread: { subject: "Your cart is waiting, Dana" } }]);
-    // A marketing run: the removal line rides on the email too.
+    // A marketing run: List-Unsubscribe in the headers (no contact row yet:
+    // the mailto to the sending mailbox), and the removal line in the text.
+    expect(H.threads).toEqual([{ to: "dana@example.com", thread: { subject: "Your cart is waiting, Dana", extraHeaders: [
+      { name: "List-Unsubscribe", value: "<mailto:shop@example.com?subject=unsubscribe&body=unsubscribe>" },
+    ] } }]);
     expect(H.sent[0]).toMatch(/Still thinking about/);
     expect(H.sent[0]).toMatch(/STOP|הסר/);
+  });
+
+  it("★ a known contact and a public origin: the one-click link for THAT contact and channel, and List-Unsubscribe-Post", async () => {
+    process.env.PUBLIC_URL = "https://dev.gotcha.co.il";
+    process.env.CHANNEL_ENCRYPTION_KEY = "k".repeat(64);
+    try {
+      H.db.chatbotFlow = [mailFirst()];
+      H.db.contact.push({ id: "k_dana", tenantId: T, channel: "GMAIL", externalId: "dana@example.com", optOutChannels: [] });
+      await arm({ customer: { email: "dana@example.com", phone: null, firstName: "Dana" }, marketingConsent: { email: true, sms: null } as any });
+      const headers = H.threads[0].thread.extraHeaders;
+      expect(headers).toHaveLength(2);
+      expect(headers[1]).toEqual({ name: "List-Unsubscribe-Post", value: "List-Unsubscribe=One-Click" });
+      const link = /<https:\/\/dev\.gotcha\.co\.il\/api\/contacts\/unsubscribe\/([^>]+)>/.exec(headers[0].value)![1]!;
+      expect(headers[0].value.startsWith("<mailto:shop@example.com?subject=unsubscribe&body=unsubscribe>, ")).toBe(true);
+      const { verifyUnsubscribeToken } = await import("@chatcenter/shared/src/lib/list-unsubscribe");
+      expect(verifyUnsubscribeToken(link)).toEqual({ tenantId: T, contactId: "k_dana", channel: "GMAIL" });
+    } finally {
+      delete process.env.PUBLIC_URL;
+    }
   });
 
   it("★ no email consent and no prior contact: not written to, recorded as skipped", async () => {
@@ -294,7 +319,7 @@ describe("★ the first send step decides how the customer is reached (2026-10-1
   it("★ WhatsApp cannot reach them (no phone): the unreachable branch's email step runs, and the run says so", async () => {
     H.db.chatbotFlow = [withFallback()];
     await arm({ customer: { email: "dana@example.com", phone: null, firstName: "Dana" }, marketingConsent: { email: true, sms: true } as any });
-    expect(H.threads).toEqual([{ to: "dana@example.com", thread: { subject: "Your cart is waiting, Dana" } }]);
+    expect(H.threads).toEqual([{ to: "dana@example.com", thread: { subject: "Your cart is waiting, Dana", extraHeaders: UNSUB } }]);
     const run = runs()[0];
     const trigStep = H.db.automationRunStep.find((st) => st.runId === run.id && st.nodeId === "t");
     expect(trigStep?.output).toMatchObject({ reachedVia: "email", fellBack: true });
@@ -303,7 +328,7 @@ describe("★ the first send step decides how the customer is reached (2026-10-1
   it("an email step without a subject: the automation's name", async () => {
     H.db.chatbotFlow = [{ ...mailFirst(), name: "עגלה נטושה", nodes: [trig, { ...mail, data: { ...mail.data, subject: "" } }] }];
     await arm({ customer: { email: "dana@example.com", phone: null, firstName: "Dana" }, marketingConsent: { email: true, sms: null } as any });
-    expect(H.threads[0]).toEqual({ to: "dana@example.com", thread: { subject: "עגלה נטושה" } });
+    expect(H.threads[0]).toEqual({ to: "dana@example.com", thread: { subject: "עגלה נטושה", extraHeaders: UNSUB } });
   });
 
   it("★ reached on the first channel: the unreachable branch is never walked", async () => {
@@ -320,5 +345,16 @@ describe("★ the first send step decides how the customer is reached (2026-10-1
     await arm({ customer: { email: "dana@example.com", phone: null, firstName: "Dana" }, marketingConsent: { email: true, sms: true } as any });
     expect(H.sent).toEqual([]);
     expect(runs()[0]).toMatchObject({ status: "skipped", error: "no_reachable_customer" });
+  });
+});
+
+import { listUnsubscribeApplies } from "../services/flow-executor.service";
+describe("★ List-Unsubscribe: marketing email only", () => {
+  it("a marketing run's email: yes; a service run's email, or another channel: no", () => {
+    expect(listUnsubscribeApplies(true, "GMAIL")).toBe(true);
+    expect(listUnsubscribeApplies(true, "outlook")).toBe(true);
+    expect(listUnsubscribeApplies(false, "GMAIL")).toBe(false);
+    expect(listUnsubscribeApplies(undefined, "GMAIL")).toBe(false);
+    expect(listUnsubscribeApplies(true, "WHATSAPP")).toBe(false);
   });
 });

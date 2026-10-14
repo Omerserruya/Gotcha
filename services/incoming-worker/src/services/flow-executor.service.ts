@@ -30,6 +30,8 @@ import type { ChannelCredentials } from "@chatcenter/shared";
 import { processAIBot, getBusinessHoursState } from "./ai-bot.service";
 import { tryLinkIdentifierFromInbound } from "./identity-link.service";
 import { withRemovalLine, hasRemovalLine, isOptedOutOn } from "@chatcenter/shared/src/lib/marketing-optout";
+import { listUnsubscribeHeaders } from "@chatcenter/shared/src/lib/list-unsubscribe";
+import type { EmailThreadContext } from "@chatcenter/shared/src/channels/email-thread";
 import { hasReplyWindow, lastInboundAtForRecipient, replyWindowFor, sendAllowed } from "@chatcenter/shared/src/lib/reply-window";
 
 // ─── Graph shapes (ReactFlow-compatible) ─────────────────────
@@ -134,6 +136,35 @@ async function optedOutNow(ctx: FlowExecCtx): Promise<boolean> {
     select: { optOutChannels: true },
   }).catch(() => null);
   return isOptedOutOn(contact?.optOutChannels, String(conv.channel));
+}
+
+/**
+ * List-Unsubscribe for a marketing email (RFC 2369 / 8058): the mailbox it is
+ * sent from (its replies are ingested, "unsubscribe" opts out) and, when a
+ * public origin is configured, the one-click link. For the conversation's
+ * contact on the conversation's channel, the same pair every opt-out gate
+ * reads. Without a contact row yet, the mailto alone.
+ */
+/** List-Unsubscribe goes on marketing email only: never on a service reply, never on another channel. */
+export function listUnsubscribeApplies(marketing: unknown, channel: string): boolean {
+  return marketing === true && EMAIL_SEND_CHANNELS.has(String(channel).toUpperCase());
+}
+
+async function marketingEmailHeaders(ctx: FlowExecCtx, sendCtx: ChannelSendContext): Promise<Array<{ name: string; value: string }>> {
+  if (!ctx.conversationId) return [];
+  const conv = await prisma.conversation.findUnique({ where: { id: ctx.conversationId }, select: { customerExternalId: true, channel: true } }).catch(() => null);
+  if (!conv?.customerExternalId) return [];
+  const contact = await prisma.contact.findFirst({
+    where: { tenantId: ctx.tenantId, channel: conv.channel as any, externalId: conv.customerExternalId },
+    select: { id: true },
+  }).catch(() => null);
+  return listUnsubscribeHeaders({
+    subject: { tenantId: ctx.tenantId, contactId: contact?.id ?? "", channel: String(conv.channel) },
+    mailbox: String((sendCtx.credentials as any)?.fromAddress || sendCtx.channelAccountExternalId || ""),
+    // No contact row yet (a first cart email): the mailto alone. Its reply
+    // creates the contact and the reply keyword opts it out.
+    ...(contact ? {} : { origin: null }),
+  });
 }
 
 export interface FlowExecutionResult {
@@ -1655,7 +1686,12 @@ async function sendText(
   let extId: string | null;
   try {
     // Email only: its subject and thread (other channels' calls are unchanged).
-    const thread = await emailThreadFor(ctx, sendCtx, opts.subject);
+    let thread: EmailThreadContext | undefined = await emailThreadFor(ctx, sendCtx, opts.subject);
+    // A marketing email names how to unsubscribe in its headers too.
+    if (listUnsubscribeApplies(ctx.run?.marketing, sendCtx.channel)) {
+      const extraHeaders = await marketingEmailHeaders(ctx, sendCtx);
+      if (extraHeaders.length) thread = { ...(thread ?? { subject: "" }), extraHeaders };
+    }
     extId = thread
       ? await adapter.sendTextMessage(sendCtx.credentials, sendCtx.channelAccountExternalId, sendCtx.recipientId, resolved, undefined, thread)
       : await adapter.sendTextMessage(sendCtx.credentials, sendCtx.channelAccountExternalId, sendCtx.recipientId, resolved);

@@ -129,6 +129,9 @@ export const outlookOutboundAdapter: OutboundAdapter = {
         console.error("Outlook reply error, falling back to sendMail:", replyErr);
       }
 
+      // thread.extraHeaders (List-Unsubscribe on marketing mail) are NOT sent
+      // here: Graph's sendMail accepts only custom "X-" headers, so a marketing
+      // email from Outlook carries the removal line in its text only.
       const internetHeaders = [
         ...(thread?.inReplyTo ? [{ name: "In-Reply-To", value: thread.inReplyTo }] : []),
         ...(thread?.references?.length ? [{ name: "References", value: thread.references.join(" ") }] : []),

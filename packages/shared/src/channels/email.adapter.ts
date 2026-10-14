@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { autoMailReason, parseHeaderBlock } from "./auto-mail";
+import { safeExtraHeaders, type EmailThreadContext } from "./email-thread";
 import type {
   InboundAdapter,
   OutboundAdapter,
@@ -97,7 +98,9 @@ export const emailOutboundAdapter: OutboundAdapter = {
     credentials: ChannelCredentials,
     accountExternalId: string,
     recipientId: string,
-    text: string
+    text: string,
+    _replyToExternalId?: string,
+    thread?: EmailThreadContext,
   ): Promise<string | null> {
     try {
       const transporter = nodemailer.createTransport({
@@ -110,10 +113,14 @@ export const emailOutboundAdapter: OutboundAdapter = {
       });
 
       const fromAddress = (credentials.fromAddress as string) || accountExternalId;
+      // The thread's extra headers (List-Unsubscribe on marketing mail).
+      const headers = Object.fromEntries(safeExtraHeaders(thread?.extraHeaders).map((h) => [h.name, h.value]));
       const info = await transporter.sendMail({
         from: fromAddress,
         to: recipientId,
         text,
+        ...(thread?.subject ? { subject: thread.subject } : {}),
+        ...(Object.keys(headers).length ? { headers } : {}),
       });
 
       return info.messageId || crypto.randomUUID();

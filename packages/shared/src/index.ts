@@ -107,6 +107,7 @@ export {
   buildReferences,
   parseMessageIdList,
   threadHeaderLines,
+  safeExtraHeaders,
   outgoingSubject,
   DEFAULT_EMAIL_SUBJECT,
   // Mail no person wrote (bounces, auto-replies, bulk): dropped at ingest.
@@ -1013,6 +1014,8 @@ export {
 } from "./lib/woo-commerce-cards";
 // The widget follows the customer's language (W10).
 export { isWidgetLocale, visitorLocaleOf, textLocaleOf, widgetTextsOf, textsToTranslate, type WidgetLocale } from "./lib/widget-language";
+// List-Unsubscribe on marketing email (RFC 2369 / 8058).
+export { signUnsubscribeToken, verifyUnsubscribeToken, listUnsubscribeHeaders, publicOrigin, type UnsubscribeSubject } from "./lib/list-unsubscribe";
 // "Powered by GOTCHA" is on for every widget (W8).
 export { POWERED_BY_LOCKED, POWERED_BY_LOCKED_CODE, effectivePoweredBy, asksToHidePoweredBy } from "./lib/powered-by";
 
