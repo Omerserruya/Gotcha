@@ -101,6 +101,12 @@ const MAX_TOOLS = 60;
 const JUDGE_VERSION = "3";
 /** Questions per judge call: 32 at once came back all "partial". */
 export const JUDGE_BATCH = 8;
+/**
+ * Output budgets per judge attempt (the visible answer; ai.service adds the
+ * reasoning headroom on top). The second is the retry for an answer cut off
+ * while the model was still reasoning.
+ */
+export const JUDGE_TOKEN_BUDGETS = [6000, 12000];
 
 export function questionSetKey(aiAgentId: string): string {
   return `agent:readiness-questions:${aiAgentId}`;
@@ -452,36 +458,49 @@ export async function generateReadinessReport(
   const batches: Array<Array<{ id: string; question: string }>> = [];
   for (let i = 0; i < toJudge.length; i += JUDGE_BATCH) batches.push(toJudge.slice(i, i + JUDGE_BATCH));
 
-  const outs = await Promise.all(batches.map(async (batch) => {
-    try {
-      const res = await generateResponse({
-        tenantId,
-        messages: [
-          { role: "system", content: "You are a meticulous QA auditor for AI customer-service employees. You output only valid JSON." },
-          { role: "user", content: buildJudgePrompt(ctx, batch, locale) },
-        ],
-        // Ignored by the gpt-5 models (see the header); harmless elsewhere.
-        temperature: 0,
-        reasoningEffort: "medium",
-        maxTokens: 3000,
-        responseFormat: { type: "json_object" },
-        metadata: { type: "agent_readiness", aiAgentId: agentId },
-      } as any);
-      return { raw: String((res as any)?.content || "") };
-    } catch (err: any) {
-      console.error("[readiness] LLM call failed:", err?.message);
-      return { error: "llm_unavailable" as const };
+  // One judge call for a batch, parsed. An empty or broken answer is retried
+  // once with more room: at medium reasoning gpt-5-mini can spend the whole
+  // budget thinking (finish_reason "length", reasoning_tokens == the cap) and
+  // return no text at all. On dev that failed Maya's whole report on its 4th
+  // batch with "bad_model_output" (2026-10-14).
+  const judgeBatch = async (batch: Array<{ id: string; question: string }>, index: number): Promise<{ parsed: any } | { error: string }> => {
+    for (const [attempt, maxTokens] of JUDGE_TOKEN_BUDGETS.entries()) {
+      let raw: string;
+      try {
+        const res = await generateResponse({
+          tenantId,
+          messages: [
+            { role: "system", content: "You are a meticulous QA auditor for AI customer-service employees. You output only valid JSON." },
+            { role: "user", content: buildJudgePrompt(ctx, batch, locale) },
+          ],
+          // Ignored by the gpt-5 models (see the header); harmless elsewhere.
+          temperature: 0,
+          reasoningEffort: "medium",
+          maxTokens,
+          responseFormat: { type: "json_object" },
+          metadata: { type: "agent_readiness", aiAgentId: agentId, batch: index, attempt },
+        } as any);
+        raw = String((res as any)?.content || "");
+      } catch (err: any) {
+        console.error(`[readiness] judge batch ${index} call failed:`, err?.message);
+        return { error: "llm_unavailable" };
+      }
+      try {
+        const parsed = withoutWideDashes(JSON.parse(raw));
+        if (parsed && typeof parsed === "object" && Array.isArray(parsed.judgements)) return { parsed };
+        console.warn(`[readiness] judge batch ${index} attempt ${attempt}: no judgements array`);
+      } catch {
+        console.warn(`[readiness] judge batch ${index} attempt ${attempt}: unreadable answer (${raw.length} chars, budget ${maxTokens}), ${attempt + 1 < JUDGE_TOKEN_BUDGETS.length ? "retrying with more room" : "giving up"}`);
+      }
     }
-  }));
+    return { error: "judge_incomplete" };
+  };
+
+  const outs = await Promise.all(batches.map((batch, i) => judgeBatch(batch, i)));
 
   for (const out of outs) {
-    if ("error" in out) return { error: out.error! };
-    let parsed: any;
-    try {
-      parsed = withoutWideDashes(JSON.parse(out.raw));
-    } catch {
-      return { error: "bad_model_output" };
-    }
+    if ("error" in out) return { error: out.error };
+    const parsed = out.parsed;
     for (const j of Array.isArray(parsed.judgements) ? parsed.judgements : []) {
       if (typeof j?.id !== "string") continue;
       const evidence = (Array.isArray(j.evidence) ? j.evidence : [])

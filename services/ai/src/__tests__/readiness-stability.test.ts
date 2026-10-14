@@ -35,7 +35,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
 });
 vi.mock("../services/ai.service", () => ({
   generateResponse: vi.fn(async (o: any) => {
-    H.calls.push({ type: o.metadata?.type, temperature: o.temperature, effort: o.reasoningEffort, prompt: o.messages[1].content });
+    H.calls.push({ type: o.metadata?.type, temperature: o.temperature, effort: o.reasoningEffort, maxTokens: o.maxTokens, prompt: o.messages[1].content });
     if (o.metadata?.type === "agent_readiness_questions") return { content: JSON.stringify({ questions: H.generated }) };
     // A "full" verdict names the shipping document as its evidence.
     const judgements = [...String(o.messages[1].content).matchAll(/^- \[(q_[0-9a-f]+)\] (.+)$/gm)].map(([, id, text]) => ({
@@ -250,5 +250,46 @@ describe("★ judged in batches of 8", () => {
     expect(r.totals).toEqual({ full: 20, partial: 0, none: 0, total: 20 });
     // One recommendation per title across the batches.
     expect(r.recommendations).toEqual([{ type: "add_faq", title: "Add FAQ", detail: "d" }]);
+  });
+});
+
+describe("★ a judge batch cut off while reasoning is retried with more room (2026-10-14)", () => {
+  // On dev, batch 4 of Maya's report came back with finish_reason "length" and
+  // no text (all 5048 tokens spent reasoning): the whole report failed.
+  it("an empty answer, then a good one: the report completes", async () => {
+    const { generateResponse } = await import("../services/ai.service");
+    const real = (generateResponse as any).getMockImplementation();
+    let judged = 0;
+    (generateResponse as any).mockImplementation(async (o: any) => {
+      if (o.metadata?.type === "agent_readiness" && judged++ === 0) {
+        H.calls.push({ type: o.metadata?.type, maxTokens: o.maxTokens, prompt: "" });
+        return { content: "" };
+      }
+      return real(o);
+    });
+    try {
+      const r = await run();
+      expect(r.error).toBeUndefined();
+      const judges = H.calls.filter((c) => c.type === "agent_readiness");
+      expect(judges.map((c) => c.maxTokens)).toEqual([6000, 12000]);
+      expect(r.questions).toHaveLength(3);
+    } finally {
+      (generateResponse as any).mockImplementation(real);
+    }
+  });
+
+  it("★ cut off twice: the run fails as judge_incomplete (not a misleading partial score)", async () => {
+    const { generateResponse } = await import("../services/ai.service");
+    const real = (generateResponse as any).getMockImplementation();
+    (generateResponse as any).mockImplementation(async (o: any) =>
+      o.metadata?.type === "agent_readiness" ? { content: "{\"judgements\": [{\"id\"" } : real(o));
+    try {
+      const r = await run();
+      expect(r).toEqual({ error: "judge_incomplete" });
+      // Nothing cached: the next run tries again.
+      expect(H.agent.readinessReport).toBeNull();
+    } finally {
+      (generateResponse as any).mockImplementation(real);
+    }
   });
 });
