@@ -10,6 +10,340 @@
  * It adapts this channel's API (/init, /message, /messages/:id) to the
  * storefront chat bundle it mounts, and draws design 7's bubble and pop-up.
  */
+(function () {
+  "use strict";
+
+  // ── The WhatsApp kind (design 7's "GOTCHA WhatsApp widget") ──────
+  //
+  // No chat on the site: WhatsApp's own panel, whose message opens wa.me to
+  // the business's number with the visitor's words and a code that carries
+  // the page they were on (POST /whatsapp-start). No /init, no conversation,
+  // no socket. The server draws nothing for this kind unless its number can
+  // take it, so reaching here means it can.
+
+  var WA_WORDS = {
+    en: {
+      title: "Chat with us", sub: "Write here and we'll continue on WhatsApp.", type: "Type a message",
+      send: "Send on WhatsApp", close: "Close", open: "Message us on WhatsApp", dismiss: "Dismiss",
+      now: "now", opening: "Continuing on WhatsApp", openLink: "Open WhatsApp",
+      failed: "WhatsApp didn't open. Please try again.",
+    },
+    he: {
+      title: "דברו איתנו", sub: "כתבו כאן ונמשיך בוואטסאפ.", type: "הקלידו הודעה",
+      send: "שליחה בוואטסאפ", close: "סגירת החלון", open: "פתיחת חלון פנייה בוואטסאפ", dismiss: "סגירת ההזמנה",
+      now: "עכשיו", opening: "ממשיכים בוואטסאפ", openLink: "פתיחת וואטסאפ",
+      failed: "וואטסאפ לא נפתח. אפשר לנסות שוב.",
+    },
+  };
+
+  var WA_GLYPH = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.2.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.1.6a2.7 2.7 0 0 0 1.8-1.3 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z"/></svg>';
+  // WhatsApp's own send glyph (a paper plane).
+  var WA_SEND = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M1.101 21.757 23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z"/></svg>';
+
+  /**
+   * The widget itself, host-agnostic: the code snippet and the storefront
+   * bootstrap both draw it. opts: { host, shadow, widget, lang, initial,
+   * assets (the origin of /widget/), session(k, v?) (per-visit storage),
+   * start(text, lang) -> Promise<wa.me url> }. Returns the button.
+   */
+  window.__gotchaWhatsappWidget = function (opts) {
+    var widget = opts.widget;
+    var host = opts.host;
+    var shadow = opts.shadow;
+    var session = opts.session;
+    var lang = opts.lang === "he" ? "he" : "en";
+    var W = WA_WORDS[lang];
+    var rtl = lang === "he";
+    var L = (widget.ux && widget.ux.launcher) || {};
+    var mobile = window.matchMedia("(max-width: 560px)").matches;
+    var side = (mobile ? L.mobilePosition : L.position) === "left" ? "left" : "right";
+    host.style.setProperty(side, "18px");
+    host.style.setProperty("bottom", "22px");
+    host.style.setProperty(side === "left" ? "right" : "left", "auto");
+
+    var style = document.createElement("style");
+    style.textContent = [
+      // The button's physical side, in either direction (flex-start is the right in RTL).
+      ".wa{position:relative;display:flex;flex-direction:column;align-items:" + ((side === "right") !== rtl ? "flex-end" : "flex-start") + ";gap:10px;",
+      "  font:400 15px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#111B21;}",
+      ".fab{width:58px;height:58px;border-radius:50%;border:0;padding:0;cursor:pointer;background:#25D366;color:#fff;",
+      "  display:flex;align-items:center;justify-content:center;flex:none;",
+      "  box-shadow:0 10px 26px rgba(37,211,102,.34),0 2px 6px rgba(11,20,26,.12);}",
+      ".fab svg{width:32px;height:32px;}",
+      ".fab .x{font-size:21px;line-height:1;}",
+      ".fab:focus-visible,.pn button:focus-visible,.ts button:focus-visible,.pn textarea:focus-visible{outline:2px solid #008069;outline-offset:2px;}",
+      ".ts{display:flex;align-items:center;gap:10px;background:#fff;border-radius:12px;padding:10px 13px;",
+      "  box-shadow:0 8px 24px rgba(11,20,26,.16);animation:up .4s ease both;max-width:min(300px, calc(100vw - 36px));}",
+      ".ts-t{border:0;background:none;padding:0;font:inherit;font-size:14px;font-weight:500;color:#111B21;cursor:pointer;text-align:start;}",
+      ".ts-x{width:24px;height:24px;border:0;border-radius:50%;background:#F0F2F5;color:#54656F;font-size:11px;cursor:pointer;flex:none;padding:0;}",
+      ".pn{width:min(92vw, 330px);border-radius:14px;overflow:hidden;background:#EFEAE2;box-shadow:0 12px 40px rgba(11,20,26,.28);}",
+      ".hd{display:flex;align-items:center;gap:11px;padding:10px 13px;background:#008069;color:#fff;}",
+      ".av{width:38px;height:38px;border-radius:50%;background:#fff;color:#2B2622;flex:none;display:flex;align-items:center;justify-content:center;",
+      "  font:500 21px/1 'Cormorant Garamond',Georgia,'Times New Roman',serif;}",
+      ".hd-t{flex:1;min-width:0;}",
+      ".hd-n{font-size:15.5px;font-weight:600;line-height:1.2;}",
+      ".hd-s{font-size:12.5px;opacity:.9;margin-top:2px;}",
+      ".hd-x{width:32px;height:32px;border:0;border-radius:50%;background:transparent;color:#fff;font-size:17px;cursor:pointer;flex:none;padding:0;}",
+      ".hd-x:hover{background:rgba(255,255,255,.16);}",
+      ".ch{padding:16px 12px 14px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;}",
+      ".gr{max-width:85%;background:#fff;border-radius:0 10px 10px 10px;padding:7px 10px 6px;box-shadow:0 1px .5px rgba(11,20,26,.13);",
+      "  font-size:14.5px;line-height:1.4;color:#111B21;white-space:pre-wrap;overflow-wrap:anywhere;}",
+      "[dir='rtl'] .gr{border-radius:10px 0 10px 10px;}",
+      ".gr-t{display:block;text-align:end;font-size:11px;color:#667781;margin-top:2px;}",
+      ".nt{align-self:center;font-size:12.5px;color:#54656F;text-align:center;}",
+      ".nt a{color:#008069;font-weight:600;}",
+      ".nt[data-kind='err']{color:#B42318;}",
+      ".cm{padding:6px 8px 8px;background:#F0F2F5;display:flex;align-items:flex-end;gap:6px;}",
+      ".cm textarea{flex:1;min-width:0;min-height:44px;max-height:120px;box-sizing:border-box;border-radius:22px;border:0;background:#fff;",
+      "  padding:11px 16px;font:inherit;font-size:16px;line-height:1.4;resize:none;color:#111B21;box-shadow:0 1px .5px rgba(11,20,26,.1);outline:none;}",
+      "@media (min-width: 561px){.cm textarea{font-size:15px;}}",
+      ".sd{width:44px;height:44px;flex:none;border:0;border-radius:50%;background:#00A884;color:#fff;cursor:pointer;",
+      "  display:flex;align-items:center;justify-content:center;padding:0;}",
+      ".sd:hover{background:#06CF9C;}",
+      ".sd:disabled{opacity:.6;cursor:progress;}",
+      ".sd svg{width:22px;height:22px;" + (rtl ? "transform:scaleX(-1);" : "") + "}",
+      ".pw{display:flex;align-items:center;justify-content:center;gap:6px;padding:4px 0 8px;background:#F0F2F5;",
+      "  font-size:11px;color:#667781;text-decoration:none;}",
+      ".pw img{height:14px;width:auto;display:block;}",
+      "@keyframes up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}",
+      "@media (prefers-reduced-motion: reduce){.ts{animation:none}}",
+    ].join("\n");
+    shadow.appendChild(style);
+
+    var root = document.createElement("div");
+    root.className = "wa";
+    root.setAttribute("dir", rtl ? "rtl" : "ltr");
+    root.setAttribute("lang", lang);
+    shadow.appendChild(root);
+
+    var panel = null;
+    var teaser = null;
+    var fab = document.createElement("button");
+    fab.type = "button";
+    fab.className = "fab";
+    fab.setAttribute("data-act", "launcher");
+    fab.setAttribute("data-look", "whatsapp");
+
+    function paintFab(open) {
+      fab.setAttribute("aria-expanded", open ? "true" : "false");
+      fab.setAttribute("aria-label", open ? W.close : W.open);
+      fab.innerHTML = open ? '<span class="x" aria-hidden="true">✕</span>' : WA_GLYPH;
+    }
+
+    function hideTeaser() {
+      if (teaserTimer) { clearTimeout(teaserTimer); teaserTimer = null; }
+      if (teaser && teaser.parentNode) teaser.parentNode.removeChild(teaser);
+      teaser = null;
+    }
+
+    function closePanel() {
+      if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
+      panel = null;
+      paintFab(false);
+    }
+
+    function openPanel() {
+      hideTeaser();
+      if (panel) return;
+      panel = buildPanel();
+      root.insertBefore(panel, root.firstChild);
+      paintFab(true);
+      var ta = panel.querySelector("textarea");
+      try { ta.focus({ preventScroll: true }); } catch (e) {}
+    }
+
+    function buildPanel() {
+      var pn = document.createElement("div");
+      pn.className = "pn";
+      pn.setAttribute("role", "dialog");
+      pn.setAttribute("aria-label", W.title);
+      pn.setAttribute("data-act", "wa-panel");
+
+      var hd = document.createElement("div");
+      hd.className = "hd";
+      var av = document.createElement("span");
+      av.className = "av";
+      av.setAttribute("aria-hidden", "true");
+      av.textContent = opts.initial || "";
+      var tx = document.createElement("div");
+      tx.className = "hd-t";
+      var nm = document.createElement("div");
+      nm.className = "hd-n";
+      nm.textContent = W.title;
+      var sb = document.createElement("div");
+      sb.className = "hd-s";
+      sb.textContent = W.sub;
+      tx.appendChild(nm);
+      tx.appendChild(sb);
+      var x = document.createElement("button");
+      x.type = "button";
+      x.className = "hd-x";
+      x.setAttribute("aria-label", W.close);
+      x.setAttribute("data-act", "close");
+      x.textContent = "✕";
+      x.addEventListener("click", closePanel);
+      hd.appendChild(av);
+      hd.appendChild(tx);
+      hd.appendChild(x);
+      pn.appendChild(hd);
+
+      // The greeting the business wrote (W1: ux.welcome.title). None, none shown.
+      var ch = document.createElement("div");
+      ch.className = "ch";
+      var greeting = String((widget.ux && widget.ux.welcome && widget.ux.welcome.title) || "").trim();
+      if (greeting) {
+        var gr = document.createElement("div");
+        gr.className = "gr";
+        gr.setAttribute("data-act", "greeting");
+        var gt = document.createElement("bdi");
+        gt.textContent = greeting;
+        var when = document.createElement("span");
+        when.className = "gr-t";
+        when.textContent = W.now;
+        gr.appendChild(gt);
+        gr.appendChild(when);
+        ch.appendChild(gr);
+      }
+      var note = document.createElement("div");
+      note.className = "nt";
+      note.setAttribute("role", "status");
+      note.hidden = true;
+      ch.appendChild(note);
+      pn.appendChild(ch);
+
+      var cm = document.createElement("form");
+      cm.className = "cm";
+      var ta = document.createElement("textarea");
+      ta.rows = 1;
+      ta.setAttribute("dir", "auto");
+      ta.setAttribute("placeholder", W.type);
+      ta.setAttribute("aria-label", W.type);
+      ta.setAttribute("maxlength", "500");
+      var sd = document.createElement("button");
+      sd.type = "submit";
+      sd.className = "sd";
+      sd.setAttribute("aria-label", W.send);
+      sd.setAttribute("data-act", "wa-send");
+      sd.innerHTML = WA_SEND;
+      cm.appendChild(ta);
+      cm.appendChild(sd);
+      ta.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && !e.shiftKey && !window.matchMedia("(max-width: 560px)").matches) {
+          e.preventDefault();
+          start();
+        }
+      });
+      cm.addEventListener("submit", function (e) { e.preventDefault(); start(); });
+      pn.appendChild(cm);
+
+      var pw = document.createElement("a");
+      pw.className = "pw";
+      pw.href = "https://gotcha.co.il";
+      pw.target = "_blank";
+      pw.rel = "noopener";
+      pw.setAttribute("dir", "ltr");
+      pw.setAttribute("aria-label", "Powered by GOTCHA");
+      var pwt = document.createElement("span");
+      pwt.textContent = "Powered by";
+      var pwl = document.createElement("img");
+      pwl.src = opts.assets + "/widget/gotcha-line-dark.png";
+      pwl.alt = "";
+      pw.appendChild(pwt);
+      pw.appendChild(pwl);
+      pn.appendChild(pw);
+
+      function say(kind, text, link) {
+        note.hidden = false;
+        note.setAttribute("data-kind", kind);
+        note.textContent = text;
+        if (link) {
+          note.appendChild(document.createTextNode(" "));
+          var a = document.createElement("a");
+          a.href = link;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          a.textContent = W.openLink;
+          note.appendChild(a);
+          try { a.focus(); } catch (e) {}
+        }
+      }
+
+      // The window opens inside the click and is pointed at wa.me once the
+      // server answers: a window opened after an await is what popup
+      // blockers block. Blocked anyway, the link is offered to tap.
+      function start() {
+        if (sd.disabled) return;
+        var w = null;
+        try { w = window.open("", "_blank"); } catch (e) { w = null; }
+        sd.disabled = true;
+        note.hidden = true;
+        var text = ta.value.trim();
+        Promise.resolve()
+          .then(function () { return opts.start(text, lang); })
+          .then(function (url) {
+            if (!url) throw new Error("unavailable");
+            if (w) {
+              try { w.opener = null; } catch (e) {}
+              w.location.href = url;
+            }
+            ta.value = "";
+            say("ok", W.opening, w ? null : url);
+          })
+          .catch(function () {
+            if (w) { try { w.close(); } catch (e) {} }
+            say("err", W.failed);
+          })
+          .then(function () { sd.disabled = false; });
+      }
+      return pn;
+    }
+
+    fab.addEventListener("click", function () {
+      if (panel) closePanel();
+      else openPanel();
+    });
+    paintFab(false);
+    root.appendChild(fab);
+
+    // The teaser (W1: ux.proactive.message after its delay), once per visit.
+    var teaserTimer = null;
+    var cfg = widget.ux && widget.ux.proactive;
+    var line = cfg && cfg.enabled ? String(cfg.message || "").trim() : "";
+    var max = (cfg && Number(cfg.maxPerSession)) || 1;
+    if (line && Number(session("popups") || 0) < max) {
+      var seconds = Number(mobile && cfg.mobileDelaySeconds != null ? cfg.mobileDelaySeconds : cfg.delaySeconds) || 1;
+      teaserTimer = setTimeout(function () {
+        teaserTimer = null;
+        if (panel) return;
+        session("popups", String(Number(session("popups") || 0) + 1));
+        teaser = document.createElement("div");
+        teaser.className = "ts";
+        teaser.setAttribute("role", "status");
+        teaser.setAttribute("data-act", "popup");
+        var t = document.createElement("button");
+        t.type = "button";
+        t.className = "ts-t";
+        t.setAttribute("data-act", "popup-open");
+        var tt = document.createElement("bdi");
+        tt.textContent = line;
+        t.appendChild(tt);
+        t.addEventListener("click", openPanel);
+        var tx = document.createElement("button");
+        tx.type = "button";
+        tx.className = "ts-x";
+        tx.setAttribute("aria-label", W.dismiss);
+        tx.setAttribute("data-act", "popup-close");
+        tx.textContent = "✕";
+        tx.addEventListener("click", hideTeaser);
+        teaser.appendChild(t);
+        teaser.appendChild(tx);
+        root.insertBefore(teaser, fab);
+      }, Math.max(900, seconds * 1000));
+    }
+    return fab;
+  };
+})();
+
 window.__gotchaSiteMount = function (opts) {
   "use strict";
 
@@ -182,33 +516,6 @@ window.__gotchaSiteMount = function (opts) {
     decorateLauncher();
   }
 
-  // ── The WhatsApp kind (design 7's "GOTCHA WhatsApp widget") ──────
-  //
-  // No chat on the site: WhatsApp's own panel, whose message opens wa.me to
-  // the business's number with the visitor's words and a code that carries
-  // the page they were on (POST /whatsapp-start). No /init, no conversation,
-  // no socket. The server draws nothing for this kind unless its number can
-  // take it, so reaching here means it can.
-
-  var WA_WORDS = {
-    en: {
-      title: "Chat with us", sub: "Write here and we'll continue on WhatsApp.", type: "Type a message",
-      send: "Send on WhatsApp", close: "Close", open: "Message us on WhatsApp", dismiss: "Dismiss",
-      now: "now", opening: "Continuing on WhatsApp", openLink: "Open WhatsApp",
-      failed: "WhatsApp didn't open. Please try again.",
-    },
-    he: {
-      title: "דברו איתנו", sub: "כתבו כאן ונמשיך בוואטסאפ.", type: "הקלידו הודעה",
-      send: "שליחה בוואטסאפ", close: "סגירת החלון", open: "פתיחת חלון פנייה בוואטסאפ", dismiss: "סגירת ההזמנה",
-      now: "עכשיו", opening: "ממשיכים בוואטסאפ", openLink: "פתיחת וואטסאפ",
-      failed: "וואטסאפ לא נפתח. אפשר לנסות שוב.",
-    },
-  };
-
-  var WA_GLYPH = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.2.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.1.6a2.7 2.7 0 0 0 1.8-1.3 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z"/></svg>';
-  // WhatsApp's own send glyph (a paper plane).
-  var WA_SEND = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M1.101 21.757 23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z"/></svg>';
-
   /**
    * The page the visitor is on, for the WhatsApp side to greet about: a
    * WooCommerce product page is `body.single-product`, and its slug is the
@@ -233,302 +540,25 @@ window.__gotchaSiteMount = function (opts) {
     return { pageType: product ? "product" : "page", productHandle: handle, path: path };
   }
 
+  /** The WhatsApp kind: the shared widget, with this channel's start (POST /whatsapp-start). */
   function mountWhatsapp(widget) {
-    var lang = langOf(widget);
-    var W = WA_WORDS[lang];
-    var rtl = lang === "he";
-    var L = (widget.ux && widget.ux.launcher) || {};
-    var mobile = window.matchMedia("(max-width: 560px)").matches;
-    var side = (mobile ? L.mobilePosition : L.position) === "left" ? "left" : "right";
-    host.style.setProperty(side, "18px");
-    host.style.setProperty("bottom", "22px");
-    host.style.setProperty(side === "left" ? "right" : "left", "auto");
-
-    var style = document.createElement("style");
-    style.textContent = [
-      // The button's physical side, in either direction (flex-start is the right in RTL).
-      ".wa{position:relative;display:flex;flex-direction:column;align-items:" + ((side === "right") !== rtl ? "flex-end" : "flex-start") + ";gap:10px;",
-      "  font:400 15px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#111B21;}",
-      ".fab{width:58px;height:58px;border-radius:50%;border:0;padding:0;cursor:pointer;background:#25D366;color:#fff;",
-      "  display:flex;align-items:center;justify-content:center;flex:none;",
-      "  box-shadow:0 10px 26px rgba(37,211,102,.34),0 2px 6px rgba(11,20,26,.12);}",
-      ".fab svg{width:32px;height:32px;}",
-      ".fab .x{font-size:21px;line-height:1;}",
-      ".fab:focus-visible,.pn button:focus-visible,.ts button:focus-visible,.pn textarea:focus-visible{outline:2px solid #008069;outline-offset:2px;}",
-      ".ts{display:flex;align-items:center;gap:10px;background:#fff;border-radius:12px;padding:10px 13px;",
-      "  box-shadow:0 8px 24px rgba(11,20,26,.16);animation:up .4s ease both;max-width:min(300px, calc(100vw - 36px));}",
-      ".ts-t{border:0;background:none;padding:0;font:inherit;font-size:14px;font-weight:500;color:#111B21;cursor:pointer;text-align:start;}",
-      ".ts-x{width:24px;height:24px;border:0;border-radius:50%;background:#F0F2F5;color:#54656F;font-size:11px;cursor:pointer;flex:none;padding:0;}",
-      ".pn{width:min(92vw, 330px);border-radius:14px;overflow:hidden;background:#EFEAE2;box-shadow:0 12px 40px rgba(11,20,26,.28);}",
-      ".hd{display:flex;align-items:center;gap:11px;padding:10px 13px;background:#008069;color:#fff;}",
-      ".av{width:38px;height:38px;border-radius:50%;background:#fff;color:#2B2622;flex:none;display:flex;align-items:center;justify-content:center;",
-      "  font:500 21px/1 'Cormorant Garamond',Georgia,'Times New Roman',serif;}",
-      ".hd-t{flex:1;min-width:0;}",
-      ".hd-n{font-size:15.5px;font-weight:600;line-height:1.2;}",
-      ".hd-s{font-size:12.5px;opacity:.9;margin-top:2px;}",
-      ".hd-x{width:32px;height:32px;border:0;border-radius:50%;background:transparent;color:#fff;font-size:17px;cursor:pointer;flex:none;padding:0;}",
-      ".hd-x:hover{background:rgba(255,255,255,.16);}",
-      ".ch{padding:16px 12px 14px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;}",
-      ".gr{max-width:85%;background:#fff;border-radius:0 10px 10px 10px;padding:7px 10px 6px;box-shadow:0 1px .5px rgba(11,20,26,.13);",
-      "  font-size:14.5px;line-height:1.4;color:#111B21;white-space:pre-wrap;overflow-wrap:anywhere;}",
-      "[dir='rtl'] .gr{border-radius:10px 0 10px 10px;}",
-      ".gr-t{display:block;text-align:end;font-size:11px;color:#667781;margin-top:2px;}",
-      ".nt{align-self:center;font-size:12.5px;color:#54656F;text-align:center;}",
-      ".nt a{color:#008069;font-weight:600;}",
-      ".nt[data-kind='err']{color:#B42318;}",
-      ".cm{padding:6px 8px 8px;background:#F0F2F5;display:flex;align-items:flex-end;gap:6px;}",
-      ".cm textarea{flex:1;min-width:0;min-height:44px;max-height:120px;box-sizing:border-box;border-radius:22px;border:0;background:#fff;",
-      "  padding:11px 16px;font:inherit;font-size:16px;line-height:1.4;resize:none;color:#111B21;box-shadow:0 1px .5px rgba(11,20,26,.1);outline:none;}",
-      "@media (min-width: 561px){.cm textarea{font-size:15px;}}",
-      ".sd{width:44px;height:44px;flex:none;border:0;border-radius:50%;background:#00A884;color:#fff;cursor:pointer;",
-      "  display:flex;align-items:center;justify-content:center;padding:0;}",
-      ".sd:hover{background:#06CF9C;}",
-      ".sd:disabled{opacity:.6;cursor:progress;}",
-      ".sd svg{width:22px;height:22px;" + (rtl ? "transform:scaleX(-1);" : "") + "}",
-      ".pw{display:flex;align-items:center;justify-content:center;gap:6px;padding:4px 0 8px;background:#F0F2F5;",
-      "  font-size:11px;color:#667781;text-decoration:none;}",
-      ".pw img{height:14px;width:auto;display:block;}",
-      "@keyframes up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}",
-      "@media (prefers-reduced-motion: reduce){.ts{animation:none}}",
-    ].join("\n");
-    shadow.appendChild(style);
-
-    var root = document.createElement("div");
-    root.className = "wa";
-    root.setAttribute("dir", rtl ? "rtl" : "ltr");
-    root.setAttribute("lang", lang);
-    shadow.appendChild(root);
-
-    var panel = null;
-    var teaser = null;
-    var fab = document.createElement("button");
-    fab.type = "button";
-    fab.className = "fab";
-    fab.setAttribute("data-act", "launcher");
-    fab.setAttribute("data-look", "whatsapp");
-
-    function paintFab(open) {
-      fab.setAttribute("aria-expanded", open ? "true" : "false");
-      fab.setAttribute("aria-label", open ? W.close : W.open);
-      fab.innerHTML = open ? '<span class="x" aria-hidden="true">✕</span>' : WA_GLYPH;
-    }
-
-    function hideTeaser() {
-      if (teaserTimer) { clearTimeout(teaserTimer); teaserTimer = null; }
-      if (teaser && teaser.parentNode) teaser.parentNode.removeChild(teaser);
-      teaser = null;
-    }
-
-    function closePanel() {
-      if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
-      panel = null;
-      paintFab(false);
-    }
-
-    function openPanel() {
-      hideTeaser();
-      if (panel) return;
-      panel = buildPanel();
-      root.insertBefore(panel, root.firstChild);
-      paintFab(true);
-      var ta = panel.querySelector("textarea");
-      try { ta.focus({ preventScroll: true }); } catch (e) {}
-    }
-
-    function buildPanel() {
-      var pn = document.createElement("div");
-      pn.className = "pn";
-      pn.setAttribute("role", "dialog");
-      pn.setAttribute("aria-label", W.title);
-      pn.setAttribute("data-act", "wa-panel");
-
-      var hd = document.createElement("div");
-      hd.className = "hd";
-      var av = document.createElement("span");
-      av.className = "av";
-      av.setAttribute("aria-hidden", "true");
-      av.textContent = initialOf(widget);
-      var tx = document.createElement("div");
-      tx.className = "hd-t";
-      var nm = document.createElement("div");
-      nm.className = "hd-n";
-      nm.textContent = W.title;
-      var sb = document.createElement("div");
-      sb.className = "hd-s";
-      sb.textContent = W.sub;
-      tx.appendChild(nm);
-      tx.appendChild(sb);
-      var x = document.createElement("button");
-      x.type = "button";
-      x.className = "hd-x";
-      x.setAttribute("aria-label", W.close);
-      x.setAttribute("data-act", "close");
-      x.textContent = "✕";
-      x.addEventListener("click", closePanel);
-      hd.appendChild(av);
-      hd.appendChild(tx);
-      hd.appendChild(x);
-      pn.appendChild(hd);
-
-      // The greeting the business wrote (W1: ux.welcome.title). None, none shown.
-      var ch = document.createElement("div");
-      ch.className = "ch";
-      var greeting = String((widget.ux && widget.ux.welcome && widget.ux.welcome.title) || "").trim();
-      if (greeting) {
-        var gr = document.createElement("div");
-        gr.className = "gr";
-        gr.setAttribute("data-act", "greeting");
-        var gt = document.createElement("bdi");
-        gt.textContent = greeting;
-        var when = document.createElement("span");
-        when.className = "gr-t";
-        when.textContent = W.now;
-        gr.appendChild(gt);
-        gr.appendChild(when);
-        ch.appendChild(gr);
-      }
-      var note = document.createElement("div");
-      note.className = "nt";
-      note.setAttribute("role", "status");
-      note.hidden = true;
-      ch.appendChild(note);
-      pn.appendChild(ch);
-
-      var cm = document.createElement("form");
-      cm.className = "cm";
-      var ta = document.createElement("textarea");
-      ta.rows = 1;
-      ta.setAttribute("dir", "auto");
-      ta.setAttribute("placeholder", W.type);
-      ta.setAttribute("aria-label", W.type);
-      ta.setAttribute("maxlength", "500");
-      var sd = document.createElement("button");
-      sd.type = "submit";
-      sd.className = "sd";
-      sd.setAttribute("aria-label", W.send);
-      sd.setAttribute("data-act", "wa-send");
-      sd.innerHTML = WA_SEND;
-      cm.appendChild(ta);
-      cm.appendChild(sd);
-      ta.addEventListener("keydown", function (e) {
-        if (e.key === "Enter" && !e.shiftKey && !window.matchMedia("(max-width: 560px)").matches) {
-          e.preventDefault();
-          start();
-        }
-      });
-      cm.addEventListener("submit", function (e) { e.preventDefault(); start(); });
-      pn.appendChild(cm);
-
-      var pw = document.createElement("a");
-      pw.className = "pw";
-      pw.href = "https://gotcha.co.il";
-      pw.target = "_blank";
-      pw.rel = "noopener";
-      pw.setAttribute("dir", "ltr");
-      pw.setAttribute("aria-label", "Powered by GOTCHA");
-      var pwt = document.createElement("span");
-      pwt.textContent = "Powered by";
-      var pwl = document.createElement("img");
-      pwl.src = API + "/widget/gotcha-line-dark.png";
-      pwl.alt = "";
-      pw.appendChild(pwt);
-      pw.appendChild(pwl);
-      pn.appendChild(pw);
-
-      function say(kind, text, link) {
-        note.hidden = false;
-        note.setAttribute("data-kind", kind);
-        note.textContent = text;
-        if (link) {
-          note.appendChild(document.createTextNode(" "));
-          var a = document.createElement("a");
-          a.href = link;
-          a.target = "_blank";
-          a.rel = "noopener noreferrer";
-          a.textContent = W.openLink;
-          note.appendChild(a);
-          try { a.focus(); } catch (e) {}
-        }
-      }
-
-      // The window opens inside the click and is pointed at wa.me once the
-      // server answers: a window opened after an await is what popup
-      // blockers block. Blocked anyway, the link is offered to tap.
-      function start() {
-        if (sd.disabled) return;
-        var w = null;
-        try { w = window.open("", "_blank"); } catch (e) { w = null; }
-        sd.disabled = true;
-        note.hidden = true;
-        var text = ta.value.trim();
-        post(API_PATH + "/whatsapp-start", {
+    launcherButton = window.__gotchaWhatsappWidget({
+      host: host,
+      shadow: shadow,
+      widget: widget,
+      lang: langOf(widget),
+      initial: initialOf(widget),
+      assets: API,
+      session: session,
+      start: function (text, lang) {
+        return post(API_PATH + "/whatsapp-start", {
           widgetId: WIDGET_ID,
           text: text || undefined,
           locale: lang,
           context: pageContext(),
-        })
-          .then(function (res) {
-            var url = res && res.data && res.data.url;
-            if (!url) throw new Error("unavailable");
-            if (w) {
-              try { w.opener = null; } catch (e) {}
-              w.location.href = url;
-            }
-            ta.value = "";
-            say("ok", W.opening, w ? null : url);
-          })
-          .catch(function () {
-            if (w) { try { w.close(); } catch (e) {} }
-            say("err", W.failed);
-          })
-          .then(function () { sd.disabled = false; });
-      }
-      return pn;
-    }
-
-    fab.addEventListener("click", function () {
-      if (panel) closePanel();
-      else openPanel();
+        }).then(function (res) { return res && res.data && res.data.url; });
+      },
     });
-    paintFab(false);
-    root.appendChild(fab);
-    launcherButton = fab;
-
-    // The teaser (W1: ux.proactive.message after its delay), once per visit.
-    var teaserTimer = null;
-    var cfg = widget.ux && widget.ux.proactive;
-    var line = cfg && cfg.enabled ? String(cfg.message || "").trim() : "";
-    var max = (cfg && Number(cfg.maxPerSession)) || 1;
-    if (line && Number(session("popups") || 0) < max) {
-      var seconds = Number(mobile && cfg.mobileDelaySeconds != null ? cfg.mobileDelaySeconds : cfg.delaySeconds) || 1;
-      teaserTimer = setTimeout(function () {
-        teaserTimer = null;
-        if (panel) return;
-        session("popups", String(Number(session("popups") || 0) + 1));
-        teaser = document.createElement("div");
-        teaser.className = "ts";
-        teaser.setAttribute("role", "status");
-        teaser.setAttribute("data-act", "popup");
-        var t = document.createElement("button");
-        t.type = "button";
-        t.className = "ts-t";
-        t.setAttribute("data-act", "popup-open");
-        var tt = document.createElement("bdi");
-        tt.textContent = line;
-        t.appendChild(tt);
-        t.addEventListener("click", openPanel);
-        var tx = document.createElement("button");
-        tx.type = "button";
-        tx.className = "ts-x";
-        tx.setAttribute("aria-label", W.dismiss);
-        tx.setAttribute("data-act", "popup-close");
-        tx.textContent = "✕";
-        tx.addEventListener("click", hideTeaser);
-        teaser.appendChild(t);
-        teaser.appendChild(tx);
-        root.insertBefore(teaser, fab);
-      }, Math.max(900, seconds * 1000));
-    }
   }
 
   function mount(bootstrap) {

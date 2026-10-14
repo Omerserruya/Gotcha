@@ -65,7 +65,15 @@ if (!MARKER.test(bootstrapSource)) {
   );
   process.exit(1);
 }
-const nextBootstrap = bootstrapSource.replace(MARKER, `var CHAT_BUNDLE = "${chatName}";`);
+// ...and the site script, for the WhatsApp kind it draws on a storefront too.
+const SITE_MARKER = /var SITE_BUNDLE = "[^"]*";/;
+if (!SITE_MARKER.test(bootstrapSource)) {
+  console.error("✗ gotcha-shopify-bootstrap.js has no `var SITE_BUNDLE = \"...\";` line.");
+  process.exit(1);
+}
+const nextBootstrap = bootstrapSource
+  .replace(MARKER, `var CHAT_BUNDLE = "${chatName}";`)
+  .replace(SITE_MARKER, `var SITE_BUNDLE = "${siteName}";`);
 const bootstrapHash = hash(Buffer.from(nextBootstrap));
 
 // The theme block names the exact bootstrap it was built against, for the
@@ -103,7 +111,7 @@ const manifest = {
 
 if (checkOnly) {
   const problems = [];
-  if (nextBootstrap !== bootstrapSource) problems.push("bootstrap does not reference the current chat bundle hash");
+  if (nextBootstrap !== bootstrapSource) problems.push("bootstrap does not reference the current chat bundle and site script hashes");
   if (!fs.existsSync(path.join(DIR, chatName))) problems.push(`missing hashed bundle ${chatName}`);
   const onDisk = fs.existsSync(MANIFEST) ? JSON.parse(fs.readFileSync(MANIFEST, "utf8")) : null;
   if (!fs.existsSync(path.join(DIR, siteName))) problems.push(`missing hashed site script ${siteName}`);
