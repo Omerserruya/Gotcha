@@ -43,6 +43,9 @@ import {
   type VisitorSessionPayload,
   type StorefrontContext,
   type HandoffRecord,
+  visitorLocaleOf,
+  widgetTextsOf,
+  isWidgetLocale,
   handoffMessage,
   waMeUrl,
   recordHandover } from "@chatcenter/shared";
@@ -55,6 +58,7 @@ import {
 } from "../services/shopify-live-chat.service";
 import { validateCartLine } from "../services/shopify-catalog.service";
 import { handoffTarget, mintHandoffRef } from "../services/website-widget.service";
+import { translateWidgetTexts } from "../services/widget-text-translation.service";
 import {
   findLiveInstallation,
   recordInstallationHeartbeat,
@@ -592,7 +596,8 @@ router.post("/message", messageLimiter, async (req: Request, res: Response) => {
       pageType: context.pageType,
     });
 
-    res.json({ data: { accepted: true, conversationId: conversation.id, clientId } });
+    // The language the shopper wrote in, for the widget to switch to (W10).
+    res.json({ data: { accepted: true, conversationId: conversation.id, clientId, locale: visitorLocaleOf(body) } });
   } catch (err) {
     console.error("[shopify-chat] message error:", (err as Error)?.message);
     res.status(500).json({ error: "unavailable" });
@@ -844,6 +849,27 @@ router.post("/whatsapp-start", conversationLimiter, async (req: Request, res: Re
     res.json({ data: { url: waMeUrl(target.digits, prefilled), ref } });
   } catch (err) {
     console.error("[shopify-chat] whatsapp-start error:", (err as Error)?.message);
+    res.status(500).json({ error: "unavailable" });
+  }
+});
+
+// ─── POST /texts - the merchant's texts in the shopper's language (W10) ──
+//
+// { sessionToken, locale: "he" | "en" } -> { locale, texts: { key: text } }:
+// only the texts written in another language, translated once per text and
+// language (cached). Same keys as /api/embedded-chat/texts.
+
+router.post("/texts", conversationLimiter, async (req: Request, res: Response) => {
+  const ctx = await requireVisitor(req, res);
+  if (!ctx) return;
+  try {
+    const locale = (req.body as any)?.locale;
+    if (!isWidgetLocale(locale)) { res.status(400).json({ error: "locale must be he or en" }); return; }
+    const { session, channel } = ctx;
+    const texts = await translateWidgetTexts(session.tenantId, widgetTextsOf(channel.config.ux, channel.config.hours.offlineMessage), locale);
+    res.json({ data: { locale, texts } });
+  } catch (err) {
+    console.error("[shopify-chat] texts error:", (err as Error)?.message);
     res.status(500).json({ error: "unavailable" });
   }
 });

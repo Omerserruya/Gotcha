@@ -10,11 +10,13 @@ import {
   BUSINESS_HOURS_KEY,
   parseBusinessHours,
   evaluateBusinessHours, readDurableSetting, normalizeStorefrontContext,
+  visitorLocaleOf, widgetTextsOf, isWidgetLocale,
   HANDOFF_TTL_SECONDS, handoffRefKey, handoffConversationKey, newHandoffRef, handoffMessage, handoffButtonLabel, waMeUrl,
   type HandoffRecord, type WebchatConfig } from "@chatcenter/shared";
 import crypto from "crypto";
 import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanitizer.service";
 import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef } from "../services/website-widget.service";
+import { translateWidgetTexts } from "../services/widget-text-translation.service";
 
 const router = Router();
 
@@ -321,6 +323,35 @@ router.post("/whatsapp-start", messageLimiter, async (req: Request, res: Respons
 });
 
 /**
+ * POST /texts { widgetId, locale: "he" | "en" } -> { locale, texts: { key: text } }
+ * The merchant's widget texts in the visitor's language (W10): only the ones
+ * written in another language, translated once per text and language
+ * (cached). Keys: welcome.title, welcome.subtitle,
+ * welcome.suggestedQuestions.<i>, launcher.label, proactive.title,
+ * proactive.message, proactive.actionLabel, offline.message. An unknown
+ * widget answers empty, like /bootstrap.
+ */
+router.post("/texts", initLimiter, async (req: Request, res: Response) => {
+  try {
+    const widgetId = String(req.body?.widgetId ?? "").trim();
+    const locale = req.body?.locale;
+    if (!isWidgetLocale(locale)) { res.status(400).json({ error: "locale must be he or en" }); return; }
+    if (!widgetId || widgetId.length > 128) { res.json({ data: { locale, texts: {} } }); return; }
+    const account = await withCrossTenantAccess(() => prisma.channelAccount.findFirst({
+      where: { externalId: widgetId, channel: "WEBCHAT", connectionStatus: { in: ["CONNECTED", "PENDING"] } },
+      select: { tenantId: true, credentials: true },
+    }));
+    if (!account) { res.json({ data: { locale, texts: {} } }); return; }
+    const config = normalizeWebchatConfig(account.credentials);
+    const texts = await translateWidgetTexts(account.tenantId, widgetTextsOf(config.ux, config.offline.message), locale);
+    res.json({ data: { locale, texts } });
+  } catch (err) {
+    console.error("Embedded chat texts error:", (err as Error)?.message);
+    res.status(500).json({ error: "unavailable" });
+  }
+});
+
+/**
  * A visitor id the client sent, when it is as strong as one /init mints
  * (128 bits: 32+ hex). The widget's own `v_<time><Math.random>` is not.
  */
@@ -506,7 +537,10 @@ router.post("/message", messageLimiter, async (req: Request, res: Response) => {
       { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
     );
 
-    res.json({ data: { messageId: externalMessageId } });
+    // The language the visitor wrote in (null when too short to tell): the
+    // widget switches its strings to it and asks POST /texts for the
+    // merchant's texts in it (W10).
+    res.json({ data: { messageId: externalMessageId, locale: visitorLocaleOf(safeBody) } });
   } catch (err) {
     console.error("Embedded chat message error:", (err as Error)?.message);
     res.status(500).json({ error: "Failed to send message" });

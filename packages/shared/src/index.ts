@@ -995,6 +995,8 @@ export {
   publicWebchatConfig,
 } from "./lib/webchat-widget";
 export type { WebchatConfig, LegacyWebchatSettings, WebchatPosition } from "./lib/webchat-widget";
+// The widget follows the customer's language (W10).
+export { isWidgetLocale, visitorLocaleOf, textLocaleOf, widgetTextsOf, textsToTranslate, type WidgetLocale } from "./lib/widget-language";
 // "Powered by GOTCHA" is on for every widget (W8).
 export { POWERED_BY_LOCKED, POWERED_BY_LOCKED_CODE, effectivePoweredBy, asksToHidePoweredBy } from "./lib/powered-by";
 

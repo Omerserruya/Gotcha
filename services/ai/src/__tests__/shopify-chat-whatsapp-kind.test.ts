@@ -19,7 +19,12 @@ vi.mock("bullmq", () => ({ Queue: class { add = vi.fn(); }, Worker: class {}, Jo
 vi.mock("ioredis", () => ({ default: class { publish = vi.fn(); subscribe = vi.fn(); on = vi.fn(); quit = vi.fn(); } }));
 
 const SHOP = "urban-supply-gotcha-demo.myshopify.com";
-const H = vi.hoisted(() => ({ kv: new Map<string, string>(), ttl: new Map<string, number>(), target: null as any, ux: {} as any, created: [] as any[] }));
+const H = vi.hoisted(() => ({ kv: new Map<string, string>(), ttl: new Map<string, number>(), target: null as any, ux: {} as any, created: [] as any[], calls: [] as any[] }));
+
+vi.mock("../services/ai.service", () => ({
+  getMicroModel: () => "micro",
+  generateResponse: async (p: any) => { H.calls.push(p); return { content: JSON.stringify({ "welcome.title": "Welcome" }), usage: {} }; },
+}));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -33,6 +38,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     getRedis: () => ({
       set: async (k: string, v: string, ...a: any[]) => { if (a.includes("NX") && H.kv.has(k)) return null; H.kv.set(k, v); if (a[0] === "EX") H.ttl.set(k, a[1]); return "OK"; },
       get: async (k: string) => H.kv.get(k) ?? null,
+      mget: async (...k: string[]) => k.map((x) => H.kv.get(x) ?? null),
     }),
   };
 });
@@ -70,7 +76,7 @@ const boot = () => request(app()).post("/api/shopify-chat/bootstrap").set("origi
 const start = (body: any) => request(app()).post("/api/shopify-chat/whatsapp-start").set("origin", `https://${SHOP}`).send(body);
 
 beforeEach(() => {
-  H.kv.clear(); H.ttl.clear(); H.created = [];
+  H.kv.clear(); H.ttl.clear(); H.created = []; H.calls = [];
   H.ux = { kind: "whatsapp", whatsapp: { enabled: true, channelAccountId: "wa_1" } };
   H.target = { channelAccountId: "wa_1", digits: "972525551234" };
 });
@@ -122,5 +128,18 @@ describe("★ POST /whatsapp-start", () => {
     H.target = null;
     expect((await start({ sessionToken: token(), text: "hi" })).status).toBe(404);
     expect([...H.kv.keys()]).toEqual([]);
+  });
+});
+
+describe("★ POST /texts (W10)", () => {
+  it("a signed shopper gets the merchant's texts in their language; no session is 401", async () => {
+    H.ux = { kind: "chat", welcome: { title: "ברוכים הבאים", subtitle: "Happy to help", suggestedQuestions: [] } };
+    const r = await request(app()).post("/api/shopify-chat/texts").set("origin", `https://${SHOP}`).send({ sessionToken: token(), locale: "en" });
+    expect(r.status).toBe(200);
+    expect(r.body.data).toEqual({ locale: "en", texts: { "welcome.title": "Welcome" } });
+    expect(H.calls).toHaveLength(1);
+    expect(H.calls[0].metadata).toEqual({ type: "widget_text_translation" });
+    expect((await request(app()).post("/api/shopify-chat/texts").send({ locale: "en" })).status).toBe(401);
+    expect((await request(app()).post("/api/shopify-chat/texts").set("origin", `https://${SHOP}`).send({ sessionToken: token(), locale: "de" })).status).toBe(400);
   });
 });
