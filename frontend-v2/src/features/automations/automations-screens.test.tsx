@@ -695,6 +695,92 @@ describe('★★ the new triggers and steps (Backend 972ae66d), edited where the
     expect(screen.getByTestId('inspector-type')).toHaveValue('send_buttons');
   });
 
+  it('★★ AU9: a "+" on a line puts a step between the two - the line keeps its id', async () => {
+    actions.readCatalog.mockResolvedValue(catalog(false));
+    showBuilder(
+      draftOf(
+        { type: 'message_received', config: {} },
+        [
+          { id: 't', type: 'automation_trigger', data: {} },
+          { id: 'm', type: 'send_message_text', data: { text: 'hi' } },
+        ],
+        [{ id: 'e1', source: 't', target: 'm', sourceHandle: null }],
+      ),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('between-t-m'));
+    });
+    fireEvent.click(screen.getByTestId('step-add_tag'));
+    await waitFor(() => {
+      const graph = actions.checkGraph.mock.calls.at(-1)?.[1] as
+        | {
+            nodes: { id: string; type: string }[];
+            edges: { id: string; source: string; target: string }[];
+          }
+        | undefined;
+      const added = graph?.nodes.find((n) => n.type === 'add_tag');
+      expect(added).toBeDefined();
+      expect(graph?.edges).toContainEqual(
+        expect.objectContaining({ id: 'e1', source: 't', target: added!.id }),
+      );
+      expect(graph?.edges).toContainEqual(
+        expect.objectContaining({ source: added!.id, target: 'm' }),
+      );
+    });
+    expect(screen.queryByTestId('builder-insert-refused')).toBeNull();
+  });
+
+  it('★★ AU9: between buttons and their wait - refused in words, nothing added', async () => {
+    actions.readCatalog.mockResolvedValue(catalog(false));
+    showBuilder(
+      draftOf(
+        { type: 'message_received', config: {} },
+        [
+          { id: 't', type: 'automation_trigger', data: {} },
+          {
+            id: 'b',
+            type: 'send_buttons',
+            data: { text: 'pick', buttons: [{ id: 'x', title: 'X' }] },
+          },
+          { id: 'w', type: 'wait_for_reply', data: {} },
+        ],
+        [
+          { id: 'e1', source: 't', target: 'b', sourceHandle: null },
+          { id: 'e2', source: 'b', target: 'w', sourceHandle: null },
+        ],
+      ),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('between-b-w'));
+    });
+    fireEvent.click(screen.getByTestId('step-add_tag'));
+    expect(screen.getByTestId('builder-insert-refused')).toHaveTextContent(
+      'Nothing can go between a message with buttons',
+    );
+    expect(screen.queryByTestId('builder-unsaved')).toBeNull();
+  });
+
+  it('★ AU9: a comment automation, before its first wait - only a step the catalogue calls comment-safe', async () => {
+    const read = catalog(false);
+    actions.readCatalog.mockResolvedValue(read);
+    showBuilder(
+      draftOf(
+        { type: 'comment_received', config: {} },
+        [
+          { id: 't', type: 'automation_trigger', data: {} },
+          { id: 'm', type: 'send_message_text', data: { text: 'hi' } },
+        ],
+        [{ id: 'e1', source: 't', target: 'm', sourceHandle: null }],
+      ),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('between-t-m'));
+    });
+    // The catalogue does not call add_tag comment-safe: refused.
+    fireEvent.click(screen.getByTestId('step-add_tag'));
+    expect(screen.getByTestId('builder-insert-refused')).toHaveTextContent('comment automation');
+  });
+
   it('★ a file step writes the executor’s `filename`; an old draft’s `fileName` is read, then dropped', async () => {
     showBuilder(
       draftOf(

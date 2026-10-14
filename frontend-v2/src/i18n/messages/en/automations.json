@@ -258,6 +258,13 @@
     "sat": "Sat"
   },
   "builder": {
+    "addBetween": "Add a step between {from} and {to}",
+    "insertRefused": {
+      "reply_pair": "Nothing can go between a message with buttons and the wait that reads its reply.",
+      "terminal": "That step ends the automation, so it can't go between two steps.",
+      "branching": "A step with branches can't go on a line. Add it from the + under a step.",
+      "comment_unsafe": "Before the first wait for a reply, a comment automation can only use steps that work on a comment."
+    },
     "crumbs": "Breadcrumbs",
     "name": "Automation name",
     "status": {

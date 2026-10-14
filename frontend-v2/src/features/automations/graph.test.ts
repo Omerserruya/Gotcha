@@ -4,6 +4,7 @@ import { nodeSchema, type AutomationNode } from '@/api/contracts/automations';
 
 import {
   NODE_W,
+  beforeFirstWait,
   changeRefusal,
   changeType,
   defaultData,
@@ -11,6 +12,8 @@ import {
   ROW_H,
   freeHandles,
   insertAfter,
+  insertBetween,
+  insertRefusal,
   layout,
   onlyThrough,
   outputsOf,
@@ -190,5 +193,72 @@ describe('★★ AU8 - a step changes type in its place', () => {
       [edge('t', 'm')],
     );
     expect(changeRefusal(one, 'm', 'send_message_text')).toBe('same');
+  });
+});
+
+describe('★★ AU9 - a step on a line, between two steps', () => {
+  const plain = { automation: false, safe: () => true };
+  const g = (nodes: AutomationNode[], edges: ReturnType<typeof edge>[]): Graph => ({
+    nodes,
+    edges,
+  });
+
+  it('★★ the line keeps its id and branch ("unreachable" too) and leads to the new step, which leads on', () => {
+    const graph = g(
+      [
+        node('t', 'automation_trigger'),
+        node('a', 'send_message_text'),
+        node('b', 'send_message_text'),
+      ],
+      [edge('t', 'a'), edge('a', 'b', 'unreachable')],
+    );
+    const line = graph.edges[1]!;
+    let n = 0;
+    const made = insertBetween(graph, line, 'add_tag', () => `n${++n}`, plain)!;
+    expect(made.id).toBe('n1');
+    expect(made.graph.edges).toContainEqual({ ...line, target: 'n1' });
+    expect(made.graph.edges).toContainEqual(
+      expect.objectContaining({ source: 'n1', target: 'b', sourceHandle: null }),
+    );
+    expect(made.graph.edges).toHaveLength(3);
+    expect(made.graph.nodes.map((x) => x.id)).toEqual(['t', 'a', 'b', 'n1']);
+  });
+
+  it('★★ never between buttons and the wait that reads them', () => {
+    const graph = g(
+      [node('t', 'automation_trigger'), node('b', 'send_buttons'), node('w', 'wait_for_reply')],
+      [edge('t', 'b'), edge('b', 'w')],
+    );
+    expect(insertRefusal(graph, graph.edges[1]!, 'add_tag', plain)).toBe('reply_pair');
+    expect(insertBetween(graph, graph.edges[1]!, 'add_tag', () => 'x', plain)).toBeNull();
+  });
+
+  it('a final step, or one with branches, never on a line', () => {
+    const graph = g([node('t', 'automation_trigger'), node('a', 'add_tag')], [edge('t', 'a')]);
+    expect(insertRefusal(graph, graph.edges[0]!, 'close_conversation', plain)).toBe('terminal');
+    expect(insertRefusal(graph, graph.edges[0]!, 'opening_hours', plain)).toBe('branching');
+    expect(insertRefusal(graph, graph.edges[0]!, 'send_message_text', plain)).toBeNull();
+  });
+
+  it('★★ a comment automation, before its first wait: only comment-safe; after it, anything', () => {
+    const graph = g(
+      [
+        node('t', 'automation_trigger'),
+        node('w', 'wait_for_reply'),
+        node('a', 'send_message_text'),
+        node('b', 'add_tag'),
+      ],
+      [edge('t', 'w'), edge('w', 'a', 'reply'), edge('a', 'b')],
+    );
+    const comments = { automation: true, safe: (type: string) => type === 'send_message_text' };
+    expect([...beforeFirstWait(graph)].sort()).toEqual(['t', 'w']);
+    expect(insertRefusal(graph, graph.edges[0]!, 'add_tag', comments)).toBe('comment_unsafe');
+    expect(insertRefusal(graph, graph.edges[0]!, 'send_message_text', comments)).toBeNull();
+    // After the wait: anything.
+    expect(insertRefusal(graph, graph.edges[2]!, 'add_tag', comments)).toBeNull();
+    // Not a comment automation: anything.
+    expect(
+      insertRefusal(graph, graph.edges[0]!, 'add_tag', { ...comments, automation: false }),
+    ).toBeNull();
   });
 });

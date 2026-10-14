@@ -14,6 +14,7 @@ import {
 import {
   ISSUE_CODES,
   type Automation,
+  type AutomationEdge,
   type AutomationNode,
   type Catalog,
   type CatalogItem,
@@ -44,6 +45,8 @@ import {
   duplicateStep,
   freeHandles,
   insertAfter,
+  insertBetween,
+  insertRefusal,
   removeSteps,
   isLabelled,
   layout,
@@ -124,8 +127,14 @@ export function Builder({
   const [sheet, setSheet] = useState<{
     readonly after: string;
     readonly handle: string;
+    /** AU9: a step on this line, between its two steps - not after `after`. */
+    readonly edge?: AutomationEdge;
     readonly catalog: Catalog | null | 'reading';
   } | null>(null);
+  const [insertRefused, setInsertRefused] = useState<Exclude<
+    ReturnType<typeof insertRefusal>,
+    null
+  > | null>(null);
   const [zoom, setZoom] = useState<number>(1);
   const [query, setQuery] = useState('');
   const [outcome, setOutcome] = useState<
@@ -274,8 +283,36 @@ export function Builder({
     setSheet(null);
   };
 
-  const openSheet = (after: string, handle: string) => {
-    setSheet({ after, handle, catalog: 'reading' });
+  /*
+    ★★ AU9 (Omer, 2026-10-14): a step on a line, between two steps
+    (graph.ts insertBetween): the line keeps its id and branch, the new step
+    leads on. In a comment automation, before its first wait, only what the
+    catalogue calls comment-safe - one it did not say is not.
+  */
+  const addBetween = (edge: AutomationEdge, item: CatalogItem) => {
+    const comments = {
+      automation: trigger.type === 'comment_received',
+      safe: (type: string) => (item.type === type ? item.commentSafe === true : false),
+    };
+    const why = insertRefusal(graph, edge, item.type, comments);
+    const made =
+      why === null
+        ? insertBetween(graph, edge, item.type, () => crypto.randomUUID(), comments)
+        : null;
+    setSheet(null);
+    if (!made) {
+      setInsertRefused(why ?? 'branching');
+      return;
+    }
+    setInsertRefused(null);
+    commit(made.graph);
+    setSelected(made.id);
+    setPanel('inspector');
+  };
+
+  const openSheet = (after: string, handle: string, edge?: AutomationEdge) => {
+    setInsertRefused(null);
+    setSheet({ after, handle, ...(edge ? { edge } : {}), catalog: 'reading' });
     startRead(async () => {
       const read = await readCatalog({ automationId: automation.id, after });
       setSheet((now) => (now && now.after === after ? { ...now, catalog: read } : now));
@@ -610,6 +647,15 @@ export function Builder({
                 onContextMenu={onCanvasMenu}
                 data-testid="builder-canvas-area"
               >
+                {insertRefused ? (
+                  <p
+                    className={styles.insertRefused}
+                    role="alert"
+                    data-testid="builder-insert-refused"
+                  >
+                    {t(`builder.insertRefused.${insertRefused}`)}
+                  </p>
+                ) : null}
                 <div
                   className={styles.canvas}
                   style={{
@@ -651,6 +697,33 @@ export function Builder({
                         );
                       })}
                     </svg>
+                    {/* AU9: a "+" on each line, at its middle - a step between the two. */}
+                    {graph.edges.map((edge, i) => {
+                      const from = at.get(edge.source);
+                      const to = at.get(edge.target);
+                      if (!from || !to) return null;
+                      const y1 = from.y + 20 + bottomOf(edge.source);
+                      const y2 = to.y + 20;
+                      return (
+                        <button
+                          key={`between-${edge.id ?? i}`}
+                          type="button"
+                          className={styles.between}
+                          style={{
+                            insetInlineStart: (from.x + to.x) / 2 + NODE_W,
+                            insetBlockStart: (y1 + y2) / 2,
+                          }}
+                          aria-label={t('builder.addBetween', {
+                            from: stepName(graph.nodes.find((n) => n.id === edge.source)!),
+                            to: stepName(graph.nodes.find((n) => n.id === edge.target)!),
+                          })}
+                          onClick={() => openSheet(edge.source, edge.sourceHandle ?? 'next', edge)}
+                          data-testid={`between-${edge.source}-${edge.target}`}
+                        >
+                          <Plus size={11} aria-hidden="true" />
+                        </button>
+                      );
+                    })}
                     {graph.edges.map((edge, i) => {
                       const from = at.get(edge.source);
                       const to = at.get(edge.target);
@@ -956,7 +1029,9 @@ export function Builder({
             catalog={sheet.catalog}
             context={sheetContext(sheet.after, graph, trigger, t)}
             onClose={() => setSheet(null)}
-            onPick={(item) => add(sheet.after, sheet.handle, item)}
+            onPick={(item) =>
+              sheet.edge ? addBetween(sheet.edge, item) : add(sheet.after, sheet.handle, item)
+            }
           />
         )
       ) : null}

@@ -385,3 +385,91 @@ export function changeType(graph: Graph, id: string, type: string): Graph | null
     edges: graph.edges,
   };
 }
+
+/** Steps reachable from the trigger without passing a wait for reply (the route's `beforeFirstWait`). */
+export function beforeFirstWait(graph: Graph): ReadonlySet<string> {
+  const start = graph.nodes.find((n) => n.type === TRIGGER_NODE);
+  const seen = new Set<string>();
+  const stack = start ? [start.id] : [];
+  while (stack.length > 0) {
+    const at = stack.pop()!;
+    if (seen.has(at)) continue;
+    seen.add(at);
+    if (graph.nodes.find((n) => n.id === at)?.type === 'wait_for_reply') continue;
+    for (const e of graph.edges) if (e.source === at) stack.push(e.target);
+  }
+  return seen;
+}
+
+/** Why a step of this type cannot go on this line, or `null` when it can. */
+export type InsertRefusal = 'reply_pair' | 'terminal' | 'branching' | 'comment_unsafe' | null;
+
+/**
+ * ★★ AU9 (Omer, 2026-10-14): a step on a line, between two steps. Ids are
+ * kept: the line keeps its id and its branch (`sourceHandle` - "unreachable"
+ * included) and now leads to the new step, which leads on to where it went.
+ * Refused, with why (Backend's rules):
+ *   reply_pair      between buttons or a list and the wait that reads them
+ *   terminal        a final step - nothing could follow it, and something does
+ *   branching       a step with branches - which would lead on? Add it from
+ *                   the "+" under a step instead
+ *   comment_unsafe  in a comment automation, before its first wait for
+ *                   reply, only what the catalogue calls comment-safe
+ */
+export function insertRefusal(
+  graph: Graph,
+  edge: AutomationEdge,
+  type: string,
+  comments: { readonly automation: boolean; readonly safe: (type: string) => boolean },
+): InsertRefusal {
+  const source = graph.nodes.find((n) => n.id === edge.source);
+  const target = graph.nodes.find((n) => n.id === edge.target);
+  if (!source || !target) return 'branching';
+  if (ASKS.has(source.type) && target.type === 'wait_for_reply') return 'reply_pair';
+  if (TERMINAL.has(type)) return 'terminal';
+  const probe: AutomationNode = {
+    id: '\u0000',
+    type,
+    position: { x: 0, y: 0 },
+    data: defaultData(type, () => 'x'),
+  };
+  const outs = outputsOf(probe, { nodes: [...graph.nodes, probe], edges: graph.edges });
+  if (outs.length !== 1 || outs[0] !== 'next') return 'branching';
+  if (
+    comments.automation &&
+    source.type !== 'wait_for_reply' &&
+    beforeFirstWait(graph).has(source.id) &&
+    !comments.safe(type)
+  ) {
+    return 'comment_unsafe';
+  }
+  return null;
+}
+
+/** The graph with a new step on `edge`, or `null` when it may not go there (`insertRefusal`). */
+export function insertBetween(
+  graph: Graph,
+  edge: AutomationEdge,
+  type: string,
+  newId: () => string,
+  comments: { readonly automation: boolean; readonly safe: (type: string) => boolean },
+): { readonly graph: Graph; readonly id: string } | null {
+  if (insertRefusal(graph, edge, type, comments) !== null) return null;
+  const id = newId();
+  const node: AutomationNode = {
+    id,
+    type,
+    position: { x: 0, y: 0 },
+    data: defaultData(type, newId),
+  };
+  return {
+    id,
+    graph: {
+      nodes: [...graph.nodes, node],
+      edges: [
+        ...graph.edges.map((e) => (e === edge ? { ...e, target: id } : e)),
+        { id: newId(), source: id, target: edge.target, sourceHandle: null },
+      ],
+    },
+  };
+}

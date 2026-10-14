@@ -521,6 +521,36 @@
     cursor: pointer;
   }
 
+  /* AU9: the "+" on a line, between two steps - quiet until reached. */
+  .between {
+    position: absolute;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 20px;
+    block-size: 20px;
+    padding: 0;
+    border: var(--border-width-thin) dashed var(--border-emphasis);
+    border-radius: 50%;
+    background-color: var(--panel-field);
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0.55;
+    transform: translate(-50%, -50%);
+  }
+
+  .between:hover,
+  .between:focus-visible {
+    opacity: 1;
+    color: var(--text-primary);
+  }
+
+  .insertRefused {
+    margin: 12px 24px 0;
+    font-size: 12.5px;
+    color: var(--intent-urgent-text);
+  }
+
   .add:hover {
     border-color: var(--text-secondary);
     color: var(--text-primary);
