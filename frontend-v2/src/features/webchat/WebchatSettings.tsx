@@ -50,7 +50,7 @@ import type { ShopifyAvailability } from '@/features/capabilities/load-capabilit
 import { Link, useRouter } from '@/i18n/navigation';
 
 import { appPath } from '@/lib/base-path';
-import { brandMark, initials, logoFit } from '@/lib/brand-mark';
+import { brandInitial, brandMark, initials, inkOn, logoFit } from '@/lib/brand-mark';
 
 import { hexToHsv, hsvToHex } from './colour';
 import {
@@ -1393,6 +1393,9 @@ function Preview({
   const colour = isHex(config.appearance.primaryColor) ? config.appearance.primaryColor : '#121212';
   const name = config.ux.welcome.assistantName.trim() || t('assistant');
   const mark = brandMark(business ?? name);
+  // The bubble's and the pop-up's mark: the brand's initial, as the live widget draws it.
+  const initial = brandInitial(business ?? name);
+  const ink = inkOn(colour);
   // Sized by its longest word, never broken inside one; initials when none fits.
   const fit = logoFit(mark.logo);
   const questions = config.ux.welcome.suggestedQuestions.filter((q) => q.trim()).slice(0, 3);
@@ -1523,8 +1526,33 @@ function Preview({
               <span aria-hidden="true">✕</span>
             </span>
           ) : (
+            /*
+              Design 7's pop-up: who is writing and that they answer right
+              away, a ✕, then the message.
+            */
             <span className={`${styles.pin} ${styles.bubble}`} data-testid="webchat-preview-bubble">
-              <bdi dir="auto">{teaser}</bdi>
+              <span className={styles.popHead}>
+                <span
+                  className={styles.popAvatar}
+                  style={{ backgroundColor: colour, color: ink }}
+                  aria-hidden="true"
+                >
+                  {initial}
+                  <span className={styles.popDot} />
+                </span>
+                <span className={styles.popNames}>
+                  <bdi dir="auto" className={styles.popName}>
+                    {name}
+                  </bdi>
+                  <span className={styles.popReplies}>{t('replies')}</span>
+                </span>
+                <span className={styles.popClose} aria-hidden="true">
+                  ✕
+                </span>
+              </span>
+              <span className={styles.popMessage} data-testid="webchat-preview-popup-message">
+                <bdi dir="auto">{teaser}</bdi>
+              </span>
             </span>
           )
         ) : null}
@@ -1539,10 +1567,12 @@ function Preview({
         ) : (
           <span
             className={`${styles.pin} ${styles.launcher}`}
-            style={{ backgroundColor: colour }}
+            style={{ backgroundColor: colour, color: ink }}
             data-testid="webchat-preview-launcher"
           >
-            {mark.launcher}
+            {initial}
+            {/* Someone answers: design 7's green dot. */}
+            <span className={styles.launcherDot} aria-hidden="true" />
           </span>
         )}
       </div>

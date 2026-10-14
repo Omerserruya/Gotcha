@@ -45,7 +45,7 @@ vi.mock('@/features/capabilities/ShopifyConnect', () => ({
 
 import type { WebchatTab } from '@/api/contracts/webchat';
 
-import { brandMark, initials, logoFit } from '@/lib/brand-mark';
+import { brandInitial, brandMark, initials, inkOn, logoFit } from '@/lib/brand-mark';
 
 import type { ShopifyData } from './load-website-widget';
 import { SAVE_AFTER_MS, WebchatSettings } from './WebchatSettings';
@@ -518,7 +518,8 @@ describe("★ the preview's marks come from one name - the business's", () => {
     expect(brandMark('Urban Supply · Tel Aviv').logo).toBe('URBAN SUPPLY');
     expect(brandMark('Shop,').launcher).toBe('SHOP');
     show('appearance');
-    expect(screen.getByTestId('webchat-preview-launcher')).toHaveTextContent(/^AVIV$/);
+    // The launcher carries the initial now (design 7; supervisor, 2026-10-14).
+    expect(screen.getByTestId('webchat-preview-launcher')).toHaveTextContent(/^A$/);
     expect(screen.getByTestId('webchat-preview')).toHaveTextContent('AVIV & CO.');
   });
 
@@ -1256,5 +1257,41 @@ describe('★★ W2 (2026-10-14) - the preview is design 7’s', () => {
       },
     });
     expect(screen.queryByTestId('webchat-preview-bubble')).toBeNull();
+  });
+});
+
+describe('★★ the bubble and the pop-up carry the brand, as the live widget does (supervisor, 2026-10-14)', () => {
+  it("the brand's initial: a whole grapheme, its first letter or digit (Backend's rule)", () => {
+    expect(brandInitial('Urban Supply - GOTCHA Demo')).toBe('U');
+    expect(brandInitial('  שָׁלוֹם')).toBe('שָׁ');
+    expect(brandInitial('élan')).toBe('É');
+    expect(brandInitial('"Urban" Supply')).toBe('U');
+    expect(brandInitial('🌿 Leaf & Co')).toBe('L');
+    expect(brandInitial('123 Shoes')).toBe('1');
+    expect(brandInitial('   ')).toBe('');
+  });
+
+  it('text on the main colour: cream on a dark one, ink on a pale one', () => {
+    expect(inkOn('#2B2622')).toBe('#FBF8F3');
+    expect(inkOn('#f5e6c8')).toBe('#2B2622');
+    expect(inkOn('#C96A4B')).toBe('#2B2622');
+    expect(inkOn('#3E5C99')).toBe('#FBF8F3');
+  });
+
+  it('★ the launcher: the initial, in the ink that reads on the colour, and the online dot', () => {
+    show('appearance', {
+      initial: { ...config, appearance: { ...config.appearance, primaryColor: '#f5e6c8' } },
+    });
+    const launcher = screen.getByTestId('webchat-preview-launcher');
+    expect(launcher).toHaveTextContent(/^A$/);
+    expect(launcher).toHaveStyle({ backgroundColor: '#f5e6c8', color: '#2B2622' });
+    expect(launcher.querySelector('span[aria-hidden="true"]')).not.toBeNull();
+  });
+
+  it('★ the pop-up: who is writing and that they answer right away, a ✕, then the message', () => {
+    show('appearance');
+    const bubble = screen.getByTestId('webchat-preview-bubble');
+    expect(bubble).toHaveTextContent(/^AAviv assistantreplies right away✕Hi$/);
+    expect(screen.getByTestId('webchat-preview-popup-message')).toHaveTextContent(/^Hi$/);
   });
 });

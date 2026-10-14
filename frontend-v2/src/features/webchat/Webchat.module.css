@@ -1199,7 +1199,7 @@
     color: var(--widget-look-ink);
   }
 
-  /* The button: 46px in the main colour, with the brand's wordmark. */
+  /* The button: 46px in the main colour, with the brand's initial and the online dot. */
   .launcher {
     display: grid;
     place-items: center;
@@ -1208,10 +1208,89 @@
     block-size: 46px;
     border-radius: 50%;
     box-shadow: 0 8px 20px rgb(43 38 34 / 28%);
-    color: var(--widget-look-surface);
-    font-size: 8px;
+    font-family: var(--font-serif);
+    font-size: 20px;
     font-weight: 500;
-    letter-spacing: 0.08em;
+    line-height: 1;
+  }
+
+  .launcherDot {
+    position: absolute;
+    inset-block-start: 2px;
+    inset-inline-start: 2px;
+    box-sizing: border-box;
+    inline-size: 10px;
+    block-size: 10px;
+    border: 2px solid var(--widget-look-surface);
+    border-radius: 50%;
+    background-color: var(--widget-look-online);
+  }
+
+  /* The pop-up's head: avatar with the dot, the name and "replies right away", a ✕. */
+  .popHead {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .popAvatar {
+    position: relative;
+    display: grid;
+    flex: none;
+    place-items: center;
+    inline-size: 26px;
+    block-size: 26px;
+    border-radius: 50%;
+    font-family: var(--font-serif);
+    font-size: 15px;
+    line-height: 1;
+  }
+
+  .popDot {
+    position: absolute;
+    inset-block-end: -1px;
+    inset-inline-start: -1px;
+    box-sizing: border-box;
+    inline-size: 9px;
+    block-size: 9px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background-color: var(--widget-look-online);
+  }
+
+  .popNames {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-inline-size: 0;
+  }
+
+  .popName {
+    overflow: hidden;
+    font-weight: 600;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .popReplies {
+    font-size: 10.5px;
+    color: var(--widget-look-muted);
+  }
+
+  .popClose {
+    flex: none;
+    font-size: 11px;
+    color: var(--widget-look-muted);
+  }
+
+  .popMessage {
+    display: block;
+    margin-block-start: 8px;
+    margin-inline-start: 34px;
+    padding: 7px 10px;
+    border-radius: 12px;
+    border-start-end-radius: 4px;
+    background-color: var(--widget-look-bubble);
   }
 
   .launcher[data-look='whatsapp'] {

@@ -2,7 +2,7 @@ import 'server-only';
 
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
-import { currentUserSchema } from '@/api/contracts/identity';
+import { onboardingStatusSchema, type OnboardingStatus } from '@/api/contracts/onboarding';
 import { integrationsSchema, isFailing } from '@/api/contracts/integrations';
 import {
   websiteWidgetSchema,
@@ -12,7 +12,11 @@ import {
   type WidgetAssignment,
   type WidgetInstall,
 } from '@/api/contracts/website-widget';
-import { authEndpoints, channelEndpoints, integrationEndpoints } from '@/api/endpoints/registry';
+import {
+  channelEndpoints,
+  integrationEndpoints,
+  onboardingEndpoints,
+} from '@/api/endpoints/registry';
 import {
   loadShopifyAvailability,
   type ShopifyAvailability,
@@ -45,6 +49,17 @@ export interface WebsiteWidgetRead {
   readonly business: string | null;
 }
 
+/**
+ * The business's display name: the business profile's organizationName,
+ * else the workspace's name - the bootstraps' widget.brand rule (Backend
+ * ef8ce568), so the preview and the live widget show the same brand.
+ */
+export function businessName(
+  status: Pick<OnboardingStatus, 'tenant' | 'businessProfile'>,
+): string | null {
+  return status.businessProfile?.organizationName?.trim() || status.tenant.name?.trim() || null;
+}
+
 export async function loadWebsiteWidget({
   installTab,
 }: {
@@ -74,8 +89,8 @@ export async function loadWebsiteWidget({
       }),
     installTab ? loadShopifyAvailability() : Promise.resolve(null),
     api
-      .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
-      .then((me) => me.tenantName?.trim() || null)
+      .get({ endpoint: onboardingEndpoints.status(), payload: onboardingStatusSchema })
+      .then((status) => businessName(status.data))
       .catch(() => null),
   ]);
   return { widget, install, shopifyData, shopifyAvailability, business };

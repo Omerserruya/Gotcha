@@ -9,7 +9,7 @@ vi.mock('@/features/capabilities/load-capabilities', () => ({
   loadShopifyAvailability: vi.fn(),
 }));
 
-import { loadWidgetAssignment } from './load-website-widget';
+import { businessName, loadWidgetAssignment } from './load-website-widget';
 
 beforeEach(() => {
   get.mockReset();
@@ -49,5 +49,22 @@ describe('who answers the widget, read (§4.1)', () => {
     expect(await loadWidgetAssignment()).toBe('forbidden');
     get.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 500 }));
     expect(await loadWidgetAssignment()).toBeNull();
+  });
+});
+
+describe("★ the business's name - the bootstraps' widget.brand rule (Backend ef8ce568)", () => {
+  it('the business profile first, else the workspace, trimmed; nothing at all is null', () => {
+    const tenant = { name: ' Workspace T ', status: 'ACTIVE' };
+    expect(
+      businessName({
+        tenant,
+        businessProfile: { organizationName: ' Urban Supply ', websiteDomain: null },
+      }),
+    ).toBe('Urban Supply');
+    expect(
+      businessName({ tenant, businessProfile: { organizationName: '  ', websiteDomain: null } }),
+    ).toBe('Workspace T');
+    expect(businessName({ tenant, businessProfile: null })).toBe('Workspace T');
+    expect(businessName({ tenant: { name: null, status: '' }, businessProfile: null })).toBeNull();
   });
 });

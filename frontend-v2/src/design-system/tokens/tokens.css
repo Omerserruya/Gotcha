@@ -549,6 +549,8 @@
     --widget-look-cover: #f1ece8;
     --widget-look-stage: #efe9e0;
     --widget-look-stage-edge: #e6e2da;
+    --widget-look-online: #5fa578;
+    --widget-look-bubble: #f4efe8;
 
     /*
      * A settled conversation's avatar - quieter than a live one. 02 draws a

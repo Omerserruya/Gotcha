@@ -898,7 +898,8 @@
       "waSub": "Write here and we'll continue on WhatsApp.",
       "waContinue": "Continue on WhatsApp",
       "waType": "Type a message",
-      "now": "now"
+      "now": "now",
+      "replies": "replies right away"
     },
     "notYet": "Not available yet",
     "comingSoon": "Coming soon",
