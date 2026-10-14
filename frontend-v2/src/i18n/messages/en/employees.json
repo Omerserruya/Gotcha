@@ -119,8 +119,7 @@
     "worth": {
       "title": "Worth changing",
       "none": "Nothing to suggest yet."
-    },
-    "skills": "Skills"
+    }
   },
   "hireFlow": {
     "title": "Hire an AI employee",

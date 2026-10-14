@@ -33,7 +33,9 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 vi.mock('./PauseEmployee', () => ({ PauseEmployee: () => <button type="button">Pause</button> }));
-vi.mock('./DeleteEmployee', () => ({ DeleteEmployee: () => null }));
+vi.mock('./DeleteEmployee', () => ({
+  DeleteEmployee: () => <button type="button">Delete</button>,
+}));
 
 import { EmployeeDetail } from './EmployeeDetail';
 
@@ -281,5 +283,13 @@ describe('★★ 07’s detail - what it is, from what the route already sends',
     expect(edit).not.toHaveAttribute('aria-disabled');
     expect(edit).toHaveAttribute('href', '/studio/employees/a');
     expect(edit).toHaveTextContent('Edit');
+  });
+
+  it('★★ E1 (2026-10-14): Pause, Edit, Delete - in that order, and no skill button', async () => {
+    await show();
+    const actions = screen.getByTestId('edit').parentElement!;
+    const controls = [...actions.querySelectorAll('a, button')].map((el) => el.textContent);
+    expect(controls).toEqual(['Pause', 'Edit', 'Delete']);
+    expect(document.querySelector('a[href$="/skills"]')).toBeNull();
   });
 });
