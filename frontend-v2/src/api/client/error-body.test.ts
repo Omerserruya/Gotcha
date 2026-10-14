@@ -199,6 +199,20 @@ describe('★★ the entitlement gate’s own fields survive the envelope', () =
     ]);
   });
 
+  it('★ W3: keeps an image refusal’s bounds and its own size', async () => {
+    respond(422, {
+      code: 'IMAGE_DIMENSIONS_TOO_LARGE',
+      maxWidth: 1024,
+      maxHeight: 1024,
+      width: 1200,
+      height: 1200,
+    });
+    const api = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect([api.maxWidth, api.maxHeight, api.width, api.height]).toEqual([1024, 1024, 1200, 1200]);
+    respond(422, { code: 'IMAGE_TOO_LARGE', maxBytes: 1_000_000 });
+    expect(((await buy().catch((e: unknown) => e)) as ApiError).maxBytes).toBe(1_000_000);
+  });
+
   it('★ a bad place is no place - the code and the rest survive', async () => {
     respond(400, { code: 'GUARDRAILS_INVALID', reason: 7, max: 'many', index: -1 });
     const api = (await buy().catch((e: unknown) => e)) as ApiError;

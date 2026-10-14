@@ -28,6 +28,9 @@ vi.mock('@/i18n/navigation', () => ({
   useRouter: () => router,
 }));
 const actions = vi.hoisted(() => ({ saveWebsiteWidget: vi.fn() }));
+/* W3/W4: the upload is the platform's - mocked here, nothing leaves. */
+const browser = vi.hoisted(() => ({ post: vi.fn() }));
+vi.mock('@/api/client/browser-api', () => ({ browserApi: browser }));
 vi.mock('./website-widget-actions', () => actions);
 const channelActions = vi.hoisted(() => ({ connectWebChat: vi.fn() }));
 vi.mock('@/features/channels/actions', () => channelActions);
@@ -135,6 +138,7 @@ beforeEach(() => {
     Promise.resolve({ ok: true, settings }),
   );
   channelActions.connectWebChat.mockReset();
+  browser.post.mockReset();
   router.refresh.mockReset();
 });
 afterEach(() => {
@@ -193,21 +197,39 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
     expect(sentAt().appearance.primaryColor).toBe('#123456');
   });
 
-  it('an image address is saved only when it is https', async () => {
+  it('★★ W4: an image by link (Drive too) is re-hosted, and its new address saved', async () => {
+    browser.post.mockResolvedValue({ url: 'https://cdn.gotcha.test/w/cover.png' });
+    show('appearance');
+    fireEvent.click(screen.getByTestId('webchat-cover-replace'));
+    fireEvent.change(screen.getByTestId('webchat-cover-url'), {
+      target: { value: 'https://drive.google.com/file/d/abc/view' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('webchat-cover-add'));
+    });
+    expect(browser.post.mock.calls[0]![0]).toMatchObject({
+      endpoint: { path: '/api/uploads/widget-image' },
+      body: { slot: 'cover', url: 'https://drive.google.com/file/d/abc/view' },
+    });
+    await pause();
+    expect(bodyOfWidget(sentAt()).ux.hero).toEqual({
+      mediaType: 'image',
+      mediaUrl: 'https://cdn.gotcha.test/w/cover.png',
+    });
+  });
+
+  it('a link that is not https: refused in words, nothing sent', async () => {
     show('appearance');
     fireEvent.click(screen.getByTestId('webchat-cover-replace'));
     const field = screen.getByTestId('webchat-cover-url');
     fireEvent.change(field, { target: { value: 'http://x.co/a.png' } });
-    fireEvent.blur(field);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('webchat-cover-add'));
+    });
+    expect(screen.getByTestId('webchat-cover-problem')).toHaveTextContent('start with https://');
+    expect(browser.post).not.toHaveBeenCalled();
     await pause();
     expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
-    fireEvent.change(field, { target: { value: 'https://x.co/a.png' } });
-    fireEvent.blur(field);
-    await pause();
-    expect(bodyOfWidget(sentAt()).ux.hero).toEqual({
-      mediaType: 'image',
-      mediaUrl: 'https://x.co/a.png',
-    });
   });
 
   it('the opening questions: typed into the preview, saved as three', async () => {
@@ -1002,5 +1024,102 @@ describe('W6 (2026-10-14) - the header says what is true at every width and on e
       expect(line).not.toMatch(/Shopify/);
       expect(line).not.toMatch(/right|left|מימין|משמאל/i);
     }
+  });
+});
+
+describe('★★ W3 (2026-10-14) - each image slot says its limits, and refuses what breaks them in words', () => {
+  const pick = (testid: string, file: File) =>
+    act(async () => {
+      fireEvent.change(screen.getByTestId(`${testid}-file`), { target: { files: [file] } });
+    });
+
+  it('the logo says its limits; the cover its own', () => {
+    show('appearance');
+    fireEvent.click(screen.getByTestId('webchat-logo-replace'));
+    expect(screen.getByTestId('webchat-logo-limits')).toHaveTextContent(
+      'up to 1 MB and 1024×1024 pixels',
+    );
+    fireEvent.click(screen.getByTestId('webchat-cover-replace'));
+    expect(screen.getByTestId('webchat-cover-limits')).toHaveTextContent(
+      'up to 3 MB and 2400×1600 pixels',
+    );
+  });
+
+  it('★★ a file is uploaded as itself, with its slot; its new address is the logo', async () => {
+    browser.post.mockResolvedValue({ url: 'https://cdn.gotcha.test/w/logo.png' });
+    show('appearance');
+    fireEvent.click(screen.getByTestId('webchat-logo-replace'));
+    await pick('webchat-logo', new File(['x'], 'logo.png', { type: 'image/png' }));
+    const body = browser.post.mock.calls[0]![0].body as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    expect(body.get('slot')).toBe('logo');
+    expect((body.get('file') as File).name).toBe('logo.png');
+    await pause();
+    expect(sentAt().appearance.logoUrl).toBe('https://cdn.gotcha.test/w/logo.png');
+  });
+
+  it('★ not an image, or too heavy: refused before anything is sent', async () => {
+    show('appearance');
+    fireEvent.click(screen.getByTestId('webchat-logo-replace'));
+    await pick('webchat-logo', new File(['<svg/>'], 'a.svg', { type: 'image/svg+xml' }));
+    expect(screen.getByTestId('webchat-logo-problem')).toHaveTextContent(
+      "That isn't an image we can use",
+    );
+    await pick(
+      'webchat-logo',
+      new File([new Uint8Array(1_000_001)], 'big.png', { type: 'image/png' }),
+    );
+    expect(screen.getByTestId('webchat-logo-problem')).toHaveTextContent(
+      'The file is too big: up to 1 MB.',
+    );
+    expect(browser.post).not.toHaveBeenCalled();
+  });
+
+  it('★★ the server’s refusals in words - the pixel size, a Drive file not shared', async () => {
+    const { ApiError } = await import('@/api/client/api-error');
+    browser.post.mockRejectedValueOnce(
+      new ApiError({
+        kind: 'validation',
+        status: 422,
+        code: 'IMAGE_DIMENSIONS_TOO_LARGE',
+        maxWidth: 1024,
+        maxHeight: 1024,
+        width: 1200,
+        height: 1200,
+      }),
+    );
+    show('appearance');
+    fireEvent.click(screen.getByTestId('webchat-logo-replace'));
+    await pick('webchat-logo', new File(['x'], 'l.png', { type: 'image/png' }));
+    expect(screen.getByTestId('webchat-logo-problem')).toHaveTextContent(
+      'The image is 1200×1200 pixels; this place takes up to 1024×1024.',
+    );
+    browser.post.mockRejectedValueOnce(
+      new ApiError({ kind: 'validation', status: 422, code: 'NOT_AN_IMAGE' }),
+    );
+    fireEvent.change(screen.getByTestId('webchat-logo-url'), {
+      target: { value: 'https://drive.google.com/file/d/x/view' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('webchat-logo-add'));
+    });
+    expect(screen.getByTestId('webchat-logo-problem')).toHaveTextContent(
+      'must be shared with anyone with the link',
+    );
+    await pause();
+    expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
+  });
+
+  it('Remove clears the image', async () => {
+    show('appearance', {
+      initial: {
+        ...config,
+        appearance: { ...config.appearance, logoUrl: 'https://cdn.gotcha.test/l.png' },
+      },
+    });
+    fireEvent.click(screen.getByTestId('webchat-logo-replace'));
+    fireEvent.click(screen.getByTestId('webchat-logo-remove'));
+    await pause();
+    expect(sentAt().appearance.logoUrl).toBeNull();
   });
 });

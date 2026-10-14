@@ -432,7 +432,37 @@
   .imageField {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 8px;
+  }
+
+  /* W3/W4: upload a file, or give a link. */
+  .imageActions,
+  .imageLink {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .imageLink input {
+    flex: 1 1 180px;
+    min-inline-size: 0;
+  }
+
+  .imageButton {
+    padding: 6px 12px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 8px;
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .imageButton:disabled {
+    cursor: default;
+    opacity: 0.55;
   }
 
   .imageField input {

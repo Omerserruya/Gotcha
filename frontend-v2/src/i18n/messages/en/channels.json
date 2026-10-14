@@ -679,8 +679,6 @@
         "left": "Left"
       },
       "replace": "Replace",
-      "addressHint": "The image's https address. Uploading from your computer isn't available yet",
-      "addressBad": "Use an address that starts with https://",
       "look": "Look",
       "lookHint": "What customers see on your site",
       "looks": {
@@ -691,7 +689,27 @@
       "colourWaLook": "The WhatsApp look uses WhatsApp's colours. Your main colour is used in the GOTCHA look",
       "coverWaLook": "The WhatsApp look shows no cover image. Yours is used in the GOTCHA look",
       "waKindLook": "A WhatsApp widget looks like WhatsApp: there's no colour, logo or cover to set. Only its side.",
-      "eyedropper": "Pick a colour from the screen"
+      "eyedropper": "Pick a colour from the screen",
+      "upload": {
+        "limits": "PNG, JPG, WEBP or GIF, up to {mb} MB and {width}×{height} pixels",
+        "file": "Upload a file",
+        "busy": "Uploading…",
+        "remove": "Remove",
+        "link": "Or a link to the image",
+        "linkPlaceholder": "https://… or a Google Drive link",
+        "add": "Add",
+        "problem": {
+          "not_image": "That isn't an image we can use. PNG, JPG, WEBP or GIF.",
+          "too_large": "The file is too big: up to {mb} MB.",
+          "too_big": "The image is {width}×{height} pixels; this place takes up to {maxWidth}×{maxHeight}.",
+          "too_big_unknown": "The image is too big: up to {maxWidth}×{maxHeight} pixels.",
+          "url_invalid": "That isn't a link we can read. It needs to start with https://, or be a Google Drive share link.",
+          "not_image_link": "There's no image at that link. A Google Drive file must be shared with anyone with the link.",
+          "fetch_failed": "The image couldn't be downloaded from that link. Check that it opens.",
+          "forbidden": "You don't have permission to change the widget.",
+          "failed": "The image wasn't saved. Try again."
+        }
+      }
     },
     "conversation": {
       "name": "Assistant name",

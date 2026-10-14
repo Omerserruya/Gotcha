@@ -28,7 +28,6 @@ import {
   WEBCHAT_LANGUAGES,
   fullHex,
   isHex,
-  isHttpsUrl,
   WIDGET_KINDS,
   type WebchatConfig,
   type WebchatTab,
@@ -53,6 +52,13 @@ import { appPath } from '@/lib/base-path';
 import { brandMark, initials, logoFit } from '@/lib/brand-mark';
 
 import { hexToHsv, hsvToHex } from './colour';
+import {
+  IMAGE_SLOTS,
+  IMAGE_TYPES,
+  uploadWidgetImage,
+  type ImageProblem,
+  type ImageSlot,
+} from './widget-image';
 import type { ShopifyData } from './load-website-widget';
 import { saveWebsiteWidget } from './website-widget-actions';
 import styles from './Webchat.module.css';
@@ -553,6 +559,7 @@ function Appearance({ config, set }: { readonly config: WebchatConfig; readonly 
           )}
 
           <ImageRow
+            slot="logo"
             label={t('logo')}
             hint={t('logoHint')}
             value={config.appearance.logoUrl}
@@ -571,6 +578,7 @@ function Appearance({ config, set }: { readonly config: WebchatConfig; readonly 
             </Row>
           ) : (
             <ImageRow
+              slot="cover"
               label={t('cover')}
               hint={t('coverHint')}
               value={config.ux.hero.mediaUrl}
@@ -602,17 +610,21 @@ function Appearance({ config, set }: { readonly config: WebchatConfig; readonly 
 }
 
 /**
- * An image the widget shows - by https address, because there is no upload
- * route (the old app took an address too). Saved once it is one the route
- * keeps; cleared by emptying it.
+ * ★★ W3/W4 (Omer, 2026-10-14): an image the widget shows - uploaded from the
+ * computer, or given by a link (a Google Drive share link too), checked and
+ * re-hosted by the platform (`widget-image.ts`). The slot's limits are said
+ * before anything is chosen, a file that cannot be used is refused here in
+ * words, and so is anything the server refuses. Removed by "Remove".
  */
 function ImageRow({
+  slot,
   label,
   hint,
   value,
   onSave,
   testid,
 }: {
+  readonly slot: ImageSlot;
   readonly label: string;
   readonly hint: string;
   readonly value: string | null;
@@ -621,13 +633,42 @@ function ImageRow({
 }) {
   const t = useTranslations('channels.webchat.appearance');
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(value ?? '');
-  const ok = draft.trim() === '' || isHttpsUrl(draft);
+  const [link, setLink] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<ImageProblem | null>(null);
+  const file = useRef<HTMLInputElement>(null);
+  const limits = IMAGE_SLOTS[slot];
+  const send = async (source: File | string) => {
+    setBusy(true);
+    setProblem(null);
+    const done = await uploadWidgetImage(slot, source);
+    setBusy(false);
+    if (!done.ok) {
+      setProblem(done);
+      return;
+    }
+    setLink('');
+    setOpen(false);
+    onSave(done.url);
+  };
+  const said = (p: ImageProblem) =>
+    p.reason === 'too_large'
+      ? t('upload.problem.too_large', { mb: p.maxBytes / 1_000_000 })
+      : p.reason === 'too_big'
+        ? p.width !== null && p.height !== null
+          ? t('upload.problem.too_big', {
+              width: p.width,
+              height: p.height,
+              maxWidth: p.maxWidth,
+              maxHeight: p.maxHeight,
+            })
+          : t('upload.problem.too_big_unknown', { maxWidth: p.maxWidth, maxHeight: p.maxHeight })
+        : t(`upload.problem.${p.reason}`);
   return (
     <Row label={label} testid={testid}>
       <span className={styles.imageLine}>
         {value ? (
-          // The merchant's own image, from their own address.
+          // The merchant's own image, re-hosted by the platform.
           // eslint-disable-next-line @next/next/no-img-element
           <img className={styles.thumb} src={value} alt="" />
         ) : (
@@ -648,19 +689,75 @@ function ImageRow({
       </span>
       {open ? (
         <span className={styles.imageField}>
+          <span className={styles.rowHint} data-testid={`${testid}-limits`}>
+            {t('upload.limits', {
+              mb: limits.maxBytes / 1_000_000,
+              width: limits.maxWidth,
+              height: limits.maxHeight,
+            })}
+          </span>
           <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => {
-              if (ok) onSave(draft.trim() || null);
+            ref={file}
+            type="file"
+            accept={IMAGE_TYPES.join(',')}
+            hidden
+            onChange={(e) => {
+              const chosen = e.target.files?.[0];
+              e.target.value = '';
+              if (chosen) void send(chosen);
             }}
-            placeholder="https://"
-            aria-invalid={!ok}
-            aria-label={label}
-            inputMode="url"
-            data-testid={`${testid}-url`}
+            data-testid={`${testid}-file`}
           />
-          <span className={styles.rowHint}>{ok ? t('addressHint') : t('addressBad')}</span>
+          <span className={styles.imageActions}>
+            <button
+              type="button"
+              className={styles.imageButton}
+              disabled={busy}
+              onClick={() => file.current?.click()}
+              data-testid={`${testid}-upload`}
+            >
+              {busy ? t('upload.busy') : t('upload.file')}
+            </button>
+            {value ? (
+              <button
+                type="button"
+                className={styles.textButton}
+                disabled={busy}
+                onClick={() => {
+                  setOpen(false);
+                  onSave(null);
+                }}
+                data-testid={`${testid}-remove`}
+              >
+                {t('upload.remove')}
+              </button>
+            ) : null}
+          </span>
+          <span className={styles.imageLink}>
+            <input
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              placeholder={t('upload.linkPlaceholder')}
+              aria-label={t('upload.link')}
+              inputMode="url"
+              dir="ltr"
+              data-testid={`${testid}-url`}
+            />
+            <button
+              type="button"
+              className={styles.imageButton}
+              disabled={busy || link.trim() === ''}
+              onClick={() => void send(link)}
+              data-testid={`${testid}-add`}
+            >
+              {t('upload.add')}
+            </button>
+          </span>
+          {problem ? (
+            <span className={styles.why} role="alert" data-testid={`${testid}-problem`}>
+              {said(problem)}
+            </span>
+          ) : null}
         </span>
       ) : null}
     </Row>

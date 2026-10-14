@@ -77,6 +77,16 @@ export const errorEnvelopeSchema = z.object({
   max: z.number().optional().catch(undefined),
   index: z.number().int().nonnegative().optional().catch(undefined),
   /**
+   * An image refused for its size (W3, conversation 7f9e204f):
+   * `IMAGE_TOO_LARGE { maxBytes }`, `IMAGE_DIMENSIONS_TOO_LARGE { maxWidth,
+   * maxHeight, width, height }`.
+   */
+  maxBytes: z.number().optional().catch(undefined),
+  maxWidth: z.number().optional().catch(undefined),
+  maxHeight: z.number().optional().catch(undefined),
+  width: z.number().optional().catch(undefined),
+  height: z.number().optional().catch(undefined),
+  /**
    * A validator's refusal (`422 { error: 'validation_failed', errors,
    * warnings }` - automations' activate and live save): the issues, read by
    * the screen's own contract. Declared, or `z.object` strips them.

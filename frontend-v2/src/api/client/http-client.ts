@@ -112,6 +112,11 @@ async function readErrorBody(response: Response): Promise<{
   reason?: string;
   max?: number;
   index?: number;
+  maxBytes?: number;
+  maxWidth?: number;
+  maxHeight?: number;
+  width?: number;
+  height?: number;
   issues?: { readonly errors: readonly unknown[]; readonly warnings: readonly unknown[] };
 }> {
   let raw: unknown;
@@ -149,6 +154,11 @@ async function readErrorBody(response: Response): Promise<{
     reason: parsed.data.reason,
     max: parsed.data.max,
     index: parsed.data.index,
+    maxBytes: parsed.data.maxBytes,
+    maxWidth: parsed.data.maxWidth,
+    maxHeight: parsed.data.maxHeight,
+    width: parsed.data.width,
+    height: parsed.data.height,
   };
 }
 
@@ -232,6 +242,11 @@ export class HttpClient {
         reason,
         max,
         index,
+        maxBytes,
+        maxWidth,
+        maxHeight,
+        width,
+        height,
         issues,
       } = await readErrorBody(response);
       const error = fail({
@@ -267,6 +282,11 @@ export class HttpClient {
         reason,
         max,
         index,
+        maxBytes,
+        maxWidth,
+        maxHeight,
+        width,
+        height,
         issues,
         requestId: effectiveRequestId,
       });

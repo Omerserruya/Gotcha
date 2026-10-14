@@ -598,6 +598,12 @@ export const channelEndpoints = {
    * for the workspace, a PUT written to every place it is installed.
    */
   websiteWidget: () => endpoint('/api/website-widget'),
+  /**
+   * W3/W4 (conversation 7f9e204f): `POST` a logo or cover - multipart `slot` +
+   * `file`, or JSON `{ slot, url }` (https or a Google Drive share link) -
+   * checked from the bytes and re-hosted: `{ url, slot, type, width, height, bytes }`.
+   */
+  widgetImage: () => endpoint('/api/uploads/widget-image'),
   /** Where it is installed: the code snippet, each Shopify shop, WooCommerce. */
   websiteWidgetInstall: () => endpoint('/api/website-widget/install'),
   /**

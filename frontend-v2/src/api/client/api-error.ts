@@ -111,6 +111,12 @@ export interface ApiErrorInit {
   readonly reason?: string;
   readonly max?: number;
   readonly index?: number;
+  /** An image refused for its size (W3): the bounds it broke, and what it was. */
+  readonly maxBytes?: number;
+  readonly maxWidth?: number;
+  readonly maxHeight?: number;
+  readonly width?: number;
+  readonly height?: number;
   /** A validator's refusal: its `errors` and `warnings`, unparsed. */
   readonly issues?: { readonly errors: readonly unknown[]; readonly warnings: readonly unknown[] };
   readonly cause?: unknown;
@@ -150,6 +156,12 @@ export class ApiError extends Error {
   readonly reason?: string;
   readonly max?: number;
   readonly index?: number;
+  /** An image refused for its size (W3): the bounds it broke, and what it was. */
+  readonly maxBytes?: number;
+  readonly maxWidth?: number;
+  readonly maxHeight?: number;
+  readonly width?: number;
+  readonly height?: number;
   /** A validator's refusal: its `errors` and `warnings`, unparsed - the screen's contract reads them. */
   readonly issues?: { readonly errors: readonly unknown[]; readonly warnings: readonly unknown[] };
 
@@ -183,6 +195,11 @@ export class ApiError extends Error {
     this.reason = init.reason;
     this.max = init.max;
     this.index = init.index;
+    this.maxBytes = init.maxBytes;
+    this.maxWidth = init.maxWidth;
+    this.maxHeight = init.maxHeight;
+    this.width = init.width;
+    this.height = init.height;
     this.issues = init.issues;
   }
 
