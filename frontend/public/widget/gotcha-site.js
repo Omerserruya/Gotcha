@@ -683,11 +683,11 @@ window.__gotchaSiteMount = function (opts) {
   var WORDS = {
     en: {
       replies: "replies right away", close: "Close", resume: "Pick up where we left off?",
-      deal: "Active deal", percentOff: "{n}% off", code: "Coupon code {code}", until: "valid until {date}", nextDeal: "Next deal",
+      deal: "Active deal", percentOff: "{n}% off", freeShipping: "Free shipping", code: "Coupon code {code}", until: "valid until {date}", nextDeal: "Next deal",
     },
     he: {
       replies: "עונה מיד", close: "סגירה", resume: "רוצים להמשיך מאיפה שעצרנו?",
-      deal: "מבצע פעיל", percentOff: "{n}% הנחה", code: "קוד קופון {code}", until: "בתוקף עד {date}", nextDeal: "המבצע הבא",
+      deal: "מבצע פעיל", percentOff: "{n}% הנחה", freeShipping: "משלוח חינם", code: "קוד קופון {code}", until: "בתוקף עד {date}", nextDeal: "המבצע הבא",
     },
   };
 
@@ -948,7 +948,11 @@ window.__gotchaSiteMount = function (opts) {
   /** A coupon in words; null when it cannot be said truthfully (an amount with no currency). */
   function dealWords(p, W, lang) {
     var amount = Number(p.amount);
-    if (!p.code || !isFinite(amount) || amount <= 0) return null;
+    if (!p.code) return null;
+    // Free shipping (Backend bd1fe183): said alone when the coupon takes nothing off.
+    if (!isFinite(amount) || amount <= 0) {
+      return p.freeShipping ? { title: W.freeShipping, sub: dealSub(p, W, lang) } : null;
+    }
     var title;
     if (p.discountType === "percent") {
       title = W.percentOff.replace("{n}", String(Math.round(amount * 100) / 100));
@@ -960,13 +964,18 @@ window.__gotchaSiteMount = function (opts) {
     } else {
       return null;
     }
+    if (p.freeShipping) title += " · " + W.freeShipping;
+    return { title: title, sub: dealSub(p, W, lang) };
+  }
+
+  function dealSub(p, W, lang) {
     var sub = W.code.replace("{code}", String(p.code));
     var ends = p.expiresAt ? new Date(p.expiresAt) : null;
     if (ends && !isNaN(ends.getTime())) {
       var date = new Intl.DateTimeFormat(lang === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "numeric" }).format(ends);
       sub += " · " + W.until.replace("{date}", date);
     }
-    return { title: title, sub: sub };
+    return sub;
   }
 
   var dealTimer = null;

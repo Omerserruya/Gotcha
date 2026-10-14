@@ -57,7 +57,7 @@
   // its URL, and every cache kept serving the old one.
   var CHAT_BUNDLE = "gotcha-shopify-chat.fd5d86cae08b.js";
   // The shared WhatsApp widget (the WhatsApp kind), stamped the same way.
-  var SITE_BUNDLE = "gotcha-site.b4a8ae1395af.js";
+  var SITE_BUNDLE = "gotcha-site.462a873622ee.js";
 
   // The App Proxy subpath on the MERCHANT's domain. Must match `subpath`
   // and `prefix` in shopify.app.toml, or the request 404s and every

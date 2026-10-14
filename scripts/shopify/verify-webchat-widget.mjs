@@ -415,6 +415,22 @@ const popupOn = (over = {}) => ({ ...widgetConfig().ux.proactive, enabled: true,
 }
 
 {
+  // Free shipping (Backend bd1fe183): alone with no amount, after a discount with one.
+  const w = withUx({ proactive: popupOn() });
+  w.promotions = [
+    { code: "freeship", amount: "0", discountType: "fixed_cart", expiresAt: null, minimumAmount: null, currency: "ILS", freeShipping: true },
+    { code: "TENSHIP", amount: "10", discountType: "percent", expiresAt: null, minimumAmount: null, currency: "ILS", freeShipping: true },
+  ];
+  const { ctx, page } = await openSite({ widgetExists: true, widget: w, wait: 3200 });
+  const a = await look(page);
+  check("L1 deals: free shipping said, never '0 off'", a.deals.includes("Free shipping") && a.deals.includes("freeship") && !a.deals.includes("0 off"), a.deals);
+  await shadowClick(page, '[data-act="deal-next"]');
+  const b = await look(page);
+  check("L1 deals: a discount with free shipping says both", b.deals.includes("10% off · Free shipping"), b.deals);
+  await ctx.close();
+}
+
+{
   const w = withUx({ proactive: popupOn() });
   w.promotions = [{ code: "TENOFF", amount: "10.00", discountType: "fixed_cart", expiresAt: null, minimumAmount: null, currency: null }];
   const { ctx, page } = await openSite({ widgetExists: true, widget: w, wait: 3200 });
