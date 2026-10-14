@@ -159,7 +159,7 @@ export async function assignedEmployeeOf(tenantId: string): Promise<{ id: string
 export async function whatsappNumbers(tenantId: string): Promise<Array<{ channelId: string; name: string; phone: string | null; available: boolean; reason?: "not_connected" | "number_unknown" }>> {
   const accounts = await prisma.channelAccount.findMany({
     where: { tenantId, channel: "WHATSAPP" as any },
-    select: { id: true, displayName: true, connectionStatus: true, isActive: true },
+    select: { id: true, displayName: true, connectionStatus: true, isActive: true, platformMeta: true },
     orderBy: { createdAt: "asc" },
   });
   if (!accounts.length) return [];
@@ -169,12 +169,20 @@ export async function whatsappNumbers(tenantId: string): Promise<Array<{ channel
   });
   const phoneOf = new Map<string, string | null>((numbers as any[]).map((n) => [n.channelAccountId, n.displayPhoneNumber ?? null]));
   return accounts.map((a) => {
-    const phone = phoneOf.get(a.id) ?? null;
+    // An account connected before WhatsAppNumber rows existed has no row, but
+    // its own platformMeta keeps the number Meta returned at connect: the same
+    // fallback auth's storedPhoneNumber uses.
+    const phone = phoneOf.get(a.id) ?? storedPhone(a.platformMeta);
     const connected = a.connectionStatus === "CONNECTED" && a.isActive;
-    // A number connected before WhatsAppNumber rows existed has no known phone: wa.me needs one.
+    // No phone in a WhatsAppNumber row nor on the account: wa.me needs one.
     const reason = !connected ? "not_connected" as const : !waMeDigits(phone) ? "number_unknown" as const : undefined;
     return { channelId: a.id, name: a.displayName || phone || "WhatsApp", phone, available: !reason, ...(reason ? { reason } : {}) };
   });
+}
+
+function storedPhone(meta: unknown): string | null {
+  const v = meta && typeof meta === "object" ? (meta as Record<string, unknown>).displayPhoneNumber : null;
+  return typeof v === "string" && v.trim() ? v.trim() : null;
 }
 
 /** The wa.me digits the handoff opens, or null when the button must not show. */

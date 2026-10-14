@@ -262,3 +262,21 @@ describe("★ Powered by GOTCHA stays on (W8)", () => {
     expect((await request(app()).put("/api/website-widget").send({ appearance: { showPoweredBy: true } })).status).toBe(200);
   });
 });
+
+describe("★ a number connected before WhatsAppNumber rows existed", () => {
+  it("the phone the account stored at connect counts: available, and the handoff opens it", async () => {
+    H.accounts.push(wa("wa_legacy", { platformMeta: { displayPhoneNumber: "+972 55-777-3421" } }));
+    const d = (await request(app()).get("/api/website-widget")).body.data;
+    expect(d.whatsappNumbers.find((n: any) => n.channelId === "wa_legacy")).toEqual({ channelId: "wa_legacy", name: "WA wa_legacy", phone: "+972 55-777-3421", available: true });
+    H.accounts[0] = web({ whatsapp: { enabled: true, channelAccountId: "wa_legacy" } });
+    const r = await handoff();
+    expect(r.body.data.url).toMatch(/^https:\/\/wa\.me\/972557773421\?text=/);
+  });
+
+  it("a WhatsAppNumber row wins over the stored one; nothing anywhere is still number_unknown", async () => {
+    H.accounts.find((a) => a.id === "wa_1").platformMeta = { displayPhoneNumber: "+972 50-000-0000" };
+    const d = (await request(app()).get("/api/website-widget")).body.data;
+    expect(d.whatsappNumbers.find((n: any) => n.channelId === "wa_1").phone).toBe("+972 52-555-1234");
+    expect(d.whatsappNumbers.find((n: any) => n.channelId === "wa_old")).toMatchObject({ phone: null, available: false, reason: "number_unknown" });
+  });
+});
