@@ -39,6 +39,15 @@ import {
 } from './hire-plan';
 import { hireEmployee } from './hire-actions';
 import { clearDraft, hasEntries, loadDraft, saveDraft, type HireStep } from './hire-draft';
+import {
+  backIsHistory,
+  hireDoor,
+  hireStepOf,
+  hireUrl,
+  isHireDoor,
+  openDoor,
+  type HireEntry,
+} from './hire-history';
 import { HandoverRules } from '../page/HandoverRules';
 import { reachedByScope, reachOf } from '../page/knowledge-plan';
 import { MAX_RULES, rulesProblem } from '../page/profile-plan';
@@ -134,6 +143,8 @@ export function HireSheet({
       if (draft) {
         setPlan(draft.plan);
         setStep(draft.step);
+        const entry: HireEntry = { hireStep: draft.step, hireFrom: draft.step };
+        window.history.replaceState(entry, '', hireUrl(draft.step));
         setAgentId(draft.agentId ?? null);
         setRestored(true);
       }
@@ -151,6 +162,47 @@ export function HireSheet({
     else clearDraft(viewerId);
   }, [loaded, hired, entered, agentId, viewerId, step, plan]);
 
+  /*
+    ★★ H-back: the browser's back. The hire's first entry is its door
+    (`hire-history.ts`): a step entry is pushed over it on opening, so a back
+    out of the hire lands on the door first - still the hire. There, with
+    something entered it asks, as × does, and the step is put back; with
+    nothing entered it walks on out. Nothing here depends on running before
+    the router's own listener: in Chromium it runs after it.
+  */
+  const live = useRef({ entered: false, hired: false, step: initialStep });
+  useEffect(() => {
+    live.current = { entered, hired, step };
+  }, [entered, hired, step]);
+  useEffect(() => {
+    if (openDoor(window.history.state)) {
+      window.history.replaceState(hireDoor(), '', window.location.href);
+      const entry: HireEntry = { hireStep: initialStep, hireFrom: initialStep };
+      window.history.pushState(entry, '', hireUrl(initialStep));
+    }
+    const onPop = () => {
+      if (isHireDoor(window.history.state)) {
+        const { entered: kept, hired: done, step: at } = live.current;
+        if (!kept || done) {
+          window.history.back();
+          return;
+        }
+        const entry: HireEntry = { hireStep: at, hireFrom: at };
+        window.history.pushState(entry, '', hireUrl(at));
+        setAsking(true);
+        return;
+      }
+      const next = hireStepOf(window.location.search);
+      if (next === null) return;
+      setStep(next);
+      setConfirming(false);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+    // Once, on opening: the door is the entry the sheet opened on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /* × , the scrim and Escape (a press on ×) ask first when anything was entered. */
   const closing = (event: { preventDefault: () => void }) => {
     if (!entered) return;
@@ -164,7 +216,7 @@ export function HireSheet({
     setFailed(null);
     setRestored(false);
     setAsking(false);
-    go(1);
+    go(1, 'replace');
   };
   const failing = new Set(systems?.filter((s) => s.failing).map((s) => s.slug) ?? []);
   /* From step 2, the head's line is the plan so far: the job. */
@@ -181,11 +233,21 @@ export function HireSheet({
     (h) => !plan.rules.some((rule) => rule.label.trim() === t(`two.when.${h}`)),
   );
 
-  const go = (next: Step) => {
+  /*
+    ★★ H-back (Omer, 2026-10-14): a step is a history entry (`hire-history.ts`),
+    so the browser's back is the step you were on. The step is in the address
+    too, so it can be measured and reloaded.
+  */
+  const go = (next: Step, how: 'push' | 'replace' = 'push') => {
     setStep(next);
     setConfirming(false);
-    // The step is in the address too, so it can be measured and reloaded.
-    window.history.replaceState(null, '', `?hire=1&step=${next}`);
+    const entry: HireEntry = { hireStep: next, hireFrom: step };
+    if (how === 'push' && next !== step) window.history.pushState(entry, '', hireUrl(next));
+    else window.history.replaceState(entry, '', hireUrl(next));
+  };
+  const back = () => {
+    if (backIsHistory(window.history.state, step)) window.history.back();
+    else go((step - 1) as Step, 'replace');
   };
 
   const groups = toolGroups(tools);
@@ -1068,7 +1130,12 @@ export function HireSheet({
                 </button>
               )}
               {confirming ? null : step === 1 ? (
-                <Link href="/studio/employees" className={styles.quiet}>
+                <Link
+                  href="/studio/employees"
+                  className={styles.quiet}
+                  data-testid="hire-cancel"
+                  onClick={closing}
+                >
                   {t('cancel')}
                 </Link>
               ) : (
@@ -1076,7 +1143,7 @@ export function HireSheet({
                   type="button"
                   className={styles.quiet}
                   data-testid="hire-back"
-                  onClick={() => go((step - 1) as Step)}
+                  onClick={back}
                 >
                   {t('back')}
                 </button>

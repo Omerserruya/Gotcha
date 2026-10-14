@@ -940,3 +940,114 @@ describe('★★ H8c - "Start from a template": a ready-made funnel, created onl
     expect(screen.getByTestId('hire-failed-not-saved')).toHaveTextContent('the sales funnel');
   });
 });
+
+describe('★★ H-back (2026-10-14) - the browser’s back is the step you were on', () => {
+  /*
+    The router's own popstate listener, registered first as the app's is. In
+    Chromium it also RUNS first, and is never stopped: jsdom's order is not
+    the browser's, so nothing here relies on running before it.
+  */
+  const router = vi.fn();
+  beforeEach(() => {
+    window.localStorage.clear();
+    push.mockClear();
+    router.mockClear();
+    window.history.replaceState(null, '', '/studio/employees');
+    window.history.pushState(null, '', '/studio/employees?hire=1');
+    window.addEventListener('popstate', router);
+    return () => window.removeEventListener('popstate', router);
+  });
+  const step = () => screen.getByTestId('hire-sheet').getAttribute('data-step');
+  const toStepTwo = async () => {
+    await userEvent.click(screen.getByTestId('hire-job-custom'));
+    await userEvent.type(screen.getByTestId('hire-goal'), 'Wholesale enquiries');
+    await userEvent.type(screen.getByTestId('hire-name'), 'Noa');
+    await userEvent.click(screen.getByTestId('hire-continue'));
+  };
+
+  it('opening: the entry it opened on becomes its door, and step 1 is pushed over it', () => {
+    const before = window.history.length;
+    sheet({ viewerId: 'u1' });
+    expect(window.history.length).toBe(before + 1);
+    expect(window.location.search).toBe('?hire=1&step=1');
+    expect(window.history.state).toMatchObject({ hireStep: 1 });
+  });
+
+  it('★ Continue is a history entry: back shows step 1 again', async () => {
+    sheet({ viewerId: 'u1' });
+    const before = window.history.length;
+    await toStepTwo();
+    expect(window.location.search).toBe('?hire=1&step=2');
+    expect(window.history.length).toBe(before + 1);
+    window.history.back();
+    await waitFor(() => expect(step()).toBe('1'));
+    expect(window.location.search).toBe('?hire=1&step=1');
+    expect(screen.queryByTestId('hire-close-ask')).toBeNull();
+  });
+
+  it('★ "Back" after Continue walks history back - forward returns to the step', async () => {
+    sheet({ viewerId: 'u1' });
+    await toStepTwo();
+    const length = window.history.length;
+    await userEvent.click(screen.getByTestId('hire-back'));
+    await waitFor(() => expect(step()).toBe('1'));
+    expect(window.location.search).toBe('?hire=1&step=1');
+    expect(window.history.length).toBe(length);
+    window.history.forward();
+    await waitFor(() => expect(step()).toBe('2'));
+  });
+
+  it('★ "Back" on a step reached without its previous one (a reload): the step before, never off the page', async () => {
+    window.history.replaceState(null, '', '/studio/employees?hire=1&step=3');
+    sheet({ initialStep: 3 });
+    const length = window.history.length;
+    await userEvent.click(screen.getByTestId('hire-back'));
+    expect(step()).toBe('2');
+    expect(window.location.search).toBe('?hire=1&step=2');
+    expect(window.history.length).toBe(length);
+    expect(router).not.toHaveBeenCalled();
+  });
+
+  it('★★ back out of the hire with something entered: asks first, as × does, and stays', async () => {
+    sheet({ viewerId: 'u1' });
+    await userEvent.click(screen.getByTestId('hire-job-sales'));
+    window.history.back();
+    await waitFor(() =>
+      expect(screen.getByTestId('hire-close-ask')).toHaveTextContent('Close for now?'),
+    );
+    // Still in the hire, on its step, and nothing navigated away.
+    expect(window.location.search).toBe('?hire=1&step=1');
+    expect(window.location.pathname).toBe('/studio/employees');
+    expect(push).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId('hire-close-yes'));
+    expect(push).toHaveBeenCalledWith('/studio/employees');
+    expect(window.localStorage.getItem(KEY)).toContain('"job":"sales"');
+  });
+
+  it('★ the same from a later step: back to step 1, then the ask - on the step it was on', async () => {
+    sheet({ viewerId: 'u1' });
+    await toStepTwo();
+    window.history.back();
+    await waitFor(() => expect(step()).toBe('1'));
+    window.history.back();
+    await waitFor(() => expect(screen.getByTestId('hire-close-ask')).toBeInTheDocument());
+    expect(step()).toBe('1');
+    expect(window.location.search).toBe('?hire=1&step=1');
+  });
+
+  it('back out of the hire with nothing entered: it walks on out, nothing asked', async () => {
+    sheet({ viewerId: 'u1' });
+    window.history.back();
+    await waitFor(() => expect(window.location.search).toBe(''));
+    expect(window.location.pathname).toBe('/studio/employees');
+    expect(screen.queryByTestId('hire-close-ask')).toBeNull();
+  });
+
+  it('★★ step 1’s Cancel asks first too, when anything was entered - never a silent exit', async () => {
+    sheet({ viewerId: 'u1' });
+    expect(fireEvent.click(screen.getByTestId('hire-cancel'))).toBe(true);
+    await userEvent.click(screen.getByTestId('hire-job-sales'));
+    expect(fireEvent.click(screen.getByTestId('hire-cancel'))).toBe(false);
+    expect(screen.getByTestId('hire-close-ask')).toBeInTheDocument();
+  });
+});
