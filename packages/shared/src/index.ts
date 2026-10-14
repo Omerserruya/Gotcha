@@ -108,6 +108,9 @@ export {
   threadHeaderLines,
   outgoingSubject,
   DEFAULT_EMAIL_SUBJECT,
+  // Mail no person wrote (bounces, auto-replies, bulk): dropped at ingest.
+  autoMailReason,
+  parseHeaderBlock,
 } from "./channels";
 export type {
   EmailThreadContext,

@@ -1,4 +1,5 @@
 export * from "./email-thread";
+export * from "./auto-mail";
 export type {
   ChannelType,
   NormalizedInboundMessage,
