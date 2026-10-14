@@ -9,7 +9,7 @@ vi.mock('@/features/capabilities/load-capabilities', () => ({
   loadShopifyAvailability: vi.fn(),
 }));
 
-import { businessName, loadWidgetAssignment } from './load-website-widget';
+import { businessName, loadWebsiteWidget, loadWidgetAssignment } from './load-website-widget';
 
 beforeEach(() => {
   get.mockReset();
@@ -66,5 +66,40 @@ describe("★ the business's name - the bootstraps' widget.brand rule (Backend e
     ).toBe('Workspace T');
     expect(businessName({ tenant, businessProfile: null })).toBe('Workspace T');
     expect(businessName({ tenant: { name: null, status: '' }, businessProfile: null })).toBeNull();
+  });
+});
+
+describe('★ the business name is read through the client as it really behaves (dev, 2026-10-14)', () => {
+  it("GET /api/onboarding/status's whole body: organizationName reaches the preview", async () => {
+    // The real client unwraps a top-level `data` unless `raw` is set; a read
+    // that forgot `raw` failed every time and fell back to the assistant's name.
+    const bodies: Record<string, unknown> = {
+      '/api/onboarding/status': {
+        data: {
+          tenant: { name: 'Workspace T', status: 'ACTIVE' },
+          businessProfile: { organizationName: 'Urban Supply - GOTCHA Demo', websiteDomain: null },
+          coreSystemConnected: null,
+          businessProfileCompleted: true,
+        },
+      },
+    };
+    get.mockImplementation(
+      async ({
+        endpoint,
+        payload,
+        raw,
+      }: {
+        endpoint: { path: string };
+        payload: { parse: (v: unknown) => unknown };
+        raw?: boolean;
+      }) => {
+        const body = bodies[endpoint.path];
+        if (body === undefined) throw new Error(`unexpected ${endpoint.path}`);
+        const envelope = body as { data?: unknown };
+        return payload.parse(!raw && 'data' in envelope ? envelope.data : body);
+      },
+    );
+    const read = await loadWebsiteWidget({ installTab: false });
+    expect(read.business).toBe('Urban Supply - GOTCHA Demo');
   });
 });

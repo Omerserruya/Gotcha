@@ -88,10 +88,15 @@ export async function loadWebsiteWidget({
         return null;
       }),
     installTab ? loadShopifyAvailability() : Promise.resolve(null),
+    // `raw`: the schema is the whole `{ data }` body; without it the client
+    // unwraps `data` first and every read failed into the assistant's name (dev).
     api
-      .get({ endpoint: onboardingEndpoints.status(), payload: onboardingStatusSchema })
+      .get({ endpoint: onboardingEndpoints.status(), payload: onboardingStatusSchema, raw: true })
       .then((status) => businessName(status.data))
-      .catch(() => null),
+      .catch((cause: unknown) => {
+        logger.warn('website_widget.business_name_failed', { cause });
+        return null;
+      }),
   ]);
   return { widget, install, shopifyData, shopifyAvailability, business };
 }
