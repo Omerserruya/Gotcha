@@ -244,7 +244,9 @@
       "failed": "{count, plural, one {1 page couldn't be read} other {# pages couldn't be read}}",
       "unchanged": "{count, plural, one {1 page unchanged} other {# pages unchanged}}"
     },
-    "failed": "The scan could not run. Nothing was changed."
+    "failed": "The scan could not run. Nothing was changed.",
+    "unchanged": "Your site hasn't changed since the last scan. There's nothing to update.",
+    "force": "Scan anyway"
   },
   "subtitle": "What GOTCHA knows about your business",
   "description": "Where it learned about your business, and the questions it could not answer.",

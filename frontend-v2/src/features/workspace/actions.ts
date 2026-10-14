@@ -189,12 +189,13 @@ export type ScanStart =
  * reads `readWorkspaceScan` until it ends. A scan already running (409
  * SCAN_IN_PROGRESS) carries that run: it is followed, not refused.
  */
-export async function startWorkspaceScan(locale?: string): Promise<ScanStart> {
+export async function startWorkspaceScan(locale?: string, force = false): Promise<ScanStart> {
   try {
     const run = await serverApi().post({
       endpoint: workspaceEndpoints.scan(),
       payload: scanRunSchema,
-      body: locale ? { locale } : {},
+      // `force`: scan even a site that reads the same as last time (auth 9544af08).
+      body: { ...(locale ? { locale } : {}), ...(force ? { force: true } : {}) },
     });
     return { ok: true, run };
   } catch (cause) {

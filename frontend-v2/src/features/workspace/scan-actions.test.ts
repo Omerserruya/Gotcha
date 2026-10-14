@@ -32,6 +32,13 @@ describe('★★ starting a rescan', () => {
     expect(request.body).toEqual({ locale: 'he' });
   });
 
+  it('force: the body asks for a scan even of a site that reads the same', async () => {
+    post.mockResolvedValue({ status: 'running' });
+    await startWorkspaceScan('he', true);
+    const [request] = post.mock.calls[0] as [{ body: unknown }];
+    expect(request.body).toEqual({ locale: 'he', force: true });
+  });
+
   it('★★ one already running (409 SCAN_IN_PROGRESS) is followed, never refused', async () => {
     post.mockRejectedValue(
       new ApiError({
@@ -71,6 +78,18 @@ describe('★★ reading it', () => {
     );
     get.mockResolvedValueOnce({ run: null, fieldSources: {} });
     expect(await readWorkspaceScan()).toBeNull();
+  });
+
+  it('a run that read the same as last time says so (unchanged); an older server, not', async () => {
+    // Through the contract itself: the mock returns what the payload schema reads.
+    const parsed = (body: unknown) => (request: { payload: { parse: (v: unknown) => unknown } }) =>
+      Promise.resolve(request.payload.parse(body));
+    get.mockImplementationOnce(parsed({ run: { status: 'done', unchanged: true } }));
+    expect((await readWorkspaceScan())?.unchanged).toBe(true);
+    get.mockImplementationOnce(parsed({ run: { status: 'done' } }));
+    expect((await readWorkspaceScan())?.unchanged).toBe(false);
+    get.mockImplementationOnce(parsed({ run: { status: 'done', unchanged: 'yes' } }));
+    expect((await readWorkspaceScan())?.unchanged).toBe(false);
   });
 
   it('★ a read that failed is undefined - not "none ever ran"', async () => {

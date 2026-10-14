@@ -68,6 +68,7 @@ const run = (over: Partial<ScanRun> = {}): ScanRun => ({
   offer: [],
   reach: null,
   knowledge: null,
+  unchanged: false,
   ...over,
 });
 /** A start that comes back with the run already ended - the result views, without the wait. */
@@ -135,7 +136,7 @@ describe('★ what the scan will do is said before the button', () => {
     await screen.findByTestId('scan-result');
     expect(startWorkspaceScan).toHaveBeenCalledTimes(1);
     // The reader's language, so the pages it writes are in it.
-    expect(startWorkspaceScan).toHaveBeenCalledWith('en');
+    expect(startWorkspaceScan).toHaveBeenCalledWith('en', false);
     expect(acceptScanFields).not.toHaveBeenCalled();
   });
 });
@@ -446,5 +447,22 @@ describe('★★ what it did to the pages it made, in counts', () => {
     await screen.findByTestId('scan-result');
     expect(screen.queryByTestId('scan-knowledge')).toBeNull();
     expect(screen.getByTestId('scan-no-changes')).toBeInTheDocument();
+  });
+});
+
+describe('★ the site read the same as last time (auth 9544af08)', () => {
+  it('said - nothing to update - with a small way to scan anyway, which sends force', async () => {
+    startWorkspaceScan.mockResolvedValue(started({ unchanged: true }));
+    renderPanel();
+    await userEvent.click(screen.getByTestId('scan-run'));
+    expect(await screen.findByTestId('scan-unchanged')).toHaveTextContent(
+      "Your site hasn't changed since the last scan. There's nothing to update.",
+    );
+    expect(screen.queryByTestId('scan-result')).toBeNull();
+    startWorkspaceScan.mockResolvedValue(started({ unchanged: false }));
+    await userEvent.click(screen.getByTestId('scan-force'));
+    expect(startWorkspaceScan).toHaveBeenLastCalledWith('en', true);
+    expect(await screen.findByTestId('scan-result')).toBeInTheDocument();
+    expect(screen.queryByTestId('scan-unchanged')).toBeNull();
   });
 });

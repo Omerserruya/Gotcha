@@ -138,14 +138,14 @@ export function ScanPanel({
     };
   }, [isRunning]);
 
-  function scan() {
+  function scan(force = false) {
     setTaken(null);
     setRefused(null);
     setLost(false);
     setAcceptFailed(false);
     setAccepted([]);
     startTransition(async () => {
-      const started = await startWorkspaceScan(locale);
+      const started = await startWorkspaceScan(locale, force);
       if (!started.ok) {
         setRefused(started.reason);
         return;
@@ -188,7 +188,7 @@ export function ScanPanel({
         <button
           type="button"
           className={styles.scanAgain}
-          onClick={scan}
+          onClick={() => scan()}
           disabled={isPending || isRunning}
           title={host ? t('beforeYouStart', { domain: host }) : undefined}
           data-testid="scan-run"
@@ -233,7 +233,24 @@ export function ScanPanel({
         </p>
       ) : null}
 
-      {result ? (
+      {result?.unchanged ? (
+        /*
+          The site reads as it did last time (auth 9544af08): nothing was
+          asked, nothing written - said, with a small way to scan anyway.
+        */
+        <p className={styles.provenanceBasis} role="status" data-testid="scan-unchanged">
+          {t('unchanged')}{' '}
+          <button
+            type="button"
+            className={styles.scanForce}
+            onClick={() => scan(true)}
+            disabled={isPending || isRunning}
+            data-testid="scan-force"
+          >
+            {t('force')}
+          </button>
+        </p>
+      ) : result ? (
         <div data-testid="scan-result">
           {/*
             ★ The caveat that appears because a measurement says so.

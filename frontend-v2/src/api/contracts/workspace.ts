@@ -318,6 +318,11 @@ export const scanRunSchema = z.object({
     ),
   reach: crawlReachSchema.nullable().catch(null).default(null),
   knowledge: scanKnowledgeSchema.nullable().catch(null).default(null),
+  /**
+   * The site read the same as last time (auth 9544af08): nothing was asked
+   * of the model, nothing written. `POST {force: true}` scans anyway.
+   */
+  unchanged: z.boolean().catch(false).default(false),
 });
 export type ScanRun = z.infer<typeof scanRunSchema>;
 
