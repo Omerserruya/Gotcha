@@ -11,7 +11,9 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
   return {
     ...actual,
+    readDurableSetting: async () => null,
     prisma: {
+      knowledgeBase: { findMany: async () => [] },
       aIAgent: { findFirst: async () => ({ id: "a1", name: "Noa", role: "customer_support", goal: "help", successCriteria: "", identity: {} }) },
       businessProfile: { findUnique: async () => ({ organizationName: "Shop", industry: "retail", businessDescription: "" }) },
       aIAgentKnowledge: { findMany: async () => [] },

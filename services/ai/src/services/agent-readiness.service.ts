@@ -11,8 +11,10 @@
  * per-question coverage so it can't drift with the model's mood.
  */
 
-import { prisma } from "@chatcenter/shared";
+import { prisma, clusterKeyFor } from "@chatcenter/shared";
 import { generateResponse } from "./ai.service";
+import { readableKnowledgeBaseIds } from "./knowledge.service";
+import { readAnsweredQuestions } from "./readiness-answers";
 import { withoutWideDashes } from "../lib/wide-dash";
 
 export type Coverage = "full" | "partial" | "none";
@@ -23,6 +25,8 @@ export interface ReadinessQuestion {
   reason: string;
   /** What's missing for the uncovered/partly-covered ones. */
   gapType: "knowledge" | "tool" | "data" | "none";
+  /** True for a question a person answered from an earlier report (B2): covered by that answer. */
+  answered?: boolean;
 }
 
 export interface ReadinessRecommendation {
@@ -57,6 +61,8 @@ interface ReadinessContext {
   knowledgeDocs: Array<{ kb: string; title: string; snippet: string }>;
   tools: Array<{ name: string; integration: string; description: string }>;
   knowledgeCount: number;
+  /** Questions a person answered from an earlier report: counted as covered, never asked again. */
+  answered: string[];
 }
 
 async function loadContext(tenantId: string, agentId: string): Promise<ReadinessContext | null> {
@@ -66,15 +72,16 @@ async function loadContext(tenantId: string, agentId: string): Promise<Readiness
   });
   if (!agent) return null;
 
-  const [profile, kbLinks, toolRows] = await Promise.all([
+  const [profile, readableKbIds, toolRows] = await Promise.all([
     prisma.businessProfile.findUnique({
       where: { tenantId },
       select: { organizationName: true, industry: true, businessDescription: true },
     }),
-    prisma.aIAgentKnowledge.findMany({
-      where: { aiAgentId: agentId },
-      select: { knowledgeBase: { select: { id: true, name: true } } },
-    }),
+    // The bases the employee can actually retrieve from at runtime: attached,
+    // tenant-wide, its department's and its own (B2). Only the attached ones
+    // were read here, so company-wide knowledge (and every answer an owner
+    // gave to a question) never counted.
+    readableKnowledgeBaseIds(tenantId, agentId),
     // Only tools that can run: a CONNECTED connection and an enabled tool.
     // Grants on a disconnected store stay on the employee but do nothing, and
     // counting them scored Maya 67 on returns and exchanges she could not do
@@ -100,8 +107,12 @@ async function loadContext(tenantId: string, agentId: string): Promise<Readiness
     }),
   ]);
 
-  const kbIds = kbLinks.map((l: any) => l.knowledgeBase?.id).filter(Boolean);
-  const kbNameById = new Map<string, string>(kbLinks.map((l: any) => [l.knowledgeBase.id, l.knowledgeBase.name]));
+  const kbIds: string[] = readableKbIds;
+  const [kbRows, answered] = await Promise.all([
+    kbIds.length ? prisma.knowledgeBase.findMany({ where: { tenantId, id: { in: kbIds } }, select: { id: true, name: true } }) : Promise.resolve([] as Array<{ id: string; name: string }>),
+    readAnsweredQuestions(tenantId, agentId),
+  ]);
+  const kbNameById = new Map<string, string>(kbRows.map((k: any) => [k.id, k.name]));
 
   let knowledgeDocs: ReadinessContext["knowledgeDocs"] = [];
   if (kbIds.length) {
@@ -135,6 +146,7 @@ async function loadContext(tenantId: string, agentId: string): Promise<Readiness
       description: t.tenantTool.catalogTool.description || "",
     })),
     knowledgeCount: kbIds.length,
+    answered: answered.map((a) => a.question),
   };
 }
 
@@ -146,6 +158,11 @@ function buildPrompt(ctx: ReadinessContext, locale: string): string {
   const toolBlock = ctx.tools.length
     ? ctx.tools.map((t) => `- ${t.name} (${t.integration})${t.description ? `: ${t.description}` : ""}`).join("\n")
     : "(no action tools granted)";
+  // Already answered by a person and counted as covered (B2): asking them again
+  // would only count them twice.
+  const answeredBlock = ctx.answered.length
+    ? `\n## Questions the business already answered (do NOT include these or near-duplicates)\n${ctx.answered.map((q) => `- ${q}`).join("\n")}\n`
+    : "";
 
   return `## Business
 Organization: ${ctx.organizationName || "unknown"}
@@ -163,7 +180,7 @@ ${kbBlock}
 
 ## Action tools available to it
 ${toolBlock}
-
+${answeredBlock}
 ## Your task
 Generate 28-36 realistic questions a real customer would ask THIS employee, given the business, industry and the employee's role. Cover the full spread: high-frequency everyday questions, edge cases, awkward/angry customers, pricing, logistics, policy, and post-sale - not just easy ones. Do not pad with near-duplicates; each question must be meaningfully distinct.
 
@@ -189,6 +206,11 @@ function computeScore(questions: ReadinessQuestion[]): { score: number; totals: 
   const score = totals.total === 0 ? 0 : Math.round((100 * (totals.full + totals.partial * 0.5)) / totals.total);
   return { score, totals };
 }
+
+const ANSWERED_REASON: Record<string, string> = {
+  en: "Answered by the team; the answer is in the knowledge.",
+  he: "הצוות ענה על השאלה, והתשובה נמצאת בידע.",
+};
 
 const VALID_COVERAGE = new Set<Coverage>(["full", "partial", "none"]);
 const VALID_GAP = new Set(["knowledge", "tool", "data", "none"]);
@@ -228,6 +250,7 @@ export async function generateReadinessReport(
     return { error: "bad_model_output" };
   }
 
+  const answeredKeys = new Set(ctx.answered.map((q) => clusterKeyFor(q)));
   const questions: ReadinessQuestion[] = (Array.isArray(parsed.questions) ? parsed.questions : [])
     .map((q: any) => {
       const coverage: Coverage = VALID_COVERAGE.has(q?.coverage) ? q.coverage : "none";
@@ -239,7 +262,14 @@ export async function generateReadinessReport(
         reason: String(q?.reason || "").slice(0, 400),
       };
     })
-    .filter((q: ReadinessQuestion) => q.question);
+    .filter((q: ReadinessQuestion) => q.question)
+    // One the model asked again anyway is the answered one, not a new gap.
+    .filter((q: ReadinessQuestion) => !answeredKeys.has(clusterKeyFor(q.question)));
+  // Each answered question is covered: its answer is knowledge the employee
+  // retrieves. Counted once, as the person asked it.
+  for (const question of ctx.answered) {
+    questions.push({ question, coverage: "full", gapType: "none", reason: ANSWERED_REASON[locale] ?? ANSWERED_REASON.en!, answered: true });
+  }
 
   const recommendations: ReadinessRecommendation[] = (Array.isArray(parsed.recommendations) ? parsed.recommendations : [])
     .map((r: any) => ({

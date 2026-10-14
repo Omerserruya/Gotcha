@@ -91,7 +91,7 @@ export type { SearchResult as RetrievedChunk };
  * onboarding tuning chat) the old tenant-wide behaviour is kept deliberately -
  * there is no employee whose scope could be applied.
  */
-async function readableKnowledgeBaseIds(
+export async function readableKnowledgeBaseIds(
   tenantId: string,
   aiAgentId?: string | null,
 ): Promise<string[]> {

@@ -1,9 +1,11 @@
 import { Router, Request, Response } from "express";
 import { Prisma } from "@prisma/client";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity, defaultIntegrationAccess, validateIntegrationAccess, integrationAccessChoices, readAgentToolLevels, writeAgentToolLevel, stricterLevel, allowedEmployeeLevels, writeAudit, AuditAction, normalizeGuardrails, readGuardrails, GuardrailsError, type ToolLevel } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity, defaultIntegrationAccess, validateIntegrationAccess, integrationAccessChoices, readAgentToolLevels, writeAgentToolLevel, stricterLevel, allowedEmployeeLevels, writeAudit, AuditAction, normalizeGuardrails, readGuardrails, GuardrailsError, type ToolLevel } from "@chatcenter/shared";
 import { listWorkspaceTools } from "./tool-permissions";
 import { catalogTool } from "../lib/catalog-tools-he";
 import { toolDomain, toolDomainLabel } from "../lib/tool-domains";
+import { answerReadinessQuestion, ReadinessAnswerError, MAX_QUESTION } from "../services/readiness-answers";
+import { GapAnswerError, MAX_ANSWER } from "../services/knowledge-gap-answer.service";
 import { readerLocale } from "../lib/reader-locale";
 import { whereEmployeeAnswers } from "../services/employee-reach.service";
 
@@ -655,6 +657,33 @@ router.put("/:id/rules", authenticate, resolveTenant, requireActiveTenant(), req
   } catch (err) {
     console.error("Set employee rules error:", err);
     res.status(500).json({ error: "Failed to save the employee's rules" });
+  }
+});
+
+// ─── Answering a readiness question (B2) ─────────────────────
+// POST /:id/readiness-questions/answer {question, answer}: the answer becomes
+// knowledge exactly as an unanswered-question answer does, and the next
+// readiness report counts the question as covered (services/readiness-answers).
+// The report's questions have no id (the model makes them each run), so the
+// question travels by its text. Open during onboarding, like the hire itself.
+router.post("/:id/readiness-questions/answer", authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
+  const question = typeof req.body?.question === "string" ? req.body.question.trim() : "";
+  // Kept as the owner wrote it; only the ends are trimmed.
+  const answer = typeof req.body?.answer === "string" ? req.body.answer.trim() : "";
+  if (!question) { res.status(400).json({ error: "A question is required", code: "QUESTION_REQUIRED" }); return; }
+  if (question.length > MAX_QUESTION) { res.status(400).json({ error: "The question is too long", code: "QUESTION_TOO_LONG", max: MAX_QUESTION }); return; }
+  if (!answer) { res.status(400).json({ error: "An answer is required", code: "ANSWER_REQUIRED" }); return; }
+  if (answer.length > MAX_ANSWER) { res.status(400).json({ error: "The answer is too long", code: "ANSWER_TOO_LONG", max: MAX_ANSWER }); return; }
+  const userId = ((req as any).user?.userId ?? (req as any).user?.id) as string | undefined;
+  if (!userId) { res.status(401).json({ error: "no user context" }); return; }
+  try {
+    const r = await answerReadinessQuestion({ tenantId: req.tenantId! as string, userId, aiAgentId: req.params.id as string, question, answer });
+    res.json({ data: { documentId: r.documentId, knowledgeBaseId: r.knowledgeBaseId, resolvedAt: r.resolvedAt.toISOString(), resolvedUnansweredQuestionId: r.resolvedUnansweredQuestionId } });
+  } catch (err) {
+    if (err instanceof ReadinessAnswerError) { res.status(404).json({ error: "AI employee not found", code: err.code }); return; }
+    if (err instanceof GapAnswerError) { res.status(err.status).json({ error: "The answer was saved but could not be learned yet; try again", code: err.code }); return; }
+    console.error("Readiness question answer error:", err);
+    res.status(500).json({ error: "Failed to answer the question" });
   }
 });
 

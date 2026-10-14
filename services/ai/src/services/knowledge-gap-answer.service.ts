@@ -44,19 +44,48 @@ export async function answerUnansweredQuestion(input: {
   });
   if (!q) throw new GapAnswerError(404, "QUESTION_NOT_FOUND");
 
-  const dedupeKey = `unanswered_question:${q.id}`;
-  const title = q.question.trim().slice(0, 200);
-  const content = `**${q.question.trim()}**\n\n${input.answer}`;
-  // UnansweredQuestion has no resolvedBy column (a migration); who answered
-  // travels with the knowledge it produced.
-  const metadata = { origin: "unanswered_question", dedupeKey, unansweredQuestionId: q.id, answeredBy: userId, answeredAt: new Date().toISOString() };
+  const { documentId } = await learnAnswer({
+    tenantId,
+    question: q.question,
+    answer: input.answer,
+    dedupeKey: `unanswered_question:${q.id}`,
+    // UnansweredQuestion has no resolvedBy column (a migration); who answered
+    // travels with the knowledge it produced.
+    metadata: { origin: "unanswered_question", unansweredQuestionId: q.id, answeredBy: userId },
+  });
+
+  const resolvedAt = new Date();
+  await prisma.unansweredQuestion.update({ where: { id: q.id }, data: { resolvedAt } });
+  return { resolvedAt, documentId, resolvedBy: userId };
+}
+
+/**
+ * Store an owner's answer to a question as knowledge the AI can retrieve: one
+ * "**question**\n\nanswer" document per dedupeKey in the first ACTIVE,
+ * tenant-wide (scope "all") base, created if there is none. Answering again
+ * replaces the document and drops its old vectors. Resolves only once
+ * embedded; a document that did not embed throws NOT_LEARNED.
+ * Shared by the gap answer above and the readiness-question answer.
+ */
+export async function learnAnswer(input: {
+  tenantId: string;
+  question: string;
+  answer: string;
+  dedupeKey: string;
+  metadata: Record<string, unknown>;
+}): Promise<{ documentId: string; knowledgeBaseId: string }> {
+  const { tenantId, dedupeKey } = input;
+  const title = input.question.trim().slice(0, 200);
+  const content = `**${input.question.trim()}**\n\n${input.answer}`;
+  const metadata = { ...input.metadata, dedupeKey, answeredAt: new Date().toISOString() };
 
   const existing = await prisma.knowledgeDocument.findFirst({
     where: { tenantId, metadata: { path: ["dedupeKey"], equals: dedupeKey } },
-    select: { id: true, metadata: true },
+    select: { id: true, metadata: true, knowledgeBaseId: true },
   });
 
   let documentId: string;
+  let knowledgeBaseId: string;
   if (existing) {
     const prior = existing.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata) ? (existing.metadata as Record<string, unknown>) : {};
     await prisma.knowledgeDocument.update({
@@ -66,6 +95,7 @@ export async function answerUnansweredQuestion(input: {
     // The superseded answer's vectors go first, or retrieval keeps quoting it.
     await deleteByDocumentId(existing.id);
     documentId = existing.id;
+    knowledgeBaseId = existing.knowledgeBaseId;
   } else {
     const kb =
       (await prisma.knowledgeBase.findFirst({ where: { tenantId, isActive: true, scope: "all" }, orderBy: { createdAt: "asc" }, select: { id: true } })) ??
@@ -75,6 +105,7 @@ export async function answerUnansweredQuestion(input: {
       select: { id: true },
     });
     documentId = doc.id;
+    knowledgeBaseId = kb.id;
   }
 
   try {
@@ -83,8 +114,5 @@ export async function answerUnansweredQuestion(input: {
     console.error(`[knowledge-gap-answer] ${documentId} did not embed:`, err?.message);
     throw new GapAnswerError(502, "NOT_LEARNED");
   }
-
-  const resolvedAt = new Date();
-  await prisma.unansweredQuestion.update({ where: { id: q.id }, data: { resolvedAt } });
-  return { resolvedAt, documentId, resolvedBy: userId };
+  return { documentId, knowledgeBaseId };
 }
