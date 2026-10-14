@@ -37,6 +37,7 @@ const prismaDouble = vi.hoisted(() => {
       // The row as the database returns it: the column default included.
       create: async (a: any) => { H.created.push(a.data); const r = { id: "new_agent", channels: [], ...a.data }; H.agents.push(r); return r; },
       update: async (a: any) => { H.updated.push(a.data); const r = H.agents.find((x) => x.id === a.where.id); Object.assign(r, a.data); return r; },
+      updateMany: async (a: any) => { H.updated.push(a.data); const r = H.agents.filter((x) => x.id === a.where.id && x.tenantId === a.where.tenantId); r.forEach((x) => Object.assign(x, a.data)); return { count: r.length }; },
     },
     agentToolPermission: {
       findMany: async (a: any) => H.grants.filter((g) =>
@@ -86,6 +87,7 @@ import { allowedIntegrationToolKeys, defaultIntegrationAccess, validateIntegrati
 import { customToolDefinitions } from "../services/ai-bot.service";
 import { loadToolGrants } from "../services/agent-loop/permissions-bridge";
 import aiAgents from "../routes/ai-agents";
+import { Prisma } from "@prisma/client";
 
 const grant = (integ: string, tool: string, o: any = {}) => ({
   tenantId: "T", aiAgentId: "maya", isAllowed: true,
@@ -245,5 +247,75 @@ describe("PATCH: says it's AI when asked (A3b) and handover rules (A2), 2026-10-
       expect(r.status, JSON.stringify(bad)).toBe(400);
       expect(r.body.code).toBe("INVALID_ESCALATION_RULES");
     }
+  });
+});
+
+describe("the employee's own rules (B4)", () => {
+  const rules = (id: string, body: any) => request(app()).put(`/api/ai-agents/${id}/rules`).send(body);
+  const isDbNull = (v: any) => v === Prisma.DbNull;
+  const patch = (body: any) => request(app()).patch("/api/ai-agents/maya").send(body);
+
+  it("★ PUT /:id/rules stores a trimmed list without repeats and answers it", async () => {
+    const r = await rules("maya", { rules: ["  never promise a delivery date ", "", "never promise a delivery date", "be brief"] });
+    expect(r.status).toBe(200);
+    expect(r.body.data.rules).toEqual(["never promise a delivery date", "be brief"]);
+    expect(H.agents[0].customGuardrails).toEqual(["never promise a delivery date", "be brief"]);
+  });
+
+  it("★ an empty list clears them (stored as null)", async () => {
+    const r = await rules("maya", { rules: [] });
+    expect(r.status).toBe(200);
+    expect(isDbNull(H.updated.at(-1).customGuardrails)).toBe(true);
+  });
+
+  it("★ over a limit, or not a list of text: 400 GUARDRAILS_INVALID and nothing stored", async () => {
+    const cases: Array<[any, string, number | undefined]> = [
+      [{ rules: "never promise" }, "not_a_list", undefined],
+      [{}, "not_a_list", undefined],
+      [{ rules: ["ok", 7] }, "not_text", undefined],
+      [{ rules: ["x".repeat(281)] }, "too_long", 280],
+      [{ rules: Array.from({ length: 21 }, (_, i) => `rule ${i}`) }, "too_many", 20],
+    ];
+    for (const [body, reason, max] of cases) {
+      const r = await rules("maya", body);
+      expect(r.status, JSON.stringify(body).slice(0, 60)).toBe(400);
+      expect(r.body).toMatchObject({ code: "GUARDRAILS_INVALID", field: "rules", reason, ...(max ? { max } : {}) });
+    }
+    expect(H.updated).toEqual([]);
+  });
+
+  it("exactly at the limits passes", async () => {
+    const r = await rules("maya", { rules: [...Array.from({ length: 19 }, (_, i) => `rule ${i}`), "x".repeat(280)] });
+    expect(r.status).toBe(200);
+    expect(r.body.data.rules).toHaveLength(20);
+  });
+
+  it("another tenant's employee: 404, nothing stored", async () => {
+    H.agents.push({ id: "theirs", tenantId: "OTHER", name: "X" });
+    expect((await rules("theirs", { rules: ["a"] })).status).toBe(404);
+    expect(H.updated).toEqual([]);
+  });
+
+  it("★ PATCH /:id: a string is refused (the prompt would skip it); a list is normalized; null clears", async () => {
+    const bad = await patch({ customGuardrails: "never promise a date" });
+    expect(bad.status).toBe(400);
+    expect(bad.body).toMatchObject({ code: "GUARDRAILS_INVALID", field: "customGuardrails", reason: "not_a_list" });
+    expect(H.updated).toEqual([]);
+    const ok = await patch({ customGuardrails: [" a ", "a", "b"] });
+    expect(ok.status).toBe(200);
+    expect(H.updated.at(-1).customGuardrails).toEqual(["a", "b"]);
+    await patch({ customGuardrails: null });
+    expect(isDbNull(H.updated.at(-1).customGuardrails)).toBe(true);
+  });
+
+  it("★ POST: rules over a limit are 400 and nothing is created; a list is stored", async () => {
+    const bad = await request(app()).post("/api/ai-agents").send({ name: "Dan", goal: "help", customGuardrails: ["y".repeat(300)] });
+    expect(bad.status).toBe(400);
+    expect(bad.body.code).toBe("GUARDRAILS_INVALID");
+    expect(H.created).toEqual([]);
+    await request(app()).post("/api/ai-agents").send({ name: "Eli", goal: "help", customGuardrails: [" be kind "] });
+    expect(H.created[0].customGuardrails).toEqual(["be kind"]);
+    await request(app()).post("/api/ai-agents").send({ name: "Gal", goal: "help" });
+    expect(isDbNull(H.created[1].customGuardrails)).toBe(true);
   });
 });

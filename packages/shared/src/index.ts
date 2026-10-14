@@ -1290,4 +1290,6 @@ export {
 export type { ReplyWindow, ReplyWindowMode, ReplyWindowRefusal } from "./lib/reply-window";
 export { buildTemplateComponents, renderTemplateText, extractPlaceholders as templatePlaceholders } from "./lib/template-components";
 export { agentToolLevelsKey, stricterLevel, allowedEmployeeLevels, readAgentToolLevels, writeAgentToolLevel } from "./lib/agent-tool-levels";
+// An AI employee's own free-text rules (customGuardrails): one shape, one set of limits (B4).
+export { MAX_RULE_LEN, MAX_RULES, GuardrailsError, normalizeGuardrails, readGuardrails, clampGuardrails } from "./lib/guardrails";
 export type { ToolLevel, EmployeeToolLevel } from "./lib/agent-tool-levels";

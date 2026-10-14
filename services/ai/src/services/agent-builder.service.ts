@@ -19,7 +19,8 @@
  * stream/event-sink contract, different tool surface + system prompt.
  */
 
-import { prisma } from "@chatcenter/shared";
+import { Prisma } from "@prisma/client";
+import { prisma, normalizeGuardrails, GuardrailsError } from "@chatcenter/shared";
 import { streamResponse } from "./ai.service";
 import {
   appendToMemory,
@@ -720,7 +721,7 @@ interface BuilderToolResult {
   toModel: unknown;
 }
 
-async function dispatchBuilderTool(
+export async function dispatchBuilderTool(
   name: string,
   args: any,
   input: BuilderRunInput,
@@ -824,10 +825,16 @@ async function dispatchBuilderTool(
       }
 
       case "set_rules": {
-        const rules = (Array.isArray(args.rules) ? args.rules : [])
-          .map((r: any) => String(r || "").trim())
-          .filter(Boolean);
-        await prisma.aIAgent.update({ where: { id: agentId }, data: { customGuardrails: rules.length ? rules : null } });
+        // The same list and limits as every other writer (B4); over a limit
+        // goes back to the model to shorten, never stored cut.
+        let rules: string[];
+        try {
+          rules = normalizeGuardrails((Array.isArray(args.rules) ? args.rules : []).map((r: any) => String(r ?? "")));
+        } catch (e) {
+          if (e instanceof GuardrailsError) return { mutated: false, summary: "rules refused", toModel: { ok: false, error: e.message, max: e.max } };
+          throw e;
+        }
+        await prisma.aIAgent.update({ where: { id: agentId }, data: { customGuardrails: rules.length ? rules : Prisma.DbNull } });
         return { mutated: true, summary: `${rules.length} rules`, toModel: { ok: true } };
       }
 

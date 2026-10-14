@@ -14,7 +14,7 @@ import {
   type DiscoverySignals,
 } from "../services/site-crawl.service";
 import { callDiscoverBusiness, persistCrawlReach } from "../services/business-scan.service";
-import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, projectReadinessAnswers, withoutWideDashes } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, projectReadinessAnswers, withoutWideDashes, clampGuardrails } from "@chatcenter/shared";
 import { applyProjection, type SyncReport } from "../services/onboarding-knowledge.service";
 import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
 import { inviteUser, resendSetupLink } from "../services/invitation.service";
@@ -191,7 +191,8 @@ async function hireRecommendedEmployee(tenantId: string, authHeader: string, rec
       const existingGuards = Array.isArray(target.customGuardrails)
         ? (target.customGuardrails as unknown[]).filter((g): g is string => typeof g === "string")
         : [];
-      data.customGuardrails = [...existingGuards, ...instr.map((i) => `Owner instruction: ${i}`)];
+      // Within the employee's rule limits (B4): the owner's earlier rules first.
+      data.customGuardrails = clampGuardrails([...existingGuards, ...instr.map((i) => `Owner instruction: ${i}`)]);
     }
   }
 

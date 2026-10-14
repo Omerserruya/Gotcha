@@ -16,7 +16,8 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, prisma, defaultIntegrationAccess } from "@chatcenter/shared";
+import { Prisma } from "@prisma/client";
+import { authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, prisma, defaultIntegrationAccess, normalizeGuardrails, GuardrailsError } from "@chatcenter/shared";
 import {
   runBuilder,
   loadDraftSnapshot,
@@ -375,12 +376,20 @@ router.post("/:id/refinements", async (req: Request, res: Response) => {
       data.conversationFlow = flow.length ? flow : null;
     }
 
-    if (Array.isArray(customGuardrails)) {
-      const rules = customGuardrails
-        .map((r: any) => String(r || "").trim())
-        .filter(Boolean)
-        .map((r: string) => r.slice(0, 280));
-      data.customGuardrails = rules.length ? rules : null;
+    // The employee's own rules (B4): the same list and limits as PUT
+    // /api/ai-agents/:id/rules; over a limit is refused, never cut.
+    if (customGuardrails === null) data.customGuardrails = Prisma.DbNull;
+    else if (customGuardrails !== undefined) {
+      try {
+        const rules = normalizeGuardrails(customGuardrails);
+        data.customGuardrails = rules.length ? rules : Prisma.DbNull;
+      } catch (e) {
+        if (e instanceof GuardrailsError) {
+          res.status(400).json({ error: e.message, code: e.code, field: "customGuardrails", reason: e.reason, ...(e.max !== undefined ? { max: e.max } : {}), ...(e.index !== undefined ? { index: e.index } : {}) });
+          return;
+        }
+        throw e;
+      }
     }
 
     if (Object.keys(data).length > 0) {

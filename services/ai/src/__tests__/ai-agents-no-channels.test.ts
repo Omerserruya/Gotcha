@@ -7,12 +7,12 @@ import { describe, it, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 
-const H = vi.hoisted(() => ({ settings: new Map<string, string>(), listWhere: null as any }));
+const H = vi.hoisted(() => ({ settings: new Map<string, string>(), listWhere: null as any, guards: undefined as unknown }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
   const pass = (_q: any, _s: any, n: any) => n();
-  const agent = { id: "maya", tenantId: "T", name: "Maya", role: "customer_support", status: "ACTIVE", channels: ["whatsapp"], departmentId: null, knowledgeBases: [], toolPermissions: [], integrationAccess: [] };
+  const agent = { id: "maya", tenantId: "T", name: "Maya", role: "customer_support", status: "ACTIVE", channels: ["whatsapp"], departmentId: null, knowledgeBases: [], toolPermissions: [], integrationAccess: [], get customGuardrails() { return H.guards; } };
   const generic = { findMany: async () => [], findFirst: async () => null, findUnique: async () => null, count: async () => 0, groupBy: async () => [] };
   return {
     ...actual,
@@ -81,5 +81,20 @@ describe("★ a hire stopped over 7 days ago is not listed (kept, not deleted)",
   it("?includeStaleDrafts=1 lists them", async () => {
     await request(app()).get("/api/ai-agents?includeStaleDrafts=1");
     expect(H.listWhere).toEqual({ tenantId: "T" });
+  });
+});
+
+describe("★ the employee's own rules are always a list (B4)", () => {
+  it("none stored: [] on the list and the detail", async () => {
+    H.guards = null;
+    expect((await request(app()).get("/api/ai-agents")).body.data[0].customGuardrails).toEqual([]);
+    expect((await request(app()).get("/api/ai-agents/maya")).body.data.customGuardrails).toEqual([]);
+  });
+
+  it("a stored list as it is; a legacy string (which the prompt skips) as []", async () => {
+    H.guards = ["be brief", "no prices"];
+    expect((await request(app()).get("/api/ai-agents/maya")).body.data.customGuardrails).toEqual(["be brief", "no prices"]);
+    H.guards = "be brief";
+    expect((await request(app()).get("/api/ai-agents/maya")).body.data.customGuardrails).toEqual([]);
   });
 });

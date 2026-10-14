@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity, defaultIntegrationAccess, validateIntegrationAccess, integrationAccessChoices, readAgentToolLevels, writeAgentToolLevel, stricterLevel, allowedEmployeeLevels, writeAudit, AuditAction, type ToolLevel } from "@chatcenter/shared";
+import { Prisma } from "@prisma/client";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity, defaultIntegrationAccess, validateIntegrationAccess, integrationAccessChoices, readAgentToolLevels, writeAgentToolLevel, stricterLevel, allowedEmployeeLevels, writeAudit, AuditAction, normalizeGuardrails, readGuardrails, GuardrailsError, type ToolLevel } from "@chatcenter/shared";
 import { listWorkspaceTools } from "./tool-permissions";
 import { catalogTool } from "../lib/catalog-tools-he";
 import { toolDomain, toolDomainLabel } from "../lib/tool-domains";
@@ -201,6 +202,8 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requirePermi
       }).catch(() => null);
       return {
         ...withoutInertFields(agent),
+        // Always a list ([] when there are none): the employee's own rules (B4).
+        customGuardrails: readGuardrails(agent.customGuardrails),
         knowledgeSources: agent.knowledgeBases.map((ak: any) => ak.knowledgeBase),
         toolCount,
         departmentName: agent.departmentId ? deptById.get(agent.departmentId) ?? null : null,
@@ -433,6 +436,8 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requirePe
     res.json({
       data: {
         ...withoutInertFields(agent),
+        // Always a list ([] when there are none): the employee's own rules (B4).
+        customGuardrails: readGuardrails(agent.customGuardrails),
         knowledgeSources: agent.knowledgeBases.map((ak: any) => ak.knowledgeBase),
         tools,
         calendarCapability,
@@ -494,6 +499,15 @@ router.post(
     if (!name) {
       res.status(400).json({ error: "Name is required" });
       return;
+    }
+
+    // The employee's own rules: a list of text within the limits, or refused (B4).
+    let rules: string[] | null = null;
+    if (customGuardrails !== undefined && customGuardrails !== null) {
+      try { rules = normalizeGuardrails(customGuardrails); } catch (e) {
+        if (e instanceof GuardrailsError) { res.status(400).json(guardrailsRefusal(e)); return; }
+        throw e;
+      }
     }
 
     // The systems this employee may use: the creator's choice, checked, or
@@ -574,7 +588,7 @@ router.post(
         confidenceThreshold: confidenceThreshold ?? 0.6,
         escalationMessage: escalationMessage || "Let me connect you with a team member who can help further.",
         conversationFlow: conversationFlow || null,
-        customGuardrails: customGuardrails || null,
+        customGuardrails: rules && rules.length ? rules : Prisma.DbNull,
         departmentId: departmentId || null,
         funnelId: funnelId || null,
         goal: normalizedGoal,
@@ -614,6 +628,33 @@ router.post(
   } catch (err) {
     console.error("Create AI agent error:", err);
     res.status(500).json({ error: "Failed to create AI agent" });
+  }
+});
+
+/** The 400 body for rules that are not a list of text within the limits. */
+function guardrailsRefusal(e: GuardrailsError) {
+  return { error: e.message, code: e.code, field: "customGuardrails", reason: e.reason, ...(e.max !== undefined ? { max: e.max } : {}), ...(e.index !== undefined ? { index: e.index } : {}) };
+}
+
+// ─── The employee's own rules (B4) ───────────────────────────
+// PUT /:id/rules {rules: string[]} replaces the list whole: at most MAX_RULES
+// rules of at most MAX_RULE_LEN characters, trimmed, repeats dropped; over a
+// limit is a 400 GUARDRAILS_INVALID, never a silent cut. [] clears them.
+router.put("/:id/rules", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:update", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agent = await prisma.aIAgent.findFirst({ where: { id: req.params.id as string, tenantId }, select: { id: true } });
+    if (!agent) { res.status(404).json({ error: "AI employee not found" }); return; }
+    let rules: string[];
+    try { rules = normalizeGuardrails(req.body?.rules); } catch (e) {
+      if (e instanceof GuardrailsError) { res.status(400).json({ ...guardrailsRefusal(e), field: "rules" }); return; }
+      throw e;
+    }
+    await prisma.aIAgent.updateMany({ where: { id: agent.id, tenantId }, data: { customGuardrails: rules.length ? rules : Prisma.DbNull } });
+    res.json({ data: { rules } });
+  } catch (err) {
+    console.error("Set employee rules error:", err);
+    res.status(500).json({ error: "Failed to save the employee's rules" });
   }
 });
 
@@ -678,6 +719,21 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     } else if (updateData.persona && typeof updateData.persona === "object" && !Array.isArray(updateData.persona) && !("disclosesAi" in updateData.persona)) {
       const prev = (await prisma.aIAgent.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! as string }, select: { persona: true } }))?.persona as any;
       if (prev && typeof prev.disclosesAi === "boolean") updateData.persona = { ...updateData.persona, disclosesAi: prev.disclosesAi };
+    }
+
+    // The employee's own rules (B4): a list of text within the limits; a string
+    // or anything else is refused, because the prompt would silently skip it.
+    if (Object.prototype.hasOwnProperty.call(bodySrc, "customGuardrails")) {
+      if (bodySrc.customGuardrails === null) updateData.customGuardrails = Prisma.DbNull;
+      else {
+        try {
+          const rules = normalizeGuardrails(bodySrc.customGuardrails);
+          updateData.customGuardrails = rules.length ? rules : Prisma.DbNull;
+        } catch (e) {
+          if (e instanceof GuardrailsError) { res.status(400).json(guardrailsRefusal(e)); return; }
+          throw e;
+        }
+      }
     }
 
     // Handover rules (A2): the array is replaced whole, so its shape is checked
