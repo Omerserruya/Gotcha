@@ -169,11 +169,25 @@ describe("widget asset CORS (gateway templates)", () => {
   it.each(templates)("%s caches hashed bundles forever and the bootstrap never", (file) => {
     const conf = fs.readFileSync(file, "utf8");
 
-    // The chat bundle's filename carries a content hash, so new bytes are
-    // a new URL and the old one can safely be cached forever.
+    // ★ Everything under /widget/ WITHOUT a content hash in its name (the
+    // snippet loader every customer site embeds, the manifest it reads to
+    // find the bundle, vendor files) is revalidated: it was "immutable for a
+    // year" until 2026-10-14, so a loader fix reached visitors a year late.
     const dirBlock = conf.slice(conf.indexOf("location /widget/"));
     const dirBody = dirBlock.slice(0, dirBlock.indexOf("\n        }"));
-    expect(dirBody).toMatch(/Cache-Control "public, max-age=31536000, immutable"/);
+    expect(dirBody).toMatch(/Cache-Control "public, no-cache, must-revalidate"/);
+    expect(dirBody).not.toMatch(/Cache-Control "[^"]*immutable/);
+
+    // Only a content-hashed name (<name>.<12 hex>.js) is cached forever: new
+    // bytes are a new URL. Its block keeps the wildcard origin and nosniff.
+    const hashedIdx = conf.indexOf('location ~ "^/widget/[A-Za-z0-9_-]+\\.[0-9a-f]{12}\\.js$"');
+    expect(hashedIdx).toBeGreaterThan(-1);
+    const hashedBody = conf.slice(hashedIdx, conf.indexOf("\n        }", hashedIdx));
+    expect(hashedBody).toMatch(/Cache-Control "public, max-age=31536000, immutable"/);
+    expect(hashedBody).toContain('add_header Access-Control-Allow-Origin "*"');
+    expect(hashedBody).toContain('add_header X-Content-Type-Options "nosniff"');
+    expect(new RegExp("^/widget/[A-Za-z0-9_-]+\\.[0-9a-f]{12}\\.js$").test("/widget/gotcha-shopify-chat.5b4a888ca14a.js")).toBe(true);
+    expect(new RegExp("^/widget/[A-Za-z0-9_-]+\\.[0-9a-f]{12}\\.js$").test("/widget/chatcenter-widget.js")).toBe(false);
 
     // The bootstrap's filename is stable - it is what the theme points at
     // - so it must be revalidated on every load, or a change to it can sit
