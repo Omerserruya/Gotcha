@@ -14,7 +14,7 @@ import type {
 import { UnavailableItem } from '@/design-system/primitives/unavailable/Unavailable';
 
 import { provisionWebhook } from './automation-actions';
-import { TRIGGER_NODE, onlyThrough, removeStep, type Graph } from './graph';
+import { fileNameOf, TRIGGER_NODE, onlyThrough, removeStep, type Graph } from './graph';
 import styles from './Builder.module.css';
 
 /** The route's limits (`LIMITS`): enforced here, where they are typed. */
@@ -412,9 +412,11 @@ function StepFields({
           </Field>
           <Field label={t('inspector.fileName')}>
             <input
-              value={str(d.fileName)}
-              onChange={(e) => set({ fileName: e.target.value })}
+              value={fileNameOf(d)}
+              // The executor's key; an old draft's `fileName` is dropped as it is rewritten.
+              onChange={(e) => set({ filename: e.target.value, fileName: undefined })}
               dir="auto"
+              data-testid="inspector-file-name"
             />
           </Field>
           <Field label={t('inspector.caption')}>

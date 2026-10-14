@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -631,6 +631,35 @@ describe('★★ the new triggers and steps (Backend 972ae66d), edited where the
     fireEvent.change(screen.getByTestId('inspector-template'), { target: { value: 'tpl1' } });
     expect(screen.getByTestId('inspector-template-var-1')).toBeInTheDocument();
     expect(screen.queryByTestId('to-fill-s')).toBeNull();
+  });
+
+  it('★ a file step writes the executor’s `filename`; an old draft’s `fileName` is read, then dropped', async () => {
+    showBuilder(
+      draftOf(
+        { type: 'message_received', config: {} },
+        [
+          { id: 't', type: 'automation_trigger', data: {} },
+          {
+            id: 'f',
+            type: 'send_message_file',
+            data: { url: 'https://x.test/m.pdf', fileName: 'old.pdf', caption: '' },
+          },
+        ],
+        [{ id: 'e', source: 't', target: 'f', sourceHandle: null }],
+      ),
+    );
+    fireEvent.click(screen.getByTestId('node-f'));
+    expect(screen.getByTestId('inspector-file-name')).toHaveValue('old.pdf');
+    fireEvent.change(screen.getByTestId('inspector-file-name'), {
+      target: { value: 'menu.pdf' },
+    });
+    await waitFor(() => {
+      const graph = actions.checkGraph.mock.calls.at(-1)?.[1] as
+        { nodes: { id: string; data: Record<string, unknown> }[] } | undefined;
+      const data = graph?.nodes.find((n) => n.id === 'f')?.data;
+      expect(data).toMatchObject({ filename: 'menu.pdf' });
+      expect(JSON.parse(JSON.stringify(data))).not.toHaveProperty('fileName');
+    });
   });
 
   it('AI writes a message: what, who, and send it (on by default)', () => {

@@ -108,7 +108,7 @@ export function defaultData(type: string, newId: () => string): Record<string, u
     case 'send_list':
       return { text: '', buttonText: '', options: [{ id: newId(), title: '' }] };
     case 'send_message_file':
-      return { url: '', fileName: '', caption: '' };
+      return { url: '', filename: '', caption: '' };
     case 'wait':
       return { durationMs: 60 * 60 * 1000 };
     case 'wait_for_reply':
@@ -315,4 +315,14 @@ export function layout(graph: Graph): {
   const columns = Math.max(slot, loose.length, 1);
   const rows = deepest + 1 + (loose.length > 0 ? 1 : 0);
   return { at, width: columns * (NODE_W + GAP) - GAP, height: rows * ROW_H };
+}
+
+/**
+ * A file step's name. The executor reads `filename`; drafts saved before
+ * 2026-10-14 wrote `fileName` (Backend accepts both) - read either, write
+ * only `filename`.
+ */
+export function fileNameOf(data: Readonly<Record<string, unknown>>): string {
+  const name = typeof data.filename === 'string' ? data.filename : data.fileName;
+  return typeof name === 'string' ? name : '';
 }

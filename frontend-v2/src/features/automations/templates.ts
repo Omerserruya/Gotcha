@@ -78,7 +78,7 @@ export const TEMPLATES: readonly Template[] = [
         config: { keywords: [words.keyword], match: 'contains' },
         nodes: [
           node('trigger', TRIGGER_NODE),
-          node(send, 'send_message_file', { url: '', fileName: '', caption: '' }),
+          node(send, 'send_message_file', { url: '', filename: '', caption: '' }),
         ],
         edges: [edge(id(), 'trigger', send)],
       };

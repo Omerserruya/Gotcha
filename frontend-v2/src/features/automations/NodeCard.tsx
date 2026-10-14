@@ -6,7 +6,7 @@ import { wholeUnit } from '@/lib/duration';
 
 import type { AutomationNode, Trigger } from '@/api/contracts/automations';
 
-import { TRIGGER_NODE } from './graph';
+import { fileNameOf, TRIGGER_NODE } from './graph';
 import { needsFilling } from './templates';
 import styles from './Builder.module.css';
 
@@ -151,7 +151,7 @@ function summary(
     case 'notify_team':
       return str(d.message) || t('builder.card.empty');
     case 'send_message_file':
-      return str(d.fileName) || str(d.url) || t('builder.card.empty');
+      return fileNameOf(d) || str(d.url) || t('builder.card.empty');
     case 'ab_split':
       return typeof d.percentA === 'number'
         ? t('builder.card.split', { a: d.percentA, b: 100 - d.percentA })

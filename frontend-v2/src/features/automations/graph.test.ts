@@ -4,6 +4,8 @@ import { nodeSchema, type AutomationNode } from '@/api/contracts/automations';
 
 import {
   NODE_W,
+  defaultData,
+  fileNameOf,
   ROW_H,
   freeHandles,
   insertAfter,
@@ -105,5 +107,20 @@ describe('★ layout: top down, a parent over its children', () => {
   it('a step nothing reaches still shows, on its own row', () => {
     const loose: Graph = { nodes: [...missed.nodes, node('x', 'add_tag')], edges: missed.edges };
     expect(layout(loose).at.get('x')?.y).toBe(5 * ROW_H);
+  });
+});
+
+describe('★ a file step’s name: the executor’s `filename`, an old draft’s `fileName` still read', () => {
+  it('reads filename first, fileName from an older draft, nothing as empty', () => {
+    expect(fileNameOf({ filename: 'menu.pdf', fileName: 'old.pdf' })).toBe('menu.pdf');
+    expect(fileNameOf({ fileName: 'old.pdf' })).toBe('old.pdf');
+    expect(fileNameOf({})).toBe('');
+    expect(fileNameOf({ filename: 7 })).toBe('');
+  });
+
+  it('a new file step is made with `filename`, never `fileName`', () => {
+    const step = defaultData('send_message_file', () => 'x');
+    expect(step).toHaveProperty('filename', '');
+    expect(step).not.toHaveProperty('fileName');
   });
 });
