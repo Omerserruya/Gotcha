@@ -99,7 +99,7 @@ const browser = await chromium.launch({
  * either alive or deleted.
  */
 async function openSite({ widgetExists, widget = widgetConfig(), availability = "online", lang = "en",
-  stored = null, history = [], wait = 1800, ctx: given = null }) {
+  stored = null, history = [], wait = 1800, ctx: given = null, waStart = null, blockPopups = false }) {
   const ctx = given || await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   const calls = [];
@@ -111,10 +111,19 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
   }
 
   const inits = [];
+  const starts = [];
+  if (blockPopups) await page.addInitScript(() => { window.open = () => null; });
+  // wa.me is never reached: a popup pointed at it gets an empty page.
+  await ctx.route("https://wa.me/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<title>wa</title>" }));
   await page.route(`${ORIGIN}/**`, async (route) => {
     const url = new URL(route.request().url());
     calls.push(url.pathname);
     if (url.pathname === "/api/embedded-chat/init") inits.push(JSON.parse(route.request().postData() || "{}"));
+    if (url.pathname === "/api/embedded-chat/whatsapp-start") {
+      starts.push(JSON.parse(route.request().postData() || "{}"));
+      const answer = waStart || { status: 200, body: { data: { url: "https://wa.me/972500000000?text=hi%20(ref)", ref: "ref" } } };
+      return route.fulfill({ status: answer.status, contentType: "application/json", body: JSON.stringify(answer.body) });
+    }
 
     if (url.pathname === "/") {
       return route.fulfill({
@@ -166,7 +175,7 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
 
   await page.goto(`${ORIGIN}/`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(wait);
-  return { ctx, page, calls, errors, inits };
+  return { ctx, page, calls, errors, inits, starts };
 }
 
 // ── A widget that no longer exists ──
@@ -564,6 +573,103 @@ const dockLook = (page) => page.evaluate(() => {
   await page.waitForTimeout(500);
   const d = await dockLook(page);
   check("L3 docked on the left: flush left, the page's room on the left", d.panel.x === 0 && d.padL === "400px" && d.padR === "0px", JSON.stringify(d));
+  await ctx.close();
+}
+
+// ── Design 7: the WhatsApp kind (live widget L4) ──
+const waLook = (page) => page.evaluate(() => {
+  const s = document.getElementById("gotcha-chat-root").shadowRoot;
+  const rect = (e) => { if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left), w: Math.round(r.width), h: Math.round(r.height), right: Math.round(innerWidth - r.right), bottom: Math.round(innerHeight - r.bottom) }; };
+  const fab = s.querySelector('[data-act="launcher"]');
+  const pn = s.querySelector('[data-act="wa-panel"]');
+  const nt = pn && pn.querySelector(".nt");
+  return {
+    fab: rect(fab), fabBg: fab && getComputedStyle(fab).backgroundColor, fabLabel: fab && fab.getAttribute("aria-label"),
+    teaser: (s.querySelector('[data-act="popup"]') || {}).textContent ?? null,
+    panel: rect(pn), dir: (s.querySelector(".wa") || {}).getAttribute?.("dir"),
+    head: pn ? getComputedStyle(pn.querySelector(".hd")).backgroundColor : null,
+    title: pn ? pn.querySelector(".hd-n").textContent : null,
+    greeting: pn && pn.querySelector('[data-act="greeting"]') ? pn.querySelector('[data-act="greeting"]').textContent : null,
+    note: nt && !nt.hidden ? nt.textContent : "", noteLink: nt && nt.querySelector("a") ? nt.querySelector("a").getAttribute("href") : null,
+    chat: !!s.querySelector(".panel"),
+  };
+});
+const waWidget = (extra = {}) => {
+  const w = widgetConfig({ brand: { name: "Urban Supply", initial: "U" } });
+  w.ux = { ...w.ux, kind: "whatsapp", look: "whatsapp", welcome: { ...w.ux.welcome, title: "Hi! How can we help?" }, ...extra };
+  w.features = { ...w.features, whatsappHandoff: true };
+  return w;
+};
+
+{
+  const { ctx, page, errors, inits, starts } = await openSite({ widgetExists: true, widget: waWidget({ proactive: popupOn({ message: "Got a question? We're here." }) }), wait: 3000 });
+  const a = await waLook(page);
+  check("L4 WhatsApp kind: a 58px green button, 18px from the side, 22px up", a.fab.w === 58 && a.fab.right === 18 && a.fab.bottom === 22 && a.fabBg === "rgb(37, 211, 102)", JSON.stringify({ ...a.fab, bg: a.fabBg }));
+  check("L4 WhatsApp kind: the teaser is the merchant's pop-up line", a.teaser === "Got a question? We're here.✕", a.teaser);
+  check("L4 WhatsApp kind: no chat on the site (no chat panel)", !a.chat);
+  await shadowClick(page, '[data-act="popup-open"]');
+  await page.waitForTimeout(300);
+  const o = await waLook(page);
+  check("L4 panel: 330px, WhatsApp's green header, the greeting the business wrote, marked now",
+    o.panel.w === 330 && o.head === "rgb(0, 128, 105)" && o.title === "Chat with us" && o.greeting === "Hi! How can we help?now" && o.teaser === null && o.fabLabel === "Close",
+    JSON.stringify(o));
+  const popup = ctx.waitForEvent("page");
+  await page.evaluate(() => {
+    const s = document.getElementById("gotcha-chat-root").shadowRoot;
+    const ta = s.querySelector('[data-act="wa-panel"] textarea');
+    ta.value = "Is the blue one in stock?";
+    s.querySelector('[data-act="wa-send"]').click();
+  });
+  const win = await popup;
+  await win.waitForURL(/wa\.me/, { timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  const sent = await waLook(page);
+  check("L4 send: /whatsapp-start with the widget, the words, the language and the page",
+    starts.length === 1 && starts[0].widgetId === "wid_test_123" && starts[0].text === "Is the blue one in stock?" && starts[0].locale === "en" && starts[0].context.path === "/" && starts[0].context.pageType === "page",
+    JSON.stringify(starts));
+  check("L4 send: the window opened in the click goes to wa.me", /^https:\/\/wa\.me\//.test(win.url()), win.url());
+  check("L4 send: says it continues on WhatsApp", sent.note === "Continuing on WhatsApp" && sent.noteLink === null, sent.note);
+  check("L4: never an /init, never a conversation on the site", inits.length === 0, String(inits.length));
+  check("L4: logs nothing", errors.length === 0, errors.slice(0, 2).join(" | "));
+  await page.screenshot({ path: path.join(os.homedir(), ".cache/cc-work/shots/webchat-l4.png") }).catch(() => {});
+  await ctx.close();
+}
+
+{
+  const { ctx, page, starts } = await openSite({ widgetExists: true, widget: waWidget(), wait: 1000, blockPopups: true });
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(200);
+  await shadowClick(page, '[data-act="wa-send"]');
+  await page.waitForTimeout(400);
+  const a = await waLook(page);
+  check("L4 blocked window: the link is offered to tap", a.noteLink === "https://wa.me/972500000000?text=hi%20(ref)" && a.note === "Continuing on WhatsApp Open WhatsApp", JSON.stringify(a.note));
+  check("L4 empty message: sent without text (the server writes the greeting)", starts.length === 1 && !("text" in starts[0]), JSON.stringify(starts));
+  await ctx.close();
+}
+
+{
+  const { ctx, page } = await openSite({ widgetExists: true, widget: waWidget({ welcome: { ...widgetConfig().ux.welcome, title: "" } }), wait: 1000, waStart: { status: 404, body: { error: "unavailable" } } });
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(200);
+  const pages = ctx.pages().length;
+  await shadowClick(page, '[data-act="wa-send"]');
+  await page.waitForTimeout(600);
+  const a = await waLook(page);
+  check("L4 refused: says so, and the opened window is closed again", a.note === "WhatsApp didn't open. Please try again." && ctx.pages().length === pages, `${a.note} pages=${ctx.pages().length}/${pages}`);
+  check("L4 no greeting written: no bubble", a.greeting === null);
+  await ctx.close();
+}
+
+{
+  const w = waWidget();
+  w.appearance = { ...w.appearance, language: "he", direction: "auto" };
+  w.ux = { ...w.ux, welcome: { ...w.ux.welcome, title: "היי! איך אפשר לעזור?" }, launcher: { ...w.ux.launcher, position: "left", mobilePosition: "left" } };
+  const { ctx, page } = await openSite({ widgetExists: true, widget: w, lang: "he", wait: 1000 });
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(300);
+  const a = await waLook(page);
+  check("L4 Hebrew, left: right to left, in Hebrew, on the left", a.dir === "rtl" && a.title === "דברו איתנו" && a.fab.x === 18 && a.panel.x === 18, JSON.stringify({ d: a.dir, t: a.title, f: a.fab.x, p: a.panel.x }));
+  await page.screenshot({ path: path.join(os.homedir(), ".cache/cc-work/shots/webchat-l4-he.png") }).catch(() => {});
   await ctx.close();
 }
 
