@@ -25,6 +25,7 @@ import { executeAdapterTool } from "./connectors/integration-framework";
 import { connectedWooStore } from "./website-widget.service";
 import { resolveWooCurrency } from "./discovery-integration.service";
 import type { ProductMessageRecord } from "./shopify-commerce-message.service";
+import { listActivePromotions, type WidgetPromotion } from "./widget-promotions.service";
 
 export interface WooTurn {
   provider: "woocommerce";
@@ -115,4 +116,24 @@ export function withoutOtherStoreTools<T extends { function?: { name?: string } 
 /** Cards only from the store the search read: never a Shopify result on the Woo store, or the reverse. */
 export function cardsMatchTurn(envelopeProvider: "shopify" | "woocommerce", wooTurn: WooTurn | null): boolean {
   return envelopeProvider === (wooTurn ? "woocommerce" : "shopify");
+}
+
+/**
+ * The promotions the AI may mention in this conversation (W9 phase d): the
+ * coupons the web chat's widget shows, live right now. Empty for every other
+ * conversation, and when none are chosen or the store is not connected.
+ */
+export async function webchatPromotionsFor(tenantId: string, conversationId: string): Promise<WidgetPromotion[]> {
+  const conv = await prisma.conversation.findFirst({
+    where: { id: conversationId, tenantId },
+    select: { channel: true, channelAccountId: true },
+  });
+  if (!conv || conv.channel !== ("WEBCHAT" as any) || !conv.channelAccountId) return [];
+  const account = await prisma.channelAccount.findFirst({
+    where: { id: conv.channelAccountId, tenantId, channel: "WEBCHAT" as any },
+    select: { credentials: true },
+  });
+  const ids = account ? normalizeWebchatConfig(account.credentials).commerce.promotions.couponIds : [];
+  if (!ids.length || !(await connectedWooStore(tenantId))) return [];
+  return listActivePromotions(tenantId, ids);
 }

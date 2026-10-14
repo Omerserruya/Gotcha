@@ -18,6 +18,7 @@ import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanit
 import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef, connectedWooStore } from "../services/website-widget.service";
 import { translateWidgetTexts } from "../services/widget-text-translation.service";
 import { executeAdapterTool } from "../services/connectors/integration-framework";
+import { listActivePromotions } from "../services/widget-promotions.service";
 
 const router = Router();
 
@@ -198,16 +199,22 @@ router.post("/bootstrap", initLimiter, async (req: Request, res: Response) => {
  * known). The number itself never reaches the page.
  */
 async function withHandoff(tenantId: string, config: WebchatConfig, offline = false) {
-  // Products only while the store they come from is connected (W9).
-  const storeConnected = config.commerce.productMessagingEnabled
+  // Products and promotions only while the store they come from is connected (W9).
+  const wantsStore = config.commerce.productMessagingEnabled || config.commerce.promotions.couponIds.length > 0;
+  const storeConnected = wantsStore
     ? !!(await withCrossTenantAccess(() => connectedWooStore(tenantId)).catch(() => null))
     : false;
   const base = publicWebchatConfig(config, { offline, storeConnected });
+  // The coupons the merchant chose, live right now (W9 phase d). None chosen, none shown.
+  const promotions = storeConnected && config.commerce.promotions.couponIds.length
+    ? await withCrossTenantAccess(() => listActivePromotions(tenantId, config.commerce.promotions.couponIds)).catch(() => [])
+    : [];
   const target = await withCrossTenantAccess(() => handoffTarget(tenantId, config.ux)).catch(() => null);
   const lang = config.appearance.language === "he" ? "he" : "en";
   if (config.ux.kind === "whatsapp" && !target) return null;
   return {
     ...base,
+    promotions: promotions.map(({ id: _id, ...p }) => p),
     features: { ...base.features, whatsappHandoff: !!target },
     ...(target ? { whatsapp: { label: handoffButtonLabel(lang) } } : {}),
   };

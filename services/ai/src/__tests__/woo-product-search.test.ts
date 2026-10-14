@@ -181,3 +181,16 @@ describe("★ discovery counts the Woo search", () => {
     expect(productDiscoveryApplies({ role: "customer_support", availableToolNames: ["woocommerce.list_products"] })).toBe(true);
   });
 });
+
+describe("★ list_coupons by ids (W9 phase d)", () => {
+  const run = (args: any) => Woo.execute({ toolName: "list_coupons", args, credentials: { consumerKey: "ck", consumerSecret: "cs" }, config: { storeUrl: STORE } } as any);
+  it("only the given numeric ids are asked for; an empty id list asks for nothing", async () => {
+    await run({ ids: ["7", "x", "11", "1;drop"], per_page: 5 });
+    expect(Object.fromEntries(new URL(H.fetches[0]!).searchParams)).toEqual({ per_page: "5", include: "7,11" });
+    H.fetches = [];
+    expect(await run({ ids: ["junk"] })).toEqual([]);
+    expect(H.fetches).toEqual([]);
+    await run({ page: 2 });
+    expect(Object.fromEntries(new URL(H.fetches[0]!).searchParams)).toEqual({ per_page: "20", page: "2" });
+  });
+});

@@ -271,7 +271,14 @@ const TOOLS: ToolDefinition[] = [
     whenToUse: "You need to see which coupons exist.",
     category: "READ",
     riskLevel: "LOW",
-    parameters: { type: "object", properties: { per_page: { type: "number" } } },
+    parameters: {
+      type: "object",
+      properties: {
+        per_page: { type: "number" },
+        page: { type: "number", description: "Page of results, from 1." },
+        ids: { type: "array", items: { type: "string" }, description: "Only these coupon ids." },
+      },
+    },
   },
   {
     name: "woocommerce.get_coupon",
@@ -540,8 +547,16 @@ const WooCommerceAdapter: ProviderAdapter = {
         return await wooRequest(auth, "GET", `${base}/products/${encodeURIComponent(String(args.product_id))}/variations?per_page=${per}`);
       }
       case "list_coupons": {
-        const per = Math.min(100, Number(args.per_page ?? 20));
-        return await wooRequest(auth, "GET", `${base}/coupons?per_page=${per}`);
+        const params = new URLSearchParams();
+        params.set("per_page", String(Math.min(100, Math.max(1, Number(args.per_page ?? 20) || 20))));
+        if (Number(args.page) > 1) params.set("page", String(Math.floor(Number(args.page))));
+        // Only these ids (the widget's chosen promotions, W9): numeric only.
+        const ids = Array.isArray(args.ids) ? (args.ids as unknown[]).map((v) => String(v ?? "").trim()).filter((v) => /^\d{1,12}$/.test(v)) : [];
+        if (Array.isArray(args.ids)) {
+          if (!ids.length) return [];
+          params.set("include", ids.join(","));
+        }
+        return await wooRequest(auth, "GET", `${base}/coupons?${params}`);
       }
       case "get_coupon": {
         const list: any = await wooRequest(auth, "GET", `${base}/coupons?code=${encodeURIComponent(String(args.code))}`);

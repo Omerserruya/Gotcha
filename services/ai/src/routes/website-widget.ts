@@ -13,7 +13,8 @@ import {
   asksToHidePoweredBy,
   POWERED_BY_LOCKED_CODE,
 } from "@chatcenter/shared";
-import { getWidget, putWidget, installOf, WidgetInputError, type WidgetSettings } from "../services/website-widget.service";
+import { getWidget, putWidget, installOf, WidgetInputError, connectedWooStore, type WidgetSettings } from "../services/website-widget.service";
+import { storeCoupons } from "../services/widget-promotions.service";
 import { readAssignment, writeAssignment, AssignmentError } from "../services/widget-assignment.service";
 
 const router = Router();
@@ -66,6 +67,32 @@ router.put("/", requirePermission("channels:manage:update"), async (req: Request
     }
     console.error("[website-widget] put failed:", (err as Error)?.message);
     res.status(500).json({ error: "Could not save the widget" });
+  }
+});
+
+/**
+ * GET /promotions/available?page=1 - the store's coupons for the settings
+ * picker (W9 phase d): { connected, coupons: [{ id, code, amount,
+ * discountType, expiresAt, minimumAmount, status, usageCount, usageLimit,
+ * live }] }, up to 100 a page. `live` = would show on the widget now.
+ * connected:false when there is no connected WooCommerce store.
+ */
+router.get("/promotions/available", requirePermission("channels:manage:read"), async (req: Request & { tenantId?: string }, res: Response) => {
+  try {
+    if (!(await connectedWooStore(req.tenantId!))) {
+      res.json({ data: { connected: false, coupons: [] } });
+      return;
+    }
+    const page = Math.max(1, Math.floor(Number(req.query.page) || 1));
+    const coupons = await storeCoupons(req.tenantId!, page);
+    if (!coupons) {
+      res.status(502).json({ error: "The store's coupons could not be read", code: "STORE_UNREACHABLE" });
+      return;
+    }
+    res.json({ data: { connected: true, coupons } });
+  } catch (err) {
+    console.error("[website-widget] promotions list failed:", (err as Error)?.message);
+    res.status(500).json({ error: "Could not list the store's coupons" });
   }
 });
 

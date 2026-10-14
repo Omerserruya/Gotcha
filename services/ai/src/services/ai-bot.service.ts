@@ -67,6 +67,7 @@ import {
   buildVariantIntentDirective,
   detectCouponIntent,
   buildCouponUnsupportedDirective,
+  buildCouponPromotionsDirective,
   detectOrderNoteIntent,
   buildOrderNoteDirective,
 } from "./product-intent.service";
@@ -234,7 +235,7 @@ import {
 } from "./action-contracts.repo";
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -2665,7 +2666,13 @@ async function generateAIBotReplyInner(
   // off this surface; this stops the model improvising in their absence.
   try {
     if (detectCouponIntent(opts.incomingMessage)) {
-      chatMessages.push({ role: "system", content: buildCouponUnsupportedDirective() });
+      // The one exception: on the website widget, the coupons the merchant
+      // chose to show (W9 phase d). Otherwise coupons stay unsupported.
+      const promotions = await webchatPromotionsFor(opts.tenantId, opts.conversationId).catch(() => []);
+      chatMessages.push({
+        role: "system",
+        content: promotions.length ? buildCouponPromotionsDirective(promotions) : buildCouponUnsupportedDirective(),
+      });
     }
     // "Write this on my order" - the model kept claiming the write instead of
     // performing it.

@@ -17,6 +17,7 @@ const STORE = "https://demo-store.example.com";
 const H = vi.hoisted(() => ({
   accounts: [] as any[], conv: null as any, integration: null as any, messages: [] as any[],
   products: {} as Record<string, any>, variations: {} as Record<string, any[]>, adapterCalls: [] as any[],
+  coupons: [] as any[], kv: new Map<string, string>(),
 }));
 
 vi.mock("express-rate-limit", () => ({ default: () => (_q: any, _r: any, n: any) => n() }));
@@ -32,7 +33,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },
     requireActiveTenant: () => (_q: any, _r: any, n: any) => n(),
     requirePermission: () => (_q: any, _r: any, n: any) => n(),
-    getRedis: () => ({ get: async () => null, set: async () => "OK" }),
+    getRedis: () => ({ get: async (k: string) => H.kv.get(k) ?? null, set: async (k: string, v: string) => { H.kv.set(k, v); return "OK"; } }),
     prisma: {
       channelAccount: {
         findFirst: async (a: any) => H.accounts.find((r) => match(r, a.where)) ?? null,
@@ -65,6 +66,9 @@ vi.mock("../services/connectors/integration-framework", async (importOriginal) =
       return p ? { ok: true, result: p } : { ok: false, failure: "errored", reason: "woocommerce_404" };
     }
     if (o.toolFunctionName === "woocommerce.list_product_variations") return { ok: true, result: H.variations[String(o.args.product_id)] ?? [] };
+    if (o.toolFunctionName === "woocommerce.list_coupons") {
+      return { ok: true, result: Array.isArray(o.args.ids) ? H.coupons.filter((c) => o.args.ids.includes(String(c.id))) : H.coupons };
+    }
     return { ok: false, failure: "refused", reason: "unexpected" };
   },
 }));
@@ -72,7 +76,8 @@ vi.mock("../services/connectors/integration-framework", async (importOriginal) =
 import { normalizeWebchatConfig } from "@chatcenter/shared";
 import chat from "../routes/embedded-chat";
 import widget from "../routes/website-widget";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn } from "../services/woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor } from "../services/woo-chat-turn.service";
+import { buildCouponPromotionsDirective } from "../services/product-intent.service";
 
 const app = () => { const a = express(); a.use(express.json()); a.use("/api/embedded-chat", chat); a.use("/api/website-widget", widget); return a; };
 const web = (commerce: any = { productMessagingEnabled: true, addToCartEnabled: true }) => ({
@@ -86,7 +91,16 @@ beforeEach(() => {
   H.accounts = [web()];
   H.conv = { id: "conv1", tenantId: "T", channel: "WEBCHAT", channelAccountId: "ca_web", customerExternalId: "tok_1", customerName: "V" };
   H.integration = { status: "CONNECTED", config: { storeUrl: STORE } };
-  H.messages = []; H.adapterCalls = [];
+  H.messages = []; H.adapterCalls = []; H.kv.clear();
+  const future = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 19);
+  const past = new Date(Date.now() - 864e5).toISOString().slice(0, 19);
+  H.coupons = [
+    { id: 7, code: "WELCOME10", amount: "10.00", discount_type: "percent", date_expires_gmt: future, minimum_amount: "200.00", status: "publish", usage_count: 1, usage_limit: 100 },
+    { id: 8, code: "OLD", amount: "5", discount_type: "fixed_cart", date_expires_gmt: past, status: "publish" },
+    { id: 9, code: "DRAFT", amount: "5", discount_type: "fixed_cart", status: "draft" },
+    { id: 10, code: "GONE", amount: "5", discount_type: "fixed_cart", status: "publish", usage_count: 3, usage_limit: 3 },
+    { id: 11, code: "FREESHIP", amount: "0", discount_type: "fixed_cart", status: "publish", date_expires_gmt: null, minimum_amount: "0.00" },
+  ];
   H.products = { "41": product(41), "42": product(42, { status: "draft" }), "43": product(43, { catalog_visibility: "hidden" }), "50": product(50, { type: "variable", attributes: [{ name: "Size", variation: true }] }) };
   H.variations = { "50": [{ id: 51, status: "publish", price: "90", regular_price: "90", stock_status: "instock", attributes: [{ name: "Size", option: "M" }] }] };
 });
@@ -222,5 +236,63 @@ describe("★ POST /cart/validate (phase c)", () => {
     H.integration = null;
     expect((await cart({ productId: "41" })).status).toBe(403);
     expect(H.adapterCalls).toEqual([]);
+  });
+});
+
+describe("★ promotions (phase d): only the chosen coupons, only while live", () => {
+  const chosen = (ids: string[]) => web({ productMessagingEnabled: false, promotions: { couponIds: ids } });
+
+  it("the bootstrap shows the chosen coupons that are live, in the merchant's order; never an id", async () => {
+    H.accounts = [chosen(["11", "8", "9", "10", "7"])];
+    const w = await boot();
+    expect(w.promotions).toEqual([
+      { code: "FREESHIP", amount: "0", discountType: "fixed_cart", expiresAt: null, minimumAmount: null },
+      { code: "WELCOME10", amount: "10.00", discountType: "percent", expiresAt: expect.stringMatching(/Z$/), minimumAmount: "200.00" },
+    ]);
+    expect(H.adapterCalls.find((c) => c.toolFunctionName === "woocommerce.list_coupons")!.args).toEqual({ ids: ["11", "8", "9", "10", "7"], per_page: 5 });
+  });
+
+  it("★ nothing chosen, or the store not connected: none shown, the store never asked", async () => {
+    H.accounts = [chosen([])];
+    expect((await boot()).promotions).toEqual([]);
+    H.accounts = [chosen(["7"])];
+    H.integration = null;
+    expect((await boot()).promotions).toEqual([]);
+    expect(H.adapterCalls).toEqual([]);
+  });
+
+  it("★ cached a few minutes, yet a coupon that expires meanwhile is dropped on the next read", async () => {
+    H.accounts = [chosen(["7"])];
+    expect((await boot()).promotions).toHaveLength(1);
+    expect((await boot()).promotions).toHaveLength(1);
+    expect(H.adapterCalls.filter((c) => c.toolFunctionName === "woocommerce.list_coupons")).toHaveLength(1);
+    const key = [...H.kv.keys()].find((k) => k.startsWith("wpromo:v1:T:"))!;
+    const rows = JSON.parse(H.kv.get(key)!);
+    rows[0].date_expires_gmt = new Date(Date.now() - 1000).toISOString().slice(0, 19);
+    H.kv.set(key, JSON.stringify(rows));
+    expect((await boot()).promotions).toEqual([]);
+  });
+
+  it("the settings picker lists the store's coupons with whether each would show", async () => {
+    const r = await request(app()).get("/api/website-widget/promotions/available");
+    expect(r.body.data.connected).toBe(true);
+    expect(r.body.data.coupons.map((c: any) => [c.id, c.code, c.live])).toEqual([["7", "WELCOME10", true], ["8", "OLD", false], ["9", "DRAFT", false], ["10", "GONE", false], ["11", "FREESHIP", true]]);
+    H.integration = null;
+    expect((await request(app()).get("/api/website-widget/promotions/available")).body.data).toEqual({ connected: false, coupons: [] });
+  });
+
+  it("★ the AI may mention exactly the live chosen codes, on that web chat only", async () => {
+    H.accounts = [chosen(["7", "8"])];
+    const promos = await webchatPromotionsFor("T", "conv1");
+    expect(promos.map((p) => p.code)).toEqual(["WELCOME10"]);
+    const d = buildCouponPromotionsDirective(promos);
+    expect(d).toContain("WELCOME10: 10.00% off, on orders from 200.00, until ");
+    expect(d).toMatch(/only codes you may mention/);
+    expect(d).not.toContain("OLD");
+    H.integration = null;
+    expect(await webchatPromotionsFor("T", "conv1")).toEqual([]);
+    H.integration = { status: "CONNECTED", config: { storeUrl: STORE } };
+    H.conv = { ...H.conv, channel: "WHATSAPP" };
+    expect(await webchatPromotionsFor("T", "conv1")).toEqual([]);
   });
 });
