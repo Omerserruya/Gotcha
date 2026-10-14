@@ -55,7 +55,7 @@ vi.mock("../services/field-provenance.service", async () => {
   return { ...real, readProvenance: provenanceMock.readProvenance, stampProvenance: provenanceMock.stampProvenance };
 });
 
-import { mapReportToProfileFields, runProfileRescan, acceptScanProposal, SCAN_PROPOSAL_KEY, startProfileRescan, readScanRun, SCAN_RUN_KEY, SCAN_CHECKSUM_KEY } from "../services/business-scan.service";
+import { mapReportToProfileFields, runProfileRescan, acceptScanProposal, SCAN_PROPOSAL_KEY, startProfileRescan, readScanRun, SCAN_RUN_KEY, SCAN_CHECKSUM_KEY, SCAN_THIN_TOPICS_KEY } from "../services/business-scan.service";
 
 /** The discovery writes that record what the crawl saw (the others record the status). */
 const crawlWrites = () => (prismaMock.businessDiscovery.updateMany.mock.calls as any[]).map((c) => c[0]).filter((a) => a.data.crawl);
@@ -605,10 +605,9 @@ describe("★ the rescan refreshes the knowledge it generated (2026-10-14)", () 
     const [deps, tenant, projected, options] = projectionMock.apply.mock.calls[0] as any[];
     expect(deps.authHeader).toBe("Bearer user");
     expect(tenant).toBe("t1");
-    // Pages may be retired, and topics left out for having no facts (2026-10-14).
-    expect(options).toMatchObject({ removeMissing: true, removeScope: ["url"] });
-    expect(Array.isArray(options.retireTopics)).toBe(true);
-    expect(options.retireTopics).toEqual(outcome.knowledge.skipped.filter((t: any) => t.reason === "thin").map((t: any) => t.topic));
+    // Pages may be retired, and topics thin two scans running (2026-10-14):
+    // this is the first, so none.
+    expect(options).toMatchObject({ removeMissing: true, removeScope: ["url"], retireTopics: [], keepUrls: [] });
     const page = projected.find((e: any) => e.metadata?.sourceUrl === "https://shop.example.com/shipping" || String(e.metadata?.dedupeKey).includes("shipping"));
     expect(page).toBeTruthy();
     // Not the 2800-character model cut.
@@ -699,7 +698,7 @@ describe("★ a site that reads the same is not rescanned (2026-10-14)", () => {
     const a: any = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: first });
     expect(a.ok).toBe(true);
     expect(first).toHaveBeenCalledTimes(1);
-    expect(settings.store[SCAN_CHECKSUM_KEY]).toMatch(/^[0-9a-f]{64}$/);
+    expect(Object.keys(JSON.parse(settings.store[SCAN_CHECKSUM_KEY]!))).toEqual(SITE.pages.map((p) => p.url));
     vi.clearAllMocks();
     const second = okFetch();
     const b: any = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: second });
@@ -735,5 +734,109 @@ describe("★ a site that reads the same is not rescanned (2026-10-14)", () => {
     await startProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
     await new Promise((r) => setTimeout(r, 10));
     expect(await readScanRun("t1")).toMatchObject({ status: "done", unchanged: true });
+  });
+});
+
+describe("★ a page that only failed to answer is not a change (2026-10-14)", () => {
+  // Measured on the demo store: one or two pages per crawl answered past the
+  // timeout, so the page set changed every run, every rescan ran in full, and
+  // the timed-out page's knowledge was removed until the next run.
+  const page = (url: string, text: string) => ({ url: `https://shop.example.com${url}`, text });
+  const PAGES = [page("", "HALVO clothing"), page("/faq", "FAQ text"), page("/shipping", "Ships in 3 days")];
+  const site = (pages: any[], unreadable: string[] = []) => ({
+    pages, okPages: pages.slice(1), home: { html: "", text: "HALVO clothing" }, signals: {}, businessType: "ecommerce",
+    requested: pages.map((p: any) => p.url), distinctTextPages: pages.length, unreadable,
+  });
+  const baseline = async () => {
+    crawlMock.mockResolvedValue(site(PAGES));
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+    vi.clearAllMocks();
+  };
+
+  it("★ a page unreadable this time: unchanged, no model call", async () => {
+    await baseline();
+    crawlMock.mockResolvedValue(site(PAGES.slice(0, 2), [PAGES[2]!.url]));
+    const fetchFn = okFetch();
+    const r: any = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: fetchFn });
+    expect(r).toMatchObject({ ok: true, unchanged: true });
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("★ a page GONE (not read, not unreadable) is a change", async () => {
+    await baseline();
+    crawlMock.mockResolvedValue(site(PAGES.slice(0, 2)));
+    const fetchFn = okFetch();
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: fetchFn });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("one page's text changed: a change, and only that page is named in the log", async () => {
+    await baseline();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    crawlMock.mockResolvedValue(site([PAGES[0], PAGES[1], page("/shipping", "Ships in 5 days")]));
+    const fetchFn = okFetch();
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: fetchFn });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(log.mock.calls.map((c) => String(c[0])).find((l) => l.includes("full scan"))).toContain("changed: https://shop.example.com/shipping)");
+    log.mockRestore();
+  });
+
+  it("★ a full run with a page unreadable keeps its document and its remembered hash", async () => {
+    await baseline();
+    // The site changed elsewhere, so this run is full, and /shipping timed out.
+    crawlMock.mockResolvedValue(site([PAGES[0], page("/faq", "FAQ text, edited")], [PAGES[2]!.url]));
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+    expect((projectionMock.apply.mock.calls[0] as any[])[3].keepUrls).toEqual([PAGES[2]!.url]);
+    expect(Object.keys(JSON.parse(settings.store[SCAN_CHECKSUM_KEY]!))).toContain(PAGES[2]!.url);
+    // So /shipping answering again next time, unchanged, is not a change.
+    vi.clearAllMocks();
+    crawlMock.mockResolvedValue(site([PAGES[0], page("/faq", "FAQ text, edited"), PAGES[2]]));
+    const fetchFn = okFetch();
+    expect(await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: fetchFn })).toMatchObject({ unchanged: true });
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("★ the old single-hash value is no baseline: one full run, then unchanged", async () => {
+    settings.store[SCAN_CHECKSUM_KEY] = "b764984463878a89".repeat(4);
+    crawlMock.mockResolvedValue(site(PAGES));
+    const a = okFetch();
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: a });
+    expect(a).toHaveBeenCalledTimes(1);
+    const b = okFetch();
+    expect(await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: b })).toMatchObject({ unchanged: true });
+    expect(b).not.toHaveBeenCalled();
+  });
+});
+
+describe("★ a topic is retired only when two full scans in a row found it thin (2026-10-14)", () => {
+  // Contact channels named but none usable: contact_hours is "thin".
+  const THIN = { ...REPORT, communication: { channels: [{ type: "phone" }] } };
+  const RICH = { ...REPORT, communication: { channels: [{ type: "phone", identifier: "03-555-1234" }] } };
+  const SITE = (n: number) => ({
+    pages: [{ url: "https://shop.example.com", text: `HALVO ${n}` }], okPages: [], home: { html: "", text: `HALVO ${n}` },
+    signals: {}, businessType: "ecommerce", requested: ["u"], distinctTextPages: 1, unreadable: [],
+  });
+  const run = async (n: number, report: unknown) => {
+    crawlMock.mockResolvedValue(SITE(n));
+    projectionMock.apply.mockClear();
+    const r: any = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch(report) });
+    return { thin: r.knowledge.skipped.filter((t: any) => t.reason === "thin").map((t: any) => t.topic), retire: (projectionMock.apply.mock.calls[0] as any[])[3].retireTopics };
+  };
+
+  it("★ thin once: kept; thin again: retired", async () => {
+    const a = await run(1, THIN);
+    expect(a.thin).toContain("contact_hours");
+    expect(a.retire).toEqual([]);
+    const b = await run(2, THIN);
+    expect(b.retire).toContain("contact_hours");
+  });
+
+  it("★ thin, then not, then thin: the streak starts over", async () => {
+    await run(1, THIN);
+    const b = await run(2, RICH);
+    expect(b.thin).not.toContain("contact_hours");
+    const c = await run(3, THIN);
+    expect(c.retire).not.toContain("contact_hours");
+    expect(JSON.parse(settings.store[SCAN_THIN_TOPICS_KEY]!)).toContain("contact_hours");
   });
 });

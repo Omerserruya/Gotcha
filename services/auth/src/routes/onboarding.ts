@@ -13,7 +13,7 @@ import {
   extractSignals,
   type DiscoverySignals,
 } from "../services/site-crawl.service";
-import { callDiscoverBusiness, persistCrawlReach, systemLanguage, crawlPagesForProjection } from "../services/business-scan.service";
+import { callDiscoverBusiness, persistCrawlReach, systemLanguage, crawlPagesForProjection, thinTopicsToRetire } from "../services/business-scan.service";
 import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, projectReadinessAnswers, withoutWideDashes, clampGuardrails, type SkippedTopic } from "@chatcenter/shared";
 import { applyProjection, type SyncReport } from "../services/onboarding-knowledge.service";
 import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
@@ -2069,8 +2069,15 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
         // Only crawled pages may be retired by a re-scan. A topic summary the
         // synthesis step failed to produce this time must not delete the good
         // summary from the previous scan.
-        // Topics left out for having no facts retire their old documents too.
-        { removeMissing: true, removeScope: ["url"], retireTopics: skippedTopics.filter((t) => t.reason === "thin").map((t) => t.topic) },
+        // Topics left out for having no facts retire their old documents too,
+        // once two scans in a row found them thin; pages that only failed to
+        // answer this time keep theirs (2026-10-14).
+        {
+          removeMissing: true,
+          removeScope: ["url"],
+          retireTopics: await thinTopicsToRetire(req.tenantId!, skippedTopics.filter((t) => t.reason === "thin").map((t) => t.topic)),
+          keepUrls: crawl.unreadable,
+        },
       );
 
       void writeAudit({

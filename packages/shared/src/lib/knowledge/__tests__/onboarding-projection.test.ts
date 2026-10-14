@@ -481,3 +481,15 @@ describe("★ a topic left out for having no facts retires its old document (202
     expect(plan.summary.removed).toBe(1);
   });
 });
+
+describe("★ a page that only failed to answer keeps its document (2026-10-14)", () => {
+  const page = (id: string, url: string) => ({
+    id, title: url, metadata: { origin: "onboarding", dedupeKey: `url:${url}`, sourceType: "url", sourceUrl: url, topic: "faq", checksum: "x", scanVersion: SCAN_VERSION },
+  });
+  it("keepUrls: kept (matched normalized); a page not listed is still removed as gone", () => {
+    const existing = [page("p1", "https://shop.example.com/shipping"), page("p2", "https://shop.example.com/old")] as any;
+    const plan = reconcile([], existing, { removeMissing: true, removeScope: ["url"], keepUrls: ["https://SHOP.example.com/shipping/"] });
+    expect(plan.items.find((i) => i.existingId === "p1")).toBeUndefined();
+    expect(plan.items.find((i) => i.existingId === "p2")).toMatchObject({ action: "remove", reason: "no_longer_found" });
+  });
+});

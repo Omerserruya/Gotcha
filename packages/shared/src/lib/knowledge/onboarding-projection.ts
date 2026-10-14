@@ -268,6 +268,12 @@ export function reconcile(
      * stay behind as last time's empty doc (2026-10-14). Needs removeMissing.
      */
     retireTopics?: KbTopic[];
+    /**
+     * Pages this scan could not read (a timeout, a 5xx), as opposed to pages
+     * that are gone. Their documents are kept: a slow answer is not a page
+     * leaving the site (2026-10-14).
+     */
+    keepUrls?: string[];
   } = {},
 ): ReconcilePlan {
   const items: ReconcileItem[] = [];
@@ -339,11 +345,13 @@ export function reconcile(
 
   if (options.removeMissing) {
     const scope = options.removeScope;
+    const keep = new Set((options.keepUrls ?? []).map((u) => normalizeUrl(u)).filter((u): u is string => !!u));
     for (const [key, doc] of owned) {
       if (seen.has(key)) continue;
       const meta = readMeta(doc.metadata)!;
       const retiredTopic = meta.sourceType === "onboarding_scan" && !!meta.topic && !!options.retireTopics?.includes(meta.topic as KbTopic);
       if (scope && !scope.includes(meta.sourceType as KbSourceType) && !retiredTopic) continue;
+      if (meta.sourceType === "url" && meta.sourceUrl && keep.has(normalizeUrl(meta.sourceUrl) ?? "")) continue;
       // A page gone from the site does not take a person's correction with it.
       if (meta.manualEdit === true) {
         items.push({ action: "preserved", dedupeKey: key, existingId: doc.id, reason: "manual_edit" });

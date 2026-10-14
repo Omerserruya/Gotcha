@@ -132,7 +132,27 @@ export function canonicalOf(html: string, base: string): string | null {
   try { return new URL(decodeEntities(href[1]!), base).toString(); } catch { return null; }
 }
 
-export async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ html: string; text: string; title?: string | null; canonical?: string | null; siteName?: string | null } | null> {
+export async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<FetchedPage | null> {
+  const r = await fetchPageForCrawl(url, timeoutMs);
+  return r && !("unreadable" in r) ? r : null;
+}
+
+export type FetchedPage = { html: string; text: string; title?: string | null; canonical?: string | null; siteName?: string | null };
+
+/**
+ * A page the crawl could not read THIS time: no answer in time, a network
+ * error, a 5xx or a 429. Not the same fact as a page that is gone (404, not
+ * HTML), and the rescan treats it differently: unknown, never "changed" or
+ * "removed" (2026-10-14). The demo store answers most pages in under a second
+ * and one or two per crawl in 5-6 seconds, so a timeout says nothing about
+ * the page.
+ */
+export type UnreadablePage = { unreadable: true };
+
+const transient = (status: number) => status === 0 || status === 408 || status === 429 || status >= 500;
+
+/** fetchPageRaw, telling a gone page (null) from one that could not be read now. */
+export async function fetchPageForCrawl(url: string, timeoutMs = 8000): Promise<FetchedPage | UnreadablePage | null> {
   try {
     // Present as a real browser. Many stores sit behind bot filters that 403 a
     // generic crawler UA - a partial/blocked fetch is a root cause of false
@@ -154,13 +174,13 @@ export async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ htm
       },
       timeoutMs,
     });
-    if (!r.ok) return null;
+    if (!r.ok) return transient(r.status) ? { unreadable: true } : null;
     const ct = r.contentType || "";
     if (!ct.includes("text/html") && !ct.includes("xhtml")) return null;
     const html = r.text;
     return { html: html.slice(0, 400000), text: htmlToText(html), title: pageTitle(html), canonical: canonicalOf(html, url), siteName: siteNameOf(html) };
   } catch {
-    return null;
+    return { unreadable: true };
   }
 }
 
@@ -457,15 +477,51 @@ export interface SiteCrawl {
    * a behaviour change to decide on its own, not a side effect of a diagnostic.
    */
   distinctTextPages: number;
+  /**
+   * Pages that could not be read this time (no answer in time, 5xx, 429), even
+   * after one retry: unknown, not gone. A rescan neither counts them as a
+   * change nor removes their knowledge (2026-10-14).
+   */
+  unreadable: string[];
 }
 
 /** Which beat of the crawl is running, for callers that narrate it to a user. */
 export type CrawlPhase = "homepage" | "pages" | "signals";
 
-export type PageFetcher = (url: string, timeoutMs?: number) => Promise<{ html: string; text: string; title?: string | null; canonical?: string | null; siteName?: string | null } | null>;
+/** A page, null when it is gone, or `{ unreadable: true }` when it could not be read now. */
+export type PageFetcher = (url: string, timeoutMs?: number) => Promise<FetchedPage | UnreadablePage | null>;
 
 /** Total page fetches after the home page. Politeness, not a page-count limit. */
 export const CRAWL_FETCH_CAP = 16;
+
+/**
+ * Page fetches in flight at once (2026-10-14). Was all 16 together, which is a
+ * burst a small WordPress host answers slowly: measured on the demo store, most
+ * pages took 0.2-0.8s and one or two per crawl 5-6s, past the 6s timeout, so
+ * the page set changed from run to run. Four keeps a crawl at about two seconds
+ * on a healthy site (16 pages at ~0.5s, four at a time) while no longer
+ * queueing a dozen PHP requests on a host that serves a few at a time.
+ */
+export const CRAWL_CONCURRENCY = 4;
+
+/** The timeout of the one retry an unreadable page gets. */
+const RETRY_TIMEOUT_MS = 10_000;
+
+/** Run `fn` over `items`, at most `limit` at once, results in input order. */
+async function mapLimited<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
+const isUnreadable = (r: unknown): r is UnreadablePage => !!r && typeof r === "object" && (r as any).unreadable === true;
 
 /**
  * Crawl a site and extract what can be known without a model.
@@ -478,14 +534,17 @@ export async function crawlSite(
   origin: string,
   opts: { fetchPage?: PageFetcher; onPhase?: (phase: CrawlPhase) => void | Promise<void> } = {},
 ): Promise<SiteCrawl | null> {
-  const fetchPage = opts.fetchPage ?? fetchPageRaw;
+  const fetchPage: PageFetcher = opts.fetchPage ?? fetchPageForCrawl;
   const phase = async (p: CrawlPhase) => { try { await opts.onPhase?.(p); } catch { /* narration must never fail a crawl */ } };
   const requested: string[] = [];
 
   await phase("homepage");
   requested.push(origin);
-  const home = await fetchPage(origin);
-  if (!home) return null;
+  let homeRead = await fetchPage(origin);
+  // One retry for the home page too: without it the whole rescan fails.
+  if (isUnreadable(homeRead)) homeRead = await fetchPage(origin, RETRY_TIMEOUT_MS);
+  if (!homeRead || isUnreadable(homeRead)) return null;
+  const home = homeRead;
 
   await phase("pages");
   // Discovered links AND well-known convention paths: most "missing" policies
@@ -499,7 +558,15 @@ export async function crawlSite(
     .filter((u) => u !== origin && u !== origin + "/")
     .slice(0, CRAWL_FETCH_CAP);
 
-  const fetched = (await Promise.all(toFetch.map((u) => fetchPage(u, 6000)))).map((page, i) => ({ url: toFetch[i]!, page }));
+  const first = await mapLimited(toFetch, CRAWL_CONCURRENCY, (u) => fetchPage(u, 6000));
+  // A page that could not be read gets one more try, one at a time and with
+  // longer to answer, after the rest are in.
+  const results = [...first];
+  for (let i = 0; i < results.length; i++) {
+    if (isUnreadable(results[i])) results[i] = await fetchPage(toFetch[i]!, RETRY_TIMEOUT_MS);
+  }
+  const fetched = results.map((r, i) => ({ url: toFetch[i]!, page: isUnreadable(r) ? null : r }));
+  const unreadable = toFetch.filter((_, i) => isUnreadable(results[i]));
   requested.push(...toFetch);
   const okPages: CrawledPage[] = fetched
     .filter((e) => e.page)
@@ -528,5 +595,6 @@ export async function crawlSite(
     businessType,
     requested,
     distinctTextPages: new Set(pages.map((p) => p.text)).size,
+    unreadable,
   };
 }

@@ -369,14 +369,17 @@ export async function runProfileRescan(args: {
   // The site reads exactly as at the last good scan: nothing to learn, and a
   // fresh model wording of the same facts would only churn the description
   // (and with it an employee's readiness questions). No model call, no writes.
-  const checksum = crawlChecksum(crawl.pages);
-  if (!args.force) {
-    const last = await readDurableSetting(tenantId, SCAN_CHECKSUM_KEY).catch(() => null);
-    if (last === checksum) {
-      await setDiscoveryStatus(tenantId, { status: "COMPLETE", scanPhase: "done" });
-      return { ok: true, plan: { apply: {}, offer: [] } as any, applied: [], reach, knowledge: null, unchanged: true };
-    }
+  // Compared page by page, so a page that only failed to answer this time is
+  // unknown rather than a change (2026-10-14).
+  const unreadable: string[] = Array.isArray((crawl as any).unreadable) ? (crawl as any).unreadable : [];
+  const lastHashes = parsePageHashes(await readDurableSetting(tenantId, SCAN_CHECKSUM_KEY).catch(() => null));
+  const nowHashes = crawlPageHashes(crawl.pages);
+  const changed = changedPages(lastHashes, nowHashes, unreadable);
+  if (!args.force && changed && changed.length === 0) {
+    await setDiscoveryStatus(tenantId, { status: "COMPLETE", scanPhase: "done" });
+    return { ok: true, plan: { apply: {}, offer: [] } as any, applied: [], reach, knowledge: null, unchanged: true };
   }
+  console.log(`[business-scan] ${tenantId}: full scan (${args.force ? "forced" : changed ? `changed: ${changed.join(", ")}` : "no baseline"}${unreadable.length ? `; unreadable: ${unreadable.join(", ")}` : ""})`);
 
   const language = await systemLanguage(tenantId, args.locale);
   const report = await callDiscoverBusiness(
@@ -433,19 +436,75 @@ export async function runProfileRescan(args: {
   const knowledge = await syncScanKnowledge({ tenantId, origin, report, crawl, language, authHeader, actorId });
 
   await setDiscoveryStatus(tenantId, { status: "COMPLETE", scanPhase: "done" });
-  // Remembered only after a scan that went through, so a failed one is retried in full.
-  await writeDurableSetting(tenantId, SCAN_CHECKSUM_KEY, checksum).catch((err: any) => console.error(`[business-scan] could not store the crawl checksum: ${err?.message}`));
+  // Remembered only after a scan that went through, so a failed one is retried
+  // in full. A page unreadable this time keeps the hash it had, so its return
+  // next time is not mistaken for a new page.
+  const remembered: Record<string, string> = { ...nowHashes };
+  for (const url of unreadable) if (lastHashes?.[url]) remembered[url] = lastHashes[url]!;
+  await writeDurableSetting(tenantId, SCAN_CHECKSUM_KEY, JSON.stringify(remembered)).catch((err: any) => console.error(`[business-scan] could not store the crawl checksum: ${err?.message}`));
   return { ok: true, plan, applied, reach, knowledge };
 }
 
-/** What the last good scan read, as a checksum of the pages' text (2026-10-14). */
+/**
+ * What the last good scan read: {url: sha256 of the page's text} (2026-10-14).
+ * Was one hash over every page, so a page that timed out once changed it and
+ * the next rescan ran in full. An older single-hash value reads as no baseline.
+ */
 export const SCAN_CHECKSUM_KEY = "profileScanChecksum";
 
-export function crawlChecksum(pages: Array<{ url: string; text: string }>): string {
-  const norm = [...pages]
-    .map((p) => `${p.url}\n${String(p.text ?? "").replace(/\s+/g, " ").trim()}`)
-    .sort();
-  return crypto.createHash("sha256").update(norm.join("\n\n")).digest("hex");
+export function crawlPageHashes(pages: Array<{ url: string; text: string }>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const p of pages) {
+    out[p.url] = crypto.createHash("sha256").update(String(p.text ?? "").replace(/\s+/g, " ").trim()).digest("hex");
+  }
+  return out;
+}
+
+export function parsePageHashes(raw: unknown): Record<string, string> | null {
+  if (typeof raw !== "string" || !raw.startsWith("{")) return null;
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, string>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The pages that differ from the last good scan, [] when none do, or null
+ * when there is no baseline to compare with. A page read now with other text,
+ * a page new since then, and a page gone since then (not read and not merely
+ * unreadable) are changes. A page that could not be read now is not.
+ */
+export function changedPages(last: Record<string, string> | null, now: Record<string, string>, unreadable: string[]): string[] | null {
+  if (!last) return null;
+  const changed: string[] = [];
+  for (const [url, hash] of Object.entries(now)) if (last[url] !== hash) changed.push(url);
+  const skip = new Set(unreadable);
+  for (const url of Object.keys(last)) if (!(url in now) && !skip.has(url)) changed.push(url);
+  return changed;
+}
+
+/**
+ * Topics this full scan found thin that may now be retired: only those the
+ * previous full scan found thin too (2026-10-14). The thin call reads the
+ * model's report, and one run's wording left "contact and hours" without a
+ * fact while the site said the same as before, which removed a good document.
+ * Remembers this run's list for the next one. Shared by the rescan and
+ * onboarding's discover.
+ */
+export const SCAN_THIN_TOPICS_KEY = "scanThinTopics";
+
+export async function thinTopicsToRetire(tenantId: string, thinNow: string[]): Promise<string[]> {
+  let before: string[] = [];
+  try {
+    const raw = await readDurableSetting(tenantId, SCAN_THIN_TOPICS_KEY);
+    const v = typeof raw === "string" ? JSON.parse(raw) : null;
+    if (Array.isArray(v)) before = v.map(String);
+  } catch { /* no history: retire nothing this time */ }
+  await writeDurableSetting(tenantId, SCAN_THIN_TOPICS_KEY, JSON.stringify(thinNow)).catch((err: any) =>
+    console.error(`[business-scan] could not store the thin topics: ${err?.message}`));
+  return thinNow.filter((t) => before.includes(t));
 }
 
 const projectionFetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string }, timeoutMs?: number) =>
@@ -494,13 +553,16 @@ async function syncScanKnowledge(a: {
       ...projectDiscoveryTopics(saved as any, (profile ?? {}) as any, ctx, skipped),
       ...projectPages(crawlPagesForProjection(a.origin, a.crawl), ctx),
     ];
+    // A topic is retired only when two full scans in a row found it thin.
+    const retireTopics = await thinTopicsToRetire(a.tenantId, skipped.filter((t) => t.reason === "thin").map((t) => t.topic));
     const sync = await applyProjection(
       { prisma, fetchFn: projectionFetch, authHeader: a.authHeader },
       a.tenantId,
       projected,
-      // Crawled pages may be retired, and topics this scan left out for having
-      // no facts. A topic the model simply did not produce keeps last time's.
-      { removeMissing: true, removeScope: ["url"], retireTopics: skipped.filter((t) => t.reason === "thin").map((t) => t.topic) },
+      // Crawled pages may be retired, except those only unreadable this time,
+      // and topics thin twice running. A topic the model simply did not
+      // produce keeps last time's.
+      { removeMissing: true, removeScope: ["url"], retireTopics, keepUrls: Array.isArray((a.crawl as any).unreadable) ? (a.crawl as any).unreadable : [] },
     );
     void writeAudit({
       tenantId: a.tenantId,
