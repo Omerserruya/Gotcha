@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 
 import { TRIGGER_TYPES, type Catalog, type TriggerType } from '@/api/contracts/automations';
 import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog';
@@ -43,7 +43,15 @@ export function NewAutomation({
   const [at, setAt] = useState('09:00');
   const [days, setDays] = useState<ReadonlySet<string>>(new Set());
   const [failed, setFailed] = useState<Exclude<CreateResult, { ok: true }> | null>(null);
-  const [isCreating, start] = useTransition();
+  /*
+    ★★ AU2 (dev, 2026-10-14): "Create" hung for ever - the row was made (201)
+    and the page never moved. The push ran inside an async transition, right
+    after a server action that revalidated the layout; the refetch and the
+    push raced and the navigation never committed. The create is awaited
+    here with its own pending state, and the push happens after it, outside
+    any transition.
+  */
+  const [isCreating, setCreating] = useState(false);
   const close = () => router.replace('/studio/automations', { scroll: false });
 
   if (trigger === null) {
@@ -71,38 +79,43 @@ export function NewAutomation({
     (trigger !== 'tag_added' || tagList.length > 0) &&
     (trigger !== 'schedule' || TIME.test(at));
 
-  const create = () =>
-    start(async () => {
-      setFailed(null);
-      const asked: Record<string, unknown> =
-        trigger === 'tag_added'
-          ? { tags: tagList }
-          : trigger === 'schedule'
-            ? { at, ...(days.size > 0 ? { days: DAYS.filter((d) => days.has(d)) } : {}) }
-            : {};
-      const graph = template?.build(
-        {
-          keyword: t('templateWords.keyword'),
-          // The variable goes in as itself; the words around it are the author's language.
-          welcome: t('templateWords.welcome', { name: '{{first_name}}' }),
-          adText: t('templateWords.adText', { name: '{{first_name}}' }),
-          prices: t('templateWords.prices'),
-          talk: t('templateWords.talk'),
-          commentReply: t('templateWords.commentReply'),
-          priceAsk: t('templateWords.priceAsk'),
-          yes: t('templateWords.yes'),
-          storyThanks: t('templateWords.storyThanks'),
-        },
-        () => crypto.randomUUID(),
-      );
-      const result = await createAutomation({
-        name: name.trim(),
-        trigger: { type: trigger, config: { ...(graph?.config ?? {}), ...asked } },
-        ...(graph ? { nodes: graph.nodes, edges: graph.edges } : {}),
-      });
-      if (result.ok) router.push(`/studio/automations/${result.automation.id}`);
-      else setFailed(result);
+  const create = async () => {
+    setCreating(true);
+    setFailed(null);
+    const asked: Record<string, unknown> =
+      trigger === 'tag_added'
+        ? { tags: tagList }
+        : trigger === 'schedule'
+          ? { at, ...(days.size > 0 ? { days: DAYS.filter((d) => days.has(d)) } : {}) }
+          : {};
+    const graph = template?.build(
+      {
+        keyword: t('templateWords.keyword'),
+        // The variable goes in as itself; the words around it are the author's language.
+        welcome: t('templateWords.welcome', { name: '{{first_name}}' }),
+        adText: t('templateWords.adText', { name: '{{first_name}}' }),
+        prices: t('templateWords.prices'),
+        talk: t('templateWords.talk'),
+        commentReply: t('templateWords.commentReply'),
+        priceAsk: t('templateWords.priceAsk'),
+        yes: t('templateWords.yes'),
+        storyThanks: t('templateWords.storyThanks'),
+      },
+      () => crypto.randomUUID(),
+    );
+    const result = await createAutomation({
+      name: name.trim(),
+      trigger: { type: trigger, config: { ...(graph?.config ?? {}), ...asked } },
+      ...(graph ? { nodes: graph.nodes, edges: graph.edges } : {}),
     });
+    if (result.ok) {
+      // Still "creating" until the builder replaces this sheet.
+      router.push(`/studio/automations/${result.automation.id}`);
+      return;
+    }
+    setFailed(result);
+    setCreating(false);
+  };
 
   return (
     <Dialog open onOpenChange={(open) => (open ? null : close())}>

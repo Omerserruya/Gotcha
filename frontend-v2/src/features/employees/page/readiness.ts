@@ -18,6 +18,8 @@ export const READINESS_FAILURES = [
   'internal_error',
   'persist_failed',
   'timed_out',
+  // The model's answer was cut off twice; nothing stored, and running again retries it.
+  'judge_incomplete',
 ] as const;
 export type ReadinessFailure = (typeof READINESS_FAILURES)[number] | 'other';
 

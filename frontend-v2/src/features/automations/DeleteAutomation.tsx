@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 
 import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog';
 
@@ -29,7 +29,8 @@ export function DeleteAutomation({
 }) {
   const t = useTranslations('automations.delete');
   const [failed, setFailed] = useState(false);
-  const [isDeleting, start] = useTransition();
+  // AU2: awaited with its own pending state; `onDeleted` (a navigation in the builder) runs outside any transition.
+  const [isDeleting, setDeleting] = useState(false);
   // A retry asks only for the ones still here.
   const [left, setLeft] = useState(targets);
   const one = left.length === 1 ? left[0]! : null;
@@ -53,19 +54,19 @@ export function DeleteAutomation({
             type="button"
             className={styles.dangerButton}
             disabled={isDeleting}
-            onClick={() =>
-              start(async () => {
-                setFailed(false);
-                const done: string[] = [];
-                for (const target of left) {
-                  if (await deleteAutomation(target.id)) done.push(target.id);
-                }
-                if (done.length > 0) onDeleted(done);
-                if (done.length === left.length) return;
-                setLeft(left.filter((target) => !done.includes(target.id)));
-                setFailed(true);
-              })
-            }
+            onClick={async () => {
+              setDeleting(true);
+              setFailed(false);
+              const done: string[] = [];
+              for (const target of left) {
+                if (await deleteAutomation(target.id)) done.push(target.id);
+              }
+              if (done.length > 0) onDeleted(done);
+              if (done.length === left.length) return;
+              setLeft(left.filter((target) => !done.includes(target.id)));
+              setFailed(true);
+              setDeleting(false);
+            }}
             data-testid="delete-automation-yes"
           >
             {isDeleting ? t('deleting') : t('yes')}

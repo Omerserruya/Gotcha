@@ -351,3 +351,13 @@ describe('★★ E2 - a question answered here goes into the knowledge', () => {
     expect(screen.getByTestId('readiness-gaps')).not.toHaveTextContent('Gift cards?');
   });
 });
+
+describe('★ judge_incomplete (2026-10-14): its own words - never "could not read the model’s answer"', () => {
+  it('Hebrew: הבדיקה לא הושלמה הפעם', () => {
+    show(null, { state: 'failed', failure: 'judge_incomplete' }, 'he');
+    expect(screen.getByTestId('readiness-failed')).toHaveTextContent(
+      'הבדיקה לא הושלמה הפעם. אפשר להריץ שוב.',
+    );
+    expect(screen.getByTestId('readiness-failed')).not.toHaveTextContent('התשובה של המודל');
+  });
+});

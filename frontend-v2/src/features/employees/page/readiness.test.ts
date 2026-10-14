@@ -64,6 +64,7 @@ describe('★★ H7 - the run, from its stored status (Backend 94ccaead)', () =>
       'internal_error',
       'persist_failed',
       'timed_out',
+      'judge_incomplete',
     ]) {
       expect(
         readinessRun(employee(), status({ readinessStatus: 'failed', readinessError: code }), now),

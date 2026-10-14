@@ -525,6 +525,7 @@
       "internal_error": "The last test did not finish because of an error on our side.",
       "persist_failed": "The last test finished, but its result was not saved.",
       "timed_out": "The last test took too long and stopped.",
+      "judge_incomplete": "The test didn't finish this time. Run it again.",
       "other": "The last test did not finish."
     },
     "problem": {
