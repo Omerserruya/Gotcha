@@ -384,6 +384,74 @@ describe('★★ 09d - the builder', () => {
     expect(screen.getByTestId('node-t')).toHaveAttribute('data-marked');
   });
 
+  it('★ AU6: nothing chosen - a library step goes after the last step, and it says where', () => {
+    const line = automation({
+      status: 'draft',
+      stats: { runsThisWeek: 0, lastRunAt: null, lastRunStatus: null },
+      nodes: [
+        { id: 't', type: 'automation_trigger', data: {} },
+        { id: 'a', type: 'add_tag', data: { tag: 'vip' } },
+      ],
+      edges: [{ id: 'e1', source: 't', target: 'a', sourceHandle: null }],
+    });
+    show(line);
+    expect(screen.getByTestId('library-where')).toHaveTextContent(/^Adds after/);
+    expect(screen.getByTestId('library-add_tag')).toBeEnabled();
+    fireEvent.click(screen.getByTestId('library-add_tag'));
+    // The new step is after "a": the canvas has three steps, and a's way out is used.
+    expect(screen.getAllByTestId(/^node-/)).toHaveLength(3);
+    expect(screen.queryByTestId('add-a-next')).toBeNull();
+    expect(screen.getByTestId('builder-unsaved')).toBeInTheDocument();
+  });
+
+  it('★ AU6: every way out taken - said, and nothing to press', () => {
+    const closed = automation({
+      status: 'draft',
+      stats: { runsThisWeek: 0, lastRunAt: null, lastRunStatus: null },
+      nodes: [
+        { id: 't', type: 'automation_trigger', data: {} },
+        { id: 'x', type: 'close_conversation', data: {} },
+      ],
+      edges: [{ id: 'e1', source: 't', target: 'x', sourceHandle: null }],
+    });
+    show(closed);
+    expect(screen.getByTestId('library-where')).toHaveTextContent(
+      "Every step's ways out are taken",
+    );
+    expect(screen.getByTestId('library-add_tag')).toBeDisabled();
+  });
+
+  it('★ AU6: an unavailable step says why in words; "Coming later" is its tag alone', () => {
+    const why = catalogSchema.parse({
+      data: {
+        context: { channel: 'WHATSAPP', firstStep: false, hasCustomer: true, afterNodeType: null },
+        groups: [
+          {
+            key: 'send',
+            items: [
+              item('send_text', { available: false, reason: 'needs_24h_window' }),
+              item('send_location', { available: false, reason: 'coming_later' }),
+            ],
+          },
+        ],
+        variables: [],
+      },
+    }).data;
+    wrap(
+      <Builder
+        automation={draft()}
+        catalog={why}
+        stats={{}}
+        webhook={null}
+        choices={{ employees: [], teams: [], members: [], skills: [] }}
+      />,
+    );
+    expect(screen.getByTestId('library-send_text-why')).toHaveTextContent(
+      'Needs the 24-hour window: use a template',
+    );
+    expect(screen.queryByTestId('library-send_location-why')).toBeNull();
+  });
+
   it('Test is drawn, off, saying why; never run says so', () => {
     show();
     expect(screen.getByTestId('builder-test')).toHaveAttribute('aria-disabled', 'true');

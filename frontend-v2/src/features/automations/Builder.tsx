@@ -43,6 +43,7 @@ import {
   NODE_W,
   TRIGGER_NODE,
   duplicateStep,
+  appendTarget,
   freeHandles,
   insertAfter,
   insertBetween,
@@ -226,6 +227,15 @@ export function Builder({
   );
   const chosen = graph.nodes.find((n) => n.id === selected) ?? null;
   const chosenFree = chosen ? freeHandles(chosen, graph) : [];
+  /*
+    ★ AU6: a library step goes after the chosen step when it has a way out,
+    else after the deepest step that has one - never "choose a step first".
+  */
+  const target =
+    chosen && chosenFree.length > 0
+      ? { id: chosen.id, handle: chosenFree[0]! }
+      : appendTarget(graph);
+  const targetNode = target ? (graph.nodes.find((n) => n.id === target.id) ?? null) : null;
 
   /** A change to the canvas's shape (add, remove, duplicate): kept, so ⌘/Ctrl+Z can undo it. */
   const commit = (next: Graph) => {
@@ -573,9 +583,9 @@ export function Builder({
           ) : (
             <>
               <p className={styles.quiet} data-testid="library-where">
-                {chosen && chosenFree.length > 0
-                  ? t('builder.addsAfter', { step: stepName(chosen) })
-                  : t('builder.chooseFirst')}
+                {targetNode
+                  ? t('builder.addsAfter', { step: stepName(targetNode) })
+                  : t('builder.nowhereFree')}
               </p>
               {libraryGroups.map((group) => (
                 <section key={group.key} className={styles.libGroup}>
@@ -593,7 +603,7 @@ export function Builder({
                         return q === '' || words.some((w) => w.toLowerCase().includes(q));
                       })
                       .map((item) => {
-                        const can = item.available && chosen !== null && chosenFree.length > 0;
+                        const can = item.available && target !== null;
                         const Icon = nodeIcon(item.type);
                         if (!item.available) {
                           // Not here yet: a status with its tag, not a step to press.
@@ -613,6 +623,18 @@ export function Builder({
                                   <UnavailableTag label={t('comingSoon')} />
                                 ) : null}
                               </span>
+                              {/*
+                                ★ AU6: why, in words - not only in a title
+                                nobody hovers. "Coming later" is the tag's.
+                              */}
+                              {item.reason && item.reason !== 'coming_later' ? (
+                                <span
+                                  className={styles.libWhy}
+                                  data-testid={`library-${item.type}-why`}
+                                >
+                                  {t(`reasons.${item.reason}`)}
+                                </span>
+                              ) : null}
                             </li>
                           );
                         }
@@ -622,8 +644,8 @@ export function Builder({
                               type="button"
                               className={styles.libItem}
                               disabled={!can}
-                              title={can ? undefined : t('builder.chooseFirst')}
-                              onClick={() => chosen && add(chosen.id, chosenFree[0]!, item)}
+                              title={can ? undefined : t('builder.nowhereFree')}
+                              onClick={() => target && add(target.id, target.handle, item)}
                               data-testid={`library-${item.type}`}
                             >
                               <Icon size={13} strokeWidth={1.75} aria-hidden="true" />

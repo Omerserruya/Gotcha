@@ -4,6 +4,7 @@ import { nodeSchema, type AutomationNode } from '@/api/contracts/automations';
 
 import {
   NODE_W,
+  appendTarget,
   beforeFirstWait,
   changeRefusal,
   changeType,
@@ -260,5 +261,58 @@ describe('★★ AU9 - a step on a line, between two steps', () => {
     expect(
       insertRefusal(graph, graph.edges[0]!, 'add_tag', { ...comments, automation: false }),
     ).toBeNull();
+  });
+});
+
+describe('★ AU6: a library step with no step chosen goes after the deepest one with a way out', () => {
+  const g = (nodes: AutomationNode[], edges: ReturnType<typeof edge>[]): Graph => ({
+    nodes,
+    edges,
+  });
+
+  it('a line: after its last step', () => {
+    const line = g(
+      [node('t', 'automation_trigger'), node('a', 'add_tag'), node('b', 'add_tag')],
+      [edge('t', 'a'), edge('a', 'b')],
+    );
+    expect(appendTarget(line)).toEqual({ id: 'b', handle: 'next' });
+  });
+
+  it('a branch ending in a closed conversation: the other branch of its split', () => {
+    const split = g(
+      [
+        node('t', 'automation_trigger'),
+        node('h', 'opening_hours'),
+        node('x', 'close_conversation'),
+      ],
+      [edge('t', 'h'), edge('h', 'x', 'open')],
+    );
+    expect(appendTarget(split)).toEqual({ id: 'h', handle: 'closed' });
+  });
+
+  it('deeper wins over a free branch above it; at one depth, the first of the row', () => {
+    const deeper = g(
+      [node('t', 'automation_trigger'), node('h', 'opening_hours'), node('a', 'add_tag')],
+      [edge('t', 'h'), edge('h', 'a', 'open')],
+    );
+    expect(appendTarget(deeper)).toEqual({ id: 'a', handle: 'next' });
+    const row = g(
+      [
+        node('t', 'automation_trigger'),
+        node('h', 'opening_hours'),
+        node('a', 'add_tag'),
+        node('c', 'add_tag'),
+      ],
+      [edge('t', 'h'), edge('h', 'a', 'open'), edge('h', 'c', 'closed')],
+    );
+    expect(appendTarget(row)).toEqual({ id: 'a', handle: 'next' });
+  });
+
+  it('every way out taken: nowhere', () => {
+    const closed = g(
+      [node('t', 'automation_trigger'), node('x', 'close_conversation')],
+      [edge('t', 'x')],
+    );
+    expect(appendTarget(closed)).toBeNull();
   });
 });

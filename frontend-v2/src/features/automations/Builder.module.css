@@ -318,6 +318,15 @@
     cursor: default;
   }
 
+  /* ★ AU6: an unavailable step's reason, in words, under its name. */
+  .libWhy {
+    display: block;
+    padding-inline-start: 27px;
+    padding-block-end: 4px;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
   .libItem[data-unavailable] {
     color: var(--text-faint);
     cursor: default;

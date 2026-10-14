@@ -291,7 +291,6 @@
     "library": "Steps",
     "find": "Find a step",
     "addsAfter": "Adds after “{step}”",
-    "chooseFirst": "Choose a step on the canvas with a free way out to add after it",
     "canvas": "Canvas",
     "addAfter": "Add a step after {step}",
     "addOn": "Add a step on {step}'s {branch} branch",
@@ -335,7 +334,8 @@
       "removeWhat": "The selected steps go, and so does anything only they lead to. You can undo until you publish.",
       "removeYes": "Remove {count} steps",
       "notInFields": "Shortcuts do nothing while you type in a field."
-    }
+    },
+    "nowhereFree": "Every step's ways out are taken: add a step on a line with its “+”"
   },
   "branches": {
     "next": "Next",

@@ -473,3 +473,25 @@ export function insertBetween(
     },
   };
 }
+
+/**
+ * ★ AU6 (Omer, 2026-10-14): where a step from the library goes when no step
+ * is chosen - after the deepest step that still has a free way out (the
+ * lowest on the canvas; the first of a row), on its first free output.
+ * Nothing free anywhere: null, and the library says so.
+ */
+export function appendTarget(
+  graph: Graph,
+): { readonly id: string; readonly handle: string } | null {
+  const { at } = layout(graph);
+  let best: { id: string; handle: string; x: number; y: number } | null = null;
+  for (const node of graph.nodes) {
+    const free = freeHandles(node, graph);
+    const place = at.get(node.id);
+    if (free.length === 0 || !place) continue;
+    if (best === null || place.y > best.y || (place.y === best.y && place.x < best.x)) {
+      best = { id: node.id, handle: free[0]!, x: place.x, y: place.y };
+    }
+  }
+  return best ? { id: best.id, handle: best.handle } : null;
+}
