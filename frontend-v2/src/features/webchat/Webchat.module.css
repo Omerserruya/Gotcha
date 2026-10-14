@@ -170,6 +170,8 @@
   .card {
     display: flex;
     flex-direction: column;
+    /* W6: a row stacks by the card's own width, whatever beside it takes room. */
+    container-type: inline-size;
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: 14px;
     background-color: var(--panel-field);
@@ -252,12 +254,15 @@
   /* Appearance */
   .swatches {
     display: flex;
+    flex-wrap: wrap;
     gap: 9px;
   }
 
+  /* W6: a fixed 28px - they wrap, never squeeze into slivers. */
   .swatch {
-    inline-size: 26px;
-    block-size: 26px;
+    flex: none;
+    inline-size: 28px;
+    block-size: 28px;
     padding: 0;
     border: 3px solid var(--panel-field);
     border-radius: 50%;
@@ -292,6 +297,7 @@
 
   .picker {
     display: flex;
+    flex-wrap: wrap;
     gap: 16px;
     align-items: flex-start;
     min-inline-size: 0;
@@ -339,11 +345,11 @@
 
   .code {
     display: flex;
-    flex: 1;
+    flex: 1 1 160px;
     flex-direction: column;
     gap: 6px;
     min-inline-size: 0;
-    max-inline-size: 170px;
+    max-inline-size: 220px;
   }
 
   .codeField,
@@ -391,12 +397,14 @@
 
   .imageLine {
     display: flex;
-    gap: 12px;
+    flex-wrap: wrap;
+    gap: 8px 12px;
     align-items: center;
   }
 
   .imageLine .rowHint {
-    flex: 1;
+    flex: 1 1 140px;
+    min-inline-size: 0;
   }
 
   .thumb {
@@ -1251,9 +1259,23 @@
     gap: 1px;
   }
 
+  /* W6: a narrow card puts each row's label over its controls. */
+  @container (width < 520px) {
+    .row {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+    }
+
+    .rowLabel {
+      padding-block-start: 0;
+    }
+  }
+
   @media (width <= 1100px) {
     .columns {
       flex-direction: column;
+      /* W6: the cards as wide as the preview under them - never shrunk to their content. */
+      align-items: stretch;
     }
 
     .preview {

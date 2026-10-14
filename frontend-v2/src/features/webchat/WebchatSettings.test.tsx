@@ -16,6 +16,7 @@ import {
   type WidgetSettings,
 } from '@/api/contracts/website-widget';
 import channelsMessages from '@/i18n/messages/en/channels.json';
+import heChannelsMessages from '@/i18n/messages/he/channels.json';
 
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock('@/i18n/navigation', () => ({
@@ -991,5 +992,15 @@ describe('★★ W1, measured on dev - asked first both ways, and "Continue on W
     fireEvent.click(screen.getByTestId('webchat-kind-chat'));
     expect(screen.queryByTestId('webchat-kind-no-number')).toBeNull();
     expect(screen.queryByTestId('webchat-kind-ask')).toBeNull();
+  });
+});
+
+describe('W6 (2026-10-14) - the header says what is true at every width and on every workspace', () => {
+  it('no platform it may not have, and no side the preview may not be on', () => {
+    for (const messages of [channelsMessages, heChannelsMessages]) {
+      const line = messages.webchat.subtitle;
+      expect(line).not.toMatch(/Shopify/);
+      expect(line).not.toMatch(/right|left|מימין|משמאל/i);
+    }
   });
 });
