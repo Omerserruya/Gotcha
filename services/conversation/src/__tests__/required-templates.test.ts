@@ -14,6 +14,8 @@ const H = vi.hoisted(() => ({
   seq: 0,
   fetches: [] as Array<{ url: string; init?: any }>,
   metaPages: [] as any[],
+  voiceInUse: false,
+  voiceWhere: null as any,
 }));
 
 const matches = (row: any, where: any): boolean => {
@@ -39,6 +41,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     decryptCredentials: () => ({ accessToken: "tok", wabaId: "waba1" }),
     prisma: {
       tenant: { findUnique: async () => ({ defaultLocale: H.locale }) },
+      voiceChannel: { findFirst: async (a: any) => { H.voiceWhere = a.where; return H.voiceInUse ? { id: "vc1" } : null; } },
       channelAccount: { findFirst: async (a: any) => H.accounts.find((x) => matches(x, a.where)) ?? null },
       messageTemplate: {
         findMany: async (a: any) => H.templates.filter((t) => matches(t, a.where)),
@@ -56,7 +59,8 @@ app.use(express.json());
 app.use("/api/templates", templatesRouter);
 
 beforeEach(() => {
-  H.seq = 0; H.locale = "he"; H.fetches = []; H.metaPages = [];
+  H.seq = 0; H.locale = "he"; H.fetches = []; H.metaPages = []; H.voiceInUse = false; H.voiceWhere = null;
+  vi.stubEnv("VOICE_PUBLIC_URL", "https://voice.example.co.il");
   H.accounts = [
     { id: "ca1", tenantId: "T", channel: "WHATSAPP", connectionStatus: "CONNECTED", isActive: true, credentials: "enc" },
     { id: "ca2", tenantId: "T", channel: "WHATSAPP", connectionStatus: "PENDING", isActive: true, credentials: "enc" },
@@ -70,7 +74,7 @@ beforeEach(() => {
     return { ok: true, status: 200, json: async () => page };
   }));
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 const getRequired = (acc = "ca1") => request(app).get(`/api/templates/required?channelAccountId=${acc}`);
 const save = (body: any) => request(app).post("/api/templates/required").send({ channelAccountId: "ca1", role: "reopen", language: "he", ...body });
@@ -203,5 +207,54 @@ describe("POST /sync: read the number's templates from Meta", () => {
     const r = await request(app).post("/api/templates/sync").send({ channelAccountId: "ca2" });
     expect(r.status).toBe(409);
     expect(H.fetches).toHaveLength(0);
+  });
+});
+
+describe("missed_call: required only while a voice number uses it (B1)", () => {
+  const CB = "https://voice.example.co.il/api/voice-copilot/callbacks/click/";
+
+  it("★ not listed while no voice number forwards to an agent and calls back agent-first", async () => {
+    const r = await getRequired();
+    expect(r.body.data.items.map((i: any) => i.role)).toEqual(["reopen", "followup"]);
+    // The question asked is exactly those two modes, in this tenant.
+    expect(H.voiceWhere).toMatchObject({ inboundMode: "FORWARD_TO_AGENT", outboundMode: "AGENT_FIRST", parent: { tenantId: "T" } });
+  });
+
+  it("★ listed while in use: conditional, Hebrew, with the callback URL button", async () => {
+    H.voiceInUse = true;
+    const items = (await getRequired()).body.data.items;
+    expect(items.map((i: any) => [i.role, i.conditional])).toEqual([["reopen", false], ["followup", false], ["missed_call", true]]);
+    const m = items[2];
+    expect(m).toMatchObject({ name: "missed_call_callback", language: "he", state: "missing", category: "UTILITY" });
+    expect(m.body).toMatch(/^\{\{1\}\} ניסה ליצור איתך קשר/);
+    expect(m.buttons).toEqual([{ type: "URL", text: "להתקשר בחזרה", url: `${CB}{{1}}`, example: `${CB}examplepayload.examplesignature` }]);
+  });
+
+  it("★ approving it saves a DRAFT with the URL button; nothing reaches Meta", async () => {
+    H.voiceInUse = true;
+    const r = await save({ role: "missed_call", button: null });
+    expect(r.status).toBe(201);
+    expect(H.templates[0]).toMatchObject({ name: "missed_call_callback", status: "DRAFT", variables: [{ key: "1", sample: "דנה כהן" }] });
+    // The button cannot be removed: the template exists for it.
+    expect(H.templates[0].buttons).toEqual([{ type: "URL", text: "להתקשר בחזרה", url: `${CB}{{1}}`, example: `${CB}examplepayload.examplesignature` }]);
+    expect(H.fetches).toHaveLength(0);
+  });
+
+  it("★ submitted by the person: the URL button carries Meta's required example", async () => {
+    H.voiceInUse = true;
+    const r = await save({ role: "missed_call", submit: true });
+    expect(r.status).toBe(200);
+    const payload = JSON.parse(H.fetches.find((f) => f.init?.method === "POST")!.init.body);
+    const buttons = payload.components.find((c: any) => c.type === "BUTTONS").buttons;
+    expect(buttons).toEqual([{ type: "URL", text: "להתקשר בחזרה", url: `${CB}{{1}}`, example: [`${CB}examplepayload.examplesignature`] }]);
+  });
+
+  it("no public voice address in production: 409 VOICE_PUBLIC_URL_MISSING, nothing saved", async () => {
+    vi.stubEnv("VOICE_PUBLIC_URL", "");
+    vi.stubEnv("NODE_ENV", "production");
+    const r = await save({ role: "missed_call" });
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe("VOICE_PUBLIC_URL_MISSING");
+    expect(H.templates).toHaveLength(0);
   });
 });

@@ -1,4 +1,3 @@
-import { getInternalServiceKey } from "@chatcenter/shared";
 /**
  * Voice Channels API - Live Call CoPilot.
  *
@@ -1094,33 +1093,10 @@ router.put("/:id/routing", async (req: Request, res: Response) => {
       },
     });
 
-    // When both modes are set so the missed-call → WABA template flow
-    // can fire, make sure the template is registered with the tenant's
-    // WABA exactly once. Fire-and-forget so a Graph API hiccup doesn't
-    // fail the routing save - the ensure-template endpoint is itself
-    // idempotent (checks existence first).
-    const wantsTemplate = inboundMode === "FORWARD_TO_AGENT" && outboundMode === "AGENT_FIRST";
-    const previouslyWanted =
-      ch.voiceChannel.inboundMode === "FORWARD_TO_AGENT" &&
-      ch.voiceChannel.outboundMode === "AGENT_FIRST";
-    if (wantsTemplate && !previouslyWanted) {
-      const url = process.env.VOICE_COPILOT_URL || "http://voice-copilot:4007";
-      const key = getInternalServiceKey();
-      fetch(`${url}/api/voice-copilot/callbacks/ensure-template`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Internal-Key": key },
-        body: JSON.stringify({ tenantId: req.tenantId! }),
-      })
-        .then(async (r) => {
-          if (!r.ok) {
-            const txt = await r.text().catch(() => "");
-            console.warn(`[voice-channels] ensure-template upstream ${r.status} ${txt.slice(0, 200)}`);
-          }
-        })
-        .catch((err) => {
-          console.warn(`[voice-channels] ensure-template upstream threw: ${err?.message}`);
-        });
-    }
+    // The missed-call message these modes need is a REQUIRED template now
+    // (conversation lib/required-templates.ts, role missed_call): it shows on
+    // the number's required templates for a person to approve and submit.
+    // Saving the routing no longer creates it at Meta (B1, 2026-10-14).
 
     res.json({ data: updated });
   } catch (err) {

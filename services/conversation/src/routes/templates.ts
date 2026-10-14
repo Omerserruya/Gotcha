@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, decryptCredentials, assertPublicUrl, metaGraphBaseUrl } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, decryptCredentials, assertPublicUrl, metaGraphBaseUrl, resolveVoicePublicUrl, AppOriginError } from "@chatcenter/shared";
 import { REMOVAL_LINE, hasRemovalLine } from "@chatcenter/shared/src/lib/marketing-optout";
-import { REQUIRED_TEMPLATES, REQUIRED_ROLES, draftFields, stateOf, languagesFor, type RequiredRole, type TemplateLanguage } from "../lib/required-templates";
+import { REQUIRED_TEMPLATES, REQUIRED_ROLES, draftFields, stateOf, languagesFor, requiredRolesFor, type RequiredRole, type TemplateLanguage } from "../lib/required-templates";
 
 const router = Router();
 
@@ -247,7 +247,10 @@ function buildMetaComponents(template: any, mediaHeaderHandle?: string | null) {
       const text = String(b.text).trim();
       const type = String(b.type || "QUICK_REPLY").toUpperCase();
       if (type === "URL") {
-        return { type: "URL", text, url: String(b.url || "").trim() };
+        // A URL with a {{1}} suffix needs an example full URL, or Meta rejects
+        // the template (the missed-call callback button, B1).
+        const url = String(b.url || "").trim();
+        return { type: "URL", text, url, ...(url.includes("{{1}}") && typeof b.example === "string" && b.example ? { example: [b.example] } : {}) };
       }
       if (type === "PHONE_NUMBER" || type === "PHONE") {
         return { type: "PHONE_NUMBER", text, phone_number: String(b.phoneNumber || b.phone_number || "").trim() };
@@ -302,6 +305,20 @@ async function whatsappAccount(tenantId: string, channelAccountId: unknown) {
   });
 }
 
+/** Is the missed-call message in use: a voice number forwarding to an agent and calling back agent-first? */
+async function voiceMissedCallInUse(tenantId: string): Promise<boolean> {
+  const v = await prisma.voiceChannel.findFirst({
+    where: { inboundMode: "FORWARD_TO_AGENT" as any, outboundMode: "AGENT_FIRST" as any, parent: { tenantId } },
+    select: { id: true },
+  });
+  return !!v;
+}
+
+/** The public voice address, or null when it is not configured (production without VOICE_PUBLIC_URL). */
+function voiceOrigin(): string | null {
+  try { return resolveVoicePublicUrl(); } catch (e) { if (e instanceof AppOriginError) return null; throw e; }
+}
+
 /** The required templates of one number, each with its state. */
 router.get("/required", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
@@ -310,18 +327,24 @@ router.get("/required", authenticate, resolveTenant, requireActiveTenant(), requ
     if (!account) { res.status(404).json({ error: "WhatsApp number not found", code: "NUMBER_NOT_FOUND" }); return; }
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { defaultLocale: true } });
     const languages = languagesFor(tenant?.defaultLocale);
-    const names = REQUIRED_ROLES.map((r) => REQUIRED_TEMPLATES[r].name);
+    // missed_call only while a voice number uses it (B1).
+    const roles = requiredRolesFor({ voiceMissedCall: await voiceMissedCallInUse(tenantId) });
+    const origin = voiceOrigin();
+    const names = roles.map((r) => REQUIRED_TEMPLATES[r].name);
     const existing = await prisma.messageTemplate.findMany({
       where: { tenantId, channel: "WHATSAPP" as any, name: { in: names }, OR: [{ channelAccountId: account.id }, { channelAccountId: null }] },
     });
-    const items = REQUIRED_ROLES.flatMap((role) =>
+    const items = roles.flatMap((role) =>
       languages.map((language) => {
         // This number's own row first, else an unbound one.
         const rows = existing.filter((t: any) => t.name === REQUIRED_TEMPLATES[role].name && t.language === language);
         const t: any = rows.find((x: any) => x.channelAccountId === account.id) ?? rows[0] ?? null;
-        const suggestion = draftFields(role, language);
+        const urlRole = REQUIRED_TEMPLATES[role].buttonKind === "URL";
+        const suggestion = urlRole && !origin ? { body: REQUIRED_TEMPLATES[role].text[language].body, buttons: [] } : draftFields(role, language, undefined, origin ?? undefined);
         return {
           role,
+          // Required because a feature in use sends it (missed_call), not always.
+          conditional: !!REQUIRED_TEMPLATES[role].when,
           name: REQUIRED_TEMPLATES[role].name,
           language,
           category: REQUIRED_TEMPLATES[role].category,
@@ -370,7 +393,12 @@ router.post("/required", authenticate, resolveTenant, requireActiveTenant(), req
     const account = await whatsappAccount(tenantId, channelAccountId);
     if (!account) { res.status(404).json({ error: "WhatsApp number not found", code: "NUMBER_NOT_FOUND" }); return; }
 
-    const fields = draftFields(role as RequiredRole, language as TemplateLanguage, { body, button });
+    let origin: string | undefined;
+    if (REQUIRED_TEMPLATES[role as RequiredRole].buttonKind === "URL") {
+      origin = voiceOrigin() ?? undefined;
+      if (!origin) { res.status(409).json({ error: "The server has no public voice address (VOICE_PUBLIC_URL), so the callback button has nowhere to point", code: "VOICE_PUBLIC_URL_MISSING" }); return; }
+    }
+    const fields = draftFields(role as RequiredRole, language as TemplateLanguage, { body, button }, origin);
     const current = await prisma.messageTemplate.findFirst({
       where: { tenantId, channel: "WHATSAPP" as any, channelAccountId: account.id, name: fields.name, language: fields.language },
     });
