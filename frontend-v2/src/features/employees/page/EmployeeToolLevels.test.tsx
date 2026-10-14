@@ -28,12 +28,19 @@ const row = (over: Partial<ToolLevelRow> = {}): ToolLevelRow => ({
   grantable: true,
   ...over,
 });
-const show = (rows: readonly ToolLevelRow[] | null = [row()]) =>
+/* As it loads: every section closed (E3). */
+const showClosed = (rows: readonly ToolLevelRow[] | null = [row()]) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ employees }}>
       <EmployeeToolLevels employeeId="e1" rows={rows} />
     </NextIntlClientProvider>,
   );
+/* Every section opened: the levels themselves. */
+const show = (rows: readonly ToolLevelRow[] | null = [row()]) => {
+  const view = showClosed(rows);
+  for (const toggle of screen.queryAllByTestId(/^levels-domain-toggle-/)) fireEvent.click(toggle);
+  return view;
+};
 const T = 'woocommerce.create_refund';
 
 beforeEach(() => {
@@ -160,6 +167,7 @@ describe('★★ given to it (Backend 9339ca26): an integration action reaches i
         <EmployeeToolLevels employeeId="e1" rows={[row({ granted: false })]} />
       </NextIntlClientProvider>,
     );
+    for (const toggle of screen.queryAllByTestId(/^levels-domain-toggle-/)) fireEvent.click(toggle);
     expect(screen.getByTestId(`level-give-row-${T}`)).toHaveTextContent('לתת לו');
     expect(screen.getByTestId(`level-not-given-${T}`)).toHaveTextContent(
       'לא ניתן לו: הוא לא יכול להשתמש בפעולה הזו.',
@@ -202,7 +210,7 @@ describe('★★ E3 (2026-10-14) - by integration, then by business section, eac
   ];
 
   it('★ GOTCHA’s own first, then each integration, named', () => {
-    show(ROWS);
+    showClosed(ROWS);
     const groups = [...screen.getByTestId('levels-rows').querySelectorAll(':scope > section')];
     expect(groups.map((g) => g.getAttribute('data-testid'))).toEqual([
       'levels-integration-gotcha',
@@ -212,27 +220,31 @@ describe('★★ E3 (2026-10-14) - by integration, then by business section, eac
     expect(groups[1]!.querySelector('h4')).toHaveTextContent('WooCommerce');
   });
 
-  it('★★ each section closed at first, with its icon, name and count; opened, its actions', () => {
-    show(ROWS);
+  it('★★ each section closed at first - its rows NOT drawn - with its icon, name and count; opened, its actions', () => {
+    showClosed(ROWS);
     const toggle = screen.getByTestId('levels-domain-toggle-woocommerce-coupons');
     expect(toggle).toHaveTextContent('Coupons and discounts');
     expect(toggle).toHaveTextContent('1');
     // The icon drawn, not a name for it: lucide's own class.
     expect(toggle.querySelector('svg.lucide-ticket-percent')).not.toBeNull();
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    const list = document.getElementById(toggle.getAttribute('aria-controls')!)!;
-    expect(list).not.toBeVisible();
+    /*
+      Not in the document at all: jsdom applies no CSS module, so a `hidden`
+      list that `.rows` drew with display:flex passed `not.toBeVisible()`
+      here while dev showed every row (3a82c22e).
+    */
+    expect(screen.queryAllByTestId(/^level-/)).toEqual([]);
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(list).toBeVisible();
-    expect(screen.getByTestId('level-woocommerce.create_coupon')).toBeVisible();
-    // The other sections stay as they were.
-    expect(screen.getByTestId('levels-domain-toggle-gotcha-messaging')).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
+    expect(document.getElementById(toggle.getAttribute('aria-controls')!)).not.toBeNull();
+    expect(screen.getByTestId('level-woocommerce.create_coupon')).toBeInTheDocument();
+    // Others stay closed - and several may be open at once, to compare.
+    expect(screen.queryByTestId('level-send_message')).toBeNull();
+    fireEvent.click(screen.getByTestId('levels-domain-toggle-gotcha-messaging'));
+    expect(screen.getByTestId('level-send_message')).toBeInTheDocument();
+    expect(screen.getByTestId('level-woocommerce.create_coupon')).toBeInTheDocument();
     fireEvent.click(toggle);
-    expect(list).not.toBeVisible();
+    expect(screen.queryByTestId('level-woocommerce.create_coupon')).toBeNull();
   });
 
   it('★ under its integration, the action’s own name; its switch still names it in full', () => {
@@ -246,7 +258,7 @@ describe('★★ E3 (2026-10-14) - by integration, then by business section, eac
   });
 
   it('a row with no section: "Other", with the shapes icon - never a blank heading', () => {
-    show(ROWS);
+    showClosed(ROWS);
     const toggle = screen.getByTestId('levels-domain-toggle-woocommerce-other');
     expect(toggle).toHaveTextContent('Other');
     expect(toggle.querySelector('svg.lucide-shapes')).not.toBeNull();
@@ -261,5 +273,18 @@ describe('★★ E3 (2026-10-14) - by integration, then by business section, eac
     expect(screen.getByTestId('levels-integration-gotcha').querySelector('h4')).toHaveTextContent(
       'הפעולות של GOTCHA',
     );
+  });
+});
+
+describe('E3 - a tool not given to it: its level dimmed, never drawn as active', () => {
+  it('not given: marked so its levels are dimmed; given, or a built-in: not', () => {
+    show([
+      row({ toolName: 'a.given', granted: true }),
+      row({ toolName: 'a.not', granted: false }),
+      row({ toolName: 'own', granted: null }),
+    ]);
+    expect(screen.getByTestId('level-a.not')).toHaveAttribute('data-given', 'no');
+    expect(screen.getByTestId('level-a.given')).not.toHaveAttribute('data-given');
+    expect(screen.getByTestId('level-own')).not.toHaveAttribute('data-given');
   });
 });

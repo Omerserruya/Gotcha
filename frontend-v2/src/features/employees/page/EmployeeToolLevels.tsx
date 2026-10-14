@@ -174,7 +174,7 @@ function DomainGroup({
         type="button"
         className={styles.toolDomainHead}
         aria-expanded={open}
-        aria-controls={id}
+        aria-controls={open ? id : undefined}
         data-testid={`levels-domain-toggle-${at}-${group.domain}`}
         onClick={() => setOpen((was) => !was)}
       >
@@ -183,11 +183,19 @@ function DomainGroup({
         <span className={styles.toolDomainCount}>{group.rows.length}</span>
         <ChevronDown className={styles.toolDomainChevron} size={14} aria-hidden="true" />
       </button>
-      <ul id={id} className={styles.rows} hidden={!open}>
-        {group.rows.map((row) => (
-          <LevelRow key={row.toolName} employeeId={employeeId} row={row} />
-        ))}
-      </ul>
+      {/*
+        Not drawn while closed - never `hidden`: `.rows` sets `display: flex`,
+        which beats the browser's own `[hidden]` rule, so on dev every closed
+        section still showed its rows while jsdom, which applies no CSS
+        module, called them hidden.
+      */}
+      {open ? (
+        <ul id={id} className={styles.rows}>
+          {group.rows.map((row) => (
+            <LevelRow key={row.toolName} employeeId={employeeId} row={row} />
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -242,7 +250,12 @@ function LevelRow({
   };
 
   return (
-    <li className={`${styles.row} ${styles.levelRow}`} data-testid={`level-${row.toolName}`}>
+    <li
+      className={`${styles.row} ${styles.levelRow}`}
+      data-testid={`level-${row.toolName}`}
+      // Not given: it cannot use it, so its level is drawn dimmed, never as active.
+      data-given={row.granted !== null && !given ? 'no' : undefined}
+    >
       <span className={styles.rowName}>
         {/* Under its integration's heading, the action's own name; aria keeps the full one. */}
         <bdi dir="auto">{row.action ?? row.label}</bdi>

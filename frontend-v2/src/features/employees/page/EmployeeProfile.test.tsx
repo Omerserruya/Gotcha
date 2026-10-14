@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -127,6 +127,8 @@ describe('★★ the Profile tab is ONE list, top to bottom, Tools and the hando
 
   it('real content in each: the responsibility, the tone, what it may do, its systems, its rules', () => {
     profile();
+    // E3: its tools' sections open closed; open them to read the levels.
+    for (const toggle of screen.queryAllByTestId(/^levels-domain-toggle-/)) fireEvent.click(toggle);
     expect(screen.getByTestId('profile-responsibility')).toHaveValue('After-sale questions');
     expect(screen.getByTestId('profile-tone-friendly')).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByTestId('level-shopify.process_refund-ask')).toHaveAttribute(

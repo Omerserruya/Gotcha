@@ -298,6 +298,11 @@
     transform: rotate(180deg);
   }
 
+  /* Not given: the level cannot apply, so it is never drawn as active. */
+  .levelRow[data-given='no'] .stances {
+    opacity: 0.45;
+  }
+
   /* "Give it this": the words toggle the switch, as on every switch here. */
   .giveRow {
     display: inline-flex;
