@@ -543,6 +543,8 @@ router.post("/workspace/scan", WRITE, async (req: Request, res: Response) => {
       authHeader: req.headers.authorization ?? "",
       actorId: (req as any).user?.userId,
       locale: typeof (req.body ?? {}).locale === "string" ? (req.body as any).locale : undefined,
+      // Rescan even when the site reads the same as last time.
+      force: (req.body ?? {}).force === true,
     });
     if (!started.started) {
       res.status(409).json({ error: "A scan is already running", code: "SCAN_IN_PROGRESS", data: scanRunView(started.run) });
@@ -585,6 +587,7 @@ function scanRunView(run: ScanRun) {
     offer: run.offer,
     reach: run.reach,
     knowledge: run.knowledge ?? null,
+    unchanged: !!run.unchanged,
   };
 }
 

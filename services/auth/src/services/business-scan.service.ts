@@ -272,7 +272,7 @@ export function crawlPagesForProjection(origin: string, crawl: { home: { text: s
 }
 
 export type RescanOutcome =
-  | { ok: true; plan: RescanPlan; applied: string[]; reach: CrawlReach; knowledge: ScanKnowledge | null }
+  | { ok: true; plan: RescanPlan; applied: string[]; reach: CrawlReach; knowledge: ScanKnowledge | null; unchanged?: boolean }
   | {
       ok: false;
       reason: "no_domain" | "fetch_failed" | "scan_failed" | "scan_in_progress" | "no_profile";
@@ -306,6 +306,8 @@ export async function runProfileRescan(args: {
   actorId?: string | null;
   locale?: string;
   fetchWithTimeoutFn?: TimedFetch;
+  /** Rescan even when the site reads the same as last time (e.g. after a model change). */
+  force?: boolean;
 }): Promise<RescanOutcome> {
   const { tenantId, authHeader, actorId } = args;
   const fetchWithTimeoutFn = args.fetchWithTimeoutFn ?? defaultFetch;
@@ -364,6 +366,18 @@ export async function runProfileRescan(args: {
   // most is a login wall plus a failed scan.
   await persistCrawlReach(tenantId, reach);
 
+  // The site reads exactly as at the last good scan: nothing to learn, and a
+  // fresh model wording of the same facts would only churn the description
+  // (and with it an employee's readiness questions). No model call, no writes.
+  const checksum = crawlChecksum(crawl.pages);
+  if (!args.force) {
+    const last = await readDurableSetting(tenantId, SCAN_CHECKSUM_KEY).catch(() => null);
+    if (last === checksum) {
+      await setDiscoveryStatus(tenantId, { status: "COMPLETE", scanPhase: "done" });
+      return { ok: true, plan: { apply: {}, offer: [] } as any, applied: [], reach, knowledge: null, unchanged: true };
+    }
+  }
+
   const language = await systemLanguage(tenantId, args.locale);
   const report = await callDiscoverBusiness(
     authHeader,
@@ -419,7 +433,19 @@ export async function runProfileRescan(args: {
   const knowledge = await syncScanKnowledge({ tenantId, origin, report, crawl, language, authHeader, actorId });
 
   await setDiscoveryStatus(tenantId, { status: "COMPLETE", scanPhase: "done" });
+  // Remembered only after a scan that went through, so a failed one is retried in full.
+  await writeDurableSetting(tenantId, SCAN_CHECKSUM_KEY, checksum).catch((err: any) => console.error(`[business-scan] could not store the crawl checksum: ${err?.message}`));
   return { ok: true, plan, applied, reach, knowledge };
+}
+
+/** What the last good scan read, as a checksum of the pages' text (2026-10-14). */
+export const SCAN_CHECKSUM_KEY = "profileScanChecksum";
+
+export function crawlChecksum(pages: Array<{ url: string; text: string }>): string {
+  const norm = [...pages]
+    .map((p) => `${p.url}\n${String(p.text ?? "").replace(/\s+/g, " ").trim()}`)
+    .sort();
+  return crypto.createHash("sha256").update(norm.join("\n\n")).digest("hex");
 }
 
 const projectionFetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string }, timeoutMs?: number) =>
@@ -528,6 +554,8 @@ export interface ScanRun {
   reach: CrawlReach | null;
   /** What happened to the generated knowledge; null until done, or when that step failed. */
   knowledge: ScanKnowledge | null;
+  /** True when the site read exactly as at the last good scan: nothing was asked or written. */
+  unchanged?: boolean;
 }
 
 async function writeRun(tenantId: string, run: ScanRun): Promise<void> {
@@ -584,7 +612,7 @@ export async function startProfileRescan(args: Parameters<typeof runProfileResca
   void runProfileRescan(args)
     .then(async (outcome) => {
       if (outcome.ok) {
-        await finish({ status: "done", applied: outcome.applied, offer: outcome.plan.offer, reach: outcome.reach, knowledge: outcome.knowledge });
+        await finish({ status: "done", applied: outcome.applied, offer: outcome.plan.offer, reach: outcome.reach, knowledge: outcome.knowledge, unchanged: !!outcome.unchanged });
       } else {
         console.warn(`[business-scan] ${args.tenantId}: rescan ended ${outcome.reason}`);
         await finish({ status: "failed", reason: outcome.reason, reach: outcome.reach ?? null });

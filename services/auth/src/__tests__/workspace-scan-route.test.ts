@@ -45,8 +45,8 @@ describe("POST /api/workspace/scan", () => {
     H.start = { started: true, run: RUN };
     const r = await request(app).post("/api/workspace/scan").set("Authorization", "Bearer user-token").send({ locale: "he" });
     expect(r.status).toBe(202);
-    expect(r.body.data).toEqual({ status: "running", startedAt: RUN.startedAt, finishedAt: null, reason: null, applied: [], offer: [], reach: null, knowledge: null });
-    expect(H.startArgs).toMatchObject({ tenantId: "t1", authHeader: "Bearer user-token", actorId: "u1", locale: "he" });
+    expect(r.body.data).toEqual({ status: "running", startedAt: RUN.startedAt, finishedAt: null, reason: null, applied: [], offer: [], reach: null, knowledge: null, unchanged: false });
+    expect(H.startArgs).toMatchObject({ tenantId: "t1", authHeader: "Bearer user-token", actorId: "u1", locale: "he", force: false });
     // The run id is internal.
     expect(r.body.data.runId).toBeUndefined();
   });

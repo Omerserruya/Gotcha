@@ -55,7 +55,7 @@ vi.mock("../services/field-provenance.service", async () => {
   return { ...real, readProvenance: provenanceMock.readProvenance, stampProvenance: provenanceMock.stampProvenance };
 });
 
-import { mapReportToProfileFields, runProfileRescan, acceptScanProposal, SCAN_PROPOSAL_KEY, startProfileRescan, readScanRun, SCAN_RUN_KEY } from "../services/business-scan.service";
+import { mapReportToProfileFields, runProfileRescan, acceptScanProposal, SCAN_PROPOSAL_KEY, startProfileRescan, readScanRun, SCAN_RUN_KEY, SCAN_CHECKSUM_KEY } from "../services/business-scan.service";
 
 /** The discovery writes that record what the crawl saw (the others record the status). */
 const crawlWrites = () => (prismaMock.businessDiscovery.updateMany.mock.calls as any[]).map((c) => c[0]).filter((a) => a.data.crawl);
@@ -681,5 +681,59 @@ describe("★ the scan writes in the workspace's system language (2026-10-14)", 
     expect(Array.isArray(outcome.knowledge.skipped)).toBe(true);
     expect(outcome.knowledge.skipped.length).toBeGreaterThan(0);
     expect(outcome.knowledge.skipped[0]).toEqual({ topic: expect.any(String), reason: expect.stringMatching(/empty|thin/) });
+  });
+});
+
+describe("★ a site that reads the same is not rescanned (2026-10-14)", () => {
+  // Every rescan rewrote the description in fresh model wording, which reset
+  // an employee's readiness questions even with the site unchanged.
+  const SITE = {
+    pages: [{ url: "https://shop.example.com", text: "HALVO clothing" }, { url: "https://shop.example.com/faq", text: "FAQ text" }],
+    okPages: [{ url: "https://shop.example.com/faq", text: "FAQ text" }],
+    home: { html: "", text: "HALVO clothing" }, signals: {}, businessType: "ecommerce", requested: ["u"], distinctTextPages: 2,
+  };
+
+  it("★ second scan of the same text: no model call, no writes, unchanged", async () => {
+    crawlMock.mockResolvedValue(SITE);
+    const first = okFetch();
+    const a: any = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: first });
+    expect(a.ok).toBe(true);
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(settings.store[SCAN_CHECKSUM_KEY]).toMatch(/^[0-9a-f]{64}$/);
+    vi.clearAllMocks();
+    const second = okFetch();
+    const b: any = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: second });
+    expect(b).toMatchObject({ ok: true, unchanged: true, applied: [] });
+    expect(second).not.toHaveBeenCalled();
+    expect(prismaMock.businessProfile.update).not.toHaveBeenCalled();
+    expect(projectionMock.apply).not.toHaveBeenCalled();
+  });
+
+  it("the site changed, or force: a full scan", async () => {
+    crawlMock.mockResolvedValue(SITE);
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+    const forced = okFetch();
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", force: true, fetchWithTimeoutFn: forced });
+    expect(forced).toHaveBeenCalledTimes(1);
+    crawlMock.mockResolvedValue({ ...SITE, pages: [...SITE.pages, { url: "https://shop.example.com/new", text: "New page" }] });
+    const changed = okFetch();
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: changed });
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failed scan does not remember the checksum (the next one runs in full)", async () => {
+    crawlMock.mockResolvedValue(SITE);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const failing = vi.fn(async () => ({ ok: false, status: 500, text: async () => "", json: async () => ({}) }) as any);
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: failing });
+    expect(settings.store[SCAN_CHECKSUM_KEY]).toBeUndefined();
+  });
+
+  it("the background run reports unchanged", async () => {
+    crawlMock.mockResolvedValue(SITE);
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+    await startProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(await readScanRun("t1")).toMatchObject({ status: "done", unchanged: true });
   });
 });
