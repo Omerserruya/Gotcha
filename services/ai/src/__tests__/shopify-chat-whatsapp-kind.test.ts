@@ -30,7 +30,12 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
   return {
     ...actual,
-    prisma: { message: { create: async (a: any) => { H.created.push(a); return a.data; } }, conversation: { create: async (a: any) => { H.created.push(a); return a.data; } } },
+    prisma: {
+      message: { create: async (a: any) => { H.created.push(a); return a.data; } },
+      conversation: { create: async (a: any) => { H.created.push(a); return a.data; } },
+      businessProfile: { findUnique: async () => ({ organizationName: "Urban Supply" }) },
+      tenant: { findUnique: async () => null },
+    },
     withCrossTenantAccess: (fn: any) => fn(),
     analyticsQueue: { add: vi.fn(async () => undefined) },
     incomingMessageQueue: { add: vi.fn() },
@@ -141,5 +146,12 @@ describe("★ POST /texts (W10)", () => {
     expect(H.calls[0].metadata).toEqual({ type: "widget_text_translation" });
     expect((await request(app()).post("/api/shopify-chat/texts").send({ locale: "en" })).status).toBe(401);
     expect((await request(app()).post("/api/shopify-chat/texts").set("origin", `https://${SHOP}`).send({ sessionToken: token(), locale: "de" })).status).toBe(400);
+  });
+});
+
+describe("★ the wordmark on the storefront too", () => {
+  it("the Shopify bootstrap carries brand { name, initial }", async () => {
+    H.ux = { kind: "chat" };
+    expect((await boot()).body.data.widget.brand).toEqual({ name: "Urban Supply", initial: "U" });
   });
 });

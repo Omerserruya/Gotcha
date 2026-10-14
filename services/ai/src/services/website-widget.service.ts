@@ -207,6 +207,30 @@ export async function mintHandoffRef(record: HandoffRecord, random: (n: number) 
 }
 
 /**
+ * The business's wordmark on the widget's bubble and pop-up (design 7):
+ * its display name (the business profile's organizationName, else the
+ * workspace name, the same rule the AI's company context uses) and its first
+ * letter. Public by nature: the business's own name on its own site.
+ * The initial is a whole grapheme (Hebrew, accents, emoji-safe), the first
+ * letter or digit in the name, upper-cased where that means anything.
+ */
+export function brandFromName(raw: unknown): { name: string; initial: string } | null {
+  const name = String(raw ?? "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 60);
+  if (!name) return null;
+  const graphemes = [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(name)].map((g) => g.segment);
+  const first = graphemes.find((g) => /[\p{L}\p{N}]/u.test(g)) ?? graphemes[0]!;
+  return { name, initial: first.toLocaleUpperCase() };
+}
+
+export async function brandOf(tenantId: string): Promise<{ name: string; initial: string } | null> {
+  const profile = await (prisma as any).businessProfile.findUnique({ where: { tenantId }, select: { organizationName: true } }).catch(() => null);
+  const fromProfile = brandFromName(profile?.organizationName);
+  if (fromProfile) return fromProfile;
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }).catch(() => null);
+  return brandFromName(tenant?.name);
+}
+
+/**
  * The workspace's CONNECTED WooCommerce store, or null (W9): the one store the
  * website widget's product cards may come from. An ERROR / DISCONNECTED
  * connection is no store: cards are not offered from a store we cannot read.

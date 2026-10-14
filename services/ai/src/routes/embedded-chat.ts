@@ -15,7 +15,7 @@ import {
   type HandoffRecord, type WebchatConfig } from "@chatcenter/shared";
 import crypto from "crypto";
 import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanitizer.service";
-import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef, connectedWooStore } from "../services/website-widget.service";
+import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef, connectedWooStore, brandOf } from "../services/website-widget.service";
 import { translateWidgetTexts } from "../services/widget-text-translation.service";
 import { executeAdapterTool } from "../services/connectors/integration-framework";
 import { listActivePromotions } from "../services/widget-promotions.service";
@@ -212,8 +212,11 @@ async function withHandoff(tenantId: string, config: WebchatConfig, offline = fa
   const target = await withCrossTenantAccess(() => handoffTarget(tenantId, config.ux)).catch(() => null);
   const lang = config.appearance.language === "he" ? "he" : "en";
   if (config.ux.kind === "whatsapp" && !target) return null;
+  // The business's wordmark on the bubble and pop-up (design 7).
+  const brand = await withCrossTenantAccess(() => brandOf(tenantId)).catch(() => null);
   return {
     ...base,
+    brand,
     promotions: promotions.map(({ id: _id, ...p }) => p),
     features: { ...base.features, whatsappHandoff: !!target },
     ...(target ? { whatsapp: { label: handoffButtonLabel(lang) } } : {}),

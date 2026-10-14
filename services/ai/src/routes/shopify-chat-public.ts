@@ -57,7 +57,7 @@ import {
   type ShopifyLiveChatChannel,
 } from "../services/shopify-live-chat.service";
 import { validateCartLine } from "../services/shopify-catalog.service";
-import { handoffTarget, mintHandoffRef } from "../services/website-widget.service";
+import { handoffTarget, mintHandoffRef, brandOf } from "../services/website-widget.service";
 import { translateWidgetTexts } from "../services/widget-text-translation.service";
 import {
   findLiveInstallation,
@@ -330,7 +330,12 @@ router.post("/bootstrap", bootstrapLimiter, async (req: Request, res: Response) 
         // Whether we know who this is. A boolean, never the id: the
         // storefront has no use for it and every reason not to hold it.
         identified: !!customerId,
-        widget: { ...widget, features: { ...widget.features, whatsappHandoff: !!waTarget } },
+        widget: {
+          ...widget,
+          // The business's wordmark on the bubble and pop-up (design 7).
+          brand: await brandOf(channel.tenantId).catch(() => null),
+          features: { ...widget.features, whatsappHandoff: !!waTarget },
+        },
       },
     });
   } catch (err) {

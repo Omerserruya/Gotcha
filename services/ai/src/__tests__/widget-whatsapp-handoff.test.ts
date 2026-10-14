@@ -21,6 +21,7 @@ const H = vi.hoisted(() => ({
   numbers: [] as any[],
   conversations: [] as any[],
   created: [] as any[],
+  profile: null as any,
 }));
 
 // The public routes' rate limits have their own tests; here they would only
@@ -53,6 +54,8 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       conversation: { findUnique: async (a: any) => H.conversations.find((c) => c.id === a.where.id) ?? null },
       message: { create: async (a: any) => { H.created.push(a.data); return { id: "m1", ...a.data }; } },
       flowCanvas: { findUnique: async () => null },
+      businessProfile: { findUnique: async (a: any) => (a.where.tenantId === "T" ? H.profile : null) },
+      tenant: { findUnique: async (a: any) => (a.where.id === "T" ? { name: "Workspace T" } : null) },
       shopifyChatInstallation: { findMany: async () => [] },
       $executeRaw: async () => 1,
     },
@@ -73,7 +76,7 @@ const boot = async () => (await request(app()).post("/api/embedded-chat/bootstra
 const handoff = (body: any = { sessionId: "conv_web", sessionToken: "sess_abc" }) => request(app()).post("/api/embedded-chat/whatsapp-handoff").send(body);
 
 beforeEach(() => {
-  H.kv.clear(); H.ttl.clear(); H.created = [];
+  H.kv.clear(); H.ttl.clear(); H.created = []; H.profile = null;
   H.accounts = [web({ whatsapp: { enabled: true, channelAccountId: "wa_1" } }), wa("wa_1"), wa("wa_old"), wa("wa_off", { connectionStatus: "DISCONNECTED" }), { ...wa("wa_x"), tenantId: "OTHER" }];
   H.numbers = [{ tenantId: "T", channelAccountId: "wa_1", displayPhoneNumber: "+972 52-555-1234" }, { tenantId: "T", channelAccountId: "wa_off", displayPhoneNumber: "+972 52-555-9999" }];
   H.conversations = [
@@ -278,5 +281,26 @@ describe("★ a number connected before WhatsAppNumber rows existed", () => {
     const d = (await request(app()).get("/api/website-widget")).body.data;
     expect(d.whatsappNumbers.find((n: any) => n.channelId === "wa_1").phone).toBe("+972 52-555-1234");
     expect(d.whatsappNumbers.find((n: any) => n.channelId === "wa_old")).toMatchObject({ phone: null, available: false, reason: "number_unknown" });
+  });
+});
+
+import { brandFromName } from "../services/website-widget.service";
+describe("★ the business's wordmark (design 7)", () => {
+  it("the bootstrap carries the business profile's name and its first letter; else the workspace name", async () => {
+    H.profile = { organizationName: "  אורבן סאפליי  " };
+    expect((await boot()).brand).toEqual({ name: "אורבן סאפליי", initial: "א" });
+    H.profile = null;
+    expect((await boot()).brand).toEqual({ name: "Workspace T", initial: "W" });
+  });
+
+  it("the initial is a whole letter: Hebrew with niqqud, accents, a leading quote or emoji skipped, lower case raised", () => {
+    expect(brandFromName("שָׁלוֹם")!.initial).toBe("שָׁ");
+    expect(brandFromName("élan")!.initial).toBe("É");
+    expect(brandFromName("\"Urban\" Supply")).toEqual({ name: "\"Urban\" Supply", initial: "U" });
+    expect(brandFromName("🌿 Leaf & Co")!.initial).toBe("L");
+    expect(brandFromName("123 Shoes")!.initial).toBe("1");
+    expect(brandFromName("<b>Shop</b>")!.name).toBe("bShop/b");
+    expect(brandFromName("   ")).toBeNull();
+    expect(brandFromName(null)).toBeNull();
   });
 });
