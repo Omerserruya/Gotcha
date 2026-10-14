@@ -214,7 +214,9 @@ describe('★★ an unconstrained messageType is not a domain', () => {
      * unknown into whatever the default branch says, and a default of
      * "system message" would mislabel the next type somebody adds.
      */
-    expect(renderableType(message({ messageType: 'shopify_product' }))).toBeNull();
+    // (shopify_product was this example until W9b drew product cards.)
+    expect(renderableType(message({ messageType: 'poll_v9' }))).toBeNull();
+    expect(renderableType(message({ messageType: 'woo_product' }))).toBe('woo_product');
     expect(renderableType(message({ messageType: 'voice_final' }))).toBeNull();
     expect(renderableType(message({ messageType: 'text' }))).toBe('text');
   });

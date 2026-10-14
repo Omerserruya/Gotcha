@@ -39,9 +39,90 @@ type T = (
     | 'fileSize.mb'
     | 'location.title'
     | 'location.open'
-    | 'location.unreadable',
+    | 'location.unreadable'
+    | 'products'
+    | 'product.view'
+    | 'product.soldOut',
   values?: { readonly size: number },
 ) => string;
+
+/**
+ * ★ W9b: the product cards a message carried - the web chat's WooCommerce
+ * ones and the storefront's - as the agent needs them: picture, name, price
+ * (and the old one when it is on sale), sold out said, a link to the product.
+ * Several are a row to scroll, as the visitor saw them.
+ */
+export function ProductCards({
+  message,
+  t,
+  money,
+}: {
+  readonly message: InboxMessage;
+  readonly t: T;
+  /** The stream's own number formatter: a price in its currency, or the amount alone. */
+  readonly money: (amount: string, currency: string | null) => string;
+}) {
+  const products = message.metadata?.commerce?.products ?? [];
+  if (products.length === 0) return null;
+  return (
+    <ul
+      className={products.length > 1 ? styles.productRow : styles.products}
+      aria-label={t('products')}
+      data-testid={`products-${message.id}`}
+    >
+      {products.map((p) => {
+        const image = safeMediaUrl(p.imageUrl ?? null);
+        const link = safeMediaUrl(p.productUrl ?? null);
+        const sale =
+          p.price !== null &&
+          p.compareAtPrice !== null &&
+          Number(p.compareAtPrice) > Number(p.price);
+        return (
+          <li
+            key={p.productId}
+            className={styles.product}
+            data-testid={`product-${message.id}-${p.productId}`}
+          >
+            {image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className={styles.productImage} src={image} alt="" loading="lazy" />
+            ) : (
+              <span className={styles.productImage} aria-hidden="true" />
+            )}
+            <span className={styles.productText}>
+              <span className={styles.productTitle}>
+                <UserText>{p.title}</UserText>
+              </span>
+              {p.price !== null ? (
+                <bdi dir="ltr" className={styles.productPrice}>
+                  {money(p.price, p.currency ?? null)}
+                  {sale ? (
+                    <s className={styles.productWas}>
+                      {money(p.compareAtPrice!, p.currency ?? null)}
+                    </s>
+                  ) : null}
+                </bdi>
+              ) : null}
+              {p.available ? null : (
+                <span className={styles.productOut}>{t('product.soldOut')}</span>
+              )}
+              {link ? (
+                <a
+                  className={styles.contactLink}
+                  href={link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {t('product.view')}
+                </a>
+              ) : null}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 export function MessageMedia({ message, t }: { readonly message: InboxMessage; readonly t: T }) {
   const url = safeMediaUrl(message.mediaUrl);

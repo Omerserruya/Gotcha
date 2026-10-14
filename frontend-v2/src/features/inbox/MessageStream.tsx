@@ -15,7 +15,7 @@ import {
 } from '@/api/contracts/inbox';
 
 import styles from './Inbox.module.css';
-import { ContactCards, LocationCard, MessageMedia } from './MessageMedia';
+import { ContactCards, LocationCard, MessageMedia, ProductCards } from './MessageMedia';
 import { isLocationMessage, isPlaceholderCaption, mediaKind, quoteOf } from './media';
 import { ReplyButton } from './ReplyButton';
 import { STREAM_SCROLLER } from './stream-scroller';
@@ -160,7 +160,9 @@ export async function MessageStream({
          * type and rendering it are different things, and only the second
          * one means the agent can see what was sent.
          */
+        const products = message.metadata?.commerce?.products.length ?? 0;
         const rendered =
+          products > 0 ||
           mediaKind(message) !== null ||
           (message.metadata?.contacts?.length ?? 0) > 0 ||
           isLocationMessage(message);
@@ -238,6 +240,24 @@ export async function MessageStream({
               <MessageMedia message={message} t={(key, values) => t(`stream.${key}`, values)} />
               <ContactCards message={message} t={(key) => t(`stream.${key}`)} />
               <LocationCard message={message} t={(key) => t(`stream.${key}`)} />
+              <ProductCards
+                message={message}
+                t={(key) => t(`stream.${key}`)}
+                money={(amount, currency) => {
+                  const n = Number(amount);
+                  if (!Number.isFinite(n)) return amount;
+                  if (!currency) return format.number(n, { maximumFractionDigits: 2 });
+                  try {
+                    return format.number(n, {
+                      style: 'currency',
+                      currency,
+                      maximumFractionDigits: 2,
+                    });
+                  } catch {
+                    return format.number(n, { maximumFractionDigits: 2 });
+                  }
+                }}
+              />
 
               {/*
               ════════════════════════════════════════════════════════════════
@@ -258,7 +278,8 @@ export async function MessageStream({
                 <p className={styles.mediaNote} data-testid={`unsupported-${message.id}`}>
                   {t('stream.unsupported', { type: unsupported })}
                 </p>
-              ) : message.body.trim() !== '' && !isPlaceholderCaption(message) ? (
+              ) : products === 0 && message.body.trim() !== '' && !isPlaceholderCaption(message) ? (
+                /* With cards drawn, the body is their plain-text fallback: not said twice. */
                 /* Isolated: a customer writes in their language, not the page's. */
                 <p className={styles.body}>
                   {/* Our side's words (the AI's, mostly): plain hyphens. The customer's are theirs. */}

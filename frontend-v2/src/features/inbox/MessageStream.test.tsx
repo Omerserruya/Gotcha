@@ -81,7 +81,8 @@ describe('★★ an unconstrained type gets no label we would be guessing at', (
      * the next type somebody writes would mislabel it silently - the
      * `KnowledgeDocument.status` trap in a DOM attribute.
      */
-    await show([message({ messageType: 'shopify_product' })]);
+    // (shopify_product was this example until W9b accounted for it.)
+    await show([message({ messageType: 'poll_v9' })]);
     expect(screen.getByTestId('message-m1')).not.toHaveAttribute('data-type');
   });
 
@@ -104,7 +105,7 @@ describe('★★ an unconstrained type gets no label we would be guessing at', (
   });
 
   it('★ and an unrecognised type with no body lands there too', async () => {
-    await show([message({ messageType: 'shopify_product', body: '' })]);
+    await show([message({ messageType: 'poll_v9', body: '' })]);
     expect(screen.getByTestId('unknown-m1')).toHaveTextContent(/can.t show yet/i);
   });
 
@@ -814,5 +815,83 @@ describe('★★ a shared location is a place and a way to the map - never "[Loc
     await show([message({ messageType: 'text', body: 'my location: [home]' })]);
     expect(screen.queryByTestId('location-m1')).toBeNull();
     expect(screen.getByTestId('message-m1')).toHaveTextContent('my location: [home]');
+  });
+});
+
+describe('★★ W9b: the product cards a message carried', () => {
+  const card = (over: Record<string, unknown> = {}) => ({
+    productId: 101,
+    handle: 'cloud-pro',
+    title: 'Cloud Pro Runner',
+    imageUrl: 'https://store.example/img/cloud.jpg',
+    productUrl: 'https://store.example/product/cloud-pro/',
+    currency: 'ILS',
+    price: '120',
+    compareAtPrice: '150',
+    available: true,
+    ...over,
+  });
+  const woo = (products: unknown[], over: Record<string, unknown> = {}) =>
+    message({
+      direction: 'OUTBOUND',
+      messageType: products.length > 1 ? 'woo_product_carousel' : 'woo_product',
+      body: 'Cloud Pro Runner - 120 ILS',
+      metadata: { commerce: { kind: 'woo_commerce', storeUrl: 'https://store.example', products } },
+      ...over,
+    });
+
+  it('★ one product: its picture, name, price and the old one on sale, and a link to it - not the fallback text', async () => {
+    await show([woo([card()])], 'WEBCHAT');
+    const one = screen.getByTestId('product-m1-101');
+    expect(one).toHaveTextContent('Cloud Pro Runner');
+    expect(one).toHaveTextContent('₪120');
+    expect(one.querySelector('s')).toHaveTextContent('₪150');
+    expect(one.querySelector('img')).toHaveAttribute('src', 'https://store.example/img/cloud.jpg');
+    expect(screen.getByRole('link', { name: 'View product' })).toHaveAttribute(
+      'href',
+      'https://store.example/product/cloud-pro/',
+    );
+    expect(screen.getByTestId('message-m1')).not.toHaveTextContent('Cloud Pro Runner - 120 ILS');
+    expect(screen.getByTestId('message-m1')).toHaveAttribute('data-type', 'woo_product');
+  });
+
+  it('a carousel is a row; sold out is said; no currency, the amount alone', async () => {
+    await show(
+      [
+        woo([
+          card(),
+          card({
+            productId: 102,
+            title: 'Trail',
+            available: false,
+            currency: null,
+            price: 90,
+            compareAtPrice: null,
+          }),
+        ]),
+      ],
+      'WEBCHAT',
+    );
+    expect(screen.getByTestId('products-m1').children).toHaveLength(2);
+    const two = screen.getByTestId('product-m1-102');
+    expect(two).toHaveTextContent('Out of stock');
+    expect(two).toHaveTextContent('90');
+    expect(two).not.toHaveTextContent('₪');
+    expect(two.querySelector('s')).toBeNull();
+  });
+
+  it('a link or picture that is not https is never used', async () => {
+    await show(
+      [woo([card({ productUrl: 'javascript:alert(1)', imageUrl: 'http://store.example/x.jpg' })])],
+      'WEBCHAT',
+    );
+    expect(screen.queryByRole('link', { name: 'View product' })).toBeNull();
+    expect(screen.getByTestId('product-m1-101').querySelector('img')).toBeNull();
+  });
+
+  it('no product that parses: the body, as before', async () => {
+    await show([woo([{ title: 'no id' }])], 'WEBCHAT');
+    expect(screen.queryByTestId('products-m1')).toBeNull();
+    expect(screen.getByTestId('message-m1')).toHaveTextContent('Cloud Pro Runner - 120 ILS');
   });
 });

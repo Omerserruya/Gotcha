@@ -84,6 +84,11 @@
       "title": "Shared location",
       "open": "Open in map",
       "unreadable": "A location was shared, but its place didn't come through."
+    },
+    "products": "Products sent",
+    "product": {
+      "view": "View product",
+      "soldOut": "Out of stock"
     }
   },
   "queue": {

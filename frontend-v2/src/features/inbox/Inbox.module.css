@@ -2221,6 +2221,72 @@
     color: var(--text-subtle);
   }
 
+  /* ★ W9b: the product cards a message carried; several are a row to scroll. */
+  .products,
+  .productRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .productRow {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-block-end: 4px;
+  }
+
+  .productRow .product {
+    flex: 0 0 220px;
+  }
+
+  .product {
+    display: flex;
+    gap: var(--space-8);
+    align-items: flex-start;
+    padding: var(--space-8);
+    border: var(--border-width-thin) solid var(--border-subtle);
+    border-radius: 10px;
+    background-color: var(--panel-field);
+  }
+
+  .productImage {
+    flex: none;
+    inline-size: 48px;
+    block-size: 48px;
+    border-radius: 8px;
+    background-color: var(--panel-inset);
+    object-fit: cover;
+  }
+
+  .productText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+    font-size: var(--font-size-label);
+  }
+
+  .productTitle {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .productPrice {
+    display: inline-flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+
+  .productWas {
+    color: var(--text-muted);
+  }
+
+  .productOut {
+    color: var(--text-muted);
+  }
+
   .contacts {
     display: flex;
     flex-direction: column;

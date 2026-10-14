@@ -491,6 +491,26 @@ export function parseViewTotals<View extends string>(
  * happens to be**, and a default branch that says "system message" would
  * mislabel the next type somebody adds.
  */
+/** A price as the store wrote it: a string or a number, else nothing. */
+const priceOf = z
+  .union([z.string(), z.number()])
+  .nullish()
+  .catch(null)
+  .transform((v) => (v === null || v === undefined || v === '' ? null : String(v)));
+
+/** One product card on a message (W9b): what the inbox needs of the widget's shape. */
+export const commerceProductSchema = z.object({
+  productId: z.coerce.string(),
+  title: z.string(),
+  imageUrl: z.string().nullish().catch(null),
+  productUrl: z.string().nullish().catch(null),
+  currency: z.string().nullish().catch(null),
+  price: priceOf,
+  compareAtPrice: priceOf,
+  available: z.boolean().catch(true).default(true),
+});
+export type CommerceProduct = z.infer<typeof commerceProductSchema>;
+
 export const KNOWN_MESSAGE_TYPES = [
   'text',
   'image',
@@ -506,6 +526,10 @@ export const KNOWN_MESSAGE_TYPES = [
   'sticker',
   'contact',
   'contacts',
+  // Product cards (W9b): the web chat's WooCommerce ones, and the storefront's.
+  'woo_product',
+  'woo_product_carousel',
+  'shopify_product',
 ] as const;
 export type KnownMessageType = (typeof KNOWN_MESSAGE_TYPES)[number];
 
@@ -710,6 +734,26 @@ export const messageSchema = z.object({
           name: z.string().nullish().catch(null),
           address: z.string().nullish().catch(null),
           url: z.string().nullish().catch(null),
+        })
+        .optional()
+        .catch(undefined),
+      /**
+       * ★ W9b: the product cards sent (`woo_product`, `woo_product_carousel`,
+       * `shopify_product`) - built server-side from the store's own answer,
+       * the widget's shape. The body is their plain-text fallback. A product
+       * that does not parse is left out; none left, the body is shown.
+       */
+      commerce: z
+        .object({
+          products: z
+            .array(z.unknown())
+            .catch([])
+            .transform((rows) =>
+              rows.flatMap((row) => {
+                const product = commerceProductSchema.safeParse(row);
+                return product.success ? [product.data] : [];
+              }),
+            ),
         })
         .optional()
         .catch(undefined),
