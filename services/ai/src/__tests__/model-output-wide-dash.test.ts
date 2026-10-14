@@ -76,7 +76,9 @@ describe("★ operator-facing model text: a regular hyphen", () => {
   });
 
   it("the readiness report's questions and recommendations", async () => {
-    H.content = JSON.stringify({ questions: [{ question: DASHED, coverage: "full", reason: DASHED }], recommendations: [{ type: "other", title: DASHED, detail: DASHED }] });
+    // One answer serves both calls: the question set reads `questions`, the
+    // judge needs a `judgements` array (an answer without one is retried).
+    H.content = JSON.stringify({ questions: [{ question: DASHED, coverage: "full", reason: DASHED }], judgements: [], recommendations: [{ type: "other", title: DASHED, detail: DASHED }] });
     const r: any = await generateReadinessReport("T", "ag1", "en");
     expect(r.error).toBeUndefined();
     expect(r.questions[0].question).toBe("Fast-friendly - clear-done");
