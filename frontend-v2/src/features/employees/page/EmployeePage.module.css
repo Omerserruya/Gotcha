@@ -511,6 +511,43 @@
     margin-inline-start: 0;
   }
 
+  /* E2: the details under the one-line summary, and an answer written in place. */
+  .readinessDetails {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .readinessAnswer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin-block-start: var(--space-8);
+  }
+
+  .readinessAnswerText {
+    inline-size: 100%;
+    padding: var(--space-8) var(--space-10);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 9px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 13px;
+    resize: block;
+  }
+
+  .readinessAnswerText:focus {
+    border-color: var(--border-focus);
+    outline: none;
+  }
+
+  .readinessAnswerActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
   .readinessGo {
     font-size: 12.5px;
     color: var(--action-base);

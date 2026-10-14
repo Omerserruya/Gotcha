@@ -28,15 +28,25 @@ export type ReadinessFailure = (typeof READINESS_FAILURES)[number] | 'other';
  */
 export const AFTER_HIRE_WINDOW_MS = 3 * 60_000;
 
+/** The route's bound on an answer written into the knowledge (E2, Backend 201ad16a). */
+export const MAX_READINESS_ANSWER = 20_000;
+
 /**
  * The questions it is not ready for: none first, then partial, each group in
- * the report's order. A fully covered question is not a gap.
+ * the report's order. A fully covered question is not a gap, and neither is
+ * one a person answered (E2) - that answer covers it.
  */
 export function readinessGaps(questions: readonly ReadinessQuestion[]): ReadinessQuestion[] {
+  const open = questions.filter((q) => !q.answered);
   return [
-    ...questions.filter((q) => q.coverage === 'none'),
-    ...questions.filter((q) => q.coverage === 'partial'),
+    ...open.filter((q) => q.coverage === 'none'),
+    ...open.filter((q) => q.coverage === 'partial'),
   ];
+}
+
+/** E2: the questions a person answered, in the report's order. */
+export function readinessAnswered(questions: readonly ReadinessQuestion[]): ReadinessQuestion[] {
+  return questions.filter((q) => q.answered);
 }
 
 /** What the card says of the last run: running, failed with why, or nothing. */

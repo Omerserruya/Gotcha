@@ -2,12 +2,18 @@ import { describe, expect, it } from 'vitest';
 
 import type { Employee, ReadinessQuestion, ReadinessRunStatus } from '@/api/contracts/employees';
 
-import { AFTER_HIRE_WINDOW_MS, readinessGaps, readinessRun } from './readiness';
+import { AFTER_HIRE_WINDOW_MS, readinessAnswered, readinessGaps, readinessRun } from './readiness';
 
-const q = (question: string, coverage: ReadinessQuestion['coverage']): ReadinessQuestion => ({
+const q = (
+  question: string,
+  coverage: ReadinessQuestion['coverage'],
+  answered = false,
+): ReadinessQuestion => ({
+  id: null,
   question,
   coverage,
   reason: '',
+  answered,
 });
 
 describe('★★ H7 - the questions it is not ready for', () => {
@@ -105,5 +111,18 @@ describe('★ an older server, or an unread status: the belief after a hire', ()
     expect(at(1_000, { status: 'PAUSED' })).toBe('idle');
     expect(readinessRun(employee({ updatedAt: null }), older, now).state).toBe('idle');
     expect(readinessRun(employee({ updatedAt: 'garbage' }), older, now).state).toBe('idle');
+  });
+});
+
+describe('★★ E2 - a question a person answered is no gap', () => {
+  it('answered is left out of the gaps, whatever its coverage, and listed on its own', () => {
+    const questions = [
+      q('a', 'none', true),
+      q('b', 'none'),
+      q('c', 'partial', true),
+      q('d', 'full', true),
+    ];
+    expect(readinessGaps(questions).map((g) => g.question)).toEqual(['b']);
+    expect(readinessAnswered(questions).map((g) => g.question)).toEqual(['a', 'c', 'd']);
   });
 });

@@ -1337,6 +1337,12 @@ export const employeeEndpoints = {
    */
   toolLevel: (id: string, toolName: string) =>
     endpoint('/api/ai-agents/{id}/tool-levels/{toolName}', { id, toolName }),
+  /**
+   * E2 (Backend 201ad16a, B6): `POST { questionId? | question, answer }` - a
+   * readiness question answered into the workspace's knowledge.
+   */
+  readinessAnswer: (id: string) =>
+    endpoint('/api/ai-agents/{id}/readiness-questions/answer', { id }),
 } as const;
 
 /**

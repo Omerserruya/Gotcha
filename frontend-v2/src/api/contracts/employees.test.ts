@@ -157,9 +157,16 @@ describe('★★ H7 - the readiness report, read whole', () => {
     });
     expect(report?.score).toBe(62);
     expect(report?.totals).toEqual({ full: 3, partial: 1, none: 1, total: 5 });
+    // An older report: no id, not answered.
     expect(report?.questions).toEqual([
-      { question: 'Do you ship abroad?', coverage: 'none', reason: 'No shipping page' },
-      { question: 'Where is my order?', coverage: 'full', reason: '' },
+      {
+        id: null,
+        question: 'Do you ship abroad?',
+        coverage: 'none',
+        reason: 'No shipping page',
+        answered: false,
+      },
+      { id: null, question: 'Where is my order?', coverage: 'full', reason: '', answered: false },
     ]);
   });
 
@@ -297,5 +304,26 @@ describe('★★ E3 - an employee’s tools say where they are drawn (Backend 0d
     expect(
       employeeToolsSchema.parse({ tools: [{ ...row, domain: 7, domainLabel: '' }] })[0],
     ).toMatchObject({ domain: null, domainLabel: '' });
+  });
+});
+
+describe('★★ E2 - a readiness question’s stable id, and whether a person answered it (B6, 201ad16a)', () => {
+  const read = (question: Record<string, unknown>) =>
+    employeeSchema.parse({
+      id: 'a',
+      name: 'Maya',
+      readinessReport: { generatedAt: '2026-10-14T08:00:00Z', questions: [question] },
+    }).readinessReport?.questions[0];
+
+  it('kept as sent', () => {
+    expect(
+      read({ id: 'q_1a2b', question: 'Gift cards?', coverage: 'full', answered: true }),
+    ).toMatchObject({ id: 'q_1a2b', answered: true });
+  });
+
+  it('a bad id or flag is "none" and "not answered" - the question stays', () => {
+    expect(
+      read({ id: '', question: 'Gift cards?', coverage: 'none', answered: 'yes' }),
+    ).toMatchObject({ id: null, question: 'Gift cards?', answered: false });
   });
 });

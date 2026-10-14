@@ -42,9 +42,13 @@ export type EmployeeStatus = (typeof EMPLOYEE_STATUSES)[number];
 
 /** One question of a readiness test, and how well the employee can answer it. */
 export const readinessQuestionSchema = z.object({
+  /** Its stable id in the employee's stored question set (Backend B6); `null` from an older report. */
+  id: z.string().min(1).nullable().catch(null).default(null),
   question: z.string().min(1),
   coverage: z.enum(['full', 'partial', 'none']),
   reason: z.string().catch('').default(''),
+  /** E2 (Backend 201ad16a): a person answered it into the knowledge - covered by that answer. */
+  answered: z.boolean().catch(false).default(false),
 });
 
 export type ReadinessQuestion = z.infer<typeof readinessQuestionSchema>;

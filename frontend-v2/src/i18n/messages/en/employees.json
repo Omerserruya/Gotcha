@@ -483,6 +483,31 @@
     "tested": "Tested {when}",
     "gaps": "Questions it is not ready for yet",
     "noGaps": "Ready for every question in the test.",
+    "open": "{count, plural, one {1 question still open} other {# questions still open}}",
+    "showAll": "Show all",
+    "showLess": "Show less",
+    "answered": {
+      "title": "Answered already",
+      "state": "Answer added"
+    },
+    "answer": {
+      "start": "Answer",
+      "for": "Answer: {question}",
+      "label": "The answer, as it should give it to customers",
+      "placeholder": "For example: yes, we ship anywhere in the country within 3 business days.",
+      "save": "Add to knowledge",
+      "saving": "Adding…",
+      "cancel": "Cancel",
+      "added": "Added to knowledge. The next test counts this question as covered.",
+      "problem": {
+        "forbidden": "You don't have permission to add knowledge.",
+        "missing": "This employee isn't here any more.",
+        "stale": "This question isn't in its test any more. Run the test again.",
+        "not_learned": "The answer was saved but not learned yet, so the question is still open. Try again in a moment.",
+        "too_long": "The answer is too long: up to {max} characters.",
+        "failed": "The answer wasn't saved. Try again."
+      }
+    },
     "coverage": {
       "none": "No answer",
       "partial": "Partial answer"

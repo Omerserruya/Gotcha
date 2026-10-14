@@ -11,11 +11,14 @@ import { EmployeeReadiness, READINESS_POLL_MS } from './EmployeeReadiness';
 import type { ReadinessRun } from './readiness';
 
 /** H7 (Omer, 2026-10-13). The run is mocked: what it is asked, and what is said. */
-const { rerunReadiness, refresh } = vi.hoisted(() => ({
+const { rerunReadiness, refresh, answerReadinessQuestion } = vi.hoisted(() => ({
   rerunReadiness: vi.fn(),
   refresh: vi.fn(),
+  // ⚠ A real answer writes the tenant's knowledge: only ever this mock.
+  answerReadinessQuestion: vi.fn(),
 }));
 vi.mock('./readiness-actions', () => ({ rerunReadiness }));
+vi.mock('./readiness-answer-actions', () => ({ answerReadinessQuestion }));
 vi.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ refresh }),
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
@@ -31,9 +34,27 @@ const REPORT: Report = {
   score: 61.6,
   totals: { full: 3, partial: 1, none: 1, total: 5 },
   questions: [
-    { question: 'Where is my order?', coverage: 'full', reason: '' },
-    { question: 'Can I pay in installments?', coverage: 'partial', reason: 'Only card terms' },
-    { question: 'Do you ship abroad?', coverage: 'none', reason: 'No shipping page' },
+    {
+      id: 'q_order',
+      question: 'Where is my order?',
+      coverage: 'full',
+      reason: '',
+      answered: false,
+    },
+    {
+      id: 'q_pay',
+      question: 'Can I pay in installments?',
+      coverage: 'partial',
+      reason: 'Only card terms',
+      answered: false,
+    },
+    {
+      id: 'q_ship',
+      question: 'Do you ship abroad?',
+      coverage: 'none',
+      reason: 'No shipping page',
+      answered: false,
+    },
   ],
   recommendations: [
     { type: 'add_faq', title: 'Add shipping abroad', detail: 'Countries and prices' },
@@ -59,10 +80,15 @@ const show = (
     </NextIntlClientProvider>,
   );
 
+/** E2: the card opens minimized; "Show all" opens the rest in place. */
+const showAll = () => fireEvent.click(screen.getByTestId('readiness-toggle'));
+
 beforeEach(() => {
   rerunReadiness.mockReset();
   rerunReadiness.mockResolvedValue({ ok: true });
   refresh.mockReset();
+  answerReadinessQuestion.mockReset();
+  answerReadinessQuestion.mockResolvedValue({ ok: true });
 });
 afterEach(() => vi.useRealTimers());
 
@@ -78,6 +104,7 @@ describe('★★ H7 - the score, the gaps, what to add', () => {
 
   it('★ the gaps: no answer first, then partial, each with the test’s reason; full is not one', () => {
     show();
+    showAll();
     expect(screen.getByTestId('readiness-gap-0')).toHaveAttribute('data-coverage', 'none');
     expect(screen.getByTestId('readiness-gap-0')).toHaveTextContent('Do you ship abroad?');
     expect(screen.getByTestId('readiness-gap-0')).toHaveTextContent('No answer');
@@ -89,6 +116,7 @@ describe('★★ H7 - the score, the gaps, what to add', () => {
 
   it('every recommendation with a title, each sent where it is resolved - or nowhere', () => {
     show();
+    showAll();
     expect(screen.getByTestId('readiness-recommendation-0-go')).toHaveAttribute(
       'href',
       '/studio/knowledge',
@@ -105,6 +133,7 @@ describe('★★ H7 - the score, the gaps, what to add', () => {
 
   it('every question covered: said, never an empty list', () => {
     show({ ...REPORT, questions: [REPORT.questions[0]!] });
+    showAll();
     expect(screen.getByTestId('readiness-no-gaps')).toHaveTextContent(
       'Ready for every question in the test.',
     );
@@ -173,6 +202,7 @@ describe('★★ H7 - "Checking readiness…" while it runs', () => {
 describe('★★ H7 - a failed run says why, in words, with Run again', () => {
   it('each stored failure in its own words', () => {
     show(REPORT, { state: 'failed', failure: 'llm_unavailable' });
+    showAll();
     expect(screen.getByTestId('readiness-failed')).toHaveTextContent(
       'The last test did not run: the AI model was not available.',
     );
@@ -219,5 +249,105 @@ describe('★★ H7 - a failed run says why, in words, with Run again', () => {
         'The test did not run. Try again.',
       ),
     );
+  });
+});
+
+describe('★★ E2 (2026-10-14) - minimized by default, everything one press away', () => {
+  it('★ one line: the score, how many are still open, when - and no gap, no recommendation drawn', () => {
+    show();
+    expect(screen.getByTestId('readiness-score')).toHaveTextContent('62 out of 100');
+    expect(screen.getByTestId('readiness-open')).toHaveTextContent('2 questions still open');
+    expect(screen.getByTestId('readiness-toggle')).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByTestId('readiness-toggle')).toHaveTextContent('Show all');
+    expect(screen.queryByTestId('readiness-gaps')).toBeNull();
+    expect(screen.queryByTestId('readiness-recommendations')).toBeNull();
+  });
+
+  it('★ Show all opens it in place; Show less closes it', () => {
+    show();
+    showAll();
+    expect(screen.getByTestId('readiness-toggle')).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('readiness-gaps')).toBeInTheDocument();
+    expect(screen.getByTestId('readiness-toggle')).toHaveTextContent('Show less');
+    fireEvent.click(screen.getByTestId('readiness-toggle'));
+    expect(screen.queryByTestId('readiness-gaps')).toBeNull();
+  });
+
+  it('nothing open: the line says so', () => {
+    show({ ...REPORT, questions: [REPORT.questions[0]!] });
+    expect(screen.getByTestId('readiness-open')).toHaveTextContent(
+      'Ready for every question in the test.',
+    );
+  });
+
+  it('Hebrew: הצגת הכול, and the open count', () => {
+    show(REPORT, IDLE, 'he');
+    expect(screen.getByTestId('readiness-toggle')).toHaveTextContent('הצגת הכול');
+    expect(screen.getByTestId('readiness-open')).toHaveTextContent('2 שאלות פתוחות');
+  });
+});
+
+describe('★★ E2 - a question answered here goes into the knowledge', () => {
+  it('★★ Answer: the words, sent by the question’s stable id, then "added" and the page read again', async () => {
+    show();
+    showAll();
+    fireEvent.click(screen.getByTestId('readiness-answer-start-0'));
+    expect(screen.getByTestId('readiness-answer-save-0')).toBeDisabled();
+    fireEvent.change(screen.getByTestId('readiness-answer-text-0'), {
+      target: { value: '  Yes, to 30 countries.  ' },
+    });
+    fireEvent.click(screen.getByTestId('readiness-answer-save-0'));
+    await waitFor(() =>
+      expect(answerReadinessQuestion).toHaveBeenCalledWith(
+        'e1',
+        expect.objectContaining({ id: 'q_ship', question: 'Do you ship abroad?' }),
+        'Yes, to 30 countries.',
+      ),
+    );
+    expect(await screen.findByTestId('readiness-answer-added-0')).toHaveTextContent(
+      'Added to knowledge.',
+    );
+    expect(screen.queryByTestId('readiness-answer-text-0')).toBeNull();
+    expect(screen.queryByTestId('readiness-answer-start-0')).toBeNull();
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it('★ saved but not learned: said, the words kept, the question still open', async () => {
+    answerReadinessQuestion.mockResolvedValue({ ok: false, reason: 'not_learned' });
+    show();
+    showAll();
+    fireEvent.click(screen.getByTestId('readiness-answer-start-1'));
+    fireEvent.change(screen.getByTestId('readiness-answer-text-1'), {
+      target: { value: 'Card only.' },
+    });
+    fireEvent.click(screen.getByTestId('readiness-answer-save-1'));
+    expect(await screen.findByTestId('readiness-answer-problem-1')).toHaveTextContent(
+      'not learned yet',
+    );
+    expect(screen.getByTestId('readiness-answer-text-1')).toHaveValue('Card only.');
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('Cancel: nothing sent', () => {
+    show();
+    showAll();
+    fireEvent.click(screen.getByTestId('readiness-answer-start-0'));
+    fireEvent.click(screen.getByTestId('readiness-answer-cancel-0'));
+    expect(screen.queryByTestId('readiness-answer-text-0')).toBeNull();
+    expect(answerReadinessQuestion).not.toHaveBeenCalled();
+  });
+
+  it('★★ a question a person answered: listed as answered, never as a gap', () => {
+    show({
+      ...REPORT,
+      questions: [
+        ...REPORT.questions,
+        { id: 'q_gift', question: 'Gift cards?', coverage: 'full', reason: '', answered: true },
+      ],
+    });
+    showAll();
+    expect(screen.getByTestId('readiness-answered-0')).toHaveTextContent('Gift cards?');
+    expect(screen.getByTestId('readiness-answered-0')).toHaveTextContent('Answer added');
+    expect(screen.getByTestId('readiness-gaps')).not.toHaveTextContent('Gift cards?');
   });
 });
