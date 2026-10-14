@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity, defaultIntegrationAccess, validateIntegrationAccess, integrationAccessChoices, readAgentToolLevels, writeAgentToolLevel, stricterLevel, allowedEmployeeLevels, writeAudit, AuditAction, type ToolLevel } from "@chatcenter/shared";
 import { listWorkspaceTools } from "./tool-permissions";
 import { catalogTool } from "../lib/catalog-tools-he";
+import { toolDomain, toolDomainLabel } from "../lib/tool-domains";
 import { readerLocale } from "../lib/reader-locale";
 import { whereEmployeeAnswers } from "../services/employee-reach.service";
 
@@ -1001,12 +1002,22 @@ router.get("/:id/tools", authenticate, resolveTenant, requireActiveTenant(), req
       const own = levels[r.toolName] ?? null;
       const employeeLevel: ToolLevel = own ?? workspaceLevel;
       const slug = r.toolName.includes(".") ? r.toolName.slice(r.toolName.indexOf(".") + 1) : r.toolName;
+      const domain = toolDomain(r.toolName, r.integration, r.category);
       const label = r.integration ? catalogTool(r.integration, { slug, name: slug, description: r.description }, locale) : null;
       return {
         toolName: r.toolName,
         label: label?.name ?? r.toolName,
         description: label?.description ?? r.description,
         integration: r.integration,
+        integrationName: r.integration ? (r.integrationName ?? r.integration) : null,
+        // The registry category (built-ins) or the catalogue's READ/WRITE/DELETE/ACTION.
+        category: r.category,
+        // The business section inside the integration (B3): Orders, Coupons...
+        domain,
+        // The icon key, the same as the domain; its own field so the screen
+        // can change icons without changing sections.
+        domainIcon: domain,
+        domainLabel: toolDomainLabel(domain, locale),
         riskGroup: r.riskGroup,
         workspaceLevel,
         // What this employee has chosen, or null for "the same as the workspace".

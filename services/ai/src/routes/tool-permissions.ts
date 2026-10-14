@@ -82,6 +82,8 @@ export interface MergedToolRow {
    * must mean "not blocking" rather than "blocked".
    */
   integration: string | null;
+  /** The integration's display name ("WooCommerce"); integration rows only. */
+  integrationName?: string;
   integrationConnected?: boolean;
   requiredScopes?: string[];
   grantedScopes?: string[];
@@ -248,6 +250,7 @@ export async function listWorkspaceTools(tenantId: string): Promise<MergedToolRo
       riskGroup: riskGroupFor(toolName),
       autoRunAllowed: mayBeAlwaysAllowed(riskGroupFor(toolName), highRiskOpen),
       integration: g.integrationSlug,
+      integrationName: conn?.name ?? g.integrationSlug,
       integrationConnected: conn ? conn.connected : undefined,
       requiredScopes: g.requiredScopes.length ? g.requiredScopes : undefined,
       grantedScopes: conn?.grantedScopes,

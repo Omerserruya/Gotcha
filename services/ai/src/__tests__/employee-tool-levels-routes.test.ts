@@ -100,6 +100,19 @@ describe("GET /:id/tools", () => {
     expect(by["woocommerce.create_refund"]).toMatchObject({ granted: false, grantable: false });
   });
 
+  it("★ each tool says its integration's name, its category and its business section (B3)", async () => {
+    H.rows = [
+      row("send_message", true, false, { category: "messaging" }),
+      row("woocommerce.create_coupon", true, true, { integration: "woocommerce", integrationName: "WooCommerce", integrationConnected: true, category: "WRITE" }),
+      row("woocommerce.get_order", true, false, { integration: "woocommerce", integrationConnected: true, category: "READ" }),
+    ];
+    const by = Object.fromEntries((await request(app).get("/api/ai-agents/maya/tools")).body.data.tools.map((t: any) => [t.toolName, t]));
+    expect(by.send_message).toMatchObject({ integration: null, integrationName: null, category: "messaging", domain: "messaging", domainIcon: "messaging", domainLabel: "הודעות" });
+    expect(by["woocommerce.create_coupon"]).toMatchObject({ integrationName: "WooCommerce", category: "WRITE", domain: "coupons", domainIcon: "coupons", domainLabel: "קופונים והנחות" });
+    // No display name on the row: the slug, never an empty header.
+    expect(by["woocommerce.get_order"]).toMatchObject({ integrationName: "woocommerce", category: "READ", domain: "orders" });
+  });
+
   it("another tenant's employee: 404", async () => {
     expect((await request(app).get("/api/ai-agents/other/tools")).status).toBe(404);
   });
