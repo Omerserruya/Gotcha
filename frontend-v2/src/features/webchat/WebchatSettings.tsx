@@ -74,7 +74,7 @@ interface Setters {
   readonly language: (language: WebchatConfig['appearance']['language']) => void;
   readonly popup: (patch: Partial<WebchatConfig['ux']['proactive']>) => void;
   /** W1: the widget's kind - its look follows; a WhatsApp widget with the number it uses. */
-  readonly kind: (kind: WidgetKind, number?: string) => void;
+  readonly kind: (kind: WidgetKind, whatsapp: WebchatConfig['ux']['whatsapp']) => void;
   /** W1: the WhatsApp widget's greeting bubble (`ux.welcome.title`). */
   readonly greeting: (title: string) => void;
   readonly whatsapp: (patch: Partial<WebchatConfig['ux']['whatsapp']>) => void;
@@ -197,12 +197,8 @@ export function WebchatSettings({
       ux({ welcome: { ...config.ux.welcome, suggestedQuestions: [...suggestedQuestions] } }),
     language: (language) => appearance({ language }),
     popup: (patch) => ux({ proactive: { ...config.ux.proactive, ...patch } }),
-    kind: (kind, number) =>
-      ux({
-        kind,
-        look: kind === 'whatsapp' ? 'whatsapp' : 'gotcha',
-        ...(number ? { whatsapp: { enabled: true, channelAccountId: number } } : {}),
-      }),
+    kind: (kind, whatsapp) =>
+      ux({ kind, look: kind === 'whatsapp' ? 'whatsapp' : 'gotcha', whatsapp }),
     greeting: (title) => ux({ welcome: { ...config.ux.welcome, title } }),
     whatsapp: (patch) => ux({ whatsapp: { ...config.ux.whatsapp, ...patch } }),
   };
@@ -1446,19 +1442,46 @@ function KindChoice({
 }) {
   const t = useTranslations('channels.webchat.kind');
   const [picking, setPicking] = useState(false);
+  /*
+    ★ A switch changes the live widget on the customer's site at once, so it
+    is asked first, both ways (dev, 2026-10-14) - with the WhatsApp block it
+    would write.
+  */
+  const [asking, setAsking] = useState<{
+    readonly kind: WidgetKind;
+    readonly whatsapp: WebchatConfig['ux']['whatsapp'];
+  } | null>(null);
+  /*
+    ★ What "Continue on WhatsApp" was before the switch to a WhatsApp widget:
+    put back on the way to chat (dev, 2026-10-14 - keeping the widget's
+    number turned the hand-off on with it). Not known (the page opened on a
+    WhatsApp widget): the hand-off is off - never a number nobody chose.
+  */
+  const [before, setBefore] = useState<WebchatConfig['ux']['whatsapp'] | null>(null);
   const usable = numbers.filter((n) => n.available);
   const current = numbers.find((n) => n.channelId === config.ux.whatsapp.channelAccountId) ?? null;
   const ready = config.ux.whatsapp.enabled && current?.available === true;
+  const toWhatsApp = (channelAccountId: string) => {
+    setPicking(false);
+    setAsking({ kind: 'whatsapp', whatsapp: { enabled: true, channelAccountId } });
+  };
   const choose = (kind: WidgetKind) => {
-    if (kind === config.ux.kind && !(kind === 'whatsapp' && !ready)) return;
     if (kind === 'chat') {
       setPicking(false);
-      set.kind('chat');
+      if (config.ux.kind === 'chat') return;
+      setAsking({ kind: 'chat', whatsapp: before ?? { enabled: false, channelAccountId: null } });
       return;
     }
-    if (ready) set.kind('whatsapp');
-    else if (usable.length === 1) set.kind('whatsapp', usable[0]!.channelId);
+    if (config.ux.kind === 'whatsapp' && ready) return;
+    if (ready) toWhatsApp(config.ux.whatsapp.channelAccountId!);
+    else if (usable.length === 1) toWhatsApp(usable[0]!.channelId);
     else setPicking(true);
+  };
+  const confirm = () => {
+    if (!asking) return;
+    if (asking.kind === 'whatsapp' && config.ux.kind === 'chat') setBefore(config.ux.whatsapp);
+    set.kind(asking.kind, asking.whatsapp);
+    setAsking(null);
   };
   return (
     <section className={styles.kinds} data-testid="webchat-kind">
@@ -1481,7 +1504,30 @@ function KindChoice({
           </button>
         ))}
       </span>
-      {config.ux.kind === 'whatsapp' && current && !picking ? (
+      {asking ? (
+        <div className={styles.kindAsk} role="alertdialog" data-testid="webchat-kind-ask">
+          <span>{t(`ask.${asking.kind}`)}</span>
+          <span className={styles.kindAskActions}>
+            <button
+              type="button"
+              className={styles.kindAskYes}
+              onClick={confirm}
+              data-testid="webchat-kind-ask-yes"
+            >
+              {t('ask.yes')}
+            </button>
+            <button
+              type="button"
+              className={styles.linkButton}
+              onClick={() => setAsking(null)}
+              data-testid="webchat-kind-ask-no"
+            >
+              {t('ask.no')}
+            </button>
+          </span>
+        </div>
+      ) : null}
+      {config.ux.kind === 'whatsapp' && current && !picking && !asking ? (
         <p className={styles.rowHint} data-testid="webchat-kind-number">
           {t('number', { name: current.name, phone: current.phone ?? '' })}{' '}
           <button
@@ -1516,10 +1562,7 @@ function KindChoice({
                   name="webchat-kind-number"
                   disabled={!n.available}
                   checked={config.ux.kind === 'whatsapp' && current?.channelId === n.channelId}
-                  onChange={() => {
-                    setPicking(false);
-                    set.kind('whatsapp', n.channelId);
-                  }}
+                  onChange={() => toWhatsApp(n.channelId)}
                   data-testid={`webchat-kind-number-${n.channelId}`}
                 />
                 <bdi dir="auto">{n.name}</bdi>

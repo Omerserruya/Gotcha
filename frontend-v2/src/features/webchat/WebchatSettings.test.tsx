@@ -600,6 +600,11 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     // The Look segment is gone: the kind decides it.
     expect(screen.queryByTestId('webchat-look-whatsapp')).toBeNull();
     fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    // A live change on the customer's site: asked first.
+    expect(screen.getByTestId('webchat-kind-ask')).toHaveTextContent(
+      'Switch the widget on your site to a WhatsApp widget?',
+    );
+    fireEvent.click(screen.getByTestId('webchat-kind-ask-yes'));
     const panel = screen.getByTestId('webchat-preview-wa');
     expect(panel).toHaveTextContent('Chat with us');
     expect(panel).toHaveTextContent("Write here and we'll continue on WhatsApp.");
@@ -632,6 +637,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
       "Its phone number isn't known yet",
     );
     fireEvent.click(screen.getByTestId('webchat-kind-number-wa4'));
+    fireEvent.click(screen.getByTestId('webchat-kind-ask-yes'));
     await pause();
     expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({
       kind: 'whatsapp',
@@ -699,6 +705,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     actions.saveWebsiteWidget.mockResolvedValue({ ok: false, reason: 'kindNumber' });
     show('appearance', { numbers: NUMBERS });
     fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    fireEvent.click(screen.getByTestId('webchat-kind-ask-yes'));
     await pause();
     expect(screen.getByTestId('webchat-saving')).toHaveTextContent(
       'a WhatsApp widget needs a connected WhatsApp number',
@@ -917,5 +924,72 @@ describe('★★ W5 (2026-10-14) - the colour: the custom swatch opens the picke
     await pause();
     expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
+  });
+});
+
+describe('★★ W1, measured on dev - asked first both ways, and "Continue on WhatsApp" put back', () => {
+  const NUMS: readonly HandoffNumber[] = [
+    { channelId: 'wa1', name: 'Lumière', phone: '+972 54 000 0000', available: true },
+  ];
+
+  it('★★ Cancel: nothing saved, nothing changed', async () => {
+    show('appearance', { numbers: NUMS });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    fireEvent.click(screen.getByTestId('webchat-kind-ask-no'));
+    await pause();
+    expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
+    expect(screen.getByTestId('webchat-kind-chat')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('★★ back to chat is asked too, and puts back the hand-off as it was before - never the widget’s number', async () => {
+    const off = {
+      ...config,
+      ux: { ...config.ux, whatsapp: { enabled: true, channelAccountId: null } },
+    };
+    show('appearance', { numbers: NUMS, initial: off });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    fireEvent.click(screen.getByTestId('webchat-kind-ask-yes'));
+    await pause();
+    fireEvent.click(screen.getByTestId('webchat-kind-chat'));
+    expect(screen.getByTestId('webchat-kind-ask')).toHaveTextContent(
+      'Switch the widget on your site to a chat widget',
+    );
+    fireEvent.click(screen.getByTestId('webchat-kind-ask-yes'));
+    await pause();
+    const last = actions.saveWebsiteWidget.mock.calls.at(-1)![0] as WidgetSettings;
+    expect(bodyOfWidget(last, { stageB: true }).ux).toMatchObject({
+      kind: 'chat',
+      look: 'gotcha',
+      whatsapp: { enabled: true, channelAccountId: null },
+    });
+  });
+
+  it('★ opened on a WhatsApp widget, back to chat: the hand-off is off - no number nobody chose', async () => {
+    const wa = {
+      ...config,
+      ux: {
+        ...config.ux,
+        kind: 'whatsapp' as const,
+        look: 'whatsapp' as const,
+        whatsapp: { enabled: true, channelAccountId: 'wa1' },
+      },
+    };
+    show('appearance', { numbers: NUMS, initial: wa });
+    fireEvent.click(screen.getByTestId('webchat-kind-chat'));
+    fireEvent.click(screen.getByTestId('webchat-kind-ask-yes'));
+    await pause();
+    expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({
+      kind: 'chat',
+      whatsapp: { enabled: false, channelAccountId: null },
+    });
+  });
+
+  it('★ "needs a number" is said only while WhatsApp is being chosen - chat clears it', () => {
+    show('appearance', { numbers: [] });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    expect(screen.getByTestId('webchat-kind-no-number')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('webchat-kind-chat'));
+    expect(screen.queryByTestId('webchat-kind-no-number')).toBeNull();
+    expect(screen.queryByTestId('webchat-kind-ask')).toBeNull();
   });
 });

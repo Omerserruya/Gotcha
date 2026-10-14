@@ -895,6 +895,12 @@
       "numberWhy": {
         "not_connected": "Not connected",
         "number_unknown": "Its phone number isn't known yet"
+      },
+      "ask": {
+        "whatsapp": "Switch the widget on your site to a WhatsApp widget? Visitors will see it right away.",
+        "chat": "Switch the widget on your site to a chat widget with an AI employee? Visitors will see it right away.",
+        "yes": "Switch",
+        "no": "Cancel"
       }
     }
   },
