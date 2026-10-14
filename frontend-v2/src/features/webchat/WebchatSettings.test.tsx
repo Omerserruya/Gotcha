@@ -1295,3 +1295,17 @@ describe('★★ the bubble and the pop-up carry the brand, as the live widget d
     expect(screen.getByTestId('webchat-preview-popup-message')).toHaveTextContent(/^Hi$/);
   });
 });
+
+describe("★ our logo at design 7's visible size (dev, 2026-10-14)", () => {
+  it('the cropped mark is set at the share of the padded image the mark fills (303 of 768)', () => {
+    const css = readFileSync(join(__dirname, 'Webchat.module.css'), 'utf8');
+    const rule = (selector: string) =>
+      new RegExp(`\\n {2}${selector.replace(/\./g, '\\.')} \\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+    const visible = (designPx: number) => `block-size: ${Math.round((designPx * 303) / 768)}px;`;
+    expect(rule('.powered .poweredLogo')).toContain(visible(22));
+    expect(rule('.waWidget .powered .poweredLogo')).toContain(visible(28));
+    expect(rule('.poweredLogo')).toContain(visible(30));
+    // The padded image's negative margins have nothing to cancel on a cropped mark.
+    expect(css).not.toMatch(/poweredLogo \{[^}]*margin/);
+  });
+});

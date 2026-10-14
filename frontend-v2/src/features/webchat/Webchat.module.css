@@ -1159,10 +1159,12 @@
     color: var(--widget-look-faint);
   }
 
+  /*
+    Design 7 draws a padded 2048×768 image (the mark is 303 of its 768px)
+    at 22px; ours is cropped to the mark, so the visible size is set: 9px.
+  */
   .powered .poweredLogo {
-    block-size: 22px;
-    margin-block: -7px;
-    margin-inline: -6px;
+    block-size: 9px;
   }
 
   /* W8: "Powered by" and our logo, as design 7 draws it (logo 30px at full size). */
@@ -1178,8 +1180,9 @@
     color: inherit;
   }
 
+  /* The live widget's visible size (design 7's 30px padded image): 12px. */
   .poweredLogo {
-    block-size: 1.5em;
+    block-size: 12px;
     inline-size: auto;
     opacity: 0.7;
   }
@@ -1429,10 +1432,9 @@
     color: var(--whatsapp-look-meta);
   }
 
+  /* 28px of the padded image, visibly 11px. */
   .waWidget .powered .poweredLogo {
-    block-size: 28px;
-    margin-block: -9px;
-    margin-inline: -7px;
+    block-size: 11px;
   }
 
   /* Its teaser: white, with a small × - above the green button. */
