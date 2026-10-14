@@ -657,6 +657,43 @@
   }
 
   /* Behaviour */
+  /* ★ W9d: the store's coupons, chosen to show on the widget. */
+  .deals {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dealsPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    align-items: flex-start;
+    padding-block-end: var(--space-8);
+  }
+
+  .dealsList {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-self: stretch;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .dealRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    align-items: center;
+    cursor: pointer;
+  }
+
+  .dealCode {
+    font-family: var(--font-mono);
+    font-weight: 600;
+  }
+
   .toggleRow {
     display: flex;
     flex-wrap: wrap;

@@ -31,7 +31,17 @@ export type WidgetSettings = z.infer<typeof widgetSettingsSchema>;
  * them: a stage A route would drop them, and the screen would snap back.
  */
 export function bodyOfWidget(settings: WidgetSettings, { stageB = false } = {}) {
-  const { displayName: _account, ...body } = bodyOfConfig({ ...settings, displayName: '' });
+  const { displayName: _account, ...config } = bodyOfConfig({ ...settings, displayName: '' });
+  // W9: the website widget's own products, cart and chosen coupons.
+  const body = {
+    ...config,
+    commerce: {
+      productMessagingEnabled: settings.commerce.productMessagingEnabled,
+      addToCartEnabled:
+        settings.commerce.productMessagingEnabled && settings.commerce.addToCartEnabled,
+      promotions: { couponIds: [...settings.commerce.promotions.couponIds] },
+    },
+  };
   if (!stageB) return body;
   return {
     ...body,
@@ -195,6 +205,53 @@ export const widgetInstallSchema = z.object({
 export type WidgetInstall = z.infer<typeof widgetInstallSchema>['data'];
 export type ShopifyPlace = WidgetInstall['shopify'][number];
 export type WooSite = WidgetInstall['woocommerce']['sites'][number];
+
+/**
+ * `GET /api/website-widget/promotions/available?page=1` (W9d, Backend 2db313bb):
+ * the connected WooCommerce store's coupons for the picker, 100 a page.
+ * `live`: would show on the widget now. A coupon that does not parse is left
+ * out rather than failing the list.
+ */
+export const storeCouponSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  amount: z.string().catch(''),
+  discountType: z.string().catch(''),
+  expiresAt: when,
+  minimumAmount: z.string().nullable().catch(null).default(null),
+  status: z.string().catch(''),
+  usageCount: z.number().catch(0),
+  usageLimit: z.number().nullable().catch(null).default(null),
+  live: z.boolean().catch(false),
+});
+export type StoreCoupon = z.infer<typeof storeCouponSchema>;
+
+export const promotionsAvailableSchema = z.object({
+  data: z.object({
+    connected: z.boolean(),
+    coupons: z
+      .array(z.unknown())
+      .catch([])
+      .transform((rows) =>
+        rows.flatMap((row) => {
+          const coupon = storeCouponSchema.safeParse(row);
+          return coupon.success ? [coupon.data] : [];
+        }),
+      ),
+  }),
+});
+
+/** Why a chosen coupon does not show now: not published, expired, or used up. */
+export function couponHeldBack(
+  coupon: StoreCoupon,
+  now = Date.now(),
+): 'unpublished' | 'expired' | 'usedUp' | null {
+  if (coupon.live) return null;
+  if (coupon.status && coupon.status !== 'publish') return 'unpublished';
+  if (coupon.expiresAt && Date.parse(coupon.expiresAt) < now) return 'expired';
+  if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit) return 'usedUp';
+  return 'unpublished';
+}
 
 /** A store's address as a host: "https://demo-store.example/" → "demo-store.example". */
 function hostOf(address: string): string | null {

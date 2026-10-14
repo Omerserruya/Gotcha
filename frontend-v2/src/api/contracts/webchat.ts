@@ -37,6 +37,15 @@ export const PALETTE = ['#121212', '#3A3833', '#C96A4B', '#4F7A2E', '#3E5C99', '
 
 const url = z.string().nullable().catch(null).default(null);
 
+/** At most this many coupons show on the widget (the server keeps the first five). */
+export const MAX_PROMOTION_COUPONS = 5;
+
+const NO_COMMERCE = {
+  productMessagingEnabled: false,
+  addToCartEnabled: false,
+  promotions: { couponIds: [] as string[] },
+};
+
 export const webchatConfigSchema = z.object({
   displayName: z.string().catch(''),
   appearance: z.object({
@@ -76,6 +85,22 @@ export const webchatConfigSchema = z.object({
       .catch({ enabled: false, channelAccountId: null })
       .default({ enabled: false, channelAccountId: null }),
   }),
+  /**
+   * ★ W9 (Backend 7eb3810a, 2db313bb): products from the connected WooCommerce
+   * store, add to cart, and the coupons chosen to show (at most 5). Off by
+   * default; the server keeps add to cart off while products are off.
+   */
+  commerce: z
+    .object({
+      productMessagingEnabled: z.boolean().catch(false),
+      addToCartEnabled: z.boolean().catch(false),
+      promotions: z
+        .object({ couponIds: z.array(z.string()).catch([]) })
+        .catch({ couponIds: [] })
+        .default({ couponIds: [] }),
+    })
+    .catch(NO_COMMERCE)
+    .default(NO_COMMERCE),
 });
 export type WebchatConfig = z.infer<typeof webchatConfigSchema>;
 

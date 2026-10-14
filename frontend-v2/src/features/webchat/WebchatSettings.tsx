@@ -23,6 +23,7 @@ import {
 
 import {
   PALETTE,
+  MAX_PROMOTION_COUPONS,
   POPUP_DELAYS,
   WEBCHAT_TABS,
   WEBCHAT_LANGUAGES,
@@ -36,8 +37,10 @@ import {
 import {
   WIDGET_PATH,
   isLive,
+  couponHeldBack,
   platformOffer,
   previewSite,
+  type StoreCoupon,
   type HandoffNumber,
   type ShopifyPlace,
   type WebsiteWidget,
@@ -62,7 +65,11 @@ import {
   type ImageSlot,
 } from './widget-image';
 import type { ShopifyData } from './load-website-widget';
-import { saveWebsiteWidget } from './website-widget-actions';
+import {
+  loadWidgetPromotions,
+  saveWebsiteWidget,
+  type PromotionsRead,
+} from './website-widget-actions';
 import styles from './Webchat.module.css';
 import { WidgetAssignmentCard } from './WidgetAssignment';
 import { WooPlugin } from './WooPlugin';
@@ -86,6 +93,8 @@ interface Setters {
   /** W1: the WhatsApp widget's greeting bubble (`ux.welcome.title`). */
   readonly greeting: (title: string) => void;
   readonly whatsapp: (patch: Partial<WebchatConfig['ux']['whatsapp']>) => void;
+  /** W9: products, cart and the chosen coupons. */
+  readonly commerce: (patch: Partial<WebchatConfig['commerce']>) => void;
 }
 
 /**
@@ -148,6 +157,10 @@ export function WebchatSettings({
   /* Products and cart: on where a shop runs it and its catalogue answers (Backend, stage A). */
   const selling = Boolean(
     install?.shopify.some((shop) => shop.status === 'active') && shopifyData === 'ok',
+  );
+  /* W9: products, cart and deals from a WooCommerce store connected to GOTCHA - switches. */
+  const woo = Boolean(
+    install?.platforms?.some((p) => p.platform === 'woocommerce' && p.data === 'connected'),
   );
   const stageB = handoffNumbers !== null;
   const [config, setConfig] = useState(initial);
@@ -212,6 +225,7 @@ export function WebchatSettings({
       ux({ kind, look: kind === 'whatsapp' ? 'whatsapp' : 'gotcha', whatsapp }),
     greeting: (title) => ux({ welcome: { ...config.ux.welcome, title } }),
     whatsapp: (patch) => ux({ whatsapp: { ...config.ux.whatsapp, ...patch } }),
+    commerce: (patch) => change({ ...config, commerce: { ...config.commerce, ...patch } }),
   };
   /* The number "Continue on WhatsApp" would use - the button shows only when it can take it. */
   const handoff =
@@ -295,6 +309,7 @@ export function WebchatSettings({
               config={config}
               set={set}
               selling={selling}
+              woo={woo}
               handoffNumbers={handoffNumbers}
             />
           ) : (
@@ -923,12 +938,15 @@ function Behaviour({
   config,
   set,
   selling,
+  woo,
   handoffNumbers,
 }: {
   readonly config: WebchatConfig;
   readonly set: Setters;
   /** A shop runs the widget and its catalogue answers: products and cart are on there. */
   readonly selling: boolean;
+  /** A WooCommerce store is connected to GOTCHA: products, cart and deals are switches (W9). */
+  readonly woo: boolean;
   /** Stage B's numbers; `null` on a stage A service. */
   readonly handoffNumbers: readonly HandoffNumber[] | null;
 }) {
@@ -1072,32 +1090,74 @@ function Behaviour({
         in a Shopify shop yes, from the code snippet no - a status, not a
         switch. Deals have no source anywhere yet.
       */}
-      {config.ux.kind === 'whatsapp'
-        ? null
-        : (['products', 'cart'] as const).map((k) =>
-            selling ? (
-              <div className={styles.toggleRow} key={k} data-testid={`webchat-${k}`}>
-                <span className={styles.toggleText}>
-                  <span>{t(`${k}.label`)}</span>
-                  <span className={styles.rowHint}>{t(`${k}.hint`)}</span>
-                  <span className={styles.rowHint}>{t('codeNoProducts')}</span>
-                </span>
-                <span className={styles.onTag} data-testid={`webchat-${k}-on`}>
-                  {t('onInShopify')}
-                </span>
-              </div>
-            ) : (
-              <Toggle
-                key={k}
-                label={t(`${k}.label`)}
-                hint={t(`${k}.hint`)}
-                on={false}
-                why={t('noCatalogue')}
-                testid={`webchat-${k}`}
-              />
-            ),
+      {config.ux.kind === 'whatsapp' ? null : woo && !selling ? (
+        /*
+          ★ W9: a WooCommerce store connected to GOTCHA - the merchant's own
+          switches. Add to cart lives on a product card: no cards, no cart.
+        */
+        <>
+          <Toggle
+            label={t('products.label')}
+            hint={t('products.hint')}
+            on={config.commerce.productMessagingEnabled}
+            onChange={(on) =>
+              set.commerce(
+                on
+                  ? { productMessagingEnabled: true }
+                  : { productMessagingEnabled: false, addToCartEnabled: false },
+              )
+            }
+            testid="webchat-products"
+          />
+          {config.commerce.productMessagingEnabled ? (
+            <Toggle
+              label={t('cart.label')}
+              hint={t('cart.hint')}
+              on={config.commerce.addToCartEnabled}
+              onChange={(on) => set.commerce({ addToCartEnabled: on })}
+              testid="webchat-cart"
+            />
+          ) : (
+            <Toggle
+              label={t('cart.label')}
+              hint={t('cart.hint')}
+              on={false}
+              why={t('cartNeedsProducts')}
+              testid="webchat-cart"
+            />
           )}
-      {config.ux.kind === 'whatsapp' ? null : (
+        </>
+      ) : (
+        (['products', 'cart'] as const).map((k) =>
+          selling ? (
+            <div className={styles.toggleRow} key={k} data-testid={`webchat-${k}`}>
+              <span className={styles.toggleText}>
+                <span>{t(`${k}.label`)}</span>
+                <span className={styles.rowHint}>{t(`${k}.hint`)}</span>
+                <span className={styles.rowHint}>{t('codeNoProducts')}</span>
+              </span>
+              <span className={styles.onTag} data-testid={`webchat-${k}-on`}>
+                {t('onInShopify')}
+              </span>
+            </div>
+          ) : (
+            <Toggle
+              key={k}
+              label={t(`${k}.label`)}
+              hint={t(`${k}.hint`)}
+              on={false}
+              why={t('noCatalogue')}
+              testid={`webchat-${k}`}
+            />
+          ),
+        )
+      )}
+      {config.ux.kind === 'whatsapp' ? null : woo ? (
+        <DealsPicker
+          chosen={config.commerce.promotions.couponIds}
+          choose={(couponIds) => set.commerce({ promotions: { couponIds: [...couponIds] } })}
+        />
+      ) : (
         <Toggle
           label={t('deals.label')}
           hint={t('deals.hint')}
@@ -1338,6 +1398,135 @@ function CopyCode({ code }: { readonly code: string }) {
       {copied === true ? t('copied') : copied === false ? t('copyFailed') : t('copy')}
     </button>
   );
+}
+
+/**
+ * ★ W9d: the store's coupons to show on the widget - at most five, in the
+ * order chosen. Each says whether it would show now, and why not (not
+ * published, expired, used up). Read when opened: the store is asked only
+ * when the merchant wants to choose.
+ */
+function DealsPicker({
+  chosen,
+  choose,
+}: {
+  readonly chosen: readonly string[];
+  readonly choose: (couponIds: readonly string[]) => void;
+}) {
+  const t = useTranslations('channels.webchat.behaviour.deals');
+  const [open, setOpen] = useState(false);
+  const [read, setRead] = useState<PromotionsRead | null>(null);
+  const [isPending, start] = useTransition();
+  const load = () =>
+    start(async () => {
+      setRead(await loadWidgetPromotions());
+    });
+  const full = chosen.length >= MAX_PROMOTION_COUPONS;
+  return (
+    <div className={styles.deals} data-testid="webchat-deals">
+      <div className={styles.toggleRow}>
+        <span className={styles.toggleText}>
+          <span>{t('label')}</span>
+          <span className={styles.rowHint}>{t('hint')}</span>
+          <span className={styles.rowHint} data-testid="webchat-deals-count">
+            {t('chosen', { count: chosen.length })}
+          </span>
+        </span>
+        {open ? null : (
+          <button
+            type="button"
+            className={styles.textButton}
+            onClick={() => {
+              setOpen(true);
+              if (read === null || !read.ok) load();
+            }}
+            data-testid="webchat-deals-choose"
+          >
+            {chosen.length ? t('change') : t('choose')}
+          </button>
+        )}
+      </div>
+      {open ? (
+        <div className={styles.dealsPanel} data-testid="webchat-deals-picker">
+          {isPending || read === null ? (
+            <p className={styles.rowHint} role="status">
+              {t('loading')}
+            </p>
+          ) : !read.ok ? (
+            <p className={styles.why} role="alert" data-testid="webchat-deals-problem">
+              {t(read.reason === 'unreachable' ? 'unreachable' : 'failed')}{' '}
+              <button type="button" className={styles.textButton} onClick={load}>
+                {t('retry')}
+              </button>
+            </p>
+          ) : !read.connected ? (
+            <p className={styles.rowHint}>{t('notConnected')}</p>
+          ) : read.coupons.length === 0 ? (
+            <p className={styles.rowHint}>{t('none')}</p>
+          ) : (
+            <>
+              <p className={styles.rowHint}>{t('max', { max: MAX_PROMOTION_COUPONS })}</p>
+              <ul className={styles.dealsList}>
+                {read.coupons.map((coupon) => {
+                  const on = chosen.includes(coupon.id);
+                  const held = couponHeldBack(coupon);
+                  return (
+                    <li key={coupon.id}>
+                      <label className={styles.dealRow}>
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          disabled={!on && full}
+                          onChange={(e) =>
+                            choose(
+                              e.target.checked
+                                ? [...chosen, coupon.id]
+                                : chosen.filter((id) => id !== coupon.id),
+                            )
+                          }
+                          data-testid={`webchat-deal-${coupon.id}`}
+                        />
+                        <bdi dir="ltr" className={styles.dealCode}>
+                          {coupon.code}
+                        </bdi>
+                        <span>{dealWords(t, coupon)}</span>
+                        <span
+                          className={held ? styles.rowHint : styles.onTag}
+                          data-testid={`webchat-deal-${coupon.id}-state`}
+                        >
+                          {held ? t(`held.${held}`) : t('live')}
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+          <button
+            type="button"
+            className={styles.textButton}
+            onClick={() => setOpen(false)}
+            data-testid="webchat-deals-done"
+          >
+            {t('done')}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** A coupon's discount in words. The list carries no currency: the amount stands as the store wrote it. */
+function dealWords(
+  t: ReturnType<typeof useTranslations<'channels.webchat.behaviour.deals'>>,
+  coupon: StoreCoupon,
+): string {
+  const n = Number(coupon.amount);
+  const amount = Number.isFinite(n) ? String(Math.round(n * 100) / 100) : coupon.amount;
+  if (coupon.discountType === 'percent') return t('percent', { n: amount });
+  if (coupon.discountType === 'fixed_product') return t('fixedProduct', { n: amount });
+  return t('fixedCart', { n: amount });
 }
 
 /**

@@ -27,7 +27,7 @@ vi.mock('@/i18n/navigation', () => ({
   ),
   useRouter: () => router,
 }));
-const actions = vi.hoisted(() => ({ saveWebsiteWidget: vi.fn() }));
+const actions = vi.hoisted(() => ({ saveWebsiteWidget: vi.fn(), loadWidgetPromotions: vi.fn() }));
 /* W3/W4: the upload is the platform's - mocked here, nothing leaves. */
 const browser = vi.hoisted(() => ({ post: vi.fn() }));
 vi.mock('@/api/client/browser-api', () => ({ browserApi: browser }));
@@ -245,11 +245,28 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
     ]);
   });
 
-  it('★ the body is the web chat body without the account name', () => {
+  it("★ the body is the web chat body without the account name, plus the widget's commerce (W9)", () => {
     const { displayName: _name, ...settings } = config;
     const { displayName: _sent, ...expected } = bodyOfConfig(config);
-    expect(bodyOfWidget(settings)).toEqual(expected);
+    expect(bodyOfWidget(settings)).toEqual({
+      ...expected,
+      commerce: {
+        productMessagingEnabled: false,
+        addToCartEnabled: false,
+        promotions: { couponIds: [] },
+      },
+    });
     expect(bodyOfWidget(settings)).not.toHaveProperty('displayName');
+    // No product cards, no cart - whatever state reached the body.
+    const odd = {
+      ...settings,
+      commerce: {
+        productMessagingEnabled: false,
+        addToCartEnabled: true,
+        promotions: { couponIds: [] },
+      },
+    };
+    expect(bodyOfWidget(odd).commerce.addToCartEnabled).toBe(false);
   });
 });
 
@@ -282,7 +299,7 @@ describe('★★ products and cart are on by WHERE it runs - a Shopify shop whos
       );
     }
     expect(screen.getByTestId('webchat-products')).toHaveTextContent(
-      'it needs the widget in a Shopify store with stock and orders connected',
+      'it needs a store connected to GOTCHA (Shopify or WooCommerce)',
     );
     expect(screen.getByTestId('webchat-popup-switch')).toBeEnabled();
   });
@@ -1313,5 +1330,159 @@ describe("★ our logo at design 7's visible size (dev, 2026-10-14)", () => {
     expect(rule('.poweredLogo')).toContain(visible(30));
     // The padded image's negative margins have nothing to cancel on a cropped mark.
     expect(css).not.toMatch(/poweredLogo \{[^}]*margin/);
+  });
+});
+
+describe('★★ W9: products, cart and deals from a WooCommerce store connected to GOTCHA', () => {
+  const woo = () =>
+    install({
+      platforms: [
+        { platform: 'woocommerce', data: 'connected', stores: ['https://demo-store.example/'] },
+      ],
+    });
+  const coupon = (over: Record<string, unknown> = {}) => ({
+    id: '11',
+    code: 'SPRING15',
+    amount: '15.00',
+    discountType: 'percent',
+    expiresAt: null,
+    minimumAmount: null,
+    status: 'publish',
+    usageCount: 0,
+    usageLimit: null,
+    live: true,
+    ...over,
+  });
+  const openPicker = async () => {
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('webchat-deals-choose'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  };
+  beforeEach(() => {
+    actions.loadWidgetPromotions.mockReset();
+  });
+
+  it("★ the switches are the merchant's: products on is saved; cart waits for products, then saves", async () => {
+    show('behaviour', { read: woo() });
+    expect(screen.getByTestId('webchat-cart-unavailable')).toHaveTextContent(
+      'Turn on Recommend products first',
+    );
+    fireEvent.click(screen.getByTestId('webchat-products-switch'));
+    fireEvent.click(screen.getByTestId('webchat-cart-switch'));
+    await pause();
+    expect(sentAt().commerce).toEqual({
+      productMessagingEnabled: true,
+      addToCartEnabled: true,
+      promotions: { couponIds: [] },
+    });
+  });
+
+  it('products off takes the cart with it', async () => {
+    const on = {
+      ...config,
+      commerce: {
+        productMessagingEnabled: true,
+        addToCartEnabled: true,
+        promotions: { couponIds: [] },
+      },
+    };
+    show('behaviour', { read: woo(), initial: on });
+    fireEvent.click(screen.getByTestId('webchat-products-switch'));
+    await pause();
+    expect(sentAt().commerce.productMessagingEnabled).toBe(false);
+    expect(sentAt().commerce.addToCartEnabled).toBe(false);
+  });
+
+  it("★ deals: the store's coupons, live or why not, chosen in order and saved", async () => {
+    actions.loadWidgetPromotions.mockResolvedValue({
+      ok: true,
+      connected: true,
+      coupons: [
+        coupon(),
+        coupon({
+          id: '12',
+          code: 'TWENTY',
+          amount: '20',
+          discountType: 'fixed_cart',
+          live: false,
+          expiresAt: '2026-01-01T00:00:00.000Z',
+        }),
+      ],
+    });
+    show('behaviour', { read: woo() });
+    expect(screen.getByTestId('webchat-deals-count')).toHaveTextContent('None chosen');
+    await openPicker();
+    expect(actions.loadWidgetPromotions).toHaveBeenCalledTimes(1);
+    const picker = screen.getByTestId('webchat-deals-picker');
+    expect(picker).toHaveTextContent('SPRING15');
+    expect(picker).toHaveTextContent('15% off');
+    expect(picker).toHaveTextContent('20 off the cart');
+    expect(screen.getByTestId('webchat-deal-11-state')).toHaveTextContent(/^Shows now$/);
+    expect(screen.getByTestId('webchat-deal-12-state')).toHaveTextContent(/^Not shown: expired$/);
+    fireEvent.click(screen.getByTestId('webchat-deal-12'));
+    fireEvent.click(screen.getByTestId('webchat-deal-11'));
+    await pause();
+    expect(sentAt().commerce.promotions.couponIds).toEqual(['12', '11']);
+    expect(screen.getByTestId('webchat-deals-count')).toHaveTextContent('2 chosen');
+  });
+
+  it('five chosen: no sixth', async () => {
+    const five = {
+      ...config,
+      commerce: {
+        productMessagingEnabled: false,
+        addToCartEnabled: false,
+        promotions: { couponIds: ['1', '2', '3', '4', '5'] },
+      },
+    };
+    actions.loadWidgetPromotions.mockResolvedValue({
+      ok: true,
+      connected: true,
+      coupons: [coupon({ id: '1' }), coupon({ id: '6', code: 'SIX' })],
+    });
+    show('behaviour', { read: woo(), initial: five });
+    await openPicker();
+    expect(screen.getByTestId('webchat-deal-1')).toBeEnabled();
+    expect(screen.getByTestId('webchat-deal-6')).toBeDisabled();
+  });
+
+  it("the store didn't answer: said, with a way to ask again", async () => {
+    actions.loadWidgetPromotions.mockResolvedValue({ ok: false, reason: 'unreachable' });
+    show('behaviour', { read: woo() });
+    await openPicker();
+    expect(screen.getByTestId('webchat-deals-problem')).toHaveTextContent(
+      "Your store didn't answer.",
+    );
+    actions.loadWidgetPromotions.mockResolvedValue({
+      ok: true,
+      connected: true,
+      coupons: [coupon()],
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId('webchat-deals-picker')).toHaveTextContent('SPRING15');
+  });
+
+  it('a Shopify shop that sells keeps its "On in Shopify"; the deals are still Woo\'s', () => {
+    show('behaviour', {
+      read: install({
+        shopify: [shop()],
+        platforms: [{ platform: 'woocommerce', data: 'connected', stores: [] }],
+      }),
+    });
+    expect(screen.getByTestId('webchat-products-on')).toBeInTheDocument();
+    expect(screen.getByTestId('webchat-deals-choose')).toBeInTheDocument();
+  });
+
+  it('no store connected: no switch, no picker', () => {
+    show('behaviour', {
+      read: install({ platforms: [{ platform: 'woocommerce', data: 'error', stores: [] }] }),
+    });
+    expect(screen.queryByTestId('webchat-products-switch')).toBeNull();
+    expect(screen.queryByTestId('webchat-deals-choose')).toBeNull();
+    expect(screen.getByTestId('webchat-deals-unavailable')).toBeInTheDocument();
   });
 });

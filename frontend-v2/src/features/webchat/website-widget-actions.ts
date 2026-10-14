@@ -7,7 +7,9 @@ import { serverApi } from '@/api/client/server-api';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 import {
   bodyOfWidget,
+  promotionsAvailableSchema,
   websiteWidgetSchema,
+  type StoreCoupon,
   widgetAssignmentWriteSchema,
   type WidgetAssignment,
   type WidgetSettings,
@@ -57,6 +59,32 @@ export async function saveWebsiteWidget(
       return { ok: false, reason: 'number' };
     }
     logger.warn('website_widget.save_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export type PromotionsRead =
+  | { readonly ok: true; readonly connected: boolean; readonly coupons: readonly StoreCoupon[] }
+  /** `unreachable`: 502 STORE_UNREACHABLE - the store did not answer. */
+  | { readonly ok: false; readonly reason: 'unreachable' | 'failed' };
+
+/** W9d: the store's coupons, for the picker (the first page: 100). */
+export async function loadWidgetPromotions(): Promise<PromotionsRead> {
+  try {
+    const answer = await serverApi().get({
+      endpoint: channelEndpoints.websiteWidgetPromotions(),
+      payload: promotionsAvailableSchema,
+      query: { page: 1 },
+      raw: true,
+    });
+    return { ok: true, connected: answer.data.connected, coupons: answer.data.coupons };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    if (isApiError(cause) && cause.code === 'STORE_UNREACHABLE')
+      return { ok: false, reason: 'unreachable' };
+    logger.warn('website_widget.promotions_failed', {
       status: isApiError(cause) ? cause.status : undefined,
     });
     return { ok: false, reason: 'failed' };

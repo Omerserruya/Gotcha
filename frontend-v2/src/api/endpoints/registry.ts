@@ -607,6 +607,11 @@ export const channelEndpoints = {
   /** Where it is installed: the code snippet, each Shopify shop, WooCommerce. */
   websiteWidgetInstall: () => endpoint('/api/website-widget/install'),
   /**
+   * W9d (Backend 2db313bb): the connected WooCommerce store's coupons for the
+   * picker - `{ connected, coupons[] }`, 100 a page; 502 STORE_UNREACHABLE.
+   */
+  websiteWidgetPromotions: () => endpoint('/api/website-widget/promotions/available'),
+  /**
    * GET / PUT - who answers the widget, written to THE PLAYBOOK (website-widget-v1
    * §4, Backend 544e8b76). Role ADMIN, like the playbook editor.
    */

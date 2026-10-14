@@ -5,12 +5,17 @@ import { webchatSettingsSchema } from '@/api/contracts/webchat';
 import { widgetAssignmentSchema } from '@/api/contracts/website-widget';
 
 const put = vi.hoisted(() => vi.fn());
+const get = vi.hoisted(() => vi.fn());
 vi.mock('server-only', () => ({}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
-vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ put }) }));
+vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ put, get }) }));
 vi.mock('@/api/client/signed-out', () => ({ signInIfSignedOut: async () => {} }));
 
-import { saveWebsiteWidget, saveWidgetAssignment } from './website-widget-actions';
+import {
+  loadWidgetPromotions,
+  saveWebsiteWidget,
+  saveWidgetAssignment,
+} from './website-widget-actions';
 
 const { displayName: _name, ...SETTINGS } = webchatSettingsSchema.parse({
   data: {
@@ -118,5 +123,56 @@ describe('★★ who answers the widget - written to the playbook (§4.2)', () =
   ])('%s %s → %s', async (status, code, reason) => {
     put.mockRejectedValueOnce(new ApiError({ kind: 'conflict', status, code }));
     expect(await saveWidgetAssignment('e1', ['WEBCHAT'])).toEqual({ ok: false, reason });
+  });
+});
+
+describe("★ W9d: the store's coupons for the picker", () => {
+  // The real client unwraps a top-level `data` unless `raw` is set.
+  const answer = (body: unknown) =>
+    get.mockImplementation(
+      async ({ payload, raw }: { payload: { parse: (v: unknown) => unknown }; raw?: boolean }) => {
+        const envelope = body as { data?: unknown };
+        return payload.parse(!raw && 'data' in envelope ? envelope.data : body);
+      },
+    );
+
+  it('page 1 of GET /promotions/available; a coupon that does not parse is left out', async () => {
+    answer({
+      data: {
+        connected: true,
+        coupons: [
+          {
+            id: '11',
+            code: 'SPRING15',
+            amount: '15',
+            discountType: 'percent',
+            expiresAt: null,
+            minimumAmount: null,
+            status: 'publish',
+            usageCount: 0,
+            usageLimit: null,
+            live: true,
+          },
+          { code: 'NO_ID' },
+        ],
+      },
+    });
+    const read = await loadWidgetPromotions();
+    expect(get.mock.calls[0]![0].endpoint.path).toBe('/api/website-widget/promotions/available');
+    expect(get.mock.calls[0]![0].query).toEqual({ page: 1 });
+    expect(read).toEqual({
+      ok: true,
+      connected: true,
+      coupons: [expect.objectContaining({ id: '11', live: true })],
+    });
+  });
+
+  it('502 STORE_UNREACHABLE: the store did not answer; anything else: failed', async () => {
+    get.mockRejectedValue(
+      new ApiError({ kind: 'unknown', status: 502, code: 'STORE_UNREACHABLE' }),
+    );
+    expect(await loadWidgetPromotions()).toEqual({ ok: false, reason: 'unreachable' });
+    get.mockRejectedValue(new ApiError({ kind: 'server', status: 500 }));
+    expect(await loadWidgetPromotions()).toEqual({ ok: false, reason: 'failed' });
   });
 });

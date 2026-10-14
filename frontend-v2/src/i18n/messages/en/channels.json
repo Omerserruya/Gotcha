@@ -793,19 +793,40 @@
       },
       "deals": {
         "label": "Show active deals",
-        "hint": "Only deals set up in your store"
+        "hint": "Only deals set up in your store",
+        "choose": "Choose deals",
+        "change": "Change",
+        "chosen": "{count, plural, =0 {None chosen} one {# chosen} other {# chosen}}",
+        "max": "Up to {max} deals, shown in the order you choose them",
+        "loading": "Reading your store's coupons…",
+        "unreachable": "Your store didn't answer.",
+        "failed": "The coupons couldn't be read.",
+        "retry": "Try again",
+        "notConnected": "Your WooCommerce store isn't connected to GOTCHA right now.",
+        "none": "Your store has no coupons yet.",
+        "percent": "{n}% off",
+        "fixedCart": "{n} off the cart",
+        "fixedProduct": "{n} off a product",
+        "live": "Shows now",
+        "held": {
+          "unpublished": "Not shown: not published",
+          "expired": "Not shown: expired",
+          "usedUp": "Not shown: used up"
+        },
+        "done": "Done"
       },
-      "noCatalogue": "Not available yet: it needs the widget in a Shopify store with stock and orders connected",
+      "noCatalogue": "Not available yet: it needs a store connected to GOTCHA (Shopify or WooCommerce)",
       "onInShopify": "On in your Shopify store",
       "codeNoProducts": "Not on sites that use the code",
-      "noDeals": "Not available yet: GOTCHA doesn't read your store's deals",
+      "noDeals": "Not available yet: it needs a WooCommerce store connected to GOTCHA",
       "whatsappNumber": "The WhatsApp number it continues on",
       "whatsappNone": "No WhatsApp number is connected yet. Connect one in <channels>Settings · Channels</channels>.",
       "whatsappReason": {
         "not_connected": "This number isn't connected",
         "number_unknown": "We don't know this number's phone yet; reconnect it in <channels>Settings · Channels</channels>"
       },
-      "whatsappHidden": "The button won't show on your site until a number that can take it is chosen."
+      "whatsappHidden": "The button won't show on your site until a number that can take it is chosen.",
+      "cartNeedsProducts": "Turn on Recommend products first: Add to cart is on a product card"
     },
     "install": {
       "shopify": "Shopify",
