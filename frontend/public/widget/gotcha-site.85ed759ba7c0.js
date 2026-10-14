@@ -209,6 +209,30 @@ window.__gotchaSiteMount = function (opts) {
   // WhatsApp's own send glyph (a paper plane).
   var WA_SEND = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M1.101 21.757 23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z"/></svg>';
 
+  /**
+   * The page the visitor is on, for the WhatsApp side to greet about: a
+   * WooCommerce product page is `body.single-product`, and its slug is the
+   * last segment of the path (or `?product=` with plain permalinks). The
+   * server keeps only an ASCII handle (HANDLE_RE), so a slug outside it is
+   * not sent.
+   */
+  function pageContext() {
+    var path = window.location.pathname || "/";
+    var body = document.body;
+    var product = !!(body && body.classList && body.classList.contains("single-product"));
+    var handle = null;
+    if (product) {
+      var query = null;
+      try { query = new URLSearchParams(window.location.search).get("product"); } catch (e) { query = null; }
+      var segments = path.split("/").filter(Boolean);
+      var slug = query || segments[segments.length - 1] || "";
+      try { slug = decodeURIComponent(slug); } catch (e) {}
+      slug = slug.trim().toLowerCase();
+      if (/^[a-z0-9][a-z0-9-_]{0,120}$/.test(slug)) handle = slug;
+    }
+    return { pageType: product ? "product" : "page", productHandle: handle, path: path };
+  }
+
   function mountWhatsapp(widget) {
     var lang = langOf(widget);
     var W = WA_WORDS[lang];
@@ -441,7 +465,7 @@ window.__gotchaSiteMount = function (opts) {
           widgetId: WIDGET_ID,
           text: text || undefined,
           locale: lang,
-          context: { pageType: "page", productHandle: null, path: window.location.pathname },
+          context: pageContext(),
         })
           .then(function (res) {
             var url = res && res.data && res.data.url;
@@ -524,7 +548,10 @@ window.__gotchaSiteMount = function (opts) {
       api: API,
       assets: API,
       apiPath: API_PATH,
-      context: { pageType: "page", productHandle: null, locale: document.documentElement.lang || "en" },
+      context: (function () {
+        var c = pageContext();
+        return { pageType: c.pageType, productHandle: c.productHandle, locale: document.documentElement.lang || "en" };
+      })(),
       availability: bootstrap.availability || "online",
       store: store,
       post: adapterPost,

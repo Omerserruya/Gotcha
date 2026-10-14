@@ -99,7 +99,8 @@ const browser = await chromium.launch({
  * either alive or deleted.
  */
 async function openSite({ widgetExists, widget = widgetConfig(), availability = "online", lang = "en",
-  stored = null, history = [], wait = 1800, ctx: given = null, waStart = null, blockPopups = false }) {
+  stored = null, history = [], wait = 1800, ctx: given = null, waStart = null, blockPopups = false,
+  pagePath = "/", bodyClass = "" }) {
   const ctx = given || await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   const calls = [];
@@ -125,11 +126,11 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
       return route.fulfill({ status: answer.status, contentType: "application/json", body: JSON.stringify(answer.body) });
     }
 
-    if (url.pathname === "/") {
+    if (url.pathname === new URL(pagePath, ORIGIN).pathname) {
       return route.fulfill({
         status: 200, contentType: "text/html",
         body: `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"></head>` +
-          '<body style="margin:0;min-height:100vh;background:#f8fafc">' +
+          `<body class="${bodyClass}" style="margin:0;min-height:100vh;background:#f8fafc">` +
           '<h1 style="font:600 22px sans-serif;padding:24px">A tenant\'s own website</h1>' +
           `<script>window.__chatcenter={apiUrl:"${ORIGIN}",widgetId:"wid_test_123"};</script>` +
           '<script src="/widget/chatcenter-widget.js"></script>' +
@@ -173,7 +174,7 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
   // Chromium's own line about the failed handshake is not the widget's.
   page.on("console", (m) => { if (m.type() === "error" && !m.text().startsWith("WebSocket connection to")) errors.push(m.text().slice(0, 160)); });
 
-  await page.goto(`${ORIGIN}/`, { waitUntil: "domcontentloaded" });
+  await page.goto(new URL(pagePath, ORIGIN).toString(), { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(wait);
   return { ctx, page, calls, errors, inits, starts };
 }
@@ -670,6 +671,24 @@ const waWidget = (extra = {}) => {
   const a = await waLook(page);
   check("L4 Hebrew, left: right to left, in Hebrew, on the left", a.dir === "rtl" && a.title === "דברו איתנו" && a.fab.x === 18 && a.panel.x === 18, JSON.stringify({ d: a.dir, t: a.title, f: a.fab.x, p: a.panel.x }));
   await page.screenshot({ path: path.join(os.homedir(), ".cache/cc-work/shots/webchat-l4-he.png") }).catch(() => {});
+  await ctx.close();
+}
+
+// The page the visitor is on goes with them to WhatsApp (supervisor: the
+// AI greets about the viewed product).
+for (const [label, pagePath, bodyClass, want] of [
+  ["a Woo product page", "/product/blue-runner/", "single-product postid-12", { pageType: "product", productHandle: "blue-runner", path: "/product/blue-runner/" }],
+  ["plain permalinks", "/?product=red-cap", "single-product", { pageType: "product", productHandle: "red-cap", path: "/" }],
+  ["a Hebrew slug (the server keeps ASCII handles only)", "/product/%D7%A0%D7%A2%D7%9C/", "single-product", { pageType: "product", productHandle: null, path: "/product/%D7%A0%D7%A2%D7%9C/" }],
+  ["not a product page", "/about/", "page", { pageType: "page", productHandle: null, path: "/about/" }],
+]) {
+  const { ctx, page, starts } = await openSite({ widgetExists: true, widget: waWidget(), wait: 1000, pagePath, bodyClass, blockPopups: true });
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(200);
+  await shadowClick(page, '[data-act="wa-send"]');
+  await page.waitForTimeout(400);
+  const got = starts[0] && starts[0].context;
+  check(`L4 page context, ${label}`, JSON.stringify(got) === JSON.stringify(want), JSON.stringify(got));
   await ctx.close();
 }
 
