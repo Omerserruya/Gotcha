@@ -7,11 +7,13 @@ import {
   ImageIcon,
   MessageCircle,
   Pencil,
+  Pipette,
   ShoppingBag,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import {
   useEffect,
+  useSyncExternalStore,
   useRef,
   useState,
   useTransition,
@@ -24,6 +26,7 @@ import {
   POPUP_DELAYS,
   WEBCHAT_TABS,
   WEBCHAT_LANGUAGES,
+  fullHex,
   isHex,
   isHttpsUrl,
   WIDGET_KINDS,
@@ -381,6 +384,14 @@ function Appearance({ config, set }: { readonly config: WebchatConfig; readonly 
   const colour = config.appearance.primaryColor;
   const custom = !PALETTE.some((p) => p.toLowerCase() === colour.toLowerCase());
   const [code, setCode] = useState(colour);
+  /* W5: the custom swatch opens the picker; a custom colour opens with it open. */
+  const [picking, setPicking] = useState(custom);
+  /* W5: the screen's eyedropper where the browser has one (Chromium) - known after mounting. */
+  const dropper = useSyncExternalStore(
+    noSubscription,
+    () => 'EyeDropper' in window,
+    () => false,
+  );
   const hsv = hexToHsv(isHex(colour) ? colour : '#121212');
   const square = useRef<HTMLDivElement>(null);
   const choose = (hex: string) => {
@@ -434,77 +445,114 @@ function Appearance({ config, set }: { readonly config: WebchatConfig; readonly 
                     aria-label={p}
                     className={styles.swatch}
                     style={{ backgroundColor: p }}
-                    onClick={() => choose(p)}
+                    onClick={() => {
+                      setPicking(false);
+                      choose(p);
+                    }}
                     data-testid={`webchat-swatch-${p.slice(1)}`}
                   />
                 ))}
-                <span
+                {/* W5: a real control now - it opens the square, the hue and the code. */}
+                <button
+                  type="button"
+                  aria-pressed={custom}
+                  aria-expanded={picking}
+                  aria-label={t('custom')}
+                  title={t('custom')}
                   className={styles.swatch}
                   data-custom=""
-                  data-checked={custom ? '' : undefined}
-                  title={t('custom')}
-                  aria-hidden="true"
+                  onClick={() => setPicking((was) => !was)}
+                  data-testid="webchat-swatch-custom"
                 />
               </div>
-              <div className={styles.picker}>
-                <div className={styles.pickerArea}>
-                  <div
-                    ref={square}
-                    className={styles.square}
-                    style={{ backgroundColor: hsvToHex({ h: hsv.h, s: 1, v: 1 }) }}
-                    onPointerDown={(e) => {
-                      e.currentTarget.setPointerCapture?.(e.pointerId);
-                      pick(e);
-                    }}
-                    onPointerMove={pick}
-                    aria-hidden="true"
-                  >
-                    <span
-                      className={styles.knob}
-                      style={{
-                        insetInlineStart: `${hsv.s * 100}%`,
-                        insetBlockStart: `${(1 - hsv.v) * 100}%`,
+              {picking ? (
+                <div className={styles.picker} data-testid="webchat-picker">
+                  <div className={styles.pickerArea}>
+                    <div
+                      ref={square}
+                      className={styles.square}
+                      style={{ backgroundColor: hsvToHex({ h: hsv.h, s: 1, v: 1 }) }}
+                      onPointerDown={(e) => {
+                        e.currentTarget.setPointerCapture?.(e.pointerId);
+                        pick(e);
                       }}
+                      onPointerMove={pick}
+                      aria-hidden="true"
+                    >
+                      <span
+                        className={styles.knob}
+                        style={{
+                          insetInlineStart: `${hsv.s * 100}%`,
+                          insetBlockStart: `${(1 - hsv.v) * 100}%`,
+                        }}
+                      />
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={359}
+                      value={Math.round(hsv.h)}
+                      onChange={(e) =>
+                        choose(
+                          hsvToHex({ h: Number(e.target.value), s: hsv.s || 0.6, v: hsv.v || 0.8 }),
+                        )
+                      }
+                      className={styles.hue}
+                      aria-label={t('hue')}
                     />
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={359}
-                    value={Math.round(hsv.h)}
-                    onChange={(e) =>
-                      choose(
-                        hsvToHex({ h: Number(e.target.value), s: hsv.s || 0.6, v: hsv.v || 0.8 }),
-                      )
-                    }
-                    className={styles.hue}
-                    aria-label={t('hue')}
-                  />
-                </div>
-                <label className={styles.code}>
-                  <span className={styles.rowHint}>{t('code')}</span>
-                  <span className={styles.codeField}>
-                    <span
-                      className={styles.codeChip}
-                      style={{ backgroundColor: isHex(code) ? code : colour }}
-                    />
-                    <input
-                      value={code}
-                      onChange={(e) => {
-                        setCode(e.target.value);
-                        if (isHex(e.target.value)) set.colour(e.target.value.toUpperCase());
+                  <label className={styles.code}>
+                    <span className={styles.rowHint}>{t('code')}</span>
+                    <span className={styles.codeField}>
+                      <span
+                        className={styles.codeChip}
+                        style={{ backgroundColor: isHex(code) ? code : colour }}
+                      />
+                      <input
+                        value={code}
+                        onChange={(e) => {
+                          setCode(e.target.value);
+                          const full = fullHex(e.target.value);
+                          if (full) set.colour(full);
+                        }}
+                        aria-invalid={!isHex(code)}
+                        spellCheck={false}
+                        data-testid="webchat-hex"
+                      />
+                      <Pencil size={13} aria-hidden="true" />
+                    </span>
+                    <span className={styles.rowHint}>
+                      {isHex(code) ? t('codeHint') : t('codeBad')}
+                    </span>
+                  </label>
+                  {dropper ? (
+                    <button
+                      type="button"
+                      className={styles.dropper}
+                      aria-label={t('eyedropper')}
+                      title={t('eyedropper')}
+                      onClick={() => {
+                        // A gesture, a secure page; Esc rejects it (AbortError) - nothing to say.
+                        const Dropper = (
+                          window as unknown as {
+                            EyeDropper: new () => { open: () => Promise<{ sRGBHex: string }> };
+                          }
+                        ).EyeDropper;
+                        new Dropper()
+                          .open()
+                          .then(({ sRGBHex }) => {
+                            const full = fullHex(sRGBHex);
+                            if (full) choose(full);
+                          })
+                          .catch(() => undefined);
                       }}
-                      aria-invalid={!isHex(code)}
-                      spellCheck={false}
-                      data-testid="webchat-hex"
-                    />
-                    <Pencil size={13} aria-hidden="true" />
-                  </span>
-                  <span className={styles.rowHint}>
-                    {isHex(code) ? t('codeHint') : t('codeBad')}
-                  </span>
-                </label>
-              </div>
+                      data-testid="webchat-eyedropper"
+                    >
+                      <Pipette size={14} aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </Row>
           )}
 
@@ -1488,4 +1536,9 @@ function KindChoice({
       ) : null}
     </section>
   );
+}
+
+/** For a value that never changes while the page is open (a browser's abilities). */
+function noSubscription(): () => void {
+  return () => undefined;
 }

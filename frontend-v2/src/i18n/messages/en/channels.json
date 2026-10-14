@@ -690,7 +690,8 @@
       "lookWhy": "Choosing the WhatsApp look isn't available yet: it comes with the next widget update",
       "colourWaLook": "The WhatsApp look uses WhatsApp's colours. Your main colour is used in the GOTCHA look",
       "coverWaLook": "The WhatsApp look shows no cover image. Yours is used in the GOTCHA look",
-      "waKindLook": "A WhatsApp widget looks like WhatsApp: there's no colour, logo or cover to set. Only its side."
+      "waKindLook": "A WhatsApp widget looks like WhatsApp: there's no colour, logo or cover to set. Only its side.",
+      "eyedropper": "Pick a colour from the screen"
     },
     "conversation": {
       "name": "Assistant name",

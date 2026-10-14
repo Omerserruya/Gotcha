@@ -183,6 +183,7 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
 
   it('a half-typed colour is never saved; a whole one is', async () => {
     show('appearance');
+    fireEvent.click(screen.getByTestId('webchat-swatch-custom'));
     fireEvent.change(screen.getByTestId('webchat-hex'), { target: { value: '#12' } });
     await pause();
     expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
@@ -719,7 +720,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     unmount();
     // Back in GOTCHA's look, both are what they were.
     show('appearance', { numbers: NUMBERS });
-    expect(screen.getByTestId('webchat-hex')).toBeInTheDocument();
+    expect(screen.getByTestId('webchat-swatch-custom')).toBeInTheDocument();
     expect(screen.getByTestId('webchat-cover-replace')).toBeInTheDocument();
   });
 
@@ -846,5 +847,75 @@ describe('★★ W8 (2026-10-14) - "Powered by GOTCHA" is always on, with our lo
     const line = screen.getByTestId('webchat-preview-powered');
     expect(line).toHaveTextContent('Powered by');
     expect(line.querySelector('img')).toHaveAttribute('alt', 'GOTCHA');
+  });
+});
+
+describe('★★ W5 (2026-10-14) - the colour: the custom swatch opens the picker; the screen’s eyedropper where there is one', () => {
+  it('★ the custom swatch is a control: it opens the square, the hue and the code; a palette colour closes them', () => {
+    show('appearance');
+    expect(screen.queryByTestId('webchat-picker')).toBeNull();
+    fireEvent.click(screen.getByTestId('webchat-swatch-custom'));
+    expect(screen.getByTestId('webchat-swatch-custom')).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('webchat-hex')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('webchat-swatch-4F7A2E'));
+    expect(screen.queryByTestId('webchat-picker')).toBeNull();
+  });
+
+  it('a custom colour opens with its picker open', () => {
+    show('appearance', {
+      initial: { ...config, appearance: { ...config.appearance, primaryColor: '#123456' } },
+    });
+    expect(screen.getByTestId('webchat-picker')).toBeInTheDocument();
+    expect(screen.getByTestId('webchat-swatch-custom')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('★★ #RGB is written out to six digits - the route keeps only those', async () => {
+    show('appearance');
+    fireEvent.click(screen.getByTestId('webchat-swatch-custom'));
+    fireEvent.change(screen.getByTestId('webchat-hex'), { target: { value: '#a1c' } });
+    await pause();
+    expect(sentAt().appearance.primaryColor).toBe('#AA11CC');
+  });
+
+  it('★ no eyedropper in a browser without one (Firefox, Safari): never a dead button', () => {
+    show('appearance');
+    fireEvent.click(screen.getByTestId('webchat-swatch-custom'));
+    expect(screen.queryByTestId('webchat-eyedropper')).toBeNull();
+  });
+
+  it('★★ where the browser has one: it picks from the screen, and the colour is saved', async () => {
+    const open = vi.fn().mockResolvedValue({ sRGBHex: '#3e5c99' });
+    vi.stubGlobal(
+      'EyeDropper',
+      class {
+        open = open;
+      },
+    );
+    show('appearance');
+    fireEvent.click(screen.getByTestId('webchat-swatch-custom'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('webchat-eyedropper'));
+    });
+    expect(open).toHaveBeenCalled();
+    await pause();
+    expect(sentAt().appearance.primaryColor).toBe('#3E5C99');
+    vi.unstubAllGlobals();
+  });
+
+  it('Esc in the eyedropper (it rejects): nothing changes, nothing said', async () => {
+    vi.stubGlobal(
+      'EyeDropper',
+      class {
+        open = () => Promise.reject(new DOMException('cancelled', 'AbortError'));
+      },
+    );
+    show('appearance');
+    fireEvent.click(screen.getByTestId('webchat-swatch-custom'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('webchat-eyedropper'));
+    });
+    await pause();
+    expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

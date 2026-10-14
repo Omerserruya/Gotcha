@@ -121,9 +121,21 @@ export function bodyOfConfig(config: WebchatConfig) {
   };
 }
 
-/** A hex colour the route will keep: #RGB or #RRGGBB. */
+/** A hex colour typed: #RGB or #RRGGBB. */
 export function isHex(value: string): boolean {
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim());
+}
+
+/**
+ * The colour as the route keeps it: #RRGGBB, upper case - #RGB written out
+ * (W5: the route keeps only six digits, and dropped a three-digit code
+ * without a word). `null` for anything that is not a colour.
+ */
+export function fullHex(value: string): string | null {
+  const v = value.trim();
+  if (!isHex(v)) return null;
+  const digits = v.length === 4 ? [...v.slice(1)].map((d) => d + d).join('') : v.slice(1);
+  return `#${digits.toUpperCase()}`;
 }
 
 /** An image address the route will keep: https only (it drops anything else). */

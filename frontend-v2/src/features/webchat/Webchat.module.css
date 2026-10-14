@@ -272,7 +272,22 @@
 
   .swatch[data-custom] {
     background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
-    cursor: default;
+    cursor: pointer;
+  }
+
+  /* W5: the screen's eyedropper, where the browser has one. */
+  .dropper {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 30px;
+    block-size: 30px;
+    padding: 0;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 8px;
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+    cursor: pointer;
   }
 
   .picker {
