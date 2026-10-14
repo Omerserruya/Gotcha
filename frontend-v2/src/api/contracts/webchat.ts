@@ -29,7 +29,8 @@ export type WidgetKind = (typeof WIDGET_KINDS)[number];
 export type WebchatLanguage = (typeof WEBCHAT_LANGUAGES)[number];
 
 /** 13i's "When to show": right away, 5s, 15s, 30s - a time-on-page delay. */
-export const POPUP_DELAYS = [0, 5, 15, 30] as const;
+/** "Right away" is one second (design 7; Omer, 2026-10-14) - the page has drawn first. */
+export const POPUP_DELAYS = [1, 5, 15, 30] as const;
 
 /** 13g's six palette colours (design 6), then any hex. */
 export const PALETTE = ['#121212', '#3A3833', '#C96A4B', '#4F7A2E', '#3E5C99', '#6B5BD2'] as const;

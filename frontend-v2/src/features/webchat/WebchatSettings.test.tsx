@@ -1168,3 +1168,19 @@ describe('★★ W11 (2026-10-14) - Install offers only the platforms connected 
     expect(container).toHaveTextContent('צריך חיבור מחדש');
   });
 });
+
+describe('★ "Right away" is one second (design 7; Omer, 2026-10-14)', () => {
+  it('it sends 1, and a stored 0 reads as "right away"', async () => {
+    const zero = {
+      ...config,
+      ux: { ...config.ux, proactive: { ...config.ux.proactive, enabled: true, delaySeconds: 0 } },
+    };
+    show('behaviour', { initial: zero });
+    expect(screen.getByTestId('webchat-when-1')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('webchat-when-1')).toHaveTextContent('Right away');
+    fireEvent.click(screen.getByTestId('webchat-when-15'));
+    fireEvent.click(screen.getByTestId('webchat-when-1'));
+    await pause();
+    expect(bodyOfWidget(sentAt()).ux.proactive.delaySeconds).toBe(1);
+  });
+});

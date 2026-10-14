@@ -944,12 +944,13 @@ function Behaviour({
                 key={s}
                 type="button"
                 role="radio"
-                aria-checked={popup.delaySeconds === s}
+                // A stored 0 (before "right away" was 1s) is "right away" too.
+                aria-checked={popup.delaySeconds === s || (s === 1 && popup.delaySeconds === 0)}
                 className={styles.segment}
                 onClick={() => set.popup({ delaySeconds: s })}
                 data-testid={`webchat-when-${s}`}
               >
-                {s === 0 ? t('rightAway') : t('seconds', { s })}
+                {s === 1 ? t('rightAway') : t('seconds', { s })}
               </button>
             ))}
           </span>
