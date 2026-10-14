@@ -831,6 +831,13 @@ export function Builder({
               statsRead={stats !== null}
               variables={catalog?.variables ?? []}
               choices={choices}
+              types={
+                catalog?.groups
+                  .filter((group) => group.key !== 'trigger')
+                  .flatMap((group) => group.items)
+                  .filter((item) => item.available)
+                  .map((item) => item.type) ?? []
+              }
               onNode={(next: AutomationNode) =>
                 setGraph({ ...graph, nodes: graph.nodes.map((n) => (n.id === next.id ? next : n)) })
               }

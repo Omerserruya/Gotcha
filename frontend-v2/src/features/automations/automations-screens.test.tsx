@@ -654,6 +654,47 @@ describe('★★ the new triggers and steps (Backend 972ae66d), edited where the
     tall.mockRestore();
   });
 
+  it('★★ AU8: a step changes type in its place; one it may not become says why, and nothing changes', async () => {
+    showBuilder(
+      draftOf(
+        { type: 'message_received', config: {} },
+        [
+          { id: 't', type: 'automation_trigger', data: {} },
+          { id: 'm', type: 'send_message_text', data: { text: 'hi' } },
+          {
+            id: 'b',
+            type: 'send_buttons',
+            data: { text: 'pick', buttons: [{ id: 'x', title: 'X' }] },
+          },
+          { id: 'w', type: 'wait_for_reply', data: {} },
+        ],
+        [
+          { id: 'e1', source: 't', target: 'm', sourceHandle: null },
+          { id: 'e2', source: 'm', target: 'b', sourceHandle: null },
+          { id: 'e3', source: 'b', target: 'w', sourceHandle: null },
+        ],
+      ),
+    );
+    fireEvent.click(screen.getByTestId('node-m'));
+    fireEvent.change(screen.getByTestId('inspector-type'), { target: { value: 'send_buttons' } });
+    await waitFor(() => {
+      const graph = actions.checkGraph.mock.calls.at(-1)?.[1] as
+        | { nodes: { id: string; type: string; data: Record<string, unknown> }[]; edges: unknown[] }
+        | undefined;
+      expect(graph?.nodes.find((n) => n.id === 'm')).toMatchObject({
+        type: 'send_buttons',
+        data: { text: 'hi' },
+      });
+      expect(graph?.edges).toHaveLength(3);
+    });
+    fireEvent.click(screen.getByTestId('node-b'));
+    fireEvent.change(screen.getByTestId('inspector-type'), { target: { value: 'add_tag' } });
+    expect(screen.getByTestId('inspector-type-refused')).toHaveTextContent(
+      'A wait for the reply reads this step',
+    );
+    expect(screen.getByTestId('inspector-type')).toHaveValue('send_buttons');
+  });
+
   it('★ a file step writes the executor’s `filename`; an old draft’s `fileName` is read, then dropped', async () => {
     showBuilder(
       draftOf(

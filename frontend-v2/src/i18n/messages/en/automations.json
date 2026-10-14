@@ -354,6 +354,13 @@
     "opening_hours": "opening_hours"
   },
   "inspector": {
+    "type": "Step type",
+    "typeRefused": {
+      "reply_pair": "A wait for the reply reads this step's buttons. Remove the wait first.",
+      "terminal_has_next": "Nothing can follow that kind of step, and steps follow this one. Remove them first.",
+      "branches_lost": "That kind of step doesn't have the branches leaving this one. Remove the steps on them first.",
+      "trigger": "The trigger can't become a step."
+    },
     "label": "Name on the canvas",
     "notHere": "This step's settings can't be edited here yet.",
     "statsUnread": "Couldn't read how often it ran",

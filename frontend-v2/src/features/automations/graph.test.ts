@@ -4,6 +4,8 @@ import { nodeSchema, type AutomationNode } from '@/api/contracts/automations';
 
 import {
   NODE_W,
+  changeRefusal,
+  changeType,
   defaultData,
   fileNameOf,
   ROW_H,
@@ -122,5 +124,71 @@ describe('★ a file step’s name: the executor’s `filename`, an old draft’
     const step = defaultData('send_message_file', () => 'x');
     expect(step).toHaveProperty('filename', '');
     expect(step).not.toHaveProperty('fileName');
+  });
+});
+
+describe('★★ AU8 - a step changes type in its place', () => {
+  const g = (nodes: AutomationNode[], edges: ReturnType<typeof edge>[]): Graph => ({
+    nodes,
+    edges,
+  });
+
+  it('★ message → file: same id, same lines, the words kept where the new type has them', () => {
+    const graph = g(
+      [
+        node('t', 'automation_trigger'),
+        node('m', 'send_message_text', { text: 'hi' }),
+        node('x', 'add_tag'),
+      ],
+      [edge('t', 'm'), edge('m', 'x')],
+    );
+    const next = changeType(graph, 'm', 'send_buttons')!;
+    const m = next.nodes.find((n) => n.id === 'm')!;
+    expect(m.type).toBe('send_buttons');
+    expect(m.data.text).toBe('hi');
+    expect(next.edges).toEqual(graph.edges);
+    expect(changeRefusal(graph, 'm', 'send_message_file')).toBeNull();
+  });
+
+  it('★★ buttons with a wait for their reply right after: refused - the wait reads them', () => {
+    const graph = g(
+      [node('t', 'automation_trigger'), node('b', 'send_buttons'), node('w', 'wait_for_reply')],
+      [edge('t', 'b'), edge('b', 'w')],
+    );
+    expect(changeRefusal(graph, 'b', 'send_message_text')).toBe('reply_pair');
+    expect(changeType(graph, 'b', 'send_message_text')).toBeNull();
+  });
+
+  it('★★ to a final step while something follows: refused', () => {
+    const graph = g(
+      [node('t', 'automation_trigger'), node('m', 'send_message_text'), node('x', 'add_tag')],
+      [edge('t', 'm'), edge('m', 'x')],
+    );
+    expect(changeRefusal(graph, 'm', 'close_conversation')).toBe('terminal_has_next');
+    // Nothing after it: allowed.
+    const last = g(
+      [node('t', 'automation_trigger'), node('m', 'send_message_text')],
+      [edge('t', 'm')],
+    );
+    expect(changeRefusal(last, 'm', 'close_conversation')).toBeNull();
+  });
+
+  it('★ a branch the new type does not have: refused, never a hanging step', () => {
+    const graph = g(
+      [node('t', 'automation_trigger'), node('h', 'opening_hours'), node('o', 'add_tag')],
+      [edge('t', 'h'), edge('h', 'o', 'open')],
+    );
+    expect(changeRefusal(graph, 'h', 'send_message_text')).toBe('branches_lost');
+  });
+
+  it('the trigger, and the same type: never changed', () => {
+    const graph = g([node('t', 'automation_trigger')], []);
+    expect(changeRefusal(graph, 't', 'send_message_text')).toBe('trigger');
+    expect(changeType(graph, 't', 'send_message_text')).toBeNull();
+    const one = g(
+      [node('t', 'automation_trigger'), node('m', 'send_message_text')],
+      [edge('t', 'm')],
+    );
+    expect(changeRefusal(one, 'm', 'send_message_text')).toBe('same');
   });
 });

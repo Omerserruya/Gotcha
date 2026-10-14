@@ -14,7 +14,16 @@ import type {
 import { UnavailableItem } from '@/design-system/primitives/unavailable/Unavailable';
 
 import { provisionWebhook } from './automation-actions';
-import { fileNameOf, TRIGGER_NODE, onlyThrough, removeStep, type Graph } from './graph';
+import {
+  changeRefusal,
+  changeType,
+  fileNameOf,
+  TRIGGER_NODE,
+  onlyThrough,
+  removeStep,
+  type ChangeRefusal,
+  type Graph,
+} from './graph';
 import styles from './Builder.module.css';
 
 /** The route's limits (`LIMITS`): enforced here, where they are typed. */
@@ -78,6 +87,7 @@ export function Inspector({
   statsRead,
   variables,
   choices,
+  types = [],
   onNode,
   onGraph,
   onTrigger,
@@ -91,12 +101,15 @@ export function Inspector({
   readonly statsRead: boolean;
   readonly variables: readonly string[];
   readonly choices: Choices;
+  /** AU8: the step types this step may become - the catalogue's, available, no trigger. */
+  readonly types?: readonly string[];
   readonly onNode: (node: AutomationNode) => void;
   readonly onGraph: (graph: Graph) => void;
   readonly onTrigger: (trigger: Trigger) => void;
 }) {
   const t = useTranslations('automations');
   const [removing, setRemoving] = useState(false);
+  const [refused, setRefused] = useState<Exclude<ChangeRefusal, null> | null>(null);
   const d = node.data;
   const set = (patch: Record<string, unknown>) => onNode({ ...node, data: { ...d, ...patch } });
   const name =
@@ -118,6 +131,42 @@ export function Inspector({
           data-testid="inspector-label"
         />
       </Field>
+
+      {/*
+        ★★ AU8 (Omer, 2026-10-14): change what this step is - a message to a
+        file, and so on - in its place: its id and its lines stay
+        (graph.ts changeType). One it may not become says why, and nothing
+        changes.
+      */}
+      {node.type !== TRIGGER_NODE && types.length > 1 ? (
+        <Field label={t('inspector.type')}>
+          <select
+            value={node.type}
+            data-testid="inspector-type"
+            onChange={(e) => {
+              const type = e.target.value;
+              const why = changeRefusal(graph, node.id, type);
+              if (why === 'same') return;
+              const next = why === null ? changeType(graph, node.id, type) : null;
+              if (next) {
+                setRefused(null);
+                onGraph(next);
+              } else setRefused(why === null ? 'trigger' : why);
+            }}
+          >
+            {[...new Set([node.type, ...types])].map((type) => (
+              <option key={type} value={type}>
+                {t(`nodes.${type}` as 'nodes.wait')}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
+      {refused ? (
+        <p className={styles.why} role="alert" data-testid="inspector-type-refused">
+          {t(`inspector.typeRefused.${refused}`)}
+        </p>
+      ) : null}
 
       {node.type === TRIGGER_NODE ? (
         <TriggerFields

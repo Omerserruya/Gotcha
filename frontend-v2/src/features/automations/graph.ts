@@ -326,3 +326,62 @@ export function fileNameOf(data: Readonly<Record<string, unknown>>): string {
   const name = typeof data.filename === 'string' ? data.filename : data.fileName;
   return typeof name === 'string' ? name : '';
 }
+
+/** The step pairs that must stay together: buttons or a list, then the wait that reads them. */
+const ASKS = new Set(['send_buttons', 'send_list']);
+
+/** What a step's settings carry over to its new type, where the new type has them. */
+const CARRIED = ['text', 'url', 'caption', 'filename', 'buttonText'] as const;
+
+/** Why a step cannot become another type, or `null` when it can. */
+export type ChangeRefusal =
+  'trigger' | 'same' | 'reply_pair' | 'terminal_has_next' | 'branches_lost' | null;
+
+/**
+ * ★★ AU8 (Omer, 2026-10-14): change a step's type - message to file, and so
+ * on - keeping its place: its id, what leads to it and where it leads.
+ * Refused, with why (Backend's list):
+ *   reply_pair         buttons or a list with a wait for their reply right
+ *                      after: the wait reads their options
+ *   terminal_has_next  to a final step (hand to AI, a skill, close) while
+ *                      something follows it
+ *   branches_lost      a way on the new type does not have (a condition's
+ *                      true/false to a plain step) - those steps would hang
+ * Required fields left empty are not refused: the card says "To fill in" and
+ * the route will not go live, as for any new step.
+ */
+export function changeRefusal(graph: Graph, id: string, type: string): ChangeRefusal {
+  const node = graph.nodes.find((n) => n.id === id);
+  if (!node || node.type === TRIGGER_NODE || type === TRIGGER_NODE) return 'trigger';
+  if (node.type === type) return 'same';
+  const out = graph.edges.filter((e) => e.source === id);
+  if (ASKS.has(node.type)) {
+    const reads = out.some(
+      (e) => graph.nodes.find((n) => n.id === e.target)?.type === 'wait_for_reply',
+    );
+    if (reads) return 'reply_pair';
+  }
+  if (TERMINAL.has(type) && out.length > 0) return 'terminal_has_next';
+  const changed = { ...node, type, data: changedData(node, type) };
+  const next = { nodes: graph.nodes.map((n) => (n.id === id ? changed : n)), edges: graph.edges };
+  const offers = outputsOf(changed, next);
+  const lost = out.some((e) => !offers.includes(e.sourceHandle ?? 'next'));
+  return lost ? 'branches_lost' : null;
+}
+
+function changedData(node: AutomationNode, type: string): Record<string, unknown> {
+  const fresh = defaultData(type, () => crypto.randomUUID());
+  const kept = Object.fromEntries(
+    CARRIED.filter((k) => k in fresh && node.data[k] !== undefined).map((k) => [k, node.data[k]]),
+  );
+  return { ...fresh, ...kept };
+}
+
+/** The graph with the step's type changed, or `null` when it may not be (`changeRefusal`). */
+export function changeType(graph: Graph, id: string, type: string): Graph | null {
+  if (changeRefusal(graph, id, type) !== null) return null;
+  return {
+    nodes: graph.nodes.map((n) => (n.id === id ? { ...n, type, data: changedData(n, type) } : n)),
+    edges: graph.edges,
+  };
+}
