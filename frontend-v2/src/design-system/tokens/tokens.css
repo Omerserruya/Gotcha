@@ -530,6 +530,25 @@
     --whatsapp-look-composer: #f0f2f5;
     --whatsapp-look-send: #00a884;
     --whatsapp-look-launcher: #25d366;
+    --whatsapp-look-ink: #111b21;
+    --whatsapp-look-meta: #667781;
+    --whatsapp-look-icon: #54656f;
+
+    /*
+     * The website widget itself, as design 7 draws it on a store (W2): its
+     * own warm surface and inks - the customer's widget, not this app's
+     * theme, so the preview shows what a visitor sees in either mode.
+     */
+    --widget-look-surface: #fbf8f3;
+    --widget-look-ink: #2b2622;
+    --widget-look-muted: #8a7a6c;
+    --widget-look-faint: #a99c8e;
+    --widget-look-rule: #eee7dc;
+    --widget-look-question-rule: #ece4d8;
+    --widget-look-field-edge: #e6ddd0;
+    --widget-look-cover: #f1ece8;
+    --widget-look-stage: #efe9e0;
+    --widget-look-stage-edge: #e6e2da;
 
     /*
      * A settled conversation's avatar - quieter than a live one. 02 draws a

@@ -924,12 +924,17 @@
   }
 
   /* Preview */
+  /*
+   * ★★ W2 (design 7): the preview is a store page, 340 wide and 640 tall, with
+   * the widget pinned to its top and the pop-up and button pinned to its
+   * bottom, on the side the widget sits - every size and colour design 7's.
+   */
   .preview {
     display: flex;
     flex: none;
     flex-direction: column;
     gap: 10px;
-    inline-size: 330px;
+    inline-size: 340px;
   }
 
   .previewHead {
@@ -941,90 +946,132 @@
   }
 
   .stage {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    align-items: center;
-    padding: 14px 14px 16px;
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: 14px;
-    background-color: var(--panel-well);
+    position: relative;
+    block-size: 640px;
+    overflow: hidden;
+    border: var(--border-width-thin) solid var(--widget-look-stage-edge);
+    border-radius: 16px;
+    background-color: var(--widget-look-stage);
   }
 
-  .stage[data-side='right'] {
-    align-items: flex-end;
+  /* Pinned to the side the widget sits on - its physical side, in either language. */
+  .pin {
+    position: absolute;
   }
 
-  .stage[data-side='left'] {
-    align-items: flex-start;
+  .stage[data-side='right'] .pin {
+    inset-inline-end: 14px;
   }
 
+  .stage[data-side='left'] .pin {
+    inset-inline-start: 14px;
+  }
+
+  .stage[data-side='right']:dir(rtl) .pin {
+    inset-inline: 14px auto;
+  }
+
+  .stage[data-side='left']:dir(rtl) .pin {
+    inset-inline: auto 14px;
+  }
+
+  /* The chat widget: 270 × 520, radius 18. */
   .widget {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    align-self: center;
-    inline-size: 264px;
-    min-block-size: 440px;
+    inset-block-start: 14px;
+    inline-size: 270px;
+    block-size: 520px;
     overflow: hidden;
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: 16px;
-    background-color: var(--panel-field);
+    border-radius: 18px;
+    background-color: var(--widget-look-surface);
+    box-shadow:
+      0 0 0 1px rgb(43 38 34 / 8%),
+      0 24px 50px -14px rgb(43 38 34 / 35%);
+    color: var(--widget-look-ink);
   }
 
+  /* The cover, 110px, fading into the widget over its last 64px. */
   .hero {
     position: relative;
     display: grid;
+    flex: none;
     place-items: center;
-    inline-size: 100%;
-    block-size: 86px;
-    background: linear-gradient(to bottom, var(--panel-inset), var(--panel-field));
-    color: var(--text-faint);
+    block-size: 110px;
+    background-color: var(--widget-look-cover);
+    color: var(--widget-look-faint);
+  }
+
+  .hero::after {
+    position: absolute;
+    inset-block-end: 0;
+    inset-inline: 0;
+    block-size: 64px;
+    background: linear-gradient(180deg, rgb(251 248 243 / 0%), var(--widget-look-surface));
+    content: '';
   }
 
   .heroImage {
+    position: absolute;
+    inset: 0;
     inline-size: 100%;
     block-size: 100%;
     object-fit: cover;
   }
 
-  .logo {
-    /*
-     * Above the cover it overlaps (-32px): the cover is positioned (for its
-     * WhatsApp chip), and a positioned box paints over an unpositioned one -
-     * dev showed "SUPPLY" with "URBAN" under the cover (4cbbcc0).
-     */
-    position: relative;
-    z-index: 1;
+  /* Design 7: the WhatsApp action on the cover's corner, when the button will show. */
+  .heroWa {
+    position: absolute;
+    z-index: 2;
+    inset-block-start: 10px;
+    inset-inline-end: 10px;
     display: grid;
     place-items: center;
+    inline-size: 26px;
+    block-size: 26px;
+    border-radius: 50%;
+    background-color: rgb(255 255 255 / 78%);
+    color: var(--whatsapp-look-header);
+  }
+
+  /* The logo disc, 70px, over the cover by 38px. */
+  .logoRow {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: center;
+    margin-block-start: -38px;
+  }
+
+  .logo {
+    display: grid;
+    place-items: center;
+    inline-size: 70px;
+    block-size: 70px;
     padding: 6px;
-    text-align: center;
+    overflow: hidden;
+    border-radius: 50%;
+    background-color: #fff;
+    box-shadow: 0 10px 24px rgb(43 38 34 / 14%);
     /* A word is never broken: data-fit sizes the text by its longest word. */
     overflow-wrap: normal;
     word-break: keep-all;
-    inline-size: 64px;
-    block-size: 64px;
-    margin-block-start: -32px;
-    overflow: hidden;
-    border-radius: 50%;
-    background-color: var(--panel-field);
-    box-shadow: 0 1px 4px rgb(0 0 0 / 10%);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.2em;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
   }
 
   .logo[data-fit='m'] {
-    font-size: 8.5px;
+    font-size: 9px;
   }
 
   .logo[data-fit='s'] {
-    font-size: 7.5px;
+    font-size: 8px;
   }
 
   .logo[data-fit='initials'] {
-    font-size: 15px;
+    font-size: 16px;
     letter-spacing: 0.08em;
   }
 
@@ -1035,66 +1082,87 @@
   }
 
   .assistant {
-    margin-block: 8px 10px;
+    margin-block-start: 8px;
+    text-align: center;
     font-size: 12px;
-    color: var(--text-subtle);
+    color: var(--widget-look-muted);
   }
 
+  /* The opening questions, as rows - a rule between them, no arrows. */
   .questions {
     display: flex;
     flex: 1;
     flex-direction: column;
-    align-self: stretch;
+    min-block-size: 0;
     margin: 0;
-    padding: 0 16px;
+    padding: 10px 16px 0;
     list-style: none;
   }
 
   .questions li {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    align-items: center;
-    padding-block: 8px;
-    border-block-end: var(--border-width-thin) solid var(--border-subtle);
+    overflow: hidden;
+    padding-block: 9px;
     font-size: 12px;
-    color: var(--text-primary);
+    line-height: 1.4;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
-  .questions li:last-child {
-    border-block-end: 0;
+  .questions li + li {
+    border-block-start: var(--border-width-thin) solid var(--widget-look-question-rule);
   }
 
-  .questions svg {
-    flex: none;
-    color: var(--text-faint);
+  .composerArea {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 10px 12px 6px;
+    border-block-start: var(--border-width-thin) solid var(--widget-look-rule);
   }
 
+  /* A pill, with a round 28px send in the main colour. */
   .composer {
     display: flex;
-    justify-content: space-between;
+    gap: 6px;
     align-items: center;
-    align-self: stretch;
-    margin: 10px 12px 6px;
-    padding: 6px 6px 6px 12px;
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: 18px;
-    font-size: 11px;
-    color: var(--text-faint);
+    padding-block: 4px;
+    padding-inline: 12px 4px;
+    border: var(--border-width-thin) solid var(--widget-look-field-edge);
+    border-radius: 99px;
+    background-color: #fff;
+  }
+
+  .composer > span:first-child {
+    flex: 1;
+    font-size: 11.5px;
+    color: var(--widget-look-faint);
   }
 
   .send {
     display: grid;
+    flex: none;
     place-items: center;
-    inline-size: 24px;
-    block-size: 24px;
+    inline-size: 28px;
+    block-size: 28px;
     border-radius: 50%;
+    color: var(--widget-look-surface);
+  }
+
+  .send svg:dir(ltr) {
+    transform: scaleX(-1);
   }
 
   .powered {
-    padding-block-end: 8px;
+    display: flex;
+    justify-content: center;
     font-size: 9px;
-    color: var(--text-faint);
+    color: var(--widget-look-faint);
+  }
+
+  .powered .poweredLogo {
+    block-size: 22px;
+    margin-block: -7px;
+    margin-inline: -6px;
   }
 
   /* W8: "Powered by" and our logo, as design 7 draws it (logo 30px at full size). */
@@ -1106,63 +1174,64 @@
     white-space: nowrap;
   }
 
+  .powered .poweredBy {
+    color: inherit;
+  }
+
   .poweredLogo {
     block-size: 1.5em;
     inline-size: auto;
     opacity: 0.7;
   }
 
+  /* The pop-up: 220px, white, over the button. */
   .bubble {
-    max-inline-size: 210px;
+    inset-block-end: 72px;
+    inline-size: 220px;
     padding: 10px 12px;
-    border-radius: 12px;
-    background-color: var(--panel-field);
-    box-shadow: 0 1px 4px rgb(0 0 0 / 8%);
+    border-radius: 14px;
+    background-color: #fff;
+    box-shadow:
+      0 0 0 1px rgb(43 38 34 / 7%),
+      0 14px 30px -10px rgb(43 38 34 / 30%);
     font-size: 12px;
-    color: var(--text-primary);
+    line-height: 1.45;
+    color: var(--widget-look-ink);
   }
 
+  /* The button: 46px in the main colour, with the brand's wordmark. */
   .launcher {
     display: grid;
     place-items: center;
+    inset-block-end: 16px;
     inline-size: 46px;
     block-size: 46px;
     border-radius: 50%;
-    color: #fff;
+    box-shadow: 0 8px 20px rgb(43 38 34 / 28%);
+    color: var(--widget-look-surface);
     font-size: 8px;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-  }
-
-  /* Design 7: the WhatsApp action on the cover's corner, when the button will show. */
-  .heroWa {
-    position: absolute;
-    inset-block-start: 8px;
-    inset-inline-start: 8px;
-    display: grid;
-    place-items: center;
-    inline-size: 24px;
-    block-size: 24px;
-    border-radius: 50%;
-    background-color: rgb(255 255 255 / 78%);
-    color: var(--whatsapp-look-header);
+    font-weight: 500;
+    letter-spacing: 0.08em;
   }
 
   .launcher[data-look='whatsapp'] {
     background-color: var(--whatsapp-look-launcher);
+    box-shadow:
+      0 10px 26px rgb(37 211 102 / 34%),
+      0 2px 6px rgb(11 20 26 / 12%);
+    color: #fff;
   }
 
-  /* The WhatsApp look: WhatsApp's own panel (design 7). */
+  /* The WhatsApp widget (design 7): WhatsApp's own panel - no chat on the site. */
   .waWidget {
     display: flex;
     flex-direction: column;
-    align-self: center;
-    inline-size: 264px;
-    min-block-size: 320px;
+    inset-block-start: 14px;
+    inline-size: 270px;
     overflow: clip;
     border-radius: 14px;
     background-color: var(--whatsapp-look-chat);
-    box-shadow: 0 12px 40px rgb(11 20 26 / 18%);
+    box-shadow: 0 12px 40px rgb(11 20 26 / 28%);
   }
 
   .waHead {
@@ -1178,19 +1247,20 @@
     display: grid;
     flex: none;
     place-items: center;
-    inline-size: 30px;
-    block-size: 30px;
+    inline-size: 32px;
+    block-size: 32px;
     border-radius: 50%;
     background-color: #fff;
-    color: var(--text-primary);
-    font-size: 11px;
-    font-weight: 600;
+    color: var(--widget-look-ink);
+    font-size: 15px;
+    font-weight: 500;
   }
 
   .waTitles {
     display: flex;
+    flex: 1;
     flex-direction: column;
-    gap: 1px;
+    gap: 2px;
     min-inline-size: 0;
   }
 
@@ -1204,58 +1274,113 @@
     opacity: 0.9;
   }
 
-  .waChat {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 12px 10px;
+  .waClose {
+    flex: none;
+    font-size: 13px;
   }
 
+  .waChat {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    min-block-size: 80px;
+    padding: 14px 10px 12px;
+  }
+
+  /* The greeting: a WhatsApp bubble, with "now" under it. */
   .waBubble {
+    display: flex;
+    flex-direction: column;
     max-inline-size: 85%;
-    padding: 6px 9px;
-    border-radius: 0 9px 9px;
+    padding: 6px 9px 5px;
+    border-radius: 0 10px 10px;
     background-color: #fff;
     box-shadow: 0 1px 0.5px rgb(11 20 26 / 13%);
     font-size: 12px;
-    color: var(--text-primary);
+    line-height: 1.4;
+    color: var(--whatsapp-look-ink);
+  }
+
+  .waTime {
+    align-self: flex-end;
+    margin-block-start: 2px;
+    font-size: 9.5px;
+    color: var(--whatsapp-look-meta);
   }
 
   .waComposer {
     display: flex;
     gap: 6px;
-    align-items: center;
-    padding: 6px 7px;
+    align-items: flex-end;
+    padding: 6px 8px 8px;
     background-color: var(--whatsapp-look-composer);
   }
 
   .waField {
     flex: 1;
-    padding: 8px 12px;
+    min-inline-size: 0;
+    padding: 9px 13px;
     border-radius: 18px;
     background-color: #fff;
-    font-size: 11px;
-    color: var(--text-faint);
+    box-shadow: 0 1px 0.5px rgb(11 20 26 / 10%);
+    font-size: 12px;
+    color: var(--whatsapp-look-meta);
   }
 
   .waSend {
     display: grid;
     flex: none;
     place-items: center;
-    inline-size: 30px;
-    block-size: 30px;
+    inline-size: 36px;
+    block-size: 36px;
     border-radius: 50%;
     background-color: var(--whatsapp-look-send);
     color: #fff;
   }
 
+  .waSend svg:dir(rtl) {
+    transform: scaleX(-1);
+  }
+
   .waWidget .powered {
-    align-self: center;
-    padding-block: 4px 7px;
+    padding-block: 4px 8px;
     background-color: var(--whatsapp-look-composer);
-    inline-size: 100%;
-    text-align: center;
+    font-size: 9.5px;
+    color: var(--whatsapp-look-meta);
+  }
+
+  .waWidget .powered .poweredLogo {
+    block-size: 28px;
+    margin-block: -9px;
+    margin-inline: -7px;
+  }
+
+  /* Its teaser: white, with a small × - above the green button. */
+  .waTeaser {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    inset-block-end: 74px;
+    padding: 8px 11px;
+    border-radius: 12px;
+    background-color: #fff;
+    box-shadow: 0 8px 24px rgb(11 20 26 / 16%);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--whatsapp-look-ink);
+  }
+
+  .waTeaser > span:last-child {
+    display: grid;
+    place-items: center;
+    inline-size: 20px;
+    block-size: 20px;
+    border-radius: 50%;
+    background-color: var(--whatsapp-look-composer);
+    color: var(--whatsapp-look-icon);
+    font-size: 9px;
   }
 
   /* "Continue on WhatsApp": the workspace's numbers, one chosen. */

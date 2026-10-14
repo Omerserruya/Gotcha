@@ -566,9 +566,10 @@ describe("★ the preview's marks come from one name - the business's", () => {
   it('★ the mark sits ABOVE the cover it overlaps (dev: "URBAN" was under the cover, 4cbbcc0)', () => {
     // jsdom does no layout; Chromium measured it - this holds the rule that fixed it.
     const css = readFileSync(join(__dirname, 'Webchat.module.css'), 'utf8');
-    const logo = /\n {2}\.logo \{([^}]*)\}/.exec(css)?.[1] ?? '';
-    expect(logo).toMatch(/position: relative/);
-    expect(logo).toMatch(/z-index: [1-9]/);
+    // W2: the disc's row carries it now (the disc is inside it).
+    const row = /\n {2}\.logoRow \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(row).toMatch(/position: relative/);
+    expect(row).toMatch(/z-index: [1-9]/);
   });
 
   it('★ a status where a switch would be fills its row (dev: "Show active deals" was narrower)', () => {
@@ -631,8 +632,10 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     const panel = screen.getByTestId('webchat-preview-wa');
     expect(panel).toHaveTextContent('Chat with us');
     expect(panel).toHaveTextContent("Write here and we'll continue on WhatsApp.");
-    // Only what the business wrote: its pop-up message - no sample greeting.
-    expect(panel).toHaveTextContent('Hi');
+    // W2: the panel holds only the greeting the business wrote (none here) - its
+    // pop-up line is the teaser above the green button, never inside the panel.
+    expect(panel).not.toHaveTextContent('Hi');
+    expect(screen.getByTestId('webchat-preview-bubble')).toHaveTextContent('Hi');
     expect(screen.getByTestId('webchat-preview-launcher')).toHaveAttribute('data-look', 'whatsapp');
     await pause();
     expect(lastStageB()).toBe(true);
@@ -1209,5 +1212,49 @@ describe('★ dev, 2026-10-14: after an upload, Remove is still there - and the 
     expect(screen.getByRole('textbox', { name: 'Link to the image' })).toBe(
       screen.getByTestId('webchat-cover-url'),
     );
+  });
+});
+
+describe('★★ W2 (2026-10-14) - the preview is design 7’s', () => {
+  it('★ the chat widget: cover, logo disc, name, the questions as rows (no arrows), the composer and powered-by', () => {
+    show('appearance');
+    const widget = screen.getByTestId('webchat-preview-widget');
+    expect(widget).toContainElement(screen.getByTestId('webchat-preview-cover'));
+    expect(widget).toContainElement(screen.getByTestId('webchat-preview-logo'));
+    expect(screen.getByTestId('webchat-preview-questions').querySelectorAll('li')).toHaveLength(1);
+    expect(screen.getByTestId('webchat-preview-questions').querySelector('svg')).toBeNull();
+    expect(widget).toContainElement(screen.getByTestId('webchat-preview-powered'));
+    // The pop-up and the button sit on the stage, outside the widget.
+    expect(widget).not.toContainElement(screen.getByTestId('webchat-preview-bubble'));
+    expect(widget).not.toContainElement(screen.getByTestId('webchat-preview-launcher'));
+  });
+
+  it('★★ the WhatsApp widget: its greeting in the panel, its line above the green button', () => {
+    const wa = {
+      ...config,
+      ux: {
+        ...config.ux,
+        kind: 'whatsapp' as const,
+        look: 'whatsapp' as const,
+        welcome: { ...config.ux.welcome, title: 'Hi! How can we help?' },
+      },
+    };
+    show('conversation', { numbers: [], initial: wa });
+    expect(screen.getByTestId('webchat-preview-greeting')).toHaveTextContent(
+      'Hi! How can we help?',
+    );
+    expect(screen.getByTestId('webchat-preview-wa')).toHaveTextContent('Type a message');
+    expect(screen.getByTestId('webchat-preview-bubble')).toHaveTextContent(/^Hi✕?$/);
+    expect(screen.getByTestId('webchat-preview-launcher')).toHaveAttribute('data-look', 'whatsapp');
+  });
+
+  it('a pop-up switched off draws no teaser', () => {
+    show('appearance', {
+      initial: {
+        ...config,
+        ux: { ...config.ux, proactive: { ...config.ux.proactive, enabled: false } },
+      },
+    });
+    expect(screen.queryByTestId('webchat-preview-bubble')).toBeNull();
   });
 });

@@ -896,7 +896,9 @@
       "type": "Type a message",
       "waTitle": "Chat with us",
       "waSub": "Write here and we'll continue on WhatsApp.",
-      "waContinue": "Continue on WhatsApp"
+      "waContinue": "Continue on WhatsApp",
+      "waType": "Type a message",
+      "now": "now"
     },
     "notYet": "Not available yet",
     "comingSoon": "Coming soon",

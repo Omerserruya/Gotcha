@@ -1,13 +1,13 @@
 'use client';
 
 import {
-  ArrowRight,
-  ArrowUp,
+  ArrowLeft,
   Globe,
   ImageIcon,
   MessageCircle,
   Pencil,
   Pipette,
+  SendHorizontal,
   ShoppingBag,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -1396,6 +1396,9 @@ function Preview({
   // Sized by its longest word, never broken inside one; initials when none fits.
   const fit = logoFit(mark.logo);
   const questions = config.ux.welcome.suggestedQuestions.filter((q) => q.trim()).slice(0, 3);
+  const whatsapp = config.ux.kind === 'whatsapp' || config.ux.look === 'whatsapp';
+  const teaser = config.ux.proactive.enabled ? config.ux.proactive.message.trim() : '';
+  const greeting = config.ux.welcome.title.trim();
   return (
     <aside className={styles.preview} aria-label={t('label')} data-testid="webchat-preview">
       <span className={styles.previewHead}>
@@ -1406,34 +1409,41 @@ function Preview({
           </span>
         ) : null}
       </span>
+      {/*
+        ★★ W2 (design 7): a store page with the widget on it - the widget at
+        the top, its pop-up and button at the bottom, on its side.
+      */}
       <div className={styles.stage} data-side={config.ux.launcher.position}>
-        {config.ux.look === 'whatsapp' ? (
+        {whatsapp ? (
           /*
-            Design 7's WhatsApp look: WhatsApp's panel, its green launcher, and
-            "write here and we'll continue on WhatsApp". The chat shows only what
-            the business wrote (its pop-up message) - no sample greeting.
+            The WhatsApp widget: WhatsApp's panel - its greeting, a composer
+            that continues on WhatsApp - and nothing chats on the site.
           */
-          <div className={styles.waWidget} data-testid="webchat-preview-wa">
+          <div className={`${styles.pin} ${styles.waWidget}`} data-testid="webchat-preview-wa">
             <div className={styles.waHead}>
               <span className={styles.waAvatar} aria-hidden="true">
-                {initials(business ?? name)}
+                {initials(business ?? name).slice(0, 1)}
               </span>
               <span className={styles.waTitles}>
                 <span className={styles.waTitle}>{t('waTitle')}</span>
                 <span className={styles.waSub}>{t('waSub')}</span>
               </span>
+              <span className={styles.waClose} aria-hidden="true">
+                ✕
+              </span>
             </div>
             <div className={styles.waChat}>
-              {config.ux.proactive.message.trim() ? (
-                <span className={styles.waBubble}>
-                  <bdi dir="auto">{config.ux.proactive.message}</bdi>
+              {greeting ? (
+                <span className={styles.waBubble} data-testid="webchat-preview-greeting">
+                  <bdi dir="auto">{greeting}</bdi>
+                  <span className={styles.waTime}>{t('now')}</span>
                 </span>
               ) : null}
             </div>
             <span className={styles.waComposer}>
-              <span className={styles.waField}>{t('type')}</span>
+              <span className={styles.waField}>{t('waType')}</span>
               <span className={styles.waSend} aria-hidden="true">
-                <ArrowUp size={12} />
+                <SendHorizontal size={16} />
               </span>
             </span>
             <span className={styles.powered} data-testid="webchat-preview-powered">
@@ -1441,8 +1451,14 @@ function Preview({
             </span>
           </div>
         ) : (
-          <div className={styles.widget}>
+          <div className={`${styles.pin} ${styles.widget}`} data-testid="webchat-preview-widget">
             <div className={styles.hero} data-testid="webchat-preview-cover">
+              {config.ux.hero.mediaUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={config.ux.hero.mediaUrl} alt="" className={styles.heroImage} />
+              ) : (
+                <ImageIcon size={16} aria-hidden="true" />
+              )}
               {handoff ? (
                 // Design 7: the WhatsApp action on the cover, when the button will show.
                 <span
@@ -1453,26 +1469,22 @@ function Preview({
                   <MessageCircle size={13} aria-hidden="true" />
                 </span>
               ) : null}
-              {config.ux.hero.mediaUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={config.ux.hero.mediaUrl} alt="" className={styles.heroImage} />
-              ) : (
-                <ImageIcon size={16} aria-hidden="true" />
-              )}
             </div>
-            <span
-              className={styles.logo}
-              data-fit={config.appearance.logoUrl ? undefined : fit}
-              data-testid="webchat-preview-logo"
-            >
-              {config.appearance.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={config.appearance.logoUrl} alt="" />
-              ) : fit === 'initials' ? (
-                initials(business ?? name)
-              ) : (
-                mark.logo
-              )}
+            <span className={styles.logoRow}>
+              <span
+                className={styles.logo}
+                data-fit={config.appearance.logoUrl ? undefined : fit}
+                data-testid="webchat-preview-logo"
+              >
+                {config.appearance.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={config.appearance.logoUrl} alt="" />
+                ) : fit === 'initials' ? (
+                  initials(business ?? name)
+                ) : (
+                  mark.logo
+                )}
+              </span>
             </span>
             <span className={styles.assistant} data-testid="webchat-preview-name">
               <bdi dir="auto">{name}</bdi>
@@ -1481,37 +1493,52 @@ function Preview({
               {questions.map((q, i) => (
                 <li key={i}>
                   <bdi dir="auto">{q}</bdi>
-                  <ArrowRight size={12} aria-hidden="true" />
                 </li>
               ))}
             </ul>
-            <span className={styles.composer}>
-              <span>{t('type')}</span>
-              <span className={styles.send} style={{ backgroundColor: colour }} aria-hidden="true">
-                <ArrowUp size={12} color="#FFFFFF" />
+            <div className={styles.composerArea}>
+              <span className={styles.composer}>
+                <span>{t('type')}</span>
+                <span
+                  className={styles.send}
+                  style={{ backgroundColor: colour }}
+                  aria-hidden="true"
+                >
+                  <ArrowLeft size={14} />
+                </span>
               </span>
-            </span>
-            <span className={styles.powered} data-testid="webchat-preview-powered">
-              <PoweredBy />
-            </span>
+              <span className={styles.powered} data-testid="webchat-preview-powered">
+                <PoweredBy />
+              </span>
+            </div>
           </div>
         )}
-        {config.ux.proactive.enabled && config.ux.proactive.message.trim() ? (
-          <span className={styles.bubble} data-testid="webchat-preview-bubble">
-            <bdi dir="auto">{config.ux.proactive.message}</bdi>
-          </span>
+        {teaser ? (
+          whatsapp ? (
+            <span
+              className={`${styles.pin} ${styles.waTeaser}`}
+              data-testid="webchat-preview-bubble"
+            >
+              <bdi dir="auto">{teaser}</bdi>
+              <span aria-hidden="true">✕</span>
+            </span>
+          ) : (
+            <span className={`${styles.pin} ${styles.bubble}`} data-testid="webchat-preview-bubble">
+              <bdi dir="auto">{teaser}</bdi>
+            </span>
+          )
         ) : null}
-        {config.ux.look === 'whatsapp' ? (
+        {whatsapp ? (
           <span
-            className={styles.launcher}
+            className={`${styles.pin} ${styles.launcher}`}
             data-look="whatsapp"
             data-testid="webchat-preview-launcher"
           >
-            <MessageCircle size={20} aria-hidden="true" />
+            <MessageCircle size={24} aria-hidden="true" />
           </span>
         ) : (
           <span
-            className={styles.launcher}
+            className={`${styles.pin} ${styles.launcher}`}
             style={{ backgroundColor: colour }}
             data-testid="webchat-preview-launcher"
           >
