@@ -980,6 +980,8 @@ export {
   publicWebchatConfig,
 } from "./lib/webchat-widget";
 export type { WebchatConfig, LegacyWebchatSettings, WebchatPosition } from "./lib/webchat-widget";
+// "Powered by GOTCHA" is on for every widget (W8).
+export { POWERED_BY_LOCKED, POWERED_BY_LOCKED_CODE, effectivePoweredBy, asksToHidePoweredBy } from "./lib/powered-by";
 
 // Secrets
 export { getSecret, requireSecret, setSecretProvider, resetSecretProvider } from "./secrets";

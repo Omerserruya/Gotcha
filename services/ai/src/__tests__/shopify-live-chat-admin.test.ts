@@ -300,6 +300,15 @@ describe("channel configuration", () => {
     expect(stored.welcome.headline).not.toContain("<");
   });
 
+  it("★ Powered by GOTCHA cannot be turned off: 403 POWERED_BY_LOCKED, nothing written", async () => {
+    const res = await request(app())
+      .put("/api/shopify-live-chat/channels/ch1")
+      .send({ config: { appearance: { showPoweredBy: false } } });
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ code: "POWERED_BY_LOCKED" });
+    expect(H.updateChannel).not.toHaveBeenCalled();
+  });
+
   it("cannot be rebound to another store by a config patch", async () => {
     await request(app())
       .put("/api/shopify-live-chat/channels/ch1")

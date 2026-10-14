@@ -27,6 +27,7 @@ import {
   migrateLegacyWelcome,
   type ShopifyChatUx,
 } from "./shopify-chat-ux";
+import { effectivePoweredBy } from "./powered-by";
 
 import {
   normalizeRecommendationSet,
@@ -498,7 +499,7 @@ export function normalizeShopifyLiveChatConfig(
       direction: ["auto", "ltr", "rtl"].includes(a.direction)
         ? a.direction
         : base.appearance.direction,
-      showPoweredBy: bool(a.showPoweredBy, base.appearance.showPoweredBy),
+      showPoweredBy: effectivePoweredBy(a.showPoweredBy, base.appearance.showPoweredBy),
     },
     welcome: {
       headline: sanitizeToken(w.headline, MAX_HEADLINE) || base.welcome.headline,

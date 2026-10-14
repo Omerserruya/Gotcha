@@ -21,6 +21,7 @@ import {
   normalizeWelcome,
   type ShopifyChatUx,
 } from "./shopify-chat-ux";
+import { effectivePoweredBy } from "./powered-by";
 
 export const WEBCHAT_CHANNEL = "WEBCHAT" as const;
 
@@ -200,7 +201,7 @@ export function normalizeWebchatConfig(raw: unknown, base = defaultWebchatConfig
       cornerRadius: Math.max(0, Math.min(28, Number(a.cornerRadius) || base.appearance.cornerRadius)),
       language: oneOf(a.language, ["auto", "en", "he"] as const, base.appearance.language),
       direction: oneOf(a.direction, ["auto", "ltr", "rtl"] as const, base.appearance.direction),
-      showPoweredBy: bool(a.showPoweredBy, base.appearance.showPoweredBy),
+      showPoweredBy: effectivePoweredBy(a.showPoweredBy, base.appearance.showPoweredBy),
     },
     ux: normalizeShopifyChatUx(s.ux, base.ux),
     behaviour: { allowHumanHandoff: bool(b.allowHumanHandoff, base.behaviour.allowHumanHandoff) },
@@ -236,7 +237,7 @@ export function publicWebchatConfig(
       cornerRadius: config.appearance.cornerRadius,
       language: config.appearance.language,
       direction: config.appearance.direction,
-      showPoweredBy: config.appearance.showPoweredBy,
+      showPoweredBy: effectivePoweredBy(config.appearance.showPoweredBy),
     },
     // The legacy block the widget still reads as a fallback.
     welcome: {

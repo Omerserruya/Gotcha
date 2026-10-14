@@ -10,6 +10,8 @@ import {
   requireActiveTenant,
   requirePermission,
   requireRole,
+  asksToHidePoweredBy,
+  POWERED_BY_LOCKED_CODE,
 } from "@chatcenter/shared";
 import { getWidget, putWidget, installOf, WidgetInputError, type WidgetSettings } from "../services/website-widget.service";
 import { readAssignment, writeAssignment, AssignmentError } from "../services/widget-assignment.service";
@@ -41,6 +43,11 @@ router.get("/", requirePermission("channels:manage:read"), async (req: Request &
 
 router.put("/", requirePermission("channels:manage:update"), async (req: Request & { tenantId?: string }, res: Response) => {
   try {
+    // "Powered by GOTCHA" stays on (W8): refused, never silently ignored.
+    if (asksToHidePoweredBy((req.body as any)?.appearance)) {
+      res.status(403).json({ error: "Powered by GOTCHA cannot be turned off", code: POWERED_BY_LOCKED_CODE, field: "appearance.showPoweredBy" });
+      return;
+    }
     const data = await putWidget(req.tenantId!, patchOf(req.body));
     if (!data) {
       res.status(409).json({ error: "Create the widget first", code: "WIDGET_NOT_CREATED" });

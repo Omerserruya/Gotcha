@@ -246,3 +246,19 @@ describe("★ the WhatsApp kind (no on-site chat)", () => {
     expect(r.body.data.settings.ux.kind).toBe("chat");
   });
 });
+
+describe("★ Powered by GOTCHA stays on (W8)", () => {
+  it("an explicit off is refused (403) and nothing is written; a stored off is served on", async () => {
+    const before = JSON.stringify(H.accounts[0].credentials);
+    const r = await request(app()).put("/api/website-widget").send({ appearance: { showPoweredBy: false, primaryColor: "#112233" } });
+    expect(r.status).toBe(403);
+    expect(r.body).toMatchObject({ code: "POWERED_BY_LOCKED", field: "appearance.showPoweredBy" });
+    expect(JSON.stringify(H.accounts[0].credentials)).toBe(before);
+    // A row saved off before the lock.
+    H.accounts[0].credentials = { ...H.accounts[0].credentials, appearance: { ...H.accounts[0].credentials.appearance, showPoweredBy: false } };
+    expect((await boot()).appearance.showPoweredBy).toBe(true);
+    expect((await request(app()).get("/api/website-widget")).body.data.settings.appearance.showPoweredBy).toBe(true);
+    // On, or not mentioned: saved as usual.
+    expect((await request(app()).put("/api/website-widget").send({ appearance: { showPoweredBy: true } })).status).toBe(200);
+  });
+});
