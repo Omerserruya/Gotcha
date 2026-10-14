@@ -481,6 +481,11 @@ window.__gotchaSiteMount = function (opts) {
       });
     }
 
+    // The merchant's texts in the visitor's language (W10).
+    if (path === "/texts") {
+      return post(API_PATH + "/texts", { widgetId: WIDGET_ID, locale: body && body.locale });
+    }
+
     if (path === "/message") {
       return post(API_PATH + "/message", {
         sessionId: store.get("conversation"),

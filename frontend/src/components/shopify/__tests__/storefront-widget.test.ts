@@ -1738,3 +1738,78 @@ describe("★★ Add to cart on a web chat's store (live widget L6, W9c)", () =>
     expect(shadow.querySelector(".cart-err")!.textContent).toBe(sentence);
   });
 });
+
+describe("★★ the visitor's language (live widget L7, W10)", () => {
+  async function talk(h: Harness, said: string | null, texts: Record<string, string> = {}) {
+    h.post.mockImplementation(async (p: string, body: any) => {
+      if (String(p).endsWith("/conversation")) return { data: { conversationId: "conv1", status: "OPEN", isHandedOver: false, messages: [] } };
+      if (String(p).endsWith("/message")) return { data: { messageId: "m1", locale: said } };
+      if (String(p).endsWith("/texts")) return { data: { locale: body.locale, texts } };
+      return { data: {} };
+    });
+    (h.shadow.querySelector(".qs .q") as HTMLButtonElement).click();
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  const textsCalls = (h: Harness) => h.post.mock.calls.filter((c) => String(c[0]).endsWith("/texts"));
+
+  it("★ the answer says Hebrew: the panel turns Hebrew and right to left, once, and asks for the merchant's texts", async () => {
+    const reset = vi.fn();
+    const h = await boot({ messages: [], resetConversation: reset });
+    await talk(h, "he", { "welcome.suggestedQuestions.0": "איזה מוצר מתאים לי?" });
+    const panel = h.shadow.querySelector(".panel")!;
+    expect(panel.getAttribute("lang")).toBe("he");
+    expect(panel.getAttribute("dir")).toBe("rtl");
+    expect(h.shadow.querySelector("textarea")!.getAttribute("placeholder")).toBe("אפשר לשאול אותנו הכל");
+    expect(h.shadow.querySelector('[data-act="close"]')!.getAttribute("aria-label")).toBe("מזעור");
+    expect(textsCalls(h)).toEqual([[expect.stringMatching(/\/texts$/), { locale: "he" }, "opaque-session-token"]]);
+    // The tools move to the Hebrew corner: the stylesheet follows the direction.
+    const sheet = (h.shadow.querySelector("style") as HTMLStyleElement).textContent ?? "";
+    expect(sheet).toContain("display:flex;gap:6px;top:15px;left:12px;}");
+    // The merchant's question, translated, where the welcome shows it.
+    (h.shadow.querySelector('[data-act="new"]') as HTMLButtonElement).click();
+    expect(h.shadow.querySelector(".qs .q .q-t")!.textContent).toBe("איזה מוצר מתאים לי?");
+    // The assistant's name is never translated.
+    expect(h.shadow.querySelector(".disc-nm")!.textContent).toBe("Store Assistant");
+  });
+
+  it("a second Hebrew answer asks nothing again", async () => {
+    const h = await boot({ messages: [] });
+    await talk(h, "he");
+    h.post.mockClear();
+    (h.shadow.querySelector("textarea") as HTMLTextAreaElement).value = "עוד שאלה";
+    h.shadow.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(textsCalls(h)).toHaveLength(0);
+  });
+
+  it("once: a later answer in the page's language does not switch it back", async () => {
+    const h = await boot({ messages: [] });
+    await talk(h, "he");
+    h.post.mockImplementation(async (p: string) =>
+      String(p).endsWith("/message") ? { data: { messageId: "m2", locale: "en" } } : { data: {} },
+    );
+    (h.shadow.querySelector("textarea") as HTMLTextAreaElement).value = "and in English?";
+    h.shadow.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(h.shadow.querySelector(".panel")!.getAttribute("lang")).toBe("he");
+    expect(textsCalls(h)).toHaveLength(1);
+  });
+
+  it("a merchant's fixed direction is kept; the words still change", async () => {
+    const h = await boot({ messages: [], appearance: { direction: "ltr" } });
+    await talk(h, "he");
+    const panel = h.shadow.querySelector(".panel")!;
+    expect(panel.getAttribute("lang")).toBe("he");
+    expect(panel.getAttribute("dir")).toBe("ltr");
+  });
+
+  it("no word on the language, or the page's own: nothing changes", async () => {
+    for (const said of [null, "en"]) {
+      document.body.innerHTML = "";
+      const h = await boot({ messages: [] });
+      await talk(h, said);
+      expect(h.shadow.querySelector(".panel")!.getAttribute("lang")).toBe("en");
+      expect(textsCalls(h)).toHaveLength(0);
+    }
+  });
+});

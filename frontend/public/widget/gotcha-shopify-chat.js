@@ -535,7 +535,9 @@ window.__gotchaShopifyChatApp = function (boot) {
   var onBrand = appearance.contrastColor;
   var side = appearance.launcherPosition === "left" ? "left" : "right";
 
-  var css = [
+  // A function, not a constant: the direction it lays out in changes when
+  // the conversation turns out to be in another language (W10).
+  function buildCss() { return [
     // `el.hidden = true` only hides anything because of the UA stylesheet's
     // `[hidden]{display:none}` - the weakest rule there is. Every element
     // below that sets its own `display` (the panel is `display:flex`) beat
@@ -1079,10 +1081,10 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".panel[data-look='gotcha'] .chip{border-color:#E3DACE;}",
     ".panel[data-look='gotcha'] .chip[aria-pressed='true']{color:" + inkOn(brand) + ";}",
     "@media (prefers-reduced-motion: reduce){.panel[data-look='gotcha'] .hd-dot::after,.panel[data-look='gotcha'] .disc-on::after{animation:none;opacity:0}.panel[data-look='gotcha'] .q,.panel[data-look='gotcha'] .tl{transition:none}}",
-  ].join("\n");
+  ].join("\n"); }
 
   var styleNode = document.createElement("style");
-  styleNode.textContent = css;
+  styleNode.textContent = buildCss();
   shadow.appendChild(styleNode);
 
   // ── Panel shell ─────────────────────────────────────────────────
@@ -1192,6 +1194,7 @@ window.__gotchaShopifyChatApp = function (boot) {
   // one close control, so `data-act="close"` still names it. Glass circles
   // over the cover, quiet squares in the header.
   var dockBtn = null;
+  var newBtn = null;
   if (LOOK === "gotcha") {
     var tools = el("div", "tools");
     closeBtn.className = "tl";
@@ -1199,7 +1202,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     closeBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
     if (waBtn) { waBtn.className = "tl"; tools.appendChild(waBtn); }
     if (typeof boot.resetConversation === "function") {
-      var newBtn = el("button", "tl");
+      newBtn = el("button", "tl");
       attr(newBtn, { type: "button", "aria-label": T.newChat, title: T.newChat, "data-act": "new" });
       newBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>';
       on(newBtn, "click", newConversation);
@@ -1324,6 +1327,82 @@ window.__gotchaShopifyChatApp = function (boot) {
   shadow.appendChild(panel);
 
   els = { panel: panel, body: body, footer: footer, textarea: textarea, sendBtn: sendBtn };
+
+  // ── The visitor's language (W10) ───────────────────────────────
+  //
+  // The widget starts in the page's language. The first reply that says the
+  // conversation is in another one (the message answer's `locale`) switches
+  // the chrome to it - strings, direction, labels - once, and asks for the
+  // merchant's texts in it (/texts: only the ones written in another
+  // language; the assistant's name is never translated).
+  var langSwitched = false;
+
+  function relabel() {
+    var typeLabel = LOOK === "whatsapp" ? T.waPlaceholder : T.placeholder;
+    attr(textarea, { placeholder: typeLabel, "aria-label": typeLabel });
+    attr(sendBtn, { "aria-label": T.send });
+    sendBtn.innerHTML =
+      dir === "rtl"
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4M10 6l-6 6 6 6"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16M14 6l6 6-6 6"/></svg>';
+    humanBtn.textContent = T.talkToHuman;
+    attr(poweredBy, { "aria-label": T.poweredBy });
+    if (LOOK === "gotcha") attr(closeBtn, { "aria-label": T.minimise, title: T.minimise });
+    else attr(closeBtn, { "aria-label": T.close });
+    if (waBtn) attr(waBtn, { "aria-label": T.continueWa, title: T.continueWa });
+    if (newBtn) attr(newBtn, { "aria-label": T.newChat, title: T.newChat });
+    if (LOOK === "whatsapp" && WA_ON) headerName.textContent = T.waTitle;
+    paintDock();
+    paintMute();
+  }
+
+  function overlayTexts(texts) {
+    if (!texts || typeof texts !== "object") return;
+    var W = (widget.ux && widget.ux.welcome) || null;
+    Object.keys(texts).forEach(function (key) {
+      var value = texts[key];
+      if (typeof value !== "string" || !value.trim()) return;
+      if (key === "welcome.title") {
+        if (W) W.title = value;
+        welcome.headline = value;
+      } else if (key === "welcome.subtitle") {
+        if (W) W.subtitle = value;
+        welcome.subline = value;
+      } else if (key === "offline.message") {
+        if (widget.offline) widget.offline.message = value;
+      } else {
+        var m = /^welcome\.suggestedQuestions\.(\d+)$/.exec(key);
+        if (!m) return;
+        var i = Number(m[1]);
+        if (W && W.suggestedQuestions && i < W.suggestedQuestions.length) {
+          W.suggestedQuestions = W.suggestedQuestions.slice();
+          W.suggestedQuestions[i] = value;
+        }
+        if (welcome.suggestedQuestions && i < welcome.suggestedQuestions.length) {
+          welcome.suggestedQuestions = welcome.suggestedQuestions.slice();
+          welcome.suggestedQuestions[i] = value;
+        }
+      }
+    });
+  }
+
+  function switchLanguage(next) {
+    if (langSwitched || (next !== "he" && next !== "en") || next === lang) return;
+    langSwitched = true;
+    lang = next;
+    T = STRINGS[lang] || STRINGS.en;
+    dir = BIDI.resolveMessageDirection({ override: dirOverride, conversationLocale: lang, widgetLocale: null }).direction;
+    attr(panel, { dir: dir, lang: lang });
+    styleNode.textContent = buildCss();
+    relabel();
+    render();
+    api("/texts", { locale: lang })
+      .then(function (res) {
+        overlayTexts(res && res.data && res.data.texts);
+        render();
+      })
+      .catch(function () {});
+  }
 
   // ── Networking ──────────────────────────────────────────────────
 
@@ -2673,7 +2752,10 @@ window.__gotchaShopifyChatApp = function (boot) {
           context: boot.context,
         });
       })
-      .then(function () {
+      .then(function (res) {
+        // The server's word on the conversation's language (W10); null keeps it.
+        var said = res && res.data && res.data.locale;
+        if (said) switchLanguage(said);
         // The chime belongs here, not in submit(): it means "delivered",
         // and a send that failed must never sound like one that worked.
         if (boot.playSound) boot.playSound("outgoing", { sendFailed: false });

@@ -100,7 +100,7 @@ const browser = await chromium.launch({
  */
 async function openSite({ widgetExists, widget = widgetConfig(), availability = "online", lang = "en",
   stored = null, history = [], wait = 1800, ctx: given = null, waStart = null, blockPopups = false,
-  pagePath = "/", bodyClass = "", cart = null }) {
+  pagePath = "/", bodyClass = "", cart = null, said = null }) {
   const ctx = given || await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   const calls = [];
@@ -115,6 +115,7 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
   const starts = [];
   const validates = [];
   const messages = [];
+  const texts = [];
   const adds = [];
   if (blockPopups) await page.addInitScript(() => { window.open = () => null; });
   // wa.me is never reached: a popup pointed at it gets an empty page.
@@ -124,6 +125,13 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
     calls.push(url.pathname);
     if (url.pathname === "/api/embedded-chat/init") inits.push(JSON.parse(route.request().postData() || "{}"));
     if (url.pathname === "/api/embedded-chat/message") messages.push(JSON.parse(route.request().postData() || "{}"));
+    // Metered on the server: always mocked here, never sent to dev.
+    if (url.pathname === "/api/embedded-chat/texts") {
+      const body = JSON.parse(route.request().postData() || "{}");
+      texts.push(body);
+      return route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify({ data: { locale: body.locale, texts: { "welcome.suggestedQuestions.0": "איפה ההזמנה שלי?" } } }) });
+    }
     if (url.pathname === "/api/embedded-chat/cart/validate") {
       validates.push(JSON.parse(route.request().postData() || "{}"));
       const answer = cart || { status: 200, body: { data: { cartUrl: `${ORIGIN}/?add-to-cart=111&quantity=1`, productId: "111", variantId: "9001", quantity: 1 } } };
@@ -177,7 +185,7 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { messages: history } }) });
     }
     if (url.pathname === "/api/embedded-chat/message") {
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: {} }) });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { messageId: "m1", locale: said } }) });
     }
     return route.fulfill({ status: 404, body: "" });
   });
@@ -190,7 +198,7 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
 
   await page.goto(new URL(pagePath, ORIGIN).toString(), { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(wait);
-  return { ctx, page, calls, errors, inits, starts, validates, adds, messages };
+  return { ctx, page, calls, errors, inits, starts, validates, adds, messages, texts };
 }
 
 // ── A widget that no longer exists ──
@@ -786,6 +794,31 @@ const addToCartClick = (page) => page.evaluate(() => {
   await page.waitForTimeout(800);
   const c = messages[0] && messages[0].context;
   check("L6 a message carries the page: the product's id and slug", !!c && c.productId === "12" && c.productHandle === "blue-runner" && c.pageType === "product", JSON.stringify(c));
+  await ctx.close();
+}
+
+{
+  // W10: the answer says the conversation is Hebrew.
+  // "auto" is the server's default; a merchant's fixed direction is kept.
+  const auto = widgetConfig();
+  auto.appearance = { ...auto.appearance, direction: "auto" };
+  const { ctx, page, texts, errors } = await openSite({ widgetExists: true, widget: auto, wait: 1000, said: "he" });
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(500);
+  await page.evaluate(() => document.getElementById("gotcha-chat-root").shadowRoot.querySelector(".qs .q").click());
+  await page.waitForTimeout(1200);
+  const a = await page.evaluate(() => {
+    const s = document.getElementById("gotcha-chat-root").shadowRoot;
+    const p = s.querySelector(".panel");
+    const close = s.querySelector('[data-act="close"]').getBoundingClientRect();
+    return { lang: p.getAttribute("lang"), dir: p.getAttribute("dir"), placeholder: s.querySelector("textarea").getAttribute("placeholder"),
+      closeLeft: Math.round(close.left - p.getBoundingClientRect().left) };
+  });
+  check("L7 a Hebrew answer: the panel turns Hebrew, right to left, its tools in the left corner",
+    a.lang === "he" && a.dir === "rtl" && a.placeholder === "אפשר לשאול אותנו הכל" && a.closeLeft < 60, JSON.stringify(a));
+  check("L7 /texts once, with the widget and the language", texts.length === 1 && texts[0].widgetId === "wid_test_123" && texts[0].locale === "he", JSON.stringify(texts));
+  check("L7: logs nothing", errors.length === 0, errors.slice(0, 2).join(" | "));
+  await page.screenshot({ path: path.join(os.homedir(), ".cache/cc-work/shots/webchat-l7.png") }).catch(() => {});
   await ctx.close();
 }
 
