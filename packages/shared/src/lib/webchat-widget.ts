@@ -52,6 +52,36 @@ export interface WebchatConfig {
   offline: {
     message: string;
   };
+  /**
+   * Products on the website widget (W9): cards from the workspace's connected
+   * WooCommerce store, and add to cart. Opt-in (off by default); served on
+   * only while that store is connected.
+   */
+  commerce: WebchatCommerce;
+}
+
+export const MAX_PROMOTION_COUPONS = 5;
+
+export interface WebchatCommerce {
+  productMessagingEnabled: boolean;
+  addToCartEnabled: boolean;
+  /** The store coupons the merchant chose to show (Woo coupon ids). Nothing shows without a choice. */
+  promotions: { couponIds: string[] };
+}
+
+export function normalizeWebchatCommerce(raw: unknown, base: WebchatCommerce = defaultWebchatConfig().commerce): WebchatCommerce {
+  const s = (raw && typeof raw === "object" ? raw : {}) as Record<string, any>;
+  const p = (s.promotions && typeof s.promotions === "object" ? s.promotions : {}) as Record<string, any>;
+  const ids = Array.isArray(p.couponIds)
+    ? [...new Set(p.couponIds.map((v: unknown) => String(v ?? "").trim()).filter((v: string) => /^\d{1,12}$/.test(v)))].slice(0, MAX_PROMOTION_COUPONS) as string[]
+    : base.promotions.couponIds;
+  const productMessagingEnabled = bool(s.productMessagingEnabled, base.productMessagingEnabled);
+  return {
+    productMessagingEnabled,
+    // Add to cart lives on a product card: no cards, no cart.
+    addToCartEnabled: productMessagingEnabled && bool(s.addToCartEnabled, base.addToCartEnabled),
+    promotions: { couponIds: ids },
+  };
 }
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -103,6 +133,7 @@ export function defaultWebchatConfig(): WebchatConfig {
     ux: defaultShopifyChatUx(),
     behaviour: { allowHumanHandoff: true },
     offline: { message: "We are away right now. Leave a message and we will get back to you." },
+    commerce: { productMessagingEnabled: false, addToCartEnabled: false, promotions: { couponIds: [] } },
   };
 }
 
@@ -206,6 +237,7 @@ export function normalizeWebchatConfig(raw: unknown, base = defaultWebchatConfig
     ux: normalizeShopifyChatUx(s.ux, base.ux),
     behaviour: { allowHumanHandoff: bool(b.allowHumanHandoff, base.behaviour.allowHumanHandoff) },
     offline: { message: text(o.message, 300, base.offline.message) },
+    commerce: normalizeWebchatCommerce(s.commerce, base.commerce),
   };
 }
 
@@ -218,7 +250,11 @@ export function normalizeWebchatConfig(raw: unknown, base = defaultWebchatConfig
  */
 export function publicWebchatConfig(
   config: WebchatConfig,
-  opts: { offline: boolean },
+  opts: {
+    offline: boolean;
+    /** True only while the workspace's WooCommerce store is connected (W9). */
+    storeConnected?: boolean;
+  },
 ): {
   appearance: Record<string, unknown>;
   welcome: Record<string, unknown>;
@@ -256,9 +292,10 @@ export function publicWebchatConfig(
     },
     features: {
       humanHandoff: config.behaviour.allowHumanHandoff,
-      // A website widget has no catalogue to show.
-      productMessaging: false,
-      addToCart: false,
+      // Products only when the merchant turned them on AND the store they
+      // come from is connected now (W9).
+      productMessaging: !!opts.storeConnected && config.commerce.productMessagingEnabled,
+      addToCart: !!opts.storeConnected && config.commerce.addToCartEnabled,
     },
     ux: publicUx(config.ux),
   };

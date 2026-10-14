@@ -62,7 +62,7 @@ export function isProductSearchTool(toolName: string | undefined): boolean {
 }
 
 /** The store's currency for a WooCommerce connection, cached on its config like Shopify's. */
-async function resolveWooCurrency(tenantId: string): Promise<{ storeUrl: string | null; currency: string | undefined }> {
+export async function resolveWooCurrency(tenantId: string): Promise<{ storeUrl: string | null; currency: string | undefined }> {
   const conn = await loadConnection({ tenantId, slug: "woocommerce" });
   if (!conn) return { storeUrl: null, currency: undefined };
   const storeUrl = String(conn.config?.storeUrl || conn.credentials?.storeUrl || conn.credentials?.store_url || "").replace(/\/+$/, "") || null;

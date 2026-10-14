@@ -10,12 +10,12 @@ import {
   BUSINESS_HOURS_KEY,
   parseBusinessHours,
   evaluateBusinessHours, readDurableSetting, normalizeStorefrontContext,
-  visitorLocaleOf, widgetTextsOf, isWidgetLocale,
+  visitorLocaleOf, widgetTextsOf, isWidgetLocale, projectWooCommerce,
   HANDOFF_TTL_SECONDS, handoffRefKey, handoffConversationKey, newHandoffRef, handoffMessage, handoffButtonLabel, waMeUrl,
   type HandoffRecord, type WebchatConfig } from "@chatcenter/shared";
 import crypto from "crypto";
 import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanitizer.service";
-import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef } from "../services/website-widget.service";
+import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef, connectedWooStore } from "../services/website-widget.service";
 import { translateWidgetTexts } from "../services/widget-text-translation.service";
 
 const router = Router();
@@ -197,7 +197,11 @@ router.post("/bootstrap", initLimiter, async (req: Request, res: Response) => {
  * known). The number itself never reaches the page.
  */
 async function withHandoff(tenantId: string, config: WebchatConfig, offline = false) {
-  const base = publicWebchatConfig(config, { offline });
+  // Products only while the store they come from is connected (W9).
+  const storeConnected = config.commerce.productMessagingEnabled
+    ? !!(await withCrossTenantAccess(() => connectedWooStore(tenantId)).catch(() => null))
+    : false;
+  const base = publicWebchatConfig(config, { offline, storeConnected });
   const target = await withCrossTenantAccess(() => handoffTarget(tenantId, config.ux)).catch(() => null);
   const lang = config.appearance.language === "he" ? "he" : "en";
   if (config.ux.kind === "whatsapp" && !target) return null;
@@ -574,10 +578,23 @@ router.get("/messages/:sessionId", pollLimiter, async (req: Request, res: Respon
         body: true,
         senderName: true,
         createdAt: true,
+        metadata: true,
       },
     });
 
-    res.json({ data: messages });
+    // Product cards (W9): projected for the visitor, only when they are this
+    // widget's and the store they came from is still the connected one. The
+    // stored metadata itself never leaves.
+    const anyCards = messages.some((m) => (m.metadata as any)?.commerce);
+    const store = anyCards
+      ? await withCrossTenantAccess(() => connectedWooStore(conversation.tenantId)).catch(() => null)
+      : null;
+    res.json({
+      data: messages.map(({ metadata, ...m }) => ({
+        ...m,
+        commerce: projectWooCommerce(metadata, { storeUrl: store?.storeUrl ?? null, channelAccountId: conversation.channelAccountId ?? "" }),
+      })),
+    });
   } catch (err) {
     console.error("Embedded chat messages error:", (err as Error)?.message);
     res.status(500).json({ error: "Failed to get messages" });

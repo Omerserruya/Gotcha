@@ -993,8 +993,21 @@ export {
   migrateLegacyWebchat,
   isLegacyWebchatSettings,
   publicWebchatConfig,
+  normalizeWebchatCommerce,
+  MAX_PROMOTION_COUPONS,
 } from "./lib/webchat-widget";
-export type { WebchatConfig, LegacyWebchatSettings, WebchatPosition } from "./lib/webchat-widget";
+export type { WebchatConfig, LegacyWebchatSettings, WebchatPosition, WebchatCommerce } from "./lib/webchat-widget";
+// WooCommerce product cards on the website widget (W9).
+export {
+  WOO_MESSAGE_TYPES,
+  MAX_WOO_VARIANTS,
+  buildWooProductCard,
+  projectWooCommerce,
+  summarizeWooCards,
+  type WooProductCard,
+  type WooCardVariant,
+  type WooCommercePayload,
+} from "./lib/woo-commerce-cards";
 // The widget follows the customer's language (W10).
 export { isWidgetLocale, visitorLocaleOf, textLocaleOf, widgetTextsOf, textsToTranslate, type WidgetLocale } from "./lib/widget-language";
 // "Powered by GOTCHA" is on for every widget (W8).

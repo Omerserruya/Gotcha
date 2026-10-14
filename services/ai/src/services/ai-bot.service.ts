@@ -234,6 +234,7 @@ import {
 } from "./action-contracts.repo";
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -1735,6 +1736,16 @@ async function generateAIBotReplyInner(
   if (shopifyTurn?.storefrontBlock) {
     ctxSlot.storefrontBlock = shopifyTurn.storefrontBlock;
   }
+  // The website widget's product cards from the connected WooCommerce store
+  // (W9). Null unless this is a web chat with products turned on; never both.
+  const wooTurn = shopifyTurn
+    ? null
+    : await prepareWebchatCommerceTurn({ tenantId: opts.tenantId, conversationId: opts.conversationId }).catch((err: any) => {
+        console.warn("[ai-bot] woo turn prep failed:", err?.message);
+        return null;
+      });
+  // The one place cards are staged this turn, whichever store they come from.
+  const productTurn = shopifyTurn ?? wooTurn;
   // Set later in the turn, read by runAdapterTool's gate below. Declared here
   // because the tool context closes over it and is built before the controller
   // runs; the closure reads it at call time, by which point it is resolved.
@@ -1751,7 +1762,7 @@ async function generateAIBotReplyInner(
   })();
 
   const agentToolCtx: AgentToolContext = {
-    sendShopifyProducts: shopifyTurn?.sendShopifyProducts,
+    sendShopifyProducts: productTurn?.sendShopifyProducts,
     tenantId: opts.tenantId,
     aiAgentId: config.id,
     conversationId: opts.conversationId,
@@ -2063,7 +2074,7 @@ async function generateAIBotReplyInner(
     rescheduleMeeting: hasExistingBooking,
     cancelMeeting: hasExistingBooking,
     // Honor CatalogTool.allowedModes - tools tagged ASSIST-only are dropped
-    shopifyProducts: shopifyTurn?.productMessagingEnabled === true,
+    shopifyProducts: productTurn?.productMessagingEnabled === true,
     // Honor CatalogTool.allowedModes - tools tagged ASSIST-only are dropped
     // from the autonomous surface. The copilot path uses {closure,followup}
     // flags; the autonomous path uses this mode filter.
@@ -2320,6 +2331,11 @@ async function generateAIBotReplyInner(
   } catch (err: any) {
     console.warn("[ai-bot] policy pre-filter failed (keeping full surface):", err?.message);
   }
+
+  // On a web chat whose cards come from the WooCommerce store (W9), the
+  // Shopify catalogue is not this conversation's store: its search would hand
+  // the model ids that are not on the shelf the widget sits on.
+  tools = withoutOtherStoreTools(tools as any[], wooTurn);
 
   // ── Hard cap: OpenAI rejects a tools array longer than 128 ──
   //
@@ -4630,7 +4646,9 @@ async function generateAIBotReplyInner(
     // sentence? The capability map answers, not this file.
     const recoCaps = capabilitiesFor(conversation.channel as string);
     const channelSupportsCards = recoCaps.supportsProductCarousel || recoCaps.supportsCards;
-    const canStage = !!shopifyTurn?.sendShopifyProducts;
+    // Cards only from the store the search read: a Shopify result is never
+    // staged against the Woo store, nor the other way round.
+    const canStage = !!productTurn?.sendShopifyProducts && cardsMatchTurn(productEnvelope.provider, wooTurn);
 
     const recoPlan = planAutoRecommendation({
       envelope: productEnvelope,
@@ -4638,7 +4656,7 @@ async function generateAIBotReplyInner(
       // cards but has no staging path (web chat today) still takes the
       // text route, honestly.
       channelSupportsCards: channelSupportsCards && canStage,
-      alreadyStaged: (shopifyTurn?.staged.length ?? 0) > 0,
+      alreadyStaged: (productTurn?.staged.length ?? 0) > 0,
       modelText: replyText,
       locale: replyLocale,
       budget: productBudget,
@@ -4649,7 +4667,7 @@ async function generateAIBotReplyInner(
       // above the budget" printed above a carousel of three.
       maxProducts: Math.min(
         recoCaps.maxCards ?? MAX_CAROUSEL_ITEMS,
-        shopifyTurn?.channel.config.commerce.carouselSize || MAX_CAROUSEL_ITEMS,
+        shopifyTurn?.channel.config.commerce.carouselSize || wooTurn?.carouselSize || MAX_CAROUSEL_ITEMS,
       ),
     });
 
@@ -4663,7 +4681,7 @@ async function generateAIBotReplyInner(
       // unpublished ones and enforces this channel's store binding, so
       // the automatic path inherits every guarantee the tool path has.
       try {
-        const staged = await shopifyTurn!.sendShopifyProducts!({
+        const staged = await productTurn!.sendShopifyProducts!({
           products: recoPlan.selected.map((c) => ({
             productId: c.productId,
             variantId: c.variantId,
@@ -4841,7 +4859,7 @@ async function generateAIBotReplyInner(
     // over, and a product card arriving after "let me get a colleague"
     // would be noise.
     structuredMessages:
-      safeReply && shopifyTurn?.staged.length ? shopifyTurn.staged : undefined,
+      safeReply && productTurn?.staged.length ? productTurn.staged : undefined,
   };
 }
 

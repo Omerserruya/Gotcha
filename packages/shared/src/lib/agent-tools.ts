@@ -890,11 +890,11 @@ export const SEND_PRODUCT_CARD_TOOL = {
       properties: {
         product_id: {
           type: "string",
-          description: "Shopify product id, from a product search or lookup. Preferred.",
+          description: "The store's product id, from a product search or lookup. Preferred.",
         },
         handle: {
           type: "string",
-          description: "Shopify product handle, if you have that instead of an id.",
+          description: "The product's handle (Shopify only), if you have that instead of an id.",
         },
         variant_id: {
           type: "string",
@@ -928,8 +928,8 @@ export const SEND_PRODUCT_CAROUSEL_TOOL = {
           items: {
             type: "object",
             properties: {
-              product_id: { type: "string", description: "Shopify product id. Preferred." },
-              handle: { type: "string", description: "Shopify product handle." },
+              product_id: { type: "string", description: "The store's product id. Preferred." },
+              handle: { type: "string", description: "The product's handle (Shopify only)." },
               variant_id: { type: "string", description: "Variant id, only if already chosen." },
               reason: { type: "string", description: "One short sentence on why this one fits." },
             },

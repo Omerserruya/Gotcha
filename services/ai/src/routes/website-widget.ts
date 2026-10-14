@@ -21,7 +21,7 @@ router.use(authenticate, resolveTenant, requireActiveTenant());
 
 const isObj = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
 
-/** Only the four shared sections, each an object; anything else is dropped (never a 400). */
+/** Only the shared sections (and the web chat's commerce), each an object; anything else is dropped (never a 400). */
 function patchOf(body: unknown): Partial<WidgetSettings> {
   const out: Partial<WidgetSettings> = {};
   if (!isObj(body)) return out;
@@ -29,6 +29,8 @@ function patchOf(body: unknown): Partial<WidgetSettings> {
   if (isObj(body.ux)) out.ux = body.ux as any;
   if (isObj(body.handoff) && typeof body.handoff.allowHumanHandoff === "boolean") out.handoff = { allowHumanHandoff: body.handoff.allowHumanHandoff };
   if (isObj(body.offline) && typeof body.offline.message === "string") out.offline = { message: body.offline.message };
+  // The website widget's products (W9); normalised against the stored value.
+  if (isObj(body.commerce)) out.commerce = body.commerce as any;
   return out;
 }
 

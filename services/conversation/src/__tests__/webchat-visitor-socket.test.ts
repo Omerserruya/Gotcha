@@ -85,7 +85,7 @@ describe("★ the relay pushes web chat messages", () => {
     expect(H.to).toContain("visitor:web1");
     expect(H.emit).toHaveBeenCalledWith("visitor:message", {
       conversationId: "web1",
-      message: { id: "m1", direction: "OUTBOUND", body: "Hi!", senderName: "Maya", createdAt: "2026-10-07T10:00:00.000Z" },
+      message: { id: "m1", direction: "OUTBOUND", body: "Hi!", senderName: "Maya", createdAt: "2026-10-07T10:00:00.000Z", commerce: null },
     });
   });
 

@@ -34,6 +34,8 @@ export interface WidgetSettings {
   ux: WebchatConfig["ux"];
   handoff: { allowHumanHandoff: boolean };
   offline: { message: string };
+  /** The web chat's products (W9). Stored on the web chat only; the Shopify chat has its own. */
+  commerce: WebchatConfig["commerce"];
 }
 
 /** The settings as a webchat config sees them (the canonical projection). */
@@ -43,6 +45,7 @@ function fromWebchat(c: WebchatConfig): WidgetSettings {
     ux: c.ux,
     handoff: { allowHumanHandoff: c.behaviour.allowHumanHandoff },
     offline: { message: c.offline.message },
+    commerce: c.commerce,
   };
 }
 
@@ -64,6 +67,7 @@ function fromShopify(platformMeta: unknown): WidgetSettings {
     ux: s.ux,
     handoff: { allowHumanHandoff: s.routing.allowHumanHandoff },
     offline: { message: s.hours.offlineMessage },
+    commerce: base.commerce,
   };
 }
 
@@ -79,6 +83,9 @@ function nextWebchat(current: WebchatConfig, patch: Partial<WidgetSettings>): We
     ux: patch.ux ? deepMerge(current.ux, patch.ux) : current.ux,
     behaviour: { ...current.behaviour, ...(patch.handoff ? { allowHumanHandoff: patch.handoff.allowHumanHandoff } : {}) },
     offline: { ...current.offline, ...(patch.offline ?? {}) },
+    commerce: patch.commerce
+      ? { ...current.commerce, ...patch.commerce, promotions: { ...current.commerce.promotions, ...((patch.commerce as any).promotions ?? {}) } }
+      : current.commerce,
   }, current);
 }
 
@@ -92,7 +99,7 @@ function deepMerge(base: any, patch: any): any {
 }
 
 /** The shared settings as a Shopify config patch: only the shared sections. */
-export function shopifyPatchOf(s: WidgetSettings): Record<string, unknown> {
+export function shopifyPatchOf(s: Omit<WidgetSettings, "commerce">): Record<string, unknown> {
   return {
     appearance: {
       primaryColor: s.appearance.primaryColor,
@@ -189,6 +196,26 @@ export async function mintHandoffRef(record: HandoffRecord, random: (n: number) 
     if (await redis.set(handoffRefKey(candidate), JSON.stringify(record), "EX", HANDOFF_TTL_SECONDS, "NX")) return candidate;
   }
   return null;
+}
+
+/**
+ * The workspace's CONNECTED WooCommerce store, or null (W9): the one store the
+ * website widget's product cards may come from. An ERROR / DISCONNECTED
+ * connection is no store: cards are not offered from a store we cannot read.
+ */
+export async function connectedWooStore(tenantId: string): Promise<{ storeUrl: string } | null> {
+  const row = await prisma.tenantIntegration.findFirst({
+    where: { tenantId, status: "CONNECTED" as any, integration: { slug: "woocommerce" } },
+    select: { config: true },
+  });
+  const raw = (row?.config as any)?.storeUrl;
+  if (typeof raw !== "string") return null;
+  try {
+    const u = new URL(raw.trim());
+    return u.protocol === "https:" ? { storeUrl: `${u.origin}${u.pathname.replace(/\/+$/, "")}` } : null;
+  } catch {
+    return null;
+  }
 }
 
 export class WidgetInputError extends Error {
