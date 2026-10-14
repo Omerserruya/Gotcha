@@ -659,7 +659,8 @@
       "failed": "Not saved. Change it again to retry",
       "nowhere": "Not saved: the widget isn't installed anywhere yet. Get the code under Install first",
       "number": "Not saved: that WhatsApp number isn't one of this workspace's. Choose another",
-      "kindNumber": "Not saved: a WhatsApp widget needs a connected WhatsApp number. Choose one."
+      "kindNumber": "Not saved: a WhatsApp widget needs a connected WhatsApp number. Choose one.",
+      "couponPersonal": "Not saved: a customer's personal coupon can't be a deal. Uncheck it."
     },
     "unread": "Couldn't read the widget's settings. Try again in a moment.",
     "appearance": {
@@ -811,9 +812,11 @@
         "held": {
           "unpublished": "Not shown: not published",
           "expired": "Not shown: expired",
-          "usedUp": "Not shown: used up"
+          "usedUp": "Not shown: used up",
+          "personal": "A customer's personal coupon, not shown as a deal"
         },
-        "done": "Done"
+        "done": "Done",
+        "freeShipping": "Free shipping"
       },
       "noCatalogue": "Not available yet: it needs a store connected to GOTCHA (Shopify or WooCommerce)",
       "onInShopify": "On in your Shopify store",

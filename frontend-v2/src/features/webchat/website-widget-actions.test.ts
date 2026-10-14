@@ -163,8 +163,48 @@ describe("★ W9d: the store's coupons for the picker", () => {
     expect(read).toEqual({
       ok: true,
       connected: true,
+      currency: null,
       coupons: [expect.objectContaining({ id: '11', live: true })],
     });
+  });
+
+  it("the store's currency, and each coupon's free shipping and personal flag", async () => {
+    answer({
+      data: {
+        connected: true,
+        currency: 'ILS',
+        coupons: [
+          {
+            id: '30',
+            code: 'credit575',
+            amount: '575',
+            discountType: 'fixed_cart',
+            expiresAt: null,
+            minimumAmount: null,
+            status: 'publish',
+            usageCount: 0,
+            usageLimit: 1,
+            freeShipping: false,
+            personal: true,
+            live: false,
+          },
+        ],
+      },
+    });
+    const read = await loadWidgetPromotions();
+    expect(read).toEqual({
+      ok: true,
+      connected: true,
+      currency: 'ILS',
+      coupons: [expect.objectContaining({ id: '30', personal: true, freeShipping: false })],
+    });
+  });
+
+  it('a save with a personal coupon: 400 COUPON_PERSONAL, in words', async () => {
+    put.mockRejectedValue(
+      new ApiError({ kind: 'validation', status: 400, code: 'COUPON_PERSONAL' }),
+    );
+    expect(await saveWebsiteWidget(SETTINGS)).toEqual({ ok: false, reason: 'couponPersonal' });
   });
 
   it('502 STORE_UNREACHABLE: the store did not answer; anything else: failed', async () => {

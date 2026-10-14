@@ -1477,6 +1477,85 @@ describe('★★ W9: products, cart and deals from a WooCommerce store connected
     expect(screen.getByTestId('webchat-deals-choose')).toBeInTheDocument();
   });
 
+  it('★ supervisor on dev: free shipping in words, a fixed amount in the store currency', async () => {
+    actions.loadWidgetPromotions.mockResolvedValue({
+      ok: true,
+      connected: true,
+      currency: 'ILS',
+      coupons: [
+        coupon({
+          id: '21',
+          code: 'freeship',
+          amount: '0',
+          discountType: 'fixed_cart',
+          freeShipping: true,
+        }),
+        coupon({ id: '22', code: 'TWENTY', amount: '20', discountType: 'fixed_cart' }),
+        coupon({
+          id: '23',
+          code: 'TENSHIP',
+          amount: '10',
+          discountType: 'percent',
+          freeShipping: true,
+        }),
+      ],
+    });
+    show('behaviour', { read: woo() });
+    await openPicker();
+    const picker = screen.getByTestId('webchat-deals-picker');
+    expect(picker).toHaveTextContent('freeship');
+    // No "0 off the cart": free shipping alone.
+    const freeship = screen.getByTestId('webchat-deal-21').closest('label');
+    expect(freeship).toHaveTextContent('Free shipping');
+    expect(freeship).not.toHaveTextContent('off');
+    expect(screen.getByTestId('webchat-deal-22').closest('label')).toHaveTextContent(
+      '₪20.00 off the cart',
+    );
+    expect(screen.getByTestId('webchat-deal-23').closest('label')).toHaveTextContent(
+      '10% off · Free shipping',
+    );
+  });
+
+  it("★ a customer's personal coupon: never offered, said why; one chosen before can be unchosen", async () => {
+    const chosen = {
+      ...config,
+      commerce: {
+        productMessagingEnabled: false,
+        addToCartEnabled: false,
+        promotions: { couponIds: ['31'] },
+      },
+    };
+    actions.loadWidgetPromotions.mockResolvedValue({
+      ok: true,
+      connected: true,
+      currency: 'ILS',
+      coupons: [
+        coupon({ id: '30', code: 'credit575', personal: true, live: false }),
+        coupon({ id: '31', code: 'old-credit', personal: true, live: false }),
+      ],
+    });
+    show('behaviour', { read: woo(), initial: chosen });
+    await openPicker();
+    expect(screen.getByTestId('webchat-deal-30')).toBeDisabled();
+    expect(screen.getByTestId('webchat-deal-30-state')).toHaveTextContent(
+      "A customer's personal coupon, not shown as a deal",
+    );
+    expect(screen.getByTestId('webchat-deal-31')).toBeEnabled();
+    fireEvent.click(screen.getByTestId('webchat-deal-31'));
+    await pause();
+    expect(sentAt().commerce.promotions.couponIds).toEqual([]);
+  });
+
+  it('a save the server refuses for a personal coupon says so', async () => {
+    actions.saveWebsiteWidget.mockResolvedValue({ ok: false, reason: 'couponPersonal' });
+    show('behaviour', { read: woo() });
+    fireEvent.click(screen.getByTestId('webchat-products-switch'));
+    await pause();
+    expect(screen.getByTestId('webchat-saving')).toHaveTextContent(
+      "Not saved: a customer's personal coupon can't be a deal. Uncheck it.",
+    );
+  });
+
   it('no store connected: no switch, no picker', () => {
     show('behaviour', {
       read: install({ platforms: [{ platform: 'woocommerce', data: 'error', stores: [] }] }),

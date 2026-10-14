@@ -24,7 +24,9 @@ export type WidgetSave =
   /** 422 WHATSAPP_NUMBER_NOT_FOUND: the number is not one of this workspace's (stage B). */
   | { readonly ok: false; readonly reason: 'number' }
   /** 422 WHATSAPP_KIND_NEEDS_NUMBER: a WhatsApp widget needs a number that can take it (W1). */
-  | { readonly ok: false; readonly reason: 'kindNumber' };
+  | { readonly ok: false; readonly reason: 'kindNumber' }
+  /** 400 COUPON_PERSONAL: a customer's own coupon cannot be a widget deal (Backend bd1fe183). */
+  | { readonly ok: false; readonly reason: 'couponPersonal' };
 
 /**
  * A change to the widget, written to every place it is installed. The answer
@@ -55,6 +57,9 @@ export async function saveWebsiteWidget(
     if (isApiError(cause) && cause.code === 'WHATSAPP_KIND_NEEDS_NUMBER') {
       return { ok: false, reason: 'kindNumber' };
     }
+    if (isApiError(cause) && cause.code === 'COUPON_PERSONAL') {
+      return { ok: false, reason: 'couponPersonal' };
+    }
     if (isApiError(cause) && cause.code === 'WHATSAPP_NUMBER_NOT_FOUND') {
       return { ok: false, reason: 'number' };
     }
@@ -66,7 +71,12 @@ export async function saveWebsiteWidget(
 }
 
 export type PromotionsRead =
-  | { readonly ok: true; readonly connected: boolean; readonly coupons: readonly StoreCoupon[] }
+  | {
+      readonly ok: true;
+      readonly connected: boolean;
+      readonly currency: string | null;
+      readonly coupons: readonly StoreCoupon[];
+    }
   /** `unreachable`: 502 STORE_UNREACHABLE - the store did not answer. */
   | { readonly ok: false; readonly reason: 'unreachable' | 'failed' };
 
@@ -79,7 +89,12 @@ export async function loadWidgetPromotions(): Promise<PromotionsRead> {
       query: { page: 1 },
       raw: true,
     });
-    return { ok: true, connected: answer.data.connected, coupons: answer.data.coupons };
+    return {
+      ok: true,
+      connected: answer.data.connected,
+      currency: answer.data.currency,
+      coupons: answer.data.coupons,
+    };
   } catch (cause) {
     await signInIfSignedOut(cause);
     if (isApiError(cause) && cause.code === 'STORE_UNREACHABLE')

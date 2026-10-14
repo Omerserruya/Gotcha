@@ -222,6 +222,10 @@ export const storeCouponSchema = z.object({
   status: z.string().catch(''),
   usageCount: z.number().catch(0),
   usageLimit: z.number().nullable().catch(null).default(null),
+  /** Free shipping (Backend bd1fe183) - a coupon may give it with no amount. */
+  freeShipping: z.boolean().catch(false).default(false),
+  /** A customer's own coupon (store credit, email-restricted, one use): never a widget deal. */
+  personal: z.boolean().catch(false).default(false),
   live: z.boolean().catch(false),
 });
 export type StoreCoupon = z.infer<typeof storeCouponSchema>;
@@ -229,6 +233,8 @@ export type StoreCoupon = z.infer<typeof storeCouponSchema>;
 export const promotionsAvailableSchema = z.object({
   data: z.object({
     connected: z.boolean(),
+    /** The store's currency, for fixed amounts; null when unknown, never guessed. */
+    currency: z.string().nullable().catch(null).default(null),
     coupons: z
       .array(z.unknown())
       .catch([])
@@ -245,7 +251,8 @@ export const promotionsAvailableSchema = z.object({
 export function couponHeldBack(
   coupon: StoreCoupon,
   now = Date.now(),
-): 'unpublished' | 'expired' | 'usedUp' | null {
+): 'personal' | 'unpublished' | 'expired' | 'usedUp' | null {
+  if (coupon.personal) return 'personal';
   if (coupon.live) return null;
   if (coupon.status && coupon.status !== 'publish') return 'unpublished';
   if (coupon.expiresAt && Date.parse(coupon.expiresAt) < now) return 'expired';

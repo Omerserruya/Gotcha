@@ -10,7 +10,7 @@ import {
   SendHorizontal,
   ShoppingBag,
 } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
 import {
   useEffect,
   useSyncExternalStore,
@@ -77,7 +77,8 @@ import { WooPlugin } from './WooPlugin';
 /** How long the editor waits after the last change before saving it. */
 export const SAVE_AFTER_MS = 700;
 
-type Saving = 'idle' | 'saving' | 'saved' | 'failed' | 'nowhere' | 'number' | 'kindNumber';
+type Saving =
+  'idle' | 'saving' | 'saved' | 'failed' | 'nowhere' | 'number' | 'kindNumber' | 'couponPersonal';
 
 interface Setters {
   readonly colour: (hex: string) => void;
@@ -1417,6 +1418,7 @@ function DealsPicker({
   const [open, setOpen] = useState(false);
   const [read, setRead] = useState<PromotionsRead | null>(null);
   const [isPending, start] = useTransition();
+  const format = useFormatter();
   const load = () =>
     start(async () => {
       setRead(await loadWidgetPromotions());
@@ -1470,13 +1472,15 @@ function DealsPicker({
                 {read.coupons.map((coupon) => {
                   const on = chosen.includes(coupon.id);
                   const held = couponHeldBack(coupon);
+                  // A customer's own coupon is never a deal: it can only be un-chosen.
+                  const offered = !coupon.personal && (on || !full);
                   return (
                     <li key={coupon.id}>
                       <label className={styles.dealRow}>
                         <input
                           type="checkbox"
                           checked={on}
-                          disabled={!on && full}
+                          disabled={!on && !offered}
                           onChange={(e) =>
                             choose(
                               e.target.checked
@@ -1489,7 +1493,7 @@ function DealsPicker({
                         <bdi dir="ltr" className={styles.dealCode}>
                           {coupon.code}
                         </bdi>
-                        <span>{dealWords(t, coupon)}</span>
+                        <span>{dealWords(t, coupon, read.currency, format)}</span>
                         <span
                           className={held ? styles.rowHint : styles.onTag}
                           data-testid={`webchat-deal-${coupon.id}-state`}
@@ -1517,16 +1521,36 @@ function DealsPicker({
   );
 }
 
-/** A coupon's discount in words. The list carries no currency: the amount stands as the store wrote it. */
+/**
+ * A coupon's discount in words: a percent, or a fixed amount in the store's
+ * currency (the amount alone when the store's currency is unknown), and free
+ * shipping - alone when the coupon takes nothing off.
+ */
 function dealWords(
   t: ReturnType<typeof useTranslations<'channels.webchat.behaviour.deals'>>,
   coupon: StoreCoupon,
+  currency: string | null,
+  format: ReturnType<typeof useFormatter>,
 ): string {
   const n = Number(coupon.amount);
-  const amount = Number.isFinite(n) ? String(Math.round(n * 100) / 100) : coupon.amount;
-  if (coupon.discountType === 'percent') return t('percent', { n: amount });
-  if (coupon.discountType === 'fixed_product') return t('fixedProduct', { n: amount });
-  return t('fixedCart', { n: amount });
+  const shipping = coupon.freeShipping ? t('freeShipping') : null;
+  if (!Number.isFinite(n) || n <= 0) return shipping ?? t('fixedCart', { n: coupon.amount });
+  const round = Math.round(n * 100) / 100;
+  let amount = String(round);
+  if (coupon.discountType !== 'percent' && currency) {
+    try {
+      amount = format.number(round, { style: 'currency', currency, maximumFractionDigits: 2 });
+    } catch {
+      amount = String(round);
+    }
+  }
+  const words =
+    coupon.discountType === 'percent'
+      ? t('percent', { n: amount })
+      : coupon.discountType === 'fixed_product'
+        ? t('fixedProduct', { n: amount })
+        : t('fixedCart', { n: amount });
+  return shipping ? `${words} · ${shipping}` : words;
 }
 
 /**
