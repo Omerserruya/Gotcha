@@ -98,3 +98,70 @@ describe("crawlSite: four at a time, one retry, unreadable reported", () => {
     expect(await crawlSite(ORIGIN, { fetchPage: async () => ({ unreadable: true }) })).toBeNull();
   });
 });
+
+// ─── Cloudflare email protection, and product tiles (2026-10-14) ───────────
+import { decodeCfEmail, decodeCfEmails, withoutProductTiles, stableTextOf, htmlToText } from "../services/site-crawl.service";
+
+/** Cloudflare's encoding: a key byte, then each byte XORed with it. */
+const cf = (email: string, key = 0x5a) =>
+  [key, ...Buffer.from(email, "utf8")].map((b, i) => (i === 0 ? b : b ^ key).toString(16).padStart(2, "0")).join("");
+
+describe("★ Cloudflare-protected emails are read as the address", () => {
+  it("decodes the span and turns the link back into a mailto", () => {
+    const hex = cf("hello@halvo.co.il");
+    const html = `<p>Email <a href="/cdn-cgi/l/email-protection#${hex}"><span class="__cf_email__" data-cfemail="${hex}">[email&#160;protected]</span></a></p>`;
+    const out = decodeCfEmails(html);
+    expect(htmlToText(out)).toBe("Email hello@halvo.co.il");
+    expect(out).toContain(`href="mailto:hello@halvo.co.il"`);
+  });
+
+  it("another key decodes the same; garbage stays as it was", () => {
+    expect(decodeCfEmail(cf("a.b@x.com", 0x11))).toBe("a.b@x.com");
+    expect(decodeCfEmail("zz")).toBeNull();
+    expect(decodeCfEmail(cf("not an email"))).toBeNull();
+    const bad = `<span data-cfemail="${cf("not an email")}">[email protected]</span>`;
+    expect(decodeCfEmails(bad)).toBe(bad);
+  });
+
+  it("the crawl's fetch decodes it, so the model and the signals see the address", async () => {
+    const hex = cf("care@shop.co.il");
+    net.answer = () => ({ ok: true, status: 200, contentType: "text/html", text: `<html><body>Write to <span class="__cf_email__" data-cfemail="${hex}">[email protected]</span></body></html>` });
+    const r: any = await fetchPageForCrawl(`${ORIGIN}/contact`);
+    expect(r.text).toBe("Write to care@shop.co.il");
+  });
+});
+
+describe("★ the rescan's checksum text leaves product tiles out", () => {
+  const WOO = `<ul class="products"><li class="product type-product post-313 instock"><a href="/product/chino/"><h3 class="card__title">Chino Pants</h3></a><ul class="card__swatches"><li>Navy</li><li>Sand</li></ul><span class="price">₪ 319</span></li></ul>`;
+  const SHOP = `<div class="card-wrapper product-card-wrapper"><a href="/products/linen-shirt">Relaxed Linen Shirt</a><span>₪ 329</span></div>`;
+  const page = (tiles: string) => `<html><body><h2>Best Sellers</h2>${tiles}<p>Free shipping over ₪299</p><ul><li class="menu-item">Contact</li></ul></body></html>`;
+
+  it("a WooCommerce tile goes whole, nested swatches included; the rest stays", () => {
+    expect(stableTextOf(page(WOO))).toBe("Best Sellers Free shipping over ₪299 Contact");
+  });
+
+  it("a Shopify card around a /products/ link goes; a card-wrapper with no product link stays", () => {
+    expect(stableTextOf(page(SHOP))).toBe("Best Sellers Free shipping over ₪299 Contact");
+    const notProduct = `<div class="card-wrapper"><a href="/pages/hours">Open Sun-Thu 9-17</a></div>`;
+    expect(stableTextOf(page(notProduct))).toContain("Open Sun-Thu 9-17");
+  });
+
+  it("★ two pages that differ only in which products are listed read the same", () => {
+    const other = WOO.replace("Chino Pants", "Relaxed Linen Shirt").replace("319", "329");
+    expect(stableTextOf(page(other))).toBe(stableTextOf(page(WOO)));
+    // Only the checksum text: the page as read still has them.
+    expect(htmlToText(page(WOO))).toContain("Chino Pants");
+    expect(withoutProductTiles(page(WOO))).not.toContain("Chino");
+  });
+
+  it("crawlSite carries the stable text per page; the pages sent to the model keep their tiles", async () => {
+    const fetchPage: PageFetcher = async (url) => {
+      const html = page(WOO);
+      return url === ORIGIN ? { html: HOME + html, text: htmlToText(HOME + html) } : null;
+    };
+    const crawl = await crawlSite(ORIGIN, { fetchPage });
+    expect(crawl!.pages[0]!.text).toContain("Chino Pants");
+    expect(crawl!.stableTexts[ORIGIN]).not.toContain("Chino Pants");
+    expect(crawl!.stableTexts[ORIGIN]).toContain("Free shipping");
+  });
+});

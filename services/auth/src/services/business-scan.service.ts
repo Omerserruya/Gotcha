@@ -373,7 +373,9 @@ export async function runProfileRescan(args: {
   // unknown rather than a change (2026-10-14).
   const unreadable: string[] = Array.isArray((crawl as any).unreadable) ? (crawl as any).unreadable : [];
   const lastHashes = parsePageHashes(await readDurableSetting(tenantId, SCAN_CHECKSUM_KEY).catch(() => null));
-  const nowHashes = crawlPageHashes(crawl.pages);
+  // Product tiles left out: their order and choice change on their own.
+  const stable = (crawl as any).stableTexts as Record<string, string> | undefined;
+  const nowHashes = crawlPageHashes(crawl.pages.map((p) => ({ url: p.url, text: stable?.[p.url] ?? p.text })));
   const changed = changedPages(lastHashes, nowHashes, unreadable);
   if (!args.force && changed && changed.length === 0) {
     await setDiscoveryStatus(tenantId, { status: "COMPLETE", scanPhase: "done" });

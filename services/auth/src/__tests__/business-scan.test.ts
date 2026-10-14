@@ -840,3 +840,20 @@ describe("★ a topic is retired only when two full scans in a row found it thin
     expect(JSON.parse(settings.store[SCAN_THIN_TOPICS_KEY]!)).toContain("contact_hours");
   });
 });
+
+describe("★ the checksum compares the stable text, product tiles left out (2026-10-14)", () => {
+  // The demo store's Best Sellers swapped its 4th tile in about 1 crawl in 18.
+  const site = (homeText: string) => ({
+    pages: [{ url: "https://shop.example.com", text: homeText }], okPages: [], home: { html: "", text: homeText },
+    signals: {}, businessType: "ecommerce", requested: ["u"], distinctTextPages: 1, unreadable: [],
+    stableTexts: { "https://shop.example.com": "Best Sellers Free shipping" },
+  });
+  it("★ a swapped product tile: unchanged, no model call", async () => {
+    crawlMock.mockResolvedValue(site("Best Sellers Chino Pants 319 Free shipping"));
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+    crawlMock.mockResolvedValue(site("Best Sellers Relaxed Linen Shirt 329 Free shipping"));
+    const fetchFn = okFetch();
+    expect(await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: fetchFn })).toMatchObject({ unchanged: true });
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+});

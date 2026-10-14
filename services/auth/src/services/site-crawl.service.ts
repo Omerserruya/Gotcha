@@ -93,6 +93,91 @@ export function htmlToText(html: string): string {
     .replace(/^(skip to (the )?(main )?content|דלג(ו)? לתוכן( הראשי| העיקרי)?)\s*/i, "");
 }
 
+/**
+ * Cloudflare's email protection, decoded (2026-10-14). A site behind Cloudflare
+ * has every address rewritten to `<span class="__cf_email__"
+ * data-cfemail="HEX">[email&#160;protected]</span>` and links to
+ * `/cdn-cgi/l/email-protection#HEX`, decoded by a script in the browser. The
+ * crawl reads no script, so the model saw "[email protected]" and no address:
+ * common on Israeli WooCommerce sites. The encoding is fixed and public: the
+ * first byte is a key, every following byte is XORed with it.
+ */
+export function decodeCfEmail(hex: string): string | null {
+  if (!/^(?:[0-9a-f]{2}){2,}$/i.test(hex) || hex.length > 512) return null;
+  const key = parseInt(hex.slice(0, 2), 16);
+  let out = "";
+  for (let i = 2; i < hex.length; i += 2) out += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16) ^ key);
+  try { out = decodeURIComponent(escape(out)); } catch { /* plain ASCII */ }
+  return /^[^\s<>@"']+@[^\s<>@"']+\.[^\s<>@"']+$/.test(out) ? out : null;
+}
+
+export function decodeCfEmails(html: string): string {
+  if (!html.includes("cfemail") && !html.includes("email-protection")) return html;
+  return html
+    // The visible element, whatever it is wrapped in: replaced by the address.
+    .replace(/<([a-z][a-z0-9]*)\b[^>]*\bdata-cfemail=["']([0-9a-f]+)["'][^>]*>[\s\S]*?<\/\1>/gi, (m, _t, hex) => decodeCfEmail(hex) ?? m)
+    // The link: a mailto again.
+    .replace(/(["'])\/cdn-cgi\/l\/email-protection#([0-9a-f]+)\1/gi, (m, q, hex) => {
+      const email = decodeCfEmail(hex);
+      return email ? `${q}mailto:${email}${q}` : m;
+    });
+}
+
+/**
+ * The element at `start` (an opening tag) through its matching close, counting
+ * nested elements of the same name. The end index, or -1 when it never closes.
+ */
+function elementEnd(html: string, start: number, tag: string): number {
+  const re = new RegExp(`<(/?)${tag}\\b[^>]*>`, "gi");
+  re.lastIndex = start;
+  let depth = 0;
+  for (let m = re.exec(html); m; m = re.exec(html)) {
+    if (m[0].endsWith("/>")) continue;
+    depth += m[1] ? -1 : 1;
+    if (depth === 0) return m.index + m[0].length;
+  }
+  return -1;
+}
+
+/**
+ * Product tiles, by the markup the two platforms give them: WooCommerce's
+ * `type-product` / block-grid products, and a Shopify theme's product card
+ * around a /products/ link.
+ */
+const WOO_TILE = /\b(type-product|wc-block-grid__product|wc-block-product)\b/;
+const SHOPIFY_TILE = /\b(product-card|product-item|card-wrapper|grid-product)\b/;
+
+/**
+ * The page with its product tiles taken out, for the rescan's checksum only
+ * (2026-10-14). A store's home page lists products whose order and choice
+ * change on their own ("Best Sellers" with tied sales swapped its 4th tile in
+ * about one crawl in 18 on the demo store), which made the site read as
+ * changed. Products reach the AI through the store integration. What the
+ * model and the knowledge read is the page as it is; never this.
+ */
+export function withoutProductTiles(html: string): string {
+  const open = /<([a-z][a-z0-9]*)\b[^>]*\bclass=["']([^"']*)["'][^>]*>/gi;
+  let out = "";
+  let from = 0;
+  for (let m = open.exec(html); m; m = open.exec(html)) {
+    const [tagText, tag, cls] = m;
+    const woo = WOO_TILE.test(cls!);
+    if (!woo && !SHOPIFY_TILE.test(cls!)) continue;
+    const end = elementEnd(html, m.index, tag!);
+    if (end < 0) continue;
+    if (!woo && !/\/products\//.test(html.slice(m.index + tagText.length, end))) continue;
+    out += html.slice(from, m.index) + " ";
+    from = end;
+    open.lastIndex = end;
+  }
+  return out + html.slice(from);
+}
+
+/** What the rescan compares for one page: its text without product tiles. */
+export function stableTextOf(html: string): string {
+  return htmlToText(withoutProductTiles(html));
+}
+
 /** The site's own name: og:site_name, else the first part of the <title>. Null when neither. */
 export function siteNameOf(html: string): string | null {
   const og = /<meta\b[^>]*property=["']og:site_name["'][^>]*>/i.exec(html);
@@ -177,7 +262,7 @@ export async function fetchPageForCrawl(url: string, timeoutMs = 8000): Promise<
     if (!r.ok) return transient(r.status) ? { unreadable: true } : null;
     const ct = r.contentType || "";
     if (!ct.includes("text/html") && !ct.includes("xhtml")) return null;
-    const html = r.text;
+    const html = decodeCfEmails(r.text);
     return { html: html.slice(0, 400000), text: htmlToText(html), title: pageTitle(html), canonical: canonicalOf(html, url), siteName: siteNameOf(html) };
   } catch {
     return { unreadable: true };
@@ -483,6 +568,8 @@ export interface SiteCrawl {
    * change nor removes their knowledge (2026-10-14).
    */
   unreadable: string[];
+  /** Per page read, the text the rescan compares: product tiles left out (stableTextOf). */
+  stableTexts: Record<string, string>;
 }
 
 /** Which beat of the crawl is running, for callers that narrate it to a user. */
@@ -596,5 +683,6 @@ export async function crawlSite(
     requested,
     distinctTextPages: new Set(pages.map((p) => p.text)).size,
     unreadable,
+    stableTexts: Object.fromEntries([[origin, stableTextOf(home.html)], ...okPages.map((p) => [p.url, stableTextOf(p.html)])]),
   };
 }
