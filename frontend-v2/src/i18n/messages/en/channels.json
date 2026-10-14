@@ -752,8 +752,9 @@
       "whatsapp": "Continue on WhatsApp",
       "whatsappHint": "A button that continues the same conversation on your WhatsApp",
       "whatsappWhy": "Not available yet: it comes with the next widget update",
+      "poweredByLead": "Powered by",
       "poweredBy": "Powered by GOTCHA",
-      "poweredByHint": "A small line at the bottom of the widget",
+      "poweredByHint": "Always shown, in both widgets.",
       "products": {
         "label": "Recommend products",
         "hint": "Product cards from your catalogue, in stock only"
@@ -864,7 +865,6 @@
       "label": "Preview",
       "assistant": "Assistant",
       "type": "Type a message",
-      "powered": "Powered by GOTCHA",
       "waTitle": "Chat with us",
       "waSub": "Write here and we'll continue on WhatsApp.",
       "waContinue": "Continue on WhatsApp"

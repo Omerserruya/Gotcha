@@ -46,6 +46,7 @@ import { ShopifyConnect } from '@/features/capabilities/ShopifyConnect';
 import type { ShopifyAvailability } from '@/features/capabilities/load-capabilities';
 import { Link, useRouter } from '@/i18n/navigation';
 
+import { appPath } from '@/lib/base-path';
 import { brandMark, initials, logoFit } from '@/lib/brand-mark';
 
 import { hexToHsv, hsvToHex } from './colour';
@@ -68,7 +69,6 @@ interface Setters {
   readonly assistantName: (name: string) => void;
   readonly questions: (questions: readonly string[]) => void;
   readonly language: (language: WebchatConfig['appearance']['language']) => void;
-  readonly poweredBy: (on: boolean) => void;
   readonly popup: (patch: Partial<WebchatConfig['ux']['proactive']>) => void;
   readonly look: (look: WidgetLook) => void;
   readonly whatsapp: (patch: Partial<WebchatConfig['ux']['whatsapp']>) => void;
@@ -190,7 +190,6 @@ export function WebchatSettings({
     questions: (suggestedQuestions) =>
       ux({ welcome: { ...config.ux.welcome, suggestedQuestions: [...suggestedQuestions] } }),
     language: (language) => appearance({ language }),
-    poweredBy: (showPoweredBy) => appearance({ showPoweredBy }),
     popup: (patch) => ux({ proactive: { ...config.ux.proactive, ...patch } }),
     look: (look) => ux({ look }),
     whatsapp: (patch) => ux({ whatsapp: { ...config.ux.whatsapp, ...patch } }),
@@ -893,13 +892,18 @@ function Behaviour({
           ) : null}
         </Toggle>
       )}
-      <Toggle
-        label={t('poweredBy')}
-        hint={t('poweredByHint')}
-        on={config.appearance.showPoweredBy}
-        onChange={set.poweredBy}
-        testid="webchat-powered"
-      />
+      {/*
+        ★★ W8 (Omer, 2026-10-14): "Powered by GOTCHA" is always on, in both
+        widgets, with our logo - the server refuses false (403
+        POWERED_BY_LOCKED, befd7811). A row that says so, never a switch.
+      */}
+      <div className={styles.toggleRow} data-testid="webchat-powered">
+        <span className={styles.toggleText}>
+          <span>{t('poweredBy')}</span>
+          <span className={styles.rowHint}>{t('poweredByHint')}</span>
+        </span>
+        <PoweredBy />
+      </div>
       {/*
         Products and cart are on by WHERE the widget runs (Backend, stage A):
         in a Shopify shop yes, from the code snippet no - a status, not a
@@ -1256,11 +1260,9 @@ function Preview({
                 <ArrowUp size={12} />
               </span>
             </span>
-            {config.appearance.showPoweredBy ? (
-              <span className={styles.powered} data-testid="webchat-preview-powered">
-                {t('powered')}
-              </span>
-            ) : null}
+            <span className={styles.powered} data-testid="webchat-preview-powered">
+              <PoweredBy />
+            </span>
           </div>
         ) : (
           <div className={styles.widget}>
@@ -1313,11 +1315,9 @@ function Preview({
                 <ArrowUp size={12} color="#FFFFFF" />
               </span>
             </span>
-            {config.appearance.showPoweredBy ? (
-              <span className={styles.powered} data-testid="webchat-preview-powered">
-                {t('powered')}
-              </span>
-            ) : null}
+            <span className={styles.powered} data-testid="webchat-preview-powered">
+              <PoweredBy />
+            </span>
           </div>
         )}
         {config.ux.proactive.enabled && config.ux.proactive.message.trim() ? (
@@ -1344,5 +1344,22 @@ function Preview({
         )}
       </div>
     </aside>
+  );
+}
+
+/** "Powered by" and our logo - design 7's line, in every widget (W8). */
+function PoweredBy() {
+  const t = useTranslations('channels.webchat.behaviour');
+  return (
+    <span className={styles.poweredBy} dir="ltr">
+      <span>{t('poweredByLead')}</span>
+      {/* A 6 KB local mark: `next/image` would optimise nothing here. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        className={styles.poweredLogo}
+        src={appPath('/brand/gotcha-line-dark.png')}
+        alt="GOTCHA"
+      />
+    </span>
   );
 }

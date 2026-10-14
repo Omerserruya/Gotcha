@@ -752,8 +752,9 @@
       "whatsapp": "המשך בוואטסאפ",
       "whatsappHint": "כפתור שממשיך את אותה שיחה בוואטסאפ שלך",
       "whatsappWhy": "עוד לא זמין: זה מגיע בעדכון הבא של הווידג׳ט",
+      "poweredByLead": "Powered by",
       "poweredBy": "Powered by GOTCHA",
-      "poweredByHint": "שורה קטנה בתחתית הווידג׳ט",
+      "poweredByHint": "מוצג תמיד, בשני הווידג׳טים.",
       "products": {
         "label": "המלצה על מוצרים",
         "hint": "כרטיסי מוצר מהקטלוג שלך, רק מה שבמלאי"
@@ -864,7 +865,6 @@
       "label": "תצוגה מקדימה",
       "assistant": "עוזר",
       "type": "כתבו הודעה",
-      "powered": "Powered by GOTCHA",
       "waTitle": "דברו איתנו",
       "waSub": "כתבו כאן ונמשיך בוואטסאפ.",
       "waContinue": "המשך בוואטסאפ"

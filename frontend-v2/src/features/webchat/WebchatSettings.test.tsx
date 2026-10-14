@@ -166,7 +166,7 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
   it('a failed save says so - never "Saved"', async () => {
     actions.saveWebsiteWidget.mockResolvedValue({ ok: false, reason: 'failed' });
     show('behaviour');
-    fireEvent.click(screen.getByTestId('webchat-powered-switch'));
+    fireEvent.click(screen.getByTestId('webchat-popup-switch'));
     await pause();
     expect(screen.getByTestId('webchat-saving')).toHaveTextContent('Not saved');
     expect(screen.getByTestId('webchat-saving')).not.toHaveTextContent(/^Saved$/);
@@ -175,7 +175,7 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
   it('★ installed nowhere yet (409 WIDGET_NOT_CREATED): says to get the code first, not "try again"', async () => {
     actions.saveWebsiteWidget.mockResolvedValue({ ok: false, reason: 'nowhere' });
     show('behaviour', { read: install({ code: null }) });
-    fireEvent.click(screen.getByTestId('webchat-powered-switch'));
+    fireEvent.click(screen.getByTestId('webchat-popup-switch'));
     await pause();
     expect(screen.getByTestId('webchat-saving')).toHaveTextContent('Get the code under Install');
     expect(screen.getByTestId('webchat-saving')).not.toHaveTextContent('Change it again');
@@ -260,7 +260,7 @@ describe('★★ products and cart are on by WHERE it runs - a Shopify shop whos
     expect(screen.getByTestId('webchat-products')).toHaveTextContent(
       'it needs the widget in a Shopify store with stock and orders connected',
     );
-    expect(screen.getByTestId('webchat-powered-switch')).toBeEnabled();
+    expect(screen.getByTestId('webchat-popup-switch')).toBeEnabled();
   });
 
   it('★ an active shop whose catalogue answers: "On in your Shopify store", and not from the code', () => {
@@ -718,5 +718,36 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
       look: 'gotcha',
       whatsapp: { enabled: false, channelAccountId: null },
     });
+  });
+});
+
+describe('★★ W8 (2026-10-14) - "Powered by GOTCHA" is always on, with our logo', () => {
+  it('a locked row with the logo - never a switch to turn it off', () => {
+    show('behaviour');
+    const row = screen.getByTestId('webchat-powered');
+    expect(row).toHaveTextContent('Always shown, in both widgets.');
+    expect(row.querySelector('input')).toBeNull();
+    expect(screen.queryByTestId('webchat-powered-switch')).toBeNull();
+    expect(row.querySelector('img')).toHaveAttribute('alt', 'GOTCHA');
+    expect(row.querySelector('img')?.getAttribute('src')).toMatch(
+      /\/brand\/gotcha-line-dark\.png$/,
+    );
+  });
+
+  it('★ the body a save sends never carries showPoweredBy - the route refuses false', () => {
+    expect(bodyOfConfig(config).appearance).not.toHaveProperty('showPoweredBy');
+    expect(
+      bodyOfConfig({ ...config, appearance: { ...config.appearance, showPoweredBy: false } })
+        .appearance,
+    ).not.toHaveProperty('showPoweredBy');
+  });
+
+  it('★ the preview shows it with the logo - even if the server ever said false', () => {
+    show('appearance', {
+      initial: { ...config, appearance: { ...config.appearance, showPoweredBy: false } },
+    });
+    const line = screen.getByTestId('webchat-preview-powered');
+    expect(line).toHaveTextContent('Powered by');
+    expect(line.querySelector('img')).toHaveAttribute('alt', 'GOTCHA');
   });
 });

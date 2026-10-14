@@ -79,7 +79,7 @@ export function bodyOfConfig(config: WebchatConfig) {
       primaryColor: color,
       logoUrl: config.appearance.logoUrl?.trim() || null,
       language: config.appearance.language,
-      showPoweredBy: config.appearance.showPoweredBy,
+      // No showPoweredBy (W8): always on; the route refuses false (403 POWERED_BY_LOCKED).
     },
     ux: {
       welcome: {
