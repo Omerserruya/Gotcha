@@ -102,6 +102,11 @@
     padding-block: 10px;
   }
 
+  /* AU1: the whole row opens it. */
+  .row[data-automation-id] {
+    cursor: pointer;
+  }
+
   .row + .row {
     border-block-start: var(--border-width-thin) solid var(--border-subtle);
   }

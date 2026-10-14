@@ -314,19 +314,27 @@ function Row({
   const trigger = automation.trigger.type;
   const live = automation.status === 'live';
   const channels = triggerChannels(automation.trigger);
+  const router = useRouter();
+  const href = `/studio/automations/${automation.id}`;
 
   /*
-   * A click on the row selects it; on the name it opens, as before. With ⌘,
-   * Ctrl or Shift it is a pick wherever it lands - the name included, so a
-   * modified click never opens a tab instead. The switch and ⋯ are their own.
+   * ★★ AU1 (Omer, 2026-10-14): a click anywhere on the row opens it to edit,
+   * not only on its name. With ⌘, Ctrl or Shift it is a pick wherever it
+   * lands - the name included, so a modified click never opens a tab
+   * instead. The switch, ⋯ and the links are their own; a click that ends a
+   * text selection opens nothing.
    */
   const onClickCapture = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as Element;
     if (target.closest('input, button, [role="menu"]')) return;
-    const modified = withMod(event) || event.shiftKey;
-    if (!modified && target.closest('a')) return;
-    if (modified) event.preventDefault();
-    onPick({ add: withMod(event), range: event.shiftKey });
+    if (withMod(event) || event.shiftKey) {
+      event.preventDefault();
+      onPick({ add: withMod(event), range: event.shiftKey });
+      return;
+    }
+    if (target.closest('a')) return;
+    if ((window.getSelection()?.toString() ?? '') !== '') return;
+    router.push(href);
   };
 
   /** An issue in our words by its code; the route's own sentence only for a code we do not know. */
@@ -337,7 +345,6 @@ function Row({
         ? t(`issues.${issue.code}` as 'issues.no_steps')
         : issue.message || t('cantGoLiveUnknown');
 
-  const href = `/studio/automations/${automation.id}`;
   const lastRun = automation.stats.lastRunAt;
 
   return (

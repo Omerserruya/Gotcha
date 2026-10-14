@@ -69,14 +69,45 @@ beforeEach(() => {
   actions.deleteAutomation.mockReset();
 });
 
-describe('★★ selecting rows', () => {
-  it('click selects one; ⌘/Ctrl-click adds; Shift-click a range', () => {
+describe('★★ AU1 (2026-10-14) - a click anywhere on the row opens it to edit', () => {
+  it('★ a plain click on the row - its steps, its last run - opens the editor; nothing is selected', () => {
     show();
+    fireEvent.click(cell('a2'));
+    expect(push).toHaveBeenCalledWith('/studio/automations/a2');
+    fireEvent.click(screen.getByTestId('automation-last-a3'));
+    expect(push).toHaveBeenLastCalledWith('/studio/automations/a3');
+    expect(selected()).toEqual([]);
+  });
+
+  it('the switch, ⋯ and the name’s own link are their own - no second navigation', () => {
+    show();
+    fireEvent.click(screen.getByTestId('automation-more-a1'));
+    fireEvent.click(screen.getByTestId('automation-switch-a1'));
+    fireEvent.click(screen.getByTestId('automation-open-a1'));
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('a click that ends a text selection opens nothing', () => {
+    show();
+    const spy = vi
+      .spyOn(window, 'getSelection')
+      .mockReturnValue({ toString: () => 'Automation a1' } as Selection);
     fireEvent.click(cell('a1'));
+    expect(push).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
+describe('★★ selecting rows', () => {
+  it('⌘/Ctrl-click selects and adds; Shift-click a range (a plain click opens - AU1)', () => {
+    show();
+    fireEvent.click(cell('a1'), { ctrlKey: true });
     expect(selected()).toEqual(['a1']);
     fireEvent.click(cell('a3'), { ctrlKey: true });
     expect(selected()).toEqual(['a1', 'a3']);
-    fireEvent.click(cell('a1'));
+    fireEvent.click(cell('a1'), { ctrlKey: true });
+    fireEvent.click(cell('a3'), { ctrlKey: true });
+    fireEvent.click(cell('a1'), { ctrlKey: true });
     fireEvent.click(cell('a3'), { shiftKey: true });
     expect(selected()).toEqual(['a1', 'a2', 'a3']);
     expect(screen.getByTestId('automations-select-hint')).toHaveTextContent('3 selected');
@@ -108,7 +139,7 @@ describe('★★ selecting rows', () => {
 
   it('★ nothing fires while typing in a field', () => {
     show();
-    fireEvent.click(cell('a1'));
+    fireEvent.click(cell('a1'), { ctrlKey: true });
     const field = document.createElement('input');
     document.body.appendChild(field);
     act(() => {
