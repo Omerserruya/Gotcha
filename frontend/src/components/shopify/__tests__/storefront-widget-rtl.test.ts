@@ -349,14 +349,13 @@ describe("panel chrome", () => {
     expect(arrow(rtl)).not.toBe(arrow(ltr));
   });
 
-  it("the close control stays a 44px target on the inline-end corner", async () => {
+  it("the tools sit in the inline-end corner: left in Hebrew", async () => {
     const h = await boot();
-    // Universal-meaning icon: the glyph itself is NOT mirrored, only the
-    // corner it lives in moves.
+    // The chevron is not mirrored; only the corner the tools live in moves.
     const closeBtn = h.shadow.querySelector('[data-act="close"]') as HTMLElement;
     expect(closeBtn).toBeTruthy();
-    expect(closeBtn.innerHTML).toContain("M6 6l12 12M18 6L6 18");
-    expect(css(h.shadow)).toContain("position:absolute;top:var(--s2);left:var(--s2);");
+    expect(closeBtn.innerHTML).toContain("m6 9 6 6 6-6");
+    expect(css(h.shadow)).toContain("display:flex;gap:6px;top:15px;left:12px;}");
   });
 
   it("suggested questions resolve their own direction", async () => {
@@ -365,10 +364,11 @@ describe("panel chrome", () => {
       messages: [],
     });
     // The welcome screen only shows with no conversation history, so boot
-    // a fresh panel with none.
-    const chips = Array.from(h.shadow.querySelectorAll(".sug-b")) as HTMLElement[];
+    // a fresh panel with none. Each question's text reads in its own
+    // direction; the row and its arrow follow the panel.
+    const chips = Array.from(h.shadow.querySelectorAll(".sug-b .q-t")) as HTMLElement[];
     expect(chips.map((c) => c.getAttribute("dir"))).toEqual(["rtl", "ltr"]);
-    expect(css(h.shadow)).toContain(".sug-b{text-align:start;");
+    expect(css(h.shadow)).toContain("text-align:start;cursor:pointer;");
   });
 
   it("the typing indicator follows the conversation direction", async () => {

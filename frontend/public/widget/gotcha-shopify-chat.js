@@ -179,6 +179,9 @@ window.__gotchaShopifyChatApp = function (boot) {
       online: "Online",
       offline: "Away",
       close: "Close chat",
+      replies: "Replies right away",
+      minimise: "Minimise",
+      newChat: "New conversation",
       continueWa: "Continue on WhatsApp",
       waTitle: "Chat with us",
       waSub: "Write here and we'll continue on WhatsApp.",
@@ -234,6 +237,9 @@ window.__gotchaShopifyChatApp = function (boot) {
       online: "זמינים",
       offline: "לא זמינים",
       close: "סגירת הצ׳אט",
+      replies: "עונה מיד",
+      minimise: "מזעור",
+      newChat: "שיחה חדשה",
       continueWa: "המשך בוואטסאפ",
       waTitle: "דברו איתנו",
       waSub: "כתבו כאן ונמשיך בוואטסאפ.",
@@ -464,6 +470,47 @@ window.__gotchaShopifyChatApp = function (boot) {
     } catch (e) {
       return n.toFixed(2) + " " + (currency || "");
     }
+  }
+
+  /**
+   * The text colour that reads on the main colour: design 7's cream or its
+   * ink, whichever contrasts more. Mirrors inkOn() in chatcenter-widget.js
+   * and frontend-v2/src/lib/brand-mark.ts. The stored contrastColor is not
+   * used for it: Settings never writes it, so it stays #ffffff on a pale
+   * colour.
+   */
+  function inkOn(hex) {
+    var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ""));
+    if (!m) return "#FBF8F3";
+    var lum = function (r, g, b) {
+      var c = [r, g, b].map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    };
+    var l = lum(parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16));
+    var cream = (lum(251, 248, 243) + 0.05) / (l + 0.05);
+    var ink = (l + 0.05) / (lum(43, 38, 34) + 0.05);
+    return cream >= ink ? "#FBF8F3" : "#2B2622";
+  }
+
+  /** The brand's initial: the server's (widget.brand), else the assistant name's first letter or digit. */
+  function brandInitial() {
+    if (widget.brand && widget.brand.initial) return String(widget.brand.initial);
+    var name = String((widget.brand && widget.brand.name) || welcome.assistantName || "");
+    var letter = Array.from(name).filter(function (ch) { return /[\p{L}\p{N}]/u.test(ch); })[0] || "";
+    return letter.toUpperCase();
+  }
+
+  /** The disc's wordmark: the brand up to 16 letters of whole words (frontend-v2 brandMark().logo). */
+  function brandWordmark() {
+    var raw = String((widget.brand && widget.brand.name) || welcome.assistantName || "");
+    var head = (raw.split(/\s[-|·:\u2013\u2014]\s|\s*[|·]\s*/)[0] || raw).trim().toUpperCase();
+    var logo = "";
+    head.split(/\s+/).some(function (word) {
+      if (logo && (logo + " " + word).length > 16) return true;
+      logo = logo ? logo + " " + word : word;
+      return false;
+    });
+    return logo.replace(/[\s\-|·:,;\u2013\u2014]+$/, "");
   }
 
   // ── Styles ──────────────────────────────────────────────────────
@@ -896,6 +943,111 @@ window.__gotchaShopifyChatApp = function (boot) {
     // The greeting is a bubble on the business's side, not a full-width title.
     ".panel[data-look='whatsapp'] .wel,.panel[data-look='whatsapp'] .wel-cp{align-items:flex-start;}",
     ".panel[data-look='whatsapp'] .wel-h{max-width:84%;}",
+
+    // ── Design 7 ("GOTCHA Widgets on Store"): the chat widget ──
+    //
+    // Fixed geometry (supervisor-approved): 400 × min(680), radius 22, 96px
+    // up and 22px in from the bubble's side, on #FBF8F3. The legacy editor's
+    // corner radius, hero height, fade and avatar size are not read.
+    "@media (min-width: 561px){",
+    "  .panel[data-look='gotcha']{bottom:96px;" + side + ":22px;width:400px;max-width:min(400px, calc(100vw - 44px));",
+    "    height:min(680px, calc(100vh - 120px));border-radius:22px;",
+    "    box-shadow:0 0 0 1px rgba(43,38,34,.08),0 2px 4px rgba(43,38,34,.04),0 28px 64px -12px rgba(43,38,34,.30);}",
+    "  .panel[data-look='gotcha'][data-view='welcome']{height:min(680px, calc(100vh - 120px));min-height:0;max-height:none;}",
+    "}",
+    ".panel[data-look='gotcha']{background:#FBF8F3;color:#2B2622;font:400 15px/1.5 Heebo,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;}",
+    // Header (the conversation): a 38px avatar with the initial and the dot,
+    // the name and who answers, then the tools.
+    ".panel[data-look='gotcha'] .hd{min-height:62px;max-height:none;gap:11px;padding-block:12px;padding-inline:18px var(--tools, 56px);",
+    "  border-bottom:1px solid #EEE7DC;background:#FBF8F3;}",
+    ".panel[data-look='gotcha'] .hd-av{position:relative;width:38px;height:38px;border-radius:50%;background:" + brand + ";color:" + inkOn(brand) + ";",
+    "  display:flex;align-items:center;justify-content:center;overflow:visible;",
+    "  font:500 22px/1 'Cormorant Garamond',Georgia,'Times New Roman',serif;}",
+    ".panel[data-look='gotcha'] .hd-dot{position:absolute;bottom:0;left:0;width:11px;height:11px;box-sizing:border-box;border-radius:50%;",
+    "  background:#5FA578;border:2px solid #FBF8F3;}",
+    ".panel[data-look='gotcha'] .hd-nm{font-size:15.5px;font-weight:600;line-height:1.2;letter-spacing:-.005em;color:#2B2622;}",
+    ".panel[data-look='gotcha'] .hd-st{font-size:12.5px;color:#8A7A6C;margin-top:2px;}",
+    ".panel[data-look='gotcha'] .hd-st .dot{display:none;}",
+    // The tools: WhatsApp, a new conversation, mute, minimise. On the cover
+    // they are glass circles; in the header, quiet squares.
+    ".panel[data-look='gotcha'] .tools{position:absolute;z-index:6;display:flex;gap:6px;top:15px;" + (dir === "rtl" ? "left" : "right") + ":12px;}",
+    ".panel[data-look='gotcha'] .tl{position:relative;width:32px;height:32px;border-radius:9px;border:0;background:transparent;color:#5A4E45;",
+    "  display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;transition:background .15s ease;}",
+    ".panel[data-look='gotcha'] .tl:hover{background:#F1EAE0;}",
+    ".panel[data-look='gotcha'] .tl:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
+    ".panel[data-look='gotcha'] .tl svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}",
+    ".panel[data-look='gotcha'] .tl[data-act='whatsapp'] svg{fill:#25D366;stroke:none;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tools{top:12px;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tl{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.78);color:#2B2622;",
+    "  box-shadow:0 2px 8px rgba(43,38,34,.08);}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tl:hover{background:#fff;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tl[data-act='new']{display:none;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .hd{display:none;}",
+    // Welcome: a 168px cover dissolving into the widget, the brand's disc
+    // over its edge, the name, and the opening questions as rows.
+    ".panel[data-look='gotcha'][data-view='welcome'] .bd{padding:0;}",
+    ".panel[data-look='gotcha'] .cv{position:relative;height:168px;flex:none;overflow:hidden;background:#F1ECE8;}",
+    ".panel[data-look='gotcha'] .cv-m{display:block;width:100%;height:100%;object-fit:cover;}",
+    ".panel[data-look='gotcha'] .cv-fd{position:absolute;left:0;right:0;bottom:0;height:96px;pointer-events:none;",
+    "  background:linear-gradient(180deg,rgba(251,248,243,0) 0%,rgba(251,248,243,.85) 62%,#FBF8F3 100%);}",
+    ".panel[data-look='gotcha'] .disc{position:relative;z-index:2;width:100px;height:100px;margin:-56px auto 0;border-radius:50%;background:#fff;",
+    "  box-shadow:0 0 0 1px rgba(43,38,34,.05),0 14px 34px rgba(43,38,34,.14);",
+    "  display:flex;align-items:center;justify-content:center;color:#2B2622;flex:none;}",
+    ".panel[data-look='gotcha'] .disc img{max-width:64px;max-height:64px;object-fit:contain;}",
+    ".panel[data-look='gotcha'] .disc-wm{font:500 15px/1.15 'Cormorant Garamond',Georgia,'Times New Roman',serif;letter-spacing:.18em;",
+    "  text-align:center;max-width:84px;}",
+    ".panel[data-look='gotcha'] .disc-wm[data-fit='m']{font-size:13px;}",
+    ".panel[data-look='gotcha'] .disc-wm[data-fit='s']{font-size:11px;letter-spacing:.12em;}",
+    ".panel[data-look='gotcha'] .disc-wm[data-fit='initials']{font-size:30px;letter-spacing:.04em;}",
+    ".panel[data-look='gotcha'] .disc-on{position:absolute;bottom:4px;left:4px;width:20px;height:20px;box-sizing:border-box;border-radius:50%;",
+    "  background:#4FB06A;border:3px solid #fff;box-shadow:0 0 0 1px rgba(79,176,106,.35);}",
+    ".panel[data-look='gotcha'] .hd-dot::after,.panel[data-look='gotcha'] .disc-on::after{content:'';position:absolute;inset:-3px;border-radius:50%;",
+    "  background:rgba(80,190,100,.4);animation:gpulse 1.8s ease-out infinite;pointer-events:none;}",
+    "@keyframes gpulse{0%{transform:scale(1);opacity:.9}70%{transform:scale(2.8);opacity:0}100%{transform:scale(2.8);opacity:0}}",
+    ".panel[data-look='gotcha'] .disc-nm{margin-top:10px;text-align:center;font-size:13px;color:#8A7A6C;}",
+    ".panel[data-look='gotcha'] .gw{display:flex;flex-direction:column;}",
+    ".panel[data-look='gotcha'] .gw-in{padding:16px 20px 4px;display:flex;flex-direction:column;gap:14px;}",
+    ".panel[data-look='gotcha'] .gw-in .wel-s{margin:0 auto;text-align:center;color:#8A7A6C;}",
+    ".panel[data-look='gotcha'] .qs{display:flex;flex-direction:column;}",
+    ".panel[data-look='gotcha'] .q{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:12px 0;border:0;",
+    "  border-top:1px solid #ECE4D8;border-radius:0;background:none;color:#2B2622;font:inherit;font-size:14.5px;line-height:1.4;",
+    "  text-align:start;cursor:pointer;transition:color .15s ease;}",
+    ".panel[data-look='gotcha'] .q:first-child{border-top:0;}",
+    ".panel[data-look='gotcha'] .q:hover{color:#8A5240;}",
+    ".panel[data-look='gotcha'] .q:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
+    ".panel[data-look='gotcha'] .q-t{flex:1;min-width:0;}",
+    ".panel[data-look='gotcha'] .q svg{flex:none;width:16px;height:16px;fill:none;stroke:#B3A698;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}",
+    ".panel[data-look='gotcha'] .gw-in .sug-more{align-self:center;}",
+    // Messages: the visitor's in the main colour; the assistant's as text.
+    ".panel[data-look='gotcha'] .bd{padding:18px 20px 12px;}",
+    ".panel[data-look='gotcha'] .msgs{gap:14px;}",
+    ".panel[data-look='gotcha'] .row[data-me='1'] .bub{background:" + brand + ";color:" + inkOn(brand) + ";max-width:80%;padding:10px 14px;",
+    "  border-radius:16px;border-end-end-radius:4px;line-height:1.5;}",
+    ".panel[data-look='gotcha'] .row[data-me='0'] .bub{background:none;color:#3A322D;max-width:92%;padding:0;border-radius:0;line-height:1.65;}",
+    ".panel[data-look='gotcha'] .typ{background:none;padding:2px 0;}",
+    ".panel[data-look='gotcha'] .typ i{background:#A99C8E;}",
+    ".panel[data-look='gotcha'] .who{color:#A99C8E;}",
+    // The composer: a white pill, a round send in the main colour once there is something to send.
+    ".panel[data-look='gotcha'] .ft{border-top:1px solid #EEE7DC;padding:12px 14px 6px;padding-bottom:calc(6px + env(safe-area-inset-bottom));background:#FBF8F3;}",
+    ".panel[data-look='gotcha'] .cmp{align-items:center;gap:6px;background:#fff;border:1px solid #E6DDD0;border-radius:99px;",
+    "  padding-block:5px;padding-inline:18px 5px;}",
+    ".panel[data-look='gotcha'] .ta{border:0;background:transparent;border-radius:0;padding:10px 0;min-height:40px;font-size:16px;color:#2B2622;}",
+    "@media (min-width: 561px){.panel[data-look='gotcha'] .ta{font-size:14.5px;}}",
+    ".panel[data-look='gotcha'] .ta:focus{border:0;box-shadow:none;}",
+    ".panel[data-look='gotcha'] .cmp:focus-within{border-color:" + brand + ";}",
+    ".panel[data-look='gotcha'] .snd{width:40px;height:40px;border-radius:50%;background:" + brand + ";color:" + inkOn(brand) + ";}",
+    ".panel[data-look='gotcha'] .snd:disabled{opacity:1;background:#D6CCBF;color:#FBF8F3;}",
+    ".panel[data-look='gotcha'] .snd svg{width:18px;height:18px;stroke-width:1.9;}",
+    ".panel[data-look='gotcha'] .sub{justify-content:center;gap:12px;margin-top:4px;}",
+    // Powered by, with our logo, linked.
+    ".pwl{display:flex;align-items:center;justify-content:center;gap:6px;padding:2px 0 0;color:#A99C8E;",
+    "  font-size:10.5px;line-height:1;text-decoration:none;opacity:.9;}",
+    // Design 7's logo is 30px tall with padding round it; ours is cropped to
+    // the mark, so the same visible size (12px, 36px → 14px) is set directly.
+    ".pwl img{height:12px;width:auto;display:block;opacity:.7;}",
+    ".panel[data-look='whatsapp'] .pwl{color:#667781;font-size:11px;}",
+    ".panel[data-look='whatsapp'] .pwl img{height:14px;opacity:1;}",
+    "@media (prefers-reduced-motion: reduce){.panel[data-look='gotcha'] .hd-dot::after,.panel[data-look='gotcha'] .disc-on::after{animation:none;opacity:0}.panel[data-look='gotcha'] .q,.panel[data-look='gotcha'] .tl{transition:none}}",
   ].join("\n");
 
   var styleNode = document.createElement("style");
@@ -924,7 +1076,12 @@ window.__gotchaShopifyChatApp = function (boot) {
   var header = el("div", "hd");
   var logo = safeUrl(appearance.logoUrl) || safeUrl(appearance.avatarUrl);
   var headerAvatar;
-  if (logo) {
+  if (LOOK === "gotcha") {
+    // Design 7: the brand's initial on the main colour, and the dot while someone answers.
+    headerAvatar = el("div", "hd-av", brandInitial());
+    attr(headerAvatar, { "aria-hidden": "true" });
+    if (boot.availability !== "offline") headerAvatar.appendChild(el("span", "hd-dot"));
+  } else if (logo) {
     headerAvatar = document.createElement("img");
     headerAvatar.className = "hd-av";
     headerAvatar.alt = "";
@@ -999,6 +1156,30 @@ window.__gotchaShopifyChatApp = function (boot) {
     panel.appendChild(waBtn);
   }
 
+  // Design 7's tools, in one row at the panel's top corner: WhatsApp, a new
+  // conversation (where the host can start one), mute, and minimise - the
+  // one close control, so `data-act="close"` still names it. Glass circles
+  // over the cover, quiet squares in the header.
+  if (LOOK === "gotcha") {
+    var tools = el("div", "tools");
+    closeBtn.className = "tl";
+    attr(closeBtn, { "aria-label": T.minimise, title: T.minimise });
+    closeBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+    if (waBtn) { waBtn.className = "tl"; tools.appendChild(waBtn); }
+    if (typeof boot.resetConversation === "function") {
+      var newBtn = el("button", "tl");
+      attr(newBtn, { type: "button", "aria-label": T.newChat, title: T.newChat, "data-act": "new" });
+      newBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>';
+      on(newBtn, "click", newConversation);
+      tools.appendChild(newBtn);
+    }
+    if (muteBtn) { muteBtn.className = "tl"; tools.appendChild(muteBtn); }
+    tools.appendChild(closeBtn);
+    panel.appendChild(tools);
+    // The header keeps its text clear of them.
+    panel.style.setProperty("--tools", tools.children.length * 38 + 12 + "px");
+  }
+
   var banner = el("div", "banner");
   banner.hidden = true;
 
@@ -1034,7 +1215,16 @@ window.__gotchaShopifyChatApp = function (boot) {
   var humanBtn = el("button", "lnk", T.talkToHuman);
   attr(humanBtn, { type: "button" });
   if (!features.humanHandoff) humanBtn.hidden = true;
-  var poweredBy = el("span", "pw", appearance.showPoweredBy ? T.poweredBy : "");
+  // Design 7: "Powered by" and our logo, linked - in both looks.
+  var poweredBy = document.createElement("a");
+  poweredBy.className = "pwl";
+  attr(poweredBy, { href: "https://gotcha.co.il", target: "_blank", rel: "noopener", dir: "ltr", "aria-label": T.poweredBy });
+  poweredBy.appendChild(el("span", null, "Powered by"));
+  var poweredLogo = document.createElement("img");
+  poweredLogo.src = ASSETS + "/widget/gotcha-line-dark.png";
+  poweredLogo.alt = "";
+  poweredBy.appendChild(poweredLogo);
+  if (!appearance.showPoweredBy) poweredBy.hidden = true;
   subRow.appendChild(humanBtn);
   subRow.appendChild(poweredBy);
 
@@ -1272,7 +1462,11 @@ window.__gotchaShopifyChatApp = function (boot) {
   function renderStatus() {
     var offline = boot.availability === "offline";
     statusDot.setAttribute("data-off", offline ? "1" : "0");
-    statusText.textContent = LOOK === "whatsapp" && WA_ON ? T.waSub : offline ? T.offline : T.online;
+    statusText.textContent =
+      LOOK === "whatsapp" && WA_ON ? T.waSub
+        : offline ? T.offline
+        : LOOK === "gotcha" ? (S.awaitingReply ? T.waitingAi : T.replies)
+        : T.online;
   }
 
   function renderBanner() {
@@ -1416,7 +1610,133 @@ window.__gotchaShopifyChatApp = function (boot) {
     try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; }
   }
 
+  /**
+   * Design 7's welcome: a 168px cover (the merchant's image, or the plain
+   * cover colour) dissolving into the widget over 96px, the brand's disc
+   * over its edge with the green dot, the assistant's name, and the opening
+   * questions as rows. No title: the questions are the opening.
+   */
+  function renderWelcomeG() {
+    footer.hidden = false;
+    var W = (boot.widget && boot.widget.ux && boot.widget.ux.welcome) || null;
+    var wrap = el("div", "gw");
+    var cover = el("div", "cv");
+    var h = (boot.widget && boot.widget.ux && boot.widget.ux.hero) || null;
+    var url = h && h.mediaType !== "none" ? safeUrl(h.mediaUrl) : null;
+    if (url) {
+      var media;
+      if (h.mediaType === "video") {
+        media = document.createElement("video");
+        media.muted = true;
+        media.defaultMuted = true;
+        media.setAttribute("muted", "");
+        media.setAttribute("playsinline", "");
+        media.playsInline = true;
+        media.loop = h.videoLoop !== false;
+        media.preload = "none";
+        var poster = safeUrl(h.posterUrl);
+        if (poster) media.poster = poster;
+        media.src = url;
+        if (!reducedMotion() && h.videoAutoplay !== false) {
+          var playing = media.play();
+          if (playing && playing.catch) playing.catch(function () {});
+        }
+        heroVideo = media;
+      } else {
+        media = document.createElement("img");
+        media.alt = "";
+        media.decoding = "async";
+        media.src = url;
+      }
+      media.className = "cv-m";
+      if (h.focalPoint) media.style.objectPosition = h.focalPoint;
+      // A dead link leaves the plain cover, never a broken-image glyph.
+      media.onerror = function () { if (media.parentNode) media.parentNode.removeChild(media); };
+      cover.appendChild(media);
+    }
+    cover.appendChild(el("div", "cv-fd"));
+    wrap.appendChild(cover);
+    setPanelHero(true);
+
+    var disc = el("div", "disc");
+    attr(disc, { "aria-hidden": "true" });
+    var wordmark = function () {
+      var mark = brandWordmark();
+      var longest = Math.max.apply(null, [0].concat(mark.split(/\s+/).map(function (w) { return Array.from(w).length; })));
+      var fit = longest <= 5 ? "l" : longest <= 6 ? "m" : longest <= 7 ? "s" : "initials";
+      var text = fit === "initials" ? brandInitial() : mark;
+      var span = el("span", "disc-wm", text);
+      attr(span, { dir: "auto", "data-fit": fit });
+      return span;
+    };
+    var logoUrl = safeUrl(appearance.logoUrl);
+    if (logoUrl) {
+      var img = document.createElement("img");
+      img.alt = "";
+      img.src = logoUrl;
+      img.onerror = function () { if (img.parentNode) disc.replaceChild(wordmark(), img); };
+      disc.appendChild(img);
+    } else {
+      disc.appendChild(wordmark());
+    }
+    if (boot.availability !== "offline") disc.appendChild(el("span", "disc-on"));
+    wrap.appendChild(disc);
+    if (welcome.assistantName) wrap.appendChild(directedEl("div", "disc-nm", welcome.assistantName));
+
+    var inner = el("div", "gw-in");
+    if (boot.availability === "offline" && widget.offline && widget.offline.message) {
+      inner.appendChild(directedEl("p", "wel-s", widget.offline.message));
+    }
+    var questions = (W && W.suggestedQuestions && W.suggestedQuestions.length ? W.suggestedQuestions : welcome.suggestedQuestions) || [];
+    questions = questions.filter(function (q) { return String(q || "").trim(); });
+    if (questions.length) {
+      var list = el("div", "qs sug");
+      attr(list, { role: "group", "aria-label": T.startConversation });
+      var VISIBLE = 3;
+      var hidden = [];
+      var arrow = dir === "rtl"
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>';
+      questions.forEach(function (q, i) {
+        var b = el("button", "q sug-b");
+        attr(b, { type: "button" });
+        b.appendChild(directedEl("span", "q-t", q));
+        b.insertAdjacentHTML("beforeend", arrow);
+        on(b, "click", function () {
+          track("suggested_question_clicked");
+          submit(q);
+        });
+        if (i >= VISIBLE) {
+          b.hidden = true;
+          hidden.push(b);
+        }
+        list.appendChild(b);
+      });
+      inner.appendChild(list);
+      if (hidden.length) {
+        var more = el("button", "sug-more", T.showMore.replace("{n}", String(hidden.length)));
+        attr(more, { type: "button", "aria-expanded": "false" });
+        on(more, "click", function () {
+          hidden.forEach(function (b) { b.hidden = false; });
+          more.remove();
+          if (hidden[0].scrollIntoView) hidden[0].scrollIntoView({ block: "nearest" });
+        });
+        inner.appendChild(more);
+      }
+    }
+    if (boot.availability === "offline" && widget.offline && widget.offline.behavior === "form") {
+      var toForm = el("button", "btn btn-p", T.submit);
+      attr(toForm, { type: "button" });
+      on(toForm, "click", function () { S.phase = "offline_form"; render(); });
+      inner.appendChild(toForm);
+      footer.hidden = true;
+    }
+    wrap.appendChild(inner);
+    clear(body).appendChild(wrap);
+  }
+
   function renderWelcome() {
+    if (LOOK === "gotcha") { renderWelcomeG(); return; }
     footer.hidden = false;
     var wrap = el("div", "wel");
     // Canonical source. `welcome` (the legacy block) is still read by the
@@ -2162,6 +2482,30 @@ window.__gotchaShopifyChatApp = function (boot) {
       });
   }
 
+  /**
+   * Design 7's "New conversation": the host forgets this visitor's
+   * conversation (only a host that can start a fresh one offers it), and the
+   * widget returns to its welcome. The old conversation stays in the inbox.
+   */
+  function newConversation() {
+    boot.resetConversation();
+    if (socket) { try { socket.disconnect(); } catch (e) {} socket = null; }
+    stopPolling();
+    S.messages = [];
+    S.pending = [];
+    S.conversationId = null;
+    S.awaitingReply = false;
+    S.handedOver = false;
+    S.ended = false;
+    S.error = null;
+    S.rateLimited = false;
+    S.waLink = null;
+    S.lastCursor = null;
+    S.phase = "welcome";
+    shownProducts = {};
+    render();
+  }
+
   function showWaNote(url, blocked) {
     S.waLink = url;
     render();
@@ -2384,7 +2728,10 @@ window.__gotchaShopifyChatApp = function (boot) {
         // character - they had to click back into the box per letter.
         if (boot.preview) return;
         setTimeout(function () {
-          var target = S.phase === "welcome" ? focusables()[0] : textarea;
+          // Design 7's welcome is a composer with questions above it: the
+          // caret goes where the visitor types (the first focusable was the
+          // minimise button).
+          var target = S.phase === "welcome" && LOOK !== "gotcha" ? focusables()[0] : textarea;
           try { (target || closeBtn).focus({ preventScroll: true }); } catch (e) {}
         }, 60);
       });

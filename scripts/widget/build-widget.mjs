@@ -35,6 +35,9 @@ const ROOT = path.resolve(new URL("../..", import.meta.url).pathname);
 const DIR = path.join(ROOT, "frontend/public/widget");
 const BOOTSTRAP = path.join(DIR, "gotcha-shopify-bootstrap.js");
 const CHAT_SRC = path.join(DIR, "gotcha-shopify-chat.js");
+// The code snippet's UI (adapter, bubble, pop-up). chatcenter-widget.js is a
+// fixed-name stub that a CDN can pin; it loads this by the manifest's name.
+const SITE_SRC = path.join(DIR, "gotcha-site.js");
 const MANIFEST = path.join(DIR, "widget-manifest.json");
 const LIQUID = path.join(ROOT, "shopify-app/extensions/gotcha-chat/blocks/gotcha_chat.liquid");
 
@@ -47,6 +50,9 @@ function hash(buf) {
 const chatSource = fs.readFileSync(CHAT_SRC);
 const chatHash = hash(chatSource);
 const chatName = `gotcha-shopify-chat.${chatHash}.js`;
+const siteSource = fs.readFileSync(SITE_SRC);
+const siteHash = hash(siteSource);
+const siteName = `gotcha-site.${siteHash}.js`;
 
 // The bootstrap names the bundle it was built against. Rewriting this
 // constant is what ties the two halves together.
@@ -88,6 +94,8 @@ const nextLiquid = liquidSource.replace(
 const manifest = {
   chat: chatName,
   chatHash,
+  site: siteName,
+  siteHash,
   bootstrapHash,
   // Deliberately no timestamp: a rebuild with identical bytes must produce
   // an identical manifest, or `--check` becomes noise in CI.
@@ -98,7 +106,8 @@ if (checkOnly) {
   if (nextBootstrap !== bootstrapSource) problems.push("bootstrap does not reference the current chat bundle hash");
   if (!fs.existsSync(path.join(DIR, chatName))) problems.push(`missing hashed bundle ${chatName}`);
   const onDisk = fs.existsSync(MANIFEST) ? JSON.parse(fs.readFileSync(MANIFEST, "utf8")) : null;
-  if (!onDisk || onDisk.chat !== chatName) problems.push("widget-manifest.json is stale");
+  if (!fs.existsSync(path.join(DIR, siteName))) problems.push(`missing hashed site script ${siteName}`);
+  if (!onDisk || onDisk.chat !== chatName || onDisk.site !== siteName) problems.push("widget-manifest.json is stale");
   if (nextLiquid !== liquidSource) problems.push("the theme block does not reference the current bootstrap hash");
   if (problems.length) {
     console.error("✗ widget build is out of date:");
@@ -112,17 +121,19 @@ if (checkOnly) {
 
 // Drop previous hashed bundles so the directory does not grow forever.
 for (const f of fs.readdirSync(DIR)) {
-  if (/^gotcha-shopify-chat\.[0-9a-f]{12}\.js$/.test(f) && f !== chatName) {
+  if ((/^gotcha-shopify-chat\.[0-9a-f]{12}\.js$/.test(f) && f !== chatName) || (/^gotcha-site\.[0-9a-f]{12}\.js$/.test(f) && f !== siteName)) {
     fs.unlinkSync(path.join(DIR, f));
   }
 }
 
 fs.writeFileSync(path.join(DIR, chatName), chatSource);
+fs.writeFileSync(path.join(DIR, siteName), siteSource);
 fs.writeFileSync(BOOTSTRAP, nextBootstrap);
 fs.writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2) + "\n");
 fs.writeFileSync(LIQUID, nextLiquid);
 
 console.log(`✓ chat bundle   ${chatName}`);
+console.log(`✓ site script   ${siteName}`);
 console.log(`✓ bootstrap     references it (hash ${bootstrapHash})`);
 console.log(`✓ manifest      ${path.relative(ROOT, MANIFEST)}`);
 console.log(`✓ theme block   loads bootstrap?b=${bootstrapHash}`);

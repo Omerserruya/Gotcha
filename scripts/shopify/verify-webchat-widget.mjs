@@ -30,10 +30,17 @@ if (!pwPath) { console.error("playwright not found; set PLAYWRIGHT_PATH"); proce
 const { chromium } = await import(pwPath);
 
 const ROOT = path.resolve(new URL("../..", import.meta.url).pathname);
-const DIR = path.join(ROOT, "frontend/public/widget");
+// WIDGET_DIR: a staged copy (built, not yet in place). dev serves
+// frontend/public/widget from the working tree, so changes are tested there
+// first; mutation runs use it too.
+const DIR = process.env.WIDGET_DIR || path.join(ROOT, "frontend/public/widget");
 const manifest = JSON.parse(fs.readFileSync(path.join(DIR, "widget-manifest.json"), "utf8"));
-const embedScript = fs.readFileSync(path.join(DIR, "chatcenter-widget.js"), "utf8");
-const chatBundle = fs.readFileSync(path.join(DIR, manifest.chat), "utf8");
+const widgetFile = (pathname) => {
+  const rel = pathname.replace(/^\/widget\//, "");
+  if (rel.split("/").includes("..")) return null;
+  const file = path.join(DIR, rel);
+  return fs.existsSync(file) ? fs.readFileSync(file) : null;
+};
 
 const ORIGIN = "https://example-tenant-site.test";
 
@@ -103,9 +110,11 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
     }, stored);
   }
 
+  const inits = [];
   await page.route(`${ORIGIN}/**`, async (route) => {
     const url = new URL(route.request().url());
     calls.push(url.pathname);
+    if (url.pathname === "/api/embedded-chat/init") inits.push(JSON.parse(route.request().postData() || "{}"));
 
     if (url.pathname === "/") {
       return route.fulfill({
@@ -118,14 +127,11 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
           "</body></html>",
       });
     }
-    if (url.pathname === "/widget/chatcenter-widget.js") {
-      return route.fulfill({ status: 200, contentType: "application/javascript", body: embedScript });
-    }
-    if (url.pathname === `/widget/${manifest.chat}`) {
-      return route.fulfill({ status: 200, contentType: "application/javascript", body: chatBundle });
-    }
-    if (url.pathname === "/widget/widget-manifest.json") {
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(manifest) });
+    if (url.pathname.startsWith("/widget/")) {
+      const body = widgetFile(url.pathname);
+      if (!body) return route.fulfill({ status: 404, body: "" });
+      const type = url.pathname.endsWith(".json") ? "application/json" : url.pathname.endsWith(".png") ? "image/png" : "application/javascript";
+      return route.fulfill({ status: 200, contentType: type, body });
     }
     if (url.pathname === "/api/embedded-chat/bootstrap") {
       // The uniform refusal a deleted widget gets.
@@ -154,11 +160,13 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
 
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e).slice(0, 160)));
-  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text().slice(0, 160)); });
+  // The harness has no socket server; the widget falls back to polling, and
+  // Chromium's own line about the failed handshake is not the widget's.
+  page.on("console", (m) => { if (m.type() === "error" && !m.text().startsWith("WebSocket connection to")) errors.push(m.text().slice(0, 160)); });
 
   await page.goto(`${ORIGIN}/`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(wait);
-  return { ctx, page, calls, errors };
+  return { ctx, page, calls, errors, inits };
 }
 
 // ── A widget that no longer exists ──
@@ -170,6 +178,8 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
     calls.includes("/api/embedded-chat/bootstrap"), calls.filter((c) => c.startsWith("/api")).join(", ") || "no api calls");
   check("deleted widget: the chat bundle is never even downloaded",
     !calls.some((c) => c.includes(manifest.chat)));
+  check("deleted widget: nor the site script, nor the manifest",
+    !calls.some((c) => c.includes("gotcha-site") || c.includes("widget-manifest")));
   check("deleted widget: nothing is printed on the tenant's page",
     errors.length === 0, errors.slice(0, 2).join(" | "));
   await ctx.close();
@@ -204,7 +214,7 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
     const box = (sel) => { const e = s.querySelector(sel); return e ? Math.round(e.getBoundingClientRect().height) : null; };
     return {
       view: p.getAttribute("data-view"),
-      title: (s.querySelector(".wel-h") || {}).textContent,
+      title: (s.querySelector(".disc-nm") || {}).textContent,
       suggestions: s.querySelectorAll(".sug-b:not([hidden])").length,
       composer: box(".ft"),
       close: !!s.querySelector('[data-act="close"]'),
@@ -214,8 +224,8 @@ async function openSite({ widgetExists, widget = widgetConfig(), availability = 
 
   check("live widget: opens into the SAME welcome experience as the storefront",
     !!panel && panel.view === "welcome", panel ? `view=${panel.view}` : "no panel");
-  check("live widget: shows the tenant's configured welcome copy",
-    !!panel && panel.title === "Talk to us", panel ? `"${panel.title}"` : "");
+  check("live widget: shows the assistant's name under the brand's disc",
+    !!panel && panel.title === "Support", panel ? `"${panel.title}"` : "");
   check("live widget: shows the configured suggested questions",
     !!panel && panel.suggestions === 3, panel ? `${panel.suggestions} shown` : "");
   check("live widget: the composer is the compact one",
@@ -363,8 +373,18 @@ const popupOn = (over = {}) => ({ ...widgetConfig().ux.proactive, enabled: true,
 }
 
 {
+  // Backend: promotions carry `currency` (null when unknown).
   const w = withUx({ proactive: popupOn() });
-  w.promotions = [{ code: "TENOFF", amount: "10.00", discountType: "fixed_cart", expiresAt: null, minimumAmount: null }];
+  w.promotions = [{ code: "TWENTY", amount: "20.00", discountType: "fixed_cart", expiresAt: null, minimumAmount: null, currency: "ILS" }];
+  const { ctx, page } = await openSite({ widgetExists: true, widget: w, wait: 3200 });
+  const a = await look(page);
+  check("L1 deals: a fixed amount with its currency is said", a.deals.includes("₪20.00 off") || a.deals.includes("₪20 off"), a.deals);
+  await ctx.close();
+}
+
+{
+  const w = withUx({ proactive: popupOn() });
+  w.promotions = [{ code: "TENOFF", amount: "10.00", discountType: "fixed_cart", expiresAt: null, minimumAmount: null, currency: null }];
   const { ctx, page } = await openSite({ widgetExists: true, widget: w, wait: 3200 });
   const a = await look(page);
   check("L1 deals: nothing truthful to say, no strip", a.message && a.deals === "", a.deals);
@@ -393,6 +413,96 @@ const popupOn = (over = {}) => ({ ...widgetConfig().ux.proactive, enabled: true,
   check("L1 Hebrew: the pop-up reads right to left, in Hebrew", a.popDir === "rtl" && a.replies === "עונה מיד", `${a.popDir} "${a.replies}"`);
   check("L1 left side: bubble and pop-up on the left", a.bubble.x === 22 && a.pop.x === 22, `${a.bubble.x} ${a.pop.x}`);
   await page.screenshot({ path: path.join(os.homedir(), ".cache/cc-work/shots/webchat-l1-he.png") }).catch(() => {});
+  await ctx.close();
+}
+
+// ── Design 7: the panel (live widget L2) ──
+const panelLook = (page) => page.evaluate(() => {
+  const s = document.getElementById("gotcha-chat-root").shadowRoot;
+  const rect = (e) => { if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height), right: Math.round(innerWidth - r.right), bottom: Math.round(innerHeight - r.bottom) }; };
+  const p = s.querySelector(".panel");
+  const cs = (e, k) => (e ? getComputedStyle(e)[k] : null);
+  const send = s.querySelector(".snd");
+  const pw = s.querySelector("a.pwl");
+  const logo = pw && pw.querySelector("img");
+  return {
+    view: p.getAttribute("data-view"), panel: rect(p), radius: cs(p, "borderTopLeftRadius"), bg: cs(p, "backgroundColor"),
+    cover: rect(s.querySelector(".cv")), disc: rect(s.querySelector(".disc")), discOn: !!s.querySelector(".disc-on"),
+    rows: Array.from(s.querySelectorAll(".qs .q")).map((q) => Math.round(q.getBoundingClientRect().height)),
+    send: rect(send), sendBg: cs(send, "backgroundColor"), sendRadius: cs(send, "borderTopLeftRadius"),
+    powered: pw ? { href: pw.getAttribute("href"), text: pw.textContent, logo: logo ? logo.naturalWidth : 0 } : null,
+    tools: Array.from(s.querySelectorAll(".tools > button")).map((b) => ({ act: b.getAttribute("data-act"), ...rect(b), visible: getComputedStyle(b).display !== "none" })),
+    header: rect(s.querySelector(".hd")), headerShown: s.querySelector(".hd") ? getComputedStyle(s.querySelector(".hd")).display !== "none" : false,
+    avatar: rect(s.querySelector(".hd-av")), status: (s.querySelector(".hd-st") || {}).textContent,
+    mine: (() => { const b = s.querySelector(".row[data-me='1'] .bub"); return b ? { bg: cs(b, "backgroundColor"), fg: cs(b, "color") } : null; })(),
+  };
+});
+
+{
+  const w = widgetConfig({ brand: { name: "Urban Supply - GOTCHA Demo", initial: "U" } });
+  w.appearance = { ...w.appearance, primaryColor: "#2b2622", cornerRadius: 8 };
+  const { ctx, page, errors, inits } = await openSite({ widgetExists: true, widget: w, wait: 1200 });
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(700);
+  const a = await panelLook(page);
+  check("L2 panel: 400 × 680, 96px up and 22px in, radius 22, on #FBF8F3 (configured radius 8 ignored)",
+    a.panel.w === 400 && a.panel.h === 680 && a.panel.bottom === 96 && a.panel.right === 22 && a.radius === "22px" && a.bg === "rgb(251, 248, 243)", JSON.stringify({ ...a.panel, r: a.radius, bg: a.bg }));
+  check("L2 welcome: a 168px cover, the 100px disc 56px over its edge, with the green dot",
+    a.cover.h === 168 && a.disc.w === 100 && a.disc.y === a.cover.y + 168 - 56 && a.discOn, JSON.stringify({ c: a.cover, d: a.disc }));
+  check("L2 welcome: the questions are 52px rows", a.rows.length === 3 && a.rows.every((h) => h >= 52), JSON.stringify(a.rows));
+  check("L2 welcome: no header; the tools are 34px glass circles 12px from the corner, minimise last",
+    !a.headerShown && a.tools.filter((t) => t.visible).map((t) => t.act).join() === "close" && a.tools.find((t) => t.act === "close").w === 34 && a.tools.find((t) => t.act === "close").y === a.panel.y + 12,
+    JSON.stringify(a.tools));
+  check("L2 composer: a 40px round send, #D6CCBF while empty", a.send.w === 40 && a.send.h === 40 && a.sendRadius === "50%" && a.sendBg === "rgb(214, 204, 191)", JSON.stringify({ ...a.send, bg: a.sendBg, r: a.sendRadius }));
+  check("L2 powered by: the words and our logo, linked", a.powered && a.powered.href === "https://gotcha.co.il" && a.powered.text === "Powered by" && a.powered.logo > 0, JSON.stringify(a.powered));
+  await page.screenshot({ path: path.join(os.homedir(), ".cache/cc-work/shots/webchat-l2-welcome.png") }).catch(() => {});
+
+  await page.evaluate(() => {
+    const s = document.getElementById("gotcha-chat-root").shadowRoot;
+    const ta = s.querySelector("textarea");
+    ta.value = "Do you ship to Eilat?";
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const typed = await panelLook(page);
+  check("L2 composer: the send takes the main colour once there is text", typed.sendBg === "rgb(43, 38, 34)", typed.sendBg);
+  await page.evaluate(() => document.getElementById("gotcha-chat-root").shadowRoot.querySelector(".snd").click());
+  await page.waitForTimeout(700);
+  const c = await panelLook(page);
+  // 12 + the 38px avatar + 12, and its 1px rule (design 7).
+  check("L2 conversation: the header, 63px, the 38px avatar, and who answers", c.view === "conversation" && c.headerShown && c.header.h === 63 && c.avatar.w === 38 && /Typing|Replies right away/.test(c.status), JSON.stringify({ v: c.view, h: c.header, a: c.avatar, s: c.status }));
+  check("L2 conversation: the visitor's bubble in the main colour, cream on it", c.mine && c.mine.bg === "rgb(43, 38, 34)" && c.mine.fg === "rgb(251, 248, 243)", JSON.stringify(c.mine));
+  check("L2 conversation: the tools in the header: new conversation, then minimise", c.tools.filter((t) => t.visible).map((t) => t.act).join() === "new,close" && c.tools[0].w === 32, JSON.stringify(c.tools));
+  await page.screenshot({ path: path.join(os.homedir(), ".cache/cc-work/shots/webchat-l2-conversation.png") }).catch(() => {});
+
+  const before = inits.length;
+  await shadowClick(page, '[data-act="new"]');
+  await page.waitForTimeout(300);
+  const n = await panelLook(page);
+  check("L2 new conversation: back to the welcome", n.view === "welcome", n.view);
+  await page.evaluate(() => {
+    const s = document.getElementById("gotcha-chat-root").shadowRoot;
+    s.querySelector(".qs .q").click();
+  });
+  await page.waitForTimeout(600);
+  const fresh = inits.slice(before);
+  check("L2 new conversation: the next message starts one - /init without the old token",
+    fresh.length >= 1 && fresh.every((b) => !b.sessionToken), JSON.stringify(fresh.map((b) => b.sessionToken ?? null)));
+  check("L2: logs nothing (panel)", errors.length === 0, errors.slice(0, 2).join(" | "));
+  await ctx.close();
+}
+
+{
+  const he = widgetConfig({ brand: { name: "אורבן סאפליי", initial: "א" } });
+  // The server sends the side in both places (publicWebchatConfig).
+  he.appearance = { ...he.appearance, language: "he", direction: "auto", primaryColor: "#2b2622", launcherPosition: "left" };
+  he.ux = { ...he.ux, launcher: { ...he.ux.launcher, position: "left", mobilePosition: "left" }, welcome: { ...he.ux.welcome, assistantName: "נועה", suggestedQuestions: ["איפה ההזמנה שלי?", "יש משלוח לאילת?", "איך מחזירים?"] } };
+  const { ctx, page } = await openSite({ widgetExists: true, widget: he, lang: "he", wait: 1200 });
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(700);
+  const a = await panelLook(page);
+  check("L2 Hebrew, left: the panel 22px from the left, the tools in the left corner",
+    a.panel.x === 22 && a.tools.find((t) => t.act === "close").x === a.panel.x + 12, JSON.stringify({ p: a.panel.x, t: a.tools }));
+  await page.screenshot({ path: path.join(os.homedir(), ".cache/cc-work/shots/webchat-l2-he.png") }).catch(() => {});
   await ctx.close();
 }
 
