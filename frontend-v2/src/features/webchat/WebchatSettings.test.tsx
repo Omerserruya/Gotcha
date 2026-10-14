@@ -1123,3 +1123,48 @@ describe('★★ W3 (2026-10-14) - each image slot says its limits, and refuses 
     expect(sentAt().appearance.logoUrl).toBeNull();
   });
 });
+
+describe('★★ W11 (2026-10-14) - Install offers only the platforms connected to GOTCHA', () => {
+  const platforms = (shopify: string, woocommerce: string) => [
+    { platform: 'shopify', data: shopify, dataErrorCode: null, chat: 'none', stores: [] },
+    { platform: 'woocommerce', data: woocommerce, dataErrorCode: null, chat: 'plugin', stores: [] },
+  ];
+
+  it('★★ dev’s case: Shopify in error says it needs reconnecting, WooCommerce is offered, the code always', () => {
+    show('install', { read: install({ platforms: platforms('error', 'connected') }) });
+    expect(screen.getByTestId('webchat-shopify-reconnect')).toHaveTextContent(
+      'The connection to Shopify needs reconnecting.',
+    );
+    expect(screen.queryByTestId('webchat-shopify')).toBeNull();
+    expect(screen.getByTestId('webchat-woo')).toBeInTheDocument();
+    expect(screen.getByTestId('webchat-snippet')).toBeInTheDocument();
+  });
+
+  it('★ not connected, or still connecting: not shown at all', () => {
+    show('install', { read: install({ platforms: platforms('not_connected', 'connecting') }) });
+    expect(screen.queryByTestId('webchat-shopify')).toBeNull();
+    expect(screen.queryByTestId('webchat-shopify-reconnect')).toBeNull();
+    expect(screen.queryByTestId('webchat-woo')).toBeNull();
+    expect(screen.getByTestId('webchat-snippet')).toBeInTheDocument();
+  });
+
+  it('a state it does not know is not offered; an older server (no platforms) offers what it did', () => {
+    const { unmount } = show('install', {
+      read: install({ platforms: platforms('weird', 'connected') }),
+    });
+    expect(screen.queryByTestId('webchat-shopify')).toBeNull();
+    unmount();
+    show('install');
+    expect(screen.getByTestId('webchat-shopify')).toBeInTheDocument();
+    expect(screen.getByTestId('webchat-woo')).toBeInTheDocument();
+  });
+
+  it('Hebrew: the reconnect line', () => {
+    const { container } = render(
+      <NextIntlClientProvider locale="he" messages={{ channels: heChannelsMessages }}>
+        <p>{heChannelsMessages.webchat.install.reconnect}</p>
+      </NextIntlClientProvider>,
+    );
+    expect(container).toHaveTextContent('צריך חיבור מחדש');
+  });
+});

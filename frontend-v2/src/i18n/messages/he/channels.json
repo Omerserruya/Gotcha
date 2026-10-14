@@ -883,7 +883,8 @@
             "failed": "לא נותק. אפשר לנסות שוב."
           }
         }
-      }
+      },
+      "reconnect": "החיבור ל‑{platform} צריך חיבור מחדש. <systems>למערכות</systems>"
     },
     "preview": {
       "label": "תצוגה מקדימה",

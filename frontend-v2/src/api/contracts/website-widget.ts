@@ -126,6 +126,24 @@ const wooInstallSchema = z.object({
  * the tab says it could not read the installs - never "Active" for a shop
  * whose state it does not understand.
  */
+export const installPlatformSchema = z.object({
+  platform: z.enum(['shopify', 'woocommerce']),
+  /** An unknown state is not offered: never an install path on a guess. */
+  data: z.enum(['connected', 'connecting', 'error', 'not_connected']).catch('not_connected'),
+  dataErrorCode: z.string().nullable().catch(null).default(null),
+});
+export type InstallPlatform = z.infer<typeof installPlatformSchema>;
+
+/** How the install tab treats a platform: offered, said to need reconnecting, or not shown. */
+export function platformOffer(
+  platforms: readonly InstallPlatform[] | null,
+  platform: InstallPlatform['platform'],
+): 'offer' | 'reconnect' | 'hide' {
+  if (platforms === null) return 'offer';
+  const row = platforms.find((p) => p.platform === platform);
+  return row?.data === 'connected' ? 'offer' : row?.data === 'error' ? 'reconnect' : 'hide';
+}
+
 export const widgetInstallSchema = z.object({
   data: z.object({
     code: z
@@ -150,6 +168,26 @@ export const widgetInstallSchema = z.object({
       }),
     ),
     woocommerce: wooInstallSchema.default({ status: 'use_code', sites: [], downloadUrl: null }),
+    /**
+     * ★★ W11 (Backend 0a718342): each store platform's own connection to
+     * GOTCHA - only a `connected` one is offered as a way to install; an
+     * `error` one says it needs reconnecting. Per row: one that does not
+     * parse is left out. Absent (an older server): `null`, and the tab
+     * offers what it always did.
+     */
+    platforms: z
+      .array(z.unknown())
+      .nullable()
+      .catch(null)
+      .default(null)
+      .transform((rows) =>
+        rows === null
+          ? null
+          : rows.flatMap((row) => {
+              const item = installPlatformSchema.safeParse(row);
+              return item.success ? [item.data] : [];
+            }),
+      ),
   }),
 });
 export type WidgetInstall = z.infer<typeof widgetInstallSchema>['data'];

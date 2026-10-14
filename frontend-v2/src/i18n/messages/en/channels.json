@@ -883,7 +883,8 @@
             "failed": "It wasn't disconnected. Try again."
           }
         }
-      }
+      },
+      "reconnect": "The connection to {platform} needs reconnecting. <systems>Open systems</systems>"
     },
     "preview": {
       "label": "Preview",

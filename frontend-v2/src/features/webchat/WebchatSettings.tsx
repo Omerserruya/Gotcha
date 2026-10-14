@@ -36,6 +36,7 @@ import {
 import {
   WIDGET_PATH,
   isLive,
+  platformOffer,
   type HandoffNumber,
   type ShopifyPlace,
   type WebsiteWidget,
@@ -1124,10 +1125,19 @@ function Install({
     );
   }
   const code = install.code;
+  const shopifyOffer = platformOffer(install.platforms, 'shopify');
+  const wooOffer = platformOffer(install.platforms, 'woocommerce');
   return (
     <>
+      {/*
+        ★★ W11 (Omer, 2026-10-14): only a platform connected to GOTCHA is a
+        way to install; one whose connection failed says it needs
+        reconnecting; the rest are not shown. Any other site, always.
+      */}
       <section className={styles.card}>
-        {install.shopify.length > 0 ? (
+        {shopifyOffer === 'hide' ? null : shopifyOffer === 'reconnect' ? (
+          <Reconnect platform="Shopify" testid="webchat-shopify-reconnect" />
+        ) : install.shopify.length > 0 ? (
           install.shopify.map((shop) => (
             <ShopRow
               key={shop.channelId}
@@ -1152,7 +1162,11 @@ function Install({
             />
           </div>
         )}
-        <WooPlugin woo={install.woocommerce} />
+        {wooOffer === 'hide' ? null : wooOffer === 'reconnect' ? (
+          <Reconnect platform="WooCommerce" testid="webchat-woo-reconnect" />
+        ) : (
+          <WooPlugin woo={install.woocommerce} />
+        )}
         <div className={styles.snippetBlock} data-testid="webchat-snippet">
           <span className={styles.snippetHead}>
             <span>{t('other')}</span>
@@ -1681,4 +1695,17 @@ function KindChoice({
 /** For a value that never changes while the page is open (a browser's abilities). */
 function noSubscription(): () => void {
   return () => undefined;
+}
+
+/** W11: a store platform whose connection to GOTCHA failed - not a way to install until it is fixed. */
+function Reconnect({ platform, testid }: { readonly platform: string; readonly testid: string }) {
+  const t = useTranslations('channels.webchat.install');
+  return (
+    <p className={styles.rowHint} role="status" data-testid={testid}>
+      {t.rich('reconnect', {
+        platform,
+        systems: (chunks) => <Link href="/settings/systems">{chunks}</Link>,
+      })}
+    </p>
+  );
 }
