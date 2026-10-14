@@ -57,8 +57,12 @@ export interface ReadinessQuestion {
   gapType: "knowledge" | "tool" | "data" | "none";
   /** True for a question a person answered (B2): covered by that answer. */
   answered?: boolean;
-  /** The documents and tools the verdict rests on, each checked to exist in the input. */
-  evidence?: Array<{ kind: "doc" | "tool"; name: string }>;
+  /**
+   * What the verdict rests on, each checked against the input: a knowledge
+   * document, a tool, or the business description ("business"), which reaches
+   * the employee's prompt at runtime too.
+   */
+  evidence?: Array<{ kind: "doc" | "tool" | "business"; name: string }>;
 }
 
 export interface ReadinessRecommendation {
@@ -94,7 +98,7 @@ const LANG_NAMES: Record<string, string> = { en: "English", he: "Hebrew (עבר�
 const MAX_KB_DOCS = 40;
 const MAX_TOOLS = 60;
 /** Bumped when the judging prompt changes, so old judgements are not reused. */
-const JUDGE_VERSION = "2";
+const JUDGE_VERSION = "3";
 /** Questions per judge call: 32 at once came back all "partial". */
 export const JUDGE_BATCH = 8;
 
@@ -281,7 +285,7 @@ ${questions.map((q) => `- [${q.id}] ${q.question}`).join("\n")}
 
 ## Your task
 For EACH question id decide:
-- evidence: the documents and tools above that answer it, by their exact quoted name: [{"kind":"doc","name":"<doc title>"}, {"kind":"tool","name":"<tool name>"}]. Only what is listed above; [] when nothing does.
+- evidence: what above answers it: a document or tool by its exact quoted name, or the "## Business" section itself: [{"kind":"doc","name":"<doc title>"}, {"kind":"tool","name":"<tool name>"}, {"kind":"business","name":"business"}]. Cite a document only for what is written in that document. Only what is listed above; [] when nothing does.
 - coverage: "full" (the evidence answers it completely), "partial" (the evidence answers part of it), or "none" (nothing listed answers it). A tool that does what the customer asks (e.g. looking up or changing their order) IS evidence. With no evidence the coverage is "none" - do not hedge with "partial".
 - gapType: if not full, the single biggest missing thing - "knowledge" (missing info/policy/FAQ), "tool" (needs an action/integration not listed, e.g. refunds when no refund tool is listed), or "data" (needs structured business data, e.g. price list, size/measurement table, product catalog). Use "none" only when coverage is "full".
 - reason: one short sentence in ${lang}.
@@ -289,7 +293,7 @@ For EACH question id decide:
 Then produce "recommendations": concrete, deduplicated fixes for the gaps you found. Each has a "type" from: "add_knowledge", "connect_tool", "add_business_data", "add_faq", "create_workflow", "other". title + detail in ${lang}.
 
 Respond ONLY with JSON of exactly this shape:
-{"judgements":[{"id":"q_...","evidence":[{"kind":"doc|tool","name":"..."}],"coverage":"full|partial|none","gapType":"knowledge|tool|data|none","reason":"..."}],"recommendations":[{"type":"...","title":"...","detail":"..."}]}`;
+{"judgements":[{"id":"q_...","evidence":[{"kind":"doc|tool|business","name":"..."}],"coverage":"full|partial|none","gapType":"knowledge|tool|data|none","reason":"..."}],"recommendations":[{"type":"...","title":"...","detail":"..."}]}`;
 }
 
 function computeScore(questions: ReadinessQuestion[]): { score: number; totals: ReadinessReport["totals"] } {
@@ -437,7 +441,9 @@ export async function generateReadinessReport(
   }
 
   const toJudge = set.questions.filter((q) => !answeredIds.has(q.id));
-  const judged = new Map<string, { coverage: Coverage; gapType: ReadinessQuestion["gapType"]; reason: string; evidence: Array<{ kind: "doc" | "tool"; name: string }> }>();
+  const judged = new Map<string, { coverage: Coverage; gapType: ReadinessQuestion["gapType"]; reason: string; evidence: NonNullable<ReadinessQuestion["evidence"]> }>();
+  // The business section is evidence only when there is something in it.
+  const hasBusiness = !!(ctx.businessDescription || ctx.companyOverview).trim();
   const recs: ReadinessRecommendation[] = [];
   // Only names that were in the judge's input count as evidence.
   const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
@@ -480,8 +486,8 @@ export async function generateReadinessReport(
       if (typeof j?.id !== "string") continue;
       const evidence = (Array.isArray(j.evidence) ? j.evidence : [])
         .map((e: any) => {
-          const kind = e?.kind === "tool" ? "tool" : e?.kind === "doc" ? "doc" : null;
-          const name = kind === "tool" ? toolNames.get(norm(e?.name)) : kind === "doc" ? docNames.get(norm(e?.name)) : undefined;
+          const kind = e?.kind === "tool" ? "tool" : e?.kind === "doc" ? "doc" : e?.kind === "business" ? "business" : null;
+          const name = kind === "tool" ? toolNames.get(norm(e?.name)) : kind === "doc" ? docNames.get(norm(e?.name)) : kind === "business" && hasBusiness ? "business" : undefined;
           return kind && name ? { kind, name } : null;
         })
         .filter((e: any, i: number, all: any[]) => e && all.findIndex((x) => x && x.kind === e.kind && x.name === e.name) === i);

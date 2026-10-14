@@ -205,11 +205,34 @@ describe("★ a verdict counts only with evidence the code can check (B6b)", () 
     expect(r.questions[1]).toMatchObject({ coverage: "full", gapType: "none", evidence: [{ kind: "doc", name: "Privacy Policy" }] });
   });
 
+  it("★ the business description is evidence (kind business), and only when there is one", async () => {
+    const r = await judgeOnce((ids) => [
+      { id: ids[0], coverage: "full", gapType: "none", reason: "free shipping over 299", evidence: [{ kind: "business", name: "anything" }] },
+      { id: ids[1], coverage: "partial", gapType: "knowledge", reason: "x", evidence: [{ kind: "business" }] },
+    ]);
+    expect(r.questions.map((q: any) => [q.coverage, q.evidence])).toEqual([
+      ["full", [{ kind: "business", name: "business" }]],
+      ["partial", [{ kind: "business", name: "business" }]],
+    ]);
+  });
+
+  it("no business description: citing it is not evidence", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const orig = (prisma as any).businessProfile.findUnique;
+    (prisma as any).businessProfile.findUnique = async () => ({ organizationName: "Shop", industry: "retail", businessDescription: "" });
+    try {
+      const r = await judgeOnce((ids) => [{ id: ids[0], coverage: "full", gapType: "none", reason: "x", evidence: [{ kind: "business", name: "business" }] }], ["Where is my order?"]);
+      expect(r.questions[0].coverage).toBe("none");
+    } finally {
+      (prisma as any).businessProfile.findUnique = orig;
+    }
+  });
+
   it("the judge is told to name its evidence, and the names it may use are quoted", async () => {
     await run();
     const judge = H.calls.find((c) => c.type === "agent_readiness")!.prompt;
     expect(judge).toContain('- doc "Shipping" [Company]');
-    expect(judge).toMatch(/"evidence":\[\{"kind":"doc\|tool"/);
+    expect(judge).toMatch(/"evidence":\[\{"kind":"doc\|tool\|business"/);
     expect(judge).toContain('do not hedge with "partial"');
   });
 });
