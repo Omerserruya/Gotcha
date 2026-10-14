@@ -19,7 +19,7 @@ vi.mock("bullmq", () => ({ Queue: class { add = vi.fn(); }, Worker: class {}, Jo
 vi.mock("ioredis", () => ({ default: class { publish = vi.fn(); subscribe = vi.fn(); on = vi.fn(); quit = vi.fn(); } }));
 
 const SHOP = "urban-supply-gotcha-demo.myshopify.com";
-const H = vi.hoisted(() => ({ kv: new Map<string, string>(), ttl: new Map<string, number>(), target: null as any, ux: {} as any, created: [] as any[], calls: [] as any[] }));
+const H = vi.hoisted(() => ({ kv: new Map<string, string>(), ttl: new Map<string, number>(), target: null as any, ux: {} as any, created: [] as any[], calls: [] as any[], convs: [] as any[] }));
 
 vi.mock("../services/ai.service", () => ({
   getMicroModel: () => "micro",
@@ -31,8 +31,11 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   return {
     ...actual,
     prisma: {
-      message: { create: async (a: any) => { H.created.push(a); return a.data; } },
-      conversation: { create: async (a: any) => { H.created.push(a); return a.data; } },
+      message: { create: async (a: any) => { H.created.push(a); return a.data; }, findMany: async () => [] },
+      conversation: {
+        create: async (a: any) => { H.created.push(a); const c = { id: `conv_${H.convs.length + 1}`, createdAt: new Date(Date.now() + H.convs.length), handledBy: null, isHandedOver: false, ...a.data }; H.convs.push(c); return c; },
+        findFirst: async (a: any) => H.convs.filter((c) => c.tenantId === a.where.tenantId && c.customerExternalId === a.where.customerExternalId && c.status !== "CLOSED").sort((x, y) => +y.createdAt - +x.createdAt)[0] ?? null,
+      },
       businessProfile: { findUnique: async () => ({ organizationName: "Urban Supply" }) },
       tenant: { findUnique: async () => null },
     },
@@ -81,7 +84,7 @@ const boot = () => request(app()).post("/api/shopify-chat/bootstrap").set("origi
 const start = (body: any) => request(app()).post("/api/shopify-chat/whatsapp-start").set("origin", `https://${SHOP}`).send(body);
 
 beforeEach(() => {
-  H.kv.clear(); H.ttl.clear(); H.created = []; H.calls = [];
+  H.kv.clear(); H.ttl.clear(); H.created = []; H.calls = []; H.convs = [];
   H.ux = { kind: "whatsapp", whatsapp: { enabled: true, channelAccountId: "wa_1" } };
   H.target = { channelAccountId: "wa_1", digits: "972525551234" };
 });
@@ -153,5 +156,29 @@ describe("★ the wordmark on the storefront too", () => {
   it("the Shopify bootstrap carries brand { name, initial }", async () => {
     H.ux = { kind: "chat" };
     expect((await boot()).body.data.widget.brand).toEqual({ name: "Urban Supply", initial: "U" });
+  });
+});
+
+describe("★ New conversation on the storefront: the open one is detached, never closed", () => {
+  const conv = (body: any = {}) => request(app()).post("/api/shopify-chat/conversation").set("origin", `https://${SHOP}`).send({ sessionToken: token(), ...body });
+  it("fresh:true starts a new conversation; the old stays OPEN and untouched; later lookups land on the new one", async () => {
+    H.ux = { kind: "chat" };
+    const first = (await conv()).body.data.conversationId;
+    expect((await conv()).body.data.conversationId).toBe(first);
+    const fresh = (await conv({ fresh: true })).body.data;
+    expect(fresh.conversationId).not.toBe(first);
+    expect(fresh.messages).toEqual([]);
+    expect(H.convs.find((c) => c.id === first)).toMatchObject({ status: "OPEN" });
+    expect(H.convs.find((c) => c.id === first)).not.toHaveProperty("closedAt");
+    // No note on either conversation (it would change idle / first-message behaviour).
+    expect(H.created.filter((c) => c?.data?.messageType === "system")).toEqual([]);
+    expect((await conv()).body.data.conversationId).toBe(fresh.conversationId);
+  });
+
+  it("only a signed visitor; fresh other than true is the normal lookup", async () => {
+    expect((await request(app()).post("/api/shopify-chat/conversation").send({ fresh: true })).status).toBe(401);
+    H.ux = { kind: "chat" };
+    const a = (await conv()).body.data.conversationId;
+    expect((await conv({ fresh: "yes" })).body.data.conversationId).toBe(a);
   });
 });

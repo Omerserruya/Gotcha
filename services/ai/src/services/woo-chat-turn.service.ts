@@ -137,3 +137,52 @@ export async function webchatPromotionsFor(tenantId: string, conversationId: str
   if (!ids.length || !(await connectedWooStore(tenantId))) return [];
   return listActivePromotions(tenantId, ids);
 }
+
+/**
+ * What the visitor is looking at on a WooCommerce store's site (2026-10-14):
+ * the page context their latest web chat message carried (a product id, else
+ * a slug: lookup keys only), resolved against the connected store, as a
+ * prompt block like Shopify's "## Shopify Storefront". Undefined for every
+ * other conversation, when the message carried no product, or when the store
+ * has no such published product.
+ */
+export async function webchatStorefrontBlock(tenantId: string, conversationId: string): Promise<string | undefined> {
+  const conv = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId }, select: { channel: true } });
+  if (!conv || conv.channel !== ("WEBCHAT" as any)) return undefined;
+  const row = await prisma.message.findFirst({
+    where: { tenantId, conversationId, direction: "INBOUND" },
+    orderBy: { createdAt: "desc" },
+    select: { metadata: true },
+  });
+  const ctx = (row?.metadata as any)?.storefront;
+  const productId = typeof ctx?.productId === "string" && /^\d{1,12}$/.test(ctx.productId) ? ctx.productId : null;
+  const slug = typeof ctx?.productHandle === "string" && ctx.productHandle ? ctx.productHandle : null;
+  if (!productId && !slug) return undefined;
+  const store = await connectedWooStore(tenantId);
+  if (!store) return undefined;
+  // The id is the exact key; the slug only when there is no id.
+  const got = await executeAdapterTool({
+    tenantId,
+    toolFunctionName: "woocommerce.get_product",
+    args: productId ? { product_id: productId } : { slug },
+    accessScope: "internal",
+  });
+  const p: any = got.ok ? got.result : null;
+  if (!p || p.status !== "publish" || p.catalog_visibility === "hidden") {
+    return ["## Store page", `Store: ${store.storeUrl}`, "They are on a product page, but that product could not be loaded from the store.", "Ask which product they mean rather than guessing."].join("\n");
+  }
+  const { currency } = await resolveWooCurrency(tenantId).catch(() => ({ currency: undefined }));
+  const parts = [`- ${p.name}`];
+  if (p.price) parts.push(`price ${p.price}${currency ? ` ${currency}` : ""}`);
+  if (p.sale_price && p.regular_price && p.sale_price !== p.regular_price) parts.push(`was ${p.regular_price}`);
+  parts.push(p.stock_status === "outofstock" ? "out of stock" : p.stock_status === "onbackorder" ? "on backorder" : "in stock");
+  return [
+    "## Store page",
+    `Store: ${store.storeUrl}`,
+    "The customer is currently viewing THIS product:",
+    parts.join(" - "),
+    `  product_id: ${p.id}`,
+    "",
+    'If they say "this", "it" or "this one" without naming a product, they mean the product above.',
+  ].join("\n");
+}

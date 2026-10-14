@@ -27,6 +27,8 @@ export const handoffConversationKey = (conversationId: string) => `wahandoff:con
 export interface HandoffPageContext {
   pageType: string | null;
   productHandle: string | null;
+  /** WooCommerce's numeric product id, when the page named it (preferred for the lookup). */
+  productId?: string | null;
   path: string | null;
 }
 

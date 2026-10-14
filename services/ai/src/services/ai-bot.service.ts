@@ -235,7 +235,7 @@ import {
 } from "./action-contracts.repo";
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -1747,6 +1747,15 @@ async function generateAIBotReplyInner(
       });
   // The one place cards are staged this turn, whichever store they come from.
   const productTurn = shopifyTurn ?? wooTurn;
+  // A web chat on a WooCommerce store's site: the product the visitor is
+  // looking at, resolved against the store (Shopify's turn has its own block).
+  if (!shopifyTurn && !ctxSlot.storefrontBlock) {
+    const block = await webchatStorefrontBlock(opts.tenantId, opts.conversationId).catch((err: any) => {
+      console.warn("[ai-bot] web chat storefront block failed:", err?.message);
+      return undefined;
+    });
+    if (block) ctxSlot.storefrontBlock = block;
+  }
   // Set later in the turn, read by runAdapterTool's gate below. Declared here
   // because the tool context closes over it and is built before the controller
   // runs; the closure reads it at call time, by which point it is resolved.

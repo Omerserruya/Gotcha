@@ -328,7 +328,7 @@ router.post("/whatsapp-start", messageLimiter, async (req: Request, res: Respons
       conversationId: null,
       whatsappChannelAccountId: target.channelAccountId,
       createdAt: new Date().toISOString(),
-      context: { pageType: ctx.pageType, productHandle: ctx.productHandle, path: ctx.path },
+      context: { pageType: ctx.pageType, productHandle: ctx.productHandle, productId: ctx.productId, path: ctx.path },
     };
     const ref = await mintHandoffRef(record, (n) => crypto.randomBytes(n));
     if (!ref) { res.status(503).json({ error: "try_again" }); return; }
@@ -602,6 +602,9 @@ router.post("/message", messageLimiter, async (req: Request, res: Response) => {
           contentType: "text",
           body: safeBody,
           messageType: "text",
+          // The page the visitor wrote from (W9: the product they are looking
+          // at on a store's site). Lookup keys only, re-resolved before use.
+          ...(req.body?.context ? { metadata: { storefront: normalizeStorefrontContext(req.body.context) } } : {}),
         },
       },
       { attempts: 3, backoff: { type: "exponential", delay: 1000 } }

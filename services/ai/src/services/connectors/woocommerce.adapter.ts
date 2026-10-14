@@ -547,8 +547,17 @@ const WooCommerceAdapter: ProviderAdapter = {
         if (args.phone) body.billing = { phone: String(args.phone), email: String(args.email) };
         return await wooRequest(auth, "POST", `${base}/customers`, body);
       }
-      case "get_product":
+      case "get_product": {
+        // Internal callers may look a product up by its slug (a page's URL
+        // names it, often in Hebrew); the model's schema still takes the id.
+        if (!args.product_id && typeof args.slug === "string" && args.slug.trim()) {
+          const params = new URLSearchParams({ slug: args.slug.trim(), status: "publish", per_page: "1" });
+          const list: any = await wooRequest(auth, "GET", `${base}/products?${params}`);
+          if (!Array.isArray(list) || !list[0]) throw new Error("woocommerce_404: product_not_found");
+          return list[0];
+        }
         return await wooRequest(auth, "GET", `${base}/products/${encodeURIComponent(String(args.product_id))}`);
+      }
       case "list_product_variations": {
         const per = Math.min(100, Number(args.per_page ?? 50));
         return await wooRequest(auth, "GET", `${base}/products/${encodeURIComponent(String(args.product_id))}/variations?per_page=${per}`);

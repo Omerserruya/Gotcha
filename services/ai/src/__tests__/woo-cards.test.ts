@@ -17,7 +17,7 @@ const STORE = "https://demo-store.example.com";
 const H = vi.hoisted(() => ({
   accounts: [] as any[], conv: null as any, integration: null as any, messages: [] as any[],
   products: {} as Record<string, any>, variations: {} as Record<string, any[]>, adapterCalls: [] as any[],
-  coupons: [] as any[], kv: new Map<string, string>(), storeCurrency: "ILS" as string | null,
+  coupons: [] as any[], kv: new Map<string, string>(), storeCurrency: "ILS" as string | null, lastInbound: null as any,
 }));
 
 vi.mock("express-rate-limit", () => ({ default: () => (_q: any, _r: any, n: any) => n() }));
@@ -48,7 +48,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         findFirst: async (a: any) => (H.integration && a.where.tenantId === "T" && (!a.where.status || a.where.status === H.integration.status) ? H.integration : null),
         update: async () => ({}),
       },
-      message: { findMany: async () => H.messages },
+      message: { findMany: async () => H.messages, findFirst: async () => H.lastInbound },
       whatsAppNumber: { findMany: async () => [] },
       flowCanvas: { findUnique: async () => null },
       shopifyChatInstallation: { findMany: async () => [] },
@@ -62,6 +62,10 @@ vi.mock("../services/connectors/integration-framework", async (importOriginal) =
   executeAdapterTool: async (o: any) => {
     H.adapterCalls.push(o);
     if (o.toolFunctionName === "woocommerce.get_product") {
+      if (o.args.slug) {
+        const bySlug = Object.values(H.products).find((x: any) => x.slug === o.args.slug);
+        return bySlug ? { ok: true, result: bySlug } : { ok: false, failure: "errored", reason: "woocommerce_404" };
+      }
       const p = H.products[String(o.args.product_id)];
       return p ? { ok: true, result: p } : { ok: false, failure: "errored", reason: "woocommerce_404" };
     }
@@ -76,7 +80,7 @@ vi.mock("../services/connectors/integration-framework", async (importOriginal) =
 import { normalizeWebchatConfig } from "@chatcenter/shared";
 import chat from "../routes/embedded-chat";
 import widget from "../routes/website-widget";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor } from "../services/woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock } from "../services/woo-chat-turn.service";
 import { buildCouponPromotionsDirective } from "../services/product-intent.service";
 
 const app = () => { const a = express(); a.use(express.json()); a.use("/api/embedded-chat", chat); a.use("/api/website-widget", widget); return a; };
@@ -307,5 +311,37 @@ describe("★ promotions (phase d): only the chosen coupons, only while live", (
     H.integration = { status: "CONNECTED", config: { storeUrl: STORE } };
     H.conv = { ...H.conv, channel: "WHATSAPP" };
     expect(await webchatPromotionsFor("T", "conv1")).toEqual([]);
+  });
+});
+
+describe("★ what the visitor is looking at on the store's site", () => {
+  it("the product id first; the block names it, its price in the store's currency and stock", async () => {
+    H.products["41"] = { ...H.products["41"], slug: "מעיל-טרנץ" };
+    H.lastInbound = { metadata: { storefront: { pageType: "product", productId: "41", productHandle: "something-else" } } };
+    const b = (await webchatStorefrontBlock("T", "conv1"))!;
+    expect(b).toContain("The customer is currently viewing THIS product:");
+    expect(b).toContain("- Product 41 - price 100 ILS - in stock");
+    expect(b).toContain("product_id: 41");
+    expect(H.adapterCalls.at(-1)).toMatchObject({ toolFunctionName: "woocommerce.get_product", args: { product_id: "41" }, accessScope: "internal" });
+  });
+
+  it("no id: the (Hebrew) slug; a draft or hidden product is not described", async () => {
+    H.products["41"] = { ...H.products["41"], slug: "מעיל-טרנץ" };
+    H.lastInbound = { metadata: { storefront: { pageType: "product", productId: null, productHandle: "מעיל-טרנץ" } } };
+    expect(await webchatStorefrontBlock("T", "conv1")).toContain("Product 41");
+    expect(H.adapterCalls.at(-1).args).toEqual({ slug: "מעיל-טרנץ" });
+    H.lastInbound = { metadata: { storefront: { productId: "42" } } };
+    expect(await webchatStorefrontBlock("T", "conv1")).toMatch(/could not be loaded/);
+  });
+
+  it("nothing for: no product on the page, a store not connected, another channel", async () => {
+    H.lastInbound = { metadata: { storefront: { pageType: "page", productId: null, productHandle: null } } };
+    expect(await webchatStorefrontBlock("T", "conv1")).toBeUndefined();
+    H.lastInbound = { metadata: { storefront: { productId: "41" } } };
+    H.integration = null;
+    expect(await webchatStorefrontBlock("T", "conv1")).toBeUndefined();
+    H.integration = { status: "CONNECTED", config: { storeUrl: STORE } };
+    H.conv = { ...H.conv, channel: "WHATSAPP" };
+    expect(await webchatStorefrontBlock("T", "conv1")).toBeUndefined();
   });
 });

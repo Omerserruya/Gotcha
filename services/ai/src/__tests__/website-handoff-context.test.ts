@@ -61,3 +61,12 @@ describe("★ started from the WhatsApp kind of widget", () => {
     expect(none).not.toMatch(/handle|page \//);
   });
 });
+
+describe("the WhatsApp kind's page: the store's product id first", () => {
+  it("an id is named as the key to look up; the slug only without one", async () => {
+    const started = (page: any) => ({ messageType: "system", metadata: { systemEvent: "continued_from_website", fromConversationId: null, page } });
+    const b = await websiteHandoffContext("T", [started({ pageType: "product", productId: "364", productHandle: "מעיל" })]);
+    expect(b).toMatch(/store's product id 364\. Look it up by that id/);
+    expect(b).not.toContain("מעיל");
+  });
+});

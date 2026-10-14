@@ -42,9 +42,12 @@ export async function websiteHandoffContext(
 function pageContext(page: unknown): string {
   const p = (page && typeof page === "object" ? page : {}) as Record<string, unknown>;
   const handle = typeof p.productHandle === "string" && p.productHandle ? p.productHandle : null;
+  const productId = typeof p.productId === "string" && /^\d{1,12}$/.test(p.productId) ? p.productId : null;
   const path = typeof p.path === "string" && p.path ? p.path : null;
   const lines = ["This customer started this conversation from the business's website, through its WhatsApp button."];
-  if (handle) lines.push(`They were looking at the product with handle "${handle}". Look it up before you mention its name, price or stock, and assume their first message is about it unless they say otherwise.`);
+  // The store's product id is the exact key (WooCommerce get_product); the slug is the fallback.
+  if (productId) lines.push(`They were looking at the store's product id ${productId}. Look it up by that id before you mention its name, price or stock, and assume their first message is about it unless they say otherwise.`);
+  else if (handle) lines.push(`They were looking at the product with handle "${handle}". Look it up before you mention its name, price or stock, and assume their first message is about it unless they say otherwise.`);
   else if (path) lines.push(`They wrote from the page ${path}.`);
   lines.push("Their first message here is what they wrote on the website. Answer it; do not greet them as if they had said nothing.");
   return lines.join("\n");

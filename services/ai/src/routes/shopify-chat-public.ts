@@ -456,7 +456,24 @@ router.post("/conversation", conversationLimiter, async (req: Request, res: Resp
   if (!ctx) return;
   try {
     const { session, channel } = ctx;
-    const conversation = await findOrCreateConversation(session, channel);
+    // "New conversation" (2026-10-14): the visitor's open conversation is
+    // DETACHED, not closed: it stays open in the inbox for staff, untouched
+    // (no conversation:closed, so no closing automations, post-chat or CSAT
+    // now; its SLA and idle policy carry on like any conversation the customer
+    // walked away from), and a new one starts. Every later lookup takes the
+    // newest open conversation, so the visitor is on the new one.
+    const fresh = (req.body as any)?.fresh === true;
+    let conversation;
+    if (fresh) {
+      // No note is written on either conversation: a system message on the
+      // old one would switch its idle policy off (it acts only when the last
+      // message is an agent's), and one on the new one would count as its
+      // first inbound message for automations. Both share the visitor's
+      // customer key, so staff see them under the same customer.
+      conversation = await createConversation(session, channel);
+    } else {
+      conversation = await findOrCreateConversation(session, channel);
+    }
     const messages = await loadVisibleMessages(session.tenantId, conversation.id, channel);
     res.json({
       data: {
@@ -512,7 +529,11 @@ async function findOrCreateConversation(
     orderBy: { createdAt: "desc" },
   });
   if (existing) return existing;
+  return createConversation(session, channel);
+}
 
+function createConversation(session: VisitorSessionPayload, channel: ShopifyLiveChatChannel) {
+  const externalId = conversationKey(session);
   return prisma.conversation.create({
     data: {
       tenantId: session.tenantId,
@@ -841,7 +862,7 @@ router.post("/whatsapp-start", conversationLimiter, async (req: Request, res: Re
       conversationId: null,
       whatsappChannelAccountId: target.channelAccountId,
       createdAt: new Date().toISOString(),
-      context: { pageType: page.pageType, productHandle: page.productHandle, path: page.path },
+      context: { pageType: page.pageType, productHandle: page.productHandle, productId: page.productId, path: page.path },
     };
     const ref = await mintHandoffRef(record, (n) => crypto.randomBytes(n));
     if (!ref) { res.status(503).json({ error: "try_again" }); return; }

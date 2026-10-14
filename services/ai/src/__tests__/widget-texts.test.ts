@@ -128,3 +128,16 @@ describe("★ POST /texts", () => {
     expect((await texts({ widgetId: "nope", locale: "he" })).body.data).toEqual({ locale: "he", texts: {} });
   });
 });
+
+describe("★ a web chat message carries the page it was written on (lookup keys only)", () => {
+  it("context → metadata.storefront on the queued message: the Hebrew slug decoded, the product id; nothing else", async () => {
+    H.queued = [];
+    await request(app()).post("/api/embedded-chat/message").send({ sessionId: "conv1", sessionToken: "tok_1", body: "is this in stock?", context: { pageType: "product", productHandle: encodeURIComponent("מעיל-טרנץ"), productId: "364", price: 1 } });
+    const st = H.queued[0].normalizedMessage.metadata.storefront;
+    expect(st).toMatchObject({ pageType: "product", productHandle: "מעיל-טרנץ", productId: "364" });
+    expect(JSON.stringify(st)).not.toContain("price");
+    H.queued = [];
+    await request(app()).post("/api/embedded-chat/message").send({ sessionId: "conv1", sessionToken: "tok_1", body: "hi there" });
+    expect(H.queued[0].normalizedMessage).not.toHaveProperty("metadata");
+  });
+});
