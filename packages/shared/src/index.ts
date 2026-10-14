@@ -93,6 +93,7 @@ export {
   gmailOutboundAdapter,
   gmailResolveAccessToken,
   gmailFetchNewMessages,
+  fetchOutlookMessage,
   outlookInboundAdapter,
   outlookOutboundAdapter,
   slackInboundAdapter,

@@ -53,7 +53,7 @@ function makeApp() {
 const STATE_A = "a".repeat(64);
 const STATE_B = "b".repeat(64);
 const account = (id: string, tenantId: string, meta: Record<string, unknown>, isActive = true) =>
-  ({ id, tenantId, channel: "OUTLOOK", isActive, platformMeta: meta });
+  ({ id, tenantId, channel: "OUTLOOK", isActive, platformMeta: meta, externalId: `${id}@shop.test`, credentials: { accessToken: `at_${id}` } });
 const note = (subscriptionId: string, clientState: string | undefined, id = "msg_1") => ({
   subscriptionId,
   ...(clientState === undefined ? {} : { clientState }),
@@ -66,8 +66,27 @@ const post = (value: any[]) => request(makeApp()).post("/api/webhook/outlook").s
 const settle = () => new Promise((r) => setTimeout(r, 30));
 
 const savedEnv = { ...process.env };
+/** What Graph answers for a message id (2026-10-14: the route reads the message itself). */
+const graph = vi.hoisted(() => ({ messages: {} as Record<string, any>, calls: [] as Array<{ url: string; auth: string }> }));
+const graphMessage = (id: string, o: any = {}) => ({
+  id, subject: "Order 1234", isDraft: false,
+  from: { emailAddress: { address: "dana@customer.test", name: "Dana Buyer" } },
+  uniqueBody: { content: "Where is my order?" }, body: { content: "Where is my order?\n\n> earlier" },
+  internetMessageId: "<cust-1@customer.test>", conversationId: "conv_AAQ",
+  internetMessageHeaders: [{ name: "References", value: "<first@shop.test>" }, { name: "In-Reply-To", value: "<first@shop.test>" }],
+  ...o,
+});
 beforeEach(() => {
   vi.clearAllMocks();
+  graph.messages = { msg_1: graphMessage("msg_1") };
+  graph.calls = [];
+  vi.stubGlobal("fetch", async (url: any, init: any) => {
+    const u = String(url);
+    graph.calls.push({ url: u, auth: String(init?.headers?.Authorization ?? "") });
+    const id = decodeURIComponent(u.split("/me/messages/")[1]?.split("?")[0] ?? "");
+    const m = graph.messages[id];
+    return m ? new Response(JSON.stringify(m), { status: 200 }) : new Response("{}", { status: 404 });
+  });
   channelAccount.rows.length = 0;
   channelAccount.rows.push(
     account("ca_a", "tenant_a", { subscriptionId: "sub_a", clientState: STATE_A }),
@@ -78,6 +97,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   process.env = { ...savedEnv };
+  vi.unstubAllGlobals();
 });
 
 describe("★ Outlook clientState, per account", () => {
@@ -141,10 +161,13 @@ describe("★ Outlook clientState, per account", () => {
   });
 
   it("a batch from two mailboxes lands on each, not both on the first", async () => {
+    graph.messages = { m_a: graphMessage("m_a"), m_b: graphMessage("m_b") };
     await post([note("sub_a", STATE_A, "m_a"), note("sub_b", STATE_B, "m_b")]);
     await settle();
     const queued = queueAdd.mock.calls.map((c) => [c[1].channelAccountId, c[1].normalizedMessage.externalMessageId]);
     expect(queued).toEqual([["ca_a", "m_a"], ["ca_b", "m_b"]]);
+    // Each mailbox is read with its own token.
+    expect(graph.calls.map((c) => c.auth)).toEqual(["Bearer at_ca_a", "Bearer at_ca_b"]);
   });
 
   it("one bad notification in a batch drops the whole delivery, as before", async () => {
@@ -156,6 +179,65 @@ describe("★ Outlook clientState, per account", () => {
   it("an unknown subscription in a batch drops the whole delivery too", async () => {
     await post([note("sub_a", STATE_A, "m_a"), note("sub_nobody", STATE_A, "m_x")]);
     await settle();
+    expect(queueAdd).not.toHaveBeenCalled();
+  });
+});
+
+describe("★ the message itself, read from Graph (2026-10-14)", () => {
+  // Was: the Graph path as the sender and "[Outlook notification]" as the text.
+  it("★ the real sender, subject and text, and the ids a reply needs", async () => {
+    await post([note("sub_a", STATE_A)]);
+    await settle();
+    expect(graph.calls[0]!.url).toMatch(/\/me\/messages\/msg_1\?\$select=.*internetMessageHeaders/);
+    expect(graph.calls[0]!.auth).toBe("Bearer at_ca_a");
+    expect(queueAdd).toHaveBeenCalledTimes(1);
+    expect(queueAdd.mock.calls[0][1].normalizedMessage).toMatchObject({
+      externalMessageId: "msg_1",
+      senderId: "dana@customer.test",
+      senderDisplayName: "Dana Buyer",
+      subject: "Order 1234",
+      // The reply's own text, not the quoted history.
+      body: "Where is my order?",
+      messageType: "email",
+      metadata: { email: { messageIdHeader: "<cust-1@customer.test>", references: ["<first@shop.test>"], subject: "Order 1234", threadId: "conv_AAQ", providerMessageId: "msg_1" } },
+    });
+  });
+
+  it("★ a bounce, an auto-reply or bulk mail is not taken, and the log says why", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    graph.messages = {
+      b1: graphMessage("b1", { from: { emailAddress: { address: "MAILER-DAEMON@outlook.com", name: "Mail Delivery System" } } }),
+      b2: graphMessage("b2", { internetMessageHeaders: [{ name: "Auto-Submitted", value: "auto-replied" }] }),
+      b3: graphMessage("b3", { internetMessageHeaders: [{ name: "Precedence", value: "bulk" }] }),
+    };
+    await post([note("sub_a", STATE_A, "b1"), note("sub_a", STATE_A, "b2"), note("sub_a", STATE_A, "b3")]);
+    await settle();
+    expect(queueAdd).not.toHaveBeenCalled();
+    const lines = log.mock.calls.map((c) => String(c[0]));
+    expect(lines).toEqual(expect.arrayContaining([
+      expect.stringContaining("message b1 not taken: mailer_daemon"),
+      expect.stringContaining("message b2 not taken: auto_submitted"),
+      expect.stringContaining("message b3 not taken: precedence"),
+    ]));
+    log.mockRestore();
+  });
+
+  it("the account's own mail, a draft, or a message Graph cannot find is not taken", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    graph.messages = {
+      own: graphMessage("own", { from: { emailAddress: { address: "CA_A@shop.test" } } }),
+      draft: graphMessage("draft", { isDraft: true }),
+    };
+    await post([note("sub_a", STATE_A, "own"), note("sub_a", STATE_A, "draft"), note("sub_a", STATE_A, "gone")]);
+    await settle();
+    expect(queueAdd).not.toHaveBeenCalled();
+  });
+
+  it("only new messages: an updated one is not read", async () => {
+    await post([{ ...note("sub_a", STATE_A), changeType: "updated" }]);
+    await settle();
+    expect(graph.calls).toEqual([]);
     expect(queueAdd).not.toHaveBeenCalled();
   });
 });

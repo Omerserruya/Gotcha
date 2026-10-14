@@ -8,6 +8,7 @@ import {
   gmailInboundAdapter,
   gmailFetchNewMessages,
   outlookInboundAdapter,
+  fetchOutlookMessage,
   slackInboundAdapter,
   decryptCredentials,
   crossTenantMiddleware,
@@ -956,30 +957,49 @@ router.post("/outlook", async (req: Request, res: Response) => {
     }
 
     // Per notification, so a batch from two mailboxes never lands on one.
+    // Each names a message; the message itself is read from Graph (2026-10-14):
+    // the route used to queue the Graph path as the sender and a placeholder
+    // as the text. Drafts, the account's own mail and mail no person wrote
+    // (bounces, reports, auto-replies, bulk) are dropped here, logged.
     for (const { notification, account } of verified) {
-      const tenantId = account.tenantId;
-      const channelAccountId = account.id;
-      const messages = outlookInboundAdapter.extractMessages({ value: [notification] });
-      for (const msg of messages) {
-        await incomingMessageQueue.add(
-          "process",
-          {
-            tenantId,
-            channel: "OUTLOOK",
-            channelAccountId,
-            normalizedMessage: {
-              externalMessageId: msg.externalMessageId,
-              senderId: msg.senderId,
-              senderDisplayName: msg.senderDisplayName,
-              timestamp: msg.timestamp.toISOString(),
-              contentType: msg.content.type,
-              body: msg.content.text || "",
-              messageType: "text",
-            },
-          },
-          { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
-        );
+      if (notification?.changeType !== "created") continue;
+      const graphId = String(notification?.resourceData?.id ?? "");
+      if (!graphId) continue;
+      const rawCreds = account.credentials;
+      let credentials: any = {};
+      try {
+        credentials = typeof rawCreds === "string" ? decryptCredentials(rawCreds) : (rawCreds ?? {});
+      } catch (err: any) {
+        console.error(`[WEBHOOK] Outlook ${account.id}: credentials unreadable: ${err?.message}`);
+        continue;
       }
+      const got = await fetchOutlookMessage(credentials, graphId, String(account.externalId ?? ""));
+      if (!got.ok) {
+        console.log(`[WEBHOOK] Outlook ${account.id}: message ${graphId} not taken: ${got.reason}`);
+        continue;
+      }
+      const msg = got.message;
+      await incomingMessageQueue.add(
+        "process",
+        {
+          tenantId: account.tenantId,
+          channel: "OUTLOOK",
+          channelAccountId: account.id,
+          normalizedMessage: {
+            externalMessageId: msg.messageId,
+            senderId: msg.senderId,
+            senderDisplayName: msg.senderDisplayName,
+            timestamp: new Date().toISOString(),
+            contentType: "text",
+            body: msg.body,
+            subject: msg.subject,
+            messageType: "email",
+            // The ids a reply needs (Message.metadata.email), as for Gmail.
+            metadata: { email: msg.email },
+          },
+        },
+        { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
+      );
     }
   } catch (err) {
     console.error("Outlook webhook error:", err);
