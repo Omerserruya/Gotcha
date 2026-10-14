@@ -89,3 +89,63 @@ export function KnowledgeTypeIcon({
   const Icon = KNOWLEDGE_TYPE_ICONS[type];
   return <Icon className={className} size={size} aria-hidden="true" data-knowledge-type={type} />;
 }
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ K1 (Omer, 2026-10-14) - THE LIST, FILTERED BY WHERE EACH ITEM CAME FROM
+ * ════════════════════════════════════════════════════════════════════════════
+ * Read from the write sites, not from the readers:
+ *   pages          url, url_text          a page of the website
+ *   topics         onboarding_scan        the scan's summary of a subject
+ *   answers        readiness_answer; text with origin unanswered_question /
+ *                  readiness_question     an answer to a question
+ *   typed          text                   written in by hand
+ *   files          file                   an uploaded document
+ *   drive          google_drive, drive, confluence   a connected folder
+ *   conversations  historical_conversations
+ *   other          anything else (ad, a value nobody wrote down)
+ */
+export const KNOWLEDGE_KINDS = [
+  'pages',
+  'topics',
+  'answers',
+  'typed',
+  'files',
+  'drive',
+  'conversations',
+  'other',
+] as const;
+export type KnowledgeKind = (typeof KNOWLEDGE_KINDS)[number];
+
+const ANSWER_ORIGINS: ReadonlySet<string> = new Set(['unanswered_question', 'readiness_question']);
+
+export function knowledgeKindOf(document: {
+  readonly sourceType: string;
+  readonly metadata?: { readonly origin?: string } | null;
+}): KnowledgeKind {
+  switch (document.sourceType) {
+    case 'url':
+    case 'url_text':
+      return 'pages';
+    case 'onboarding_scan':
+      return 'topics';
+    case 'readiness_answer':
+      return 'answers';
+    case 'text':
+      return ANSWER_ORIGINS.has(document.metadata?.origin ?? '') ? 'answers' : 'typed';
+    case 'file':
+      return 'files';
+    case 'google_drive':
+    case 'drive':
+    case 'confluence':
+      return 'drive';
+    case 'historical_conversations':
+      return 'conversations';
+    default:
+      return 'other';
+  }
+}
+
+export function isKnowledgeKind(value: string | undefined): value is KnowledgeKind {
+  return (KNOWLEDGE_KINDS as readonly string[]).includes(value ?? '');
+}

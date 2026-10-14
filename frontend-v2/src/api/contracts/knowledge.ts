@@ -46,6 +46,16 @@ export const knowledgeDocumentSchema = z.object({
    * another shape blanks this line, never the list.
    */
   summary: z.string().nullable().optional().catch(null),
+  /**
+   * K1: the provenance the list route returns. One key is read - `origin`:
+   * `unanswered_question` / `readiness_question` mark an answer someone typed
+   * to a question (stored as `text`). Any other shape is `null`.
+   */
+  metadata: z
+    .object({ origin: z.string().optional().catch(undefined) })
+    .nullable()
+    .optional()
+    .catch(null),
 });
 
 export const knowledgeSourceSchema = z.object({

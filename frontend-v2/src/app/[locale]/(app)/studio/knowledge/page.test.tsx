@@ -296,3 +296,14 @@ describe('★★ K6 - ?doc=<id> opens that item’s drawer', () => {
     expect(loadDoc).not.toHaveBeenCalled();
   });
 });
+
+describe('★ K1: ?kind= narrows the list - one of the eight, else all', () => {
+  const kindOf = async (query: Record<string, string>) =>
+    find<{ kind: string | null }>(await page(query), KnowledgeScreen)?.kind ?? null;
+
+  it('a known kind is handed to the screen; anything else is all of it', async () => {
+    expect(await kindOf({ kind: 'answers' })).toBe('answers');
+    expect(await kindOf({ kind: 'drafts' })).toBeNull();
+    expect(await kindOf({})).toBeNull();
+  });
+});

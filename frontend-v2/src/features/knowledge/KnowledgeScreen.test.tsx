@@ -428,3 +428,80 @@ describe('★ "scanned automatically" - only where every document came from the 
     expect(screen.getByTestId('way-website')).not.toHaveTextContent('scanned automatically');
   });
 });
+
+describe('★★ K1: the list, filtered by where each item came from', () => {
+  const doc = (id: string, sourceType: string, origin?: string) => ({
+    id,
+    title: `Doc ${id}`,
+    status: 'ready',
+    sourceType,
+    updatedAt: '2026-10-10T10:00:00.000Z',
+    ...(origin ? { metadata: { origin } } : {}),
+  });
+  const sources = (): KnowledgeSource[] => [
+    knowledgeSourceSchema.parse({
+      id: 'web',
+      name: 'Your website',
+      documents: [doc('p1', 'url_text'), doc('p2', 'url'), doc('s1', 'onboarding_scan')],
+    }),
+    knowledgeSourceSchema.parse({
+      id: 'kb',
+      name: 'Company Knowledge',
+      documents: [
+        doc('a1', 'text', 'unanswered_question'),
+        doc('a2', 'readiness_answer'),
+        doc('t1', 'text'),
+        doc('f1', 'file'),
+      ],
+    }),
+  ];
+  const show = async (kind: Parameters<typeof KnowledgeScreen>[0]['kind'] = null) =>
+    render(
+      await KnowledgeScreen({
+        sources: sources(),
+        unanswered: [],
+        conflicts: [],
+        everImported: false,
+        kind,
+      }),
+    );
+
+  it('all, then each kind there is, with its count - the kinds with none are not offered', async () => {
+    await show();
+    expect(screen.getByTestId('kind-all')).toHaveTextContent('All7');
+    expect(screen.getByTestId('kind-all')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('kind-pages')).toHaveTextContent('Website pages2');
+    expect(screen.getByTestId('kind-topics')).toHaveTextContent('Website topics1');
+    expect(screen.getByTestId('kind-answers')).toHaveTextContent('Answered questions2');
+    expect(screen.getByTestId('kind-typed')).toHaveTextContent('Typed in1');
+    expect(screen.getByTestId('kind-files')).toHaveTextContent('Files1');
+    expect(screen.queryByTestId('kind-drive')).toBeNull();
+    expect(screen.getByTestId('kind-pages')).toHaveAttribute(
+      'href',
+      '/studio/knowledge?kind=pages',
+    );
+  });
+
+  it('★ one kind: only its items, numbered from 1, each opening with the filter kept', async () => {
+    await show('answers');
+    expect(screen.getByTestId('kind-answers')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('kind-all')).not.toHaveAttribute('aria-current');
+    expect(screen.getByTestId('doc-a1')).toBeInTheDocument();
+    expect(screen.getByTestId('doc-a2')).toBeInTheDocument();
+    for (const id of ['p1', 'p2', 's1', 't1', 'f1'])
+      expect(screen.queryByTestId(`doc-${id}`)).toBeNull();
+    // A source with none of them is left out.
+    expect(screen.queryByTestId('source-web')).toBeNull();
+    expect(screen.getByTestId('doc-number-a1')).toHaveTextContent('1');
+    expect(screen.getByTestId('doc-a1').querySelector('a')).toHaveAttribute(
+      'href',
+      '/studio/knowledge?doc=a1&kind=answers',
+    );
+  });
+
+  it('a kind with nothing in it (an old link): said, and still offered so it can be left', async () => {
+    await show('drive');
+    expect(screen.getByTestId('kind-none')).toHaveTextContent('Nothing of this kind yet.');
+    expect(screen.getByTestId('kind-drive')).toHaveTextContent('Drive and Confluence0');
+  });
+});

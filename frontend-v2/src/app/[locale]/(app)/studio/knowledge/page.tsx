@@ -14,6 +14,7 @@ import { editableOf } from '@/features/knowledge/document-edit';
 import { DocumentDrawer, DocumentTypeLead } from '@/features/knowledge/DocumentDrawer';
 import { FocusSection } from '@/features/knowledge/FocusSection';
 import { KnowledgeScreen } from '@/features/knowledge/KnowledgeScreen';
+import { isKnowledgeKind } from '@/features/knowledge/knowledge-type';
 import { loadKnowledge } from '@/features/knowledge/load-knowledge';
 import { loadKnowledgeDocument } from '@/features/knowledge/load-document';
 import styles from '@/features/knowledge/Knowledge.module.css';
@@ -62,9 +63,12 @@ export default async function Page({
     readonly section?: string;
     /** K6: one knowledge item's drawer - a document id from "Where it learns from". */
     readonly doc?: string;
+    /** K1: only the items of one kind (where they came from). Anything else: all. */
+    readonly kind?: string;
   }>;
 } = {}) {
   const params = (await searchParams) ?? {};
+  const kind = isKnowledgeKind(params.kind) ? params.kind : null;
   const t = await getTranslations('knowledge');
   const [{ sources, unanswered, conflicts, everImported }, workspace, scanRun] = await Promise.all([
     loadKnowledge(),
@@ -132,6 +136,7 @@ export default async function Page({
           conflicts={conflicts}
           everImported={everImported}
           rescan={rescan}
+          kind={kind}
         />
       )}
       {docRead ? (
@@ -146,7 +151,8 @@ export default async function Page({
           lead={
             docRead.state === 'ok' ? <DocumentTypeLead type={docRead.document.type} /> : undefined
           }
-          closeHref="/studio/knowledge"
+          // Back to the list as it was filtered.
+          closeHref={kind ? `/studio/knowledge?kind=${kind}` : '/studio/knowledge'}
           width={600}
           testId="knowledge-doc-drawer"
         >

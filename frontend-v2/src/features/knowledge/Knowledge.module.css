@@ -580,4 +580,39 @@
       inline-size: auto;
     }
   }
+
+  /* ★ K1: all, then each kind with its count - the inbox's filter. */
+  .kinds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-block-end: var(--space-8);
+  }
+
+  .kind {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    padding: 4px 10px;
+    border: var(--border-width-thin) solid var(--border-subtle);
+    border-radius: 99px;
+    color: var(--text-secondary);
+    font-size: var(--font-size-label);
+    text-decoration: none;
+  }
+
+  .kind:hover {
+    color: var(--text-primary);
+  }
+
+  .kind[aria-current='page'] {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .kindCount {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
 }

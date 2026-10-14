@@ -36,6 +36,8 @@ import { AddKnowledge } from './add/AddKnowledge';
 import { DocumentTypeLead } from './DocumentDrawer';
 import { KnowledgeScreen } from './KnowledgeScreen';
 import {
+  isKnowledgeKind,
+  knowledgeKindOf,
   KNOWLEDGE_TYPE_ICONS,
   KNOWLEDGE_TYPES,
   knowledgeTypeOf,
@@ -124,5 +126,33 @@ describe('★★ K8 - one icon per kind of knowledge', () => {
     }
     const { container } = render(<DocumentTypeLead type="confluence" />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("★ K1: each item's kind, from the values its writers write", () => {
+  it.each([
+    ['url', undefined, 'pages'],
+    ['url_text', undefined, 'pages'],
+    ['onboarding_scan', undefined, 'topics'],
+    ['readiness_answer', undefined, 'answers'],
+    ['text', 'unanswered_question', 'answers'],
+    ['text', 'readiness_question', 'answers'],
+    ['text', 'onboarding', 'typed'],
+    ['text', undefined, 'typed'],
+    ['file', undefined, 'files'],
+    ['google_drive', undefined, 'drive'],
+    ['drive', undefined, 'drive'],
+    ['confluence', undefined, 'drive'],
+    ['historical_conversations', undefined, 'conversations'],
+    ['ad', undefined, 'other'],
+    ['something_new', undefined, 'other'],
+  ])('%s (origin %s) is %s', (sourceType, origin, kind) => {
+    expect(knowledgeKindOf({ sourceType, metadata: origin ? { origin } : null })).toBe(kind);
+  });
+
+  it('only the eight kinds are read from the address', () => {
+    expect(isKnowledgeKind('answers')).toBe(true);
+    expect(isKnowledgeKind('drafts')).toBe(false);
+    expect(isKnowledgeKind(undefined)).toBe(false);
   });
 });

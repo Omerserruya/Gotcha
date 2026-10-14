@@ -322,5 +322,18 @@
         "failed": "It wasn't deleted. Try again."
       }
     }
+  },
+  "kinds": {
+    "label": "Show",
+    "all": "All",
+    "pages": "Website pages",
+    "topics": "Website topics",
+    "answers": "Answered questions",
+    "typed": "Typed in",
+    "files": "Files",
+    "drive": "Drive and Confluence",
+    "conversations": "Past conversations",
+    "other": "Other",
+    "none": "Nothing of this kind yet."
   }
 }
