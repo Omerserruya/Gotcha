@@ -687,6 +687,27 @@ function ImageRow({
         >
           {t('replace')}
         </button>
+        {/*
+          On the row, always, and named for its slot (dev, 2026-10-14: after an
+          upload the area closed with its Remove, and the first "Remove" on the
+          page was not this one's).
+        */}
+        {value ? (
+          <button
+            type="button"
+            className={styles.textButton}
+            disabled={busy}
+            aria-label={t(`upload.removeFor.${slot}`)}
+            onClick={() => {
+              setOpen(false);
+              setProblem(null);
+              onSave(null);
+            }}
+            data-testid={`${testid}-remove`}
+          >
+            {t('upload.remove')}
+          </button>
+        ) : null}
       </span>
       {open ? (
         <span className={styles.imageField}>
@@ -719,20 +740,6 @@ function ImageRow({
             >
               {busy ? t('upload.busy') : t('upload.file')}
             </button>
-            {value ? (
-              <button
-                type="button"
-                className={styles.textButton}
-                disabled={busy}
-                onClick={() => {
-                  setOpen(false);
-                  onSave(null);
-                }}
-                data-testid={`${testid}-remove`}
-              >
-                {t('upload.remove')}
-              </button>
-            ) : null}
           </span>
           <span className={styles.imageLink}>
             <input

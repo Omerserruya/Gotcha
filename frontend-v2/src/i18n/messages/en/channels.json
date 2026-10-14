@@ -695,7 +695,7 @@
         "file": "Upload a file",
         "busy": "Uploading…",
         "remove": "Remove",
-        "link": "Or a link to the image",
+        "link": "Link to the image",
         "linkPlaceholder": "https://… or a Google Drive link",
         "add": "Add",
         "problem": {
@@ -708,6 +708,10 @@
           "fetch_failed": "The image couldn't be downloaded from that link. Check that it opens.",
           "forbidden": "You don't have permission to change the widget.",
           "failed": "The image wasn't saved. Try again."
+        },
+        "removeFor": {
+          "logo": "Remove the logo",
+          "cover": "Remove the cover image"
         }
       }
     },

@@ -1117,7 +1117,8 @@ describe('★★ W3 (2026-10-14) - each image slot says its limits, and refuses 
         appearance: { ...config.appearance, logoUrl: 'https://cdn.gotcha.test/l.png' },
       },
     });
-    fireEvent.click(screen.getByTestId('webchat-logo-replace'));
+    // On the row itself, without opening anything, and named for its slot.
+    expect(screen.getByTestId('webchat-logo-remove')).toHaveAccessibleName('Remove the logo');
     fireEvent.click(screen.getByTestId('webchat-logo-remove'));
     await pause();
     expect(sentAt().appearance.logoUrl).toBeNull();
@@ -1182,5 +1183,31 @@ describe('★ "Right away" is one second (design 7; Omer, 2026-10-14)', () => {
     fireEvent.click(screen.getByTestId('webchat-when-1'));
     await pause();
     expect(bodyOfWidget(sentAt()).ux.proactive.delaySeconds).toBe(1);
+  });
+});
+
+describe('★ dev, 2026-10-14: after an upload, Remove is still there - and the link field has a name', () => {
+  it('uploaded: the area closes, the row keeps its own Remove, which clears and saves', async () => {
+    browser.post.mockResolvedValue({ url: 'https://cdn.gotcha.test/w/logo.png' });
+    show('appearance');
+    fireEvent.click(screen.getByTestId('webchat-logo-replace'));
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('webchat-logo-file'), {
+        target: { files: [new File(['x'], 'l.png', { type: 'image/png' })] },
+      });
+    });
+    await pause();
+    expect(screen.queryByTestId('webchat-logo-file')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove the logo' }));
+    await pause();
+    expect(sentAt(1).appearance.logoUrl).toBeNull();
+  });
+
+  it('the link field is found by its name', () => {
+    show('appearance');
+    fireEvent.click(screen.getByTestId('webchat-cover-replace'));
+    expect(screen.getByRole('textbox', { name: 'Link to the image' })).toBe(
+      screen.getByTestId('webchat-cover-url'),
+    );
   });
 });
