@@ -18,7 +18,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // them, so a test file can pass its suite and fail the typecheck.
 const prismaMock = vi.hoisted(() => ({
   businessProfile: { findUnique: vi.fn<(...a: any[]) => any>(), update: vi.fn<(...a: any[]) => any>() },
-  businessDiscovery: { findUnique: vi.fn<(...a: any[]) => any>(), updateMany: vi.fn<(...a: any[]) => any>() },
+  businessDiscovery: { findUnique: vi.fn<(...a: any[]) => any>(), updateMany: vi.fn<(...a: any[]) => any>(), upsert: vi.fn<(...a: any[]) => any>() },
 }));
 const crawlMock = vi.hoisted(() => vi.fn<(...a: any[]) => any>());
 const provenanceMock = vi.hoisted(() => ({
@@ -27,11 +27,23 @@ const provenanceMock = vi.hoisted(() => ({
 }));
 
 const settings = vi.hoisted(() => ({ store: {} as Record<string, string>, writes: [] as string[] }));
-vi.mock("@chatcenter/shared", () => ({
-  prisma: prismaMock,
-  readDurableSetting: async (_t: string, k: string) => settings.store[k] ?? null,
-  writeDurableSetting: async (_t: string, k: string, v: string) => { settings.store[k] = v; settings.writes.push(k); },
-}));
+const projectionMock = vi.hoisted(() => ({ apply: vi.fn<(...a: any[]) => any>(), audits: [] as any[] }));
+vi.mock("@chatcenter/shared", async () => {
+  // The projection RULES are the real ones (what a rescan would write); only
+  // the database and the writes are doubles.
+  const actual = await vi.importActual<any>("@chatcenter/shared");
+  return {
+    prisma: prismaMock,
+    readDurableSetting: async (_t: string, k: string) => settings.store[k] ?? null,
+    writeDurableSetting: async (_t: string, k: string, v: string) => { settings.store[k] = v; settings.writes.push(k); },
+    normalizeDiscoveryTechnology: actual.normalizeDiscoveryTechnology,
+    projectDiscoveryTopics: actual.projectDiscoveryTopics,
+    projectPages: actual.projectPages,
+    AuditAction: actual.AuditAction,
+    writeAudit: async (e: any) => { projectionMock.audits.push(e); },
+  };
+});
+vi.mock("../services/onboarding-knowledge.service", () => ({ applyProjection: projectionMock.apply }));
 vi.mock("../services/site-crawl.service", () => ({ crawlSite: crawlMock }));
 vi.mock("../services/field-provenance.service", async () => {
   // The RULE is not mocked - planRescan is the thing under test here, and a
@@ -73,6 +85,9 @@ beforeEach(() => {
   prismaMock.businessProfile.update.mockResolvedValue({});
   prismaMock.businessDiscovery.findUnique.mockResolvedValue(null);
   prismaMock.businessDiscovery.updateMany.mockResolvedValue({ count: 1 });
+  prismaMock.businessDiscovery.upsert.mockImplementation(async (a: any) => ({ tenantId: "t1", ...a.update }));
+  projectionMock.apply.mockResolvedValue({ ok: true, knowledgeBaseId: "kb1", added: 1, updated: 2, unchanged: 3, preserved: 1, removed: 0, failed: 0, details: [] });
+  projectionMock.audits = [];
   provenanceMock.readProvenance.mockResolvedValue({});
   crawlMock.mockResolvedValue({
     pages: [],
@@ -564,5 +579,64 @@ describe("★ the rescan runs in the background and is read back (2026-10-14)", 
 
   it("never started: null", async () => {
     expect(await readScanRun("t1")).toBeNull();
+  });
+});
+
+describe("★ the rescan refreshes the knowledge it generated (2026-10-14)", () => {
+  const SITE = {
+    pages: [{ url: "https://shop.example.com/shipping", text: "short" }],
+    okPages: [{ url: "https://shop.example.com/shipping", text: "Free shipping over 299. Returns within 30 days. ".repeat(80) }],
+    home: { html: "<html></html>", text: "HALVO clothing, designed in Copenhagen." },
+    signals: {},
+    businessType: "ecommerce",
+    requested: ["https://shop.example.com/shipping"],
+    distinctTextPages: 2,
+  };
+
+  it("★ saves the report on the discovery row and projects it with the FULL page text", async () => {
+    crawlMock.mockResolvedValue(SITE);
+    const outcome: any = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer user", actorId: "u1", locale: "he", fetchWithTimeoutFn: okFetch() });
+    expect(outcome.ok).toBe(true);
+    const up = (prismaMock.businessDiscovery.upsert.mock.calls[0] as any[])[0];
+    expect(up.where).toEqual({ tenantId: "t1" });
+    expect(up.update).toMatchObject({ business: REPORT.business, websiteDomain: "https://shop.example.com" });
+    const [deps, tenant, projected, options] = projectionMock.apply.mock.calls[0] as any[];
+    expect(deps.authHeader).toBe("Bearer user");
+    expect(tenant).toBe("t1");
+    expect(options).toEqual({ removeMissing: true, removeScope: ["url"] });
+    const page = projected.find((e: any) => e.metadata?.sourceUrl === "https://shop.example.com/shipping" || String(e.metadata?.dedupeKey).includes("shipping"));
+    expect(page).toBeTruthy();
+    // Not the 2800-character model cut.
+    expect(page.content.length).toBeGreaterThan(2800);
+    expect(projected.some((e: any) => e.metadata?.topic === "business_overview")).toBe(true);
+    expect(outcome.knowledge).toEqual({ created: 1, updated: 2, unchanged: 3, preserved: 1, removed: 0, failed: 0 });
+    expect(projectionMock.audits[0]).toMatchObject({ actorId: "u1", metadata: { via: "rescan", added: 1, preserved: 1 } });
+  });
+
+  it("the background run reports the knowledge counts", async () => {
+    crawlMock.mockResolvedValue(SITE);
+    await startProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+    await new Promise((r) => setTimeout(r, 10));
+    expect((await readScanRun("t1"))?.knowledge).toEqual({ created: 1, updated: 2, unchanged: 3, preserved: 1, removed: 0, failed: 0 });
+  });
+
+  it("★ a failed knowledge step never fails the rescan: knowledge null, logged", async () => {
+    crawlMock.mockResolvedValue(SITE);
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    projectionMock.apply.mockRejectedValue(new Error("ai down"));
+    const outcome: any = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+    expect(outcome.ok).toBe(true);
+    expect(outcome.knowledge).toBeNull();
+    expect(err.mock.calls.some((c) => String(c[0]).includes("knowledge sync failed"))).toBe(true);
+    expect(statusWrites().at(-1)).toBe("COMPLETE");
+  });
+
+  it("no report (the model failed): no knowledge step at all", async () => {
+    crawlMock.mockResolvedValue(SITE);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const failing = vi.fn(async () => ({ ok: false, status: 500, text: async () => "", json: async () => ({}) }) as any);
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: failing });
+    expect(projectionMock.apply).not.toHaveBeenCalled();
+    expect(prismaMock.businessDiscovery.upsert).not.toHaveBeenCalled();
   });
 });

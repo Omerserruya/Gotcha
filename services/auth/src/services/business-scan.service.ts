@@ -25,7 +25,8 @@ import crypto from "crypto";
  * `address` or `currency` either - the scan does not produce them, and a field
  * the scan cannot speak for must never appear in its proposal.
  */
-import { prisma, readDurableSetting, writeDurableSetting } from "@chatcenter/shared";
+import { prisma, readDurableSetting, writeDurableSetting, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, writeAudit, AuditAction } from "@chatcenter/shared";
+import { applyProjection } from "./onboarding-knowledge.service";
 import { crawlSite } from "./site-crawl.service";
 import {
   readProvenance,
@@ -232,8 +233,18 @@ export async function acceptScanProposal(
   return { ok: true, accepted, skipped };
 }
 
+/** What the rescan did to the knowledge it generated (null when that step failed). */
+export interface ScanKnowledge {
+  created: number;
+  updated: number;
+  unchanged: number;
+  preserved: number;
+  removed: number;
+  failed: number;
+}
+
 export type RescanOutcome =
-  | { ok: true; plan: RescanPlan; applied: string[]; reach: CrawlReach }
+  | { ok: true; plan: RescanPlan; applied: string[]; reach: CrawlReach; knowledge: ScanKnowledge | null }
   | {
       ok: false;
       reason: "no_domain" | "fetch_failed" | "scan_failed" | "scan_in_progress" | "no_profile";
@@ -372,8 +383,84 @@ export async function runProfileRescan(args: {
     await stampProvenance(tenantId, applied, "scan", actorId);
   }
 
+  // The knowledge the scan generated follows the site too (2026-10-14): the
+  // same projection onboarding's discover runs. Machine-owned documents refresh
+  // silently; a document a person edited (manualEdit) is preserved. Without
+  // this, an auto-made overview stayed stale forever after a rescan.
+  const knowledge = await syncScanKnowledge({ tenantId, origin, report, crawl, locale: args.locale, authHeader, actorId });
+
   await setDiscoveryStatus(tenantId, { status: "COMPLETE", scanPhase: "done" });
-  return { ok: true, plan, applied, reach };
+  return { ok: true, plan, applied, reach, knowledge };
+}
+
+const projectionFetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string }, timeoutMs?: number) =>
+  fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs ?? 30_000) }) as any;
+
+/**
+ * Save the report on the discovery row (as discover does) and project it, with
+ * the pages read, into the generated knowledge. Never fails the rescan: the
+ * profile part already happened; a failure here is logged and reported null.
+ */
+async function syncScanKnowledge(a: {
+  tenantId: string;
+  origin: string;
+  report: any;
+  crawl: { home: { text: string }; okPages: Array<{ url: string; text: string }> };
+  locale?: string;
+  authHeader: string;
+  actorId?: string | null;
+}): Promise<ScanKnowledge | null> {
+  try {
+    const r = a.report ?? {};
+    const fields = {
+      brand: r.brand ?? undefined,
+      business: r.business ?? undefined,
+      knowledge: r.knowledge ?? undefined,
+      communication: r.communication ?? undefined,
+      technology: r.technology ? normalizeDiscoveryTechnology(r.technology) : undefined,
+      gaps: r.gaps ?? undefined,
+      recommendation: r.recommendation ?? undefined,
+      confidence: r.confidence ?? undefined,
+      report: r.report ?? undefined,
+      scannedAt: new Date(),
+    };
+    const saved = await prisma.businessDiscovery.upsert({
+      where: { tenantId: a.tenantId },
+      update: { ...fields, websiteDomain: a.origin } as never,
+      create: { tenantId: a.tenantId, status: "SCANNING", websiteDomain: a.origin, ...fields } as never,
+    });
+    const profile = await prisma.businessProfile.findUnique({
+      where: { tenantId: a.tenantId },
+      select: { organizationName: true, industry: true, businessDescription: true, country: true, primaryLanguage: true },
+    });
+    const ctx = { language: a.locale || profile?.primaryLanguage || "en", now: new Date().toISOString() };
+    const projected = [
+      ...projectDiscoveryTopics(saved as any, (profile ?? {}) as any, ctx),
+      // Full page text, as discover does: the 2800-character cut is only for the model.
+      ...projectPages([{ url: a.origin, content: a.crawl.home.text }, ...a.crawl.okPages.map((p) => ({ url: p.url, content: p.text }))], ctx),
+    ];
+    const sync = await applyProjection(
+      { prisma, fetchFn: projectionFetch, authHeader: a.authHeader },
+      a.tenantId,
+      projected,
+      // Only crawled pages may be retired; a topic the model skipped this time keeps last time's.
+      { removeMissing: true, removeScope: ["url"] },
+    );
+    void writeAudit({
+      tenantId: a.tenantId,
+      actorType: "user",
+      actorId: a.actorId ?? undefined,
+      action: AuditAction.KNOWLEDGE_SCAN_SYNCED,
+      targetType: "knowledge_base",
+      targetId: sync.knowledgeBaseId ?? "-",
+      metadata: { domain: a.origin, via: "rescan", added: sync.added, updated: sync.updated, unchanged: sync.unchanged, preserved: sync.preserved, removed: sync.removed, failed: sync.failed },
+    } as any);
+    if (!sync.ok) console.warn(`[business-scan] ${a.tenantId}: knowledge sync reported failures (${sync.failed} failed)`);
+    return { created: sync.added, updated: sync.updated, unchanged: sync.unchanged, preserved: sync.preserved, removed: sync.removed, failed: sync.failed };
+  } catch (err: any) {
+    console.error(`[business-scan] ${a.tenantId}: knowledge sync failed:`, err?.message ?? err);
+    return null;
+  }
 }
 
 /** The discovery row's status, when there is a row. A missed write only costs the status. */
@@ -409,6 +496,8 @@ export interface ScanRun {
   applied: string[];
   offer: unknown[];
   reach: CrawlReach | null;
+  /** What happened to the generated knowledge; null until done, or when that step failed. */
+  knowledge: ScanKnowledge | null;
 }
 
 async function writeRun(tenantId: string, run: ScanRun): Promise<void> {
@@ -452,6 +541,7 @@ export async function startProfileRescan(args: Parameters<typeof runProfileResca
     applied: [],
     offer: [],
     reach: null,
+    knowledge: null,
   };
   await writeRun(args.tenantId, run);
 
@@ -464,7 +554,7 @@ export async function startProfileRescan(args: Parameters<typeof runProfileResca
   void runProfileRescan(args)
     .then(async (outcome) => {
       if (outcome.ok) {
-        await finish({ status: "done", applied: outcome.applied, offer: outcome.plan.offer, reach: outcome.reach });
+        await finish({ status: "done", applied: outcome.applied, offer: outcome.plan.offer, reach: outcome.reach, knowledge: outcome.knowledge });
       } else {
         console.warn(`[business-scan] ${args.tenantId}: rescan ended ${outcome.reason}`);
         await finish({ status: "failed", reason: outcome.reason, reach: outcome.reach ?? null });

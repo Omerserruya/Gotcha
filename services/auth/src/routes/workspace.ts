@@ -584,6 +584,7 @@ function scanRunView(run: ScanRun) {
     applied: run.applied,
     offer: run.offer,
     reach: run.reach,
+    knowledge: run.knowledge ?? null,
   };
 }
 
