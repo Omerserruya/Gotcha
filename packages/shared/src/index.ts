@@ -828,9 +828,11 @@ export {
   normalizeShopifyChatUx,
   publicUxConfig,
   WIDGET_LOOKS,
+  WIDGET_KINDS,
   defaultWhatsapp,
   normalizeWhatsapp,
   type WidgetLook,
+  type WidgetKind,
   type ShopifyChatWhatsapp,
 } from "./lib/shopify-chat-ux";
 export type {
@@ -1279,6 +1281,7 @@ export {
   waMeDigits,
   waMeUrl,
   type HandoffRecord,
+  type HandoffPageContext,
 } from "./lib/whatsapp-handoff";
 
 // The business's real conversations (no rehearsals, no test rows): one definition.

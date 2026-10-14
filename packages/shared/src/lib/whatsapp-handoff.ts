@@ -19,10 +19,26 @@ export const HANDOFF_TTL_SECONDS = 7 * 24 * 60 * 60;
 export const handoffRefKey = (ref: string) => `wahandoff:ref:${ref}`;
 export const handoffConversationKey = (conversationId: string) => `wahandoff:conv:${conversationId}`;
 
+/**
+ * Where the visitor was when they started on WhatsApp (the WhatsApp kind of
+ * widget, which has no website conversation to carry). A lookup key, never a
+ * fact: the handle is re-resolved against the store before anything quotes it.
+ */
+export interface HandoffPageContext {
+  pageType: string | null;
+  productHandle: string | null;
+  path: string | null;
+}
+
 export interface HandoffRecord {
   tenantId: string;
-  /** The website conversation the customer is continuing. */
-  conversationId: string;
+  /**
+   * The website conversation the customer is continuing; null when the
+   * widget is the WhatsApp kind and the conversation starts on WhatsApp.
+   */
+  conversationId: string | null;
+  /** The page they started from, for a WhatsApp-kind start. */
+  context?: HandoffPageContext | null;
   /** The WhatsApp number (channel account) it continues on. */
   whatsappChannelAccountId: string;
   createdAt: string;

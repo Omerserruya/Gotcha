@@ -271,6 +271,7 @@ function publicUx(ux: ShopifyChatUx) {
     proactive: { ...ux.proactive },
     sounds: ux.sounds,
     behavior: ux.behavior,
-    look: ux.look,
+    kind: ux.kind,
+    look: ux.kind === "whatsapp" ? "whatsapp" : ux.look,
   };
 }

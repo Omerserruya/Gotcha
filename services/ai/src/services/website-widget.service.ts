@@ -16,6 +16,11 @@ import {
   normalizeWebchatConfig,
   readShopifyLiveChatConfig,
   waMeDigits,
+  getRedis,
+  HANDOFF_TTL_SECONDS,
+  handoffRefKey,
+  newHandoffRef,
+  type HandoffRecord,
   type WebchatConfig,
   type ShopifyChatUx,
 } from "@chatcenter/shared";
@@ -172,6 +177,19 @@ export async function handoffTarget(tenantId: string, ux: ShopifyChatUx): Promis
   return digits ? { channelAccountId: n!.channelId, digits } : null;
 }
 
+/**
+ * A new handoff code for `record`, stored for a week. Null when five random
+ * codes in a row were taken (the caller answers "try again").
+ */
+export async function mintHandoffRef(record: HandoffRecord, random: (n: number) => Uint8Array): Promise<string | null> {
+  const redis = getRedis();
+  for (let i = 0; i < 5; i++) {
+    const candidate = newHandoffRef(random);
+    if (await redis.set(handoffRefKey(candidate), JSON.stringify(record), "EX", HANDOFF_TTL_SECONDS, "NX")) return candidate;
+  }
+  return null;
+}
+
 export class WidgetInputError extends Error {
   constructor(public code: string, public field: string) { super(code); }
 }
@@ -220,6 +238,14 @@ export async function putWidget(tenantId: string, patch: Partial<WidgetSettings>
     ? normalizeWebchatConfig(webchat.credentials)
     : normalizeWebchatConfig({ v: 2, ...fromShopify({ shopifyLiveChat: shops[0]!.config }), behaviour: { allowHumanHandoff: fromShopify({ shopifyLiveChat: shops[0]!.config }).handoff.allowHumanHandoff } });
   const next = nextWebchat(current, patch);
+  // The WhatsApp kind has no on-site chat: without a number that can take
+  // the conversation it would be a widget that does nothing. Checked when the
+  // save chooses the kind or the number, so a number that disconnects later
+  // does not block saving a colour (the bootstrap then draws nothing).
+  const choosing = !!patch.ux && ("kind" in (patch.ux as any) || "whatsapp" in (patch.ux as any));
+  if (choosing && next.ux.kind === "whatsapp" && !(await handoffTarget(tenantId, next.ux))) {
+    throw new WidgetInputError("WHATSAPP_KIND_NEEDS_NUMBER", "ux.kind");
+  }
   if (webchat) {
     await prisma.channelAccount.update({ where: { id: webchat.id }, data: { credentials: next as any } });
   }

@@ -42,6 +42,9 @@ import {
   MAX_VISITOR_MESSAGE_CHARS,
   type VisitorSessionPayload,
   type StorefrontContext,
+  type HandoffRecord,
+  handoffMessage,
+  waMeUrl,
   recordHandover } from "@chatcenter/shared";
 import { sanitizeUntrusted } from "../services/prompt-sanitizer.service";
 import {
@@ -51,6 +54,7 @@ import {
   type ShopifyLiveChatChannel,
 } from "../services/shopify-live-chat.service";
 import { validateCartLine } from "../services/shopify-catalog.service";
+import { handoffTarget, mintHandoffRef } from "../services/website-widget.service";
 import {
   findLiveInstallation,
   recordInstallationHeartbeat,
@@ -304,6 +308,17 @@ router.post("/bootstrap", bootstrapLimiter, async (req: Request, res: Response) 
       shopDomain: channel.config.shopDomain!,
     });
 
+    // "Continue on WhatsApp" / the WhatsApp kind: only when its number can
+    // take it. The number never reaches the storefront.
+    const waTarget = channel.config.ux.whatsapp.enabled
+      ? await handoffTarget(channel.tenantId, channel.config.ux).catch(() => null)
+      : null;
+    if (channel.config.ux.kind === "whatsapp" && !waTarget) {
+      unavailable(res, "whatsapp kind without a number that can take it");
+      return;
+    }
+    const widget = publicWidgetConfig(channel, availability, productMessagingEnabled);
+
     res.json({
       data: {
         session: { token: sessionToken },
@@ -311,7 +326,7 @@ router.post("/bootstrap", bootstrapLimiter, async (req: Request, res: Response) 
         // Whether we know who this is. A boolean, never the id: the
         // storefront has no use for it and every reason not to hold it.
         identified: !!customerId,
-        widget: publicWidgetConfig(channel, availability, productMessagingEnabled),
+        widget: { ...widget, features: { ...widget.features, whatsappHandoff: !!waTarget } },
       },
     });
   } catch (err) {
@@ -790,6 +805,45 @@ router.post("/handoff", conversationLimiter, async (req: Request, res: Response)
     res.json({ data: { handedOver: true } });
   } catch (err) {
     console.error("[shopify-chat] handoff error:", (err as Error)?.message);
+    res.status(500).json({ error: "unavailable" });
+  }
+});
+
+// ─── POST /whatsapp-start - the WhatsApp kind ────────────────
+//
+// { sessionToken, text?, locale?, context? } -> { url, ref }. No storefront
+// conversation: the shopper's message opens wa.me pre-filled to the
+// business number with a code; the code carries the page (product handle,
+// re-resolved before anything quotes it) to the WhatsApp side. 404 unless
+// the channel is the WhatsApp kind and its number can take it.
+
+router.post("/whatsapp-start", conversationLimiter, async (req: Request, res: Response) => {
+  const ctx = await requireVisitor(req, res);
+  if (!ctx) return;
+  try {
+    const { session, channel } = ctx;
+    if (channel.config.ux.kind !== "whatsapp") { res.status(404).json({ error: "unavailable" }); return; }
+    const target = await handoffTarget(session.tenantId, channel.config.ux);
+    if (!target) { res.status(404).json({ error: "unavailable" }); return; }
+    const page = normalizeStorefrontContext((req.body as any)?.context);
+    const record: HandoffRecord = {
+      tenantId: session.tenantId,
+      conversationId: null,
+      whatsappChannelAccountId: target.channelAccountId,
+      createdAt: new Date().toISOString(),
+      context: { pageType: page.pageType, productHandle: page.productHandle, path: page.path },
+    };
+    const ref = await mintHandoffRef(record, (n) => crypto.randomBytes(n));
+    if (!ref) { res.status(503).json({ error: "try_again" }); return; }
+    const asked = (req.body as any)?.locale;
+    const locale = asked === "he" || asked === "en" ? asked : channel.config.appearance.language === "he" ? "he" : "en";
+    const raw = (req.body as any)?.text;
+    const text = typeof raw === "string" ? sanitizeUntrusted(raw, { wrap: false, maxLength: 500 }).trim() : "";
+    const prefilled = text ? `${text} (${ref})` : handoffMessage(ref, locale);
+    trackEvent(session.tenantId, "shopify_chat_whatsapp_start", {});
+    res.json({ data: { url: waMeUrl(target.digits, prefilled), ref } });
+  } catch (err) {
+    console.error("[shopify-chat] whatsapp-start error:", (err as Error)?.message);
     res.status(500).json({ error: "unavailable" });
   }
 });

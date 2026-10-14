@@ -49,7 +49,10 @@ router.put("/", requirePermission("channels:manage:update"), async (req: Request
     res.json({ data });
   } catch (err) {
     if (err instanceof WidgetInputError) {
-      res.status(422).json({ error: "This WhatsApp number is not one of this workspace's", code: err.code, field: err.field });
+      const error = err.code === "WHATSAPP_KIND_NEEDS_NUMBER"
+        ? "The WhatsApp widget needs Continue on WhatsApp on, with a connected number"
+        : "This WhatsApp number is not one of this workspace's";
+      res.status(422).json({ error, code: err.code, field: err.field });
       return;
     }
     console.error("[website-widget] put failed:", (err as Error)?.message);

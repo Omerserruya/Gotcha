@@ -15,6 +15,7 @@ export async function websiteHandoffContext(
 ): Promise<string | null> {
   const ev = messages.find((m) => m.messageType === "system" && (m.metadata as any)?.systemEvent === "continued_from_website");
   const fromId = (ev?.metadata as any)?.fromConversationId;
+  if (ev && !fromId) return pageContext((ev.metadata as any)?.page);
   if (typeof fromId !== "string" || !fromId) return null;
   const rows = await prisma.message.findMany({
     where: { tenantId, conversationId: fromId, messageType: { not: "system" } },
@@ -32,4 +33,19 @@ export async function websiteHandoffContext(
     ...lines,
     "Pick up where it left off. Do not ask for anything they already told you there, and do not greet them as a new customer.",
   ].join("\n");
+}
+
+/**
+ * Started from the website's WhatsApp widget (no website conversation): the
+ * page they wrote from. The product handle is a lookup key, never a fact.
+ */
+function pageContext(page: unknown): string {
+  const p = (page && typeof page === "object" ? page : {}) as Record<string, unknown>;
+  const handle = typeof p.productHandle === "string" && p.productHandle ? p.productHandle : null;
+  const path = typeof p.path === "string" && p.path ? p.path : null;
+  const lines = ["This customer started this conversation from the business's website, through its WhatsApp button."];
+  if (handle) lines.push(`They were looking at the product with handle "${handle}". Look it up before you mention its name, price or stock, and assume their first message is about it unless they say otherwise.`);
+  else if (path) lines.push(`They wrote from the page ${path}.`);
+  lines.push("Their first message here is what they wrote on the website. Answer it; do not greet them as if they had said nothing.");
+  return lines.join("\n");
 }

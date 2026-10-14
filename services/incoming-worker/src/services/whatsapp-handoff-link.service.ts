@@ -18,6 +18,8 @@ import { prisma, getRedis, publishEvent, findHandoffRef, handoffRefKey, handoffC
 
 export type HandoffLinkResult =
   | { linked: true; websiteConversationId: string; identity: "linked" | "conflict" }
+  /** The WhatsApp kind of widget: no website conversation, the page it started from. */
+  | { linked: true; websiteConversationId: null; identity: "none" }
   | { linked: false; reason: "no_code" | "unknown_code" | "other_number" | "website_chat_gone" };
 
 /** Read and delete in one step: only one inbound message can claim a code. */
@@ -43,6 +45,23 @@ export async function linkWebsiteHandoff(args: {
   // links nothing (and stays claimed: it was shown to a customer once).
   if (record.tenantId !== args.tenantId || record.whatsappChannelAccountId !== args.channelAccountId) {
     return { linked: false, reason: "other_number" };
+  }
+  if (!record.conversationId) {
+    // Started on the WhatsApp kind of widget: nothing on the website to link
+    // or close. The event records where it came from; the bot reads the page.
+    const ctx = record.context ?? null;
+    const event = await prisma.message.create({
+      data: {
+        tenantId: args.tenantId, conversationId: args.whatsappConversationId, channel: "WHATSAPP" as any,
+        direction: "INBOUND", body: "", messageType: "system", status: "DELIVERED",
+        metadata: {
+          systemEvent: "continued_from_website", fromConversationId: null, ref, identity: "none",
+          page: ctx ? { pageType: ctx.pageType ?? null, productHandle: ctx.productHandle ?? null, path: ctx.path ?? null } : null,
+        },
+      },
+    });
+    await publishEvent({ event: "message:new", tenantId: args.tenantId, data: { message: event, conversationId: args.whatsappConversationId, channel: "WHATSAPP" } }).catch(() => undefined);
+    return { linked: true, websiteConversationId: null, identity: "none" };
   }
   const web = await prisma.conversation.findFirst({
     where: { id: record.conversationId, tenantId: args.tenantId, channel: "WEBCHAT" as any },

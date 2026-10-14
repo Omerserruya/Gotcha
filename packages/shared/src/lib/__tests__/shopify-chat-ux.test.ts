@@ -559,7 +559,7 @@ describe("public widget payload", () => {
 
     // Everything a shopper's browser needs to draw the widget.
     expect(Object.keys(pub).sort()).toEqual(
-      ["behavior", "hero", "launcher", "look", "proactive", "sounds", "welcome"].sort(),
+      ["behavior", "hero", "kind", "launcher", "look", "proactive", "sounds", "welcome"].sort(),
     );
     // The WhatsApp handoff's number is the merchant's channel account: never public.
     expect(serialized).not.toContain("ca_whatsapp_secret");

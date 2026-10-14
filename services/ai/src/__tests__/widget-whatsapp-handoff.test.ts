@@ -184,3 +184,65 @@ describe("the shared code", () => {
     expect(waMeDigits("call me")).toBeNull();
   });
 });
+
+describe("★ the WhatsApp kind (no on-site chat)", () => {
+  const start = (body: any) => request(app()).post("/api/embedded-chat/whatsapp-start").send(body);
+
+  it("served with the kind and always the WhatsApp look", async () => {
+    H.accounts[0] = web({ kind: "whatsapp", look: "gotcha", whatsapp: { enabled: true, channelAccountId: "wa_1" } });
+    const w = await boot();
+    expect(w.ux).toMatchObject({ kind: "whatsapp", look: "whatsapp" });
+    expect(w.features.whatsappHandoff).toBe(true);
+  });
+
+  it("a stored WhatsApp kind whose number cannot take it draws nothing", async () => {
+    H.accounts[0] = web({ kind: "whatsapp", whatsapp: { enabled: true, channelAccountId: "wa_off" } });
+    const r = await request(app()).post("/api/embedded-chat/bootstrap").send({ widgetId: "widget-1" });
+    expect(r.body).toEqual({ data: {} });
+  });
+
+  it("start: wa.me with the visitor's words + code; no website conversation, the page in the code", async () => {
+    H.accounts[0] = web({ kind: "whatsapp", whatsapp: { enabled: true, channelAccountId: "wa_1" } });
+    const r = await start({ widgetId: "widget-1", text: " Is the oak lamp in stock? ", context: { pageType: "product", productHandle: "Oak-Lamp", path: "/products/oak-lamp?utm=x", price: 1 } });
+    expect(r.status).toBe(200);
+    const { url, ref } = r.body.data;
+    expect(url).toBe(`https://wa.me/972525551234?text=${encodeURIComponent(`Is the oak lamp in stock? (${ref})`)}`);
+    const rec = JSON.parse(H.kv.get(`wahandoff:ref:${ref}`));
+    expect(rec).toMatchObject({ tenantId: "T", conversationId: null, whatsappChannelAccountId: "wa_1", context: { pageType: "product", productHandle: "oak-lamp", path: "/products/oak-lamp" } });
+    expect(JSON.stringify(rec)).not.toMatch(/price|utm/);
+    expect(H.ttl.get(`wahandoff:ref:${ref}`)).toBe(7 * 24 * 3600);
+    expect(H.created).toEqual([]);
+    // No text: the default message, in the asked language.
+    const d = (await start({ widgetId: "widget-1", locale: "he" })).body.data;
+    expect(d.url).toBe(`https://wa.me/972525551234?text=${encodeURIComponent(handoffMessage(d.ref, "he"))}`);
+  });
+
+  it("refused (404) for the chat kind, an unknown widget, or a number that cannot take it", async () => {
+    expect((await start({ widgetId: "widget-1", text: "hi" })).status).toBe(404);
+    H.accounts[0] = web({ kind: "whatsapp", whatsapp: { enabled: true, channelAccountId: "wa_1" } });
+    expect((await start({ widgetId: "nope", text: "hi" })).status).toBe(404);
+    H.accounts[0] = web({ kind: "whatsapp", whatsapp: { enabled: true, channelAccountId: "wa_off" } });
+    expect((await start({ widgetId: "widget-1", text: "hi" })).status).toBe(404);
+    expect([...H.kv.keys()]).toEqual([]);
+  });
+
+  it("saving the WhatsApp kind needs a number that can take it (422); a later colour save is not blocked", async () => {
+    const bad = await request(app()).put("/api/website-widget").send({ ux: { kind: "whatsapp", whatsapp: { enabled: true, channelAccountId: "wa_off" } } });
+    expect(bad.status).toBe(422);
+    expect(bad.body).toMatchObject({ code: "WHATSAPP_KIND_NEEDS_NUMBER", field: "ux.kind" });
+    const off = await request(app()).put("/api/website-widget").send({ ux: { kind: "whatsapp", whatsapp: { enabled: false } } });
+    expect(off.status).toBe(422);
+    const ok = await request(app()).put("/api/website-widget").send({ ux: { kind: "whatsapp" } });
+    expect(ok.status).toBe(200);
+    expect(ok.body.data.settings.ux.kind).toBe("whatsapp");
+    // The number disconnects; saving a colour still works.
+    H.accounts.find((a) => a.id === "wa_1").connectionStatus = "DISCONNECTED";
+    const colour = await request(app()).put("/api/website-widget").send({ appearance: { primaryColor: "#112233" } });
+    expect(colour.status).toBe(200);
+  });
+
+  it("an unknown kind falls back to chat", async () => {
+    const r = await request(app()).put("/api/website-widget").send({ ux: { kind: "sms" } });
+    expect(r.body.data.settings.ux.kind).toBe("chat");
+  });
+});

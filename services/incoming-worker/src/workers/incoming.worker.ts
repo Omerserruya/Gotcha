@@ -680,7 +680,9 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         whatsappContact: savedContact ? { id: savedContact.id, personId: (savedContact as any).personId ?? null } : null,
         body,
       });
-      if (linked.linked) console.log(`[incoming] website chat ${linked.websiteConversationId} continued on WhatsApp ${conversation.id} (identity ${linked.identity})`);
+      if (linked.linked) console.log(linked.websiteConversationId
+        ? `[incoming] website chat ${linked.websiteConversationId} continued on WhatsApp ${conversation.id} (identity ${linked.identity})`
+        : `[incoming] WhatsApp ${conversation.id} started from the website's WhatsApp widget`);
     } catch (err: any) {
       console.warn("[incoming] website handoff link failed (message kept):", err?.message);
     }

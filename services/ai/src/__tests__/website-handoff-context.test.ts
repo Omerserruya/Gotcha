@@ -42,3 +42,22 @@ describe("★ the website chat as context", () => {
     expect(await websiteHandoffContext("T", [{ messageType: "text" }, { messageType: "system", metadata: { systemEvent: "conversation_merged", fromConversationId: "other" } }])).toBeNull();
   });
 });
+
+describe("★ started from the WhatsApp kind of widget", () => {
+  const started = (page: any) => ({ messageType: "system", metadata: { systemEvent: "continued_from_website", fromConversationId: null, page } });
+
+  it("the product handle as a lookup key, never read from any website chat", async () => {
+    const before = H.asked.length;
+    const block = await websiteHandoffContext("T", [started({ pageType: "product", productHandle: "oak-lamp", path: "/products/oak-lamp" })]);
+    expect(block).toMatch(/through its WhatsApp button/);
+    expect(block).toMatch(/product with handle "oak-lamp"\. Look it up before you mention its name, price or stock/);
+    expect(H.asked.length).toBe(before);
+  });
+
+  it("a page without a product: the path; no page at all: still told where they came from", async () => {
+    expect(await websiteHandoffContext("T", [started({ pageType: "other", productHandle: null, path: "/pages/contact" })])).toMatch(/wrote from the page \/pages\/contact/);
+    const none = await websiteHandoffContext("T", [started(null)]);
+    expect(none).toMatch(/through its WhatsApp button/);
+    expect(none).not.toMatch(/handle|page \//);
+  });
+});

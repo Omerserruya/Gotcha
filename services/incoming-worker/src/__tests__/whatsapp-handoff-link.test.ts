@@ -133,3 +133,24 @@ function beforeEachReset() {
     { id: "c_web", tenantId: "T", channel: "WEBCHAT", externalId: "sess_1", personId: null, mergedIntoId: null },
   ];
 }
+
+describe("★ started from the WhatsApp kind of widget (no website conversation)", () => {
+  it("one event on the WhatsApp side carrying the page; nothing on the website touched; claimed once", async () => {
+    H.kv.set(`wahandoff:ref:${REF}`, record({ conversationId: null, context: { pageType: "product", productHandle: "oak-lamp", path: "/products/oak-lamp" } }));
+    const r = await arrive({ body: `Does it come in blue? (${REF})` });
+    expect(r).toEqual({ linked: true, websiteConversationId: null, identity: "none" });
+    expect(H.messages).toHaveLength(1);
+    expect(H.messages[0]).toMatchObject({ conversationId: "wa_conv", messageType: "system" });
+    expect(H.messages[0].metadata).toEqual({ systemEvent: "continued_from_website", fromConversationId: null, ref: REF, identity: "none", page: { pageType: "product", productHandle: "oak-lamp", path: "/products/oak-lamp" } });
+    expect(H.conversations[0].status).toBe("OPEN");
+    expect([H.contacts[0].personId, H.contacts[1].personId]).toEqual([null, null]);
+    expect(H.events.map((e) => e.event)).toEqual(["message:new"]);
+    expect(await arrive()).toEqual({ linked: false, reason: "unknown_code" });
+  });
+
+  it("still only on the number it was issued for", async () => {
+    H.kv.set(`wahandoff:ref:${REF}`, record({ conversationId: null }));
+    expect(await arrive({ channelAccountId: "wa_2" })).toEqual({ linked: false, reason: "other_number" });
+    expect(H.messages).toEqual([]);
+  });
+});

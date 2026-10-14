@@ -9,12 +9,12 @@ import {
   getRedis,
   BUSINESS_HOURS_KEY,
   parseBusinessHours,
-  evaluateBusinessHours, readDurableSetting,
+  evaluateBusinessHours, readDurableSetting, normalizeStorefrontContext,
   HANDOFF_TTL_SECONDS, handoffRefKey, handoffConversationKey, newHandoffRef, handoffMessage, handoffButtonLabel, waMeUrl,
   type HandoffRecord, type WebchatConfig } from "@chatcenter/shared";
 import crypto from "crypto";
 import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanitizer.service";
-import { recordWebchatSeen, hostOf, handoffTarget } from "../services/website-widget.service";
+import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef } from "../services/website-widget.service";
 
 const router = Router();
 
@@ -163,10 +163,17 @@ router.post("/bootstrap", initLimiter, async (req: Request, res: Response) => {
       offline = false;
     }
 
+    const widget = await withHandoff(account.tenantId, config, offline);
+    // The WhatsApp kind whose number cannot take the conversation: there is
+    // nothing to draw (the same uniform "render nothing" as above).
+    if (!widget) {
+      res.json({ data: {} });
+      return;
+    }
     res.json({
       data: {
         availability: offline ? "offline" : "online",
-        widget: await withHandoff(account.tenantId, config, offline),
+        widget,
       },
     });
   } catch (err) {
@@ -191,6 +198,7 @@ async function withHandoff(tenantId: string, config: WebchatConfig, offline = fa
   const base = publicWebchatConfig(config, { offline });
   const target = await withCrossTenantAccess(() => handoffTarget(tenantId, config.ux)).catch(() => null);
   const lang = config.appearance.language === "he" ? "he" : "en";
+  if (config.ux.kind === "whatsapp" && !target) return null;
   return {
     ...base,
     features: { ...base.features, whatsappHandoff: !!target },
@@ -263,6 +271,51 @@ router.post("/whatsapp-handoff", messageLimiter, async (req: Request, res: Respo
     res.json({ data: { url: waMeUrl(target.digits, prefilled), ref } });
   } catch (err) {
     console.error("Embedded chat whatsapp-handoff error:", (err as Error)?.message);
+    res.status(500).json({ error: "unavailable" });
+  }
+});
+
+/**
+ * POST /whatsapp-start { widgetId, text?, locale?, context? } -> { url, ref }
+ * The WhatsApp kind of widget (no on-site chat): the visitor's message opens
+ * wa.me pre-filled to the business number, followed by a code. No website
+ * conversation is created; the code carries the page they were on
+ * (`context`: pageType, productHandle, path - a lookup key, re-resolved
+ * before anything quotes it), and the WhatsApp side reads it as context.
+ * 404 unless the widget is the WhatsApp kind and its number can take it.
+ */
+router.post("/whatsapp-start", messageLimiter, async (req: Request, res: Response) => {
+  try {
+    const widgetId = String(req.body?.widgetId ?? "").trim();
+    if (!widgetId || widgetId.length > 128) { res.status(404).json({ error: "unavailable" }); return; }
+    // Public: the widget id is the only identity, as in /bootstrap.
+    const account = await withCrossTenantAccess(() => prisma.channelAccount.findFirst({
+      where: { externalId: widgetId, channel: "WEBCHAT", connectionStatus: { in: ["CONNECTED", "PENDING"] } },
+      select: { tenantId: true, credentials: true },
+    }));
+    if (!account) { res.status(404).json({ error: "unavailable" }); return; }
+    const config = normalizeWebchatConfig(account.credentials);
+    if (config.ux.kind !== "whatsapp") { res.status(404).json({ error: "unavailable" }); return; }
+    const target = await withCrossTenantAccess(() => handoffTarget(account.tenantId, config.ux));
+    if (!target) { res.status(404).json({ error: "unavailable" }); return; }
+
+    const ctx = normalizeStorefrontContext(req.body?.context);
+    const record: HandoffRecord = {
+      tenantId: account.tenantId,
+      conversationId: null,
+      whatsappChannelAccountId: target.channelAccountId,
+      createdAt: new Date().toISOString(),
+      context: { pageType: ctx.pageType, productHandle: ctx.productHandle, path: ctx.path },
+    };
+    const ref = await mintHandoffRef(record, (n) => crypto.randomBytes(n));
+    if (!ref) { res.status(503).json({ error: "try_again" }); return; }
+    const asked = req.body?.locale;
+    const locale = asked === "he" || asked === "en" ? asked : config.appearance.language === "he" ? "he" : "en";
+    const text = typeof req.body?.text === "string" ? sanitizeUntrusted(req.body.text, { wrap: false, maxLength: 500 }).trim() : "";
+    const prefilled = text ? `${text} (${ref})` : handoffMessage(ref, locale);
+    res.json({ data: { url: waMeUrl(target.digits, prefilled), ref } });
+  } catch (err) {
+    console.error("Embedded chat whatsapp-start error:", (err as Error)?.message);
     res.status(500).json({ error: "unavailable" });
   }
 });
