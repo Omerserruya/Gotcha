@@ -227,6 +227,8 @@
     "MESSENGER": "Messenger",
     "INSTAGRAM": "Instagram",
     "EMAIL": "Email",
+    "GMAIL": "Gmail",
+    "OUTLOOK": "Outlook",
     "SLACK": "Slack",
     "VOICE": "Phone",
     "WEBCHAT": "Web chat",
@@ -362,9 +364,26 @@
     "unreachable": "If they can't be reached"
   },
   "variables": {
-    "first_name": "first_name",
-    "business_name": "business_name",
-    "opening_hours": "opening_hours"
+    "first_name": "First name",
+    "business_name": "Business name",
+    "opening_hours": "Opening hours",
+    "cart_url": "Cart link",
+    "cart_total": "Cart total",
+    "cart_items": "Items in the cart",
+    "story_url": "Story link",
+    "order_number": "Order number",
+    "order_total": "Order total",
+    "order_status": "Order status",
+    "order_items": "Items in the order",
+    "order_url": "Order link",
+    "caller_number": "Caller's number",
+    "line_name": "Line name",
+    "call_duration": "Call length",
+    "call_recording_url": "Call recording link",
+    "comment_text": "Comment text",
+    "comment_from_username": "Commenter's username",
+    "comment_postId": "Post ID",
+    "comment_postPermalink": "Post link"
   },
   "inspector": {
     "type": "Step type",

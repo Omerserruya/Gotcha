@@ -1118,6 +1118,75 @@ describe('★★ the new triggers and steps (Backend 972ae66d), edited where the
     expect(screen.getByTestId('node-m')).toHaveAttribute('data-marked');
   });
 
+  describe('★★ AU4 on dev: the variables under a message are words, and insert their token', () => {
+    // Every variable the route offers (chatbot automation-catalog.ts variablesFor).
+    const SERVER_VARIABLES = [
+      'first_name',
+      'business_name',
+      'opening_hours',
+      'cart_url',
+      'cart_total',
+      'cart_items',
+      'story_url',
+      'order_number',
+      'order_total',
+      'order_status',
+      'order_items',
+      'order_url',
+      'caller_number',
+      'line_name',
+      'call_duration',
+      'call_recording_url',
+      'comment.text',
+      'comment.from.username',
+      'comment.postId',
+      'comment.postPermalink',
+    ];
+
+    it.each([
+      ['en', automationsMessages],
+      ['he', heAutomationsMessages],
+    ] as const)('every one has a label in %s, never its id', (_, messages) => {
+      const labels = messages.variables as Record<string, string>;
+      for (const v of SERVER_VARIABLES) {
+        const label = labels[v.replaceAll('.', '_')];
+        expect(label, v).toBeTruthy();
+        expect(label).not.toBe(v);
+        expect(label).not.toMatch(/^[a-z_.]+$/);
+      }
+    });
+
+    it("a cart's chips: the cart's words; a click puts the token in; one not named yet shows its token", () => {
+      wrap(
+        <Builder
+          automation={draftOf(
+            { type: 'cart_abandoned', config: {} },
+            [
+              { id: 't', type: 'automation_trigger', data: {} },
+              { id: 'm', type: 'send_message_text', data: { text: 'Hi ' } },
+            ],
+            [{ id: 'e', source: 't', target: 'm', sourceHandle: null }],
+          )}
+          catalog={{
+            ...catalog(false),
+            variables: ['first_name', 'cart_url', 'comment.text', 'new_one'],
+          }}
+          stats={{}}
+          webhook={null}
+          choices={{ employees: [], teams: [], members: [], skills: [], templates: [] }}
+        />,
+      );
+      fireEvent.click(screen.getByTestId('node-m'));
+      const chips = within(screen.getByTestId('inspector-text').parentElement!)
+        .getAllByRole('button')
+        .map((b) => b.textContent);
+      expect(chips).toEqual(['First name', 'Cart link', 'Comment text', '{{new_one}}']);
+      (screen.getByTestId('inspector-text') as HTMLTextAreaElement).setSelectionRange(3, 3);
+      fireEvent.click(screen.getByRole('button', { name: 'Cart link' }));
+      expect(screen.getByTestId('inspector-text')).toHaveValue('Hi {{cart_url}}');
+    });
+  });
+
   describe('★★ AU4 on dev: the issues are the canvas as it is now', () => {
     const windowIssue = {
       errors: [

@@ -440,6 +440,13 @@ function Message({
 }) {
   const t = useTranslations('automations');
   const box = useRef<HTMLTextAreaElement>(null);
+  // The chip says it in words and inserts the token. A dotted id
+  // (comment.text) is keyed with "_"; one we have not named yet shows its
+  // token, never a key path.
+  const variableLabel = (v: string) => {
+    const key = `variables.${v.replaceAll('.', '_')}` as 'variables.first_name';
+    return t.has(key) ? t(key) : `{{${v}}}`;
+  };
   const insert = (name: string) => {
     const el = box.current;
     const token = `{{${name}}}`;
@@ -464,7 +471,7 @@ function Message({
             .filter((v) => !v.includes('<'))
             .map((v) => (
               <button key={v} type="button" className={styles.variable} onClick={() => insert(v)}>
-                {t(`variables.${v}` as 'variables.first_name')}
+                {variableLabel(v)}
               </button>
             ))}
         </span>

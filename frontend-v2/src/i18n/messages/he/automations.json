@@ -227,6 +227,8 @@
     "MESSENGER": "מסנג׳ר",
     "INSTAGRAM": "אינסטגרם",
     "EMAIL": "אימייל",
+    "GMAIL": "Gmail",
+    "OUTLOOK": "Outlook",
     "SLACK": "Slack",
     "VOICE": "טלפון",
     "WEBCHAT": "צ׳אט באתר",
@@ -362,9 +364,26 @@
     "unreachable": "אם אי אפשר להשיג אותו"
   },
   "variables": {
-    "first_name": "first_name",
-    "business_name": "business_name",
-    "opening_hours": "opening_hours"
+    "first_name": "שם פרטי",
+    "business_name": "שם העסק",
+    "opening_hours": "שעות פעילות",
+    "cart_url": "קישור לעגלה",
+    "cart_total": "סכום העגלה",
+    "cart_items": "פריטים בעגלה",
+    "story_url": "קישור לסטורי",
+    "order_number": "מספר ההזמנה",
+    "order_total": "סכום ההזמנה",
+    "order_status": "סטטוס ההזמנה",
+    "order_items": "פריטים בהזמנה",
+    "order_url": "קישור להזמנה",
+    "caller_number": "מספר המתקשר/ת",
+    "line_name": "שם הקו",
+    "call_duration": "משך השיחה",
+    "call_recording_url": "קישור להקלטת השיחה",
+    "comment_text": "טקסט התגובה",
+    "comment_from_username": "שם המשתמש של המגיב/ה",
+    "comment_postId": "מזהה הפוסט",
+    "comment_postPermalink": "קישור לפוסט"
   },
   "inspector": {
     "type": "סוג הצעד",
