@@ -1,3 +1,4 @@
+import { toolCallRecord } from "@chatcenter/shared/src/lib/tool-call-record";
 import { getInternalServiceKey, readDurableSetting, recordHandover } from "@chatcenter/shared";
 /**
  * Autonomous AI bot - worker side.
@@ -451,7 +452,8 @@ export async function processAIBot(
       metadata: {
         source: "ai_bot",
         ...(result.toolCallLog.length > 0 && {
-          toolCalls: result.toolCallLog.map((tc) => ({ tool: tc.tool, decision: tc.decision })),
+          // Masked args and a result summary, never the payload (lib/tool-call-record).
+          toolCalls: result.toolCallLog.map((tc) => toolCallRecord(tc)),
         }),
         ...(sendErrorDetail ? { sendError: sendErrorDetail } : {}),
       },
