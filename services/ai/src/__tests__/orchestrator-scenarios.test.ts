@@ -45,6 +45,9 @@ vi.mock("@chatcenter/shared", () => ({
   stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
   // Business-policy hooks added to the orchestrator (round 3): benign stubs
   actionKindForTool: () => null,
+  actionKindForCall: () => null,
+  couponRequestedType: () => undefined,
+  policyRequestedAmount: (_t: string, a: any) => (typeof a?.amount === "number" ? a.amount : undefined),
   evaluateBusinessPolicy: async () => ({ decision: "ALLOWED", policyId: null, policyVersion: null, matchedRules: [], reasonCodes: [] }),
   revalidateBeforeExecution: async () => ({ ok: true, decision: "ALLOWED" }),
 

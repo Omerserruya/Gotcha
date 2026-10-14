@@ -5,7 +5,9 @@ import {
   createApprovalRequest,
   describeApprovalAction,
   getRedis,
-  actionKindForTool,
+  actionKindForCall,
+  couponRequestedType,
+  policyRequestedAmount,
   evaluateBusinessPolicy,
   type PolicyResult,
 } from "@chatcenter/shared";
@@ -188,7 +190,7 @@ export class ActionOrchestrator {
     // the configured cap come back as a denial that NAMES the permitted
     // maximum - the model may re-propose within it, a manager never has to
     // catch an over-limit ask. FAIL_CLOSED (engine unavailable) denies too.
-    const bizKind = actionKindForTool(action.tool);
+    const bizKind = actionKindForCall(action.tool, action.args as Record<string, unknown>);
     if (bizKind) {
       const args = action.args as Record<string, any>;
       const biz = await evaluateBusinessPolicy({
@@ -198,7 +200,8 @@ export class ActionOrchestrator {
         correlationId: action.id,
         facts: {
           tool: action.tool,
-          requestedAmount: typeof args.amount === "number" ? args.amount : undefined,
+          requestedAmount: policyRequestedAmount(action.tool, args),
+          requestedType: couponRequestedType(action.tool, args),
           orderName: typeof args.order_name === "string" ? args.order_name : undefined,
           reasonCode: typeof args.reason_code === "string" ? args.reason_code : undefined,
           conversationId: action.conversationId || undefined,
@@ -222,9 +225,9 @@ export class ActionOrchestrator {
       }
       if (
         biz.decision === "ALLOWED_WITH_LIMIT" &&
-        typeof args.amount === "number" &&
+        policyRequestedAmount(action.tool, args) != null &&
         biz.maxAmount != null &&
-        args.amount > biz.maxAmount + 0.005
+        policyRequestedAmount(action.tool, args)! > biz.maxAmount + 0.005
       ) {
         return recordIfLedger(
           await this.recordDeny(

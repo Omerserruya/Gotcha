@@ -47,6 +47,9 @@ vi.mock("@chatcenter/shared", () => ({
   metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
   stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
   actionKindForTool: () => null,
+  actionKindForCall: () => null,
+  couponRequestedType: () => undefined,
+  policyRequestedAmount: (_t: string, a: any) => (typeof a?.amount === "number" ? a.amount : undefined),
   evaluateBusinessPolicy: async () => ({ decision: "ALLOWED", policyId: null, policyVersion: null, matchedRules: [], reasonCodes: [] }),
   revalidateBeforeExecution: async () => ({ ok: true, decision: "ALLOWED" }),
   prisma: {

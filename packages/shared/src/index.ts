@@ -266,6 +266,10 @@ export {
   evaluateBusinessPolicy,
   evaluateConfig,
   actionKindForTool,
+  actionKindForCall,
+  couponRequestedType,
+  policyRequestedAmount,
+  policyAmount,
   revalidateBeforeExecution,
 } from "./lib/business-policy";
 export type {
