@@ -67,6 +67,22 @@ export function clusterKeyFor(question: string): string {
   return [...new Set(words)].sort().join(" ").slice(0, 200);
 }
 
+/**
+ * Is this something a customer ASKED, as opposed to a placeholder the channel
+ * wrote for a non-text message (2026-10-14: a WhatsApp reaction was listed
+ * as an unanswered question, "[reaction message]")? Not a question:
+ *   - the whole message is one bracketed placeholder: "[reaction message]",
+ *     "[Sticker]", "[Image]", "[Document]", "[Voice message]",
+ *     "[Unknown message]", "[Shared location: ...]"
+ *   - nothing in it is a letter or a digit (an emoji, "?", "👍")
+ */
+export function isQuestionText(text: string | null | undefined): boolean {
+  const t = String(text ?? "").trim();
+  if (!t) return false;
+  if (/^\[[^\[\]]{1,200}\]$/.test(t)) return false;
+  return /[\p{L}\p{N}]/u.test(t);
+}
+
 export interface RecordUnansweredInput {
   tenantId: string;
   question: string;
@@ -85,7 +101,8 @@ export interface RecordUnansweredInput {
 export async function recordUnansweredQuestion(input: RecordUnansweredInput): Promise<void> {
   try {
     const question = input.question.trim().slice(0, 500);
-    if (!question) return;
+    // A reaction, sticker or other non-text placeholder is not a question.
+    if (!isQuestionText(question)) return;
     const clusterKey = clusterKeyFor(question);
 
     const existing = await prisma.unansweredQuestion.findUnique({

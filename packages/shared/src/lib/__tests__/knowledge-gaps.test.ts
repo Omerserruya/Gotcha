@@ -9,7 +9,7 @@ const { prismaMock } = vi.hoisted(() => ({
 vi.mock("../prisma", () => ({ prisma: prismaMock }));
 
 import {
-  clusterKeyFor, isoWeekKey, recordUnansweredQuestion, recordProductDemand,
+  clusterKeyFor, isoWeekKey, recordUnansweredQuestion, recordProductDemand, isQuestionText,
 } from "../knowledge-gaps";
 
 describe("clusterKeyFor", () => {
@@ -120,5 +120,28 @@ describe("recordProductDemand", () => {
   it("never throws", async () => {
     prismaMock.productDemandTerm.upsert.mockRejectedValue(new Error("db is down"));
     await expect(recordProductDemand({ tenantId: "t1", term: "x", inCatalogue: false })).resolves.toBeUndefined();
+  });
+});
+
+describe("★ a placeholder for a non-text message is never an unanswered question (2026-10-14)", () => {
+  it("reactions, stickers, media placeholders and emoji-only messages are not questions; real questions are", () => {
+    for (const t of ["[reaction message]", "[Sticker]", "[Image]", "[Document]", "[Voice message]", "[Unknown message]", "[Shared location: Eilat Port (29.55, 34.95)]", "👍", "?", "  ", "", null]) {
+      expect(isQuestionText(t as any), String(t)).toBe(false);
+    }
+    for (const t of ["מה זמני המשלוח?", "do you ship to Eilat?", "[order 575] where is it?", "575"]) {
+      expect(isQuestionText(t), t).toBe(true);
+    }
+  });
+
+  it("★ recording one writes nothing", async () => {
+    prismaMock.unansweredQuestion.findUnique.mockReset();
+    prismaMock.unansweredQuestion.create.mockReset();
+    prismaMock.unansweredQuestion.update.mockReset();
+    for (const q of ["[reaction message]", "[Sticker]", "😂😂"]) {
+      await recordUnansweredQuestion({ tenantId: "T", question: q, reason: "low_confidence" });
+    }
+    expect(prismaMock.unansweredQuestion.findUnique).not.toHaveBeenCalled();
+    expect(prismaMock.unansweredQuestion.create).not.toHaveBeenCalled();
+    expect(prismaMock.unansweredQuestion.update).not.toHaveBeenCalled();
   });
 });

@@ -613,6 +613,7 @@ export {
   recordUnansweredQuestion,
   recordProductDemand,
   clusterKeyFor,
+  isQuestionText,
   isoWeekKey,
   UNANSWERED_REASONS,
   type UnansweredReason,
