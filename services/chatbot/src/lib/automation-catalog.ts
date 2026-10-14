@@ -112,6 +112,12 @@ export function normalizeTrigger(input: any): { type: TriggerType; config: Recor
       const ch = channels(c.channels);
       if (ch?.some((x) => x !== "INSTAGRAM" && x !== "MESSENGER")) throw new AutomationInputError("trigger.config.channels", "comments come from INSTAGRAM or MESSENGER");
       if (ch?.length) config.channels = ch;
+      // The page or account the posts belong to (a ChannelAccount id). The
+      // runtime matches only comments that came in on it.
+      if (c.channelAccountId != null && c.channelAccountId !== "") {
+        if (typeof c.channelAccountId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(c.channelAccountId)) throw new AutomationInputError("trigger.config.channelAccountId", "channelAccountId must be a connected page or account id");
+        config.channelAccountId = c.channelAccountId;
+      }
       const posts = strings(c.postIds, "trigger.config.postIds", 50); if (posts?.length) config.postIds = posts.map((x) => x.slice(0, 64));
       const kw = strings(c.keywords, "trigger.config.keywords"); if (kw?.length) config.keywords = kw.map((k) => k.slice(0, 100));
       const match = c.match ?? "contains";
@@ -249,6 +255,10 @@ export interface CatalogItem {
   type: string; label: string; description: string; channels: Channel[];
   outputs: string[] | "dynamic"; limits?: Record<string, number>; synonyms: string[];
   available: boolean; reason: Reason | null;
+  /** Sends to the customer on the conversation's channel (needs a customer and a channel). */
+  sends: boolean;
+  /** May run on the comment itself, before the first wait, in a comment automation. */
+  commentSafe: boolean;
 }
 
 export function triggerAvailability(type: TriggerType, ctx: Pick<CatalogContext, "voiceConnected">): { available: boolean; reason: Reason | null } {
@@ -277,6 +287,7 @@ export function catalogFor(ctx: CatalogContext) {
       type: `trigger:${t.type}`, label: t.label, description: t.description, channels: t.channels,
       outputs: ["next"], synonyms: t.synonyms,
       available: !firstOnly && a.available, reason: firstOnly ? "first_step_only" : a.reason,
+      sends: false, commentSafe: true,
     };
   });
   const group = (g: Exclude<Group, "trigger">, label: string) => ({
@@ -286,6 +297,9 @@ export function catalogFor(ctx: CatalogContext) {
       return {
         type: n.type, label: n.label, description: n.description, channels: n.channels, outputs: n.outputs,
         ...(n.limits ? { limits: n.limits } : {}), synonyms: n.synonyms, ...a,
+        // Facts for the builder (2026-10-14), so it does not hardcode them:
+        // which steps send, and which may run on the comment itself.
+        sends: !!n.sends, commentSafe: COMMENT_WALK_TYPES.has(n.type),
       };
     }),
   });
@@ -477,7 +491,8 @@ export function beforeFirstWait(nodes: ANode[], edges: AEdge[]): Set<string> {
     if (out.has(id)) continue;
     out.add(id);
     const n = nodes.find((x) => x.id === id);
-    if (n?.type === "wait_for_reply") continue;
+    // A message that waits for the reply is a wait too (2026-10-14).
+    if (n?.type === "wait_for_reply" || (n?.type === "send_message_text" && (n as any).data?.waitForReply)) continue;
     for (const e of edges) if (e.source === id) stack.push(e.target);
   }
   return out;

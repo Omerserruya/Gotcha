@@ -97,6 +97,12 @@ vi.mock("@chatcenter/shared", () => ({
       H.sent.push({ kind: "text", body });
       return `wamid.${++H.seq}`;
     },
+    sendMediaMessage: async (...args: any[]) => {
+      // (creds, account, recipient, url, type, caption, filename) in any order
+      // the adapter takes them: recorded whole, asserted by content.
+      H.sent.push({ kind: "media", body: "", extra: args });
+      return `wamid.${++H.seq}`;
+    },
     sendInteractiveMessage: async (_c: any, _a: any, _r: any, body: string, buttons: any[]) => {
       if (H.failSend) throw new Error("provider said no");
       H.sent.push({ kind: "buttons", body, extra: buttons });
@@ -473,5 +479,62 @@ describe("★ message from an ad, button tapped, AI writes a message", () => {
       expect(calls).toEqual([]);
       expect(H.sent).toEqual([]);
     } finally { (global as any).fetch = realFetch; }
+  });
+});
+
+describe("★ a message that waits for the reply (2026-10-14)", () => {
+  const waitFlow = (data: any) => flow("f_msgwait", [
+    trig,
+    { id: "m", type: "send_message_text", data: { text: "What size?", waitForReply: true, ...data } },
+    { id: "next", type: "send_message_text", data: { text: "Thanks" } },
+  ], [e("t", "m"), e("m", "next")]);
+
+  it("parks on the message with its timeout timer; the reply continues", async () => {
+    H.db.chatbotFlow.push(waitFlow({ timeoutMs: 600_000 }));
+    await inbound();
+    expect(run()).toMatchObject({ status: "waiting", currentNodeId: "m" });
+    expect(H.queued[0]).toMatchObject({ data: { resumeNodeId: "m", automationRunId: run().id, timeout: true }, opts: { delay: 600_000 } });
+    await automationsForInbound({ tenantId: T, conversation: conv(), messageId: "m2", message: "42", channel: "whatsapp" });
+    expect(H.sent.map((s) => s.body)).toEqual(["What size?", "Thanks"]);
+    expect(run().status).toBe("completed");
+  });
+
+  it("★ the timeout moves it on too", async () => {
+    H.db.chatbotFlow.push(waitFlow({ timeoutMs: 600_000 }));
+    await inbound();
+    await resumeAutomationRun({ tenantId: T, conversationId: CONV, runId: run().id, message: "", channel: "whatsapp", fromTimer: true, timeout: true });
+    expect(H.sent.map((s) => s.body)).toEqual(["What size?", "Thanks"]);
+  });
+
+  it("no timeout: it waits for the reply with no timer", async () => {
+    H.db.chatbotFlow.push(waitFlow({}));
+    await inbound();
+    expect(run().status).toBe("waiting");
+    expect(H.queued).toEqual([]);
+  });
+});
+
+describe("★ a file's name, whichever editor wrote it", () => {
+  it("fileName (v2) and filename (older) both reach the customer", async () => {
+    H.db.chatbotFlow.push(flow("f_file", [
+      trig,
+      { id: "f1", type: "send_message_file", data: { url: "https://x.test/a.pdf", fileName: "price-list.pdf" } },
+      { id: "f2", type: "send_message_file", data: { url: "https://x.test/b.pdf", filename: "terms.pdf" } },
+    ], [e("t", "f1"), e("f1", "f2")]));
+    await inbound();
+    const media = H.sent.filter((s) => s.kind === "media").map((s) => s.extra);
+    expect(media).toHaveLength(2);
+    expect(media[0]).toContain("price-list.pdf");
+    expect(media[1]).toContain("terms.pdf");
+  });
+});
+
+describe("★ a comment trigger can name its page", () => {
+  it("only comments that came in on that page or account", () => {
+    const f = { triggerType: "comment_received", triggerConfig: { channelAccountId: "page_a" } };
+    expect(triggerMatches(f, { type: "comment_received", channel: "MESSENGER", message: "hi", postId: "p1", channelAccountId: "page_a" })).toBe(true);
+    expect(triggerMatches(f, { type: "comment_received", channel: "MESSENGER", message: "hi", postId: "p1", channelAccountId: "page_b" })).toBe(false);
+    // None named: any page, as before.
+    expect(triggerMatches({ triggerType: "comment_received", triggerConfig: {} }, { type: "comment_received", channel: "MESSENGER", message: "hi", channelAccountId: "page_b" })).toBe(true);
   });
 });

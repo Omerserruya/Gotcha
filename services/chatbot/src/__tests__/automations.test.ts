@@ -116,7 +116,7 @@ vi.mock("@chatcenter/shared", async () => {
 
 import automations from "../routes/automations";
 import chatbot from "../routes/chatbot";
-import { validateAutomation, outputsOf, normalizeTrigger } from "../lib/automation-catalog";
+import { validateAutomation, outputsOf, normalizeTrigger, beforeFirstWait, catalogFor } from "../lib/automation-catalog";
 
 const app = express();
 app.use(express.json());
@@ -616,3 +616,34 @@ describe("story mention", () => {
   });
 });
 
+describe("★ 2026-10-14: page on a comment trigger, message waits, catalogue facts", () => {
+  it("a comment trigger may name its page; a malformed id is refused", () => {
+    expect(normalizeTrigger({ type: "comment_received", config: { channelAccountId: "cmabc123", postIds: ["p1"] } }).config)
+      .toMatchObject({ channelAccountId: "cmabc123", postIds: ["p1"] });
+    expect(normalizeTrigger({ type: "comment_received", config: { channelAccountId: "" } }).config).not.toHaveProperty("channelAccountId");
+    expect(() => normalizeTrigger({ type: "comment_received", config: { channelAccountId: "../../x" } })).toThrow(/channelAccountId/);
+  });
+
+  it("★ a message that waits for the reply is a wait boundary for comment automations", () => {
+    const nodes = [
+      { id: "t", type: "automation_trigger" },
+      { id: "m", type: "send_message_text", data: { text: "Size?", waitForReply: true } },
+      { id: "after", type: "send_location", data: {} },
+    ];
+    const edges = [{ source: "t", target: "m" }, { source: "m", target: "after" }];
+    const pre = beforeFirstWait(nodes as any, edges as any);
+    expect([...pre].sort()).toEqual(["m", "t"]);
+    // Without the wait, the next step is still on the comment.
+    expect([...beforeFirstWait([nodes[0], { ...nodes[1], data: { text: "Size?" } }, nodes[2]] as any, edges as any)].sort()).toEqual(["after", "m", "t"]);
+  });
+
+  it("★ each catalogue item says whether it sends and whether it may run on the comment", () => {
+    const cat: any = catalogFor({ channel: null, firstStep: false, triggerType: "message_received", afterNodeType: null, voiceConnected: false });
+    const all = cat.groups.flatMap((g: any) => g.items);
+    const by = Object.fromEntries(all.map((i: any) => [i.type, i]));
+    expect(by.send_message_text).toMatchObject({ sends: true, commentSafe: true });
+    expect(by.wait).toMatchObject({ sends: false, commentSafe: false });
+    expect(by.add_tag).toMatchObject({ sends: false });
+    expect(all.every((i: any) => typeof i.sends === "boolean" && typeof i.commentSafe === "boolean")).toBe(true);
+  });
+});

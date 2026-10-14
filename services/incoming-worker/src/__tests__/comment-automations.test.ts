@@ -262,3 +262,40 @@ describe("★ a refused send", () => {
     expect(H.db.conversation ?? []).toEqual([]);
   });
 });
+
+describe("★ 2026-10-14: page, message waits, file names", () => {
+  it("a trigger that names a page runs only for comments that came in on it", async () => {
+    H.db.chatbotFlow = [commentFlow({ triggerConfig: { channelAccountId: "other-page" } })];
+    await processCommentTrigger(job());
+    expect(H.sent.map((s) => s.body)).toEqual(["LEGACY"]);
+    H.sent = [];
+    H.db.chatbotFlow = [commentFlow({ triggerConfig: { channelAccountId: "ca1" } })];
+    await processCommentTrigger(job({ commentId: "cm2" }));
+    expect(H.sent.map((s) => s.kind)).toEqual(["comment_reply", "private_reply"]);
+  });
+
+  it("a file's v2 fileName reaches the customer (it opens the DM when there is no caption)", async () => {
+    H.db.chatbotFlow = [commentFlow({
+      nodes: [{ id: "t", type: "automation_trigger", data: {} }, { id: "f", type: "send_message_file", data: { url: "https://x.test/p.pdf", fileName: "price-list.pdf" } }],
+      edges: [e("t", "f")],
+    })];
+    await processCommentTrigger(job());
+    expect(H.sent[0]).toMatchObject({ kind: "private_reply", body: "price-list.pdf" });
+  });
+
+  it("★ a message that waits for the reply parks like Wait for reply, with the bridge timer", async () => {
+    H.db.chatbotFlow = [commentFlow({
+      nodes: [
+        { id: "t", type: "automation_trigger", data: {} },
+        { id: "m", type: "send_message_text", data: { text: "Which size?", waitForReply: true, timeoutMs: 3 * 24 * 3_600_000 } },
+        { id: "after", type: "send_message_text", data: { text: "Thanks" } },
+      ],
+      edges: [e("t", "m"), e("m", "after")],
+    })];
+    await processCommentTrigger(job());
+    expect(H.sent.map((s) => s.body)).toEqual(["Which size?"]);
+    expect(H.db.automationRun![0].status).toBe("waiting");
+    expect(H.queued[0]).toMatchObject({ data: { resumeNodeId: "m", timeout: true } });
+    expect(H.queued[0].opts.delay).toBeLessThan(24 * 3_600_000);
+  });
+});

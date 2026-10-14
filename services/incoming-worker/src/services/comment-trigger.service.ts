@@ -214,7 +214,7 @@ export async function runCommentAutomations(opts: {
     select: { id: true, triggerType: true, triggerConfig: true, nodes: true, edges: true },
   });
   const flow = (flows as any[]).find((f) =>
-    triggerMatches(f, { type: "comment_received", channel: opts.channel, message: opts.comment.text, postId: opts.comment.postId }),
+    triggerMatches(f, { type: "comment_received", channel: opts.channel, message: opts.comment.text, postId: opts.comment.postId, channelAccountId: opts.channelAccountId }),
   );
   if (!flow) return false;
 
@@ -446,6 +446,12 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
       case "send_message_text": {
         const text = interpolate(String(node.data?.text || ""), vars);
         if (text.trim() && !(await sendOutbound(args.send, text)) && sendFailed(args)) return;
+        // "Wait for the reply" on the message itself is a Wait for reply here
+        // too: the run parks in the DM and the normal walker resumes it.
+        if (node.data?.waitForReply) {
+          await parkForReply(args, node, vars);
+          return;
+        }
         break;
       }
 
@@ -477,8 +483,10 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
         const caption = node.data?.caption != null
           ? interpolate(String(node.data.caption), vars)
           : undefined;
-        const filename = node.data?.filename != null
-          ? interpolate(String(node.data.filename), vars)
+        // v2 writes fileName, the older editors filename: both are the name.
+        const rawName = node.data?.filename ?? node.data?.fileName;
+        const filename = rawName != null
+          ? interpolate(String(rawName), vars)
           : undefined;
         if (url.trim() && !(await sendOutboundMedia(args.send, url, "document", caption, filename)) && sendFailed(args)) return;
         break;

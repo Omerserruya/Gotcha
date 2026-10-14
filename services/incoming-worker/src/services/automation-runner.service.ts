@@ -40,6 +40,8 @@ export interface TriggerEvent {
   payload?: string | null;
   /** The post / media a comment was left on. */
   postId?: string | null;
+  /** The connected page / account the event came in on. */
+  channelAccountId?: string | null;
 }
 
 // ── Matching (pure) ────────────────────────────────────────────────────────
@@ -54,6 +56,9 @@ export function triggerMatches(flow: { triggerType: string | null; triggerConfig
   if (channels.length && !channels.includes(String(ev.channel ?? "").toUpperCase())) return false;
   if (ev.type === "message_received" || ev.type === "comment_received") {
     if (ev.type === "comment_received") {
+      // One page or account, when the trigger names one (2026-10-14): with two
+      // pages connected, "any post" means any post of THAT page.
+      if (c.channelAccountId && String(c.channelAccountId) !== String(ev.channelAccountId ?? "")) return false;
       const posts: string[] = Array.isArray(c.postIds) ? c.postIds.map(norm).filter(Boolean) : [];
       if (posts.length && !(ev.postId && posts.includes(norm(ev.postId)))) return false;
     }

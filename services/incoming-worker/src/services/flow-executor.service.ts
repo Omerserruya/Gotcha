@@ -912,7 +912,28 @@ async function walk(
         // generic branch) continues from the first outgoing edge.
         if (node.data?.waitForReply) {
           await park(ctx, node.id, true);
-          ctx.trace.push({ nodeId: node.id, type: node.type, action: "paused_for_reply" });
+          // Optional timeout (2026-10-14): without one the run waits for the
+          // reply however long it takes; with one, the same resume job as Wait
+          // for reply moves it on (stale timers are dropped by flow-resume).
+          const waitMs = Number(node.data?.timeoutMs);
+          if (waitMs > 0 && ctx.conversationId) {
+            await flowResumeQueue.add(
+              "resume",
+              {
+                tenantId: ctx.tenantId,
+                conversationId: ctx.conversationId,
+                flowKind: ctx.flowScope,
+                flowId: ctx.flowId,
+                resumeNodeId: node.id,
+                channel: ctx.channel,
+                message: "",
+                timeout: true,
+                ...(ctx.run ? { automationRunId: ctx.run.id } : {}),
+              },
+              { delay: waitMs, removeOnComplete: true, removeOnFail: 100 },
+            );
+          }
+          ctx.trace.push({ nodeId: node.id, type: node.type, action: "paused_for_reply", ...(waitMs > 0 ? { detail: { timeoutMs: waitMs } } : {}) });
           return {
             executed: true,
             halted: true,
@@ -1002,7 +1023,8 @@ async function walk(
           String(node.data?.url || ""),
           "document",
           node.data?.caption,
-          node.data?.filename,
+          // v2 writes fileName, the older editors filename: both are the name.
+          node.data?.filename ?? node.data?.fileName,
           ctx,
         );
         ctx.trace.push({ nodeId: node.id, type: node.type, action: "sent" });
