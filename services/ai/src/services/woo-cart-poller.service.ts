@@ -19,7 +19,7 @@
  * status, deduped by the incoming worker). Polling, not a Woo webhook: it
  * needs nothing written to the customer's store.
  */
-import { prisma, getRedis, incomingMessageQueue, decryptCredentials, assertPublicUrl, type CartEventJob, type OrderEventJob, type OrderStatus } from "@chatcenter/shared";
+import { prisma, getRedis, incomingMessageQueue, decryptCredentials, assertPublicUrl, withCrossTenantAccess, type CartEventJob, type OrderEventJob, type OrderStatus } from "@chatcenter/shared";
 import { normalizeStoreUrl } from "./connectors/woocommerce.adapter";
 
 const PER_PAGE = 20;
@@ -154,16 +154,24 @@ export async function pollWooConnection(
  * order automation. A workspace without one is never polled.
  */
 export async function pollWooCarts(now = new Date()): Promise<number> {
-  const tenants = await prisma.chatbotFlow.findMany({
-    where: { isActive: true, triggerType: { in: ["cart_abandoned", "order_event"] } },
-    select: { tenantId: true },
-    distinct: ["tenantId"],
-  } as any);
-  const ids = [...new Set((tenants as any[]).map((t) => t.tenantId))];
-  if (!ids.length) return 0;
-  const conns = await prisma.tenantIntegration.findMany({
-    where: { tenantId: { in: ids }, status: "CONNECTED", integration: { slug: "woocommerce" } },
-    select: { id: true, tenantId: true, credentials: true, config: true },
+  // Deliberately cross-tenant: which workspaces have a live cart / order
+  // automation, then their stores. Without the wrapper the TenantGuard blocked
+  // the first query and every tick failed before polling anything (2026-10-14:
+  // no Woo cart or order automation had ever fired). Everything after this is
+  // per store: pollWooConnection only talks to that store, Redis and the queue,
+  // and each job carries its connection's own tenantId.
+  const conns = await withCrossTenantAccess(async () => {
+    const tenants = await prisma.chatbotFlow.findMany({
+      where: { isActive: true, triggerType: { in: ["cart_abandoned", "order_event"] } },
+      select: { tenantId: true },
+      distinct: ["tenantId"],
+    } as any);
+    const ids = [...new Set((tenants as any[]).map((t) => t.tenantId))];
+    if (!ids.length) return [];
+    return prisma.tenantIntegration.findMany({
+      where: { tenantId: { in: ids }, status: "CONNECTED", integration: { slug: "woocommerce" } },
+      select: { id: true, tenantId: true, credentials: true, config: true },
+    });
   });
   let total = 0;
   for (const c of conns as any[]) {
