@@ -291,12 +291,12 @@ const popupOn = (over = {}) => ({ ...widgetConfig().ux.proactive, enabled: true,
 }
 
 {
-  // A pale main colour: the initial takes the colour the server chose to read on it.
+  // A pale main colour: dark text, whatever the stored contrastColor (Settings never writes it).
   const pale = widgetConfig({ brand: { name: "Aviv & Co.", initial: "A" } });
-  pale.appearance = { ...pale.appearance, primaryColor: "#f5e6c8", contrastColor: "#111111" };
+  pale.appearance = { ...pale.appearance, primaryColor: "#f5e6c8", contrastColor: "#ffffff" };
   const { page, ctx } = await openSite({ widgetExists: true, widget: pale, wait: 900 });
   const a = await look(page);
-  check("L1 bubble: a pale main colour gets dark text", a.bg === "rgb(245, 230, 200)" && a.fg === "rgb(17, 17, 17)" && a.face === "A", `${a.bg} ${a.fg} "${a.face}"`);
+  check("L1 bubble: a pale main colour gets dark text", a.bg === "rgb(245, 230, 200)" && a.fg === "rgb(43, 38, 34)" && a.face === "A", `${a.bg} ${a.fg} "${a.face}"`);
   await ctx.close();
 }
 

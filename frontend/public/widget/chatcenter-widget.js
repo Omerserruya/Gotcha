@@ -303,6 +303,25 @@
     return letter.toUpperCase();
   }
 
+  /**
+   * The text colour that reads on the main colour: design 7's cream or its
+   * ink, whichever contrasts more. Not the stored contrastColor - Settings
+   * never writes it, so it stays #ffffff on a pale colour (dev, 2026-10-14).
+   * Mirrors inkOn() in frontend-v2/src/lib/brand-mark.ts (the preview).
+   */
+  function inkOn(hex) {
+    var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ""));
+    if (!m) return "#FBF8F3";
+    var lum = function (r, g, b) {
+      var c = [r, g, b].map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    };
+    var l = lum(parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16));
+    var cream = (lum(251, 248, 243) + 0.05) / (l + 0.05);
+    var ink = (l + 0.05) / (lum(43, 38, 34) + 0.05);
+    return cream >= ink ? "#FBF8F3" : "#2B2622";
+  }
+
   var CHEVRON = '<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 
   var badge = null;
@@ -346,9 +365,8 @@
     style.textContent = [
       ".ldr{position:relative;width:56px;height:56px;border-radius:50%;padding:0;border:0;cursor:pointer;",
       "  display:flex;align-items:center;justify-content:center;",
-      // The initial in the colour the server chose to read on the main colour:
-      // a pale brand colour must not get pale text.
-      "  background:" + (wa ? "#25D366" : accent) + ";color:" + (wa ? "#fff" : appearance.contrastColor || "#FBF8F3") + ";",
+      // A pale main colour must not get pale text.
+      "  background:" + (wa ? "#25D366" : accent) + ";color:" + (wa ? "#fff" : inkOn(accent)) + ";",
       "  box-shadow:0 1px 0 rgba(255,255,255,.12) inset,0 10px 28px rgba(43,38,34,.28);",
       "  transition:transform .2s ease;}",
       ".ldr:hover{transform:translateY(-2px);}",
@@ -378,7 +396,7 @@
       ".pop-c::after{content:'';position:absolute;" + side + ":20px;bottom:-7px;width:16px;height:16px;background:#fff;",
       "  transform:rotate(45deg);border-radius:" + (side === "right" ? "0 0 4px 0" : "0 0 0 4px") + ";box-shadow:1px 1px 0 rgba(43,38,34,.07);}",
       ".pop-h{display:flex;align-items:center;gap:10px;}",
-      ".pav{position:relative;width:32px;height:32px;border-radius:50%;flex:none;background:" + accent + ";color:#FBF8F3;",
+      ".pav{position:relative;width:32px;height:32px;border-radius:50%;flex:none;background:" + accent + ";color:" + inkOn(accent) + ";",
       "  display:flex;align-items:center;justify-content:center;",
       "  font:500 19px/1 'Cormorant Garamond',Georgia,'Times New Roman',serif;}",
       ".pav-on{position:absolute;bottom:-1px;left:-1px;width:10px;height:10px;box-sizing:border-box;border-radius:50%;",
