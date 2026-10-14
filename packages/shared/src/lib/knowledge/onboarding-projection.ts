@@ -98,7 +98,10 @@ export interface ProjectedEntry {
  * changes shape enough that existing documents should be refreshed even
  * though their inputs did not change.
  */
-export const SCAN_VERSION = 1;
+// 2: clean page text, real page titles, one document per page, Hebrew topics
+// for a Hebrew workspace (2026-10-14). Bumped so every generated document is
+// rewritten once (title included); an edited one is still preserved.
+export const SCAN_VERSION = 2;
 
 // ─── URL normalization ──────────────────────────────────────
 

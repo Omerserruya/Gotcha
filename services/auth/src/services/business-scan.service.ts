@@ -25,7 +25,7 @@ import crypto from "crypto";
  * `address` or `currency` either - the scan does not produce them, and a field
  * the scan cannot speak for must never appear in its proposal.
  */
-import { prisma, readDurableSetting, writeDurableSetting, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, writeAudit, AuditAction } from "@chatcenter/shared";
+import { prisma, readDurableSetting, writeDurableSetting, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, writeAudit, AuditAction, type SkippedTopic } from "@chatcenter/shared";
 import { applyProjection } from "./onboarding-knowledge.service";
 import { crawlSite } from "./site-crawl.service";
 import {
@@ -36,6 +36,22 @@ import {
 } from "./field-provenance.service";
 
 const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || "http://ai:4006").replace(/\/$/, "");
+
+/**
+ * The language a scan writes in: the workspace's system language
+ * (Tenant.defaultLocale), then what the caller asked for, then English
+ * (2026-10-14). A Hebrew workspace's knowledge came out in English because the
+ * request carried no locale and the profile's primaryLanguage (the language
+ * customers write in) said "en". Used by onboarding's discover and the rescan.
+ */
+export async function systemLanguage(tenantId: string, requested?: string | null): Promise<"he" | "en"> {
+  const t = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { defaultLocale: true } }).catch(() => null);
+  const pick = (v: unknown) => {
+    const s = String(v ?? "").toLowerCase();
+    return s.startsWith("he") ? "he" : s.startsWith("en") ? "en" : null;
+  };
+  return pick(t?.defaultLocale) ?? pick(requested) ?? "en";
+}
 
 /**
  * The default transport. `fetchWithTimeout` is route-local in onboarding.ts and
@@ -241,6 +257,17 @@ export interface ScanKnowledge {
   preserved: number;
   removed: number;
   failed: number;
+  /** Topics left out (no facts in them), for the screen to show as gaps. */
+  skipped: SkippedTopic[];
+}
+
+/** The crawled pages as the projection takes them: titled, with their canonical, the home page marked. */
+export function crawlPagesForProjection(origin: string, crawl: { home: { text: string; title?: string | null; canonical?: string | null }; okPages: Array<{ url: string; text: string; title?: string | null; canonical?: string | null }> }) {
+  return [
+    { url: origin, content: crawl.home.text, title: crawl.home.title ?? null, canonical: crawl.home.canonical ?? null, home: true },
+    // Full page text: the 2800-character cut is only for the model.
+    ...crawl.okPages.map((p) => ({ url: p.url, content: p.text, title: p.title ?? null, canonical: p.canonical ?? null })),
+  ];
 }
 
 export type RescanOutcome =
@@ -336,11 +363,12 @@ export async function runProfileRescan(args: {
   // most is a login wall plus a failed scan.
   await persistCrawlReach(tenantId, reach);
 
+  const language = await systemLanguage(tenantId, args.locale);
   const report = await callDiscoverBusiness(
     authHeader,
     {
       domain: origin,
-      locale: args.locale || "en",
+      locale: language,
       pages: crawl.pages,
       signals: crawl.signals,
       businessType: crawl.businessType,
@@ -387,7 +415,7 @@ export async function runProfileRescan(args: {
   // same projection onboarding's discover runs. Machine-owned documents refresh
   // silently; a document a person edited (manualEdit) is preserved. Without
   // this, an auto-made overview stayed stale forever after a rescan.
-  const knowledge = await syncScanKnowledge({ tenantId, origin, report, crawl, locale: args.locale, authHeader, actorId });
+  const knowledge = await syncScanKnowledge({ tenantId, origin, report, crawl, language, authHeader, actorId });
 
   await setDiscoveryStatus(tenantId, { status: "COMPLETE", scanPhase: "done" });
   return { ok: true, plan, applied, reach, knowledge };
@@ -405,8 +433,8 @@ async function syncScanKnowledge(a: {
   tenantId: string;
   origin: string;
   report: any;
-  crawl: { home: { text: string }; okPages: Array<{ url: string; text: string }> };
-  locale?: string;
+  crawl: Parameters<typeof crawlPagesForProjection>[1];
+  language: "he" | "en";
   authHeader: string;
   actorId?: string | null;
 }): Promise<ScanKnowledge | null> {
@@ -433,11 +461,11 @@ async function syncScanKnowledge(a: {
       where: { tenantId: a.tenantId },
       select: { organizationName: true, industry: true, businessDescription: true, country: true, primaryLanguage: true },
     });
-    const ctx = { language: a.locale || profile?.primaryLanguage || "en", now: new Date().toISOString() };
+    const ctx = { language: a.language, now: new Date().toISOString() };
+    const skipped: SkippedTopic[] = [];
     const projected = [
-      ...projectDiscoveryTopics(saved as any, (profile ?? {}) as any, ctx),
-      // Full page text, as discover does: the 2800-character cut is only for the model.
-      ...projectPages([{ url: a.origin, content: a.crawl.home.text }, ...a.crawl.okPages.map((p) => ({ url: p.url, content: p.text }))], ctx),
+      ...projectDiscoveryTopics(saved as any, (profile ?? {}) as any, ctx, skipped),
+      ...projectPages(crawlPagesForProjection(a.origin, a.crawl), ctx),
     ];
     const sync = await applyProjection(
       { prisma, fetchFn: projectionFetch, authHeader: a.authHeader },
@@ -456,7 +484,7 @@ async function syncScanKnowledge(a: {
       metadata: { domain: a.origin, via: "rescan", added: sync.added, updated: sync.updated, unchanged: sync.unchanged, preserved: sync.preserved, removed: sync.removed, failed: sync.failed },
     } as any);
     if (!sync.ok) console.warn(`[business-scan] ${a.tenantId}: knowledge sync reported failures (${sync.failed} failed)`);
-    return { created: sync.added, updated: sync.updated, unchanged: sync.unchanged, preserved: sync.preserved, removed: sync.removed, failed: sync.failed };
+    return { created: sync.added, updated: sync.updated, unchanged: sync.unchanged, preserved: sync.preserved, removed: sync.removed, failed: sync.failed, skipped };
   } catch (err: any) {
     console.error(`[business-scan] ${a.tenantId}: knowledge sync failed:`, err?.message ?? err);
     return null;

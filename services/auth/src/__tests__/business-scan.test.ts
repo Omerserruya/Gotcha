@@ -17,6 +17,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // the test while vitest ran it happily - esbuild strips types without checking
 // them, so a test file can pass its suite and fail the typecheck.
 const prismaMock = vi.hoisted(() => ({
+  tenant: { findUnique: vi.fn<(...a: any[]) => any>() },
   businessProfile: { findUnique: vi.fn<(...a: any[]) => any>(), update: vi.fn<(...a: any[]) => any>() },
   businessDiscovery: { findUnique: vi.fn<(...a: any[]) => any>(), updateMany: vi.fn<(...a: any[]) => any>(), upsert: vi.fn<(...a: any[]) => any>() },
 }));
@@ -83,6 +84,7 @@ beforeEach(() => {
   settings.writes = [];
   prismaMock.businessProfile.findUnique.mockResolvedValue({ ...PROFILE });
   prismaMock.businessProfile.update.mockResolvedValue({});
+  prismaMock.tenant.findUnique.mockResolvedValue({ defaultLocale: "en" });
   prismaMock.businessDiscovery.findUnique.mockResolvedValue(null);
   prismaMock.businessDiscovery.updateMany.mockResolvedValue({ count: 1 });
   prismaMock.businessDiscovery.upsert.mockImplementation(async (a: any) => ({ tenantId: "t1", ...a.update }));
@@ -609,7 +611,7 @@ describe("★ the rescan refreshes the knowledge it generated (2026-10-14)", () 
     // Not the 2800-character model cut.
     expect(page.content.length).toBeGreaterThan(2800);
     expect(projected.some((e: any) => e.metadata?.topic === "business_overview")).toBe(true);
-    expect(outcome.knowledge).toEqual({ created: 1, updated: 2, unchanged: 3, preserved: 1, removed: 0, failed: 0 });
+    expect(outcome.knowledge).toMatchObject({ created: 1, updated: 2, unchanged: 3, preserved: 1, removed: 0, failed: 0 });
     expect(projectionMock.audits[0]).toMatchObject({ actorId: "u1", metadata: { via: "rescan", added: 1, preserved: 1 } });
   });
 
@@ -617,7 +619,7 @@ describe("★ the rescan refreshes the knowledge it generated (2026-10-14)", () 
     crawlMock.mockResolvedValue(SITE);
     await startProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
     await new Promise((r) => setTimeout(r, 10));
-    expect((await readScanRun("t1"))?.knowledge).toEqual({ created: 1, updated: 2, unchanged: 3, preserved: 1, removed: 0, failed: 0 });
+    expect((await readScanRun("t1"))?.knowledge).toMatchObject({ created: 1, updated: 2, unchanged: 3, preserved: 1, removed: 0, failed: 0 });
   });
 
   it("★ a failed knowledge step never fails the rescan: knowledge null, logged", async () => {
@@ -638,5 +640,43 @@ describe("★ the rescan refreshes the knowledge it generated (2026-10-14)", () 
     await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: failing });
     expect(projectionMock.apply).not.toHaveBeenCalled();
     expect(prismaMock.businessDiscovery.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("★ the scan writes in the workspace's system language (2026-10-14)", () => {
+  const SITE = {
+    pages: [{ url: "https://shop.example.com/faq", text: "x" }],
+    okPages: [{ url: "https://shop.example.com/faq", text: "Frequently asked questions about orders and sizing.", title: "FAQ", canonical: null }],
+    home: { html: "", text: "HALVO clothing, designed in Copenhagen.", title: "HALVO", canonical: null },
+    signals: {}, businessType: "ecommerce", requested: ["u"], distinctTextPages: 2,
+  };
+
+  it("★ a Hebrew workspace asks ai in Hebrew and gets Hebrew topics, whatever the request said", async () => {
+    prismaMock.tenant.findUnique.mockResolvedValue({ defaultLocale: "he" });
+    crawlMock.mockResolvedValue(SITE);
+    const fetchFn = okFetch();
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", locale: "en", fetchWithTimeoutFn: fetchFn });
+    const body = JSON.parse((fetchFn.mock.calls[0] as any[])[1].body);
+    expect(body.locale).toBe("he");
+    const projected = (projectionMock.apply.mock.calls[0] as any[])[2];
+    expect(projected.find((e: any) => e.metadata.topic === "business_overview")?.title).toBe("סקירת העסק");
+    // Pages carry their own titles.
+    expect(projected.find((e: any) => e.metadata.sourceUrl === "https://shop.example.com/faq")?.title).toBe("FAQ");
+  });
+
+  it("no workspace language: the request's, else English", async () => {
+    prismaMock.tenant.findUnique.mockResolvedValue({ defaultLocale: null });
+    crawlMock.mockResolvedValue(SITE);
+    const fetchFn = okFetch();
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", locale: "he", fetchWithTimeoutFn: fetchFn });
+    expect(JSON.parse((fetchFn.mock.calls[0] as any[])[1].body).locale).toBe("he");
+  });
+
+  it("★ topics left out are reported in the run's knowledge (skipped)", async () => {
+    crawlMock.mockResolvedValue(SITE);
+    const outcome: any = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+    expect(Array.isArray(outcome.knowledge.skipped)).toBe(true);
+    expect(outcome.knowledge.skipped.length).toBeGreaterThan(0);
+    expect(outcome.knowledge.skipped[0]).toEqual({ topic: expect.any(String), reason: expect.stringMatching(/empty|thin/) });
   });
 });

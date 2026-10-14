@@ -13,7 +13,7 @@ import {
   extractSignals,
   type DiscoverySignals,
 } from "../services/site-crawl.service";
-import { callDiscoverBusiness, persistCrawlReach } from "../services/business-scan.service";
+import { callDiscoverBusiness, persistCrawlReach, systemLanguage, crawlPagesForProjection } from "../services/business-scan.service";
 import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, projectReadinessAnswers, withoutWideDashes, clampGuardrails } from "@chatcenter/shared";
 import { applyProjection, type SyncReport } from "../services/onboarding-knowledge.service";
 import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
@@ -1952,7 +1952,9 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
       },
     }).catch(() => {});
 
-    const report = await callAIDiscoverBusiness(req.headers.authorization!, { domain: origin, locale, pages, signals, businessType });
+    // The workspace's system language, not the request's (2026-10-14).
+    const language = await systemLanguage(req.tenantId!, locale);
+    const report = await callAIDiscoverBusiness(req.headers.authorization!, { domain: origin, locale: language, pages, signals, businessType });
     if (!report) {
       // The deterministic signals were already persisted at the synthesis
       // boundary above - the review still shows the channels/tech we KNOW we
@@ -2047,20 +2049,16 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
         },
       }).catch(() => null);
 
-      const ctx = { language: locale || profile?.primaryLanguage || "en", now: new Date().toISOString() };
+      const ctx = { language, now: new Date().toISOString() };
       const projected = [
         ...projectDiscoveryTopics(saved as any, profile ?? {}, ctx),
         // `okPages`, not `pages`: the latter is truncated to 2800 chars per
         // page purely to keep the LLM request under its body-parser limit.
         // Ingesting that truncation would put a knowingly half-read shipping
         // policy in front of customers. The knowledge base gets the full text.
-        ...projectPages(
-          [
-            { url: origin, content: home.text },
-            ...okPages.map((p) => ({ url: p.url, content: p.text })),
-          ],
-          ctx,
-        ),
+        // Titled pages, one per content, the shared header and footer removed
+        // (projectPages); full text, not the model's 2800-character cut.
+        ...projectPages(crawlPagesForProjection(origin, { home, okPages }), ctx),
       ];
 
       knowledgeSync = await applyProjection(

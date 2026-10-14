@@ -41,7 +41,84 @@ import { promises as dns } from "dns";
 
 /** Fetch a page returning BOTH raw HTML (for signal regexes) and stripped text
  *  (for the LLM). Best-effort - returns null on any failure. */
-export async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ html: string; text: string } | null> {
+// ─── HTML to text (2026-10-14) ──────────────────────────────
+//
+// Every page doc of the dev store started `Ø "> HALVØ &#8211; …`: the tag
+// strip ran over the whole document, and the favicon's data-URI attribute
+// (an <svg> holding "Ø") ended a tag match early; numeric entities were never
+// decoded. Text now comes from <body> only, with svg/template dropped and
+// entities decoded.
+
+const NAMED_ENTITIES: Record<string, string> = {
+  nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", ndash: "-", mdash: "-",
+  hellip: "...", rsquo: "'", lsquo: "'", rdquo: '"', ldquo: '"', laquo: '"', raquo: '"', middot: "·", bull: "·", copy: "©", reg: "®", trade: "™",
+};
+
+/** Decode HTML entities; a dash entity becomes a plain hyphen. */
+export function decodeEntities(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, code: string) => {
+    if (code[0] === "#") {
+      const n = code[1] === "x" || code[1] === "X" ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+      if (!Number.isFinite(n) || n <= 0 || n > 0x10ffff) return m;
+      // En/em dashes and the horizontal bar read as a hyphen in our knowledge.
+      if (n === 0x2013 || n === 0x2014 || n === 0x2015) return "-";
+      return String.fromCodePoint(n);
+    }
+    const v = NAMED_ENTITIES[code.toLowerCase()];
+    return v ?? m;
+  });
+}
+
+/** The readable text of a page: its <body>, without scripts, styles, svg or markup. */
+export function htmlToText(html: string): string {
+  const bodyMatch = /<body[^>]*>([\s\S]*)<\/body>/i.exec(html);
+  const body = bodyMatch ? bodyMatch[1]! : html.replace(/<head[\s\S]*?<\/head>/i, " ");
+  return decodeEntities(
+    body
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+      .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
+      .replace(/<template[\s\S]*?<\/template>/gi, " ")
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      // Quoted attribute values may hold ">"; drop them before the tag strip.
+      .replace(/<([a-z][^\s>\/]*)(?:\s+[^\s=>\/]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?)*\s*\/?>/gi, " ")
+      .replace(/<\/[a-z][^>]*>/gi, " ")
+      .replace(/<[^>]+>/g, " "),
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * A page's title for people: its first <h1>, else its <title> without the
+ * site-name suffix ("FAQ - HALVØ" -> "FAQ"). Null when it has neither.
+ */
+export function pageTitle(html: string): string | null {
+  const clean = (v: string) => decodeEntities(v.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+  const h1 = /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html);
+  if (h1) {
+    const t = clean(h1[1]!);
+    if (t) return t.slice(0, 200);
+  }
+  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
+  if (title) {
+    const t = clean(title[1]!).split(/\s+[-|·:]\s+/)[0]!.trim();
+    if (t) return t.slice(0, 200);
+  }
+  return null;
+}
+
+/** The page's own <link rel="canonical">, absolute, or null. */
+export function canonicalOf(html: string, base: string): string | null {
+  const m = /<link\b[^>]*rel=["']?canonical["']?[^>]*>/i.exec(html);
+  if (!m) return null;
+  const href = /href=["']([^"']+)["']/i.exec(m[0]);
+  if (!href) return null;
+  try { return new URL(decodeEntities(href[1]!), base).toString(); } catch { return null; }
+}
+
+export async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ html: string; text: string; title?: string | null; canonical?: string | null } | null> {
   try {
     // Present as a real browser. Many stores sit behind bot filters that 403 a
     // generic crawler UA - a partial/blocked fetch is a root cause of false
@@ -67,18 +144,7 @@ export async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ htm
     const ct = r.contentType || "";
     if (!ct.includes("text/html") && !ct.includes("xhtml")) return null;
     const html = r.text;
-    const text = html
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/gi, " ")
-      .replace(/&amp;/gi, "&")
-      .replace(/&lt;/gi, "<")
-      .replace(/&gt;/gi, ">")
-      .replace(/\s+/g, " ")
-      .trim();
-    return { html: html.slice(0, 400000), text };
+    return { html: html.slice(0, 400000), text: htmlToText(html), title: pageTitle(html), canonical: canonicalOf(html, url) };
   } catch {
     return null;
   }
@@ -340,11 +406,11 @@ export function classifyBusinessType(text: string, signals: DiscoverySignals): s
 // [key, English, Hebrew] - each step is a genuine phase of the scan.
 // ─── The crawl itself ────────────────────────────────────────
 
-export interface CrawledPage { url: string; html: string; text: string }
+export interface CrawledPage { url: string; html: string; text: string; title?: string | null; canonical?: string | null }
 
 export interface SiteCrawl {
   /** The home page, raw and stripped. */
-  home: { html: string; text: string };
+  home: { html: string; text: string; title?: string | null; canonical?: string | null };
   /** Same-origin pages that answered, with their HTML kept for signal regexes. */
   okPages: CrawledPage[];
   /** Exactly the shape `/api/ai-assist/discover-business` expects. */
@@ -382,7 +448,7 @@ export interface SiteCrawl {
 /** Which beat of the crawl is running, for callers that narrate it to a user. */
 export type CrawlPhase = "homepage" | "pages" | "signals";
 
-export type PageFetcher = (url: string, timeoutMs?: number) => Promise<{ html: string; text: string } | null>;
+export type PageFetcher = (url: string, timeoutMs?: number) => Promise<{ html: string; text: string; title?: string | null; canonical?: string | null } | null>;
 
 /** Total page fetches after the home page. Politeness, not a page-count limit. */
 export const CRAWL_FETCH_CAP = 16;
@@ -423,7 +489,7 @@ export async function crawlSite(
   requested.push(...toFetch);
   const okPages: CrawledPage[] = fetched
     .filter((e) => e.page)
-    .map((e) => ({ url: e.url, html: e.page!.html, text: e.page!.text }));
+    .map((e) => ({ url: e.url, html: e.page!.html, text: e.page!.text, title: e.page!.title ?? null, canonical: e.page!.canonical ?? null }));
 
   // Capped so the JSON body stays under the AI service's body-parser limit.
   // The AI trims further when it builds the LLM corpus.

@@ -722,8 +722,11 @@ export {
   projectReadinessAnswers,
   projectExternalSources,
   titleFor,
+  hasConcreteFact,
+  BOILERPLATE_MIN_PAGES,
 } from "./lib/knowledge/discovery-to-knowledge";
 export type {
+  SkippedTopic,
   DiscoveryInput,
   ProfileInput,
   ReadinessAnswer,
