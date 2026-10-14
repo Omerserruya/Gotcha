@@ -23,6 +23,7 @@ import process from "node:process";
 
 const pwPath = [
   process.env.PLAYWRIGHT_PATH,
+  path.join(path.resolve(new URL("../..", import.meta.url).pathname), "frontend-v2/node_modules/playwright/index.mjs"),
   path.join(os.homedir(), "projects/marketing/node_modules/playwright/index.mjs"),
 ].filter(Boolean).find((c) => fs.existsSync(c));
 if (!pwPath) { console.error("playwright not found; set PLAYWRIGHT_PATH"); process.exit(2); }
@@ -79,8 +80,10 @@ function widgetConfig(overrides = {}) {
   };
 }
 
+// The browser the installed Playwright ships with, unless one is named:
+// a hardcoded build path broke this script the day that build was replaced.
 const browser = await chromium.launch({
-  executablePath: path.join(os.homedir(), ".cache/ms-playwright/chromium-1228/chrome-linux64/chrome"),
+  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
   headless: true,
 });
 
@@ -88,10 +91,17 @@ const browser = await chromium.launch({
  * Serve a tenant's page with the embed snippet on it, with the widget
  * either alive or deleted.
  */
-async function openSite({ widgetExists }) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+async function openSite({ widgetExists, widget = widgetConfig(), availability = "online", lang = "en",
+  stored = null, history = [], wait = 1800, ctx: given = null }) {
+  const ctx = given || await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   const calls = [];
+  // A returning visitor: the loader's own keys (cc_ + the widget id's last 12).
+  if (stored) {
+    await page.addInitScript((entries) => {
+      for (const [k, v] of Object.entries(entries)) localStorage.setItem("cc_wid_test_123_" + k, v);
+    }, stored);
+  }
 
   await page.route(`${ORIGIN}/**`, async (route) => {
     const url = new URL(route.request().url());
@@ -100,7 +110,7 @@ async function openSite({ widgetExists }) {
     if (url.pathname === "/") {
       return route.fulfill({
         status: 200, contentType: "text/html",
-        body: '<!doctype html><html lang="en"><head><meta charset="utf-8"></head>' +
+        body: `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"></head>` +
           '<body style="margin:0;min-height:100vh;background:#f8fafc">' +
           '<h1 style="font:600 22px sans-serif;padding:24px">A tenant\'s own website</h1>' +
           `<script>window.__chatcenter={apiUrl:"${ORIGIN}",widgetId:"wid_test_123"};</script>` +
@@ -126,7 +136,7 @@ async function openSite({ widgetExists }) {
       }
       return route.fulfill({
         status: 200, contentType: "application/json",
-        body: JSON.stringify({ data: { availability: "online", widget: widgetConfig() } }),
+        body: JSON.stringify({ data: { availability, widget } }),
       });
     }
     if (url.pathname === "/api/embedded-chat/init") {
@@ -134,7 +144,7 @@ async function openSite({ widgetExists }) {
         body: JSON.stringify({ data: { sessionId: "conv_1", visitorId: "v1", sessionToken: "conv_1" } }) });
     }
     if (url.pathname.startsWith("/api/embedded-chat/messages")) {
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { messages: [] } }) });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { messages: history } }) });
     }
     if (url.pathname === "/api/embedded-chat/message") {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: {} }) });
@@ -147,7 +157,7 @@ async function openSite({ widgetExists }) {
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text().slice(0, 160)); });
 
   await page.goto(`${ORIGIN}/`, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(1800);
+  await page.waitForTimeout(wait);
   return { ctx, page, calls, errors };
 }
 
@@ -227,6 +237,162 @@ async function openSite({ widgetExists }) {
   check("live widget: logs nothing on the tenant's page", errors.length === 0, errors.slice(0, 2).join(" | "));
 
   await page.screenshot({ path: path.join(os.homedir(), ".cache/cc-work/shots/webchat-live.png") }).catch(() => {});
+  await ctx.close();
+}
+
+// ── Design 7: the bubble and the pop-up (live widget, L1) ──
+//
+// What the shadow root holds, read in one place.
+const look = (page) => page.evaluate(() => {
+  const s = document.getElementById("gotcha-chat-root")?.shadowRoot;
+  if (!s) return null;
+  const rect = (e) => { if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height), right: Math.round(innerWidth - r.right), bottom: Math.round(innerHeight - r.bottom) }; };
+  const b = s.querySelector('[data-act="launcher"]');
+  const pop = s.querySelector('[data-act="popup"]');
+  const bdg = s.querySelector(".bdg");
+  return {
+    bubble: rect(b), bg: b && getComputedStyle(b).backgroundColor, fg: b && getComputedStyle(b).color,
+    face: b ? (b.querySelector(".mark") || {}).textContent || "" : "", chevron: !!(b && b.querySelector(".chev")),
+    expanded: b && b.getAttribute("aria-expanded"),
+    dot: !!(b && b.querySelector(".on")),
+    badge: bdg && bdg.getAttribute("data-show") === "1" ? bdg.textContent : "",
+    pop: rect(pop), popDir: pop && pop.getAttribute("dir"),
+    typing: !!(pop && pop.querySelector(".pop-ty")),
+    name: pop ? (pop.querySelector(".pop-nm") || {}).textContent : null,
+    replies: pop ? (pop.querySelector(".pop-t") || {}).textContent || "" : null,
+    message: pop ? (pop.querySelector(".pop-m") || {}).textContent || "" : null,
+    deals: pop && pop.querySelector('[data-act="deals"]') ? pop.querySelector('[data-act="deals"]').textContent : "",
+    dealNext: !!(pop && pop.querySelector('[data-act="deal-next"]')),
+    panel: (s.querySelector(".panel") || {}).getAttribute?.("data-state") || null,
+  };
+});
+const shadowClick = (page, sel) => page.evaluate((q) => document.getElementById("gotcha-chat-root").shadowRoot.querySelector(q).click(), sel);
+const withUx = (ux, extra = {}) => { const w = widgetConfig(extra); w.ux = { ...w.ux, ...ux }; return w; };
+const popupOn = (over = {}) => ({ ...widgetConfig().ux.proactive, enabled: true, delaySeconds: 1, mobileDelaySeconds: 1, message: "Hi! Looking for a gift?", ...over });
+
+{
+  const { ctx, page, errors } = await openSite({ widgetExists: true,
+    widget: { ...widgetConfig({ brand: { name: "Urban Supply - GOTCHA Demo", initial: "U" } }), appearance: { ...widgetConfig().appearance, primaryColor: "#2b2622", contrastColor: "#fbf8f3" } } });
+  const a = await look(page);
+  check("L1 bubble: 56px, 22px from the side and the bottom", a.bubble.w === 56 && a.bubble.h === 56 && a.bubble.right === 22 && a.bubble.bottom === 22, JSON.stringify(a.bubble));
+  check("L1 bubble: the main colour, the brand's initial in its contrast colour", a.bg === "rgb(43, 38, 34)" && a.fg === "rgb(251, 248, 243)" && a.face === "U", `${a.bg} ${a.fg} "${a.face}"`);
+  check("L1 bubble: the green dot while someone answers", a.dot);
+  check("L1: a pop-up switched off never shows", a.pop === null);
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(500);
+  const o = await look(page);
+  check("L1 bubble: open, it is a chevron that minimises", o.chevron && o.expanded === "true" && !o.dot && o.panel === "open", JSON.stringify({ c: o.chevron, e: o.expanded, d: o.dot, p: o.panel }));
+  await shadowClick(page, '[data-act="launcher"]');
+  await page.waitForTimeout(300);
+  const c = await look(page);
+  check("L1 bubble: the chevron closes the chat", c.panel === "closed" && c.face === "U" && c.dot, JSON.stringify({ p: c.panel, f: c.face }));
+  check("L1: logs nothing (bubble)", errors.length === 0, errors.slice(0, 2).join(" | "));
+  await ctx.close();
+}
+
+{
+  // A pale main colour: the initial takes the colour the server chose to read on it.
+  const pale = widgetConfig({ brand: { name: "Aviv & Co.", initial: "A" } });
+  pale.appearance = { ...pale.appearance, primaryColor: "#f5e6c8", contrastColor: "#111111" };
+  const { page, ctx } = await openSite({ widgetExists: true, widget: pale, wait: 900 });
+  const a = await look(page);
+  check("L1 bubble: a pale main colour gets dark text", a.bg === "rgb(245, 230, 200)" && a.fg === "rgb(17, 17, 17)" && a.face === "A", `${a.bg} ${a.fg} "${a.face}"`);
+  await ctx.close();
+}
+
+{
+  const { page, ctx } = await openSite({ widgetExists: true, availability: "offline", widget: withUx({ proactive: popupOn() }), wait: 3400 });
+  const a = await look(page);
+  check("L1 offline: no green dot, and the pop-up does not promise a quick reply", !a.dot && a.pop && a.replies === "", JSON.stringify({ d: a.dot, r: a.replies }));
+  await ctx.close();
+}
+
+{
+  const { ctx, page, errors } = await openSite({ widgetExists: true, widget: withUx({ proactive: popupOn() }), wait: 400 });
+  const before = await look(page);
+  check("L1 pop-up: not before the merchant's delay", before.pop === null);
+  await page.waitForTimeout(900);
+  const typing = await look(page);
+  check("L1 pop-up: who is writing, then typing", !!typing.pop && typing.typing && typing.name === "Support" && typing.replies === "replies right away" && !typing.message, JSON.stringify({ t: typing.typing, n: typing.name, r: typing.replies }));
+  check("L1 pop-up: no '1' while it is still typing", typing.badge === "", typing.badge);
+  await page.waitForTimeout(1700);
+  const ready = await look(page);
+  check("L1 pop-up: the merchant's message, after the typing", ready.message === "Hi! Looking for a gift?" && !ready.typing, ready.message);
+  check("L1 pop-up: 330px, 90px up, 22px from the side", ready.pop.w === 330 && ready.pop.bottom === 90 && ready.pop.right === 22, JSON.stringify(ready.pop));
+  check("L1 bubble: '1' once the pop-up has its message", ready.badge === "1", ready.badge);
+  check("L1 pop-up: no deals strip without chosen coupons", ready.deals === "");
+  await shadowClick(page, '[data-act="popup-open"]');
+  await page.waitForTimeout(500);
+  const opened = await look(page);
+  check("L1 pop-up: its message opens the chat, and both pop-up and '1' go", opened.panel === "open" && opened.pop === null && opened.badge === "", JSON.stringify({ p: opened.panel, b: opened.badge }));
+  // Once per visit: the next page of the same visit offers nothing.
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(3200);
+  const again = await look(page);
+  check("L1 pop-up: once per visit", again.pop === null);
+  check("L1: logs nothing (pop-up)", errors.length === 0, errors.slice(0, 2).join(" | "));
+  await ctx.close();
+}
+
+{
+  const { ctx, page } = await openSite({ widgetExists: true, widget: withUx({ proactive: popupOn() }), wait: 3200 });
+  await shadowClick(page, '[data-act="popup-close"]');
+  await page.waitForTimeout(200);
+  const a = await look(page);
+  check("L1 pop-up: ✕ dismisses it and its '1'", a.pop === null && a.badge === "" && a.panel === "closed", JSON.stringify({ b: a.badge, p: a.panel }));
+  await ctx.close();
+}
+
+{
+  const w = withUx({ proactive: popupOn() });
+  w.promotions = [
+    { code: "SPRING15", amount: "15.00", discountType: "percent", expiresAt: null, minimumAmount: null },
+    { code: "TENOFF", amount: "10.00", discountType: "fixed_cart", expiresAt: null, minimumAmount: null },
+    { code: "VIP20", amount: "20", discountType: "percent", expiresAt: "2026-12-31T21:59:59.000Z", minimumAmount: "100" },
+  ];
+  const { ctx, page } = await openSite({ widgetExists: true, widget: w, wait: 3200 });
+  const a = await look(page);
+  check("L1 deals: the first chosen coupon, in words", a.deals.includes("Active deal") && a.deals.includes("15% off") && a.deals.includes("Coupon code SPRING15"), a.deals);
+  await shadowClick(page, '[data-act="deal-next"]');
+  const b = await look(page);
+  check("L1 deals: onward skips an amount with no currency", b.deals.includes("20% off") && b.deals.includes("VIP20") && b.deals.includes("valid until 31/12"), b.deals);
+  await shadowClick(page, '[data-act="deal-next"]');
+  const c = await look(page);
+  check("L1 deals: and comes round again", c.deals.includes("SPRING15"), c.deals);
+  await ctx.close();
+}
+
+{
+  const w = withUx({ proactive: popupOn() });
+  w.promotions = [{ code: "TENOFF", amount: "10.00", discountType: "fixed_cart", expiresAt: null, minimumAmount: null }];
+  const { ctx, page } = await openSite({ widgetExists: true, widget: w, wait: 3200 });
+  const a = await look(page);
+  check("L1 deals: nothing truthful to say, no strip", a.message && a.deals === "", a.deals);
+  await ctx.close();
+}
+
+{
+  const history = [
+    { id: "m1", direction: "INBOUND", body: "Do you ship to Eilat?", createdAt: "2026-10-14T08:00:00.000Z" },
+    { id: "m2", direction: "OUTBOUND", body: "Yes, in two days.\nAnything else?", createdAt: "2026-10-14T08:00:05.000Z" },
+  ];
+  const { ctx, page } = await openSite({ widgetExists: true, widget: withUx({ proactive: popupOn() }), wait: 3200,
+    stored: { conversation: "conv_1", token: "conv_1", session: "conv_1" }, history });
+  const a = await look(page);
+  check("L1 resume: a conversation under way is offered back, with its last line", a.message === "Pick up where we left off?Yes, in two days.", a.message);
+  check("L1 resume: no '1' for an offer", a.badge === "", a.badge);
+  await ctx.close();
+}
+
+{
+  const he = widgetConfig();
+  he.appearance = { ...he.appearance, language: "he" };
+  he.ux = { ...he.ux, proactive: popupOn({ message: "היי, אפשר לעזור?" }), launcher: { ...he.ux.launcher, position: "left", mobilePosition: "left" } };
+  const { ctx, page } = await openSite({ widgetExists: true, widget: he, lang: "he", wait: 3200 });
+  const a = await look(page);
+  check("L1 Hebrew: the pop-up reads right to left, in Hebrew", a.popDir === "rtl" && a.replies === "עונה מיד", `${a.popDir} "${a.replies}"`);
+  check("L1 left side: bubble and pop-up on the left", a.bubble.x === 22 && a.pop.x === 22, `${a.bubble.x} ${a.pop.x}`);
+  await page.screenshot({ path: path.join(os.homedir(), ".cache/cc-work/shots/webchat-l1-he.png") }).catch(() => {});
   await ctx.close();
 }
 
