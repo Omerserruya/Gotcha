@@ -108,7 +108,8 @@ export const RETRIEVE_PER_QUESTION = 5;
 export const FULL_TEXT_BUDGET = 30_000;
 const MAX_TOOLS = 60;
 /** Bumped when the judging prompt changes, so old judgements are not reused. */
-const JUDGE_VERSION = "3";
+// 4: judged on retrieval per question (987c2378), so stored judgements are judged again.
+const JUDGE_VERSION = "4";
 /** Questions per judge call: 32 at once came back all "partial". */
 export const JUDGE_BATCH = 8;
 /**
