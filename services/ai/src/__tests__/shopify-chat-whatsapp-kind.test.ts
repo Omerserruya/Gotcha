@@ -122,7 +122,8 @@ describe("★ POST /whatsapp-start", () => {
     expect(url).toBe(`https://wa.me/972525551234?text=${encodeURIComponent(`Does it come in blue? (${ref})`)}`);
     const rec = JSON.parse(H.kv.get(`wahandoff:ref:${ref}`)!);
     expect(rec).toMatchObject({ tenantId: "T", conversationId: null, whatsappChannelAccountId: "wa_1", context: { pageType: "product", productHandle: "oak-lamp", path: "/products/oak-lamp" } });
-    expect(JSON.stringify(rec)).not.toMatch(/99|price/);
+    expect(Object.keys(rec.context).sort()).toEqual(["pageType", "path", "productHandle", "productId"]);
+    expect(JSON.stringify(rec.context)).not.toMatch(/99|price/);
     expect(H.created).toEqual([]);
     const d = (await start({ sessionToken: token(), locale: "he" })).body.data;
     expect(d.url).toBe(`https://wa.me/972525551234?text=${encodeURIComponent(handoffMessage(d.ref, "he"))}`);
