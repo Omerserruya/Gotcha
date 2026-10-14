@@ -99,7 +99,8 @@ describe("★ topics", () => {
     const topics = out.map((e) => e.metadata.topic);
     expect(topics).not.toContain("contact_hours");
     expect(topics).toContain("shipping_returns");
-    expect(skipped).toEqual(expect.arrayContaining([{ topic: "contact_hours", reason: "empty" }, { topic: "pricing_policies", reason: "thin" }]));
+    // Channels found, none usable: thin (its old document is retired), not empty.
+    expect(skipped).toEqual(expect.arrayContaining([{ topic: "contact_hours", reason: "thin" }, { topic: "pricing_policies", reason: "thin" }]));
     expect(topics).not.toContain("pricing_policies");
     expect(hasConcreteFact("## Pricing model\nretail prices shown per product")).toBe(false);
     expect(hasConcreteFact("## Returns\nReturns within 14 days.")).toBe(true);
@@ -108,5 +109,19 @@ describe("★ topics", () => {
   it("Hebrew workspace: Hebrew titles", () => {
     const out = projectDiscoveryTopics(DISCOVERY, {}, CTX);
     expect(out.find((e) => e.metadata.topic === "business_overview")?.title).toBe("סקירת העסק");
+  });
+});
+
+describe("★ the home page is titled by the site", () => {
+  const pages = [
+    { url: "https://shop.test/", content: "The Quiet Season - autumn knitwear and coats, designed in Copenhagen.", title: "The Quiet Season", home: true, siteName: "HALVØ" },
+    { url: "https://shop.test/faq/", content: "Frequently asked questions about orders and delivery.", title: "FAQ" },
+  ];
+  it("Hebrew: דף הבית with the site name; English: the site name; never the hero h1", () => {
+    expect(projectPages(pages, { ...CTX, language: "he" })[0]!.title).toBe("דף הבית - HALVØ");
+    expect(projectPages(pages, { ...CTX, language: "en" })[0]!.title).toBe("HALVØ");
+    expect(projectPages([{ ...pages[0]!, siteName: null }], { ...CTX, language: "en" })[0]!.title).toBe("Home page");
+    // Other pages keep their own title.
+    expect(projectPages(pages, CTX)[1]!.title).toBe("FAQ");
   });
 });

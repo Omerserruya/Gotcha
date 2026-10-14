@@ -466,3 +466,18 @@ describe("buildEntry", () => {
     expect(a.content).toBe("a b");
   });
 });
+
+describe("★ a topic left out for having no facts retires its old document (2026-10-14)", () => {
+  const doc = (id: string, topic: string, extra: any = {}) => ({
+    id, title: topic, metadata: { origin: "onboarding", dedupeKey: `onboarding_scan:${topic}`, sourceType: "onboarding_scan", topic, checksum: "x", scanVersion: SCAN_VERSION, ...extra },
+  });
+  it("removed when listed in retireTopics; kept when only missing; an edited one is preserved", () => {
+    const existing = [doc("d1", "pricing_policies"), doc("d2", "contact_hours", { manualEdit: true }), doc("d3", "faq")] as any;
+    const plan = reconcile([], existing, { removeMissing: true, removeScope: ["url"], retireTopics: ["pricing_policies", "contact_hours"] });
+    expect(plan.items.find((i) => i.existingId === "d1")).toMatchObject({ action: "remove", reason: "topic_skipped" });
+    expect(plan.items.find((i) => i.existingId === "d2")).toMatchObject({ action: "preserved", reason: "manual_edit" });
+    // A topic the model simply did not produce this time keeps last time's.
+    expect(plan.items.find((i) => i.existingId === "d3")).toBeUndefined();
+    expect(plan.summary.removed).toBe(1);
+  });
+});

@@ -119,6 +119,8 @@ export interface PageInput {
   canonical?: string | null;
   /** The site's home page: kept whole when the shared header/footer is removed. */
   home?: boolean;
+  /** The site's own name (og:site_name or the title's first part); titles the home page. */
+  siteName?: string | null;
 }
 
 export interface ExternalSourceInput {
@@ -421,7 +423,10 @@ export function projectDiscoveryTopics(
     // sentinels used to produce) is a near-empty chunk that competes with real
     // knowledge during retrieval while teaching the employee nothing.
     if (!hasSubstance(content)) {
-      skipped?.push({ topic, reason: "empty" });
+      // Contact channels were found but none had anything usable: that is the
+      // thin case (retired), not the model having said nothing (kept).
+      const hadChannels = topic === "contact_hours" && Array.isArray(obj(discovery.communication).channels) && (obj(discovery.communication).channels as unknown[]).length > 0;
+      skipped?.push({ topic, reason: hadChannels ? "thin" : "empty" });
       continue;
     }
     if (POLICY_TOPICS.has(topic) && !hasConcreteFact(content)) {
@@ -481,7 +486,9 @@ export function projectPages(pages: PageInput[], ctx: ProjectionContext): Projec
   return unique.map((p, i) =>
     buildEntry({
       topic: "website_pages",
-      title: p.title?.trim() || p.url,
+      // The home page's h1 is a campaign line ("The Quiet Season"), not what
+      // the page is: it is titled by the site.
+      title: p.home ? homeTitle(p, ctx.language) : p.title?.trim() || p.url,
       content: stripped[i]!,
       sourceType: "url",
       sourceUrl: p.url,
@@ -489,6 +496,11 @@ export function projectPages(pages: PageInput[], ctx: ProjectionContext): Projec
       now: ctx.now,
     }),
   );
+}
+
+function homeTitle(p: PageInput, language: string): string {
+  if (isHe(language)) return p.siteName?.trim() ? `דף הבית - ${p.siteName.trim()}` : "דף הבית";
+  return p.siteName?.trim() || "Home page";
 }
 
 /** Each page's content without the word run that opens, and the one that closes, every page. */

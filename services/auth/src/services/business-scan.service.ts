@@ -262,9 +262,10 @@ export interface ScanKnowledge {
 }
 
 /** The crawled pages as the projection takes them: titled, with their canonical, the home page marked. */
-export function crawlPagesForProjection(origin: string, crawl: { home: { text: string; title?: string | null; canonical?: string | null }; okPages: Array<{ url: string; text: string; title?: string | null; canonical?: string | null }> }) {
+export function crawlPagesForProjection(origin: string, crawl: { home: { text: string; title?: string | null; canonical?: string | null; siteName?: string | null }; okPages: Array<{ url: string; text: string; title?: string | null; canonical?: string | null }> }) {
   return [
-    { url: origin, content: crawl.home.text, title: crawl.home.title ?? null, canonical: crawl.home.canonical ?? null, home: true },
+    // The home page is titled by the site, not its hero heading (projectPages).
+    { url: origin, content: crawl.home.text, title: crawl.home.title ?? null, canonical: crawl.home.canonical ?? null, home: true, siteName: crawl.home.siteName ?? null },
     // Full page text: the 2800-character cut is only for the model.
     ...crawl.okPages.map((p) => ({ url: p.url, content: p.text, title: p.title ?? null, canonical: p.canonical ?? null })),
   ];
@@ -471,8 +472,9 @@ async function syncScanKnowledge(a: {
       { prisma, fetchFn: projectionFetch, authHeader: a.authHeader },
       a.tenantId,
       projected,
-      // Only crawled pages may be retired; a topic the model skipped this time keeps last time's.
-      { removeMissing: true, removeScope: ["url"] },
+      // Crawled pages may be retired, and topics this scan left out for having
+      // no facts. A topic the model simply did not produce keeps last time's.
+      { removeMissing: true, removeScope: ["url"], retireTopics: skipped.filter((t) => t.reason === "thin").map((t) => t.topic) },
     );
     void writeAudit({
       tenantId: a.tenantId,

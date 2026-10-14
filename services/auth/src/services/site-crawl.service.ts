@@ -75,6 +75,8 @@ export function htmlToText(html: string): string {
   const body = bodyMatch ? bodyMatch[1]! : html.replace(/<head[\s\S]*?<\/head>/i, " ");
   return decodeEntities(
     body
+      // Accessibility skip links ("Skip to content") are for screen readers, not knowledge.
+      .replace(/<a\b[^>]*class=["'][^"']*\b(skip-link|skip-to-content|screen-reader-text|skip)\b[^"']*["'][^>]*>[\s\S]*?<\/a>/gi, " ")
       .replace(/<script[\s\S]*?<\/script>/gi, " ")
       .replace(/<style[\s\S]*?<\/style>/gi, " ")
       .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
@@ -87,7 +89,19 @@ export function htmlToText(html: string): string {
       .replace(/<[^>]+>/g, " "),
   )
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
+    .replace(/^(skip to (the )?(main )?content|דלג(ו)? לתוכן( הראשי| העיקרי)?)\s*/i, "");
+}
+
+/** The site's own name: og:site_name, else the first part of the <title>. Null when neither. */
+export function siteNameOf(html: string): string | null {
+  const og = /<meta\b[^>]*property=["']og:site_name["'][^>]*>/i.exec(html);
+  const content = og ? /content=["']([^"']+)["']/i.exec(og[0]) : null;
+  if (content) return decodeEntities(content[1]!).trim().slice(0, 120) || null;
+  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
+  if (!title) return null;
+  const t = decodeEntities(title[1]!.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim().split(/\s+[-|·:]\s+/)[0]!.trim();
+  return t ? t.slice(0, 120) : null;
 }
 
 /**
@@ -118,7 +132,7 @@ export function canonicalOf(html: string, base: string): string | null {
   try { return new URL(decodeEntities(href[1]!), base).toString(); } catch { return null; }
 }
 
-export async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ html: string; text: string; title?: string | null; canonical?: string | null } | null> {
+export async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ html: string; text: string; title?: string | null; canonical?: string | null; siteName?: string | null } | null> {
   try {
     // Present as a real browser. Many stores sit behind bot filters that 403 a
     // generic crawler UA - a partial/blocked fetch is a root cause of false
@@ -144,7 +158,7 @@ export async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ htm
     const ct = r.contentType || "";
     if (!ct.includes("text/html") && !ct.includes("xhtml")) return null;
     const html = r.text;
-    return { html: html.slice(0, 400000), text: htmlToText(html), title: pageTitle(html), canonical: canonicalOf(html, url) };
+    return { html: html.slice(0, 400000), text: htmlToText(html), title: pageTitle(html), canonical: canonicalOf(html, url), siteName: siteNameOf(html) };
   } catch {
     return null;
   }
@@ -410,7 +424,7 @@ export interface CrawledPage { url: string; html: string; text: string; title?: 
 
 export interface SiteCrawl {
   /** The home page, raw and stripped. */
-  home: { html: string; text: string; title?: string | null; canonical?: string | null };
+  home: { html: string; text: string; title?: string | null; canonical?: string | null; siteName?: string | null };
   /** Same-origin pages that answered, with their HTML kept for signal regexes. */
   okPages: CrawledPage[];
   /** Exactly the shape `/api/ai-assist/discover-business` expects. */
@@ -448,7 +462,7 @@ export interface SiteCrawl {
 /** Which beat of the crawl is running, for callers that narrate it to a user. */
 export type CrawlPhase = "homepage" | "pages" | "signals";
 
-export type PageFetcher = (url: string, timeoutMs?: number) => Promise<{ html: string; text: string; title?: string | null; canonical?: string | null } | null>;
+export type PageFetcher = (url: string, timeoutMs?: number) => Promise<{ html: string; text: string; title?: string | null; canonical?: string | null; siteName?: string | null } | null>;
 
 /** Total page fetches after the home page. Politeness, not a page-count limit. */
 export const CRAWL_FETCH_CAP = 16;

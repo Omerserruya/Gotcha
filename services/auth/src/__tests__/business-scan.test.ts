@@ -605,7 +605,10 @@ describe("★ the rescan refreshes the knowledge it generated (2026-10-14)", () 
     const [deps, tenant, projected, options] = projectionMock.apply.mock.calls[0] as any[];
     expect(deps.authHeader).toBe("Bearer user");
     expect(tenant).toBe("t1");
-    expect(options).toEqual({ removeMissing: true, removeScope: ["url"] });
+    // Pages may be retired, and topics left out for having no facts (2026-10-14).
+    expect(options).toMatchObject({ removeMissing: true, removeScope: ["url"] });
+    expect(Array.isArray(options.retireTopics)).toBe(true);
+    expect(options.retireTopics).toEqual(outcome.knowledge.skipped.filter((t: any) => t.reason === "thin").map((t: any) => t.topic));
     const page = projected.find((e: any) => e.metadata?.sourceUrl === "https://shop.example.com/shipping" || String(e.metadata?.dedupeKey).includes("shipping"));
     expect(page).toBeTruthy();
     // Not the 2800-character model cut.

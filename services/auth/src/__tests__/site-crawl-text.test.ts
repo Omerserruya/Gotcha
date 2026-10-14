@@ -5,7 +5,7 @@
  * numeric entities were never decoded.
  */
 import { describe, it, expect } from "vitest";
-import { htmlToText, pageTitle, canonicalOf, decodeEntities } from "../services/site-crawl.service";
+import { htmlToText, pageTitle, canonicalOf, decodeEntities, siteNameOf } from "../services/site-crawl.service";
 
 const HTML = `<!doctype html><html><head>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text x='32'>Ø</text></svg>">
@@ -20,7 +20,7 @@ describe("htmlToText", () => {
   it("★ reads the body only: no favicon debris, no attribute leftovers, entities decoded", () => {
     const t = htmlToText(HTML);
     expect(t).not.toMatch(/Ø ">|&#|data:image|not text|M0 0/);
-    expect(t).toBe("Skip to content Frequently asked questions Shipping & returns: 30-day returns & free shipping over ₪299.");
+    expect(t).toBe("Frequently asked questions Shipping & returns: 30-day returns & free shipping over ₪299.");
   });
   it("a page with no <body> still drops its <head>", () => {
     expect(htmlToText("<head><title>T</title></head><p>Hello there</p>")).toBe("Hello there");
@@ -40,5 +40,20 @@ describe("pageTitle and canonicalOf", () => {
     expect(canonicalOf(HTML, "https://shop.test/pages/faq")).toBe("https://shop.test/faq/");
     expect(canonicalOf('<link href="/about/" rel="canonical">', "https://shop.test/pages/about")).toBe("https://shop.test/about/");
     expect(canonicalOf("<p></p>", "https://shop.test/")).toBeNull();
+  });
+});
+
+describe("skip links and the site name", () => {
+  it("★ a skip link is not knowledge, by class or as leading text", () => {
+    expect(htmlToText('<body><a class="skip-link screen-reader-text" href="#c">Skip to content</a><p>Hello there</p></body>')).toBe("Hello there");
+    expect(htmlToText("<body><p>Skip to main content</p><p>Hello there</p></body>")).toBe("Hello there");
+    // Not only at the start: a skip link inside the page is dropped by its class.
+    expect(htmlToText('<body><p>Hello there</p><a class="skip-link" href="#f">Skip to footer</a><p>Bye</p></body>')).toBe("Hello there Bye");
+    expect(htmlToText("<body><p>דלג לתוכן</p><p>שלום</p></body>")).toBe("שלום");
+  });
+  it("og:site_name, else the title's first part", () => {
+    expect(siteNameOf('<meta property="og:site_name" content="HALV&#216;">')).toBe("HALVØ");
+    expect(siteNameOf("<title>HALVØ &#8211; Considered clothing</title>")).toBe("HALVØ");
+    expect(siteNameOf("<p></p>")).toBeNull();
   });
 });

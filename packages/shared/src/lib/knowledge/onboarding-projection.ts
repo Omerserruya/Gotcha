@@ -259,7 +259,16 @@ function readMeta(raw: unknown): Partial<KbSourceMetadata> | null {
 export function reconcile(
   projected: ProjectedEntry[],
   existing: ExistingDoc[],
-  options: { removeMissing?: boolean; removeScope?: KbSourceType[] } = {},
+  options: {
+    removeMissing?: boolean;
+    removeScope?: KbSourceType[];
+    /**
+     * Topics this scan left out on purpose (no facts in them). Their machine
+     * made documents are retired too, so a topic that turned thin does not
+     * stay behind as last time's empty doc (2026-10-14). Needs removeMissing.
+     */
+    retireTopics?: KbTopic[];
+  } = {},
 ): ReconcilePlan {
   const items: ReconcileItem[] = [];
 
@@ -333,13 +342,14 @@ export function reconcile(
     for (const [key, doc] of owned) {
       if (seen.has(key)) continue;
       const meta = readMeta(doc.metadata)!;
-      if (scope && !scope.includes(meta.sourceType as KbSourceType)) continue;
+      const retiredTopic = meta.sourceType === "onboarding_scan" && !!meta.topic && !!options.retireTopics?.includes(meta.topic as KbTopic);
+      if (scope && !scope.includes(meta.sourceType as KbSourceType) && !retiredTopic) continue;
       // A page gone from the site does not take a person's correction with it.
       if (meta.manualEdit === true) {
         items.push({ action: "preserved", dedupeKey: key, existingId: doc.id, reason: "manual_edit" });
         continue;
       }
-      items.push({ action: "remove", dedupeKey: key, existingId: doc.id, reason: "no_longer_found" });
+      items.push({ action: "remove", dedupeKey: key, existingId: doc.id, reason: retiredTopic ? "topic_skipped" : "no_longer_found" });
     }
   }
 
