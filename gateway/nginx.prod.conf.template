@@ -100,6 +100,16 @@ http {
         ~^/ai-studio/agents/[^/.]+/?$                                    /studio/employees;
     }
 
+    # Never redirect a page to itself. The map above was written for /v2 (old
+    # path -> /v2/new path); at the root, an old path that kept its name maps
+    # to itself (/approvals, /settings/security, /settings/billing...), which
+    # without this loops forever. Empty when the target's path equals the
+    # request's (a trailing slash aside), so the app serves it.
+    map "$v2_dest|$uri" $v2_go {
+        default $v2_dest;
+        "~^([^?|]*)(\?[^|]*)?\|\1/?$" "";
+    }
+
 
     # Real public scheme. TLS terminates at Cloudflare, so $scheme is always
     # "http" inside this container - passing it to Authentik would make it
@@ -2122,7 +2132,7 @@ http {
             # Old app paths 302 to their place in this one (the $v2_dest map).
             # Relative Location: $scheme is http behind Cloudflare.
             absolute_redirect off;
-            if ($v2_dest != "") { return 302 $v2_dest; }
+            if ($v2_go != "") { return 302 $v2_go; }
             proxy_pass http://frontend_v2;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
