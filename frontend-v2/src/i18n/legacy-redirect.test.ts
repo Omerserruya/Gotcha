@@ -78,7 +78,7 @@ describe('★★ every target is a page this app has', () => {
    * The console's pages, being built in parallel (2026-10-21). Listed, not
    * skipped: the last test fails the day they exist, so this list empties.
    */
-  const PENDING = ['/system/tenants', '/system/tenants/x1', '/system/coupons'];
+  const PENDING = ['/system/tenants/x1', '/system/coupons'];
 
   it.each(legacyPages(LEGACY))('%s', (page) => {
     const target = to(page, 'en');
