@@ -2,5 +2,54 @@
   "home": {
     "title": "ניהול מערכת",
     "description": "כל סביבות העבודה בפלטפורמה, במקום אחד: מי הן, איך הן משלמות ומה הן מחויבות."
+  },
+  "sections": {
+    "tenants": "ארגונים",
+    "tenantsLine": "כל ארגון בפלטפורמה: התוכנית שלו ומה הוא חייב."
+  },
+  "tenants": {
+    "title": "ארגונים",
+    "description": "כל ארגון בפלטפורמה: התוכנית שלו, מצב החיוב שלו וכמה אנשים משתמשים בו.",
+    "search": {
+      "label": "חיפוש ארגונים",
+      "placeholder": "שם או מזהה",
+      "submit": "חיפוש"
+    },
+    "columns": {
+      "organization": "ארגון",
+      "users": "משתמשים",
+      "conversations": "שיחות פתוחות",
+      "channels": "ערוצים מחוברים",
+      "plan": "תוכנית",
+      "status": "סטטוס"
+    },
+    "shown": "מוצגים {shown} החדשים מתוך {total}. אפשר לחפש כדי למצוא את השאר.",
+    "empty": "אין עדיין ארגונים.",
+    "noMatch": "אין ארגון שהשם או המזהה שלו מכילים „{search}”.",
+    "unread": "לא הצלחנו לקרוא את הארגונים. רעננו את הדף כדי לנסות שוב."
+  },
+  "plan": {
+    "ACTIVE_PAID": "תוכנית בתשלום",
+    "ACTIVE_POC": "POC",
+    "ACTIVE_TRIAL": "ניסיון",
+    "ACTIVE_MANUAL_CONTRACT": "חוזה ידני",
+    "PENDING_PAYMENT": "ממתין לתשלום",
+    "SETUP_INCOMPLETE": "הגדרת התוכנית לא הושלמה",
+    "EXPIRED": "הגישה הסתיימה",
+    "CONFLICTING": "שתי תוכניות פעילות, נדרשת בדיקה",
+    "MISSING": "אין תוכנית, נדרשת פעולה",
+    "unknown": "תוכנית לא ידועה"
+  },
+  "billing": {
+    "PENDING_PAYMENT_READY": "ממתין לתשלום",
+    "BILLING_SETUP_INCOMPLETE": "הגדרת החיוב לא הושלמה",
+    "BILLING_UNREAD": "מצב החיוב לא נקרא"
+  },
+  "status": {
+    "ACTIVE": "פעיל",
+    "PENDING_ADMIN_SETUP": "ממתין להגדרת מנהל",
+    "PENDING_ONBOARDING": "בהטמעה",
+    "SUSPENDED": "מושעה",
+    "disabled": "מושבת"
   }
 }

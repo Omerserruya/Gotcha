@@ -2,5 +2,54 @@
   "home": {
     "title": "Platform console",
     "description": "Every workspace on the platform, in one place: who they are, how they pay and what they are charged."
+  },
+  "sections": {
+    "tenants": "Tenants",
+    "tenantsLine": "Every organization on the platform: the plan it holds and what it owes."
+  },
+  "tenants": {
+    "title": "Tenants",
+    "description": "Every organization on the platform: its plan, its billing state and how many people use it.",
+    "search": {
+      "label": "Search tenants",
+      "placeholder": "Name or slug",
+      "submit": "Search"
+    },
+    "columns": {
+      "organization": "Organization",
+      "users": "Users",
+      "conversations": "Open conversations",
+      "channels": "Connected channels",
+      "plan": "Plan",
+      "status": "Status"
+    },
+    "shown": "Showing the newest {shown} of {total}. Search to find the others.",
+    "empty": "There are no tenants yet.",
+    "noMatch": "No tenant's name or slug contains “{search}”.",
+    "unread": "The tenants couldn't be read. Reload the page to try again."
+  },
+  "plan": {
+    "ACTIVE_PAID": "Paid plan",
+    "ACTIVE_POC": "POC",
+    "ACTIVE_TRIAL": "Trial",
+    "ACTIVE_MANUAL_CONTRACT": "Manual contract",
+    "PENDING_PAYMENT": "Pending payment",
+    "SETUP_INCOMPLETE": "Plan setup incomplete",
+    "EXPIRED": "Access ended",
+    "CONFLICTING": "Two active plans, needs review",
+    "MISSING": "No plan, needs action",
+    "unknown": "Plan unknown"
+  },
+  "billing": {
+    "PENDING_PAYMENT_READY": "Pending payment",
+    "BILLING_SETUP_INCOMPLETE": "Billing setup incomplete",
+    "BILLING_UNREAD": "Billing state unread"
+  },
+  "status": {
+    "ACTIVE": "Active",
+    "PENDING_ADMIN_SETUP": "Waiting for admin setup",
+    "PENDING_ONBOARDING": "Onboarding",
+    "SUSPENDED": "Suspended",
+    "disabled": "Disabled"
   }
 }

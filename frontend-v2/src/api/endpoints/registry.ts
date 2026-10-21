@@ -2002,5 +2002,17 @@ export const inboxEndpoints = {
    */
 } as const;
 
+/**
+ * The platform console - SYSTEM_ADMIN only (`requireSystemAdmin`, auth
+ * `routes/system.ts`, served by auth through the gateway's `/api/system`).
+ */
+export const consoleEndpoints = {
+  /** `?search=&page=&limit=` → `{ data, meta }` - raw (system.ts:101). */
+  tenants: () => endpoint('/api/system/tenants'),
+  /** `{ data: ProvisioningStatus | null }` (system.ts:880). */
+  provisioning: (tenantId: string) =>
+    endpoint('/api/system/tenants/{tenantId}/billing-provisioning', { tenantId }),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };

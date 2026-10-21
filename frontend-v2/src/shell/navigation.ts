@@ -344,4 +344,6 @@ export const CONSOLE_NAVIGATION: NavigationItem = {
  * pages exist: a link to a room with nothing in it is the promise an empty tab
  * makes (see ANALYTICS_SECTIONS).
  */
-export const CONSOLE_SECTIONS: readonly NavigationChild[] = [];
+export const CONSOLE_SECTIONS: readonly NavigationChild[] = [
+  { id: 'tenants', labelKey: 'sections.tenants', href: '/system/tenants' },
+];
