@@ -1,10 +1,19 @@
 import { render, screen, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
-import { describe, expect, it } from 'vitest';
+import type { ReactNode } from 'react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { tenantRowSchema, type ProvisioningStatus } from '@/api/contracts/console';
 import consoleEn from '@/i18n/messages/en/console.json';
 import consoleHe from '@/i18n/messages/he/console.json';
+
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 import { TenantsTable } from './TenantsTable';
 
@@ -60,6 +69,11 @@ describe('★★ the tenants table', () => {
         .getAllByRole('cell')
         .map((c) => c.textContent),
     ).toEqual(['Org aorg-a', '4', '2', '1', 'Paid plan', 'Active']);
+  });
+
+  it('★ the name opens the tenant’s own page', () => {
+    show({ tenants: [tenant('a')] });
+    expect(within(rowOf('a')).getByRole('link')).toHaveAttribute('href', '/system/tenants/a');
   });
 
   it('★★ a plan is never blank: no verdict reads "Plan unknown", no plan reads as needing action', () => {

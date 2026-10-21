@@ -110,3 +110,125 @@ export const provisioningStatusSchema = z
   })
   .nullable();
 export type ProvisioningStatus = z.infer<typeof provisioningStatusSchema>;
+
+/**
+ * One tenant - `GET /api/system/tenants/:id` (system.ts:172) → `{ data }`.
+ * The route sends the whole Tenant row and more; the console reads what it
+ * draws. `_count` here is unfiltered (all conversations, all channels).
+ */
+export const tenantDetailSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  status: z.string(),
+  isActive: z.boolean(),
+  createdAt: z.string(),
+  _count: z
+    .object({
+      users: count,
+      conversations: count,
+      messages: count,
+      channelAccounts: count,
+      departments: count,
+    })
+    .catch({
+      users: null,
+      conversations: null,
+      messages: null,
+      channelAccounts: null,
+      departments: null,
+    })
+    .default({
+      users: null,
+      conversations: null,
+      messages: null,
+      channelAccounts: null,
+      departments: null,
+    }),
+  channels: z
+    .array(
+      z.object({
+        id: z.string(),
+        channel: z.string(),
+        displayName: nullableString,
+        connectionStatus: z.string().catch('').default(''),
+      }),
+    )
+    .catch([])
+    .default([]),
+  /** Always sent on the detail (system.ts:211), with `planName`. */
+  planAccess: planAccessSchema,
+});
+export type TenantDetail = z.infer<typeof tenantDetailSchema>;
+
+/**
+ * Plans a paid plan can be assigned from - ACTIVE, PUBLIC, not sales-only
+ * (billing `admin-pricing.ts:1085`) → `{ data }`. Only what the picker needs:
+ * the route prices the choice itself and accepts the id alone.
+ */
+export const provisionablePlansSchema = z.array(
+  z.object({
+    id: z.string(),
+    key: z.string(),
+    name: z.string(),
+  }),
+);
+export type ProvisionablePlan = z.infer<typeof provisionablePlansSchema>[number];
+
+/**
+ * A coupon (billing `coupon.service.ts:134` listCoupons) - `GET
+ * /api/admin/coupons` → bare `{ coupons }`. `label` is the service's own
+ * summary of the discount ("20% off").
+ */
+export const couponSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  nameEn: z.string().catch('').default(''),
+  nameHe: nullableString,
+  /** `CouponDiscountType` (schema.prisma:3727): PERCENT · FIXED. */
+  discountType: z.string(),
+  percentOff: z.number().nullable().catch(null).default(null),
+  amountOff: nullableString,
+  currency: nullableString,
+  defaultDurationMonths: z.number().int().nullable().catch(null).default(null),
+  active: z.boolean(),
+  maxRedemptions: z.number().int().nullable().catch(null).default(null),
+  assignmentCount: z.number().int().catch(0).default(0),
+  label: z.string().catch('').default(''),
+});
+export type Coupon = z.infer<typeof couponSchema>;
+export const couponListSchema = z.object({ coupons: z.array(couponSchema) });
+
+/**
+ * One tenant's coupon assignment (coupon.service.ts:288) - `GET
+ * /api/admin/coupons/tenants/:id` → bare `{ assignments }`. `live` is "is
+ * discounting money right now": window open AND the coupon still active.
+ * `status` is `TenantCouponStatus` (schema.prisma:3735).
+ */
+export const tenantCouponSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  label: z.string().catch('').default(''),
+  startsAt: z.string(),
+  endsAt: nullableString,
+  status: z.string(),
+  live: z.boolean().catch(false).default(false),
+});
+export type TenantCoupon = z.infer<typeof tenantCouponSchema>;
+export const tenantCouponsSchema = z.object({ assignments: z.array(tenantCouponSchema) });
+
+/** The coupon routes' refusal codes (`refusal()`, admin-coupons.ts:42), each its own sentence. */
+export const COUPON_REFUSALS = [
+  'invalid_code',
+  'name_required',
+  'percent_out_of_range',
+  'amount_required',
+  'currency_required_for_fixed',
+  'invalid_duration',
+  'unknown_coupon',
+  'coupon_inactive',
+  'coupon_exhausted',
+  'unknown_tenant',
+  'already_assigned',
+] as const;
+export type CouponRefusalCode = (typeof COUPON_REFUSALS)[number];

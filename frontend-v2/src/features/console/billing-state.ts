@@ -28,3 +28,19 @@ export function tenantBillingState(
   if (provisioning?.state === 'COMPLETED') return 'PENDING_PAYMENT_READY';
   return 'BILLING_SETUP_INCOMPLETE';
 }
+
+/**
+ * Whether Repair is offered - the route's own guard (system.ts:757-787),
+ * not legacy's narrower "PENDING_PAYMENT only": a request exists, it has not
+ * COMPLETED, it can be retried, and either the tenant owes its first payment
+ * or the request is a POC's (which never owes one, and is exactly what a
+ * half-provisioned POC needs). No request at all is not repairable - the
+ * route answers NO_PROVISIONING_REQUEST; a plan is assigned instead.
+ */
+export function repairOffered(
+  tenantStatus: string,
+  provisioning: ProvisioningStatus | undefined,
+): boolean {
+  if (!provisioning || provisioning.state === 'COMPLETED' || !provisioning.canRepair) return false;
+  return tenantStatus === 'PENDING_PAYMENT' || provisioning.mode === 'POC';
+}

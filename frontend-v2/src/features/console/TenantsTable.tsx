@@ -4,6 +4,7 @@ import type { ProvisioningStatus, TenantRow } from '@/api/contracts/console';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Input } from '@/design-system/primitives/input/Input';
 import { UserText } from '@/design-system/primitives/text/UserText';
+import { Link } from '@/i18n/navigation';
 
 import { PlanAccessBadge, TenantStatusBadge } from './badges';
 import { tenantBillingState } from './billing-state';
@@ -39,7 +40,8 @@ const cell = (value: number | null) => (value === null ? '-' : value);
 /**
  * The tenants (legacy `system/tenants/page.tsx`): who, how many people and
  * conversations, the plan they hold, and the state they are in - with the
- * billing state a PENDING_PAYMENT tenant's own request decides.
+ * billing state a PENDING_PAYMENT tenant's own request decides. The name
+ * opens the tenant's own page, where its actions are.
  */
 export function TenantsTable({
   tenants,
@@ -98,10 +100,15 @@ export function TenantsTable({
               data-testid={`tenant-${tenant.id}`}
             >
               <span className={styles.colName} role="cell">
-                <UserText className={styles.name}>{tenant.name}</UserText>
-                <span className={styles.slug} dir="ltr">
-                  {tenant.slug}
-                </span>
+                <Link
+                  href={`/system/tenants/${tenant.id}`}
+                  className={`${styles.colName} ${styles.rowLink}`}
+                >
+                  <UserText className={styles.name}>{tenant.name}</UserText>
+                  <span className={styles.slug} dir="ltr">
+                    {tenant.slug}
+                  </span>
+                </Link>
               </span>
               <span className={styles.colCount} role="cell">
                 {cell(tenant._count.users)}

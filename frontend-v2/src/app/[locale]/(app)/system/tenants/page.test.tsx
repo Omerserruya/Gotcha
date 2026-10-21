@@ -14,6 +14,11 @@ vi.mock('@/shell/require-console', () => ({
   },
 }));
 vi.mock('@/features/console/load-tenants', () => ({ loadTenants }));
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children }: { href: string; children: ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'console.tenants') =>
     createTranslator({ locale: 'en', messages: { console: consoleEn }, namespace }),
