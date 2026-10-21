@@ -77,3 +77,57 @@ export async function revokeTenantCoupon(assignmentId: string): Promise<CouponWr
     return refusalOf(cause, 'console.coupon_revoke_failed');
   }
 }
+
+/** What the create form sends - the service's own input (coupon.service.ts:159). */
+export interface NewCoupon {
+  readonly code: string;
+  readonly nameEn: string;
+  readonly nameHe: string | null;
+  readonly discountType: 'PERCENT' | 'FIXED';
+  readonly percentOff: number | null;
+  readonly amountOff: string | null;
+  readonly currency: string | null;
+  readonly defaultDurationMonths: number | null;
+  readonly maxRedemptions: number | null;
+  readonly internalNote: string | null;
+}
+
+/**
+ * Issue a coupon (admin-coupons.ts:72). It discounts nothing until it is
+ * given to an organization, but it is the price of every charge it will
+ * touch - a billing write, held like the others. The route validates every
+ * field and names what it refused.
+ */
+export async function createCoupon(input: NewCoupon): Promise<CouponWrite> {
+  if (!billingWritesEnabled()) return { ok: false, reason: 'held' };
+  try {
+    await serverApi().post({
+      endpoint: couponEndpoints.list(),
+      body: input,
+      payload: z.unknown(),
+    });
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    return refusalOf(cause, 'console.coupon_create_failed');
+  }
+}
+
+/**
+ * Enable or disable a coupon (admin-coupons.ts:93). Disabling stops it
+ * discounting at once, everywhere it is assigned - a money change.
+ */
+export async function setCouponActive(couponId: string, active: boolean): Promise<CouponWrite> {
+  if (!billingWritesEnabled()) return { ok: false, reason: 'held' };
+  try {
+    await serverApi().post({
+      endpoint: couponEndpoints.active(couponId),
+      body: { active },
+      payload: z.unknown(),
+    });
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    return refusalOf(cause, 'console.coupon_active_failed');
+  }
+}

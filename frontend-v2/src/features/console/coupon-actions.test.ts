@@ -13,7 +13,12 @@ vi.mock('@/api/client/billing-writes', () => ({ billingWritesEnabled: () => writ
 vi.mock('@/api/client/signed-out', () => ({ signInIfSignedOut: async () => {} }));
 vi.mock('@/observability/logger', () => ({ logger: { warn: vi.fn() } }));
 
-import { assignTenantCoupon, revokeTenantCoupon } from './coupon-actions';
+import {
+  assignTenantCoupon,
+  createCoupon,
+  revokeTenantCoupon,
+  setCouponActive,
+} from './coupon-actions';
 
 beforeEach(() => {
   api.post.mockReset();
@@ -67,5 +72,52 @@ describe('★★ a tenant’s coupons at the wire', () => {
       new ApiError({ kind: 'server', status: 500, developerMessage: 'coupon_operation_failed' }),
     );
     expect(await revokeTenantCoupon('a1')).toEqual({ ok: false, reason: 'failed' });
+  });
+});
+
+describe('★★ issuing and switching coupons', () => {
+  const input = {
+    code: 'LAUNCH20',
+    nameEn: 'Launch',
+    nameHe: null,
+    discountType: 'PERCENT' as const,
+    percentOff: 20,
+    amountOff: null,
+    currency: null,
+    defaultDurationMonths: 12,
+    maxRedemptions: null,
+    internalNote: null,
+  };
+
+  it('★★ held unless BILLING_WRITES=on, before any call', async () => {
+    writes.on = false;
+    expect(await createCoupon(input)).toEqual({ ok: false, reason: 'held' });
+    expect(await setCouponActive('c1', false)).toEqual({ ok: false, reason: 'held' });
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it('★ create POSTs the form as the service takes it', async () => {
+    api.post.mockResolvedValue({ coupon: { id: 'c1' } });
+    expect(await createCoupon(input)).toEqual({ ok: true });
+    expect(api.post.mock.calls[0]![0]).toMatchObject({
+      endpoint: { path: '/api/admin/coupons' },
+      body: input,
+    });
+  });
+
+  it('★ enable and disable POST { active } on the coupon', async () => {
+    api.post.mockResolvedValue({ coupon: { id: 'c1' } });
+    await setCouponActive('c1', false);
+    expect(api.post.mock.calls[0]![0]).toMatchObject({
+      endpoint: { path: '/api/admin/coupons/c1/active' },
+      body: { active: false },
+    });
+  });
+
+  it('★ a refused field comes back as its own code', async () => {
+    api.post.mockRejectedValueOnce(
+      new ApiError({ kind: 'validation', status: 400, developerMessage: 'percent_out_of_range' }),
+    );
+    expect(await createCoupon(input)).toEqual({ ok: false, reason: 'percent_out_of_range' });
   });
 });

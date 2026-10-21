@@ -5,7 +5,9 @@
   },
   "sections": {
     "tenants": "Tenants",
-    "tenantsLine": "Every organization on the platform: the plan it holds and what it owes."
+    "tenantsLine": "Every organization on the platform: the plan it holds and what it owes.",
+    "coupons": "Coupons",
+    "couponsLine": "Discounts on what an organization is charged: issue them, and switch them on or off."
   },
   "tenants": {
     "title": "Tenants",
@@ -230,6 +232,59 @@
       "unchanged": "The plan and its contracted price don't change.",
       "yes": "Give the coupon",
       "done": "The coupon was given. It applies from the next charge."
+    }
+  },
+  "coupons": {
+    "title": "Coupons",
+    "description": "A coupon discounts what an organization is charged. It never changes its plan or its contracted price: when the window closes, the charge returns to the plan price on its own.",
+    "held": "Billing writes are off in this environment: its billing is the live payment account. Creating, enabling and disabling coupons are refused here, and say so.",
+    "unread": "The coupons couldn't be read. Reload the page to try again.",
+    "empty": "No coupon has been issued yet.",
+    "issued": "Issued coupons",
+    "window": "{months, plural, one {# month} other {# months}} by default",
+    "windowOpen": "Until revoked",
+    "given": "{count, plural, =0 {Given to no organization} one {Given to # organization} other {Given to # organizations}}",
+    "givenOfMax": "Given to {count} of at most {max}",
+    "active": "Active",
+    "disabled": "Disabled",
+    "disable": {
+      "label": "Disable",
+      "what": "{code} stops discounting at once, for every organization it was given to, and can't be given again until it is enabled.",
+      "yes": "Disable the coupon",
+      "done": "{code} is disabled. It stopped discounting everywhere it was given."
+    },
+    "enable": {
+      "label": "Enable",
+      "what": "{code} discounts again wherever its window is still open, and can be given again.",
+      "yes": "Enable the coupon",
+      "done": "{code} is enabled."
+    },
+    "create": {
+      "title": "Create a coupon",
+      "code": "Code",
+      "nameEn": "Name in English",
+      "nameHe": "Name in Hebrew (optional)",
+      "type": "Discount",
+      "percent": "A percentage",
+      "fixed": "A fixed amount",
+      "percentOff": "Percent off",
+      "amountOff": "Amount off",
+      "currency": "Currency",
+      "months": "Default months",
+      "monthsNone": "No end date",
+      "max": "At most this many organizations",
+      "maxNone": "No limit",
+      "note": "Internal note (optional)",
+      "notePlaceholder": "Never shown to the customer",
+      "wholeMonths": "A whole number of months, 1 or more.",
+      "wholeNumber": "A whole number, 1 or more.",
+      "example": "{price} becomes {after} ({off} off)",
+      "exampleOtherCurrency": "A {currency} coupon only discounts charges made in {currency}.",
+      "exampleFor": "On a plan of {price} a month: {example}, every month for {months, plural, one {# month} other {# months}}.",
+      "exampleOpen": "On a plan of {price} a month: {example}, every month until it is revoked.",
+      "submit": "Create coupon",
+      "creating": "Creating…",
+      "done": "The coupon was created. It discounts nothing until it is given to an organization."
     }
   }
 }
