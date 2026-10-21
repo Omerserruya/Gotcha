@@ -21,13 +21,21 @@
 # ── deps ─────────────────────────────────────────────────────────────────────
 # Separate stage so a source change does not reinstall. `npm ci` from the
 # lockfile, never `npm install`: the deployed tree must be the resolved one.
-FROM node:22-alpine AS deps
+#
+# deps and build run on the BUILD machine's platform, not the target's. Their
+# only product is `.next`, which is plain JS with no native modules (checked
+# 2026-10-21: no *.node and no x64 reference in it), and the run stage below
+# installs its own node_modules for the target. Under QEMU an arm64 `next build`
+# took 91 min to compile and then ran out of memory type-checking; natively it
+# takes minutes. On a same-arch build $BUILDPLATFORM is the target, so nothing
+# changes there.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
 # ── build ────────────────────────────────────────────────────────────────────
-FROM node:22-alpine AS build
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
