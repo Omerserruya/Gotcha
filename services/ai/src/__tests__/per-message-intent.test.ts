@@ -7,13 +7,13 @@
  * :146 to keyword matching "only if metadata didn't already say".
  *
  * ★ Nothing had ever written it. No message-intent column exists in any of 207
- * migrations and no writer set the metadata key — so that precedence rule was
+ * migrations and no writer set the metadata key - so that precedence rule was
  * written, shipped, and never once fired: the consumer ran on keyword
  * heuristics one hundred percent of the time, silently.
  *
  * `analyzeConversation` already classifies ONE specific inbound message and kept
  * the answer only at conversation level. So this is storage, not a new
- * classifier — no extra model call, and the value is the one already in hand.
+ * classifier - no extra model call, and the value is the one already in hand.
  * ════════════════════════════════════════════════════════════════════════════
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";

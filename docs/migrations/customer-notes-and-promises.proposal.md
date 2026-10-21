@@ -1,4 +1,4 @@
-# Customer notes and cross-channel promises — migration PROPOSAL
+# Customer notes and cross-channel promises - migration PROPOSAL
 
 **Status: NOT APPLIED. Nothing here has been run.** This is the shape for review.
 The authorisation I have reached me through a peer session quoting Omer; a quote
@@ -11,7 +11,7 @@ migration. Everything below is ready to apply the moment that arrives.
 **`CrmActivity` does not exist.** The justification I was given for a local table
 was "`CrmActivity` has no author field". There is no such model anywhere in
 `schema.prisma`. The real situation is stronger: notes are not stored locally
-**at all** — `POST /api/crm/conversation/:id/notes` calls `adapter.createNote`
+**at all** - `POST /api/crm/conversation/:id/notes` calls `adapter.createNote`
 and the note leaves for the merchant's CRM. Nothing on our side keeps a copy.
 
 So the conclusion holds and the reason stated does not, which matters because the
@@ -23,7 +23,7 @@ source_outbox_id?, payload_version? }`. **No author. No visibility. No revision.
 No pending state.** Four of 04f's requirements are unrepresentable, confirmed at
 the interface rather than inferred from a vendor's API.
 
-**`VoiceCallActionItem` should NOT be generalised.** It has no `tenantId` — it is
+**`VoiceCallActionItem` should NOT be generalised.** It has no `tenantId` - it is
 tenant-scoped only transitively, through a Cascade FK to `VoiceCallSession`
 (`schema.prisma:5960-5976`). Generalising means adding `tenantId`, adding a
 customer key, and making `sessionId` nullable, which turns a tight model into a
@@ -47,11 +47,11 @@ Three ways out, and this is a product decision:
 
 | | behaviour | cost |
 |---|---|---|
-| **A** | `team_only` notes stay local; only `ai_usable` notes reach the CRM | the merchant's CRM no longer holds everything — a silo, which is what routing exists to prevent |
+| **A** | `team_only` notes stay local; only `ai_usable` notes reach the CRM | the merchant's CRM no longer holds everything - a silo, which is what routing exists to prevent |
 | **B** | everything reaches the CRM; `team_only` means "not shown to the AI **by us**" and the flag is honestly described as best-effort | the flag promises less than its name implies |
 | **C** | everything reaches the CRM, and the envelope filters CRM notes back out by matching them to local `team_only` rows | real, and the match is fuzzy: the CRM may reformat the body, so it will sometimes fail open |
 
-**My recommendation is A, with the silo stated on screen** — "kept in GOTCHA only,
+**My recommendation is A, with the silo stated on screen** - "kept in GOTCHA only,
 because you marked it team-only". A flag that can be defeated by a path the user
 cannot see is worse than a flag with a visible limit. B is defensible if the
 label changes. C should not be built: a security-shaped guarantee that fails open
@@ -187,7 +187,7 @@ Frontend is right that they want the same storage and reading them together is
 correct. They still should not share a row:
 
 * A promise **closes**; a note does not. `status` means different things.
-* `visibility` is meaningful for a note and meaningless for a promise — the AI
+* `visibility` is meaningful for a note and meaningless for a promise - the AI
   should always know what we owe someone. A shared table would carry a column
   that must be ignored for half its rows.
 * A shared table needs a `kind` discriminator plus per-kind required fields,
@@ -204,7 +204,7 @@ An AI-suggested note is the AI's guess. If `status: PENDING` rows are included
 in the prompt context, the model reads its own earlier guess back as established
 fact about the customer and compounds it. The read that feeds the prompt must
 filter `status: ACTIVE` **and** `visibility: AI_USABLE`, and that belongs in a
-single shared accessor, not at each call site — the same reason
+single shared accessor, not at each call site - the same reason
 `resolvePersonScope` exists.
 
 ## Migration SQL, exactly as it would be applied
@@ -290,7 +290,7 @@ revision of a deleted note is meaningless.
 
 ## Routing, per Omer's earlier instruction
 
-On create, read the elected system through `getSystemForPart(tenantId, "crm")` —
+On create, read the elected system through `getSystemForPart(tenantId, "crm")` -
 the facade the AI already reads, so the screen and the bot cannot disagree:
 
 * **elected, write succeeds** → local row + `crmVendor`/`crmNoteId`/`crmSyncedAt`
@@ -301,7 +301,7 @@ the facade the AI already reads, so the screen and the bot cannot disagree:
 * **nothing elected** → local only, stated
 
 `source: "unmapped"` from the facade is a real answer and must not be treated as
-"no CRM, write locally and say nothing" — that is the silo the routing exists to
+"no CRM, write locally and say nothing" - that is the silo the routing exists to
 avoid.
 
 ## What I would build once it is authorised

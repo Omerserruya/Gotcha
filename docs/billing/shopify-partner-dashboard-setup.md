@@ -1,4 +1,4 @@
-# Shopify Partner Dashboard — the steps that cannot be done in code
+# Shopify Partner Dashboard - the steps that cannot be done in code
 
 Everything in this file is a manual action in Shopify's Partner Dashboard. None
 of it can be scripted from this repository, and until it is done the billing
@@ -38,7 +38,7 @@ means merchants are billed for an app they did not install.
 |---|---|---|
 | Plan selection | Shopify-hosted page | Your own UI + `appSubscriptionCreate` |
 | Plans defined in | **Partner Dashboard only** | Code |
-| How you learn of a subscription | **Partner API poll — no webhooks** | Admin API + `app_subscriptions/update` |
+| How you learn of a subscription | **Partner API poll - no webhooks** | Admin API + `app_subscriptions/update` |
 | Credential needed | Organisation-level Partner API token | The shop's own Admin token |
 | Non-embedded apps | **undocumented** | works |
 | Config | `SHOPIFY_BILLING_MODE=app_pricing` | `SHOPIFY_BILLING_MODE=manual` |
@@ -63,7 +63,7 @@ Two things should drive the choice:
 ### 2.1 Create the pricing plans
 **Partner Dashboard → App distribution → All apps → \<the app\> → Pricing.**
 
-For each plan, record its **handle** — that is the only part this repo needs.
+For each plan, record its **handle** - that is the only part this repo needs.
 
 Then set `SHOPIFY_BILLING_PLAN_HANDLES` as a JSON map from our product key to
 Shopify's handle:
@@ -103,7 +103,7 @@ broken admin URL.
 **Partner Dashboard → Settings → Partner API clients.**
 
 Needed for `activeSubscription(appId:, shopId:)`. **This is not optional under
-App Pricing** — since **2026‑04‑28** Shopify sends no subscription webhooks and
+App Pricing** - since **2026‑04‑28** Shopify sends no subscription webhooks and
 no longer appends `charge_id` to the redirect, so this query is the only way to
 learn that anyone paid.
 
@@ -117,7 +117,7 @@ Record `SHOPIFY_APP_EVENTS_CLIENT_ID` and `SHOPIFY_APP_EVENTS_CLIENT_SECRET`
 
 ### 2.6 Set the redirect URL
 Where Shopify returns the merchant after plan selection. It arrives with
-`plan_handle` and `shop` — **and nothing else.** The code treats those as a
+`plan_handle` and `shop` - **and nothing else.** The code treats those as a
 prompt to go and verify, never as proof of payment.
 
 ---
@@ -125,7 +125,7 @@ prompt to go and verify, never as proof of payment.
 ## 3. If using the manual Billing API
 
 1. Define plans **in code**, not in the Dashboard.
-2. Confirm the app has an Admin API access token per shop — note that the Chat
+2. Confirm the app has an Admin API access token per shop - note that the Chat
    app currently requests **`scopes = ""`** and stores no token, so a scope and
    a token-storage/rotation flow must be added first.
 3. Subscribe to `app_subscriptions/update` in **Partner Dashboard → Webhooks**
@@ -144,7 +144,7 @@ prompt to go and verify, never as proof of payment.
 ## 4. Development stores and test charges
 
 - Create development stores in the **same Partner organisation** as the app.
-- Under App Pricing, Shopify prices contracts at **$0** on development stores —
+- Under App Pricing, Shopify prices contracts at **$0** on development stores -
   the full flow is exercisable with no real money.
 - Under the manual API, `appSubscriptionCreate(test: true)`. The adapter sets
   this automatically for anything that is not `SHOPIFY_BILLING_ENV=live`.
@@ -162,7 +162,7 @@ prompt to go and verify, never as proof of payment.
   Shopify and others externally. **This is the open question for Shopify/Kyle**,
   and it gates `SHOPIFY_ALLOW_SPLIT_BILLING` and the entire
   `SHOPIFY_CONNECTOR_ADDON` policy.
-- Do not request an access scope nothing consumes — App Store review rejects it,
+- Do not request an access scope nothing consumes - App Store review rejects it,
   as `shopify.app.toml` already notes.
 
 ---

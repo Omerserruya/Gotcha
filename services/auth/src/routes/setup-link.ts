@@ -53,7 +53,7 @@ function expiredPage(reason: string, token?: string): string {
  * screen.
  */
 /**
- * GET /:token/state — the invitation as DATA.
+ * GET /:token/state - the invitation as DATA.
  *
  * `GET /:token` answers with a 302 in every branch, which is right for an
  * emailed link and useless to a frontend that has to render an acceptance

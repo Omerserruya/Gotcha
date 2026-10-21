@@ -3,7 +3,7 @@
  *
  * ════════════════════════════════════════════════════════════════════════════
  * The old figure was `now - claim_time` on every agent reply. So it was:
- *   · measured from a HUMAN'S CLAIM, not the customer's message — forty minutes
+ *   · measured from a HUMAN'S CLAIM, not the customer's message - forty minutes
  *     unclaimed then answered in ten seconds reported 10s
  *   · every reply, not the first
  *   · blind to AI-answered conversations, which have no claim
@@ -12,7 +12,7 @@
  *
  * Four live screens read this field. The NAME was always right and only the
  * computation was wrong, so the number changes under it rather than the field
- * being removed — removing it would break four screens and leave the wrong
+ * being removed - removing it would break four screens and leave the wrong
  * figure in whatever place nobody has looked.
  * ════════════════════════════════════════════════════════════════════════════
  */
@@ -77,7 +77,7 @@ describe("★ the first-reply computation", () => {
 describe("★ the exclusions, each of which has cost something before", () => {
   beforeEach(() => { state.raw = [{ avg_ms: 1000, pairs: 1n }]; });
 
-  it("★ filters origin on BOTH sides — applyLiveByDefault does not reach $queryRaw", async () => {
+  it("★ filters origin on BOTH sides - applyLiveByDefault does not reach $queryRaw", async () => {
     await getAvgFirstReplyMs("t1", new Date());
 
     // Imported history would otherwise contribute years-old gaps. The guard that

@@ -69,9 +69,19 @@ echo "Latest   : $( [ "${PUSH_LATEST:-1}" = "1" ] && echo "yes (rolling tag move
 echo "Services : ${!BACKEND[*]} $( [ -z "${SERVICES:-}" ] && echo frontend-v2 gateway )"
 echo
 
-# Ensure a buildx builder exists.
+# Use a builder with bounded memory and build parallelism.
+GOTCHA_BUILDKIT_CONFIG="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/buildkitd.toml"
+
 docker buildx inspect chatcenter-builder >/dev/null 2>&1 || \
-  docker buildx create --name chatcenter-builder --use
+  docker buildx create \
+    --name chatcenter-builder \
+    --driver docker-container \
+    --driver-opt memory=3g,memory-swap=4g,network=bridge \
+    --buildkitd-config "$GOTCHA_BUILDKIT_CONFIG" \
+    --buildkitd-flags '--allow-insecure-entitlement=network.host' \
+    --use
+
+export BUILDX_BUILDER=chatcenter-builder
 
 # Publishing `<service>-latest` IS a deploy, not a preparation for one.
 # Production pins TAG=latest (see .env.prod, which push-deploy.sh lands on the

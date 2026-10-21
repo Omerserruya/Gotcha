@@ -379,7 +379,9 @@ describe("customer-facing copy", () => {
       businessAppOptions().fullMigration.reason,
     ];
     for (const m of messages) {
-      expect(m).not.toMatch(/[—–]/);
+      // Escapes, not the characters: a dash sweep turned the literal class into
+      // a hyphen-and-en-dash class, which forbade hyphens and let em dashes through.
+      expect(m).not.toMatch(/[\u2013\u2014]/);
     }
   });
 });

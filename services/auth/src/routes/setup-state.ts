@@ -1,5 +1,5 @@
 /**
- * GET /api/setup/state — day one, as a state machine.
+ * GET /api/setup/state - day one, as a state machine.
  *
  * The reasoning lives in @chatcenter/shared (setup-state.ts); this route's only
  * job is to find out what is true. That split is deliberate: the ordering and

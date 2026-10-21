@@ -88,7 +88,7 @@ vi.mock("@chatcenter/shared", () => ({
 }));
 
 /**
- * `(lastMessageAt desc nulls last, id desc)` — driven by the query's own
+ * `(lastMessageAt desc nulls last, id desc)` - driven by the query's own
  * `orderBy`, so a missing tiebreak is visible here rather than supplied.
  */
 function order(a: any, b: any, orderBy?: any[]): number {
@@ -200,7 +200,7 @@ describe("★ the visibility clause survives the keyset", () => {
   });
 });
 
-describe("★ walks the WHOLE list — every page correct is not the same as a complete set", () => {
+describe("★ walks the WHOLE list - every page correct is not the same as a complete set", () => {
   it("★ visits all 120 conversations exactly once across pages of 25", async () => {
     state.rows = Array.from({ length: 120 }, (_, i) => conv(`c${String(i).padStart(4, "0")}`, i));
 
@@ -340,7 +340,7 @@ describe("what the keyset does not do, and what offset callers keep", () => {
 });
 
 /**
- * ★ The undated count — the instrument for the invisible half.
+ * ★ The undated count - the instrument for the invisible half.
  *
  * ~9 message writers never maintained `lastMessageAt`, so a conversation can
  * carry an absent sort key and drift to the end of the queue while somebody
@@ -348,7 +348,7 @@ describe("what the keyset does not do, and what offset callers keep", () => {
  *
  *   · nulls sort LAST, so undated rows sit at the very end. A group rendered
  *     from a page is empty on every page but the last, and empty entirely on a
- *     capped list — so the instrument for the problem is invisible for exactly
+ *     capped list - so the instrument for the problem is invisible for exactly
  *     the tenants large enough to have it.
  *   · a number does not require loading the whole queue to obtain.
  *
@@ -442,7 +442,7 @@ describe("★ the undated count", () => {
 });
 
 /**
- * ★ Sandbox rehearsals are not inbox items — and are identified by the PREFIX.
+ * ★ Sandbox rehearsals are not inbox items - and are identified by the PREFIX.
  *
  * The row that exposed this has `is_test = false`, `status = OPEN` and two
  * messages, so an `isTest` filter would not have caught it. The same confusion

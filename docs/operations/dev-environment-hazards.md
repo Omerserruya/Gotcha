@@ -13,7 +13,7 @@ observed, not advice.
 it alone survives.
 
 It has happened at least twice. The failure presents to whoever works next as **broken
-routes**, not as a dead stack — you will debug endpoints that are fine.
+routes**, not as a dead stack - you will debug endpoints that are fine.
 
 **Recovery.**
 
@@ -33,14 +33,14 @@ done
 - **502 means drift.** After a full stop every container takes a new IP; the gateway can
   hold a stale one. Recreate the gateway.
 
-Sweep **several paths across different services** — one path proves one upstream.
+Sweep **several paths across different services** - one path proves one upstream.
 
 ---
 
 ## Restarting Authentik breaks the Next app until it is also restarted
 
 The app discovers Authentik's OIDC configuration at startup. If Authentik restarts
-afterwards — including because a compose change recreated it — the app holds a stale
+afterwards - including because a compose change recreated it - the app holds a stale
 reference and **`GET /api/auth/login` returns 500 with an empty body**.
 
 It presents as a broken app. It is not. Restart `next start`:
@@ -67,8 +67,8 @@ auth container:  SMTP_HOST=smtp.resend.com
                  SMTP_FROM=GOTCHA <no-reply@gotcha.co.il>
 ```
 
-**There is no mail sink and no catcher on this box.** Anything that triggers an email — an
-invite, a notification, a password setup link — **leaves the building, from the real domain,
+**There is no mail sink and no catcher on this box.** Anything that triggers an email - an
+invite, a notification, a password setup link - **leaves the building, from the real domain,
 against the real sending reputation.**
 
 So a probe that exercises an invite path is not a local operation: it provisions an Authentik
@@ -96,7 +96,7 @@ docker ps           →  22   plus two buildkit builders, one of which is not ou
 
 ## Build cost
 
-**Measured, and it is a ladder rather than one number — per single service:**
+**Measured, and it is a ladder rather than one number - per single service:**
 ```
 ~0.1 GB   a code edit, mostly cached layers
 ~1.04 GB  a change inside packages/shared TypeScript
@@ -106,7 +106,7 @@ docker ps           →  22   plus two buildkit builders, one of which is not ou
 ~10GB and cost 1.36GB, because only one service references that model. The question *"which
 services import this?"* is worth more than the measurement.
 
-A change inside `packages/shared` rebuilds every service that imports it — most of them —
+A change inside `packages/shared` rebuilds every service that imports it - most of them -
 which is roughly **10GB**. Check free space before starting one; hitting `ENOSPC` partway
 through is the outcome to avoid on a shared box.
 
@@ -118,7 +118,7 @@ request, so a saved cookie is single-use and a sweep costs one minted session pe
 `curl -b jar -c jar` carries each rotation forward and covers a whole sweep from one mint.
 
 **Reclaimable without touching anyone else's work:** `npm cache clean --force`, stale
-`.next/cache` directories. **Do not** delete `~/.cache/ms-playwright` — the e2e captures
+`.next/cache` directories. **Do not** delete `~/.cache/ms-playwright` - the e2e captures
 need those browsers.
 
 ---
@@ -141,7 +141,7 @@ reached through another model.**
 
 ## `isTest` does not mean sandbox
 
-A sandbox conversation — the rehearsal someone runs while setting up an AI employee —
+A sandbox conversation - the rehearsal someone runs while setting up an AI employee -
 has **`isTest = false`**. It is identified by `customerExternalId` starting `sandbox:`,
 which is what `sandbox-conversation.service.ts` treats as definitive, and it carries
 `handledBy = "sandbox"`.
@@ -155,7 +155,7 @@ nothing.**
 ## Route-level traps
 
 - **The production gateway is an explicit per-path allowlist.** A path with no `location`
-  block does not 404 — it falls through to the SPA and returns **200 with `index.html`**,
+  block does not 404 - it falls through to the SPA and returns **200 with `index.html`**,
   so the client fails at `JSON.parse` or silently reads `undefined`. Add the block to
   **both** `nginx/nginx.conf.template` and `gateway/nginx.prod.conf.template`, and check
   the longest-prefix interaction with existing blocks: a path can match a *broader*
@@ -165,7 +165,7 @@ nothing.**
   them apart. Measured: `app.use("/api/knowledge-bases", knowledgeRoutes)` is the list
   route; `app.use("/api/knowledge", knowledgeOauthRoutes)` is Confluence/Drive OAuth and
   has no `GET "/"`. `/api/knowledge` **is** in the gateway allowlist, proxies cleanly and
-  returns 401 unauthenticated — so the reboot sweep above passes on it. **Measured: all six
+  returns 401 unauthenticated - so the reboot sweep above passes on it. **Measured: all six
   Studio paths return 401 unauthenticated, including the dead one**, because the auth
   middleware answers before the router is consulted. Authenticated, `/api/knowledge` returns
   **404 with an HTML body**, `Cannot GET /api/knowledge`, from Express.
@@ -182,7 +182,7 @@ nothing.**
 
 ## The internal-service bearer does not reach every service
 
-The smoke-test pattern — call a service with `INTERNAL_SERVICE_KEY` — works on `auth`, `billing`
+The smoke-test pattern - call a service with `INTERNAL_SERVICE_KEY` - works on `auth`, `billing`
 and `ai` and **fails on two services for two different reasons**:
 
 ```
@@ -219,7 +219,7 @@ So a response-shape change here is a breaking change **with no compiler, no lint
 anywhere that can see it.** Measured 2026-09-23: a field went from `0` to `null`, which is more
 truthful and cannot be expressed by `z.number().default(0)`, and a screen two repositories away
 started rendering *"could not be loaded"*. The commit message said **"no screen reads it yet"**,
-written after grepping `ChatCenter/frontend/src` — **the wrong tree.**
+written after grepping `ChatCenter/frontend/src` - **the wrong tree.**
 
 > **"No consumer in this repo" is not "no consumer."**
 
@@ -232,13 +232,13 @@ grep -rn "<the field>" frontend-v2/src/api/contracts/
 trip on an improvement:
 > **A contract that fails closed will sometimes fail on good news.**
 
-### The one shared artifact cannot see response shapes — and that is measured
+### The one shared artifact cannot see response shapes - and that is measured
 
 `docs/openapi.yaml` is **fully generated** from the routes, 700+ of them. It carries each
 route's source file and line, its auth requirement and its database calls.
 `/api/workspace/voice` is at line 50934. **`messagesAnalysed` appears zero times in the entire
 spec**, because the generator refuses to invent a shape it cannot find and marks the gap
-instead — **352 `x-documentation-gap` markers.**
+instead - **352 `x-documentation-gap` markers.**
 
 > **A spec that is honest about its gaps still cannot catch a change in the part it does not
 > describe.**
@@ -255,14 +255,14 @@ await request.patch('/api/bff/api/workspace', { data: { description: current } }
 ```
 deliberately, to move `updatedAt` so an ETag conflict is real. **It was harmless for weeks.**
 Then `PATCH /workspace` gained `stampProvenance`, and that same write began marking
-`businessDescription` as human-authored **on every capture run** — breaking a later test in the
+`businessDescription` as human-authored **on every capture run** - breaking a later test in the
 same file that asserts nothing is attributed.
 
 > **Neither side is wrong. A side effect was added to an endpoint that an unrelated caller, in
 > another repository, had been invoking on the assumption that writing the same value changed
 > nothing.**
 
-**Before adding a side effect to a served route, ask who already calls it — including callers
+**Before adding a side effect to a served route, ask who already calls it - including callers
 that write values they expect to be no-ops.**
 
 ---
@@ -279,13 +279,13 @@ writeDurableSetting(tenantId, key, JSON.stringify("leads"))
 ```
 
 **So it reads back correctly after an eviction and wrongly while cached.** An intermittent that
-resolves itself on restart is the worst shape available: **every instinct that would find it —
-reproduce, restart, retry, check tomorrow — makes it disappear.**
+resolves itself on restart is the worst shape available: **every instinct that would find it -
+reproduce, restart, retry, check tomorrow - makes it disappear.**
 
 The symptom points away from the cause. Measured 2026-09-23: **`PUT` returned 200, the value was
 in the database, and the `GET` read nothing.** Three true observations, none of them about Redis.
 
-**`businessHours` survives this by accident** — it stores an **object** and its reader parses, so
+**`businessHours` survives this by accident** - it stores an **object** and its reader parses, so
 the round trip happens to work. **A scalar must not be stringified.** Two callers of one helper,
 one safe for a reason that does not generalise.
 
@@ -315,14 +315,14 @@ scan still reports  businessType "ecommerce" · platform "shopify"
 ```
 
 `fetchPageRaw` rejects a non-200 or a non-HTML body. **A Shopify login wall is neither**, so
-every candidate path "succeeds" and the crawl reads one page seventeen times — and the platform
+every candidate path "succeeds" and the crawl reads one page seventeen times - and the platform
 markers it keys on are **in the login page's own markup**, so it is most confident about the one
 thing it could not see.
 
 > **`pages.length` is the number of fetches that worked, not the number of pages anybody read.**
 > Use `distinctTextPages` for anything a person will see.
 
-The model itself reported the wall honestly — the prompt's *"NEVER STATE ABSENCE UNLESS YOU
+The model itself reported the wall honestly - the prompt's *"NEVER STATE ABSENCE UNLESS YOU
 LOOKED"* held. **It was the count around it that lied.**
 
 ---
@@ -340,7 +340,7 @@ per-event hand verification         6     <- the truth
 
 **Four automated methods, four different wrong answers.** The diff counted a union declaration
 as an emit. The proximity window over-matched. And one run matched `subscription_canceled` while
-searching for `subscription.canceled`, **because `.` in a grep pattern matches any character** —
+searching for `subscription.canceled`, **because `.` in a grep pattern matches any character** -
 escape it, or use `-F`.
 
 The events that defeated the literal grep are emitted through a variable:
@@ -349,7 +349,7 @@ search can see that.**
 
 > **Whether a thing is reachable is not a property a search can establish.** If a list claims it,
 > the list has to be maintained with its evidence, and a test has to fail when the evidence stops
-> being true — otherwise it decays into a confident wrong answer, in whichever direction happens
+> being true - otherwise it decays into a confident wrong answer, in whichever direction happens
 > to be worse.
 
 ---

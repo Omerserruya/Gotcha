@@ -4,14 +4,14 @@
  * ════════════════════════════════════════════════════════════════════════════
  * 18 files create messages directly and only this one updates `lastMessageAt`
  * inside the transaction. The refactor to one writer is blocked on shape, not on
- * will: ★ `create` DECIDED `status` for its callers — PENDING for outbound,
- * DELIVERED for inbound — and 17 of the 18 writers already know the send
+ * will: ★ `create` DECIDED `status` for its callers - PENDING for outbound,
+ * DELIVERED for inbound - and 17 of the 18 writers already know the send
  * outcome. The flow executor writes SENT or FAILED depending on whether an
  * external id came back; the sandbox writes SENT for a message no provider saw.
  *
  * ★ And the FAILED rule lives here rather than at each call site. It was found
  * while fixing the flow executor, and had it stayed there, every writer moved
- * into this function afterwards would have reintroduced the bug — the opposite
+ * into this function afterwards would have reintroduced the bug - the opposite
  * of what consolidating the writers is for.
  * ════════════════════════════════════════════════════════════════════════════
  */

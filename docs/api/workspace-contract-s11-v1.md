@@ -79,7 +79,7 @@ Errors:
 
 | Status | Body |
 |---|---|
-| 422 | `{ "error": "Invalid workspace patch", "details": [{ "field", "message" }] }` — one entry per bad field, unknown keys reported as `unknown field "x"` |
+| 422 | `{ "error": "Invalid workspace patch", "details": [{ "field", "message" }] }` - one entry per bad field, unknown keys reported as `unknown field "x"` |
 | 409 | `{ "error": "The workspace changed since you loaded it", "code": "STALE_WRITE" }` |
 | 409 | `{ "error": "This workspace has no business profile yet", "code": "NO_BUSINESS_PROFILE" }` |
 | 500 | `{ "error": "Failed to update workspace" }` |
@@ -135,7 +135,7 @@ never trips the 40-character minimum.
 
 ## 5 · POST /api/workspace/voice/sample
 
-Body: `{ "guidance": string }` — the **draft** being previewed, not the stored
+Body: `{ "guidance": string }` - the **draft** being previewed, not the stored
 voice. Requires `settings:workspace:update` even though it writes nothing.
 
 - 200 `{ "data": { "reply": "string" } }`
@@ -161,12 +161,12 @@ PUT ← `{ "claims": ["string"] }` → `{ "data": { "claims": ["string"] } }`
 
 **Two different behaviours, and conflating them is the trap.** Verified on DEV:
 
-*Silent normalisation, 200 with a SHORTER array* — blanks and whitespace-only
+*Silent normalisation, 200 with a SHORTER array* - blanks and whitespace-only
 entries are dropped; duplicates are removed case-insensitively, keeping the
 FIRST occurrence's original casing (`["Cheapest in Israel","cheapest in israel"]`
 → `["Cheapest in Israel"]`).
 
-*Hard limits, 422, nothing written* — the list is REJECTED, never trimmed:
+*Hard limits, 422, nothing written* - the list is REJECTED, never trimmed:
 
 | Condition | `details[0].message` |
 |---|---|
@@ -175,7 +175,7 @@ FIRST occurrence's original casing (`["Cheapest in Israel","cheapest in israel"]
 | any non-string entry | `every claims entry must be a string` |
 | `claims` not an array | `claims must be an array of strings` |
 
-**Render the returned array, never the submitted one** — because of the first
+**Render the returned array, never the submitted one** - because of the first
 group. But do not expect the second group to be silently fixed for you: an
 over-long entry fails the whole save, so the UI must enforce 200/50 itself.
 
@@ -184,12 +184,12 @@ share the same policy blob and are untouched by this screen.
 
 ## Recorded, not fixed
 
-- **D14** — `settings:workspace:read` / `:update` do not appear in the original
+- **D14** - `settings:workspace:read` / `:update` do not appear in the original
   spec. They were added to the permission catalog to make these routes
   enforceable. Recorded for Omer, deliberately not "fixed".
-- **GAP-S11-1 CLOSED** — tone is a single editable `guidance` text; the five
+- **GAP-S11-1 CLOSED** - tone is a single editable `guidance` text; the five
   chips are dropped.
-- **GAP-S11-3 CLOSED** — currency and language are single-select.
+- **GAP-S11-3 CLOSED** - currency and language are single-select.
 
 ## Verified on DEV · 2026-09-16 · auth @ ad136980
 

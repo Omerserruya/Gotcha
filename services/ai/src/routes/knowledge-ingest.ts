@@ -1,5 +1,5 @@
 /**
- * GET /api/knowledge/ingest/latest — what came back from pointing GOTCHA at a
+ * GET /api/knowledge/ingest/latest - what came back from pointing GOTCHA at a
  * website.
  *
  * Day one's feedback line: pages read, answers drafted, answers needing

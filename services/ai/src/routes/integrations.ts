@@ -147,7 +147,7 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 /**
- * GET /commerce/capabilities — can this WORKSPACE act on orders at all?
+ * GET /commerce/capabilities - can this WORKSPACE act on orders at all?
  *
  * The same flags already exist on /api/commerce-context/:conversationId, but
  * that endpoint is scoped to one conversation, so there was no way to ask the

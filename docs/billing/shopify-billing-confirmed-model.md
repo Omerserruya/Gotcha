@@ -1,9 +1,9 @@
-# Shopify billing — the confirmed model
+# Shopify billing - the confirmed model
 
 Supersedes the open commercial questions in
 [shopify-billing-implementation-plan.md](./shopify-billing-implementation-plan.md).
 Shopify App Review has confirmed the split, so the code no longer has to support
-every possible policy — but it still does, because the flags that made that
+every possible policy - but it still does, because the flags that made that
 possible are what let this ship disabled.
 
 ---
@@ -20,7 +20,7 @@ public and private plans.
 
 This is **split billing**, which the plan listed as its first open question.
 `SHOPIFY_ALLOW_SPLIT_BILLING` is therefore now a real option rather than a
-placeholder — it still defaults to `false`, because a confirmed policy and a
+placeholder - it still defaults to `false`, because a confirmed policy and a
 configured deployment are different things.
 
 ### Still not decided, and deliberately not in code
@@ -51,7 +51,7 @@ stops a well-meaning "App Store users are different" branch from appearing.
 
 ---
 
-## 3. Ordering — OAuth always wins
+## 3. Ordering - OAuth always wins
 
 ```
 Shopify install  →  HMAC verified  →  OAuth  →  store linked  →  billing decided
@@ -93,7 +93,7 @@ writer, so there is no column to go stale.
 paying and the local catalog cannot say what they bought. Both obvious
 responses are wrong: granting the full set turns an unconfigured handle into a
 way to widen access without review, and revoking cuts off a demonstrably paying
-merchant because *our* config is wrong — during a bad deploy, that is an outage
+merchant because *our* config is wrong - during a bad deploy, that is an outage
 for every paying store at once. So nothing new is granted, nothing already
 verified is revoked, the handle is recorded on the row
 (`metadata.configurationError = "unknown_plan"`, `metadata.unknownPlanHandle`)
@@ -101,7 +101,7 @@ and logged for an operator, and the next reconciliation pass repairs it once the
 catalog is corrected. The connection stays `BILLING_PENDING`, never `CONNECTED`.
 
 **Never-subscribed is not `CANCELLED`.** A verified read that finds nothing
-stores `CANCELLED` with a null provider id — that is the honest storage shape,
+stores `CANCELLED` with a null provider id - that is the honest storage shape,
 because "we asked and there is none" deserves a `lastVerifiedAt`. Reporting it
 to a merchant as "your subscription ended" would be a lie to somebody who never
 had one, and it would strand them: `CANCELLED` offers no route to a plan page.
@@ -118,7 +118,7 @@ Both halves have been got wrong before:
 
 - **"started being paid", not "was created."** An account opened in January that
   first paid in November is a new customer commercially. Reading
-  `tenant.createdAt` — one join closer, and the obvious shortcut — would
+  `tenant.createdAt` - one join closer, and the obvious shortcut - would
   grandfather them. `tenant.createdAt` is stored in the evidence blob as
   *context* and never compared against the cutoff, and there is a test asserting
   exactly that.
@@ -128,7 +128,7 @@ Both halves have been got wrong before:
 
 | Rank | Source | Quality |
 |---|---|---|
-| 1 | `Invoice.paidAt` — money arrived | `CONFIRMED` |
+| 1 | `Invoice.paidAt` - money arrived | `CONFIRMED` |
 | 2 | `SubscriptionEvent` → ACTIVE/TRIALING | `CONFIRMED` |
 | 3 | `Subscription.createdAt` while paying | `INFERRED` |
 
@@ -138,7 +138,7 @@ Both halves have been got wrong before:
   finds the standing grant rather than re-deciding against whatever flags are
   set that day.
 - **Auditable.** The grant stores the evidence, which row produced it, and the
-  cutoff *in force at the time* — the configured value can move, and a grant has
+  cutoff *in force at the time* - the configured value can move, and a grant has
   to stay explainable against the rule that made it.
 - **Revocable, attributably.** Revocation requires a named actor and is never
   silently undone by a reinstall.
@@ -170,7 +170,7 @@ configuring a deployment into a guessing game played one restart at a time.
 | `manual`, any env | none of the above |
 
 Mock is exempt from Partner API credentials **only** because it performs no
-network call and can neither create nor verify a real subscription —
+network call and can neither create nor verify a real subscription -
 `isShopifyBillingMock()` short-circuits every client. It is **not** exempt from
 the catalog: without one, a merchant can approve a charge this deployment
 cannot interpret and would be billed without receiving access.
@@ -196,7 +196,7 @@ Names, and whether each is required. **No values here.**
 | **`SHOPIFY_GRANDFATHER_DEV_STORES`** | Opt in for testing | `false` |
 | **`SHOPIFY_BILLING_PLAN_CATALOG`** | JSON plan catalog | unset → nothing sellable |
 | `SHOPIFY_BILLING_PLAN_HANDLES` | Minimal form: productKey → handle | unset |
-| `SHOPIFY_APP_PRICING_HANDLE` | Builds the plan-selection URL. The APP handle, NOT the App Store listing slug — see `docs/setup/shopify-install-flow.md`. Falls back to `SHOPIFY_APP_HANDLE`. | unset |
+| `SHOPIFY_APP_PRICING_HANDLE` | Builds the plan-selection URL. The APP handle, NOT the App Store listing slug - see `docs/setup/shopify-install-flow.md`. Falls back to `SHOPIFY_APP_HANDLE`. | unset |
 | `SHOPIFY_PARTNER_API_TOKEN` | **Secret.** App Pricing verification | unset |
 | `SHOPIFY_USAGE_BILLING_ENABLED` | Metered dispatch. **Not implemented** | `false` |
 
@@ -222,7 +222,7 @@ Bold rows are new in this round. All are declared in `docker-compose.yml` **and*
 ```
 
 `restrictedToShops` is how a private plan and a store-specific arrangement are
-expressed. There is deliberately **no price, currency or trial field** — Shopify
+expressed. There is deliberately **no price, currency or trial field** - Shopify
 owns all three, and a copy here would eventually disagree with what the merchant
 was shown and charged. A test asserts the parsed shape carries none of them.
 
@@ -247,7 +247,7 @@ was shown and charged. A test asserts the parsed shape carries none of them.
 This is the App Pricing return URL. It renders **no outcome of its own**:
 it POSTs to `/api/billing/shopify/complete`, which re-reads the subscription
 from Shopify, persists status and plan handle, moves entitlements, and returns
-the freshly computed state. Reaching the URL proves nothing — a merchant who
+the freshly computed state. Reaching the URL proves nothing - a merchant who
 declined can reach it from history, and anyone can type it.
 
 The `shop` parameter is forwarded only so the server can **reject** a return
@@ -255,7 +255,7 @@ naming a store the session does not own. It is a guard, never a credential.
 
 ---
 
-## 7a. The test-shop list — REMOVED as a gate (review 132211)
+## 7a. The test-shop list - REMOVED as a gate (review 132211)
 
 `SHOPIFY_BILLING_TEST_SHOPS` used to decide which stores could enter the App
 Pricing flow while `SHOPIFY_BILLING_ENV=test`. A store nobody had listed was
@@ -265,7 +265,7 @@ connected and then silently excluded: no plan page, nothing granted, state
 **Shopify App Store review 132211 rejected that shape**, and the reasoning
 generalises beyond this one variable. A reviewer works from an ordinary
 development store that nobody added to a server-side list, so an allowlist means
-the reviewer — and every real merchant during the same window — travels a
+the reviewer - and every real merchant during the same window - travels a
 different code path from the one under review. An app whose behaviour depends on
 whether the tenant was named in configuration cannot be assessed. The finding
 covers **any** reviewer-specific tenant, shop or workspace allowlist, so
@@ -297,8 +297,8 @@ Removing the allowlist removed a gate, not the authorization rules around it.
   parameter or request body;
 - refuse a return whose `shop` does not match that connection
   (`shopify_shop_mismatch`);
-- treat reaching the URL as **no evidence of payment** — Shopify appends
-  `plan_handle` and `shop` to a redirect anybody can replay — and re-verify the
+- treat reaching the URL as **no evidence of payment** - Shopify appends
+  `plan_handle` and `shop` to a redirect anybody can replay - and re-verify the
   subscription against the Partner API before any entitlement moves.
 
 ---
@@ -321,7 +321,7 @@ Shopify applies **$0 to development stores**, so no real charge occurs. Leave
 `SHOPIFY_ALLOW_LIVE_BILLING` unset: `live` degrades to `mock` without it, which
 is the intended safety net.
 
-### 8.2 Scenario B/C — a merchant who must pay
+### 8.2 Scenario B/C - a merchant who must pay
 
 1. Install from the Partner Dashboard (see
    `docs/setup/shopify-install-flow.md` §7 for the install itself).
@@ -345,12 +345,12 @@ FROM tenant_entitlements WHERE tenant_id = '<tenant>';
 Expect `source = 'SHOPIFY_SUBSCRIPTION'` and
 `funded_by_billing_source = 'SHOPIFY'`.
 
-### 8.3 Scenario 7 — decline
+### 8.3 Scenario 7 - decline
 
 Decline the charge on Shopify. Expect: the connection **stays**, the state is
 `PLAN_SELECTION_REQUIRED` with `declined: true`, and no entitlement rows.
 
-### 8.4 Scenario A — grandfathered
+### 8.4 Scenario A - grandfathered
 
 Set `SHOPIFY_ALLOW_GRANDFATHERED=true` and a cutoff **after** the workspace's
 first paid invoice. Reinstall. Expect: **no** redirect to a plan page, and
@@ -392,7 +392,7 @@ No parameter grants anything. The verified read decides.
 | App URL | `https://app.gotcha.co.il/api/connectors/shopify/install` |
 | Redirect URL | `https://app.gotcha.co.il/api/connectors/shopify/oauth/callback` |
 | **App Pricing return URL** | `https://app.gotcha.co.il/integrations/shopify/billing/complete` |
-| Distribution | **Public.** Never Custom — irreversible, and it forecloses App Store billing |
+| Distribution | **Public.** Never Custom - irreversible, and it forecloses App Store billing |
 
 **Do not create live plans yet.** The catalog reads handles from configuration,
 so plans can be created and wired without a deploy.

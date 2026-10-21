@@ -1,4 +1,4 @@
-# Shopify Billing — repository architecture assessment
+# Shopify Billing - repository architecture assessment
 
 Written on branch `feature/shopify-billing`, against `origin/main` @ `2a1d00c0`.
 
@@ -34,7 +34,7 @@ over Docker DNS + HTTP (`http://billing:4009`).
 - **No new dependencies.** No `@shopify/shopify-api`; the Shopify billing client
   must be built from what is already here (`axios`, or the existing fetch-based
   Shopify code).
-- **No half-work** — UI *and* backend.
+- **No half-work** - UI *and* backend.
 - **Main is sacred**; PR-based merges only.
 
 ---
@@ -52,14 +52,14 @@ later. **Nothing needs redesigning here.**
 
 `packages/shared/src/lib/billing/`:
 
-- `entitlement-resolver.ts` — `isEntitled(tenantId, featureKey)`,
+- `entitlement-resolver.ts` - `isEntitled(tenantId, featureKey)`,
   `assertEntitled`, `resolveEntitlements`, `resolveLimit`, `assertWithinLimit`,
   `EntitlementDeniedError`.
-- `entitlement-gate.ts` — `checkPaidAccess()` / `assertPaidAccess()`, which
+- `entitlement-gate.ts` - `checkPaidAccess()` / `assertPaidAccess()`, which
   composes "is this organization in good standing" **and** "does their plan
   include this". Three modes: `off | audit | enforce`, with
   `assertEnforcementConfigured()` refusing to boot on a fail-open config.
-- `entitlements.ts` — `materializeEntitlements(tenantId)` projects plan →
+- `entitlements.ts` - `materializeEntitlements(tenantId)` projects plan →
   `TenantEntitlement` rows.
 
 Product code already asks the entitlement service rather than reading
@@ -67,7 +67,7 @@ subscription fields. **The prompt's requirement here is already satisfied**; the
 work is to make entitlements aware of *which provider funded them*, without
 changing a single call site.
 
-### 2.3 Provider abstraction exists — but it is the wrong *layer* for Shopify
+### 2.3 Provider abstraction exists - but it is the wrong *layer* for Shopify
 
 `services/billing/src/providers/provider.ts` defines `PaymentProvider`:
 
@@ -83,10 +83,10 @@ This is a **card-tokenization** contract: we hold a token and we move money.
 **Shopify cannot implement this interface.** Shopify owns the money end to end:
 there is no token to store, no charge for us to submit, no refund for us to
 issue. Forcing `SHOPIFY` into `PaymentProvider` would mean five methods that
-throw, and `getCapabilities("SHOPIFY")` returning mostly `unsupported` — which
+throw, and `getCapabilities("SHOPIFY")` returning mostly `unsupported` - which
 `assertCapability` would then correctly refuse, making the provider unusable.
 
-The correct move is a **second, higher port** — subscription/billing-source —
+The correct move is a **second, higher port** - subscription/billing-source -
 that sits above `PaymentProvider` rather than beside it. `GOTCHA_EXTERNAL`
 delegates down to the existing `PaymentProvider` registry; `SHOPIFY` talks to
 Shopify. Entitlement logic sees neither.
@@ -94,7 +94,7 @@ Shopify. Entitlement logic sees neither.
 There is already a strong precedent to copy: `providers/capabilities.ts` encodes
 capabilities as `verified | unverified | unsupported` and **fails closed on
 anything not verified**. Shopify's adapter should declare its capabilities the
-same way — which is exactly how the "we have not heard back from Shopify yet"
+same way - which is exactly how the "we have not heard back from Shopify yet"
 problem gets represented in code instead of in a comment.
 
 ### 2.4 The pieces the prompt asks for that already exist
@@ -129,7 +129,7 @@ asked for.
 
 2. **`Subscription` has no provider column.** Provider lives on
    `BillingProfile.provider`, and `BillingProfile.billableEntityId` is `@unique`
-   — so provider is a property of the *payer*, not of the subscription. Billing
+   - so provider is a property of the *payer*, not of the subscription. Billing
    source cannot currently vary below the payer level, which is precisely what
    the requirement demands.
 
@@ -164,7 +164,7 @@ asked for.
 >
 > Two open questions in the implementation plan depended on this being wrong:
 > **Q4** ("the Chat app requests `scopes = ""` and stores no token") and **Q5**
-> ("which app is billed — Chat or Core?"). Both are resolved by there being one
+> ("which app is billed - Chat or Core?"). Both are resolved by there being one
 > app: a plan belongs to it, and it holds a real Admin token.
 >
 > The table is kept for history because the migration reasoning references it.
@@ -177,7 +177,7 @@ this work could break production.
 |---|---|---|
 | Purpose | Product/order truth for the AI | Storefront live-chat widget |
 | Credential | `SHOPIFY_API_KEY`, per-tenant token in `TenantIntegration.credentials` | `SHOPIFY_CHAT_APP_*`; `ShopifyChatInstallation.accessToken` |
-| Scopes | `read_products`, `read/write_orders`, `read_customers`, price rules, returns | **`scopes = ""` — empty by design** |
+| Scopes | `read_products`, `read/write_orders`, `read_customers`, price rules, returns | **`scopes = ""` - empty by design** |
 | Embedded | n/a | `embedded = false`, no App Bridge, no session tokens |
 | Manifest | not in this repo | `shopify-app/shopify.app.toml` |
 
@@ -194,14 +194,14 @@ Other relevant facts:
   overridable by `SHOPIFY_API_VERSION`, with `checkShopifyResponseVersion()`
   comparing every response's `X-Shopify-API-Version` header against what was
   requested. Reuse this; do not add a second version constant.
-- **No obsolete REST *billing* code exists** — because **no Shopify billing code
+- **No obsolete REST *billing* code exists** - because **no Shopify billing code
   exists at all**. There is no `appSubscriptionCreate`,
   `RecurringApplicationCharge`, `appUsageRecordCreate` or managed-pricing code
   anywhere in the tree. This is genuinely greenfield on the Shopify side.
 - REST *is* still used by the Core adapter for products/orders alongside a
   `shopifyGraphQL()` helper. The version module documents why REST remains legal
   for these apps. **A separate unpushed branch (`fix/autoconnect-stale-state`,
-  commit `25581f38`) moves the Admin API to GraphQL and is not in `main`** — per
+  commit `25581f38`) moves the Admin API to GraphQL and is not in `main`** - per
   your instruction this branch is built against `origin/main`, so it does not
   depend on that work.
 - The Chat app already handles `app/uninstalled` plus the three mandatory
@@ -222,12 +222,12 @@ and some of it is recent enough to be easy to get wrong.
 
 - Managed Pricing **has been renamed Shopify App Pricing** and is the default
   for new public apps.
-- Plans are configured **in the Partner Dashboard only** — not in
+- Plans are configured **in the Partner Dashboard only** - not in
   `shopify.app.toml`, not in code. Plan handles and prices therefore *cannot* be
   version-controlled, only referenced.
 - Plan selection is a redirect to
   `https://admin.shopify.com/store/:store_handle/charges/:app_handle/pricing_plans`.
-- **After 2026-04-28 — already four months ago — Shopify App Pricing sends no
+- **After 2026-04-28 - already four months ago - Shopify App Pricing sends no
   webhooks for subscription changes, and no longer appends `charge_id` to the
   redirect.** The old `APP_SUBSCRIPTIONS_UPDATE` topic is gone.
 - The redirect returns only `plan_handle` and `shop`. Shopify's own guidance is
@@ -253,7 +253,7 @@ replacementBehavior)` → `{ appSubscription, confirmationUrl, userErrors }`.
 
 - `AppRecurringPricingInput`: `price`, `interval`, optional `discount`.
 - `AppUsagePricingInput`: `terms`, `cappedAmount`.
-- `AppPricingInterval`: **`EVERY_30_DAYS`, `ANNUAL`** — note there is no
+- `AppPricingInterval`: **`EVERY_30_DAYS`, `ANNUAL`** - note there is no
   "monthly".
 - `AppSubscriptionStatus`: **`PENDING`, `ACTIVE`, `DECLINED`, `EXPIRED`,
   `FROZEN`, `CANCELLED`** (plus deprecated `ACCEPTED`).
@@ -263,12 +263,12 @@ replacementBehavior)` → `{ appSubscription, confirmationUrl, userErrors }`.
     deadline for the "merchant abandons plan selection" flow.
   - `DECLINED` and `CANCELLED` are **terminal**.
 - Verification uses the shop's own Admin API token
-  (`currentAppInstallation { activeSubscriptions }`) — which **does** fit
+  (`currentAppInstallation { activeSubscriptions }`) - which **does** fit
   GOTCHA's existing per-shop model.
 
 ### 4.3 Usage billing: the App Events API
 
-For App Pricing usage meters, billable events go to a **dedicated** API — not
+For App Pricing usage meters, billable events go to a **dedicated** API - not
 Admin, not Partner:
 
 ```
@@ -278,19 +278,19 @@ Authorization: Bearer <JWT>     # OAuth2 client_credentials, 60-minute lifetime
 { shop_id, event_handle, timestamp, idempotency_key, attributes: { value } }
 ```
 
-- `idempotency_key` — max 64 chars, **"enforced permanently"**. This maps
+- `idempotency_key` - max 64 chars, **"enforced permanently"**. This maps
   directly onto a ledger row's idempotency key.
 - `event_handle` must exactly match a Partner-Dashboard-configured meter handle,
   case-sensitively.
 - `timestamp` must be inside the current billing cycle and no more than 5
-  minutes in the future — so a retry of a stale event **cannot** simply be
+  minutes in the future - so a retry of a stale event **cannot** simply be
   replayed, which the dispatcher has to handle.
 - **Corrections are supported**: send a negative `value` with a *new*
   idempotency key, inside the current cycle.
 - Limits: up to 5 active usage meters per plan, 6 pricing tiers per meter, and
   usage must be tied to a monthly cycle.
 - Development stores incur no real charges.
-- The path says **`unstable`** — that is Shopify's own current documented path
+- The path says **`unstable`** - that is Shopify's own current documented path
   and is worth flagging as a stability risk.
 
 ### 4.4 Policy
@@ -319,7 +319,7 @@ not invent one. The convention is a plain `process.env.X_ENABLED` read, default
 a service reads is declared in both `docker-compose.yml` and
 `docker-compose.prod.yml`.** New flags must be added to both files or the suite
 fails. Declaring them with safe, disabled defaults is a repo-config change, not a
-change to any live production environment — but it is worth stating plainly.
+change to any live production environment - but it is worth stating plainly.
 
 **Provider modes.** `icount-config.ts` is the template: `mock` (default, no
 network) / `simulator` (models declines, timeouts, ambiguous outcomes; opt-in via
@@ -335,33 +335,33 @@ database** with `fileParallelism: false` and a `global-teardown.ts` that sweeps
 orphaned `BillableEntity` rows. The suite turns payment capabilities ON via
 `vitest.config.ts` while keeping `ICOUNT_MODE` non-networked.
 
-**Frontend.** No shared `ui/` kit — `components/ui/` holds only `Modal.tsx`.
+**Frontend.** No shared `ui/` kit - `components/ui/` holds only `Modal.tsx`.
 Screens compose local primitives with Tailwind tokens from
 `frontend/tailwind.config.ts` (`primary` 50–900 at `#7c5cfc`, `gray-150`, shadow
 scale `card/float/subtle/panel/inner-glow`). `CheckoutShell.tsx` backs all seven
-checkout states with a `tone` prop (neutral/positive/warning/critical) — that is
+checkout states with a `tone` prop (neutral/positive/warning/critical) - that is
 the component to reuse for Shopify's billing states.
 
 **Acquisition source.** `ShopifyChatInstallation` records `installedAt`,
 `boundAt`, `uninstalledAt` and `appIdentity`; `Tenant` has `createdAt`. There is
 **no** dedicated acquisition-source field, so a grandfathering decision cannot
-currently be derived from stored evidence alone — which is why the policy
+currently be derived from stored evidence alone - which is why the policy
 resolver must be able to answer `REVIEW_REQUIRED`.
 
 ---
 
 ## 6. Baseline state
 
-`origin/main`'s billing suite was **red before this branch existed** — 7 files,
-31 tests — and no CI workflow runs vitest (`.github/workflows/` contains only
+`origin/main`'s billing suite was **red before this branch existed** - 7 files,
+31 tests - and no CI workflow runs vitest (`.github/workflows/` contains only
 `security.yml`). Four independent causes, all test-side drift rather than
 production defects, are repaired in commit `27eb673b`; see that commit message
 for the detail.
 
 Verified green after the repair:
 
-- `services/billing` — **773 passed, 46 files**
-- `packages/shared` — **1858 passed, 109 files**
+- `services/billing` - **773 passed, 46 files**
+- `packages/shared` - **1858 passed, 109 files**
 - `tsc --noEmit` clean for both
 
 One environment note: `docker-compose.yml` publishes Postgres (`5432:5432`) but

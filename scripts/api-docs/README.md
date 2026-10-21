@@ -33,17 +33,17 @@ so the two documents can never disagree about which domain an endpoint is in.
 ### Extraction
 
 `extract-routes.ts` parses TypeScript ASTs (no regex, no runtime import, no
-database). For each service it reads `src/index.ts` — and `src/app.ts`, which
-voice-copilot uses instead — finds `app.use("<prefix>", router)`, resolves the
+database). For each service it reads `src/index.ts` - and `src/app.ts`, which
+voice-copilot uses instead - finds `app.use("<prefix>", router)`, resolves the
 router back to its file, and walks it.
 
 Four middleware patterns exist in this codebase, and **all four had to be handled
 before the output was trustworthy**:
 
 1. Per-route: `router.post("/x", authenticate, handler)`
-2. Router-level: `router.use(authenticate, resolveTenant)` — applies to
+2. Router-level: `router.use(authenticate, resolveTenant)` - applies to
    everything declared *after* it
-3. Path-scoped: `router.use("/funnels", authenticate, ...)` — applies only under
+3. Path-scoped: `router.use("/funnels", authenticate, ...)` - applies only under
    that prefix
 4. Spread arrays: `router.get("/users", ...ADMIN_ONLY, handler)`
 
@@ -55,9 +55,9 @@ there means a middleware needs classifying in `classifyNamed()`.
 
 ### What each artifact is for
 
-- **`openapi.yaml`** — what you can call. Importable into Swagger UI, Postman,
+- **`openapi.yaml`** - what you can call. Importable into Swagger UI, Postman,
   Insomnia, or a client generator.
-- **`API_EXECUTION_MAP.md`** — what happens when you do. Middleware order,
+- **`API_EXECUTION_MAP.md`** - what happens when you do. Middleware order,
   service calls, Prisma models read and written, queues, and the background work
   that outlives the response.
 

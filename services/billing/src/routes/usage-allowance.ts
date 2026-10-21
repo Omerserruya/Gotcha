@@ -1,5 +1,5 @@
 /**
- * GET /api/usage/allowance — the tenant's conversation headroom this period.
+ * GET /api/usage/allowance - the tenant's conversation headroom this period.
  *
  * Home draws a progress bar from this and says "at today's pace that lasts
  * until 12 September". `/api/usage/stats` and `/api/usage/by-tenant` cannot

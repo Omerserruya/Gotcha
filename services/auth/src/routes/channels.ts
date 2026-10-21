@@ -298,7 +298,7 @@ router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:
 // agents see those pages too - the full listing above is ADMIN-only. This
 // returns health COUNTS only: no tokens, external ids, or error details.
 /**
- * GET /channels/state — one row per channel, not four counts.
+ * GET /channels/state - one row per channel, not four counts.
  *
  * `/summary` answers "how many are connected". Day one has to say WHICH:
  * "WhatsApp connected, Instagram awaiting verification". A count cannot name a

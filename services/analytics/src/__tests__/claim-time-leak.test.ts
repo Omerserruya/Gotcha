@@ -8,7 +8,7 @@
  * LENGTH rather than with responsiveness.
  *
  * Beside a person's name that made whoever handles the long difficult cases look
- * slowest — on a screen built specifically not to rank anyone.
+ * slowest - on a screen built specifically not to rank anyone.
  *
  * The property this file exists for is only visible by invoking the handler
  * TWICE: one claim must produce exactly one measurement.
@@ -61,7 +61,7 @@ describe("★ one claim, one measurement", () => {
     expect(times[0].value).toBe("30000");
   });
 
-  it("★ a SECOND reply records NOTHING — the drift is impossible now", async () => {
+  it("★ a SECOND reply records NOTHING - the drift is impossible now", async () => {
     await processAnalyticsEvent(job("conversation_claimed", { conversationId: "cv1", agentId: "a1" }, "2026-09-26T10:00:00.000Z"));
     await processAnalyticsEvent(job("agent_response", { conversationId: "cv1", agentId: "a1" }, "2026-09-26T10:00:30.000Z"));
     state.pushed = [];
