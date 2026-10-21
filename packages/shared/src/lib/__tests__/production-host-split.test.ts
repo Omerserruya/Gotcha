@@ -481,12 +481,14 @@ describe("the landing answers in both languages", () => {
     expect(marketing()).toMatch(/rewrite\s+\^\/en\/\?\(\.\*\)\$\s+\/\$1\s+permanent;/);
   });
 
-  it("retires the old landing still shipped by the application build", () => {
-    // frontend/src/app/{he,en}/page.tsx render the previous design, and their
-    // own metadata declares gotcha.co.il/he as canonical - which is now a
-    // different page. Two designs answering to one name.
+  it("leaves /he and /en to the app: every app route is localised (2026-10-21)", () => {
+    // The app vhost used to 301 /he and /en to gotcha.co.il, to retire the old
+    // landing the legacy build shipped there. The app (frontend-v2) now owns
+    // the root and every one of its routes is /he/... or /en/..., so that
+    // redirect would bounce the whole product to the marketing site.
     const app = find("app.gotcha.co.il")!.body;
-    expect(app).toMatch(/location\s+~\s+\^\/\(he\|en\)\(\/\|\$\)\s*\{\s*\n\s*return\s+301\s+https:\/\/gotcha\.co\.il\$request_uri/);
+    expect(app).not.toMatch(/location\s+~\s+\^\/\(he\|en\)/);
+    expect(app).toMatch(/location \/ \{[\s\S]*?proxy_pass http:\/\/frontend_v2;/);
   });
 });
 
