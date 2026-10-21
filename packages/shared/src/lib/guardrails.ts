@@ -58,3 +58,33 @@ export function clampGuardrails(input: unknown): string[] {
   }
   return out;
 }
+
+/**
+ * What a stored value that is NOT a list becomes, for the one-time repair of
+ * rows written before every writer went through normalizeGuardrails
+ * (scripts/convert-custom-guardrails.ts, 2026-10-21). readGuardrails reads such
+ * a row as [] - the prompt and the editor both drop the rule without a word.
+ *
+ * - a list: untouched ("keep");
+ * - text: one rule, trimmed ("set"); empty text: no rules ("null");
+ * - JSON null: no rules ("null");
+ * - anything else (a number, an object): left for a person ("report").
+ * A rule over MAX_RULE_LEN is kept whole and flagged, never cut: the person's
+ * words are not shortened by a repair; the editor asks them to on next save.
+ */
+export type LegacyGuardrailsFix =
+  | { action: "keep" }
+  | { action: "set"; value: string[]; overLimit: boolean }
+  | { action: "null" }
+  | { action: "report"; reason: string };
+
+export function legacyGuardrailsFix(stored: unknown): LegacyGuardrailsFix {
+  if (Array.isArray(stored)) return { action: "keep" };
+  if (stored === null) return { action: "null" };
+  if (typeof stored === "string") {
+    const t = stored.trim();
+    if (!t) return { action: "null" };
+    return { action: "set", value: [t], overLimit: t.length > MAX_RULE_LEN };
+  }
+  return { action: "report", reason: `stored as ${typeof stored}` };
+}
