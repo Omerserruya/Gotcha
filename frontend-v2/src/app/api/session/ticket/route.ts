@@ -15,6 +15,13 @@ import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
  * immediately. Routing it through its own endpoint keeps that lifecycle
  * visible and keeps the ticket out of any cached response.
  *
+ * ★ `/api/session/ticket`, NOT the platform's `/api/realtime/ticket` (2026-10-21,
+ * the app moved to the root). The gateway sends `/api/realtime` to the auth
+ * service, and this handler calls that same path through `API_BASE_URL` -
+ * the same gateway. Named like the platform's, giving it to this app would
+ * have it call itself. `api-routes-at-root.test.ts` keeps every route here on
+ * a path the gateway gives this app.
+ *
  * `no-store` is not decoration. A ticket is single-use and lives 60 seconds; a
  * cached one is either already spent or about to expire, and either way the
  * socket fails in a way that looks like a network fault.

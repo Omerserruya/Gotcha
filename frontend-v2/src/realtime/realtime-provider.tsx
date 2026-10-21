@@ -42,7 +42,7 @@ export function RealtimeProvider({
       credentials: async () => {
         try {
           // Prefixed: `fetch` has no knowledge of where the app is mounted.
-          const response = await fetch(appPath('/api/realtime/ticket'), {
+          const response = await fetch(appPath('/api/session/ticket'), {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'content-type': 'application/json' },

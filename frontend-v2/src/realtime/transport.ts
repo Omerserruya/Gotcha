@@ -29,7 +29,7 @@ export interface RealtimeTransport {
  *
  * The access token lives in an HttpOnly cookie precisely so that scripts
  * cannot read it - which equally means the browser cannot put it in a
- * handshake. `POST /api/realtime/ticket` resolves that: it mints a
+ * handshake. `POST /api/session/ticket` resolves that: it mints a
  * short-lived, single-use credential the page may safely hold.
  *
  * Returning null keeps the transport dormant, which is what should happen if
