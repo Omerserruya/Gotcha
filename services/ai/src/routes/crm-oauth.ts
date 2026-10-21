@@ -80,7 +80,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
 
     if (await redirectRedesignDenied(req, res, "zoho_crm", "zoho_crm")) return;
     if (zohoError) {
-      res.redirect(`${frontendUrl}/integrations?error=${encodeURIComponent(String(zohoError))}`);
+      res.redirect(redesignCapabilitiesUrl("zoho_crm", { error: "denied" }));
       return;
     }
     if (!code || !state) {
@@ -109,7 +109,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
     });
     if (!catalog) {
       console.error("[Zoho OAuth] Catalog entry not found:", payload.integrationSlug);
-      res.redirect(flow === REDESIGN_FLOW ? redesignCapabilitiesUrl("zoho_crm", { error: "catalog_missing" }) : `${frontendUrl}/integrations?error=catalog_missing`);
+      res.redirect(flow === REDESIGN_FLOW ? redesignCapabilitiesUrl("zoho_crm", { error: "catalog_missing" }) : redesignCapabilitiesUrl("zoho_crm", { error: "catalog_missing" }));
       return;
     }
 
@@ -196,14 +196,14 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
       });
     }
 
-    // During onboarding, return to /setup so the boot logic detects the
-    // connected core system and finishes activation; otherwise integrations.
+    // During onboarding, return to the onboarding screen; otherwise the
+    // app's capabilities page (the legacy pages are gone since 2026-10-21).
     res.redirect(
       payload.flow === REDESIGN_FLOW
         ? redesignCapabilitiesUrl(payload.integrationSlug)
         : payload.flow === "onboarding"
-          ? `${frontendUrl}/setup?connected=${payload.integrationSlug}`
-          : `${frontendUrl}/integrations?connected=${payload.integrationSlug}`,
+          ? `${frontendUrl}/onboarding`
+          : redesignCapabilitiesUrl(payload.integrationSlug),
     );
   } catch (err: any) {
     console.error("[Zoho OAuth] Callback error:", err?.message ?? err);
@@ -215,7 +215,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
       cause: err,
       context: { stage: "callback" },
     });
-    res.redirect(flow === REDESIGN_FLOW ? redesignCapabilitiesUrl("zoho_crm", { error: "callback_error" }) : `${frontendUrl}/integrations?error=oauth_callback_failed`);
+    res.redirect(flow === REDESIGN_FLOW ? redesignCapabilitiesUrl("zoho_crm", { error: "callback_error" }) : redesignCapabilitiesUrl("zoho_crm", { error: "callback_error" }));
   }
 });
 

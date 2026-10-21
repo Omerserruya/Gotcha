@@ -300,7 +300,7 @@ describe("★ callback, v1 flow: still connects every Page", () => {
   it("both Pages, the old landing", async () => {
     A.pages = [page("pg_a"), page("pg_b")];
     const r = await callback();
-    expect(r.headers.location).toBe("https://dev.example.test/channels?connected=messenger&count=2");
+    expect(r.headers.location).toBe("https://dev.example.test/settings/channels?connected=messenger&count=2");
     expect(byExternal("pg_a")).toBeTruthy();
     expect(byExternal("pg_b")).toBeTruthy();
     expect(L.calls).toEqual([{ current: 0, adding: 2 }]);
@@ -310,7 +310,7 @@ describe("★ callback, v1 flow: still connects every Page", () => {
     L.limit = 1;
     A.pages = [page("pg_a"), page("pg_b")];
     const r = await callback();
-    expect(r.headers.location).toBe("https://dev.example.test/channels?error=limit_reached");
+    expect(r.headers.location).toBe("https://dev.example.test/settings/channels?error=limit_reached");
     expect(DB.rows).toEqual([]);
     expect(A.subscribed).toEqual([]);
   });
@@ -319,13 +319,13 @@ describe("★ callback, v1 flow: still connects every Page", () => {
     DB.rows.push(row({ tenantId: "tenant_b", externalId: "pg_a" }), row({ tenantId: "tenant_b", externalId: "pg_b" }));
     A.pages = [page("pg_a"), page("pg_b")];
     const r = await callback();
-    expect(r.headers.location).toBe("https://dev.example.test/channels?error=already_connected");
+    expect(r.headers.location).toBe("https://dev.example.test/settings/channels?error=already_connected");
   });
 
   it("Pages none of which carry a token are no_pages, not count=0", async () => {
     A.pages = [page("pg_a", { access_token: undefined })];
     const r = await callback();
-    expect(r.headers.location).toBe("https://dev.example.test/channels?error=no_pages");
+    expect(r.headers.location).toBe("https://dev.example.test/settings/channels?error=no_pages");
   });
 
   it("a tenant already over its limit can still reconnect the Pages it has", async () => {
@@ -336,7 +336,7 @@ describe("★ callback, v1 flow: still connects every Page", () => {
     );
     A.pages = [page("pg_a"), page("pg_b")];
     const r = await callback();
-    expect(r.headers.location).toBe("https://dev.example.test/channels?connected=messenger&count=2");
+    expect(r.headers.location).toBe("https://dev.example.test/settings/channels?connected=messenger&count=2");
     expect(L.calls).toEqual([]);
   });
 });

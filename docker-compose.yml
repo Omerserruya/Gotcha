@@ -215,8 +215,10 @@ services:
       # bind: build-widget rewrites the files, and a file bind would keep
       # pointing at the replaced inode.
       - ./frontend/public/widget:/usr/share/nginx/widget:ro
-      # The logo brand emails embed (${app}/full_icon_white.png).
-      - ./frontend/public/full_icon_white.png:/usr/share/nginx/brand/full_icon_white.png:ro
+      # The legacy app's public files still linked from outside the app (the
+      # logo in every brand email, stored integration logo URLs, channel
+      # icons, favicons): nginx serves them, falling back to the app.
+      - ./frontend/public:/usr/share/nginx/legacy-public:ro
       # The generated OpenAPI spec, served read-only at /api/docs/openapi.yaml.
       # DEV ONLY: docker-compose.prod.yml has no equivalent mount and the prod
       # nginx template has no /api/docs location, so the spec is unreachable in

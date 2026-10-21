@@ -100,11 +100,11 @@ describe("token validation", () => {
 
 describe("return path derivation", () => {
   it("sends an onboarding connect back to the wizard", () => {
-    expect(returnPathForFlow("onboarding", "monday")).toBe("/setup?connected=monday");
+    expect(returnPathForFlow("onboarding", "monday")).toBe("/onboarding");
   });
 
-  it("sends everything else to the provider's marketplace page", () => {
-    expect(returnPathForFlow(undefined, "monday")).toBe("/ai-studio/marketplace/monday?status=connected");
+  it("sends everything else to the app's capabilities page (the legacy marketplace is gone)", () => {
+    expect(returnPathForFlow(undefined, "monday")).toBe("/studio/capabilities?system=monday&connected=1");
   });
 
   it("never emits an absolute URL (open-redirect safety)", () => {

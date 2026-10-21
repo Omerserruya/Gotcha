@@ -287,7 +287,7 @@ export async function deliverAutomationNotice(event: SystemEvent): Promise<numbe
   if (!userIds.length && !departmentId) {
     for (const u of await resolveRecipients({ tenantId: event.tenantId, spec: { type: "tenant_owner" } as RecipientSpec })) users.set(u.id, u);
   }
-  const link = typeof d.conversationId === "string" && d.conversationId ? `/inbox?conversation=${d.conversationId}` : undefined;
+  const link = typeof d.conversationId === "string" && d.conversationId ? `/inbox?c=${encodeURIComponent(d.conversationId)}` : undefined;
   // The person's own in-app switch holds here too.
   const personal = await loadPersonal([...users.keys()], event.tenantId);
   for (const user of users.values()) {

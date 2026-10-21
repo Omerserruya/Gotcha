@@ -307,7 +307,7 @@ describe("★ automation.notify_team", () => {
     expect((prismaMock.user.findMany.mock.calls as any[])[0][0].where).toMatchObject({ tenantId: "tenant-A", id: { in: ["u1", "foreign"] }, isActive: true });
     const rows = (prismaMock.inAppNotification.create.mock.calls as any[]).map((c) => c[0].data);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ userId: "u1", title: "Automation", body: "Call back Dana", link: "/inbox?conversation=c1" });
+    expect(rows[0]).toMatchObject({ userId: "u1", title: "Automation", body: "Call back Dana", link: "/inbox?c=c1" });
   });
 
   it("a department reaches its active members; nobody chosen reaches the admins", async () => {

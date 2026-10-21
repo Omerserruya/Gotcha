@@ -250,7 +250,7 @@ export function buildCompletionEmail(args: {
     bodyHtml: `${cards}${topicsBlock}${emailParagraph(escapeHtml(reviewNote), args.locale)}`,
     cta: {
       label: he ? "לראות מה GOTCHA למד" : "Review what GOTCHA learned",
-      url: `${appUrl()}/ai-studio/knowledge?tab=discovered`,
+      url: `${appUrl()}/studio/knowledge`,
     },
     footerNote: he
       ? "קיבלתם את המייל הזה כי חיברתם את הוואטסאפ העסקי שלכם ל-GOTCHA."
@@ -268,7 +268,7 @@ export function buildCompletionEmail(args: {
         "",
         reviewNote,
         "",
-        `${appUrl()}/ai-studio/knowledge?tab=discovered`,
+        `${appUrl()}/studio/knowledge`,
       ].join("\n")
     : [
         headline,
@@ -279,7 +279,7 @@ export function buildCompletionEmail(args: {
         "",
         reviewNote,
         "",
-        `${appUrl()}/ai-studio/knowledge?tab=discovered`,
+        `${appUrl()}/studio/knowledge`,
       ].join("\n");
 
   return { subject, html, text };

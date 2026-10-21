@@ -92,8 +92,9 @@ const canManageSystems = requirePermission("integrations:connections:disconnect"
 // unchanged.
 
 function dashboardRedirect(slug: string, query: Record<string, string> = {}) {
-  const params = new URLSearchParams({ status: "connected", ...query });
-  const path = `/ai-studio/marketplace/${slug}?${params.toString()}`;
+  // The legacy marketplace page is gone (2026-10-21): the app's capabilities page.
+  const params = new URLSearchParams(query.error ? { system: slug, error: query.error } : { system: slug, connected: "1", ...query });
+  const path = `/studio/capabilities?${params.toString()}`;
   return process.env.DASHBOARD_URL ? `${process.env.DASHBOARD_URL}${path}` : path;
 }
 
@@ -128,12 +129,12 @@ function postOAuthRedirect(slug: string, flow: string | undefined, query: Record
     return `${base}${REDESIGN_BASE_PATH}/studio/capabilities?${params.toString()}`;
   }
   if (flow === "onboarding") {
-    const params = new URLSearchParams({ connected: slug, ...query });
-    return `${base}/setup?${params.toString()}`;
+    void query;
+    return `${base}/onboarding`;
   }
   if (flow === "settings_business_systems") {
-    const params = new URLSearchParams({ connected: slug, ...query });
-    return `${base}/settings/business-systems?${params.toString()}`;
+    const params = new URLSearchParams(query.error ? { system: slug, error: query.error } : { system: slug, connected: "1", ...query });
+    return `${base}/studio/capabilities?${params.toString()}`;
   }
   return dashboardRedirect(slug, query);
 }
@@ -812,7 +813,8 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
         res.redirect(`${base}${REDESIGN_BASE_PATH}/studio/capabilities?system=shopify&pending=1&reason=claim`);
         return;
       }
-      res.redirect(`${base}/settings/business-systems/shopify/finish?handle=${encodeURIComponent(handle)}`);
+      // The legacy finish page is gone (2026-10-21): the app's claim screen.
+      res.redirect(`${base}/studio/capabilities?system=shopify&pending=1&reason=claim`);
       return;
     }
 
@@ -849,7 +851,7 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
         res.redirect(`${base}${REDESIGN_BASE_PATH}/studio/capabilities?system=shopify&pending=1&reason=replace_store`);
         return;
       }
-      res.redirect(`${base}/settings/business-systems/shopify/finish?handle=${encodeURIComponent(handle)}`);
+      res.redirect(`${base}/studio/capabilities?system=shopify&pending=1&reason=replace_store`);
       return;
     }
 

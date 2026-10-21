@@ -270,7 +270,8 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
     });
 
     const frontendUrl = resolveAppPublicUrl(process.env);
-    res.redirect(flow === "redesign_studio" ? redesignKnowledgeUrl("confluence") : `${frontendUrl}/knowledge?connected=confluence`);
+    void frontendUrl;
+    res.redirect(redesignKnowledgeUrl("confluence"));
   } catch (err: any) {
     console.error("[Confluence OAuth] Callback error:", err.message);
     knowledgeFail(res, "confluence", flow, 500, "callback_error", { error: "OAuth callback failed" });
@@ -419,8 +420,8 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
       payload.flow === "redesign_studio"
         ? redesignKnowledgeUrl("google_drive")
         : payload.flow === "onboarding"
-          ? `${frontendUrl}/setup?connected=google_drive`
-          : `${frontendUrl}/knowledge?connected=google_drive`,
+          ? `${frontendUrl}/onboarding`
+          : redesignKnowledgeUrl("google_drive"),
     );
   } catch (err: any) {
     console.error("[Google Drive OAuth] Callback error:", err.message);

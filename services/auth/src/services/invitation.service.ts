@@ -308,7 +308,7 @@ export async function tenantAdminEntry(tenantId: string): Promise<{
     user: { id: admin.id, email: admin.email, name: admin.name },
     // Both roads end at onboarding; they differ only in whether a credential
     // has to be established on the way.
-    actionUrl: setupUrl ?? `${frontend}/login?next=/setup`,
+    actionUrl: setupUrl ?? `${frontend}/api/auth/login?returnTo=${encodeURIComponent("/onboarding")}`,
     needsPassword: !hasLoggedIn,
   };
 }

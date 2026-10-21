@@ -133,9 +133,9 @@ describe("success", () => {
     vi.stubGlobal("fetch", vi.fn(async (u: string) =>
       String(u).includes("oauth2.googleapis.com") ? ok({ access_token: "a", expires_in: 3600 }) : ok({})));
     expect((await cb("google-drive", { code: "c", state: st("google_drive") })).headers.location)
-      .toBe("https://app.example.test/knowledge?connected=google_drive");
+      .toBe("https://app.example.test/studio/knowledge?add=1&way=drive&connected=1");
     expect((await cb("google-drive", { code: "c", state: st("google_drive", "onboarding") })).headers.location)
-      .toBe("https://app.example.test/setup?connected=google_drive");
+      .toBe("https://app.example.test/onboarding");
   });
 });
 

@@ -30,9 +30,17 @@
 
 FROM nginx:alpine
 
-# The logo brand emails embed (${app}/full_icon_white.png); the legacy export
-# used to carry it.
-COPY frontend/public/full_icon_white.png /usr/share/nginx/brand/full_icon_white.png
+# The legacy app's public files still linked from outside the app: the logo in
+# every brand email (${app}/full_icon_white.png), integration logo URLs stored
+# in the database, channel icons, favicons. nginx serves them and falls back to
+# the app for any name not here.
+COPY frontend/public/icons        /usr/share/nginx/legacy-public/icons
+COPY frontend/public/integrations /usr/share/nginx/legacy-public/integrations
+COPY frontend/public/platforms    /usr/share/nginx/legacy-public/platforms
+COPY frontend/public/favicon.ico frontend/public/favicon-16.png frontend/public/favicon-32.png \
+     frontend/public/favicon-48.png frontend/public/favicon-96.png frontend/public/apple-touch-icon.png \
+     frontend/public/logo.png frontend/public/logo_icon.png frontend/public/full_icon_white.png \
+     /usr/share/nginx/legacy-public/
 # The embeddable widget, served by nginx itself at /widget/ (2026-10-21). The
 # publish script runs `node scripts/widget/build-widget.mjs --check` first, so
 # the files copied here are the current build.

@@ -212,7 +212,7 @@ describe("callback: success", () => {
 
   it("no flow → exactly the old landing", async () => {
     const r = await cb({ code: "c", state: st("gmail") });
-    expect(r.headers.location).toBe("https://dev.example.test/channels?connected=gmail&count=1");
+    expect(r.headers.location).toBe("https://dev.example.test/settings/channels?connected=gmail&count=1");
   });
 });
 
@@ -221,7 +221,7 @@ describe("callback: failures", () => {
     const r = await cb({ error: "access_denied", state: st("gmail", "redesign_studio") });
     expect(r.headers.location).toBe(`${V2}?platform=gmail&error=denied`);
     const legacy = await cb({ error: "access_denied", state: st("gmail") });
-    expect(legacy.headers.location).toBe("https://dev.example.test/channels?error=access_denied");
+    expect(legacy.headers.location).toBe("https://dev.example.test/settings/channels?error=access_denied");
   });
 
   it("★ a replayed redesign state still lands in v2, with state_already_used", async () => {
@@ -233,7 +233,7 @@ describe("callback: failures", () => {
 
   it("a forged state cannot pick the v2 landing", async () => {
     const r = await cb({ code: "c", state: "eyJhbGciOiJIUzI1NiJ9.eyJmbG93IjoicmVkZXNpZ25fc3R1ZGlvIn0.x" });
-    expect(r.headers.location).toBe("https://dev.example.test/channels?error=invalid_state");
+    expect(r.headers.location).toBe("https://dev.example.test/settings/channels?error=invalid_state");
   });
 });
 

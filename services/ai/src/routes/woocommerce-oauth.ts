@@ -86,8 +86,11 @@ export function wooReturnUrl(flow: string | undefined, result: { error?: string 
     else p.set("connected", "1");
     return `${origin}/studio/capabilities?${p.toString()}`;
   }
-  const p = new URLSearchParams(result.error ? { status: "error", error: result.error } : { status: "connected" });
-  return `${origin}/ai-studio/marketplace/${PROVIDER}?${p.toString()}`;
+  // The legacy marketplace page is gone (2026-10-21): same landing as above.
+  const p = new URLSearchParams({ system: PROVIDER });
+  if (result.error) p.set("error", WOO_ERROR_CODES.has(result.error) ? result.error : "callback_error");
+  else p.set("connected", "1");
+  return `${origin}/studio/capabilities?${p.toString()}`;
 }
 
 /** Signature-only read of a state we issued (no consume). For choosing a landing. */

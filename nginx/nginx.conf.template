@@ -2005,21 +2005,55 @@ http {
             limit_req zone=authentik burst=40 nodelay;
         }
 
-        # The logo every brand email embeds (packages/shared brand-email.ts
-        # builds ${app}/full_icon_white.png). The legacy app's export served
-        # it; the app has no such file, so the gateway does.
-        location = /full_icon_white.png {
-            root /usr/share/nginx/brand;
-            try_files $uri =404;
+        # ─── Legacy public assets, served by nginx (2026-10-21) ──────────
+        # The legacy app is gone but its public files are still linked from
+        # outside the app: /full_icon_white.png is the logo in EVERY brand email
+        # (packages/shared brand-email.ts), integration logo URLs are stored in
+        # the database (/integrations/*.svg), and channel icons, favicons and
+        # logos are referenced by old pages and mail. The legacy file is tried
+        # first; a name it does not have falls through to the app, which serves
+        # its own /integrations/*.png etc. (no names overlap today). Extensions
+        # only, so an old PAGE path (/integrations/hubspot) still reaches the
+        # redirect map in `location /`.
+        location ~ "^/(integrations|platforms|icons)/[A-Za-z0-9_.-]+\.(svg|png|jpe?g|webp|ico)$" {
+            root /usr/share/nginx/legacy-public;
+            try_files $uri @app;
             expires 7d;
+            # No http-level mime.types in this config (see the widget).
+            include /etc/nginx/mime.types;
+        }
+        location ~ "^/(favicon\.ico|favicon-(16|32|48|96)\.png|apple-touch-icon\.png|logo_icon\.png|logo\.png|full_icon_white\.png)$" {
+            root /usr/share/nginx/legacy-public;
+            try_files $uri @app;
+            expires 7d;
+            # No http-level mime.types in this config (see the widget).
+            include /etc/nginx/mime.types;
+        }
+        location @app {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # The app lived under /v2 until 2026-10-21. Links already sent keep
-        # working: the prefix is stripped, the query kept.
-        location ^~ /v2 {
+        # The app lived under /v2 until 2026-10-21. A PERMANENT 308 (method and
+        # body kept, so a POST from an installed WooCommerce plugin with /v2
+        # baked in still lands), prefix stripped, query kept.
+        location ~ ^/v2(?:/(?<v2rest>.*))?$ {
             absolute_redirect off;
-            rewrite ^/v2/?(.*)$ /$1 permanent;
+            return 308 /$v2rest$is_args$args;
         }
+
+        # Pages that live on the marketing, trust and help sites.
+        location = /privacy-policy { return 301 https://gotcha.co.il$request_uri; }
+        location = /terms          { return 301 https://gotcha.co.il$request_uri; }
+        location ^~ /legal         { return 301 https://gotcha.co.il$request_uri; }
+        location ^~ /help          { return 301 https://help.gotcha.co.il$request_uri; }
 
         # ─── The app's own server routes (frontend-v2) ───
         # Exact matches, so they beat the auth service's `location /api/auth`

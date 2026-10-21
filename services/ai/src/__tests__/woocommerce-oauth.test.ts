@@ -191,6 +191,6 @@ describe("callback + return: the whole round-trip", () => {
     storeAnswers(true);
     await callback({ ...KEYS, user_id: state });
     expect((await back({ success: "1", user_id: state })).headers.location)
-      .toBe("https://dev.example.test/ai-studio/marketplace/woocommerce?status=connected");
+      .toBe("https://dev.example.test/studio/capabilities?system=woocommerce&connected=1");
   });
 });

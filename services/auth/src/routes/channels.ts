@@ -1344,7 +1344,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
   const back = (legacyQuery: string) =>
     flow === "redesign_studio"
       ? redesignChannelsUrl(frontendUrl, platformForReturn, legacyQuery)
-      : `${frontendUrl}/channels?${legacyQuery}`;
+      : `${frontendUrl}/settings/channels?${legacyQuery}`;
 
   try {
     const { code, state, error: oauthError } = req.query;
@@ -1360,12 +1360,12 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
           return;
         }
       }
-      res.redirect(`${frontendUrl}/channels?error=${encodeURIComponent(oauthError as string)}`);
+      res.redirect(`${frontendUrl}/settings/channels?error=${encodeURIComponent(oauthError as string)}`);
       return;
     }
 
     if (!code || !state) {
-      res.redirect(`${frontendUrl}/channels?error=missing_params`);
+      res.redirect(`${frontendUrl}/settings/channels?error=missing_params`);
       return;
     }
 

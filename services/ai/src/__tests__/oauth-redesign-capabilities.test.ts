@@ -115,7 +115,8 @@ describe.each(CASES)("$name", (c) => {
   it("a legacy flow is untouched", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ok({ access_token: "a", refresh_token: "r", expires_in: 3600, email: "x@y.z", resource: { email: "x@y.z" }, api_domain: "https://www.zohoapis.com" })));
     const r = await request(app).get(c.cb).query({ code: "c", state: st(c, "onboarding") });
-    expect(r.headers.location).toBe(`https://app.example.test/setup?connected=${c.system}`);
+    // Onboarding returns to the app's onboarding screen (the legacy /setup is gone).
+    expect(r.headers.location).toBe("https://app.example.test/onboarding");
   });
 });
 

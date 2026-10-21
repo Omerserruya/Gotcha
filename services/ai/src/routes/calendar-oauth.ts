@@ -438,11 +438,13 @@ function connectedRedirect(
   // dropped the user on the marketplace page and onboarding looked reset.
   if (flow === "onboarding") {
     const base = resolveAppPublicUrl(process.env);
-    return `${base}/setup?connected=${provider}`;
+    return `${base}/onboarding`;
   }
   if (flow === REDESIGN_FLOW) return redesignCapabilitiesUrl(provider);
-  const path = `/ai-studio/marketplace/${provider}?calendar=connected&aiAgentId=${aiAgentId}`;
-  return process.env.DASHBOARD_URL ? `${process.env.DASHBOARD_URL}${path}` : path;
+  // The legacy marketplace page is gone (2026-10-21): every other flow lands
+  // on the app's capabilities page too. aiAgentId is no longer needed there.
+  void aiAgentId;
+  return redesignCapabilitiesUrl(provider);
 }
 
 export default router;

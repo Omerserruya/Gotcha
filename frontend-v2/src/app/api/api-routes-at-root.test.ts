@@ -57,10 +57,18 @@ describe('★★ every API route is on a path the gateway gives this app at the 
     for (const prefix of OURS) {
       const bare = prefix.slice(0, -1);
       // A location naming the prefix (or a shorter one covering it, like a bare `/api/s`).
-      const taken = conf
-        .split('\n')
-        .filter((line) => /^\s*location\b/.test(line))
-        .filter((line) => !/frontend_v2/.test(line))
+      // Each location with its whole block (to the first closing brace): a
+      // multi-line block that proxies to frontend_v2 is ours too.
+      const lines = conf.split('\n');
+      const blockOf = (i: number) => {
+        const end = lines.findIndex((l, j) => j >= i && /}/.test(l));
+        return lines.slice(i, end < 0 ? i + 1 : end + 1).join('\n');
+      };
+      const taken = lines
+        .map((line, i) => ({ line, block: blockOf(i) }))
+        .filter(({ line }) => /^\s*location\b/.test(line))
+        .filter(({ block }) => !/frontend_v2/.test(block))
+        .map(({ line }) => line)
         .filter((line) => {
           const m = /location\s+(?:\^~|=)?\s*(\/api\/[^\s{]*)/.exec(line);
           return m ? bare.startsWith(m[1]!.replace(/\/$/, '')) && m[1] !== '/api' : false;

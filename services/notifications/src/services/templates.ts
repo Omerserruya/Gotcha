@@ -33,7 +33,8 @@ const safe = (v: unknown, fallback = "n/a"): string => {
   if (typeof v === "string") return v;
   try { return JSON.stringify(v); } catch { return fallback; }
 };
-const convLink = (e: SystemEvent) => (e.metadata.conversationId ? `/conversations/${e.metadata.conversationId}` : undefined);
+// The app opens a conversation in the inbox (/inbox?c=<id>); /conversations/<id> never existed there.
+const convLink = (e: SystemEvent) => (e.metadata.conversationId ? `/inbox?c=${encodeURIComponent(String(e.metadata.conversationId))}` : undefined);
 /** "on WhatsApp" / "בוואטסאפ": the channel as a place, with its preposition. */
 const ON_CHANNEL: Record<string, { en: string; he: string }> = {
   WHATSAPP: { en: "on WhatsApp", he: "בוואטסאפ" },
@@ -71,7 +72,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
   // it assigns to them); "GOTCHA asks to run propose_plan" was wrong twice.
   "tool.approval_required": (e, viewerId) => {
     const id = safe(e.data.approvalRequestId, "");
-    const link = id ? `/approvals?id=${id}` : e.metadata.conversationId ? `/conversations/${e.metadata.conversationId}` : "/approvals";
+    const link = id ? `/approvals?id=${id}` : e.metadata.conversationId ? `/inbox?c=${encodeURIComponent(String(e.metadata.conversationId))}` : "/approvals";
     const plan = e.data.plan as { steps?: unknown; requester?: { userId?: string; name?: string } | null; source?: string | null } | undefined;
     if (plan) {
       const said = planSummaryFor(plan.steps, viewerId) ?? safe(e.data.summary, "");
@@ -101,7 +102,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
     return {
       en: { title: `New lead: ${name || "Unnamed lead"}`, body: `A new lead was created${value ? ` with estimated value ${value}` : ""}.` },
       he: { title: `ליד חדש${name ? `: ${name}` : ""}`, body: `נוצר ליד חדש${name ? `: ${name}` : ""}${value ? ` (ערך משוער ${value})` : ""}.` },
-      link: "/contacts",
+      link: "/customers",
     };
   },
 
@@ -187,7 +188,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
         title: `בדיקת החיבור ${name ? `ל-${name} ` : ""}נכשלה`,
         body: `בדקנו את החיבור${name ? ` ל-${name}` : ""} וההתחברות נדחתה. GOTCHA לא תוכל להשתמש בו עד שיחובר מחדש.${reason ? ` דווח: ${reason}` : ""}`,
       },
-      link: "/settings/business-systems",
+      link: "/settings/systems",
     };
   },
 
@@ -234,7 +235,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
     return {
       en: { title: `High-value lead detected: ${name || "Unnamed lead"}`, body: `A high-value lead was detected (estimated ${value || "high"}).` },
       he: { title: `ליד בעל ערך גבוה${name ? `: ${name}` : ""}`, body: `זוהה ליד בעל ערך גבוה${name ? `: ${name}` : ""}${value ? ` (ערך משוער ${value})` : ""}.` },
-      link: "/contacts",
+      link: "/customers",
     };
   },
 
@@ -252,7 +253,8 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
     return {
       en: { title: "Critical system error", body: `A critical system error was reported: ${msg || "Unknown error"}` },
       he: { title: "שגיאת מערכת קריטית", body: `דווחה שגיאת מערכת קריטית${msg ? `: ${msg}` : ""}.` },
-      link: "/system/health",
+      // The sysadmin console (/system); there is no /system/health page.
+      link: "/system",
     };
   },
 

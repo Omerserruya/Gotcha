@@ -138,7 +138,7 @@ router.get("/:token", redeemLimiter, async (req: Request, res: Response): Promis
     if (outcome.status === "already_has_password") {
       // Not an error, and deliberately not the expiry page. This person has a
       // credential already; the honest next screen is the ordinary way in.
-      res.redirect(302, `${resolveAppPublicUrl(process.env)}/login?next=/setup`);
+      res.redirect(302, `${resolveAppPublicUrl(process.env)}/api/auth/login?returnTo=${encodeURIComponent("/onboarding")}`);
       return;
     }
     if (outcome.status === "no_identity") {

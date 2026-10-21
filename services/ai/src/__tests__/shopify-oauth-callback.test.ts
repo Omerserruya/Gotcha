@@ -281,8 +281,9 @@ describe("workspace linking", () => {
     H.stateResult.current = WITHOUT_INTENT;
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
     expect(res.status).toBe(302);
-    expect(res.headers.location).toContain("/settings/business-systems/shopify/finish");
-    expect(res.headers.location).toContain("handle=");
+    expect(res.headers.location).toContain("/studio/capabilities?system=shopify&pending=1&reason=claim");
+    // The handle travels in the HttpOnly cookie; the URL carries none.
+    expect(res.headers.location).not.toContain("handle=");
     // Nothing is written to any tenant yet.
     expect(H.linkCalls).toHaveLength(0);
     expect(H.pendingCalls[0]).toMatchObject({ shopDomain: SHOP });
@@ -317,7 +318,7 @@ describe("workspace linking", () => {
       claims: { tenantId: "", provider: "shopify", shop: SHOP, hasIntent: true, jti: "j" },
     };
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
-    expect(res.headers.location).toContain("/shopify/finish");
+    expect(res.headers.location).toContain("system=shopify&pending=1");
     expect(H.linkCalls).toHaveLength(0);
   });
 
@@ -447,19 +448,19 @@ describe("redesign_studio flow", () => {
     expect(res.headers.location).toBe(`${V2}?system=shopify&error=token_exchange_failed`);
   });
 
-  it("without the flow, replacing still goes to the old finish screen with its handle", async () => {
+  it("without the flow, replacing goes to the app's replace screen (the legacy finish page is gone)", async () => {
     H.replacing.current = "old-store.myshopify.com";
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
-    expect(res.headers.location).toContain("/settings/business-systems/shopify/finish?handle=");
+    expect(res.headers.location).toContain("/studio/capabilities?system=shopify&pending=1&reason=replace_store");
   });
 });
 
 describe("an install that began on Shopify (no GOTCHA session)", () => {
-  it("lands on the old finish screen by default", async () => {
+  it("lands on the app's claim screen by default (the legacy finish page is gone)", async () => {
     H.stateResult.current = WITHOUT_INTENT;
     delete process.env.SHOPIFY_ANONYMOUS_INSTALL_LANDING;
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
-    expect(res.headers.location).toContain("/settings/business-systems/shopify/finish?handle=");
+    expect(res.headers.location).toContain("/studio/capabilities?system=shopify&pending=1&reason=claim");
   });
 
   it("★ with SHOPIFY_ANONYMOUS_INSTALL_LANDING=v2 it lands on v2 to claim, the handle only in the cookie", async () => {

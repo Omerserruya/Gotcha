@@ -240,6 +240,6 @@ describe("the email quotes real numbers", () => {
       conflicts: 0,
       topics: [],
     });
-    expect(mail.text).toContain("/ai-studio/knowledge?tab=discovered");
+    expect(mail.text).toContain("/studio/knowledge");
   });
 });

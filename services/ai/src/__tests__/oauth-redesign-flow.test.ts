@@ -145,7 +145,7 @@ describe("success lands on the redesigned studio", () => {
   it("the other flows still land where they did", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => tokenOk));
     const res = await callback("hubspot", { code: "c", state: stateFor("hubspot", "settings_business_systems") });
-    expect(res.headers.location).toBe("https://app.gotcha.co.il/settings/business-systems?connected=hubspot");
+    expect(res.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=hubspot&connected=1");
   });
 });
 
@@ -306,7 +306,7 @@ describe("Stripe (it carried no flow and answered failures in plain text)", () =
     expect(r.text).toBe("token_exchange_failed");
     vi.stubGlobal("fetch", vi.fn(async () => tokenOk));
     const ok = await callback("stripe", { code: "c", state: stateFor("stripe") });
-    expect(ok.headers.location).toContain("/ai-studio/marketplace/stripe?status=connected");
+    expect(ok.headers.location).toContain("/studio/capabilities?system=stripe&connected=1");
   });
 });
 
