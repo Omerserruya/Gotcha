@@ -116,7 +116,9 @@ function parseKnowledgeFlow(raw: unknown, allowed: ReadonlySet<string> = KNOWLED
 
 // Fixed, not read from anywhere a request reaches: must equal frontend-v2's
 // NEXT_PUBLIC_BASE_PATH.
-const REDESIGN_BASE_PATH = "/v2";
+// The app has been at the root since 2026-10-21 (it was under /v2; the
+// gateway 301s any old /v2 link).
+const REDESIGN_BASE_PATH = "";
 const KNOWLEDGE_WAY: Record<string, string> = { google_drive: "drive", confluence: "confluence" };
 
 /** Failure codes a redesign-flow callback may put in its redirect. Closed. */

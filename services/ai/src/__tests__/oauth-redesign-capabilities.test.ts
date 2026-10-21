@@ -1,6 +1,6 @@
 /**
  * flow=redesign_studio on Zoho, Google Calendar and Calendly (and the shared
- * landing helper). Each lands on {origin}/v2/studio/capabilities?system=<slug>
+ * landing helper). Each lands on {origin}/studio/capabilities?system=<slug>
  * &connected=1 or &error=<closed code>, and every other flow keeps its exact
  * old answer. Real state signing and single-use consume; providers stubbed at
  * fetch; the DB is a permissive double (the subject is the landing, not the
@@ -68,7 +68,7 @@ app.use(express.json());
 app.use("/api/integrations", crmRouter);
 app.use("/api/integrations", calendarRouter);
 
-const V2 = "https://app.example.test/v2/studio/capabilities";
+const V2 = "https://app.example.test/studio/capabilities";
 const ok = (body: any) => ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) });
 const bad = { ok: false, status: 400, json: async () => ({}), text: async () => "nope <script>" };
 const flowOf = (url: string) =>

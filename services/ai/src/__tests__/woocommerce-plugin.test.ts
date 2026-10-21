@@ -240,7 +240,7 @@ describe("★ the zip", () => {
 
   it("\"Open in GOTCHA\" goes to the website chat settings (the page that exists)", () => {
     const zip = pluginZip("https://dev.gotcha.co.il").toString("utf8");
-    expect(zip).toContain("'/v2/settings/channels/website'");
+    expect(zip).toContain("'/settings/channels/website'");
     expect(zip).not.toContain("'/v2/widgets'");
   });
 

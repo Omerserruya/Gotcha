@@ -62,7 +62,7 @@ const app = express();
 app.use("/api/integrations", router);
 
 const STORE = "https://shop.example.test";
-const V2 = "https://dev.example.test/v2/studio/capabilities";
+const V2 = "https://dev.example.test/studio/capabilities";
 
 beforeEach(() => { R.kv.clear(); C.upserts = []; C.publicCheck = true; vi.unstubAllGlobals(); });
 

@@ -191,7 +191,7 @@ beforeEach(() => {
 
 // 2026-10-09: a refused callback lands on the v2 studio with a closed code
 // instead of plain text on the API host (which stranded the browser).
-const LANDING = "https://app.gotcha.co.il/v2/studio/capabilities?system=shopify";
+const LANDING = "https://app.gotcha.co.il/studio/capabilities?system=shopify";
 const refusedWith = (res: any, code: string) => {
   expect(res.status).toBe(302);
   expect(res.headers.location).toBe(`${LANDING}&error=${code}`);
@@ -415,9 +415,9 @@ describe("GET /connectors/shopify/oauth/init - reauthorization only", () => {
 
 describe("redesign_studio flow", () => {
   const REDESIGN = { ...WITH_INTENT, claims: { ...WITH_INTENT.claims, flow: "redesign_studio" } };
-  const V2 = "https://app.gotcha.co.il/v2/studio/capabilities";
+  const V2 = "https://app.gotcha.co.il/studio/capabilities";
 
-  it("★ a linked store lands on /v2/studio/capabilities?system=shopify&connected=1", async () => {
+  it("★ a linked store lands on /studio/capabilities?system=shopify&connected=1", async () => {
     H.stateResult.current = REDESIGN;
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
     expect(res.headers.location).toBe(`${V2}?system=shopify&connected=1`);
@@ -467,7 +467,7 @@ describe("an install that began on Shopify (no GOTCHA session)", () => {
     process.env.SHOPIFY_ANONYMOUS_INSTALL_LANDING = "v2";
     try {
       const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
-      expect(res.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=shopify&pending=1&reason=claim");
+      expect(res.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=shopify&pending=1&reason=claim");
       expect(String(res.headers["set-cookie"] || "")).toContain("gotcha_shopify_pending=");
     } finally {
       delete process.env.SHOPIFY_ANONYMOUS_INSTALL_LANDING;

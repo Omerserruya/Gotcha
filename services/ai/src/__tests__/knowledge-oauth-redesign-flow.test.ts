@@ -1,7 +1,7 @@
 /**
  * Drive / Confluence "Connect" from the redesigned app: flow=redesign_studio.
  *
- * Lands on {origin}/v2/studio/knowledge?add=1&way=<drive|confluence>&connected=1
+ * Lands on {origin}/studio/knowledge?add=1&way=<drive|confluence>&connected=1
  * or &error=<closed code>. Real state signing and single-use consume (jwt + a
  * Redis double with SET NX); provider endpoints stubbed. Every other flow
  * answers exactly as before, and a URL-shaped flow is dropped at init.
@@ -70,7 +70,7 @@ app.use("/api/knowledge", router);
 
 const ok = (body: any) => ({ ok: true, json: async () => body, text: async () => JSON.stringify(body) });
 const bad = { ok: false, json: async () => ({}), text: async () => "provider said no" };
-const V2 = "https://app.example.test/v2/studio/knowledge";
+const V2 = "https://app.example.test/studio/knowledge";
 
 const st = (provider: string, flow?: string) =>
   mintOAuthState({ tenantId: "tenant_a", provider, kbId: "kb_1", flow, userId: "user_1" }).state;
@@ -102,7 +102,7 @@ describe("init: the flow is a closed list signed into the state", () => {
 });
 
 describe("success", () => {
-  it("★ drive → /v2/studio/knowledge?add=1&way=drive&connected=1", async () => {
+  it("★ drive → /studio/knowledge?add=1&way=drive&connected=1", async () => {
     vi.stubGlobal("fetch", vi.fn(async (u: string) =>
       String(u).includes("oauth2.googleapis.com") ? ok({ access_token: "a", refresh_token: "r", expires_in: 3600 }) : ok({ user: { displayName: "Omer" } })));
     const res = await cb("google-drive", { code: "c", state: st("google_drive", "redesign_studio") });

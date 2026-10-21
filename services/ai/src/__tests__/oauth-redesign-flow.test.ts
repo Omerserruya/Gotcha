@@ -2,7 +2,7 @@
  * "Connect" from the redesigned app: the `redesign_studio` OAuth flow.
  *
  * The callback used to return only to the old app's routes. The new flow lands
- * on `/v2/studio/capabilities?system=<slug>&connected=1`, or `&error=<code>`.
+ * on `/studio/capabilities?system=<slug>&connected=1`, or `&error=<code>`.
  *
  * What must hold, and is checked here with the REAL state signing and
  * single-use consume (jwt + a Redis double with SET NX semantics) - no real
@@ -127,11 +127,11 @@ describe("the flow is a closed list, bound into the signed state", () => {
 });
 
 describe("success lands on the redesigned studio", () => {
-  it("★ hubspot → /v2/studio/capabilities?system=hubspot&connected=1, on the fixed origin", async () => {
+  it("★ hubspot → /studio/capabilities?system=hubspot&connected=1, on the fixed origin", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => tokenOk));
     const res = await callback("hubspot", { code: "c", state: stateFor("hubspot", "redesign_studio") });
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=hubspot&connected=1");
+    expect(res.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=hubspot&connected=1");
     expect(C.upserts).toHaveLength(1);
   });
 
@@ -139,7 +139,7 @@ describe("success lands on the redesigned studio", () => {
     vi.stubGlobal("fetch", vi.fn(async (u: string) =>
       String(u).includes("oauth2/token") ? tokenOk : { ok: true, json: async () => ({ data: {} }) }));
     const res = await callback("monday", { code: "c", state: stateFor("monday", "redesign_studio") });
-    expect(res.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=monday&error=validation_failed");
+    expect(res.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=monday&error=validation_failed");
   });
 
   it("the other flows still land where they did", async () => {
@@ -153,14 +153,14 @@ describe("failure: the redesign flow gets a closed error code, everyone else the
   it("★ token exchange failed → error=token_exchange_failed; the provider's text is NOT in the URL", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => tokenFail));
     const res = await callback("hubspot", { code: "c", state: stateFor("hubspot", "redesign_studio") });
-    expect(res.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=hubspot&error=token_exchange_failed");
+    expect(res.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=hubspot&error=token_exchange_failed");
     expect(C.upserts).toHaveLength(0);
   });
 
   it("★ an exception → error=callback_error; its message never reaches the URL", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("secret-ish detail"); }));
     const res = await callback("hubspot", { code: "c", state: stateFor("hubspot", "redesign_studio") });
-    expect(res.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=hubspot&error=callback_error");
+    expect(res.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=hubspot&error=callback_error");
     expect(res.headers.location).not.toContain("secret");
   });
 
@@ -182,7 +182,7 @@ describe("failure: the redesign flow gets a closed error code, everyone else the
 describe("the user pressed Cancel at the provider (?error=, no code)", () => {
   it("★ redesign flow → error=denied", async () => {
     const res = await callback("hubspot", { error: "access_denied", state: stateFor("hubspot", "redesign_studio") });
-    expect(res.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=hubspot&error=denied");
+    expect(res.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=hubspot&error=denied");
   });
 
   it("legacy flow → the same plain response as before", async () => {
@@ -207,7 +207,7 @@ describe("the user pressed Cancel at the provider (?error=, no code)", () => {
     const replay = await callback("hubspot", { code: "c", state });
     // 2026-10-09: refused on v2 with a closed code, not plain text.
     expect(replay.status).toBe(302);
-    expect(replay.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=hubspot&error=invalid_state");
+    expect(replay.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=hubspot&error=invalid_state");
     expect(C.upserts).toHaveLength(0);
   });
 });
@@ -215,7 +215,7 @@ describe("the user pressed Cancel at the provider (?error=, no code)", () => {
 // 2026-10-09: refusals BEFORE the state verifies answered plain text on the
 // API host and stranded the browser. They land on v2 now, for every flow.
 describe("refused before the state verifies: the browser lands on v2", () => {
-  const V2 = "https://app.gotcha.co.il/v2/studio/capabilities";
+  const V2 = "https://app.gotcha.co.il/studio/capabilities";
   const SLUGS = ["hubspot", "stripe", "monday", "salesforce", "airtable"] as const;
 
   it.each(SLUGS)("★ %s: a forged state → error=invalid_state, nothing exchanged or written", async (slug) => {
@@ -261,7 +261,7 @@ describe("refused before the state verifies: the browser lands on v2", () => {
     try {
       const res = await callback("hubspot", { code: "c", state: "bogus" });
       expect(res.status).toBe(302);
-      expect(res.headers.location).toBe("/v2/studio/capabilities?system=hubspot&error=invalid_state");
+      expect(res.headers.location).toBe("/studio/capabilities?system=hubspot&error=invalid_state");
     } finally {
       process.env.NODE_ENV = saved.env;
       process.env.FRONTEND_URL = saved.url;
@@ -285,18 +285,18 @@ describe("Stripe (it carried no flow and answered failures in plain text)", () =
     expect(JSON.parse(Buffer.from(new URL(r.body.url).searchParams.get("state")!.split(".")[1], "base64url").toString()).flow).toBe("redesign_studio");
   });
 
-  it("★ success → /v2/studio/capabilities?system=stripe&connected=1", async () => {
+  it("★ success → /studio/capabilities?system=stripe&connected=1", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => tokenOk));
     const r = await callback("stripe", { code: "c", state: stateFor("stripe", "redesign_studio") });
-    expect(r.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=stripe&connected=1");
+    expect(r.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=stripe&connected=1");
   });
 
   it("★ failures redirect with a closed code instead of plain text", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => tokenFail));
     const r = await callback("stripe", { code: "c", state: stateFor("stripe", "redesign_studio") });
-    expect(r.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=stripe&error=token_exchange_failed");
+    expect(r.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=stripe&error=token_exchange_failed");
     const cancel = await callback("stripe", { error: "access_denied", state: stateFor("stripe", "redesign_studio") });
-    expect(cancel.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=stripe&error=denied");
+    expect(cancel.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=stripe&error=denied");
   });
 
   it("without the flow Stripe answers exactly as before", async () => {

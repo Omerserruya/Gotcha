@@ -78,13 +78,13 @@ export function wooReturnUrl(flow: string | undefined, result: { error?: string 
   const origin = resolveAppPublicUrl(process.env);
   if (flow === "wp_plugin") {
     const p = new URLSearchParams(result.error ? { error: WOO_ERROR_CODES.has(result.error) ? result.error : "callback_error" } : { connected: "1" });
-    return `${origin}/v2/connect/woocommerce?${p.toString()}`;
+    return `${origin}/connect/woocommerce?${p.toString()}`;
   }
   if (flow === "redesign_studio") {
     const p = new URLSearchParams({ system: PROVIDER });
     if (result.error) p.set("error", WOO_ERROR_CODES.has(result.error) ? result.error : "callback_error");
     else p.set("connected", "1");
-    return `${origin}/v2/studio/capabilities?${p.toString()}`;
+    return `${origin}/studio/capabilities?${p.toString()}`;
   }
   const p = new URLSearchParams(result.error ? { status: "error", error: result.error } : { status: "connected" });
   return `${origin}/ai-studio/marketplace/${PROVIDER}?${p.toString()}`;

@@ -115,7 +115,7 @@ function parseFlow(raw: unknown): string | undefined {
 //     home - so a connect started in Settings returns to Settings, not the
 //     AI Studio marketplace)
 //   • otherwise                 → the provider's marketplace page
-//   • redesign_studio           → /v2/studio/capabilities in the redesigned app,
+//   • redesign_studio           → /studio/capabilities in the app,
 //     `system=<slug>&connected=1`, or `system=<slug>&error=<code>` on failure
 function postOAuthRedirect(slug: string, flow: string | undefined, query: Record<string, string> = {}) {
   const base = resolveAppPublicUrl(process.env);
@@ -138,7 +138,9 @@ function postOAuthRedirect(slug: string, flow: string | undefined, query: Record
   return dashboardRedirect(slug, query);
 }
 
-const REDESIGN_BASE_PATH = "/v2";
+// The app has been at the root since 2026-10-21 (it was under /v2; the
+// gateway 301s any old /v2 link).
+const REDESIGN_BASE_PATH = "";
 
 /**
  * The failure codes a redesign-flow callback may put in its redirect. A closed

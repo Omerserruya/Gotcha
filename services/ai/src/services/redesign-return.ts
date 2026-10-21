@@ -3,7 +3,7 @@
  *
  * One closed list and one URL shape for the capability connectors that do not
  * live in connectors-admin (Zoho, Google Calendar, Calendly). The destination
- * is fixed - the app origin plus /v2, which must equal frontend-v2's
+ * is fixed - the app origin (the app is at the root), which must equal frontend-v2's
  * NEXT_PUBLIC_BASE_PATH - and never a URL from the request; the error is a
  * code from the list below, never a provider's own text.
  */
@@ -11,7 +11,9 @@ import { Request, Response } from "express";
 import { consumeOAuthState, resolveAppPublicUrl } from "@chatcenter/shared";
 
 export const REDESIGN_FLOW = "redesign_studio";
-const REDESIGN_BASE_PATH = "/v2";
+// The app has been at the root since 2026-10-21 (it was under /v2; the
+// gateway 301s any old /v2 link).
+const REDESIGN_BASE_PATH = "";
 
 export const CAPABILITY_FAILURE_CODES: ReadonlySet<string> = new Set([
   "denied",

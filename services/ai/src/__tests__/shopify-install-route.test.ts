@@ -183,7 +183,7 @@ beforeEach(() => {
 
 // 2026-10-09: a refused install lands on the v2 studio with the same code it
 // always carried; v1's /settings/business-systems never read the param.
-const INSTALL_REFUSED = "https://app.gotcha.co.il/v2/studio/capabilities?system=shopify&error=invalid_request";
+const INSTALL_REFUSED = "https://app.gotcha.co.il/studio/capabilities?system=shopify&error=invalid_request";
 
 describe("GET /connectors/shopify/install/start", () => {
   it("returns a SHOPIFY-owned URL and never asks for a shop domain", async () => {
@@ -383,7 +383,7 @@ describe("GET /connectors/shopify/install (public)", () => {
     try {
       const res = await request(app()).get(`/api/connectors/shopify/install?${entryQuery()}`);
       expect(res.status).toBe(302);
-      expect(res.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=shopify&error=not_configured");
+      expect(res.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=shopify&error=not_configured");
     } finally {
       process.env.SHOPIFY_REDIRECT_URI = saved;
     }
@@ -821,12 +821,13 @@ describe("GET /connectors/shopify/billing/return", () => {
     expect(H.settings.get("tenant-A|shopify.returnFlow")).toBeNull();
   });
 
-  it("★ a v2 workspace's return lands in /v2 to verify there", async () => {
+  it("★ a v2 workspace's return lands in the app to verify there (at the root since 2026-10-21)", async () => {
     H.owner.current = { tenantId: "tenant-A", connectionId: "c1", status: "CONNECTED" };
     H.settings.set("tenant-A|shopify.returnFlow", "redesign_studio");
     const r = await ret(`plan_handle=pro&shop=${SHOP}`);
     expect(r.status).toBe(302);
-    expect(r.headers.location).toMatch(/\/v2\/studio\/capabilities\?system=shopify&billing=verify&shop=urban-supply-dev\.myshopify\.com$/);
+    expect(r.headers.location).toMatch(/[^2]\/studio\/capabilities\?system=shopify&billing=verify&shop=urban-supply-dev\.myshopify\.com$/);
+    expect(r.headers.location).not.toContain("/v2/");
   });
 
   it("★ everyone else gets today's page, with Shopify's query passed through untouched", async () => {

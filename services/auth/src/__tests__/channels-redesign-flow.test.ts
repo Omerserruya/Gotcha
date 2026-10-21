@@ -1,7 +1,7 @@
 /**
  * Channel "Connect" from the redesigned app: flow=redesign_studio.
  *
- * The callback lands on {origin}/v2/settings/channels?connected=<platform>&count=N
+ * The callback lands on {origin}/settings/channels?connected=<platform>&count=N
  * or ?platform=<p>&error=<code> from a closed list. Every other flow keeps its
  * exact old answer. And init has a BFF variant, /oauth/init-url, that takes the
  * caller's normal credentials and answers JSON { url } - the redirect variant
@@ -164,7 +164,7 @@ beforeEach(() => {
 });
 
 
-const V2 = "https://dev.example.test/v2/settings/channels";
+const V2 = "https://dev.example.test/settings/channels";
 const st = (platform: string, flow?: string) =>
   mintOAuthState({ tenantId: "tenant_a", provider: "meta_channels", userId: "user_1", platform, flow }).state;
 const cb = (q: Record<string, string>) => request(app()).get("/api/channels/oauth/callback").query(q);
@@ -204,7 +204,7 @@ describe("init: the flow is a closed list signed into the state", () => {
 });
 
 describe("callback: success", () => {
-  it("★ redesign flow → /v2/settings/channels?connected=gmail&count=1", async () => {
+  it("★ redesign flow → /settings/channels?connected=gmail&count=1", async () => {
     const r = await cb({ code: "c", state: st("gmail", "redesign_studio") });
     expect(r.headers.location).toBe(`${V2}?connected=gmail&count=1`);
     expect(state.channelWrites.length).toBeGreaterThan(0);

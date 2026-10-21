@@ -108,7 +108,7 @@ function installErrorRedirect(reason: string): string {
   // (/settings/business-systems?shopify_install_error=) never read the param,
   // so a refused install told the merchant nothing.
   const params = new URLSearchParams({ system: "shopify", error: reason });
-  return `${base}/v2/studio/capabilities?${params.toString()}`;
+  return `${base}/studio/capabilities?${params.toString()}`;
 }
 
 /**
@@ -266,7 +266,7 @@ export const SHOPIFY_RETURN_FLOW_KEY = "shopify.returnFlow";
  * that place can tell them apart: the shop names its workspace, and the
  * workspace remembers which app its latest connect began in.
  *
- *   redesign flow -> /v2/studio/capabilities?system=shopify&billing=verify&shop=<shop>
+ *   redesign flow -> /studio/capabilities?system=shopify&billing=verify&shop=<shop>
  *                    (the v2 screen POSTs /api/billing/shopify/complete with
  *                     its own session, exactly as the old page does)
  *   anything else -> /integrations/shopify/billing/complete?<the same query>,
@@ -288,7 +288,7 @@ router.get("/connectors/shopify/billing/return", async (req: Request, res: Respo
     const flow = owner ? await readDurableSetting(owner.tenantId, SHOPIFY_RETURN_FLOW_KEY) : null;
     if (shop && flow === "redesign_studio") {
       const p = new URLSearchParams({ system: "shopify", billing: "verify", shop });
-      res.redirect(`${base}/v2/studio/capabilities?${p.toString()}`);
+      res.redirect(`${base}/studio/capabilities?${p.toString()}`);
       return;
     }
   } catch (err: any) {

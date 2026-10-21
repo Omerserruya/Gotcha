@@ -224,7 +224,7 @@ function gotcha_wc_settings_page() {
 			'return' => rawurlencode( gotcha_wc_settings_url() ),
 			'nonce'  => $nonce,
 		),
-		untrailingslashit( GOTCHA_APP_URL ) . '/v2/connect/woocommerce'
+		untrailingslashit( GOTCHA_APP_URL ) . '/connect/woocommerce'
 	);
 	?>
 	<div class="wrap">
@@ -239,7 +239,7 @@ function gotcha_wc_settings_page() {
 				printf( esc_html__( 'Connected to %s. The chat shows on your store.', 'gotcha-for-woocommerce' ), '<strong>' . esc_html( (string) get_option( GOTCHA_WC_OPT_WORKSPACE ) ) . '</strong>' );
 				?>
 			</p>
-			<p><a class="button button-primary" href="<?php echo esc_url( untrailingslashit( GOTCHA_APP_URL ) . '/v2/settings/channels/website' ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Open in GOTCHA', 'gotcha-for-woocommerce' ); ?></a></p>
+			<p><a class="button button-primary" href="<?php echo esc_url( untrailingslashit( GOTCHA_APP_URL ) . '/settings/channels/website' ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Open in GOTCHA', 'gotcha-for-woocommerce' ); ?></a></p>
 			<form method="post">
 				<?php wp_nonce_field( 'gotcha_wc_disconnect' ); ?>
 				<p><button class="button" name="gotcha_wc_disconnect" value="1"><?php esc_html_e( 'Disconnect', 'gotcha-for-woocommerce' ); ?></button></p>

@@ -1012,7 +1012,9 @@ function buildChannelOAuth(opts: {
 }
 
 /** Where a channel connect lands in the redesigned app. Fixed path, closed codes. */
-const REDESIGN_BASE_PATH = "/v2";
+// The app has been at the root since 2026-10-21 (it was under /v2; the
+// gateway 301s any old /v2 link).
+const REDESIGN_BASE_PATH = "";
 const CHANNEL_ERROR_CODES = new Set([
   "denied",
   "token_exchange_failed",

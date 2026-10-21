@@ -758,6 +758,8 @@ services:
       context: .
       dockerfile: services/billing/Dockerfile
     environment:
+      # The app is at the root (it was under /v2 until 2026-10-21).
+      V2_BASE_PATH: ""
       # Official Bank of Israel USD/ILS feed. Off by default: with it off there
       # is no chargeable rate, which is the safe direction.
       BOI_FX_ENABLED: ${BOI_FX_ENABLED:-false}

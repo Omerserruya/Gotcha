@@ -180,7 +180,7 @@ const app = express();
 app.use(express.json());
 app.use("/api/channels", router);
 
-const V2 = "https://dev.example.test/v2/settings/channels";
+const V2 = "https://dev.example.test/settings/channels";
 const callback = (flow?: string, who = { tenantId: "tenant_a", userId: "u_admin" }) =>
   request(app).get("/api/channels/oauth/callback").query({
     code: "code_1",
@@ -553,7 +553,7 @@ describe("★ POST /messenger/select", () => {
 describe("redesignChannelsUrl: the pick branch", () => {
   it("pick=1&platform=messenger&session=<id>", () => {
     expect(redesignChannelsUrl("https://o", "messenger", "pick=1&session=abc-123"))
-      .toBe("https://o/v2/settings/channels?pick=1&platform=messenger&session=abc-123");
+      .toBe("https://o/settings/channels?pick=1&platform=messenger&session=abc-123");
   });
   it("a pick without a session is not a pick", () => {
     expect(new URL(redesignChannelsUrl("https://o", "messenger", "pick=1")).searchParams.get("pick")).toBeNull();
