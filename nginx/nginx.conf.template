@@ -41,12 +41,8 @@ http {
         server billing:${BILLING_PORT};
     }
 
-    upstream frontend {
-        server frontend:${FRONTEND_PORT};
-    }
-
-    # The redesigned app, running beside the one above and sharing nothing with
-    # it. Reached at /v2.
+    # The app (frontend-v2), served at the root since 2026-10-21. The legacy
+    # frontend is code only: nothing here routes to it.
     #
     # ★ THE PORT IS HARDCODED, AND THAT IS NOT LAZINESS.
     #
@@ -109,46 +105,41 @@ http {
     }
 
     # ── DEV ONLY: v2 is the front door on dev.gotcha.co.il (2026-10-09) ──────
-    # A v1 page path 302s to its v2 equivalent, query kept. Only this host:
-    # localhost probes and any other Host keep v1. The gotcha_ui=v1 cookie
-    # (set by /legacy) opts out of every redirect. Unlisted paths fall through
-    # to v1 (no v2 equivalent yet), and /api, /socket.io, /widget, /_next,
-    # /join, /checkout, /legal, /auth and the rest have their own locations or
-    # no entry here. Named captures only. Dots are excluded so public assets
-    # under a page prefix (/integrations/x.svg) are never redirected.
-    map $host $v2_host { default 0; dev.gotcha.co.il 1; }
-    map $cookie_gotcha_ui $v2_optout { default 0; v1 1; }
+            # Old app paths (the legacy frontend's, still in emails already sent and
+    # in bookmarks) 302 to their equivalent at the root, query kept where it
+    # means the same. Every host; the legacy app no longer answers anything.
+    # Unlisted paths fall through to the app (its own 404). Named captures
+    # only; dots excluded so an asset path is never redirected.
     map $arg_id $v2_inbox_qs { default "?c=$arg_id"; "" ""; }
     map "$arg_status$arg_calendar" $v2_cap_ok { default ""; ~connected "&connected=1"; }
-    map "$v2_host$v2_optout:$uri" $v2_dest {
+    map $uri $v2_dest {
         default "";
-        "10:/"                                                              /v2;
-        ~^10:/login/?$                                                      /v2;
-        ~^10:/(dashboard|getting-started)/?$                                /v2/home$is_args$args;
-        ~^10:/setup/?$                                                      /v2/onboarding$is_args$args;
-        ~^10:/(conversations|history)/?$                                    /v2/inbox$v2_inbox_qs;
-        ~^10:/contacts/(?<v2cid>[^/.]+)/?$                                  /v2/customers/$v2cid;
-        ~^10:/(?<v2top>analytics|approvals)/?$                              /v2/$v2top$is_args$args;
-        ~^10:/outbound(/(broadcasts|campaigns|scheduled))?/?$               /v2/outreach$is_args$args;
-        ~^10:/outbound/templates/?$                                         /v2/outreach/templates;
-        ~^10:/outbound/call/?$                                              /v2/outreach/calls;
-        ~^10:/(settings/)?channels/?$                                       /v2/settings/channels$is_args$args;
-        ~^10:/settings/channels/whatsapp/?$                                 /v2/settings/channels/whatsapp$is_args$args;
-        ~^10:/settings/?$                                                   /v2/settings;
-        ~^10:/(agents|settings/(people|users|agents))/?$                    /v2/settings/people;
-        ~^10:/settings/permissions/?$                                       /v2/settings/people/permissions;
-        ~^10:/settings/(?<v2set>security|notifications)/?$                  /v2/settings/$v2set;
-        ~^10:/(usage|settings/usage|settings/billing(/(details|credits|usage-limit))?)/?$  /v2/settings/billing$is_args$args;
-        ~^10:/settings/billing/(?<v2bill>plan|payment-method)/?$            /v2/settings/billing/$v2bill$is_args$args;
-        ~^10:/settings/(business-systems|integrations)/?$                   /v2/settings/systems$is_args$args;
-        ~^10:/settings/business-systems/shopify/finish/?$                   /v2/studio/capabilities?system=shopify&pending=1&reason=claim;
-        ~^10:/integrations/shopify/billing/complete/?$                      /v2/studio/capabilities?system=shopify&billing=verify&shop=$arg_shop;
-        ~^10:/integrations/?$                                               /v2/studio/capabilities$is_args$args;
-        ~^10:/(integrations|ai-studio/marketplace)/(?<v2slug>[a-z0-9_-]+)/?$ /v2/studio/capabilities?system=$v2slug$v2_cap_ok;
-        ~^10:/settings/(tools|policy|business-rules)/?$                     /v2/studio/capabilities;
-        ~^10:/ai-studio/?$                                                  /v2/studio$is_args$args;
-        ~^10:/(knowledge|business|ai-studio/knowledge)/?$                   /v2/studio/knowledge$is_args$args;
-        ~^10:/ai-studio/agents/[^/.]+/?$                                    /v2/studio/employees;
+        ~^/login/?$                                                         /sign-in;
+        ~^/(dashboard|getting-started)/?$                                /home$is_args$args;
+        ~^/setup/?$                                                      /onboarding$is_args$args;
+        ~^/(conversations|history)/?$                                    /inbox$v2_inbox_qs;
+        ~^/contacts/(?<v2cid>[^/.]+)/?$                                  /customers/$v2cid;
+        ~^/(?<v2top>analytics|approvals)/?$                              /$v2top$is_args$args;
+        ~^/outbound(/(broadcasts|campaigns|scheduled))?/?$               /outreach$is_args$args;
+        ~^/outbound/templates/?$                                         /outreach/templates;
+        ~^/outbound/call/?$                                              /outreach/calls;
+        ~^/(settings/)?channels/?$                                       /settings/channels$is_args$args;
+        ~^/settings/channels/whatsapp/?$                                 /settings/channels/whatsapp$is_args$args;
+        ~^/settings/?$                                                   /settings;
+        ~^/(agents|settings/(people|users|agents))/?$                    /settings/people;
+        ~^/settings/permissions/?$                                       /settings/people/permissions;
+        ~^/settings/(?<v2set>security|notifications)/?$                  /settings/$v2set;
+        ~^/(usage|settings/usage|settings/billing(/(details|credits|usage-limit))?)/?$  /settings/billing$is_args$args;
+        ~^/settings/billing/(?<v2bill>plan|payment-method)/?$            /settings/billing/$v2bill$is_args$args;
+        ~^/settings/(business-systems|integrations)/?$                   /settings/systems$is_args$args;
+        ~^/settings/business-systems/shopify/finish/?$                   /studio/capabilities?system=shopify&pending=1&reason=claim;
+        ~^/integrations/shopify/billing/complete/?$                      /studio/capabilities?system=shopify&billing=verify&shop=$arg_shop;
+        ~^/integrations/?$                                               /studio/capabilities$is_args$args;
+        ~^/(integrations|ai-studio/marketplace)/(?<v2slug>[a-z0-9_-]+)/?$ /studio/capabilities?system=$v2slug$v2_cap_ok;
+        ~^/settings/(tools|policy|business-rules)/?$                     /studio/capabilities;
+        ~^/ai-studio/?$                                                  /studio$is_args$args;
+        ~^/(knowledge|business|ai-studio/knowledge)/?$                   /studio/knowledge$is_args$args;
+        ~^/ai-studio/agents/[^/.]+/?$                                    /studio/employees;
     }
 
     map $http_upgrade $connection_upgrade {
@@ -492,32 +483,14 @@ http {
         # Disabled: send visitors to early access rather than a dead end, and
         # never reveal that a pricing route exists.
         location = /pricing {
-            absolute_redirect off;
-            if ($public_pricing_enabled != "true") { return 302 /early-access; }
-            proxy_pass http://frontend;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $host;
-            proxy_set_header X-Internal-Key "";
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
+            # The legacy app served this page; the marketing site has it now.
+            return 302 https://gotcha.co.il/pricing;
         }
 
-        # Static export emits /pricing/ (trailingSlash) - gate both forms.
+        # Both forms (the legacy static export emitted /pricing/).
         location = /pricing/ {
-            absolute_redirect off;
-            if ($public_pricing_enabled != "true") { return 302 /early-access; }
-            proxy_pass http://frontend;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $host;
-            proxy_set_header X-Internal-Key "";
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
+            # The legacy app served this page; the marketing site has it now.
+            return 302 https://gotcha.co.il/pricing;
         }
 
         # ─── Public pricing catalog (billing, no auth, cacheable) ──
@@ -1956,34 +1929,21 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # ─── The redesigned app, mounted beside the existing one ──────────
+        # ─── The app (frontend-v2), at the root since 2026-10-21 ──────────
         #
-        # Nothing existing moves. Every /api/... prefix above is longer and more
-        # specific than this one, and the legacy catch-all below still takes
-        # everything else, so this adds a namespace rather than redirecting one.
+        # Built with an empty base path, so its pages, /_next/... and its own
+        # server routes are all at the root; the catch-all `location /` at the
+        # end of this server sends it everything no longer prefix claims. A
+        # REGEX location still beats a prefix one: any new regex here must be
+        # anchored so it cannot take app paths. `/v2` only redirects now.
         #
-        # ★ `^~`, NOT A BARE PREFIX. In nginx a REGEX location beats a prefix
-        # location. A bare `/v2` would be safe here only because every regex in
-        # this block happens to be anchored at `^/t/` and the one matching
-        # `_next` lives in the help server block - true today, not true by
-        # construction. `^~` stops regex evaluation once this prefix wins, so the
-        # next unanchored regex somebody adds cannot quietly take /v2 paths.
-        #
-        # ★★ AND NO TRAILING SLASH ON proxy_pass. `http://frontend_v2;` forwards
-        # the URI unchanged, which is what the app needs: it was BUILT with
-        # basePath=/v2 and serves its own routes under that prefix, including
-        # /v2/_next/... for its bundle. Writing `http://frontend_v2/` would strip
-        # /v2 and hand the app paths it does not serve - a 404 that reads as a
-        # broken container.
-        #
-        # The app owns its own locale negotiation: /v2/sign-in with
-        # Accept-Language: he answers 307 -> /v2/he/sign-in. A rewrite here would
-        # have pinned one language for a bilingual product, which is why there is
-        # no rewrite here.
+        # The app owns its own locale negotiation (/sign-in with
+        # Accept-Language: he answers 307 -> /he/sign-in), so nothing here
+        # rewrites a language.
         # ════════════════════════════════════════════════════════════════════
         # ★★ THE FLOW EXECUTOR, FIRST-PARTY - SO THE PASSWORD NEVER ENTERS NODE
         # ════════════════════════════════════════════════════════════════════
-        # /v2 serves its own sign-in panel and drives Authentik's flow executor
+        # The app serves its own sign-in panel and drives Authentik's flow executor
         # directly. The password therefore travels:
         #
         #     browser -> THIS PROXY -> authentik_server
@@ -2018,33 +1978,7 @@ http {
         #
         # Longest-prefix wins among `^~` locations, so this takes precedence
         # over `^~ /v2` below regardless of the order they appear in.
-        # ── DEV: the v1 opt-out for the v2 front door (2026-10-09) ──────────
-        # /legacy keeps this browser on v1 (every v2 redirect skipped) for 30
-        # days; /legacy/off undoes it. add_header here stops inheritance, so
-        # the server-scope security headers are repeated (CSP not needed on a
-        # bodiless 302).
-        location = /legacy {
-            absolute_redirect off;
-            add_header X-Content-Type-Options "nosniff" always;
-            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-            add_header X-Frame-Options "SAMEORIGIN" always;
-            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Set-Cookie "gotcha_ui=v1; Path=/; Max-Age=2592000; SameSite=Lax; Secure" always;
-            return 302 /;
-        }
-        location = /legacy/off {
-            absolute_redirect off;
-            add_header X-Content-Type-Options "nosniff" always;
-            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-            add_header X-Frame-Options "SAMEORIGIN" always;
-            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Set-Cookie "gotcha_ui=; Path=/; Max-Age=0; SameSite=Lax; Secure" always;
-            return 302 /v2;
-        }
-
-        location ^~ /v2/auth-api/ {
+        location ^~ /auth-api/ {
             proxy_pass http://authentik_server/api/v3/;
             # ★★ THE EXECUTOR REDIRECTS TO ITS OWN ROOT, AND THAT IS NOT OURS.
             #
@@ -2059,7 +1993,7 @@ http {
             # absolute path written by something that assumes it is mounted at
             # the root. There it was ours to fix in the href; here it is the
             # IdP's assumption and the rewrite belongs at the proxy.
-            proxy_redirect /api/v3/ /v2/auth-api/;
+            proxy_redirect /api/v3/ /auth-api/;
             proxy_http_version 1.1;
             proxy_set_header Host auth-dev.gotcha.co.il;
             proxy_set_header X-Internal-Key "";
@@ -2071,12 +2005,19 @@ http {
             limit_req zone=authentik burst=40 nodelay;
         }
 
+        # The app lived under /v2 until 2026-10-21. Links already sent keep
+        # working: the prefix is stripped, the query kept.
         location ^~ /v2 {
+            absolute_redirect off;
+            rewrite ^/v2/?(.*)$ /$1 permanent;
+        }
+
+        # ─── The app's own server routes (frontend-v2) ───
+        # Exact matches, so they beat the auth service's `location /api/auth`
+        # while /api/auth/setup/:token and the rest stay on the auth service.
+        location = /api/auth/login {
             proxy_pass http://frontend_v2;
             proxy_http_version 1.1;
-            # Socket.IO does not arrive here - the browser connects to
-            # /socket.io/ at the root, which is the platform's own service and
-            # already routed above. This upgrade is for Next's own streaming.
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
             proxy_set_header Host $host;
@@ -2085,15 +2026,72 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
+        location = /api/auth/callback {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location = /api/auth/logout {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location = /api/session/ticket {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location ^~ /api/exports/ {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        # The BFF streams (SSE): nothing buffered between it and the browser.
+        location ^~ /api/bff/ {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_buffering off;
+            proxy_read_timeout 3600s;
+        }
 
-        # ─── Frontend (catch-all) ────────────────────────
+        # ─── The app (catch-all) ─────────────────────────
         location / {
-            # DEV: v2 is the front door (see the $v2_dest map). A relative
-            # Location, because $scheme is http behind cloudflared.
+            # Old app paths 302 to their place in this one (the $v2_dest map).
+            # A relative Location, because $scheme is http behind cloudflared.
             absolute_redirect off;
             if ($v2_dest != "") { return 302 $v2_dest; }
-            proxy_pass http://frontend;
-            # WebSocket upgrade so Next.js dev HMR (/_next/webpack-hmr) works.
+            proxy_pass http://frontend_v2;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
@@ -2360,69 +2358,10 @@ http {
     server {
         listen 80;
         server_name help.gotcha.co.il help.dev.gotcha.co.il;
-
-        # ── Security headers (H-5) ──────────────────────────────
-        # Emitted at server scope; repeated inside any location that declares
-        # its own add_header (nginx add_header inheritance stops there).
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-        add_header X-Frame-Options "SAMEORIGIN" always;
-        add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-        # CSP: blast-radius cap for XSS. unsafe-inline/eval are required by the
-        # Next.js static export today; tightening to nonces is a follow-up.
-        # frame-ancestors 'self' (embedded chat is a script widget, not an
-        # iframe of this origin, so it is unaffected).
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
-
-        # Next.js internals + shared static assets - no rewrite (regex wins
-        # over the prefix locations below).
-        location ~ ^/(_next|favicon\.ico|logo[^/]*\.png|apple-touch-icon\.png|icons/|images/) {
-            proxy_pass http://frontend;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $host;
-            proxy_set_header X-Internal-Key "";
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-
-        # In-page links already carry the /help prefix - pass through as-is.
-        location /help {
-            proxy_pass http://frontend;
-            proxy_http_version 1.1;
-            proxy_set_header Host $host;
-            proxy_set_header X-Internal-Key "";
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-
-        # The bare root maps to /help exactly (no trailing slash, so Next
-        # serves it directly instead of 308-redirecting /help/ → /help).
-        location = / {
-            rewrite ^ /help break;
-            proxy_pass http://frontend;
-            proxy_http_version 1.1;
-            proxy_set_header Host $host;
-            proxy_set_header X-Internal-Key "";
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-
-        # Everything else lands on the help section.
+        # The legacy app served the help center here. Production serves it
+        # from the landing build; dev has none, so it sends readers there.
         location / {
-            rewrite ^/(.*)$ /help/$1 break;
-            proxy_pass http://frontend;
-            proxy_http_version 1.1;
-            proxy_set_header Host $host;
-            proxy_set_header X-Internal-Key "";
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
+            return 302 https://help.gotcha.co.il$request_uri;
         }
     }
 }

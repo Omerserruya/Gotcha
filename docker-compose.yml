@@ -227,7 +227,6 @@ services:
       ANALYTICS_PORT: ${ANALYTICS_PORT:-4004}
       CHATBOT_PORT: ${CHATBOT_PORT:-4005}
       AI_PORT: ${AI_PORT:-4006}
-      FRONTEND_PORT: ${FRONTEND_PORT:-3000}
       VOICE_COPILOT_PORT: ${VOICE_COPILOT_PORT:-4007}
       NOTIFICATIONS_PORT: ${NOTIFICATIONS_PORT:-4008}
       BILLING_PORT: ${BILLING_PORT:-4009}
@@ -237,7 +236,7 @@ services:
       # literal in the rendered config and nginx refuses to start.
       AUTHENTIK_PORT: ${AUTHENTIK_PORT:-9000}
     command: >
-      sh -c "envsubst '$$AUTH_PORT $$CONVERSATION_PORT $$WEBHOOK_PORT $$ANALYTICS_PORT $$CHATBOT_PORT $$AI_PORT $$FRONTEND_PORT $$VOICE_COPILOT_PORT $$NOTIFICATIONS_PORT $$BILLING_PORT $$AUTHENTIK_PORT $$PUBLIC_PRICING_ENABLED'
+      sh -c "envsubst '$$AUTH_PORT $$CONVERSATION_PORT $$WEBHOOK_PORT $$ANALYTICS_PORT $$CHATBOT_PORT $$AI_PORT $$VOICE_COPILOT_PORT $$NOTIFICATIONS_PORT $$BILLING_PORT $$AUTHENTIK_PORT $$PUBLIC_PRICING_ENABLED'
       < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
       && nginx -g 'daemon off;'"
     depends_on:
@@ -247,7 +246,9 @@ services:
       - analytics
       - chatbot
       - ai
-      - frontend
+      # The app and its sign-in build: nginx resolves both upstreams at start.
+      - frontend-v2
+      - frontend-auth
       - voice-copilot
       - notifications
       # nginx resolves every upstream at startup, so the authentik-server name
@@ -1111,41 +1112,15 @@ services:
     profiles:
       - migrate
 
-  # ─── Frontend (dev: hot reload via `next dev`) ───────────
-  frontend:
-    restart: unless-stopped
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
-    # NEXT_PUBLIC_* are read at runtime by `next dev` (no rebuild needed).
-    environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
-      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
-      NEXT_PUBLIC_META_APP_ID: ${META_APP_ID:-}
-      NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: ${WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID:-}
-      # The browser talks to Authentik directly, so these must be the PUBLIC
-      # URL (auth.gotcha.co.il in production), not the internal service DNS.
-      NEXT_PUBLIC_OIDC_ISSUER: ${NEXT_PUBLIC_OIDC_ISSUER}
-      NEXT_PUBLIC_OIDC_CLIENT_ID: ${NEXT_PUBLIC_OIDC_CLIENT_ID:-gotcha-app}
-      NEXT_PUBLIC_OIDC_REDIRECT_URI: ${NEXT_PUBLIC_OIDC_REDIRECT_URI:-}
-      # Mirrors the server flag so nav/section render correctly on first paint.
-      # This is presentation only - nginx and the billing service are the gate.
-      NEXT_PUBLIC_PRICING_ENABLED: ${PUBLIC_PRICING_ENABLED:-false}
-      # Footer social profiles. Unset means the icon is not rendered at all.
-      NEXT_PUBLIC_SOCIAL_INSTAGRAM_URL: ${SOCIAL_INSTAGRAM_URL:-}
-      NEXT_PUBLIC_SOCIAL_FACEBOOK_URL: ${SOCIAL_FACEBOOK_URL:-}
-      NEXT_PUBLIC_SOCIAL_WHATSAPP_URL: ${SOCIAL_WHATSAPP_URL:-}
-    # Bind-mount source for hot reload; keep container's node_modules/.next.
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
+  # ─── Frontend ────────────────────────────────────────────
+  # The legacy frontend (./frontend) is code only since 2026-10-21: nothing
+  # builds, serves or routes to it. The app is frontend-v2, at the root.
 
-  # ── The redesigned app, installed BESIDE the existing product ───────────────
+  # ── The app (frontend-v2), served at the root ───────────────────────────────
   #
   # Its own directory (frontend-v2/, imported with its history 2026-10-09),
-  # its own dependencies, its own image. Reachable at /v2
-  # once the gateway route exists; until then it is only on the compose network.
+  # its own dependencies, its own image. The gateway's catch-all sends it every
+  # page (it was at /v2 until 2026-10-21; /v2 now 301s to the root).
   # What is deliberately ABSENT matters as much as what is here:
   #
   #   * no `volumes:` - the legacy service above bind-mounts its source, which
@@ -1206,7 +1181,7 @@ services:
       # base path, and this build only has its own, which is empty. That is
       # `new URL('/a', 'https://host/v2')` one container removed - an absolute
       # path discarding a base that belongs to somebody else.
-      PRODUCT_LOGIN_URL: ${AUTH_PRODUCT_LOGIN_URL:-https://dev.gotcha.co.il/v2/api/auth/login}
+      PRODUCT_LOGIN_URL: ${AUTH_PRODUCT_LOGIN_URL:-https://dev.gotcha.co.il/api/auth/login}
       # This app is served from the auth host, so its own origin is that one.
       APP_ORIGIN: ${AUTH_APP_ORIGIN:-https://auth-dev.gotcha.co.il}
       OIDC_ISSUER: ${NEXT_PUBLIC_OIDC_ISSUER:-}
@@ -1215,6 +1190,13 @@ services:
 
   frontend-v2:
     restart: unless-stopped
+    # No health route in the app, so a TCP check: the server is accepting.
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     build:
       context: ./frontend-v2
       args:
@@ -1225,7 +1207,10 @@ services:
         # routes under the prefix while the browser's own JavaScript fetches the
         # root. The Dockerfile re-declares it in the runtime stage from this same
         # arg so the two halves cannot drift apart.
-        NEXT_PUBLIC_BASE_PATH: /v2
+        # Root-mounted since 2026-10-21: the app is the whole site. An ARG with
+        # an empty value is SET, and empty is what next.config.ts reads as "no
+        # prefix" (frontend-auth does the same).
+        NEXT_PUBLIC_BASE_PATH: ""
         # Every NEXT_PUBLIC_* the source reads is inlined by `next build`, so
         # each one that matters has to be here. The Dockerfile repeats only
         # BASE_PATH and REALTIME_URL in the runtime stage, and that asymmetry is
