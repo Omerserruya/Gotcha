@@ -773,6 +773,19 @@ export const checkoutEndpoints = {
     endpoint('/api/checkout/{reference}/resend-welcome', { reference }),
 } as const;
 
+/**
+ * Links in an email, answered without a session (services/auth). The token
+ * in the URL is the identification; `serverApi()` sends no bearer when there
+ * is no session, and these routes read none.
+ *
+ *   invite        GET   /api/public/onboarding/invite/{token}  (onboarding.ts:2989)
+ *   acceptInvite  POST  /api/public/onboarding/invite/accept   (onboarding.ts:3023)
+ */
+export const publicLinkEndpoints = {
+  invite: (token: string) => endpoint('/api/public/onboarding/invite/{token}', { token }),
+  acceptInvite: () => endpoint('/api/public/onboarding/invite/accept'),
+} as const;
+
 export const goLiveEndpoints = {
   complete: () => endpoint('/api/onboarding/complete'),
 } as const;
