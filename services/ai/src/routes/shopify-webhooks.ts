@@ -396,14 +396,21 @@ core.post("/app-uninstalled", async (req: Request, res: Response) => {
     // duplicate webhook is safe. The in-product Disconnect keeps them on
     // purpose (they hold the admin's per-tool choices, and only a CONNECTED
     // integration's tools are offered); a reinstall re-creates any missing.
-    const toolsRemoved = await withCrossTenantAccess(async () =>
-      removeTenantToolAssignments({ tenantId: match.tenantId, tenantIntegrationId: match.id }),
-    );
-    if (toolsRemoved.removed > 0) {
-      console.log(
-        `[shopify-webhook] removed ${toolsRemoved.removed} tenant tool assignment(s) ` +
-          `for tenant=${match.tenantId} after uninstall`,
+    // Best-effort like the chat step below: a failure here must not skip the
+    // storefront chat or the delivery record (they are only offered while
+    // CONNECTED, which the update above already ended).
+    try {
+      const toolsRemoved = await withCrossTenantAccess(async () =>
+        removeTenantToolAssignments({ tenantId: match.tenantId, tenantIntegrationId: match.id }),
       );
+      if (toolsRemoved.removed > 0) {
+        console.log(
+          `[shopify-webhook] removed ${toolsRemoved.removed} tenant tool assignment(s) ` +
+            `for tenant=${match.tenantId} after uninstall`,
+        );
+      }
+    } catch (err) {
+      console.error("[shopify-webhook] tool assignment removal on uninstall failed:", (err as Error)?.message);
     }
 
     // The extension left with the app, so the storefront chat goes too.

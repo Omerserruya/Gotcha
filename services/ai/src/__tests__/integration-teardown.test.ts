@@ -132,9 +132,14 @@ describe("both paths use the shared teardown", () => {
     expect(src).toMatch(/removeTenantToolAssignments\(/);
   });
 
-  it("the in-product disconnect route removes tool assignments", () => {
+  // Merged into rebrand/v2 2026-10-21: the in-product Disconnect KEEPS the
+  // tool rows on purpose (they hold the admin's per-tool choices, only a
+  // CONNECTED integration's tools are offered, and every connect re-creates a
+  // missing row). Only the uninstall webhook, whose store is gone, removes them.
+  it("the in-product disconnect route keeps tool assignments (the admin's choices)", () => {
     const src = read("src/routes/integrations.ts");
-    expect(src).toMatch(/removeTenantToolAssignments\(/);
+    expect(src).not.toMatch(/removeTenantToolAssignments\(/);
+    expect(src).toMatch(/stripLiveConnectionClaims\(/);
   });
 
   it("neither path deletes tenant tools by hand any more", () => {

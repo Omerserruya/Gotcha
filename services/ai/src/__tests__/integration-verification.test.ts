@@ -41,6 +41,9 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     decryptCredentials: (x: any) => (typeof x === "string" ? JSON.parse(x) : x),
     // The real SSRF guard resolves DNS (shop.example.com -> ENOTFOUND).
     assertPublicUrl: async (u: string) => new URL(u),
+    // Main's per-capability Shopify entitlement check reads the database; the
+    // adapter behaviour under test assumes a funded store (merged 2026-10-21).
+    isShopifyAuthorized: async () => true,
   };
 });
 

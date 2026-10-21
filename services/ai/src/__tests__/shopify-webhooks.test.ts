@@ -40,6 +40,7 @@ const H = vi.hoisted(() => {
     updateInstallations: v.fn(async () => ({ count: 1 })),
     createAudit: v.fn(async () => ({})),
     enqueue: v.fn(async () => ({})),
+    toolRowsRemoval: v.fn(async () => ({ count: 68 })),
   };
 });
 
@@ -64,6 +65,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         update: H.updateConnection,
       },
       shopifyChatInstallation: { updateMany: H.updateInstallations },
+      tenantTool: { deleteMany: H.toolRowsRemoval },
     },
   };
 });
@@ -162,6 +164,23 @@ describe("chat app/uninstalled", () => {
 });
 
 describe("core app/uninstalled", () => {
+  it("★ removes the tenant's tool rows for that store, both ids in the where (merged 2026-10-21)", async () => {
+    H.connections.current = [{ id: "ti1", tenantId: "t1", config: { shopDomain: SHOP } }];
+    await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
+    await new Promise((r) => setImmediate(r));
+    expect(H.toolRowsRemoval).toHaveBeenCalledWith({ where: { tenantId: "t1", tenantIntegrationId: "ti1" } });
+  });
+
+  it("★ a failed tool removal still disables the storefront chat", async () => {
+    H.connections.current = [{ id: "ti1", tenantId: "t1", config: { shopDomain: SHOP } }];
+    H.toolRowsRemoval.mockRejectedValueOnce(new Error("db down"));
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
+    await new Promise((r) => setImmediate(r));
+    expect(H.disableChatOnUninstall).toHaveBeenCalledWith(SHOP);
+    err.mockRestore();
+  });
+
   it("disconnects the commerce connection and drops its credentials", async () => {
     const res = await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
     expect(res.status).toBe(200);
