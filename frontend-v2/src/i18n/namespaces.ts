@@ -99,6 +99,8 @@ export const NAMESPACES = [
   'capabilities',
   /** Settings · People & teams · Roles - screen 12b. */
   'roles',
+  /** The customer checkout (/checkout/*), signed in or out. */
+  'checkout',
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];
@@ -147,4 +149,11 @@ export const CREDENTIAL_SURFACE_NAMESPACES = [
  * locale root, outside `(app)` and `(auth)` alike, so something must provide
  * its namespace before either group's layout runs.
  */
+/**
+ * What the checkout pages load into the browser: their own copy and the
+ * error boundary's. They are reached signed out from an emailed link, so -
+ * like sign-in - they carry none of the product's vocabulary.
+ */
+export const CHECKOUT_NAMESPACES = ['checkout', 'errors'] as const satisfies readonly Namespace[];
+
 export const SHELL_NAMESPACES = ['errors'] as const satisfies readonly Namespace[];

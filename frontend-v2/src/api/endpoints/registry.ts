@@ -754,11 +754,23 @@ export const onboardingEndpoints = {
  * admin, or `core_system_required`.
  */
 /**
- * The payment flow the old app owns (`lib/payment-gate.ts`): the tenant's
- * outstanding checkout, `{ data: { checkout: { reference } | null } }`.
+ * The customer checkout (billing `routes/checkout.ts`, `checkout-session.ts`).
+ * Every one but `mine` takes the emailed token or a member's session; see
+ * `contracts/checkout.ts`.
  */
 export const checkoutEndpoints = {
+  /** The tenant's outstanding checkout, `{ data: { checkout: { reference } | null } }`. Session only. */
   mine: () => endpoint('/api/checkout/mine'),
+  /** The safe summary; `?token=` for the emailed link (`checkout.ts:216`). */
+  status: (reference: string) => endpoint('/api/checkout/{reference}/status', { reference }),
+  /** Starts or resumes the provider's hosted card page. Writes at the provider (`checkout-session.ts:84`). */
+  paymentSession: (reference: string) =>
+    endpoint('/api/checkout/{reference}/payment-session', { reference }),
+  /** Asks billing to re-check and move the checkout on; MAY CHARGE the stored card (`checkout-session.ts:111`). */
+  advance: (reference: string) => endpoint('/api/checkout/{reference}/advance', { reference }),
+  /** The welcome email again, once paid (`checkout-session.ts:135`). */
+  resendWelcome: (reference: string) =>
+    endpoint('/api/checkout/{reference}/resend-welcome', { reference }),
 } as const;
 
 export const goLiveEndpoints = {
