@@ -555,3 +555,38 @@ describe('★★ 13c - which paths get Meta’s frames', () => {
     expect(await csp('/en/sign-in')).not.toContain('facebook.com');
   });
 });
+
+describe('★★ a link to the old app lands on its screen here (2026-10-21, the root)', () => {
+  const at = async (path: string, cookie?: string) => {
+    const { legacy } = await import('./proxy');
+    return legacy(
+      new NextRequest(`https://app.gotcha.co.il${path}`, {
+        headers: cookie ? { cookie } : undefined,
+      }),
+    );
+  };
+
+  it('an emailed conversation link: the inbox, in the language they chose, never stored', async () => {
+    const response = await at('/conversations/c42', 'locale=he');
+    expect(response?.status).toBe(302);
+    expect(response?.headers.get('location')).toBe('https://app.gotcha.co.il/he/inbox?c=c42');
+    expect(response?.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it("this app's language cookie wins over the old one", async () => {
+    const response = await at('/login?next=%2Fapprovals', 'NEXT_LOCALE=en; locale=he');
+    expect(response?.headers.get('location')).toBe(
+      'https://app.gotcha.co.il/en/sign-in?returnTo=%2Fapprovals',
+    );
+  });
+
+  it('a marketing page leaves for the marketing site', async () => {
+    expect((await at('/legal/privacy-policy'))?.headers.get('location')).toBe(
+      'https://gotcha.co.il/legal/privacy-policy',
+    );
+  });
+
+  it('a page already in this app’s shape is not touched', async () => {
+    expect(await at('/he/inbox?c=1')).toBeNull();
+  });
+});

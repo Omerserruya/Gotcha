@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { within, act, fireEvent, render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -113,6 +113,16 @@ describe('★★ 00d - confirm, not type; nothing is read until yes', () => {
     show();
     expect(screen.getByTestId('website-consent')).toHaveTextContent(
       'By continuing you agree to the Terms of Service and the Privacy Policy',
+    );
+    // The legal pages are the marketing site's: the app no longer serves /legal.
+    const consent = screen.getByTestId('website-consent');
+    expect(within(consent).getByRole('link', { name: 'Terms of Service' })).toHaveAttribute(
+      'href',
+      'https://gotcha.co.il/legal/terms-of-service',
+    );
+    expect(within(consent).getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
+      'href',
+      'https://gotcha.co.il/legal/privacy-policy',
     );
     await act(async () => {
       fireEvent.click(screen.getByTestId('website-yes'));

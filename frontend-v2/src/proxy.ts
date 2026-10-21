@@ -15,6 +15,7 @@ import { nowInSeconds, sealSession, sessionCookieOptions, unsealSession } from '
 import { PUBLIC_PATH_PATTERN } from './auth-surface';
 import { isLocale } from '@/i18n/locales';
 import { inLocaleOf, mountOf } from '@/auth/sign-in-url';
+import { legacyLocale, legacyRedirect } from '@/i18n/legacy-redirect';
 
 const intlMiddleware = createIntlMiddleware(routing);
 
@@ -80,7 +81,30 @@ export async function renew(request: NextRequest): Promise<Renewal> {
 }
 
 export default async function proxy(request: NextRequest): Promise<NextResponse> {
-  return gate(request, await renew(request));
+  return legacy(request) ?? gate(request, await renew(request));
+}
+
+/**
+ * A link to the old app (2026-10-21: this app replaced it at the root) goes to
+ * its screen here - see `i18n/legacy-redirect.ts` for the table.
+ *
+ * ★ FIRST, BEFORE `renew`. A redirect returned after a renewal would drop the
+ *   renewed cookie, and a refresh that rotated the token would then leave the
+ *   visitor holding a spent one. Before the gate, too, so a signed-out
+ *   visitor's `returnTo` names the new path, not the old.
+ *
+ * 302 while the table is young: a permanent redirect is cached by browsers
+ * and outlives a corrected row.
+ */
+export function legacy(request: NextRequest): NextResponse | null {
+  const target = legacyRedirect(request.nextUrl, legacyLocale(request.cookies));
+  if (!target) return null;
+  const to = /^https?:\/\//.test(target)
+    ? target
+    : new URL(`${request.nextUrl.basePath}${target}`, request.nextUrl.origin).toString();
+  const response = NextResponse.redirect(to, 302);
+  response.headers.set('cache-control', 'no-store');
+  return response;
 }
 
 /** Locale, the coarse gate and the CSP - after `renew` has run. */
