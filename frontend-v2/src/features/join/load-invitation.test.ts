@@ -42,6 +42,25 @@ describe('★★ what /join can show', () => {
     expect(await loadInvitation('tok')).toEqual({ state: 'invalid' });
   });
 
+  it('★★ the 404 says why (Backend b0ed4d81): used, expired, invalid; an unknown reason is invalid', async () => {
+    for (const [reason, state] of [
+      ['used', 'used'],
+      ['expired', 'expired'],
+      ['invalid', 'invalid'],
+      ['revoked', 'invalid'],
+    ] as const) {
+      api.get.mockRejectedValueOnce(
+        new ApiError({
+          kind: 'not_found',
+          status: 404,
+          developerMessage: 'invite_invalid_or_expired',
+          reason,
+        }),
+      );
+      expect(await loadInvitation('tok')).toEqual({ state });
+    }
+  });
+
   it('⚠⚠ anything else is unreachable, never "invalid" - the link may be fine', async () => {
     api.get.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 500 }));
     expect(await loadInvitation('tok')).toEqual({ state: 'unreachable' });

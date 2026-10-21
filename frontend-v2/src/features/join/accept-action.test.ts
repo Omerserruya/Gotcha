@@ -66,6 +66,18 @@ describe('★★ accepting an invitation', () => {
   it('★ every refusal the route names is its own reason', async () => {
     refuse(404, 'invite_invalid_or_expired');
     expect(await acceptInvite({ token: 't', name: 'D' })).toEqual({ ok: false, reason: 'invalid' });
+    // Backend b0ed4d81: the same 404 says why.
+    for (const reason of ['used', 'expired'] as const) {
+      api.post.mockRejectedValueOnce(
+        new ApiError({
+          kind: 'not_found',
+          status: 404,
+          developerMessage: 'invite_invalid_or_expired',
+          reason,
+        }),
+      );
+      expect(await acceptInvite({ token: 't', name: 'D' })).toEqual({ ok: false, reason });
+    }
     refuse(400, 'email_required');
     expect(await acceptInvite({ token: 't', name: 'D' })).toEqual({
       ok: false,
