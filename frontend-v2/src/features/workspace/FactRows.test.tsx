@@ -23,6 +23,7 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
+import { placeLabels } from './zones';
 import { FactRows } from './FactRows';
 
 /*
@@ -83,7 +84,12 @@ const renderRows = (
 ) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ workspace: messages }}>
-      <FactRows workspace={ws(over)} scan={scan} systemLocale={systemLocale} />
+      <FactRows
+        places={placeLabels('en', ws(over))}
+        workspace={ws(over)}
+        scan={scan}
+        systemLocale={systemLocale}
+      />
     </NextIntlClientProvider>,
   );
 
@@ -286,7 +292,7 @@ describe('★ a missing key renders as NOTHING in production, not as a key', () 
         messages={{ workspace: catalogue }}
         getMessageFallback={() => ''}
       >
-        <FactRows workspace={ws()} />
+        <FactRows places={placeLabels('en', ws())} workspace={ws()} />
       </NextIntlClientProvider>,
     );
 
@@ -329,7 +335,7 @@ describe('★★ the time zone in the reader’s words, and only ever the one ch
     const he = (await import('@/i18n/messages/he/workspace.json')).default;
     render(
       <NextIntlClientProvider locale="he" messages={{ workspace: he }}>
-        <FactRows workspace={ws()} />
+        <FactRows places={placeLabels('he', ws())} workspace={ws()} />
       </NextIntlClientProvider>,
     );
     const row = screen.getByTestId('fact-value-currencyTimezone');
@@ -352,5 +358,40 @@ describe('★★ the time zone in the reader’s words, and only ever the one ch
     await userEvent.selectOptions(screen.getByTestId('currency-select'), 'ILS');
     await userEvent.click(screen.getByTestId('fact-save-currencyTimezone'));
     expect(saveWorkspace).toHaveBeenCalledWith({ currency: 'ILS' }, null);
+  });
+});
+
+describe('★★ the time zone and currency words are the server’s, never recomputed here (#418)', () => {
+  it('the row and both selects show exactly what the page handed over', async () => {
+    const zone = { iana: 'Europe/London', label: 'ZONE FROM SERVER' };
+    render(
+      <NextIntlClientProvider locale="en" messages={{ workspace: messages }}>
+        <FactRows
+          places={{
+            zones: [zone],
+            common: [zone],
+            rest: [],
+            storedZone: 'STORED FROM SERVER',
+            defaultZone: 'DEFAULT FROM SERVER',
+            currencies: { USD: 'CURRENCY FROM SERVER' },
+          }}
+          workspace={ws()}
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('fact-value-currencyTimezone')).toHaveTextContent(
+      'CURRENCY FROM SERVER · STORED FROM SERVER',
+    );
+    await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
+    expect(
+      within(screen.getByTestId('timezone-select'))
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['ZONE FROM SERVER']);
+    expect(
+      within(screen.getByTestId('currency-select'))
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['CURRENCY FROM SERVER']);
   });
 });

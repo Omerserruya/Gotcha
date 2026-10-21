@@ -1,4 +1,4 @@
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 
 import { FactRows } from '@/features/workspace/FactRows';
 import { HoursDrawer } from '@/features/workspace/HoursDrawer';
@@ -7,6 +7,7 @@ import { loadLanguages } from '@/features/workspace/load-languages';
 import { loadIdleSetup } from '@/features/workspace/load-idle';
 import { loadDepartmentSlas, loadSlaSetup } from '@/features/workspace/load-sla-setup';
 import { loadWebsiteScan, loadWorkspace } from '@/features/workspace/load-workspace';
+import { placeLabels } from '@/features/workspace/zones';
 import { ProhibitedClaims } from '@/features/workspace/ProhibitedClaims';
 import { IdleDrawer } from '@/features/workspace/IdleDrawer';
 import { IdleRow } from '@/features/workspace/IdleRow';
@@ -35,6 +36,8 @@ export default async function Page({
   readonly searchParams?: Promise<{ readonly panel?: string }>;
 }) {
   const t = await getTranslations('workspace');
+  // The time zone and currency words, built here so the browser never recomputes them (zones.ts).
+  const locale = await getLocale();
   const panel = (await searchParams)?.panel;
   const [{ workspace, voice, claims }, languages, scan, sla, idle] = await Promise.all([
     loadWorkspace(),
@@ -63,6 +66,7 @@ export default async function Page({
           workspace={workspace}
           scan={scan}
           systemLocale={languages.systemLocale}
+          places={placeLabels(locale, workspace)}
           sla={<SlaRow setup={sla} />}
           idle={<IdleRow setup={idle} />}
         />
