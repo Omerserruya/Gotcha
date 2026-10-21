@@ -40,7 +40,7 @@ const basePath = rawBasePath === '' || rawBasePath === '/' ? '' : rawBasePath.re
 
 if (basePath !== '' && !basePath.startsWith('/')) {
   throw new Error(
-    `APP_BASE_PATH must start with "/" — got ${JSON.stringify(process.env.APP_BASE_PATH)}. ` +
+    `NEXT_PUBLIC_BASE_PATH must start with "/" — got ${JSON.stringify(rawBasePath)}. ` +
       'A prefix without one is silently ignored by Next and the app would serve at the root ' +
       'while everything around it expected otherwise.',
   );

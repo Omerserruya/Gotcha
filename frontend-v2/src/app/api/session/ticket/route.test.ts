@@ -32,7 +32,7 @@ const answer = (status: number, body: unknown) =>
     }),
   );
 const ask = () =>
-  POST(new NextRequest('https://dev.gotcha.co.il/v2/api/realtime/ticket', { method: 'POST' }));
+  POST(new NextRequest('https://dev.gotcha.co.il/api/session/ticket', { method: 'POST' }));
 
 describe('★★ the platform’s exact answer is a ticket (2026-10-11)', () => {
   it('`{ data: { ticket, expiresInSeconds } }`: 200 with the ticket, never cached', async () => {
