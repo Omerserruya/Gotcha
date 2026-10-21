@@ -36,6 +36,10 @@ FROM nginx:alpine
 
 # Pre-built Next.js static exports (run the builds on the host first).
 COPY frontend/out /usr/share/nginx/html
+# The embeddable widget, served by nginx itself at /widget/ (2026-10-21). The
+# publish script runs `node scripts/widget/build-widget.mjs --check` first, so
+# the files copied here are the current build.
+COPY frontend/public/widget /usr/share/nginx/widget
 
 # The marketing site is a second export with its own root. Kept separate rather
 # than merged under one tree: both are Next.js builds with their own /_next

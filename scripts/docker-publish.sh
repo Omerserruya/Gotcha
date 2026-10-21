@@ -270,6 +270,10 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICE
     exit 1
   fi
 
+  # The widget is COPYed into the gateway image as committed; refuse to ship
+  # one that is not the current build of its source.
+  node scripts/widget/build-widget.mjs --check || { echo "ERROR: frontend/public/widget is not the current build (run node scripts/widget/build-widget.mjs)."; exit 1; }
+
   push_image gateway gateway/Dockerfile.prod .
 fi
 
