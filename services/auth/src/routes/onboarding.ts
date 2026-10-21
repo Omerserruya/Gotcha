@@ -2986,6 +2986,21 @@ router.post("/invite-link", requireRole("ADMIN"), async (req: Request, res: Resp
 // the user fills the form. Auth NOT required.
 const publicRouter = Router();
 
+/**
+ * Why an invite cannot be used, for the /join page to say so (2026-10-21).
+ * The token is a long random secret, so whoever holds an existing one is that
+ * invite's own recipient: "used" and "expired" tell them nothing about anyone
+ * else. A token that matches nothing is "invalid", the same answer for every
+ * unknown token, so nothing leaks about tokens of other workspaces.
+ * The `error` value is unchanged for existing readers.
+ */
+export function inviteRejection(invite: { acceptedAt: Date | null; expiresAt: Date } | null, now = new Date()): "used" | "expired" | "invalid" | null {
+  if (!invite) return "invalid";
+  if (invite.acceptedAt) return "used";
+  if (invite.expiresAt < now) return "expired";
+  return null;
+}
+
 publicRouter.get("/invite/:token", async (req: Request, res: Response): Promise<void> => {
   try {
     const token = req.params.token as string;
@@ -2993,8 +3008,9 @@ publicRouter.get("/invite/:token", async (req: Request, res: Response): Promise<
       where: { token },
       include: { tenant: { select: { name: true, slug: true } } },
     });
-    if (!invite || invite.acceptedAt || invite.expiresAt < new Date()) {
-      res.status(404).json({ error: "invite_invalid_or_expired" });
+    const rejected = inviteRejection(invite);
+    if (rejected || !invite) {
+      res.status(404).json({ error: "invite_invalid_or_expired", reason: rejected ?? "invalid" });
       return;
     }
     res.json({
@@ -3027,8 +3043,9 @@ publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Re
     };
 
     const invite = await prisma.tenantInvite.findUnique({ where: { token } });
-    if (!invite || invite.acceptedAt || invite.expiresAt < new Date()) {
-      res.status(404).json({ error: "invite_invalid_or_expired" });
+    const rejected = inviteRejection(invite);
+    if (rejected || !invite) {
+      res.status(404).json({ error: "invite_invalid_or_expired", reason: rejected ?? "invalid" });
       return;
     }
 
