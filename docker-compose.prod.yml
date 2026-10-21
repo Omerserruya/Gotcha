@@ -1025,6 +1025,10 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # The https half of List-Unsubscribe on marketing email (one-click,
+      # RFC 8058) is built on this origin; without it only the mailto part is
+      # sent. Same value as conversation's.
+      PUBLIC_URL: ${NEXT_PUBLIC_API_URL:-}
       <<: *sentry-workers
       DATABASE_URL: ${DATABASE_URL}
       # Paid-access gate - see the `ai` service for the full note. Present here
@@ -1072,6 +1076,10 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # The https half of List-Unsubscribe on marketing email (one-click,
+      # RFC 8058) is built on this origin; without it only the mailto part is
+      # sent. Same value as conversation's.
+      PUBLIC_URL: ${NEXT_PUBLIC_API_URL:-}
       <<: *sentry-workers
       DATABASE_URL: ${DATABASE_URL}
       # Paid-access gate - see the `ai` service for the full note. Present here
