@@ -1,7 +1,7 @@
 'use client';
 
 import { useLocale, useTranslations } from 'next-intl';
-import { useMemo, useState, useTransition, type ReactNode } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
 
 import { type DayKey, type Workspace } from '@/api/contracts/workspace';
 import { UserText } from '@/design-system/primitives/text/UserText';
@@ -12,14 +12,7 @@ import { BusinessFacts } from './BusinessFacts';
 import { summariseWeek, weekOf } from './hours';
 import type { WebsiteScan } from './load-workspace';
 import styles from './Workspace.module.css';
-import {
-  COMMON_CURRENCIES,
-  currencyLabel,
-  SERVER_DEFAULT_ZONE,
-  zoneGroups,
-  zoneLabel,
-  zoneOptions,
-} from './zones';
+import type { PlaceLabels } from './zones';
 
 /**
  * The facts an AI employee quotes to a customer, as 11's table.
@@ -41,7 +34,14 @@ export function FactRows({
   systemLocale = null,
   sla = null,
   idle = null,
+  places,
 }: {
+  /**
+   * The currency and time zone words, computed on the server (`placeLabels`):
+   * the browser's own time zone data differs from the server's, and text
+   * computed in both broke hydration (/he/settings/workspace, 2026-10-21).
+   */
+  readonly places: PlaceLabels;
   /** Follow-up and auto-close's row (S3), after the response target - drawn by the page. */
   readonly idle?: ReactNode;
   readonly workspace: Workspace;
@@ -66,11 +66,8 @@ export function FactRows({
    *   opens, and its type-ahead still finds a city by its first letters.
    *   Ordered as `zoneGroups` says: the common ones first, then by offset.
    */
-  const zones = useMemo(() => zoneOptions(locale), [locale]);
-  const groups = useMemo(
-    () => zoneGroups(zones, workspace.timezone ?? null, locale),
-    [zones, workspace.timezone, locale],
-  );
+  const zones = places.zones;
+  const groups = places;
 
   /*
    * ★ ONLY WHAT CHANGED IS SENT. dev's Europe/London was saved by a request,
@@ -217,14 +214,9 @@ export function FactRows({
               onChange={(e) => setCurrency(e.target.value)}
             >
               {currency === '' ? <option value="">-</option> : null}
-              {[
-                ...new Set([
-                  ...(workspace.currency ? [workspace.currency] : []),
-                  ...COMMON_CURRENCIES,
-                ]),
-              ].map((code) => (
+              {Object.entries(places.currencies).map(([code, label]) => (
                 <option key={code} value={code}>
-                  {currencyLabel(code, locale)}
+                  {label}
                 </option>
               ))}
             </select>
@@ -240,7 +232,7 @@ export function FactRows({
               onChange={(e) => setTimezone(e.target.value)}
             >
               {timezone === '' ? <option value="">-</option> : null}
-              {/* A stored zone this browser does not list is still shown, and kept. */}
+              {/* A stored zone the server does not list is still shown, and kept. */}
               {workspace.timezone && !zones.some((z) => z.iana === workspace.timezone) ? (
                 <option value={workspace.timezone}>{workspace.timezone}</option>
               ) : null}
@@ -305,12 +297,12 @@ export function FactRows({
             {workspace.currency || workspace.timezone
               ? [
                   workspace.currency
-                    ? currencyLabel(workspace.currency, locale)
+                    ? (places.currencies[workspace.currency] ?? workspace.currency)
                     : t('currencyUnset'),
                   workspace.timezone
-                    ? zoneLabel(workspace.timezone, locale)
+                    ? (places.storedZone ?? workspace.timezone)
                     : // None stored: the zone the platform actually uses, said as its default.
-                      t('zoneDefault', { zone: zoneLabel(SERVER_DEFAULT_ZONE, locale) }),
+                      t('zoneDefault', { zone: places.defaultZone }),
                 ]
                   .filter(Boolean)
                   .join(' · ')

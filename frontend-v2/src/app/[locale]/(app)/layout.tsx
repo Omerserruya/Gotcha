@@ -55,7 +55,7 @@ export default async function AuthenticatedLayout({
       <NextIntlClientProvider messages={await loadMessages(resolved)}>
         <WorkspaceGate
           route={route}
-          paymentPath={route === 'payment' ? await paymentPath() : null}
+          paymentPath={route === 'payment' ? await paymentPath(resolved) : null}
           setupAdmin={setupAdmin}
         />
       </NextIntlClientProvider>

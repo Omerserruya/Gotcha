@@ -1,0 +1,201 @@
+@layer shell {
+  /*
+    The checkout is the product's closed door seen from outside: the payment
+    gate's dark frame, the mark, one card - so the gate's "Go to payment"
+    lands on a page that looks like where it came from.
+  */
+  .frame {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    align-items: center;
+    justify-content: center;
+    min-block-size: 100dvh;
+    padding: 24px 16px;
+    background-color: var(--copilot-surface);
+    color: var(--frame-text);
+    line-height: normal;
+  }
+
+  .brand {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: var(--letter-spacing-brand);
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+    inline-size: min(480px, 100%);
+    padding: 28px;
+    border-radius: 16px;
+    background-color: var(--panel-base);
+    color: var(--text-primary);
+  }
+
+  .title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+  }
+
+  .lead {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+
+  .body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-block-start: 6px;
+  }
+
+  .summary {
+    margin: 0;
+    padding: 16px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+  }
+
+  .organization {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .line {
+    display: flex;
+    gap: 16px;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-block: 4px;
+    font-size: 13.5px;
+  }
+
+  .line dt {
+    color: var(--text-muted);
+  }
+
+  .line dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .strong {
+    font-weight: 600;
+  }
+
+  .note {
+    margin: 12px 0 0;
+    padding-block-start: 10px;
+    border-block-start: 1px solid var(--border-subtle);
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+
+  .rate {
+    margin: 8px 0 0;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+
+  .declined {
+    margin: 0;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background-color: var(--alert-surface);
+    color: var(--alert-text);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .quiet {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+
+  .error {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--intent-urgent-text);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .primary {
+    padding: 9px 16px;
+    border: 0;
+    border-radius: 9px;
+    background-color: var(--text-primary);
+    color: var(--frame-text);
+    font: inherit;
+    font-size: 13px;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .primary:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
+  .secondary {
+    padding: 8px 15px;
+    border: 1px solid var(--border-default);
+    border-radius: 9px;
+    background-color: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 13px;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-primary);
+    font: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .link:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
+  .waiting {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .dot {
+    inline-size: 8px;
+    block-size: 8px;
+    border-radius: 50%;
+    background-color: var(--signal-waiting);
+  }
+}

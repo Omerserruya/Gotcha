@@ -5,7 +5,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import workspace from '@/i18n/messages/en/workspace.json';
 
+import { SERVER_DEFAULT_ZONE, zoneLabel, type PlaceLabels } from '@/features/workspace/zones';
+
 vi.mock('next-intl/server', () => ({
+  getLocale: async () => 'he',
   getTranslations: async (namespace: 'workspace') =>
     createTranslator({ locale: 'en', messages: { workspace }, namespace }),
 }));
@@ -108,6 +111,13 @@ describe('★ the business is one block on the page - no 11b drawer repeating it
       topics: [],
       alsoFound: [],
     });
+  });
+
+  it('★★ the rows get the time zone and currency words built HERE, in the request’s language (#418)', async () => {
+    await open();
+    const { places } = factRows.mock.calls.at(-1)![0] as { places?: PlaceLabels };
+    expect(places?.zones.length).toBeGreaterThan(100);
+    expect(places?.defaultZone).toBe(zoneLabel(SERVER_DEFAULT_ZONE, 'he'));
   });
 
   it('the drawer’s own copy is gone from the catalogue', () => {

@@ -754,11 +754,36 @@ export const onboardingEndpoints = {
  * admin, or `core_system_required`.
  */
 /**
- * The payment flow the old app owns (`lib/payment-gate.ts`): the tenant's
- * outstanding checkout, `{ data: { checkout: { reference } | null } }`.
+ * The customer checkout (billing `routes/checkout.ts`, `checkout-session.ts`).
+ * Every one but `mine` takes the emailed token or a member's session; see
+ * `contracts/checkout.ts`.
  */
 export const checkoutEndpoints = {
+  /** The tenant's outstanding checkout, `{ data: { checkout: { reference } | null } }`. Session only. */
   mine: () => endpoint('/api/checkout/mine'),
+  /** The safe summary; `?token=` for the emailed link (`checkout.ts:216`). */
+  status: (reference: string) => endpoint('/api/checkout/{reference}/status', { reference }),
+  /** Starts or resumes the provider's hosted card page. Writes at the provider (`checkout-session.ts:84`). */
+  paymentSession: (reference: string) =>
+    endpoint('/api/checkout/{reference}/payment-session', { reference }),
+  /** Asks billing to re-check and move the checkout on; MAY CHARGE the stored card (`checkout-session.ts:111`). */
+  advance: (reference: string) => endpoint('/api/checkout/{reference}/advance', { reference }),
+  /** The welcome email again, once paid (`checkout-session.ts:135`). */
+  resendWelcome: (reference: string) =>
+    endpoint('/api/checkout/{reference}/resend-welcome', { reference }),
+} as const;
+
+/**
+ * Links in an email, answered without a session (services/auth). The token
+ * in the URL is the identification; `serverApi()` sends no bearer when there
+ * is no session, and these routes read none.
+ *
+ *   invite        GET   /api/public/onboarding/invite/{token}  (onboarding.ts:2989)
+ *   acceptInvite  POST  /api/public/onboarding/invite/accept   (onboarding.ts:3023)
+ */
+export const publicLinkEndpoints = {
+  invite: (token: string) => endpoint('/api/public/onboarding/invite/{token}', { token }),
+  acceptInvite: () => endpoint('/api/public/onboarding/invite/accept'),
 } as const;
 
 export const goLiveEndpoints = {
@@ -918,6 +943,11 @@ export const securityEndpoints = {
   /** Revokes every OTHER session, keeping the caller's. */
   revokeOtherSessions: () => endpoint('/api/account/sessions'),
   loginHistory: () => endpoint('/api/account/login-history'),
+  /**
+   * Confirms a change of sign-in address: `{ token }` from the link mailed
+   * to the new one (auth account.ts:448). Needs the session.
+   */
+  verifyEmailChange: () => endpoint('/api/account/email-change/verify'),
   /**
    * `/api/tenant/security` - a SLASH, and it is an exception.
    *

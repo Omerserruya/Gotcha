@@ -21,6 +21,7 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 
 import { checkBusinessFact } from './BusinessFacts';
+import { placeLabels } from './zones';
 import { FactRows } from './FactRows';
 import type { WebsiteScan } from './load-workspace';
 import styles from './Workspace.module.css';
@@ -55,7 +56,7 @@ const ws = (over: Record<string, unknown> = {}) =>
 const renderRows = (over: Record<string, unknown> = {}, scan: WebsiteScan | null = null) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ workspace: messages }}>
-      <FactRows workspace={ws(over)} scan={scan} />
+      <FactRows places={placeLabels('en', ws(over))} workspace={ws(over)} scan={scan} />
     </NextIntlClientProvider>,
   );
 
@@ -300,14 +301,17 @@ describe('★ a stored value that is not one is shown as not set, never as store
   it('Hebrew: "לא הוגדר", and a code by its Hebrew name', () => {
     const { unmount } = render(
       <NextIntlClientProvider locale="he" messages={{ workspace: he }}>
-        <FactRows workspace={ws({ country: 'unknown' })} />
+        <FactRows
+          places={placeLabels('he', ws({ country: 'unknown' }))}
+          workspace={ws({ country: 'unknown' })}
+        />
       </NextIntlClientProvider>,
     );
     expect(screen.getByTestId('fact-value-country')).toHaveTextContent(/^לא הוגדר$/);
     unmount();
     render(
       <NextIntlClientProvider locale="he" messages={{ workspace: he }}>
-        <FactRows workspace={ws()} />
+        <FactRows places={placeLabels('he', ws())} workspace={ws()} />
       </NextIntlClientProvider>,
     );
     expect(screen.getByTestId('fact-value-country')).toHaveTextContent(/^ישראל$/);
@@ -483,7 +487,7 @@ describe('★ Hebrew: the block’s own words', () => {
   it('the hint and the refusal in Hebrew', async () => {
     render(
       <NextIntlClientProvider locale="he" messages={{ workspace: he }}>
-        <FactRows workspace={ws()} />
+        <FactRows places={placeLabels('he', ws())} workspace={ws()} />
       </NextIntlClientProvider>,
     );
     await userEvent.click(screen.getByTestId('fact-edit-name'));
@@ -534,7 +538,7 @@ describe('★ "From your website" says what it means - the banner’s sentence, 
   it('Hebrew: the banner’s Hebrew words', () => {
     render(
       <NextIntlClientProvider locale="he" messages={{ workspace: he }}>
-        <FactRows workspace={ws(marked)} />
+        <FactRows places={placeLabels('he', ws(marked))} workspace={ws(marked)} />
       </NextIntlClientProvider>,
     );
     expect(screen.getByTestId('fact-origin-description')).toHaveAccessibleDescription(

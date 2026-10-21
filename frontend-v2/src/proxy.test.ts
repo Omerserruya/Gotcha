@@ -161,6 +161,87 @@ describe('⚠⚠ an unauthenticated visitor reaches OUR sign-in screen', () => {
   });
 });
 
+describe('★★ a link from an email opens signed out', () => {
+  /*
+   * An invitation, an expired setup link and checkout are opened by somebody
+   * with no session - the legacy app served them, and the links are already in
+   * people's inboxes. Sent to sign-in, an invitee has no password to type.
+   */
+  const signedOut = (path: string, env: Record<string, string> = {}) => {
+    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+    try {
+      const response = proxy(new NextRequest(`https://dev.gotcha.co.il${path}`));
+      return { status: response.status, location: response.headers.get('location') ?? '' };
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  };
+
+  const OPEN = [
+    '/join',
+    '/setup-link/expired',
+    '/checkout',
+    '/checkout/payment-required',
+    '/checkout/processing',
+    '/checkout/completed',
+    '/checkout/failed',
+    '/checkout/cancelled',
+    '/checkout/expired',
+  ];
+
+  it('★★ each renders - no redirect - with and without a locale', () => {
+    for (const page of OPEN) {
+      for (const path of [page, `/en${page}`, `/he${page}`, `${page}/`]) {
+        const { status, location } = signedOut(`${path}?token=abc`);
+        expect(location, path).toBe('');
+        expect(status, path).toBe(200);
+      }
+    }
+  });
+
+  it('⚠⚠ a near miss is still the product: it redirects to sign-in', () => {
+    for (const path of [
+      '/joinx',
+      '/en/joinx',
+      '/en/join/more',
+      '/checkoutx',
+      '/he/checkoutx',
+      '/en/checkout/anything',
+      '/account',
+      '/en/account',
+      '/en/setup-link',
+      '/en/setup-link/expiredx',
+      '/en/settings/billing',
+    ]) {
+      const { status, location } = signedOut(path);
+      expect(status, path).toBe(307);
+      expect(location, path).toContain('/sign-in');
+    }
+  });
+
+  it('★★ verify-email is NOT open: its route needs the session, so sign-in comes first - token kept', () => {
+    // POST /api/account/email-change/verify sits behind `authenticate`
+    // (services/auth account.ts:41, :448); legacy sent a signed-out visitor to log in first.
+    const { status, location } = signedOut('/he/account/verify-email?token=t.1');
+    expect(status).toBe(307);
+    const target = new URL(location, 'https://dev.gotcha.co.il');
+    expect(target.pathname).toBe('/he/sign-in');
+    expect(target.searchParams.get('returnTo')).toBe('/he/account/verify-email?token=t.1');
+  });
+
+  it('★★ none of them is the sign-in surface: the product keeps its CSP and serves them', () => {
+    // The narrowed policy would cut checkout's frames; the move to SIGN_IN_URL
+    // would carry an invitation off the product origin.
+    expect(directive(cspFor('/en/join'), 'img-src')).toContain('https:');
+    expect(directive(cspFor('/en/checkout/failed'), 'img-src')).toContain('https:');
+    const moved = signedOut('/he/join?token=abc', {
+      SIGN_IN_URL: 'https://auth-dev.gotcha.co.il/sign-in',
+    });
+    expect(moved.location).toBe('');
+    expect(moved.status).toBe(200);
+  });
+});
+
 describe('⚠⚠ the gate can send people to a sign-in screen on another origin', () => {
   /*
    * ═════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,85 @@
+{
+  "tabTitle": "Payment",
+  "support": "Contact support",
+  "opening": {
+    "title": "Opening your payment",
+    "lead": "One moment while we look up the plan for your workspace."
+  },
+  "summary": {
+    "plan": "Plan",
+    "recurring": "Recurring",
+    "charged": "Charged today",
+    "credits": "Included credits",
+    "interval": "Billing",
+    "monthly": "Monthly",
+    "annual": "Yearly",
+    "offerValid": "Offer valid until",
+    "rateSettled": "Converted at {rate} ILS per USD, the rate applied to this payment.",
+    "rateIndicative": "Your card is charged in shekels, at {rate} ILS per USD.",
+    "activation": "Your workspace opens fully once payment is confirmed."
+  },
+  "paymentRequired": {
+    "title": "One step left",
+    "lead": "Set up payment to activate the plan chosen for your workspace.",
+    "start": "Set up payment",
+    "retry": "Try a different card",
+    "starting": "Opening the secure page…",
+    "startFailed": "We couldn't open the payment page. Try again in a moment.",
+    "notYet": "Secure payment isn't available yet. We'll be in touch as soon as it is, and nothing has been charged.",
+    "declined": {
+      "CARD_EXPIRED": "That card has expired.",
+      "INSUFFICIENT_FUNDS": "The payment was declined for insufficient funds.",
+      "CARD_UNUSABLE": "That card couldn't be used.",
+      "DECLINED": "The card issuer declined the payment.",
+      "tryAnother": "Try a different card."
+    },
+    "held": {
+      "tag": "Not available here",
+      "why": "Billing in this environment uses the live payment account, so no payment is started from here."
+    }
+  },
+  "processing": {
+    "title": "Confirming your payment",
+    "lead": "This usually takes a few moments. You can leave this page open.",
+    "status": "Waiting for confirmation"
+  },
+  "manualReview": {
+    "title": "We're checking one thing",
+    "lead": "Your payment needs a quick manual check before your plan activates. You don't need to do anything else.",
+    "status": "Being reviewed by our team"
+  },
+  "unresolved": {
+    "title": "We're checking with your bank",
+    "lead": "Your payment is being confirmed with the card issuer. This can take longer than usual, and you don't need to wait here: we'll email you as soon as we know. Please don't pay again in the meantime.",
+    "status": "Checking with the card issuer"
+  },
+  "completed": {
+    "title": "Your plan is active",
+    "lead": "Payment is confirmed and your workspace is ready.",
+    "continue": "Continue to GOTCHA",
+    "noEmail": "No welcome email yet?",
+    "resend": "Send it again",
+    "resending": "Sending…",
+    "resent": "Sent. Check your inbox again in a moment.",
+    "resendFailed": "We couldn't send it just now. Try again in a moment."
+  },
+  "failed": {
+    "title": "That payment didn't go through",
+    "lead": "No charge was made. You can try again, or contact us and we'll sort it out with you.",
+    "tryAgain": "Try again"
+  },
+  "cancelled": {
+    "title": "You closed the payment page",
+    "lead": "Nothing was charged and no card was saved. Your plan is still waiting, and you can pick up where you left off whenever you're ready.",
+    "tryAgain": "Back to payment"
+  },
+  "expired": {
+    "title": "This link has expired",
+    "lead": "For security, payment links are valid for a limited time. Ask your admin for a new one, or contact us.",
+    "requestNewLink": "Request a new link"
+  },
+  "unavailable": {
+    "title": "We couldn't open this page",
+    "lead": "This link may have expired or already been used. Ask your admin for a new one, or contact us."
+  }
+}

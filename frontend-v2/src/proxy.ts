@@ -12,7 +12,7 @@ import { refreshSession } from '@/auth/refresh';
 import { RETURN_TO_HEADER, SESSION_ENDED_HEADER } from '@/auth/return-to';
 import { nowInSeconds, sealSession, sessionCookieOptions, unsealSession } from '@/auth/session';
 
-import { PUBLIC_PATH_PATTERN } from './auth-surface';
+import { PUBLIC_PATH_PATTERN, SIGNED_OUT_PATH_PATTERN } from './auth-surface';
 import { isLocale } from '@/i18n/locales';
 import { inLocaleOf, mountOf } from '@/auth/sign-in-url';
 import { legacyLocale, legacyRedirect } from '@/i18n/legacy-redirect';
@@ -270,7 +270,13 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
     }
   }
 
-  if (!PUBLIC_PATH_PATTERN.test(pathname)) {
+  /*
+   * ★ An emailed link's page (an invitation, an expired setup link, checkout)
+   *   is opened by somebody who cannot sign in yet. It skips this redirect and
+   *   nothing else - see `SIGNED_OUT_ROUTES` for why it is not the sign-in
+   *   surface's pattern.
+   */
+  if (!PUBLIC_PATH_PATTERN.test(pathname) && !SIGNED_OUT_PATH_PATTERN.test(pathname)) {
     /*
      * Either session counts. This is a redirect, not a security control - it
      * only avoids rendering a shell that is about to 401, and the real check

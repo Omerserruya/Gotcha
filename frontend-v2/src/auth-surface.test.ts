@@ -2,7 +2,7 @@ import { readdirSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { AUTH_SURFACE_ROUTES, PUBLIC_PATH_PATTERN } from './auth-surface';
+import { AUTH_SURFACE_ROUTES, PUBLIC_PATH_PATTERN, SIGNED_OUT_ROUTES } from './auth-surface';
 
 /**
  * The auth-origin build's allowlist, checked against the routes that exist.
@@ -40,7 +40,15 @@ describe('⚠⚠ the auth origin serves every screen of the auth surface', () =>
      * which is the exact failure it exists to catch.
      */
     expect(routesOnDisk.length, 'no routes found - the path is probably wrong').toBeGreaterThan(0);
-    expect([...AUTH_SURFACE_ROUTES].sort()).toEqual([...routesOnDisk].sort());
+    /*
+     * ★ The group also holds the pages an emailed link opens (`/join`), which
+     *   share its signed-out frame but are NOT the sign-in surface. Each must
+     *   be named by one list or the other: a screen in neither is a screen
+     *   the gate sends to sign-in, or the auth origin refuses.
+     */
+    const linkPages = new Set(SIGNED_OUT_ROUTES.map((route) => route.split('/')[0]));
+    const onSurface = routesOnDisk.filter((name) => !linkPages.has(name));
+    expect([...AUTH_SURFACE_ROUTES].sort()).toEqual([...onSurface].sort());
   });
 
   it('⚠ and permits nothing that is not a screen', () => {

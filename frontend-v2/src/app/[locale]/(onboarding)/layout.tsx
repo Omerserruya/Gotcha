@@ -51,7 +51,7 @@ export default async function OnboardingLayout({
       ) : route === 'product' ? null : (
         <WorkspaceGate
           route={route}
-          paymentPath={route === 'payment' ? await paymentPath() : null}
+          paymentPath={route === 'payment' ? await paymentPath(resolved) : null}
           setupAdmin={setupAdmin}
         />
       )}

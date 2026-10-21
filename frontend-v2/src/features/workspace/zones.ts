@@ -144,3 +144,49 @@ export function currencyLabel(code: string, locale: string): string {
 
 /** Offered first; the stored one is added when it is not here. */
 export const COMMON_CURRENCIES = ['ILS', 'USD', 'EUR', 'GBP'] as const;
+
+/**
+ * Every place-dependent word the currency & time zone row shows, computed ONCE,
+ * on the server (2026-10-21).
+ *
+ * ★★ WHY NOT IN THE BROWSER. The names come from the runtime's time zone and
+ * locale data, and the server's Node and the visitor's browser carry different
+ * versions: measured, the production image (Node 22, ICU 78.3) and Chromium
+ * 151 disagree on 11 Hebrew zone names ("שעון מערב אירופה (קזבלנקה)" against
+ * "שעון מרוקו") and on Casablanca's offset in every language. Computed in both,
+ * the select's text differed and React refused to hydrate the page
+ * (/he/settings/workspace, error #418). Built here and handed to the row, both
+ * renders read the same words; any other browser version can differ again, so
+ * nothing in the row may recompute them.
+ */
+export interface PlaceLabels {
+  /** Every zone the server lists, labelled. */
+  readonly zones: readonly Zone[];
+  /** `zoneGroups`: the common ones first, then by offset. */
+  readonly common: readonly Zone[];
+  readonly rest: readonly Zone[];
+  /** The stored zone's label, or null when none is stored. */
+  readonly storedZone: string | null;
+  /** The zone the platform uses when none is stored. */
+  readonly defaultZone: string;
+  /** code → label for every currency the row can show (common + stored). */
+  readonly currencies: Readonly<Record<string, string>>;
+}
+
+export function placeLabels(
+  locale: string,
+  stored: { readonly timezone?: string | null; readonly currency?: string | null },
+  at: Date = new Date(),
+): PlaceLabels {
+  const zones = zoneOptions(locale, at);
+  const { common, rest } = zoneGroups(zones, stored.timezone ?? null, locale, at);
+  const codes = [...new Set([...(stored.currency ? [stored.currency] : []), ...COMMON_CURRENCIES])];
+  return {
+    zones,
+    common,
+    rest,
+    storedZone: stored.timezone ? zoneLabel(stored.timezone, locale, at) : null,
+    defaultZone: zoneLabel(SERVER_DEFAULT_ZONE, locale, at),
+    currencies: Object.fromEntries(codes.map((code) => [code, currencyLabel(code, locale)])),
+  };
+}
