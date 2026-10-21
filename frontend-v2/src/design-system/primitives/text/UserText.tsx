@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 /**
  * Text somebody typed, isolated from the direction of the page around it.
@@ -35,7 +35,21 @@ import type { ReactNode } from 'react';
  * needs no isolation. Wrapping it would be harmless and misleading: the point
  * of this element is to mark a value as *not ours*, so a reader of the code
  * knows the direction is the data's business rather than the layout's.
+ *
+ * ── ★★ AND AN "@" IS ITS OWN TEXT NODE (dev, 2026-10-21, React #418) ──
+ * Cloudflare's Email Address Obfuscation rewrites every email it finds in the
+ * HTML into a link and a script that decodes it. The server's text then
+ * no longer matches the client's, and React threw #418 on
+ * /he/settings/workspace, whose description holds "hello@...". The edge
+ * setting is the real fix; this is the code's own guard for user text:
+ * split at "@", the server render writes `hello<!-- -->@<!-- -->example.com`,
+ * which no email pattern matches, and the page reads the same.
  */
+function unscannable(children: ReactNode): ReactNode {
+  if (typeof children !== 'string' || !children.includes('@')) return children;
+  return children.split(/(@)/).map((part, i) => <Fragment key={i}>{part}</Fragment>);
+}
+
 export function UserText({
   children,
   className,
@@ -47,7 +61,7 @@ export function UserText({
 }) {
   return (
     <bdi dir="auto" className={className} data-testid={testId}>
-      {children}
+      {unscannable(children)}
     </bdi>
   );
 }

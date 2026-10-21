@@ -32,10 +32,16 @@ export default async function JoinPage({
   const read = await loadInvitation(token);
   const signInHref = appPath(`/${locale}/sign-in`);
 
+  /*
+   * "Your team saved you a seat" only beside an invitation that can be
+   * accepted. Beside a dead link (invalid, missing, unreadable) it read as a
+   * live invitation (dev, 2026-10-21): those get a line that promises nothing.
+   */
+  const open = read.state === 'valid';
   const editorial = {
     eyebrow: t('editorial.eyebrow'),
-    headline: t('editorial.headline'),
-    support: t('editorial.support'),
+    headline: open ? t('editorial.headline') : t('editorial.closed.headline'),
+    support: open ? t('editorial.support') : t('editorial.closed.support'),
     status: t('editorial.status'),
   };
 

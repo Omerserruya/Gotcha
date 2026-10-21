@@ -780,10 +780,13 @@ export const checkoutEndpoints = {
  *
  *   invite        GET   /api/public/onboarding/invite/{token}  (onboarding.ts:2989)
  *   acceptInvite  POST  /api/public/onboarding/invite/accept   (onboarding.ts:3023)
+ *   resendSetup   POST  /api/auth/setup/resend `{ token }` → always `{ ok: true }`
+ *                       (setup-link.ts:176), so it cannot say whether a token exists
  */
 export const publicLinkEndpoints = {
   invite: (token: string) => endpoint('/api/public/onboarding/invite/{token}', { token }),
   acceptInvite: () => endpoint('/api/public/onboarding/invite/accept'),
+  resendSetup: () => endpoint('/api/auth/setup/resend'),
 } as const;
 
 export const goLiveEndpoints = {
@@ -1997,6 +2000,58 @@ export const inboxEndpoints = {
    * on any screen says so. The rule prevents a real defect rather than
    * expressing a preference.
    */
+} as const;
+
+/**
+ * The platform console - SYSTEM_ADMIN only (`requireSystemAdmin`, auth
+ * `routes/system.ts`, served by auth through the gateway's `/api/system`).
+ */
+export const consoleEndpoints = {
+  /** `?search=&page=&limit=` → `{ data, meta }` - raw (system.ts:101). */
+  tenants: () => endpoint('/api/system/tenants'),
+  /** `{ data: ProvisioningStatus | null }` (system.ts:880). */
+  provisioning: (tenantId: string) =>
+    endpoint('/api/system/tenants/{tenantId}/billing-provisioning', { tenantId }),
+  /** GET `{ data }` (system.ts:172); PATCH `{ name?, isActive? }` (system.ts:1372). */
+  tenant: (tenantId: string) => endpoint('/api/system/tenants/{tenantId}', { tenantId }),
+  /** POST - creates the checkout never made, emails the link; charges nothing (system.ts:757). */
+  repairBilling: (tenantId: string) =>
+    endpoint('/api/system/tenants/{tenantId}/repair-billing-provisioning', { tenantId }),
+  /** POST - a new link for the same checkout; the old one is revoked (system.ts:1060). */
+  resendPaymentLink: (tenantId: string) =>
+    endpoint('/api/system/tenants/{tenantId}/resend-payment-link', { tenantId }),
+  /** POST `{ planVersionId }` - a plan for a tenant with none (system.ts:910). */
+  assignPaidPlan: (tenantId: string) =>
+    endpoint('/api/system/tenants/{tenantId}/assign-paid-plan', { tenantId }),
+  /** POST - a fresh onboarding email; refused while awaiting payment (system.ts:1161). */
+  resendOnboarding: (tenantId: string) =>
+    endpoint('/api/system/tenants/{tenantId}/resend-onboarding', { tenantId }),
+  /**
+   * GET `{ data }` - ACTIVE, PUBLIC plans (billing admin-pricing.ts:1085),
+   * served by billing through the gateway's `/api/admin/pricing`.
+   */
+  plans: () => endpoint('/api/admin/pricing/provisioning/plans'),
+  /** POST `{ planVersionId, chatVolumeOptionKey, voiceVolumeOptionKey }` → `{ data: quote }` (admin-pricing.ts:1125). */
+  quote: () => endpoint('/api/admin/pricing/provisioning/quote'),
+  /** GET `{ data: string[] }` - the license domains a POC is scoped to (system.ts:1028). */
+  pocDomains: () => endpoint('/api/system/poc-feature-domains'),
+} as const;
+
+/**
+ * Coupons - billing `routes/admin-coupons.ts`, through the gateway's
+ * `/api/admin/coupons`. SYSTEM_ADMIN only (`requirePlatformPermission`).
+ * Bare envelopes: `{ coupons }`, `{ coupon }`, `{ assignments }`, `{ assignment }`.
+ */
+export const couponEndpoints = {
+  /** GET → `{ coupons }`; POST creates one → 201 `{ coupon }`. */
+  list: () => endpoint('/api/admin/coupons'),
+  /** POST `{ active }` (admin-coupons.ts:93). */
+  active: (couponId: string) => endpoint('/api/admin/coupons/{couponId}/active', { couponId }),
+  /** GET → `{ assignments }`; POST `{ couponId, durationMonths }` gives one (:120, :129). */
+  tenant: (tenantId: string) => endpoint('/api/admin/coupons/tenants/{tenantId}', { tenantId }),
+  /** DELETE - revokes one assignment (admin-coupons.ts:161). */
+  assignment: (assignmentId: string) =>
+    endpoint('/api/admin/coupons/assignments/{assignmentId}', { assignmentId }),
 } as const;
 
 export type { Endpoint as ApiEndpoint };

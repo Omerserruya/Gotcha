@@ -60,3 +60,22 @@ describe('★★ user content is isolated from the page direction', () => {
     expect(screen.getByText('Natural cosmetics (organic)')).toBeInTheDocument();
   });
 });
+
+describe('★★ an email in user text survives an edge that rewrites emails (#418, Cloudflare)', () => {
+  it('the server render never holds a whole email; the page reads it whole', async () => {
+    const { renderToString } = await import('react-dom/server');
+    const text = 'שירות hello@halvo-dev.test.';
+    const html = renderToString(<UserText>{text}</UserText>);
+    expect(html).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+    expect(html).toContain('hello<!-- -->@<!-- -->halvo-dev.test.');
+    render(<UserText data-testid="u">{text}</UserText>);
+    expect(screen.getByTestId('u').textContent).toBe(text);
+  });
+
+  it('text without an "@" is left as it is', async () => {
+    const { renderToString } = await import('react-dom/server');
+    expect(renderToString(<UserText>plain text</UserText>)).toBe(
+      '<bdi dir="auto">plain text</bdi>',
+    );
+  });
+});

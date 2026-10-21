@@ -25,6 +25,16 @@ export type PermissionString = string;
 /** The backend role that bypasses the permission set entirely. */
 export const SYSTEM_ADMIN_ROLE = 'SYSTEM_ADMIN';
 
+/**
+ * Whether a role key is the platform operator's. The same case-insensitive
+ * compare the set uses below: `/permissions/me` answers `"system_admin"`, a
+ * user record `"SYSTEM_ADMIN"`. Absent or unread is NOT a system admin - the
+ * console is the one surface that is never shown on uncertainty.
+ */
+export function isSystemAdminRole(roleKey: string | null | undefined): boolean {
+  return roleKey?.toUpperCase() === SYSTEM_ADMIN_ROLE;
+}
+
 export class PermissionSet {
   private readonly held: ReadonlySet<string>;
   private readonly isSystemAdmin: boolean;
@@ -36,7 +46,7 @@ export class PermissionSet {
      *   as `"system_admin"` (auth permissions.ts:119) while `User.role` is
      *   `"SYSTEM_ADMIN"` - the exact compare never matched the real answer.
      */
-    this.isSystemAdmin = roleKey?.toUpperCase() === SYSTEM_ADMIN_ROLE;
+    this.isSystemAdmin = isSystemAdminRole(roleKey);
   }
 
   /** True when the set grants `required`. Exact match, or system admin. */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { PERMISSIONS } from './catalogue';
-import { PermissionSet, SYSTEM_ADMIN_ROLE } from './permission-set';
+import { isSystemAdminRole, PermissionSet, SYSTEM_ADMIN_ROLE } from './permission-set';
 
 describe('PermissionSet', () => {
   it('grants an exact match', () => {
@@ -96,5 +96,18 @@ describe('canSee - the unavailable case', () => {
 
   it('always shows an ungated surface', () => {
     expect(canSee('loaded', [])(undefined)).toBe(true);
+  });
+});
+
+describe('isSystemAdminRole - the console’s door', () => {
+  it('the platform operator, in either case the platform writes it', () => {
+    expect(isSystemAdminRole('system_admin')).toBe(true);
+    expect(isSystemAdminRole('SYSTEM_ADMIN')).toBe(true);
+  });
+
+  it('a tenant’s own roles, and an unread one, are not', () => {
+    for (const role of ['owner', 'admin', 'ADMIN', 'agent', '', null, undefined]) {
+      expect(isSystemAdminRole(role)).toBe(false);
+    }
   });
 });

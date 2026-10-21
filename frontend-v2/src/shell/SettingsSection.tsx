@@ -26,8 +26,8 @@ export function SettingsSection({
   fill = false,
   children,
 }: {
-  /** Already translated. */
-  title: string;
+  /** Already translated - or a name the user wrote, in its own `<bdi>`. */
+  title: ReactNode;
   /** Omitted where the design's line is data rather than copy. */
   description?: string;
   /** The section's own action, on the header's right. */

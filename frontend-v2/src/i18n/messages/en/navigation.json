@@ -107,5 +107,6 @@
     "more": "More for {title}",
     "rename": "Rename",
     "delete": "Delete"
-  }
+  },
+  "console": "Console"
 }

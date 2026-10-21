@@ -11,6 +11,7 @@ import {
 } from '@/api/contracts/invitation';
 import { publicLinkEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { deadReason, type DeadInvitation } from './load-invitation';
 
 /**
  * Accepting an invitation (legacy `frontend/src/app/join/page.tsx`).
@@ -24,7 +25,7 @@ import { logger } from '@/observability/logger';
 export type AcceptInviteResult =
   | { readonly ok: true; readonly setupLink: string | null }
   /** Used, expired or unknown - the route does not say which. */
-  | { readonly ok: false; readonly reason: 'invalid' }
+  | { readonly ok: false; readonly reason: DeadInvitation }
   /** An open link with no address typed. */
   | { readonly ok: false; readonly reason: 'email_required' }
   /** That address is already a member of this workspace. */
@@ -52,7 +53,7 @@ export async function acceptInvite(input: {
     logger.warn('join.accept_failed', { cause });
     if (isApiError(cause)) {
       if (cause.status === 404 || cause.developerMessage === INVITE_INVALID) {
-        return { ok: false, reason: 'invalid' };
+        return { ok: false, reason: deadReason(cause.reason) };
       }
       if (cause.developerMessage === EMAIL_REQUIRED) return { ok: false, reason: 'email_required' };
       if (cause.developerMessage === EMAIL_ALREADY_IN_TENANT) {

@@ -8,7 +8,7 @@ import styles from './AppShell.module.css';
 import { AccountControl } from './AccountControl';
 import { CommandHint } from './CommandHint';
 import { CommandPalette } from './CommandPalette';
-import { PrimaryNavigation, SettingsNavigation } from './PrimaryNavigation';
+import { ConsoleNavigation, PrimaryNavigation, SettingsNavigation } from './PrimaryNavigation';
 import { RecentThreads } from './RecentThreads';
 import { serverApi } from '@/api/client/server-api';
 import { currentUserSchema } from '@/api/contracts/identity';
@@ -57,6 +57,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
 
         <div className={styles.railBottom}>
           <CommandHint />
+          <ConsoleNavigation />
           <SettingsNavigation />
           <AccountControl name={me?.name ?? null} workspace={me?.workspace ?? null} />
         </div>

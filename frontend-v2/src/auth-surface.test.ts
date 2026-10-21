@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
@@ -103,5 +103,23 @@ describe('⚠⚠ and the pattern matches every one of them, prefixed or not', ()
     ]) {
       expect(PUBLIC_PATH_PATTERN.test(denied), denied).toBe(false);
     }
+  });
+});
+
+describe('★★ every signed-out link page the gate opens is a page that exists', () => {
+  /*
+   * The other direction of the list: a name in SIGNED_OUT_ROUTES with no
+   * page behind it opens a path to nothing. Searched under every route group.
+   *
+   * ⚠ Blind spot, named: checkout's pages are built on another branch, so
+   *   they are not required here - this repo's checkout agent owns them.
+   */
+  const groups = readdirSync('src/app/[locale]', { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith('('))
+    .map((entry) => `src/app/[locale]/${entry.name}`);
+
+  it.each(SIGNED_OUT_ROUTES.filter((route) => !route.startsWith('checkout')))('%s', (route) => {
+    const found = groups.filter((group) => existsSync(`${group}/${route}/page.tsx`));
+    expect(found, `${route} has no page.tsx in any route group`).toHaveLength(1);
   });
 });

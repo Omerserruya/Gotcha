@@ -71,6 +71,8 @@ export const NAMESPACES = [
   'billing',
   /** Settings · Developer - screen 18. */
   'developer',
+  /** The platform console - /system, SYSTEM_ADMIN only. */
+  'console',
   /** Settings · Notifications - screen 15. Not `notifications`, which is 01d. */
   'notifications-settings',
   /** Approvals - screen 03, with 03b and 03c. */
