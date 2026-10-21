@@ -163,6 +163,15 @@ http {
 
     # Rate limiting zone
     limit_req_zone $binary_remote_addr zone=api:10m rate=100r/s;
+
+    # Authentik 2025.6+ (and the app's sign-in callback) answer with response
+    # headers past nginx's 4k default; behind the proxy that is a 502 ("upstream
+    # sent too big header") while the service itself is fine. Dev hit it at the
+    # 2025.6 step (389a1c5c) and set this at http level so every vhost has it.
+    # Production needs it BEFORE Authentik is stepped past 2025.4.
+    proxy_buffer_size 16k;
+    proxy_buffers     8 16k;
+    proxy_busy_buffers_size 32k;
     # ★ 429, NOT NGINX'S DEFAULT 503. Without this every rate-limited route in
     # the product answers "Service Unavailable" for "you sent too many requests",
     # and the two are investigated in completely different places.

@@ -151,7 +151,12 @@ services:
       retries: 10
 
   authentik-server:
-    image: ghcr.io/goauthentik/server:2024.10
+    # The tag is a parameter for the 2024.10 -> 2026.2 upgrade, which must step
+    # through every release (2024.12.5 2025.2.3 2025.4.4 2025.6.4 2025.8.6
+    # 2025.10.4 2025.12.5 2026.2.7) with AUTHENTIK_TAG passed per step. The
+    # default is what production runs today, so a plain `up` never jumps
+    # versions; set AUTHENTIK_TAG=2026.2.7 in .env once the steps are done.
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2024.10.5}
     command: server
     <<: *default-restart
     logging: *default-logging
@@ -220,7 +225,7 @@ services:
         condition: service_healthy
 
   authentik-worker:
-    image: ghcr.io/goauthentik/server:2024.10
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2024.10.5}
     command: worker
     <<: *default-restart
     logging: *default-logging
