@@ -32,3 +32,48 @@ export const AUTH_SURFACE_ROUTES = ['sign-in', 'recover'] as const;
 export const PUBLIC_PATH_PATTERN = new RegExp(
   `^/(?:[a-z]{2}/)?(?:${AUTH_SURFACE_ROUTES.join('|')})(?:/|$)`,
 );
+
+/**
+ * Pages a person reaches from a link in an email, before they can sign in.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THE GATE LETS THESE THROUGH. NOTHING ELSE ABOUT THE SIGN-IN SURFACE DOES.
+ * ════════════════════════════════════════════════════════════════════════════
+ * `PUBLIC_PATH_PATTERN` means more than "no session needed": the proxy also
+ * narrows the CSP on it, serves ONLY it on the auth origin, and relocates it
+ * to `SIGN_IN_URL`. An invitation or a checkout is none of those things - it
+ * belongs to the product origin, and a narrowed `frame-src` on a payment page
+ * would break it. So this is a second list beside the first, read by the
+ * gate's one exemption and by nothing else.
+ *
+ *   join                 an invitation (services/auth onboarding.ts, the
+ *                        `/join?token=` link)
+ *   setup-link/expired   where a setup link that cannot be redeemed lands
+ *                        (services/auth setup-link.ts `expiredPage`)
+ *   checkout/…           the payment pages; the backend sends a person there
+ *                        from an email or a payment provider
+ *
+ * ★ `/account/verify-email` is NOT here, on purpose: its backend route
+ *   (`POST /api/account/email-change/verify`) requires the session, and the
+ *   legacy page sent a signed-out visitor to sign in first. The gate already
+ *   does exactly that, with the link's token in `returnTo`.
+ *
+ * ⚠ Whole paths, not prefixes: `/checkout/anything` is not a page anybody
+ *   built, and `/account` is the product.
+ */
+export const SIGNED_OUT_ROUTES = [
+  'join',
+  'setup-link/expired',
+  'checkout',
+  'checkout/payment-required',
+  'checkout/processing',
+  'checkout/completed',
+  'checkout/failed',
+  'checkout/cancelled',
+  'checkout/expired',
+] as const;
+
+/** `/join`, `/he/join`, `/en/checkout/failed/` - exactly these, locale or not. */
+export const SIGNED_OUT_PATH_PATTERN = new RegExp(
+  `^/(?:[a-z]{2}/)?(?:${SIGNED_OUT_ROUTES.join('|')})/?$`,
+);
