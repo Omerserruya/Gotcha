@@ -131,10 +131,11 @@ const RULES: readonly Rule[] = [
   [/^\/(account|settings\/account)$/, bare('/settings/security')],
   [/^\/settings\/(security|notifications)$/, (m, q) => ({ path: `/settings/${m[1]}`, query: q })],
   [
-    /^\/settings\/billing\/(plan|payment-method|credits)$/,
+    /^\/settings\/billing\/(plan|payment-method)$/,
     (m, q) => ({ path: `/settings/billing/${m[1]}`, query: q }),
   ],
-  [/^\/settings\/billing(\/(details|usage-limit))?$/, keep('/settings/billing')],
+  // Credits, buying them and the receipt details are all on the billing page here.
+  [/^\/settings\/billing(\/(details|usage-limit|credits))?$/, keep('/settings/billing')],
   [/^\/settings\/(business-systems|integrations)(\/[^/]+)?$/, keep('/settings/systems')],
   [
     /^\/settings\/(intelligence|intelligence-fields|intelligence-reviews|post-conversation|funnels(\/[^/]+)?)$/,
@@ -160,7 +161,9 @@ const RULES: readonly Rule[] = [
   ],
 
   // ── the console ──
-  [/^\/system(\/.*)?$/, (m, q) => ({ path: m[0], query: q })],
+  // Tenants and coupons are ported (2026-10-21); the rest of the old console lands on its home.
+  [/^\/system\/(tenants(\/[^/]+)?|coupons)$/, (m, q) => ({ path: m[0], query: q })],
+  [/^\/system(\/.*)?$/, bare('/system')],
 
   // ── the marketing site ──
   [/^\/(pricing|early-access|privacy-policy|terms|legal(\/[^/]+)?)$/, marketing],

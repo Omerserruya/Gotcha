@@ -54,6 +54,53 @@ describe('★★ every page of the old app lands somewhere', () => {
   });
 });
 
+describe('★★ every target is a page this app has', () => {
+  /*
+   * "Lands somewhere" passed while /settings/billing/credits pointed at a
+   * route this app does not have: a 404 one hop later. Every in-app target
+   * must match a page under src/app/[locale].
+   */
+  const V2 = join(__dirname, '../app/[locale]');
+  const v2Routes = (dir: string): RegExp[] =>
+    readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) return v2Routes(path);
+      if (name !== 'page.tsx') return [];
+      const route = relative(V2, dir)
+        .split(sep)
+        .filter((part) => part && !/^\(.*\)$/.test(part))
+        .map((part) => (/^\[.*\]$/.test(part) ? '[^/]+' : part))
+        .join('/');
+      return [new RegExp(`^/${route}$`)];
+    });
+  const routes = v2Routes(V2);
+  /*
+   * The console's pages, being built in parallel (2026-10-21). Listed, not
+   * skipped: the last test fails the day they exist, so this list empties.
+   */
+  const PENDING = ['/system', '/system/tenants', '/system/tenants/x1', '/system/coupons'];
+
+  it.each(legacyPages(LEGACY))('%s', (page) => {
+    const target = to(page, 'en');
+    if (!target || /^https?:/.test(target) || target.startsWith('/api/')) return;
+    const path = target.replace(/^\/en(?=\/|$)/, '').replace(/\?.*$/, '') || '/';
+    if (PENDING.includes(path)) return;
+    expect(
+      routes.some((r) => r.test(path)) || path === '/',
+      `${page} → ${path}: no such page`,
+    ).toBe(true);
+  });
+
+  it('the pending pages do not exist yet (when they do, empty PENDING)', () => {
+    for (const path of PENDING) {
+      expect(
+        routes.some((r) => r.test(path)),
+        `${path} exists now: remove it from PENDING`,
+      ).toBe(false);
+    }
+  });
+});
+
 describe('★★ the links the platform sends', () => {
   it.each([
     // notifications templates.ts: conversation links (one shape never existed in the old app)
@@ -62,7 +109,9 @@ describe('★★ the links the platform sends', () => {
     ['/history?id=c42&x=1', '/en/inbox?c=c42&x=1'],
     ['/approvals?id=a7', '/en/approvals?id=a7'],
     ['/contacts/k9', '/en/customers/k9'],
-    ['/settings/billing/credits', '/en/settings/billing/credits'],
+    ['/settings/billing/credits', '/en/settings/billing'],
+    ['/system/tenants/t9', '/en/system/tenants/t9'],
+    ['/system/usage', '/en/system'],
     ['/settings/billing/details', '/en/settings/billing'],
     ['/settings/business-systems', '/en/settings/systems'],
     ['/ai-studio/knowledge?tab=discovered', '/en/studio/knowledge?tab=discovered'],
