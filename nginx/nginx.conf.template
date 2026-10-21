@@ -314,6 +314,8 @@ http {
         # surface - see the prod template for why.
         location /api/admin/coupons {
             proxy_pass http://billing_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -1420,6 +1422,8 @@ http {
         location /api/shopify-chat {
             limit_req zone=api burst=30 nodelay;
             proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header Origin $http_origin;
             proxy_set_header X-Real-IP $remote_addr;
@@ -1431,6 +1435,8 @@ http {
         location /api/website-widget {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -1443,6 +1449,8 @@ http {
         location /api/woocommerce-plugin {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -1453,6 +1461,8 @@ http {
         location /api/shopify-live-chat {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -1466,6 +1476,8 @@ http {
         location /api/shopify-chat-install {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -1923,6 +1935,8 @@ http {
         # published port too.
         location /api/docs/ {
             proxy_pass http://swagger_ui/;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -2283,6 +2297,8 @@ http {
         # which `location =` ignores, and neither name can shadow anything else.
         location = /icon.svg {
             proxy_pass http://frontend_auth;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Forwarded-Proto $public_proto;
@@ -2290,6 +2306,8 @@ http {
 
         location = /apple-icon.png {
             proxy_pass http://frontend_auth;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Forwarded-Proto $public_proto;

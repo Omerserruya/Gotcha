@@ -1560,6 +1560,8 @@ http {
         location /api/shopify-chat {
             limit_req zone=api burst=30 nodelay;
             proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header Origin $http_origin;
             proxy_set_header X-Real-IP $remote_addr;
@@ -1571,6 +1573,8 @@ http {
         location /api/website-widget {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -1583,6 +1587,8 @@ http {
         location /api/woocommerce-plugin {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -1593,6 +1599,8 @@ http {
         location /api/shopify-live-chat {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -1606,6 +1614,8 @@ http {
         location /api/shopify-chat-install {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
