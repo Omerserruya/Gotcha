@@ -19,6 +19,9 @@ import { startReading } from './onboarding-actions';
 import styles from './Onboarding.module.css';
 import { stepHref } from './preview';
 
+/** Terms and privacy, on the marketing site (the app no longer serves /legal). */
+const LEGAL_SITE = 'https://gotcha.co.il/legal';
+
 /** A description longer than this is a paragraph, not the line beside a name. */
 const KIND_MAX = 60;
 
@@ -225,14 +228,14 @@ export function WebsiteStep({
       )}
       <p className={styles.consent} data-testid="website-consent">
         {t.rich('consent', {
-          // The old app's pages, at the site root - outside this app's base path on purpose.
+          // The legal pages live on the marketing site (landing's legal-registry), not in this app.
           terms: (chunks) => (
-            <a href="/legal/terms-of-service" target="_blank" rel="noreferrer">
+            <a href={`${LEGAL_SITE}/terms-of-service`} target="_blank" rel="noreferrer">
               {chunks}
             </a>
           ),
           privacy: (chunks) => (
-            <a href="/legal/privacy-policy" target="_blank" rel="noreferrer">
+            <a href={`${LEGAL_SITE}/privacy-policy`} target="_blank" rel="noreferrer">
               {chunks}
             </a>
           ),
