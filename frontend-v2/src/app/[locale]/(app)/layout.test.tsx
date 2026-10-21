@@ -121,8 +121,14 @@ describe("★★ onboarding is a gate (Omer, 2026-10-07) - the server's status d
     me('PENDING_PAYMENT');
     expect(gateIn(await render())).toMatchObject({
       route: 'payment',
-      paymentPath: '/checkout/payment-required?ref=chk_1',
+      paymentPath: '/en/checkout/payment-required?ref=chk_1',
     });
+  });
+
+  it('unpaid, in Hebrew: the Hebrew checkout page', async () => {
+    me('PENDING_PAYMENT');
+    const he = await Layout({ children: null, params: Promise.resolve({ locale: 'he' }) });
+    expect(gateIn(he)).toMatchObject({ paymentPath: '/he/checkout/payment-required?ref=chk_1' });
   });
 
   it('live: the product - no gate, no redirect', async () => {

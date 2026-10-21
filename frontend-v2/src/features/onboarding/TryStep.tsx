@@ -69,7 +69,7 @@ export function TryStep({
       setResult(null);
       const done = await finishOnboarding({ skippedCore, locale });
       if (done.ok && done.payAt) {
-        // Setup is done and it owes payment: the old app's payment pages, at the root.
+        // Setup is done and it owes payment: the checkout's payment page.
         window.location.replace(done.payAt);
         return;
       }

@@ -135,7 +135,7 @@ export async function finishOnboarding(input: {
     });
     return {
       ok: true,
-      payAt: done.data.paymentRequired ? await paymentPath() : null,
+      payAt: done.data.paymentRequired ? await paymentPath(input.locale) : null,
       knowledgeUsable: done.data.knowledge?.usable ?? null,
     };
   } catch (cause) {

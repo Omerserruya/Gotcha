@@ -14,8 +14,8 @@ import styles from './WorkspaceGate.module.css';
  *   waiting      a member of a workspace an admin is still setting up
  *   unavailable  the workspace's status could not be read: Retry - never
  *                the product, and never a lock-out that outlives a reload
- *   payment      the old app's payment pages, at the site root (outside
- *                this app's base path), as it decides them today
+ *   payment      the checkout's payment page (`paymentPath`), in this
+ *                language: the open checkout's, else the entry page
  */
 export function WorkspaceGate({
   route,
