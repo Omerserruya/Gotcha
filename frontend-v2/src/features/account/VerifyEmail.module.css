@@ -1,0 +1,22 @@
+/*
+ * Confirming a new sign-in address. No design frame exists for it, so every
+ * value is one the auth screens already use: the recovery panel's column and
+ * rhythm, its underlined way onward.
+ */
+@layer components {
+  .panel {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-16);
+    max-inline-size: 400px;
+    padding-block: var(--space-40);
+  }
+
+  .onward {
+    font-size: var(--font-size-meta);
+    color: var(--text-secondary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}

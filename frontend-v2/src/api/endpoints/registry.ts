@@ -944,6 +944,11 @@ export const securityEndpoints = {
   revokeOtherSessions: () => endpoint('/api/account/sessions'),
   loginHistory: () => endpoint('/api/account/login-history'),
   /**
+   * Confirms a change of sign-in address: `{ token }` from the link mailed
+   * to the new one (auth account.ts:448). Needs the session.
+   */
+  verifyEmailChange: () => endpoint('/api/account/email-change/verify'),
+  /**
    * `/api/tenant/security` - a SLASH, and it is an exception.
    *
    * Compound paths in this platform are hyphenated **38 to 3**. Only

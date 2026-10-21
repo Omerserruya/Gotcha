@@ -227,5 +227,21 @@
     "googleNone": "Nothing here reads whether Google sign-in is on.",
     "session": "Sign out after inactivity",
     "sessionNone": "Session length is set for the whole platform, not for this workspace - and it is not an inactivity timeout."
+  },
+  "verifyEmail": {
+    "working": "Confirming your new email…",
+    "doneTitle": "Email updated",
+    "doneBody": "You now sign in with <email></email>.",
+    "continue": "Continue to GOTCHA",
+    "refusedTitle": "We could not confirm your new email",
+    "retry": "Try again",
+    "reason": {
+      "missing": "This link is missing its confirmation code. Open it again from the email.",
+      "invalid": "This confirmation link has expired or is not valid. Your sign-in email has not changed.",
+      "wrong_account": "This link belongs to a different account. Sign in as the account that asked for the change, then open the link again.",
+      "taken": "That email is already in use by another account. Your sign-in email has not changed.",
+      "unfinished": "We could not finish the change, and nothing was changed. Try again in a moment.",
+      "failed": "That did not go through. Try again in a moment."
+    }
   }
 }
