@@ -56,10 +56,50 @@ http {
         server authentik-server:${AUTHENTIK_PORT};
     }
 
-    # No `frontend` upstream in prod - the static export is baked into THIS
-    # nginx image at /usr/share/nginx/html and served from `location /` below.
-    # See gateway/Dockerfile.prod. Dev still uses an upstream (separate Node
-    # SSR container) via nginx/nginx.conf.template.
+    # The app (frontend-v2), a Node container since 2026-10-21. The legacy
+    # frontend's static export is no longer built or served. The port is
+    # hardcoded: this file's envsubst whitelist has no variable for it.
+    upstream frontend_v2 {
+        server frontend-v2:3000;
+    }
+
+    # Old app paths (the legacy frontend's, still in emails already sent and
+    # in bookmarks) 302 to their equivalent at the root, query kept where it
+    # means the same. Every host; the legacy app no longer answers anything.
+    # Unlisted paths fall through to the app (its own 404). Named captures
+    # only; dots excluded so an asset path is never redirected.
+    map $arg_id $v2_inbox_qs { default "?c=$arg_id"; "" ""; }
+    map "$arg_status$arg_calendar" $v2_cap_ok { default ""; ~connected "&connected=1"; }
+    map $uri $v2_dest {
+        default "";
+        ~^/login/?$                                                         /sign-in;
+        ~^/(dashboard|getting-started)/?$                                /home$is_args$args;
+        ~^/setup/?$                                                      /onboarding$is_args$args;
+        ~^/(conversations|history)/?$                                    /inbox$v2_inbox_qs;
+        ~^/contacts/(?<v2cid>[^/.]+)/?$                                  /customers/$v2cid;
+        ~^/(?<v2top>analytics|approvals)/?$                              /$v2top$is_args$args;
+        ~^/outbound(/(broadcasts|campaigns|scheduled))?/?$               /outreach$is_args$args;
+        ~^/outbound/templates/?$                                         /outreach/templates;
+        ~^/outbound/call/?$                                              /outreach/calls;
+        ~^/(settings/)?channels/?$                                       /settings/channels$is_args$args;
+        ~^/settings/channels/whatsapp/?$                                 /settings/channels/whatsapp$is_args$args;
+        ~^/settings/?$                                                   /settings;
+        ~^/(agents|settings/(people|users|agents))/?$                    /settings/people;
+        ~^/settings/permissions/?$                                       /settings/people/permissions;
+        ~^/settings/(?<v2set>security|notifications)/?$                  /settings/$v2set;
+        ~^/(usage|settings/usage|settings/billing(/(details|credits|usage-limit))?)/?$  /settings/billing$is_args$args;
+        ~^/settings/billing/(?<v2bill>plan|payment-method)/?$            /settings/billing/$v2bill$is_args$args;
+        ~^/settings/(business-systems|integrations)/?$                   /settings/systems$is_args$args;
+        ~^/settings/business-systems/shopify/finish/?$                   /studio/capabilities?system=shopify&pending=1&reason=claim;
+        ~^/integrations/shopify/billing/complete/?$                      /studio/capabilities?system=shopify&billing=verify&shop=$arg_shop;
+        ~^/integrations/?$                                               /studio/capabilities$is_args$args;
+        ~^/(integrations|ai-studio/marketplace)/(?<v2slug>[a-z0-9_-]+)/?$ /studio/capabilities?system=$v2slug$v2_cap_ok;
+        ~^/settings/(tools|policy|business-rules)/?$                     /studio/capabilities;
+        ~^/ai-studio/?$                                                  /studio$is_args$args;
+        ~^/(knowledge|business|ai-studio/knowledge)/?$                   /studio/knowledge$is_args$args;
+        ~^/ai-studio/agents/[^/.]+/?$                                    /studio/employees;
+    }
+
 
     # Real public scheme. TLS terminates at Cloudflare, so $scheme is always
     # "http" inside this container - passing it to Authentik would make it
@@ -203,6 +243,98 @@ http {
             add_header X-Frame-Options "SAMEORIGIN" always;
             add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
             add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        }
+
+        # ─── The app's own server routes (frontend-v2) ───
+        # Exact matches, so they beat `location /api/auth` below while
+        # /api/auth/setup/:token and the rest stay on the auth service;
+        # /api/realtime/ticket stays there too.
+        location = /api/auth/login {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location = /api/auth/callback {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location = /api/auth/logout {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location = /api/session/ticket {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location ^~ /api/exports/ {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        # The BFF streams (SSE): nothing buffered between it and the browser.
+        location ^~ /api/bff/ {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_buffering off;
+            proxy_read_timeout 3600s;
+        }
+
+        # The app's sign-in panel drives Authentik's flow executor first-party
+        # (the password goes browser -> this proxy -> Authentik, never through
+        # Node). Same as dev's; see nginx/nginx.conf.template for the reasons.
+        location ^~ /auth-api/ {
+            proxy_pass http://authentik_server/api/v3/;
+            # The executor redirects to its own absolute /api/v3/ paths.
+            proxy_redirect /api/v3/ /auth-api/;
+            proxy_http_version 1.1;
+            # Authentik's own name: it builds URLs and checks the origin by it.
+            proxy_set_header Host auth.gotcha.co.il;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $public_proto;
+            proxy_set_header X-Forwarded-Host $host;
+            limit_req zone=authentik burst=40 nodelay;
         }
 
         # ─── Auth Service ─────────────────────────────────
@@ -1910,93 +2042,48 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # ─── Static frontend (Next.js export, baked into this image) ──
-        root /usr/share/nginx/html;
-        index index.html;
+        # ─── The app (frontend-v2), at the root since 2026-10-21 ──────────
+        # It was the legacy app's static export, served from this image. Now
+        # every page, /_next/... and /monitoring go to the app container. A
+        # REGEX location beats a prefix one: any regex added to this server must
+        # be anchored so it cannot take app paths. (The old `^/(he|en)` 301 to
+        # gotcha.co.il is gone: every app route is /he/... or /en/....)
 
-        # Long-cache hashed assets - Next.js output has content hashes in every
-        # filename under /_next/static, so these are safe to cache aggressively.
-        location /_next/static/ {
-            expires 1y;
-            access_log off;
-            add_header Cache-Control "public, immutable";
-            # Security headers repeated: this location declares add_header,
-            # which cancels server-level inheritance, so ALL six must be re-emitted.
-            add_header X-Content-Type-Options "nosniff" always;
-            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-            add_header X-Frame-Options "SAMEORIGIN" always;
-            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        # The logo every brand email embeds (packages/shared brand-email.ts
+        # builds ${app}/full_icon_white.png). The legacy app's export served
+        # it; the app has no such file, so the gateway does.
+        location = /full_icon_white.png {
+            root /usr/share/nginx/brand;
+            try_files $uri =404;
+            expires 7d;
         }
 
-        # Next.js static-export dynamic [id] routes are emitted ONLY as a "_"
-        # placeholder dir (no per-id HTML), because the [id] pages have no
-        # generateStaticParams. Falling back to /index.html (as the generic
-        # block below does) serves the root shell, so the page never mounts and
-        # client-nav RSC (.txt) fetches receive HTML instead of an RSC payload -
-        # which is exactly why deep-linking / refreshing /ai-studio/agents/<id>,
-        # /agents/new, /system/tenants/<id>, etc. rendered nothing.
-        #
-        # Map /<base>/<id>/ and its /<id>/index.txt RSC to that "_" placeholder.
-        # Scoped to the known dynamic bases (alternation) so it can't touch /api,
-        # /_next, or real static pages - those still resolve via $uri first.
-        # Keep the .txt block first; both try $uri before the placeholder so the
-        # list pages (e.g. /system/tenants/index.txt) keep serving their own file.
-        location ~ ^/(departments|integrations|voice|contacts|system/tenants|ai-studio/flows|ai-studio/marketplace|ai-studio/agents|settings/voice-channels|settings/funnels|settings/business-systems|system/plans)/[^/]+/index\.txt$ {
-            try_files $uri /$1/_/index.txt /index.html;
-        }
-        location ~ ^/(departments|integrations|voice|contacts|system/tenants|ai-studio/flows|ai-studio/marketplace|ai-studio/agents|settings/voice-channels|settings/funnels|settings/business-systems|system/plans)/[^/]+/?$ {
-            try_files $uri $uri/index.html /$1/_/index.html /index.html;
-        }
-
-        # ...and the SUB-PAGES of a dynamic id, which the two rules above do not
-        # reach: `[^/]+` cannot cross a slash, so /settings/voice-channels/<id>/routing
-        # matched neither and fell through to /index.html - the root shell. The
-        # export emits these as /<base>/_/<sub>/index.html, and today that is
-        #   settings/voice-channels/_/routing   (inbound + outbound call routing)
-        #   departments/_/copilot
-        #   voice/_/replay
-        # all three of which were unreachable in production while building
-        # perfectly. A merchant reported it as "the option is gone from the UI",
-        # which is precisely what a page that never mounts looks like.
-        location ~ ^/(departments|integrations|voice|contacts|system/tenants|ai-studio/flows|ai-studio/marketplace|ai-studio/agents|settings/voice-channels|settings/funnels|settings/business-systems|system/plans)/[^/]+/([^/]+)/index\.txt$ {
-            try_files $uri /$1/_/$2/index.txt /index.html;
-        }
-        location ~ ^/(departments|integrations|voice|contacts|system/tenants|ai-studio/flows|ai-studio/marketplace|ai-studio/agents|settings/voice-channels|settings/funnels|settings/business-systems|system/plans)/[^/]+/([^/]+)/?$ {
-            try_files $uri $uri/index.html /$1/_/$2/index.html /index.html;
-        }
-
-        # Next.js export with trailingSlash:true: /foo resolves to /foo/index.html.
-        # Unknown URLs fall back to /index.html so the SPA client router can mount
-        # the matching route at runtime.
-        # ─── Public pricing page (flag-gated, no auth) ────
-        # Placed before the static try_files fallback so a disabled flag wins.
-        # Both /pricing and /pricing/ are gated: the static export emits the
-        # trailing-slash form.
-        location = /pricing {
+        # The app lived under /v2 on dev; any such link keeps working.
+        location ^~ /v2 {
             absolute_redirect off;
-            if ($public_pricing_enabled != "true") { return 302 /early-access; }
-            try_files $uri $uri/index.html $uri.html /404.html;
+            rewrite ^/v2/?(.*)$ /$1 permanent;
         }
 
-        location = /pricing/ {
-            absolute_redirect off;
-            if ($public_pricing_enabled != "true") { return 302 /early-access; }
-            try_files $uri $uri/index.html $uri.html /404.html;
-        }
-
-        # The old landing page, which the application build still ships at /he
-        # and /en. It was the marketing site once, and its own metadata still
-        # declares gotcha.co.il/he as its canonical address - which is now a
-        # different page entirely. Two designs answering to one name, with the
-        # older one claiming to be the newer: send them to the real thing.
-        location ~ ^/(he|en)(/|$) {
-            return 301 https://gotcha.co.il$request_uri;
-        }
+        # Pages that live on the marketing site.
+        location = /pricing  { return 302 https://gotcha.co.il/pricing; }
+        location = /pricing/ { return 302 https://gotcha.co.il/pricing; }
+        location ^~ /legal   { return 301 https://gotcha.co.il$request_uri; }
+        location ^~ /early-access { return 301 https://gotcha.co.il$request_uri; }
 
         location / {
-            try_files $uri $uri/index.html $uri.html /index.html;
+            # Old app paths 302 to their place in this one (the $v2_dest map).
+            # Relative Location: $scheme is http behind Cloudflare.
+            absolute_redirect off;
+            if ($v2_dest != "") { return 302 $v2_dest; }
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
         }
     }
 
@@ -2030,8 +2117,8 @@ http {
 
         client_max_body_size 1m;
         # The marketing site is its own build with its own /_next chunks, so it
-        # gets its own root. The application export stays at /usr/share/nginx/html
-        # and is still reachable from the few locations below that need it.
+        # gets its own root. (The application is no longer a static export
+        # here; the widget is served from /usr/share/nginx/widget.)
         root /usr/share/nginx/landing;
 
         add_header X-Content-Type-Options "nosniff" always;

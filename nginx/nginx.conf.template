@@ -2005,6 +2005,15 @@ http {
             limit_req zone=authentik burst=40 nodelay;
         }
 
+        # The logo every brand email embeds (packages/shared brand-email.ts
+        # builds ${app}/full_icon_white.png). The legacy app's export served
+        # it; the app has no such file, so the gateway does.
+        location = /full_icon_white.png {
+            root /usr/share/nginx/brand;
+            try_files $uri =404;
+            expires 7d;
+        }
+
         # The app lived under /v2 until 2026-10-21. Links already sent keep
         # working: the prefix is stripped, the query kept.
         location ^~ /v2 {

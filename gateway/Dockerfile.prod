@@ -1,22 +1,18 @@
-# Production gateway = API reverse-proxy + two static sites in one nginx image.
+# Production gateway = API reverse-proxy + the static marketing sites in one
+# nginx image. The application is NOT here: since 2026-10-21 it is the
+# frontend-v2 container, proxied at `location /`. The legacy frontend/ is code
+# only and its export is no longer built or copied.
 #
-#   frontend/out  the application, served on app.gotcha.co.il
-#   landing/out   the marketing site, served on gotcha.co.il, trust. and help.
+#   landing/out             the marketing site: gotcha.co.il, trust. and help.
+#   campaigns/out           campaign landings: go.gotcha.co.il
+#   frontend/public/widget  the embeddable widget, served at /widget/
 #
 # Build context MUST be the repo root so this Dockerfile can COPY from
-# frontend/, landing/ AND gateway/.
+# frontend/public, landing/, campaigns/ AND gateway/.
 #
-# IMPORTANT: this Dockerfile assumes both `out/` directories already exist.
-# Generate them on the HOST before building:
+# The `out/` directories must exist before building; generate them on the HOST:
 #
 #   cd landing && NEXT_TELEMETRY_DISABLED=1 NEXT_OUTPUT=export npm run build
-#
-# and, for the application:
-#
-#   cd frontend && NEXT_TELEMETRY_DISABLED=1 NEXT_OUTPUT=export \
-#     NEXT_PUBLIC_API_URL=… NEXT_PUBLIC_WS_URL=… \
-#     NEXT_PUBLIC_META_APP_ID=… NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID=… \
-#     npm run build
 #
 # Then from repo root:
 #
@@ -34,8 +30,9 @@
 
 FROM nginx:alpine
 
-# Pre-built Next.js static exports (run the builds on the host first).
-COPY frontend/out /usr/share/nginx/html
+# The logo brand emails embed (${app}/full_icon_white.png); the legacy export
+# used to carry it.
+COPY frontend/public/full_icon_white.png /usr/share/nginx/brand/full_icon_white.png
 # The embeddable widget, served by nginx itself at /widget/ (2026-10-21). The
 # publish script runs `node scripts/widget/build-widget.mjs --check` first, so
 # the files copied here are the current build.

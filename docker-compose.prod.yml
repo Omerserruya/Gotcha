@@ -294,6 +294,43 @@ services:
       - notifications
       - billing
       - authentik-server
+      # nginx resolves the app's upstream at start (since 2026-10-21).
+      - frontend-v2
+
+  # ─── The app (frontend-v2), served at the root by the gateway ─────────
+  # Since 2026-10-21 the application is this Node container (`next start`),
+  # not a static export baked into the gateway; the legacy frontend/ is code
+  # only. Its NEXT_PUBLIC_* values are frozen into the image at build (see
+  # scripts/docker-publish.sh); what is below is read at runtime.
+  # Explicit env only: a global SESSION_COOKIE_NAME (the platform's
+  # __Host-gotcha_session) must never reach this app's own session.
+  frontend-v2:
+    image: ${REGISTRY}/${REPO:-gotcha}:frontend-v2-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      APP_ENV: production
+      APP_ORIGIN: ${APP_ORIGIN}
+      # The platform API the BFF calls, through this same gateway.
+      API_BASE_URL: ${V2_API_BASE_URL:-https://app.gotcha.co.il}
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_CLIENT_ID: ${V2_OIDC_CLIENT_ID:-${OIDC_CLIENT_ID:-gotcha-app}}
+      # Encrypts the app's own session cookie. Minted by Omer; at least 32
+      # characters. Required: compose refuses to start without it rather than
+      # run an app that cannot sign anyone in.
+      SESSION_SECRET: ${V2_SESSION_SECRET:?V2_SESSION_SECRET required in prod (the app's session key, 32+ chars)}
+      # Fails closed: only the exact value `on` lets a payment, card or plan
+      # change go through from the app. Set it in .env.prod to open billing.
+      BILLING_WRITES: ${V2_BILLING_WRITES:-off}
+      SENTRY_DSN: ${V2_SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: production
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # ─── Microservices ───────────────────────────────────────
   auth:
