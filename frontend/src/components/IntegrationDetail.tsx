@@ -20,12 +20,15 @@ import {
   listMongoCollections,
   listRdsTables,
 } from "@/lib/api";
+import { useShopifyFeatureAccess } from "@/lib/useShopifyFeatureAccess";
 import CustomApiToolsSection from "@/components/CustomApiToolsSection";
 import CustomDbToolsSection from "@/components/CustomDbToolsSection";
 import { AirtableMappingCard } from "@/components/integrations/AirtableMappingCard";
 import clsx from "clsx";
 import { beginConnect, connectHelpText, connectButtonLabel, connectErrorMessage } from "@/lib/shopify-connect";
 import { getPendingShopifyInstall, getShopifyInstallAvailability } from "@/lib/api";
+import { notifyIntegrationsChanged } from "@/lib/integration-events";
+import ShopifyDisconnectDialog from "@/components/ShopifyDisconnectDialog";
 
 const RISK_BADGE: Record<string, string> = {
   LOW: "bg-green-100 text-green-700",
@@ -193,6 +196,19 @@ export function IntegrationDetail({
 
   const ti = integration?.tenantConnection;
   const isConnected = ti?.status === "CONNECTED";
+  /**
+   * OAuth finishing is not the same fact as the Connector being paid for.
+   * Every Shopify-specific indicator below reads this instead of `isConnected`,
+   * so this page cannot announce Shopify as running while the Connector banner
+   * beside it says the subscription is required. Non-Shopify integrations get
+   * `applies: false` and are untouched.
+   */
+  // Set the moment Shopify accepts our uninstall request; cleared by the
+  // verified webhook (or by a failed retry). The store is still connected
+  // while this is true, which is exactly why we must not say "Disconnected".
+  const awaitingUninstall = Boolean((ti?.config as any)?.uninstallRequestedAt);
+  const shopifyAccess = useShopifyFeatureAccess(slug, isConnected, awaitingUninstall);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const status = ti?.status || "DISCONNECTED";
 
   // Build credential fields from authSchema. Per-provider fallbacks below
@@ -371,9 +387,19 @@ export function IntegrationDetail({
 
   async function handleDisconnect() {
     if (!token) return;
+    // Shopify is not a local row to clear: disconnecting means asking Shopify
+    // to uninstall the app, which stops the storefront assistant and every
+    // Shopify feature. That deserves a confirmation, and it goes through a
+    // different endpoint.
+    if (slug === "shopify") {
+      setConfirmDisconnect(true);
+      return;
+    }
     setDisconnecting(true);
     try {
       await disconnectIntegration(token, slug);
+      // Other screens show this connection; tell them it changed.
+      notifyIntegrationsChanged();
       await load();
     } catch {
       // ignore
@@ -518,8 +544,12 @@ export function IntegrationDetail({
                 )}
                 {canDisconnect && (
                 <button
+                  data-testid="disconnect-button"
                   onClick={handleDisconnect}
-                  disabled={disconnecting}
+                  // A second request while Shopify is still working on the
+                  // first would be a second uninstall attempt against an app
+                  // that may already be gone.
+                  disabled={disconnecting || shopifyAccess.awaitingUninstall}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl border border-red-200 text-sm font-medium text-red-600 hover:bg-red-50 transition disabled:opacity-50 ml-auto"
                 >
                   {disconnecting ? (
@@ -975,8 +1005,21 @@ export function IntegrationDetail({
           {slug === "shopify" && isConnected && useAsCrm && (
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
               <div className="flex items-center gap-3">
-                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200 shrink-0">
-                  {t("marketplace.systemOfRecordActive")}
+                {/* Writeback to Shopify is a Shopify-funded capability. Without
+                    the Connector it is off, and a green "active" chip here was
+                    one of the claims that contradicted the billing state. */}
+                <span
+                  data-testid="shopify-writeback-chip"
+                  className={clsx(
+                    "px-2 py-0.5 rounded-full text-xs font-medium border shrink-0",
+                    shopifyAccess.featuresEnabled
+                      ? "bg-green-50 text-green-700 border-green-200"
+                      : "bg-gray-100 text-gray-500 border-gray-200",
+                  )}
+                >
+                  {shopifyAccess.featuresEnabled
+                    ? t("marketplace.systemOfRecordActive")
+                    : t("marketplace.shopifyAccess.writebackUnavailable")}
                 </span>
                 <Link href="/settings/business-systems" className="text-sm font-medium text-violet-600 hover:text-violet-700 ms-auto shrink-0">
                   {t("marketplace.manageInSettings")}
@@ -985,8 +1028,56 @@ export function IntegrationDetail({
             </div>
           )}
 
+          {/* Shopify has accepted the uninstall and has not finished it. The
+              store still works; saying "Disconnected" here would be a claim
+              Shopify has not confirmed. */}
+          {shopifyAccess.awaitingUninstall && (
+            <div
+              data-testid="shopify-awaiting-uninstall"
+              className="bg-amber-50 border border-amber-200 rounded-2xl p-5"
+            >
+              <p className="font-semibold text-amber-900">
+                {t("marketplace.shopifyDisconnect.waiting")}
+              </p>
+              <p className="mt-1 text-sm text-amber-800">
+                {t("marketplace.shopifyDisconnect.waitingHint")}
+              </p>
+            </div>
+          )}
+
+          <ShopifyDisconnectDialog
+            open={confirmDisconnect}
+            shopDomain={String((ti?.config as any)?.shopDomain ?? "")}
+            onCancel={() => setConfirmDisconnect(false)}
+            onRequested={async () => {
+              setConfirmDisconnect(false);
+              // Re-read so the waiting strip appears from the SERVER's answer
+              // rather than from local optimism.
+              await load();
+            }}
+          />
+
+          {/* Tools are a Shopify-funded capability. Claiming "68 of 68 active"
+              while the Connector is unpaid is the contradiction requirement
+              1.2.1 is about, so an authorized-but-unpaid store is told the
+              count is zero and why, rather than being shown a live list. */}
+          {isConnected && tools.length > 0 && shopifyAccess.applies && !shopifyAccess.featuresEnabled && (
+            <div
+              data-testid="shopify-tools-locked"
+              className="bg-white rounded-2xl shadow-card border border-gray-100 p-5"
+            >
+              <h2 className="font-semibold text-gray-900 mb-2">{t("marketplace.availableTools")}</h2>
+              <p className="text-sm text-gray-500">
+                {t("marketplace.shopifyAccess.toolsLocked")}
+              </p>
+              <p className="mt-1 text-sm font-medium text-gray-400" data-testid="shopify-tools-count">
+                {t("marketplace.shopifyAccess.toolsLockedCount").replace("{total}", String(tools.length))}
+              </p>
+            </div>
+          )}
+
           {/* Tools section */}
-          {isConnected && tools.length > 0 && (
+          {isConnected && tools.length > 0 && shopifyAccess.featuresEnabled && (
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
               <h2 className="font-semibold text-gray-900 mb-4">{t("marketplace.availableTools")}</h2>
               <div className="space-y-3">

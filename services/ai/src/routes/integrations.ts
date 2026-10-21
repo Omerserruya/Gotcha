@@ -26,6 +26,8 @@ import { catalogDescription } from "../lib/catalog-descriptions";
 import { catalogTool } from "../lib/catalog-tools-he";
 import { splitErrorCode } from "../lib/error-code";
 import { probeConnectCredentials } from "../services/connect-probe";
+import { requestShopifySelfUninstall } from "../services/connectors/shopify-self-uninstall.service";
+import { stripLiveConnectionClaims } from "../services/connectors/integration-teardown";
 
 const router = Router();
 
@@ -1114,6 +1116,43 @@ router.post("/:slug/test", canConnectSystems, async (req: Request, res: Response
 });
 
 // POST /:slug/disconnect - Disconnect and delete tenant tools (cascade handles child rows)
+/**
+ * POST /integrations/shopify/uninstall - disconnect Shopify for real.
+ *
+ * The generic `/:slug/disconnect` clears GOTCHA's own row. For Shopify that is
+ * not a disconnect: the app stays installed on the store with its scopes and
+ * keeps delivering webhooks, while the merchant is told they disconnected.
+ *
+ * This asks Shopify to uninstall the app (the official `appUninstall`
+ * mutation) and then WAITS. Shopify's signed `app/uninstalled` webhook is the
+ * authoritative confirmation and owns the cleanup; a 200 from the mutation
+ * only means the request was accepted.
+ *
+ * Registered before /:slug so the literal path wins.
+ */
+router.post("/shopify/uninstall", canManageSystems, async (req: Request, res: Response) => {
+  try {
+    const result = await requestShopifySelfUninstall(req.tenantId!);
+    if (!result.ok) {
+      // 502 only for a genuine failure talking to Shopify. The others are
+      // preconditions on our side that the merchant can act on, and returning
+      // "bad gateway" for them sent a confusing signal and buried the cause.
+      const code =
+        result.reason === "not_connected" ? 404
+          : result.reason === "shopify_refused" ? 502
+            : 409;
+      res.status(code).json({ error: result.reason });
+      return;
+    }
+    // Deliberately not "disconnected". Nothing is disconnected until Shopify
+    // says so, and claiming otherwise is the defect this route exists to fix.
+    res.json({ data: { state: result.state, shopDomain: result.shopDomain } });
+  } catch (err) {
+    console.error("shopify self-uninstall error:", err);
+    res.status(500).json({ error: "Failed to request Shopify uninstall" });
+  }
+});
+
 router.post("/:slug/disconnect", canManageSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
@@ -1137,10 +1176,22 @@ router.post("/:slug/disconnect", canManageSystems, async (req: Request, res: Res
     // keeps them: they hold the admin's per-tool choices, a tool is only offered
     // while its connection is CONNECTED, and /connect never recreated them, so a
     // reconnect after this route left the system with no actions at all.
+    // The app/uninstalled webhook is different: the store itself is gone,
+    // so that path removes the rows (removeTenantToolAssignments, merged
+    // from main 2026-10-21). A reconnect re-creates any missing row either way.
+
+    // Clearing credentials is not enough. `config` carries claims about a
+    // LIVE connection - `useAsCrm` elects this integration as the customer
+    // system of record, `capabilityState` records a healthy scope check -
+    // and leaving them behind is what let a disconnected Shopify go on being
+    // shown as the active source of truth with writeback enabled, beside a
+    // card that already read Disconnected. What the store WAS stays
+    // (`shopDomain`); what it can currently DO does not.
+    const cfg = stripLiveConnectionClaims(tenantIntegration.config);
 
     const updated = await prisma.tenantIntegration.update({
       where: { id: tenantIntegration.id },
-      data: { status: "DISCONNECTED", credentials: {} },
+      data: { status: "DISCONNECTED", credentials: {}, config: cfg },
     });
 
     res.json({ data: updated });

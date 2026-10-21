@@ -2189,6 +2189,20 @@ export function toggleIntegrationTool(token: string, slug: string, toolSlug: str
  * Shopify supports this - when on, the bot reads customer context (and writes
  * notes/tags) from Shopify instead of any CRM-category integration.
  */
+/**
+ * Ask Shopify to uninstall the GOTCHA app from the connected store.
+ *
+ * Resolves to `awaiting_webhook`: Shopify accepted the request, and its signed
+ * `app/uninstalled` webhook is what actually completes the disconnect. The UI
+ * must not report the store as disconnected on this response.
+ */
+export function requestShopifyUninstall(token: string) {
+  return apiFetch<{ data: { state: "awaiting_webhook"; shopDomain: string } }>(
+    "/api/integrations/shopify/uninstall",
+    { token, method: "POST" },
+  );
+}
+
 export function setIntegrationCrmSource(token: string, slug: string, useAsCrm: boolean) {
   return apiFetch<{ data: { id: string; useAsCrm: boolean } }>(`/api/integrations/${slug}/crm-source`, {
     token, method: "PUT", body: JSON.stringify({ useAsCrm }),

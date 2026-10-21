@@ -1,5 +1,12 @@
 # Shopify App Store review 132211: what changed, and how to test it
 
+> **SUPERSEDED for the current round.** This documents the EARLIER 132211
+> cycle (install, OAuth redirect, parked-installation expiry, the shop
+> allowlist) and is kept as the record of those fixes. The current round is
+> requirement 1.2.1, billing separation: see
+> [shopify-review-132211/](./shopify-review-132211/). Do not paste the Test
+> Instructions from this file - they predate the Connector split.
+
 App: **GOTCHA** (client id `b1ce3aa5…5f76`)
 Reference: **132211**
 Status at rejection: Paused. Visibility: Limited.

@@ -35,19 +35,29 @@ export const AUTO_PURCHASE_DEFAULTS = {
 
 // Capabilities every public plan includes.
 export const CORE_FEATURES = [
-  // The two Shopify commerce capabilities join CORE rather than a paid tier.
-  // That is not a pricing decision - it PRESERVES today's behaviour. Both were
-  // gated only by the legacy Feature enum, whose metadata default is
-  // `defaultEnabled: true`, so every tenant already has them. Putting them on a
-  // narrower tier here would silently REMOVE a capability that customers
-  // currently use. Moving them to a paid tier is a commercial decision to make
-  // deliberately, with migration, not as a side effect of adding a key.
+  // THE TWO SHOPIFY KEYS USED TO BE HERE, AND HAVE BEEN REMOVED.
   //
-  // commerce.auto_buy is deliberately ABSENT: it spends a customer's money and
-  // its legacy default was already false, so granting it here would be a
+  // They were placed in CORE to preserve behaviour: both were gated only by the
+  // legacy Feature enum, whose metadata default was `defaultEnabled: true`, so
+  // every tenant already had them, and a narrower tier would have taken away a
+  // capability customers were using. That comment ended by saying moving them
+  // was "a commercial decision to make deliberately, with migration, not as a
+  // side effect of adding a key".
+  //
+  // That decision has now been made, and not by us. Shopify App Review paused
+  // submission 132211 under requirement 1.2.1: capabilities tied to the Shopify
+  // integration must be billed through Shopify. A GOTCHA Core plan selling
+  // Shopify storefront chat and the Shopify product picker is exactly the
+  // arrangement the requirement forbids, and it is what the reviewer saw.
+  //
+  // They are now funded solely by the Shopify Connector subscription. A Core
+  // plan cannot grant them even if a seed listed them, because `entitledIn`
+  // requires a Shopify funding source for any Shopify key - so this removal
+  // makes the seed HONEST rather than making it enforcing.
+  //
+  // commerce.auto_buy remains deliberately ABSENT: it spends a customer's money
+  // and its legacy default was already false, so granting it here would be a
   // loosening, not a preservation.
-  "commerce.shopify_live_chat",
-  "commerce.shopify_product_messaging",
   "communication.omnichannel",
   "communication.broadcasts",
   "communication.automations",

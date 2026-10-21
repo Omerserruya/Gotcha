@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { getMarketplaceIntegrations } from "@/lib/api";
 import { INTEGRATION_LOGOS } from "@/lib/integration-logos";
+import { useShopifyFeatureAccess } from "@/lib/useShopifyFeatureAccess";
 import clsx from "clsx";
 
 /**
@@ -136,12 +137,27 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
     return matchSearch && matchCat;
   });
 
+  /**
+   * One snapshot for the whole grid. A card cannot call a hook of its own, and
+   * the Shopify verdict is the same for every card anyway.
+   */
+  const shopifyAccess = useShopifyFeatureAccess("shopify", true);
+
   function getStatusInfo(intg: any) {
     const ti = intg.tenantConnection;
     const isConnected = ti && ti.status === "CONNECTED";
     const totalTools = intg.catalogTools?.length || 0;
-    const enabledTools = intg.catalogTools?.filter((t: any) => t.tenantTool?.isEnabled).length || 0;
-    return { isConnected, totalTools, enabledTools };
+    const rawEnabled = intg.catalogTools?.filter((t: any) => t.tenantTool?.isEnabled).length || 0;
+    // An authorized but unpaid Shopify store has no usable tools, so the card
+    // must not count them as enabled. Every other integration is untouched.
+    const shopifyLocked =
+      intg.slug === "shopify" && shopifyAccess.applies && !shopifyAccess.featuresEnabled;
+    return {
+      isConnected,
+      totalTools,
+      enabledTools: shopifyLocked ? 0 : rawEnabled,
+      connectorRequired: Boolean(shopifyLocked && isConnected),
+    };
   }
 
   return (
@@ -213,7 +229,7 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map((intg) => {
-            const { isConnected, totalTools, enabledTools } = getStatusInfo(intg);
+            const { isConnected, totalTools, enabledTools, connectorRequired } = getStatusInfo(intg);
             const logoSrc = intg.logoUrl || INTEGRATION_LOGOS[intg.slug] || null;
             const logoColor = getLogoColor(intg.name || "");
             const authLabel = intg.authType === "OAUTH2" ? "OAuth" : intg.authType === "BASIC_AUTH" ? "Basic Auth" : "API Key";
@@ -260,9 +276,11 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
                 )}
 
                 <p className="text-xs text-gray-400">
-                  {isConnected && totalTools > 0
-                    ? `${enabledTools}/${totalTools} ${t("marketplace.toolsEnabled")}`
-                    : `${totalTools} ${t("marketplace.toolsAvailable")}`}
+                  {connectorRequired
+                    ? t("marketplace.shopifyAccess.connectorRequired")
+                    : isConnected && totalTools > 0
+                      ? `${enabledTools}/${totalTools} ${t("marketplace.toolsEnabled")}`
+                      : `${totalTools} ${t("marketplace.toolsAvailable")}`}
                 </p>
 
                 <button

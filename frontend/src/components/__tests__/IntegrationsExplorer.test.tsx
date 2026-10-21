@@ -26,6 +26,11 @@ const CATALOG = [
 ];
 
 vi.mock("@/lib/api", () => ({
+  // The explorer asks for the Shopify billing verdict so a card cannot claim
+  // Shopify tools are enabled while the Connector is unpaid. This grid has no
+  // Shopify connection, so a null snapshot is the honest double; omitting the
+  // export entirely makes vitest THROW on access rather than return undefined.
+  getShopifyBillingState: vi.fn(async () => ({ data: null })),
   getMarketplaceIntegrations: vi.fn(() => Promise.resolve({ data: CATALOG })),
 }));
 

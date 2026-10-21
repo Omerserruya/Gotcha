@@ -44,6 +44,10 @@ import {
 import { notifyShopifyUninstalled } from "../services/shopify-billing-bridge.service";
 import { cartEventFromShopifyCheckout, cartCompletionFromShopifyOrder, orderEventFromShopifyOrder } from "../services/shopify-cart-events";
 import { withErrorCode } from "../lib/error-code";
+import {
+  removeTenantToolAssignments,
+  stripLiveConnectionClaims,
+} from "../services/connectors/integration-teardown";
 
 const router = Router();
 
@@ -163,6 +167,8 @@ async function alreadyProcessed(app: "chat" | "core", webhookId: string | null):
 }
 
 // ═══ CHAT APP ════════════════════════════════════════════════
+
+
 
 const chat = Router();
 
@@ -368,10 +374,38 @@ core.post("/app-uninstalled", async (req: Request, res: Response) => {
           // The token is revoked on Shopify's side the moment the app is
           // removed. Keeping the ciphertext would only be a liability.
           credentials: {},
+          // Two things at once, both about not leaving stale claims behind:
+          //
+          // `uninstallRequestedAt` is dropped because this webhook is the
+          // answer to that request, and it is cleared HERE rather than in the
+          // route that made it because only the webhook knows the uninstall
+          // actually happened.
+          //
+          // `useAsCrm` and `capabilityState` are dropped because they are
+          // claims about a live connection. Left in place they told the
+          // Business systems screen that Shopify was still the active source
+          // of truth with writeback on, beside a card already reading
+          // Disconnected. `shopDomain` is KEPT: which store this was is
+          // history worth having, and the screens label it disconnected.
+          config: stripLiveConnectionClaims(match.config),
           lastError: withErrorCode("SHOPIFY_APP_UNINSTALLED"),
         },
       }),
     );
+    // Tool assignments for a store that no longer exists, idempotent so a
+    // duplicate webhook is safe. The in-product Disconnect keeps them on
+    // purpose (they hold the admin's per-tool choices, and only a CONNECTED
+    // integration's tools are offered); a reinstall re-creates any missing.
+    const toolsRemoved = await withCrossTenantAccess(async () =>
+      removeTenantToolAssignments({ tenantId: match.tenantId, tenantIntegrationId: match.id }),
+    );
+    if (toolsRemoved.removed > 0) {
+      console.log(
+        `[shopify-webhook] removed ${toolsRemoved.removed} tenant tool assignment(s) ` +
+          `for tenant=${match.tenantId} after uninstall`,
+      );
+    }
+
     // The extension left with the app, so the storefront chat goes too.
     // Best-effort and ordered second: a chat-side failure must not leave the
     // commerce connection wrongly marked CONNECTED with a revoked token.
