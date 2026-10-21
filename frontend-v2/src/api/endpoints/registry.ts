@@ -780,10 +780,13 @@ export const checkoutEndpoints = {
  *
  *   invite        GET   /api/public/onboarding/invite/{token}  (onboarding.ts:2989)
  *   acceptInvite  POST  /api/public/onboarding/invite/accept   (onboarding.ts:3023)
+ *   resendSetup   POST  /api/auth/setup/resend `{ token }` → always `{ ok: true }`
+ *                       (setup-link.ts:176), so it cannot say whether a token exists
  */
 export const publicLinkEndpoints = {
   invite: (token: string) => endpoint('/api/public/onboarding/invite/{token}', { token }),
   acceptInvite: () => endpoint('/api/public/onboarding/invite/accept'),
+  resendSetup: () => endpoint('/api/auth/setup/resend'),
 } as const;
 
 export const goLiveEndpoints = {
