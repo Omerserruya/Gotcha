@@ -137,3 +137,13 @@ describe('★★ the proxy renews the session before the render', () => {
     expect(refreshSession).not.toHaveBeenCalled();
   });
 });
+
+describe('★★ a link to the old app is redirected BEFORE the session is renewed', () => {
+  it('near expiry on a legacy URL: nothing refreshed, so no rotated token can be dropped', async () => {
+    refreshSession.mockResolvedValue({ ...base, at: 'at-new', rt: 'rt-new', exp: now() + 3600 });
+    const response = await proxy(await request(now() + 10, '/conversations/c1'));
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe('https://dev.gotcha.co.il/inbox?c=c1');
+    expect(refreshSession).not.toHaveBeenCalled();
+  });
+});
