@@ -204,7 +204,16 @@ export function legacyRedirect(url: URL, locale: Locale | null): string | null {
     const target = to(match, new URLSearchParams(url.search));
     if ('url' in target) return target.url;
     const search = target.query?.size ? `?${target.query}` : '';
-    return `${locale ? `/${locale}` : ''}${target.path}${search}`;
+    const href = `${locale ? `/${locale}` : ''}${target.path}${search}`;
+    /*
+     * ★★ With no locale known, a rule that keeps the path (/join, /approvals,
+     * /settings...) would answer the request with itself: a redirect loop
+     * for every visitor without a language cookie. That is not a legacy hop -
+     * it is next-intl's to negotiate. (A query this table re-encodes
+     * converges: the second request reads back the same.)
+     */
+    if (href === `${url.pathname}${url.search}`) return null;
+    return href;
   }
   return null;
 }

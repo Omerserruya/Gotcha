@@ -35,6 +35,17 @@ describe('★★ every page of the old app lands somewhere', () => {
     );
   });
 
+  it.each(pages)('%s: never answers itself, with or without a language (a loop)', (page) => {
+    for (const locale of ['en', 'he', null] as const) {
+      const target = to(page, locale);
+      // Another host (marketing, help) is not this app: it cannot loop here.
+      if (target === null || /^https?:/.test(target)) continue;
+      // Following the redirect must not redirect again to the same place.
+      expect(target, `${page} (${locale}) answers itself`).not.toBe(page);
+      expect(to(target, locale), `${page} (${locale}) → ${target} → loops`).not.toBe(target);
+    }
+  });
+
   it.each(pages)('%s', (page) => {
     const target = to(page);
     expect(target, `${page} has no rule`).not.toBeNull();
