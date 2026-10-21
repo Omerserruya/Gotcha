@@ -321,3 +321,27 @@ export const SETTINGS_NAVIGATION: NavigationItem = {
   href: '/settings',
   labelKey: 'primary.settings',
 };
+
+/**
+ * The platform console, at the rail's foot above Settings - for the platform's
+ * operators (SYSTEM_ADMIN) only, and never by permission: a system admin holds
+ * every permission key (`permission-set.ts`), and permissions that could not
+ * be read gate nothing - either would draw this for a tenant's admin. The rail
+ * asks `isSystemAdminRole` instead (`ConsoleNavigation`).
+ *
+ * Legacy drew it as a whole second app (`SystemLayout.tsx`); here it is one
+ * destination with its sections in a sidebar inside the panel, the way
+ * Settings is drawn.
+ */
+export const CONSOLE_NAVIGATION: NavigationItem = {
+  id: 'console',
+  href: '/system',
+  labelKey: 'console',
+};
+
+/**
+ * The console's sections, in the sidebar and on its home. Only sections whose
+ * pages exist: a link to a room with nothing in it is the promise an empty tab
+ * makes (see ANALYTICS_SECTIONS).
+ */
+export const CONSOLE_SECTIONS: readonly NavigationChild[] = [];

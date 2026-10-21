@@ -4,10 +4,12 @@ import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 
 import { Link, usePathname } from '@/i18n/navigation';
+import { isSystemAdminRole } from '@/permissions/permission-set';
 import { usePermissions } from '@/permissions/permissions-context';
 
 import styles from './AppShell.module.css';
 import {
+  CONSOLE_NAVIGATION,
   isCurrentHrefChild,
   PRIMARY_NAVIGATION,
   SETTINGS_NAVIGATION,
@@ -186,6 +188,35 @@ export function SettingsNavigation() {
     >
       <span className={styles.navDot} aria-hidden="true" />
       <span>{t(SETTINGS_NAVIGATION.labelKey)}</span>
+    </Link>
+  );
+}
+
+/**
+ * The platform console, above Settings - drawn for a SYSTEM_ADMIN and for
+ * nobody else. By role, never by `canSee`: a system admin holds every key,
+ * and an unread permission set gates nothing, so either would show a tenant's
+ * admin a door to a page that answers "not found" (`/system`'s layout).
+ */
+export function ConsoleNavigation() {
+  const t = useTranslations('navigation');
+  const pathname = usePathname();
+  const { roleKey } = usePermissions();
+
+  if (!isSystemAdminRole(roleKey)) return null;
+
+  const isCurrent =
+    pathname === CONSOLE_NAVIGATION.href || pathname.startsWith(`${CONSOLE_NAVIGATION.href}/`);
+
+  return (
+    <Link
+      href={CONSOLE_NAVIGATION.href}
+      className={styles.navLink}
+      aria-current={isCurrent ? 'page' : undefined}
+      data-testid="console-navigation"
+    >
+      <span className={styles.navDot} aria-hidden="true" />
+      <span>{t(CONSOLE_NAVIGATION.labelKey)}</span>
     </Link>
   );
 }
