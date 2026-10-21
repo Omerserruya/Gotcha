@@ -263,3 +263,13 @@
     text-decoration: underline;
   }
 }
+
+@layer features {
+  /* The POC's feature areas: a group, not a boxed form section. */
+  .fieldset {
+    margin: 0;
+    padding: 0;
+    border: none;
+    min-inline-size: 0;
+  }
+}

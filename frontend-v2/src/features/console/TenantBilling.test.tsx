@@ -2,7 +2,11 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { planAccessSchema, type ProvisioningStatus } from '@/api/contracts/console';
+import {
+  planAccessSchema,
+  provisionablePlansSchema,
+  type ProvisioningStatus,
+} from '@/api/contracts/console';
 import consoleEn from '@/i18n/messages/en/console.json';
 
 /** Billing oversight on a tenant's page. The writes are mocked: nothing is sent. */
@@ -149,10 +153,10 @@ describe('★★ confirmed first, reported after, nothing optimistic', () => {
 });
 
 describe('★★ a tenant with no plan to work on', () => {
-  const plans = [
+  const plans = provisionablePlansSchema.parse([
     { id: 'pv1', key: 'growth', name: 'Growth' },
     { id: 'pv2', key: 'scale', name: 'Scale' },
-  ];
+  ]);
 
   it('★ says why, and assigns only once a plan is chosen', async () => {
     actions.assignPaidPlan.mockResolvedValue({ ok: true, emailSent: true });

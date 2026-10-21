@@ -161,16 +161,24 @@ export const tenantDetailSchema = z.object({
 });
 export type TenantDetail = z.infer<typeof tenantDetailSchema>;
 
+/** A plan's volume option: KEY and daily volume - the route prices it (`safeOption`). */
+const volumeOptionSchema = z.object({ key: z.string(), dailyVolume: z.number() });
+
 /**
- * Plans a paid plan can be assigned from - ACTIVE, PUBLIC, not sales-only
- * (billing `admin-pricing.ts:1085`) → `{ data }`. Only what the picker needs:
- * the route prices the choice itself and accepts the id alone.
+ * Plans a paid plan can be given from - ACTIVE, PUBLIC, not sales-only
+ * (billing `admin-pricing.ts:1085`) → `{ data }`. The picker's needs only:
+ * the plan and its volume options by KEY. The route prices a choice itself
+ * and takes keys alone.
  */
 export const provisionablePlansSchema = z.array(
   z.object({
     id: z.string(),
     key: z.string(),
     name: z.string(),
+    chatVolumeEnabled: z.boolean().catch(false).default(false),
+    voiceVolumeEnabled: z.boolean().catch(false).default(false),
+    chatOptions: z.array(volumeOptionSchema).catch([]).default([]),
+    voiceOptions: z.array(volumeOptionSchema).catch([]).default([]),
   }),
 );
 export type ProvisionablePlan = z.infer<typeof provisionablePlansSchema>[number];
@@ -232,3 +240,35 @@ export const COUPON_REFUSALS = [
   'already_assigned',
 ] as const;
 export type CouponRefusalCode = (typeof COUPON_REFUSALS)[number];
+
+/**
+ * The quote for a selection - `POST /api/admin/pricing/provisioning/quote`
+ * (billing admin-pricing.ts:1125) → `{ data }`. Every figure is the server's:
+ * the screen computes no total, and what the operator approves is what
+ * provisioning freezes. `chargeableToday` false: the plan's currency has no
+ * verified charge contract yet - the tenant can be created, not charged.
+ */
+export const provisioningQuoteSchema = z.object({
+  planName: z.string(),
+  basePrice: z.string(),
+  totalAmount: z.string(),
+  currency: z.string(),
+  includedCredits: z.number(),
+  estimatedChatsMonthly: z.number().catch(0).default(0),
+  estimatedCallsMonthly: z.number().catch(0).default(0),
+  billingInterval: z.string(),
+  chargeableToday: z.boolean().catch(false).default(false),
+});
+export type ProvisioningQuote = z.infer<typeof provisioningQuoteSchema>;
+
+/** `GET /api/system/poc-feature-domains` (system.ts:1028) → `{ data: string[] }`. */
+export const pocDomainsSchema = z.array(z.string());
+
+/**
+ * `POST /api/system/tenants` (system.ts:348) → 201 `{ data: { tenant,
+ * admin, billing } }`. A 502 carries the same `data` with the tenant that WAS
+ * created and its billing that was not - "repair, never create again".
+ */
+export const createdTenantSchema = z.object({
+  tenant: z.object({ id: z.string(), name: z.string() }),
+});

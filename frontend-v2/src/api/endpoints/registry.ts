@@ -2031,6 +2031,10 @@ export const consoleEndpoints = {
    * served by billing through the gateway's `/api/admin/pricing`.
    */
   plans: () => endpoint('/api/admin/pricing/provisioning/plans'),
+  /** POST `{ planVersionId, chatVolumeOptionKey, voiceVolumeOptionKey }` → `{ data: quote }` (admin-pricing.ts:1125). */
+  quote: () => endpoint('/api/admin/pricing/provisioning/quote'),
+  /** GET `{ data: string[] }` - the license domains a POC is scoped to (system.ts:1028). */
+  pocDomains: () => endpoint('/api/system/poc-feature-domains'),
 } as const;
 
 /**

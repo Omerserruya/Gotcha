@@ -13,7 +13,13 @@ vi.mock('@/shell/require-console', () => ({
     if (!door.open) throw new Error('NEXT_NOT_FOUND');
   },
 }));
-vi.mock('@/features/console/load-tenants', () => ({ loadTenants }));
+vi.mock('@/features/console/load-tenants', () => ({
+  loadTenants,
+  loadCreateOptions: async () => ({ plans: [], domains: [] }),
+}));
+vi.mock('@/features/console/CreateTenant', () => ({
+  CreateTenant: () => <div data-testid="create-tenant" />,
+}));
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children }: { href: string; children: ReactNode }) => (
     <a href={href}>{children}</a>
@@ -58,6 +64,11 @@ describe('★★ /system/tenants', () => {
     await open('  acme ');
     expect(loadTenants).toHaveBeenCalledWith('acme');
     expect(screen.getByRole('searchbox', { name: 'Search tenants' })).toHaveValue('acme');
+  });
+
+  it('★ the create form is on the page', async () => {
+    await open();
+    expect(screen.getByTestId('create-tenant')).toBeInTheDocument();
   });
 
   it('no search: all of them', async () => {

@@ -139,7 +139,9 @@ describe('★★ loadTenant', () => {
         data: [{ id: 'pv1', key: 'growth', version: 2, name: 'Growth', basePrice: '499' }],
       },
     });
-    expect((await loadTenant('t1')).plans).toEqual([{ id: 'pv1', key: 'growth', name: 'Growth' }]);
+    expect((await loadTenant('t1')).plans).toEqual([
+      expect.objectContaining({ id: 'pv1', key: 'growth', name: 'Growth' }),
+    ]);
   });
 
   it('★★ a missing tenant and an unread one are two answers', async () => {

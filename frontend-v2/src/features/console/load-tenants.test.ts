@@ -11,7 +11,7 @@ const api = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => api }));
 vi.mock('@/observability/logger', () => ({ logger: { warn: vi.fn() } }));
 
-import { loadTenants, TENANT_PAGE_SIZE } from './load-tenants';
+import { loadCreateOptions, loadTenants, TENANT_PAGE_SIZE } from './load-tenants';
 
 const row = (id: string, status: string) => ({
   id,
@@ -126,5 +126,55 @@ describe('★★ loadTenants', () => {
       planAccess: null,
       _count: { users: null, conversations: null, channelAccounts: null },
     });
+  });
+});
+
+describe('★ loadCreateOptions', () => {
+  it('the plans with their volume options by key, and the POC areas', async () => {
+    serve({
+      '/api/admin/pricing/provisioning/plans': {
+        data: [
+          {
+            id: 'pv1',
+            key: 'growth',
+            version: 2,
+            name: 'Growth',
+            basePrice: '499',
+            currency: 'ILS',
+            includedCredits: 10000,
+            billingInterval: 'MONTHLY',
+            chatVolumeEnabled: true,
+            voiceVolumeEnabled: false,
+            chatOptions: [
+              { key: 'chat_50', dailyVolume: 50, additionalCredits: 0, additionalPrice: '100' },
+            ],
+            voiceOptions: [],
+          },
+        ],
+      },
+      '/api/system/poc-feature-domains': { data: ['ai', 'conversation'] },
+    });
+    expect(await loadCreateOptions()).toEqual({
+      plans: [
+        {
+          id: 'pv1',
+          key: 'growth',
+          name: 'Growth',
+          chatVolumeEnabled: true,
+          voiceVolumeEnabled: false,
+          chatOptions: [{ key: 'chat_50', dailyVolume: 50 }],
+          voiceOptions: [],
+        },
+      ],
+      domains: ['ai', 'conversation'],
+    });
+  });
+
+  it('★ a failed read is undefined - the form says so, never an empty picker', async () => {
+    serve({
+      '/api/admin/pricing/provisioning/plans': new ApiError({ kind: 'server', status: 500 }),
+      '/api/system/poc-feature-domains': new ApiError({ kind: 'server', status: 500 }),
+    });
+    expect(await loadCreateOptions()).toEqual({ plans: undefined, domains: undefined });
   });
 });

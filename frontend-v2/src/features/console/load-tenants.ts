@@ -2,8 +2,11 @@ import 'server-only';
 
 import { serverApi } from '@/api/client/server-api';
 import {
+  pocDomainsSchema,
+  provisionablePlansSchema,
   provisioningStatusSchema,
   tenantListSchema,
+  type ProvisionablePlan,
   type ProvisioningStatus,
   type TenantRow,
 } from '@/api/contracts/console';
@@ -72,4 +75,30 @@ export async function loadTenants(search: string): Promise<TenantList> {
     total: list.meta?.total ?? list.data.length,
     provisioning: Object.fromEntries(reads.filter((read) => read !== null)),
   };
+}
+
+/**
+ * What the create form offers: the plans a paid tenant can start on, and the
+ * feature areas a POC is scoped to - both served, never hardcoded (a domain
+ * missing from the picker is one an operator can neither grant nor deny).
+ * `undefined` when a read failed; the form says so.
+ */
+export async function loadCreateOptions(): Promise<{
+  readonly plans: readonly ProvisionablePlan[] | undefined;
+  readonly domains: readonly string[] | undefined;
+}> {
+  const api = serverApi();
+  const unread = (event: string) => (cause: unknown) => {
+    logger.warn(event, { cause });
+    return undefined;
+  };
+  const [plans, domains] = await Promise.all([
+    api
+      .get({ endpoint: consoleEndpoints.plans(), payload: provisionablePlansSchema })
+      .catch(unread('console.plans_failed')),
+    api
+      .get({ endpoint: consoleEndpoints.pocDomains(), payload: pocDomainsSchema })
+      .catch(unread('console.poc_domains_failed')),
+  ]);
+  return { plans, domains };
 }
