@@ -76,6 +76,23 @@ describe('★★ /join - every state the legacy page had', () => {
     );
   });
 
+  it('★★ only a live invitation says the team saved a seat (dev: beside a dead link it read as live)', async () => {
+    for (const state of ['invalid', 'missing', 'unreachable'] as const) {
+      loadInvitation.mockResolvedValue({ state });
+      const { container, unmount } = await show('tok-1');
+      expect(container).not.toHaveTextContent('Your team saved you a seat.');
+      expect(container).toHaveTextContent('Each invitation works once.');
+      unmount();
+    }
+    loadInvitation.mockResolvedValue({
+      state: 'valid',
+      invitation: { tenant: { name: 'Aviv' }, email: null },
+    });
+    const { container } = await show('tok-1');
+    expect(container).toHaveTextContent('Your team saved you a seat.');
+    expect(container).not.toHaveTextContent('Each invitation works once.');
+  });
+
   it('★ unreachable: not "dead" - and the same link again, to retry', async () => {
     loadInvitation.mockResolvedValue({ state: 'unreachable' });
     await show('a b&c');
