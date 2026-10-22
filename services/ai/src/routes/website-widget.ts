@@ -136,7 +136,7 @@ router.put("/assignment", requireRole("ADMIN"), async (req: Request & { tenantId
         WIDGET_NOT_CREATED: "Create the widget first",
         EMPLOYEE_NOT_FOUND: "Choose an active employee of this workspace",
         NO_WIDGET_CHANNEL: "None of these channels is one of the widget's",
-        PLAYBOOK_CONDITIONAL: "Conditions in the playbook decide who answers this channel: change it in the playbook",
+        PLAYBOOK_CONDITIONAL: "Conditions in this channel's automation decide who answers it: change it in Automations",
         PLAYBOOK_SHARED: "This also changes who answers other channels",
       };
       res.status(err.status).json({ error: words[err.code] ?? err.code, code: err.code, ...err.extra });

@@ -176,6 +176,18 @@ http {
         ''      close;
     }
 
+    # ★ A password-reset link lands on the APP's own recover screen (2026-10-22).
+    # Authentik's email builds <host>/if/flow/gotcha-recovery-self/?flow_token=...
+    # and our invite/setup links (Authentik's users/{pk}/recovery API, the brand's
+    # gotcha-recovery flow) build /if/flow/gotcha-recovery/?flow_token=...
+    # and has no setting to point it elsewhere. With a token, that path goes to
+    # the app's /recover screen (it drives the flow through /auth-api/); without
+    # one (admin, preview) it stays Authentik's. The token passes untouched.
+    map "$uri|$arg_flow_token" $recover_go {
+        default "";
+        "~^/if/flow/(?<rflow>gotcha-recovery-self|gotcha-recovery)/\|(?<rtok>[^|]+)$" "/recover?flow=$rflow&flow_token=$rtok";
+    }
+
     # The client's real address (2026-10-22). The only way in is a host
     # cloudflared, so every request reached nginx from the docker bridge
     # (dev: 172.19.0.1 for everyone) and each limit below - plus Express's
@@ -241,6 +253,11 @@ http {
     server {
         listen 80 default_server;
         server_name app.gotcha.co.il _;
+
+        # Password-reset links -> the app's recover screen (see $recover_go).
+        if ($recover_go != "") {
+            return 302 https://app.gotcha.co.il$recover_go;
+        }
 
         # Authentik's own UI paths on the APP host go to the IdP (2026-10-22).
         # Links Authentik built before the X-Forwarded-Host fix (reset emails
@@ -2602,6 +2619,11 @@ http {
     server {
         listen 80;
         server_name auth.gotcha.co.il;
+
+        # Password-reset links -> the app's recover screen (see $recover_go).
+        if ($recover_go != "") {
+            return 302 https://app.gotcha.co.il$recover_go;
+        }
 
         # Authentik serves its own static assets and accepts branding/icon
         # uploads through the admin UI.

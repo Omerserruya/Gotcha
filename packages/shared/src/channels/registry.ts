@@ -8,6 +8,7 @@ import { outlookInboundAdapter, outlookOutboundAdapter } from "./outlook.adapter
 import { slackInboundAdapter, slackOutboundAdapter } from "./slack.adapter";
 import { webchatOutboundAdapter } from "./webchat.adapter";
 import { shopifyLiveChatOutboundAdapter } from "./shopify-live-chat.adapter";
+import { withEmailTemplate } from "./email-template-apply";
 
 // ─── Channel Registry ────────────────────────────────────────
 
@@ -25,9 +26,10 @@ const outboundAdapters: Map<ChannelType, OutboundAdapter> = new Map([
   ["WHATSAPP", whatsAppOutboundAdapter],
   ["MESSENGER", messengerOutboundAdapter],
   ["INSTAGRAM", instagramOutboundAdapter],
-  ["EMAIL", emailOutboundAdapter],
-  ["GMAIL", gmailOutboundAdapter],
-  ["OUTLOOK", outlookOutboundAdapter],
+  // The channel's HTML email template is applied here, once, for every producer.
+  ["EMAIL", withEmailTemplate("EMAIL", emailOutboundAdapter)],
+  ["GMAIL", withEmailTemplate("GMAIL", gmailOutboundAdapter)],
+  ["OUTLOOK", withEmailTemplate("OUTLOOK", outlookOutboundAdapter)],
   ["SLACK", slackOutboundAdapter],
   ["WEBCHAT", webchatOutboundAdapter],
   ["SHOPIFY_LIVE_CHAT", shopifyLiveChatOutboundAdapter],

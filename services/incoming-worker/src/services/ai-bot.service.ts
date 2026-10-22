@@ -33,6 +33,7 @@ import {
   parseBusinessHours,
   evaluateBusinessHours,
   describeNextOpening,
+  resolveEmailThread,
 } from "@chatcenter/shared";
 import type { ChannelCredentials, ProviderSendError, BusinessHoursConfig, BusinessOpenState } from "@chatcenter/shared";
 
@@ -318,6 +319,8 @@ export async function processAIBot(
           sendContext.channelAccountExternalId,
           sendContext.recipientId,
           ack,
+          undefined,
+          await emailThreadFor(tenantId, conversationId, sendContext.channel),
         );
         const bridgeMsg = await prisma.message.create({
           data: {
@@ -382,6 +385,8 @@ export async function processAIBot(
           sendContext.channelAccountExternalId,
           sendContext.recipientId,
           interim,
+          undefined,
+          await emailThreadFor(tenantId, conversationId, sendContext.channel),
         );
         const interimMsg = await prisma.message.create({
           data: {
@@ -428,6 +433,8 @@ export async function processAIBot(
       sendContext.channelAccountExternalId,
       sendContext.recipientId,
       result.reply,
+      undefined,
+      await emailThreadFor(tenantId, conversationId, sendContext.channel),
     );
   } catch (err: any) {
     const described = describeSendError(err, sendContext.channel);
@@ -574,6 +581,32 @@ async function trackMessageUsage(tenantId: string, conversationId: string, messa
   } catch (err: any) {
     console.error("[AI-Bot] Message usage tracking failed:", err.message);
   }
+}
+
+const EMAIL_REPLY_CHANNELS = new Set(["EMAIL", "GMAIL", "OUTLOOK"]);
+const EMAIL_THREAD_LOOKBACK = 50;
+
+/**
+ * The email thread an AI reply continues (2026-10-22).
+ *
+ * The bot sends through the adapter directly, not through the outgoing worker,
+ * and until now passed no thread at all: an AI answer to a customer's email
+ * went out as a NEW email with the default subject, beside the customer's
+ * thread instead of in it. Resolved exactly as the outgoing worker does, from
+ * the conversation's recent messages. Not an email channel: undefined, the
+ * same call as before.
+ */
+export async function emailThreadFor(tenantId: string, conversationId: string, channel: string) {
+  if (!EMAIL_REPLY_CHANNELS.has(String(channel))) return undefined;
+  const history = await prisma.message
+    .findMany({
+      where: { tenantId, conversationId },
+      select: { direction: true, metadata: true },
+      orderBy: { createdAt: "desc" },
+      take: EMAIL_THREAD_LOOKBACK,
+    })
+    .catch(() => []);
+  return resolveEmailThread(history as any) || undefined;
 }
 
 function buildSendContext(conversation: any): SendContext | null {
@@ -840,6 +873,8 @@ async function sendClosedHoursAutoReply(
       sendContext.channelAccountExternalId,
       sendContext.recipientId,
       body,
+      undefined,
+      await emailThreadFor(tenantId, conversationId, sendContext.channel),
     );
   } catch (err: any) {
     sendErrorMessage = describeSendError(err, sendContext.channel).errorMessage;
@@ -921,6 +956,8 @@ async function escalateToHuman(
       sendContext.channelAccountExternalId,
       sendContext.recipientId,
       escalationMessage,
+      undefined,
+      await emailThreadFor(tenantId, conversationId, sendContext.channel),
     );
   } catch (err: any) {
     const described = describeSendError(err, sendContext.channel);

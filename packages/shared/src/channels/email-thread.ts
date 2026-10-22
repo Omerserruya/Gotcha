@@ -53,6 +53,18 @@ export interface EmailThreadContext {
    * Graph send takes no such header and sends without it.
    */
   extraHeaders?: Array<{ name: string; value: string }>;
+  /**
+   * The HTML part, sent NEXT TO the plain text (multipart/alternative). Set
+   * only by the channel's email template (email-template-apply.ts); its
+   * presence also marks the template as already applied.
+   */
+  htmlBody?: string;
+  /** Who is answering, for the template's {{agent_name}}. */
+  senderName?: string;
+  /** The customer's name, for {{customer_name}}, when the producer knows it. */
+  customerName?: string;
+  /** A template to render even while the stored one is off (the test send). */
+  templateOverride?: string;
 }
 
 /**

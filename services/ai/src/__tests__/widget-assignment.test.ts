@@ -1,22 +1,27 @@
 /**
- * ★ Who answers the website widget, written to THE PLAYBOOK (one source;
- * docs/api/website-widget-v1.md §4). Through the real routes.
- *   - read: per widget channel, the employee its path reaches, how
- *     (always / conditional / team / flow / none), and the other channels
- *     that reach the same route
- *   - ★ a route shared with other channels is never changed silently
- *     (409 PLAYBOOK_SHARED; includeShared changes it for all of them)
- *   - ★ a playbook with channel entries gets a dedicated web chat entry
- *     APPENDED: WhatsApp keeps its employee (the playbook's rule is "own
- *     entry, else the FIRST entry, else start")
- *   - a conditional channel is refused with nothing written
- *   - role ADMIN (like the playbook editor); an active employee only
+ * ★ Who answers the website widget (2026-10-22: AUTOMATIONS decide). Through
+ * the real routes.
+ *   - read: a workspace with "New conversation" automations is answered by
+ *     them (the channel's own first, else one for every channel); one with
+ *     none yet still reads the playbook canvas (not migrated)
+ *   - ★ a write creates or updates the widget channel's OWN automation
+ *     (trigger -> hand to AI), never another channel's, never the canvas
+ *   - ★ the channel's own automation with conditions is refused, nothing written
+ *   - an active employee only; a widget must exist; every write audited
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
-const H = vi.hoisted(() => ({ canvas: null as any, accounts: [] as any[], agents: [] as any[], audits: [] as any[], writes: 0, role: "ADMIN" }));
+const H = vi.hoisted(() => ({
+  canvas: null as any, accounts: [] as any[], agents: [] as any[], audits: [] as any[],
+  canvasWrites: 0, flows: [] as any[], flowWrites: 0, role: "ADMIN",
+}));
+
+const order = (rows: any[], orderBy: any) => {
+  const key = orderBy && Object.keys(orderBy)[0];
+  return key ? [...rows].sort((a, b) => +new Date(a[key] ?? 0) - +new Date(b[key] ?? 0)) : rows;
+};
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -30,8 +35,21 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     prisma: {
       flowCanvas: {
         findUnique: async () => H.canvas,
-        update: async (a: any) => { H.writes++; Object.assign(H.canvas, a.data); return H.canvas; },
-        upsert: async (a: any) => { H.writes++; H.canvas = { id: "fc", ...a.create }; return H.canvas; },
+        update: async () => { H.canvasWrites++; },
+        upsert: async () => { H.canvasWrites++; },
+      },
+      chatbotFlow: {
+        findMany: async (a: any) => order(H.flows.filter((f) =>
+          f.tenantId === a.where.tenantId
+          && (a.where.isActive === undefined || f.isActive === a.where.isActive)
+          && (a.where.triggerType === undefined || f.triggerType === a.where.triggerType)), a.orderBy),
+        create: async (a: any) => { H.flowWrites++; const f = { id: `f${H.flows.length + 1}`, createdAt: new Date(), ...a.data }; H.flows.push(f); return f; },
+        updateMany: async (a: any) => {
+          H.flowWrites++;
+          const f = H.flows.find((x) => x.id === a.where.id && x.tenantId === a.where.tenantId);
+          if (f) Object.assign(f, a.data);
+          return { count: f ? 1 : 0 };
+        },
       },
       channelAccount: {
         findMany: async (a: any) => H.accounts.filter((x) => (a.where.isActive ? x.isActive : true) && (a.where.channel?.in ? a.where.channel.in.includes(x.channel) : true)),
@@ -42,129 +60,118 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
 });
 
 import router from "../routes/website-widget";
-import { pathFor } from "../services/widget-assignment.service";
-import { entryFor } from "../services/employee-reach.service";
 
 const app = express();
 app.use(express.json());
 app.use("/api/website-widget", router);
 
 const route = (id: string, targetId: string | null, routeType = "agent") => ({ id, type: "route_target", data: { routeType, targetId }, position: { x: 750, y: 100 } });
-const entry = (id: string, channelType: string) => ({ id, type: "channel_entry", data: { channelType }, position: { x: 400, y: 100 } });
 const edge = (s: string, t: string) => ({ id: `e-${s}-${t}`, source: s, target: t });
 const get = () => request(app).get("/api/website-widget/assignment");
 const put = (body: any) => request(app).put("/api/website-widget/assignment").send(body);
+const webchat = (body: any) => body.channels.find((c: any) => c.channel === "WEBCHAT");
+
+/** A routing automation: trigger -> hand to AI (or anything given). */
+const routing = (id: string, channels: string[], aiAgentId: string, extra: Partial<any> = {}) => ({
+  id, tenantId: "T", triggerType: "conversation_started", triggerConfig: channels.length ? { channels } : {},
+  isActive: true, activatedAt: new Date(2026, 0, 1), createdAt: new Date(2026, 0, 1),
+  nodes: [{ id: "trigger", type: "automation_trigger", data: {} }, { id: "h", type: "hand_to_ai", data: { aiAgentId } }],
+  edges: [edge("trigger", "h")],
+  ...extra,
+});
 
 beforeEach(() => {
-  H.role = "ADMIN"; H.audits = []; H.writes = 0;
+  H.role = "ADMIN"; H.audits = []; H.canvasWrites = 0; H.flowWrites = 0; H.flows = [];
   H.accounts = [
     { id: "wc1", channel: "WEBCHAT", isActive: true, createdAt: 1 },
     { id: "wa1", channel: "WHATSAPP", isActive: true, createdAt: 1 },
   ];
   H.agents = [{ id: "maya", name: "Maya", status: "ACTIVE" }, { id: "noa", name: "Noa", status: "ACTIVE" }, { id: "draft", name: "Draft", status: "DRAFT" }];
-  // dev's shape: one start for every channel → Maya
+  // Not migrated yet: one start for every channel -> Maya.
   H.canvas = { id: "fc", nodes: [{ id: "s", type: "start", data: {} }, route("r", "maya")], edges: [edge("s", "r")] };
 });
 
-describe("★ read", () => {
-  it("who answers, how, and which other channels share the route", async () => {
+describe("read", () => {
+  it("no routing automation yet: the playbook canvas still answers (not migrated)", async () => {
     const r = await get();
     expect(r.status).toBe(200);
-    expect(r.body.data.channels).toEqual([{ channel: "WEBCHAT", employee: { id: "maya", name: "Maya" }, how: "always", editable: true, dedicated: false, sharedWith: ["WHATSAPP"], movesWith: ["WHATSAPP"] }]);
-    expect(r.body.data.employees).toEqual([{ id: "maya", name: "Maya", active: true }, { id: "noa", name: "Noa", active: true }, { id: "draft", name: "Draft", active: false }]);
+    expect(webchat(r.body.data ?? r.body)).toMatchObject({ employee: { id: "maya", name: "Maya" }, how: "always" });
   });
 
-  it("role ADMIN, like the playbook editor", async () => {
-    H.role = "AGENT";
-    expect((await get()).status).toBe(403);
-    expect((await put({ employeeId: "noa" })).status).toBe(403);
-  });
-});
-
-describe("★ a shared route is never changed silently", () => {
-  it("409 PLAYBOOK_SHARED with the channels it would change, nothing written", async () => {
-    const r = await put({ employeeId: "noa" });
-    expect(r.status).toBe(409);
-    expect(r.body).toMatchObject({ code: "PLAYBOOK_SHARED", channels: ["WEBCHAT"], sharedWith: ["WHATSAPP"] });
-    expect(H.writes).toBe(0);
+  it("★ with automations: the channel's own automation decides, and the canvas is ignored", async () => {
+    H.flows = [routing("all", [], "maya"), routing("wc", ["WEBCHAT"], "noa", { activatedAt: new Date(2026, 5, 1) })];
+    const c = webchat((await get()).body.data ?? (await get()).body);
+    expect(c).toMatchObject({ employee: { id: "noa" }, how: "always", dedicated: true, sharedWith: [], editable: true });
   });
 
-  it("includeShared: the route changes, for WhatsApp too, and says so", async () => {
-    const r = await put({ employeeId: "noa", includeShared: true });
-    expect(r.status).toBe(200);
-    expect(H.canvas.nodes.find((n: any) => n.id === "r").data).toEqual({ routeType: "agent", targetId: "noa" });
-    expect(r.body.data.changed).toEqual([
-      { channel: "WEBCHAT", from: { id: "maya", name: "Maya" }, created: false },
-      { channel: "WHATSAPP", from: { id: "maya", name: "Maya" }, created: false },
-    ]);
-    expect(H.audits[0]).toEqual(["T", "u1", "playbook.route_updated", { type: "flow_canvas", id: "fc" }, expect.objectContaining({ employeeId: "noa", channels: ["WEBCHAT", "WHATSAPP"] })]);
-    expect(H.canvas.updatedBy).toBe("u1");
+  it("a channel answered by an every-channel automation says which others share it", async () => {
+    H.flows = [routing("all", [], "maya")];
+    const c = webchat((await get()).body.data ?? (await get()).body);
+    expect(c).toMatchObject({ employee: { id: "maya" }, dedicated: false, sharedWith: ["WHATSAPP"], editable: true });
   });
 });
 
-describe("★ a playbook with channel entries", () => {
-  beforeEach(() => {
-    H.canvas = { id: "fc", nodes: [entry("ew", "whatsapp"), route("rw", "maya")], edges: [edge("ew", "rw")] };
-  });
-
-  it("web chat (falling back to WhatsApp's entry) gets its own entry, APPENDED; WhatsApp keeps Maya", async () => {
-    // The read says so before any write: shared, but nothing else would move.
-    expect((await get()).body.data.channels[0]).toMatchObject({ sharedWith: ["WHATSAPP"], movesWith: [] });
+describe("★ a write is the widget channel's OWN automation", () => {
+  it("creates one (trigger -> hand to AI, active), leaves the canvas and WhatsApp alone", async () => {
     const r = await put({ employeeId: "noa" });
     expect(r.status).toBe(200);
-    expect(r.body.data.changed).toEqual([{ channel: "WEBCHAT", from: { id: "maya", name: "Maya" }, created: true }]);
-    const { nodes, edges } = H.canvas;
-    // The playbook's fallback (the FIRST entry) is still WhatsApp's.
-    expect(nodes.find((n: any) => n.type === "channel_entry").id).toBe("ew");
-    expect(entryFor(nodes, "WEBCHAT")).toMatchObject({ type: "channel_entry", data: { channelType: "webchat", channelId: "wc1" } });
-    expect(pathFor(nodes, edges, "WEBCHAT")).toMatchObject({ how: "always", employeeId: "noa", dedicated: true });
-    expect(pathFor(nodes, edges, "WHATSAPP")).toMatchObject({ how: "always", employeeId: "maya" });
+    expect(H.canvasWrites).toBe(0);
+    expect(H.flows).toHaveLength(1);
+    const f = H.flows[0];
+    expect(f).toMatchObject({ triggerType: "conversation_started", triggerConfig: { channels: ["WEBCHAT"] }, isActive: true, activatedBy: "u1" });
+    expect(f.nodes.map((n: any) => n.type)).toEqual(["automation_trigger", "hand_to_ai"]);
+    expect(f.nodes[1].data.aiAgentId).toBe("noa");
+    expect(webchat(r.body.data ?? r.body)).toMatchObject({ employee: { id: "noa" }, dedicated: true });
+    expect((r.body.data ?? r.body).changed).toEqual([{ channel: "WEBCHAT", from: { id: "maya", name: "Maya" }, created: true }]);
   });
 
-  it("a dedicated web chat entry: only its route changes; a team route becomes an employee route", async () => {
-    H.canvas.nodes.push(entry("ec", "webchat"), route("rc", null, "human"));
-    H.canvas.edges.push(edge("ec", "rc"));
-    expect((await get()).body.data.channels[0]).toMatchObject({ how: "team", employee: null, dedicated: true, sharedWith: [], movesWith: [] });
-    const r = await put({ employeeId: "noa" });
-    expect(r.status).toBe(200);
-    expect(H.canvas.nodes.find((n: any) => n.id === "rc").data).toEqual({ routeType: "agent", targetId: "noa" });
-    expect(H.canvas.nodes.find((n: any) => n.id === "rw").data.targetId).toBe("maya");
+  it("a second write changes that automation's employee: no duplicate", async () => {
+    await put({ employeeId: "noa" });
+    await put({ employeeId: "maya" });
+    expect(H.flows).toHaveLength(1);
+    expect(H.flows[0].nodes[1].data.aiAgentId).toBe("maya");
   });
 
-  it("★ conditions decide it: 409 PLAYBOOK_CONDITIONAL, nothing written", async () => {
-    H.canvas.nodes.push(entry("ec", "webchat"), { id: "hours", type: "opening_hours", data: {} }, route("r1", "maya"), route("r2", "noa"));
-    H.canvas.edges.push(edge("ec", "hours"), edge("hours", "r1"), edge("hours", "r2"));
-    expect((await get()).body.data.channels[0]).toMatchObject({ how: "conditional", editable: false, employee: null });
+  it("a paused own automation is switched back on", async () => {
+    H.flows = [routing("wc", ["WEBCHAT"], "maya", { isActive: false, activatedAt: null })];
+    await put({ employeeId: "noa" });
+    expect(H.flows[0]).toMatchObject({ isActive: true, activatedBy: "u1" });
+    expect(H.flows[0].nodes[1].data.aiAgentId).toBe("noa");
+  });
+
+  it("an every-channel automation is never edited: the widget gets its own beside it", async () => {
+    H.flows = [routing("all", [], "maya")];
+    await put({ employeeId: "noa" });
+    expect(H.flows.find((f) => f.id === "all")!.nodes[1].data.aiAgentId).toBe("maya");
+    expect(H.flows).toHaveLength(2);
+  });
+
+  it("★ the channel's own automation with conditions: 409 PLAYBOOK_CONDITIONAL, nothing written", async () => {
+    H.flows = [routing("wc", ["WEBCHAT"], "maya", {
+      nodes: [{ id: "trigger", type: "automation_trigger", data: {} }, { id: "oh", type: "opening_hours", data: {} }, { id: "h", type: "hand_to_ai", data: { aiAgentId: "maya" } }],
+      edges: [edge("trigger", "oh"), edge("oh", "h")],
+    })];
     const r = await put({ employeeId: "noa" });
     expect(r.status).toBe(409);
     expect(r.body).toMatchObject({ code: "PLAYBOOK_CONDITIONAL", channels: ["WEBCHAT"] });
-    expect(H.writes).toBe(0);
+    expect(H.flowWrites).toBe(0);
   });
 
-  it("an entry follows its first edge (as the walker does): not a condition", async () => {
-    H.canvas.nodes.push(entry("ec", "webchat"), route("r1", "maya"), route("r2", "noa"));
-    H.canvas.edges.push(edge("ec", "r1"), edge("ec", "r2"));
-    expect((await get()).body.data.channels[0]).toMatchObject({ how: "always", employee: { id: "maya", name: "Maya" } });
+  it("every write is audited", async () => {
+    await put({ employeeId: "noa" });
+    expect(H.audits.at(-1)?.[2]).toBe("automation.route_updated");
   });
 });
 
 describe("refused", () => {
   it("an employee that is not active, or not this workspace's", async () => {
-    expect((await put({ employeeId: "draft", includeShared: true })).body.code).toBe("EMPLOYEE_NOT_FOUND");
-    expect((await put({ employeeId: "other-ws", includeShared: true })).status).toBe(422);
-    expect(H.writes).toBe(0);
+    expect((await put({ employeeId: "draft" })).status).toBe(422);
+    expect((await put({ employeeId: "elsewhere" })).status).toBe(422);
+    expect(H.flowWrites).toBe(0);
   });
 
   it("no widget yet", async () => {
-    H.accounts = [{ id: "wa1", channel: "WHATSAPP", isActive: true, createdAt: 1 }];
-    expect((await put({ employeeId: "noa" })).body.code).toBe("WIDGET_NOT_CREATED");
-  });
-
-  it("no playbook yet: the one created answers every channel, so it is shared", async () => {
-    H.canvas = null;
-    expect((await put({ employeeId: "noa" })).body).toMatchObject({ code: "PLAYBOOK_SHARED", sharedWith: ["WHATSAPP"] });
-    const r = await put({ employeeId: "noa", includeShared: true });
-    expect(r.status).toBe(200);
-    expect(pathFor(H.canvas.nodes, H.canvas.edges, "WEBCHAT")).toMatchObject({ how: "always", employeeId: "noa" });
+    H.accounts = H.accounts.filter((a) => a.channel !== "WEBCHAT");
+    expect((await put({ employeeId: "noa" })).status).toBe(409);
   });
 });

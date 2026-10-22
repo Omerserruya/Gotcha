@@ -16,7 +16,7 @@
  *                           (handledBy "flow") and gives it back to whoever
  *                           had it when the run ends.
  */
-import { prisma, publishEvent } from "@chatcenter/shared";
+import { prisma, publishEvent, withCrossTenantAccess } from "@chatcenter/shared";
 import {
   executeSubFlow,
   executeWebhookFlow,
@@ -27,7 +27,7 @@ import {
 
 export const LOOP_GUARD_PER_MIN = 5;
 
-export type AutomationTrigger = "message_received" | "new_customer" | "message_from_ad" | "button_tapped" | "tag_added" | "cart_abandoned" | "order_event" | "comment_received" | "story_mention" | "schedule" | "webhook" | "call_missed" | "call_answered";
+export type AutomationTrigger = "message_received" | "conversation_started" | "new_customer" | "message_from_ad" | "button_tapped" | "tag_added" | "cart_abandoned" | "order_event" | "comment_received" | "story_mention" | "schedule" | "webhook" | "call_missed" | "call_answered";
 
 export interface TriggerEvent {
   type: AutomationTrigger;
@@ -203,6 +203,18 @@ function isUniqueViolation(err: any): boolean {
  * Fire every live automation of these trigger types that accepts the event,
  * in the order they went live, until one answers. Returns whether one did.
  */
+/**
+ * A channel's own "New conversation" automation beats one for every channel,
+ * whatever their activation order (2026-10-22) - the playbook's rule, where a
+ * channel's own entry beat the fallback entry. Stable: everything else keeps
+ * activation order.
+ */
+export function routingFallbackLast<T extends { triggerType?: string | null; triggerConfig?: any }>(flows: T[]): T[] {
+  const isFallback = (f: T) => f.triggerType === "conversation_started"
+    && !(Array.isArray(f.triggerConfig?.channels) && f.triggerConfig.channels.length > 0);
+  return [...flows.filter((f) => !isFallback(f)), ...flows.filter(isFallback)];
+}
+
 export async function runAutomationsForEvent(ev: {
   tenantId: string;
   types: AutomationTrigger[];
@@ -227,7 +239,9 @@ export async function runAutomationsForEvent(ev: {
     orderBy: { activatedAt: "asc" },
     select: { id: true, triggerType: true, triggerConfig: true },
   });
-  const matching = flows.filter((f: any) => ev.types.some((type) => triggerMatches(f, { type, channel: ev.channel, message: ev.message, tag: ev.tag, adId: ev.adId, payload: ev.replyPayload })));
+  const matching = routingFallbackLast(
+    flows.filter((f: any) => ev.types.some((type) => triggerMatches(f, { type, channel: ev.channel, message: ev.message, tag: ev.tag, adId: ev.adId, payload: ev.replyPayload }))),
+  );
   if (!matching.length) return out;
 
   let prevOwner: string | null = null;
@@ -386,6 +400,7 @@ export async function automationsForInbound(opts: {
   tenantId: string;
   conversation: {
     id: string; channel: string; customerExternalId: string; handledBy?: string | null; chatbotNodeId?: string | null; automationRunId?: string | null;
+    assignedAiAgentId?: string | null;
     fromAdCampaign?: boolean | null; referralSourceId?: string | null;
   };
   messageId: string;
@@ -423,8 +438,14 @@ export async function automationsForInbound(opts: {
   // "Message from an ad": the conversation's FIRST message, when it came from
   // an ad (Meta's referral, or a billed ad entry point). Once per conversation.
   const fromAd = inboundCount <= 1 && (!!c.fromAdCampaign || !!c.referralSourceId);
+  // "New conversation": nobody owns it yet (the worker only gets here with no
+  // person assigned and no handover). Mirrors the playbook's first-unanswered
+  // routing, so a "hand to AI" automation assigns once instead of re-stamping
+  // the employee on every message.
+  const unowned = !c.handledBy && !c.assignedAiAgentId && !c.chatbotNodeId;
   const types: AutomationTrigger[] = [
     ...(fromAd ? ["message_from_ad" as const] : []),
+    ...(unowned && !opts.storyMention ? ["conversation_started" as const] : []),
     ...(isNewCustomer ? ["new_customer" as const] : []),
     // A tap with no flow waiting for it (e.g. a campaign template's button).
     ...(opts.replyPayload ? ["button_tapped" as const] : []),
@@ -514,10 +535,14 @@ export function scheduleDue(config: any, now: Date, fallbackTz = "Asia/Jerusalem
  * makes each due run happen once.
  */
 export async function runDueSchedules(now = new Date()): Promise<number> {
-  const flows = await prisma.chatbotFlow.findMany({
+  // The one cross-tenant read here: every tenant's live schedules. Without the
+  // explicit scope the tenant guard refused it on every tick, so "On a
+  // schedule" automations never ran (2026-10-22, seen on dev and prod). Each
+  // run below is still started for its own flow's tenant.
+  const flows = await withCrossTenantAccess(() => prisma.chatbotFlow.findMany({
     where: { isActive: true, triggerType: "schedule" },
     select: { id: true, tenantId: true, triggerConfig: true },
-  });
+  }));
   let started = 0;
   for (const f of flows as any[]) {
     const key = scheduleDue(f.triggerConfig, now);

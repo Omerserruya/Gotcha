@@ -8,7 +8,7 @@ import { answerReadinessQuestion, ReadinessAnswerError, MAX_QUESTION } from "../
 import { GapAnswerError, MAX_ANSWER } from "../services/knowledge-gap-answer.service";
 import { readQuestionSet } from "../services/agent-readiness.service";
 import { readerLocale } from "../lib/reader-locale";
-import { whereEmployeeAnswers } from "../services/employee-reach.service";
+import { whereEmployeeAnswers, routingAutomations } from "../services/employee-reach.service";
 
 /**
  * Columns that still exist but are no longer part of the API. `channels`
@@ -1198,7 +1198,9 @@ router.get("/:id/reachability", authenticate, resolveTenant, requireActiveTenant
     const reachable = nodes.some((n) => {
       const routeType = n?.data?.routeType ?? "agent";
       return routeType === "agent" && n?.data?.targetId === agent.id;
-    });
+    }) || (await routingAutomations(req.tenantId! as string)).some((a) =>
+      // An automation's "hand to AI" to this employee (2026-10-22).
+      a.nodes.some((n) => n?.type === "hand_to_ai" && n?.data?.aiAgentId === agent.id));
     // Where it answers, per channel the workspace has (the playbook decides;
     // AIAgent.channels is display-only and does not).
     const channels = await whereEmployeeAnswers(req.tenantId! as string, agent.id);

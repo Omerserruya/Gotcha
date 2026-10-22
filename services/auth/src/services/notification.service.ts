@@ -165,7 +165,7 @@ export async function sendSetupLinkEmail(userId: string): Promise<void> {
     ),
     cta: { label: "Set my password", url },
     fallbackUrl: url,
-    expiryNote: `This link expires in <strong style="color:#7C3291;">48 hours</strong>`,
+    expiryNote: `This link expires in <strong style="color:${EC.strong};">48 hours</strong>`,
     footerNote: "You're receiving this because you asked for a new setup link.",
   });
   const text = [
@@ -244,7 +244,7 @@ export function onboardingEmailHtml(adminName: string, tenantName: string, setup
     ]),
     cta: { label: "Start setup", url: setupUrl },
     fallbackUrl: setupUrl,
-    expiryNote: `This link expires in <strong style="color:#7C3291;">48 hours</strong> &bull; No login required`,
+    expiryNote: `This link expires in <strong style="color:${EC.strong};">48 hours</strong> &bull; No login required`,
     footerNote: "You're receiving this because your workspace was created on gotcha.co.il",
   });
 }
@@ -708,7 +708,7 @@ export async function sendEmailChangeVerification(
     subhead: `${escapeHtml(name)}, confirm this address to make it your new GOTCHA sign-in email.`,
     cta: { label: "Confirm email", url: verifyUrl },
     fallbackUrl: verifyUrl,
-    expiryNote: `This link expires in <strong style="color:#7C3291;">1 hour</strong>`,
+    expiryNote: `This link expires in <strong style="color:${EC.strong};">1 hour</strong>`,
     footerNote: "You're receiving this because someone requested to use this address on gotcha.co.il. If that wasn't you, ignore this email.",
   });
   await sendHtmlEmail(newEmail, subject, html, text);
@@ -745,7 +745,7 @@ export async function sendTeamInviteEmail(
     // usable more than once inside that window. It said "once" while the link
     // was Authentik's, which was true of the IdP token but not of the window
     // the recipient actually had.
-    expiryNote: `This link is good for <strong style="color:#7C3291;">48 hours</strong>.`,
+    expiryNote: `This link is good for <strong style="color:${EC.strong};">48 hours</strong>.`,
     footerNote: `You're receiving this because an administrator of ${escapeHtml(workspaceName)} invited this address. If that wasn't expected, ignore this email.`,
   });
   await sendHtmlEmail(email, subject, html, text);
@@ -836,8 +836,8 @@ export function paidOnboardingEmailHtml(a: {
       : undefined,
     fallbackUrl: a.setupUrl ?? a.continuationUrl,
     expiryNote: he
-      ? `הקישור בתוקף עד <strong style="color:#7C3291;">${escapeHtml(a.expiresAtLabel)}</strong>`
-      : `This link is valid until <strong style="color:#7C3291;">${escapeHtml(a.expiresAtLabel)}</strong>`,
+      ? `הקישור בתוקף עד <strong style="color:${EC.strong};">${escapeHtml(a.expiresAtLabel)}</strong>`
+      : `This link is valid until <strong style="color:${EC.strong};">${escapeHtml(a.expiresAtLabel)}</strong>`,
     footerNote: he
       ? "קיבלתם את ההודעה הזו כי נוצר עבורכם ארגון ב-gotcha.co.il"
       : "You're receiving this because your organization was created on gotcha.co.il",

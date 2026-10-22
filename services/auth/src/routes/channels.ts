@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import { splitErrorCode, withErrorCode } from "../lib/error-code";
 // Every row a route answers with goes through this one serializer (2026-10-10).
 import { publicChannelAccount } from "../lib/channel-account-dto";
+import emailTemplateRouter, { deleteEmailTemplateFor } from "./email-template";
 import {
   prisma,
   // The website widget shares its experience config with the Shopify
@@ -37,6 +38,9 @@ import {
 import { startPageSession, readPageSession, endPageSession, type PageCandidate } from "../services/messenger/page-session";
 
 const router = Router();
+
+// A channel's HTML email template: /api/channels/:channelAccountId/email-template.
+router.use(emailTemplateRouter);
 
 /**
  * What a WhatsApp number's account remembers about it: its WABA, and the
@@ -2447,6 +2451,10 @@ router.delete("/:id", authenticate, resolveTenant, requirePermission("channels:m
     // Invalidate Redis cache
     const redis = getRedis();
     await redis.del(`channel_account:${account.channel}:${account.externalId}`);
+
+    // Its email template goes with it (a no-op for non-email channels).
+    await deleteEmailTemplateFor(req.tenantId!, channelAccountId).catch((e: any) =>
+      console.warn("[channels] email template cleanup failed:", e?.message));
 
     res.json({
       data: {
