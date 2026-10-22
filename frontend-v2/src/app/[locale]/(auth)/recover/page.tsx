@@ -2,10 +2,15 @@ import { getTranslations } from 'next-intl/server';
 
 import { Logo } from '@/design-system/brand/Logo';
 import { Text } from '@/design-system/primitives/text/Text';
+import { FINISH_PARAM, HANDOVER_PARAM } from '@/app/api/auth/login/route';
+import { Button } from '@/design-system/primitives/button/Button';
 import { appPath } from '@/lib/base-path';
+import { serverEnv } from '@/config/env.server';
 
 import signIn from '../sign-in/SignIn.module.css';
+import styles from './Recover.module.css';
 import { RecoverPanel } from './RecoverPanel';
+import { ResetPanel, type ResetPurpose } from './ResetPanel';
 
 /**
  * Password recovery - the screen "Forgot it?" now reaches.
@@ -33,19 +38,49 @@ import { RecoverPanel } from './RecoverPanel';
  */
 const FLOW_SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
+/**
+ * A link's `flow_token`, as far as the page can judge it: present, and plain.
+ * ★ Not its validity - only the executor knows that, and it says so silently
+ *   (a dead token restarts the flow). This only refuses a value that cannot be
+ *   one, so a truncated link reads "incomplete" rather than "expired".
+ */
+const FLOW_TOKEN = /^[^\s\p{C}]{8,512}$/u;
+
+/**
+ * Which link this is, by its flow (Backend's gateway, 2026-10-22):
+ * `gotcha-recovery` is an invited user's setup link (their FIRST password);
+ * every other recovery flow is a reset somebody asked for. ⚠ A slug an
+ * administrator can rename - a renamed setup flow reads as a reset, which is
+ * the wording, not the behaviour.
+ */
+const SETUP_FLOW = 'gotcha-recovery';
+const purposeOf = (flow: string): ResetPurpose => (flow === SETUP_FLOW ? 'setup' : 'reset');
+
 export default async function RecoverPage({
   params,
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ flow?: string }>;
+  searchParams: Promise<{ flow?: string; flow_token?: string }>;
 }) {
   const { locale } = await params;
-  const { flow } = await searchParams;
+  const { flow, flow_token: flowToken } = await searchParams;
   const t = await getTranslations('auth.recover');
 
   const slug = typeof flow === 'string' && FLOW_SLUG.test(flow) ? flow : null;
   const signInHref = appPath(`/${locale}/sign-in`);
+  // Screen two: the link from the email carries a token.
+  const linked = slug !== null && typeof flowToken === 'string';
+  const token = linked && FLOW_TOKEN.test(flowToken) ? flowToken : null;
+  const purpose = slug ? purposeOf(slug) : 'reset';
+  const recoverHref =
+    purpose === 'reset' && slug ? appPath(`/${locale}/recover?flow=${slug}`) : null;
+  /*
+   * After the new password, the flow has signed the person in at the provider
+   * (user_login), so the app's own sign-in completes without asking again: the
+   * same hand-over the sign-in panel makes, with its marker, or it loops.
+   */
+  const loginHref = `${serverEnv().PRODUCT_LOGIN_URL ?? appPath('/api/auth/login')}?${new URLSearchParams({ [HANDOVER_PARAM]: '1', [FINISH_PARAM]: '1' }).toString()}`;
 
   return (
     <div className={signIn.frame}>
@@ -84,7 +119,33 @@ export default async function RecoverPage({
 
       <main className={signIn.surface}>
         <div className={signIn.form} data-screen="signIn">
-          {slug ? (
+          {linked && token && slug ? (
+            <ResetPanel
+              flow={slug}
+              token={token}
+              purpose={purpose}
+              loginHref={loginHref}
+              signInHref={signInHref}
+              recoverHref={recoverHref}
+            />
+          ) : linked ? (
+            <div data-testid="reset-malformed" className={styles.done}>
+              <Text role="title" as="h1">
+                {t('reset.malformed.title')}
+              </Text>
+              <Text role="body" tone="muted" as="p">
+                {t(recoverHref ? 'reset.malformed.body' : 'reset.malformed.setupBody')}
+              </Text>
+              {recoverHref ? (
+                <Button asChild variant="primary" size="lg" fullWidth>
+                  <a href={recoverHref}>{t('reset.expired.resend')}</a>
+                </Button>
+              ) : null}
+              <a className={signIn.footnote} href={signInHref}>
+                {t('back')}
+              </a>
+            </div>
+          ) : slug ? (
             <RecoverPanel flow={slug} signInHref={signInHref} />
           ) : (
             <div data-testid="recover-unavailable">

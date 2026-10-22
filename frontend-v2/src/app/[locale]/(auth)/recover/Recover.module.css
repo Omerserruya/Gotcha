@@ -78,6 +78,101 @@
   }
 
   /*
+   * Screen two (the link from the email, and an invited user's setup link).
+   * The same field, notice and button as screen one; the eye is sign-in's own
+   * (`.reveal` in SignInPanel.module.css), and the checklist's tick is its
+   * `--signal-done-text`, as the email field's check mark.
+   */
+  .fieldControl .input[name^='password'] {
+    /* Room for the eye: its 15px icon, its padding, and the field's own. */
+    padding-inline-end: calc(var(--space-32) + var(--space-8));
+  }
+
+  .input[aria-invalid='true'] {
+    border-color: var(--intent-urgent-text);
+  }
+
+  .reveal {
+    position: absolute;
+    inset-inline-end: var(--space-12);
+    inset-block: 0;
+    display: flex;
+    align-items: center;
+    padding-inline: var(--space-3);
+    color: var(--text-faint);
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+
+  .reveal:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .noticeLine {
+    margin: 0;
+  }
+
+  .noticeLine + .noticeLine {
+    margin-block-start: var(--space-6);
+  }
+
+  .rules {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    margin-block-start: calc(var(--space-8) * -1);
+  }
+
+  .rulesTitle {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .ruleList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .rule {
+    display: flex;
+    gap: var(--space-8);
+    align-items: center;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .rule[data-met='yes'] {
+    color: var(--signal-done-text);
+  }
+
+  /* A fixed box, so the text does not move when the tick appears. */
+  .ruleMark {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: 15px;
+    block-size: 15px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 50%;
+  }
+
+  .rule[data-met='yes'] .ruleMark {
+    border-color: currentcolor;
+  }
+
+  .rule[data-met='unknown'] .ruleMark {
+    border-style: dashed;
+  }
+
+  /*
    * The way back to sign-in. An anchor, not a button: it leaves this flow for
    * another page, and a person should be able to open it in a new tab or see
    * where it goes before pressing it.

@@ -144,6 +144,70 @@ export const userLoginChallengeSchema = z.looseObject({
 });
 
 /**
+ * A recovery link's first stage (Authentik 2026.2, captured on dev 2026-10-22):
+ * "continue to confirm this address". It exists because mail scanners open
+ * links, and it is answered with the one-time `token` it carries.
+ *
+ * `pending_user` is the account's address - shown to the person whose link it
+ * is, never logged.
+ */
+export const consentChallengeSchema = z.looseObject({
+  component: z.literal('ak-stage-consent'),
+  flow_info: flowInfoSchema,
+  pending_user: z.string().default(''),
+  token: z.string().min(1),
+  response_errors: flowErrorsSchema,
+});
+
+/** The answer to a consent stage: its own token, back as-is. */
+export function consentBody(challenge: ConsentChallenge): Record<string, string> {
+  return { component: 'ak-stage-consent', token: challenge.token };
+}
+
+/**
+ * A prompt stage: fields an administrator configured. On the recovery flow it
+ * is `password` + `password_repeat` (dev, 2026-10-22); a refused submit is the
+ * same challenge again with `response_errors`.
+ */
+export const promptChallengeSchema = z.looseObject({
+  component: z.literal('ak-stage-prompt'),
+  flow_info: flowInfoSchema,
+  fields: z
+    .array(
+      z.looseObject({
+        field_key: z.string(),
+        type: z.string().default(''),
+        required: z.boolean().default(false),
+      }),
+    )
+    .default([]),
+  response_errors: flowErrorsSchema,
+});
+
+/**
+ * Whether a prompt is exactly "a new password, twice" - the only prompt the
+ * recovery screen draws. Any other required field would be a field we do not
+ * show, and a submit that can only fail.
+ */
+export function isNewPasswordPrompt(challenge: PromptChallenge): boolean {
+  const keys = challenge.fields.map((f) => f.field_key);
+  const passwords = challenge.fields.filter(
+    (f) =>
+      (f.field_key === 'password' || f.field_key === 'password_repeat') && f.type === 'password',
+  );
+  return (
+    passwords.length === 2 &&
+    keys.includes('password') &&
+    keys.includes('password_repeat') &&
+    challenge.fields.every((f) => !f.required || passwords.includes(f))
+  );
+}
+
+export function newPasswordBody(password: string, repeat: string): Record<string, string> {
+  return { component: 'ak-stage-prompt', password, password_repeat: repeat };
+}
+
+/**
  * Authentik's device classes for a validate stage.
  *
  * ★ `static` IS RECOVERY CODES, AND IT ARRIVES AS A PEER. Not a link under the
@@ -326,6 +390,8 @@ export const redirectChallengeSchema = z.looseObject({
 export type IdentificationChallenge = z.infer<typeof identificationChallengeSchema>;
 export type UserLoginChallenge = z.infer<typeof userLoginChallengeSchema>;
 export type RedirectChallenge = z.infer<typeof redirectChallengeSchema>;
+export type ConsentChallenge = z.infer<typeof consentChallengeSchema>;
+export type PromptChallenge = z.infer<typeof promptChallengeSchema>;
 
 /**
  * Whether a completed flow's `to` is somewhere we are willing to send a
@@ -435,6 +501,10 @@ export type FlowStep =
    */
   | { readonly kind: 'identifyOnly'; readonly challenge: IdentificationChallenge }
   | { readonly kind: 'staySignedIn'; readonly challenge: UserLoginChallenge }
+  /** A recovery link's confirm step (`ak-stage-consent`). */
+  | { readonly kind: 'consent'; readonly challenge: ConsentChallenge }
+  /** A prompt stage - on recovery, the new password twice. */
+  | { readonly kind: 'prompt'; readonly challenge: PromptChallenge }
   /**
    * A second factor is required. **Parsed, and deliberately not rendered** - the
    * submit shape is the one unknown, and a device picker that cannot submit is a
@@ -498,6 +568,12 @@ export function readChallenge(raw: unknown): FlowStep {
 
   const stay = userLoginChallengeSchema.safeParse(raw);
   if (stay.success) return { kind: 'staySignedIn', challenge: stay.data };
+
+  const consent = consentChallengeSchema.safeParse(raw);
+  if (consent.success) return { kind: 'consent', challenge: consent.data };
+
+  const prompt = promptChallengeSchema.safeParse(raw);
+  if (prompt.success) return { kind: 'prompt', challenge: prompt.data };
 
   const factor = authenticatorValidateChallengeSchema.safeParse(raw);
   if (factor.success) return { kind: 'chooseFactor', challenge: factor.data };
