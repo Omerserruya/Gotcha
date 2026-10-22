@@ -64,6 +64,13 @@ export async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Prom
     emailThread = resolveEmailThread(history) || undefined;
   }
 
+  // Who is answering, for the channel's email template ({{agent_name}}). Only
+  // data: the template itself is applied once, in the email adapter wrapper.
+  if (EMAIL_CHANNELS.has(channel) && messageId) {
+    const sender = await prisma.message.findUnique({ where: { id: messageId }, select: { senderName: true } }).catch(() => null);
+    if (sender?.senderName) emailThread = { ...(emailThread ?? { subject: "" }), senderName: sender.senderName };
+  }
+
   // An email broadcast is marketing: it names how to unsubscribe in its
   // headers too (RFC 2369 / 8058), for the recipient's contact on this channel.
   if (EMAIL_CHANNELS.has(channel) && broadcastId && broadcastRecipientId) {

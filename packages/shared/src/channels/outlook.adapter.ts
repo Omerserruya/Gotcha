@@ -119,7 +119,9 @@ export const outlookOutboundAdapter: OutboundAdapter = {
               Authorization: `Bearer ${accessToken}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ comment: text }),
+            // Graph's reply comment is HTML; with the channel's template it is
+            // the rendered template, otherwise the plain text as before.
+            body: JSON.stringify({ comment: thread.htmlBody ?? text }),
           },
         );
         if (replyRes.ok) return crypto.randomUUID();
@@ -146,10 +148,11 @@ export const outlookOutboundAdapter: OutboundAdapter = {
         body: JSON.stringify({
           message: {
             subject: outgoingSubject(thread),
-            body: {
-              contentType: "Text",
-              content: text,
-            },
+            // Graph takes ONE body, so with the channel's template the email is
+            // HTML only here (Gmail and SMTP also carry a text/plain part).
+            body: thread?.htmlBody !== undefined
+              ? { contentType: "HTML", content: thread.htmlBody }
+              : { contentType: "Text", content: text },
             toRecipients: [
               {
                 emailAddress: { address: recipientId },

@@ -547,6 +547,7 @@ export {
 // One email look for every service that sends mail, and one queue contract.
 export * from "./lib/email/brand-email";
 export * from "./lib/email/email-queue";
+export * from "./lib/email/email-template";
 export {
   readSessionFlags,
   sessionInfraEnabled,

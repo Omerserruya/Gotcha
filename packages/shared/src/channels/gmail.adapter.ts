@@ -100,13 +100,17 @@ export const gmailOutboundAdapter: OutboundAdapter = {
       const accessToken = await resolveAccessToken(credentials);
 
       const fromAddress = (credentials.fromAddress as string) || accountExternalId;
-      const rawMessage = buildRawEmail(
-        fromAddress,
-        recipientId,
-        outgoingSubject(thread),
-        text,
-        threadHeaderLines(thread),
-      );
+      // With the channel's HTML template the email carries both parts;
+      // without one it is the same text/plain message as always.
+      const rawMessage = thread?.htmlBody !== undefined
+        ? buildRawAlternativeEmail(fromAddress, recipientId, outgoingSubject(thread), text, thread.htmlBody, threadHeaderLines(thread))
+        : buildRawEmail(
+          fromAddress,
+          recipientId,
+          outgoingSubject(thread),
+          text,
+          threadHeaderLines(thread),
+        );
 
       const response = await fetch(`${GMAIL_API_URL}/users/me/messages/send`, {
         method: "POST",
@@ -387,6 +391,39 @@ function buildRawEmail(from: string, to: string, subject: string, body: string, 
     "Content-Type: text/plain; charset=utf-8",
     "",
     body,
+  ].join("\r\n");
+
+  return Buffer.from(message).toString("base64url");
+}
+
+/**
+ * text/plain AND text/html in one message (RFC 2046 multipart/alternative),
+ * plain first so a client that cannot show HTML shows the words. Both parts are
+ * base64 so non-ASCII text (Hebrew) survives any relay.
+ */
+function buildRawAlternativeEmail(from: string, to: string, subject: string, text: string, html: string, extraHeaders: string[] = []): string {
+  const boundary = `alt_${crypto.randomUUID().replace(/-/g, "")}`;
+  const b64 = (s: string) => (Buffer.from(s, "utf8").toString("base64").match(/.{1,76}/g) ?? [""]).join("\r\n");
+  const message = [
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${encodeSubject(subject)}`,
+    ...extraHeaders,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    b64(text),
+    `--${boundary}`,
+    "Content-Type: text/html; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    b64(html),
+    `--${boundary}--`,
+    "",
   ].join("\r\n");
 
   return Buffer.from(message).toString("base64url");

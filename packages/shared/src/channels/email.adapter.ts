@@ -119,6 +119,9 @@ export const emailOutboundAdapter: OutboundAdapter = {
         from: fromAddress,
         to: recipientId,
         text,
+        // The channel's HTML template, sent beside the text (nodemailer makes
+        // it multipart/alternative).
+        ...(thread?.htmlBody !== undefined ? { html: thread.htmlBody } : {}),
         ...(thread?.subject ? { subject: thread.subject } : {}),
         ...(Object.keys(headers).length ? { headers } : {}),
       });
