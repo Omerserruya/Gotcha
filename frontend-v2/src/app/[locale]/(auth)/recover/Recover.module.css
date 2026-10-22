@@ -172,6 +172,15 @@
     border-style: dashed;
   }
 
+  /* The breach row, after the server found this password in one. */
+  .rule[data-met='failed'] {
+    color: var(--intent-urgent-text);
+  }
+
+  .rule[data-met='failed'] .ruleMark {
+    border-color: currentcolor;
+  }
+
   /*
    * The way back to sign-in. An anchor, not a button: it leaves this flow for
    * another page, and a person should be able to open it in a new tab or see

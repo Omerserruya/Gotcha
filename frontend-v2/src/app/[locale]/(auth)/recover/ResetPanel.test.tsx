@@ -331,3 +331,31 @@ describe('Hebrew', () => {
     expect(screen.getByTestId('reset-rule-length')).toHaveTextContent('לפחות 12 תווים');
   });
 });
+
+describe('the breach row agrees with the breach refusal', () => {
+  it('reads failed while the field holds the refused password, and unknown once it changes', async () => {
+    startFlow.mockResolvedValue(step(CAPTURED.prompt));
+    submitStage.mockResolvedValueOnce(accepted(CAPTURED.promptBreached));
+    show('setup');
+    await open();
+    await fill(GOOD);
+    const row = () => screen.getByTestId('reset-rule-leaked');
+    expect(row()).toHaveAttribute('data-met', 'unknown');
+    await save();
+    await waitFor(() => expect(row()).toHaveAttribute('data-met', 'failed'));
+    expect(row()).toHaveTextContent('(Not met)');
+    await fill(`${GOOD}z`);
+    expect(row()).toHaveAttribute('data-met', 'unknown');
+  });
+
+  it('another refusal does not mark it', async () => {
+    startFlow.mockResolvedValue(step(CAPTURED.prompt));
+    submitStage.mockResolvedValueOnce(accepted(CAPTURED.promptWeak));
+    show('setup');
+    await open();
+    await fill(GOOD);
+    await save();
+    await screen.findByTestId('reset-problem');
+    expect(screen.getByTestId('reset-rule-leaked')).toHaveAttribute('data-met', 'unknown');
+  });
+});

@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Eye, EyeOff } from 'lucide-react';
+import { Check, Eye, EyeOff, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 
@@ -91,6 +91,8 @@ export function ResetPanel({
   const [problems, setProblems] = useState<readonly ResetProblem[]>([]);
   const [transport, setTransport] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** The password the server found in a breach: its row reads failed while the field holds it. */
+  const [breached, setBreached] = useState<string | null>(null);
 
   const query = new URLSearchParams({ flow_token: token }).toString();
 
@@ -161,7 +163,9 @@ export function ResetPanel({
     const step = outcome.step;
     if (step.kind === 'prompt') {
       setBusy(false);
-      setProblems(resetProblems(step.challenge.response_errors));
+      const refused = resetProblems(step.challenge.response_errors);
+      setProblems(refused);
+      setBreached(refused.some((p) => p.kind === 'leaked') ? password : null);
       return;
     }
     setShown({ password: false, repeat: false });
@@ -328,9 +332,25 @@ export function ResetPanel({
             </li>
           ))}
           {/* Only the server can check this one, on save. */}
-          <li className={styles.rule} data-met="unknown" data-testid="reset-rule-leaked">
-            <span className={styles.ruleMark} aria-hidden="true" />
+          {/*
+            Unknown until the server answers; failed while the field still holds
+            the password it found in a breach, so the list agrees with the
+            message above it. Any change returns it to unknown.
+          */}
+          <li
+            className={styles.rule}
+            data-met={breached !== null && breached === password ? 'failed' : 'unknown'}
+            data-testid="reset-rule-leaked"
+          >
+            <span className={styles.ruleMark} aria-hidden="true">
+              {breached !== null && breached === password ? (
+                <X size={11} strokeWidth={2.6} />
+              ) : null}
+            </span>
             {t('rules.leaked')}
+            {breached !== null && breached === password ? (
+              <span className="srOnly"> ({t('rules.failed')})</span>
+            ) : null}
           </li>
         </ul>
       </div>
