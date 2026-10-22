@@ -24,8 +24,9 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
 
 import { automationsForInbound, routingFallbackLast } from "../services/automation-runner.service";
 
-const base = { id: "c1", channel: "WHATSAPP", customerExternalId: "972500000000", handledBy: null, chatbotNodeId: null, automationRunId: null, assignedAiAgentId: null };
-const run = (conv: Partial<typeof base>, extra: any = {}) =>
+type Conv = { id: string; channel: string; customerExternalId: string; handledBy: string | null; chatbotNodeId: string | null; automationRunId: string | null; assignedAiAgentId: string | null };
+const base: Conv = { id: "c1", channel: "WHATSAPP", customerExternalId: "972500000000", handledBy: null, chatbotNodeId: null, automationRunId: null, assignedAiAgentId: null };
+const run = (conv: Partial<Conv>, extra: any = {}) =>
   automationsForInbound({ tenantId: "t1", conversation: { ...base, ...conv } as any, messageId: "m1", message: "hi", channel: "whatsapp", ...extra });
 
 beforeEach(() => { H.askedTypes = []; });
