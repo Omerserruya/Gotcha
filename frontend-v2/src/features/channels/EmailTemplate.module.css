@@ -34,6 +34,19 @@
     color: var(--text-subtle);
   }
 
+  /*
+   * Hebrew has no capitals and the mono face no Hebrew glyphs: a tracked mono
+   * label falls back to a monospace Hebrew and spaces each letter apart. In
+   * Hebrew the label is the sans, untracked.
+   */
+  :root:lang(he) .eyebrow {
+    font-family: var(--font-sans);
+    font-size: var(--font-size-caption);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: normal;
+    text-transform: none;
+  }
+
   /* The switch: 02's plain pill, its label beside it, its state under both. */
   .switchRow {
     display: grid;

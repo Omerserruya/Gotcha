@@ -1055,11 +1055,11 @@
   },
   "emailTemplate": {
     "title": "Email template",
-    "lead": "Every email this mailbox sends, from your team or your AI employees, goes out inside this HTML. The message goes where {placeholder} stands.",
+    "lead": "Every email this mailbox sends, from your team or your AI employees, goes out inside this HTML. The message goes where <ph>{placeholder}</ph> stands.",
     "switch": {
       "label": "Send every email in this template",
       "on": "On: every email from this mailbox goes out in this template.",
-      "off": "Off: emails go out plain, as they do today.",
+      "off": "Off: emails go out without a template.",
       "needsTemplate": "Save a template to turn this on."
     },
     "editor": {
@@ -1072,7 +1072,7 @@
     "kb": "{n} KB",
     "problem": {
       "empty": "Paste or upload the template HTML.",
-      "noContent": "Add {placeholder} where the message goes. Without it, the email has nowhere to go.",
+      "noContent": "Add <ph>{placeholder}</ph> where the message goes. Without it, the email has nowhere to go.",
       "tooLarge": "This template is {size}. The limit is {max}."
     },
     "upload": {
@@ -1109,7 +1109,7 @@
       "javascriptLinks": "javascript: links"
     },
     "saveProblem": {
-      "content_missing": "The saved HTML has no {placeholder}. If it was inside a script, it was removed with it.",
+      "content_missing": "The saved HTML has no <ph>{placeholder}</ph>. If it was inside a script, it was removed with it.",
       "too_large": "The template is over the {max} limit.",
       "not_set": "Save a template before turning it on.",
       "forbidden": "You do not have permission to change channel settings.",
@@ -1121,7 +1121,7 @@
       "sending": "Sending…",
       "hint": "Sends the saved template, through this mailbox, to your own address only.",
       "saveFirst": "Save your changes first. The test uses the saved template.",
-      "sent": "Test sent to {address}.",
+      "sent": "Test sent to <ph>{address}</ph>.",
       "problem": {
         "not_set": "There is no saved template to send yet.",
         "no_sender": "Your account has no email address, so we can't send you a test.",

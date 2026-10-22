@@ -1,7 +1,15 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useDeferredValue, useId, useRef, useState, useTransition, type ChangeEvent } from 'react';
+import {
+  useDeferredValue,
+  useId,
+  useRef,
+  useState,
+  useTransition,
+  type ChangeEvent,
+  type ReactNode,
+} from 'react';
 
 import type { EmailTemplate, RemovedKind } from '@/api/contracts/email-template';
 import { Button } from '@/design-system/primitives/button/Button';
@@ -36,6 +44,12 @@ const REMOVED_KEY: Readonly<Record<RemovedKind, string>> = {
   'on*': 'onHandlers',
   'javascript:': 'javascriptLinks',
 };
+
+/**
+ * A placeholder or an address inside a sentence: its own left-to-right run,
+ * so on a Hebrew line the braces and the period around it stay in place.
+ */
+const ph = (chunks: ReactNode) => <bdi dir="ltr">{chunks}</bdi>;
 
 type Notice =
   | { readonly kind: 'saved'; readonly removed: readonly RemovedKind[] }
@@ -165,14 +179,14 @@ export function EmailTemplateEditor({
 
   const problemText =
     problem === 'noContent'
-      ? t('problem.noContent', { placeholder: CONTENT_PLACEHOLDER })
+      ? t.rich('problem.noContent', { placeholder: CONTENT_PLACEHOLDER, ph })
       : problem === 'tooLarge'
         ? t('problem.tooLarge', { size: kb(bytes), max })
         : null;
 
   return (
     <div className={styles.panel} data-testid="email-template">
-      <p className={styles.lead}>{t('lead', { placeholder: CONTENT_PLACEHOLDER })}</p>
+      <p className={styles.lead}>{t.rich('lead', { placeholder: CONTENT_PLACEHOLDER, ph })}</p>
 
       <div className={styles.switchRow}>
         <button
@@ -342,7 +356,7 @@ export function EmailTemplateEditor({
             data-testid="email-template-test-result"
           >
             {test.ok
-              ? t('test.sent', { address: test.sentTo })
+              ? t.rich('test.sent', { address: test.sentTo, ph })
               : test.reason === 'send_failed'
                 ? test.detail
                   ? t('test.problem.send_failed', { detail: test.detail })
@@ -380,7 +394,7 @@ function NoticeLine({ notice, max }: { readonly notice: Notice; readonly max: st
   return (
     <p className={styles.problem} role="alert" data-testid="email-template-notice">
       {notice.kind === 'saveProblem'
-        ? t(`saveProblem.${notice.reason}`, { placeholder: CONTENT_PLACEHOLDER, max })
+        ? t.rich(`saveProblem.${notice.reason}`, { placeholder: CONTENT_PLACEHOLDER, max, ph })
         : notice.reason === 'tooLarge'
           ? t('saveProblem.too_large', { max })
           : t(`upload.${notice.reason}`)}

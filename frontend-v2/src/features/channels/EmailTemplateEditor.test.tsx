@@ -172,9 +172,13 @@ describe('★ the switch', () => {
     type('<i>{{content}}</i>');
     const toggle = screen.getByTestId('email-template-switch');
     expect(toggle).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText(/^On: every email/)).toBeInTheDocument();
     await userEvent.click(toggle);
     expect(saveEmailTemplate).toHaveBeenCalledWith('ca1', { enabled: false });
     expect(toggle).toHaveAttribute('aria-checked', 'false');
+    // The hint follows the switch, never the other way round.
+    expect(screen.getByText('Off: emails go out without a template.')).toBeInTheDocument();
+    expect(screen.queryByText(/^On: every email/)).toBeNull();
     expect(html().value).toBe('<i>{{content}}</i>');
     expect(screen.getByTestId('email-template-unsaved')).toBeInTheDocument();
   });
@@ -298,6 +302,16 @@ describe('the upload', () => {
 });
 
 describe('Hebrew', () => {
+  it('every placeholder in a sentence is its own left-to-right run', () => {
+    editor({ ...STORED, html: '<p>x</p>' }, NAMES, 'he');
+    const isolated = (text: string) =>
+      [...document.querySelectorAll('bdi[dir="ltr"]')].filter((b) => b.textContent === text);
+    // The intro, and the blocked-save line.
+    expect(isolated('{{content}}')).toHaveLength(2);
+    type('<p>{{content}}</p>');
+    expect(isolated('{{content}}')).toHaveLength(1);
+  });
+
   it('reads in Hebrew, and the code stays left to right', () => {
     editor(STORED, NAMES, 'he');
     expect(screen.getByTestId('email-template-save')).toHaveTextContent('שמירת התבנית');
