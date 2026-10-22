@@ -443,6 +443,14 @@ services:
       # service creates, so it has to be present when the subscription is made.
       OUTLOOK_WEBHOOK_URL: ${OUTLOOK_WEBHOOK_URL:-}
       OUTLOOK_WEBHOOK_CLIENT_STATE: ${OUTLOOK_WEBHOOK_CLIENT_STATE:-}
+      # Inbound leads are written into the team Airtable beside the Telegram
+      # alert. Unset means the write is skipped and logged - the lead still
+      # reaches the database and the chat. Declared HERE and not only in .env:
+      # this service takes an explicit environment allowlist, so a variable
+      # that is only in the env file reaches the host and never the container.
+      AIRTABLE_LEADS_TOKEN: ${AIRTABLE_LEADS_TOKEN:-}
+      AIRTABLE_LEADS_BASE_ID: ${AIRTABLE_LEADS_BASE_ID:-}
+      AIRTABLE_LEADS_TABLE_ID: ${AIRTABLE_LEADS_TABLE_ID:-}
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
