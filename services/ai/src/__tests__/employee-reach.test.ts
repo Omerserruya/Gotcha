@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
-const H = vi.hoisted(() => ({ canvas: null as any, accounts: [] as any[] }));
+const H = vi.hoisted(() => ({ canvas: null as any, accounts: [] as any[], flows: [] as any[] }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -26,6 +26,12 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     prisma: {
       aIAgent: { findFirst: async (a: any) => (a.where.id === "maya" && a.where.tenantId === "T" ? { id: "maya" } : null) },
       flowCanvas: { findUnique: async () => H.canvas },
+      // "New conversation" automations (2026-10-22); none = not migrated.
+      chatbotFlow: {
+        findMany: async (a: any) => H.flows
+          .filter((f) => f.tenantId === a.where.tenantId && f.isActive === a.where.isActive && f.triggerType === a.where.triggerType)
+          .sort((x, y) => +x.activatedAt - +y.activatedAt),
+      },
       channelAccount: { findMany: async (a: any) => H.accounts.filter((x) => x.tenantId === a.where.tenantId && x.isActive === a.where.isActive) },
     },
   };
@@ -39,6 +45,7 @@ const e = (source: string, target: string) => ({ source, target });
 const app = () => { const a = express(); a.use(express.json()); a.use("/api/ai-agents", router); return a; };
 
 beforeEach(() => {
+  H.flows = [];
   H.accounts = [
     { tenantId: "T", channel: "WHATSAPP", isActive: true }, { tenantId: "T", channel: "WHATSAPP", isActive: true },
     { tenantId: "T", channel: "WEBCHAT", isActive: true }, { tenantId: "T", channel: "INSTAGRAM", isActive: true },
@@ -117,5 +124,44 @@ describe("★ GET /:id/reachability says where", () => {
   it("no playbook: nowhere", async () => {
     H.canvas = null;
     expect((await request(app()).get("/api/ai-agents/maya/reachability")).body.data).toEqual({ hasCanvas: false, reachable: false, channels: [] });
+  });
+});
+
+describe("★ automations decide where an employee answers (2026-10-22)", () => {
+  const auto = (id: string, channels: string[], nodes: any[], edges: any[], activatedAt = new Date(2026, 0, 1)) => ({
+    id, tenantId: "T", isActive: true, triggerType: "conversation_started", triggerConfig: channels.length ? { channels } : {}, activatedAt,
+    nodes: [n("trigger", "automation_trigger"), ...nodes], edges,
+  });
+  const reach = async () => (await request(app()).get("/api/ai-agents/maya/reachability")).body.data;
+
+  it("a channel with its own automation is decided by it, not the playbook", async () => {
+    // WhatsApp's automation hands to Dan: Maya no longer answers WhatsApp,
+    // though the playbook still routes it to her.
+    H.flows = [auto("waToDan", ["WHATSAPP"], [n("h", "hand_to_ai", { aiAgentId: "dan" })], [e("trigger", "h")])];
+    const d = await reach();
+    expect(d.channels.find((c: any) => c.channel === "WHATSAPP")).toBeUndefined();
+    // Web chat has no automation of its own: the playbook still decides it.
+    expect(d.channels.find((c: any) => c.channel === "WEBCHAT")?.reach).toBe("sometimes");
+  });
+
+  it("★ a channel's own automation beats an every-channel one, whatever was activated first", async () => {
+    H.flows = [
+      auto("allToDan", [], [n("h", "hand_to_ai", { aiAgentId: "dan" })], [e("trigger", "h")], new Date(2026, 0, 1)),
+      auto("igToMaya", ["INSTAGRAM"], [n("h", "hand_to_ai", { aiAgentId: "maya" })], [e("trigger", "h")], new Date(2026, 5, 1)),
+    ];
+    const d = await reach();
+    expect(d.channels.map((c: any) => [c.channel, c.reach])).toEqual([["INSTAGRAM", "always"]]);
+    expect(d.reachable).toBe(true);
+  });
+
+  it("an every-channel automation to this employee reaches every active channel without its own", async () => {
+    H.flows = [auto("all", [], [n("h", "hand_to_ai", { aiAgentId: "maya" })], [e("trigger", "h")])];
+    const d = await reach();
+    expect(d.channels.map((c: any) => [c.channel, c.reach])).toEqual([["INSTAGRAM", "always"], ["WEBCHAT", "always"], ["WHATSAPP", "always"]]);
+  });
+
+  it("behind a branch: sometimes", async () => {
+    H.flows = [auto("wa", ["WHATSAPP"], [n("oh", "opening_hours"), n("h", "hand_to_ai", { aiAgentId: "maya" }), n("t", "assign")], [e("trigger", "oh"), e("oh", "h"), e("oh", "t")])];
+    expect((await reach()).channels.find((c: any) => c.channel === "WHATSAPP")?.reach).toBe("sometimes");
   });
 });

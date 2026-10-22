@@ -29,7 +29,7 @@ export type Group = "trigger" | "logic" | "send" | "do";
 // ── Triggers ───────────────────────────────────────────────────────────────
 
 export const TRIGGER_TYPES = [
-  "message_received", "new_customer", "message_from_ad", "button_tapped", "comment_received", "tag_added", "schedule", "webhook",
+  "message_received", "conversation_started", "new_customer", "message_from_ad", "button_tapped", "comment_received", "tag_added", "schedule", "webhook",
   "call_missed", "call_answered",
   "order_event", "cart_abandoned", "form_submitted", "story_mention",
 ] as const;
@@ -38,7 +38,7 @@ export type TriggerType = (typeof TRIGGER_TYPES)[number];
 /** Triggers whose events reach the dispatcher today. */
 // call_missed / call_answered: the shared call-state transition queues them
 // (inbound calls only); the reply goes to the caller on WhatsApp.
-const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "message_from_ad", "button_tapped", "comment_received", "tag_added", "cart_abandoned", "order_event", "story_mention", "call_missed", "call_answered", "schedule", "webhook"]);
+const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "conversation_started", "new_customer", "message_from_ad", "button_tapped", "comment_received", "tag_added", "cart_abandoned", "order_event", "story_mention", "call_missed", "call_answered", "schedule", "webhook"]);
 /**
  * Triggers that fire when the customer has not written to us: on WhatsApp the
  * 24 h service window is closed, so only an approved template can be sent.
@@ -55,6 +55,11 @@ const TRIGGERS: TriggerDef[] = [
   { type: "message_received", label: "Message received", description: "Any channel, or a keyword", channels: ["WHATSAPP", "INSTAGRAM", "EMAIL", "WEBCHAT"], synonyms: ["message", "keyword", "inbound", "text"] },
   { type: "call_missed", label: "Call missed", description: "An incoming call nobody answered, on any of your lines or chosen ones. Writes to the caller on WhatsApp, with a template", channels: ["VOICE"], synonyms: ["call", "phone", "missed"] },
   { type: "call_answered", label: "Call answered", description: "When an answered incoming call ends. Writes to the caller on WhatsApp, with a template", channels: ["VOICE"], synonyms: ["call", "phone", "recording"] },
+  // Who answers a NEW conversation, per channel: the playbook's routing, as an
+  // automation (2026-10-22). Fires only while nobody owns the conversation yet
+  // (no AI employee, no flow, no person), so a "hand to AI" here assigns once,
+  // not on every message.
+  { type: "conversation_started", label: "New conversation", description: "Before anyone answers it, on any channel or chosen ones", channels: ["WHATSAPP", "INSTAGRAM", "MESSENGER", "EMAIL", "GMAIL", "OUTLOOK", "WEBCHAT", "SHOPIFY_LIVE_CHAT", "SLACK"], synonyms: ["new conversation", "who answers", "route", "routing", "assign", "playbook", "entry"] },
   { type: "new_customer", label: "New customer", description: "First message ever", channels: ["WHATSAPP", "INSTAGRAM", "EMAIL", "WEBCHAT"], synonyms: ["new", "first", "welcome"] },
   { type: "message_from_ad", label: "Message from an ad", description: "Click-to-WhatsApp and other ads, any ad or chosen ones", channels: ["WHATSAPP", "MESSENGER", "INSTAGRAM"], synonyms: ["ad", "campaign", "click to whatsapp", "ctwa", "referral", "facebook ad"] },
   { type: "comment_received", label: "Comment on a post", description: "Instagram or Facebook, any post or chosen ones, optional keywords", channels: ["INSTAGRAM", "MESSENGER"], synonyms: ["comment", "post", "instagram", "facebook", "dm", "comment to dm"] },
@@ -104,6 +109,7 @@ export function normalizeTrigger(input: any): { type: TriggerType; config: Recor
       break;
     }
     case "new_customer": { const ch = channels(c.channels); if (ch?.length) config.channels = ch; break; }
+    case "conversation_started": { const ch = channels(c.channels); if (ch?.length) config.channels = ch; break; }
     case "message_from_ad": {
       const ch = channels(c.channels); if (ch?.length) config.channels = ch;
       const ads = strings(c.adIds, "trigger.config.adIds", 50); if (ads?.length) config.adIds = ads.map((a) => a.slice(0, 64));

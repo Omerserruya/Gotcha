@@ -15,8 +15,15 @@ import { prisma } from "@chatcenter/shared";
 
 export type Reach = "always" | "sometimes";
 
-const isRouteTo = (n: any, agentId: string) => (n?.data?.routeType ?? "agent") === "agent" && n?.data?.targetId === agentId;
-const isAnyAgentRoute = (n: any) => (n?.data?.routeType ?? "agent") === "agent" && !!n?.data?.targetId && n?.type !== "channel_entry";
+// A route to an employee: the playbook's route_target, or an automation's
+// "hand to AI" step (2026-10-22: the same dispatch, flow-executor dispatchRoute).
+const isHandToAi = (n: any) => n?.type === "hand_to_ai";
+const isRouteTo = (n: any, agentId: string) => isHandToAi(n)
+  ? n?.data?.aiAgentId === agentId
+  : (n?.data?.routeType ?? "agent") === "agent" && n?.data?.targetId === agentId;
+const isAnyAgentRoute = (n: any) => isHandToAi(n)
+  ? !!n?.data?.aiAgentId
+  : (n?.data?.routeType ?? "agent") === "agent" && !!n?.data?.targetId && n?.type !== "channel_entry" && n?.type !== "automation_trigger";
 
 /** The node an inbound on `channel` enters the playbook at (flow-executor's rule, keyword triggers aside). */
 export function entryFor(nodes: any[], channel: string): any | null {
@@ -71,19 +78,64 @@ export interface ReachAccount {
  * TYPE (the flow executor matches channel_entry by type), so every active
  * account of a reached channel is reached the same way.
  */
+/** An active "New conversation" automation, as the runner sees it. */
+export interface RoutingAutomation {
+  id: string;
+  channels: string[];
+  nodes: any[];
+  edges: any[];
+}
+
+/**
+ * Active "New conversation" automations, in the order the runner tries them
+ * (activatedAt ascending). The runner stops at the first that answers, and a
+ * "hand to AI" step answers, so for one channel the FIRST match decides.
+ */
+export async function routingAutomations(tenantId: string): Promise<RoutingAutomation[]> {
+  const rows = await (prisma as any).chatbotFlow.findMany({
+    where: { tenantId, isActive: true, triggerType: "conversation_started" },
+    orderBy: { activatedAt: "asc" },
+    select: { id: true, triggerConfig: true, nodes: true, edges: true },
+  });
+  return (rows as any[]).map((r) => ({
+    id: String(r.id),
+    channels: Array.isArray(r.triggerConfig?.channels) ? r.triggerConfig.channels.map((c: unknown) => String(c).toUpperCase()) : [],
+    nodes: Array.isArray(r.nodes) ? r.nodes : [],
+    edges: Array.isArray(r.edges) ? r.edges : [],
+  }));
+}
+
+/** The automation that routes a new conversation on this channel, if any. */
+export function routingAutomationFor(autos: RoutingAutomation[], channel: string): RoutingAutomation | null {
+  const ch = channel.toUpperCase();
+  // A channel's own automation first, then one for every channel - the
+  // runner's order (routingFallbackLast).
+  return autos.find((a) => a.channels.includes(ch)) ?? autos.find((a) => a.channels.length === 0) ?? null;
+}
+
 export async function whereEmployeeAnswers(tenantId: string, agentId: string): Promise<Array<{ channel: string; reach: Reach; accounts: ReachAccount[] }>> {
-  const [canvas, accounts] = await Promise.all([
+  const [canvas, accounts, autos] = await Promise.all([
     (prisma as any).flowCanvas.findUnique({ where: { tenantId }, select: { nodes: true, edges: true } }),
     prisma.channelAccount.findMany({ where: { tenantId, isActive: true }, select: { id: true, channel: true, displayName: true, platformMeta: true } as any }),
+    routingAutomations(tenantId),
   ]);
   const nodes: any[] = Array.isArray(canvas?.nodes) ? canvas.nodes : [];
   const edges: any[] = Array.isArray(canvas?.edges) ? canvas.edges : [];
   const channels = [...new Set((accounts as any[]).map((a) => String(a.channel)))].sort();
   const out: Array<{ channel: string; reach: Reach; accounts: ReachAccount[] }> = [];
   for (const ch of channels) {
-    const entry = entryFor(nodes, ch);
-    if (!entry) continue;
-    const reach = reachFrom(entry.id, nodes, edges, agentId);
+    // Automations run before the playbook: a matching "New conversation"
+    // automation decides this channel, and the playbook only when none does.
+    const auto = routingAutomationFor(autos, ch);
+    let reach: Reach | null;
+    if (auto) {
+      const trigger = auto.nodes.find((n) => n?.type === "automation_trigger");
+      reach = trigger ? reachFrom(trigger.id, auto.nodes, auto.edges, agentId) : null;
+    } else {
+      const entry = entryFor(nodes, ch);
+      if (!entry) continue;
+      reach = reachFrom(entry.id, nodes, edges, agentId);
+    }
     if (!reach) continue;
     const ofChannel = (accounts as any[])
       .filter((a) => String(a.channel) === ch)

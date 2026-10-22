@@ -548,6 +548,7 @@ export {
 export * from "./lib/email/brand-email";
 export * from "./lib/email/email-queue";
 export * from "./lib/email/email-template";
+export * from "./lib/routing-automation";
 export {
   readSessionFlags,
   sessionInfraEnabled,
