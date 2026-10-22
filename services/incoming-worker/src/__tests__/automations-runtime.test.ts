@@ -81,6 +81,8 @@ vi.mock("@chatcenter/shared", () => ({
   checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
   metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
   stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
+  // runDueSchedules reads every tenant's schedules inside withCrossTenantAccess.
+  withCrossTenantAccess: async (fn: () => Promise<any>) => fn(),
   prisma: {
     conversation: table("conversation"),
     chatbotFlow: table("chatbotFlow"),
