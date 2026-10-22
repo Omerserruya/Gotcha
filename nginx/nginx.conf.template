@@ -82,9 +82,14 @@ http {
     # the vhost at the bottom of this file. Mirrors the prod topology so dev
     # exercises the same issuer/proxy path rather than a localhost shortcut.
     # See docs/security/authentik-architecture.md.
-    upstream authentik_server {
-        server authentik-server:${AUTHENTIK_PORT};
-    }
+    # Authentik is reached through a VARIABLE, not an `upstream` block, so nginx
+    # resolves the name per request (Docker's DNS, below) instead of once at
+    # startup. With a static upstream (until 2026-10-22) a gateway started while
+    # Authentik was stopped refused to start ("host not found in upstream
+    # authentik-server:9000"; prod was down ~1 min in the release window), and
+    # after every Authentik recreate it kept the OLD container IP and answered
+    # 502 until `nginx -s reload`. `valid=10s` bounds how long a dead IP lingers.
+    resolver 127.0.0.11 valid=10s ipv6=off;
 
     # Real public scheme - see the note in gateway/nginx.prod.conf.template.
     # TLS terminates upstream of this container, so $scheme is "http" here;
@@ -2003,7 +2008,9 @@ http {
         # Longest-prefix wins among `^~` locations, so this takes precedence
         # over `^~ /v2` below regardless of the order they appear in.
         location ^~ /auth-api/ {
-            proxy_pass http://authentik_server/api/v3/;
+            set $authentik_origin http://authentik-server:${AUTHENTIK_PORT};
+            rewrite ^/auth-api/(.*)$ /api/v3/$1 break;
+            proxy_pass $authentik_origin;
             # ★★ THE EXECUTOR REDIRECTS TO ITS OWN ROOT, AND THAT IS NOT OURS.
             #
             # Posting a stage answers `302 Location: /api/v3/flows/executor/...`
@@ -2324,7 +2331,8 @@ http {
         }
 
         location = /static/dist/custom.css {
-            proxy_pass http://authentik_server;
+            set $authentik_origin http://authentik-server:${AUTHENTIK_PORT};
+            proxy_pass $authentik_origin;
             proxy_http_version 1.1;
             proxy_set_header Host              $host;
             proxy_set_header X-Internal-Key "";
@@ -2370,7 +2378,9 @@ http {
         location / {
             limit_req zone=authentik burst=40 nodelay;
 
-            proxy_pass http://authentik_server;
+            set $authentik_origin http://authentik-server:${AUTHENTIK_PORT};
+
+            proxy_pass $authentik_origin;
             proxy_http_version 1.1;
 
             # Host + proto drive Authentik's absolute URLs and the OIDC `iss`
