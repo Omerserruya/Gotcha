@@ -9,9 +9,9 @@
  * FIRST channel_entry, else start; from the entry, its FIRST edge only.
  * Faithful mapping:
  *   - each channel's own entry -> an automation for that channel;
- *   - the first entry (the canvas's fallback for every other channel) -> also
- *     an automation with no channels, which the runner tries last
- *     (routingFallbackLast), exactly the canvas's "own entry, else first";
+ *   - the first entry (the canvas's fallback for every channel WITHOUT an
+ *     entry of its own) -> also an automation for exactly those channels; a
+ *     channel whose own entry leads nowhere stays unrouted, as in the canvas;
  *   - a canvas with only `start` -> one automation with no channels.
  * Inside a path: route_target / default_fallback "agent" -> hand_to_ai;
  * "human"/department -> assign to that team (the same dispatch); every other
@@ -52,6 +52,9 @@ const ROUTES = new Set(["route_target", "default_fallback"]);
 const ROUTING_ENTRIES = new Set(["channel_entry", "start"]);
 /** Triggers the canvas runs from OTHER events: emptying the canvas would stop them. */
 const OTHER_TRIGGERS = new Set(["keyword_trigger", "comment_trigger", "schedule_trigger", "webhook_trigger", "campaign_entry"]);
+
+/** The channels a "New conversation" automation can name (catalogue). */
+const ROUTING_CHANNELS: Channel[] = ["WHATSAPP", "INSTAGRAM", "MESSENGER", "EMAIL", "GMAIL", "OUTLOOK", "WEBCHAT", "SHOPIFY_LIVE_CHAT", "SLACK"];
 
 const CHANNEL_LABEL: Record<string, string> = {
   WHATSAPP: "WhatsApp", MESSENGER: "Messenger", INSTAGRAM: "Instagram", EMAIL: "Email", GMAIL: "Gmail",
@@ -112,7 +115,7 @@ export function planPlaybookMigration(canvas: { nodes?: unknown; edges?: unknown
   const start = nodes.find((n) => n.type === "start") ?? null;
   const add = (entry: Node, channels: Channel[], name: string) => {
     const g = pathAutomation(entry, nodes, edges);
-    const where = channels.length ? CHANNEL_LABEL[channels[0]!] ?? channels[0] : "every other channel";
+    const where = channels.length === 1 ? CHANNEL_LABEL[channels[0]!] ?? channels[0] : channels.length ? "every other channel" : "every channel";
     if ("why" in g) { plan.notMigrated.push(`${where} (entry ${entry.id}): ${g.why}`); return; }
     const v = validateAutomation({ type: "conversation_started", config: channels.length ? { channels } : {} }, g.nodes as any, g.edges as any);
     if (v.errors.length) {
@@ -132,9 +135,18 @@ export function planPlaybookMigration(canvas: { nodes?: unknown; edges?: unknown
     add(entry, [ch], `Who answers on ${CHANNEL_LABEL[ch] ?? ch} (from the playbook)`);
   }
   // The canvas's fallback: the first entry, else start, serves every channel
-  // without an entry of its own.
+  // WITHOUT an entry of its own. A channel that has an entry - even one that
+  // leads nowhere, which the canvas honoured by routing nobody - must not fall
+  // to it, so the fallback names the other channels explicitly. Only a canvas
+  // with no entries at all keeps it channel-less (every channel, future ones
+  // included).
   const fallback = entries[0] ?? start;
-  if (fallback) add(fallback, [], "Who answers on every other channel (from the playbook)");
+  if (fallback) {
+    const withEntry = new Set(entries.map((e) => channelOf(e)).filter(Boolean) as Channel[]);
+    const others = ROUTING_CHANNELS.filter((c) => !withEntry.has(c));
+    if (!entries.length) add(fallback, [], "Who answers on every channel (from the playbook)");
+    else if (others.length) add(fallback, others, "Who answers on every other channel (from the playbook)");
+  }
 
   const unused = nodes.filter((n) => !ROUTING_ENTRIES.has(n.type) && !edges.some((e) => e.target === n.id));
   for (const n of unused) plan.notMigrated.push(`step ${n.id} (${n.type}): nothing leads to it, so it never ran`);

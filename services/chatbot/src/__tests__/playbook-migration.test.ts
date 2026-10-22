@@ -20,7 +20,7 @@ describe("★ a demo-shaped playbook (5 entries, 4 routes to one employee)", () 
   const plan = planPlaybookMigration(canvas);
 
   it("one automation per routed channel: trigger -> hand to AI, the employee kept", () => {
-    const own = plan.automations.filter((a) => a.channels.length);
+    const own = plan.automations.filter((a) => !a.name.includes("every other channel"));
     expect(own.map((a) => a.channels[0])).toEqual(["WHATSAPP", "MESSENGER", "INSTAGRAM", "GMAIL"]);
     for (const a of own) {
       expect(a.nodes.map((n) => n.type)).toEqual(["automation_trigger", "hand_to_ai"]);
@@ -29,10 +29,17 @@ describe("★ a demo-shaped playbook (5 entries, 4 routes to one employee)", () 
     }
   });
 
-  it("★ the first entry is also the every-other-channel automation (the canvas's fallback)", () => {
-    const fb = plan.automations.filter((a) => a.channels.length === 0);
+  it("★ the first entry is also the automation for every channel WITHOUT an entry of its own (the canvas's fallback)", () => {
+    const fb = plan.automations.filter((a) => a.name.includes("every other channel"));
     expect(fb).toHaveLength(1);
     expect(fb[0]!.fromEntryId).toBe("wa");
+    expect(fb[0]!.channels).toEqual(["EMAIL", "OUTLOOK", "WEBCHAT", "SLACK"]);
+  });
+
+  it("★ a channel whose own entry leads nowhere stays unrouted: it does NOT fall to the fallback", () => {
+    // Shopify chat has an entry with no route: the canvas routed nobody there.
+    for (const a of plan.automations) expect(a.channels).not.toContain("SHOPIFY_LIVE_CHAT");
+    expect(plan.automations.some((a) => a.channels.length === 0)).toBe(false);
   });
 
   it("★ the entry that leads nowhere is reported, not dropped silently", () => {
