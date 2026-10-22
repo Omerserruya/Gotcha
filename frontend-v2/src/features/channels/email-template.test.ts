@@ -15,8 +15,15 @@ describe('templateProblem', () => {
 
   it('refuses a template without {{content}}, or with only a near miss', () => {
     expect(templateProblem('<p>hello</p>')).toBe('noContent');
-    expect(templateProblem('<p>{{ content }}</p>')).toBe('noContent');
     expect(templateProblem('<p>{{Content}}</p>')).toBe('noContent');
+    expect(templateProblem('<p>{content}</p>')).toBe('noContent');
+  });
+
+  it('★ passes what the server passes: spaces inside the braces', () => {
+    // The server's CONTENT_RE is /\{\{\s*content\s*\}\}/: blocking this would
+    // refuse a template the platform accepts.
+    expect(templateProblem('<p>{{ content }}</p>')).toBeNull();
+    expect(templateProblem('<p>{{content  }}</p>')).toBeNull();
   });
 
   it('refuses an empty template, whitespace included', () => {
@@ -63,6 +70,16 @@ describe('previewDocument', () => {
     const out = fill('Hi {{customer_name}}');
     expect(out).toContain('{{customer_name}}</span>');
     expect(out.startsWith('Hi <span')).toBe(true);
+  });
+
+  it('fills a placeholder written with spaces, as the server does', () => {
+    expect(fill('{{ agent_name }}|{{ content }}', { agent_name: 'Noa' })).toBe(
+      'Noa|<div data-preview-content>here</div>',
+    );
+  });
+
+  it('leaves an upper-case name as typed, as the server does', () => {
+    expect(fill('{{Agent_Name}}', { agent_name: 'Noa' })).toBe('{{Agent_Name}}');
   });
 
   it('leaves a placeholder the sender does not know as the author wrote it', () => {

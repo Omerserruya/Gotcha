@@ -11,6 +11,14 @@
 /** The one placeholder a template must carry: where the message goes. */
 export const CONTENT_PLACEHOLDER = '{{content}}';
 
+/**
+ * The server's own grammar (packages/shared email-template.ts): spaces inside
+ * the braces are allowed, names are lower case. `{{ content }}` is a template
+ * the server accepts, so the screen must not block it; `{{Content}}` is not.
+ */
+const CONTENT_RE = /\{\{\s*content\s*\}\}/;
+const PLACEHOLDER_RE = /\{\{\s*([a-z_]+)\s*\}\}/g;
+
 /** Every placeholder the sender fills, in the order the screen lists them. */
 export const TEMPLATE_PLACEHOLDERS = [
   'content',
@@ -33,7 +41,7 @@ export type TemplateProblem = 'empty' | 'noContent' | 'tooLarge';
 export function templateProblem(html: string): TemplateProblem | null {
   if (html.trim() === '') return 'empty';
   if (templateBytes(html) > TEMPLATE_MAX_BYTES) return 'tooLarge';
-  if (!html.includes(CONTENT_PLACEHOLDER)) return 'noContent';
+  if (!CONTENT_RE.test(html)) return 'noContent';
   return null;
 }
 
@@ -75,7 +83,7 @@ export function previewDocument(
     readonly chip: (name: string) => string;
   },
 ): string {
-  return html.replace(/\{\{(\w+)\}\}/g, (match, name: string) => {
+  return html.replace(PLACEHOLDER_RE, (match, name: string) => {
     if (name === 'content') return content;
     if (!(TEMPLATE_PLACEHOLDERS as readonly string[]).includes(name)) return match;
     const value = values[name as Exclude<TemplatePlaceholder, 'content'>];
