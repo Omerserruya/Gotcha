@@ -16,7 +16,7 @@
  *                           (handledBy "flow") and gives it back to whoever
  *                           had it when the run ends.
  */
-import { prisma, publishEvent } from "@chatcenter/shared";
+import { prisma, publishEvent, withCrossTenantAccess } from "@chatcenter/shared";
 import {
   executeSubFlow,
   executeWebhookFlow,
@@ -535,10 +535,14 @@ export function scheduleDue(config: any, now: Date, fallbackTz = "Asia/Jerusalem
  * makes each due run happen once.
  */
 export async function runDueSchedules(now = new Date()): Promise<number> {
-  const flows = await prisma.chatbotFlow.findMany({
+  // The one cross-tenant read here: every tenant's live schedules. Without the
+  // explicit scope the tenant guard refused it on every tick, so "On a
+  // schedule" automations never ran (2026-10-22, seen on dev and prod). Each
+  // run below is still started for its own flow's tenant.
+  const flows = await withCrossTenantAccess(() => prisma.chatbotFlow.findMany({
     where: { isActive: true, triggerType: "schedule" },
     select: { id: true, tenantId: true, triggerConfig: true },
-  });
+  }));
   let started = 0;
   for (const f of flows as any[]) {
     const key = scheduleDue(f.triggerConfig, now);
