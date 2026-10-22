@@ -139,6 +139,8 @@ describe("★ POST test", () => {
     expect(externalId).toBe("support@acme.test");
     expect(to).toBe("owner@acme.test");
     expect(ctx).toMatchObject({ templateOverride: GOOD, senderName: "Owner Name", customerName: "Sample customer" });
+    // The sample is the content: placeholder syntax in it would arrive literally.
+    expect(H.sends[0][3]).not.toMatch(/\{\{/);
   });
 
   it("422 when nothing is saved; 409 when the account is disconnected; 502 when the provider refuses", async () => {

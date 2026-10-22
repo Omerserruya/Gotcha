@@ -151,7 +151,10 @@ router.put(
 const SAMPLE_TEXT = [
   "Hi,",
   "",
-  "This is a test of your email template. Your real replies will appear here, inside the template, exactly where {{content}} is.",
+  // No placeholder syntax in here: this text IS the content, and inserted
+  // content is never re-read for placeholders, so "{{content}}" would arrive
+  // literally (it did, in the first live test on 2026-10-22).
+  "This is a test of your email template. Your real replies will appear here, inside the template, where the message goes.",
   "",
   "Thanks!",
 ].join("\n");
