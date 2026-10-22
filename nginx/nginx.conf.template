@@ -164,12 +164,14 @@ http {
 
     # ★ A password-reset link lands on the APP's own recover screen (2026-10-22).
     # Authentik's email builds <host>/if/flow/gotcha-recovery-self/?flow_token=...
+    # and our invite/setup links (Authentik's users/{pk}/recovery API, the brand's
+    # gotcha-recovery flow) build /if/flow/gotcha-recovery/?flow_token=...
     # and has no setting to point it elsewhere. With a token, that path goes to
     # the app's /recover screen (it drives the flow through /auth-api/); without
     # one (admin, preview) it stays Authentik's. The token passes untouched.
     map "$uri|$arg_flow_token" $recover_go {
         default "";
-        "~^/if/flow/(?<rflow>gotcha-recovery-self)/\|(?<rtok>[^|]+)$" "/recover?flow=$rflow&flow_token=$rtok";
+        "~^/if/flow/(?<rflow>gotcha-recovery-self|gotcha-recovery)/\|(?<rtok>[^|]+)$" "/recover?flow=$rflow&flow_token=$rtok";
     }
 
     # The client's real address (2026-10-22). The only way in is a host

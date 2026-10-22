@@ -54,10 +54,15 @@ describe.each(TEMPLATES)("%s", (file, appHost, authHost, appServerName) => {
     expect(recoverGo(conf, "/if/flow/gotcha-recovery-self/", "Ab-c_9%2Bz")).toBe("/recover?flow=gotcha-recovery-self&flow_token=Ab-c_9%2Bz");
   });
 
+  it("★ an invite / setup link (the brand's gotcha-recovery flow) goes there too", () => {
+    expect(recoverGo(conf, "/if/flow/gotcha-recovery/", "T0k")).toBe("/recover?flow=gotcha-recovery&flow_token=T0k");
+  });
+
   it("no token, an empty token, or another flow: stays Authentik's", () => {
     expect(recoverGo(conf, "/if/flow/gotcha-recovery-self/", "")).toBe("");
     expect(recoverGo(conf, "/if/flow/default-authentication-flow/", "x")).toBe("");
     expect(recoverGo(conf, "/if/flow/gotcha-recovery-self/extra", "x")).toBe("");
+    expect(recoverGo(conf, "/if/flow/gotcha-recovery-other/", "x")).toBe("");
   });
 
   it.each([["auth vhost", authHost], ["app vhost", appServerName]])("★ the %s redirects on it, to the app host", (_label, name) => {
