@@ -591,6 +591,13 @@ export const channelEndpoints = {
     }),
   /** Creates the widget as PENDING - a draft, not a connected channel. */
   createWebChat: () => endpoint('/api/channels/webchat/create'),
+  /**
+   * GET / PUT - an email account's HTML template (contracts/email-template.ts).
+   * A PUT without `html` keeps the stored one: the toggle sends only `enabled`.
+   */
+  emailTemplate: (id: string) => endpoint('/api/channels/{id}/email-template', { id }),
+  /** POST, no body: a sample through this account, to the signed-in user only. */
+  emailTemplateTest: (id: string) => endpoint('/api/channels/{id}/email-template/test', { id }),
   /** GET / PUT - the widget's config (13g-13j); a PUT merges into what is stored. */
   webchatSettings: (id: string) => endpoint('/api/channels/webchat/{id}/settings', { id }),
   /**

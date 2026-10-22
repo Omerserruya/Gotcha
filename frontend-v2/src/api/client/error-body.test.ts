@@ -340,3 +340,23 @@ describe('★★ 30d610da - ROLE_CEILING keeps the keys the role can never hold'
     expect(bad.blocked).toBeUndefined();
   });
 });
+
+describe('a `detail` sent as a sentence', () => {
+  it('reaches the error as detailText, and the rest of the body with it', async () => {
+    // The email template's test send: the provider's own refusal, in words.
+    respond(502, { error: 'EMAIL_TEMPLATE_TEST_SEND_FAILED', detail: 'Mailbox unavailable' });
+
+    const api = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(api.detailText).toBe('Mailbox unavailable');
+    expect(api.developerMessage).toBe('EMAIL_TEMPLATE_TEST_SEND_FAILED');
+    expect(api.failureDetail).toBeUndefined();
+  });
+
+  it('is absent when `detail` is a record', async () => {
+    respond(402, { failureCode: 'quantity_exceeds_maximum', detail: { max: 10 } });
+
+    const api = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(api.detailText).toBeUndefined();
+    expect(api.failureDetail?.max).toBe(10);
+  });
+});

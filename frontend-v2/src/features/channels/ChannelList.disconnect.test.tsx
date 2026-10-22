@@ -77,7 +77,12 @@ describe('★★ a connected channel can be disconnected from its row', () => {
     const button = screen.getByTestId('channel-disconnect-c1');
     expect(button.tagName).toBe('BUTTON');
     expect(button).toHaveTextContent('Disconnect');
-    expect(screen.queryByTestId('channel-settings-c1')).toBeNull();
+    // A mailbox has its template beside it (2026-10-22); the rest have nothing to set.
+    if (['GMAIL', 'OUTLOOK', 'EMAIL'].includes(type)) {
+      expect(screen.getByTestId('channel-settings-c1').tagName).toBe('A');
+    } else {
+      expect(screen.queryByTestId('channel-settings-c1')).toBeNull();
+    }
   });
 
   it('the button opens a confirmation in the channel’s name - nothing is sent yet', async () => {
@@ -137,10 +142,10 @@ describe('★ where the route does not apply, the row keeps a status', () => {
     expect(status).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('an account already disconnected offers no second Disconnect', async () => {
+  it('a mailbox already disconnected offers no second Disconnect, and its template still opens', async () => {
     await list([account('e1', 'EMAIL', 'DISCONNECTED')]);
     expect(screen.queryByTestId('channel-disconnect-e1')).toBeNull();
-    expect(screen.getByTestId('channel-settings-e1')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('channel-settings-e1').tagName).toBe('A');
   });
 
   it('WhatsApp keeps its Settings (13b, where numbers are disconnected one by one)', async () => {

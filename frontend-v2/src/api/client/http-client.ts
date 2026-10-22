@@ -111,6 +111,7 @@ async function readErrorBody(response: Response): Promise<{
   field?: string;
   reason?: string;
   max?: number;
+  detailText?: string;
   index?: number;
   maxBytes?: number;
   maxWidth?: number;
@@ -153,6 +154,13 @@ async function readErrorBody(response: Response): Promise<{
     field: parsed.data.field,
     reason: parsed.data.reason,
     max: parsed.data.max,
+    // `detail` as a sentence; the schema keeps only a record (see envelope.ts).
+    detailText:
+      raw !== null &&
+      typeof raw === 'object' &&
+      typeof (raw as { detail?: unknown }).detail === 'string'
+        ? (raw as { detail: string }).detail
+        : undefined,
     index: parsed.data.index,
     maxBytes: parsed.data.maxBytes,
     maxWidth: parsed.data.maxWidth,
@@ -248,6 +256,7 @@ export class HttpClient {
         width,
         height,
         issues,
+        detailText,
       } = await readErrorBody(response);
       const error = fail({
         /*
@@ -288,6 +297,7 @@ export class HttpClient {
         width,
         height,
         issues,
+        detailText,
         requestId: effectiveRequestId,
       });
       if (error.kind === 'authentication') {

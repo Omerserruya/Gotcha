@@ -16,6 +16,7 @@ import { ReconnectChannel } from './ReconnectChannel';
 import {
   buildChannelRows,
   canDisconnect,
+  hasEmailTemplate,
   isTroubled,
   needsReconnect,
   type ChannelRow,
@@ -220,13 +221,26 @@ export async function ChannelList({
                 >
                   {t('rowSettings')}
                 </Link>
-              ) : canDisconnect(row) ? (
+              ) : hasEmailTemplate(row) || canDisconnect(row) ? (
                 /*
                   Disconnect, after a confirmation in the channel's name
                   (POST /api/channels/:id/disconnect; conversations are kept).
                   Reconnect beside it when messages cannot arrive.
                 */
                 <span className={styles.rowActions}>
+                  {/* A mailbox's own template (`?panel=email`). */}
+                  {hasEmailTemplate(row) ? (
+                    <Link
+                      href={{
+                        pathname: '/settings/channels',
+                        query: { panel: 'email', id: row.id },
+                      }}
+                      className={styles.settingsLink}
+                      data-testid={`channel-settings-${row.id}`}
+                    >
+                      {t('rowSettings')}
+                    </Link>
+                  ) : null}
                   {needsReconnect(row) ? (
                     <ReconnectChannel
                       id={row.id}
@@ -234,17 +248,19 @@ export async function ChannelList({
                       name={channelName(row.channel, t) ?? t('name.other')}
                     />
                   ) : null}
-                  <DisconnectChannel
-                    id={row.id}
-                    name={channelName(row.channel, t) ?? t('name.other')}
-                    identity={row.identity}
-                  />
+                  {canDisconnect(row) ? (
+                    <DisconnectChannel
+                      id={row.id}
+                      name={channelName(row.channel, t) ?? t('name.other')}
+                      identity={row.identity}
+                    />
+                  ) : null}
                 </span>
               ) : (
                 /*
                   Nothing to set (checked 2026-10-08): the platform's only
                   channel settings are WhatsApp's numbers and the web chat's
-                  widget - for Instagram, Messenger, email and the rest it has
+                  widget (and, since 2026-10-22, each mailbox's template) - for Instagram, Messenger and the rest it has
                   connect, disconnect and a status read, no setting. A status,
                   saying so - never a panel of things that write nowhere.
                 */
