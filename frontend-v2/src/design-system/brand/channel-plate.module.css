@@ -1,0 +1,57 @@
+@layer primitives {
+  /*
+   * The plate a channel's mark sits on (`channel-plate.tsx`): the brand's
+   * white ground, a hairline so it holds its edge on a white panel, and the
+   * mark centred - the room around it is the box less the mark, so it scales
+   * with the preset. Neutral glyphs (web chat, phone, plain email, unknown)
+   * paint in `currentColor`, inked here.
+   *
+   * ⚠ Each preset's box and radius are the numbers in `PLATE_GEOMETRY`;
+   *   `channel-plate.test.tsx` reads this file to keep them so.
+   */
+  .plate {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    border: var(--border-width-thin) solid var(--border-subtle);
+    background-color: var(--channel-mark-plate);
+    color: var(--channel-web-mark);
+    line-height: 0;
+  }
+
+  .xs {
+    inline-size: var(--space-16);
+    block-size: var(--space-16);
+    border-radius: var(--radius-key);
+  }
+
+  .sm {
+    inline-size: var(--space-20);
+    block-size: var(--space-20);
+    border-radius: var(--radius-badge);
+  }
+
+  .md {
+    inline-size: var(--space-24);
+    block-size: var(--space-24);
+    border-radius: var(--radius-chip);
+  }
+
+  .lg {
+    inline-size: var(--space-28);
+    block-size: var(--space-28);
+    border-radius: var(--radius-chip);
+  }
+
+  .xl {
+    inline-size: var(--space-34);
+    block-size: var(--space-34);
+    border-radius: var(--radius-item);
+  }
+
+  .xxl {
+    inline-size: var(--space-40);
+    block-size: var(--space-40);
+    border-radius: var(--radius-control);
+  }
+}

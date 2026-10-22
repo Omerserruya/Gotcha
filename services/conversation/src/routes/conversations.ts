@@ -1,6 +1,9 @@
 import { Router, Request, Response } from "express";
-import { authenticate, resolveTenant, requireRole, requireActiveTenant, prisma } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireRole, requireActiveTenant, prisma, latestHandover, replyWindowsFor } from "@chatcenter/shared";
+import { requireVisibleConversation } from "../lib/require-visible-conversation";
 import * as conversationService from "../services/conversation.service";
+import { getIO } from "../lib/socket";
+import { unreadStates } from "../lib/unread-state";
 
 async function generateAndSaveSummary(tenantId: string, conversationId: string, authHeader?: string) {
   if (!authHeader) return;
@@ -33,6 +36,31 @@ async function generateAndSaveSummary(tenantId: string, conversationId: string, 
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
+// Every /:id route below answers only for a conversation this viewer may
+// see; 404 otherwise. See lib/require-visible-conversation.ts.
+router.param("id", requireVisibleConversation);
+
+/**
+ * The tenant's most recent change of handler.
+ *
+ * `null` when nothing has been recorded, and the card must render that as
+ * absence rather than as zero: a tenant deployed this morning and a tenant
+ * whose AI has never needed help both have no handovers, and they do not mean
+ * the same thing.
+ *
+ * Any tenant member. Whether the AI recently gave up is exactly what an agent
+ * wants to know before picking the next conversation. Declared before "/:id",
+ * which would otherwise read "handovers" as a conversation id.
+ */
+router.get("/handovers/latest", async (req: Request, res: Response) => {
+  try {
+    const data = await latestHandover(req.tenantId!);
+    res.json({ data });
+  } catch (err) {
+    console.error("Latest handover error:", err);
+    res.status(500).json({ error: "Failed to get latest handover" });
+  }
+});
 
 router.get("/stats/workload", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
@@ -46,7 +74,7 @@ router.get("/stats/workload", requireRole("ADMIN"), async (req: Request, res: Re
 
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { status, assignedAgentId, channel, departmentId, search, page, limit, includeAutomated, automatedOnly } = req.query;
+    const { status, assignedAgentId, channel, departmentId, search, page, limit, cursor, includeAutomated, automatedOnly, view, from, to, total } = req.query;
     const result = await conversationService.list(req.tenantId!, {
       status: status as string | undefined,
       assignedAgentId: assignedAgentId as string | undefined,
@@ -55,16 +83,54 @@ router.get("/", async (req: Request, res: Response) => {
       search: search as string | undefined,
       page: page ? parseInt(page as string, 10) : undefined,
       limit: limit ? parseInt(limit as string, 10) : undefined,
+      // Presence switches the list to keyset paging; an empty string means
+      // "first keyset page" and is distinct from absent, which means offset.
+      cursor: typeof cursor === "string" ? cursor : undefined,
       includeAutomated: includeAutomated === "true",
       automatedOnly: automatedOnly === "true",
+      view: view === "queue" ? "queue" : undefined,
+      // Present-but-invalid is refused (400), not ignored: a link that says
+      // "this week" must never open every conversation.
+      from: from === undefined ? undefined : String(from),
+      to: to === undefined ? undefined : String(to),
+      withTotal: total === "1" || total === "true",
       userRole: req.user!.role,
       userId: req.user!.userId,
       userDepartmentId: req.user!.departmentId,
     });
     res.json(result);
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.status === 400) { res.status(400).json({ error: err.message }); return; }
     console.error("List conversations error:", err);
     res.status(500).json({ error: "Failed to list conversations" });
+  }
+});
+
+/**
+ * GET /unread-counts?views=queue,mine,active,gotcha,all
+ *   -> { data: { queue: n, mine: n, ..., totals: { queue: n, mine: n, ... } } }
+ * The view keys are the unread counts (unchanged); `totals` is each view's
+ * size, equal to that view's list `viewTotal`.
+ * Unread for THIS viewer, per view, with exactly the list's filters and
+ * visibility (conversationService.listWhere). Registered above "/:id", which
+ * would otherwise take "unread-counts" as an id.
+ */
+router.get("/unread-counts", async (req: Request, res: Response) => {
+  try {
+    const asked = String(req.query.views ?? "queue,mine,active,gotcha,all").split(",").map((v) => v.trim()).filter(Boolean);
+    const unknown = asked.filter((v) => !(conversationService.UNREAD_COUNT_VIEWS as readonly string[]).includes(v));
+    if (unknown.length) { res.status(400).json({ error: `unknown view: ${unknown.join(",")}` }); return; }
+    const views = Array.from(new Set(asked)) as conversationService.UnreadCountView[];
+    const { unread, totals } = await conversationService.unreadCounts(
+      req.tenantId!,
+      { userId: req.user!.userId, role: req.user!.role, departmentId: req.user!.departmentId },
+      views,
+    );
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({ data: { ...unread, totals } });
+  } catch (err) {
+    console.error("Unread counts error:", err);
+    res.status(500).json({ error: "Failed to count unread conversations" });
   }
 });
 
@@ -80,6 +146,7 @@ router.get("/history/:customerExternalId", async (req: Request, res: Response) =
       req.tenantId!,
       customerExternalId,
       conversationId,
+      { userId: req.user!.userId, role: req.user!.role, departmentId: (req.user as any)?.departmentId },
     );
     res.json({ data });
   } catch (err) {
@@ -88,22 +155,55 @@ router.get("/history/:customerExternalId", async (req: Request, res: Response) =
   }
 });
 
+/**
+ * Conversation notes are NOT stored by this service, and these say so.
+ *
+ * They used to be demo stubs: the GET answered `{ data: [] }` and the POST
+ * answered 200 with `{ id, text, createdAt }` - a well-formed note that was
+ * never written anywhere. That is the worst shape a stub can take. A client
+ * renders it as saved, the person who typed it believes it saved, and nothing
+ * records that it did not. An empty 200 from the GET has the same defect one
+ * level down: "no notes" and "notes are not kept here" are different facts and
+ * an empty array reads as the first.
+ *
+ * ★ NOTES DO EXIST, AND THEY ARE KEYED ON A CUSTOMER. `/api/identity/:contactId/notes`
+ * stores them (`customer-notes.service.ts`) and mirrors the body to whatever
+ * system the merchant elected in Business Core, reporting that push's real
+ * outcome. A conversation is at most WHERE a note was written, never its
+ * subject - the person outlives the thread.
+ *
+ * Which is why this answers 501 and NAMES that endpoint rather than 404ing:
+ * the next person to want notes here should use the customer-keyed ones, not
+ * build a second note store in the conversation service.
+ */
+const NOTES_NOT_STORED = {
+  error: "notes_not_stored_here",
+  message:
+    "Notes are keyed on a CUSTOMER, not a conversation. Use /api/identity/:contactId/notes (GET, POST, PATCH, DELETE), which stores the note and mirrors it to the system elected in Business Core.",
+} as const;
+
 router.get("/:id/notes", async (_req: Request, res: Response) => {
-  // Demo stub - notes will be stored in a future model
-  res.json({ data: [] });
+  res.status(501).json(NOTES_NOT_STORED);
 });
 
-router.post("/:id/notes", async (req: Request, res: Response) => {
-  // Demo stub - echo back the note
-  const { text } = req.body;
-  res.json({ data: { id: Date.now().toString(), text, createdAt: new Date().toISOString() } });
+router.post("/:id/notes", async (_req: Request, res: Response) => {
+  // Refused BEFORE reading the body: accepting input we will not keep is the
+  // whole defect, and a 501 that still parses the note invites a caller to
+  // believe some of it was used.
+  res.status(501).json(NOTES_NOT_STORED);
 });
 
 router.get("/:id", async (req: Request, res: Response) => {
   try {
     const conversation = await conversationService.getById(req.tenantId!, req.params.id as string);
     if (!conversation) { res.status(404).json({ error: "Conversation not found" }); return; }
-    res.json({ data: conversation });
+    // What may be sent now (B7): free text, a template only, or nothing.
+    // null if it cannot be read; the send routes still decide.
+    const windows = await Promise.resolve().then(() => replyWindowsFor(req.tenantId!, [conversation.id])).catch((err: any) => {
+      console.warn("[conversations] reply window unavailable:", err?.message);
+      return new Map();
+    });
+    res.json({ data: { ...conversation, replyWindow: windows.get(conversation.id) ?? null } });
   } catch (err) {
     console.error("Get conversation error:", err);
     res.status(500).json({ error: "Failed to get conversation" });
@@ -139,7 +239,148 @@ router.post("/:id/return-to-ai", async (req: Request, res: Response) => {
   }
 });
 
+// Stop the AI without assigning anyone: the conversation waits for a person.
+// The inverse of return-to-ai, with the same access.
+router.post("/:id/stop-ai", async (req: Request, res: Response) => {
+  try {
+    const conversation = await conversationService.stopAi(req.tenantId!, req.params.id as string, req.user?.userId);
+    res.json({ data: conversation });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to stop the AI" });
+  }
+});
+
 // Allow both ADMIN and the assigned agent to transfer/reassign
+/*
+ * ARCHIVE AND MARK-UNREAD - the two context-menu actions the server could not do.
+ *
+ * The queue's right-click menu specifies seven actions. Five had routes. These
+ * two did not: archive had nothing at all, and "mark as unread" lived only as a
+ * `chatcenter:markedUnread` set in the browser's localStorage, so it was lost on
+ * another device, lost when site data was cleared, and invisible to the team.
+ *
+ * ★ They are deliberately different shapes. Archiving is a fact about the
+ *   CONVERSATION and everyone sees it. Marking unread is a fact about the
+ *   PERSON - a column would mean one agent marking unread marks it unread for
+ *   the whole team, which is neither what the old product did nor what anyone
+ *   would expect.
+ */
+
+/** Both archive routes need the same check: it exists, and it is ours. */
+async function findInTenant(tenantId: string, conversationId: string) {
+  return prisma.conversation.findFirst({ where: { id: conversationId, tenantId } });
+}
+
+router.post("/:id/archive", async (req: Request, res: Response) => {
+  try {
+    const conversationId = req.params.id as string;
+    const existing = await findInTenant(req.tenantId!, conversationId);
+    if (!existing) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    // Already archived is not an error: the menu can be opened twice, and the
+    // second click should leave the FIRST archive time standing rather than
+    // moving it.
+    if (existing.archivedAt) { res.json({ data: existing }); return; }
+
+    const conversation = await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { archivedAt: new Date() },
+    });
+    res.json({ data: conversation });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to archive conversation" });
+  }
+});
+
+router.delete("/:id/archive", async (req: Request, res: Response) => {
+  try {
+    const conversationId = req.params.id as string;
+    const existing = await findInTenant(req.tenantId!, conversationId);
+    if (!existing) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    const conversation = await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { archivedAt: null },
+    });
+    res.json({ data: conversation });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to unarchive conversation" });
+  }
+});
+
+/**
+ * Tell the viewer's OTHER tabs (their own room only: read state is personal)
+ * that this conversation's unread changed, so the dot clears or appears there
+ * too. conversation:updated, merged by id like any partial update. Best-effort:
+ * the HTTP answer is the truth for this tab.
+ */
+async function pushReadState(tenantId: string, userId: string, conversationId: string, markedUnread: boolean): Promise<void> {
+  try {
+    const state = (await unreadStates(tenantId, userId, [conversationId])).get(conversationId);
+    getIO().to(`user:${userId}`).emit("conversation:updated", {
+      id: conversationId,
+      conversationId,
+      tenantId,
+      unread: state?.unread ?? markedUnread,
+      unreadCount: state?.unreadCount ?? 0,
+      lastReadAt: state?.lastReadAt ?? null,
+      markedUnread,
+    });
+  } catch { /* socket not ready */ }
+}
+
+router.post("/:id/unread", async (req: Request, res: Response) => {
+  try {
+    const conversationId = req.params.id as string;
+    const userId = req.user!.userId;
+    const existing = await findInTenant(req.tenantId!, conversationId);
+    if (!existing) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    /*
+     * `markedUnread` is set by hand and is NOT the same as "has unseen
+     * messages", which is derived from lastReadAt. A conversation you have
+     * read can still be deliberately marked unread - that is the entire point
+     * of the action, so clearing lastReadAt here would be wrong.
+     */
+    const state = await prisma.conversationReadState.upsert({
+      // ★ `tenantId` IS LOAD-BEARING HERE, NOT BELT-AND-BRACES. The tenant
+      // guard REFUSES an upsert whose where clause omits it
+      // ("where clause must include tenantId"), and Prisma 5's extended unique
+      // where accepts a non-unique field beside the compound key. Without it
+      // this route throws on its first call.
+      where: { userId_conversationId: { userId, conversationId }, tenantId: req.tenantId! },
+      create: { tenantId: req.tenantId!, userId, conversationId, markedUnread: true },
+      update: { markedUnread: true },
+    });
+    await pushReadState(req.tenantId!, userId, conversationId, true);
+    res.json({ data: state });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to mark conversation unread" });
+  }
+});
+
+router.delete("/:id/unread", async (req: Request, res: Response) => {
+  try {
+    const conversationId = req.params.id as string;
+    const userId = req.user!.userId;
+    const existing = await findInTenant(req.tenantId!, conversationId);
+    if (!existing) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    // Opening a conversation clears the manual mark AND moves the read point.
+    const state = await prisma.conversationReadState.upsert({
+      // Same reason as the mark-unread route above: the guard refuses an
+      // upsert with no tenantId in its where.
+      where: { userId_conversationId: { userId, conversationId }, tenantId: req.tenantId! },
+      create: { tenantId: req.tenantId!, userId, conversationId, markedUnread: false, lastReadAt: new Date() },
+      update: { markedUnread: false, lastReadAt: new Date() },
+    });
+    await pushReadState(req.tenantId!, userId, conversationId, false);
+    res.json({ data: state });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to mark conversation read" });
+  }
+});
+
 router.post("/:id/reassign", async (req: Request, res: Response) => {
   try {
     const { agentId, departmentId } = req.body;
@@ -163,7 +404,7 @@ router.post("/:id/reassign", async (req: Request, res: Response) => {
       const conversation = await conversationService.transferToDepartment(req.tenantId!, conversationId, departmentId);
       res.json({ data: conversation });
     } else {
-      const conversation = await conversationService.reassign(req.tenantId!, conversationId, agentId);
+      const conversation = await conversationService.reassign(req.tenantId!, conversationId, agentId, userId);
       res.json({ data: conversation });
     }
   } catch (err: any) {

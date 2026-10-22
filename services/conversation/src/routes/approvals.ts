@@ -1,4 +1,4 @@
-import { getInternalServiceKey, reportOperationalFailure, recordExpectedOutcome, ERROR_CODES } from "@chatcenter/shared";
+import { getInternalServiceKey, reportOperationalFailure, recordExpectedOutcome, ERROR_CODES, recordHandover } from "@chatcenter/shared";
 /**
  * Approval request REST surface.
  *
@@ -35,7 +35,12 @@ import {
   findPendingByConversation,
   publishEvent,
   outgoingMessageQueue,
+  evaluateToolGate,
 } from "@chatcenter/shared";
+import { canViewConversation, visibilityClause } from "../lib/conversation-visibility";
+import { activityLabelKey } from "@chatcenter/shared/src/lib/ai-activity-labels";
+import { applyApprovalEdits } from "../lib/approval-edits";
+import { approvalFor } from "../lib/plan-summary";
 
 /**
  * Dispatch an approved action by calling the AI service.
@@ -278,6 +283,41 @@ export function sanitizeExecutionResult(value: unknown, depth = 0): unknown {
 const router = Router();
 
 /**
+ * An approval is about a conversation, and answers only for a viewer who may
+ * see that conversation - the same rule as the inbox (404 otherwise, as for a
+ * missing approval). With no user on the request this passes through: the two
+ * internal dispatch routes above the user auth carry no session and are
+ * guarded by requireInternalKey, which still runs after this. An approval with
+ * no conversation, or none at all, is left to the handler.
+ */
+router.param("id", async (req: Request, res: Response, next, id: string) => {
+  try {
+    const user = (req as any).user;
+    const tenantId = (req as any).tenantId as string | undefined;
+    if (!user || !tenantId) return next();
+    // An unrestricted viewer (admin, or no department) has nothing to check -
+    // and must not lose an approval because its conversation was deleted.
+    if (!visibilityClause(viewerFromReq(req))) return next();
+    const approval = await prisma.approvalRequest.findFirst({
+      where: { id: String(id), tenantId },
+      select: { conversationId: true },
+    });
+    if (!approval?.conversationId) return next();
+    const ok = await canViewConversation(tenantId, approval.conversationId, viewerFromReq(req));
+    if (!ok) { res.status(404).json({ error: "approval not found" }); return; }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+const viewerFromReq = (req: Request) => ({
+  userId: (req as any).user?.userId as string,
+  role: (req as any).user?.role as string | undefined,
+  departmentId: (req as any).user?.departmentId as string | undefined,
+});
+
+/**
  * Did the tool say, in its own result, that nothing changed?
  *
  * The dispatch layer only knows whether the call completed. Every write tool in
@@ -352,17 +392,19 @@ function localFallbackMessage(tool: string, outcome: ContinuationOutcome, he: bo
   const isCancel = /cancel/.test(tool);
   const isRefund = /refund/.test(tool);
   const actHe = isCancel ? "הביטול" : isRefund ? "ההחזר" : "הפעולה";
+  // The verb agrees with the noun: "הביטול בוצע", "הפעולה בוצעה".
+  const doneHe = isCancel || isRefund ? "בוצע" : "בוצעה";
   const actEn = isCancel ? "the cancellation" : isRefund ? "the refund" : "the action";
   if (outcome === "succeeded") {
-    return he ? `${actHe} בוצע בהצלחה.` : `${actEn[0].toUpperCase()}${actEn.slice(1)} was completed successfully.`;
+    return he ? `${actHe} ${doneHe} בהצלחה.` : `${actEn[0].toUpperCase()}${actEn.slice(1)} was completed successfully.`;
   }
   if (outcome === "rejected") {
     return he
-      ? `הבקשה לא אושרה ולכן ${actHe} לא בוצע. אפשר לבדוק יחד אפשרות אחרת.`
+      ? `הבקשה לא אושרה ולכן ${actHe} לא ${doneHe}. אפשר לבדוק יחד אפשרות אחרת.`
       : `The request was not approved, so ${actEn} did not go through. We can look at another option together.`;
   }
   return he
-    ? `הבקשה אושרה, אבל לא הצלחתי להשלים את ${actHe} כרגע. אני בודק את האפשרויות.`
+    ? `הבקשה אושרה, אבל לא הצלחתי להשלים את ${actHe} כרגע. אני בודקת את האפשרויות.`
     : `The request was approved, but I could not complete ${actEn} right now. I am checking the options.`;
 }
 
@@ -382,6 +424,32 @@ function orderNameFromParams(params: Record<string, unknown> | undefined): strin
     return t.startsWith("#") ? t : `#${t}`;
   }
   return undefined;
+}
+
+/**
+ * A plan an operator proposed in GOTCHA (Home or the command bar) is internal
+ * to the team: the customer never asked for it and is not waiting on it.
+ * Deciding it (approve, reject, expire) must never message the customer, nor
+ * touch who handles their conversation. The first Home plans to be rejected
+ * sent the customer "the request was not approved" nine times on 2026-10-08
+ * (undelivered only because Meta's 24h window had closed).
+ */
+const OPERATOR_SOURCES = new Set(["home_assistant", "command_bar"]);
+export function isOperatorPlan(tool: unknown, params: unknown): boolean {
+  if (tool === "propose_plan") return true;
+  const source = (params as Record<string, unknown> | null | undefined)?.source;
+  return typeof source === "string" && OPERATOR_SOURCES.has(source);
+}
+
+/**
+ * The person behind requestedBy: "user:<id>" (Home), "agent:<id>" (a human's
+ * commerce request, 2026-10-09) and a bare id are the same user. "agent-loop:"
+ * and "ai-agent:" name an AI agent, never a person, and stay as they are.
+ */
+function requesterUserId(requestedBy: unknown): string | null {
+  if (typeof requestedBy !== "string" || !requestedBy) return null;
+  const m = /^(?:user|agent):(.+)$/.exec(requestedBy);
+  return m ? m[1]! : requestedBy;
 }
 
 /**
@@ -409,6 +477,8 @@ async function sendApprovalContinuation(args: {
 }): Promise<{ sent: boolean; reason?: string }> {
   const { tenantId, approvalId, conversationId, tool, outcome } = args;
   if (!conversationId) return { sent: false, reason: "no_conversation" };
+  // The team's own plan: nobody on the customer's side is waiting for it.
+  if (isOperatorPlan(tool, args.params)) return { sent: false, reason: "operator_plan" };
 
   // Claim FIRST. Everything below is delivery; the claim is the thing that
   // makes "exactly one" true across retries, sweepers and both decision
@@ -624,9 +694,12 @@ async function recordFailureAndMaybeEscalate(args: {
     escalated = reason !== "already_done" && attempts >= MAX_AUTONOMOUS_EXECUTION_ATTEMPTS;
 
     if (escalated) {
-      await prisma.conversation.update({
-        where: { id: conversationId },
-        data: { handledBy: "human", isHandedOver: true, status: "WAITING" },
+      await recordHandover({
+        tenantId,
+        conversationId,
+        to: "human",
+        reason: "escalation",
+        data: { isHandedOver: true, status: "WAITING" },
       });
     }
 
@@ -773,7 +846,9 @@ export async function runApprovedAction(opts: {
   // cannot be cancelled takes a return plus a refund). Escalate only once the
   // action has genuinely been attempted more than once without success.
   let escalated = false;
-  if (!dispatch.ok) {
+  // A team's plan leaves the customer's conversation exactly as it was.
+  const operatorPlan = isOperatorPlan(tool, effectiveParams);
+  if (!dispatch.ok && !operatorPlan) {
     ({ escalated } = await recordFailureAndMaybeEscalate({
       tenantId,
       approvalId,
@@ -791,7 +866,7 @@ export async function runApprovedAction(opts: {
   // incoming-worker does not treat as bot-owned, and the customer's NEXT
   // message got no reply at all. Restoring it here means every decision
   // channel converges on the same end state.
-  if (!escalated) await restoreAiOwnership(tenantId, conversationId);
+  if (!escalated && !operatorPlan) await restoreAiOwnership(tenantId, conversationId);
   return { ok: dispatch.ok, error: dispatch.error };
 }
 
@@ -875,7 +950,7 @@ router.post("/:id/dispatch-rejected", requireInternalKey, async (req: Request, r
       outcome: "rejected",
       params: (row.modifiedParams ?? row.params) as Record<string, unknown>,
     });
-    await restoreAiOwnership(tenantId, row.conversationId);
+    if (!isOperatorPlan(row.tool, row.params)) await restoreAiOwnership(tenantId, row.conversationId);
 
     return res.json({ data: { approvalId: row.id, notified: sent.sent, reason: sent.reason ?? null } });
   } catch (err: any) {
@@ -927,8 +1002,12 @@ router.get("/", async (req: Request, res: Response) => {
       });
       for (const u of users) userMap.set(u.id, u.name || u.email || u.id);
     }
+    // A plan's words are the reader's: an assignment to them is "you" (lib/plan-summary).
+    const viewerId = ((req as any).user?.userId ?? (req as any).user?.id) as string | undefined;
     const enriched = rows.map((r: any) => ({
-      ...r,
+      ...approvalFor(r, viewerId),
+      // The same key the inbox's live line and the timeline use for this tool.
+      labelKey: activityLabelKey(String(r.tool ?? "")),
       decidedByName: r.decidedBy ? userMap.get(r.decidedBy as string) ?? null : null,
       requestedByName:
         r.requestedBy && !String(r.requestedBy).includes(":") && r.requestedBy !== "bot"
@@ -959,28 +1038,36 @@ router.get("/:id", async (req: Request, res: Response) => {
     // Load the surrounding context so the frontend card doesn't need
     // N extra round trips.
     const [conversation, contact, recentMessages] = await Promise.all([
-      prisma.conversation.findFirst({
-        where: { id: row.conversationId, tenantId },
-      }),
+      // ★ A System Copilot plan has NO conversation, and then there is nothing
+      // to load. This used to query `id: null`, on the belief that it "matches
+      // nothing" - Prisma REJECTS null for a required field (validation
+      // error), so every conversation-less approval answered 500. And
+      // `undefined` would drop the filter and return an arbitrary conversation,
+      // so the id is never passed through at all when it is absent.
+      row.conversationId
+        ? prisma.conversation.findFirst({ where: { id: row.conversationId, tenantId } })
+        : Promise.resolve(null),
       row.contactId
         ? prisma.contact.findFirst({ where: { id: row.contactId, tenantId } })
         : Promise.resolve(null),
-      prisma.message.findMany({
-        where: { conversationId: row.conversationId, tenantId },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-        select: {
-          id: true,
-          direction: true,
-          body: true,
-          createdAt: true,
-          senderName: true,
-        },
-      }),
+      row.conversationId
+        ? prisma.message.findMany({
+            where: { conversationId: row.conversationId, tenantId },
+            orderBy: { createdAt: "desc" },
+            take: 5,
+            select: {
+              id: true,
+              direction: true,
+              body: true,
+              createdAt: true,
+              senderName: true,
+            },
+          })
+        : Promise.resolve([] as any[]),
     ]);
 
     return res.json({
-      approval: row,
+      approval: { ...approvalFor(row, (req as any).user?.userId ?? (req as any).user?.id), labelKey: activityLabelKey(String(row.tool ?? "")) },
       conversation,
       contact,
       recentMessages: recentMessages.reverse(),
@@ -993,7 +1080,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 
 /**
  * POST /api/approvals/:id/approve
- * Body: { decisionReason?, modifiedParams? }
+ * Body: { decisionReason?, modifiedParams?, edits?: { amount?: number } | { percentage?: number } }
  *
  * Separation of duties: the approver MUST NOT be the same actor who
  * authored the originating bot action. For bot-initiated requests
@@ -1038,15 +1125,64 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
       });
       return res.status(409).json({ error: "approval has expired" });
     }
-    // Same-actor defense-in-depth
-    if (row.requestedBy === actorId) {
+    // Same-actor defense-in-depth. 2026-10-09: Home writes requestedBy as
+    // "user:<id>", so the bare compare never matched and the guard never fired.
+    // An operator plan is the asker's own team decision, so they may approve it.
+    if (!isOperatorPlan(row.tool, row.params) && requesterUserId(row.requestedBy) === String(actorId)) {
       return res.status(403).json({
         error: "approver must be a different actor than the requester",
       });
     }
 
-    const effectiveParams =
-      req.body?.modifiedParams && typeof req.body.modifiedParams === "object"
+    // D49. `allowModification` is resolved through tool-gate for every tool and
+    // was read by nobody: an approver could edit the params of an action whose
+    // policy forbids editing, and the edit executed.
+    //
+    // Refused LOUDLY rather than ignored. Falling back to the original params
+    // would execute something the approver did not agree to while showing them
+    // the version they typed - the approval record would then disagree with
+    // what ran, which is the one thing this table exists to prevent.
+    //
+    // Fails CLOSED: an absent `approvalConfig` means no policy said editing was
+    // permitted, and the default at every resolution site in tool-gate is
+    // already `?? false`. Unknown is not permission.
+    const wantsModification =
+      req.body?.modifiedParams != null && typeof req.body.modifiedParams === "object";
+
+    // "Edit amount": a bounded, allow-listed edit (see lib/approval-edits).
+    // Not combinable with a free-form modifiedParams - two edits to one action
+    // would leave no single version the approver agreed to.
+    const wantsEdits = req.body?.edits !== undefined;
+    let editedParams: Record<string, unknown> | null = null;
+    let edit: { field: string; key: string; from: number; to: number; unit: string } | null = null;
+    if (wantsEdits) {
+      if (wantsModification) {
+        return res.status(400).json({ error: "edit_not_allowed", message: "send edits or modifiedParams, not both" });
+      }
+      const applied = applyApprovalEdits(row.tool, (row.params ?? {}) as Record<string, unknown>, req.body.edits);
+      if (!applied.ok) return res.status(applied.status).json({ error: applied.error, message: applied.message });
+      editedParams = applied.params;
+      edit = applied.edit;
+    }
+
+    if (wantsModification) {
+      const gate = await evaluateToolGate(tenantId, row.tool);
+      if (gate.approvalConfig?.allowModification !== true) {
+        return res.status(403).json({
+          error: "this tool's policy does not allow editing the requested action before approval",
+          code: "MODIFICATION_NOT_ALLOWED",
+          tool: row.tool,
+          setting: "allowModification",
+        });
+      }
+    }
+
+    // Reached only once the edit is permitted, so this is the params the
+    // approver actually agreed to. It is dispatched below, which is why the
+    // gate above has to run BEFORE it rather than alongside it.
+    const effectiveParams = editedParams
+      ? editedParams
+      : wantsModification
         ? (req.body.modifiedParams as Record<string, unknown>)
         : (row.params as Record<string, unknown>);
 
@@ -1055,11 +1191,15 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
     // once (or a double-click, or web racing a WhatsApp button) previously
     // both passed the checks and both dispatched - executing the action twice.
     // Exactly one caller can win the compare-and-set; the loser stops here.
+    // An edit is stored exactly where a modification is: `params` keeps the
+    // original for audit, `modifiedParams` holds what ran, and decidedBy /
+    // decidedAt say who edited and when (the edit IS the decision). Retry and
+    // the kernel resume both already read modifiedParams over params.
     const updated = await approveRequest(
       tenantId,
       row.id,
       actorId,
-      req.body?.modifiedParams,
+      editedParams ?? req.body?.modifiedParams,
       req.body?.decisionReason,
       { decisionChannel: (req.body?.decisionChannel as string) || "web", correlationId: row.correlationId ?? row.id },
     );
@@ -1084,7 +1224,8 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
     // action must NOT silently re-activate the bot on a human-owned
     // conversation - execute the action, keep the human in charge.
     try {
-      const conv = await prisma.conversation.findFirst({
+      // A team's plan never parked the conversation, so there is nothing to un-park.
+      const conv = isOperatorPlan(row.tool, row.params) ? null : await prisma.conversation.findFirst({
         where: { id: row.conversationId, tenantId },
         select: { isHandedOver: true, assignedAgentId: true },
       });
@@ -1132,6 +1273,8 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
 
     return res.json({
       approval: updated,
+      // Present only when the approver edited; null means approved as asked.
+      edit,
       dispatch: {
         ok: dispatch.ok,
         error: dispatch.error,
@@ -1234,7 +1377,8 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
     // supported. Routing every "no" to a person was the reason a declined
     // cancellation looked, to the customer, exactly like being ignored.
     try {
-      const conv = await prisma.conversation.findFirst({
+      // A team's plan never parked the conversation: nothing to resume.
+      const conv = isOperatorPlan(row.tool, row.params) ? null : await prisma.conversation.findFirst({
         where: { id: row.conversationId, tenantId },
         select: { isHandedOver: true, assignedAgentId: true },
       });

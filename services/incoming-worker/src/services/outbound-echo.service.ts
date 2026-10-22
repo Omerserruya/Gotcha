@@ -1,5 +1,6 @@
 import { Job } from "bullmq";
 import { prisma, OutboundEchoJob, publishEvent, decryptCredentials, isInboundExcluded } from "@chatcenter/shared";
+import type { MediaFacts } from "../workers/incoming.worker";
 
 /**
  * Business-app echo ingestion (WhatsApp Coexistence).
@@ -104,19 +105,23 @@ export async function processOutboundEcho(job: Job<OutboundEchoJob>): Promise<vo
   let resolvedMediaUrl: string | undefined;
   let resolvedFileName: string | undefined;
   let mediaError: string | undefined;
+  // metadata.media, as on the inbound path (2026-10-09).
+  let media: MediaFacts | undefined;
   if (echo.mediaUrl && channelAccount) {
+    let worker: typeof import("../workers/incoming.worker") | undefined;
     try {
+      worker = await import("../workers/incoming.worker");
       const creds = channelAccount.credentials;
       const decrypted = typeof creds === "string" ? decryptCredentials(creds) : (creds as any);
       if (decrypted?.accessToken) {
-        const { resolveWhatsAppMedia } = await import("../workers/incoming.worker");
-        const resolved = await resolveWhatsAppMedia(echo.mediaUrl, decrypted.accessToken, echo.messageType, {
+        const resolved = await worker.resolveWhatsAppMedia(echo.mediaUrl, decrypted.accessToken, echo.messageType, {
           fileName: echo.fileName,
           mimeType: echo.mimeType,
         });
         if (resolved) {
           resolvedMediaUrl = resolved.localUrl;
           resolvedFileName = resolved.displayName;
+          media = resolved.media;
         } else {
           mediaError = "download_failed";
         }
@@ -127,6 +132,7 @@ export async function processOutboundEcho(job: Job<OutboundEchoJob>): Promise<vo
       mediaError = "download_failed";
       console.warn("[incoming-worker] echo media resolution failed:", err?.message);
     }
+    media ??= worker?.mediaFacts({ declaredMime: echo.mimeType, senderFileName: echo.fileName });
   }
 
   // DELIVERED, not SENT: the app already put this on the wire. We will never
@@ -151,6 +157,7 @@ export async function processOutboundEcho(job: Job<OutboundEchoJob>): Promise<vo
         echo: true,
         ...(echo.businessExternalId ? { businessExternalId: echo.businessExternalId } : {}),
         ...(mediaError ? { mediaError } : {}),
+        ...(media ? { media } : {}),
       },
     },
   });

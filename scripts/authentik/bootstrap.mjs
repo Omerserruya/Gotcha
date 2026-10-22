@@ -26,7 +26,14 @@ const CLIENT_ID = process.env.AUTHENTIK_CLIENT_ID || "gotcha-app";
 // listed here is rejected by Authentik - this is the open-redirect gate.
 const REDIRECT_URIS = (
   process.env.AUTHENTIK_REDIRECT_URIS ||
-  "http://localhost:3000/auth/callback,http://localhost/auth/callback,https://app.gotcha.co.il/auth/callback"
+  // Two callbacks per host, and they are NOT interchangeable:
+  //   /auth/callback      - the SPA page (browser-side PKCE, legacy path)
+  //   /api/auth/callback  - the BFF's BACKEND route (server-side exchange)
+  // Registering only the first is why a cookie-session login on localhost was
+  // rejected by Authentik while the same flow worked on dev.
+  "http://localhost:3000/auth/callback,http://localhost:3000/api/auth/callback," +
+  "http://localhost/auth/callback,http://localhost/api/auth/callback," +
+  "https://app.gotcha.co.il/auth/callback,https://app.gotcha.co.il/api/auth/callback"
 ).split(",").map((s) => s.trim()).filter(Boolean);
 
 const POST_LOGOUT_URIS = (

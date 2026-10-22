@@ -17,6 +17,7 @@
  */
 
 import { generateResponse, getDefaultModel } from "./ai.service";
+import { withoutWideDashes } from "../lib/wide-dash";
 
 // ─── Contract ───────────────────────────────────────────────
 
@@ -166,6 +167,7 @@ const SYSTEM_PROMPT = (lang: string) =>
     "",
     "Depth over breadth. Be SPECIFIC and NON-OBVIOUS (counts, languages, conflicting pages). Generic output ('you are in retail') is a failure. Never invent specifics - an honest gap beats a guess.",
     `Write ALL human-readable prose (summary, reasons, report, gap labels, purposes) in ${lang}. Keep enum-like slugs (employeeRole, confidence values, tool slugs) in English.`,
+    "PUNCTUATION: never write the em-dash (U+2014), the en-dash (U+2013) or the horizontal bar (U+2015), in any language. Use a regular hyphen (-), a comma or a period.",
     "",
     "Respond ONLY with a single JSON object (no prose, no code fences) with EXACTLY these keys:",
     "{",
@@ -282,7 +284,9 @@ export async function discoverBusiness(input: DiscoveryInput): Promise<Discovery
     try { parsed = JSON.parse(stripFences(resp.content ?? "")); }
     catch { console.warn(`[business-discovery] JSON parse failed (len=${(resp.content ?? "").length})`); return null; }
     if (!parsed || typeof parsed !== "object") return null;
-    return normalizeReport(parsed, input);
+    // The prompt asks for no wide dashes; this makes it true for every field
+    // the screens show (brand, business, knowledge, gaps, recommendation, report).
+    return withoutWideDashes(normalizeReport(parsed, input));
   } catch (err: any) {
     console.warn("[business-discovery] scan failed:", err?.message);
     return null;
@@ -347,6 +351,10 @@ function policy(p: any): PolicyFinding {
   }
   return { found: null, confidence: "unknown" };
 }
+
+// Moved to lib/wide-dash.ts (now used by every operator-facing model output);
+// re-exported for the existing importers.
+export { withoutWideDashes };
 
 export function normalizeReport(raw: any, input: DiscoveryInput): DiscoveryReport {
   const b = raw.brand || {};

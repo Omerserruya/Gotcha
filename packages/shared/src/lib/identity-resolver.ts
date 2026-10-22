@@ -13,10 +13,25 @@
  *     to the surviving target. Callers get "the right contact" without
  *     knowing anything about merge history.
  *
- *   - unifyContact(): checks whether the given contact shares a verified
- *     email/phone with any OTHER contact in the same tenant and, if so,
- *     assigns them the same personId. "Same real human across channels."
+ *   - unifyContact(): checks whether the given contact shares an email/phone
+ *     with any OTHER contact in the same tenant and, if so, assigns them the
+ *     same personId. "Same real human across channels."
  *     Non-destructive - no rows deleted, no existing fields overwritten.
+ *
+ *     IT DOES NOT CHECK `emailVerified` / `phoneVerified`. This header used to
+ *     say "shares a VERIFIED email/phone", fifty-seven lines above a doc
+ *     comment on the function itself saying "verified-or-not" and ninety above
+ *     the code, which tests neither flag. Both sentences were read and believed;
+ *     the safety property of a function was stated twice, in opposite
+ *     directions, in one file. A caller MUST decide for itself what it is
+ *     willing to match on - see ensureContactForInbound in services/
+ *     incoming-worker, which passes only contacts whose identifier came from
+ *     the channel envelope.
+ *
+ *     For the record, `phoneVerified: true` means "a staff member typed it into
+ *     /identity/capture and it passed a format check". Nothing in this product
+ *     sends a code to an address or a number. There is no verification here to
+ *     gate on.
  *
  * Both are idempotent and safe to call on the hot path (webhook ingest,
  * bot engine tool execution, /identity/capture endpoint).
@@ -79,8 +94,28 @@ export async function resolveContactByChannelId(
  *     and assigns to BOTH rows so they share it
  *   - no sibling found → mints a new cuid, assigns only to this row
  *
- * Idempotent: safe to call on every inbound. Returns the resulting contact
- * (with personId populated) so callers can use it directly.
+ * READ THAT LAST LINE AGAIN BEFORE CALLING THIS. It mints a personId even when
+ * it matched NOTHING. A row that has been through here is not a row we have
+ * identified - the id means "the unifier ran", not "this is a known human", and
+ * the two are indistinguishable afterwards because both look like a populated
+ * personId. Call it on a contact with no matchable identifier and you have
+ * stamped an identity onto someone we know nothing about.
+ *
+ * THE CALLER DECIDES WHAT IS MATCHABLE, because this function will match on
+ * anything present. It reads `email` and `phone` and tests NEITHER
+ * `emailVerified` NOR `phoneVerified` - see the header for why that sentence is
+ * worth repeating. An identifier parsed out of a chat message is matched with
+ * exactly the confidence of one a staff member entered deliberately, so a
+ * caller that passes contacts carrying customer-typed identifiers is a caller
+ * that merges strangers.
+ * `ensureContactForInbound` in services/incoming-worker is the worked example:
+ * it passes only contacts whose phone came from the channel envelope, and its
+ * guard is fail-closed so the set cannot widen by accident.
+ *
+ * Idempotent in the sense that a second call is a no-op once `personId` is set
+ * - but that early return still costs a query, so "safe on every inbound" is
+ * not the same as "free on every inbound". Prefer calling it once, on create.
+ * Returns the resulting contact so callers can use it directly.
  */
 export async function unifyContact(
   tenantId: string,

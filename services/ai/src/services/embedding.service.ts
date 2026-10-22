@@ -2,6 +2,7 @@ import { prisma } from "@chatcenter/shared";
 import { upsertChunks, deleteByDocumentId } from "./qdrant.service";
 import { generateEmbedding as aiGenerateEmbedding } from "./ai.service";
 import { randomUUID } from "crypto";
+import { ensureDocumentSummary } from "./knowledge-summary.service";
 
 const CHUNK_SIZE = parseInt(process.env.RAG_CHUNK_SIZE || "500", 10);
 const CHUNK_OVERLAP = parseInt(process.env.RAG_CHUNK_OVERLAP || "50", 10);
@@ -66,13 +67,22 @@ export async function upsertSyncedDocument(params: {
   });
 
   if (existing) {
-    const prevKey = (existing.metadata as any)?.syncChangeKey;
+    const prev = ((existing.metadata as Record<string, unknown> | null) ?? {});
+    const prevKey = (prev as any).syncChangeKey;
     // Unchanged at the source - nothing to do (avoids needless re-embedding).
     if (prevKey && changeKey && prevKey === changeKey) return "skipped";
+    // A person's edit outranks the source (K11, 2026-10-13): the same rule the
+    // website re-scan follows. Reported as skipped so callers' counts hold.
+    if ((prev as any).manualEdit === true) {
+      console.log(`[KnowledgeSync] ${existing.id} kept: edited by a person`);
+      return "skipped";
+    }
 
+    // Merged, not replaced: the summary and provenance stay (an old error goes).
+    const { error: _staleError, ...kept } = prev as Record<string, unknown>;
     await prisma.knowledgeDocument.update({
       where: { id: existing.id },
-      data: { title, content, sourceType, metadata, status: "pending" },
+      data: { title, content, sourceType, metadata: { ...kept, ...metadata } as any, status: "pending" },
     });
     await processDocument(existing.id).catch((err) => {
       console.error(`[KnowledgeSync] Failed to re-embed ${existing.id}:`, err.message);
@@ -155,11 +165,18 @@ export async function processDocument(documentId: string): Promise<void> {
     });
 
     console.log(`[Embedding] Processed document ${documentId}: ${chunks.length} chunks -> Qdrant`);
+
+    // What the document contains, in a line, for the Knowledge center. Made
+    // here because every ingest and update passes through; kept until the
+    // content changes. Never fails the document.
+    await ensureDocumentSummary(documentId);
   } catch (err: any) {
     console.error(`[Embedding] Failed to process document ${documentId}:`, err.message);
     await prisma.knowledgeDocument.update({
       where: { id: documentId },
-      data: { status: "error", metadata: { error: err.message } },
+      // Merged: replacing the whole bag dropped provenance, the sync change key
+      // and the summary along with the error.
+      data: { status: "error", metadata: { ...((document.metadata as Record<string, unknown> | null) ?? {}), error: err.message } as any },
     });
     throw err;
   }

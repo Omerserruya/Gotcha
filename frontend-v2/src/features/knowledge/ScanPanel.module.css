@@ -1,0 +1,158 @@
+@layer features {
+  /*
+   * Scan again (11b), on Studio · Knowledge since 2026-10-11: the banner and
+   * what a rescan answered. Moved whole from Workspace.module.css.
+   */
+
+  .provenanceHeading {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--text-subtle);
+  }
+
+  .provenanceLead {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /*
+   * The basis under a statement: why an offer was left alone ("You edited
+   * this, so it was left alone."), what taking one means, what was taken.
+   * Used since 32c7df6a and never defined, so those lines fell back to the
+   * size they inherit - larger than the lead they qualify. They are the
+   * quieter line under it: caption size, subtle, as `.rowCaveat` is on 11.
+   */
+  .provenanceBasis {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  /* ── Screen 11b · scan again ─────────────────────────────────────────── */
+
+  .scan {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  /* 02's banner: `#F5F2EC`, radius 12, `padding:12px 16px`, gap 12. */
+  .scanBanner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: var(--space-12) var(--space-16);
+    border-radius: 12px;
+    background-color: var(--table-head-surface);
+    line-height: normal;
+  }
+
+  .scanIcon {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  .scanIntro {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  /* "Scan again": a quiet link, underlined, at the row's end. */
+  .scanAgain {
+    flex: none;
+    padding: 0;
+    border: 0;
+    border-block-end: 1px solid var(--border-strong);
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  .scanAgain:disabled {
+    cursor: default;
+    color: var(--text-subtle);
+  }
+
+  .scanRefusal {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /* The login-wall caveat. Amber because it qualifies everything below it. */
+  .scanUnreadable {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-14);
+  }
+
+  .scanOffers {
+    list-style: none;
+    margin: var(--space-8) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .scanOffer {
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    gap: var(--space-4);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+  }
+
+  .scanValue {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .scanValueLabel {
+    min-inline-size: var(--size-label-column);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* "Scan anyway": a quiet link-looking control after the unchanged line. */
+  .scanForce {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-secondary);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .scanForce:disabled {
+    color: var(--text-faint);
+    cursor: default;
+  }
+}

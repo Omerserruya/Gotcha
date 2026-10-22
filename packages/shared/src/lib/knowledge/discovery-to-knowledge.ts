@@ -19,6 +19,9 @@
 
 import {
   buildEntry,
+  checksumOf,
+  normalizeContent,
+  normalizeUrl,
   type KbSourceType,
   type KbTopic,
   type ProjectedEntry,
@@ -110,8 +113,14 @@ export interface ReadinessAnswer {
 
 export interface PageInput {
   url: string;
-  title?: string;
+  title?: string | null;
   content: string;
+  /** The page's own <link rel="canonical">, when it has one. */
+  canonical?: string | null;
+  /** The site's home page: kept whole when the shared header/footer is removed. */
+  home?: boolean;
+  /** The site's own name (og:site_name or the title's first part); titles the home page. */
+  siteName?: string | null;
 }
 
 export interface ExternalSourceInput {
@@ -277,6 +286,38 @@ function supportInfo(d: DiscoveryInput, _p: ProfileInput, lang: string): string 
   ]);
 }
 
+/** Contact channel types as people say them; an unknown type is humanized, never printed raw. */
+const CHANNEL_LABELS: Record<string, { en: string; he: string }> = {
+  phone: { en: "Phone", he: "טלפון" },
+  mobile: { en: "Mobile", he: "נייד" },
+  whatsapp: { en: "WhatsApp", he: "WhatsApp" },
+  email: { en: "Email", he: "אימייל" },
+  contact_form: { en: "Contact form", he: "טופס יצירת קשר" },
+  form: { en: "Contact form", he: "טופס יצירת קשר" },
+  live_chat: { en: "Live chat", he: "צ'אט באתר" },
+  chat: { en: "Chat", he: "צ'אט" },
+  address: { en: "Address", he: "כתובת" },
+  store: { en: "Store", he: "חנות" },
+  instagram: { en: "Instagram", he: "Instagram" },
+  facebook: { en: "Facebook", he: "Facebook" },
+};
+
+function channelLabel(type: string, lang: string): string {
+  const key = type.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const known = CHANNEL_LABELS[key];
+  if (known) return isHe(lang) ? known.he : known.en;
+  const words = key.replace(/_+/g, " ").trim();
+  return words ? words[0]!.toUpperCase() + words.slice(1) : "";
+}
+
+/**
+ * A line is a fact only with something a customer can use: a number, an
+ * address, a link. "contact_form - (General inquiries)" told them nothing.
+ */
+function isConcreteContact(detail: string): boolean {
+  return /[@]|\d{3,}|https?:\/\/|www\.|\.[a-z]{2,}\b/i.test(detail) || detail.trim().length >= 12;
+}
+
 function contactHours(d: DiscoveryInput, _p: ProfileInput, lang: string): string {
   const h = headings(lang);
   const channels = Array.isArray(obj(d.communication).channels)
@@ -288,8 +329,8 @@ function contactHours(d: DiscoveryInput, _p: ProfileInput, lang: string): string
       const type = str(o.type);
       const detail = str(o.identifier) || str(o.detail);
       const purpose = str(o.purpose);
-      if (!type && !detail) return "";
-      return [type, detail, purpose && `(${purpose})`].filter(Boolean).join(" - ");
+      if (!detail || !isConcreteContact(detail)) return "";
+      return [channelLabel(type, lang), detail, purpose && `(${purpose})`].filter(Boolean).join(" - ");
     })
     .filter(Boolean);
   return join([section(h("contact"), lines)]);
@@ -347,10 +388,32 @@ const TOPIC_BUILDERS: Array<{ topic: KbTopic; build: Build }> = [
  * entirely: an entry whose body is a lone heading teaches the employee
  * nothing and pollutes retrieval with a near-empty chunk.
  */
+/**
+ * Policy-type topics need a real fact to be a document (2026-10-14). On dev a
+ * "Contact details" doc held a raw slug and "Pricing" one generic line
+ * ("retail prices shown per product"): a customer opening Knowledge sees a doc
+ * that says nothing. A fact here is something checkable: a number (a price, a
+ * day count, an hour), an email, a link. Length is not the test: "Returns
+ * within 14 days." is short and real. Without one, the topic is skipped and
+ * reported, so the screen shows a gap.
+ */
+export function hasConcreteFact(content: string): boolean {
+  const body = content.split("\n").filter((line) => !line.trim().startsWith("##")).join(" ");
+  return /\d|@|https?:\/\/|www\./i.test(body);
+}
+const POLICY_TOPICS = new Set<KbTopic>(["contact_hours", "pricing_policies", "support_info", "shipping_returns"]);
+
+export interface SkippedTopic {
+  topic: KbTopic;
+  reason: "empty" | "thin";
+}
+
 export function projectDiscoveryTopics(
   discovery: DiscoveryInput,
   profile: ProfileInput,
   ctx: ProjectionContext,
+  /** Collects the topics left out and why, for the caller to show as gaps. */
+  skipped?: SkippedTopic[],
 ): ProjectedEntry[] {
   const entries: ProjectedEntry[] = [];
   for (const { topic, build } of TOPIC_BUILDERS) {
@@ -359,7 +422,17 @@ export function projectDiscoveryTopics(
     // with nothing under it (which is what a discovery full of "unknown"
     // sentinels used to produce) is a near-empty chunk that competes with real
     // knowledge during retrieval while teaching the employee nothing.
-    if (!hasSubstance(content)) continue;
+    if (!hasSubstance(content)) {
+      // Contact channels were found but none had anything usable: that is the
+      // thin case (retired), not the model having said nothing (kept).
+      const hadChannels = topic === "contact_hours" && Array.isArray(obj(discovery.communication).channels) && (obj(discovery.communication).channels as unknown[]).length > 0;
+      skipped?.push({ topic, reason: hadChannels ? "thin" : "empty" });
+      continue;
+    }
+    if (POLICY_TOPICS.has(topic) && !hasConcreteFact(content)) {
+      skipped?.push({ topic, reason: "thin" });
+      continue;
+    }
     entries.push(
       buildEntry({
         topic,
@@ -375,21 +448,81 @@ export function projectDiscoveryTopics(
   return entries;
 }
 
-/** Individual crawled pages, kept as their own sources per the spec. */
+/**
+ * Individual crawled pages, kept as their own sources per the spec.
+ *
+ * 2026-10-14, from the dev store's first rescan:
+ *  - The same page reached by two addresses (/faq/ and /pages/faq) is ONE
+ *    document: pages are grouped by content checksum, keeping the address the
+ *    page names as canonical, else the shortest path, else the first.
+ *  - The header and footer every page repeats are removed from each page but
+ *    the home page, so a chunk is about its page. Only with at least
+ *    BOILERPLATE_MIN_PAGES distinct pages, and never down to nothing.
+ *  - A page is titled by its own title (the crawler passes the h1 or <title>).
+ */
+export const BOILERPLATE_MIN_PAGES = 3;
+const MIN_PAGE_CHARS = 40;
+const MIN_SHARED_WORDS = 5;
+
 export function projectPages(pages: PageInput[], ctx: ProjectionContext): ProjectedEntry[] {
-  return pages
-    .filter((p) => p && p.url && normalizeContentLength(p.content) >= 40)
-    .map((p) =>
-      buildEntry({
-        topic: "website_pages",
-        title: p.title?.trim() || p.url,
-        content: p.content,
-        sourceType: "url",
-        sourceUrl: p.url,
-        language: ctx.language,
-        now: ctx.now,
-      }),
-    );
+  const usable = pages.filter((p) => p && p.url && normalizeContentLength(p.content) >= MIN_PAGE_CHARS);
+
+  // One per content: the canonical address wins.
+  const groups = new Map<string, PageInput[]>();
+  for (const p of usable) {
+    const key = checksumOf(normalizeContent(p.content));
+    groups.set(key, [...(groups.get(key) ?? []), p]);
+  }
+  const pathLen = (u: string) => { try { return new URL(u).pathname.length; } catch { return u.length; } };
+  const unique = [...groups.values()].map((group) => {
+    if (group.length === 1) return group[0]!;
+    const canon = group.map((p) => (p.canonical ? normalizeUrl(p.canonical) : null)).find(Boolean);
+    const byCanon = canon ? group.find((p) => normalizeUrl(p.url) === canon) : undefined;
+    const home = group.find((p) => p.home);
+    return home ?? byCanon ?? [...group].sort((a, b) => pathLen(a.url) - pathLen(b.url))[0]!;
+  });
+
+  const stripped = stripSharedBoilerplate(unique);
+  return unique.map((p, i) =>
+    buildEntry({
+      topic: "website_pages",
+      // The home page's h1 is a campaign line ("The Quiet Season"), not what
+      // the page is: it is titled by the site.
+      title: p.home ? homeTitle(p, ctx.language) : p.title?.trim() || p.url,
+      content: stripped[i]!,
+      sourceType: "url",
+      sourceUrl: p.url,
+      language: ctx.language,
+      now: ctx.now,
+    }),
+  );
+}
+
+function homeTitle(p: PageInput, language: string): string {
+  if (isHe(language)) return p.siteName?.trim() ? `דף הבית - ${p.siteName.trim()}` : "דף הבית";
+  return p.siteName?.trim() || "Home page";
+}
+
+/** Each page's content without the word run that opens, and the one that closes, every page. */
+function stripSharedBoilerplate(pages: PageInput[]): string[] {
+  const contents = pages.map((p) => p.content);
+  if (new Set(contents.map((c) => normalizeContent(c))).size < BOILERPLATE_MIN_PAGES) return contents;
+  const words = contents.map((c) => c.trim().split(/\s+/));
+  const shortest = Math.min(...words.map((w) => w.length));
+  let prefix = 0;
+  while (prefix < shortest && words.every((w) => w[prefix] === words[0]![prefix])) prefix++;
+  let suffix = 0;
+  while (suffix < shortest - prefix && words.every((w) => w[w.length - 1 - suffix] === words[0]![words[0]!.length - 1 - suffix])) suffix++;
+  if (prefix < MIN_SHARED_WORDS) prefix = 0;
+  if (suffix < MIN_SHARED_WORDS) suffix = 0;
+  if (!prefix && !suffix) return contents;
+  return pages.map((p, i) => {
+    if (p.home) return contents[i]!;
+    const w = words[i]!;
+    const body = w.slice(prefix, w.length - suffix).join(" ").trim();
+    // Never strip a page to nothing: what is left must still be a page.
+    return body.length >= MIN_PAGE_CHARS ? body : contents[i]!;
+  });
 }
 
 /**

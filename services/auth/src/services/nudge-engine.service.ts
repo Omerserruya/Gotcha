@@ -276,10 +276,10 @@ export async function processNudgeRow(row: any): Promise<NudgeResult> {
   // carries an Authentik setup link. If that cannot be minted we fall back to
   // /setup, which bounces through Authentik login anyway.
   const frontendUrl = resolveAppPublicUrl(process.env);
-  let ctaUrl = `${frontendUrl}/setup`;
+  let ctaUrl = `${frontendUrl}/onboarding`;
   try {
     ctaUrl = await createSetupLink(admin.id);
-  } catch { /* fall back to bare /setup - still valid */ }
+  } catch { /* fall back to bare /onboarding - still valid */ }
 
   const html = nudgeHtml(content.headline, content.body, ctaUrl, locale);
   const cta = locale === "he" ? "המשיכו בהגדרה" : "Continue setup";

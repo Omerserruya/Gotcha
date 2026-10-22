@@ -1,0 +1,762 @@
+import { getFormatter, getTranslations } from 'next-intl/server';
+import type { ReactNode } from 'react';
+
+import {
+  KNOWLEDGE_SEARCH_MAX,
+  documentState,
+  documentSummary,
+  hasAmbiguousName,
+  lastRefreshed,
+  notReadyCount,
+  undatedSources,
+  type KnowledgeSearchHit,
+  type KnowledgeSource,
+  type UnansweredQuestion,
+} from '@/api/contracts/knowledge';
+import { lastHeardFor, variantsOf, type Candidate } from '@/api/contracts/knowledge-candidates';
+
+import { BookOpen, Layers, ListChecks, MessagesSquare, Search, Shapes, Upload } from 'lucide-react';
+
+import { GapRow } from './GapRow';
+import type { KnowledgeSearch } from './search-knowledge';
+import {
+  KNOWLEDGE_KINDS,
+  KNOWLEDGE_TYPE_ICONS,
+  KnowledgeTypeIcon,
+  knowledgeKindOf,
+  knowledgeTypeOf,
+  type KnowledgeKind,
+  SCANNED_SOURCE_TYPES,
+  WEBSITE_SOURCE_TYPES,
+} from './knowledge-type';
+import { plainPreview } from './DocumentText';
+import { ResolveConflict } from './ResolveConflict';
+import styles from './Knowledge.module.css';
+import { UserText } from '@/design-system/primitives/text/UserText';
+import rowLink from '@/design-system/styles/row-link.module.css';
+import { Link } from '@/i18n/navigation';
+
+/**
+ * Screen 08 - what GOTCHA knows, and what it does not.
+ *
+ * ── THE DATE, NOT THE VERDICT ──
+ * The design labels each source *"Fresh"* and counts *"Out of date · 4"*.
+ * `updatedAt` is real; **a staleness policy is not** - no threshold, no
+ * field, no job anywhere in the platform. So each source says **when** it was
+ * last refreshed and leaves the judgement to the reader, who knows their own
+ * business well enough to decide whether two months is fine.
+ *
+ * ── FOUR WAYS IN, NOT THE DESIGN'S FIVE ──
+ * The design lists *"Business core · Products & prices · Shopify · live"* as
+ * a fifth source. **Omer ruled it out (2026-09-26): it is not a knowledge
+ * source.** It is the part→system mapping on screen 14, and presenting it
+ * here would have required inventing a read that treats it as one.
+ *
+ * The screen does not explain the absence, deliberately - nobody looking at
+ * a knowledge screen misses a row that was never a knowledge row, and an
+ * explanation would be the only place the idea appeared.
+ *
+ * ── AND THE CONFLICT PANEL'S OTHER AXIS IS COMING ──
+ * Fact extraction from ingested documents is authorized, so *"your website
+ * says ₪550, the PDF says ₪850"* will eventually be real. Nothing is
+ * pre-built for it: the shape is unsettled, and the conversation-axis card
+ * says truthfully what it knows - which is why widening it later will be an
+ * addition rather than a correction.
+ *
+ * ── AND THE QUESTIONS ARE THE SCREEN ──
+ * The design's headline counts - confident topics, thin topics, out of date -
+ * have no source. What is real is **the list of questions GOTCHA could not
+ * answer**, with `timesAsked` and `distinctAskers` kept apart: one person
+ * asking twenty times is a stuck customer, twenty people asking once is a
+ * missing page, and a single "asked 23 times" cannot tell you which.
+ *
+ * ── 08, MEASURED (S2) ──
+ * A strip of four in one white card (25px figures); the conflict card (its
+ * question, both answers side by side on `#FAF8F4`, the control under them);
+ * then "Where it learns from" (grouped by how it came in, the documents' own
+ * `sourceType`) beside "Questions it couldn't answer" (400). The two
+ * figures nothing measures are "-" in their shape; the conflict answers are
+ * sentences people wrote, so they are set at reading size, not 02's 22px.
+ */
+export async function KnowledgeScreen({
+  sources,
+  unanswered,
+  conflicts,
+  everImported,
+  rescan = null,
+  kind = null,
+  search = null,
+}: {
+  /** K1: a search asked for (`?q=`) and its answer; `null`, the list. */
+  readonly search?: KnowledgeSearch | null;
+  readonly sources: readonly KnowledgeSource[] | null;
+  /** K1: only the items of this kind (`?kind=`); `null`, all of them. */
+  readonly kind?: KnowledgeKind | null;
+  readonly unanswered: readonly UnansweredQuestion[] | null;
+  readonly conflicts: readonly Candidate[] | null;
+  readonly everImported: boolean;
+  /**
+   * "Scan again" (11b, from Settings · Workspace since 2026-10-11): under
+   * "Your website" when that group is listed, else first in the card - a
+   * tenant whose website pages are not (or not yet) listed can still rescan.
+   */
+  readonly rescan?: ReactNode;
+}) {
+  const t = await getTranslations('knowledge');
+  const format = await getFormatter();
+
+  const date = (iso: string | null) =>
+    iso ? format.dateTime(new Date(iso), { day: 'numeric', month: 'long', year: 'numeric' }) : null;
+
+  const found = conflicts !== null && conflicts.length > 0 && everImported;
+  const undated = sources ? undatedSources(sources) : [];
+  /*
+    ★★ K1: each kind's count over every item, and the list narrowed to one
+    kind when asked - a source with none of it left out.
+  */
+  const counts = new Map<KnowledgeKind, number>();
+  for (const source of sources ?? []) {
+    for (const document of source.documents) {
+      const k = knowledgeKindOf(document);
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+  }
+  const total = [...counts.values()].reduce((sum, n) => sum + n, 0);
+  const shown =
+    sources && kind
+      ? sources
+          .map((source) => ({
+            ...source,
+            documents: source.documents.filter((document) => knowledgeKindOf(document) === kind),
+          }))
+          .filter((source) => source.documents.length > 0)
+      : sources;
+  const groups = shown ? groupByWayIn(shown) : [];
+  const firstNumber = firstNumbers(groups);
+  const websiteListed = groups.some((group) => group.way === 'website');
+  const rescanBlock = rescan ? (
+    <div className={styles.rescan} data-testid="knowledge-rescan">
+      {rescan}
+    </div>
+  ) : null;
+
+  return (
+    <div className={styles.screen} data-testid="knowledge-screen">
+      {/*
+        ★ No strip of four figures (Omer, 2026-10-11: K3) - two of them had
+        nothing measuring them, and the conflict and the gaps below say what
+        needs an answer.
+      */}
+
+      {/*
+        ════════════════════════════════════════════════════════════════════
+        ★★ THE CONFLICT - AND IT IS NOT THE CONFLICT THE DESIGN DRAWS
+        ════════════════════════════════════════════════════════════════════
+        02 shows two NAMED SOURCES disagreeing. What this platform detects is
+        the business having answered ONE question differently at different
+        times (*"We do NOT pick one"*), clustered from an import. So the card
+        says that: the question, each answer and how often it was heard. The
+        scan runs inside the import only - the coverage line says so, always.
+
+        ★★ ONLY WHEN THERE IS ONE (Omer, 2026-10-12, K9). With nothing found -
+        none, never scanned, or a read that failed - there is no card: no
+        "nothing has been checked yet" box over a screen with nothing to do.
+      */}
+      {found && conflicts ? (
+        <section className={styles.conflictCard} data-testid="conflicts-section">
+          <ul className={styles.conflicts}>
+            {conflicts.map((candidate) => {
+              const variants = variantsOf(candidate);
+              return (
+                <li
+                  key={candidate.id}
+                  className={styles.conflict}
+                  data-testid={`conflict-${candidate.id}`}
+                >
+                  <div className={styles.conflictHead}>
+                    <p className={styles.conflictQuestion}>
+                      <UserText>{candidate.question}</UserText>
+                    </p>
+                    <p className={styles.conflictAsked}>
+                      {t('conflicts.asked', { count: candidate.occurrenceCount })}
+                    </p>
+                  </div>
+
+                  {/* ★ BOTH ANSWERS, NEITHER PREFERRED - in the order given. */}
+                  <ul className={styles.variants}>
+                    {variants.map((variant) => {
+                      const heard = lastHeardFor(variant, candidate.examples);
+                      return (
+                        <li
+                          key={variant.key}
+                          className={styles.variant}
+                          data-testid={`variant-${candidate.id}-${variant.key}`}
+                        >
+                          {/* One of the business's own past answers, verbatim. */}
+                          <p className={styles.variantAnswer}>
+                            <UserText>{variant.answer}</UserText>
+                          </p>
+                          <p className={styles.variantMeta}>
+                            {t('conflicts.said', { count: variant.occurrenceCount })}
+                            {/* Absent is absent - a zero would read as "no customers". */}
+                            {variant.customerCount !== null && variant.customerCount !== undefined
+                              ? ` · ${t('conflicts.byCustomers', { count: variant.customerCount })}`
+                              : ''}
+                            {/* At most three examples come back: no borrowed dates. */}
+                            {heard
+                              ? ` · ${t('conflicts.lastHeard', { when: date(heard) ?? '' })}`
+                              : ''}
+                          </p>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  {/*
+                      ⚠ THIS WRITES THE TENANT KNOWLEDGE BASE. Authorized by
+                      Omer for this panel. Two presses, the second quoting the
+                      answer back - see `ResolveConflict`. No test and no
+                      capture presses it. Only where there is more than one
+                      answer to choose between.
+                    */}
+                  {variants.length > 1 ? (
+                    <ResolveConflict
+                      candidateId={candidate.id}
+                      question={candidate.question}
+                      reasoning={candidate.reasoning}
+                      liveLookup={candidate.requiresLiveLookup}
+                      variants={variants}
+                    />
+                  ) : null}
+
+                  {/* What is true until somebody decides, said before it is decided. */}
+                  <p className={styles.conflictMeanwhile}>{t('conflicts.meanwhile')}</p>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/*
+            ★★ WHAT WAS COMPARED, beside what it found - the axis is the team's
+            own answers over time, not website against PDF.
+          */}
+          <p className={styles.coverage} data-testid="conflicts-coverage">
+            {t('conflicts.coverage')}
+          </p>
+        </section>
+      ) : null}
+
+      <div className={styles.bottom}>
+        {/* ── Where it learns from ─────────────────────────────────────── */}
+        <section className={styles.sourcesCard} data-testid="sources-section">
+          <header className={styles.cardHead}>
+            <h2 className={styles.cardTitle}>{t('sources.heading')}</h2>
+            {sources !== null ? (
+              <span className={styles.cardMeta} data-testid="counter-sources">
+                {t('counters.sources', { count: sources.length })}
+              </span>
+            ) : null}
+          </header>
+
+          <div className={styles.cardBody}>
+            {websiteListed ? null : rescanBlock}
+            {sources === null ? (
+              <p className={styles.degraded} data-testid="sources-unavailable">
+                {t('sources.unavailable')}
+              </p>
+            ) : sources.length === 0 ? (
+              <div className={styles.empty} data-testid="sources-none">
+                <p className={styles.emptyLead}>{t('sources.none')}</p>
+                <p className={styles.emptyBody}>{t('sources.noneBody')}</p>
+              </div>
+            ) : (
+              <>
+                {/*
+                  ★★ K1: search titles and text (GET /api/knowledge-bases/search).
+                  A plain GET form: it works before any script, and the address
+                  is the search - shareable, and the way back from an item.
+                */}
+                <form
+                  className={styles.search}
+                  method="get"
+                  role="search"
+                  data-testid="knowledge-search"
+                >
+                  <label className={styles.searchField}>
+                    <Search size={13} aria-hidden="true" />
+                    <input
+                      type="search"
+                      name="q"
+                      defaultValue={search?.q ?? ''}
+                      placeholder={t('search.placeholder')}
+                      aria-label={t('search.label')}
+                      maxLength={KNOWLEDGE_SEARCH_MAX}
+                      data-testid="knowledge-search-input"
+                    />
+                  </label>
+                  <button type="submit" className={styles.searchGo}>
+                    {t('search.submit')}
+                  </button>
+                </form>
+                {search ? (
+                  <SearchResults search={search} date={date} t={t} />
+                ) : (
+                  <>
+                    {/* K1: the inbox's way - all, then each kind there is, with its count. */}
+                    <nav
+                      className={styles.kinds}
+                      aria-label={t('kinds.label')}
+                      data-testid="knowledge-kinds"
+                    >
+                      <Link
+                        href="/studio/knowledge"
+                        className={styles.kind}
+                        aria-current={kind ? undefined : 'page'}
+                        data-testid="kind-all"
+                      >
+                        {t('kinds.all')}
+                        <span className={styles.kindCount}>{format.number(total)}</span>
+                      </Link>
+                      {KNOWLEDGE_KINDS.filter((k) => (counts.get(k) ?? 0) > 0 || k === kind).map(
+                        (k) => (
+                          <Link
+                            key={k}
+                            href={{ pathname: '/studio/knowledge', query: { kind: k } }}
+                            className={styles.kind}
+                            aria-current={kind === k ? 'page' : undefined}
+                            data-testid={`kind-${k}`}
+                          >
+                            {t(`kinds.${k}`)}
+                            <span className={styles.kindCount}>
+                              {format.number(counts.get(k) ?? 0)}
+                            </span>
+                          </Link>
+                        ),
+                      )}
+                    </nav>
+                    {groups.length === 0 ? (
+                      <p className={styles.kindNone} data-testid="kind-none">
+                        {t('kinds.none')}
+                      </p>
+                    ) : null}
+                    {groups.map((group) => (
+                      <div key={group.way} data-testid={`way-${group.way}`}>
+                        <p className={styles.wayHead}>
+                          <WayIcon way={group.way} />
+                          <span className={styles.wayName}>
+                            {t(`way.${group.way}` as 'way.website')}
+                          </span>
+                          {/* Only where it is true: every document came from the scan. */}
+                          {group.way === 'website' && group.sources.every(scannedOnly) ? (
+                            <span className={styles.wayNote}>{t('way.scanned')}</span>
+                          ) : null}
+                        </p>
+                        {/* 02's "Your website · scanned automatically" - and its rescan. */}
+                        {group.way === 'website' ? rescanBlock : null}
+                        <ul className={styles.sources}>
+                          {group.sources.map((source) => {
+                            const refreshed = date(lastRefreshed(source));
+                            const pending = notReadyCount(source);
+                            const first = firstNumber.get(source.id) ?? 1;
+                            return (
+                              <li key={source.id}>
+                                <div className={styles.source} data-testid={`source-${source.id}`}>
+                                  <span className={styles.sourceText}>
+                                    <span className={styles.sourceName}>
+                                      {source.name || t('sources.unnamed')}
+                                      {/* A shared name says what tells the two apart. */}
+                                      {hasAmbiguousName(source, sources) ? (
+                                        <span
+                                          className={styles.disambiguate}
+                                          data-testid={`same-name-${source.id}`}
+                                        >
+                                          {t('sources.sameName')}
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                    {/* WHEN, not whether that is good: no staleness policy exists. */}
+                                    <span
+                                      className={styles.sourceMeta}
+                                      data-testid={`docs-${source.id}`}
+                                    >
+                                      {t('sources.documents', { count: source.documents.length })}
+                                      {refreshed
+                                        ? ` · ${t('sources.refreshed', { date: refreshed })}`
+                                        : null}
+                                    </span>
+                                  </span>
+                                  {pending > 0 ? (
+                                    <span
+                                      className={styles.pending}
+                                      data-testid={`pending-${source.id}`}
+                                    >
+                                      {t('sources.pending', { count: pending })}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {/*
+                            ★★ K5 (Omer, 2026-10-11): what is IN it, a row each -
+                            newest first, as the route orders them. A source row
+                            alone turned an added document into "13 documents"
+                            where "12" had been, and nothing appeared. Each row
+                            says whether it is still being read.
+
+                            ★★ K10 (Omer, 2026-10-12): numbered 1, 2, 3… down the
+                            whole list, the number drawn; the kind's icon and the
+                            name, large, as the title; under it the stored
+                            summary, or no line at all.
+                          */}
+                                {source.documents.length > 0 ? (
+                                  <ol className={styles.docs} start={first}>
+                                    {source.documents.map((document, index) => {
+                                      const state = documentState(document);
+                                      const updated = date(document.updatedAt);
+                                      const type = knowledgeTypeOf(document.sourceType);
+                                      /*
+                                  As plain text (supervisor, dev 2026-10-13): a short
+                                  document is its own summary, markers and all -
+                                  "**אפשר להחליף מידה?** כן…". K6's preview helper.
+                                */
+                                      const stored = documentSummary(document);
+                                      const summary = stored ? plainPreview(stored) || null : null;
+                                      return (
+                                        <li
+                                          key={document.id}
+                                          className={`${styles.doc} ${rowLink.row}`}
+                                          data-testid={`doc-${document.id}`}
+                                          data-state={state}
+                                        >
+                                          <span
+                                            className={styles.docNumber}
+                                            data-testid={`doc-number-${document.id}`}
+                                          >
+                                            {format.number(first + index)}
+                                          </span>
+                                          {/*
+                                      K8: its kind's one icon (the Add sheet's and
+                                      the drawer's); none of the four, an empty slot.
+                                    */}
+                                          {type ? (
+                                            <KnowledgeTypeIcon
+                                              type={type}
+                                              size={16}
+                                              className={styles.docIcon}
+                                            />
+                                          ) : (
+                                            <span className={styles.docIcon} aria-hidden="true" />
+                                          )}
+                                          {/*
+                                      K6: the row's one link, stretched over the
+                                      row (row-link) - one tab stop, the drawer.
+                                    */}
+                                          <Link
+                                            href={{
+                                              pathname: '/studio/knowledge',
+                                              query: kind
+                                                ? { doc: document.id, kind }
+                                                : { doc: document.id },
+                                            }}
+                                            className={`${styles.docTitle} ${rowLink.link}`}
+                                            scroll={false}
+                                            data-testid={`doc-open-${document.id}`}
+                                          >
+                                            {document.title ? (
+                                              <UserText>{document.title}</UserText>
+                                            ) : (
+                                              t('sources.untitled')
+                                            )}
+                                          </Link>
+                                          {/* What it contains, as stored - never made up here. */}
+                                          {summary ? (
+                                            <span
+                                              className={styles.docSummary}
+                                              data-testid={`doc-summary-${document.id}`}
+                                            >
+                                              <UserText>{summary}</UserText>
+                                            </span>
+                                          ) : null}
+                                          <span className={styles.docEnd}>
+                                            {state === 'ready' ? null : (
+                                              <span
+                                                className={
+                                                  state === 'failed'
+                                                    ? styles.docFailed
+                                                    : styles.pending
+                                                }
+                                                data-testid={`doc-state-${document.id}`}
+                                              >
+                                                {t(
+                                                  state === 'failed'
+                                                    ? 'sources.docFailed'
+                                                    : 'sources.docReading',
+                                                )}
+                                              </span>
+                                            )}
+                                            {updated ? (
+                                              <span className={styles.sourceMeta}>
+                                                {t('sources.docUpdated', { date: updated })}
+                                              </span>
+                                            ) : null}
+                                          </span>
+                                        </li>
+                                      );
+                                    })}
+                                  </ol>
+                                ) : null}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* "We cannot tell when this was read" is not "this is old": said apart. */}
+          {undated.length > 0 ? (
+            <p className={styles.cardFoot} data-testid="counter-undated">
+              {t('counters.undated', { count: undated.length })}
+            </p>
+          ) : null}
+        </section>
+
+        {/* ── What it could not answer ─────────────────────────────────── */}
+        {/* `tabIndex` -1: an address can send focus here (`?section=gaps`), a Tab cannot. */}
+        <section
+          className={styles.gapsCard}
+          data-testid="gaps-section"
+          tabIndex={-1}
+          aria-labelledby="knowledge-gaps-heading"
+        >
+          <header className={styles.cardHead}>
+            <h2 className={styles.cardTitle} id="knowledge-gaps-heading">
+              {t('gaps.heading')}
+            </h2>
+          </header>
+
+          <div className={styles.cardBody}>
+            {unanswered === null ? (
+              <p className={styles.degraded} data-testid="gaps-unavailable">
+                {t('gaps.unavailable')}
+              </p>
+            ) : unanswered.length === 0 ? (
+              <p className={styles.none} data-testid="gaps-none">
+                {t('gaps.none')}
+              </p>
+            ) : (
+              <ul className={styles.gaps}>
+                {unanswered.map((question) => (
+                  <GapRow
+                    key={question.id}
+                    question={question}
+                    asked={t('gaps.asked', {
+                      times: question.timesAsked,
+                      people: question.distinctAskers,
+                    })}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+/** How a source came in - from its documents' own `sourceType`. */
+export type WayIn =
+  'website' | 'uploaded' | 'drive' | 'confluence' | 'conversations' | 'answers' | 'mixed' | 'other';
+
+/**
+ * The writers' vocabulary, read from their write sites: `url`,
+ * `onboarding_scan` and `url_text` (the website - WEBSITE_SOURCE_TYPES), `file` and `text` (uploaded or typed),
+ * `google_drive` and `drive`, `confluence`, `historical_conversations`,
+ * `readiness_answer` (answers given during setup). Anything else - `ad`
+ * included - is "other" rather than a guess. A source whose documents came
+ * in different ways is "mixed"; one with none is "other".
+ */
+export function wayIn(source: KnowledgeSource): WayIn {
+  const of = (type: string): WayIn => {
+    if (WEBSITE_SOURCE_TYPES.has(type)) return 'website';
+    switch (type) {
+      case 'file':
+      case 'text':
+        return 'uploaded';
+      case 'google_drive':
+      case 'drive':
+        return 'drive';
+      case 'confluence':
+        return 'confluence';
+      case 'historical_conversations':
+        return 'conversations';
+      case 'readiness_answer':
+        return 'answers';
+      default:
+        return 'other';
+    }
+  };
+  const ways = new Set(source.documents.map((document) => of(document.sourceType)));
+  if (ways.size === 0) return 'other';
+  return ways.size === 1 ? [...ways][0]! : 'mixed';
+}
+
+const WAY_ORDER: readonly WayIn[] = [
+  'website',
+  'uploaded',
+  'drive',
+  'confluence',
+  'conversations',
+  'answers',
+  'mixed',
+  'other',
+];
+
+/** Sources grouped by how they came in, in 02's order; empty groups left out. */
+export function groupByWayIn(
+  sources: readonly KnowledgeSource[],
+): readonly { readonly way: WayIn; readonly sources: readonly KnowledgeSource[] }[] {
+  return WAY_ORDER.map((way) => ({ way, sources: sources.filter((s) => wayIn(s) === way) })).filter(
+    (group) => group.sources.length > 0,
+  );
+}
+
+/**
+ * K10: each source's first document number, counting down the list as it is
+ * drawn (groups in order, sources in order, documents in order) - so the
+ * items read 1, 2, 3… across the whole list, not again from 1 per source.
+ */
+export function firstNumbers(
+  groups: readonly { readonly sources: readonly KnowledgeSource[] }[],
+): ReadonlyMap<string, number> {
+  const first = new Map<string, number>();
+  let next = 1;
+  for (const group of groups) {
+    for (const source of group.sources) {
+      first.set(source.id, next);
+      next += source.documents.length;
+    }
+  }
+  return first;
+}
+
+/** A source every one of whose documents came from the website scan. */
+function scannedOnly(source: KnowledgeSource): boolean {
+  return (
+    source.documents.length > 0 &&
+    source.documents.every((document) => SCANNED_SOURCE_TYPES.has(document.sourceType))
+  );
+}
+
+/* The website and Drive ways are those kinds' own icons (K8), never a second pick. */
+const WAY_ICONS = {
+  website: KNOWLEDGE_TYPE_ICONS.page,
+  uploaded: Upload,
+  drive: KNOWLEDGE_TYPE_ICONS.drive,
+  confluence: BookOpen,
+  conversations: MessagesSquare,
+  answers: ListChecks,
+  mixed: Layers,
+  other: Shapes,
+} as const;
+
+function WayIcon({ way }: { readonly way: WayIn }) {
+  const Icon = WAY_ICONS[way];
+  return <Icon className={styles.wayIcon} size={13} aria-hidden="true" />;
+}
+
+/** K1: the search's answer - its hits, or why there are none. */
+function SearchResults({
+  search,
+  date,
+  t,
+}: {
+  readonly search: KnowledgeSearch;
+  readonly date: (iso: string | null) => string | null;
+  readonly t: Awaited<ReturnType<typeof getTranslations<'knowledge'>>>;
+}) {
+  const head =
+    search.state === 'ok'
+      ? t('search.results', { count: search.hits.length, q: search.q })
+      : t(`search.${search.state}`);
+  return (
+    <div className={styles.searchResults} data-testid="search-results">
+      <p className={styles.searchHead} role="status" data-testid="search-head">
+        <span>{head}</span>
+        <Link href="/studio/knowledge" className={styles.searchClear} data-testid="search-clear">
+          {t('search.clear')}
+        </Link>
+      </p>
+      {search.state === 'ok' && search.hits.length > 0 ? (
+        <ul className={styles.hits}>
+          {search.hits.map((hit) => (
+            <SearchHit key={hit.id} hit={hit} q={search.q} date={date} t={t} />
+          ))}
+        </ul>
+      ) : null}
+      {search.state === 'ok' && search.hasMore ? (
+        <p className={styles.emptyBody} data-testid="search-more">
+          {t('search.more', { count: search.hits.length })}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function SearchHit({
+  hit,
+  q,
+  date,
+  t,
+}: {
+  readonly hit: KnowledgeSearchHit;
+  readonly q: string;
+  readonly date: (iso: string | null) => string | null;
+  readonly t: Awaited<ReturnType<typeof getTranslations<'knowledge'>>>;
+}) {
+  const updated = date(hit.updatedAt);
+  return (
+    <li className={`${styles.hit} ${rowLink.row}`} data-testid={`hit-${hit.id}`}>
+      <Link
+        className={`${styles.hitTitle} ${rowLink.link}`}
+        href={{ pathname: '/studio/knowledge', query: { doc: hit.id, q } }}
+        scroll={false}
+      >
+        <UserText>{hit.title || t('sources.unnamed')}</UserText>
+      </Link>
+      <span className={styles.hitMeta}>
+        {[
+          hit.knowledgeBaseName,
+          t(hit.matchIn === 'title' ? 'search.inTitle' : 'search.inText'),
+          updated,
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+      </span>
+      {hit.snippet ? (
+        <span className={styles.hitSnippet} data-testid={`hit-snippet-${hit.id}`}>
+          <UserText>{marked(plainPreview(hit.snippet) || hit.snippet, q)}</UserText>
+        </span>
+      ) : null}
+    </li>
+  );
+}
+
+/** The snippet with each place the search matched marked - case aside, as the route matches. */
+function marked(text: string, q: string): ReactNode {
+  const needle = q.toLowerCase();
+  if (!needle) return text;
+  const lower = text.toLowerCase();
+  const parts: ReactNode[] = [];
+  let at = 0;
+  for (let i = lower.indexOf(needle); i !== -1; i = lower.indexOf(needle, at)) {
+    if (i > at) parts.push(text.slice(at, i));
+    parts.push(<mark key={i}>{text.slice(i, i + needle.length)}</mark>);
+    at = i + needle.length;
+  }
+  if (at < text.length) parts.push(text.slice(at));
+  return parts;
+}

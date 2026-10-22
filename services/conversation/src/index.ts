@@ -9,16 +9,24 @@ import templateRoutes from "./routes/templates";
 import broadcastRoutes from "./routes/broadcasts";
 import scheduledMessageRoutes from "./routes/scheduled-messages";
 import contactRoutes from "./routes/contacts";
+import unsubscribeRoutes from "./routes/unsubscribe";
+import contactInsightsRoutes from "./routes/contact-insights";
 import gdprContactsRoutes from "./routes/gdpr-contacts";
 import identityRoutes from "./routes/identity";
+import customerNotesRoutes from "./routes/customer-notes";
 import approvalRoutes from "./routes/approvals";
 import audienceRoutes from "./routes/audiences";
 import tenantSettingsRoutes from "./routes/tenant-settings";
 import businessPolicyRoutes from "./routes/business-policies";
+import policyDecisionRoutes from "./routes/policy-decisions";
 import voiceSessionsRoutes from "./routes/voice-sessions";
 import voiceChannelsRoutes from "./routes/voice-channels";
 import autoBuyRoutes from "./routes/auto-buy";
 import { handleVoiceSessionEnded } from "./subscribers/voice-auto-close";
+import { uploadsStatic } from "./lib/uploads-static";
+import { widgetImagesRouter } from "./routes/widget-images";
+import { signedMediaHandler } from "./lib/media-serving";
+import { relayBusEvent } from "./lib/socket-bridge";
 import { relayToVisitor, relayConversationState } from "./subscribers/shopify-visitor-relay";
 
 const config = { name: "conversation-service", port: parseInt(process.env.PORT || "4002", 10) };
@@ -32,10 +40,24 @@ initSocket(httpServer);
 // This is pure projection - no side effects, no DB writes. Voice-copilot
 // writes final VOICE-channel messages directly to Postgres via its
 // StreamRouter.PersistenceSink; we only forward the events to browsers.
+//
+// ROUTING. `data.channel` names the room this event is FOR when it is shaped
+// like a room (lib/socket-bridge.ts); everything else broadcasts to the tenant.
+//
+// This bridge used to emit everything to `tenant:{id}` unconditionally, which
+// meant the routing targets that publishers had been setting since Phase 3 were
+// read by nobody. Nine events declared a conversation or agent target and every
+// one of them went to every open tab in the tenant - including `coaching.hint`,
+// which is private feedback about one person's performance. The publishers were
+// right; nothing was listening.
+//
+// Note what this means for the obvious version of this fix: moving a publisher
+// onto `channels.conversation(id)` accomplishes nothing on its own, because the
+// bus envelope has no target field - `publishConvEvent` writes the channel into
+// `data` as a hint and THIS is the only code that can honour it.
 subscribeToEvents((event) => {
   try {
-    const io = getIO();
-    io.to(`tenant:${event.tenantId}`).emit(event.event, event.data);
+    relayBusEvent(getIO(), event);
   } catch {
     // Socket not ready yet - event is dropped (acceptable per MVP spec)
   }
@@ -81,7 +103,13 @@ if (!uploadsProbe.ok) {
   console.log(describeUploadsProbe(uploadsProbe, "conversation"));
 }
 
-app.use("/api/uploads", express.static(uploadsDir));
+// The widget's logo and cover (W3/W4): a signed-in POST, before the static files.
+app.use("/api/uploads", widgetImagesRouter(uploadsDir));
+app.use("/api/uploads", uploadsStatic(uploadsDir));
+// Short-lived signed media links for providers that fetch with no login (Meta,
+// Slack); before any auth on purpose (2026-10-10). Rate limited by the app-wide
+// /api/ limiter in createServiceApp.
+app.get("/api/media/s/:messageId", signedMediaHandler(uploadsDir));
 
 // Routes
 app.use("/api/conversations", conversationRoutes);
@@ -89,13 +117,19 @@ app.use("/api/conversations", messageRoutes);
 app.use("/api/templates", templateRoutes);
 app.use("/api/broadcasts", broadcastRoutes);
 app.use("/api/scheduled-messages", scheduledMessageRoutes);
+// Before the contacts router: its "/:id" must not shadow /insights and /tags.
+// Public, the signed token is its identity: before the authenticated routers.
+app.use("/api/contacts", unsubscribeRoutes);
+app.use("/api/contacts", contactInsightsRoutes);
 app.use("/api/contacts", contactRoutes);
 app.use("/api/gdpr/contacts", gdprContactsRoutes);
+app.use("/api/identity", customerNotesRoutes);
 app.use("/api/identity", identityRoutes);
 app.use("/api/approvals", approvalRoutes);
 app.use("/api/audiences", audienceRoutes);
 app.use("/api/tenant-settings", tenantSettingsRoutes);
 app.use("/api/business-policies", businessPolicyRoutes);
+app.use("/api/policy-decisions", policyDecisionRoutes);
 app.use("/api/voice-sessions", voiceSessionsRoutes);
 app.use("/api/voice-channels", voiceChannelsRoutes);
 app.use("/api/auto-buy", autoBuyRoutes);

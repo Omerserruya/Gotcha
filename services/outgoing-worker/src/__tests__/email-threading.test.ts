@@ -31,10 +31,14 @@ const { prisma, adapter, getOutboundAdapter } = vi.hoisted(() => {
     prisma: {
       channelAccount: { findUnique: vi.fn() },
       message: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
-      conversation: { update: vi.fn() },
+      // `updateMany` is the conversation sort-key bump on the success branch.
+      // Absent, every case here died on a TypeError - which is what these 13
+      // tests caught, correctly, when that call was added.
+      conversation: { update: vi.fn(), updateMany: vi.fn(async () => ({ count: 1 })) },
       usageLog: { create: vi.fn(async () => ({})) },
       auditLog: { create: vi.fn(async () => ({})) },
       scheduledMessage: { update: vi.fn(async () => ({})), findUnique: vi.fn(async () => null) },
+      broadcastRecipient: { findUnique: vi.fn(async () => null as any) },
     },
   };
 });
@@ -207,5 +211,41 @@ describe("a job that already carries its own thread", () => {
 
     expect(prisma.message.findMany).not.toHaveBeenCalled();
     expect(threadSentToAdapter()).toEqual(supplied);
+  });
+});
+
+// ─── List-Unsubscribe on email broadcasts (RFC 2369 / 8058) ─────
+
+describe("★ an email broadcast is marketing: it says how to unsubscribe in its headers", () => {
+  const bjob = (o: any = {}) => job({ conversationId: null, broadcastId: "b1", broadcastRecipientId: "r1", senderName: "Broadcast", ...o });
+
+  it("a recipient with a contact and a public origin: mailto + one-click for that contact and channel", async () => {
+    process.env.PUBLIC_URL = "https://dev.gotcha.co.il";
+    process.env.CHANNEL_ENCRYPTION_KEY = "k".repeat(64);
+    try {
+      prisma.broadcastRecipient.findUnique.mockResolvedValue({ contactId: "k1" });
+      await processOutgoingMessage(bjob());
+      const t = threadSentToAdapter();
+      expect(t.subject).toBe("");
+      expect(t.extraHeaders[0].value).toMatch(/^<mailto:support@acme\.test\?subject=unsubscribe&body=unsubscribe>, <https:\/\/dev\.gotcha\.co\.il\/api\/contacts\/unsubscribe\/[^>]+>$/);
+      expect(t.extraHeaders[1]).toEqual({ name: "List-Unsubscribe-Post", value: "List-Unsubscribe=One-Click" });
+      const token = /unsubscribe\/([^>]+)>$/.exec(t.extraHeaders[0].value)![1]!;
+      const { verifyUnsubscribeToken } = await import("@chatcenter/shared/src/lib/list-unsubscribe");
+      expect(verifyUnsubscribeToken(token)).toEqual({ tenantId: "t1", contactId: "k1", channel: "GMAIL" });
+    } finally {
+      delete process.env.PUBLIC_URL;
+    }
+  });
+
+  it("★ no public origin (the workers today): mailto only, no one-click", async () => {
+    prisma.broadcastRecipient.findUnique.mockResolvedValue({ contactId: "k1" });
+    await processOutgoingMessage(bjob());
+    expect(threadSentToAdapter().extraHeaders).toEqual([{ name: "List-Unsubscribe", value: "<mailto:support@acme.test?subject=unsubscribe&body=unsubscribe>" }]);
+  });
+
+  it("★ an ordinary reply carries none", async () => {
+    await processOutgoingMessage(job());
+    expect(threadSentToAdapter()).not.toHaveProperty("extraHeaders");
+    expect(prisma.broadcastRecipient.findUnique).not.toHaveBeenCalled();
   });
 });

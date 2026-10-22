@@ -1,0 +1,15 @@
+/*
+ * The typefaces' names, as the variables tokens.css reads (2026-10-21).
+ *
+ * The faces themselves are ../fonts/fonts.css, served from this repo: a
+ * build fetches nothing (scripts/fetch-fonts.mjs says why). These names are
+ * what next/font used to put on <html>; the fallbacks after them are what
+ * tokens.css already adds.
+ */
+.gotchaFonts {
+  --font-archivo: 'Archivo';
+  --font-heebo: 'Heebo';
+  --font-instrument-serif: 'Instrument Serif';
+  --font-frank-ruhl-libre: 'Frank Ruhl Libre';
+  --font-ibm-plex-mono: 'IBM Plex Mono';
+}

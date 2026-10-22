@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermissionOrRole, safeFetch, requireEntitlement, requireCapacity } from "@chatcenter/shared";
 import { processDocument } from "../services/embedding.service";
+import { summaryOf } from "../services/knowledge-summary.service";
 import { deleteByDocumentId, deleteByKnowledgeBaseId } from "../services/qdrant.service";
 import { parseFile, isAllowedMimeType, resolveMimeType } from "../services/file-parser.service";
 import multer from "multer";
@@ -61,10 +62,158 @@ router.get("/", async (req: Request, res: Response) => {
       },
       orderBy: { createdAt: "desc" },
     });
-    res.json({ data: knowledgeBases });
+    // `summary`: one stored line on what each document contains (B3), made when
+    // it was processed - never generated here.
+    res.json({
+      data: knowledgeBases.map((kb) => ({
+        ...kb,
+        documents: kb.documents.map((d) => ({ ...d, summary: summaryOf(d.metadata) })),
+      })),
+    });
   } catch (err) {
     console.error("List knowledge bases error:", err);
     res.status(500).json({ error: "Failed to list knowledge bases" });
+  }
+});
+
+/*
+ * GET /api/knowledge-bases/search?q=&limit= - find knowledge by what it says
+ * (2026-10-14): the documents whose title or content contain q, this
+ * workspace's only, with a short snippet around the first match.
+ *
+ * A plain case-insensitive contains (ILIKE), which works for Hebrew as for
+ * English: a person searching Knowledge Center types words they expect to
+ * see. Meaning-based search (the vector index) answers a different question
+ * and can come later as its own mode. Title matches first, then the most
+ * recently changed. Same gate as the list (ai:knowledge:read).
+ */
+export const SEARCH_MAX_Q = 200;
+export const SEARCH_MAX_LIMIT = 50;
+const SNIPPET_SIDE = 60;
+
+/** The text around the first match of q in content ("...before MATCH after..."), whitespace collapsed. */
+export function snippetAround(content: string, q: string, side = SNIPPET_SIDE): string | null {
+  const text = String(content ?? "").replace(/\s+/g, " ").trim();
+  const at = text.toLowerCase().indexOf(q.toLowerCase());
+  if (at < 0) return null;
+  const start = Math.max(0, at - side);
+  const end = Math.min(text.length, at + q.length + side);
+  return `${start > 0 ? "..." : ""}${text.slice(start, end).trim()}${end < text.length ? "..." : ""}`;
+}
+
+router.get("/search", async (req: Request, res: Response) => {
+  const q = typeof req.query.q === "string" ? req.query.q.replace(/\s+/g, " ").trim() : "";
+  if (q.length < 2) { res.status(400).json({ error: "Search for at least 2 characters", code: "QUERY_TOO_SHORT" }); return; }
+  if (q.length > SEARCH_MAX_Q) { res.status(400).json({ error: "The search is too long", code: "QUERY_TOO_LONG", max: SEARCH_MAX_Q }); return; }
+  const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, SEARCH_MAX_LIMIT) : 20;
+  try {
+    const rows = await prisma.knowledgeDocument.findMany({
+      where: {
+        tenantId: req.tenantId!,
+        OR: [{ title: { contains: q, mode: "insensitive" } }, { content: { contains: q, mode: "insensitive" } }],
+      },
+      select: { id: true, knowledgeBaseId: true, title: true, content: true, updatedAt: true, knowledgeBase: { select: { name: true } } },
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      take: 200,
+    });
+    const lower = q.toLowerCase();
+    const hits = rows
+      .map((d: any) => {
+        const inTitle = String(d.title ?? "").toLowerCase().includes(lower);
+        return {
+          id: d.id,
+          knowledgeBaseId: d.knowledgeBaseId,
+          knowledgeBaseName: d.knowledgeBase?.name ?? null,
+          title: d.title,
+          matchIn: inTitle ? "title" : "content",
+          // The content around the match; for a title-only match, the opening.
+          snippet: snippetAround(d.content ?? "", q) ?? (String(d.content ?? "").replace(/\s+/g, " ").trim().slice(0, SNIPPET_SIDE * 2) || null),
+          updatedAt: d.updatedAt,
+        };
+      })
+      // Title matches first; the rest keep the recency order.
+      .sort((a, b) => (a.matchIn === b.matchIn ? 0 : a.matchIn === "title" ? -1 : 1));
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({ data: hits.slice(0, limit), q, hasMore: hits.length > limit });
+  } catch (err) {
+    console.error("Knowledge search error:", err);
+    res.status(500).json({ error: "Failed to search knowledge" });
+  }
+});
+
+/*
+ * One document, for the Knowledge center's detail drawer (K6, 2026-10-11).
+ * Same permission as the list (the router's ai:knowledge:read), scoped by
+ * tenant AND knowledge base. Only stored text and allowlisted provenance leave
+ * here - for a connected source (Drive, Confluence) that is the extracted text
+ * we keep, never a token; a URL loses any credential-looking query parameter.
+ */
+const DOC_CONTENT_CAP = 20_000;
+const DOC_SECTIONS_CAP = 50;
+const SECTION_PREVIEW = 240;
+const SECRET_PARAM = /token|key|secret|sig|signature|auth|password|code/i;
+
+export function safeSourceUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    u.username = "";
+    u.password = "";
+    for (const k of [...u.searchParams.keys()]) if (SECRET_PARAM.test(k)) u.searchParams.delete(k);
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+router.get("/:id/documents/:docId", async (req: Request, res: Response) => {
+  try {
+    const doc = await prisma.knowledgeDocument.findFirst({
+      where: { id: req.params.docId as string, knowledgeBaseId: req.params.id as string, tenantId: req.tenantId! },
+      select: { id: true, knowledgeBaseId: true, title: true, content: true, sourceType: true, sourceUrl: true, status: true, chunkCount: true, metadata: true, createdAt: true, updatedAt: true },
+    });
+    if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
+    const [sectionCount, sections] = await Promise.all([
+      prisma.knowledgeChunk.count({ where: { documentId: doc.id, tenantId: req.tenantId! } }),
+      prisma.knowledgeChunk.findMany({
+        where: { documentId: doc.id, tenantId: req.tenantId! },
+        select: { chunkIndex: true, content: true },
+        orderBy: { chunkIndex: "asc" },
+        take: DOC_SECTIONS_CAP,
+      }),
+    ]);
+    const content = doc.content ?? "";
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({
+      data: {
+        id: doc.id,
+        knowledgeBaseId: doc.knowledgeBaseId,
+        title: doc.title,
+        summary: summaryOf(doc.metadata),
+        type: doc.sourceType,
+        sourceUrl: safeSourceUrl(doc.sourceUrl),
+        status: doc.status,
+        createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt,
+        content: content.slice(0, DOC_CONTENT_CAP),
+        contentLength: content.length,
+        truncated: content.length > DOC_CONTENT_CAP,
+        metadata: sanitizeDocMetadata(doc.metadata) ?? null,
+        // What the AI reads: the stored sections it searches, not the raw text.
+        ai: {
+          sectionCount,
+          sections: sections.map((c) => ({ index: c.chunkIndex, length: c.content.length, preview: c.content.slice(0, SECTION_PREVIEW) })),
+          sectionsTruncated: sectionCount > sections.length,
+          // No per-document facts are extracted today; null rather than [] so
+          // "none found" is never claimed.
+          facts: null,
+        },
+      },
+    });
+  } catch (err) {
+    console.error("Get knowledge document error:", err);
+    res.status(500).json({ error: "Failed to get document" });
   }
 });
 
@@ -284,6 +433,18 @@ router.delete("/:id/documents/:docId", requirePermissionOrRole("ai:knowledge:wri
       where: { id: String(req.params.docId), knowledgeBaseId: String(req.params.id), tenantId: req.tenantId! },
     });
     if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
+    // A synced item (Drive, Confluence) is recreated by the next hourly sync,
+    // so deleting it here would look like it worked and then come back
+    // (K11, 2026-10-13). It is removed at the source, or by not syncing it.
+    if ((doc.metadata as any)?.syncChangeKey) {
+      res.status(409).json({
+        error: "This document is kept in sync with its source. Remove it there, or stop syncing it, and it leaves the knowledge base.",
+        code: "SYNCED_DOCUMENT",
+        sourceType: doc.sourceType,
+        sourceUrl: safeSourceUrl(doc.sourceUrl),
+      });
+      return;
+    }
 
     await deleteByDocumentId(doc.id);
     await prisma.knowledgeDocument.delete({ where: { id: doc.id } });

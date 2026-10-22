@@ -1,5 +1,24 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity } from "@chatcenter/shared";
+import { Prisma } from "@prisma/client";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity, defaultIntegrationAccess, validateIntegrationAccess, integrationAccessChoices, readAgentToolLevels, writeAgentToolLevel, stricterLevel, allowedEmployeeLevels, writeAudit, AuditAction, normalizeGuardrails, readGuardrails, GuardrailsError, type ToolLevel } from "@chatcenter/shared";
+import { listWorkspaceTools } from "./tool-permissions";
+import { catalogTool } from "../lib/catalog-tools-he";
+import { toolDomain, toolDomainLabel } from "../lib/tool-domains";
+import { answerReadinessQuestion, ReadinessAnswerError, MAX_QUESTION } from "../services/readiness-answers";
+import { GapAnswerError, MAX_ANSWER } from "../services/knowledge-gap-answer.service";
+import { readQuestionSet } from "../services/agent-readiness.service";
+import { readerLocale } from "../lib/reader-locale";
+import { whereEmployeeAnswers } from "../services/employee-reach.service";
+
+/**
+ * Columns that still exist but are no longer part of the API. `channels`
+ * ("Answers on") was display-only: who answers where is the playbook, which
+ * GET /:id/reachability reports per channel. The column is dropped separately.
+ */
+function withoutInertFields<T extends Record<string, any>>(agent: T): Omit<T, "channels"> {
+  const { channels: _channels, ...rest } = agent;
+  return rest;
+}
 import { runSandboxTurn } from "../services/sandbox-conversation.service";
 import { computeCalendarCapability } from "../services/calendar-capability.service";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
@@ -8,6 +27,8 @@ import { buildAgentPrompt, GENERATOR_BUILTIN_AGENT } from "../services/prompt-bu
 import { isBrandArchetype } from "../services/brand-archetypes";
 import { loadToolGrants, deriveAllowedOperations } from "../services/agent-loop/permissions-bridge";
 import { ensureCapabilitiesRegistered, describeAllWorlds } from "../services/capability-plane";
+import { withoutWideDashes } from "../lib/wide-dash";
+import { readReadinessStatus } from "../services/readiness-status";
 
 const router = Router();
 
@@ -60,10 +81,20 @@ function normalizeSalesContext(raw: unknown): Record<string, unknown> | null {
 }
 
 // ─── List AI Agents ──────────────────────────────────────────
+export const STALE_DRAFT_DAYS = 7;
+
 router.get("/", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
+    // A hire stopped and never resumed leaves a DRAFT behind. One untouched
+    // for STALE_DRAFT_DAYS is not listed (it is kept, not deleted: starting a
+    // new hire still resumes the latest draft). ?includeStaleDrafts=1 lists it.
+    const includeStale = String(req.query.includeStaleDrafts ?? "") === "1";
+    const staleBefore = new Date(Date.now() - STALE_DRAFT_DAYS * 24 * 60 * 60 * 1000);
     const agents = await prisma.aIAgent.findMany({
-      where: { tenantId: req.tenantId! as string },
+      where: {
+        tenantId: req.tenantId! as string,
+        ...(includeStale ? {} : { NOT: { status: "DRAFT", updatedAt: { lt: staleBefore } } }),
+      },
       include: {
         knowledgeBases: {
           include: { knowledgeBase: { select: { id: true, name: true, isActive: true } } },
@@ -78,6 +109,83 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requirePermi
       select: { id: true, name: true },
     }).catch(() => [] as Array<{ id: string; name: string }>);
     const deptById = new Map(departments.map((d) => [d.id, d.name]));
+
+    // ── Per-employee conversation counts ───────────────────────────────────
+    //
+    // WHAT COUNTS AS THIS EMPLOYEE'S WORK. Defined ONCE and spread into every
+    // query below, because the last time a filter like this was added to one
+    // query and not its sibling, a total disagreed with the list it totalled
+    // and nothing looked wrong. Two exclusions here, each a different kind of
+    // not-a-customer, and a third the platform already applies:
+    //
+    //   sandbox:   the owner's own test chat. `ensureSandboxConversation`
+    //              writes assignedAiAgentId and status OPEN, and NOTHING ever
+    //              closes those rows - `resetSandboxConversation` wipes the
+    //              messages and leaves the conversation open - so each one is
+    //              a permanent phantom, one per person who ever clicked Test.
+    //              The prefix is the product's own definition of a sandbox
+    //              conversation (sandbox-conversation.service.ts), and this
+    //              file already queries it 25 lines below for `lastTestedAt`.
+    //   isTest:    the rehearsal the team ran during setup, from their own
+    //              numbers, before going live.
+    //
+    // `isTest` does NOT mean sandbox - they are separate flags and a sandbox
+    // row has isTest=false - which is exactly why the old count missed it.
+    //
+    // IMPORTED HISTORY IS EXCLUDED, AND NOT HERE. `applyLiveByDefault` in
+    // packages/shared/src/lib/prisma.ts injects `origin: "LIVE"` into every
+    // bulk where-operation on Conversation, groupBy included. Writing it out
+    // again would be worse than redundant: `mentionsOrigin()` treats any
+    // mention of origin as "the caller has an explicit intent" and SUPPRESSES
+    // the injection, so restating the platform's own default replaces a
+    // guarantee with a hand-written copy of it that the next edit can break.
+    // The guard's whole argument is that call sites should not have to
+    // remember. So this one does not.
+    const workloadScope = {
+      tenantId: req.tenantId! as string,
+      assignedAiAgentId: { not: null },
+      customerExternalId: { not: { startsWith: "sandbox:" } },
+      isTest: false,
+    };
+
+    // Three counts, one round trip each, all served by
+    // @@index([tenantId, assignedAiAgentId]). Grouped rather than counted per
+    // agent: `assignedAiAgentId` is a plain column with no Prisma relation, so
+    // there is no `_count` to piggyback on and per-agent counts would add
+    // 3 x N queries to a loop that already runs two per agent.
+    const tally = async (extra: Record<string, unknown>) =>
+      prisma.conversation
+        .groupBy({ by: ["assignedAiAgentId"], where: { ...workloadScope, ...extra } as never, _count: { _all: true } })
+        .catch(() => [] as Array<{ assignedAiAgentId: string | null; _count: { _all: number } }>);
+
+    const [openGrouped, handledGrouped, aloneGrouped] = await Promise.all([
+      // OPEN + WAITING. Not "being handled right now" - WAITING is usually
+      // waiting on the customer - so it must not be captioned as live activity.
+      tally({ status: { not: "CLOSED" } }),
+      // Everything ever routed here, open or finished. The denominator.
+      tally({}),
+      // Finished, and finished without a person taking over.
+      //
+      // `isHandedOver` is the right field for THIS question and the wrong one
+      // for "escalated", which is why no escalation column exists here. It has
+      // six-plus writers - escalation, a human claiming the thread, the idle
+      // sweeper, a human replying from their own phone - and they share only
+      // one meaning: a person ended up driving. That is precisely the negation
+      // of "alone", so it answers this and nothing else. The CAUSE would need
+      // ConversationHandover.reason, which holds zero rows while five
+      // conversations carry the flag, so a cause column would be a confident
+      // zero for every employee.
+      tally({ status: "CLOSED", isHandedOver: false }),
+    ]);
+
+    const byAgent = (rows: Array<{ assignedAiAgentId: string | null; _count: { _all: number } }>) => {
+      const m = new Map<string, number>();
+      for (const row of rows) if (row.assignedAiAgentId) m.set(row.assignedAiAgentId, row._count._all);
+      return m;
+    };
+    const openByAgent = byAgent(openGrouped);
+    const handledByAgent = byAgent(handledGrouped);
+    const aloneByAgent = byAgent(aloneGrouped);
 
     // Enrich with tool count, department name and when it was last tested.
     const enriched = await Promise.all(agents.map(async (agent) => {
@@ -96,11 +204,34 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requirePermi
         orderBy: { updatedAt: "desc" },
       }).catch(() => null);
       return {
-        ...agent,
+        ...withoutInertFields(agent),
+        // Always a list ([] when there are none): the employee's own rules (B4).
+        customGuardrails: readGuardrails(agent.customGuardrails),
         knowledgeSources: agent.knowledgeBases.map((ak: any) => ak.knowledgeBase),
         toolCount,
         departmentName: agent.departmentId ? deptById.get(agent.departmentId) ?? null : null,
         lastTestedAt: sandbox ? (sandbox.lastMessageAt ?? sandbox.updatedAt) : null,
+        // Absent from the group-by means zero, not unknown: the queries cover
+        // every non-null assignment in the tenant.
+        //
+        // NO LONGER THE SAME PREDICATE as the human count on
+        // /api/permissions/users, and both files used to say it was. That one
+        // filters on `status != CLOSED` alone. Sandbox rows cannot reach it -
+        // the test chat sets assignedAiAgentId, never assignedAgentId - but
+        // `isTest` and imported history DO count toward a person's total and
+        // no longer count toward an employee's. If the two are rendered in one
+        // column, that column is now comparing two slightly different things,
+        // and the human side is the one that is wrong.
+        openConversations: openByAgent.get(agent.id) ?? 0,
+        // Lifetime, not windowed. "How much has this employee done" rather
+        // than "this week", which is the question the roster asks; a windowed
+        // version is a different field and should be named for its window
+        // rather than quietly changing what this one means.
+        handledConversations: handledByAgent.get(agent.id) ?? 0,
+        // Closed with no human ever taking over. A ratio against
+        // `handledConversations` is the honest denominator - both are drawn
+        // from the same scope, so the division means something.
+        resolvedAlone: aloneByAgent.get(agent.id) ?? 0,
       };
     }));
 
@@ -159,13 +290,8 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
       if (genderLower.includes(key)) { detectedGender = val; break; }
     }
 
-    // Detect channels
-    const channelsRaw = (answers.channels || "").toLowerCase();
-    const channels: string[] = [];
-    if (channelsRaw.includes("whatsapp") || channelsRaw.includes("ווטסאפ")) channels.push("whatsapp");
-    if (channelsRaw.includes("instagram") || channelsRaw.includes("אינסטגרם")) channels.push("instagram");
-    if (channelsRaw.includes("web") || channelsRaw.includes("אתר") || channelsRaw.includes("צ'אט")) channels.push("webchat");
-    if (channelsRaw.includes("email") || channelsRaw.includes("אימייל") || channelsRaw.includes("מייל")) channels.push("email");
+    // Channels are not part of an employee: the playbook decides who answers
+    // where (GET /:id/reachability says it per channel).
 
     // Build the AI Employee name
     const name = agentName || (responsibility ? responsibility.substring(0, 50) : `AI Employee ${new Date().toLocaleDateString()}`);
@@ -204,7 +330,7 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
           { role: "system", content: generatorSystemPrompt },
           {
             role: "user",
-            content: `Wizard answers for the new AI agent:\n\n${wizardSummary}\n\nProduce a 2–4 sentence description in the user's language. Do not repeat the agent's name. Output only the description text.`,
+            content: `Wizard answers for the new AI agent:\n\n${wizardSummary}\n\nProduce a 2-4 sentence description in the user's language. Do not repeat the agent's name. Output only the description text.`,
           },
         ],
         temperature: 0.7,
@@ -212,7 +338,7 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
         metadata: { type: "agent_description", belMode: "generator" },
       });
       if (aiRes.content?.trim()) {
-        description = aiRes.content.trim();
+        description = withoutWideDashes(aiRes.content.trim());
       }
     } catch (err) {
       console.warn("[ai-agents] AI description generation failed, using fallback:", (err as Error).message);
@@ -227,7 +353,6 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
       role: detectedRole,
       description,
       tone: detectedTone,
-      channels,
       mode,
       persona: {
         gender: detectedGender,
@@ -308,13 +433,21 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requirePe
     // Single calendar-capability signal so the builder can warn accurately
     // when calendar tools are enabled but the agent cannot actually book.
     const calendarCapability = await computeCalendarCapability(req.tenantId! as string, agent.id);
+    // Is the readiness report being made now? Read, never guessed (H7).
+    const readiness = await readReadinessStatus(req.tenantId! as string, agent.id).catch(() => null);
 
     res.json({
       data: {
-        ...agent,
+        ...withoutInertFields(agent),
+        // Always a list ([] when there are none): the employee's own rules (B4).
+        customGuardrails: readGuardrails(agent.customGuardrails),
         knowledgeSources: agent.knowledgeBases.map((ak: any) => ak.knowledgeBase),
         tools,
         calendarCapability,
+        readinessStatus: readiness?.status ?? null,
+        readinessStartedAt: readiness?.startedAt ?? null,
+        readinessFinishedAt: readiness?.finishedAt ?? null,
+        readinessError: readiness?.error ?? null,
       },
     });
   } catch (err) {
@@ -356,19 +489,42 @@ router.post(
   try {
     const {
       name, role, description, avatarColor, status,
-      tone, languages, style, channels, escalationRules,
+      tone, languages, style, escalationRules,
       interactiveMessages, systemPrompt, model, provider,
       temperature, maxTokens, identity, goals, toneConfig,
       behavioral, persona, maxAutonomousMessages, maxAutonomousMinutes,
       confidenceThreshold, escalationMessage, conversationFlow, customGuardrails,
       departmentId, funnelId,
       goal, successCriteria, salesContext,
-      knowledgeBaseIds, toolIds,
+      knowledgeBaseIds, toolIds, integrationAccess,
     } = req.body;
 
     if (!name) {
       res.status(400).json({ error: "Name is required" });
       return;
+    }
+
+    // The employee's own rules: a list of text within the limits, or refused (B4).
+    let rules: string[] | null = null;
+    if (customGuardrails !== undefined && customGuardrails !== null) {
+      try { rules = normalizeGuardrails(customGuardrails); } catch (e) {
+        if (e instanceof GuardrailsError) { res.status(400).json(guardrailsRefusal(e)); return; }
+        throw e;
+      }
+    }
+
+    // The systems this employee may use: the creator's choice, checked, or
+    // every system the workspace has today (one connected later stays off).
+    let access: string[];
+    if (integrationAccess !== undefined) {
+      const v = await validateIntegrationAccess(req.tenantId! as string, integrationAccess);
+      if (!v.ok) {
+        res.status(422).json({ error: "Unknown system in integrationAccess", field: "integrationAccess", code: "INVALID_INTEGRATION_ACCESS", invalid: v.invalid });
+        return;
+      }
+      access = v.keys;
+    } else {
+      access = await defaultIntegrationAccess(req.tenantId! as string);
     }
 
     // Role-driven guardrails: funnel-required roles still need a funnel
@@ -417,7 +573,7 @@ router.post(
         tone: tone || "professional",
         languages: languages || { english: true },
         style: style || {},
-        channels: channels || [],
+        integrationAccess: access,
         escalationRules: escalationRules || [],
         interactiveMessages: interactiveMessages || {},
         systemPrompt: systemPrompt || "",
@@ -435,7 +591,7 @@ router.post(
         confidenceThreshold: confidenceThreshold ?? 0.6,
         escalationMessage: escalationMessage || "Let me connect you with a team member who can help further.",
         conversationFlow: conversationFlow || null,
-        customGuardrails: customGuardrails || null,
+        customGuardrails: rules && rules.length ? rules : Prisma.DbNull,
         departmentId: departmentId || null,
         funnelId: funnelId || null,
         goal: normalizedGoal,
@@ -471,10 +627,73 @@ router.post(
       });
     }
 
-    res.status(201).json({ data: agent });
+    res.status(201).json({ data: withoutInertFields(agent) });
   } catch (err) {
     console.error("Create AI agent error:", err);
     res.status(500).json({ error: "Failed to create AI agent" });
+  }
+});
+
+/** The 400 body for rules that are not a list of text within the limits. */
+function guardrailsRefusal(e: GuardrailsError) {
+  return { error: e.message, code: e.code, field: "customGuardrails", reason: e.reason, ...(e.max !== undefined ? { max: e.max } : {}), ...(e.index !== undefined ? { index: e.index } : {}) };
+}
+
+// ─── The employee's own rules (B4) ───────────────────────────
+// PUT /:id/rules {rules: string[]} replaces the list whole: at most MAX_RULES
+// rules of at most MAX_RULE_LEN characters, trimmed, repeats dropped; over a
+// limit is a 400 GUARDRAILS_INVALID, never a silent cut. [] clears them.
+router.put("/:id/rules", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:update", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agent = await prisma.aIAgent.findFirst({ where: { id: req.params.id as string, tenantId }, select: { id: true } });
+    if (!agent) { res.status(404).json({ error: "AI employee not found" }); return; }
+    let rules: string[];
+    try { rules = normalizeGuardrails(req.body?.rules); } catch (e) {
+      if (e instanceof GuardrailsError) { res.status(400).json({ ...guardrailsRefusal(e), field: "rules" }); return; }
+      throw e;
+    }
+    await prisma.aIAgent.updateMany({ where: { id: agent.id, tenantId }, data: { customGuardrails: rules.length ? rules : Prisma.DbNull } });
+    res.json({ data: { rules } });
+  } catch (err) {
+    console.error("Set employee rules error:", err);
+    res.status(500).json({ error: "Failed to save the employee's rules" });
+  }
+});
+
+// ─── Answering a readiness question (B2) ─────────────────────
+// POST /:id/readiness-questions/answer {question, answer}: the answer becomes
+// knowledge exactly as an unanswered-question answer does, and the next
+// readiness report counts the question as covered (services/readiness-answers).
+// The report's questions have no id (the model makes them each run), so the
+// question travels by its text. Open during onboarding, like the hire itself.
+router.post("/:id/readiness-questions/answer", authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requirePermissionOrRole("ai:knowledge:write", "ADMIN"), async (req: Request, res: Response) => {
+  // By the question's text, or by its id in the employee's stable question
+  // set (B6): ids are stable across runs.
+  const questionId = typeof req.body?.questionId === "string" ? req.body.questionId.trim() : "";
+  let question = typeof req.body?.question === "string" ? req.body.question.trim() : "";
+  if (questionId) {
+    const set = await readQuestionSet(req.tenantId! as string, req.params.id as string).catch(() => null);
+    const hit = set?.questions.find((q) => q.id === questionId);
+    if (!hit) { res.status(404).json({ error: "No such question in this employee's readiness questions", code: "QUESTION_NOT_FOUND" }); return; }
+    question = hit.question;
+  }
+  // Kept as the owner wrote it; only the ends are trimmed.
+  const answer = typeof req.body?.answer === "string" ? req.body.answer.trim() : "";
+  if (!question) { res.status(400).json({ error: "A question is required", code: "QUESTION_REQUIRED" }); return; }
+  if (question.length > MAX_QUESTION) { res.status(400).json({ error: "The question is too long", code: "QUESTION_TOO_LONG", max: MAX_QUESTION }); return; }
+  if (!answer) { res.status(400).json({ error: "An answer is required", code: "ANSWER_REQUIRED" }); return; }
+  if (answer.length > MAX_ANSWER) { res.status(400).json({ error: "The answer is too long", code: "ANSWER_TOO_LONG", max: MAX_ANSWER }); return; }
+  const userId = ((req as any).user?.userId ?? (req as any).user?.id) as string | undefined;
+  if (!userId) { res.status(401).json({ error: "no user context" }); return; }
+  try {
+    const r = await answerReadinessQuestion({ tenantId: req.tenantId! as string, userId, aiAgentId: req.params.id as string, question, answer });
+    res.json({ data: { documentId: r.documentId, knowledgeBaseId: r.knowledgeBaseId, resolvedAt: r.resolvedAt.toISOString(), resolvedUnansweredQuestionId: r.resolvedUnansweredQuestionId } });
+  } catch (err) {
+    if (err instanceof ReadinessAnswerError) { res.status(404).json({ error: "AI employee not found", code: err.code }); return; }
+    if (err instanceof GapAnswerError) { res.status(err.status).json({ error: "The answer was saved but could not be learned yet; try again", code: err.code }); return; }
+    console.error("Readiness question answer error:", err);
+    res.status(500).json({ error: "Failed to answer the question" });
   }
 });
 
@@ -510,18 +729,86 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     // again.
     const AGENT_EDITABLE_FIELDS = [
       "name", "role", "avatarColor", "status", "tone", "languages", "style",
-      "channels", "escalationRules", "interactiveMessages", "systemPrompt",
+      "escalationRules", "interactiveMessages", "systemPrompt",
       "model", "provider", "temperature",
       "maxTokens", "persona", "identity", "goals", "toneConfig", "behavioral",
       "salesContext", "goal", "successCriteria", "maxAutonomousMessages",
       "maxAutonomousMinutes", "confidenceThreshold", "escalationMessage",
       "conversationFlow", "customGuardrails", "capabilities",
-      "behavioralAnchors", "departmentId", "funnelId",
+      "behavioralAnchors", "departmentId", "funnelId", "noSkillPolicy",
     ] as const;
     const bodySrc = (req.body ?? {}) as Record<string, unknown>;
     const updateData: Record<string, any> = {};
     for (const k of AGENT_EDITABLE_FIELDS) {
       if (Object.prototype.hasOwnProperty.call(bodySrc, k)) updateData[k] = bodySrc[k];
+    }
+
+    // "Says it's AI when asked" (A3b): a boolean kept inside persona, merged so
+    // a persona edit that does not mention it keeps it.
+    if (Object.prototype.hasOwnProperty.call(bodySrc, "disclosesAi")) {
+      if (typeof bodySrc.disclosesAi !== "boolean") {
+        res.status(400).json({ error: "disclosesAi must be true or false", field: "disclosesAi", code: "INVALID_DISCLOSES_AI" });
+        return;
+      }
+      const current = updateData.persona === undefined
+        ? (await prisma.aIAgent.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! as string }, select: { persona: true } }))?.persona
+        : updateData.persona;
+      const base = current && typeof current === "object" && !Array.isArray(current) ? (current as Record<string, unknown>) : {};
+      updateData.persona = { ...base, disclosesAi: bodySrc.disclosesAi };
+    } else if (updateData.persona && typeof updateData.persona === "object" && !Array.isArray(updateData.persona) && !("disclosesAi" in updateData.persona)) {
+      const prev = (await prisma.aIAgent.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! as string }, select: { persona: true } }))?.persona as any;
+      if (prev && typeof prev.disclosesAi === "boolean") updateData.persona = { ...updateData.persona, disclosesAi: prev.disclosesAi };
+    }
+
+    // The employee's own rules (B4): a list of text within the limits; a string
+    // or anything else is refused, because the prompt would silently skip it.
+    if (Object.prototype.hasOwnProperty.call(bodySrc, "customGuardrails")) {
+      if (bodySrc.customGuardrails === null) updateData.customGuardrails = Prisma.DbNull;
+      else {
+        try {
+          const rules = normalizeGuardrails(bodySrc.customGuardrails);
+          updateData.customGuardrails = rules.length ? rules : Prisma.DbNull;
+        } catch (e) {
+          if (e instanceof GuardrailsError) { res.status(400).json(guardrailsRefusal(e)); return; }
+          throw e;
+        }
+      }
+    }
+
+    // Handover rules (A2): the array is replaced whole, so its shape is checked
+    // here; a malformed rule reached the prompt as "undefined".
+    if (Object.prototype.hasOwnProperty.call(bodySrc, "escalationRules")) {
+      const rules = bodySrc.escalationRules;
+      const ok = Array.isArray(rules) && rules.length <= 50 && rules.every((r: any) =>
+        r && typeof r === "object" && !Array.isArray(r)
+        && typeof r.label === "string" && r.label.trim().length > 0 && r.label.length <= 300
+        && (r.type === undefined || typeof r.type === "string")
+        && (r.value === undefined || r.value === null || typeof r.value === "string" || typeof r.value === "number")
+        && (r.enabled === undefined || typeof r.enabled === "boolean"));
+      if (!ok) {
+        res.status(400).json({ error: "escalationRules must be a list of {label, type?, value?, enabled?} (at most 50, label 1-300 characters)", field: "escalationRules", code: "INVALID_ESCALATION_RULES" });
+        return;
+      }
+      updateData.escalationRules = (rules as any[]).map((r) => ({ ...r, label: String(r.label).trim() }));
+    }
+
+    // The systems this employee may use: a checked list of catalog slugs and
+    // "custom:<id>" keys. An unknown key is refused (stored, it would gate nothing).
+    if (Object.prototype.hasOwnProperty.call(bodySrc, "integrationAccess")) {
+      const v = await validateIntegrationAccess(req.tenantId! as string, bodySrc.integrationAccess);
+      if (!v.ok) {
+        res.status(422).json({ error: "Unknown system in integrationAccess", field: "integrationAccess", code: "INVALID_INTEGRATION_ACCESS", invalid: v.invalid });
+        return;
+      }
+      updateData.integrationAccess = v.keys;
+    }
+
+    // What the employee does when no business skill fits. A closed list: an
+    // unknown value is refused, not stored (it would change nothing at runtime).
+    if (Object.prototype.hasOwnProperty.call(updateData, "noSkillPolicy") &&
+        !["answer_from_knowledge", "always_handover", "knowledge_only"].includes(updateData.noSkillPolicy)) {
+      res.status(422).json({ error: "noSkillPolicy must be answer_from_knowledge, always_handover or knowledge_only", field: "noSkillPolicy" });
+      return;
     }
 
     // Empty strings from the dropdowns mean "no binding" - coerce to NULL
@@ -685,7 +972,7 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     // Body: { tenantToolId, isAllowed, requireApproval? }
     // Handled via the dedicated route below.
 
-    res.json({ data: agent });
+    res.json({ data: withoutInertFields(agent) });
   } catch (err) {
     console.error("Update AI agent error:", err);
     res.status(500).json({ error: "Failed to update AI agent" });
@@ -775,6 +1062,124 @@ router.put(
 // Runtime routing is exclusively the FlowCanvas graph: an ACTIVE employee
 // with no agent-node targeting it NEVER receives a conversation. This
 // endpoint tells the UI the truth so "go live" can't be a broken promise.
+// ─── The employee's own tool levels (A1, Omer 2026-10-13) ──────────────────
+//
+// Equal to or stricter than the workspace (Integrations), never looser.
+// Enforced at dispatch in the shared gate (evaluatePolicies, Layer 4); these
+// two routes read and set it.
+
+function workspaceLevelOf(row: { enabled: boolean; requiresApproval: boolean }): ToolLevel {
+  if (!row.enabled) return "never";
+  return row.requiresApproval ? "ask" : "execute";
+}
+
+router.get("/:id/tools", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const agent = await prisma.aIAgent.findFirst({ where: { id: req.params.id as string, tenantId }, select: { id: true } });
+    if (!agent) { res.status(404).json({ error: "AI employee not found" }); return; }
+    const [rows, levels, locale, grants] = await Promise.all([
+      listWorkspaceTools(tenantId),
+      readAgentToolLevels(tenantId, agent.id),
+      readerLocale(req),
+      prisma.agentToolPermission.findMany({
+        where: { tenantId, aiAgentId: agent.id, isAllowed: true },
+        select: { tenantTool: { select: { catalogToolId: true } } },
+      }),
+    ]);
+    const grantedCatalogIds = new Set(grants.map((g: any) => g.tenantTool?.catalogToolId).filter(Boolean));
+    // Only what can run: built-ins, and the tools of integrations that are
+    // CONNECTED. A disconnected (or failing) store's tools cannot run, so
+    // listing ~80 of them only confuses. An own level already stored for one
+    // stays stored and applies again once the store reconnects.
+    const tools = rows.filter((r) => !r.integration || r.integrationConnected === true).map((r) => {
+      const workspaceLevel = workspaceLevelOf(r);
+      const own = levels[r.toolName] ?? null;
+      const employeeLevel: ToolLevel = own ?? workspaceLevel;
+      const slug = r.toolName.includes(".") ? r.toolName.slice(r.toolName.indexOf(".") + 1) : r.toolName;
+      const domain = toolDomain(r.toolName, r.integration, r.category);
+      const label = r.integration ? catalogTool(r.integration, { slug, name: slug, description: r.description }, locale) : null;
+      return {
+        toolName: r.toolName,
+        label: label?.name ?? r.toolName,
+        description: label?.description ?? r.description,
+        integration: r.integration,
+        integrationName: r.integration ? (r.integrationName ?? r.integration) : null,
+        // The registry category (built-ins) or the catalogue's READ/WRITE/DELETE/ACTION.
+        category: r.category,
+        // The business section inside the integration (B3): Orders, Coupons...
+        domain,
+        // The icon key, the same as the domain; its own field so the screen
+        // can change icons without changing sections.
+        domainIcon: domain,
+        domainLabel: toolDomainLabel(domain, locale),
+        riskGroup: r.riskGroup,
+        workspaceLevel,
+        // What this employee has chosen, or null for "the same as the workspace".
+        ownLevel: own,
+        // What actually applies: the stricter of the two, so a workspace that
+        // tightened after the employee was set still wins.
+        employeeLevel: stricterLevel(workspaceLevel, employeeLevel),
+        allowedLevels: allowedEmployeeLevels(workspaceLevel),
+        // Integration tools reach an employee only when granted to it
+        // (POST /builder/:id/tool, by toolName or tenantToolId). Built-ins
+        // need no grant: null. A catalogue action the workspace has not set up
+        // yet cannot be granted until it has a workspace level.
+        granted: r.integration ? (!!r.catalogToolId && grantedCatalogIds.has(r.catalogToolId)) : null,
+        grantable: r.integration ? r.state !== "not_provisioned" : false,
+      };
+    });
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({ data: { tools } });
+  } catch (err) {
+    console.error("Employee tools error:", err);
+    res.status(500).json({ error: "Failed to list the employee's tools" });
+  }
+});
+
+router.put("/:id/tool-levels/:toolName", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:update", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const toolName = String(req.params.toolName);
+    const level = req.body?.level as ToolLevel | null;
+    if (level !== null && level !== "execute" && level !== "ask" && level !== "never") {
+      res.status(400).json({ error: "level must be execute, ask, never or null", code: "BAD_LEVEL" }); return;
+    }
+    const agent = await prisma.aIAgent.findFirst({ where: { id: req.params.id as string, tenantId }, select: { id: true } });
+    if (!agent) { res.status(404).json({ error: "AI employee not found" }); return; }
+    const row = (await listWorkspaceTools(tenantId)).find((r) => r.toolName === toolName);
+    if (!row) { res.status(404).json({ error: `unknown tool "${toolName}"`, code: "UNKNOWN_TOOL" }); return; }
+    const workspaceLevel = workspaceLevelOf(row);
+    const wanted: ToolLevel = level ?? workspaceLevel;
+    if (!allowedEmployeeLevels(workspaceLevel).includes(wanted)) {
+      res.status(422).json({
+        error: `The workspace sets "${toolName}" to ${workspaceLevel}; an AI employee may only be the same or stricter.`,
+        code: "LOOSER_THAN_WORKSPACE",
+        workspaceLevel,
+        allowedLevels: allowedEmployeeLevels(workspaceLevel),
+      });
+      return;
+    }
+    // Equal to the workspace is stored as "no own level", so the employee
+    // follows the workspace if it later loosens back.
+    const stored = wanted === workspaceLevel ? null : wanted;
+    const levels = await writeAgentToolLevel(tenantId, agent.id, toolName, stored, (req as any).user?.userId);
+    void writeAudit({
+      tenantId,
+      actorType: "user",
+      actorId: (req as any).user?.userId ?? null,
+      action: AuditAction.PERMISSION_CHANGED,
+      targetType: "ai_agent",
+      targetId: agent.id,
+      metadata: { change: "employee_tool_level", tool: toolName, workspaceLevel, level: wanted },
+    });
+    res.json({ data: { toolName, workspaceLevel, ownLevel: levels[toolName] ?? null, employeeLevel: wanted } });
+  } catch (err) {
+    console.error("Set employee tool level error:", err);
+    res.status(500).json({ error: "Failed to set the tool level" });
+  }
+});
+
 router.get("/:id/reachability", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const agent = await prisma.aIAgent.findFirst({
@@ -794,7 +1199,10 @@ router.get("/:id/reachability", authenticate, resolveTenant, requireActiveTenant
       const routeType = n?.data?.routeType ?? "agent";
       return routeType === "agent" && n?.data?.targetId === agent.id;
     });
-    res.json({ data: { hasCanvas: !!canvas, reachable } });
+    // Where it answers, per channel the workspace has (the playbook decides;
+    // AIAgent.channels is display-only and does not).
+    const channels = await whereEmployeeAnswers(req.tenantId! as string, agent.id);
+    res.json({ data: { hasCanvas: !!canvas, reachable, channels } });
   } catch (err) {
     console.error("Reachability check error:", err);
     res.status(500).json({ error: "Failed to check reachability" });
@@ -807,6 +1215,27 @@ router.get("/:id/reachability", authenticate, resolveTenant, requireActiveTenant
 // capability is live (CONNECTED / bookable / KB attached) AND (for tool-governed
 // domains) an AgentToolPermission grants it. Reuses the exact permissions bridge
 // + capability world the kernel uses, so the UI never disagrees with the runtime.
+/**
+ * GET /api/ai-agents/:id/integration-access - the systems this employee may
+ * use (`allowed`) and every system and custom tool of the workspace it could
+ * be given (`choices`). Write it with PATCH /:id { integrationAccess }.
+ */
+router.get("/:id/integration-access", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agent = await prisma.aIAgent.findFirst({ where: { id: String(req.params.id), tenantId }, select: { integrationAccess: true } });
+    if (!agent) {
+      res.status(404).json({ error: "AI agent not found" });
+      return;
+    }
+    const choices = await integrationAccessChoices(tenantId);
+    res.json({ data: { allowed: agent.integrationAccess ?? [], choices } });
+  } catch (err) {
+    console.error("[ai-agents] integration-access failed:", (err as Error)?.message);
+    res.status(500).json({ error: "Could not load the employee's systems" });
+  }
+});
+
 router.get("/:id/effective-permissions", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId! as string;
@@ -960,11 +1389,166 @@ router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requir
           AND vc.copilot_config->>'aiAgentId' = ${agentId}
       `;
 
+      // ── The routing canvas ──────────────────────────────────────────────
+      //
+      // THE THIRD HIDING PLACE, and the only one that keeps causing damage
+      // after the delete rather than leaving a fixed amount behind.
+      // `FlowCanvas.nodes` holds `{ targetId, routeType: "agent" }`, and
+      // flow-executor.service.ts writes that targetId straight onto
+      // `Conversation.assignedAiAgentId` for every inbound that reaches the
+      // node. Leave it pointing at a deleted employee and the canvas keeps
+      // stamping a dead id onto NEW conversations for as long as nobody looks.
+      //
+      // It hid the way the voice mirror did, one level further down. The
+      // schema comment at FlowCanvas.nodes enumerates the types as
+      // "channel"|"rule"|"flow"|"agent"|"department". The types that actually
+      // exist are `start` and `route_target`, so searching for an "agent" node
+      // - which is what that comment instructs - finds nothing and reads as
+      // proof the canvas is clean. Matched on routeType, not on node type.
+      //
+      // The node is neutralised rather than removed: deleting it would break
+      // the edges that point at it and silently reshape the tenant's routing
+      // graph, which is a bigger decision than deleting one employee.
+      await tx.$executeRaw`
+        UPDATE flow_canvas
+        SET nodes = (
+          SELECT jsonb_agg(
+            CASE
+              WHEN n->'data'->>'targetId' = ${agentId}
+               AND n->'data'->>'routeType' = 'agent'
+              THEN jsonb_set(n, '{data,targetId}', 'null'::jsonb)
+              ELSE n
+            END
+          )
+          FROM jsonb_array_elements(nodes::jsonb) n
+        )
+        WHERE tenant_id = ${tenantId}
+          AND nodes::jsonb @> ${`[{"data":{"targetId":"${agentId}","routeType":"agent"}}]`}::jsonb
+      `;
+
+      // ── Per-agent tool grants ───────────────────────────────────────────
+      //
+      // Deleted with the employee. A grant saying "this agent may call
+      // shopify.process_refund" describes an agent that no longer exists; it
+      // is configuration, not history, and `AIAgentKnowledge` already cascades
+      // for exactly this reason. No FK here, so it is done by hand.
+      const { count: removedToolGrants } = await tx.agentToolPermission.deleteMany({
+        where: { tenantId, aiAgentId: agentId },
+      });
+
+      // ── Usage history: the ids STAY DANGLING, deliberately ──────────────
+      //
+      // `UsageLog.aiAgentId` and `ConversationUsageAggregate.aiAgentId` are NOT
+      // cleared. Deleting an employee does not mean it never ran or never cost
+      // anything, and nulling those columns would erase which employee incurred
+      // which spend - the profitability ledger and the per-employee cost
+      // rollups both key on it.
+      //
+      // This codebase has already paid for that lesson once, on ToolExecution:
+      // disconnecting an integration cascaded away the audit log of everything
+      // the AI had done through it. The fix was SetNull plus a denormalised
+      // name, under the note that an audit trail a normal UI action can delete
+      // is not an audit trail. Same shape, same answer.
+      //
+      // NOT EVERY DANGLING ID IS A BUG. Some are the only remaining evidence
+      // that something happened.
+      //
+      // What those rows cannot do once the employee is gone is NAME it. The
+      // right fix is a denormalised `aiAgentName` column written at insert
+      // time, as ToolExecution has - that needs a migration, so the name is
+      // captured here instead, in the transaction that would otherwise lose it.
+      // Delete-time capture is strictly weaker than write-time: it is atomic
+      // with the delete, but nothing recovers rows if this statement is ever
+      // removed. Replace it with a real column when a migration is next open.
+      await tx.$executeRaw`
+        UPDATE usage_logs
+        SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ aiAgentName: existing.name, aiAgentDeletedAt: new Date().toISOString() })}::jsonb
+        WHERE tenant_id = ${tenantId} AND ai_agent_id = ${agentId}
+      `;
+
+      // ── Live conversations: released, not closed and not reassigned ─────
+      //
+      // Omer's ruling, and the screen says it in these words: "14 people are
+      // mid-conversation with it. They will stop getting replies and will wait
+      // unassigned until someone claims them." That sentence is the spec, so
+      // the end state has to be one a human actually meets in the inbox.
+      //
+      // `handledBy` IS CLEARED, and nulling `assignedAiAgentId` alone would
+      // have made the sentence false. `isAiManaged()` in the frontend and
+      // `automatedOnly` in conversation.service both read
+      // (handledBy in [ai_agent, flow]) AND !isHandedOver AND !assignedAgentId
+      // - a released conversation still saying "ai_agent" satisfies all three,
+      // so it would file itself under "the AI is handling this" and sit there
+      // while nobody replied. Null puts it back in the unrouted state the
+      // worker already documents as "stays in inbox for manual pickup".
+      //
+      // `isHandedOver` is deliberately NOT set. No human has taken it - that
+      // latch is what `claim` flips, and setting it here would make the
+      // conversation look owned by someone who has not arrived.
+      //
+      // LIVE ONES ONLY. A CLOSED conversation keeps its `assignedAiAgentId`,
+      // because on a finished thread that id is the record of WHICH employee
+      // handled it - evidence, by the same rule that keeps the usage rows. It
+      // is also what the per-employee handled/resolved counts read. Releasing
+      // all 82 rather than the 14 that are live would erase the history to tidy
+      // the hazard. The origin filter is injected by applyLiveByDefault, so
+      // imported threads are excluded without being mentioned.
+      const { count: releasedConversations } = await tx.conversation.updateMany({
+        where: { tenantId, assignedAiAgentId: agentId, status: { not: "CLOSED" } },
+        data: { assignedAiAgentId: null, handledBy: null },
+      });
+
+      // ── Dead instructions elsewhere ─────────────────────────────────────
+      //
+      // Both are READ to make a live decision, which is what separates them
+      // from the history above: a dead instruction keeps acting.
+      //   Tenant.defaultAgentId   router-rules.ts uses it as the tenant-wide
+      //                           routing fallback - the canvas problem at
+      //                           tenant scope.
+      //   KnowledgeBase.scopeAgentId  knowledge.service.ts compares it to the
+      //                           asking agent to decide who may read a base;
+      //                           left dangling it makes a base invisible to
+      //                           everyone, permanently.
+      // Neither has an FK. Both are empty on this estate today, which is the
+      // condition under which every other item in this file was wrong for
+      // months - empty is untested, not safe.
+      await tx.tenant.updateMany({ where: { id: tenantId, defaultAgentId: agentId }, data: { defaultAgentId: null } });
+      await tx.knowledgeBase.updateMany({ where: { tenantId, scopeAgentId: agentId }, data: { scopeAgentId: null } });
+
+      // ── A connected calendar the employee owned ─────────────────────────
+      //
+      // The link is cleared; the Google account stays connected to the tenant,
+      // owned by nobody, for a human to re-attach. Same choice as the
+      // conversations: leave the external thing intact and unowned rather than
+      // destroy it. Deleting the row would sever a live third-party grant to
+      // tidy a foreign key, and reassigning it would invent an owner nobody
+      // picked.
+      //
+      // This needed migration 20260923120000 - the column was NOT NULL, so
+      // until then there was no null to write and the id was left dangling.
+      // Dangling was worse than it sounds: the only admin listing takes
+      // `aiAgentId` as a required parameter, so an orphaned row was not merely
+      // unowned but UNREACHABLE - the merchant kept a live Google grant with no
+      // route to see or disconnect it. `scheduler-admin.ts` now accepts the
+      // parameter as optional so an unowned account can be found.
+      await tx.calendarAccount.updateMany({
+        where: { tenantId, aiAgentId: agentId },
+        data: { aiAgentId: null },
+      });
+
       await tx.aIAgent.delete({ where: { id: agentId } });
-      return count;
+      return { removedRules: count, removedToolGrants, releasedConversations };
     });
 
-    res.json({ success: true, removedRoutingRules: removedRules });
+    res.json({
+      success: true,
+      removedRoutingRules: removedRules.removedRules,
+      removedToolGrants: removedRules.removedToolGrants,
+      // The number the confirmation dialog says out loud. Returned so the
+      // screen reports what actually happened rather than the count it
+      // predicted before the delete ran.
+      releasedConversations: removedRules.releasedConversations,
+    });
   } catch (err) {
     console.error("Delete AI agent error:", err);
     res.status(500).json({ error: "Failed to delete AI agent" });

@@ -1,0 +1,12 @@
+{
+  "required": "This is required",
+  "tooShort": "Use at least {min, plural, one {# character} other {# characters}}",
+  "tooLong": "Use at most {max, plural, one {# character} other {# characters}}",
+  "email": "Enter a valid email address",
+  "url": "Enter a valid URL",
+  "number": "Enter a number",
+  "min": "Must be {min} or more",
+  "max": "Must be {max} or less",
+  "pattern": "This doesn't look right",
+  "server": "The server rejected this value"
+}

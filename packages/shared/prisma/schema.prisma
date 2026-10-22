@@ -41,11 +41,6 @@ enum BotFlowMode {
   PER_CHANNEL
 }
 
-enum ChannelResponseMode {
-  HUMAN_WITH_COPILOT
-  AI_AUTO_REPLY
-}
-
 // ─── Tenant Status & AI Mode ────────────────────────────────
 
 enum TenantStatus {
@@ -147,6 +142,7 @@ model Tenant {
   channelConfig           TenantChannelConfig?
   departments             Department[]
   departmentMembers       DepartmentMember[]
+  conversationReadStates  ConversationReadState[]
   businessProfile         BusinessProfile?
   businessDiscovery       BusinessDiscovery?
   scheduledNudges         ScheduledNudge[]
@@ -169,6 +165,10 @@ model Tenant {
   toolExecutionRequests   ToolExecutionRequest[]
   communicationChannels   CommunicationChannel[]
   agentPresences          AgentPresence[]
+  userNotificationPrefs   UserNotificationPreference[]
+  insightDismissals       InsightDismissal[]
+  unansweredQuestions     UnansweredQuestion[]
+  productDemandTerms      ProductDemandTerm[]
   tenantFeatures          TenantFeature[]
   tenantRoles             TenantRole[]
   invites                 TenantInvite[]
@@ -197,7 +197,10 @@ model Tenant {
   customerHistoricalMemory  CustomerHistoricalMemory[]
   knowledgeCandidates       KnowledgeCandidate[]
 
+  businessSkills BusinessSkill[]
+
   @@map("tenants")
+  customerNotes CustomerNote[]
 }
 
 /// Admin-configured runtime settings that must SURVIVE a restart.
@@ -326,9 +329,6 @@ model ChannelAccount {
   displayName String      @map("display_name")
   credentials Json        @default("{}") // { accessToken, appSecret, ... }
   isActive    Boolean     @default(true) @map("is_active")
-
-  // Per-channel response mode (for email channels: GMAIL, OUTLOOK)
-  responseMode ChannelResponseMode @default(HUMAN_WITH_COPILOT) @map("response_mode")
 
   // Connection lifecycle
   connectionStatus ChannelConnectionStatus @default(CONNECTED) @map("connection_status")
@@ -574,7 +574,11 @@ model InboundExclusion {
 
   /// One rule per number per channel. A second attempt updates the note
   /// rather than creating a duplicate that the reader cannot tell apart.
-  @@unique([tenantId, channel, customerExternalId])
+  // One rule per number: the same contact can be private on one number and
+  // not on another. Legacy rows with no number ("every number") are kept
+  // unique by a partial index in migration 20261007210000 (Postgres treats
+  // NULLs as distinct, so this key alone would allow duplicates of those).
+  @@unique([tenantId, channel, channelAccountId, customerExternalId])
   @@index([tenantId, channel])
   @@map("inbound_exclusions")
 }
@@ -906,6 +910,7 @@ model User {
   // requests, throttled). Drives the tenant picker's "last used" ordering and
   // the default-tenant resolution for hint-less API calls.
   lastActiveAt             DateTime? @map("last_active_at")
+  notificationPreference UserNotificationPreference?
   createdAt                DateTime  @default(now()) @map("created_at")
   updatedAt                DateTime  @updatedAt @map("updated_at")
 
@@ -916,6 +921,7 @@ model User {
   tenant                  Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversations           Conversation[]       @relation("AssignedAgent")
   departmentMembers       DepartmentMember[]
+  conversationReadStates  ConversationReadState[]
   inAppNotifications      InAppNotification[]
   // Voice channels where this user is the default-ring target for inbound calls.
   defaultVoiceChannels    VoiceChannel[]       @relation("VoiceChannelDefaultAgent")
@@ -950,6 +956,15 @@ model Conversation {
   tenantId           String             @map("tenant_id")
   channel            ChannelType        @default(WHATSAPP)
   channelAccountId   String?            @map("channel_account_id")
+  /// A conversation the team had with GOTCHA during setup, from their own
+  /// numbers, before going live.
+  ///
+  /// EXCLUDED from every analytics aggregate. Day one ends with the team
+  /// talking to itself to check the thing works; if those land in the figures,
+  /// the next morning's metric strip reports the rehearsal as business.
+  /// A flag rather than a deletion, because the conversations are still worth
+  /// reading back - they are just not evidence about customers.
+  isTest             Boolean            @default(false) @map("is_test")
   customerExternalId String             @map("customer_external_id") // Phone (WA) or PSID (Messenger)
   customerName       String?            @map("customer_name")
   customerAvatarUrl  String?            @map("customer_avatar_url")
@@ -978,10 +993,21 @@ model Conversation {
   flowExpiresAt      DateTime?          @map("flow_expires_at")
   isHandedOver       Boolean            @default(false) @map("is_handed_over")
   handledBy          String?            @map("handled_by") // "ai_agent", "flow", "human", null (unrouted)
+  // The automation run whose cursor is parked on this conversation
+  // (chatbotNodeId belongs to it). Null = no automation is waiting here.
+  automationRunId    String?            @map("automation_run_id")
   lastMessageAt      DateTime?          @map("last_message_at")
   reminderSentAt     DateTime?          @map("reminder_sent_at")
   closedAt           DateTime?          @map("closed_at")
+  /// ★ ARCHIVE IS NOT A STATUS, DELIBERATELY.
+  ///
+  /// A conversation can be CLOSED and archived, or archived while still
+  /// WAITING. Adding ARCHIVED to ConversationStatus would make those mutually
+  /// exclusive and would silently change every count that groups by status -
+  /// archiving a closed conversation would remove it from the closed figure.
+  archivedAt         DateTime?          @map("archived_at")
   aiSummary          String?            @map("ai_summary")
+  handovers          ConversationHandover[]
 
   // ── Where this conversation came from ──
   //
@@ -1056,6 +1082,7 @@ model Conversation {
   /// delete its rows so a number can be re-onboarded.
   channelAccount   ChannelAccount?           @relation(fields: [channelAccountId], references: [id], onDelete: SetNull)
   assignedAgent    User?                     @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  readStates       ConversationReadState[]
   department       Department?               @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   chatbotFlow      ChatbotFlow?              @relation(fields: [chatbotFlowId], references: [id], onDelete: SetNull)
   messages         Message[]
@@ -1079,6 +1106,11 @@ model Conversation {
   @@index([tenantId, assignedAiAgentId])
   @@index([tenantId, departmentId])
   @@index([tenantId, channel, customerExternalId])
+  // Per-ACCOUNT volume for the Channels screen. The existing
+  // (tenantId, channel, ...) index serves grouping by channel TYPE, which is
+  // why that has always been cheap; a tenant with two WhatsApp numbers needs
+  // them counted apart, and that grouping had no index at all.
+  @@index([tenantId, channelAccountId])
   @@index([flowExpiresAt])
   @@map("conversations")
 }
@@ -1199,7 +1231,6 @@ model AIAgent {
   tone                String        @default("professional") // professional, friendly, casual, formal
   languages           Json          @default("{\"english\":true}") // { english: bool, hebrew: bool, arabic: bool }
   style               Json          @default("{}") // { useEmojis, concise, useFirstName, proactive }
-  channels            Json          @default("[]") // ["whatsapp", "instagram", "webchat"]
   escalationRules     Json          @default("[]") @map("escalation_rules") // [{ label, type, value, enabled }]
   interactiveMessages Json          @default("{}") @map("interactive_messages") // { allowQuickReply, allowListMenu, ... }
 
@@ -1262,6 +1293,12 @@ model AIAgent {
   // { auto: bool, assist: bool }. Both default true.
   capabilities Json @default("{\"auto\":true,\"assist\":true}") @map("capabilities")
 
+  // Which business systems this employee may use (an allowlist): integration
+  // catalog slugs, and "custom:<id>" for custom API tools / DB queries. A system
+  // connected later stays off until it is added here. Per-tool rows still pick
+  // the tools within an allowed system. See lib/integration-access.ts.
+  integrationAccess String[] @default([]) @map("integration_access")
+
   // Behavioral anchors - guidance, NOT executable logic.
   // [{ id, condition, intent, guidance }] - rendered into the system prompt.
   behavioralAnchors Json @default("[]") @map("behavioral_anchors")
@@ -1281,6 +1318,10 @@ model AIAgent {
   // channel override → conversation department → tenant default.
   funnelId String? @map("funnel_id")
 
+  // What the employee does when none of its business skills fits the message:
+  // answer_from_knowledge (today's behaviour) | always_handover | knowledge_only.
+  noSkillPolicy String @default("answer_from_knowledge") @map("no_skill_policy")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -1288,6 +1329,7 @@ model AIAgent {
   department     Department?        @relation("AIAgentDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
   funnel         TenantFunnel?      @relation("AIAgentFunnel", fields: [funnelId], references: [id], onDelete: SetNull)
   knowledgeBases AIAgentKnowledge[]
+  agentSkills    AgentSkill[]
   routerRules    RouterRule[]       @relation("RouterRuleAIAgent")
   voiceChannels  VoiceChannel[]     @relation("VoiceChannelAIAgent")
 
@@ -1313,6 +1355,101 @@ model AIAgentKnowledge {
   @@index([aiAgentId])
   @@index([knowledgeBaseId])
   @@map("ai_agent_knowledge")
+}
+
+// ─── Business skills (AI Studio, design 6) ───────────────────
+// A tenant-defined playbook an AI employee follows for one business case:
+// when it applies, what to gather, the steps (with the tools each may use),
+// rules, completion and hand-over. NOT a parallel engine: the existing
+// per-turn loop selects it (wizard-binding judgement), the knowledge ledger
+// gathers its requiredInfo, and the tool gate still decides every tool.
+// The built-in role Skill (services/ai/src/services/skills.ts) stays code.
+// See docs/product/ai-studio-skills-automations.md §3.1-3.2.
+model BusinessSkill {
+  id           String    @id @default(cuid())
+  tenantId     String    @map("tenant_id")
+  name         String
+  // The situation in the customer's words ("where is my order").
+  situation    String?
+  // orders | products | bookings | other
+  category     String    @default("other")
+  whenToUse    String?   @map("when_to_use")
+  examples     Json      @default("[]") // string[]
+  exclusions   Json      @default("[]") // [{ text, skillId? }]
+  // [{ id, kind: find|check|change|document|message|approval|handover,
+  //    title, guidance, tools: string[], approvalOverAmount?, elseNote? }]
+  steps        Json      @default("[]")
+  rules        Json      @default("[]") // [{ type: never|handover, text }]
+  requiredInfo Json      @default("[]") @map("required_info") // [{ key, label, priority }]
+  // draft | active | archived (never deleted: runs keep their history)
+  status       String    @default("draft")
+  version      Int       @default(1)
+  createdBy    String?   @map("created_by")
+  updatedBy    String?   @map("updated_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  archivedAt   DateTime? @map("archived_at")
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agentSkills AgentSkill[]
+  runs        SkillRun[]
+
+  @@index([tenantId, status])
+  @@map("business_skills")
+}
+
+// Which skills an employee uses, how (on | watch | off) and in what order
+// (order breaks a tie when several skills fit). New assignments start in watch.
+model AgentSkill {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  aiAgentId String   @map("ai_agent_id")
+  skillId   String   @map("skill_id")
+  mode      String   @default("watch")
+  order     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  aiAgent AIAgent       @relation(fields: [aiAgentId], references: [id], onDelete: Cascade)
+  skill   BusinessSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([aiAgentId, skillId])
+  @@index([tenantId, skillId])
+  @@map("agent_skills")
+}
+
+// One use of a skill in one conversation: continuity across turns (the open
+// run is resumed), the run log, and the stats (runs, alone, asked you).
+// skillVersion pins the definition the run started with.
+model SkillRun {
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  conversationId String    @map("conversation_id")
+  aiAgentId      String    @map("ai_agent_id")
+  skillId        String    @map("skill_id")
+  skillVersion   Int       @map("skill_version")
+  // on | watch (watch records what it would do; nothing is injected)
+  mode           String
+  // active | completed | handed_over | failed | abandoned
+  status         String    @default("active")
+  currentStepId  String?   @map("current_step_id")
+  gatheredKeys   Json      @default("[]") @map("gathered_keys")
+  stopReason     String?   @map("stop_reason")
+  // [{ step, tool?, outcome, at }] - no model reasoning is stored
+  trace          Json      @default("[]")
+  // Consecutive turns the judgement chose another skill or none: two closes
+  // the run as abandoned (topic change).
+  missedTurns    Int       @default(0) @map("missed_turns")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  endedAt        DateTime? @map("ended_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  skill BusinessSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, conversationId, status])
+  @@index([tenantId, skillId, startedAt])
+  @@index([tenantId, aiAgentId, startedAt])
+  @@map("skill_runs")
 }
 
 // ─── Router Rules (Main Playbook) ───────────────────────────
@@ -1360,20 +1497,83 @@ model ChatbotFlow {
   channel     ChannelType? // null = ALL channels
   trigger     String? // trigger condition description
   runCount    Int          @default(0) @map("run_count") // number of times this flow has been executed
+  // Automation trigger (Studio > Automations). Null = a sub-flow the main
+  // playbook routes into; those are never fired by events. Types and config
+  // shapes: packages/shared/src/lib/automation-catalog.ts.
+  triggerType   String?   @map("trigger_type")
+  triggerConfig Json?     @map("trigger_config")
+  activatedAt   DateTime? @map("activated_at")
+  activatedBy   String?   @map("activated_by")
+  pausedAt      DateTime? @map("paused_at")
+  pausedBy      String?   @map("paused_by")
   // JSON definition of the flow graph
   nodes       Json         @default("[]")
   edges       Json         @default("[]")
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversations Conversation[]
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations  Conversation[]
+  automationRuns AutomationRun[]
   // WebhookTrigger.workflowId references a flow here in "flow" mode, but is a
   // plain (un-FK'd) anchor - see that model - so there is no relation back-ref.
 
   @@index([tenantId, isActive])
   @@index([tenantId, channel, isActive])
+  @@index([tenantId, triggerType, isActive])
   @@map("chatbot_flows")
+}
+
+/// One automation run: an event fired a ChatbotFlow with a trigger.
+model AutomationRun {
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  flowId         String    @map("flow_id")
+  triggerType    String    @map("trigger_type")
+  // The event's identity (e.g. "msg:<messageId>", "tag:<contactId>:<tag>:<ts>").
+  // Unique per flow: the same event never runs the same automation twice.
+  eventKey       String    @map("event_key")
+  conversationId String?   @map("conversation_id")
+  contactId      String?   @map("contact_id")
+  // running | waiting | completed | failed | skipped
+  status         String    @default("running")
+  // This run responded to the inbound that fired it (sent, waits, or handed
+  // on), so the AI employee does not also answer that message.
+  answeredInbound Boolean  @default(false) @map("answered_inbound")
+  currentNodeId  String?   @map("current_node_id")
+  error          String?
+  startedAt      DateTime  @default(now()) @map("started_at")
+  endedAt        DateTime? @map("ended_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  flow  ChatbotFlow         @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  steps AutomationRunStep[]
+
+  @@unique([flowId, eventKey])
+  @@index([tenantId, flowId, startedAt])
+  @@index([tenantId, conversationId, startedAt])
+  @@map("automation_runs")
+}
+
+/// One node an automation run passed through (the run log's node trace).
+model AutomationRunStep {
+  id       String   @id @default(cuid())
+  tenantId String   @map("tenant_id")
+  runId    String   @map("run_id")
+  nodeId   String   @map("node_id")
+  nodeType String   @map("node_type")
+  // ok | failed | skipped | waiting
+  status   String
+  // The branch taken out of this node (sourceHandle), when it branches.
+  branch   String?
+  output   Json?
+  at       DateTime @default(now())
+
+  run AutomationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, at])
+  @@index([tenantId, nodeId])
+  @@map("automation_run_steps")
 }
 
 // ─── Webhook Triggers ────────────────────────────────────────
@@ -1472,6 +1672,40 @@ model Department {
   @@map("departments")
 }
 
+/// ★★ READ STATE BELONGS TO THE PERSON, NOT THE CONVERSATION.
+///
+/// "I marked this unread" is a fact about one agent, not about the thread. A
+/// column on Conversation would mean one agent marking unread marks it unread
+/// for the whole team - which is not what the current product does, and not
+/// what anyone expects.
+///
+/// This replaces two things the browser was keeping on its own: the
+/// `chatcenter:markedUnread` localStorage set, and the client-side lastRead
+/// map. Both were per-BROWSER, so they were lost on another device, lost when
+/// site data was cleared, and invisible to the rest of the team.
+model ConversationReadState {
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  userId         String    @map("user_id")
+  conversationId String    @map("conversation_id")
+  /// Set by hand from the queue. Distinct from "has unseen messages", which is
+  /// derived from lastReadAt - a conversation you have read can still be
+  /// deliberately marked unread, and that is the whole point of the action.
+  markedUnread   Boolean   @default(false) @map("marked_unread")
+  lastReadAt     DateTime? @map("last_read_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conversationId])
+  @@index([tenantId, userId, markedUnread])
+  @@index([conversationId])
+  @@map("conversation_read_states")
+}
+
 model DepartmentMember {
   id             String         @id @default(cuid())
   tenantId       String         @map("tenant_id")
@@ -1530,6 +1764,14 @@ model BusinessProfile {
   /// the company-context block, so a correct answer also sounds like them.
   /// Written by the history import's brand-voice stage; a human edit here is
   /// never overwritten by a later import (see `observedVoiceEditedAt`).
+  /// Where the business is, as one line, in whatever form the owner wrote it.
+  /// Deliberately not parsed into parts: an AI employee quotes it back, and no
+  /// reader here needs a postcode field it would then have to reassemble.
+  address                     String?
+  /// ISO-4217 for prices the AI quotes. Distinct from the BILLING currency,
+  /// which is the plan's and lives on the subscription - a shop can be billed
+  /// in USD and sell in ILS, and conflating them would misquote one of them.
+  currency                    String?
   observedVoice               String?          @map("observed_voice")
   observedVoiceEditedAt       DateTime?        @map("observed_voice_edited_at")
   createdAt                   DateTime         @default(now()) @map("created_at")
@@ -1595,6 +1837,22 @@ model BusinessDiscovery {
   // Movement 8 tune-chat transcript, persisted (bounded to the last 20 turns)
   // so a reload mid-tune resumes the conversation instead of losing it.
   tuneTranscript Json? @map("tune_transcript")
+
+  /// What the CRAWL could see, as opposed to what the model concluded.
+  ///
+  /// ★ `distinctTextPages` IS THE ONE THAT MATTERS. A password-protected store
+  /// answers 200 to EVERY path, so `pagesRead` can be 17 while the crawl saw the
+  /// same login page seventeen times - measured on this deployment's own demo
+  /// store, where all 17 responses were the same 188-byte "This store is password
+  /// protected". A screen must never say "we read 17 pages" off `pagesRead`; when
+  /// the distinct count is 1 the honest sentence is that the site could not be
+  /// read, and the `ecommerce` industry that comes back with it was inferred from
+  /// Shopify markers in the login page's own markup.
+  ///
+  /// Shape: { requested, pagesRead, distinctTextPages, coverage: string[], at }.
+  /// Written by every scan, so it describes the LATEST one, like the rest of this
+  /// row.
+  crawl     Json?
 
   scannedAt DateTime? @map("scanned_at")
   createdAt DateTime  @default(now()) @map("created_at")
@@ -2468,7 +2726,14 @@ model InAppNotification {
   priority  String   @default("MEDIUM")
   title     String
   body      String
+  /// Free-text path, kept for the clients that still read it. Superseded by
+  /// the typed target below: a string cannot be validated, and the interface
+  /// cannot tell from it which affordance to render.
   link      String?
+  /// conversation | approval | integration | campaign | none
+  targetType String? @map("target_type")
+  /// The id within targetType. Null when targetType is "none".
+  targetId   String? @map("target_id")
   read      Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -2605,7 +2870,9 @@ model MessageTemplate {
   channelAccount ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: SetNull)
   broadcasts     Broadcast[]
 
-  @@unique([tenantId, name, language, channel])
+  /// Per WhatsApp number (2026-10-13): two numbers may each have their own
+  /// template of the same name and language. Was [tenantId, name, language, channel].
+  @@unique([tenantId, name, language, channel, channelAccountId], map: "message_templates_tenant_name_lang_channel_account_key")
   @@index([tenantId])
   @@index([tenantId, channel, status])
   @@index([tenantId, channelAccountId])
@@ -4918,6 +5185,54 @@ model SystemAgentMessage {
   @@map("system_agent_messages")
 }
 
+/// A Home chat thread (docs/api/assistant-threads-v1.md). Its owner's only.
+/// The model's own turn memory (tool calls included) stays in
+/// system_agent_messages under sessionId = this id; the rows below are what
+/// the screen shows.
+model AssistantThread {
+  id            String    @id @default(cuid())
+  tenantId      String    @map("tenant_id")
+  userId        String    @map("user_id")
+  title         String?
+  /// "auto" | "user": a title the user set is never overwritten.
+  titleSource   String?   @map("title_source")
+  scope         Json
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastMessageAt DateTime? @map("last_message_at")
+  archivedAt    DateTime? @map("archived_at")
+
+  messages AssistantMessage[]
+
+  @@index([tenantId, userId, updatedAt(sort: Desc)])
+  @@map("assistant_threads")
+}
+
+model AssistantMessage {
+  id          String   @id @default(cuid())
+  threadId    String   @map("thread_id")
+  tenantId    String   @map("tenant_id")
+  role        String // "user" | "assistant"
+  text        String   @db.Text
+  /// "done" | "streaming" | "cancelled" | "failed"
+  status      String
+  steps       Json     @default("[]")
+  scope       Json?
+  suggestions Json     @default("[]")
+  /// Stage 2: cards computed by the server (chart, breakdown, record_list, record).
+  blocks      Json     @default("[]")
+  /// Stage 2: what each claim and card was computed from (replayable query).
+  sources     Json     @default("[]")
+  runId       String?  @map("run_id")
+  usage       Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  thread AssistantThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+  @@map("assistant_messages")
+}
+
 // ─── Calendar Accounts (Task 3 - schedule_meeting) ───────────
 //
 // One row per (tenant × AI agent × calendar provider) connection. Stores
@@ -4945,7 +5260,19 @@ model CalendarAccount {
   id                String                @id @default(cuid())
   tenantId          String                @map("tenant_id")
   /// The AIAgent that owns this calendar binding.
-  aiAgentId         String                @map("ai_agent_id")
+  /// NULLABLE since 20260923120000. An employee can be deleted while the
+  /// merchant's calendar stays connected - the OAuth grant belongs to the
+  /// tenant, not to the employee that happened to own it, and severing a live
+  /// third-party grant to tidy a foreign key is the wrong trade.
+  ///
+  /// MEASURED, not recalled: Postgres treats NULLs as DISTINCT in a unique
+  /// index, so @@unique([aiAgentId, provider]) below keeps rejecting a
+  /// duplicate owned account and stops preventing duplicate UNOWNED ones.
+  /// Probed directly - three NULL rows with the same provider were accepted,
+  /// a second non-null duplicate was rejected. A tenant can therefore
+  /// accumulate several unowned GOOGLE_CALENDAR rows and nothing objects.
+  /// That is an accepted consequence, not an oversight.
+  aiAgentId         String?               @map("ai_agent_id")
   provider          CalendarProvider
   /// Encrypted JSON: { accessToken, refreshToken, scope, idToken? }
   credentials       String                @db.Text
@@ -5686,6 +6013,11 @@ enum CallState {
 enum PresenceStatus {
   ONLINE
   BUSY
+  /// Stepped out, deliberately and with an end in mind. Distinct from OFFLINE:
+  /// OFFLINE is what we INFER when an agent stops sending heartbeats, AWAY is
+  /// what an agent SAYS. Routing can wait for an agent who will be back at
+  /// 11:00; it cannot wait for one who closed their laptop without a word.
+  AWAY
   OFFLINE
 }
 
@@ -5854,6 +6186,10 @@ model AgentPresence {
   tenantId             String         @map("tenant_id")
   status               PresenceStatus @default(OFFLINE)
   activeVoiceSessionId String?        @map("active_voice_session_id")
+  /// When an AWAY agent said they would be back. Null for every other status.
+  /// Nothing sweeps this: reads treat an elapsed window as ONLINE, so an agent
+  /// who never came back is not left AWAY forever by a job that failed to run.
+  awayUntil            DateTime?      @map("away_until")
   lastSeenAt           DateTime       @default(now()) @map("last_seen_at")
   updatedAt            DateTime       @updatedAt @map("updated_at")
 
@@ -6091,9 +6427,13 @@ model UserFeatureGrant {
   // false = explicit revoke (overrides "role grants this")
   granted   Boolean
   reason    String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedBy String?  @map("updated_by")
+  // When this override stops applying. null = no end date. Enforced at READ
+  // time by the permission resolver (loadUserGrants), so an expired row needs
+  // no cleanup job to stop granting.
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -6937,6 +7277,145 @@ model CustomerHistoricalMemory {
   @@map("customer_historical_memory")
 }
 
+/// Who may read a note. Two members, because a third would be a permission
+/// system and this is a flag.
+enum CustomerNoteVisibility {
+  /// Everyone in the tenant who can see the customer.
+  TEAM
+  /// The author only. Still stored, still auditable, never shown to others and
+  /// NEVER pushed to an external system - a private note in the merchant's CRM
+  /// is not private.
+  PRIVATE
+}
+
+/// A note the AI proposed is not a note until a human agrees with it.
+enum CustomerNoteStatus {
+  PUBLISHED
+  /// Written by the AI, awaiting a person. Must not be counted or shown as a
+  /// team note, for the same reason an unapproved knowledge candidate is not
+  /// knowledge.
+  AI_SUGGESTED
+  /// A person declined the suggestion. Kept rather than deleted so the AI is
+  /// not re-proposing the same thing forever.
+  REJECTED
+}
+
+/// Whether the note reached the system the merchant actually works in.
+///
+/// Four states because the difference between them is the whole point: a note
+/// that never had a target, one on its way, one that arrived, and one that
+/// failed. Collapsing the last two is how "saved" starts meaning nothing.
+enum CustomerNoteSyncStatus {
+  /// No external system is elected for this part of the business, so there is
+  /// nothing to sync to. Not a failure.
+  NOT_APPLICABLE
+  PENDING
+  SYNCED
+  FAILED
+}
+
+/// A note a person (or the AI) wrote about a CUSTOMER.
+///
+/// ════════════════════════════════════════════════════════════════════════════
+/// WHY THIS EXISTS AT ALL, GIVEN NOTES ALREADY GO TO THE CRM
+///
+/// `POST /api/crm/conversation/:id/notes` writes to the merchant's CRM and
+/// works. It cannot hold what this design asks for: a visibility flag, an edit
+/// history, @mentions of teammates, or a note the AI proposed and nobody has
+/// accepted yet. Those are GOTCHA concepts and a CRM note body has nowhere to
+/// put them.
+///
+/// So this row is the record, and the elected system gets a COPY of the body.
+/// Stated because the two readings of "notes live either in GOTCHA or in the
+/// elected system" lead to different schemas:
+///
+///   Not routing. MIRRORING, with the outcome reported.
+///
+/// A note is always saved here, and when a system is elected for the customer
+/// part of the business it is also pushed there. Nothing is silent in either
+/// direction: `externalSyncStatus` says whether the push happened, and FAILED
+/// is a state a screen must render rather than a detail in a log. Routing to
+/// the CRM *instead* would have meant dropping visibility, history, mentions
+/// and suggestions on the floor whenever a CRM happened to be connected.
+///
+/// ── Keyed on a CUSTOMER, not a conversation ──
+///
+/// The stub this replaces was keyed on `conversationId`, which is the wrong
+/// subject: a note is about a person, and the person outlives the thread.
+/// `conversationId` survives only as WHERE it was written, and is nullable
+/// because a note written from a customer page has no conversation.
+///
+/// `personId` is carried beside `contactId` so a note survives a contact merge,
+/// the same reason the brief resolves on it.
+/// ════════════════════════════════════════════════════════════════════════════
+model CustomerNote {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  /// The contact the note is about.
+  contactId String  @map("contact_id")
+  /// Cross-channel identity, so a merge does not orphan the note.
+  personId  String? @map("person_id")
+  /// WHERE it was written, when it was written in a conversation. Not the subject.
+  conversationId String? @map("conversation_id")
+
+  body       String
+  /// WHO MAY READ IT. Orthogonal to `aiUsable` below, and conflating the two is
+  /// a bug either way round: a note can be readable by the whole team and still
+  /// be something the bot must never repeat to a customer.
+  visibility CustomerNoteVisibility @default(TEAM)
+  /// ★ MAY THE AI'S PROMPT INCLUDE IT. Default FALSE, so a note is prompt-unsafe
+  /// until somebody says otherwise. A teammate reading a note they should not
+  /// have is a privacy problem; the bot reading one and repeating it to the
+  /// customer is a product incident, so this fails closed.
+  ///
+  /// A peer's proposal (docs/migrations/customer-notes-and-promises.proposal.md)
+  /// carried this axis as the visibility enum itself (AI_USABLE/TEAM_ONLY). It
+  /// is the more dangerous of the two axes and was missing here; keeping both
+  /// separately loses neither protection.
+  aiUsable   Boolean                @default(false) @map("ai_usable")
+  /// Pinned notes sort first, and 04f puts them at the top of the Inbox Copilot
+  /// too - so this is read by a surface outside the notes list, which is why it
+  /// is a column and not a client-side preference.
+  pinned     Boolean                @default(false)
+  status     CustomerNoteStatus     @default(PUBLISHED)
+
+  /// Null when the AI wrote it. A user row can be deleted, so the display name
+  /// is denormalised: an unattributable note is worth less than no note.
+  authorUserId String? @map("author_user_id")
+  authorName   String  @map("author_name")
+
+  /// User ids mentioned with @. Ids, not names, so a rename does not break them.
+  mentions String[] @default([]) @map("mentions")
+
+  /// Append-only [{ at, byUserId, byName, previousBody }]. A note that can be
+  /// corrected silently is a record of whatever it says now.
+  editHistory Json @default("[]") @map("edit_history")
+
+  /// The elected system this was mirrored to, and what came of it.
+  externalSystem     String?                @map("external_system")
+  externalNoteId     String?                @map("external_note_id")
+  externalSyncStatus CustomerNoteSyncStatus @default(NOT_APPLICABLE) @map("external_sync_status")
+  /// The provider's own words when it refused. Shown, not just logged.
+  externalSyncError  String?                @map("external_sync_error")
+  externalSyncedAt   DateTime?              @map("external_synced_at")
+
+  /// Soft delete: the history of a customer should not develop holes, and a
+  /// deleted note is still evidence of what somebody believed.
+  deletedAt DateTime? @map("deleted_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, contactId, createdAt])
+  @@index([tenantId, personId])
+  @@index([tenantId, status])
+  @@index([tenantId, externalSyncStatus])
+  @@map("customer_notes")
+}
+
 /// What a mined piece of knowledge is BEFORE a human agrees with it.
 enum KnowledgeCandidateStatus {
   PENDING
@@ -7503,4 +7982,169 @@ model BillingOutboxEntry {
   @@index([status, nextAttemptAt])
   @@index([tenantId])
   @@map("billing_outbox_entries")
+}
+
+
+// ─── Conversation handover history ─────────────────────────
+//
+// `Conversation.handledBy` is a single string with no timestamp: it says who
+// is driving NOW and nothing about when that changed or what it changed from.
+// "Last handover 3 hours ago" was therefore underivable, and so was any
+// question about how often the AI gives up.
+//
+// Append-only. A conversation that bounced between the bot and a human four
+// times has four rows, and overwriting them to keep only the latest would
+// discard the pattern that makes the count worth reading.
+model ConversationHandover {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  conversationId String   @map("conversation_id")
+  /// Who was driving before. Null for the first assignment of a conversation
+  /// that had no handler at all - which is a real state, not a missing value.
+  fromHandler    String?  @map("from_handler")
+  /// Who is driving now: "ai_agent" | "flow" | "human".
+  toHandler      String   @map("to_handler")
+  /// The membership that took over, when a person did.
+  actorUserId    String?  @map("actor_user_id")
+  /// Why, as a stable code: "escalation" | "takeover" | "assignment" | "routing".
+  reason         String?
+  at             DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, at])
+  @@index([conversationId, at])
+  @@map("conversation_handovers")
+}
+
+// ─── Per-user notification preferences ─────────────────────
+//
+// NotificationPreference is TENANT-ADMIN routing: which events go to whom. It
+// cannot answer "do not email me after 22:00", because it is not the user's to
+// set. This is, and the two are deliberately separate rows: an admin removing
+// a routing rule must not silently erase someone's quiet hours.
+model UserNotificationPreference {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  userId   String @unique @map("user_id")
+
+  inApp     Boolean @default(true) @map("in_app")
+  email     Boolean @default(true)
+  /// Not among the tenant-admin channels. A WhatsApp notification costs money
+  /// and reaches a personal phone, so it is off unless the person says yes.
+  whatsapp  Boolean @default(false)
+  /// Approvals are opt-OUT: an action waiting on you is the one notification
+  /// whose default cannot be silence.
+  approvals Boolean @default(true)
+
+  /// "HH:MM" in the tenant's timezone, both null when quiet hours are off.
+  /// Stored as text rather than minutes so what the user typed is what is
+  /// stored, and a window that wraps midnight needs no special encoding.
+  quietHoursFrom String? @map("quiet_hours_from")
+  quietHoursTo   String? @map("quiet_hours_to")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("user_notification_preferences")
+}
+
+// ─── Dismissed insights ────────────────────────────────────
+//
+// Insights are DERIVED on every request - they have no rows of their own, only
+// stable ids like "high-escalation-rate". So a dismissal cannot be a flag on
+// the insight; it has to be a record that this tenant said no to that id.
+model InsightDismissal {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  /// The insight's stable id, e.g. "top-intent-automation".
+  insightId   String   @map("insight_id")
+  dismissedBy String?  @map("dismissed_by")
+  dismissedAt DateTime @default(now()) @map("dismissed_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// One dismissal per insight per tenant. Dismissing twice is not two events.
+  @@unique([tenantId, insightId])
+  @@index([tenantId])
+  @@map("insight_dismissals")
+}
+
+// ─── Questions GOTCHA could not answer ─────────────────────
+//
+// /api/analytics/top-questions cannot serve this: it ranks intent slugs by
+// frequency and has no concept of failure. This records the failure itself, at
+// the moment retrieval decides it has nothing good enough to say.
+//
+// One row per question CLUSTER per tenant, counted up - not one row per ask,
+// which would make "asked by 33 people" a GROUP BY over an unbounded table.
+model UnansweredQuestion {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  /// The canonical phrasing, from the first ask in the cluster.
+  question   String
+  /// Stable key for the cluster, so repeats increment instead of inserting.
+  clusterKey String @map("cluster_key")
+
+  /// no_knowledge | low_confidence | conflicting. RECORDED at the point of
+  /// failure, never inferred later - "we found nothing" and "we found two
+  /// answers that disagree" need different fixes from the owner.
+  reason String
+
+  /// Times asked, and by how many distinct people. Both counts of real events.
+  askCount     Int @default(1) @map("ask_count")
+  askedBy      Int @default(1) @map("asked_by")
+
+  firstAskedAt DateTime @default(now()) @map("first_asked_at")
+  lastAskedAt  DateTime @default(now()) @map("last_asked_at")
+  /// Set when the owner adds knowledge that answers it, so it stops surfacing
+  /// without losing the record that it was once a gap.
+  resolvedAt   DateTime? @map("resolved_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, clusterKey])
+  @@index([tenantId, lastAskedAt])
+  @@index([tenantId, resolvedAt])
+  @@map("unanswered_questions")
+}
+
+// ─── Demand for things not in the catalogue ────────────────
+//
+// "22 people asked for navy towels this week. You do not stock them."
+// Recorded when a product search runs and the catalogue returns nothing for
+// the term the customer used.
+//
+// Bucketed by ISO week: the card's claim is "this week", and a running total
+// since launch cannot answer "is this getting worse".
+model ProductDemandTerm {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  /// Normalised search term, lowercased and trimmed.
+  term    String
+  /// ISO-8601 week, "2026-W36". Sorts lexically, which is why it is text.
+  weekKey String @map("week_key")
+
+  askCount Int @default(1) @map("ask_count")
+  askedBy  Int @default(1) @map("asked_by")
+
+  /// Whether the catalogue had a match at the time of asking. False is the
+  /// interesting case; true rows are kept so a term that STOPS matching after
+  /// a product is delisted is visible as a change rather than as a new term.
+  inCatalogue Boolean @default(false) @map("in_catalogue")
+
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, term, weekKey])
+  @@index([tenantId, weekKey])
+  @@map("product_demand_terms")
 }

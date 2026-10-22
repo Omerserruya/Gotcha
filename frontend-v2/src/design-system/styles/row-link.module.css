@@ -1,0 +1,78 @@
+@layer patterns {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ A ROW YOU CAN CLICK ANYWHERE - the row's one link, stretched over it
+   * ════════════════════════════════════════════════════════════════════════
+   * Omer, 2026-10-11, for every list in Settings: a row with an edit arrow or
+   * a clickable word is clickable across the WHOLE row.
+   *
+   * The row's own link (or button) stays the only element that does it, and
+   * the only tab stop. Its `::after` is stretched over the row, so a click
+   * anywhere on the row lands on the link. Never a whole row wrapped in an
+   * `<a>`: a row with a second control would then nest one interactive
+   * element inside another, which is invalid and announces twice.
+   *
+   *   <li className={rowLink.row}>                    ← the hit area
+   *     <span>…</span>
+   *     <ElectPart className={rowLink.above} />       ← a second control
+   *     <Link className={`${styles.open} ${rowLink.link}`}>›</Link>
+   *   </li>
+   *
+   * ⚠ A SECOND CONTROL IN THE ROW TAKES `above`. The overlay is painted after
+   *   everything positioned before it, so without `z-index: 1` a switch or a
+   *   menu in the row is under the link: it looks pressable and opens the row.
+   *   An element carrying a `title` takes it too, or its tooltip never shows.
+   *
+   * ⚠ THE RING MOVES TO THE ROW. The link's own ring would circle one word
+   *   while the whole row is the target; it is drawn on the overlay, inset so
+   *   a card's `overflow: clip` cannot cut it off.
+   *
+   * Hover needs no rule: the overlay IS the link, so the link's own `:hover`
+   * fires anywhere on the row.
+   */
+  .row {
+    position: relative;
+  }
+
+  .link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  .link:focus-visible {
+    outline: none;
+  }
+
+  .link:focus-visible::after {
+    outline: var(--focus-ring-width) solid var(--border-focus);
+    outline-offset: calc(-1 * var(--focus-ring-width));
+  }
+
+  .above {
+    position: relative;
+    z-index: 1;
+  }
+
+  /*
+   * ⚠ `z-index: 1` makes the control its own stacking context, so a menu it
+   *   opens is no higher than the NEXT row's control, painted later at the
+   *   same level - 14c's system menu went under the pill below it. A control
+   *   with its popup open rises over its neighbours.
+   */
+  .above:has([aria-expanded='true']) {
+    z-index: 2;
+  }
+
+  /*
+   * A label that explains itself only on hover (a status chip, the faces on
+   * a role): above the row's link so its tooltip shows, and - through
+   * `RowTipForward` - a click on it opens the row all the same. It is not a
+   * control: no tab stop of its own, so the row stays one stop (2026-10-11).
+   */
+  .tip {
+    position: relative;
+    z-index: 1;
+    cursor: pointer;
+  }
+}

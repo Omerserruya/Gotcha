@@ -13,7 +13,7 @@ import type {
   ChannelCredentials,
   ProviderSendError,
 } from "./types";
-import { ChannelSendError } from "./types";
+import { ChannelSendError, sharedLocationContent } from "./types";
 import { metaGraphBaseUrl } from "../lib/meta-graph-version";
 
 const WA_API_URL = metaGraphBaseUrl(process.env.WHATSAPP_API_URL);
@@ -606,11 +606,17 @@ function extractWhatsAppContent(msg: any): NormalizedInboundMessage["content"] {
         mimeType: msg.video?.mime_type,
       };
     case "sticker":
-      // A sticker is an image (webp, often animated). Treated as one so it
-      // renders instead of printing "[sticker message]" as dead text.
-      return { type: "image", mediaUrl: msg.sticker?.id, caption: "[Sticker]", mimeType: msg.sticker?.mime_type };
+      // Its own type (2026-10-09): stored as "image" it was drawn as a photo
+      // and counted as one. Still downloaded and rendered like an image.
+      return { type: "sticker", mediaUrl: msg.sticker?.id, caption: "[Sticker]", mimeType: msg.sticker?.mime_type };
     case "location":
-      return { type: "location", text: `[Location: ${msg.location?.latitude}, ${msg.location?.longitude}]` };
+      // Name, address and a link travel with the coordinates (2026-10-09):
+      // "[Location: lat, lng]" was all the AI and the inbox ever saw.
+      return (
+        sharedLocationContent(msg.location?.latitude, msg.location?.longitude, {
+          name: msg.location?.name, address: msg.location?.address, url: msg.location?.url,
+        }) ?? { type: "text", text: "[Shared location]" }
+      );
     case "contacts": {
       // "Send a contact" from the WhatsApp attach menu. Arrives as an array,
       // because a customer can share several at once.
@@ -719,6 +725,38 @@ export const whatsAppOutboundAdapter: OutboundAdapter = {
           interactive: {
             type: "button", body: { text: formatWhatsAppText(bodyText) },
             action: { buttons: buttons.slice(0, 3).map((b) => ({ type: "reply", reply: { id: b.id, title: b.title } })) },
+          },
+        },
+        { headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" } }
+      );
+      return response.data?.messages?.[0]?.id || null;
+    } catch (err: any) {
+      throw new ChannelSendError(buildWaSendError(err));
+    }
+  },
+
+  async sendListMessage(
+    credentials: ChannelCredentials,
+    accountExternalId: string,
+    recipientId: string,
+    bodyText: string,
+    buttonText: string,
+    rows: Array<{ id: string; title: string; description?: string }>,
+  ): Promise<string | null> {
+    try {
+      const response = await axios.post(
+        `${WA_API_URL}/${accountExternalId}/messages`,
+        {
+          messaging_product: "whatsapp", to: recipientId, type: "interactive",
+          interactive: {
+            type: "list", body: { text: formatWhatsAppText(bodyText) },
+            action: {
+              // Meta limits: button text 20, row title 24, description 72, 10 rows.
+              button: buttonText.slice(0, 20),
+              sections: [{ rows: rows.slice(0, 10).map((r) => ({
+                id: r.id, title: r.title.slice(0, 24), ...(r.description ? { description: r.description.slice(0, 72) } : {}),
+              })) }],
+            },
           },
         },
         { headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" } }

@@ -23,9 +23,8 @@ import {
   checkAiAllowed,
 } from "@chatcenter/shared";
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
-import { withProtectedAtoms } from "@chatcenter/shared";
 import { getShopifyAuthorization, shopifyCapabilityForTool } from "@chatcenter/shared";
-import { capabilitiesFor, MAX_CAROUSEL_ITEMS } from "@chatcenter/shared";
+import { capabilitiesFor, MAX_CAROUSEL_ITEMS, loadIntegrationAccess, allowedIntegrationToolKeys, customAccessKey } from "@chatcenter/shared";
 import {
   readGrammaticalAddress,
   updateGrammaticalAddress,
@@ -69,6 +68,7 @@ import {
   buildVariantIntentDirective,
   detectCouponIntent,
   buildCouponUnsupportedDirective,
+  buildCouponPromotionsDirective,
   detectOrderNoteIntent,
   buildOrderNoteDirective,
 } from "./product-intent.service";
@@ -98,6 +98,25 @@ import {
   buildDocumentDirective,
 } from "./document-request.service";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
+import { loadProfileFactsForPrompt } from "./customer-memory.service";
+import { humanizeReply } from "./reply-style";
+import { websiteHandoffContext } from "./website-handoff-context.service";
+import {
+  loadSkillContext,
+  selectionCandidates,
+  decideSkillTurn,
+  withStartSkill,
+  applySkillDecision,
+  loadRunRequests,
+  traceAsRequests,
+  businessSkillsForPrompt,
+  skillLedgerFields,
+  skillApprovalReason,
+  settleSkillRun,
+  type SkillContext,
+  type SkillCandidate,
+} from "./skill-runtime.service";
+import { mergeKnowledgeFields } from "./prompt-builder.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
 import { isAgentArchitectureEnabled } from "@chatcenter/shared";
@@ -113,11 +132,10 @@ import {
   BudgetExceededError,
   auditBudgetAbort,
 } from "./cost-budget.service";
-import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
+import { retrieveRelevantChunks, buildKnowledgeContext, shouldRecordKnowledgeGap } from "./knowledge.service";
 import { prefetchCrmContext, renderCrmContextBlock, invalidateCrmPrefetch } from "./crm-prefetch.service";
 import { getCrmAdapter } from "./connectors/crm-adapter-resolver";
 import type { CrmVendor } from "./connectors/crm-adapter.types";
-import { resolveIdentity } from "./intelligence-ingest.service";
 import { resolveActiveStage } from "./intelligence/stage-resolver.service";
 import type { StageContextForPrompt } from "./intelligence/prompts/blocks/copilot-config-block";
 import {
@@ -178,6 +196,7 @@ import {
 } from "./schedule-handler.service";
 import { computeCalendarCapability, type CalendarCapabilityDetail } from "./calendar-capability.service";
 import { getCompanyContext, type CompanyContext } from "./company-context.service";
+import { getBusinessCoreMap } from "./connectors/part-systems";
 import {
   detectBookingCommitment,
   detectBookingClaim,
@@ -207,6 +226,7 @@ import {
   refreshCapabilityState,
   getToolPriority,
 } from "./connectors/integration-framework";
+import { SHIPMENT_TRACKING_TOOL, shipmentTrackingVisible } from "./connectors/woo-shipment-tracking";
 import {
   loadActionContracts,
   loadContractProgress,
@@ -216,6 +236,7 @@ import {
 } from "./action-contracts.repo";
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -913,6 +934,27 @@ function silentTurnFallback(locale: string): string {
     : "Sorry - I couldn't finish checking that just now. Shall I try again, or pass you to a person?";
 }
 
+/**
+ * The text a turn delivers. An empty turn gets the honest fallback, except
+ * when an escalation or an approval pause already owes the customer a message
+ * from another path. A SIMULATED escalation (the test chat) counts as one:
+ * live, the hand-off message comes from the worker's escalation path; in the
+ * test chat the fallback ("I couldn't finish checking - shall I pass you to a
+ * person?") showed an operator a message live would never send.
+ */
+export function deliverableReply(t: {
+  safeReply: string | null | undefined;
+  pendingEscalation: boolean;
+  awaitingApproval: boolean;
+  toolCallLog: Array<{ tool: string; decision?: string }>;
+  locale: string;
+}): string {
+  if (t.safeReply?.trim()) return t.safeReply;
+  const simulatedEscalation = t.toolCallLog.some((c) => c.tool === "escalate_to_human" && c.decision === "simulated");
+  if (t.pendingEscalation || t.awaitingApproval || simulatedEscalation) return t.safeReply ?? "";
+  return silentTurnFallback(t.locale);
+}
+
 function renderPendingApprovalsBlock(pending: Array<{ tool: string }>): string | undefined {
   if (!pending.length) return undefined;
   const list = pending.map((a) => `\`${a.tool}\``).join(", ");
@@ -965,36 +1007,6 @@ async function lookupLastAssistantMove(
   return undefined;
 }
 
-// Final humanizing pass on the customer-facing reply. Models love joining
-// clauses with an em/en dash or a spaced hyphen ("…אשמח לעזור - מתי…"), which
-// reads as machine-written. Prompt rules reduce it but don't eliminate it, so we
-// also strip it deterministically here. Token-internal hyphens (phone numbers,
-// "Wi-Fi", date ranges like 10-15) have NO surrounding spaces and are preserved.
-function humanizeReply(text: string | null): string | null {
-  if (!text) return text;
-  // ROOT-CAUSE NOTE (2026-07-20 live incident): a previous version of the dash
-  // class here accidentally contained the ASCII hyphen, which rewrote EVERY
-  // hyphen - inside product URLs (urban-supply-… → "urban, supply, …"), ISO
-  // dates (2026-07-08 → "2026, 07, 08") and image UUIDs - into comma soup on
-  // real WhatsApp messages. Two defenses now: the class holds ONLY true wide
-  // dashes (U+2014 em, U+2013 en, U+2015 bar), and every transform runs with
-  // atomic values (URLs, emails, dates, ids, phones) shielded byte-for-byte
-  // via withProtectedAtoms.
-  return withProtectedAtoms(text, (prose) => {
-    let out = prose;
-    // Wide dash used as a clause connector (with or without surrounding spaces).
-    out = out.replace(/\s*[\u2013\u2014\u2015]\s*/g, ", ");
-    // ASCII hyphen used as a dash: spaces on BOTH sides only. Token-internal
-    // hyphens (Wi-Fi, ranges like 10-15) are untouched.
-    out = out.replace(/(\S) +- +(\S)/g, "$1, $2");
-    // Don't leave a stray ", " right before sentence punctuation or newline.
-    out = out.replace(/,\s*([.!?,\n])/g, "$1");
-    // Collapse the accidental ", ," and trailing/leading artifacts.
-    out = out.replace(/,\s*,/g, ",").replace(/[ \t]{2,}/g, " ");
-    return out;
-  }).trim();
-}
-
 /** Worker-computed "business is closed right now" context (active policy). */
 export interface ClosedHoursContext {
   nextOpeningIso: string | null;
@@ -1017,6 +1029,8 @@ export async function generateAIBotReply(opts: {
    * Never set by the incoming-worker.
    */
   sandbox?: { enabled: true; writes: "safe" | "real" };
+  /** An automation's "Run a skill": start this business skill on this turn. */
+  startSkillId?: string | null;
 }): Promise<AIBotReplyResult> {
   // Per-conversation cancellation: if a newer inbound for this conversation
   // hits the AI service mid-turn, it calls beginTurn() again which aborts
@@ -1166,24 +1180,15 @@ async function buildSessionFactsBlock(opts: {
 
   // (1) Structured facts already extracted/persisted for this person.
   try {
-    const identity = await resolveIdentity(opts.tenantId, opts.conversationId);
-    if (identity) {
-      const profile = await (prisma as any).customerProfile
-        .findUnique({
-          where: { tenantId_identityKey: { tenantId: opts.tenantId, identityKey: identity.identityKey } },
-          select: { facts: true },
-        })
-        .catch(() => null);
-      const facts = (profile?.facts ?? {}) as Record<string, { value?: unknown }>;
-      const lines = Object.entries(facts)
-        .filter(([, v]) => v && v.value != null && String(v.value).trim() !== "")
-        .map(([k, v]) => `- ${k}: ${String(v.value).slice(0, 120)}`);
-      if (lines.length) {
-        parts.push(
-          "## Facts already known about this customer (treat as established - do NOT re-ask)\n" +
-            lines.join("\n"),
-        );
-      }
+    // The same loader GET /api/ai-assist/:id/customer-memory returns, so the screen's
+    // "GOTCHA remembers" is exactly this list.
+    const known = await loadProfileFactsForPrompt(opts.tenantId, opts.conversationId);
+    const lines = known.map((f) => `- ${f.key}: ${f.value}`);
+    if (lines.length) {
+      parts.push(
+        "## Facts already known about this customer (treat as established - do NOT re-ask)\n" +
+          lines.join("\n"),
+      );
     }
   } catch {
     /* non-fatal - fall through to transcript layer */
@@ -1232,6 +1237,8 @@ async function generateAIBotReplyInner(
     closedHours?: ClosedHoursContext;
     /** See generateAIBotReply - reaches the tool dispatcher only. */
     sandbox?: { enabled: true; writes: "safe" | "real" };
+    /** See generateAIBotReply. */
+    startSkillId?: string | null;
   },
   signal: AbortSignal,
 ): Promise<AIBotReplyResult> {
@@ -1519,7 +1526,15 @@ async function generateAIBotReplyInner(
   if (shouldRetrieveKB(behaviorState, opts.incomingMessage)) {
     try {
       // Scoped to what THIS employee may read - see readableKnowledgeBaseIds.
-      const chunks = await retrieveRelevantChunks(opts.tenantId, opts.incomingMessage, 5, opts.aiAgentId);
+      // The live customer path, and the only caller that records gaps: a miss
+      // here is a real question this business could not answer.
+      const chunks = await retrieveRelevantChunks(
+        opts.tenantId, opts.incomingMessage, 5, opts.aiAgentId,
+        {
+          record: shouldRecordKnowledgeGap({ sandbox: !!opts.sandbox?.enabled, customerExternalId: conversation.customerExternalId, message: opts.incomingMessage }),
+          askerKey: opts.conversationId ?? null,
+        },
+      );
       kbBlock = buildKnowledgeContext(chunks) || undefined;
       for (const c of chunks as any[]) {
         const title = String(c?.documentTitle ?? c?.title ?? "").trim();
@@ -1571,11 +1586,23 @@ async function generateAIBotReplyInner(
   // brand-new prospect who answered every question still read as knowing
   // nothing → objectives stuck forever (real WhatsApp regression). Feed in what
   // the customer ACTUALLY said this session so progression reflects reality.
+  // ── Business skills (design 6): this employee's skills + the open run ──
+  // Fail-soft: a skills error costs the turn its skills, never its reply.
+  const skillCtx: SkillContext = await loadSkillContext(opts.tenantId, config.id, opts.conversationId).catch((err: any) => {
+    console.warn("[ai-bot] skill context load failed (turn runs without skills):", err?.message);
+    return { candidates: [], openRun: null, noSkillPolicy: "answer_from_knowledge" };
+  });
+  // The open run's fields join the session knowledge now; a NEW run's fields
+  // join the ledger once it is chosen below.
+  const openRunSkill = skillCtx.openRun
+    ? skillCtx.candidates.find((c) => c.id === skillCtx.openRun!.skillId && c.mode === "on")
+    : undefined;
+
   const sessionFactsBlock = await buildSessionFactsBlock({
     tenantId: opts.tenantId,
     conversationId: opts.conversationId,
     messages,
-    knowledgeFields: requiredKnowledgeFor(config.role),
+    knowledgeFields: mergeKnowledgeFields(requiredKnowledgeFor(config.role), openRunSkill ? skillLedgerFields(openRunSkill) : []),
     signal,
   });
 
@@ -1693,6 +1720,11 @@ async function generateAIBotReplyInner(
   // Company identity inherited from the tenant BusinessProfile - so the agent
   // always knows who it works for and what the company does/sells.
   const companyContext: CompanyContext | null = await getCompanyContext(opts.tenantId);
+  // The part -> system mapping screen 14 writes. Resolved here because the
+  // prompt builder is sync, exactly as companyContext is. Never throws:
+  // getSystemForPart degrades to "unmapped", which the block states rather than
+  // guessing around.
+  const businessCoreMap = await getBusinessCoreMap(opts.tenantId);
   // Shopify Live Chat wiring. Null on every other channel, which is the
   // common case - the storefront block and the product tools simply do
   // not exist for a WhatsApp or Instagram turn.
@@ -1705,6 +1737,25 @@ async function generateAIBotReplyInner(
   });
   if (shopifyTurn?.storefrontBlock) {
     ctxSlot.storefrontBlock = shopifyTurn.storefrontBlock;
+  }
+  // The website widget's product cards from the connected WooCommerce store
+  // (W9). Null unless this is a web chat with products turned on; never both.
+  const wooTurn = shopifyTurn
+    ? null
+    : await prepareWebchatCommerceTurn({ tenantId: opts.tenantId, conversationId: opts.conversationId }).catch((err: any) => {
+        console.warn("[ai-bot] woo turn prep failed:", err?.message);
+        return null;
+      });
+  // The one place cards are staged this turn, whichever store they come from.
+  const productTurn = shopifyTurn ?? wooTurn;
+  // A web chat on a WooCommerce store's site: the product the visitor is
+  // looking at, resolved against the store (Shopify's turn has its own block).
+  if (!shopifyTurn && !ctxSlot.storefrontBlock) {
+    const block = await webchatStorefrontBlock(opts.tenantId, opts.conversationId).catch((err: any) => {
+      console.warn("[ai-bot] web chat storefront block failed:", err?.message);
+      return undefined;
+    });
+    if (block) ctxSlot.storefrontBlock = block;
   }
   // Set later in the turn, read by runAdapterTool's gate below. Declared here
   // because the tool context closes over it and is built before the controller
@@ -1722,8 +1773,9 @@ async function generateAIBotReplyInner(
   })();
 
   const agentToolCtx: AgentToolContext = {
-    sendShopifyProducts: shopifyTurn?.sendShopifyProducts,
+    sendShopifyProducts: productTurn?.sendShopifyProducts,
     tenantId: opts.tenantId,
+    aiAgentId: config.id,
     conversationId: opts.conversationId,
     contactId: contactRow?.id,
     authToken: process.env.INTERNAL_SERVICE_TOKEN,
@@ -1981,6 +2033,39 @@ async function generateAIBotReplyInner(
               },
             });
           }
+        } else {
+          // D30. This branch used to do nothing: the product notified on the
+          // SUCCESS of a money action and stayed silent when it failed, which
+          // is the inverse of what anyone wants. "A refund did not go through"
+          // is the one thing worth interrupting someone for.
+          //
+          // ONLY `errored` is emitted. A `refused` is a guard, a rate limit or
+          // a missing precondition declining - the product working correctly -
+          // and paging someone because their own cross-sell gate held would
+          // teach them to ignore the row this exists to make trustworthy.
+          //
+          // The discriminator comes from executeAdapterTool rather than from
+          // parsing `reason`: the strings are free-form, and a prefix match
+          // would silently misclassify every failure mode added later, in the
+          // direction of notifying nobody.
+          const kind = classifyToolForNotification(toolFunctionName);
+          if (kind && result.failure === "errored") {
+            tryEmit({
+              type: "tool.action_failed",
+              tenantId: opts.tenantId,
+              data: {
+                tool: toolFunctionName,
+                kind,
+                failure: result.failure,
+                reason: String(result.reason ?? "").slice(0, 200),
+                args,
+              },
+              metadata: {
+                conversationId: opts.conversationId,
+                agentId: config.id,
+              },
+            });
+          }
         }
       } catch (err: any) {
         console.warn("[ai-bot] notification emit failed:", err?.message);
@@ -2000,56 +2085,20 @@ async function generateAIBotReplyInner(
     rescheduleMeeting: hasExistingBooking,
     cancelMeeting: hasExistingBooking,
     // Honor CatalogTool.allowedModes - tools tagged ASSIST-only are dropped
-    shopifyProducts: shopifyTurn?.productMessagingEnabled === true,
+    shopifyProducts: productTurn?.productMessagingEnabled === true,
     // Honor CatalogTool.allowedModes - tools tagged ASSIST-only are dropped
     // from the autonomous surface. The copilot path uses {closure,followup}
     // flags; the autonomous path uses this mode filter.
     allowedMode: "AUTO",
   });
 
-  // ── Custom API tools ── (tenant-defined HTTP calls as bot tools)
-  try {
-    const customTools = await listCustomApiTools(opts.tenantId);
-    for (const t of customTools) {
-      tools.push({
-        type: "function",
-        function: {
-          name: `custom.${t.slug}`,
-          description:
-            `${t.description}\n\nWHEN TO USE: ${t.whenToUse}` +
-            (t.whenNotToUse ? `\n\nDO NOT USE: ${t.whenNotToUse}` : ""),
-          parameters: t.parameters,
-        },
-      });
-    }
-  } catch (err: any) {
-    console.warn("[ai-bot] custom-api tool surface failed:", err?.message);
-  }
+  // Custom API tools and DB queries, only those on the employee's allowlist.
+  tools.push(...(await customToolDefinitions(opts.tenantId, config.id)));
 
   // Snapshot of what the model was actually offered, for diagnostics.
   const toolsOffered: string[] = (tools as any[])
     .map((t) => t?.function?.name)
     .filter((n): n is string => typeof n === "string");
-
-  // ── Custom DB query tools ── (tenant-defined SQL/Mongo as bot tools)
-  try {
-    const { listCustomDbQueryTools } = await import("./connectors/custom-db.service");
-    const customDbTools = await listCustomDbQueryTools(opts.tenantId);
-    for (const t of customDbTools) {
-      tools.push({
-        type: "function",
-        function: {
-          name: `custom_db.${t.slug}`,
-          description:
-            `${t.description}\n\nWHEN TO USE: ${t.whenToUse}` +
-            (t.whenNotToUse ? `\n\nDO NOT USE: ${t.whenNotToUse}` : ""),
-          parameters: t.parameters,
-        },
-      });
-    }
-  } catch (err: any) {
-    console.warn("[ai-bot] custom-db tool surface failed:", err?.message);
-  }
 
   // ── Adapter framework tools ── (only for tenants with the integration CONNECTED)
   try {
@@ -2089,35 +2138,11 @@ async function generateAIBotReplyInner(
     // allowedModes), so the autonomous bot never surfaces an adapter tool the
     // operator hasn't enabled for THIS agent. Without this, every tool of every
     // connected integration would leak in regardless of the marketplace toggle.
-    const allowedAdapterTools = new Set<string>();
+    // The one shared query (grants + enabled + CONNECTED + the employee's
+    // allowlist), AUTO surface only.
+    let allowedAdapterTools = new Set<string>();
     try {
-      const perms = await prisma.agentToolPermission.findMany({
-        where: {
-          tenantId: opts.tenantId,
-          aiAgentId: config.id,
-          isAllowed: true,
-          tenantTool: { isEnabled: true, tenantIntegration: { status: "CONNECTED" } },
-        },
-        include: {
-          tenantTool: {
-            include: {
-              catalogTool: { select: { slug: true, allowedModes: true } },
-              tenantIntegration: { include: { integration: { select: { slug: true } } } },
-            },
-          },
-        },
-      });
-      for (const p of perms as any[]) {
-        const tt = p.tenantTool;
-        const integSlug = tt?.tenantIntegration?.integration?.slug;
-        const toolSlug = tt?.catalogTool?.slug;
-        if (!integSlug || !toolSlug) continue;
-        // AUTO surface: drop ASSIST-only tools. allowedModes default permits all,
-        // so a missing/malformed value is treated as "allowed".
-        const am = tt?.catalogTool?.allowedModes;
-        if (Array.isArray(am) && !am.includes("AUTO")) continue;
-        allowedAdapterTools.add(`${integSlug}:${toolSlug}`);
-      }
+      allowedAdapterTools = await allowedIntegrationToolKeys(opts.tenantId, config.id, { mode: "AUTO" });
     } catch (err: any) {
       console.warn("[ai-bot] adapter tool permission load failed:", err?.message);
     }
@@ -2190,6 +2215,13 @@ async function generateAIBotReplyInner(
         // store could actually do.
         if (toolCannotExecute(def)) {
           console.log(`[ai-bot][tool-surface] hiding ${def.name}: provider declares it unsupported`);
+          continue;
+        }
+        // Capability gate, part three: a tool that needs a store extension is
+        // offered only where the extension was seen (cached per store; an
+        // unknown store is probed in the background and the tool waits).
+        if (def.name === SHIPMENT_TRACKING_TOOL && !(await shipmentTrackingVisible(String(cfg.storeUrl ?? "")))) {
+          console.log(`[ai-bot][tool-surface] hiding ${def.name}: the store has no Shipment Tracking extension (or it is not known yet)`);
           continue;
         }
         // Entitlement gate, per TOOL. Which Shopify entitlement a tool needs is
@@ -2344,6 +2376,11 @@ async function generateAIBotReplyInner(
     console.warn("[ai-bot] policy pre-filter failed (keeping full surface):", err?.message);
   }
 
+  // On a web chat whose cards come from the WooCommerce store (W9), the
+  // Shopify catalogue is not this conversation's store: its search would hand
+  // the model ids that are not on the shelf the widget sits on.
+  tools = withoutOtherStoreTools(tools as any[], wooTurn);
+
   // ── Hard cap: OpenAI rejects a tools array longer than 128 ──
   //
   // Not a soft limit. The API answers 400 "Invalid 'tools': array too long"
@@ -2464,11 +2501,33 @@ async function generateAIBotReplyInner(
     },
     messages,
     signal,
+    // Skill selection rides the same judgement call (none offered → identical).
+    skills: skillCtx.candidates.length ? selectionCandidates(skillCtx) : undefined,
+    openSkillId: skillCtx.openRun?.skillId ?? null,
   });
   const committedActionTools = planContext.completedActionTools;
   const priorGoal = planContext.priorGoal;
   const wizardFacts = planContext.wizardFacts;
   const toolCapabilityHints = planContext.toolCapabilityHints;
+
+  // Which skill this turn works in (stickiness, topic change, edits: see
+  // decideSkillTurn). Watch runs are recorded but never shape the reply.
+  const started = withStartSkill(skillCtx, wizardFacts.matchedSkillId, opts.startSkillId);
+  const skillDecision = decideSkillTurn(started.ctx, started.matched);
+  const skillRunId = skillCtx.candidates.length || skillCtx.openRun
+    ? await applySkillDecision(opts.tenantId, opts.conversationId, config.id, skillDecision).catch((err: any) => {
+        console.warn("[ai-bot] skill run record failed:", err?.message);
+        return null;
+      })
+    : null;
+  const activeSkill: SkillCandidate | null = skillRunId ? skillDecision.active?.skill ?? null : null;
+  const activeOnSkill: SkillCandidate | null = activeSkill && activeSkill.mode === "on" ? activeSkill : null;
+  // While a live skill runs, it - not the objective chain - decides this turn's
+  // next move: the objective-driven forcing below stands aside.
+  const skillOwnsTurn = !!activeOnSkill;
+  // A step's "ask you over X" can only TIGHTEN approval (orchestrator hook).
+  const skillTighten = (a: { tool: string; args?: unknown }) =>
+    skillApprovalReason(activeOnSkill, a.tool, (a.args ?? {}) as Record<string, unknown>);
 
   // OUTCOME QUALITY > DATA COLLECTION (role-agnostic): don't let the model create
   // records (lead/contact/deal/opportunity/ticket/case/…) unless creation is
@@ -2488,6 +2547,26 @@ async function generateAIBotReplyInner(
     .map((t) => t?.function?.name)
     .filter((n): n is string => typeof n === "string");
 
+  // Business skills for the prompt (undefined → the prompt is exactly what it
+  // was before skills existed). Watch runs never reach the prompt.
+  // Step state = the open run's own trace (what the bot did, incl. reused
+  // results) merged with the request rows (what changed since, e.g. an approval).
+  const skillRequests = activeOnSkill && !skillDecision.starts && skillCtx.openRun
+    ? [
+        ...(await loadRunRequests(opts.tenantId, opts.conversationId, skillCtx.openRun.startedAt).catch(() => [])),
+        ...traceAsRequests(skillCtx.openRun.trace),
+      ]
+    : [];
+  const businessSkills = businessSkillsForPrompt({
+    ctx: skillCtx,
+    activeOnSkill,
+    requests: skillRequests,
+    surface: toolFunctionNames,
+    factText: [ctxSlot.customerBlock, ctxSlot.crmBlock, ctxSlot.memoryBlock, ctxSlot.sessionFactsBlock]
+      .filter((x): x is string => !!x && !!x.trim())
+      .join("\n"),
+  });
+
   const promptOpts: BuildPromptOpts = {
     behaviorState,
     agent: toAgentRecord(config),
@@ -2503,6 +2582,8 @@ async function generateAIBotReplyInner(
     priorGoal,
     wizardFacts,
     company: companyContext ?? undefined,
+    businessCore: businessCoreMap,
+    businessSkills,
   };
   const systemPrompt = buildAgentPrompt(promptOpts);
 
@@ -2540,6 +2621,14 @@ async function generateAIBotReplyInner(
   } catch { /* shadow must never break the turn */ }
 
   const chatMessages: any[] = [{ role: "system", content: systemPrompt }];
+
+  // "Continue on WhatsApp": the website chat this conversation continues.
+  try {
+    const handoff = await websiteHandoffContext(opts.tenantId, messages as any);
+    if (handoff) chatMessages.push({ role: "system", content: handoff });
+  } catch (err: any) {
+    console.warn("[ai-bot] website handoff context failed (non-fatal):", err?.message);
+  }
 
   // ── Discovery State (structured conversational memory) ──────────────────
   // Extract shopping facts into the authoritative per-conversation session,
@@ -2592,7 +2681,10 @@ async function generateAIBotReplyInner(
             // model that filters after the fact is a model that receives the
             // first N rows of the catalogue and then writes prose about a
             // budget it never applied.
-            `Everything else goes in ARGUMENTS, not in the query and not in your head: price_max for a budget, plus product_type / vendor / tag / option_name+option_value from the catalogue block above. ` +
+            (disc.decision.tool.startsWith("woocommerce.")
+              // The WooCommerce search filters by price and stock only.
+              ? `Everything else goes in ARGUMENTS, not in the query and not in your head: price_max for a budget (price_min for a floor), in_stock true when they want only what is available. `
+              : `Everything else goes in ARGUMENTS, not in the query and not in your head: price_max for a budget, plus product_type / vendor / tag / option_name+option_value from the catalogue block above. `) +
             `Do NOT ask more questions and do NOT describe products from general knowledge - only real results from the tool may be shown.`,
         });
       } else if (disc.decision?.kind === "blocked_no_tool") {
@@ -2617,7 +2709,13 @@ async function generateAIBotReplyInner(
   // off this surface; this stops the model improvising in their absence.
   try {
     if (detectCouponIntent(opts.incomingMessage)) {
-      chatMessages.push({ role: "system", content: buildCouponUnsupportedDirective() });
+      // The one exception: on the website widget, the coupons the merchant
+      // chose to show (W9 phase d). Otherwise coupons stay unsupported.
+      const promotions = await webchatPromotionsFor(opts.tenantId, opts.conversationId).catch(() => []);
+      chatMessages.push({
+        role: "system",
+        content: promotions.length ? buildCouponPromotionsDirective(promotions) : buildCouponUnsupportedDirective(),
+      });
     }
     // "Write this on my order" - the model kept claiming the write instead of
     // performing it.
@@ -3003,6 +3101,7 @@ async function generateAIBotReplyInner(
             tenantId: agentToolCtx.tenantId,
             proposedBy: { mode: "chat", system: "ai-bot" },
             actor: { agentId: "" },
+            aiAgentId: agentToolCtx.aiAgentId,
             tool: toolName,
             args: toolArgs,
             rationale: "ai-bot inbox tool call",
@@ -3013,7 +3112,7 @@ async function generateAIBotReplyInner(
               { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
               agentToolCtx,
             ),
-          { ledger, ctx: ledgerCtx, idempotency: true },
+          { ledger, ctx: ledgerCtx, idempotency: true, tightenApproval: skillTighten },
         );
         const result = unwrapToolExec(tc.id, toolName, exec);
 
@@ -3238,6 +3337,7 @@ async function generateAIBotReplyInner(
             tenantId: agentToolCtx.tenantId,
             proposedBy: { mode: "chat", system: "ai-bot:retry" },
             actor: { agentId: "" },
+            aiAgentId: agentToolCtx.aiAgentId,
             tool: toolName,
             args: toolArgs,
             rationale: "ai-bot retry-loop tool call",
@@ -3248,7 +3348,7 @@ async function generateAIBotReplyInner(
               { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
               agentToolCtx,
             ),
-          { ledger, ctx: ledgerCtx, idempotency: true },
+          { ledger, ctx: ledgerCtx, idempotency: true, tightenApproval: skillTighten },
         );
         const result = unwrapToolExec(tc.id, toolName, exec);
         toolCallLog.push({
@@ -3386,6 +3486,9 @@ async function generateAIBotReplyInner(
     if (
       ripeAct?.tool &&
       !apDisqualified &&
+      // A live business skill owns this turn's next move; forcing the
+      // objective chain's tool here would hijack it.
+      !skillOwnsTurn &&
       !actionAlreadyTaken &&
       isNonAdvancingReply(replyText) &&
       !awaitingApproval &&
@@ -3465,6 +3568,7 @@ async function generateAIBotReplyInner(
               tenantId: agentToolCtx.tenantId,
               proposedBy: { mode: "chat", system: "ai-bot:action-preference" },
               actor: { agentId: "" },
+            aiAgentId: agentToolCtx.aiAgentId,
               tool: toolName,
               args: toolArgs,
               rationale: "ai-bot action-preference (RIPE goal action)",
@@ -3475,7 +3579,7 @@ async function generateAIBotReplyInner(
                 { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
                 agentToolCtx,
               ),
-            { ledger, ctx: ledgerCtx, idempotency: true },
+            { ledger, ctx: ledgerCtx, idempotency: true, tightenApproval: skillTighten },
           );
           const result = unwrapToolExec(tc.id, toolName, exec);
           toolCallLog.push({
@@ -3555,6 +3659,9 @@ async function generateAIBotReplyInner(
     if (
       failedActions.length > 0 &&
       !succeededAction &&
+      // A live skill has its own fallback (the step's else note / hand-over);
+      // objective-driven recovery would steer toward a different goal.
+      !skillOwnsTurn &&
       !detectHumanHandoff(opts.incomingMessage) &&
       !awaitingApproval &&
       !budget.exceededTurnCap()
@@ -3677,6 +3784,7 @@ async function generateAIBotReplyInner(
                 tenantId: agentToolCtx.tenantId,
                 proposedBy: { mode: "chat", system: "ai-bot:recovery" },
                 actor: { agentId: "" },
+            aiAgentId: agentToolCtx.aiAgentId,
                 tool: toolName,
                 args: toolArgs,
                 rationale: "ai-bot failure recovery",
@@ -3687,7 +3795,7 @@ async function generateAIBotReplyInner(
                   { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
                   agentToolCtx,
                 ),
-              { ledger, ctx: ledgerCtx, idempotency: true },
+              { ledger, ctx: ledgerCtx, idempotency: true, tightenApproval: skillTighten },
             );
             const result = unwrapToolExec(tc.id, toolName, exec);
             toolCallLog.push({
@@ -3877,6 +3985,7 @@ async function generateAIBotReplyInner(
             tenantId: agentToolCtx.tenantId,
             proposedBy: { mode: "chat", system: "ai-bot:guaranteed-bg" },
             actor: { agentId: "" },
+            aiAgentId: agentToolCtx.aiAgentId,
             tool: toolName,
             args: toolArgs,
             rationale: "ai-bot guaranteed background action (RIPE objective completion tool)",
@@ -3887,7 +3996,7 @@ async function generateAIBotReplyInner(
               { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
               agentToolCtx,
             ),
-          { ledger, ctx: ledgerCtx, idempotency: true },
+          { ledger, ctx: ledgerCtx, idempotency: true, tightenApproval: skillTighten },
         );
         const result = unwrapToolExec(tc.id, toolName, exec);
         toolCallLog.push({ tool: toolName, args: toolArgs, result: result.content, decision: "executed_on_retry", sideEffect: "background" });
@@ -3932,6 +4041,9 @@ async function generateAIBotReplyInner(
     !committedActionThisTurn &&
     !customerIsClosing(opts.incomingMessage) &&
     !decisionDisqualified &&
+    // Closing out a finished skill ("anything else?") is not the objective
+    // chain's passive close; the skill, not the chain, owns this turn.
+    !skillOwnsTurn &&
     // Block a passive close when EITHER an active objective forbids it OR the
     // business OUTCOME is still pending/blocked (the case the bare null cursor
     // used to mask: "no next objective" ≠ "the goal happened").
@@ -4139,6 +4251,7 @@ async function generateAIBotReplyInner(
             tenantId: agentToolCtx.tenantId,
             proposedBy: { mode: "chat", system: "ai-bot:booking-grounding" },
             actor: { agentId: "" },
+            aiAgentId: agentToolCtx.aiAgentId,
             tool: toolName,
             args: toolArgs,
             rationale: "ai-bot booking-grounding forced tool call",
@@ -4149,7 +4262,7 @@ async function generateAIBotReplyInner(
               { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
               agentToolCtx,
             ),
-          { ledger, ctx: ledgerCtx, idempotency: true },
+          { ledger, ctx: ledgerCtx, idempotency: true, tightenApproval: skillTighten },
         );
         const result = unwrapToolExec(tc.id, toolName, exec);
         toolCallLog.push({ tool: toolName, args: toolArgs, result: result.content, decision: "executed_on_retry", sideEffect: undefined });
@@ -4469,6 +4582,27 @@ async function generateAIBotReplyInner(
     console.warn("[ai-bot] decision-trace log failed:", err?.message);
   }
 
+  // Business skill: move the run to where this turn's tool requests put it
+  // (step, completion, hand-over). Fail-soft, like every skill path.
+  if (skillRunId && activeSkill) {
+    // An escalation is logged with decision "escalate", not "executed".
+    const escalatedThisTurn =
+      !!pendingEscalation ||
+      // "simulated": the sandbox's rehearsal of a hand-over is a hand-over for the run.
+      toolCallLog.some((t) => t.tool === "escalate_to_human" && ["escalate", "executed", "executed_on_retry", "simulated"].includes(String(t.decision)));
+    await settleSkillRun({
+      tenantId: opts.tenantId,
+      conversationId: opts.conversationId,
+      aiAgentId: config.id,
+      runId: skillRunId,
+      skill: activeSkill,
+      surface: toolFunctionNames,
+      escalatedThisTurn,
+      // What the bot did this turn, with ok by the same rule the turn uses.
+      turnCalls: toolCallLog.map((t) => ({ tool: t.tool, decision: String(t.decision ?? ""), ok: TOOL_OK_RE.test(String(t.result ?? "")) })),
+    }).catch((err: any) => console.warn("[ai-bot] skill run settle failed:", err?.message));
+  }
+
   // Audit - full BehaviorState + tool calls.
   prisma.auditLog.create({
     data: {
@@ -4491,6 +4625,10 @@ async function generateAIBotReplyInner(
         activeGoal: nextGoalSnapshot ?? undefined,
         // WIZARD→RUNTIME: the structured judgment facts that drove this turn.
         wizardFacts: wizardFacts.evaluated ? wizardFacts : undefined,
+        // The business skill this turn worked in (absent when none).
+        activeSkillId: activeSkill?.id ?? undefined,
+        activeSkillMode: activeSkill?.mode ?? undefined,
+        skillRunId: skillRunId ?? undefined,
         toolCalls: toolCallLog.length > 0 ? toolCallLog : undefined,
         behaviorState: {
           strategy: behaviorState.strategy,
@@ -4558,7 +4696,9 @@ async function generateAIBotReplyInner(
     // sentence? The capability map answers, not this file.
     const recoCaps = capabilitiesFor(conversation.channel as string);
     const channelSupportsCards = recoCaps.supportsProductCarousel || recoCaps.supportsCards;
-    const canStage = !!shopifyTurn?.sendShopifyProducts;
+    // Cards only from the store the search read: a Shopify result is never
+    // staged against the Woo store, nor the other way round.
+    const canStage = !!productTurn?.sendShopifyProducts && cardsMatchTurn(productEnvelope.provider, wooTurn);
 
     const recoPlan = planAutoRecommendation({
       envelope: productEnvelope,
@@ -4566,7 +4706,7 @@ async function generateAIBotReplyInner(
       // cards but has no staging path (web chat today) still takes the
       // text route, honestly.
       channelSupportsCards: channelSupportsCards && canStage,
-      alreadyStaged: (shopifyTurn?.staged.length ?? 0) > 0,
+      alreadyStaged: (productTurn?.staged.length ?? 0) > 0,
       modelText: replyText,
       locale: replyLocale,
       budget: productBudget,
@@ -4577,7 +4717,7 @@ async function generateAIBotReplyInner(
       // above the budget" printed above a carousel of three.
       maxProducts: Math.min(
         recoCaps.maxCards ?? MAX_CAROUSEL_ITEMS,
-        shopifyTurn?.channel.config.commerce.carouselSize || MAX_CAROUSEL_ITEMS,
+        shopifyTurn?.channel.config.commerce.carouselSize || wooTurn?.carouselSize || MAX_CAROUSEL_ITEMS,
       ),
     });
 
@@ -4591,7 +4731,7 @@ async function generateAIBotReplyInner(
       // unpublished ones and enforces this channel's store binding, so
       // the automatic path inherits every guarantee the tool path has.
       try {
-        const staged = await shopifyTurn!.sendShopifyProducts!({
+        const staged = await productTurn!.sendShopifyProducts!({
           products: recoPlan.selected.map((c) => ({
             productId: c.productId,
             variantId: c.variantId,
@@ -4746,12 +4886,8 @@ async function generateAIBotReplyInner(
   // An escalation or an approval pause is a different case: both already owe
   // the customer a message from another path, and adding one here would make
   // two.
-  const deliverable =
-    safeReply?.trim() ||
-    (pendingEscalation || awaitingApproval
-      ? safeReply
-      : silentTurnFallback(replyLocale));
-  if (!safeReply?.trim() && !pendingEscalation && !awaitingApproval) {
+  const deliverable = deliverableReply({ safeReply, pendingEscalation: !!pendingEscalation, awaitingApproval: !!awaitingApproval, toolCallLog, locale: replyLocale });
+  if (deliverable === silentTurnFallback(replyLocale)) {
     console.error(
       `[ai-bot] SILENT TURN: no reply produced conv=${opts.conversationId} ` +
         `tools=${toolCallLog.map((t) => t.tool).join(",") || "none"} - sent the fallback instead of nothing`,
@@ -4773,7 +4909,7 @@ async function generateAIBotReplyInner(
     // over, and a product card arriving after "let me get a colleague"
     // would be noise.
     structuredMessages:
-      safeReply && shopifyTurn?.staged.length ? shopifyTurn.staged : undefined,
+      safeReply && productTurn?.staged.length ? productTurn.staged : undefined,
   };
 }
 
@@ -5097,4 +5233,37 @@ function billingPauseSummary(allowance: { reason?: string; balance: number }): s
     default:
       return `AI paused - AI Units exhausted. Remaining: ${allowance.balance}.`;
   }
+}
+
+/**
+ * The tenant's custom API tools (`custom.<slug>`) and custom DB queries
+ * (`custom_db.<slug>`) this employee may use. They have no per-tool grant
+ * rows, so the employee's allowlist ("custom:<id>") is their only
+ * per-employee gate; the dispatch gate checks the same key.
+ */
+export async function customToolDefinitions(tenantId: string, aiAgentId: string): Promise<any[]> {
+  const out: any[] = [];
+  const access = await loadIntegrationAccess(tenantId, aiAgentId).catch(() => new Set<string>());
+  const def = (prefix: string, t: any) => ({
+    type: "function",
+    function: {
+      name: `${prefix}.${t.slug}`,
+      description:
+        `${t.description}\n\nWHEN TO USE: ${t.whenToUse}` +
+        (t.whenNotToUse ? `\n\nDO NOT USE: ${t.whenNotToUse}` : ""),
+      parameters: t.parameters,
+    },
+  });
+  try {
+    for (const t of await listCustomApiTools(tenantId)) if (access.has(customAccessKey(t.id))) out.push(def("custom", t));
+  } catch (err: any) {
+    console.warn("[ai-bot] custom-api tool surface failed:", err?.message);
+  }
+  try {
+    const { listCustomDbQueryTools } = await import("./connectors/custom-db.service");
+    for (const t of await listCustomDbQueryTools(tenantId)) if (access.has(customAccessKey(t.id))) out.push(def("custom_db", t));
+  } catch (err: any) {
+    console.warn("[ai-bot] custom-db tool surface failed:", err?.message);
+  }
+  return out;
 }

@@ -31,6 +31,7 @@ import {
   prisma,
   withCrossTenantAccess,
   getRedis,
+  incomingMessageQueue,
   verifyShopifyWebhookHmac,
   getShopifyAppIdentity,
   normalizeShopifyShopDomain,
@@ -41,6 +42,8 @@ import {
   disableChatForUninstalledShop,
 } from "../services/shopify-chat-install.service";
 import { notifyShopifyUninstalled } from "../services/shopify-billing-bridge.service";
+import { cartEventFromShopifyCheckout, cartCompletionFromShopifyOrder, orderEventFromShopifyOrder } from "../services/shopify-cart-events";
+import { withErrorCode } from "../lib/error-code";
 import {
   removeTenantToolAssignments,
   stripLiveConnectionClaims,
@@ -50,6 +53,12 @@ const router = Router();
 
 /** Shopify retries anything that is not 2xx, so idempotency is mandatory. */
 type Topic =
+  | "checkouts/create"
+  | "checkouts/update"
+  | "orders/create"
+  | "orders/paid"
+  | "orders/fulfilled"
+  | "orders/cancelled"
   | "app/uninstalled"
   | "customers/data_request"
   | "customers/redact"
@@ -343,9 +352,17 @@ core.post("/app-uninstalled", async (req: Request, res: Response) => {
     });
 
     if (!match) {
-      // No legacy row. Billing has already been told, so this is only a note
-      // that there was nothing on the legacy side to disconnect.
-      await recordDelivery({ app: "core", hook, outcome: "no_connection" });
+      // No legacy row. Billing has already been told. The storefront chat
+      // still goes with the app (2026-10-10): a store disconnected here first
+      // has no CONNECTED row, and this return used to skip the chat shutdown,
+      // leaving the chat on after the merchant removed the app.
+      let chatDisabled = false;
+      try {
+        chatDisabled = (await disableChatForUninstalledShop(shop)).disabled;
+      } catch (err) {
+        console.error("[shopify-webhook] chat disable on unmatched uninstall failed:", (err as Error)?.message);
+      }
+      await recordDelivery({ app: "core", hook, outcome: chatDisabled ? "no_connection+chat_disabled" : "no_connection" });
       return;
     }
 
@@ -371,21 +388,29 @@ core.post("/app-uninstalled", async (req: Request, res: Response) => {
           // Disconnected. `shopDomain` is KEPT: which store this was is
           // history worth having, and the screens label it disconnected.
           config: stripLiveConnectionClaims(match.config),
-          lastError: "The GOTCHA Shopify app was uninstalled from this store.",
+          lastError: withErrorCode("SHOPIFY_APP_UNINSTALLED"),
         },
       }),
     );
-    // Tool assignments for a store that no longer exists. Shared with the
-    // in-product Disconnect route so the two paths cannot drift again, and
-    // idempotent so a duplicate webhook is safe.
-    const toolsRemoved = await withCrossTenantAccess(async () =>
-      removeTenantToolAssignments({ tenantId: match.tenantId, tenantIntegrationId: match.id }),
-    );
-    if (toolsRemoved.removed > 0) {
-      console.log(
-        `[shopify-webhook] removed ${toolsRemoved.removed} tenant tool assignment(s) ` +
-          `for tenant=${match.tenantId} after uninstall`,
+    // Tool assignments for a store that no longer exists, idempotent so a
+    // duplicate webhook is safe. The in-product Disconnect keeps them on
+    // purpose (they hold the admin's per-tool choices, and only a CONNECTED
+    // integration's tools are offered); a reinstall re-creates any missing.
+    // Best-effort like the chat step below: a failure here must not skip the
+    // storefront chat or the delivery record (they are only offered while
+    // CONNECTED, which the update above already ended).
+    try {
+      const toolsRemoved = await withCrossTenantAccess(async () =>
+        removeTenantToolAssignments({ tenantId: match.tenantId, tenantIntegrationId: match.id }),
       );
+      if (toolsRemoved.removed > 0) {
+        console.log(
+          `[shopify-webhook] removed ${toolsRemoved.removed} tenant tool assignment(s) ` +
+            `for tenant=${match.tenantId} after uninstall`,
+        );
+      }
+    } catch (err) {
+      console.error("[shopify-webhook] tool assignment removal on uninstall failed:", (err as Error)?.message);
     }
 
     // The extension left with the app, so the storefront chat goes too.
@@ -436,6 +461,58 @@ core.post("/shop-redact", async (req: Request, res: Response) => {
   if (await alreadyProcessed("core", hook.webhookId)) return;
   await recordDelivery({ app: "core", hook, outcome: "recorded_for_erasure_pipeline" });
 });
+
+// ── Commerce events → automations (cart left behind, order event) ─────────
+//
+// checkouts/create|update and orders/create|paid|fulfilled|cancelled. NOT yet
+// subscribed in the app TOML: that needs Protected Customer Data approval
+// (Omer's side, in the Partner Dashboard). Verified like every core webhook,
+// idempotent per webhook id, and answered 200 at once; the work is a job for
+// the incoming worker. A shop with no CONNECTED Shopify connection is
+// acknowledged and ignored.
+
+async function tenantForShop(shop: string | null): Promise<string | null> {
+  if (!shop) return null;
+  const connections = await withCrossTenantAccess(async () =>
+    prisma.tenantIntegration.findMany({
+      where: { integration: { slug: "shopify" }, status: "CONNECTED" },
+      select: { tenantId: true, config: true },
+    }),
+  );
+  const match = connections.find((c: any) => normalizeShopifyShopDomain((c.config as any)?.shopDomain) === shop);
+  return match?.tenantId ?? null;
+}
+
+type CommerceJob = { name: "cart-event" | "order-event"; data: any };
+
+function commerceRoute(topic: Topic, toJobs: (tenantId: string, body: any) => Array<CommerceJob | null>) {
+  return async (req: Request, res: Response) => {
+    const hook = verify(req, res, process.env.SHOPIFY_API_SECRET || "", topic);
+    if (!hook) return;
+    res.status(200).json({ ok: true });
+    if (await alreadyProcessed("core", hook.webhookId)) return;
+    try {
+      const tenantId = await tenantForShop(hook.shopDomain);
+      if (!tenantId) return;
+      for (const job of toJobs(tenantId, hook.body)) {
+        if (!job?.data) continue;
+        await incomingMessageQueue.add(job.name, job.data, { attempts: 3, backoff: { type: "exponential", delay: 2000 }, removeOnComplete: true, removeOnFail: 100 });
+      }
+    } catch (err: any) {
+      console.error(`[shopify-webhook] ${topic} handling failed:`, err?.message ?? err);
+    }
+  };
+}
+
+const cart = (t: string, b: any): CommerceJob => ({ name: "cart-event", data: cartEventFromShopifyCheckout(t, b) });
+const order = (status: "created" | "paid" | "fulfilled" | "cancelled") => (t: string, b: any): CommerceJob => ({ name: "order-event", data: orderEventFromShopifyOrder(t, b, status) });
+core.post("/checkouts-create", commerceRoute("checkouts/create", (t, b) => [cart(t, b)]));
+core.post("/checkouts-update", commerceRoute("checkouts/update", (t, b) => [cart(t, b)]));
+// A new order is both: its checkout is bought, and an order was created.
+core.post("/orders-create", commerceRoute("orders/create", (t, b) => [{ name: "cart-event", data: cartCompletionFromShopifyOrder(t, b) }, order("created")(t, b)]));
+core.post("/orders-paid", commerceRoute("orders/paid", (t, b) => [order("paid")(t, b)]));
+core.post("/orders-fulfilled", commerceRoute("orders/fulfilled", (t, b) => [order("fulfilled")(t, b)]));
+core.post("/orders-cancelled", commerceRoute("orders/cancelled", (t, b) => [order("cancelled")(t, b)]));
 
 router.use("/shopify-chat/webhooks", chat);
 router.use("/connectors/shopify/webhooks", core);

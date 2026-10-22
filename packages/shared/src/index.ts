@@ -12,9 +12,14 @@ export type {
   BroadcastJob,
   ScheduledMessageJob,
   FlowResumeJob,
+  AutomationEventJob,
+  CartEventJob,
+  OrderEventJob,
+  OrderStatus,
   HistoricalImportChunkJob,
   HistoricalIntelligenceJob,
 } from "./lib/queue";
+export { tagsAdded, emitTagsAdded } from "./lib/automation-events";
 
 // Historical import: the one mapping between the pipeline's thirteen states and
 // the four the customer actually sees.
@@ -88,6 +93,7 @@ export {
   gmailOutboundAdapter,
   gmailResolveAccessToken,
   gmailFetchNewMessages,
+  fetchOutlookMessage,
   outlookInboundAdapter,
   outlookOutboundAdapter,
   slackInboundAdapter,
@@ -101,8 +107,12 @@ export {
   buildReferences,
   parseMessageIdList,
   threadHeaderLines,
+  safeExtraHeaders,
   outgoingSubject,
   DEFAULT_EMAIL_SUBJECT,
+  // Mail no person wrote (bounces, auto-replies, bulk): dropped at ingest.
+  autoMailReason,
+  parseHeaderBlock,
 } from "./channels";
 export type {
   EmailThreadContext,
@@ -117,6 +127,22 @@ export {
   unifyContact,
   findSiblingContacts,
 } from "./lib/identity-resolver";
+export {
+  linkContacts,
+  suggestLink,
+  unlinkContacts,
+  autoLinkByIdentifier,
+  autoLinkByShopifyCustomer,
+  suggestBySameName,
+  namesLookAlike,
+  normalizeName,
+  IDENTITY_LINK,
+  NOT_SAME_PREFIX,
+  pairKey,
+  type LinkRecord,
+  type LinkSignal,
+  type LinkOutcome,
+} from "./lib/identity-links";
 // Read vs write classification - ONE table, used by the Copilot's
 // who-executes decision and by the sandbox write guard in dispatchToolCall.
 // Migrating existing tool policy into the three-state model. Conservative by
@@ -165,6 +191,8 @@ export {
   RISK_GROUPS,
   riskGroupFor,
   mayBeAlwaysAllowed,
+  isHighRiskGroup,
+  highRiskAutoRunPermitted,
   recommendedState,
   resolveToolAvailability,
   summarizeTools,
@@ -206,6 +234,7 @@ export {
   recordExecutionOutcome,
   claimCustomerNotification,
   linkCustomerMessage,
+  describeApprovalAction,
 } from "./lib/approval-requests";
 export type { CreateApprovalRequestInput } from "./lib/approval-requests";
 export { sanitizeCustomerText, hasAiSignaturePunctuation, withProtectedAtoms } from "./lib/customer-text";
@@ -237,6 +266,10 @@ export {
   evaluateBusinessPolicy,
   evaluateConfig,
   actionKindForTool,
+  actionKindForCall,
+  couponRequestedType,
+  policyRequestedAmount,
+  policyAmount,
   revalidateBeforeExecution,
 } from "./lib/business-policy";
 export type {
@@ -319,7 +352,22 @@ export { getOAuthStateSecret } from "./lib/oauth-state";
 export { mintOAuthState, consumeOAuthState, returnPathForFlow } from "./lib/oauth-state-store";
 export type { OAuthStateClaims, MintedState, ConsumeResult } from "./lib/oauth-state-store";
 export { verifyInternalServiceKey, requireInternalKey, getInternalServiceKey } from "./lib/internal-key";
-export { safeFetch, assertPublicUrl, isBlockedIp, SsrfError } from "./lib/safe-fetch";
+export { safeFetch, safeFetchBuffer, assertPublicUrl, isBlockedIp, SsrfError } from "./lib/safe-fetch";
+export type { SafeFetchBufferResult } from "./lib/safe-fetch";
+// Widget logo and cover: checked from the bytes, re-hosted (W3/W4).
+export {
+  WIDGET_IMAGE_LIMITS,
+  WIDGET_IMAGE_MAX_BYTES,
+  WIDGET_IMAGE_EXTENSION,
+  isWidgetImageSlot,
+  probeImage,
+  checkWidgetImage,
+  driveDirectUrl,
+  type WidgetImageSlot,
+  type WidgetImageType,
+  type ImageFacts,
+  type WidgetImageRefusal,
+} from "./lib/widget-image";
 export type { SafeFetchOptions, SafeFetchResult } from "./lib/safe-fetch";
 export { verifyWebhookSignature, verifySharedSecretToken, timingSafeEqualStr } from "./lib/webhook-verify";
 export type { WebhookVerifyResult } from "./lib/webhook-verify";
@@ -408,6 +456,10 @@ export {
   licenseKeysFor,
   builtinRoleForLegacy,
   maxScope,
+  ROLE_CEILINGS,
+  OWNER_FLOOR,
+  ceilingKeysFor,
+  rolesEditable,
 } from "./lib/permission-catalog";
 export type {
   PermissionDef,
@@ -429,7 +481,9 @@ export {
   backfillTenantAssignments,
   seedTenantRbac,
   seedAllTenantsRbac,
+  customizedRoleKey,
 } from "./lib/rbac-seed";
+export { mergeAdminIntoOwner, undoMergeAdminIntoOwner, MERGE_RECORD_KEY } from "./lib/rbac-merge";
 
 // Packaging / plans (License layer presets).
 export {
@@ -514,6 +568,91 @@ export {
   type SafeSessionView,
   type SessionTtl,
 } from "./lib/session-store";
+export {
+  readSessionCookie,
+  resolvePrincipalFromSessionToken,
+} from "./lib/session-principal";
+export {
+  issueRealtimeTicket,
+  redeemRealtimeTicket,
+  isWellFormedRealtimeTicket,
+  REALTIME_TICKET_TTL_SECONDS,
+  type RealtimeTicketPrincipal,
+} from "./lib/realtime-ticket";
+export {
+  CONVERSATION_INTENTS,
+  isConversationIntent,
+  normalizeConversationIntent,
+  isFrustrated,
+  type ConversationIntent,
+  type IntentSignals,
+} from "./lib/conversation-intent";
+export {
+  scoreQueueItem,
+  rankQueueItems,
+  type QueueUrgency,
+  type QueueRankInput,
+  type QueueScore,
+} from "./lib/queue-ranking";
+export {
+  toActivityEvent,
+  approvalToActivityEvent,
+  toolSubject,
+  type ActivityEvent,
+  type ActivityOutcome,
+  type ActivitySubject,
+} from "./lib/activity-events";
+export {
+  recordHandover,
+  latestHandover,
+  CONVERSATION_HANDLERS,
+  type ConversationHandler,
+  type HandoverReason,
+} from "./lib/conversation-handover";
+export {
+  recordUnansweredQuestion,
+  recordProductDemand,
+  clusterKeyFor,
+  isQuestionText,
+  isoWeekKey,
+  UNANSWERED_REASONS,
+  type UnansweredReason,
+} from "./lib/knowledge-gaps";
+export {
+  notificationCategory,
+  notificationTarget,
+  NOTIFICATION_CATEGORIES,
+  type NotificationCategory,
+  type NotificationTargetType,
+} from "./lib/notification-category";
+export {
+  computeSetupState,
+  SETUP_STEPS,
+  type SetupState,
+  type SetupStep,
+  type SetupStepState,
+  type SetupFacts,
+} from "./lib/setup-state";
+export {
+  buildQuietDayList,
+  HORIZON_WEEKS,
+  type QuietDayItem,
+  type QuietDayEffect,
+  type QuietDaySource,
+} from "./lib/quiet-day-ranking";
+export {
+  DEFAULT_POLICY,
+  MAX_LIST_ITEMS,
+  MAX_ITEM_CHARS,
+  PolicyValidationError,
+  validateStringList,
+  validatePolicyPatch,
+  getPolicy,
+  getPolicyPrompt,
+  setPolicy,
+  validateAgainstPolicy,
+  type BusinessPolicy,
+} from "./lib/workspace-policy";
 export { redact, safeLogger } from "./lib/log-redact";
 export * from "./lib/tenant-access-policy";
 export {
@@ -524,10 +663,12 @@ export {
   idleConversationQueue,
   broadcastQueue,
   scheduledMessageQueue,
+  notificationsQueue,
   flowResumeQueue,
   historicalIntelligenceQueue,
   createWorker,
   CHANNEL_RATE_LIMITS,
+  ORDER_STATUSES,
 } from "./lib/queue";
 export { publishEvent, subscribeToEvents, closeEventBus } from "./lib/event-bus";
 export { createServiceApp, startService } from "./lib/service-app";
@@ -606,8 +747,11 @@ export {
   projectReadinessAnswers,
   projectExternalSources,
   titleFor,
+  hasConcreteFact,
+  BOILERPLATE_MIN_PAGES,
 } from "./lib/knowledge/discovery-to-knowledge";
 export type {
+  SkippedTopic,
   DiscoveryInput,
   ProfileInput,
   ReadinessAnswer,
@@ -704,6 +848,13 @@ export {
   defaultShopifyChatUx,
   normalizeShopifyChatUx,
   publicUxConfig,
+  WIDGET_LOOKS,
+  WIDGET_KINDS,
+  defaultWhatsapp,
+  normalizeWhatsapp,
+  type WidgetLook,
+  type WidgetKind,
+  type ShopifyChatWhatsapp,
 } from "./lib/shopify-chat-ux";
 export type {
   WidgetState,
@@ -737,6 +888,15 @@ export {
 // The ONE place the Meta Graph API version is decided. Replaced eight
 // independent declarations across four services that sat on three different
 // versions at once - two of them expired.
+// What a stored customer upload may be called and how it is served (the
+// stored-XSS fix, 2026-10-09).
+export { safeUploadExtension, uploadServingHeaders, SAFE_UPLOAD_EXTENSIONS, INLINE_UPLOAD_EXTENSIONS } from "./lib/upload-safety";
+export { signMediaUrl, verifyMediaSignature, mediaSignatureShapeOk, presentMediaUrl, storedUploadName, signedMediaPath, STORED_UPLOAD_NAME } from "./lib/media-url";
+
+// A WhatsApp number's own details from Meta (the channel check and the
+// on-demand refresh read it the same way).
+export { whatsappNumberDetails, withWhatsAppNumberDetails, type WhatsAppNumberDetails } from "./lib/whatsapp-number-details";
+
 export {
   metaGraphVersion,
   metaGraphBaseUrl,
@@ -839,8 +999,30 @@ export {
   migrateLegacyWebchat,
   isLegacyWebchatSettings,
   publicWebchatConfig,
+  normalizeWebchatCommerce,
+  MAX_PROMOTION_COUPONS,
 } from "./lib/webchat-widget";
-export type { WebchatConfig, LegacyWebchatSettings, WebchatPosition } from "./lib/webchat-widget";
+export type { WebchatConfig, LegacyWebchatSettings, WebchatPosition, WebchatCommerce } from "./lib/webchat-widget";
+// WooCommerce product cards on the website widget (W9).
+export {
+  WOO_MESSAGE_TYPES,
+  MAX_WOO_VARIANTS,
+  buildWooProductCard,
+  projectWooCommerce,
+  summarizeWooCards,
+  wooCartLine,
+  MAX_CART_QUANTITY,
+  type WooCartRefusal,
+  type WooProductCard,
+  type WooCardVariant,
+  type WooCommercePayload,
+} from "./lib/woo-commerce-cards";
+// The widget follows the customer's language (W10).
+export { isWidgetLocale, visitorLocaleOf, textLocaleOf, widgetTextsOf, textsToTranslate, type WidgetLocale } from "./lib/widget-language";
+// List-Unsubscribe on marketing email (RFC 2369 / 8058).
+export { signUnsubscribeToken, verifyUnsubscribeToken, listUnsubscribeHeaders, publicOrigin, type UnsubscribeSubject } from "./lib/list-unsubscribe";
+// "Powered by GOTCHA" is on for every widget (W8).
+export { POWERED_BY_LOCKED, POWERED_BY_LOCKED_CODE, effectivePoweredBy, asksToHidePoweredBy } from "./lib/powered-by";
 
 // Secrets
 export { getSecret, requireSecret, setSecretProvider, resetSecretProvider } from "./secrets";
@@ -852,6 +1034,9 @@ export { requireRole, requireSystemAdmin, requireDepartmentRole } from "./middle
 export { enforceMfaEnrollment } from "./middleware/mfa-guard";
 export { requireFeature, requireTenantFeature } from "./middleware/feature-gate";
 export { requirePermission, requirePermissionOrRole } from "./middleware/permission-gate";
+export { visibilityClause, canViewConversation, requireVisibleConversation, visibleConversationFrom, viewerOf, type Viewer } from "./lib/conversation-visibility";
+export { waitingForPersonWhere, waitingForPersonClause, WAITING_STATUSES } from "./lib/conversation-queue";
+export { activityLabelKey, bareToolName, ACTIVITY_LABEL_RULES, ACTIVITY_LABEL_KEYS } from "./lib/ai-activity-labels";
 export { resolveTenant, assertTenantId } from "./middleware/tenant";
 export { requireActiveTenant, requireOnboardingOrActiveTenant, requirePaymentSetupAccess } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";
@@ -984,7 +1169,12 @@ export {
   markBusy,
   markOnline,
   heartbeat,
+  declarePresence,
+  effectivePresence,
+  PRESENCE_STALE_AFTER_MS,
   type AgentPresenceStatus,
+  type StoredPresence,
+  type EffectivePresence,
 } from "./lib/agent-presence";
 export {
   resolveEffectiveLocale,
@@ -1117,3 +1307,56 @@ export * from "./whatsapp";
 
 // Types import (side-effect for Express augmentation)
 import "./types/express.d";
+
+// Per-employee allowlist of business systems (AIAgent.integrationAccess).
+export {
+  CUSTOM_ACCESS_PREFIX,
+  customAccessKey,
+  loadIntegrationAccess,
+  agentGrantWhere,
+  allowedIntegrationToolKeys,
+  defaultIntegrationAccess,
+  integrationAccessChoices,
+  validateIntegrationAccess,
+  type IntegrationAccessChoice,
+} from "./lib/integration-access";
+
+// No em/en dash or horizontal bar in operator-facing model text.
+export { withoutWideDashes } from "./lib/wide-dash";
+
+// "Continue on WhatsApp" from the website widget: one definition for ai and the inbound worker.
+export {
+  HANDOFF_REF_ALPHABET,
+  HANDOFF_REF_LENGTH,
+  HANDOFF_TTL_SECONDS,
+  handoffRefKey,
+  handoffConversationKey,
+  newHandoffRef,
+  handoffMessage,
+  handoffButtonLabel,
+  findHandoffRef,
+  waMeDigits,
+  waMeUrl,
+  type HandoffRecord,
+  type HandoffPageContext,
+} from "./lib/whatsapp-handoff";
+
+// The business's real conversations (no rehearsals, no test rows): one definition.
+export { REAL_CONVERSATION } from "./lib/real-conversation";
+export { isWorkspaceDay, dayStart, dayOf, nextWorkspaceDay, workspaceDayWindow } from "./lib/workspace-days";
+
+// The customer-service window (WhatsApp 24h then template only; Instagram/Messenger 24h then closed).
+export {
+  REPLY_WINDOW_MS,
+  hasReplyWindow,
+  replyWindowFor,
+  sendAllowed,
+  lastInboundAtForRecipient,
+  replyWindowsFor,
+} from "./lib/reply-window";
+export type { ReplyWindow, ReplyWindowMode, ReplyWindowRefusal } from "./lib/reply-window";
+export { buildTemplateComponents, renderTemplateText, extractPlaceholders as templatePlaceholders } from "./lib/template-components";
+export { agentToolLevelsKey, stricterLevel, allowedEmployeeLevels, readAgentToolLevels, writeAgentToolLevel } from "./lib/agent-tool-levels";
+// An AI employee's own free-text rules (customGuardrails): one shape, one set of limits (B4).
+export { MAX_RULE_LEN, MAX_RULES, GuardrailsError, normalizeGuardrails, readGuardrails, clampGuardrails } from "./lib/guardrails";
+export type { ToolLevel, EmployeeToolLevel } from "./lib/agent-tool-levels";

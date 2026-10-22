@@ -5,15 +5,19 @@ import {
   createWorker,
   channelHealthQueue,
   decryptCredentials,
-  encryptCredentials, metaGraphBaseUrl } from "@chatcenter/shared";
+  encryptCredentials, metaGraphBaseUrl, whatsappNumberDetails, withWhatsAppNumberDetails } from "@chatcenter/shared";
+import { withErrorCode, errorCodeOf, clearOwnError } from "../lib/error-code";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
+
+// The number as Meta shows it, read the same way auth's "refresh from Meta"
+// reads it (one shared function, 2026-10-09).
+export { whatsappNumberDetails };
 // Intentionally OUTSIDE central Meta versioning: graph.instagram.com
 // (Instagram Login) rejects version-prefixed paths. See meta-graph-version.ts.
 const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
 const META_APP_ID = process.env.META_APP_ID || "";
 const META_APP_SECRET = process.env.META_APP_SECRET || "";
-const OUTLOOK_WEBHOOK_URL = process.env.OUTLOOK_WEBHOOK_URL || "";
 // Same Graph scopes the Outlook OAuth callback requested (channels.ts) - the
 // refresh grant must ask for the identical scope set to get a usable token back.
 const OUTLOOK_SCOPES =
@@ -99,6 +103,9 @@ export async function runHealthCheck(): Promise<void> {
 
       // Instagram-Login accounts hold an IG-user token that can't be validated
       // via Facebook's debug_token. Probe graph.instagram.com/me instead.
+      // No subscription re-check here (2026-10-09): Meta documents only the
+      // POST on /me/subscribed_apps for Instagram Login, no read whose answer
+      // we can verify, and guessing would mark healthy accounts broken.
       if (credentials?.igLogin) {
         try {
           await axios.get(`${IG_API_URL}/me`, {
@@ -145,6 +152,18 @@ export async function runHealthCheck(): Promise<void> {
         if (tokenData.expires_at && tokenData.expires_at > 0) {
           updateData.tokenExpiresAt = new Date(tokenData.expires_at * 1000);
         }
+        // A WhatsApp number's own details, so the channels screen can show the
+        // number (it was fetched at connect and dropped, 2026-10-09). One read,
+        // never a write to Meta; a failure here changes nothing else.
+        if (account.channel === "WHATSAPP") {
+          const meta = await whatsappNumberDetails(account.externalId, accessToken);
+          if (meta) updateData.platformMeta = withWhatsAppNumberDetails(account.platformMeta, meta);
+        }
+        // A valid Page token says nothing about whether messages still reach
+        // us: the Page can drop our app while the token lives on (2026-10-09).
+        if (account.channel === "MESSENGER") {
+          updateData.lastError = await messengerSubscriptionError(account.externalId, accessToken, account.lastError);
+        }
         await prisma.channelAccount.update({
           where: { id: account.id },
           data: updateData,
@@ -169,6 +188,28 @@ export async function runHealthCheck(): Promise<void> {
   }
 
   console.log(`[channel-health] Health check complete: ${checked} checked, ${errors} errors, ${recovered} recovered, ${accounts.length} total`);
+}
+
+// Read-only: GET the Page's subscribed apps and look for ours. Returns the
+// lastError the row should carry. A failed READ is no evidence either way, so
+// it keeps whatever code is stored and drops only free text, as before.
+export async function messengerSubscriptionError(
+  pageId: string,
+  pageToken: string,
+  stored: string | null | undefined,
+): Promise<string | null> {
+  let apps: any[];
+  try {
+    const resp = await axios.get(`${FB_API_URL}/${pageId}/subscribed_apps`, {
+      params: { access_token: pageToken },
+    });
+    apps = Array.isArray(resp.data?.data) ? resp.data.data : [];
+  } catch (err: any) {
+    console.warn(`[channel-health] Messenger subscribed_apps read failed for ${pageId}:`, err.response?.data?.error?.message || err.message);
+    return errorCodeOf(stored) ? (stored as string) : null;
+  }
+  const listed = apps.some((a) => String(a?.id) === META_APP_ID);
+  return listed ? clearOwnError(stored, "SUBSCRIBE_FAILED") : withErrorCode("SUBSCRIBE_FAILED");
 }
 
 // ─── Token Refresh ───────────────────────────────────────────
@@ -271,8 +312,6 @@ async function runTokenRefresh(): Promise<void> {
 // Gmail account's OAuth access token (they expire hourly, so the stored one is
 // almost always stale here) and re-issues the watch against GMAIL_PUBSUB_TOPIC.
 
-const GMAIL_PUBSUB_TOPIC = process.env.GMAIL_PUBSUB_TOPIC || "";
-
 async function refreshGoogleAccessToken(creds: {
   refreshToken?: string;
   clientId?: string;
@@ -292,17 +331,29 @@ async function refreshGoogleAccessToken(creds: {
   return resp.data?.access_token || null;
 }
 
-async function runGmailWatchRenewal(): Promise<void> {
+export async function runGmailWatchRenewal(): Promise<void> {
   console.log("[channel-health] Running Gmail watch renewal...");
 
-  if (!GMAIL_PUBSUB_TOPIC) {
-    console.warn("[channel-health] GMAIL_PUBSUB_TOPIC not configured, skipping Gmail watch renewal");
-    return;
-  }
+  // Read per run, not at load, so a topic added to the env is seen without a
+  // code change (and the no-topic path is testable).
+  const topic = process.env.GMAIL_PUBSUB_TOPIC || "";
 
   const accounts = await prisma.channelAccount.findMany({
     where: { connectionStatus: "CONNECTED", isActive: true, channel: "GMAIL" },
   });
+
+  // No topic means no watch can exist, so mail cannot arrive. Skipping
+  // silently left these mailboxes CONNECTED with no error (2026-10-09).
+  if (!topic) {
+    console.warn("[channel-health] GMAIL_PUBSUB_TOPIC not configured, marking Gmail accounts WATCH_FAILED");
+    for (const account of accounts) {
+      await prisma.channelAccount.update({
+        where: { id: account.id },
+        data: { lastError: withErrorCode("WATCH_FAILED", "Connected, but new mail cannot arrive: no Gmail Pub/Sub topic is configured.") },
+      }).catch(() => {});
+    }
+    return;
+  }
 
   let renewed = 0;
   let failed = 0;
@@ -325,7 +376,7 @@ async function runGmailWatchRenewal(): Promise<void> {
         console.warn(`[channel-health] Gmail watch renewal skipped for ${account.externalId}: missing refresh credentials`);
         await prisma.channelAccount.update({
           where: { id: account.id },
-          data: { lastError: "Gmail watch renewal: missing refresh credentials" },
+          data: { lastError: withErrorCode("WATCH_FAILED", "Connected, but new mail cannot arrive: the Gmail watch cannot be renewed without refresh credentials.") },
         });
         continue;
       }
@@ -333,7 +384,7 @@ async function runGmailWatchRenewal(): Promise<void> {
       // Re-arm the watch on the env-configured topic (dev vs prod isolation).
       const watchResp = await axios.post(
         "https://gmail.googleapis.com/gmail/v1/users/me/watch",
-        { topicName: GMAIL_PUBSUB_TOPIC, labelIds: ["INBOX"] },
+        { topicName: topic, labelIds: ["INBOX"] },
         { headers: { Authorization: `Bearer ${freshToken}`, "Content-Type": "application/json" } },
       );
 
@@ -345,7 +396,7 @@ async function runGmailWatchRenewal(): Promise<void> {
         where: { id: account.id },
         data: {
           credentials: encryptCredentials(updatedCredentials),
-          lastError: null,
+          lastError: clearOwnError(account.lastError, "WATCH_FAILED"),
           platformMeta: {
             ...((account.platformMeta as Record<string, unknown>) || {}),
             watchExpiration: watchResp.data?.expiration ?? null,
@@ -361,7 +412,7 @@ async function runGmailWatchRenewal(): Promise<void> {
       console.error(`[channel-health] Gmail watch renewal failed for ${account.externalId}:`, errorMsg);
       await prisma.channelAccount.update({
         where: { id: account.id },
-        data: { lastError: `Gmail watch renewal failed: ${errorMsg}` },
+        data: { lastError: withErrorCode("WATCH_FAILED", `Connected, but new mail cannot arrive: the Gmail watch could not be renewed (${errorMsg}).`) },
       }).catch(() => {});
     }
   }
@@ -417,7 +468,58 @@ export async function refreshOutlookAccessToken(
   };
 }
 
-async function runOutlookHealth(): Promise<void> {
+// Graph's ceiling for a mail subscription is about 4230 minutes; stay under it.
+const OUTLOOK_SUBSCRIPTION_MINUTES = 4200;
+// Renew when the subscription has less than a day left, so one missed 6-hour
+// run never lets it lapse.
+const OUTLOOK_RENEW_WITHIN_MS = 24 * 60 * 60 * 1000;
+
+export type OutlookSubscriptionResult =
+  | { outcome: "not_due" }
+  | { outcome: "renewed"; platformMeta: Record<string, unknown> }
+  | { outcome: "failed"; lastError: string };
+
+// Renew, never create: creating needs the webhook URL and the clientState,
+// which auth's connect owns. A missing subscription is reported, not fixed.
+export async function renewOutlookSubscription(
+  platformMeta: unknown,
+  accessToken: string,
+  now: number = Date.now(),
+): Promise<OutlookSubscriptionResult> {
+  const meta = (platformMeta && typeof platformMeta === "object" ? platformMeta : {}) as Record<string, unknown>;
+  const subId = typeof meta.subscriptionId === "string" ? meta.subscriptionId : "";
+  if (!subId) {
+    return {
+      outcome: "failed",
+      lastError: withErrorCode("OUTLOOK_SUBSCRIPTION_FAILED", "Connected, but new mail cannot arrive: this mailbox has no Outlook mail subscription."),
+    };
+  }
+
+  // Older rows carry no expiry; an unreadable one counts as missing. Both renew.
+  const expiresAt = typeof meta.subscriptionExpiresAt === "string" ? Date.parse(meta.subscriptionExpiresAt) : NaN;
+  if (Number.isFinite(expiresAt) && expiresAt - now > OUTLOOK_RENEW_WITHIN_MS) return { outcome: "not_due" };
+
+  const requested = new Date(now + OUTLOOK_SUBSCRIPTION_MINUTES * 60 * 1000).toISOString();
+  try {
+    const resp = await axios.patch(
+      `https://graph.microsoft.com/v1.0/subscriptions/${encodeURIComponent(subId)}`,
+      { expirationDateTime: requested },
+      { headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" } },
+    );
+    // Graph answers with the expiry it actually set; trust that over our ask.
+    const granted = typeof resp?.data?.expirationDateTime === "string" ? resp.data.expirationDateTime : requested;
+    return { outcome: "renewed", platformMeta: { ...meta, subscriptionExpiresAt: granted } };
+  } catch (err: any) {
+    const msg = err.response?.data?.error?.message || err.message;
+    console.warn(`[channel-health] Outlook subscription renew failed for ${subId}:`, msg);
+    const sentence = err.response?.status === 404
+      ? "Connected, but new mail cannot arrive: the Outlook mail subscription no longer exists."
+      : `Connected, but new mail cannot arrive: the Outlook mail subscription could not be renewed (${msg}).`;
+    return { outcome: "failed", lastError: withErrorCode("OUTLOOK_SUBSCRIPTION_FAILED", sentence) };
+  }
+}
+
+export async function runOutlookHealth(): Promise<void> {
   console.log("[channel-health] Running Outlook health...");
 
   // Include ERROR rows so a channel whose token merely lapsed can RECOVER once
@@ -461,6 +563,10 @@ async function runOutlookHealth(): Promise<void> {
         accessToken: refreshed.accessToken,
         ...(refreshed.refreshToken ? { refreshToken: refreshed.refreshToken } : {}),
       };
+      // The token is fine; now whether mail can still ARRIVE. Graph drops a
+      // mail subscription after ~3 days unless renewed, and nothing renewed it
+      // reliably before (2026-10-09). A failure here never flips the status.
+      const subscription = await renewOutlookSubscription(account.platformMeta, refreshed.accessToken);
       const wasError = account.connectionStatus === "ERROR";
       await prisma.channelAccount.update({
         where: { id: account.id },
@@ -468,28 +574,15 @@ async function runOutlookHealth(): Promise<void> {
           credentials: encryptCredentials(updatedCredentials),
           tokenExpiresAt: new Date(Date.now() + refreshed.expiresIn * 1000),
           connectionStatus: "CONNECTED",
-          lastError: null,
+          lastError: subscription.outcome === "failed"
+            ? subscription.lastError
+            : clearOwnError(account.lastError, "OUTLOOK_SUBSCRIPTION_FAILED"),
+          ...(subscription.outcome === "renewed" ? { platformMeta: subscription.platformMeta } : {}),
           lastHealthCheck: new Date(),
         },
       });
       ok++;
       if (wasError) recovered++;
-
-      // Best-effort: renew the Graph mail subscription (max 3-day expiry) so
-      // inbound mail keeps arriving. A renewal failure must NOT flip health -
-      // the probe above already decided it.
-      const subId = (account.platformMeta as Record<string, unknown> | null)?.subscriptionId as string | undefined;
-      if (subId && OUTLOOK_WEBHOOK_URL) {
-        try {
-          await axios.patch(
-            `https://graph.microsoft.com/v1.0/subscriptions/${subId}`,
-            { expirationDateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString() },
-            { headers: { Authorization: `Bearer ${refreshed.accessToken}`, "Content-Type": "application/json" } },
-          );
-        } catch (subErr: any) {
-          console.warn(`[channel-health] Outlook subscription renew failed for ${account.externalId}:`, subErr.response?.data?.error?.message || subErr.message);
-        }
-      }
     } catch (err: any) {
       const msg = err.response?.data?.error?.message || err.message;
       await prisma.channelAccount.update({
@@ -543,5 +636,5 @@ export async function startChannelHealthWorker(): Promise<void> {
   // Start the worker
   createWorker<ChannelHealthJob>("channel-health", processChannelHealth, 1);
 
-  console.log("[channel-health] Worker started with repeatable health check (6h, incl. Outlook refresh-and-probe), token refresh (12h), Gmail watch renewal (daily)");
+  console.log("[channel-health] Worker started with repeatable health check (6h, incl. Outlook refresh-and-probe and subscription renewal), token refresh (12h), Gmail watch renewal (daily)");
 }

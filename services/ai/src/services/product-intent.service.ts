@@ -81,6 +81,29 @@ export function buildCouponUnsupportedDirective(): string {
 }
 
 /**
+ * The one exception (W9 phase d): the coupons the merchant chose to show on
+ * the website widget, live right now. The model may share exactly these
+ * codes, as written, and nothing else; every other rule above stands.
+ */
+export function buildCouponPromotionsDirective(promotions: Array<{
+  code: string; amount: string; discountType: string; expiresAt: string | null; minimumAmount: string | null;
+}>): string {
+  const lines = promotions.map((p) => {
+    const what = p.discountType === "percent" ? `${p.amount}% off` : p.discountType === "fixed_product" ? `${p.amount} off each eligible product` : `${p.amount} off the cart`;
+    return `  - ${p.code}: ${what}${p.minimumAmount ? `, on orders from ${p.minimumAmount}` : ""}${p.expiresAt ? `, until ${p.expiresAt.slice(0, 10)}` : ""}`;
+  });
+  return (
+    `The customer is asking about a coupon, discount code or promotion.\n` +
+    `The store currently offers these promotions, chosen by the business to show on its website. You may share them, with the code EXACTLY as written:\n` +
+    `${lines.join("\n")}\n` +
+    `- These are the only codes you may mention. Never invent, guess or alter a code.\n` +
+    `- Do NOT create, check or apply any other coupon, and do NOT promise one: that is not supported in this chat.\n` +
+    `- Do NOT offer a refund as a substitute, and do NOT transfer to a human just because a discount was requested.\n` +
+    `- The customer applies the code at checkout on the store.\n`
+  );
+}
+
+/**
  * "Write this on my order."
  *
  * The model never called the tool. Asked to record a callback request on

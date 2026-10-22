@@ -1,0 +1,25 @@
+# Everything the image must build for itself.
+#
+# Without this the build context is the working tree — a gigabyte of
+# `node_modules` and a `.next` from somebody's laptop, uploaded to the daemon
+# on every build and then shadowed by the image's own install. Slow, and worse
+# than slow: a stale `.next` copied in would be served instead of the one the
+# image built.
+node_modules
+.next
+out
+coverage
+
+# Local secrets and local state. `.env.local` carries this developer's
+# platform credentials; the container is configured by compose.
+.env*.local
+.env
+
+# Evidence and scratch output. `e2e/evidence` is hundreds of PNGs.
+e2e/evidence
+playwright-report
+test-results
+
+.git
+.github
+*.log

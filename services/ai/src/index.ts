@@ -1,12 +1,16 @@
 import { createServiceApp, startService } from "@chatcenter/shared";
+import internalVoiceSampleRoutes from "./routes/internal-voice-sample";
+import internalVoiceLearnRoutes from "./routes/internal-voice-learn";
 import aiAssistRoutes from "./routes/ai-assist";
 import knowledgeRoutes from "./routes/knowledge";
+import knowledgeIngestRoutes from "./routes/knowledge-ingest";
 import knowledgeOauthRoutes from "./routes/knowledge-oauth";
 import systemChatRoutes from "./routes/system-chat";
 import toolRoutes from "./routes/tools";
 import integrationRoutes from "./routes/integrations";
 import crmOauthRoutes from "./routes/crm-oauth";
 import calendarOauthRoutes from "./routes/calendar-oauth";
+import woocommerceOauthRoutes from "./routes/woocommerce-oauth";
 import schedulerAdminRoutes from "./routes/scheduler-admin";
 import funnelAdminRoutes from "./routes/funnel-admin";
 import stageAdminRoutes from "./routes/stage-admin";
@@ -16,6 +20,8 @@ import customDbAdminRoutes from "./routes/custom-db-admin";
 import connectorsAdminRoutes from "./routes/connectors-admin";
 import agentScoreRoutes from "./routes/agent-scores";
 import aiAgentRoutes from "./routes/ai-agents";
+import agentSkillRoutes from "./routes/agent-skills";
+import businessSkillRoutes from "./routes/business-skills";
 import aiAgentBuilderRoutes from "./routes/ai-agent-builder";
 import aiSkillsRoutes from "./routes/ai-skills";
 import routerRuleRoutes from "./routes/router-rules";
@@ -27,6 +33,9 @@ import shopifyChatInstallRoutes from "./routes/shopify-chat-install";
 import shopifyInstallRoutes from "./routes/shopify-install";
 import shopifyWebhookRoutes from "./routes/shopify-webhooks";
 import shopifyLiveChatRoutes from "./routes/shopify-live-chat";
+import websiteWidgetRoutes from "./routes/website-widget";
+import woocommercePluginRoutes from "./routes/woocommerce-plugin";
+import assistantThreadRoutes from "./routes/assistant-threads";
 import actionPlannerRoutes from "./routes/action-planner";
 import toolPermissionRoutes from "./routes/tool-permissions";
 import integrationWorkspaceRoutes from "./routes/integration-workspace";
@@ -45,10 +54,15 @@ import customerSnapshotRoutes from "./routes/customer-snapshot";
 import crmAutoLinkRoutes from "./routes/crm-auto-link";
 import customerSummaryRoutes from "./routes/customer-summary";
 import commerceContextRoutes from "./routes/commerce-context";
+import customerCommerceRoutes from "./routes/customer-commerce";
 import copilotOutcomesRoutes from "./routes/copilot-outcomes";
 import reasonerShadowRoutes from "./routes/reasoner-shadow";
 import decisionTimelineRoutes from "./routes/decision-timeline";
+import customerCardRoutes from "./routes/customer-card";
+import unansweredQuestionRoutes from "./routes/unanswered-questions";
 import gdprInternalRoutes from "./routes/gdpr-internal";
+import automationActionsInternalRoutes from "./routes/automation-actions-internal";
+import { startWooCartPoller } from "./services/woo-cart-poller.service";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 import { initAIService, getDefaultModel } from "./services/ai.service";
@@ -100,8 +114,11 @@ const config = {
 };
 const app = createServiceApp(config);
 
+app.use("/api", internalVoiceSampleRoutes);
+app.use("/api", internalVoiceLearnRoutes);
 app.use("/api/ai-assist", aiAssistRoutes);
 app.use("/api/knowledge-bases", knowledgeRoutes);
+app.use("/api", knowledgeIngestRoutes);
 app.use("/api/knowledge", knowledgeOauthRoutes);
 app.use("/api/system-chat", systemChatRoutes);
 app.use("/api/tools", toolRoutes);
@@ -112,6 +129,9 @@ app.use("/api/integrations", crmOauthRoutes);
 // Calendar OAuth - same rationale as crmOauthRoutes: callback runs without
 // the dashboard's bearer token, so it must mount before integrationRoutes.
 app.use("/api/integrations", calendarOauthRoutes);
+// WooCommerce key-generation flow - the store POSTs to an unauthenticated
+// callback, so it too must mount before integrationRoutes.
+app.use("/api/integrations", woocommerceOauthRoutes);
 app.use("/api/integrations", integrationRoutes);
 app.use("/api/scheduler", schedulerAdminRoutes);
 app.use("/api", funnelAdminRoutes);
@@ -128,6 +148,10 @@ app.use("/api/agent-scores", agentScoreRoutes);
 // Mount the builder BEFORE ai-agents so its routes (/builder/*) resolve
 // before ai-agents' `GET /:id` could shadow them.
 app.use("/api/ai-agents/builder", aiAgentBuilderRoutes);
+// Business skills (AI Studio, design 6). agent-skills sits beside ai-agents
+// under the same prefix: /:id/skills has more segments than its /:id.
+app.use("/api/ai-agents", agentSkillRoutes);
+app.use("/api/business-skills", businessSkillRoutes);
 app.use("/api/ai-agents", aiAgentRoutes);
 app.use("/api/ai-skills", aiSkillsRoutes);
 app.use("/api/router-rules", routerRuleRoutes);
@@ -144,6 +168,9 @@ app.use("/api", shopifyChatInstallRoutes);
 app.use("/api", shopifyWebhookRoutes);
 app.use("/api/shopify-chat", shopifyChatPublicRoutes);
 app.use("/api/shopify-live-chat", shopifyLiveChatRoutes);
+app.use("/api/website-widget", websiteWidgetRoutes);
+app.use("/api/woocommerce-plugin", woocommercePluginRoutes);
+app.use("/api/assistant", assistantThreadRoutes);
 app.use("/api/action-planner", actionPlannerRoutes);
 app.use("/api/tool-permissions", toolPermissionRoutes);
 // Integrations & Tools workspace: composed sidebar + per-integration tool policy.
@@ -162,10 +189,18 @@ app.use("/api/historical-imports", historicalImportRoutes);
 app.use("/api/customer-snapshot", customerSnapshotRoutes);
 app.use("/api/crm", crmAutoLinkRoutes);
 app.use("/api/customer-summary", customerSummaryRoutes);
+// Before commerce-context: its "/:conversationId" must not shadow /customers/*.
+app.use("/api/commerce-context/customers", customerCommerceRoutes);
 app.use("/api/commerce-context", commerceContextRoutes);
 app.use("/api/reasoner-shadow", reasonerShadowRoutes);
 app.use("/api/decision-timeline", decisionTimelineRoutes);
+app.use("/api", customerCardRoutes);
+app.use("/api", unansweredQuestionRoutes);
 app.use("/api/gdpr-internal", gdprInternalRoutes);
+app.use("/api/internal/automation-actions", automationActionsInternalRoutes);
+// Cart left behind on WooCommerce stores (no cart webhook exists): polls only
+// workspaces that have a live cart automation.
+startWooCartPoller();
 app.use("/api/copilot", copilotOutcomesRoutes);
 app.use("/api", postCallRoutes);
 
@@ -184,9 +219,14 @@ import { startVoicePostCallWorker } from "./workers/voice-postcall";
 import { startPostChatSubscriber } from "./workers/post-chat/subscriber";
 import { startIntelligenceLiveSubscriber } from "./workers/intelligence-live/subscriber";
 import { startCommerceCacheSubscriber } from "./services/commerce-cache-subscriber";
+// Chat copilot suggestions are generated on a customer message, never on open.
+import { startCopilotSuggestionsSubscriber } from "./workers/copilot-suggestions/subscriber";
 startVoiceCopilotSubscriber();
+startCopilotSuggestionsSubscriber();
 startVoicePostCallWorker();
 startPostChatSubscriber();
+import { startConversationAnalysisSweeper } from "./services/conversation-analysis.service";
+startConversationAnalysisSweeper().catch((err) => console.error("[conversation-analysis] sweeper failed to start:", err?.message));
 startIntelligenceLiveSubscriber();
 startCommerceCacheSubscriber();
 startLiveRunnerSupervisor();

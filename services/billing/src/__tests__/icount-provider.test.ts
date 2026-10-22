@@ -36,6 +36,11 @@ afterAll(() => {
 });
 
 describe("icount provider: mock mode (dev/E2E default)", () => {
+  // Charging a stored card is a product switch, checked before any I/O. These
+  // tests are about mock mode's behaviour, so the switch is on here; they read
+  // it from the ambient environment (.env) before, and failed wherever it was
+  // unset.
+  beforeEach(() => { process.env.ICOUNT_STORED_CARD_CHARGE_ENABLED = "true"; });
   it("tokenizes deterministically with NO network and stores only safe refs", async () => {
     const tok = await icountProvider.tokenizeAndVerify({ pageToken: "pt_dev" });
     expect(tok.token).toBe("icmock_pt_dev");

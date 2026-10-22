@@ -233,7 +233,20 @@ const ACTION_TAG: Record<NextActionKind, string> = {
  * objective/NBA sub-sections and the flat tool list. Reuses the exact imperative
  * action labels the model is already tuned to (from resolveNextActions).
  */
-export function renderCurrentPlan(plan: CurrentPlan, opts?: { advisory?: boolean }): string {
+export function renderCurrentPlan(plan: CurrentPlan, opts?: { advisory?: boolean; skillActive?: string | null }): string {
+  // A live business skill owns this turn: the plan's DRIVE (objective, best
+  // next action, goal pressure) stands aside so the model is not pulled two
+  // ways; the capabilities stay, because the tool list lives here. The
+  // objective chain is untouched and resumes when the skill ends.
+  if (opts?.skillActive) {
+    const out = [
+      "# Current Plan (paused this turn)",
+      `The business skill "${opts.skillActive}" decides this turn's next move (see # Active Skill). Your usual plan resumes after it ends; do not pursue it now.`,
+    ];
+    const caps = renderCapabilities(plan.capabilities);
+    if (caps) out.push("", caps);
+    return out.join("\n");
+  }
   // `advisory` = the Copilot execution mode: SAME plan, but it recommends to the
   // human instead of acting. Only the call-to-action phrasing changes; every fact
   // (goal, situation, best action, candidates, why, capabilities) is identical.

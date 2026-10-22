@@ -1,0 +1,354 @@
+{
+  "title": "Knowledge center",
+  "unavailable": "We couldn't read your knowledge just now.",
+  "counters": {
+    "sources": "{count, plural, =0 {No sources yet} =1 {One source} other {# sources}}",
+    "undated": "{count, plural, =1 {1 source has no last-read date} other {# sources have no last-read date}}"
+  },
+  "conflicts": {
+    "heading": "Answered more than one way",
+    "asked": "{count, plural, =1 {Came up once} other {Came up # times}}",
+    "said": "{count, plural, =1 {said once} other {said # times}}",
+    "byCustomers": "{count, plural, =1 {to one customer} other {to # customers}}",
+    "lastHeard": "last on {when}",
+    "meanwhile": "Nobody has decided which of these is right, so GOTCHA has both.",
+    "coverage": "These come from reading past conversations - each answer is one your team actually gave, not something written on your website or in a document. Nothing has compared your website against your files; that check doesn't exist yet.",
+    "resolve": {
+      "choose": "This one is right",
+      "confirm": "Save “{answer}” as the answer?",
+      "armed": "Press again to save it. Above is what GOTCHA will read, word for word - nothing is used until you do.",
+      "alreadyApproved": "This was already approved, so nothing was written twice.",
+      "use": {
+        "in_use": "Saved. GOTCHA answers with this from now on.",
+        "not_retrievable": "Saved to your knowledge base, but GOTCHA cannot use it yet - preparing it for search failed. Nothing will answer with it until that is retried.",
+        "unknown": "Saved to your knowledge base. We could not confirm it is ready for GOTCHA to use yet."
+      },
+      "problem": {
+        "already_covered": "Your knowledge base already answers this, so nothing was added. This suggestion is marked as covered and will not come back as a conflict.",
+        "no_knowledge_base": "There is no knowledge base to save this into yet. Create one first, and then this will have somewhere to go.",
+        "not_found": "This suggestion is no longer there. Someone may have decided it already - reload to see where it stands.",
+        "forbidden": "You do not have permission to change the knowledge base. Whoever administers GOTCHA for you can do this or grant it.",
+        "too_long": "One of these answers is too long to save as it stands. Shorten it in the knowledge base after approving a shorter one, or edit it there directly.",
+        "failed": "We could not save that just now, and nothing was written. Try again in a moment."
+      }
+    }
+  },
+  "gaps": {
+    "heading": "Questions it couldn't answer",
+    "none": "Nothing has been asked that GOTCHA couldn't answer.",
+    "unavailable": "We couldn't read the unanswered questions just now.",
+    "asked": "Asked {times, plural, =1 {once} other {# times}} by {people, plural, =1 {one person} other {# people}}",
+    "answer": "Answer",
+    "answerLabel": "Your answer to: {question}",
+    "placeholder": "What should GOTCHA tell a customer who asks this?",
+    "hint": "Every employee learns it, and answers it from now on.",
+    "save": "Teach it",
+    "learning": "Learning…",
+    "cancel": "Cancel",
+    "learned": "Learned - every employee answers this now.",
+    "problem": {
+      "empty": "Write an answer first.",
+      "too_long": "That's longer than GOTCHA keeps - 20,000 characters at most.",
+      "forbidden": "You need permission to change what GOTCHA knows.",
+      "gone": "This question isn't here any more.",
+      "not_learned": "Saved, but GOTCHA couldn't learn it yet - the question stays open. Try again.",
+      "failed": "It wasn't saved. Try again."
+    }
+  },
+  "sources": {
+    "heading": "Where it learns from",
+    "none": "Nothing has been added yet.",
+    "noneBody": "Until something is, GOTCHA answers only from what an AI employee was told directly.",
+    "unavailable": "We couldn't read the sources just now.",
+    "unnamed": "Unnamed source",
+    "sameName": "another source has this name too",
+    "documents": "{count, plural, =0 {Nothing in it} =1 {One document} other {# documents}}",
+    "refreshed": "last refreshed {date}",
+    "pending": "{count, plural, =1 {One document is still being read, so it isn't answering anything yet} other {# documents are still being read, so they aren't answering anything yet}}",
+    "untitled": "Untitled",
+    "docUpdated": "updated {date}",
+    "docReading": "Being read",
+    "docFailed": "Couldn't be read"
+  },
+  "add": "Add knowledge",
+  "way": {
+    "website": "Your website",
+    "uploaded": "Uploaded by you",
+    "drive": "Drive folder",
+    "confluence": "Confluence",
+    "conversations": "Past conversations",
+    "answers": "Your answers during setup",
+    "mixed": "Several ways in",
+    "other": "Other",
+    "scanned": "scanned automatically"
+  },
+  "addSheet": {
+    "close": "Close",
+    "title": "Add knowledge",
+    "line": "Every AI employee learns it at the same time",
+    "eyebrow": {
+      "upload": "Upload",
+      "website": "Website",
+      "drive": "Drive sync"
+    },
+    "way": {
+      "document": {
+        "name": "A document",
+        "text": "PDF, Word or text · up to 10 MB"
+      },
+      "page": {
+        "name": "A page on your site",
+        "text": "Paste its address"
+      },
+      "drive": {
+        "name": "A Drive folder",
+        "text": "Google Drive or Confluence"
+      },
+      "text": {
+        "name": "Just type it",
+        "text": "One fact, one answer"
+      }
+    },
+    "drop": "Drop a file here",
+    "urlPlaceholder": "https://",
+    "read": "Read it",
+    "connector": {
+      "google_drive": "Google Drive",
+      "confluence": "Confluence"
+    },
+    "connect": "Connect",
+    "titlePlaceholder": "What it is about",
+    "bodyPlaceholder": "The fact, or the answer, as a customer should hear it",
+    "learned": "What it learned",
+    "learnedNone": "Nothing previews what a source teaches before it is added.",
+    "teach": "Teach all of it",
+    "cancel": "Cancel",
+    "newBase": "Knowledge",
+    "fileChosen": "{name} · {size} KB",
+    "reading": "Reading…",
+    "teaching": "Teaching…",
+    "state": {
+      "reading": "Being read - it answers once it is",
+      "ready": "Learned"
+    },
+    "error": {
+      "too_large": "Up to 10 MB.",
+      "wrong_type": "PDF, Word, Markdown or text only.",
+      "bad_url": "An address starting https://",
+      "unreadable": "There was no text to read in it. Nothing was added.",
+      "entitlement": "Knowledge isn't part of this plan.",
+      "forbidden": "You don't have permission to add knowledge.",
+      "failed": "It wasn't added - try again."
+    },
+    "connectProblem": {
+      "not_configured": "This connection isn't set up in this environment yet.",
+      "forbidden": "You don't have permission to connect a knowledge source.",
+      "entitlement": "Knowledge isn't part of this plan, so {name} can't be connected.",
+      "limit": "This plan has no room for another knowledge base, so {name} wasn't connected.",
+      "failed": "{name} couldn't be opened - try again."
+    },
+    "opening": "Opening…",
+    "landing": {
+      "connected": "{name} is connected.",
+      "denied": "You cancelled at {provider} - nothing was connected.",
+      "token_exchange_failed": "{provider} didn't confirm the connection. Nothing was connected - try again.",
+      "no_accessible_site": "No Confluence site you can reach was found - nothing was connected.",
+      "callback_error": "Something went wrong on the way back from {provider}. Nothing was connected - try again.",
+      "other": "{name} didn't connect. Try again.",
+      "close": "Close"
+    },
+    "provider": {
+      "google_drive": "Google",
+      "confluence": "Atlassian"
+    },
+    "sources": {
+      "drive": "{name} · connected",
+      "driveName": "Google Drive",
+      "confluence": "{name} · connected",
+      "paused": "Paused",
+      "folderSynced": "Folder · new files learned automatically",
+      "fileSynced": "File · kept in sync",
+      "choose": "Choose what to learn",
+      "root": "My Drive",
+      "open": "Open",
+      "loading": "Reading…",
+      "empty": "Nothing here.",
+      "filesUnread": "We couldn't read this Drive - try again.",
+      "spacesUnread": "We couldn't read the Confluence spaces - try again.",
+      "unread": "We couldn't read what's connected - try again.",
+      "oneKind": "Learn folders and files in separate rounds.",
+      "learn": "{count, plural, =0 {Learn these} one {Learn 1 item} other {Learn # items}}",
+      "learning": "{count, plural, one {Learning 1 item - it answers once it’s read.} other {Learning # items - they answer once they’re read.}}",
+      "learnSpaces": "{count, plural, =0 {Learn these spaces} one {Learn 1 space} other {Learn # spaces}}",
+      "learnedSpaces": "{count, plural, one {The space is being read - it answers once it is.} other {# spaces are being read - they answer once they are.}}",
+      "cancel": "Cancel",
+      "refused": {
+        "busy": "A sync is already running for this source - try again when it finishes.",
+        "mixed": "Learn folders and files in separate rounds.",
+        "failed": "That wasn't learned - try again."
+      },
+      "disconnect": {
+        "button": "Disconnect",
+        "confirm": "Disconnect {name}? GOTCHA stops syncing from it. What it already learned stays in your knowledge.",
+        "yes": "Disconnect",
+        "working": "Disconnecting…",
+        "keep": "Keep it",
+        "problem": {
+          "forbidden": "Only an admin can disconnect a knowledge source.",
+          "failed": "{name} wasn't disconnected. Try again."
+        }
+      }
+    },
+    "connectedAlready": "Connected",
+    "addAnother": "Add another account"
+  },
+  "scan": {
+    "intro": {
+      "withSite": "Your business details were read from {domain} when you signed up. Scanning again refreshes the ones marked “From your website” in Settings · Workspace. It also refreshes the pages it made from your site, listed here, and keeps any page you edited.",
+      "noSite": "Your business details were filled in when you signed up."
+    },
+    "button": "Scan again",
+    "running": "Reading your website…",
+    "beforeYouStart": "The scan reads {domain} again. Fields you have never marked come back as suggestions, and only fields the website already owns are refreshed on their own. Pages it made from your site are refreshed too, and a page you edited is kept as it is.",
+    "appliedNone": "Nothing was refreshed on its own - no field is marked as coming from your website yet.",
+    "applied": "{count, plural, =1 {One field was refreshed from your site.} other {# fields were refreshed from your site.}}",
+    "noChanges": "Your site says the same as what is stored. Nothing to change.",
+    "offerHeading": "Suggestions from your site",
+    "offerIntro": "Taking a suggestion tells GOTCHA this field follows your website, so future scans will refresh it without asking.",
+    "because": {
+      "human_edited": "You edited this, so it was left alone.",
+      "source_unknown": "Nobody recorded who wrote this, so it was left alone."
+    },
+    "currentLabel": "Now",
+    "proposedLabel": "Your site says",
+    "accept": "Use the site's version",
+    "accepted": "{count, plural, =1 {One suggestion taken.} other {# suggestions taken.}}",
+    "skipped": "{count, plural, =1 {One suggestion was out of date and was not applied - scan again.} other {# suggestions were out of date and were not applied - scan again.}}",
+    "unreadable": "Your site answered, but every page it returned was the same one - usually a login or password screen. Anything suggested below was inferred from that page rather than from your content.",
+    "refusal": {
+      "no_domain": "GOTCHA does not have your website address, so there is nothing to scan.",
+      "fetch_failed": "Your site did not answer. Nothing was changed.",
+      "scan_failed": "We reached your site but could not make sense of it. Nothing was changed.",
+      "internal_error": "Something went wrong on our side, and the scan stopped. Nothing changed.",
+      "timed_out": "The scan took too long and was stopped. Nothing changed. Try again.",
+      "no_profile": "This workspace has no business profile yet, so there is nothing to update."
+    },
+    "runningLine": "Reading your website. This usually takes under a minute; you can leave this page and come back.",
+    "forbidden": "You don't have permission to scan the website again.",
+    "lost": "We couldn't read how the scan is going. Reload the page to see where it is.",
+    "pages": {
+      "created": "{count, plural, one {1 page added} other {# pages added}}",
+      "updated": "{count, plural, one {1 page updated} other {# pages updated}}",
+      "preserved": "{count, plural, one {1 page kept because you edited it} other {# pages kept because you edited them}}",
+      "removed": "{count, plural, one {1 page removed} other {# pages removed}}",
+      "failed": "{count, plural, one {1 page couldn't be read} other {# pages couldn't be read}}",
+      "unchanged": "{count, plural, one {1 page unchanged} other {# pages unchanged}}"
+    },
+    "failed": "The scan could not run. Nothing was changed.",
+    "unchanged": "Your site hasn't changed since the last scan. There's nothing to update.",
+    "force": "Scan anyway"
+  },
+  "subtitle": "What GOTCHA knows about your business",
+  "description": "Where it learned about your business, and the questions it could not answer.",
+  "doc": {
+    "title": "Knowledge item",
+    "source": "Source",
+    "updated": "Updated",
+    "status": "Status",
+    "type": {
+      "website": "A page on your website",
+      "uploaded": "A file you uploaded",
+      "typed": "Typed by you",
+      "drive": "Google Drive",
+      "confluence": "Confluence",
+      "conversations": "Past conversations",
+      "answers": "Your answer during setup",
+      "other": "Other"
+    },
+    "state": {
+      "ready": "In use",
+      "reading": "Being read",
+      "failed": "Couldn't be read"
+    },
+    "content": "Content",
+    "noContent": "No text was kept from it.",
+    "truncated": "Showing part of the content ({shown} of {total} characters)",
+    "ai": {
+      "heading": "What the AI uses",
+      "count": "{count, plural, =1 {One section} other {# sections}}",
+      "section": "Section {n}",
+      "more": "Showing the first {shown} of {count} sections.",
+      "noneYet": "It's still being read. Its sections appear when it's done.",
+      "none": "The AI uses nothing from it yet."
+    },
+    "problem": {
+      "not_found": "This item isn't in your knowledge any more.",
+      "forbidden": "You don't have permission to see what's in your knowledge.",
+      "failed": "We couldn't open this item just now. Try again in a moment."
+    },
+    "edit": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "title": "Title",
+      "content": "Content",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "saved": "Saved.",
+      "savedReading": "Saved. GOTCHA is reading the new text, and answers from it once that's done.",
+      "titleOnly": "This item is too long to edit here, so only its title can be changed.",
+      "note": {
+        "scan": "A manual edit is kept through the next scan.",
+        "page": "You're changing the text GOTCHA took from the page. The page itself stays as it is.",
+        "file": "You're changing the text GOTCHA took from the file. Your file stays as it is."
+      },
+      "synced": {
+        "drive": "GOTCHA keeps this item in step with Google Drive, so it's changed or removed in Google Drive.",
+        "confluence": "GOTCHA keeps this item in step with Confluence, so it's changed or removed in Confluence."
+      },
+      "confirm": "Delete „<title></title>”? GOTCHA stops using it.",
+      "confirmYes": "Delete",
+      "deleting": "Deleting…",
+      "keep": "Keep it",
+      "problem": {
+        "unchanged": "Nothing has changed yet.",
+        "empty_title": "Give it a title first.",
+        "empty_content": "Write its content first. To remove the item, delete it.",
+        "forbidden": "You need permission to change what GOTCHA knows.",
+        "gone": "This item isn't in your knowledge any more.",
+        "failed": "It wasn't saved. Try again."
+      },
+      "deleteProblem": {
+        "forbidden": "You need permission to delete from what GOTCHA knows.",
+        "gone": "This item isn't in your knowledge any more.",
+        "failed": "It wasn't deleted. Try again."
+      }
+    }
+  },
+  "kinds": {
+    "label": "Show",
+    "all": "All",
+    "pages": "Website pages",
+    "topics": "Website topics",
+    "answers": "Answered questions",
+    "typed": "Typed in",
+    "files": "Files",
+    "drive": "Drive and Confluence",
+    "conversations": "Past conversations",
+    "other": "Other",
+    "none": "Nothing of this kind yet."
+  },
+  "search": {
+    "label": "Search what GOTCHA knows",
+    "placeholder": "Search titles and text",
+    "submit": "Search",
+    "results": "{count, plural, =0 {Nothing matches “{q}”} one {# result for “{q}”} other {# results for “{q}”}}",
+    "more": "Showing the first {count}. Search for something more specific to narrow it.",
+    "inTitle": "In the title",
+    "inText": "In the text",
+    "clear": "Clear the search",
+    "short": "Type at least 2 characters to search.",
+    "long": "That's too long to search: up to 200 characters.",
+    "failed": "Couldn't search just now. Try again in a moment."
+  }
+}

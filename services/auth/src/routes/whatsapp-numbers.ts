@@ -32,6 +32,9 @@ import {
   requireCapacity,
   validate,
   decryptCredentials,
+  getRedis,
+  whatsappNumberDetails,
+  withWhatsAppNumberDetails,
   MetaWhatsAppClient,
   inspectMetaAssets,
   selectFlow,
@@ -55,6 +58,42 @@ const router = Router();
 
 const META_APP_ID = process.env.META_APP_ID || "";
 const META_APP_SECRET = process.env.META_APP_SECRET || "";
+
+/** The phone number an unprofiled account has stored, or null. */
+export function storedPhoneNumber(meta: unknown): string | null {
+  return storedText(meta, "displayPhoneNumber");
+}
+
+function storedText(meta: unknown, key: string): string | null {
+  const v = meta && typeof meta === "object" ? (meta as Record<string, unknown>)[key] : null;
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+const UNPROFILED_SELECT = { id: true, externalId: true, displayName: true, connectionStatus: true, platformMeta: true, lastHealthCheck: true } as const;
+
+/**
+ * One unprofiled (legacy) WhatsApp account as the numbers page shows it: the
+ * number, its verified name and quality as Meta last told us, and when we last
+ * checked. Each is null until the 6-hourly check or a refresh has read it.
+ */
+function unprofiledRow(c: { id: string; externalId: string; displayName: string | null; connectionStatus: string; platformMeta: unknown; lastHealthCheck: Date | null }) {
+  return {
+    channelAccountId: c.id,
+    phoneNumberId: c.externalId,
+    name: c.displayName,
+    // Stored at connect and refreshed by the 6-hourly channel check or
+    // "refresh from Meta"; null until one of them has read it.
+    phoneNumber: storedPhoneNumber(c.platformMeta),
+    verifiedName: storedText(c.platformMeta, "verifiedName"),
+    qualityRating: storedText(c.platformMeta, "qualityRating"),
+    lastHealthCheck: c.lastHealthCheck ? c.lastHealthCheck.toISOString() : null,
+    connectionStatus: c.connectionStatus,
+    note: "Connected before per-number health was available. Its number, name and quality are read from Meta; reconnect it for full health checks and repair.",
+  };
+}
+
+/** "Refresh from Meta" on an unprofiled account: at most once a minute each. */
+const UNPROFILED_REFRESH_EVERY_MS = 60_000;
 
 /**
  * Express types `req.params.id` as `string | string[]` in this codebase.
@@ -126,20 +165,14 @@ router.get(
     const profiledIds = new Set(numbers.map((n) => n.phoneNumberId));
     const legacy = await prisma.channelAccount.findMany({
       where: { tenantId: req.tenantId!, channel: "WHATSAPP" },
-      select: { id: true, externalId: true, displayName: true, connectionStatus: true },
+      select: UNPROFILED_SELECT,
     });
 
     return res.json({
       data,
       unprofiled: legacy
         .filter((c) => !profiledIds.has(c.externalId))
-        .map((c) => ({
-          channelAccountId: c.id,
-          phoneNumberId: c.externalId,
-          name: c.displayName,
-          connectionStatus: c.connectionStatus,
-          note: "Connected before per-number health was available. Reconnect it to enable health checks and repair.",
-        })),
+        .map(unprofiledRow),
     });
   },
 );
@@ -167,7 +200,17 @@ const inspectSchema = z.object({
  * Look at what the customer has, and say which flow each number would take.
  *
  * Read-only against Meta: no subscription, no registration, no database write.
- * Safe to call repeatedly, including on a fully healthy workspace.
+ * ⚠ "READ-ONLY" IS NOT "WITHOUT SIDE EFFECTS", and the distinction matters here
+ * because everything around it is careful enough to be believed.
+ *
+ * `inspectMetaAssets` genuinely only GETs against the customer's Meta assets -
+ * nothing there is written. But THIS ROUTE is not repeatable: it SPENDS a
+ * single-use authorization code, and it replaces the caller's in-flight signup
+ * session. Both are true of the call and neither is a property of the Meta reads.
+ *
+ * So: safe to call again in the sense that it will not corrupt the customer's
+ * Meta account, and NOT safe in the sense that the previous `code` is now dead
+ * and the previous session is gone. A second call needs a fresh authorization.
  */
 router.post(
   "/inspect",
@@ -189,19 +232,22 @@ router.post(
       console.error("[wa-numbers] code exchange failed:", err?.message);
       return res
         .status(400)
-        .json({ error: "Meta did not accept the authorization. Try connecting again." });
+        .json({ error: "Meta did not accept the authorization. Try connecting again.", code: "AUTHORIZATION_REJECTED" });
     }
 
-    // Held server-side, keyed by tenant so one workspace's session can never
-    // be replayed by another. Replacing the tenant's previous session is part
-    // of this call: a relaunch is a new authorization, and the old token is
-    // from a grant the customer walked away from.
-    const sessionId = await startSignupSession(req.tenantId!, {
-      accessToken,
-      path,
-      businessPortfolioId,
-      wabaIds,
-    });
+    // Held server-side, keyed by tenant so one workspace's session can never be
+    // replayed by another. Replacing the previous session is part of this call:
+    // a relaunch is a new authorization, and the old token is from a grant the
+    // customer walked away from.
+    //
+    // The replacement is scoped to THIS PERSON. With a tenant-wide pointer, a
+    // second admin's inspect destroyed the first admin's in-flight session, and
+    // the first learned about it only as an unexplained failure on Connect.
+    const sessionId = await startSignupSession(
+      req.tenantId!,
+      { accessToken, path, businessPortfolioId, wabaIds },
+      req.user?.userId,
+    );
 
     const known = await prisma.whatsAppNumber.findMany({
       select: { phoneNumberId: true, tenantId: true },
@@ -277,6 +323,7 @@ router.post(
       console.error("[wa-numbers] inspect failed:", err?.message);
       return res.status(502).json({
         error: "We could not read your WhatsApp setup from Meta. Try connecting again.",
+        code: "META_UNREADABLE",
       });
     }
   },
@@ -328,6 +375,7 @@ router.post(
     if (!session) {
       return res.status(410).json({
         error: "That WhatsApp connection has expired. Start connecting again.",
+        code: "SESSION_EXPIRED",
       });
     }
 
@@ -346,6 +394,7 @@ router.post(
       if (decision.scenario === "BLOCKED") {
         return res.status(409).json({
           error: decision.customerMessage,
+          code: "NUMBER_BLOCKED",
           blockers: decision.blockers,
         });
       }
@@ -376,7 +425,7 @@ router.post(
       });
     } catch (err: any) {
       console.error("[wa-numbers] connect failed:", err?.message);
-      return res.status(500).json({ error: "We could not finish connecting this number." });
+      return res.status(500).json({ error: "We could not finish connecting this number.", code: "CONNECT_FAILED" });
     }
   },
 );
@@ -404,13 +453,13 @@ router.post(
     const number = await prisma.whatsAppNumber.findFirst({
       where: { id: paramId(req), tenantId: req.tenantId! },
     });
-    if (!number) return res.status(404).json({ error: "Number not found." });
+    if (!number) return res.status(404).json({ error: "Number not found.", code: "NUMBER_NOT_FOUND" });
 
     const channel = await prisma.channelAccount.findUnique({
       where: { id: number.channelAccountId },
       select: { credentials: true },
     });
-    if (!channel) return res.status(409).json({ error: "This number needs reconnecting." });
+    if (!channel) return res.status(409).json({ error: "This number needs reconnecting.", code: "RECONNECT_REQUIRED" });
 
     let accessToken: string;
     try {
@@ -419,6 +468,7 @@ router.post(
     } catch {
       return res.status(409).json({
         error: "GOTCHA's access to this number has expired. Reconnect it.",
+        code: "TOKEN_EXPIRED",
       });
     }
 
@@ -448,7 +498,7 @@ router.post(
       });
     } catch (err: any) {
       console.error("[wa-numbers] resume failed:", err?.message);
-      return res.status(500).json({ error: "We could not finish setting up this number." });
+      return res.status(500).json({ error: "We could not finish setting up this number.", code: "SETUP_FAILED" });
     }
   },
 );
@@ -465,12 +515,58 @@ router.post(
       where: { id: paramId(req), tenantId: req.tenantId! },
       select: { id: true },
     });
-    if (!owned) return res.status(404).json({ error: "Number not found." });
-
-    const report = await refreshNumberHealth(owned.id);
-    return res.json({ data: report });
+    if (owned) {
+      const report = await refreshNumberHealth(owned.id);
+      return res.json({ data: report });
+    }
+    // An unprofiled (legacy) account, by its channel account id (2026-10-09):
+    // the same read as the 6-hourly check, one Graph GET plus the platformMeta
+    // merge. Never reconnects and never writes to Meta.
+    return refreshUnprofiled(req, res);
   },
 );
+
+async function refreshUnprofiled(req: Request, res: Response) {
+  const account = await prisma.channelAccount.findFirst({
+    where: { id: paramId(req), tenantId: req.tenantId!, channel: "WHATSAPP" },
+    select: { ...UNPROFILED_SELECT, credentials: true },
+  });
+  if (!account) return res.status(404).json({ error: "Number not found.", code: "NUMBER_NOT_FOUND" });
+  // A profiled number refreshes through its own row, above.
+  const profiled = await prisma.whatsAppNumber.findFirst({
+    where: { tenantId: req.tenantId!, phoneNumberId: account.externalId },
+    select: { id: true },
+  });
+  if (profiled) return res.status(404).json({ error: "Number not found.", code: "NUMBER_NOT_FOUND" });
+
+  // Once a minute per account, across replicas: a key that expires on its own.
+  const slot = await getRedis().set(`wa-number-refresh:${account.id}`, "1", "PX", UNPROFILED_REFRESH_EVERY_MS, "NX");
+  if (slot !== "OK") {
+    res.setHeader("Retry-After", String(Math.ceil(UNPROFILED_REFRESH_EVERY_MS / 1000)));
+    return res.status(429).json({ error: "This number was refreshed a moment ago. Try again in a minute.", code: "RATE_LIMITED" });
+  }
+
+  let accessToken: string | undefined;
+  try {
+    accessToken = decryptCredentials(account.credentials as any)?.accessToken;
+  } catch {
+    accessToken = undefined;
+  }
+  if (!accessToken) {
+    return res.status(409).json({ error: "GOTCHA's access to this number has expired. Reconnect it.", code: "TOKEN_EXPIRED" });
+  }
+
+  const details = await whatsappNumberDetails(account.externalId, accessToken);
+  if (!details) {
+    return res.status(502).json({ error: "Meta did not answer for this number. Nothing was changed.", code: "META_UNREADABLE" });
+  }
+  const updated = await prisma.channelAccount.update({
+    where: { id: account.id },
+    data: { platformMeta: withWhatsAppNumberDetails(account.platformMeta, details) as any, lastHealthCheck: new Date() },
+    select: UNPROFILED_SELECT,
+  });
+  return res.json({ data: unprofiledRow(updated) });
+}
 
 const repairSchema = z.object({
   action: z.enum(["RESUBSCRIBE_WEBHOOKS", "REFRESH_STATUS", "REQUEST_HISTORY_SYNC"]),
@@ -487,7 +583,7 @@ router.post(
       where: { id: paramId(req), tenantId: req.tenantId! },
       select: { id: true },
     });
-    if (!owned) return res.status(404).json({ error: "Number not found." });
+    if (!owned) return res.status(404).json({ error: "Number not found.", code: "NUMBER_NOT_FOUND" });
 
     const result = await repairNumber(owned.id, req.body.action as RepairAction);
     return res.status(result.succeeded ? 200 : 502).json({ data: result });
@@ -511,7 +607,7 @@ router.delete(
   requirePermission("channels:manage:update"),
   async (req: Request, res: Response) => {
     const result = await disconnectNumber(paramId(req), req.tenantId!);
-    if (!result.succeeded) return res.status(404).json({ error: result.message });
+    if (!result.succeeded) return res.status(404).json({ error: result.message, code: "NUMBER_NOT_FOUND" });
     return res.json({ data: result });
   },
 );
@@ -533,8 +629,15 @@ router.get(
   resolveTenant,
   requirePermission("channels:manage:read"),
   async (req: Request, res: Response) => {
+    // ?channelAccountId=: one number's rules plus the legacy "every number"
+    // rules (they apply to it too). Without it, every rule of the workspace.
+    const forNumber = typeof req.query.channelAccountId === "string" && req.query.channelAccountId ? req.query.channelAccountId : null;
     const rules = await prisma.inboundExclusion.findMany({
-      where: { tenantId: req.tenantId!, channel: "WHATSAPP" },
+      where: {
+        tenantId: req.tenantId!,
+        channel: "WHATSAPP",
+        ...(forNumber ? { OR: [{ channelAccountId: forNumber }, { channelAccountId: null }] } : {}),
+      },
       orderBy: { createdAt: "desc" },
     });
     return res.json({
@@ -564,43 +667,43 @@ router.post(
       return res.status(400).json({ error: "invalid_number", message: "Enter a phone number with at least 6 digits." });
     }
 
+    // Every new rule belongs to one number: a contact private on one number
+    // is not silently dropped on another. (Rules with no number are legacy.)
     // An account id from another tenant must not scope our rule.
     const channelAccountId = req.body?.channelAccountId ? String(req.body.channelAccountId) : null;
-    if (channelAccountId) {
-      const owned = await prisma.channelAccount.findFirst({
-        where: { id: channelAccountId, tenantId: req.tenantId!, channel: "WHATSAPP" },
-        select: { id: true },
-      });
-      if (!owned) return res.status(404).json({ error: "channel_account_not_found" });
+    if (!channelAccountId) {
+      return res.status(400).json({ error: "channel_account_required", message: "Choose the WhatsApp number this contact is private on." });
     }
+    const owned = await prisma.channelAccount.findFirst({
+      where: { id: channelAccountId, tenantId: req.tenantId!, channel: "WHATSAPP" },
+      select: { id: true },
+    });
+    if (!owned) return res.status(404).json({ error: "channel_account_not_found" });
 
     const note = req.body?.note ? String(req.body.note).slice(0, 280) : null;
 
-    // Upsert, matching the unique key: re-adding a number the owner already
-    // excluded should update the note, not fail with a duplicate they cannot
-    // see or fix from the UI.
-    const rule = await prisma.inboundExclusion.upsert({
-      where: {
-        tenantId_channel_customerExternalId: {
-          tenantId: req.tenantId!,
-          channel: "WHATSAPP",
-          customerExternalId: normalized,
-        },
-      },
-      create: {
-        tenantId: req.tenantId!,
-        channel: "WHATSAPP",
-        channelAccountId,
-        customerExternalId: normalized,
-        displayValue: exclusionDisplayValue(raw),
-        note,
-        createdBy: req.user?.userId ?? null,
-      },
-      update: { channelAccountId, displayValue: exclusionDisplayValue(raw), note },
-    });
+    // Re-adding a contact already private on THIS number updates the note
+    // (not a duplicate the owner cannot see or fix). The same contact on
+    // another number is a separate rule; a rule is never moved between numbers.
+    const key = { tenantId: req.tenantId!, channel: "WHATSAPP" as const, channelAccountId, customerExternalId: normalized };
+    const data = { displayValue: exclusionDisplayValue(raw), note };
+    let existing = await prisma.inboundExclusion.findFirst({ where: key, select: { id: true } });
+    let rule;
+    if (!existing) {
+      try {
+        rule = await prisma.inboundExclusion.create({ data: { ...key, ...data, createdBy: req.user?.userId ?? null } });
+      } catch (err: any) {
+        // Two adds of the same contact at once: the unique index let one in;
+        // the other becomes an update of it.
+        if (err?.code !== "P2002") throw err;
+        existing = await prisma.inboundExclusion.findFirst({ where: key, select: { id: true } });
+        if (!existing) throw err;
+      }
+    }
+    if (existing) rule = await prisma.inboundExclusion.update({ where: { id: existing.id }, data });
 
-    return res.status(201).json({
-      data: { id: rule.id, value: rule.displayValue, normalized: rule.customerExternalId, note: rule.note },
+    return res.status(existing ? 200 : 201).json({
+      data: { id: rule!.id, value: rule!.displayValue, normalized: rule!.customerExternalId, channelAccountId: rule!.channelAccountId, note: rule!.note },
     });
   },
 );
@@ -640,7 +743,7 @@ router.get(
       where: { id: paramId(req), tenantId: req.tenantId! },
       select: { id: true },
     });
-    if (!owned) return res.status(404).json({ error: "Number not found." });
+    if (!owned) return res.status(404).json({ error: "Number not found.", code: "NUMBER_NOT_FOUND" });
 
     const events = await prisma.whatsAppNumberEvent.findMany({
       where: { numberId: owned.id },

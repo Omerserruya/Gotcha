@@ -19,6 +19,7 @@
 import { prisma } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel } from "./ai.service";
 import type { ExistingActionItems } from "./existing-action-items.service";
+import { withoutWideDashes } from "../lib/wide-dash";
 
 export type Sentiment = "positive" | "neutral" | "negative" | "mixed";
 
@@ -566,7 +567,7 @@ export async function summarizePostConversation(params: {
       );
       return validateAndCoerce(null, params.stage);
     }
-    return validateAndCoerce(parsed, params.stage);
+    return validateAndCoerce(withoutWideDashes(parsed), params.stage);
   } catch (err: any) {
     console.error("[post-conversation-summarizer] LLM call failed:", err?.message);
     return validateAndCoerce(null, params.stage);

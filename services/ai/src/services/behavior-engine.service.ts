@@ -583,7 +583,7 @@ export function shouldRetrieveKB(state: BehaviorState, lastMessage: string): boo
  * Private heuristic used inside `when_relevant`. Skips short, identifying,
  * or filler messages that have no semantic value for vector search.
  */
-function isSemanticallyRetrievable(text: string): boolean {
+export function isSemanticallyRetrievable(text: string): boolean {
   if (!text || text.trim().length < 8) return false;
   const trimmed = text.trim();
   const lower = trimmed.toLowerCase();

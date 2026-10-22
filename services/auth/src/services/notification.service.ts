@@ -483,7 +483,7 @@ export async function sendActivationConfirmation(tenantId: string): Promise<void
   if (!admin) return;
 
   const frontendUrl = resolveAppPublicUrl(process.env);
-  const dashboardUrl = `${frontendUrl}/conversations`;
+  const dashboardUrl = `${frontendUrl}/inbox`;
 
   const departments = tenant.departments.map((d) => {
     return {

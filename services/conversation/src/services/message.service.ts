@@ -1,5 +1,6 @@
 import { prisma, publishEvent, type ChannelType, withHistoricalRecords } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
+import { presentMessageMedia } from "../lib/message-media";
 
 interface CreateMessageData {
   tenantId: string;
@@ -15,6 +16,22 @@ interface CreateMessageData {
   fileName?: string;
   /** The message this one replies to, when the agent quoted one. */
   replyToMessageId?: string;
+  /**
+   * The send outcome, when the caller already knows it.
+   *
+   * ★ THIS IS WHY 17 OF 18 WRITERS COULD NOT USE THIS FUNCTION. `create` decided
+   * `status` for them - PENDING for outbound, DELIVERED for inbound - and a
+   * writer that has already called the provider knows better: the flow executor
+   * writes SENT or FAILED depending on whether an external id came back, and the
+   * sandbox writes SENT for a message no provider ever saw.
+   *
+   * Omitted keeps the old behaviour exactly, so existing callers are unaffected.
+   */
+  status?: "PENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED";
+  /** The provider's own words when a send failed. */
+  errorMessage?: string;
+  /** The provider's id for the quoted message, when ours could not be resolved. */
+  replyToExternalId?: string;
 }
 
 /**
@@ -61,7 +78,7 @@ export async function listByConversation(tenantId: string, conversationId: strin
     }),
     prisma.message.count({ where: { tenantId, conversationId } }),
   ]));
-  return { data: messages, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+  return { data: messages.map((m) => presentMessageMedia(m)), meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
 
 export async function create(data: CreateMessageData) {
@@ -79,19 +96,83 @@ export async function create(data: CreateMessageData) {
         // here; the provider's id is stamped by the outgoing worker once the
         // send returns, because it does not exist until then.
         replyToMessageId: data.replyToMessageId ?? undefined,
-        status: data.direction === "OUTBOUND" ? "PENDING" : "DELIVERED",
+        replyToExternalId: data.replyToExternalId ?? undefined,
+        errorMessage: data.errorMessage ?? undefined,
+        // The caller's outcome when it has one, else the old default.
+        status: data.status ?? (data.direction === "OUTBOUND" ? "PENDING" : "DELIVERED"),
       },
     });
-    await tx.conversation.update({ where: { id: data.conversationId }, data: { lastMessageAt: msg.createdAt } });
+
+    /**
+     * ★ A FAILED SEND DOES NOT MOVE THE CONVERSATION'S SORT KEY.
+     *
+     * The inbox orders by `lastMessageAt`, and a message the customer never
+     * received must not make the conversation look answered: the last real thing
+     * that happened is still their inbound, and moving the column would demote a
+     * customer who is still waiting on the strength of a delivery that did not
+     * happen.
+     *
+     * This lives HERE rather than at each call site on purpose. The rule was
+     * found while fixing the flow executor, and if it stayed at that one site
+     * then every writer moved into this function afterwards would reintroduce the
+     * bug - which is the opposite of what consolidating the writers is for.
+     *
+     * ─────────────────────────────────────────────────────────────────────
+     * ★★ AND YET THIS RULE LIVES AT FOUR-PLUS SITES BY DECISION, NOT BY
+     * OVERSIGHT. If you are here because you found it duplicated, this is the
+     * choice you are looking at rather than a gap to close.
+     *
+     * The plan was to make this the ONE message writer. A survey of all 31
+     * direct writes across 17 files found that only THREE of them - two in
+     * `routes/approvals.ts` and one in `routes/contacts.ts` - can even call this
+     * function. The other 28 live in `services/ai`, `incoming-worker`,
+     * `outgoing-worker` and `voice-copilot`, and no service in this repo imports
+     * another service's `src`. So "one writer" is not reachable from where this
+     * function sits; it would require relocating it into `packages/shared`.
+     *
+     * That was put to the product owner as two halves - fixing the sites that
+     * have the rule wrong today, against relocating the writer so the 19th
+     * writer cannot get it wrong tomorrow - and the decision was to FIX THE BUGS
+     * AND NOT RELOCATE. The relocation is cancelled, not deferred.
+     *
+     * The consequence, stated plainly so nobody has to rediscover it: the
+     * failed-send rule and the origin rule are maintained BY CONVENTION at every
+     * site that writes a message. The known sites carrying them correctly are
+     * `incoming-worker/services/flow-executor.service.ts`,
+     * `incoming-worker/services/ai-bot.service.ts` (three writes), the
+     * `status === "SENT"` branch of `outgoing-worker/workers/outgoing.worker.ts`,
+     * and this function. Reopening the relocation is a product decision, not a
+     * cleanup - so if you are tempted, that is the conversation to have first.
+     * ─────────────────────────────────────────────────────────────────────
+     */
+    if (msg.status !== "FAILED") {
+      await tx.conversation.update({ where: { id: data.conversationId }, data: { lastMessageAt: msg.createdAt } });
+    }
     return msg;
   });
 
-  const eventData = { message, conversationId: data.conversationId };
+  // Presented once for the caller, the socket and the bus: the bus event is
+  // relayed to browsers by this service's socket bridge too.
+  const presented = presentMessageMedia(message);
+  const eventData = { message: presented, conversationId: data.conversationId, messageId: presented.id, tenantId: data.tenantId };
   try { getIO().to(`tenant:${data.tenantId}`).emit("message:new", eventData); } catch {}
   publishEvent({ event: "message:new", tenantId: data.tenantId, data: eventData }).catch(() => {});
-  return message;
+  return presented;
 }
 
+/**
+ * ⚠ UNCALLED, AND IT WILL FAIL THE MOMENT SOMETHING CALLS IT.
+ *
+ * Nothing calls this as of 2026-10-02 (delivery status is updated elsewhere).
+ * Its lookup below is by `externalMessageId` alone, with no `tenantId`, and
+ * `Message` is tenant-guarded - so the guard refuses it on the first call.
+ *
+ * Whether that failure is LOUD depends entirely on the caller. Status updates
+ * are usually fire-and-forget from a webhook, behind `.catch(...)`, and in that
+ * shape the refusal becomes a log line while receipts silently stop advancing.
+ * So before wiring this up: give it a `tenantId` parameter and scope the lookup,
+ * rather than relying on the error to announce itself.
+ */
 export async function updateStatus(messageId: string, status: "SENT" | "DELIVERED" | "READ" | "FAILED") {
   const message = await prisma.message.findFirst({
     where: { externalMessageId: messageId },
@@ -103,7 +184,7 @@ export async function updateStatus(messageId: string, status: "SENT" | "DELIVERE
   if (status !== "FAILED" && newIdx <= currentIdx) return message;
 
   const updated = await prisma.message.update({ where: { id: message.id }, data: { status } });
-  const eventData = { messageId: updated.id, conversationId: updated.conversationId, status: updated.status };
+  const eventData = { messageId: updated.id, conversationId: updated.conversationId, status: updated.status, tenantId: message.tenantId };
   try { getIO().to(`tenant:${message.tenantId}`).emit("message:status", eventData); } catch {}
   publishEvent({ event: "message:status", tenantId: message.tenantId, data: eventData }).catch(() => {});
   return updated;

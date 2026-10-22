@@ -516,14 +516,17 @@ describe("BehaviorEngine - playbook selection", () => {
 });
 
 describe("BehaviorEngine - KB gating (BEL-controlled)", () => {
-  it("QUALIFY (knowledgeRetrieval=skip) → shouldRetrieveKB=false even on rich text", () => {
+  it("★ QUALIFY (knowledgeRetrieval=when_relevant, Omer 2026-10-08): a first message that asks something reads the knowledge; a greeting does not", () => {
     const s = computeBehaviorState({
       mode: "agent",
       identity: baseIdentity.newLead,
       request: { lastMessage: "tell me about your features and integrations", messageCount: 1 },
     });
     expect(s.strategy).toBe("QUALIFY");
-    expect(shouldRetrieveKB(s, "tell me about your features and integrations")).toBe(false);
+    expect(shouldRetrieveKB(s, "tell me about your features and integrations")).toBe(true);
+    expect(shouldRetrieveKB(s, "do you ship to Eilat on Fridays?")).toBe(true);
+    expect(shouldRetrieveKB(s, "hi")).toBe(false);
+    expect(shouldRetrieveKB(s, "ok")).toBe(false);
   });
 
   it("RESOLVE (knowledgeRetrieval=always) → shouldRetrieveKB=true even on bare 'ok'", () => {
@@ -660,11 +663,13 @@ describe("BehaviorEngine - funnel integration (Task 2)", () => {
   });
 
   it("SaaS funnel demo+informational → strategy override CONVERT applied via BEL", () => {
-    // 'tell me' = informational marker; 'demo' = funnel stage marker.
+    // 'tell me' = informational; 'see it in action' = the demo stage's marker.
+    // ("demo" itself is now a transactional marker, so the matrix already says
+    // CONVERT and the funnel has nothing to override.)
     const s = computeBehaviorState({
       mode: "agent",
       identity: baseIdentity.newLead,
-      request: { lastMessage: "tell me about your demo", messageCount: 3 },
+      request: { lastMessage: "tell me, can I see it in action?", messageCount: 3 },
       funnel: SAAS_DEFAULT_FUNNEL,
     });
     expect(s.strategy).toBe("CONVERT");
@@ -697,15 +702,28 @@ describe("BehaviorEngine - closure posture (Task 4)", () => {
     expect(s.requiredActions).not.toContain("schedule_followup");
   });
 
-  it("customer defers ('let me think') → posture=needs_followup + schedule_followup", () => {
+  // A deferral with no time asks WHEN (Omer, 2026-10-07); only a stated time
+  // schedules the follow-up.
+  it("customer defers ('let me think') → needs_followup, and asks when (no time given)", () => {
     const s = computeBehaviorState({
       mode: "agent",
       identity: baseIdentity.newLead,
       request: { lastMessage: "let me think about it and i'll get back to you", messageCount: 5 },
     });
     expect(s.closurePosture).toBe("needs_followup");
-    expect(s.requiredActions).toContain("schedule_followup");
+    expect(s.requiredActions).toContain("ask_question");
+    expect(s.requiredActions).not.toContain("schedule_followup");
     expect(s.requiredActions).not.toContain("close_conversation");
+  });
+
+  it("a deferral WITH a time ('call me tomorrow at 10') → schedule_followup", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "call me tomorrow at 10", messageCount: 5 },
+    });
+    expect(s.closurePosture).toBe("needs_followup");
+    expect(s.requiredActions).toContain("schedule_followup");
   });
 
   it("Hebrew defer ('אחזור אליך') → needs_followup", () => {
@@ -715,7 +733,8 @@ describe("BehaviorEngine - closure posture (Task 4)", () => {
       request: { lastMessage: "אחשוב על זה ואחזור אליך", messageCount: 5 },
     });
     expect(s.closurePosture).toBe("needs_followup");
-    expect(s.requiredActions).toContain("schedule_followup");
+    expect(s.requiredActions).toContain("ask_question");
+    expect(s.requiredActions).not.toContain("schedule_followup");
   });
 
   it("customer thanks after closing assistant move → ready_to_close + close_conversation", () => {

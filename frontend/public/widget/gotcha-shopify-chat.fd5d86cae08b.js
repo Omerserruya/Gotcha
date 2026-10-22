@@ -1,0 +1,3055 @@
+/**
+ * GOTCHA Shopify Live Chat - chat application.
+ *
+ * Loaded lazily by the bootstrap, so nothing in this file is on the
+ * critical path of a storefront page.
+ *
+ * Two rules run through the whole file:
+ *
+ *   1. Nothing dynamic is ever written as HTML. Every value that came
+ *      from a server, a merchant or a shopper goes in via `textContent`.
+ *      Markup is built from element factories. There is no innerHTML
+ *      interpolation anywhere below, which is what makes "message HTML is
+ *      sanitized" true by construction rather than by a filter someone
+ *      has to remember to call.
+ *   2. Nothing about money or stock is believed from local state. Prices
+ *      shown come from the server's snapshot; Add to Cart re-validates
+ *      server-side and only then touches the theme's own cart.
+ *   3. Direction is a property of a MESSAGE, not of the widget. See the
+ *      bidi module immediately below.
+ */
+
+/**
+ * Bidi: per-message direction, in ES5, on a storefront page.
+ *
+ * This is a deliberate restatement of
+ * `packages/shared/src/lib/text-direction.ts`. The widget ships without a
+ * bundler and cannot import the workspace package, so the rules live
+ * twice - and `frontend/src/components/shopify/__tests__/widget-rtl-parity.test.ts`
+ * runs both implementations over the same table and fails on the first
+ * disagreement. Change one, change the other.
+ *
+ * Kept as its own module rather than folded into the app factory so the
+ * parity test can reach it without booting a widget.
+ */
+window.__gotchaBidi = (function () {
+  "use strict";
+
+  var RTL_LANGUAGES = [
+    "he", "iw", "ar", "fa", "prs", "ur", "ps", "sd", "ug", "ckb", "ku",
+    "yi", "ji", "dv", "arc", "syr",
+    "he-il", "ar-sa", "ar-ae", "ar-eg", "fa-ir", "ur-pk",
+  ];
+
+  var STRONG_RTL = /[\u0590-\u05FF\u0600-\u06FF\u0700-\u074F\u0750-\u077F\u0780-\u07BF\u07C0-\u07FF\u0800-\u083F\u0840-\u085F\u0860-\u086F\u08A0-\u08FF\uFB1D-\uFB4F\uFB50-\uFDFF\uFE70-\uFEFF]/g;
+  var STRONG_LTR = /[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u1E00-\u1EFF\u2C60-\u2C7F\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/g;
+
+  var RTL_SHARE_THRESHOLD = 0.3;
+
+  // Runs with no direction of their own. A Hebrew sentence does not
+  // become English by quoting a product URL.
+  var ATOMS = [
+    /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi,
+    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
+    /(?:[$₪€£¥₹]\s?\d[\d.,]*|\b\d[\d.,]*\s?(?:USD|ILS|EUR|GBP|JPY|AED|SAR|INR|NIS)\b|\b(?:USD|ILS|EUR|GBP|JPY|AED|SAR|INR|NIS)\s?\d[\d.,]*)/gi,
+    /\b[A-Z0-9]{2,}(?:[-_/][A-Z0-9]+)+\b/g,
+    /\+\d[\d\s\-().]{6,}\d/g,
+  ];
+
+  function stripNeutralAtoms(text) {
+    var out = String(text == null ? "" : text);
+    for (var i = 0; i < ATOMS.length; i++) {
+      out = out.replace(new RegExp(ATOMS[i].source, ATOMS[i].flags), " ");
+    }
+    return out;
+  }
+
+  function countStrong(text) {
+    var clean = stripNeutralAtoms(text);
+    var rtl = (clean.match(STRONG_RTL) || []).length;
+    var ltr = (clean.match(STRONG_LTR) || []).length;
+    var total = rtl + ltr;
+    return { rtl: rtl, ltr: ltr, rtlShare: total === 0 ? 0 : rtl / total };
+  }
+
+  /** "rtl" | "ltr" | null. Null means "this text has no opinion". */
+  function detectScriptDirection(text) {
+    var c = countStrong(text);
+    if (c.rtl === 0 && c.ltr === 0) return null;
+    if (c.rtl === 0) return "ltr";
+    if (c.ltr === 0) return "rtl";
+    return c.rtlShare >= RTL_SHARE_THRESHOLD ? "rtl" : "ltr";
+  }
+
+  function isRtlLocale(locale) {
+    if (typeof locale !== "string") return false;
+    var tag = locale.trim().toLowerCase().replace(/_/g, "-");
+    if (!tag) return false;
+    if (RTL_LANGUAGES.indexOf(tag) !== -1) return true;
+    return RTL_LANGUAGES.indexOf(tag.split("-")[0]) !== -1;
+  }
+
+  function directionForLocale(locale) {
+    if (typeof locale !== "string" || !locale.trim()) return null;
+    return isRtlLocale(locale) ? "rtl" : "ltr";
+  }
+
+  /**
+   * The priority chain: explicit metadata, then this message's own
+   * script, then the conversation, then the store, then LTR.
+   */
+  function resolveMessageDirection(input) {
+    var i = input || {};
+    if (i.override === "rtl" || i.override === "ltr") {
+      return { direction: i.override, source: "override" };
+    }
+    var fromContent = directionForLocale(i.contentLocale);
+    if (fromContent) return { direction: fromContent, source: "content_locale" };
+
+    var fromScript = detectScriptDirection(i.text);
+    if (fromScript) return { direction: fromScript, source: "script" };
+
+    var fromConversation = directionForLocale(i.conversationLocale);
+    if (fromConversation) return { direction: fromConversation, source: "conversation_locale" };
+
+    var fromWidget = directionForLocale(i.widgetLocale);
+    if (fromWidget) return { direction: fromWidget, source: "widget_locale" };
+
+    return { direction: "ltr", source: "default" };
+  }
+
+  /**
+   * Split prose from the atoms that must sit inside a <bdi>. Without this
+   * a URL's trailing full stop migrates to the wrong end of the link and
+   * "$120.00" shows its dollar sign on the right.
+   */
+  function segmentBidiText(text) {
+    var src = String(text == null ? "" : text);
+    if (!src) return [];
+    var sources = [];
+    for (var i = 0; i < ATOMS.length; i++) sources.push("(?:" + ATOMS[i].source + ")");
+    var combined = new RegExp(sources.join("|"), "gi");
+
+    var out = [];
+    var cursor = 0;
+    var m;
+    while ((m = combined.exec(src)) !== null) {
+      if (m.index > cursor) out.push({ text: src.slice(cursor, m.index), kind: "text" });
+      out.push({ text: m[0], kind: "isolate" });
+      cursor = m.index + m[0].length;
+      if (m[0].length === 0) combined.lastIndex++;
+    }
+    if (cursor < src.length) out.push({ text: src.slice(cursor), kind: "text" });
+    return out;
+  }
+
+  function needsBidiIsolation(text) {
+    var segs = segmentBidiText(text);
+    for (var i = 0; i < segs.length; i++) if (segs[i].kind === "isolate") return true;
+    return false;
+  }
+
+  return {
+    RTL_SHARE_THRESHOLD: RTL_SHARE_THRESHOLD,
+    stripNeutralAtoms: stripNeutralAtoms,
+    countStrongCharacters: countStrong,
+    detectScriptDirection: detectScriptDirection,
+    isRtlLocale: isRtlLocale,
+    directionForLocale: directionForLocale,
+    resolveMessageDirection: resolveMessageDirection,
+    segmentBidiText: segmentBidiText,
+    needsBidiIsolation: needsBidiIsolation,
+  };
+})();
+
+window.__gotchaShopifyChatApp = function (boot) {
+  "use strict";
+
+  var API = boot.api;
+  var ASSETS = boot.assets;
+  var shadow = boot.shadow;
+  var store = boot.store;
+  var widget = boot.widget;
+  var appearance = widget.appearance;
+  var welcome = widget.welcome;
+  var features = widget.features;
+
+  var STRINGS = {
+    en: {
+      online: "Online",
+      offline: "Away",
+      close: "Close chat",
+      replies: "Replies right away",
+      minimise: "Minimise",
+      newChat: "New conversation",
+      dock: "Dock to the side of the screen",
+      undock: "Undock",
+      continueWa: "Continue on WhatsApp",
+      waTitle: "Chat with us",
+      waSub: "Write here and we'll continue on WhatsApp.",
+      waPlaceholder: "Type a message",
+      waOpening: "Continuing on WhatsApp",
+      waOpenLink: "Open WhatsApp",
+      mute: "Mute chat sounds",
+      unmute: "Unmute chat sounds",
+      placeholder: "Ask us anything",
+      send: "Send",
+      startConversation: "Start the conversation",
+      showMore: "Show {n} more",
+      connecting: "Connecting…",
+      reconnecting: "Reconnecting…",
+      waitingAi: "Typing…",
+      waitingAgent: "Connecting you with someone from the team…",
+      agentJoined: "A team member has joined.",
+      talkToHuman: "Talk to a person",
+      failed: "Something went wrong. Try again.",
+      retry: "Try again",
+      rateLimited: "You are sending messages very quickly. Please wait a moment.",
+      ended: "This conversation has ended.",
+      addToCart: "Add to cart",
+      adding: "Adding…",
+      added: "Added to cart",
+      // Reasons an Add to Cart can fail that the SERVER names by code
+      // rather than by sentence. Everything the server does send a
+      // sentence for (out of stock, option gone, subscription-only) is
+      // shown in the shopper's language as the server wrote it.
+      cartDisabled: "Add to cart is switched off for this store right now.",
+      cartSessionExpired: "This chat session has expired. Refresh the page and try again.",
+      cartStoreBusy: "The store did not answer. Please try again in a moment.",
+      notForSale: "This product isn't for sale right now.",
+      outOfStock: "This one is sold out.",
+      chooseVariantFirst: "Choose an option first.",
+      variantGone: "That option isn't available anymore.",
+      chooseOnPage: "Opening the product page to choose the options.",
+      viewProduct: "View product",
+      viewCart: "View cart",
+      keepShopping: "Keep shopping",
+      soldOut: "Sold out",
+      unavailable: "Unavailable",
+      notPublished: "Not published",
+      chooseOption: "Choose an option",
+      quantity: "Quantity",
+      poweredBy: "Powered by GOTCHA",
+      name: "Name",
+      email: "Email",
+      message: "Message",
+      submit: "Send message",
+      submitted: "Thanks. We will get back to you.",
+      consent: "I agree to be contacted about this enquiry.",
+      previous: "Previous products",
+      next: "More products",
+      you: "You",
+    },
+    he: {
+      online: "זמינים",
+      offline: "לא זמינים",
+      close: "סגירת הצ׳אט",
+      replies: "עונה מיד",
+      minimise: "מזעור",
+      newChat: "שיחה חדשה",
+      dock: "הצמדה לצד המסך",
+      undock: "ביטול ההצמדה",
+      continueWa: "המשך בוואטסאפ",
+      waTitle: "דברו איתנו",
+      waSub: "כתבו כאן ונמשיך בוואטסאפ.",
+      waPlaceholder: "הקלידו הודעה",
+      waOpening: "ממשיכים בוואטסאפ",
+      waOpenLink: "פתיחת וואטסאפ",
+      mute: "השתקת צלילי הצ׳אט",
+      unmute: "ביטול השתקה",
+      placeholder: "אפשר לשאול אותנו הכל",
+      send: "שליחה",
+      startConversation: "אפשר להתחיל",
+      showMore: "עוד {n}",
+      connecting: "מתחברים…",
+      reconnecting: "מתחברים מחדש…",
+      waitingAi: "מקלידים…",
+      waitingAgent: "מחברים אתכם לנציג…",
+      agentJoined: "נציג הצטרף לשיחה.",
+      talkToHuman: "לדבר עם נציג",
+      failed: "משהו השתבש. אפשר לנסות שוב.",
+      retry: "לנסות שוב",
+      rateLimited: "ההודעות נשלחות מהר מדי. רגע אחד.",
+      ended: "השיחה הסתיימה.",
+      addToCart: "הוספה לסל",
+      adding: "מוסיפים…",
+      added: "נוסף לסל",
+      cartDisabled: "ההוספה לסל כבויה בחנות הזו כרגע.",
+      cartSessionExpired: "החיבור לצ׳אט פג. רעננו את הדף ונסו שוב.",
+      cartStoreBusy: "החנות לא הגיבה. אפשר לנסות שוב עוד רגע.",
+      notForSale: "המוצר הזה לא למכירה כרגע.",
+      outOfStock: "המוצר הזה אזל מהמלאי.",
+      chooseVariantFirst: "צריך לבחור אפשרות קודם.",
+      variantGone: "האפשרות הזו כבר לא זמינה.",
+      chooseOnPage: "פותחים את דף המוצר כדי לבחור אפשרויות.",
+      viewProduct: "למוצר",
+      viewCart: "לסל הקניות",
+      keepShopping: "להמשיך לגלוש",
+      soldOut: "אזל מהמלאי",
+      unavailable: "לא זמין",
+      notPublished: "לא מפורסם",
+      chooseOption: "בחרו אפשרות",
+      quantity: "כמות",
+      poweredBy: "מופעל על ידי GOTCHA",
+      name: "שם",
+      email: "אימייל",
+      message: "הודעה",
+      submit: "שליחת הודעה",
+      submitted: "תודה, נחזור אליכם.",
+      consent: "אני מאשר/ת שתיצרו איתי קשר בנוגע לפנייה.",
+      previous: "מוצרים קודמים",
+      next: "עוד מוצרים",
+      you: "את/ה",
+    },
+  };
+
+  // Language: the merchant's explicit choice wins; "auto" follows the
+  // storefront's own locale, because the shopper already chose that.
+  var lang =
+    appearance.language !== "auto"
+      ? appearance.language
+      : /^he/i.test(String(boot.context.locale || document.documentElement.lang || ""))
+        ? "he"
+        : "en";
+  var T = STRINGS[lang] || STRINGS.en;
+
+  // ── Look and "Continue on WhatsApp" (website widget, stage B) ──
+  // The look is the merchant's choice; the handoff exists only when the
+  // server says its number can take it AND the host page gave us a way to
+  // ask for the link (the code snippet does; a host without it never shows
+  // the button rather than showing one that cannot work).
+  var LOOK = widget.ux && widget.ux.look === "whatsapp" ? "whatsapp" : "gotcha";
+  var WA_ON = !!(widget.features && widget.features.whatsappHandoff) && typeof boot.whatsappHandoff === "function";
+  var BIDI = window.__gotchaBidi;
+
+  // The merchant's explicit choice, or "auto". Passed to every per-message
+  // resolution so one setting still governs the whole widget when a
+  // merchant has made a decision.
+  var dirOverride = appearance.direction === "rtl" || appearance.direction === "ltr"
+    ? appearance.direction
+    : "auto";
+
+  // The PANEL's direction: chrome, layout and the direction a shopper
+  // starts typing in. Individual bubbles resolve their own.
+  var dir = BIDI.resolveMessageDirection({
+    override: dirOverride,
+    conversationLocale: lang,
+    widgetLocale: boot.context.locale || document.documentElement.lang || null,
+  }).direction;
+
+  /**
+   * Direction of ONE message. The storefront locale is the last resort,
+   * so a Hebrew shopper's "👍" stays on the Hebrew side and an English
+   * agent reply inside the same conversation still reads left to right.
+   */
+  function dirOf(text, contentLocale) {
+    return BIDI.resolveMessageDirection({
+      override: dirOverride,
+      contentLocale: contentLocale || null,
+      text: text,
+      conversationLocale: lang,
+      widgetLocale: boot.context.locale || null,
+    }).direction;
+  }
+
+  // ── State ───────────────────────────────────────────────────────
+
+  var S = {
+    phase: "welcome", // welcome | connecting | active | offline_form | failed
+    connection: "idle", // idle | connecting | live | polling | reconnecting
+    messages: [],
+    pending: [], // optimistic sends awaiting their server echo
+    conversationId: store.get("conversation"),
+    awaitingReply: false,
+    handedOver: false,
+    ended: false,
+    rateLimited: false,
+    error: null,
+    opened: false,
+    lastCursor: null,
+    unread: 0,
+    waLink: null, // the WhatsApp link after a handoff, kept in the chat
+    docked: false,
+  };
+
+  var socket = null;
+  var pollTimer = null;
+  var els = {};
+  var shownProducts = {};
+
+  // ── DOM helpers (no innerHTML for dynamic content, ever) ────────
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = String(text);
+    return node;
+  }
+  function attr(node, map) {
+    Object.keys(map).forEach(function (k) {
+      if (map[k] == null) node.removeAttribute(k);
+      else node.setAttribute(k, String(map[k]));
+    });
+    return node;
+  }
+  function clear(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+    return node;
+  }
+  function on(node, evt, fn) {
+    node.addEventListener(evt, fn);
+    return node;
+  }
+
+  /**
+   * Write text into a node with its own direction, isolating the atoms
+   * that the bidi algorithm otherwise mangles.
+   *
+   * Still no innerHTML: <bdi> elements are built with createElement and
+   * filled with textContent, so rule 1 at the top of this file holds.
+   * <bdi> is used rather than a CSS `unicode-bidi` span because it
+   * isolates natively, needs no stylesheet to be correct, and degrades to
+   * an inline element on anything that has not implemented it.
+   */
+  function setDirectedText(node, text, contentLocale) {
+    var value = text == null ? "" : String(text);
+    var d = dirOf(value, contentLocale);
+    attr(node, { dir: d });
+    clear(node);
+    var segments = BIDI.segmentBidiText(value);
+    if (segments.length <= 1) {
+      node.textContent = value;
+      return node;
+    }
+    segments.forEach(function (seg) {
+      if (seg.kind === "isolate") {
+        var bdi = document.createElement("bdi");
+        // A URL, a price or a part code is always read left to right,
+        // whatever it is embedded in.
+        bdi.setAttribute("dir", "ltr");
+        bdi.textContent = seg.text;
+        node.appendChild(bdi);
+      } else {
+        node.appendChild(document.createTextNode(seg.text));
+      }
+    });
+    return node;
+  }
+
+  /**
+   * An element whose content is ALWAYS left to right regardless of the
+   * surrounding prose: prices, timestamps, counts, part codes. Rendered
+   * as a <bdi> so it cannot leak its direction into the sentence around
+   * it.
+   */
+  function ltrAtom(className, text) {
+    var bdi = document.createElement("bdi");
+    if (className) bdi.className = className;
+    bdi.setAttribute("dir", "ltr");
+    bdi.textContent = text == null ? "" : String(text);
+    return bdi;
+  }
+
+  /** A text node with its own resolved direction. */
+  function directedEl(tag, className, text, contentLocale) {
+    var node = el(tag, className);
+    setDirectedText(node, text, contentLocale);
+    return node;
+  }
+
+  /**
+   * Only https URLs on hosts we expect are allowed to become an href or
+   * a src. A product link is server-built, but this is the last gate
+   * before a URL reaches the DOM and it costs nothing.
+   */
+  function safeUrl(raw) {
+    if (typeof raw !== "string") return null;
+    try {
+      var u = new URL(raw, window.location.origin);
+      return u.protocol === "https:" || u.protocol === "http:" ? u.toString() : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function money(amount, currency) {
+    if (amount == null) return "";
+    var n = Number(amount);
+    if (!isFinite(n)) return "";
+    try {
+      return new Intl.NumberFormat(lang === "he" ? "he-IL" : "en-US", {
+        style: "currency",
+        currency: currency || "USD",
+        minimumFractionDigits: n % 1 === 0 ? 0 : 2,
+      }).format(n);
+    } catch (e) {
+      return n.toFixed(2) + " " + (currency || "");
+    }
+  }
+
+  /**
+   * The text colour that reads on the main colour: design 7's cream or its
+   * ink, whichever contrasts more. Mirrors inkOn() in chatcenter-widget.js
+   * and frontend-v2/src/lib/brand-mark.ts. The stored contrastColor is not
+   * used for it: Settings never writes it, so it stays #ffffff on a pale
+   * colour.
+   */
+  function inkOn(hex) {
+    var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ""));
+    if (!m) return "#FBF8F3";
+    var lum = function (r, g, b) {
+      var c = [r, g, b].map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    };
+    var l = lum(parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16));
+    var cream = (lum(251, 248, 243) + 0.05) / (l + 0.05);
+    var ink = (l + 0.05) / (lum(43, 38, 34) + 0.05);
+    return cream >= ink ? "#FBF8F3" : "#2B2622";
+  }
+
+  /** The brand's initial: the server's (widget.brand), else the assistant name's first letter or digit. */
+  function brandInitial() {
+    if (widget.brand && widget.brand.initial) return String(widget.brand.initial);
+    var name = String((widget.brand && widget.brand.name) || welcome.assistantName || "");
+    var letter = Array.from(name).filter(function (ch) { return /[\p{L}\p{N}]/u.test(ch); })[0] || "";
+    return letter.toUpperCase();
+  }
+
+  /** The disc's wordmark: the brand up to 16 letters of whole words (frontend-v2 brandMark().logo). */
+  function brandWordmark() {
+    var raw = String((widget.brand && widget.brand.name) || welcome.assistantName || "");
+    var head = (raw.split(/\s[-|·:\u2013\u2014]\s|\s*[|·]\s*/)[0] || raw).trim().toUpperCase();
+    var logo = "";
+    head.split(/\s+/).some(function (word) {
+      if (logo && (logo + " " + word).length > 16) return true;
+      logo = logo ? logo + " " + word : word;
+      return false;
+    });
+    return logo.replace(/[\s\-|·:,;\u2013\u2014]+$/, "");
+  }
+
+  // ── Styles ──────────────────────────────────────────────────────
+
+  var radius = Math.max(0, Math.min(28, Number(appearance.cornerRadius) || 20));
+  var brand = appearance.primaryColor;
+  var onBrand = appearance.contrastColor;
+  var side = appearance.launcherPosition === "left" ? "left" : "right";
+
+  // A function, not a constant: the direction it lays out in changes when
+  // the conversation turns out to be in another language (W10).
+  function buildCss() { return [
+    // `el.hidden = true` only hides anything because of the UA stylesheet's
+    // `[hidden]{display:none}` - the weakest rule there is. Every element
+    // below that sets its own `display` (the panel is `display:flex`) beat
+    // it, so the close button ran, state flipped to closed, analytics
+    // fired, and the panel stayed on screen looking exactly like a dead
+    // button. Shadow DOM has no UA sheet of its own to fall back on, so
+    // this has to be declared here, once, ahead of everything.
+    // ONE source of truth for whether the panel is on screen.
+    //
+    // `el.hidden` alone was not enough: it works only through the UA
+    // stylesheet's `[hidden]{display:none}`, the weakest rule there is,
+    // and `.panel` sets `display:flex`, which beat it. A shadow root has
+    // no UA sheet of its own to fall back on, so the close button ran,
+    // state flipped, analytics fired, and the panel stayed on screen.
+    //
+    // Now the CLOSED state owns `display:none` explicitly and the OPEN
+    // state owns the layout, so no future cascade rule can make a closed
+    // panel visible. `[hidden]` is kept as a belt-and-braces second
+    // signal and for assistive technology.
+    "[hidden]{display:none!important;}",
+    ".panel[data-state='closed']{display:none!important;}",
+
+    // ── Layout by STATE, not by hiding things ad hoc ──
+    //
+    // WELCOME gives the whole panel to the brand: no conversation header
+    // at all, hero flush against the top edge. CONVERSATION swaps in a
+    // compact header, because by then the shopper knows where they are
+    // and the messages need the room.
+    // …but only when there IS a hero to give it to. Every rule below is
+    // scoped to [data-hero='1'] for that reason: with the hero switched off
+    // (or its media missing) hiding the header left a bare white strip with
+    // the title jammed against the top edge, and the close button - restyled
+    // white for legibility over a photograph - invisible on it.
+    ".panel[data-view='welcome'][data-hero='1'] .hd{display:none;}",
+    // The gap above the hero was .wel's own padding-top surviving the
+    // hero's negative margin. In welcome the hero owns the top edge.
+    ".panel[data-view='welcome'][data-hero='1'] .bd{padding-top:0;}",
+    ".panel[data-view='welcome'][data-hero='1'] .wel{padding-top:0;}",
+    ".panel[data-view='welcome'][data-hero='1'] .hero{margin-top:0;border-radius:" + radius + "px " + radius + "px 0 0;}",
+
+    // One close button for both states, moved rather than duplicated, so
+    // there is a single handler and a single data-act="close".
+    // Positioning lives with the rest of the .x rule further down; two
+    // `.x` blocks in one stylesheet is how `position:absolute` here lost
+    // to `position:relative` there and put a 44px hole above the hero.
+    // Over the hero it needs its own contrast: a merchant's photograph
+    // can be any colour, and the way out must be legible on all of them.
+    // Over a photograph the chip needs its own contrast, because a
+    // merchant's hero can be any colour and the way out must be legible on
+    // all of them. Everywhere else it stays a quiet neutral.
+    ".panel[data-view='welcome'][data-hero='1'] .x{color:#fff;}",
+    ".panel[data-view='welcome'][data-hero='1'] .x::before{background:rgba(15,23,42,.32);",
+    "  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}",
+    ".panel[data-view='welcome'][data-hero='1'] .x:hover::before{background:rgba(15,23,42,.46);}",
+    ".panel[data-view='welcome'][data-hero='1'] .x:active::before{transform:scale(.92);}",
+    // ── Welcome hero ──
+    // Bleeds to the panel edges by cancelling the body's padding, so the
+    // media touches the sides instead of floating in a gutter.
+    ".hero{position:relative;margin:calc(var(--pad) * -1) calc(var(--pad) * -1) 0;overflow:hidden;background:#eef2f7;}",
+    ".hero-m{display:block;width:100%;height:100%;}",
+    // The fade is what makes the media belong to the panel rather than
+    // sit on top of it: media dissolves into the chat surface.
+    ".hero-fd{position:absolute;left:0;right:0;bottom:0;pointer-events:none;}",
+    ".hero-ov{position:absolute;inset:0;pointer-events:none;}",
+    // The avatar hangs below the media's bottom edge. z-index keeps it
+    // above the fade, and the ring separates it from any busy image.
+    // Attached to the hero, not floating below it: a 3px ring, a soft
+    // shadow, and no bottom margin of its own - the .wel gap owns the
+    // distance to the title so there is only one number to tune.
+    ".wel-av{display:block;border-radius:50%;object-fit:cover;position:relative;z-index:2;",
+    "  background:#fff;border:3px solid #fff;box-shadow:0 3px 10px rgba(15,23,42,.14);margin-bottom:0;}",
+    "@media (prefers-reduced-motion: reduce){.hero-m{animation:none!important}}",
+    // ── The spacing scale ──
+    //
+    // Every gap in the welcome screen is one of these. The widget was
+    // built with margins chosen per-rule - 18px here, 14px there, a -8px
+    // correction to undo one of them - and the sum was a panel that felt
+    // loose at the top and ran out of room at the bottom. One scale means
+    // tightening the layout is a change to five numbers, not fifty.
+    ":host,.panel{",
+    "  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;",
+    // The body's horizontal padding, referenced by anything that needs to
+    // bleed to the panel edge (the hero) or line up with it.
+    "  --pad:16px;",
+    "}",
+    ".panel{",
+    "  position:fixed;bottom:80px;" + side + ":16px;width:392px;",
+    // Never wider than the viewport, whatever the theme is doing. A
+    // storefront with its own horizontal overflow must not be able to
+    // drag the widget wider and make its own bug worse.
+    "  max-width:min(392px, calc(100vw - 32px));",
+    "  height:min(640px, calc(100vh - 120px));",
+    "  background:#fff;color:#0f172a;border-radius:" + radius + "px;",
+    "  box-shadow:0 24px 60px rgba(15,23,42,.22),0 2px 8px rgba(15,23,42,.08);",
+    "  display:flex;flex-direction:column;overflow:hidden;",
+    "  font:400 15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;",
+    "  animation:rise .22s cubic-bezier(.2,.8,.3,1);",
+    "}",
+    // A welcome screen is short by design, and a card that reserves the
+    // full 640px for it ends in a band of empty white above the composer.
+    // Hug the content; the max-height keeps a long question list scrolling
+    // rather than growing off the screen.
+    "@media (min-width: 561px){",
+    // The floor matters as much as the ceiling. Hugging the content is right
+    // WITH a hero; without one the same rule collapsed the card to about half
+    // its height, which reads as a broken widget rather than a short one - and
+    // sent merchants looking for a blank placeholder image to prop it open.
+    "  .panel[data-view='welcome']{height:auto;min-height:min(430px, calc(100vh - 120px));",
+    "    max-height:min(640px, calc(100vh - 120px));}",
+    "}",
+    "@keyframes rise{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}",
+    "@media (prefers-reduced-motion: reduce){.panel{animation:none}}",
+    // Phones: a floating card wastes the screen and fights the keyboard.
+    "@media (max-width: 560px){",
+    // width:auto, driven by the insets - `width:100%` resolves against a
+    // containing block that a wide page can inflate, which is how the
+    // panel ends up 12px past the screen on a theme that already
+    // overflows.
+    "  .panel{inset:0;width:auto;max-width:100vw;height:100%;border-radius:0;",
+    "    height:100dvh;padding-bottom:env(safe-area-inset-bottom);}",
+    "}",
+    // Compact by design: 16px padding around a 40px avatar made a 72px
+    // header, which is a lot of a 640px panel spent on saying who you are
+    // already talking to. 44px visual height, 30px avatar.
+    // LOGICAL padding, not physical. The inline-END reservation is what
+    // keeps the header's own controls clear of the absolutely-positioned
+    // close button - and in RTL that corner is on the left, so a hardcoded
+    // `padding-right` left the mute button sitting under the close button.
+    ".hd{display:flex;align-items:center;gap:10px;",
+    "  padding-block:6px;padding-inline:14px 56px;",
+    // border-box, or min-height:44 becomes 44 + padding + border = 57.
+    "  box-sizing:border-box;border-bottom:1px solid #eef1f5;min-height:44px;max-height:48px;flex:0 0 auto;}",
+    ".hd-tx{min-width:0;line-height:1.2;}",
+    ".hd-av{width:30px;height:30px;border-radius:9px;object-fit:cover;background:" + brand + ";flex:0 0 auto;}",
+    ".hd-mono{display:flex;align-items:center;justify-content:center;color:" + onBrand + ";font-weight:650;font-size:14px;}",
+    ".hd-tx{flex:1 1 auto;min-width:0;}",
+    ".hd-nm{font-weight:650;font-size:14px;line-height:1.25;letter-spacing:-.01em;",
+    "  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
+    ".hd-st{display:flex;align-items:center;gap:5px;font-size:11.5px;line-height:1.2;color:#64748b;margin-top:1px;}",
+    ".dot{width:7px;height:7px;border-radius:4px;background:#16a34a;flex:0 0 auto;}",
+    ".dot[data-off='1']{background:#cbd5e1;}",
+    // 44x44 is the accessibility floor for a touch target, and this one
+    // is the shopper's way out of the widget - the last control that
+    // should be fiddly on a phone. The icon stays visually small; the
+    // hit area does not.
+    // 44x44 is the accessibility floor and this is the shopper's way out,
+    // so the TARGET never shrinks. What shrinks is the part you can see:
+    // a 30px chip drawn behind the icon. Making the visible control the
+    // same size as the touch target is what made the X the loudest thing
+    // in the hero.
+    // The close button and the mute button LOOK the same and SIT
+    // differently. Sharing one class made them share `position:absolute`
+    // too, which stacked the mute button exactly on top of the close
+    // button. The look is shared here; the placement is not.
+    ".x,.mute{width:44px;height:44px;min-width:44px;min-height:44px;border:0;background:transparent;",
+    "  color:#64748b;cursor:pointer;display:flex;align-items:center;justify-content:center;",
+    "  position:relative;pointer-events:auto;-webkit-tap-highlight-color:transparent;}",
+    ".x::before,.mute::before{content:'';position:absolute;width:30px;height:30px;border-radius:50%;",
+    "  background:rgba(15,23,42,.06);transition:background .15s,transform .15s;}",
+    ".x svg,.mute svg{position:relative;width:15px;height:15px;fill:none;stroke:currentColor;",
+    "  stroke-width:2.1;stroke-linecap:round;pointer-events:none;}",
+    ".x:hover::before,.mute:hover::before{background:rgba(15,23,42,.12);}",
+    ".x:hover,.mute:hover{color:#0f172a;}",
+    ".x:active::before,.mute:active::before{transform:scale(.92);}",
+    ".x:focus-visible,.mute:focus-visible{outline:none;}",
+    ".x:focus-visible::before,.mute:focus-visible::before{outline:2px solid " + brand + ";outline-offset:3px;}",
+    "@media (prefers-reduced-motion: reduce){.x::before,.mute::before{transition:none}}",
+    // ONLY the close button leaves the flow. It is a child of the panel so
+    // that it survives the header being hidden in the welcome view, which
+    // also means it must not occupy a row of that column.
+    ".x{position:absolute;top:var(--s2);" + (dir === "rtl" ? "left" : "right") + ":var(--s2);z-index:6;}",
+    // The mute button stays a normal item of the header row, ahead of the
+    // padding that reserves the close button's corner.
+    ".mute{flex:0 0 auto;}",
+
+    // The only scrolling region. The extra bottom padding is what lets
+    // the LAST suggested question clear the composer instead of sitting
+    // permanently underneath it.
+    // The ONLY scrolling region. The composer is a flex sibling below it,
+    // never an overlay, so nothing here can be trapped behind it.
+    ".bd{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;",
+    "  padding:var(--pad) var(--pad) var(--s4);scroll-behavior:smooth;overscroll-behavior:contain;}",
+    "@media (prefers-reduced-motion: reduce){.bd{scroll-behavior:auto}}",
+
+    // Welcome
+    // One gap between blocks, and a tighter one inside the title/subtitle
+    // pair so they read as a unit. The old sheet used a -8px margin on the
+    // subtitle to claw back a gap it had just declared.
+    ".wel{display:flex;flex-direction:column;gap:var(--s3);padding:var(--s2) 0 0;}",
+    ".wel-lg{width:52px;height:52px;border-radius:14px;object-fit:contain;background:#f8fafc;}",
+    ".wel-cp{display:flex;flex-direction:column;gap:var(--s1);}",
+    ".wel-h{font-size:21px;line-height:1.25;font-weight:670;letter-spacing:-.015em;margin:0;}",
+    // Measure, not just size: a subtitle that runs the full panel width is
+    // harder to scan than one that breaks where a person would.
+    ".wel-s{font-size:14px;line-height:1.45;color:#5b6b7f;margin:0;max-width:34ch;}",
+    ".wel[data-align='center'] .wel-s{margin-left:auto;margin-right:auto;}",
+    ".sug{display:flex;flex-direction:column;gap:var(--s1);}",
+    // Compact: 9px of padding and a 1.35 line-height instead of 12px and
+    // the panel default. Three questions now cost what two used to.
+    // `start`, resolved against the chip's OWN dir: a Hebrew suggestion
+    // and an English one in the same list each read from their own edge.
+    ".sug-b{text-align:start;border:1px solid #e8edf3;background:#fff;",
+    "  border-radius:11px;padding:9px 12px;font:inherit;font-size:13.5px;line-height:1.35;",
+    "  color:#1e293b;cursor:pointer;min-height:38px;display:flex;align-items:center;",
+    "  transition:border-color .15s,background .15s,color .15s;}",
+    // The accent earns its place on interaction rather than sitting on
+    // every border at rest.
+    ".sug-b:hover{border-color:" + brand + ";background:" + brand + "0b;color:#0f172a;}",
+    ".sug-b:active{background:" + brand + "16;}",
+    ".sug-b:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
+    "@media (prefers-reduced-motion: reduce){.sug-b{transition:none}}",
+    // §5 More than three questions collapses behind a quiet toggle rather
+    // than turning the welcome screen into a list.
+    // Follows the copy's alignment rather than picking its own, and stays
+    // quiet: it is an escape hatch for the curious, not a call to action.
+    // `flex-start` in a COLUMN flex container already resolves against
+    // the writing direction, so flipping it by hand was a double flip:
+    // in RTL the toggle landed on the left, opposite the questions it
+    // belongs to.
+    ".sug-more{align-self:flex-start;background:none;border:0;",
+    "  padding:var(--s1) var(--s2);margin:0;font:inherit;font-size:12.5px;font-weight:500;color:#64748b;",
+    "  cursor:pointer;border-radius:8px;}",
+    ".wel[data-align='center'] .sug-more{align-self:center;}",
+    ".sug-more:hover{color:" + brand + ";}",
+    ".sug-more:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;border-radius:6px;}",
+
+    // Messages
+    ".msgs{display:flex;flex-direction:column;gap:10px;}",
+    ".row{display:flex;flex-direction:column;max-width:100%;}",
+    ".row[data-me='1']{align-items:flex-end;}",
+    ".row[data-me='0']{align-items:flex-start;}",
+    // `text-align:start` resolves against the element's OWN dir, which is
+    // the message's, not the panel's. The two explicit rules below are
+    // not redundancy: they are what makes the intent readable in devtools
+    // when a bubble disagrees with the widget around it.
+    ".bub{max-width:84%;padding:10px 13px;border-radius:16px;font-size:14.5px;white-space:pre-wrap;word-break:break-word;text-align:start;}",
+    ".bub[dir='rtl']{text-align:right;}",
+    ".bub[dir='ltr']{text-align:left;}",
+    // A URL, price or part code inside prose of the other direction. The
+    // isolation is <bdi>'s own; this only stops a long link from forcing
+    // the bubble wider than the panel.
+    ".bub bdi,.why bdi,.card-ti bdi{unicode-bidi:isolate;overflow-wrap:anywhere;}",
+    ".row[data-me='1'] .bub{background:" + brand + ";color:" + onBrand + ";border-bottom-" + (dir === "rtl" ? "left" : "right") + "-radius:6px;}",
+    ".row[data-me='0'] .bub{background:#f1f5f9;color:#0f172a;border-bottom-" + (dir === "rtl" ? "right" : "left") + "-radius:6px;}",
+    ".who{font-size:11.5px;color:#94a3b8;margin:0 4px 3px;text-align:start;}",
+    ".mst{font-size:11px;color:#94a3b8;margin:3px 4px 0;text-align:start;}",
+    ".typ{display:inline-flex;gap:4px;align-items:center;padding:12px 14px;background:#f1f5f9;border-radius:16px;}",
+    ".typ i{width:6px;height:6px;border-radius:3px;background:#94a3b8;animation:blink 1.2s infinite;}",
+    ".typ i:nth-child(2){animation-delay:.2s}.typ i:nth-child(3){animation-delay:.4s}",
+    "@keyframes blink{0%,60%,100%{opacity:.3}30%{opacity:1}}",
+    "@media (prefers-reduced-motion: reduce){.typ i{animation:none;opacity:.6}}",
+    ".note{font-size:12.5px;color:#64748b;text-align:center;padding:8px 12px;}",
+
+    // Product cards
+    ".card{border:1px solid #e6eaf0;border-radius:16px;overflow:hidden;background:#fff;max-width:86%;}",
+    ".card-top{display:flex;gap:12px;padding:12px;}",
+    ".card-im{width:78px;height:78px;border-radius:11px;object-fit:cover;background:#f1f5f9;flex:0 0 auto;}",
+    ".card-in{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px;}",
+    ".card-ti{font-weight:620;font-size:14.5px;line-height:1.3;text-align:start;}",
+    ".card-pr{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;}",
+    ".pr{font-weight:650;font-size:15px;}",
+    ".pr-was{font-size:12.5px;color:#94a3b8;text-decoration:line-through;}",
+    ".tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 7px;border-radius:999px;}",
+    ".tag-sale{background:#fee2e2;color:#b91c1c;}",
+    ".tag-out{background:#f1f5f9;color:#64748b;}",
+    ".tag-dr{background:#fef3c7;color:#92400e;}",
+    ".why{font-size:12.5px;color:#475569;padding:0 12px 10px;text-align:start;}",
+    ".opts{padding:0 12px 10px;display:flex;flex-direction:column;gap:7px;}",
+    ".opt-l{font-size:11.5px;color:#64748b;}",
+    ".chips{display:flex;flex-wrap:wrap;gap:6px;}",
+    ".chip{border:1px solid #e2e8f0;background:#fff;border-radius:999px;padding:5px 11px;font:inherit;font-size:12.5px;cursor:pointer;color:#0f172a;}",
+    ".chip[aria-pressed='true']{border-color:" + brand + ";background:" + brand + ";color:" + onBrand + ";}",
+    ".chip:disabled{opacity:.4;cursor:not-allowed;text-decoration:line-through;}",
+    ".chip:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
+    ".qty{display:flex;align-items:center;gap:8px;padding:0 12px 10px;}",
+    ".qty-b{width:28px;height:28px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;font:inherit;color:#0f172a;}",
+    ".qty-b:disabled{opacity:.4;cursor:not-allowed;}",
+    ".qty-v{min-width:22px;text-align:center;font-size:14px;font-variant-numeric:tabular-nums;}",
+    ".acts{display:flex;gap:8px;padding:0 12px 12px;}",
+    ".btn{flex:1 1 0;min-width:0;border-radius:11px;padding:9px 10px;font:inherit;font-size:13.5px;font-weight:600;",
+    "  cursor:pointer;text-align:center;text-decoration:none;border:1px solid transparent;white-space:nowrap;",
+    "  overflow:hidden;text-overflow:ellipsis;}",
+    ".btn-p{background:" + brand + ";color:" + onBrand + ";}",
+    // A disabled primary button must not still look like the thing to
+    // press. Neutral outline reads as "not yet", which is the truth: the
+    // shopper has a size to choose first.
+    ".btn-p:disabled{background:#fff;color:#94a3b8;border-color:#e2e8f0;cursor:not-allowed;}",
+    ".btn-s{background:#fff;color:#0f172a;border-color:#e2e8f0;}",
+    ".btn-s:hover{border-color:#cbd5e1;}",
+    ".btn:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
+    ".cart-ok{display:flex;align-items:center;gap:6px;font-size:12.5px;color:#15803d;padding:0 12px 12px;}",
+    ".cart-err{font-size:12.5px;color:#b91c1c;padding:0 12px 12px;}",
+
+    // Carousel
+    ".car{position:relative;max-width:100%;}",
+    ".car-tr{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 2px 8px;",
+    "  scrollbar-width:thin;-webkit-overflow-scrolling:touch;}",
+    ".car-tr>*{flex:0 0 186px;scroll-snap-align:start;max-width:186px;}",
+    ".car-tr .card{max-width:100%;}",
+    ".car-tr .card-top{flex-direction:column;gap:9px;padding:10px;}",
+    ".car-tr .card-im{width:100%;height:112px;}",
+    // A carousel item is a shortlist entry, not a product page. Two lines
+    // of reasoning is enough to choose between three shoes; more turns
+    // the strip into a wall and buries the actions below the fold.
+    // padding-bottom would reveal a sliver of the clamped third line -
+    // `overflow:hidden` clips at the PADDING box, not the content box.
+    ".car-tr .why{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;",
+    "  line-height:1.35;max-height:2.7em;padding:0 10px;margin-bottom:8px;}",
+    // Stacked, full-width actions. Side by side at 186px both labels get
+    // ellipsised into "Add to …" and "View pr.", which is worse than
+    // taking a second row.
+    ".car-tr .acts{padding:0 10px 10px;flex-direction:column;gap:6px;}",
+    ".car-tr .btn{font-size:12.5px;padding:8px 8px;flex:0 0 auto;width:100%;}",
+    // Right-edge fade: without it a scrollable strip looks like a clipped
+    // one, and shoppers do not swipe what they cannot tell is swipeable.
+    ".car::after{content:'';position:absolute;top:0;bottom:14px;" + (dir === "rtl" ? "left" : "right") + ":0;",
+    "  width:26px;pointer-events:none;background:linear-gradient(to " + (dir === "rtl" ? "left" : "right") + ",rgba(255,255,255,0),#fff);}",
+    ".car-nav{display:flex;gap:6px;justify-content:flex-end;padding:0 2px;}",
+    ".car-n{width:28px;height:28px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;color:#475569;}",
+    ".car-n:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
+
+    // Composer
+    // A one-line composer by default. It was 115px of a 640px panel -
+    // more than the hero is allowed now - mostly padding around an empty
+    // textarea.
+    ".ft{border-top:1px solid #f0f3f7;padding:var(--s2) var(--s3);",
+    "  padding-bottom:calc(var(--s2) + env(safe-area-inset-bottom));background:#fff;flex:0 0 auto;}",
+    ".cmp{display:flex;align-items:flex-end;gap:var(--s2);}",
+    // border-box, or min-height:38 becomes 38 + padding + border = 56 -
+    // the same trap that made a "44px" header measure 57.
+    ".ta{flex:1 1 auto;box-sizing:border-box;resize:none;border:1px solid #e4e9f0;border-radius:11px;padding:8px 12px;",
+    "  font:inherit;font-size:16px;line-height:1.4;max-height:104px;min-height:38px;color:#0f172a;background:#fff;",
+    "  transition:border-color .15s,box-shadow .15s;}",
+    "@media (min-width: 561px){.ta{font-size:14px;}}",
+    // `start`, not `left`: with dir="auto" the caret begins on the side
+    // the shopper's language starts from, and the placeholder sits there
+    // waiting for it.
+    ".ta{text-align:start;}",
+    ".ta::placeholder{color:#9aa7b8;text-align:start;}",
+    ".ta:focus{outline:none;border-color:" + brand + ";box-shadow:0 0 0 3px " + brand + "1f;}",
+    "@media (prefers-reduced-motion: reduce){.ta{transition:none}}",
+    ".snd{width:38px;height:38px;flex:0 0 auto;border-radius:10px;border:0;background:" + brand + ";",
+    "  color:" + onBrand + ";cursor:pointer;display:flex;align-items:center;justify-content:center;",
+    "  transition:opacity .15s,transform .15s;}",
+    ".snd:disabled{opacity:.35;cursor:not-allowed;}",
+    ".snd:not(:disabled):active{transform:scale(.94);}",
+    ".snd:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
+    ".snd svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}",
+    "@media (prefers-reduced-motion: reduce){.snd{transition:none}}",
+    // §8 The footer states who is answering and offers a person. Neither
+    // needs height: this row is now 15px plus its gap.
+    ".sub{display:flex;align-items:center;justify-content:space-between;gap:var(--s2);margin-top:var(--s1);}",
+    ".lnk{background:none;border:0;padding:0;font:inherit;font-size:11.5px;color:#64748b;cursor:pointer;",
+    "  text-decoration:none;border-bottom:1px solid #cbd5e1;line-height:1.25;}",
+    ".lnk:hover{color:" + brand + ";border-bottom-color:" + brand + ";}",
+    ".lnk:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
+    ".pw{font-size:10.5px;color:#a3aec0;line-height:1.25;}",
+    ".banner{font-size:12.5px;padding:8px 14px;text-align:center;}",
+    ".banner[data-kind='warn']{background:#fef3c7;color:#92400e;}",
+    ".banner[data-kind='err']{background:#fee2e2;color:#b91c1c;}",
+    ".banner[data-kind='info']{background:#f1f5f9;color:#475569;}",
+
+    // Offline form
+    ".form{display:flex;flex-direction:column;gap:10px;padding:4px 2px;}",
+    ".fl{font-size:12.5px;color:#475569;}",
+    ".fi{border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;font:inherit;font-size:16px;color:#0f172a;}",
+    "@media (min-width: 561px){.fi{font-size:14.5px;}}",
+    ".fi:focus{outline:none;border-color:" + brand + ";box-shadow:0 0 0 3px " + brand + "22;}",
+    ".cbx{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:#475569;}",
+
+    ".sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}",
+
+    // Respect a shopper's contrast + forced-colors preferences.
+    "@media (prefers-contrast: more){",
+    "  .bub,.card,.chip,.ta,.fi,.sug-b{border:1px solid #0f172a;}",
+    "  .hd-st,.who,.mst,.pw,.note{color:#334155;}",
+    "}",
+    "@media (forced-colors: active){",
+    "  .panel,.card,.bub{border:1px solid CanvasText;}",
+    "  .btn-p,.snd{border:1px solid ButtonText;}",
+    "}",
+
+    // ── "Continue on WhatsApp" in the GOTCHA look: a chip beside close ──
+    ".wa{position:absolute;top:var(--s2);" + (dir === "rtl" ? "left" : "right") + ":calc(var(--s2) + 40px);z-index:6;",
+    "  width:32px;height:32px;border-radius:50%;border:0;background:#25D366;color:#fff;cursor:pointer;",
+    "  display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(15,23,42,.18);}",
+    ".wa svg{width:18px;height:18px;fill:currentColor;}",
+    ".wa:focus-visible{outline:2px solid #25D366;outline-offset:3px;}",
+    ".wa-note{align-self:center;margin:var(--s2) 0;font-size:12.5px;color:#475569;text-align:center;}",
+    ".wa-note a{color:#008069;font-weight:600;}",
+
+    // ── The WhatsApp look ──
+    // A green header in every view (no hero), the beige chat surface,
+    // WhatsApp's bubbles, a pill composer and a round green send.
+    ".panel[data-look='whatsapp'] .hero,.panel[data-look='whatsapp'] .wel-av,.panel[data-look='whatsapp'] .wel-lg,.panel[data-look='whatsapp'] .wa{display:none!important;}",
+    ".panel[data-look='whatsapp'] .hd{display:flex!important;background:#008069;color:#fff;border-bottom:0;}",
+    ".panel[data-look='whatsapp'] .hd-nm{color:#fff;}",
+    ".panel[data-look='whatsapp'] .hd-st{color:rgba(255,255,255,.88);}",
+    ".panel[data-look='whatsapp'] .hd-st .dot{display:none;}",
+    ".panel[data-look='whatsapp'] .hd-av{border-radius:50%;background:#fff;}",
+    ".panel[data-look='whatsapp'] .hd-mono{color:#008069;}",
+    // WhatsApp opens on the greeting alone; the visitor writes their own question.
+    ".panel[data-look='whatsapp'] .sug{display:none!important;}",
+    ".panel[data-look='whatsapp'] .x{color:#fff;}",
+    ".panel[data-look='whatsapp'] .x::before{background:transparent;}",
+    ".panel[data-look='whatsapp'] .bd{background:#EFEAE2;padding-top:var(--s4)!important;}",
+    ".panel[data-look='whatsapp'] .wel{padding-top:0!important;}",
+    ".panel[data-look='whatsapp'] .wel-h{display:inline-block;background:#fff;color:#111b21;font-size:14.5px;font-weight:400;",
+    "  padding:8px 12px;border-radius:8px;box-shadow:0 1px .5px rgba(11,20,26,.13);margin:0;}",
+    ".panel[data-look='whatsapp'] .bub{border-radius:8px;box-shadow:0 1px .5px rgba(11,20,26,.13);}",
+    ".panel[data-look='whatsapp'] .row[data-me='0'] .bub{background:#fff;color:#111b21;}",
+    ".panel[data-look='whatsapp'] .row[data-me='1'] .bub{background:#D9FDD3;color:#111b21;}",
+    ".panel[data-look='whatsapp'] .ta{border-radius:22px;border-color:transparent;background:#fff;}",
+    ".panel[data-look='whatsapp'] .ft{background:#EFEAE2;}",
+    ".panel[data-look='whatsapp'] .snd{border-radius:50%;background:#00a884;color:#fff;}",
+    // On a desktop the WhatsApp panel hugs the conversation, as WhatsApp's own
+    // web widget does, and grows (then scrolls) with it.
+    "@media (min-width: 561px){.panel[data-look='whatsapp'],.panel[data-look='whatsapp'][data-view='welcome']{height:auto;min-height:0;max-height:min(640px, calc(100vh - 120px));}",
+    "  .panel[data-look='whatsapp'] .bd{min-height:96px;}}",
+    // The greeting is a bubble on the business's side, not a full-width title.
+    ".panel[data-look='whatsapp'] .wel,.panel[data-look='whatsapp'] .wel-cp{align-items:flex-start;}",
+    ".panel[data-look='whatsapp'] .wel-h{max-width:84%;}",
+
+    // ── Design 7 ("GOTCHA Widgets on Store"): the chat widget ──
+    //
+    // Fixed geometry (supervisor-approved): 400 × min(680), radius 22, 96px
+    // up and 22px in from the bubble's side, on #FBF8F3. The legacy editor's
+    // corner radius, hero height, fade and avatar size are not read.
+    "@media (min-width: 561px){",
+    "  .panel[data-look='gotcha']{bottom:96px;" + side + ":22px;width:400px;max-width:min(400px, calc(100vw - 44px));",
+    "    height:min(680px, calc(100vh - 120px));border-radius:22px;",
+    "    box-shadow:0 0 0 1px rgba(43,38,34,.08),0 2px 4px rgba(43,38,34,.04),0 28px 64px -12px rgba(43,38,34,.30);}",
+    "  .panel[data-look='gotcha'][data-view='welcome']{height:min(680px, calc(100vh - 120px));min-height:0;max-height:none;}",
+    "}",
+    ".panel[data-look='gotcha']{background:#FBF8F3;color:#2B2622;font:400 15px/1.5 Heebo,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;}",
+    // Header (the conversation): a 38px avatar with the initial and the dot,
+    // the name and who answers, then the tools.
+    ".panel[data-look='gotcha'] .hd{min-height:62px;max-height:none;gap:11px;padding-block:12px;padding-inline:18px var(--tools, 56px);",
+    "  border-bottom:1px solid #EEE7DC;background:#FBF8F3;}",
+    ".panel[data-look='gotcha'] .hd-av{position:relative;width:38px;height:38px;border-radius:50%;background:" + brand + ";color:" + inkOn(brand) + ";",
+    "  display:flex;align-items:center;justify-content:center;overflow:visible;",
+    "  font:500 22px/1 'Cormorant Garamond',Georgia,'Times New Roman',serif;}",
+    ".panel[data-look='gotcha'] .hd-dot{position:absolute;bottom:0;left:0;width:11px;height:11px;box-sizing:border-box;border-radius:50%;",
+    "  background:#5FA578;border:2px solid #FBF8F3;}",
+    ".panel[data-look='gotcha'] .hd-nm{font-size:15.5px;font-weight:600;line-height:1.2;letter-spacing:-.005em;color:#2B2622;}",
+    ".panel[data-look='gotcha'] .hd-st{font-size:12.5px;color:#8A7A6C;margin-top:2px;}",
+    ".panel[data-look='gotcha'] .hd-st .dot{display:none;}",
+    // The tools: WhatsApp, a new conversation, mute, minimise. On the cover
+    // they are glass circles; in the header, quiet squares.
+    ".panel[data-look='gotcha'] .tools{position:absolute;z-index:6;display:flex;gap:6px;top:15px;" + (dir === "rtl" ? "left" : "right") + ":12px;}",
+    ".panel[data-look='gotcha'] .tl{position:relative;width:32px;height:32px;border-radius:9px;border:0;background:transparent;color:#5A4E45;",
+    "  display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;transition:background .15s ease;}",
+    ".panel[data-look='gotcha'] .tl:hover{background:#F1EAE0;}",
+    ".panel[data-look='gotcha'] .tl:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
+    ".panel[data-look='gotcha'] .tl svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}",
+    ".panel[data-look='gotcha'] .tl[data-act='whatsapp'] svg{fill:#25D366;stroke:none;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tools{top:12px;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tl{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.78);color:#2B2622;",
+    "  box-shadow:0 2px 8px rgba(43,38,34,.08);}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tl:hover{background:#fff;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tl[data-act='new']{display:none;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .hd{display:none;}",
+    // Welcome: a 168px cover dissolving into the widget, the brand's disc
+    // over its edge, the name, and the opening questions as rows.
+    ".panel[data-look='gotcha'][data-view='welcome'] .bd{padding:0;}",
+    ".panel[data-look='gotcha'] .cv{position:relative;height:168px;flex:none;overflow:hidden;background:#F1ECE8;}",
+    ".panel[data-look='gotcha'] .cv-m{display:block;width:100%;height:100%;object-fit:cover;}",
+    ".panel[data-look='gotcha'] .cv-fd{position:absolute;left:0;right:0;bottom:0;height:96px;pointer-events:none;",
+    "  background:linear-gradient(180deg,rgba(251,248,243,0) 0%,rgba(251,248,243,.85) 62%,#FBF8F3 100%);}",
+    ".panel[data-look='gotcha'] .disc{position:relative;z-index:2;width:100px;height:100px;margin:-56px auto 0;border-radius:50%;background:#fff;",
+    "  box-shadow:0 0 0 1px rgba(43,38,34,.05),0 14px 34px rgba(43,38,34,.14);",
+    "  display:flex;align-items:center;justify-content:center;color:#2B2622;flex:none;}",
+    ".panel[data-look='gotcha'] .disc img{max-width:64px;max-height:64px;object-fit:contain;}",
+    ".panel[data-look='gotcha'] .disc-wm{font:500 15px/1.15 'Cormorant Garamond',Georgia,'Times New Roman',serif;letter-spacing:.18em;",
+    "  text-align:center;max-width:84px;}",
+    ".panel[data-look='gotcha'] .disc-wm[data-fit='m']{font-size:13px;}",
+    ".panel[data-look='gotcha'] .disc-wm[data-fit='s']{font-size:11px;letter-spacing:.12em;}",
+    ".panel[data-look='gotcha'] .disc-wm[data-fit='initials']{font-size:30px;letter-spacing:.04em;}",
+    ".panel[data-look='gotcha'] .disc-on{position:absolute;bottom:4px;left:4px;width:20px;height:20px;box-sizing:border-box;border-radius:50%;",
+    "  background:#4FB06A;border:3px solid #fff;box-shadow:0 0 0 1px rgba(79,176,106,.35);}",
+    ".panel[data-look='gotcha'] .hd-dot::after,.panel[data-look='gotcha'] .disc-on::after{content:'';position:absolute;inset:-3px;border-radius:50%;",
+    "  background:rgba(80,190,100,.4);animation:gpulse 1.8s ease-out infinite;pointer-events:none;}",
+    "@keyframes gpulse{0%{transform:scale(1);opacity:.9}70%{transform:scale(2.8);opacity:0}100%{transform:scale(2.8);opacity:0}}",
+    ".panel[data-look='gotcha'] .disc-nm{margin-top:10px;text-align:center;font-size:13px;color:#8A7A6C;}",
+    ".panel[data-look='gotcha'] .gw{display:flex;flex-direction:column;}",
+    ".panel[data-look='gotcha'] .gw-in{padding:16px 20px 4px;display:flex;flex-direction:column;gap:14px;}",
+    ".panel[data-look='gotcha'] .gw-in .wel-s{margin:0 auto;text-align:center;color:#8A7A6C;}",
+    ".panel[data-look='gotcha'] .qs{display:flex;flex-direction:column;}",
+    ".panel[data-look='gotcha'] .q{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:12px 0;border:0;",
+    "  border-top:1px solid #ECE4D8;border-radius:0;background:none;color:#2B2622;font:inherit;font-size:14.5px;line-height:1.4;",
+    "  text-align:start;cursor:pointer;transition:color .15s ease;}",
+    ".panel[data-look='gotcha'] .q:first-child{border-top:0;}",
+    ".panel[data-look='gotcha'] .q:hover{color:#8A5240;}",
+    ".panel[data-look='gotcha'] .q:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
+    ".panel[data-look='gotcha'] .q-t{flex:1;min-width:0;}",
+    ".panel[data-look='gotcha'] .q svg{flex:none;width:16px;height:16px;fill:none;stroke:#B3A698;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}",
+    ".panel[data-look='gotcha'] .gw-in .sug-more{align-self:center;}",
+    // Messages: the visitor's in the main colour; the assistant's as text.
+    ".panel[data-look='gotcha'] .bd{padding:18px 20px 12px;}",
+    ".panel[data-look='gotcha'] .msgs{gap:14px;}",
+    ".panel[data-look='gotcha'] .row[data-me='1'] .bub{background:" + brand + ";color:" + inkOn(brand) + ";max-width:80%;padding:10px 14px;",
+    "  border-radius:16px;border-end-end-radius:4px;line-height:1.5;}",
+    ".panel[data-look='gotcha'] .row[data-me='0'] .bub{background:none;color:#3A322D;max-width:92%;padding:0;border-radius:0;line-height:1.65;}",
+    ".panel[data-look='gotcha'] .typ{background:none;padding:2px 0;}",
+    ".panel[data-look='gotcha'] .typ i{background:#A99C8E;}",
+    ".panel[data-look='gotcha'] .who{color:#A99C8E;}",
+    // The composer: a white pill, a round send in the main colour once there is something to send.
+    ".panel[data-look='gotcha'] .ft{border-top:1px solid #EEE7DC;padding:12px 14px 6px;padding-bottom:calc(6px + env(safe-area-inset-bottom));background:#FBF8F3;}",
+    ".panel[data-look='gotcha'] .cmp{align-items:center;gap:6px;background:#fff;border:1px solid #E6DDD0;border-radius:99px;",
+    "  padding-block:5px;padding-inline:18px 5px;}",
+    ".panel[data-look='gotcha'] .ta{border:0;background:transparent;border-radius:0;padding:10px 0;min-height:40px;font-size:16px;color:#2B2622;}",
+    "@media (min-width: 561px){.panel[data-look='gotcha'] .ta{font-size:14.5px;}}",
+    ".panel[data-look='gotcha'] .ta:focus{border:0;box-shadow:none;}",
+    ".panel[data-look='gotcha'] .cmp:focus-within{border-color:" + brand + ";}",
+    ".panel[data-look='gotcha'] .snd{width:40px;height:40px;border-radius:50%;background:" + brand + ";color:" + inkOn(brand) + ";}",
+    ".panel[data-look='gotcha'] .snd:disabled{opacity:1;background:#D6CCBF;color:#FBF8F3;}",
+    ".panel[data-look='gotcha'] .snd svg{width:18px;height:18px;stroke-width:1.9;}",
+    ".panel[data-look='gotcha'] .sub{justify-content:center;gap:12px;margin-top:4px;}",
+    // Powered by, with our logo, linked.
+    ".pwl{display:flex;align-items:center;justify-content:center;gap:6px;padding:2px 0 0;color:#A99C8E;",
+    "  font-size:10.5px;line-height:1;text-decoration:none;opacity:.9;}",
+    // Design 7's logo is 30px tall with padding round it; ours is cropped to
+    // the mark, so the same visible size (12px, 36px → 14px) is set directly.
+    ".pwl img{height:12px;width:auto;display:block;opacity:.7;}",
+    ".panel[data-look='whatsapp'] .pwl{color:#667781;font-size:11px;}",
+    ".panel[data-look='whatsapp'] .pwl img{height:14px;opacity:1;}",
+    // Docked (design 7): the full height of the screen, flush to its side,
+    // the page making room beside it.
+    "@media (min-width: 900px){",
+    "  .panel[data-look='gotcha'][data-docked='1']{top:0;bottom:0;" + side + ":0;width:400px;max-width:400px;height:100vh;",
+    "    border-radius:0;animation:none;box-shadow:" + (side === "right" ? "-1px 0 0 #E6DDD0,-12px 0 40px rgba(43,38,34,.08)" : "1px 0 0 #E6DDD0,12px 0 40px rgba(43,38,34,.08)") + ";}",
+    "  .panel[data-look='gotcha'][data-docked='1'][data-view='welcome']{height:100vh;}",
+    "}",
+    ".panel[data-look='gotcha'] .tl[data-act='dock'][aria-pressed='true']{background:#EDE5D9;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tl[data-act='dock'][aria-pressed='true']{background:#fff;}",
+    "@media (max-width: 899px){.panel[data-look='gotcha'] .tl[data-act='dock']{display:none;}}",
+    // Product cards (design 7): warm rules, the main colour's ink on its buttons.
+    ".panel[data-look='gotcha'] .card{border-color:#ECE4D8;border-radius:14px;}",
+    ".panel[data-look='gotcha'] .btn-p{background:" + brand + ";color:" + inkOn(brand) + ";border-radius:9px;}",
+    ".panel[data-look='gotcha'] .btn-s{border-color:#E3DACE;color:#2B2622;border-radius:9px;}",
+    ".panel[data-look='gotcha'] .chip{border-color:#E3DACE;}",
+    ".panel[data-look='gotcha'] .chip[aria-pressed='true']{color:" + inkOn(brand) + ";}",
+    "@media (prefers-reduced-motion: reduce){.panel[data-look='gotcha'] .hd-dot::after,.panel[data-look='gotcha'] .disc-on::after{animation:none;opacity:0}.panel[data-look='gotcha'] .q,.panel[data-look='gotcha'] .tl{transition:none}}",
+  ].join("\n"); }
+
+  var styleNode = document.createElement("style");
+  styleNode.textContent = buildCss();
+  shadow.appendChild(styleNode);
+
+  // ── Panel shell ─────────────────────────────────────────────────
+
+  // The hero video, when one is playing. Held so it can be stopped the
+  // moment it stops being visible - a muted loop running behind a closed
+  // panel is battery and bandwidth a shopper never agreed to spend.
+  var heroVideo = null;
+  var panel = el("div", "panel");
+  // Born closed, and says so in the attribute that owns visibility.
+  panel.setAttribute("data-state", "closed");
+  attr(panel, {
+    role: "dialog",
+    "aria-modal": "false",
+    "aria-label": welcome.assistantName || "Chat",
+    dir: dir,
+    lang: lang,
+    hidden: "",
+  });
+
+  panel.setAttribute("data-look", LOOK);
+  var header = el("div", "hd");
+  var logo = safeUrl(appearance.logoUrl) || safeUrl(appearance.avatarUrl);
+  var headerAvatar;
+  if (LOOK === "gotcha") {
+    // Design 7: the brand's initial on the main colour, and the dot while someone answers.
+    headerAvatar = el("div", "hd-av", brandInitial());
+    attr(headerAvatar, { "aria-hidden": "true" });
+    if (boot.availability !== "offline") headerAvatar.appendChild(el("span", "hd-dot"));
+  } else if (logo) {
+    headerAvatar = document.createElement("img");
+    headerAvatar.className = "hd-av";
+    headerAvatar.alt = "";
+    headerAvatar.src = logo;
+  } else {
+    // A merchant who has not uploaded a logo yet should get a monogram,
+    // not a solid block of brand colour that reads as a broken image.
+    headerAvatar = el("div", "hd-av hd-mono", (welcome.assistantName || "?").trim().charAt(0).toUpperCase());
+    attr(headerAvatar, { "aria-hidden": "true" });
+  }
+
+  var headerText = el("div", "hd-tx");
+  // In the WhatsApp look with a working handoff, the header says what the
+  // panel does ("Chat with us / write here and we continue on WhatsApp").
+  var headerName = el("div", "hd-nm", LOOK === "whatsapp" && WA_ON ? T.waTitle : welcome.assistantName || "");
+  var headerStatus = el("div", "hd-st");
+  var statusDot = el("span", "dot");
+  var statusText = el("span", null, "");
+  headerStatus.appendChild(statusDot);
+  headerStatus.appendChild(statusText);
+  headerText.appendChild(headerName);
+  headerText.appendChild(headerStatus);
+
+  var closeBtn = el("button", "x");
+  // A stable hook so tests and tooling can find THE close button rather
+  // than the first button that happens to carry a label.
+  attr(closeBtn, { type: "button", "aria-label": T.close, "data-act": "close" });
+  closeBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+  header.appendChild(headerAvatar);
+  header.appendChild(headerText);
+  // Visitor mute. Only offered when the merchant enabled sound at all -
+  // a mute button for silence a shopper already has is just clutter.
+  var muteBtn = null;
+  var soundsOn = !!(boot.widget && boot.widget.ux && boot.widget.ux.sounds && boot.widget.ux.sounds.enabled);
+  if (soundsOn && boot.setVisitorMuted) {
+    muteBtn = el("button", "mute");
+    attr(muteBtn, { type: "button", "data-act": "mute" });
+    paintMute();
+    on(muteBtn, "click", function () {
+      var next = !(boot.visitorMuted && boot.visitorMuted());
+      boot.setVisitorMuted(next);
+      paintMute();
+    });
+    header.appendChild(muteBtn);
+  }
+
+  function paintMute() {
+    if (!muteBtn) return;
+    var muted = boot.visitorMuted && boot.visitorMuted();
+    // The label states what the button DOES, which is what a screen
+    // reader user needs, not what the current state is.
+    attr(muteBtn, { "aria-label": muted ? T.unmute : T.mute, "aria-pressed": muted ? "true" : "false" });
+    muteBtn.innerHTML = muted
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M17 9l4 6M21 9l-4 6"/></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>';
+  }
+
+  // Appended to the panel, not the header: in WELCOME there is no
+  // header to live in, and duplicating it would mean two handlers.
+  panel.appendChild(closeBtn);
+
+  var WA_ICON =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.2.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.1.6a2.7 2.7 0 0 0 1.8-1.3 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z"/></svg>';
+  var waBtn = null;
+  if (WA_ON && LOOK === "gotcha") {
+    waBtn = el("button", "wa");
+    attr(waBtn, { type: "button", "aria-label": T.continueWa, title: T.continueWa, "data-act": "whatsapp" });
+    waBtn.innerHTML = WA_ICON;
+    on(waBtn, "click", function () { continueOnWhatsapp(""); });
+    panel.appendChild(waBtn);
+  }
+
+  // Design 7's tools, in one row at the panel's top corner: WhatsApp, a new
+  // conversation (where the host can start one), mute, and minimise - the
+  // one close control, so `data-act="close"` still names it. Glass circles
+  // over the cover, quiet squares in the header.
+  var dockBtn = null;
+  var newBtn = null;
+  if (LOOK === "gotcha") {
+    var tools = el("div", "tools");
+    closeBtn.className = "tl";
+    attr(closeBtn, { "aria-label": T.minimise, title: T.minimise });
+    closeBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+    if (waBtn) { waBtn.className = "tl"; tools.appendChild(waBtn); }
+    if (typeof boot.resetConversation === "function") {
+      newBtn = el("button", "tl");
+      attr(newBtn, { type: "button", "aria-label": T.newChat, title: T.newChat, "data-act": "new" });
+      newBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>';
+      on(newBtn, "click", newConversation);
+      tools.appendChild(newBtn);
+    }
+    // Docking needs a host that can step its bubble aside (the snippet), and
+    // a screen wide enough to keep the page beside the panel.
+    if (typeof boot.onDock === "function") {
+      dockBtn = el("button", "tl");
+      attr(dockBtn, { type: "button", "data-act": "dock" });
+      dockBtn.innerHTML = side === "right"
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>';
+      on(dockBtn, "click", function () { setDocked(!S.docked); });
+      tools.appendChild(dockBtn);
+      paintDock();
+    }
+    if (muteBtn) { muteBtn.className = "tl"; tools.appendChild(muteBtn); }
+    tools.appendChild(closeBtn);
+    panel.appendChild(tools);
+    // The header keeps its text clear of them.
+    panel.style.setProperty("--tools", tools.children.length * 38 + 12 + "px");
+  }
+
+  /**
+   * Design 7's docking: the panel takes the full height of the screen on
+   * its side and the page makes room for it - a padding on <html>, restored
+   * to exactly what it was. Undone by Minimise, Escape, and a screen too
+   * narrow to keep the page beside it.
+   */
+  var pagePad = null;
+  var padSide = side === "right" ? "paddingRight" : "paddingLeft";
+  function wideEnough() {
+    try { return window.matchMedia("(min-width: 900px)").matches; } catch (e) { return false; }
+  }
+  function paintDock() {
+    if (!dockBtn) return;
+    var label = S.docked ? T.undock : T.dock;
+    attr(dockBtn, { "aria-label": label, title: label, "aria-pressed": S.docked ? "true" : "false" });
+  }
+  function setDocked(docked) {
+    docked = !!docked && wideEnough();
+    if (docked === !!S.docked) return;
+    S.docked = docked;
+    var root = document.documentElement;
+    if (docked) {
+      pagePad = { value: root.style[padSide], transition: root.style.transition };
+      root.style.transition = "padding .32s ease";
+      root.style[padSide] = "400px";
+      panel.setAttribute("data-docked", "1");
+    } else {
+      panel.removeAttribute("data-docked");
+      if (pagePad) {
+        root.style[padSide] = pagePad.value;
+        var before = pagePad.transition;
+        setTimeout(function () { root.style.transition = before; }, 400);
+      }
+      pagePad = null;
+    }
+    paintDock();
+    if (typeof boot.onDock === "function") boot.onDock(docked);
+  }
+  window.addEventListener("resize", function () {
+    if (S.docked && !wideEnough()) setDocked(false);
+  });
+
+  var banner = el("div", "banner");
+  banner.hidden = true;
+
+  var body = el("div", "bd");
+  attr(body, { tabindex: "0", role: "log", "aria-live": "polite", "aria-relevant": "additions" });
+
+  var footer = el("div", "ft");
+  var composer = el("form", "cmp");
+  var textarea = document.createElement("textarea");
+  textarea.className = "ta";
+  // The ONE place `dir="auto"` is the right answer rather than a guess:
+  // the input has no history to reason from, first-strong is exactly the
+  // rule a typist expects, and it re-evaluates as they type. Empty, it
+  // inherits the panel, so the placeholder sits where the shopper is
+  // about to start typing.
+  attr(textarea, {
+    rows: "1",
+    dir: "auto",
+    placeholder: LOOK === "whatsapp" ? T.waPlaceholder : T.placeholder,
+    "aria-label": LOOK === "whatsapp" ? T.waPlaceholder : T.placeholder,
+    maxlength: "2000",
+  });
+  var sendBtn = el("button", "snd");
+  attr(sendBtn, { type: "submit", "aria-label": T.send, disabled: "" });
+  sendBtn.innerHTML =
+    dir === "rtl"
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4M10 6l-6 6 6 6"/></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16M14 6l6 6-6 6"/></svg>';
+  composer.appendChild(textarea);
+  composer.appendChild(sendBtn);
+
+  var subRow = el("div", "sub");
+  var humanBtn = el("button", "lnk", T.talkToHuman);
+  attr(humanBtn, { type: "button" });
+  if (!features.humanHandoff) humanBtn.hidden = true;
+  // Design 7: "Powered by" and our logo, linked - in both looks.
+  var poweredBy = document.createElement("a");
+  poweredBy.className = "pwl";
+  attr(poweredBy, { href: "https://gotcha.co.il", target: "_blank", rel: "noopener", dir: "ltr", "aria-label": T.poweredBy });
+  poweredBy.appendChild(el("span", null, "Powered by"));
+  var poweredLogo = document.createElement("img");
+  poweredLogo.src = ASSETS + "/widget/gotcha-line-dark.png";
+  poweredLogo.alt = "";
+  poweredBy.appendChild(poweredLogo);
+  if (!appearance.showPoweredBy) poweredBy.hidden = true;
+  subRow.appendChild(humanBtn);
+  subRow.appendChild(poweredBy);
+
+  footer.appendChild(composer);
+  footer.appendChild(subRow);
+
+  panel.appendChild(header);
+  panel.appendChild(banner);
+  panel.appendChild(body);
+  panel.appendChild(footer);
+  shadow.appendChild(panel);
+
+  els = { panel: panel, body: body, footer: footer, textarea: textarea, sendBtn: sendBtn };
+
+  // ── The visitor's language (W10) ───────────────────────────────
+  //
+  // The widget starts in the page's language. The first reply that says the
+  // conversation is in another one (the message answer's `locale`) switches
+  // the chrome to it - strings, direction, labels - once, and asks for the
+  // merchant's texts in it (/texts: only the ones written in another
+  // language; the assistant's name is never translated).
+  var langSwitched = false;
+
+  function relabel() {
+    var typeLabel = LOOK === "whatsapp" ? T.waPlaceholder : T.placeholder;
+    attr(textarea, { placeholder: typeLabel, "aria-label": typeLabel });
+    attr(sendBtn, { "aria-label": T.send });
+    sendBtn.innerHTML =
+      dir === "rtl"
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4M10 6l-6 6 6 6"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16M14 6l6 6-6 6"/></svg>';
+    humanBtn.textContent = T.talkToHuman;
+    attr(poweredBy, { "aria-label": T.poweredBy });
+    if (LOOK === "gotcha") attr(closeBtn, { "aria-label": T.minimise, title: T.minimise });
+    else attr(closeBtn, { "aria-label": T.close });
+    if (waBtn) attr(waBtn, { "aria-label": T.continueWa, title: T.continueWa });
+    if (newBtn) attr(newBtn, { "aria-label": T.newChat, title: T.newChat });
+    if (LOOK === "whatsapp" && WA_ON) headerName.textContent = T.waTitle;
+    paintDock();
+    paintMute();
+  }
+
+  function overlayTexts(texts) {
+    if (!texts || typeof texts !== "object") return;
+    var W = (widget.ux && widget.ux.welcome) || null;
+    Object.keys(texts).forEach(function (key) {
+      var value = texts[key];
+      if (typeof value !== "string" || !value.trim()) return;
+      if (key === "welcome.title") {
+        if (W) W.title = value;
+        welcome.headline = value;
+      } else if (key === "welcome.subtitle") {
+        if (W) W.subtitle = value;
+        welcome.subline = value;
+      } else if (key === "offline.message") {
+        if (widget.offline) widget.offline.message = value;
+      } else {
+        var m = /^welcome\.suggestedQuestions\.(\d+)$/.exec(key);
+        if (!m) return;
+        var i = Number(m[1]);
+        if (W && W.suggestedQuestions && i < W.suggestedQuestions.length) {
+          W.suggestedQuestions = W.suggestedQuestions.slice();
+          W.suggestedQuestions[i] = value;
+        }
+        if (welcome.suggestedQuestions && i < welcome.suggestedQuestions.length) {
+          welcome.suggestedQuestions = welcome.suggestedQuestions.slice();
+          welcome.suggestedQuestions[i] = value;
+        }
+      }
+    });
+  }
+
+  function switchLanguage(next) {
+    if (langSwitched || (next !== "he" && next !== "en") || next === lang) return;
+    langSwitched = true;
+    lang = next;
+    T = STRINGS[lang] || STRINGS.en;
+    dir = BIDI.resolveMessageDirection({ override: dirOverride, conversationLocale: lang, widgetLocale: null }).direction;
+    attr(panel, { dir: dir, lang: lang });
+    styleNode.textContent = buildCss();
+    relabel();
+    render();
+    api("/texts", { locale: lang })
+      .then(function (res) {
+        overlayTexts(res && res.data && res.data.texts);
+        render();
+      })
+      .catch(function () {});
+  }
+
+  // ── Networking ──────────────────────────────────────────────────
+
+  function token() {
+    return store.get("session");
+  }
+
+  // The channel's API base, supplied by whichever bootstrap loaded us.
+  // This is the ONLY thing in the bundle that was ever Shopify-specific:
+  // with commerce features off it is a general-purpose chat widget, and
+  // the website widget serves the same experience from the same file
+  // rather than a second implementation that drifts.
+  var API_BASE = boot.apiPath || "/api/shopify-chat";
+
+  function api(path, payload) {
+    return boot.post(API_BASE + path, payload || {}, token());
+  }
+
+  function apiGet(path) {
+    // Routed through the bootstrap when it offers a reader, so a channel
+    // whose API is shaped differently can adapt in ONE place instead of
+    // this bundle learning about every channel.
+    if (typeof boot.get === "function") return boot.get(API_BASE + path, token());
+    return fetch(API + API_BASE + path, {
+      headers: { "X-Visitor-Token": token() || "" },
+      credentials: "omit",
+      mode: "cors",
+    }).then(function (res) {
+      return res.json().then(function (json) {
+        if (!res.ok) {
+          var err = new Error(json.error || "request_failed");
+          err.status = res.status;
+          throw err;
+        }
+        return json;
+      });
+    });
+  }
+
+  function track(name, extra) {
+    var e = { name: name };
+    if (extra) Object.keys(extra).forEach(function (k) { e[k] = extra[k]; });
+    e.pageType = boot.context.pageType || null;
+    api("/events", { events: [e] }).catch(function () {});
+  }
+
+  // ── Realtime ────────────────────────────────────────────────────
+  //
+  // socket.io when we can get it, adaptive polling when we cannot. The
+  // fallback exists because a shopper on a locked-down network should
+  // still get their answer, just a few seconds later.
+
+  var ioPromise = null;
+  function loadIO() {
+    if (window.io) return Promise.resolve(window.io);
+    if (ioPromise) return ioPromise;
+    ioPromise = new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = ASSETS + "/widget/vendor/socket.io.min.js";
+      s.async = true;
+      s.crossOrigin = "anonymous";
+      s.onload = function () {
+        window.io ? resolve(window.io) : reject(new Error("io_missing"));
+      };
+      s.onerror = function () { reject(new Error("io_failed")); };
+      document.head.appendChild(s);
+    });
+    return ioPromise;
+  }
+
+  function connectRealtime() {
+    if (!S.conversationId) return;
+    if (socket && socket.connected) return;
+    setConnection("connecting");
+    loadIO()
+      .then(function (io) {
+        socket = io(API, {
+          path: "/socket.io",
+          transports: ["websocket", "polling"],
+          // A host whose visitors prove themselves differently (the code
+          // snippet's session token) says how; the storefront's signed token
+          // otherwise.
+          auth: typeof boot.socketAuth === "function" ? boot.socketAuth() : { visitorToken: token(), conversationId: S.conversationId },
+          reconnectionDelay: 800,
+          reconnectionDelayMax: 8000,
+          // Bounded on purpose. On a network that blocks websockets the
+          // default is an endless retry loop running alongside the HTTP
+          // fallback: twice the traffic, on a page we promised not to
+          // slow down. Give up and let polling carry the conversation.
+          reconnectionAttempts: 6,
+        });
+        socket.on("connect", function () {
+          setConnection("live");
+          stopPolling();
+          // A socket that reconnects after a gap has missed messages.
+          // Catching up on connect is what makes "reconnect restores the
+          // conversation" true rather than aspirational.
+          catchUp();
+        });
+        socket.on("visitor:message", function (payload) {
+          if (!payload || payload.conversationId !== S.conversationId) return;
+          // The only genuinely live delivery path, and so the only one
+          // allowed to make a sound.
+          ingest(typeof boot.normalize === "function" ? boot.normalize([payload.message]) : [payload.message], true);
+        });
+        socket.on("visitor:conversation", function (payload) {
+          if (!payload || payload.conversationId !== S.conversationId) return;
+          if (payload.isHandedOver) S.handedOver = true;
+          if (payload.status === "CLOSED") S.ended = true;
+          render();
+        });
+        socket.on("disconnect", function () {
+          setConnection("reconnecting");
+          startPolling(6000);
+        });
+        socket.on("connect_error", function () {
+          setConnection("polling");
+          startPolling(5000);
+        });
+        socket.io.on("reconnect_failed", function () {
+          // Stop trying entirely; polling is now the transport.
+          try { socket.close(); } catch (e) {}
+          socket = null;
+          setConnection("polling");
+          startPolling(5000);
+        });
+      })
+      .catch(function () {
+        setConnection("polling");
+        startPolling(5000);
+      });
+  }
+
+  function setConnection(next) {
+    if (S.connection === next) return;
+    S.connection = next;
+    renderBanner();
+  }
+
+  function startPolling(intervalMs) {
+    stopPolling();
+    pollTimer = setInterval(catchUp, intervalMs);
+  }
+  function stopPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
+  function catchUp() {
+    if (!token()) return Promise.resolve();
+    var q = S.lastCursor ? "?after=" + encodeURIComponent(S.lastCursor) : "";
+    return apiGet("/messages" + q)
+      .then(function (res) {
+        var data = res.data || {};
+        if (data.conversationId) {
+          S.conversationId = data.conversationId;
+          store.set("conversation", data.conversationId);
+        }
+        if (data.isHandedOver) S.handedOver = true;
+        if (data.status === "CLOSED") S.ended = true;
+        ingest(data.messages || []);
+      })
+      .catch(function (err) {
+        if (err && err.status === 429) {
+          S.rateLimited = true;
+          renderBanner();
+        }
+      });
+  }
+
+  /**
+   * Fold server messages into local state.
+   *
+   * Dedupes on id, and resolves optimistic sends: when the shopper's own
+   * message comes back from the server, the local placeholder is removed
+   * rather than leaving the message on screen twice.
+   */
+  /**
+   * @param live  true when these messages just arrived, false when they
+   *              are history being replayed. Only the former may make a
+   *              sound - a shopper reopening a chat must not hear a
+   *              burst of chimes for messages they already read.
+   */
+  function ingest(incoming, live) {
+    if (!incoming || !incoming.length) return;
+    var known = {};
+    S.messages.forEach(function (m) { known[m.id] = true; });
+    var added = 0;
+    incoming.forEach(function (m) {
+      if (!m || known[m.id]) return;
+      known[m.id] = true;
+      if (m.direction === "INBOUND") {
+        var idx = -1;
+        for (var i = 0; i < S.pending.length; i++) {
+          if (S.pending[i].body.trim() === String(m.body || "").trim()) { idx = i; break; }
+        }
+        if (idx >= 0) S.pending.splice(idx, 1);
+      } else {
+        S.awaitingReply = false;
+        if (!S.opened) S.unread++;
+        if (live && boot.playSound) {
+          // A human reply and an assistant reply are different events to
+          // a shopper, so they are different sounds.
+          var human = m.author && m.author.type === "AGENT";
+          boot.playSound(human ? "incoming_human" : "incoming_ai", { fromHistory: false });
+        }
+      }
+      S.messages.push(m);
+      S.lastCursor = m.createdAt;
+      added++;
+    });
+    if (!added) return;
+    S.messages.sort(function (a, b) {
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    });
+    if (!S.opened && boot.setUnread) boot.setUnread(S.unread);
+    render();
+  }
+
+  // ── Rendering ───────────────────────────────────────────────────
+
+  function renderStatus() {
+    var offline = boot.availability === "offline";
+    statusDot.setAttribute("data-off", offline ? "1" : "0");
+    statusText.textContent =
+      LOOK === "whatsapp" && WA_ON ? T.waSub
+        : offline ? T.offline
+        : LOOK === "gotcha" ? (S.awaitingReply ? T.waitingAi : T.replies)
+        : T.online;
+  }
+
+  function renderBanner() {
+    var kind = null;
+    var text = "";
+    if (S.rateLimited) { kind = "warn"; text = T.rateLimited; }
+    else if (S.ended) { kind = "info"; text = T.ended; }
+    else if (S.error) { kind = "err"; text = S.error; }
+    else if (S.connection === "reconnecting") { kind = "warn"; text = T.reconnecting; }
+    else if (S.handedOver && !hasAgentMessage()) { kind = "info"; text = T.waitingAgent; }
+
+    if (!kind) { banner.hidden = true; return; }
+    banner.hidden = false;
+    banner.setAttribute("data-kind", kind);
+    // `S.error` can be a server sentence in the shopper's language while
+    // the rest of these are widget strings, so the banner resolves rather
+    // than assumes.
+    setDirectedText(banner, text);
+  }
+
+  function hasAgentMessage() {
+    return S.messages.some(function (m) { return m.authorKind === "agent"; });
+  }
+
+  function render() {
+    renderStatus();
+    renderBanner();
+
+    // A handoff ends the welcome screen: the WhatsApp link belongs in the chat.
+    var inWelcome = !S.messages.length && !S.pending.length && S.phase === "welcome" && !S.waLink;
+    setPanelView(inWelcome ? "welcome" : "conversation");
+
+    if (S.phase === "offline_form") { setPanelView("conversation"); renderOfflineForm(); return; }
+    if (inWelcome) { renderWelcome(); return; }
+    // Leaving the welcome state: the hero is gone from the DOM the moment
+    // the message list replaces it, so release the video handle too
+    // rather than leaving a detached element decoding in the background.
+    pauseHero();
+    heroVideo = null;
+    renderMessages();
+  }
+
+  /**
+   * The rich welcome hero: image, GIF or muted looping video, fading into
+   * the chat surface with the brand avatar overlapping its bottom edge.
+   *
+   * Every branch here degrades to "no hero" rather than to a broken
+   * frame. A merchant who pastes a URL that 404s, or a browser that
+   * refuses autoplay, must still get a usable chat.
+   */
+  function renderHero(parent) {
+    var h = (boot.widget && boot.widget.ux && boot.widget.ux.hero) || null;
+    if (!h || h.mediaType === "none" || !h.mediaUrl) return null;
+    var url = safeUrl(h.mediaUrl);
+    if (!url) return null;
+
+    var mobile = window.matchMedia("(max-width: 560px)").matches;
+    var configured = mobile ? h.mobileHeight : h.height;
+
+    // The merchant's height is a PREFERENCE; the panel has the last word.
+    // Mirrors resolveHeroHeight() in @chatcenter/shared - the widget ships
+    // without a bundler and cannot import it, so the rule is duplicated
+    // deliberately and tested on both sides.
+    // The panel's MAXIMUM height, not its current one. In the welcome view
+    // the panel sizes to its content, so measuring it here would be
+    // circular - and before first paint it measures zero.
+    var panelH = mobile ? window.innerHeight : Math.min(640, window.innerHeight - 120);
+    var reserved = mobile ? 264 : 288;
+    var height = Math.min(configured, Math.max(0, panelH - reserved), Math.floor(panelH * (mobile ? 0.22 : 0.25)));
+    // Below ~72px a hero reads as a stripe. Drop it rather than show it badly.
+    if (height < 72) return null;
+
+    var hero = el("div", "hero");
+    hero.style.height = height + "px";
+    if (h.cornerRadius) hero.style.borderRadius = h.cornerRadius + "px";
+
+    var media;
+    if (h.mediaType === "video") {
+      media = document.createElement("video");
+      // Muted + playsinline are the only combination browsers will
+      // autoplay. Audio never autoplays, on any platform, by design.
+      media.muted = true;
+      media.defaultMuted = true;
+      media.setAttribute("muted", "");
+      media.setAttribute("playsinline", "");
+      media.playsInline = true;
+      media.loop = !!h.videoLoop;
+      media.preload = "none";
+      var poster = safeUrl(h.posterUrl);
+      if (poster) media.poster = poster;
+      media.src = url;
+      // A shopper who asked their OS for less motion gets the poster.
+      var still = reducedMotion() || !h.videoAutoplay;
+      if (!still) {
+        var p = media.play();
+        if (p && p.catch) p.catch(function () { /* autoplay refused: poster stands in */ });
+      }
+      heroVideo = media;
+    } else {
+      media = document.createElement("img");
+      media.src = url;
+      media.alt = "";
+      media.loading = "lazy";
+      media.decoding = "async";
+    }
+    media.className = "hero-m";
+    media.style.height = "100%";
+    media.style.objectFit = h.objectFit || "cover";
+    media.style.objectPosition = h.focalPoint || "50% 50%";
+    // A dead URL leaves no trace: the frame collapses instead of showing
+    // a broken-image glyph at the top of the chat.
+    media.onerror = function () {
+      try { hero.remove(); } catch (e) { if (hero.parentNode) hero.parentNode.removeChild(hero); }
+    };
+    hero.appendChild(media);
+
+    if (h.overlayStrength > 0) {
+      var ov = el("div", "hero-ov");
+      ov.style.background = "rgba(0,0,0," + (h.overlayStrength / 100) + ")";
+      hero.appendChild(ov);
+    }
+    if (h.fadeStrength > 0) {
+      var fd = el("div", "hero-fd");
+      var bg = h.backgroundColor || "#ffffff";
+      fd.style.height = Math.round(height * (h.fadeStrength / 100)) + "px";
+      fd.style.background = "linear-gradient(to bottom, " + hexToRgba(bg, 0) + ", " + bg + ")";
+      hero.appendChild(fd);
+    }
+    parent.appendChild(hero);
+    return h;
+  }
+
+  /** #rrggbb -> rgba(), so a gradient can start fully transparent. */
+  function hexToRgba(hex, alpha) {
+    var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ""));
+    if (!m) return "rgba(255,255,255," + alpha + ")";
+    return "rgba(" + parseInt(m[1], 16) + "," + parseInt(m[2], 16) + "," + parseInt(m[3], 16) + "," + alpha + ")";
+  }
+
+  function reducedMotion() {
+    try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; }
+  }
+
+  /**
+   * Design 7's welcome: a 168px cover (the merchant's image, or the plain
+   * cover colour) dissolving into the widget over 96px, the brand's disc
+   * over its edge with the green dot, the assistant's name, and the opening
+   * questions as rows. No title: the questions are the opening.
+   */
+  function renderWelcomeG() {
+    footer.hidden = false;
+    var W = (boot.widget && boot.widget.ux && boot.widget.ux.welcome) || null;
+    var wrap = el("div", "gw");
+    var cover = el("div", "cv");
+    var h = (boot.widget && boot.widget.ux && boot.widget.ux.hero) || null;
+    var url = h && h.mediaType !== "none" ? safeUrl(h.mediaUrl) : null;
+    if (url) {
+      var media;
+      if (h.mediaType === "video") {
+        media = document.createElement("video");
+        media.muted = true;
+        media.defaultMuted = true;
+        media.setAttribute("muted", "");
+        media.setAttribute("playsinline", "");
+        media.playsInline = true;
+        media.loop = h.videoLoop !== false;
+        media.preload = "none";
+        var poster = safeUrl(h.posterUrl);
+        if (poster) media.poster = poster;
+        media.src = url;
+        if (!reducedMotion() && h.videoAutoplay !== false) {
+          var playing = media.play();
+          if (playing && playing.catch) playing.catch(function () {});
+        }
+        heroVideo = media;
+      } else {
+        media = document.createElement("img");
+        media.alt = "";
+        media.decoding = "async";
+        media.src = url;
+      }
+      media.className = "cv-m";
+      if (h.focalPoint) media.style.objectPosition = h.focalPoint;
+      // A dead link leaves the plain cover, never a broken-image glyph.
+      media.onerror = function () { if (media.parentNode) media.parentNode.removeChild(media); };
+      cover.appendChild(media);
+    }
+    cover.appendChild(el("div", "cv-fd"));
+    wrap.appendChild(cover);
+    setPanelHero(true);
+
+    var disc = el("div", "disc");
+    attr(disc, { "aria-hidden": "true" });
+    var wordmark = function () {
+      var mark = brandWordmark();
+      var longest = Math.max.apply(null, [0].concat(mark.split(/\s+/).map(function (w) { return Array.from(w).length; })));
+      var fit = longest <= 5 ? "l" : longest <= 6 ? "m" : longest <= 7 ? "s" : "initials";
+      var text = fit === "initials" ? brandInitial() : mark;
+      var span = el("span", "disc-wm", text);
+      attr(span, { dir: "auto", "data-fit": fit });
+      return span;
+    };
+    var logoUrl = safeUrl(appearance.logoUrl);
+    if (logoUrl) {
+      var img = document.createElement("img");
+      img.alt = "";
+      img.src = logoUrl;
+      img.onerror = function () { if (img.parentNode) disc.replaceChild(wordmark(), img); };
+      disc.appendChild(img);
+    } else {
+      disc.appendChild(wordmark());
+    }
+    if (boot.availability !== "offline") disc.appendChild(el("span", "disc-on"));
+    wrap.appendChild(disc);
+    if (welcome.assistantName) wrap.appendChild(directedEl("div", "disc-nm", welcome.assistantName));
+
+    var inner = el("div", "gw-in");
+    if (boot.availability === "offline" && widget.offline && widget.offline.message) {
+      inner.appendChild(directedEl("p", "wel-s", widget.offline.message));
+    }
+    var questions = (W && W.suggestedQuestions && W.suggestedQuestions.length ? W.suggestedQuestions : welcome.suggestedQuestions) || [];
+    questions = questions.filter(function (q) { return String(q || "").trim(); });
+    if (questions.length) {
+      var list = el("div", "qs sug");
+      attr(list, { role: "group", "aria-label": T.startConversation });
+      var VISIBLE = 3;
+      var hidden = [];
+      var arrow = dir === "rtl"
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>';
+      questions.forEach(function (q, i) {
+        var b = el("button", "q sug-b");
+        attr(b, { type: "button" });
+        b.appendChild(directedEl("span", "q-t", q));
+        b.insertAdjacentHTML("beforeend", arrow);
+        on(b, "click", function () {
+          track("suggested_question_clicked");
+          submit(q);
+        });
+        if (i >= VISIBLE) {
+          b.hidden = true;
+          hidden.push(b);
+        }
+        list.appendChild(b);
+      });
+      inner.appendChild(list);
+      if (hidden.length) {
+        var more = el("button", "sug-more", T.showMore.replace("{n}", String(hidden.length)));
+        attr(more, { type: "button", "aria-expanded": "false" });
+        on(more, "click", function () {
+          hidden.forEach(function (b) { b.hidden = false; });
+          more.remove();
+          if (hidden[0].scrollIntoView) hidden[0].scrollIntoView({ block: "nearest" });
+        });
+        inner.appendChild(more);
+      }
+    }
+    if (boot.availability === "offline" && widget.offline && widget.offline.behavior === "form") {
+      var toForm = el("button", "btn btn-p", T.submit);
+      attr(toForm, { type: "button" });
+      on(toForm, "click", function () { S.phase = "offline_form"; render(); });
+      inner.appendChild(toForm);
+      footer.hidden = true;
+    }
+    wrap.appendChild(inner);
+    clear(body).appendChild(wrap);
+  }
+
+  function renderWelcome() {
+    if (LOOK === "gotcha") { renderWelcomeG(); return; }
+    footer.hidden = false;
+    var wrap = el("div", "wel");
+    // Canonical source. `welcome` (the legacy block) is still read by the
+    // server-side migration, but by the time it reaches here there is
+    // exactly one place to look.
+    var W = (boot.widget && boot.widget.ux && boot.widget.ux.welcome) || null;
+    var hero = renderHero(wrap);
+    setPanelHero(!!hero);
+
+    // With a hero the avatar overlaps its bottom edge; without one the
+    // original logo treatment is unchanged.
+    var avatarUrl = safeUrl(W && W.avatarUrl) || safeUrl(appearance.logoUrl);
+    if (hero && avatarUrl) {
+      var av = document.createElement("img");
+      av.className = "wel-av";
+      av.src = avatarUrl;
+      av.alt = "";
+      var avSize = (W && W.avatarSize) || 56;
+      av.style.width = avSize + "px";
+      av.style.height = avSize + "px";
+      av.style.marginTop = "-" + ((W && W.avatarOverlap) || 30) + "px";
+      av.style.marginLeft = "auto";
+      av.style.marginRight = "auto";
+      av.onerror = function () { av.style.display = "none"; };
+      wrap.appendChild(av);
+    }
+
+    var logoUrl = hero ? null : safeUrl(appearance.logoUrl);
+    if (logoUrl) {
+      var img = document.createElement("img");
+      img.className = "wel-lg";
+      img.src = logoUrl;
+      img.alt = "";
+      wrap.appendChild(img);
+    }
+    var title = (W && W.title) || welcome.headline || "";
+    var subtitle = (W && W.subtitle) || welcome.subline || "";
+    // Grouped: a title and its subtitle are one thought, and should not be
+    // separated by the same gap that separates them from the questions.
+    var copy = el("div", "wel-cp");
+    copy.appendChild(directedEl("h2", "wel-h", title));
+    if (subtitle) copy.appendChild(directedEl("p", "wel-s", subtitle));
+    wrap.appendChild(copy);
+    if (!W || W.textAlign !== "start") {
+      wrap.style.textAlign = "center";
+      wrap.setAttribute("data-align", "center");
+    }
+
+    if (boot.availability === "offline" && widget.offline && widget.offline.message) {
+      wrap.appendChild(directedEl("p", "wel-s", widget.offline.message));
+    }
+
+    var questions = (W && W.suggestedQuestions && W.suggestedQuestions.length ? W.suggestedQuestions : welcome.suggestedQuestions) || [];
+    if (questions.length) {
+      var list = el("div", "sug");
+      attr(list, { role: "group", "aria-label": T.startConversation });
+      // Three is what a shopper reads; a fourth and fifth are a list they
+      // skip. The rest stay one tap away rather than costing everyone the
+      // height.
+      var VISIBLE = 3;
+      var hidden = [];
+      questions.forEach(function (q, i) {
+        // A merchant may write suggestions in a language other than the
+        // widget's; each chip reads in its own.
+        var b = directedEl("button", "sug-b", q);
+        attr(b, { type: "button" });
+        on(b, "click", function () {
+          track("suggested_question_clicked");
+          submit(q);
+        });
+        if (i >= VISIBLE) {
+          b.hidden = true;
+          hidden.push(b);
+        }
+        list.appendChild(b);
+      });
+      if (hidden.length) {
+        var more = el("button", "sug-more", T.showMore.replace("{n}", String(hidden.length)));
+        attr(more, { type: "button", "aria-expanded": "false" });
+        on(more, "click", function () {
+          hidden.forEach(function (b) { b.hidden = false; });
+          more.remove();
+          // The newly revealed questions are below the fold by definition,
+          // so say so by moving to them rather than leaving the shopper to
+          // wonder whether anything happened.
+          hidden[0].scrollIntoView({ block: "nearest" });
+        });
+        list.appendChild(more);
+      }
+      wrap.appendChild(list);
+    }
+
+    if (boot.availability === "offline" && widget.offline && widget.offline.behavior === "form") {
+      var toForm = el("button", "btn btn-p", T.submit);
+      attr(toForm, { type: "button" });
+      on(toForm, "click", function () { S.phase = "offline_form"; render(); });
+      wrap.appendChild(toForm);
+      footer.hidden = true;
+    }
+
+    clear(body).appendChild(wrap);
+  }
+
+  function renderMessages() {
+    footer.hidden = false;
+    var list = el("div", "msgs");
+
+    // Only label the first message of a run. Repeating the assistant's
+    // name above every consecutive bubble reads like three different
+    // people talking.
+    var previousAuthor = null;
+    S.messages.forEach(function (m) {
+      list.appendChild(messageRow(m, m.author === previousAuthor));
+      previousAuthor = m.author;
+    });
+    S.pending.forEach(function (p) { list.appendChild(pendingRow(p)); });
+    // After a handoff: the link stays in the chat (a blocked window, or a
+    // visitor who closed WhatsApp and wants it back).
+    if (S.waLink) list.appendChild(waNote(S.waLink));
+
+    if (S.awaitingReply && !S.ended) {
+      var typing = el("div", "row");
+      // The dots stand in for a reply that has not arrived, so they take
+      // the direction the conversation is being held in.
+      attr(typing, { "data-me": "0", dir: dir });
+      var t = el("div", "typ");
+      attr(t, { "aria-label": T.waitingAi });
+      t.appendChild(el("i"));
+      t.appendChild(el("i"));
+      t.appendChild(el("i"));
+      typing.appendChild(t);
+      list.appendChild(typing);
+    }
+
+    clear(body).appendChild(list);
+    scrollToEnd();
+  }
+
+  function messageRow(m, sameAuthorAsPrevious) {
+    var row = el("div", "row");
+    attr(row, { "data-me": m.direction === "INBOUND" ? "1" : "0" });
+
+    if (m.direction === "OUTBOUND" && m.author && !sameAuthorAsPrevious) {
+      // An agent called "דנה" and one called "Dana" belong on opposite
+      // sides of their own label.
+      row.appendChild(directedEl("div", "who", m.author));
+    }
+    if (m.commerce && m.commerce.products && m.commerce.products.length) {
+      row.appendChild(
+        m.commerce.products.length > 1
+          ? carousel(m.commerce)
+          : productCard(m.commerce.products[0], m.commerce.addToCartEnabled),
+      );
+      // Re-renders are frequent (every new message repaints the list);
+      // the impression is the message, not the paint.
+      if (!shownProducts[m.id]) {
+        shownProducts[m.id] = true;
+        track("product_shown", { productId: m.commerce.products[0].productId });
+      }
+      return row;
+    }
+    // `m.locale` is the server's own statement about this message's
+    // language when it has one (a translated or generated reply knows);
+    // otherwise the text decides.
+    if (m.body) row.appendChild(directedEl("div", "bub", m.body, m.locale));
+    return row;
+  }
+
+  function pendingRow(p) {
+    var row = el("div", "row");
+    attr(row, { "data-me": "1" });
+    row.appendChild(directedEl("div", "bub", p.body));
+    // The status line is widget chrome, so it follows the widget.
+    row.appendChild(attr(el("div", "mst", p.failed ? T.failed : "· · ·"), { dir: dir }));
+    if (p.failed) {
+      var retry = el("button", "lnk", T.retry);
+      attr(retry, { type: "button" });
+      on(retry, "click", function () {
+        p.failed = false;
+        render();
+        deliver(p);
+      });
+      row.appendChild(retry);
+    }
+    return row;
+  }
+
+  // ── Product card ────────────────────────────────────────────────
+
+  /**
+   * @param compact  Rendered inside a carousel. A shortlist entry is a
+   *   choice between products, not a configurator: the variant picker
+   *   and quantity stepper are dropped, and Add to Cart only appears
+   *   when a variant is already resolved. Anything else belongs on the
+   *   single card the shopper lands on after choosing.
+   */
+  function productCard(product, addToCartAllowed, compact) {
+    var card = el("div", "card");
+    // The card is CHROME. Its layout follows the widget, not the message
+    // it happens to sit under, so an English-titled product inside a
+    // Hebrew reply does not flip the image, the buttons and the stepper
+    // to the other side mid-conversation. Only the text inside it -
+    // title, reason - resolves per string.
+    attr(card, { dir: dir });
+    var vState = {
+      variantId: initialVariant(product),
+      quantity: 1,
+      busy: false,
+      done: false,
+      error: null,
+    };
+
+    function paint() {
+      clear(card);
+      var variant = findVariant(product, vState.variantId);
+
+      var top = el("div", "card-top");
+      var imgUrl = safeUrl(product.imageUrl);
+      if (imgUrl) {
+        var img = document.createElement("img");
+        img.className = "card-im";
+        img.src = imgUrl;
+        img.alt = "";
+        // Attributes, not properties: a browser that does not implement
+        // the `loading` IDL still honours the attribute, and it is what
+        // a merchant's own auditing tools will look for.
+        img.setAttribute("loading", "lazy");
+        img.setAttribute("decoding", "async");
+        on(img, "error", function () { img.remove(); });
+        top.appendChild(img);
+      } else {
+        top.appendChild(el("div", "card-im"));
+      }
+
+      var info = el("div", "card-in");
+      // A product title is the merchant's, in whatever language they sell
+      // in - never assumed to match the shopper's.
+      info.appendChild(directedEl("div", "card-ti", product.title));
+
+      // Prices, discounts and the row that holds them are LTR whatever
+      // language surrounds them: "₪120.00" reversed is not a price, and a
+      // "-25%" whose minus sign has migrated is a price rise.
+      var priceRow = el("div", "card-pr");
+      attr(priceRow, { dir: "ltr" });
+      var price = variant && variant.price != null ? variant.price : product.price;
+      var wasPrice =
+        variant && variant.compareAtPrice != null ? variant.compareAtPrice : product.compareAtPrice;
+      priceRow.appendChild(ltrAtom("pr", money(price, product.currency)));
+      if (wasPrice && Number(wasPrice) > Number(price)) {
+        priceRow.appendChild(ltrAtom("pr-was", money(wasPrice, product.currency)));
+        priceRow.appendChild(ltrAtom("tag tag-sale", "-" +
+          Math.round((1 - Number(price) / Number(wasPrice)) * 100) + "%"));
+      }
+      info.appendChild(priceRow);
+
+      var purchasable = variant ? variant.available : product.available;
+      if (!purchasable) info.appendChild(el("span", "tag tag-out", T.soldOut));
+      if (product.published === false) info.appendChild(el("span", "tag tag-dr", T.notPublished));
+
+      top.appendChild(info);
+      card.appendChild(top);
+
+      // The "why this one" line is written by the AI employee in the
+      // shopper's language, so it resolves its own direction rather than
+      // inheriting the card's.
+      if (product.reason) card.appendChild(directedEl("div", "why", product.reason));
+
+      // Variant picker. A product with real options never gets an
+      // arbitrary variant chosen for the shopper - Add to Cart stays
+      // disabled until they pick one that actually exists. Anything with
+      // more than one variant gets the picker.
+      //
+      // It used to also require named options, and `optionNames` drops
+      // the option Shopify calls "Title". A product whose only option is
+      // named Title but whose values are real ("Small", "Large") showed
+      // no picker at all, and if the variant it opened on could not be
+      // bought, Add to Cart sat there disabled with nothing on the card
+      // that could ever enable it. The variant titles are always present,
+      // so there is always something to label the chips with.
+      var needsChoice = product.variants.length > 1;
+      if (needsChoice && !compact) {
+        var opts = el("div", "opts");
+        opts.appendChild(el("div", "opt-l", T.chooseOption));
+        var chips = el("div", "chips");
+        attr(chips, { role: "group", "aria-label": T.chooseOption });
+        product.variants.forEach(function (v) {
+          var chip = el("button", "chip", v.title);
+          attr(chip, {
+            type: "button",
+            "aria-pressed": v.variantId === vState.variantId ? "true" : "false",
+          });
+          if (!v.available) {
+            chip.disabled = true;
+            attr(chip, { "aria-label": v.title + " - " + T.soldOut });
+          }
+          on(chip, "click", function () {
+            vState.variantId = v.variantId;
+            vState.error = null;
+            vState.done = false;
+            track("variant_selected", { productId: product.productId });
+            paint();
+          });
+          chips.appendChild(chip);
+        });
+        opts.appendChild(chips);
+        card.appendChild(opts);
+      }
+
+      var canAdd =
+        addToCartAllowed &&
+        features.addToCart &&
+        !!variant &&
+        variant.available &&
+        !variant.requiresSellingPlan &&
+        product.published !== false;
+
+      if (canAdd && !compact) {
+        var qtyRow = el("div", "qty");
+        var minus = el("button", "qty-b", "−");
+        attr(minus, { type: "button", "aria-label": T.quantity + " −" });
+        minus.disabled = vState.quantity <= 1;
+        var qtyVal = el("span", "qty-v", String(vState.quantity));
+        attr(qtyVal, { "aria-live": "polite", "aria-label": T.quantity + " " + vState.quantity });
+        var plus = el("button", "qty-b", "+");
+        attr(plus, { type: "button", "aria-label": T.quantity + " +" });
+        plus.disabled = vState.quantity >= 10;
+        on(minus, "click", function () { vState.quantity = Math.max(1, vState.quantity - 1); paint(); });
+        on(plus, "click", function () { vState.quantity = Math.min(10, vState.quantity + 1); paint(); });
+        qtyRow.appendChild(minus);
+        qtyRow.appendChild(qtyVal);
+        qtyRow.appendChild(plus);
+        card.appendChild(qtyRow);
+      }
+
+      var acts = el("div", "acts");
+      // In a carousel, only offer Add to Cart when there is genuinely
+      // nothing left to choose. Otherwise the button would either lie or
+      // pick a size for the shopper.
+      var offerAdd = addToCartAllowed && features.addToCart && (!compact || canAdd);
+      if (offerAdd) {
+        var add = el("button", "btn btn-p", vState.busy ? T.adding : T.addToCart);
+        attr(add, { type: "button" });
+        add.disabled = !canAdd || vState.busy;
+        on(add, "click", function () { addToCart(product, vState, paint); });
+        acts.appendChild(add);
+      }
+      var view = el("a", "btn btn-s", T.viewProduct);
+      var href = safeUrl(product.productUrl);
+      if (href) {
+        attr(view, { href: href, target: "_top", rel: "noopener" });
+        on(view, "click", function () { track("product_clicked", { productId: product.productId }); });
+      }
+      acts.appendChild(view);
+      card.appendChild(acts);
+
+      if (vState.done) {
+        var ok = el("div", "cart-ok");
+        ok.appendChild(el("span", null, "✓ " + T.added));
+        card.appendChild(ok);
+        var after = el("div", "acts");
+        // Only where the cart page is known (the storefront's; a web chat
+        // store's is not, so it offers none rather than a guess).
+        if (vState.cartPage) {
+          var cart = el("a", "btn btn-s", T.viewCart);
+          attr(cart, { href: vState.cartPage, target: "_top" });
+          after.appendChild(cart);
+        }
+        var keep = el("button", "btn btn-s", T.keepShopping);
+        attr(keep, { type: "button" });
+        on(keep, "click", function () { vState.done = false; paint(); });
+        after.appendChild(keep);
+        card.appendChild(after);
+      }
+      // The shopper-safe sentence the server sends is in the shopper's
+      // language, not the widget's.
+      if (vState.error) card.appendChild(directedEl("div", "cart-err", vState.error));
+    }
+
+    paint();
+    return card;
+  }
+
+  /**
+   * The variant the card opens on.
+   *
+   * The server resolves one for us, but it resolves the FIRST variant,
+   * which is not always a purchasable one. Opening on a sold-out variant
+   * left Add to Cart disabled on a product that was in stock in every
+   * other size, and in a carousel - where there is no picker - it removed
+   * the button entirely. So: keep the server's choice when it can
+   * actually be bought, and only fall back when there is genuinely
+   * nothing being chosen on the shopper's behalf.
+   */
+  function initialVariant(product) {
+    var chosen = product.selectedVariantId ? findVariant(product, product.selectedVariantId) : null;
+    if (chosen && chosen.available && !chosen.requiresSellingPlan) return chosen.variantId;
+    var auto = autoVariant(product);
+    if (auto) return auto;
+    // Nothing purchasable to fall back to. Keep the server's variant so
+    // the card still shows its price and its "sold out" tag rather than
+    // going blank.
+    return chosen ? chosen.variantId : null;
+  }
+
+  function autoVariant(product) {
+    var variants = product.variants || [];
+    if (!variants.length) return null;
+    // One variant: nothing to choose, so it IS the choice.
+    if (variants.length === 1) return variants[0].variantId;
+    // Real options mean real decisions (size, colour). Picking one of
+    // those for the shopper is how somebody ends up with the wrong size,
+    // so we never do it - the picker below is their way in.
+    if ((product.optionNames || []).length > 0) return null;
+    // Several variants and no options to choose between them. There is
+    // no decision to take away from anyone; prefer one that can be
+    // bought.
+    for (var i = 0; i < variants.length; i++) {
+      if (variants[i].available && !variants[i].requiresSellingPlan) return variants[i].variantId;
+    }
+    return null;
+  }
+
+  function findVariant(product, variantId) {
+    if (!variantId) return null;
+    for (var i = 0; i < (product.variants || []).length; i++) {
+      if (product.variants[i].variantId === variantId) return product.variants[i];
+    }
+    return null;
+  }
+
+  var CAROUSEL_STEP = 224;
+
+  /**
+   * Scroll the strip one card FORWARD or BACKWARD in reading order.
+   *
+   * `scrollLeft` is physical. In an RTL container the first card sits at
+   * scrollLeft 0 and later cards are at NEGATIVE offsets (the modern
+   * spec; older WebKit used positive-descending, which is why the value
+   * is read back rather than assumed). Adding a positive step to advance
+   * therefore scrolled an RTL carousel backwards into its own start edge,
+   * and the shopper saw the arrows do nothing.
+   */
+  function scrollStrip(strip, cards) {
+    var delta = CAROUSEL_STEP * cards;
+    strip.scrollLeft += dir === "rtl" ? -delta : delta;
+  }
+
+  function carousel(commerce) {
+    var wrap = el("div", "car");
+    var strip = el("div", "car-tr");
+    // The strip is chrome: it lays out in the widget's direction so the
+    // first recommendation is at the edge a shopper starts reading from.
+    attr(strip, { role: "group", "aria-label": T.next, tabindex: "0", dir: dir });
+    commerce.products.forEach(function (p) {
+      strip.appendChild(productCard(p, commerce.addToCartEnabled, true));
+    });
+
+    // Keyboard: the strip itself is focusable and arrow keys scroll it,
+    // so a keyboard user is never stuck at a horizontal list they can
+    // see but cannot move. The keys stay PHYSICAL - ArrowRight moves the
+    // content right on screen in both directions, which is what the key
+    // says on the keycap and what a screen reader user expects.
+    on(strip, "keydown", function (e) {
+      if (e.key === "ArrowRight") { strip.scrollLeft += CAROUSEL_STEP; e.preventDefault(); }
+      if (e.key === "ArrowLeft") { strip.scrollLeft -= CAROUSEL_STEP; e.preventDefault(); }
+    });
+
+    var nav = el("div", "car-nav");
+    // The chevrons point along the reading order, so "previous" is the
+    // one aiming back toward the start edge whichever side that is.
+    var prev = el("button", "car-n", dir === "rtl" ? "›" : "‹");
+    attr(prev, { type: "button", "aria-label": T.previous, "data-act": "carousel-prev" });
+    var next = el("button", "car-n", dir === "rtl" ? "‹" : "›");
+    attr(next, { type: "button", "aria-label": T.next, "data-act": "carousel-next" });
+    on(prev, "click", function () { scrollStrip(strip, -1); });
+    on(next, "click", function () { scrollStrip(strip, 1); });
+    nav.appendChild(prev);
+    nav.appendChild(next);
+
+    wrap.appendChild(strip);
+    wrap.appendChild(nav);
+    return wrap;
+  }
+
+  /**
+   * Add to Cart, in two halves.
+   *
+   * The server half re-resolves the product and variant from Shopify and
+   * answers with a variant id it is willing to stand behind. The browser
+   * half posts that id to the THEME's own /cart/add.js - same origin,
+   * the merchant's own cart, no Admin credential anywhere near the page,
+   * and no order created from chat.
+   */
+  function addToCart(product, vState, repaint) {
+    vState.busy = true;
+    vState.error = null;
+    repaint();
+    track("add_to_cart_attempted", { productId: product.productId });
+
+    api("/cart/validate", {
+      productId: product.productId,
+      variantId: vState.variantId,
+      quantity: vState.quantity,
+    })
+      .then(function (res) {
+        var v = res.data;
+        // A host whose store is not Shopify completes the line its own way
+        // (the web chat: the store's ?add-to-cart= link, W9c).
+        if (typeof boot.addToCart === "function") {
+          return boot.addToCart(v).then(function (done) {
+            vState.cartPage = done && done.cartPage ? safeUrl(done.cartPage) : null;
+          });
+        }
+        vState.cartPage = storefrontRoute("cart");
+        return fetch(storefrontRoute("cart/add.js"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ items: [{ id: Number(v.variantId), quantity: v.quantity }] }),
+          credentials: "same-origin",
+        }).then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (j) {
+            if (!r.ok) {
+              // Shopify's own sentence, in the storefront's language. It
+              // is the only party that knows "you can only add 1 of
+              // this", so it gets tagged and carried rather than
+              // flattened into a generic failure the shopper can do
+              // nothing with.
+              var e = new Error(j.description || j.message || T.failed);
+              e.storefront = true;
+              throw e;
+            }
+            return j;
+          });
+        });
+      })
+      .then(function () {
+        vState.busy = false;
+        vState.done = true;
+        repaint();
+        // The card grows by a confirmation row, which lands below the
+        // fold on a full conversation. Without this the shopper taps Add
+        // to cart and, as far as they can tell, nothing happens.
+        scrollToEnd();
+        api("/cart/result", { ok: true }).catch(function () {});
+        notifyThemeCartChanged();
+      })
+      .catch(function (err) {
+        vState.busy = false;
+        vState.error = cartErrorSentence(err);
+        repaint();
+        scrollToEnd();
+        api("/cart/result", { ok: false }).catch(function () {});
+        // An option the link cannot name ("any size"): the product's own page asks it.
+        var code = err && ((err.body && err.body.error) || err.message);
+        var page = safeUrl(product.productUrl);
+        if (code === "choose_on_product_page" && page) {
+          try { window.top.location.href = page; } catch (e) { window.location.href = page; }
+        }
+      });
+  }
+
+  /**
+   * Why an Add to Cart failed, in a sentence the shopper can act on.
+   *
+   * Every failure used to collapse to "Something went wrong. Try again."
+   * The reason was being computed and then thrown away: the storefront
+   * error carried Shopify's own explanation on `err.message`, and the
+   * only branch that read `message` required a status this error never
+   * had. A shopper who could not add an item was told nothing, and so
+   * was anybody they reported it to.
+   *
+   * Order matters. The server's own sentence first (it is written for
+   * shoppers and already in their language), then Shopify's, then a
+   * sentence for the server codes that ship a code and nothing else.
+   */
+  function cartErrorSentence(err) {
+    if (!err) return T.failed;
+    if (err.body && err.body.message) return err.body.message;
+    if (err.storefront && err.message) return err.message;
+    if (err.status === 409 && err.message) return err.message;
+    var code = (err.body && err.body.error) || err.message;
+    if (code === "add_to_cart_disabled" || code === "cart_disabled") return T.cartDisabled;
+    // The web chat's store (WooCommerce) names its refusals by code (W9c).
+    if (code === "not_for_sale") return T.notForSale;
+    if (code === "out_of_stock") return T.outOfStock;
+    if (code === "choose_variant") return T.chooseVariantFirst;
+    if (code === "variant_not_found" || code === "product_not_found") return T.variantGone;
+    if (code === "choose_on_product_page") return T.chooseOnPage;
+    if (code === "session_expired") return T.cartSessionExpired;
+    if (code === "unavailable") return T.cartStoreBusy;
+    return T.failed;
+  }
+
+  /**
+   * A storefront path, respecting the shop's own root.
+   *
+   * A store with markets or translated locales serves the cart under a
+   * prefix ("/en-il/cart/add.js"). Posting to the bare "/cart/add.js"
+   * earns a 302 to the localized route, and a redirected POST becomes a
+   * GET, which the cart endpoint does not answer - so Add to Cart failed
+   * for every shopper on a localized storefront. `Shopify.routes.root` is
+   * what the theme itself uses; "/" is the right answer everywhere else,
+   * including the website widget that shares this bundle.
+   */
+  function storefrontRoute(path) {
+    var root = "/";
+    try {
+      var r = window.Shopify && window.Shopify.routes && window.Shopify.routes.root;
+      if (typeof r === "string" && r.charAt(0) === "/") {
+        root = r.charAt(r.length - 1) === "/" ? r : r + "/";
+      }
+    } catch (e) {}
+    return root + path;
+  }
+
+  /**
+   * Tell the theme its cart changed, using the events Shopify's own
+   * Dawn-lineage themes and most app ecosystems already listen for. We
+   * only ever *announce* - opening a merchant's cart drawer ourselves
+   * would mean guessing at their markup and breaking themes we have
+   * never seen.
+   */
+  function notifyThemeCartChanged() {
+    try {
+      document.dispatchEvent(new CustomEvent("cart:refresh", { bubbles: true }));
+      document.dispatchEvent(new CustomEvent("cart:build", { bubbles: true }));
+      if (window.Shopify && window.Shopify.onCartUpdate) {
+        fetch(storefrontRoute("cart.js"), { credentials: "same-origin" })
+          .then(function (r) { return r.json(); })
+          .then(function (cart) { window.Shopify.onCartUpdate(cart); })
+          .catch(function () {});
+      }
+    } catch (e) {}
+  }
+
+  // ── Offline lead form ───────────────────────────────────────────
+
+  function renderOfflineForm() {
+    footer.hidden = true;
+    var offline = widget.offline || {};
+    var form = el("form", "form");
+    var fields = offline.formFields || ["name", "email", "message"];
+    var inputs = {};
+
+    if (offline.message) form.appendChild(el("p", "wel-s", offline.message));
+
+    fields.forEach(function (f) {
+      var label = el("label", "fl", T[f] || f);
+      var input =
+        f === "message" ? document.createElement("textarea") : document.createElement("input");
+      input.className = "fi";
+      if (f === "email") input.type = "email";
+      if (f === "message") input.rows = 4;
+      var id = "gotcha-f-" + f;
+      input.id = id;
+      label.setAttribute("for", id);
+      inputs[f] = input;
+      form.appendChild(label);
+      form.appendChild(input);
+    });
+
+    var consentBox = null;
+    if (offline.consentRequired) {
+      var wrap = el("label", "cbx");
+      consentBox = document.createElement("input");
+      consentBox.type = "checkbox";
+      wrap.appendChild(consentBox);
+      wrap.appendChild(el("span", null, offline.consentText || T.consent));
+      form.appendChild(wrap);
+    }
+
+    var submitBtn = el("button", "btn btn-p", T.submit);
+    attr(submitBtn, { type: "submit" });
+    form.appendChild(submitBtn);
+
+    var errLine = el("div", "cart-err", "");
+    errLine.hidden = true;
+    form.appendChild(errLine);
+
+    on(form, "submit", function (e) {
+      e.preventDefault();
+      if (consentBox && !consentBox.checked) {
+        errLine.hidden = false;
+        errLine.textContent = offline.consentText || T.consent;
+        return;
+      }
+      submitBtn.disabled = true;
+      ensureConversation()
+        .then(function () {
+          return api("/lead", {
+            name: inputs.name ? inputs.name.value : "",
+            email: inputs.email ? inputs.email.value : "",
+            message: inputs.message ? inputs.message.value : "",
+            consent: consentBox ? consentBox.checked : true,
+          });
+        })
+        .then(function () {
+          clear(body).appendChild(el("p", "note", T.submitted));
+        })
+        .catch(function () {
+          submitBtn.disabled = false;
+          errLine.hidden = false;
+          errLine.textContent = T.failed;
+        });
+    });
+
+    clear(body).appendChild(form);
+  }
+
+  // ── Sending ─────────────────────────────────────────────────────
+
+  function clientId() {
+    var bytes = new Uint8Array(9);
+    (window.crypto || window.msCrypto).getRandomValues(bytes);
+    return Array.prototype.map
+      .call(bytes, function (b) { return ("0" + b.toString(16)).slice(-2); })
+      .join("");
+  }
+
+  function ensureConversation() {
+    if (S.conversationId) return Promise.resolve(S.conversationId);
+    // After "New conversation": the next one is a fresh one, not the open
+    // conversation the server would otherwise resume.
+    var fresh = !!S.fresh;
+    return api("/conversation", fresh ? { fresh: true } : {}).then(function (res) {
+      S.fresh = false;
+      var data = res.data || {};
+      S.conversationId = data.conversationId;
+      if (S.conversationId) store.set("conversation", S.conversationId);
+      S.handedOver = !!data.isHandedOver;
+      S.ended = data.status === "CLOSED";
+      ingest(data.messages || []);
+      connectRealtime();
+      return S.conversationId;
+    });
+  }
+
+  /**
+   * Opens WhatsApp with the message pre-filled (and the code that links the
+   * two conversations). The window is opened synchronously, inside the click,
+   * and pointed at the link once the server answers: a window opened after an
+   * await is what popup blockers block. If it is blocked anyway, the link is
+   * shown in the chat to tap.
+   */
+  function continueOnWhatsapp(text) {
+    var w = null;
+    try { w = window.open("", "_blank"); } catch (e) { w = null; }
+    if (text) {
+      var entry = { clientId: clientId(), body: text, failed: false };
+      S.pending.push(entry);
+      S.phase = "active";
+      render();
+    }
+    ensureConversation()
+      .then(function () { return boot.whatsappHandoff({ locale: lang, text: text || undefined }); })
+      .then(function (data) {
+        var url = data && data.url;
+        if (!url) throw new Error("unavailable");
+        if (w) {
+          try { w.opener = null; } catch (e) {}
+          w.location.href = url;
+        }
+        showWaNote(url, !w);
+        if (text) catchUp();
+        track("whatsapp_handoff");
+      })
+      .catch(function () {
+        if (w) { try { w.close(); } catch (e) {} }
+        if (text && S.pending.length) S.pending[S.pending.length - 1].failed = true;
+        render();
+      });
+  }
+
+  /**
+   * Design 7's "New conversation": the host forgets this visitor's
+   * conversation (only a host that can start a fresh one offers it), and the
+   * widget returns to its welcome. The old conversation stays in the inbox.
+   */
+  function newConversation() {
+    boot.resetConversation();
+    S.fresh = true;
+    if (socket) { try { socket.disconnect(); } catch (e) {} socket = null; }
+    stopPolling();
+    S.messages = [];
+    S.pending = [];
+    S.conversationId = null;
+    S.awaitingReply = false;
+    S.handedOver = false;
+    S.ended = false;
+    S.error = null;
+    S.rateLimited = false;
+    S.waLink = null;
+    S.lastCursor = null;
+    S.phase = "welcome";
+    shownProducts = {};
+    render();
+  }
+
+  function showWaNote(url, blocked) {
+    S.waLink = url;
+    render();
+    if (blocked) {
+      var a = body.querySelector(".wa-note a");
+      if (a) a.focus();
+    }
+  }
+
+  function waNote(url) {
+    var note = el("div", "wa-note");
+    note.appendChild(document.createTextNode(T.waOpening + " "));
+    var a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.textContent = T.waOpenLink;
+    note.appendChild(a);
+    return note;
+  }
+
+  function submit(text) {
+    var body = String(text || "").trim();
+    if (!body || S.ended) return;
+    // The WhatsApp look: "write here and we continue on WhatsApp".
+    if (LOOK === "whatsapp" && WA_ON) {
+      textarea.value = "";
+      autoGrow();
+      continueOnWhatsapp(body);
+      return;
+    }
+    var entry = { clientId: clientId(), body: body, failed: false };
+    S.pending.push(entry);
+    S.phase = "active";
+    S.awaitingReply = true;
+    S.rateLimited = false;
+    textarea.value = "";
+    autoGrow();
+    render();
+    if (!S.messages.length && S.pending.length === 1) track("conversation_started");
+    deliver(entry);
+  }
+
+  function deliver(entry) {
+    ensureConversation()
+      .then(function () {
+        return api("/message", {
+          body: entry.body,
+          clientId: entry.clientId,
+          context: boot.context,
+        });
+      })
+      .then(function (res) {
+        // The server's word on the conversation's language (W10); null keeps it.
+        var said = res && res.data && res.data.locale;
+        if (said) switchLanguage(said);
+        // The chime belongs here, not in submit(): it means "delivered",
+        // and a send that failed must never sound like one that worked.
+        if (boot.playSound) boot.playSound("outgoing", { sendFailed: false });
+        // Nudge once shortly after: the bot's reply arrives over the
+        // socket, but a slow model plus a dropped frame should not leave
+        // the shopper staring at a typing indicator forever.
+        setTimeout(catchUp, 1500);
+        setTimeout(catchUp, 6000);
+      })
+      .catch(function (err) {
+        S.awaitingReply = false;
+        if (err && err.status === 429) {
+          S.rateLimited = true;
+          entry.failed = true;
+        } else if (err && err.status === 401) {
+          // Session expired - re-bootstrap silently on the next open.
+          store.del("session");
+          store.del("conversation");
+          entry.failed = true;
+        } else {
+          entry.failed = true;
+        }
+        render();
+      });
+  }
+
+  // ── Composer behaviour ──────────────────────────────────────────
+
+  // One line until the visitor actually needs more, then bounded. The
+  // ceiling must match the stylesheet's max-height or the two disagree
+  // and the textarea grows past a scrollbar it cannot show.
+  var TA_MIN = 38;
+  var TA_MAX = 104;
+
+  function autoGrow() {
+    textarea.style.height = "auto";
+    textarea.style.height = Math.max(TA_MIN, Math.min(TA_MAX, textarea.scrollHeight)) + "px";
+    sendBtn.disabled = !textarea.value.trim();
+  }
+
+  on(textarea, "input", autoGrow);
+  on(textarea, "keydown", function (e) {
+    // Enter sends; Shift+Enter is a newline. On touch keyboards Enter is
+    // usually a newline key, so we only intercept when a real keyboard
+    // is plausible.
+    if (e.key === "Enter" && !e.shiftKey && !window.matchMedia("(max-width: 560px)").matches) {
+      e.preventDefault();
+      submit(textarea.value);
+    }
+  });
+  on(composer, "submit", function (e) {
+    e.preventDefault();
+    submit(textarea.value);
+  });
+  on(humanBtn, "click", function () {
+    ensureConversation()
+      .then(function () { return api("/handoff", {}); })
+      .then(function () {
+        S.handedOver = true;
+        render();
+      })
+      .catch(function () {});
+  });
+
+  function scrollToEnd() {
+    requestAnimationFrame(function () {
+      body.scrollTop = body.scrollHeight;
+    });
+  }
+
+  // ── Mobile keyboard ─────────────────────────────────────────────
+  //
+  // On iOS the visual viewport shrinks under the keyboard while the
+  // layout viewport does not, which is exactly how a chat input ends up
+  // hidden behind the keys. Tracking visualViewport keeps the composer
+  // reachable without hacks like scroll-locking the page.
+  if (window.visualViewport) {
+    var vv = window.visualViewport;
+    var applyViewport = function () {
+      if (!window.matchMedia("(max-width: 560px)").matches) {
+        panel.style.height = "";
+        return;
+      }
+      panel.style.height = vv.height + "px";
+      scrollToEnd();
+    };
+    vv.addEventListener("resize", applyViewport);
+    vv.addEventListener("scroll", applyViewport);
+  }
+
+  // ── Focus + dismissal ───────────────────────────────────────────
+
+  function focusables() {
+    return Array.prototype.filter.call(
+      panel.querySelectorAll("button, a[href], textarea, input, [tabindex]:not([tabindex='-1'])"),
+      function (n) { return !n.disabled && n.offsetParent !== null; },
+    );
+  }
+
+  on(panel, "keydown", function (e) {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      close();
+      return;
+    }
+    // Focus stays inside the panel while it is open, but the shopper is
+    // never trapped: Escape and the close button both return them to the
+    // storefront, and the panel is not aria-modal so the page behind it
+    // remains reachable by browser chrome.
+    if (e.key !== "Tab") return;
+    var items = focusables();
+    if (!items.length) return;
+    var first = items[0];
+    var last = items[items.length - 1];
+    var active = shadow.activeElement;
+    if (e.shiftKey && active === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+
+  on(closeBtn, "click", function (e) {
+    // Stop the storefront theme from ever seeing this click, and count it
+    // so a stuck widget can be told apart from a click that never landed.
+    if (e && e.stopPropagation) e.stopPropagation();
+    S.closeClicks = (S.closeClicks || 0) + 1;
+    close();
+  });
+
+  function open() {
+    setPanelOpen(true);
+    S.unread = 0;
+    if (boot.setUnread) boot.setUnread(0);
+    if (boot.onOpened) boot.onOpened();
+    track("widget_opened");
+
+    var restore = S.conversationId
+      ? api("/conversation", {}).then(function (res) {
+          var data = res.data || {};
+          S.conversationId = data.conversationId || S.conversationId;
+          if (S.conversationId) store.set("conversation", S.conversationId);
+          S.handedOver = !!data.isHandedOver;
+          S.ended = data.status === "CLOSED";
+          S.phase = (data.messages || []).length ? "active" : "welcome";
+          ingest(data.messages || []);
+          connectRealtime();
+        })
+      : Promise.resolve();
+
+    restore
+      .catch(function (err) {
+        if (err && err.status === 401) {
+          store.del("session");
+          store.del("conversation");
+          S.conversationId = null;
+        }
+      })
+      .then(function () {
+        render();
+        // Opening a chat should put the caret where the shopper is about to
+        // type. A PREVIEW must not: the settings editor rebuilds this whole
+        // widget on every keystroke, so focusing in here pulled the merchant's
+        // caret out of the field they were typing in after every single
+        // character - they had to click back into the box per letter.
+        if (boot.preview) return;
+        setTimeout(function () {
+          // Design 7's welcome is a composer with questions above it: the
+          // caret goes where the visitor types (the first focusable was the
+          // minimise button).
+          var target = S.phase === "welcome" && LOOK !== "gotcha" ? focusables()[0] : textarea;
+          try { (target || closeBtn).focus({ preventScroll: true }); } catch (e) {}
+        }, 60);
+      });
+  }
+
+  function pauseHero() {
+    if (heroVideo) { try { heroVideo.pause(); } catch (e) {} }
+  }
+
+  // A backgrounded tab should not be decoding video either.
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) pauseHero();
+    else if (S.opened && heroVideo && !reducedMotion()) {
+      var p = heroVideo.play();
+      if (p && p.catch) p.catch(function () {});
+    }
+  });
+
+  /**
+   * The only place panel visibility changes. Everything else calls this.
+   */
+  /**
+   * WELCOME or CONVERSATION. Drives layout entirely through CSS, so there
+   * is no scattered show/hide to fall out of sync with the state.
+   */
+  function setPanelView(view) {
+    panel.setAttribute("data-view", view);
+  }
+
+  /**
+   * Whether the welcome screen actually rendered a hero.
+   *
+   * The welcome layout gives the top edge away to the hero - no header, no
+   * body padding, a close button restyled for a photograph. All of that is
+   * wrong when there is no hero, so the stylesheet keys on this instead of
+   * assuming one is always there.
+   */
+  function setPanelHero(present) {
+    if (present) panel.setAttribute("data-hero", "1");
+    else panel.removeAttribute("data-hero");
+  }
+
+  function setPanelOpen(open) {
+    panel.setAttribute("data-state", open ? "open" : "closed");
+    panel.hidden = !open;
+    S.opened = open;
+  }
+
+  function close(reason) {
+    // A docked panel minimised gives the page its room back.
+    setDocked(false);
+    setPanelOpen(false);
+    // An explicit shopper close is a decision that outlives this render:
+    // nothing may auto-open the panel again for the rest of the page
+    // view. The launcher still can, because that is the shopper asking.
+    if (reason !== "internal") S.closedByVisitor = true;
+    pauseHero();
+    track("widget_closed");
+    // Keep the socket while a conversation is live so an agent's reply
+    // still raises the badge; drop the poll timer either way.
+    stopPolling();
+    if (!S.conversationId && socket) {
+      socket.disconnect();
+      socket = null;
+    }
+    if (boot.onClosed) boot.onClosed();
+  }
+
+  /**
+   * Returning shopper with an open conversation: connect, catch up once,
+   * and let the badge do the talking. No panel, no polling loop.
+   */
+  function watchInBackground() {
+    if (!S.conversationId) return;
+    catchUp().then(function () {
+      S.unread = 0;
+      var lastRead = Number(store.get("lastRead") || 0);
+      S.messages.forEach(function (m) {
+        if (m.direction === "OUTBOUND" && new Date(m.createdAt).getTime() > lastRead) S.unread++;
+      });
+      if (boot.setUnread) boot.setUnread(S.unread);
+      connectRealtime();
+    });
+  }
+
+  window.addEventListener("beforeunload", function () {
+    store.set("lastRead", String(Date.now()));
+  });
+
+  render();
+
+  /**
+   * Safe UI state for debugging a live storefront.
+   *
+   * Deliberately contains no tenant id, channel id, session token,
+   * conversation body or AI configuration - only what somebody looking at
+   * a stuck widget needs to see. Attached by the bootstrap.
+   */
+  function debugState() {
+    return {
+      state: S.opened ? (S.messages.length || S.pending.length ? "CONVERSATION" : "WELCOME") : "CLOSED",
+      panelHidden: panel.hidden,
+      panelDataState: panel.getAttribute("data-state"),
+      panelDisplay: (function () {
+        try { return getComputedStyle(panel).display; } catch (e) { return "?"; }
+      })(),
+      closeClicks: S.closeClicks || 0,
+      closedByVisitor: !!S.closedByVisitor,
+      messageCount: S.messages.length,
+      unread: S.unread,
+      polling: !!pollTimer,
+      socketConnected: !!(socket && socket.connected),
+      heroVideoPlaying: !!(heroVideo && !heroVideo.paused),
+    };
+  }
+
+  return {
+    open: open,
+    close: close,
+    watchInBackground: watchInBackground,
+    closedByVisitor: function () { return !!S.closedByVisitor; },
+    debugState: debugState,
+  };
+};

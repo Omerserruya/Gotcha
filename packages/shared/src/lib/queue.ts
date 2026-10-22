@@ -24,6 +24,21 @@ export const channelHealthQueue = new Queue("channel-health", { connection: { ur
 export const idleConversationQueue = new Queue("idle-conversations", { connection: { url: REDIS_URL } });
 export const broadcastQueue = new Queue("broadcast-messages", { connection: { url: REDIS_URL } });
 export const scheduledMessageQueue = new Queue("scheduled-messages", { connection: { url: REDIS_URL } });
+/**
+ * System events for the notifications service.
+ *
+ * A HANDLE only - the emit helpers stay where they are. `services/ai` and
+ * `services/billing` each construct their own `Queue("notifications")`, and
+ * this does not change either of them. It exists so a service with no emit
+ * path of its own (outgoing-worker, conversation) can enqueue without either
+ * importing `bullmq` undeclared - it resolves today only by root hoisting -
+ * or adding a dependency, which this repo does not permit.
+ *
+ * Job name is "system-event" and the payload shape is
+ * `{ id, type, tenantId, data, metadata: { ..., timestamp } }`, matching what
+ * the notifications worker already consumes from billing.
+ */
+export const notificationsQueue = new Queue("notifications", { connection: { url: REDIS_URL } });
 // Delayed resume for flow Wait nodes. When a flow hits a Wait(5s), the
 // walker enqueues a job here with { delay: 5000 } and halts. The worker
 // picks it up after the delay and resumes the flow at the next node.
@@ -284,6 +299,11 @@ export interface OutgoingMessageJob {
   emailReplyMode?: "reply" | "new";
   mediaUrl?: string;
   fileName?: string;
+  /**
+   * This app's public origin, for minting a signed media link at send time
+   * when the worker has no PUBLIC_URL of its own (2026-10-10, uploads plan).
+   */
+  publicBaseUrl?: string;
   // Broadcast linkage - when set, the outgoing worker writes the send result
   // back to the BroadcastRecipient row and updates broadcast counters.
   broadcastId?: string;
@@ -335,6 +355,81 @@ export interface FlowResumeJob {
   channel: string;
   // Message to carry through on resume (usually empty for a Wait resume)
   message: string;
+  // The automation run this timer belongs to. The worker resumes only while
+  // the conversation is still parked on THIS run at THIS node; anything else
+  // is a stale timer and is dropped.
+  automationRunId?: string;
+  // A Wait-for-reply timeout (take the "timeout" branch), not a plain Wait.
+  timeout?: boolean;
+}
+
+/**
+ * A shopper's checkout, normalised from any store (job name "cart-event" on
+ * the incoming-messages queue). Shopify checkouts/* and orders/create, the
+ * WooCommerce poller and the internal test path all produce this shape; the
+ * incoming worker decides abandonment from it.
+ */
+export interface CartEventJob {
+  tenantId: string;
+  source: "shopify" | "woocommerce" | "test";
+  /** Stable per checkout: one abandonment run per automation per checkout. */
+  checkoutId: string;
+  /** The checkout became an order (or was completed): stop everything for it. */
+  completed: boolean;
+  /** When the store last changed this checkout (ISO). */
+  updatedAt: string;
+  customer: { email?: string | null; phone?: string | null; firstName?: string | null };
+  items: Array<{ title: string; quantity: number; price?: number | null }>;
+  total?: number | null;
+  currency?: string | null;
+  /** The store's own recovery link. */
+  cartUrl?: string | null;
+  /** What the store recorded about marketing consent (null = the store has none). */
+  marketingConsent?: { email?: boolean | null; sms?: boolean | null } | null;
+}
+
+/** What an order event reports (the automation's `statuses` filter). */
+export const ORDER_STATUSES = ["created", "paid", "fulfilled", "cancelled"] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+/**
+ * A store order changed (job name "order-event" on the incoming-messages
+ * queue). Shopify orders/* webhooks and the WooCommerce poller produce it;
+ * the incoming worker runs "Order event" automations from it, once per order
+ * per status.
+ */
+export interface OrderEventJob {
+  tenantId: string;
+  source: "shopify" | "woocommerce" | "test";
+  orderId: string;
+  status: OrderStatus;
+  /** What the customer sees ("#1042"). */
+  orderNumber: string;
+  total?: number | null;
+  currency?: string | null;
+  customer: { email?: string | null; phone?: string | null; firstName?: string | null };
+  items: Array<{ title: string; quantity: number }>;
+  /** The store's order status page for the customer, when it has one. */
+  orderUrl?: string | null;
+  /** What the store recorded about marketing consent (null = the store has none, e.g. WooCommerce). */
+  marketingConsent?: { email?: boolean | null; sms?: boolean | null } | null;
+}
+
+/**
+ * An event that can fire automations without an inbound message (job name
+ * "automation-event" on the incoming-messages queue). `eventKey` is the
+ * event's identity: one run per automation per key.
+ */
+export interface AutomationEventJob {
+  tenantId: string;
+  type: "tag_added" | "schedule" | "call_missed" | "call_answered";
+  eventKey: string;
+  contactId?: string | null;
+  conversationId?: string | null;
+  // tag_added: the tag; schedule: the automation to run
+  tag?: string;
+  flowId?: string;
+  payload?: Record<string, unknown>;
 }
 
 // ─── Worker factory ─────────────────────────────────────────

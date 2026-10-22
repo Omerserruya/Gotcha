@@ -25,6 +25,11 @@ vi.mock("@chatcenter/shared", () => {
     tenant: {
       findUnique: vi.fn(),
     },
+    // The list and GET /:id resolve each row's contactId (one batched read).
+    // No contacts here, so every row's contactId is null.
+    contact: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     $transaction: vi.fn((fn: any) => fn({
       message: { create: vi.fn().mockResolvedValue({ id: "msg-1", createdAt: new Date() }) },
       conversation: { update: vi.fn() },

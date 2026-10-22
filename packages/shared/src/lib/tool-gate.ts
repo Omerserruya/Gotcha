@@ -21,6 +21,8 @@
  * should use `evaluatePolicies()`.
  */
 import { prisma } from "./prisma";
+import { loadIntegrationAccess, customAccessKey } from "./integration-access";
+import { readAgentToolLevels, type EmployeeToolLevel } from "./agent-tool-levels";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -40,7 +42,7 @@ export type ToolGateDecision = "ALLOW" | "DENY" | "REQUIRE_APPROVAL";
 export interface PolicySnapshot {
   catalog?: HitlPolicy;
   tenant?: HitlPolicy;
-  agent?: { requireApproval?: boolean; approverRole?: string | null };
+  agent?: { requireApproval?: boolean; approverRole?: string | null; level?: EmployeeToolLevel };
 }
 
 export interface PolicyResult {
@@ -121,6 +123,12 @@ export async function evaluatePolicies(opts: {
   tenantId: string;
   toolName: string;
   aiAgentId?: string;
+  /**
+   * The employee acting, for its own STRICTER level only (A1). Unlike
+   * aiAgentId it does not switch on the grant check (Layer 3): a caller that
+   * did not check grants before keeps not checking them. aiAgentId implies it.
+   */
+  employeeId?: string;
   args?: unknown;
 }): Promise<PolicyResult> {
   if (!opts.toolName) {
@@ -135,6 +143,7 @@ export async function evaluatePolicies(opts: {
   let catalog: HitlPolicy;
   let tenantToolId: string | null = null;
   let tenantToolEnabled = true;
+  let toolIntegrationSlug: string | null = null;
 
   if (opts.toolName === "integration_create_lead" || opts.toolName === "integration_create_contact") {
     // Vendor-neutral semantic create. No CatalogTool row by design - resolve
@@ -159,6 +168,11 @@ export async function evaluatePolicies(opts: {
     }).catch(() => null);
     if (!row || !row.isActive) {
       return denyResult(`unknown or inactive custom tool "${opts.toolName}"`, {});
+    }
+    // Custom tools have no per-tool grant rows: the employee's allowlist is
+    // their only per-employee gate, so nothing slips past it.
+    if (opts.aiAgentId && !(await loadIntegrationAccess(opts.tenantId, opts.aiAgentId)).has(customAccessKey(row.id))) {
+      return denyResult(`custom tool not allowed for agent "${opts.aiAgentId}"`, {});
     }
     const cat = String(row.category || "").toUpperCase();
     const risk = String(row.riskLevel || "").toUpperCase();
@@ -193,7 +207,7 @@ export async function evaluatePolicies(opts: {
           ? { slug: toolSlugLookup, integration: { slug: integrationSlugLookup } }
           : { slug: toolSlugLookup },
       },
-      include: { catalogTool: true, tenantIntegration: { select: { status: true } } },
+      include: { catalogTool: true, tenantIntegration: { select: { status: true, integration: { select: { slug: true } } } } },
     });
 
     // A tool whose provider is no longer connected cannot run, whatever the
@@ -220,6 +234,7 @@ export async function evaluatePolicies(opts: {
     }
     tenantToolId = tenantTool.id;
     tenantToolEnabled = tenantTool.isEnabled;
+    toolIntegrationSlug = tenantTool.tenantIntegration?.integration?.slug ?? integrationSlugLookup ?? null;
 
     catalog = (tenantTool.catalogTool?.hitlPolicy as HitlPolicy) ?? { mode: "never" };
   } else {
@@ -281,10 +296,33 @@ export async function evaluatePolicies(opts: {
     if (!grant || !grant.isAllowed) {
       return denyResult(`tool not granted to agent "${opts.aiAgentId}"`, snapshot);
     }
+    // The system itself must be on the employee's allowlist (a per-tool grant
+    // survives a reconnect; the allowlist is the durable "never this system").
+    if (!toolIntegrationSlug || !(await loadIntegrationAccess(opts.tenantId, opts.aiAgentId)).has(toolIntegrationSlug)) {
+      return denyResult(`integration "${toolIntegrationSlug ?? "unknown"}" not allowed for agent "${opts.aiAgentId}"`, snapshot);
+    }
   }
 
   // Compose: tenant authoritative when set, else catalog default.
-  const effective = composeAuthoritative(catalog, tenant);
+  let effective = composeAuthoritative(catalog, tenant);
+
+  // Layer 4: the employee's own level (A1, 2026-10-13), never looser than the
+  // workspace: Never denies, Ask turns an auto-run into an approval. Unreadable
+  // = the workspace level holds, which is still enforced.
+  const employee = opts.employeeId ?? opts.aiAgentId;
+  if (employee) {
+    let level: EmployeeToolLevel | undefined;
+    try {
+      level = (await readAgentToolLevels(opts.tenantId, employee))[opts.toolName];
+    } catch {
+      level = undefined;
+    }
+    if (level) snapshot.agent = { ...(snapshot.agent ?? {}), level };
+    if (level === "never") return denyResult(`tool "${opts.toolName}" set to Never for this employee`, snapshot);
+    if (level === "ask" && effective.mode !== "always") {
+      effective = { ...effective, mode: "always", condition: undefined };
+    }
+  }
 
   // Materialise the decision
   if (effective.mode === "never") {
@@ -298,7 +336,7 @@ export async function evaluatePolicies(opts: {
   if (effective.mode === "always") {
     return {
       decision: "REQUIRE_APPROVAL",
-      reason: `policy requires approval (catalog=${catalog.mode}${tenant ? `, tenant=${tenant.mode}` : ""})`,
+      reason: `policy requires approval (catalog=${catalog.mode}${tenant ? `, tenant=${tenant.mode}` : ""}${snapshot.agent?.level ? `, employee=${snapshot.agent.level}` : ""})`,
       effective,
       snapshot,
       approvalConfig: {
@@ -430,8 +468,9 @@ export async function evaluateToolGate(
   tenantId: string,
   toolName: string,
   aiAgentId?: string,
+  employeeId?: string,
 ): Promise<ToolGateResult> {
-  const r = await evaluatePolicies({ tenantId, toolName, aiAgentId });
+  const r = await evaluatePolicies({ tenantId, toolName, aiAgentId, employeeId });
   return { decision: r.decision, reason: r.reason, approvalConfig: r.approvalConfig };
 }
 

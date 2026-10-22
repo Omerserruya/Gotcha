@@ -4,12 +4,20 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { prisma, authenticate, resolveTenant, validate, outgoingMessageQueue, decryptCredentials, requireActiveTenant,
-  type EmailThreadContext,
+  withHistoricalRecords, type EmailThreadContext, buildTemplateComponents, renderTemplateText, templatePlaceholders,
 } from "@chatcenter/shared";
 import * as messageService from "../services/message.service";
+import { safeUploadExtension } from "@chatcenter/shared/src/lib/upload-safety";
+import { requireVisibleConversation } from "../lib/require-visible-conversation";
+import { replyWindowRefusal } from "../lib/reply-window-gate";
+import { mediaNotFound, serveStoredUpload } from "../lib/media-serving";
+import { STORED_UPLOAD_NAME, storedUploadName } from "@chatcenter/shared/src/lib/media-url";
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
+// Every /:conversationId route below answers only for a conversation this viewer may
+// see; 404 otherwise. See lib/require-visible-conversation.ts.
+router.param("conversationId", requireVisibleConversation);
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.resolve(process.cwd(), "uploads");
 const UPLOADS_BASE_URL = process.env.UPLOADS_BASE_URL || "/api/uploads";
@@ -146,6 +154,10 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
       res.status(400).json({ error: "Channel not configured for this tenant" }); return;
     }
 
+    // The customer-service window, before anything is written (B7).
+    const refused = await replyWindowRefusal(conversation as any);
+    if (refused) { res.status(refused.status).json(refused.body); return; }
+
     // ── Email threading ──
     //
     // The route carries the agent's CHOICE; the outgoing worker does the
@@ -201,6 +213,121 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
   }
 });
 
+// ─── Templates in a conversation (B7, 2026-10-12) ───────────
+//
+// Past WhatsApp's 24h window only an approved template may be sent; it is
+// also what reopens the window when the customer answers. The template list
+// in Outreach (/api/templates) is for admins, so the people answering
+// conversations had no way to see or send one here.
+
+/** The approved templates of this conversation's WhatsApp number. */
+async function usableTemplates(tenantId: string, conversation: { channel: string | null; channelAccountId: string | null }) {
+  if ((conversation.channel || "WHATSAPP") !== "WHATSAPP") return [];
+  return prisma.messageTemplate.findMany({
+    where: {
+      tenantId,
+      status: "APPROVED",
+      isActive: true,
+      OR: [{ channel: "WHATSAPP" as any }, { channel: null }],
+      // Bound to this number, or to none (a template from before numbers were bound).
+      AND: [{ OR: [{ channelAccountId: conversation.channelAccountId }, { channelAccountId: null }] }],
+    },
+    orderBy: [{ name: "asc" }, { language: "asc" }],
+  });
+}
+
+router.get("/:conversationId/reply-templates", async (req: Request, res: Response) => {
+  try {
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: req.params.conversationId as string, tenantId: req.tenantId! },
+      select: { channel: true, channelAccountId: true },
+    });
+    if (!conversation) { res.status(404).json({ error: "Conversation not found" }); return; }
+    const templates = await usableTemplates(req.tenantId!, conversation as any);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({
+      data: templates.map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        language: t.language,
+        category: t.category,
+        body: t.body,
+        headerType: t.headerType ?? null,
+        headerContent: t.headerType === "TEXT" ? t.headerContent ?? null : null,
+        footer: t.footer ?? null,
+        buttons: t.buttons ?? [],
+        // What the agent fills in, in order, with the sample the form can show.
+        placeholders: templatePlaceholders(`${t.headerType === "TEXT" ? t.headerContent ?? "" : ""} ${t.body ?? ""}`).map((key) => ({
+          key,
+          sample: (Array.isArray(t.variables) ? (t.variables as any[]).find((v) => v?.key === key)?.sample : null) ?? null,
+        })),
+      })),
+    });
+  } catch (err) {
+    console.error("List reply templates error:", err);
+    res.status(500).json({ error: "Failed to list templates" });
+  }
+});
+
+const sendTemplateSchema = z.object({
+  templateId: z.string().min(1),
+  variables: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+});
+
+router.post("/:conversationId/messages/template", validate(sendTemplateSchema), async (req: Request, res: Response) => {
+  try {
+    const conversationId = req.params.conversationId as string;
+    const { templateId, variables } = req.body as { templateId: string; variables?: Record<string, string | number> };
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId: req.tenantId! },
+      include: { channelAccount: true },
+    });
+    if (!conversation) { res.status(404).json({ error: "Conversation not found" }); return; }
+    if ((conversation.channel || "WHATSAPP") !== "WHATSAPP") {
+      res.status(400).json({ error: "Templates are sent on WhatsApp only", code: "TEMPLATES_WHATSAPP_ONLY" }); return;
+    }
+    if (!conversation.channelAccount) { res.status(400).json({ error: "Channel not configured for this tenant" }); return; }
+    const rawCreds = conversation.channelAccount.credentials;
+    const creds = typeof rawCreds === "string" ? decryptCredentials(rawCreds) : (rawCreds as any);
+    if (!creds?.accessToken) { res.status(400).json({ error: "Channel not configured for this tenant" }); return; }
+
+    const tmpl = (await usableTemplates(req.tenantId!, conversation as any)).find((t: any) => t.id === templateId);
+    if (!tmpl) {
+      res.status(409).json({ error: "This template is not approved for this number", code: "TEMPLATE_NOT_USABLE" }); return;
+    }
+
+    const values = Object.fromEntries(Object.entries(variables ?? {}).map(([k, v]) => [k, String(v)]));
+    const body = renderTemplateText(tmpl as any, values);
+    const message = await messageService.create({
+      tenantId: req.tenantId!,
+      conversationId,
+      direction: "OUTBOUND",
+      body,
+      messageType: "template",
+      senderName: req.user!.email,
+      metadata: { template: { id: tmpl.id, name: tmpl.name, language: tmpl.language } },
+    });
+    await outgoingMessageQueue.add("send", {
+      tenantId: req.tenantId!,
+      conversationId,
+      channel: "WHATSAPP",
+      channelAccountId: conversation.channelAccountId!,
+      recipientExternalId: conversation.customerExternalId,
+      body,
+      messageType: "template",
+      senderName: req.user!.email,
+      messageId: message.id,
+      templateName: tmpl.name,
+      templateLanguage: tmpl.language || "en",
+      templateComponents: buildTemplateComponents(tmpl as any, values),
+    } as any, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
+    res.status(201).json({ data: message });
+  } catch (err) {
+    console.error("Send template error:", err);
+    res.status(500).json({ error: "Failed to send template" });
+  }
+});
+
 // ─── Send Media Message (file upload) ────────────────────────
 router.post("/:conversationId/messages/media", async (req: Request, res: Response) => {
   try {
@@ -216,6 +343,10 @@ router.post("/:conversationId/messages/media", async (req: Request, res: Respons
     const rawCreds = conversation.channelAccount.credentials;
     const creds = typeof rawCreds === "string" ? decryptCredentials(rawCreds) : (rawCreds as any);
     if (!creds?.accessToken) { res.status(400).json({ error: "Channel not configured" }); return; }
+
+    // The window first: a refused send stores no file and no row (B7).
+    const refused = await replyWindowRefusal(conversation as any);
+    if (refused) { res.status(refused.status).json(refused.body); return; }
 
     // Parse multipart form data manually using built-in approach
     const contentType = req.headers["content-type"] || "";
@@ -258,7 +389,9 @@ router.post("/:conversationId/messages/media", async (req: Request, res: Respons
     else if (mimeType.startsWith("video/")) messageType = "video";
 
     // Save file to uploads directory
-    const ext = path.extname(originalName) || getExtFromMime(mimeType);
+    // Only an allowlisted extension is ever stored: the uploader's name could
+    // say ".html" (2026-10-09). The original name still goes on the message.
+    const ext = safeUploadExtension(path.extname(originalName), getExtFromMime(mimeType));
     const savedName = `${crypto.randomUUID()}${ext}`;
     const filePath = path.join(UPLOADS_DIR, savedName);
     fs.writeFileSync(filePath, fileBuffer);
@@ -266,9 +399,11 @@ router.post("/:conversationId/messages/media", async (req: Request, res: Respons
     const mediaUrl = `${UPLOADS_BASE_URL}/${savedName}`;
     const channel = conversation.channel || "WHATSAPP";
 
-    // Build a public URL for the outgoing message (channels need a publicly accessible URL)
-    const baseUrl = process.env.PUBLIC_URL || process.env.NEXT_PUBLIC_API_URL || "";
-    const publicMediaUrl = baseUrl ? `${baseUrl}${mediaUrl}` : mediaUrl;
+    // The job carries the STORED path, never a public /api/uploads link: the
+    // outgoing worker signs a short-lived /api/media/s link at send time
+    // (2026-10-10). The worker has no PUBLIC_URL of its own, so the origin
+    // travels with the job.
+    const publicBaseUrl = process.env.PUBLIC_URL || process.env.NEXT_PUBLIC_API_URL || "";
 
     const message = await messageService.create({
       tenantId: req.tenantId!,
@@ -279,6 +414,8 @@ router.post("/:conversationId/messages/media", async (req: Request, res: Respons
       senderName: req.user!.email,
       mediaUrl,
       fileName: originalName,
+      // Same shape the incoming worker writes for customer media (2026-10-09).
+      metadata: { media: uploadMediaFacts(mimeType, (fileBuffer as Buffer).length, originalName) },
     });
 
     await outgoingMessageQueue.add("send", {
@@ -291,7 +428,8 @@ router.post("/:conversationId/messages/media", async (req: Request, res: Respons
       messageType,
       senderName: req.user!.email,
       messageId: message.id,
-      mediaUrl: publicMediaUrl,
+      mediaUrl,
+      publicBaseUrl,
       fileName: originalName,
     }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
 
@@ -301,6 +439,24 @@ router.post("/:conversationId/messages/media", async (req: Request, res: Respons
     res.status(500).json({ error: "Failed to send media message" });
   }
 });
+
+/**
+ * metadata.media for an agent's upload (2026-10-09): busboy's declared type,
+ * the bytes actually received, and the uploader's name made safe to render.
+ */
+function uploadMediaFacts(mimeType: string, byteSize: number, originalName: string) {
+  const name = originalName
+    .replace(/[\\/]/g, "_")
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim()
+    .slice(0, 180);
+  return {
+    mimeType: mimeType.split(";")[0]?.trim().toLowerCase() || null,
+    byteSize,
+    originalName: name || null,
+  };
+}
 
 function getExtFromMime(mime: string): string {
   const map: Record<string, string> = {
@@ -313,6 +469,29 @@ function getExtFromMime(mime: string): string {
   };
   return map[mime] || ".bin";
 }
+
+// ─── Message media (logged in) ───────────────────────────────
+// The inbox's URL for a stored upload (2026-10-10, replacing the public
+// /api/uploads). Inherits authenticate, tenant, active tenant and the
+// conversation visibility check above. The name must be exactly the one this
+// message stored, so no other file, and no path outside the directory, is
+// reachable. Every refusal is the same bare 404.
+router.get("/:conversationId/messages/:messageId/media/:storedName", async (req: Request, res: Response) => {
+  try {
+    const storedName = String(req.params.storedName);
+    if (!STORED_UPLOAD_NAME.test(storedName)) return mediaNotFound(res);
+    // The caller already chose this conversation, so an imported one's media
+    // opens too (same reason as listByConversation).
+    const message = await withHistoricalRecords(() => prisma.message.findFirst({
+      where: { id: req.params.messageId as string, conversationId: req.params.conversationId as string, tenantId: req.tenantId! },
+      select: { mediaUrl: true },
+    }));
+    if (!message || storedUploadName(message.mediaUrl) !== storedName) return mediaNotFound(res);
+    serveStoredUpload(res, UPLOADS_DIR, storedName);
+  } catch {
+    mediaNotFound(res);
+  }
+});
 
 // ─── Delete Message ──────────────────────────────────────────
 router.delete("/:conversationId/messages/:messageId", async (req: Request, res: Response) => {

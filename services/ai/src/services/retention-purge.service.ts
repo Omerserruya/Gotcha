@@ -163,6 +163,17 @@ export async function startRetentionScheduler(): Promise<void> {
   if (_started) return;
   _started = true;
 
+  // THE KILL SWITCH IS OFF ONLY WHEN IT SAYS THE WORD "false".
+  //
+  // An UNSET or EMPTY `RETENTION_PURGE_ENABLED` leaves this scheduler RUNNING,
+  // daily at 03:30. That is the opposite of what an empty kill switch reads
+  // like, and it is the state this variable was in for months - undeclared in
+  // docker-compose, therefore empty, therefore enabled. Nothing was deleted
+  // only because no `RETENTION_DEFAULT_*` had a value either; the schedule
+  // itself was live the whole time.
+  //
+  // So: setting a retention default does not arm anything. It hands a running
+  // scheduler its first thing to do, tonight.
   if (process.env.RETENTION_PURGE_ENABLED === "false") {
     console.log("[retention-purge] scheduler disabled via RETENTION_PURGE_ENABLED=false");
     return;

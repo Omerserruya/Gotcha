@@ -1,0 +1,522 @@
+{
+  "greeting": {
+    "morning": "בוקר טוב",
+    "afternoon": "צהריים טובים",
+    "evening": "ערב טוב",
+    "quiet": {
+      "morning": "בוקר שקט",
+      "afternoon": "צהריים שקטים",
+      "evening": "ערב שקט"
+    },
+    "named": {
+      "morning": "בוקר טוב, {name}",
+      "afternoon": "צהריים טובים, {name}",
+      "evening": "ערב טוב, {name}",
+      "quiet": {
+        "morning": "בוקר שקט, {name}",
+        "afternoon": "צהריים שקטים, {name}",
+        "evening": "ערב שקט, {name}"
+      }
+    }
+  },
+  "summary": "{total, plural, =0 {עדיין לא נכנס דבר היום.} one {שיחה אחת היום, {handled} טופלו בלעדיכם.} two {# שיחות היום, {handled} טופלו בלעדיכם.} many {# שיחות היום, {handled} טופלו בלעדיכם.} other {# שיחות היום, {handled} טופלו בלעדיכם.}}",
+  "summaryBacklog": "{waiting, plural, one {לא נכנס דבר היום. שיחה אחת עדיין ממתינה מקודם.} two {לא נכנס דבר היום. # שיחות עדיין ממתינות מקודם.} many {לא נכנס דבר היום. # שיחות עדיין ממתינות מקודם.} other {לא נכנס דבר היום. # שיחות עדיין ממתינות מקודם.}}",
+  "command": {
+    "label": "שאלו את GOTCHA או אמרו לה מה לעשות",
+    "placeholder": "שאלו כל דבר, או אמרו ל‑GOTCHA מה לעשות…",
+    "try": "נסו",
+    "send": "שליחה",
+    "stop": "עצירה",
+    "suggestions": {
+      "summarise": "סכם את היום",
+      "waiting": "מי ממתין לתשובה?",
+      "campaign": "שלח קמפיין"
+    },
+    "awaitingApproval": "ממתין לאישורכם: {what}",
+    "failed": "הפעולה לא הושלמה. נסו שוב.",
+    "step": {
+      "running": "מבצע",
+      "succeeded": "הושלם",
+      "failed": "נכשל",
+      "denied": "אין הרשאה"
+    },
+    "whileQuiet": "כל עוד שקט",
+    "quiet": {
+      "answer": "ענו על השאלות הפתוחות",
+      "dormant": "כתבו למי שנעלם",
+      "recap": "הקריאו לי את אתמול",
+      "answerCounted": "{count, plural, one {לענות על השאלה הפתוחה} other {לענות על # השאלות הפתוחות}}"
+    },
+    "dayOne": {
+      "learned": "מה למדת מהאתר שלי?",
+      "test": "שלח לי הודעת ניסיון",
+      "store": "חבר את החנות שלי"
+    }
+  },
+  "metrics": {
+    "conversations": "שיחות היום",
+    "conversationsSoFar": "שיחות עד כה",
+    "handledByGotcha": "טופלו על ידי GOTCHA",
+    "allOfThem": "כולן",
+    "byYourTeam": "על ידי הצוות",
+    "needingYou": "דורשות אתכם",
+    "waitingOnApproval": "אישורים שמחכים לך",
+    "whereItCameFrom": "מאיפה הגיעו · {days} הימים האחרונים"
+  },
+  "needsYou": {
+    "title": "דורש אתכם עכשיו",
+    "sortedBy": "ממוין לפי סיכון",
+    "empty": "אף אחד לא ממתין לתשובה.",
+    "unavailable": "לא הצלחנו לטעון את התור כרגע.",
+    "more": "{count, plural, one {עוד אחד ממתין} two {עוד # ממתינים} other {עוד # ממתינים}} · פתחו את התיבה",
+    "wait": {
+      "minutes": "{count} דק׳",
+      "hours": "{count} שע׳",
+      "days": "{count} ימ׳"
+    },
+    "intent": {
+      "FRUSTRATED": "מתוסכל",
+      "COMPLAINT": "תלונה",
+      "HIGH_INTENT": "כוונת רכישה",
+      "REFUND": "החזר",
+      "SHIPPING_ISSUE": "משלוח",
+      "RETURN": "החזרה",
+      "ORDER_CHANGE": "שינוי הזמנה",
+      "PRODUCT_QUESTION": "שאלה",
+      "WAITING_EXTERNAL": "ממתין",
+      "OTHER": "אחר"
+    }
+  },
+  "working": {
+    "title": "GOTCHA עובדת",
+    "event": {
+      "refund": {
+        "completed": "בוצע החזר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "החזר נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: החזר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "refund_check": {
+        "completed": "נבדק החזר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "בדיקת החזר נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: בדיקת החזר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "order_cancel": {
+        "completed": "בוטלה הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "ביטול ההזמנה נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: ביטול הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "order_edit": {
+        "completed": "עודכנה הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "עדכון ההזמנה נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: עדכון הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "order_note": {
+        "completed": "נוספה הערה להזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "הוספת ההערה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: הערה להזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "order_exchange": {
+        "completed": "בוצעה החלפה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "ההחלפה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: החלפה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "order_lookup": {
+        "completed": "אותרה הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "איתור ההזמנה נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: איתור הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "return": {
+        "completed": "נפתחה החזרה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "פתיחת ההחזרה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: פתיחת החזרה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "return_check": {
+        "completed": "נבדקה החזרה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "בדיקת ההחזרה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: בדיקת החזרה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "tracking": {
+        "completed": "נשלח מעקב{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "שליחת המעקב נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: מעקב{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "contact": {
+        "completed": "עודכן איש קשר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "עדכון איש הקשר נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: עדכון איש קשר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "customer": {
+        "completed": "עודכן לקוח{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "עדכון הלקוח נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: עדכון לקוח{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "lead": {
+        "completed": "נוצר ליד{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "יצירת הליד נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: ליד{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "lead_convert": {
+        "completed": "הומר ליד{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "המרת הליד נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: המרת ליד{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "deal": {
+        "completed": "עודכנה עסקה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "עדכון העסקה נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: עדכון עסקה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "discount": {
+        "completed": "הוחל הנחה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "החלת ההנחה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: הנחה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "invoice": {
+        "completed": "הופקה חשבונית{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "הפקת החשבונית נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: חשבונית{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "payment_link": {
+        "completed": "נשלח קישור לתשלום{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "שליחת הקישור נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: קישור לתשלום{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "tag": {
+        "completed": "סומנה שיחה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "הסימון נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: סימון{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "fallback": {
+        "completed": "{action}{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "{action} - נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: {action}{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
+      }
+    },
+    "empty": "GOTCHA עוד לא ביצעה שום פעולה היום.",
+    "unavailable": "לא הצלחנו לטעון את פעילות GOTCHA כרגע.",
+    "timeSaved": "זמן שנחסך היום",
+    "timeSavedMeasured": "מבוסס על השיחות שלכם",
+    "timeSavedDefault": "מבוסס על ממוצע הפלטפורמה, לא על ההיסטוריה שלכם",
+    "duration": {
+      "hours": "{count} שע׳",
+      "minutes": "{count} דק׳",
+      "days": "{count} ימ׳"
+    },
+    "now": {
+      "lead": "כרגע: {summary}.",
+      "idle": "שום דבר לא רץ כרגע.",
+      "conversations": "{count, plural, one {עונה לשיחה אחת} two {עונה ל-# שיחות} other {עונה ל-# שיחות}}",
+      "approvals": "{count, plural, one {מחזיקה פעולה אחת לאישורכם} two {מחזיקה # פעולות לאישורכם} other {מחזיקה # פעולות לאישורכם}}",
+      "tool": {
+        "order": "{count, plural, one {בודקת הזמנה אחת} two {בודקת # הזמנות} other {בודקת # הזמנות}}",
+        "customer": "{count, plural, one {מעדכנת לקוח אחד} two {מעדכנת # לקוחות} other {מעדכנת # לקוחות}}",
+        "contact": "{count, plural, one {מעדכנת איש קשר אחד} two {מעדכנת # אנשי קשר} other {מעדכנת # אנשי קשר}}",
+        "lead": "{count, plural, one {מטפלת בליד אחד} two {מטפלת ב-# לידים} other {מטפלת ב-# לידים}}",
+        "deal": "{count, plural, one {מטפלת בעסקה אחת} two {מטפלת ב-# עסקאות} other {מטפלת ב-# עסקאות}}",
+        "conversation": "{count, plural, one {מנהלת שיחה אחת} two {מנהלת # שיחות} other {מנהלת # שיחות}}"
+      }
+    },
+    "allowance": {
+      "label": "שיחות שנותרו החודש",
+      "uncapped": "אין תקרה חודשית בתוכנית הזו.",
+      "unavailable": "לא הצלחנו לטעון את המכסה החודשית.",
+      "projection": "בקצב של היום זה מספיק עד {date}",
+      "projectionNone": "בקצב של היום זה מספיק לכל התקופה"
+    }
+  },
+  "summaryUnavailable": "נתוני היום אינם זמינים כרגע.",
+  "summaryQuiet": "GOTCHA ענתה על הכל עד כה. שום דבר לא ממתין לכם.",
+  "quietWork": {
+    "title": "שווה שעה, כל עוד שקט",
+    "subtitle": "GOTCHA בחרה את אלה",
+    "footnote": "שום דבר מזה אינו דחוף. זה פשוט מה שיקל על השבוע הבא.",
+    "empty": "אין על מה לעבוד כרגע.",
+    "unavailable": "לא הצלחנו לטעון את הרשימה כרגע.",
+    "missingSource": "סתירות בידע עדיין לא נכללות בדירוג הזה.",
+    "item": {
+      "gaps": {
+        "title": "{count, plural, one {שאלה שלא ידע לענות עליה} other {# שאלות שלא ידע לענות עליהן}}",
+        "body": "{questions} - {asked, plural, one {נשאלה פעם אחת} other {נשאלו # פעמים}}",
+        "action": "{count, plural, one {לענות עליה} other {לענות עליהן}}"
+      },
+      "conflicts": {
+        "title": "{count, plural, one {שני מקורות עדיין חלוקים לגבי {fields}} other {מקורות חלוקים לגבי # דברים}}",
+        "body": "{count, plural, one {עד שתבחר, GOTCHA מעבירה כל שאלה בנושא לאדם.} other {{fields} - עד שתבחר, GOTCHA מעבירה את השאלות האלה לאדם.}}",
+        "action": "לפתור"
+      },
+      "demandOne": {
+        "title": "{askedBy, plural, one {אדם אחד ביקש} other {# אנשים ביקשו}} {term}",
+        "body": "אין לך את זה במלאי. {weeksRunning, plural, =1 {שבוע ראשון.} other {# שבועות ברצף.}}",
+        "action": "לראות מי"
+      },
+      "demandMany": {
+        "title": "{count} דברים שביקשו ואין לך במלאי",
+        "body": "{terms} - {asked, plural, one {בקשה אחת} other {# בקשות}}",
+        "action": "לראות מי"
+      },
+      "dormant": {
+        "title": "{count, plural, one {לקוח אחד נעלם} two {# לקוחות נעלמו} other {# לקוחות נעלמו}}",
+        "body": "אין קשר כבר {quietForDays, plural, one {יום} two {יומיים} other {# ימים}}. פנייה אליהם פותחת שיחות, לא סוגרת אותן.",
+        "action": "פתחו קמפיין"
+      }
+    }
+  },
+  "conflicts": {
+    "title": "שני מקורות סותרים",
+    "body": "GOTCHA מצאה תשובות סותרות עבור {field}. עד שתבחרו אחת, כל שאלה בנושא עוברת לאדם.",
+    "accept": "השתמשו בחדש",
+    "keep": "השאירו נוכחי",
+    "failed": "השמירה נכשלה. הסתירה עדיין פתוחה."
+  },
+  "team": {
+    "title": "הצוות שלכם עכשיו",
+    "online": "{count, plural, =0 {אף אחד לא מחובר} one {אחד מחובר} two {# מחוברים} many {# מחוברים} other {# מחוברים}}",
+    "load": "{open} פתוחות · משיב תוך {reply}",
+    "awayUntil": "חוזר ב‑{time}",
+    "imbalance": "{name} נושא את רוב התור -",
+    "rebalance": "פתחו את תיבת ההודעות",
+    "none": "עדיין אין אף אחד בצוות.",
+    "unavailable": "לא הצלחנו לקרוא את הצוות כרגע.",
+    "loadAi": "{open} פתוחות · עובד AI"
+  },
+  "status": {
+    "nothingNeedsYou": "שום דבר לא דורש אתכם",
+    "signals": "{count, plural, one {סימן אחד} two {# סימנים} many {# סימנים} other {# סימנים}}",
+    "noSignals": "אין סימנים",
+    "signalsUnknown": "מצב ההתראות אינו זמין",
+    "waitingOnYou": "{count, plural, =0 {שום דבר לא ממתין לכם} one {אחת ממתינה לכם} two {# ממתינות לכם} many {# ממתינות לכם} other {# ממתינות לכם}}",
+    "waitingUnknown": "מספר הממתינים אינו זמין",
+    "lastHandover": "העברה אחרונה",
+    "lastHandoverNone": "שום דבר לא מתעד מתי שיחה הועברה לאחרונה לאדם.",
+    "notLive": "בהקמה · עוד לא באוויר",
+    "trial": "{days, plural, one {ניסיון · נשאר יום אחד} other {ניסיון · נשארו # ימים}}",
+    "setupCall": "קביעת שיחת הקמה"
+  },
+  "insight": {
+    "title": "כדאי לדעת",
+    "empty": "שום דבר לא בולט כרגע.",
+    "unavailable": "לא הצלחנו לטעון תובנות כרגע.",
+    "dismiss": "התעלמו",
+    "act": "הצצה",
+    "kind": {
+      "intent": {
+        "automatable": "<b>{count}</b> שיחות ב‑{days} הימים האחרונים עסקו באותו נושא. תשובה אוטומטית הייתה מורידה אותן מהתור.",
+        "multiple_automatable": "<b>{count}</b> נושאים חוזרים הופיעו לפחות {minOccurrences} פעמים כל אחד ב‑{days} הימים האחרונים. כל אחד מהם הוא תהליך שממתין שייכתב."
+      },
+      "escalation": {
+        "rate_high": "<b>{percent}%</b> מהשיחות שנותחו הועברו לאדם ב‑{days} הימים האחרונים - {escalated} מתוך {analyzed}."
+      },
+      "confidence": {
+        "below_threshold": "GOTCHA לא הייתה בטוחה ב-<b>{percent}%</b> מהשיחות שנותחו ב‑{days} הימים האחרונים - {count} מתוך {analyzed}, מתחת ל‑{threshold}% ביטחון."
+      },
+      "channel": {
+        "highest_volume": "<b>{count}</b> שיחות הגיעו דרך {channel} ב‑{days} הימים האחרונים, יותר מכל ערוץ אחר."
+      },
+      "department": {
+        "load_imbalance": "<b>{count}</b> שיחות הגיעו למחלקה אחת ב‑{days} הימים האחרונים, הרבה לפני השאר."
+      },
+      "fallback": "GOTCHA שמה לב למשהו ששווה מבט."
+    }
+  },
+  "firstSteps": {
+    "title": "צעדים ראשונים",
+    "progress": "{done, plural, one {אחד הושלם} two {# הושלמו} other {# הושלמו}} · נותרו כ‑{minutes, plural, one {דקה} two {# דקות} other {# דקות}}",
+    "allDone": "הכול הושלם",
+    "hide": "הסתירו - אפשר לסיים אחר כך בהגדרות",
+    "next": "השלב הבא",
+    "estimate": "{minutes} דק׳",
+    "unavailable": "לא הצלחנו לטעון את התקדמות ההגדרה כרגע.",
+    "ingest": "{pages, plural, one {עמוד אחד} two {# עמודים} other {# עמודים}} נקראו, {drafted, plural, one {תשובה אחת} two {# תשובות} other {# תשובות}} הוכנו",
+    "step": {
+      "connect_channel": {
+        "title": "חברו ערוץ",
+        "body": "וואטסאפ, אינסטגרם או אימייל - איפה שהלקוחות שלכם כבר כותבים לכם.",
+        "action": "חברו",
+        "after": "אחרי שתחבר ערוץ."
+      },
+      "connect_store": {
+        "title": "חברו את החנות",
+        "body": "עד שזה ייעשה, GOTCHA יכולה לענות על הזמנות אבל לא לזכות, לבטל או לעקוב אחריהן.",
+        "action": "חברו חנות",
+        "after": "אחרי שתחבר את החנות."
+      },
+      "add_knowledge": {
+        "title": "הוסיפו את מה ש‑GOTCHA צריכה לדעת",
+        "body": "הפנו אותה לאתר שלכם והיא תקרא את העמודים בעצמה.",
+        "action": "הוסיפו ידע",
+        "after": "אחרי שתוסיף מה GOTCHA צריכה לדעת."
+      },
+      "hire_employee": {
+        "title": "לגייס את עובד ה־AI הראשון",
+        "body": "לבחור את התפקיד שלו ואיפה הוא עונה.",
+        "action": "לגייס",
+        "after": "אחרי שתגייס את עובד ה־AI הראשון."
+      },
+      "handover_rules": {
+        "title": "הגדירו כללי העברה",
+        "body": "מתי אדם לוקח פיקוד - כעס, כסף, סיטונאות - ומה קורה מחוץ לשעות הפעילות.",
+        "action": "הגדירו כללים",
+        "after": "אחרי שתגדיר את כללי ההעברה."
+      },
+      "approval_limits": {
+        "title": "בחרו מה דורש את אישורכם",
+        "body": "החזרים מעל סכום שתקבעו, ביטולים, הנחות.",
+        "action": "הגדירו מגבלות",
+        "after": "אחרי שתבחר מה צריך את אישורך."
+      },
+      "test_conversation": {
+        "title": "שלחו לעצמכם בדיקה",
+        "body": "שיחה שתסמן כניסיון, כדי לראות איך GOTCHA עונה.",
+        "action": "שלחו בדיקה",
+        "after": "אחרי שתשלח לעצמך ניסיון."
+      },
+      "invite_team": {
+        "title": "הזמינו את הצוות",
+        "body": "האנשים שייקחו פיקוד כש‑GOTCHA מעבירה שיחה.",
+        "action": "הזמינו",
+        "after": "אחרי שתזמין את הצוות."
+      }
+    },
+    "noScreen": "עדיין אין מסך שמגדיר את זה.",
+    "ingestWaiting": "{count, plural, one {אחת מחכה לאישור שלך} other {# מחכות לאישור שלך}}",
+    "goLive": {
+      "title": "עלייה לאוויר",
+      "body": "GOTCHA מתחילה לענות ללקוחות אמיתיים.",
+      "locked": "נעול",
+      "go": "לעלות לאוויר",
+      "lockedBy": "מחכה ל: {steps}",
+      "confirm": "GOTCHA תתחיל לענות ללקוחות אמיתיים. לעלות לאוויר?",
+      "yes": "כן, לעלות לאוויר",
+      "going": "עולה לאוויר…",
+      "cancel": "עוד לא",
+      "connectStore": "לחיבור החנות",
+      "failed": {
+        "store": "קודם מחברים את החנות - GOTCHA צריכה אותה כדי לפעול על הזמנות.",
+        "profile": "קודם צריך למלא את פרופיל העסק.",
+        "admin": "סביבת העבודה צריכה קודם מנהל פעיל.",
+        "forbidden": "רק מנהל יכול להעלות את סביבת העבודה לאוויר.",
+        "failed": "העלייה לאוויר לא הצליחה - אפשר לנסות שוב."
+      },
+      "opensOnce": "נפתח כש{steps} מוגדרים."
+    },
+    "foot": "כשתעלה לאוויר, המספרים של היום והתור יתפסו את המקום הזה.",
+    "blockedBy": "מחכה ל: {step}",
+    "and": "ו",
+    "testMessage": "שליחת הודעת ניסיון לעצמך",
+    "testMessageNotYet": "שליחת הודעת ניסיון מכאן תגיע בהמשך - בינתיים אפשר לכתוב למספר ה‑WhatsApp מהטלפון שלך."
+  },
+  "dayOne": {
+    "eyebrow": "היום הראשון",
+    "heading": "סביבת העבודה שלך מוכנה",
+    "read": "GOTCHA קראה {pages, plural, one {עמוד אחד} other {# עמודים}} וניסחה {drafted, plural, one {תשובה אחת} other {# תשובות}}.",
+    "stepsLeft": "{count, plural, one {נשאר צעד אחד לפני שאפשר לעלות לאוויר.} other {נשארו # צעדים לפני שאפשר לעלות לאוויר.}}",
+    "allSteps": "כל הצעדים הושלמו.",
+    "headingNamed": "סביבת העבודה שלך מוכנה, {name}"
+  },
+  "conversation": {
+    "label": "שיחה עם GOTCHA",
+    "home": "בית",
+    "placeholder": "אפשר להגיב, או לומר ל־GOTCHA מה לעשות עכשיו…",
+    "send": "שליחה",
+    "stop": "עצירה",
+    "working": "עובדים על זה…",
+    "failed": "לא הצלחנו לענות כרגע. אפשר לנסות שוב בעוד רגע.",
+    "stopped": "נעצר.",
+    "step": {
+      "running": "בעבודה",
+      "failed": "נכשל",
+      "seconds": "{count, plural, =0 {· פחות משנייה} other {· # שנ׳}}",
+      "done": "הסתיים",
+      "waiting_approval": "ממתין לאישור שלך",
+      "openApprovals": "לפתיחת האישורים"
+    },
+    "opening": "פותחים את השיחה…",
+    "missing": "השיחה הזו לא כאן. ייתכן שנמחקה, או שהיא שייכת למישהו אחר.",
+    "openFailed": "לא הצלחנו לפתוח את השיחה. אפשר לנסות שוב בעוד רגע.",
+    "stopping": "עוצרים…",
+    "suggestions": "שאלות המשך",
+    "title": {
+      "label": "כותרת השיחה",
+      "rename": "שינוי שם",
+      "failed": "השם לא שונה. אפשר לנסות שוב."
+    },
+    "scope": {
+      "label": "על מה התשובות מסתכלות: {scope}",
+      "range": {
+        "this_week": "השבוע",
+        "last_7": "7 הימים האחרונים",
+        "last_30": "30 הימים האחרונים",
+        "custom": "{from} עד {to}"
+      },
+      "channels": {
+        "all": "כל הערוצים",
+        "some": "{count, plural, one {ערוץ אחד} other {# ערוצים}}"
+      },
+      "failed": "לא שונה. אפשר לנסות שוב."
+    },
+    "delete": {
+      "button": "מחיקת השיחה",
+      "title": "למחוק את השיחה?",
+      "what": "השאלות והתשובות שבה נמחקות איתה. אי אפשר לבטל את זה.",
+      "yes": "מחיקה",
+      "cancel": "להשאיר",
+      "deleting": "מוחקים…",
+      "failed": "השיחה לא נמחקה. אפשר לנסות שוב."
+    },
+    "problem": {
+      "budget": "התשובה נעצרה כאן: היא הגיעה למקסימום שאפשר לכתוב בבת אחת. אפשר לשאול על חלק מצומצם יותר.",
+      "unavailable": "שירות ה־AI לא ענה. אפשר לנסות שוב בעוד רגע.",
+      "busy": "עדיין נכתבת תשובה בשיחה הזו. אפשר לחכות לה, או לעצור אותה.",
+      "rate": "זה יותר מ־10 שאלות בדקה. אפשר לנסות שוב בעוד {seconds, plural, one {שנייה} other {# שניות}}.",
+      "rateSoon": "זה יותר מ־10 שאלות בדקה. אפשר לנסות שוב בעוד דקה.",
+      "credits": "אי אפשר להשתמש ב־AI כרגע: נגמרו הקרדיטים של סביבת העבודה. אפשר לבדוק ב<billing>הגדרות · חיוב</billing>.",
+      "missing": "השיחה הזו כבר לא כאן. ייתכן שנמחקה.",
+      "failed": "לא הצלחנו לענות כרגע. אפשר לנסות שוב בעוד רגע."
+    },
+    "blocks": {
+      "coverage": "נרשם עבור {covered} מתוך {of} שיחות",
+      "capped": "נספר מתוך {cap} הראשונים",
+      "storeLimit": "חלק ממה שהחנות החזירה",
+      "open": "לפתיחה ↗",
+      "total": "{total} בסך הכל",
+      "rows": "{count, plural, one {אחד בסך הכל} other {# בסך הכל}}",
+      "showAll": "להצגת הכל",
+      "showMore": "להצגת עוד",
+      "reading": "קוראים…",
+      "readFailed": "לא הצלחנו לקרוא את השאר. אפשר לנסות שוב בעוד רגע.",
+      "storeGone": "אי אפשר לקרוא את החנות כרגע, ולכן אי אפשר להציג את השאר.",
+      "sources": "על מה התשובה מבוססת",
+      "none": "אין"
+    },
+    "about": {
+      "title": "על בקשה",
+      "line": "על בקשה שמחכה לאישור. GOTCHA יכולה להסביר אותה כאן; ההחלטה נשארת בעמוד שלה.",
+      "open": "פתיחת הבקשה"
+    },
+    "proposal": {
+      "ready": "{count, plural, one {שינוי אחד מוכן} other {# שינויים מוכנים}}",
+      "notLive": "עוד שום דבר לא פעיל",
+      "state": {
+        "approved": "התוכנית אושרה, עוד לא הופעלה",
+        "executed": "התוכנית בוצעה",
+        "rejected": "התוכנית נדחתה, שום דבר לא הופעל",
+        "expired": "פג תוקף התוכנית, שום דבר לא הופעל"
+      },
+      "open": "לפתיחה",
+      "approve": "לאשר ולהפעיל",
+      "edit": "לערוך",
+      "openRequest": "לפתיחת הבקשה",
+      "confirm": {
+        "ask": "{count, plural, one {זה מה שיופעל עכשיו:} other {# הפעולות האלה יופעלו עכשיו:}}",
+        "yes": "כן, להפעיל",
+        "back": "חזרה"
+      },
+      "ran": "אושר, והפעולה בוצעה.",
+      "notRun": "אושר, אבל הפעולה לא בוצעה. בבקשה עצמה אפשר לראות למה ולנסות שוב.",
+      "refused": {
+        "stale": "מישהו אחר החליט על זה, או שהמועד חלף. מוצג עכשיו המצב הנוכחי.",
+        "forbidden": "אין לך הרשאה להחליט על זה.",
+        "failed": "זה לא עבר. שום דבר לא הופעל."
+      }
+    }
+  }
+}

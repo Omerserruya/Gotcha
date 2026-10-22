@@ -28,7 +28,7 @@ import {
   isFeatureEnabledForTenant,
   getShopifyAppIdentity,
   buildThemeEditorDeepLink,
-  type ProductSnapshot, readDurableSetting } from "@chatcenter/shared";
+  type ProductSnapshot, readDurableSetting, asksToHidePoweredBy, POWERED_BY_LOCKED_CODE } from "@chatcenter/shared";
 import {
   listChannels,
   loadChannel,
@@ -200,6 +200,11 @@ router.put(
         return;
       }
       const patch = { ...(req.body?.config ?? {}) };
+      // "Powered by GOTCHA" stays on (W8): refused, never silently ignored.
+      if (asksToHidePoweredBy((patch as any).appearance)) {
+        res.status(403).json({ error: "Powered by GOTCHA cannot be turned off", code: POWERED_BY_LOCKED_CODE, field: "config.appearance.showPoweredBy" });
+        return;
+      }
 
       // The AI employee and department used to be set here, and had to be
       // tenant-checked so an admin could not point their widget at another

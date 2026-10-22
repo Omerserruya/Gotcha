@@ -1,0 +1,254 @@
+{
+  "stepsLabel": "Setting up GOTCHA",
+  "steps": {
+    "website": "Your website",
+    "reading": "Reading it",
+    "learned": "What it learned",
+    "truth": "Source of truth",
+    "try": "Try it"
+  },
+  "mostImportant": "Most important",
+  "website": {
+    "headline": "It starts from what you already have.",
+    "lead": "Your website, your store, your past conversations. You confirm, GOTCHA reads.",
+    "foot": "Nothing reaches a customer until you say so",
+    "title": "Is this your website?",
+    "fromEmail": "We took it from {email}",
+    "from": {
+      "profile": "From your workspace's details",
+      "scan": "GOTCHA read it before. Reading it again brings it up to date"
+    },
+    "askTitle": "What's your website?",
+    "askLead": "GOTCHA reads it to learn how your business works. Nothing is read until you say so",
+    "placeholder": "yourbusiness.com",
+    "notReadYet": "Not read yet. What it finds shows on the next step",
+    "yes": "Yes, read it",
+    "starting": "Starting…",
+    "different": "It's a different address",
+    "readThis": "Read this one",
+    "back": "Back to {host}",
+    "notAnAddress": "That doesn't look like a website address. Try something like yourbusiness.com",
+    "noWebsite": "No website? Start from something else",
+    "sources": {
+      "instagram": {
+        "title": "Instagram profile",
+        "hint": "Your business's handle"
+      },
+      "catalogue": {
+        "title": "A catalogue or price list",
+        "hint": "PDF, Excel, CSV"
+      },
+      "yourself": {
+        "title": "Tell it yourself",
+        "hint": "Five short questions"
+      }
+    },
+    "elsewhereWhy": "Starting from these isn't available yet. For now GOTCHA starts from a website",
+    "consent": "By continuing you agree to the <terms>Terms of Service</terms> and the <privacy>Privacy Policy</privacy>"
+  },
+  "reading": {
+    "headline": "It reads your website so you don't have to explain it.",
+    "lead": {
+      "starting": "Starting…",
+      "reading": "About two minutes. You can watch, or go make coffee",
+      "done": "Done. Here's what it found",
+      "failed": "It couldn't finish reading the site. You can try again, or try another address",
+      "notStarted": "The read hasn't started. Try again from your website"
+    },
+    "foot": "You can close this tab, it keeps going",
+    "title": "Reading <host></host>",
+    "titleNoHost": "Reading your website",
+    "progress": "How far the read is",
+    "tracks": {
+      "pages": "Pages",
+      "products": "Products",
+      "policies": "Policies",
+      "places": "Places",
+      "voice": "Voice"
+    },
+    "ofPages": "of {requested}",
+    "counting": "Counting as it reads",
+    "notCounted": "Not counted separately yet",
+    "found": "Found just now",
+    "factsSoon": "Facts appear here as pages are turned into knowledge",
+    "nothingWritten": "Nothing was added to Knowledge from this read",
+    "factsUnread": "Couldn't read Knowledge just now",
+    "notFound": "not found anywhere",
+    "missed": "Couldn't check just now. Trying again",
+    "next": "See what it learned",
+    "again": "Back to your website"
+  },
+  "learned": {
+    "headline": "What it knows, and how it will sound.",
+    "lead": "Approve once. Everything here lands in Knowledge, where you can change it any time.",
+    "foot": "Nothing reaches a customer until you say so",
+    "title": "What GOTCHA knows now",
+    "count": "{facts, plural, =1 {1 topic from your website} other {# topics from your website}}",
+    "countFromPages": "{facts, plural, =1 {1 topic} other {# topics}} from {pages, plural, =1 {1 page} other {# pages}}",
+    "none": "Nothing from your website is in Knowledge yet",
+    "unread": "Couldn't read Knowledge just now",
+    "inKnowledge": "In Knowledge",
+    "learning": "Learning…",
+    "whereToChange": "It's all in Knowledge already, and you can change any of it there. <knowledge>Open Knowledge</knowledge>",
+    "readAgain": "Read the website again",
+    "conflictsWhy": "Pages that say different things aren't checked against each other yet. If two pages disagree, fix the page, and GOTCHA learns again.",
+    "voice": {
+      "title": "How you sound",
+      "unread": "Couldn't read the voice just now.",
+      "formal": "Formal",
+      "casual": "Casual",
+      "scaleWhy": "A formal to casual setting isn't available yet. Describe it in the voice below",
+      "says": "Says",
+      "never": "Never says",
+      "guidance": "The voice GOTCHA writes in",
+      "placeholder": "Warm and short. First names, no emoji, never \"Dear customer\"",
+      "tooShort": "At least {min} characters",
+      "reply": "A reply in your voice",
+      "sampleAsk": "Ask for a reply to hear it",
+      "sampleNeedsVoice": "Describe the voice first, then ask for a reply",
+      "sampleUnavailable": "Replies can't be written just now. Try again in a moment",
+      "sampleFailed": "Couldn't write a reply just now",
+      "ask": "Write a reply in this voice",
+      "asking": "Writing…",
+      "save": "Save the voice",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "saveFailed": "The voice wasn't saved. Try again",
+      "cancel": "Cancel",
+      "later": "Do this later",
+      "soundsLikeUs": "Sounds like us",
+      "adjust": "Adjust"
+    }
+  },
+  "truth": {
+    "headline": "The most important connection you'll make.",
+    "lead": "Your website explains how things work. Your store knows what's true right now. GOTCHA checks it before every answer about an order, a price or stock.",
+    "foot": "You decide what it may change. Reading is always safe",
+    "title": "Where does the truth live?",
+    "subtitle": "Orders, stock, prices and customers. GOTCHA checks here before every answer, so it never guesses from an old web page",
+    "systems": {
+      "shopify": "Shopify",
+      "woocommerce": "WooCommerce",
+      "priority": "Priority",
+      "wix": "Wix",
+      "google_sheets": "Google Sheets",
+      "custom_api": "Your API"
+    },
+    "how": {
+      "shopify": "One sign-in, at Shopify",
+      "woocommerce": "Your store's address, then approve in WooCommerce",
+      "priority": "An API key from Priority",
+      "wix": "One sign-in, at Wix",
+      "google_sheets": "A sheet you share with GOTCHA",
+      "custom_api": "Set up with GOTCHA's team"
+    },
+    "foundOn": "Found on <host></host>",
+    "connected": "Connected",
+    "unread": "Couldn't read your systems just now. Try again in a moment.",
+    "notOffered": "Connecting {name} isn't available yet.",
+    "comesBack": "Connecting opens {name}. When it's done you come back to Studio · Integrations, where the connection shows.",
+    "others": "Other systems",
+    "may": {
+      "title": "What GOTCHA may do there",
+      "read": "Read everything above",
+      "always": "Always on",
+      "actions": {
+        "address": "Change a delivery address",
+        "cancel": "Cancel an order that hasn't shipped",
+        "refund": "Refund or give credit",
+        "prices": "Change prices or stock"
+      },
+      "stances": {
+        "allowed": "Allowed",
+        "ask": "Ask me first",
+        "never": "Never"
+      },
+      "why": "You set these in Studio · Integrations once the workspace is live. They can't be set during setup yet"
+    },
+    "next": "Continue",
+    "skip": "Skip for now",
+    "skipWhy": "Without it, GOTCHA can explain your policies, but it can't check an order, a price or stock",
+    "failing": "Needs reconnecting",
+    "failingWhy": "{name} stopped letting GOTCHA in. Reconnect to sign in again."
+  },
+  "try": {
+    "headline": "Judge it on your own questions.",
+    "lead": "Things your customers really ask. If an answer is off, fix it once and it's fixed everywhere",
+    "foot": "Setup mode: it only talks to your team until you go live",
+    "title": "Try GOTCHA on real questions",
+    "leadNone": "No customer questions to try yet. Ask your own below",
+    "unread": "Couldn't read your customers' questions just now. You can still ask your own below",
+    "asked": "{count, plural, =1 {Asked once} other {Asked # times}}",
+    "answerLabel": "The answer",
+    "placeholder": "The answer, the way you'd give it to a customer",
+    "save": "Teach it",
+    "teaching": "Teaching…",
+    "cancel": "Cancel",
+    "failed": "It wasn't learned. Try again in a moment",
+    "open": "Open my workspace",
+    "nextOnHome": "Next on Home: connect WhatsApp and invite your team",
+    "finishing": "Opening your workspace and hiring your AI employee…",
+    "noKnowledge": {
+      "title": "Your workspace is open, but GOTCHA has nothing to answer from yet",
+      "lead": "Nothing in Knowledge is ready to use: the website read added nothing it can answer from. Until you add some, your AI employee will hand most questions to your team.",
+      "add": "Add knowledge"
+    },
+    "refused": {
+      "core_system_required": "Finishing needs your main business system connected (HubSpot, Salesforce, Zoho, Fireberry, Airtable or Shopify), or skipped on the previous step.",
+      "toTruth": "Back to Source of truth",
+      "needs_profile": "Finishing needs your business's name and a short description, and the website read didn't find them.",
+      "toWebsite": "Read your website",
+      "refused": "It couldn't finish yet. Try again in a moment, or ask GOTCHA's team.",
+      "failed": "It didn't finish. Try again in a moment."
+    },
+    "real": "Your real questions",
+    "suggested": "Questions customers usually ask",
+    "see": "See how GOTCHA answers",
+    "answering": "GOTCHA is answering…",
+    "source": "Knowledge · {title}",
+    "notLearned": "Not in what GOTCHA learned yet",
+    "good": "Good",
+    "goodLine": "Good, this is how it'll answer",
+    "fix": "Fix",
+    "relearned": "Learned. This is how it answers now",
+    "own": {
+      "label": "Ask your own question",
+      "placeholder": "Something a customer might ask",
+      "ask": "Ask"
+    },
+    "refusedAsk": {
+      "required": "Write a question first",
+      "too_long": "That's too long. Keep the question under 300 characters",
+      "rate": "That's a lot of questions at once. Try again in {seconds, plural, =1 {a second} other {# seconds}}",
+      "no_ai": "GOTCHA can't answer right now: this workspace has no AI available (no active plan, or its units are used up)",
+      "forbidden": "Only an admin can try GOTCHA's answers",
+      "failed": "It couldn't answer just now. Try again in a moment"
+    },
+    "subtitle": "Answered from what GOTCHA just learned, with where each answer came from",
+    "home": "Back to Home"
+  },
+  "gate": {
+    "waiting": {
+      "title": "Your workspace is still being set up",
+      "lead": "An admin is setting up GOTCHA for your business. You'll be able to sign in and work here as soon as they finish.",
+      "leadBy": "<name></name> is setting up GOTCHA for your business. You'll be able to sign in and work here as soon as they finish."
+    },
+    "unavailable": {
+      "title": "Couldn't load your workspace",
+      "lead": "We couldn't check where your workspace stands just now. Try again in a moment.",
+      "retry": "Try again"
+    },
+    "payment": {
+      "title": "Your workspace is waiting for payment",
+      "lead": "Setup is done. The workspace opens once payment is confirmed. Taking you to payment…",
+      "go": "Go to payment"
+    }
+  },
+  "notYet": "Not available yet",
+  "preview": {
+    "tag": "Preview",
+    "why": "In preview nothing here changes your workspace",
+    "banner": "A preview of onboarding. Your workspace is live, and nothing here changes it",
+    "home": "Back to Home"
+  }
+}

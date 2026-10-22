@@ -1,0 +1,18 @@
+@layer shell {
+  /*
+   * Placed by the Settings layout, which decides whether this sits under the
+   * section list or under the page. The spacing that differs between those two
+   * homes belongs to the layout; what the paragraph looks like belongs here.
+   */
+  .footnote {
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .footnoteLink {
+    color: var(--text-primary);
+    text-decoration: none;
+    border-block-end: var(--border-width-thin) solid var(--border-emphasis);
+  }
+}

@@ -130,8 +130,12 @@ describe("production nginx upstreams", () => {
     expect(dangling, "nginx will refuse to start: host not found in upstream").toEqual([]);
   });
 
-  it("names no `frontend` container - the static export is baked into the image", () => {
-    expect(conf).not.toMatch(/proxy_pass\s+https?:\/\/frontend/);
+  // Since 2026-10-21 the app is the frontend-v2 container; the legacy app
+  // (whose static export this image used to carry) is reached by nothing.
+  it("proxies the app to frontend-v2 and never to the legacy `frontend` container", () => {
+    expect(conf).not.toMatch(/proxy_pass\s+https?:\/\/frontend[;:/]/);
+    expect(conf).toMatch(/upstream frontend_v2 \{\s*server frontend-v2:3000;\s*\}/);
+    expect(conf).not.toMatch(/root \/usr\/share\/nginx\/html;/);
   });
 
   /**

@@ -47,6 +47,12 @@ export interface EmailThreadContext {
   threadId?: string;
   /** Graph message id, so Outlook can use its own reply endpoint. */
   providerMessageId?: string;
+  /**
+   * More header lines for this email (List-Unsubscribe on marketing mail).
+   * Sent by the adapters that write raw headers (Gmail, SMTP); Outlook's
+   * Graph send takes no such header and sends without it.
+   */
+  extraHeaders?: Array<{ name: string; value: string }>;
 }
 
 /**
@@ -201,7 +207,13 @@ export function threadHeaderLines(thread: EmailThreadContext | undefined): strin
   const lines: string[] = [];
   if (thread.inReplyTo) lines.push(`In-Reply-To: ${thread.inReplyTo}`);
   if (thread.references?.length) lines.push(`References: ${thread.references.join(" ")}`);
+  for (const h of safeExtraHeaders(thread.extraHeaders)) lines.push(`${h.name}: ${h.value}`);
   return lines;
+}
+
+/** Extra headers that cannot break the header block: a token name, no line breaks. */
+export function safeExtraHeaders(headers: EmailThreadContext["extraHeaders"]): Array<{ name: string; value: string }> {
+  return (headers ?? []).filter((h) => h && /^[A-Za-z][A-Za-z0-9-]{0,62}$/.test(h.name) && typeof h.value === "string" && !/[\r\n]/.test(h.value) && h.value.length <= 2000);
 }
 
 /** The subject to put on a send, whether it is a reply or a fresh email. */

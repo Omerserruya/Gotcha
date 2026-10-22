@@ -23,8 +23,10 @@ export interface ProductCandidate {
   matchQuality: "exact" | "approximate";
 }
 
+export type ProductProvider = "shopify" | "woocommerce";
+
 export interface ProductSearchEnvelope {
-  provider: "shopify";
+  provider: ProductProvider;
   tool: string;
   executionId?: string;
   status: "ok" | "no_results" | "error";
@@ -286,6 +288,94 @@ export function normalizeShopifyProducts(
     provider: "shopify",
     tool: "shopify_product_search",
     status,
+    candidates,
+    appliedFilters,
+    unavailableFilters,
+    safeModelSummary: buildSafeModelSummary(candidates),
+    ...(mismatch ? { budgetCurrencyMismatch: mismatch } : {}),
+    ...(comparableBudget ? { budget: comparableBudget } : {}),
+  };
+}
+
+/**
+ * WooCommerce products (REST v3) into the same envelope (W9, 2026-10-14).
+ *
+ * Woo differs from Shopify in what it hands back:
+ * - the price is the product's own `price` (the sale price while on sale);
+ *   a variable product's price is its cheapest variation's, and it has no
+ *   single purchasable id, so `variantId` stays empty (the card resolves it)
+ * - stock is `stock_status`: instock / onbackorder (can be ordered) /
+ *   outofstock
+ * - the link is `permalink`, kept only when it is on the connected store's
+ *   own host (anything else is replaced by the store's ?p=<id> link: a
+ *   product URL is never taken from a field we do not control)
+ * - hidden products (catalog_visibility "hidden") and anything not published
+ *   are dropped: the store does not show them either
+ * Currency is the store's, read from the store, never the shopper's.
+ */
+export function normalizeWooProducts(
+  rawProducts: any[],
+  opts: {
+    storeUrl: string;
+    budget?: { target: number; currency: string };
+    requestedFilters?: string[];
+    storeCurrency?: string;
+  },
+): ProductSearchEnvelope {
+  const list = (Array.isArray(rawProducts) ? rawProducts : []).filter(
+    (p) => p && (p.status === undefined || p.status === "publish") && p.catalog_visibility !== "hidden",
+  );
+  const requested = opts.requestedFilters ?? [];
+  const mismatch =
+    opts.budget && opts.storeCurrency && opts.budget.currency !== opts.storeCurrency
+      ? { budget: opts.budget.currency, shop: opts.storeCurrency }
+      : undefined;
+  const comparableBudget = mismatch ? undefined : opts.budget;
+  let storeHost = "";
+  try { storeHost = new URL(opts.storeUrl).host.toLowerCase(); } catch { /* no store host */ }
+  const base = opts.storeUrl.replace(/\/+$/, "");
+
+  const candidates: ProductCandidate[] = list.map((raw) => {
+    const productId = raw?.id !== undefined && raw?.id !== null ? String(raw.id) : "";
+    const price = typeof raw?.price === "string" && raw.price.trim() ? raw.price.trim() : typeof raw?.price === "number" ? String(raw.price) : undefined;
+    let url = `${base}/?p=${encodeURIComponent(productId)}`;
+    if (typeof raw?.permalink === "string") {
+      try {
+        const u = new URL(raw.permalink);
+        if (u.protocol === "https:" && u.host.toLowerCase() === storeHost) url = u.toString();
+      } catch { /* keep the store link */ }
+    }
+    const stock = raw?.stock_status;
+    const attributes: Record<string, string | number> = {};
+    if (typeof raw?.type === "string" && raw.type) attributes.product_type = raw.type;
+    const category = Array.isArray(raw?.categories) ? raw.categories.find((c: any) => typeof c?.name === "string")?.name : undefined;
+    if (category) attributes.category = category;
+    return {
+      title: typeof raw?.name === "string" ? raw.name : "",
+      productId,
+      variantId: undefined,
+      sku: typeof raw?.sku === "string" && raw.sku ? raw.sku : undefined,
+      price,
+      currency: opts.storeCurrency,
+      inventoryState: stock === "instock" || stock === "onbackorder" ? "in_stock" : stock === "outofstock" ? "out_of_stock" : "unknown",
+      url,
+      imageUrl: Array.isArray(raw?.images) && typeof raw.images[0]?.src === "string" ? raw.images[0].src : undefined,
+      attributes,
+      unknownAttributes: [],
+      matchQuality: deriveMatchQuality(price, comparableBudget),
+    };
+  });
+
+  const appliedFilters: string[] = [];
+  if (requested.includes("query")) appliedFilters.push("query");
+  if (comparableBudget) appliedFilters.push("budget");
+  // Woo filters by price and stock only; the discovery attributes are not fields.
+  const unavailableFilters = SHOPIFY_UNFILTERABLE.filter((f) => requested.includes(f));
+
+  return {
+    provider: "woocommerce",
+    tool: "woocommerce_product_search",
+    status: candidates.length === 0 ? "no_results" : "ok",
     candidates,
     appliedFilters,
     unavailableFilters,

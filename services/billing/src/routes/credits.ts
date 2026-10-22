@@ -19,6 +19,7 @@ import { ensureBillableEntity, getEntityIdForTenant, getSubscriptionForTenant } 
 import { listActivePlans } from "../services/plan.service";
 import { buyCredits } from "../services/purchase.service";
 import { spendWindowKey } from "../lib/period";
+import { observedConversationCost, remainingAtObservedRate } from "../services/observed-usage.service";
 import { commercialCurrencyFor } from "../lib/currency";
 import { resolvePaygRate } from "@chatcenter/shared";
 import { taxSummaryForTenant } from "../services/pricing.service";
@@ -36,11 +37,12 @@ const router = Router();
  */
 router.get("/billing/credit-summary", authenticate, resolveTenant, async (req, res) => {
   const tenantId = req.tenantId!;
-  const [balance, sub, plans, entityId] = await Promise.all([
+  const [balance, sub, plans, entityId, observed] = await Promise.all([
     getBalance(tenantId),
     getSubscriptionForTenant(tenantId),
     listActivePlans(),
     getEntityIdForTenant(tenantId),
+    observedConversationCost(tenantId),
   ]);
   const plan = plans.find((p) => p.key === (sub as any)?.planKey) ?? null;
   const policy = entityId
@@ -135,6 +137,20 @@ router.get("/billing/credit-summary", authenticate, resolveTenant, async (req, r
         voiceCreditsPerEstimatedCall: ratios.voiceCreditsPerEstimatedCall,
         businessDaysPerMonth: ratios.businessDaysPerMonth,
       },
+    },
+    // The SAME question answered from this tenant's own ledger instead of the
+    // commercial ratio. Reported ALONGSIDE `estimatedRemaining`, never in place
+    // of it: one is what the plan promises, the other is what this tenant has
+    // actually been burning, and a screen that silently swapped them would make
+    // a pricing claim out of one customer's behaviour. Null with a reason when
+    // there is not enough evidence, so the screen falls back to the plan ratio
+    // and can say which it is showing.
+    observedRemaining: {
+      chats: remainingAtObservedRate(balance.total, observed),
+      basis: observed.creditsPerConversation !== null ? "TENANT_ACTUAL" : null,
+      creditsPerConversation: observed.creditsPerConversation,
+      reason: observed.reason,
+      sample: observed.sample,
     },
     disclaimer: ESTIMATE_DISCLAIMER,
     // Evaluation access, when this is a POC or Trial rather than a paid plan.

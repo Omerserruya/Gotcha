@@ -8,6 +8,7 @@ import {
   gmailInboundAdapter,
   gmailFetchNewMessages,
   outlookInboundAdapter,
+  fetchOutlookMessage,
   slackInboundAdapter,
   decryptCredentials,
   crossTenantMiddleware,
@@ -50,29 +51,45 @@ const router = Router();
  * This does NOT weaken the gate. Each candidate is the full HMAC check, a
  * signature matching none of them is still rejected, and a request with no
  * signature or no configured secret still fails closed.
+ *
+ * The Facebook app's secret can be configured under two names, and both are
+ * candidates. With `WHATSAPP_APP_SECRET || META_APP_SECRET` only the first was
+ * ever tried, so when the two named DIFFERENT apps (dev on 2026-10-10: the
+ * first was the prod app's secret, the second the dev app's) every delivery
+ * for a number or Page subscribed to the second app failed the HMAC and was
+ * dropped, while connect and health looked fine.
  */
 function verifyMetaSignature(adapter: { channel: string; getSignatureHeader(): string; verifySignature(s: string, b: Buffer, sig: string): boolean }, req: Request) {
   // Ordered by which app most likely signed this channel, so the common case
   // matches on the first try.
-  const fbSecret = process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET;
-  const igSecret = process.env.INSTAGRAM_APP_SECRET;
-  const ordered = adapter.channel === "INSTAGRAM" ? [igSecret, fbSecret] : [fbSecret, igSecret];
+  type Named = { name: string; secret: string | undefined };
+  const fbSecrets: Named[] = [
+    { name: "WHATSAPP_APP_SECRET", secret: process.env.WHATSAPP_APP_SECRET },
+    { name: "META_APP_SECRET", secret: process.env.META_APP_SECRET },
+  ];
+  const igSecret: Named = { name: "INSTAGRAM_APP_SECRET", secret: process.env.INSTAGRAM_APP_SECRET };
+  const ordered = adapter.channel === "INSTAGRAM" ? [igSecret, ...fbSecrets] : [...fbSecrets, igSecret];
 
-  const configured = Array.from(new Set(ordered.filter((s): s is string => !!s)));
+  // One candidate per distinct secret, named by the first env var holding it.
+  const seen = new Set<string>();
+  const configured = ordered.filter((c) => !!c.secret && !seen.has(c.secret) && (seen.add(c.secret), true));
   // With nothing configured, still make ONE call with an empty secret so the
   // "not configured" verdict keeps coming from the shared verifier rather than
   // being re-implemented here with a reason string that could drift from it.
-  const candidates: Array<string | undefined> = configured.length > 0 ? configured : [undefined];
+  const candidates: Named[] = configured.length > 0 ? configured : [{ name: "none", secret: undefined }];
 
   let last: ReturnType<typeof verifyWebhookSignature> = { ok: false, reason: "signature mismatch" };
-  for (const secret of candidates) {
+  for (const { name, secret } of candidates) {
     const verdict = verifyWebhookSignature({
       secret,
       rawBody: (req as any).rawBody,
       signature: req.headers[adapter.getSignatureHeader()] as string | undefined,
       verify: (s, b, sig) => adapter.verifySignature(s, b, sig),
     });
-    if (verdict.ok) return verdict;
+    // Which app signed it, by env NAME (never the value): the only way to tell
+    // two subscriptions delivering the same event apart (2026-10-11, every
+    // Instagram event arrived twice ~400ms apart).
+    if (verdict.ok) return { ...verdict, via: name };
     // A missing body or missing header is a property of the REQUEST, not of the
     // secret, so retrying with another key cannot help and the reason must not
     // be flattened into "signature mismatch" - that is the difference between
@@ -101,11 +118,17 @@ router.get("/", (req: Request, res: Response) => {
     // The Meta verification handshake failed. Either the configured token
     // drifted from the one in the Meta dashboard - in which case NO webhook
     // will ever be delivered - or someone is probing the endpoint.
-    reportOperationalFailure({
-      errorCode: ERROR_CODES.webhook_verification_failed,
-      domain: "webhook", service: "webhook", provider: "meta",
-      context: { mode: String(mode ?? "none"), configured: Boolean(verifyToken) },
-    });
+    // The report can never change the answer: a 5xx here makes Meta retry
+    // (2026-10-09), and the answer below is always 403.
+    try {
+      reportOperationalFailure({
+        errorCode: ERROR_CODES.webhook_verification_failed,
+        domain: "webhook", service: "webhook", provider: "meta",
+        context: { mode: String(mode ?? "none"), configured: Boolean(verifyToken) },
+      });
+    } catch (err: any) {
+      console.warn("[webhook] verification failure could not be reported:", err?.message);
+    }
   }
   if (mode === "subscribe" && token === verifyToken) {
     console.log("Webhook verified");
@@ -183,6 +206,7 @@ router.post("/", async (req: Request, res: Response) => {
       });
       return;
     }
+    console.log(`[WEBHOOK] ${adapter.channel} signature verified via=${(verdict as { via?: string }).via ?? "?"}`);
 
     // Step 2.5: Template-related updates from WhatsApp arrive at the WABA level
     // (entry.id = WABA id, no phone_number_id), so they cannot be resolved via
@@ -221,12 +245,22 @@ router.post("/", async (req: Request, res: Response) => {
           continue;
         }
 
-        const whereTemplate = (name: string) => ({
+        // Meta's own id first; otherwise name AND language on this number (or
+        // an unbound one). By name alone, a status for the English template
+        // overwrote the Hebrew one of the same name (2026-10-13).
+        const whereTemplate = (name: string, language: string | null, metaTemplateId: string | null) => ({
           tenantId: matchedAccount!.tenantId,
           channel: "WHATSAPP" as const,
           OR: [
-            { channelAccountId: matchedAccount!.id, name },
-            { channelAccountId: null, name },
+            ...(metaTemplateId ? [{ metaTemplateId }] : []),
+            {
+              AND: [
+                { name },
+                ...(language ? [{ language }] : []),
+                ...(metaTemplateId ? [{ metaTemplateId: null }] : []),
+                { OR: [{ channelAccountId: matchedAccount!.id }, { channelAccountId: null }] },
+              ],
+            },
           ],
         });
 
@@ -248,11 +282,18 @@ router.post("/", async (req: Request, res: Response) => {
                   PENDING_DELETION: "APPROVED",
                   DISABLED: "REJECTED",
                   FLAGGED: "REJECTED",
+                  // A paused template cannot be sent; it used to be ignored
+                  // and stayed APPROVED, so it was still offered.
+                  PAUSED: "REJECTED",
                 };
                 const newStatus = statusMap[tu.event];
                 if (!newStatus) continue;
                 data.status = newStatus;
-                if (tu.reason) data.rejectionReason = tu.reason;
+                // The exact Meta state rides in front of the reason ("[PAUSED]
+                // ..."), as lastError codes do: our enum has no PAUSED/DISABLED.
+                const precise = tu.event === "REJECTED" || newStatus === "APPROVED" ? null : String(tu.event);
+                if (precise) data.rejectionReason = `[${precise}] ${tu.reason ? String(tu.reason) : ""}`.trim();
+                else if (tu.reason) data.rejectionReason = tu.reason;
                 else if (newStatus === "APPROVED") data.rejectionReason = null;
                 break;
               }
@@ -283,8 +324,9 @@ router.post("/", async (req: Request, res: Response) => {
 
             if (Object.keys(data).length === 0) continue;
 
+            const metaLanguage = tu.message_template_language ? String(tu.message_template_language) : null;
             await prisma.messageTemplate.updateMany({
-              where: whereTemplate(metaTemplateName),
+              where: whereTemplate(metaTemplateName, metaLanguage, metaTemplateId),
               data,
             });
             console.log(`[WEBHOOK] Template "${metaTemplateName}" updated via ${change.field}:`, data);
@@ -341,10 +383,16 @@ router.post("/", async (req: Request, res: Response) => {
             // Structured and already reduced by the adapter to name, numbers,
             // emails and organization. The worker copies producer metadata onto
             // the message row verbatim.
-            ...(msg.content.contacts?.length || msg.content.unsupported
+            ...(msg.content.contacts?.length || msg.content.unsupported || msg.content.storyMention || msg.content.location
               ? {
                   metadata: {
                     ...(msg.content.contacts?.length ? { contacts: msg.content.contacts } : {}),
+                    // A shared location: coordinates, the place's name and
+                    // address, and a map link, for the inbox and the AI.
+                    ...(msg.content.location ? { location: msg.content.location } : {}),
+                    // An Instagram story mention: the story's link, for the
+                    // inbox and for "Story mention" automations.
+                    ...(msg.content.storyMention ? { storyMention: msg.content.storyMention } : {}),
                     // The provider's own reason for a message it could not
                     // represent. Persisted because it is the ONLY evidence
                     // that will exist: the payload log truncates, and the
@@ -528,6 +576,9 @@ function normalizeContentToBodyAndType(
       return { body: content.text || "", messageType: "text" };
     case "image":
       return { body: content.caption || "[Image]", messageType: "image", ...media };
+    case "sticker":
+      // Without this case the default branch drops the media id (2026-10-09).
+      return { body: content.caption || "[Sticker]", messageType: "sticker", ...media };
     case "document":
       return { body: content.caption || content.fileName || "[Document]", messageType: "document", ...media };
     case "audio":
@@ -872,68 +923,79 @@ router.post("/outlook", async (req: Request, res: Response) => {
     const body = req.body;
     console.log(`[WEBHOOK] Outlook notification received, count=${body?.value?.length || 0}`);
 
-    // Verify the Microsoft Graph clientState (set at subscription creation).
-    // Every notification must carry the matching secret, else it is dropped
-    // (fail-closed in production).
-    const notifications: any[] = Array.isArray(body?.value) ? body.value : [];
-    for (const n of notifications) {
-      const outlookVerdict = verifySharedSecretToken({
-        expected: process.env.OUTLOOK_WEBHOOK_CLIENT_STATE,
-        provided: n?.clientState,
-        isProduction: IS_PRODUCTION,
-        label: "Outlook clientState",
-      });
-      if (!outlookVerdict.ok) {
-        console.error(`[WEBHOOK] Rejected Outlook webhook: ${outlookVerdict.reason}`);
-        return;
-      }
-    }
-
     if (!outlookInboundAdapter.canHandle(body)) {
       console.warn("Outlook webhook: invalid payload");
       return;
     }
 
-    // Outlook sends subscriptionId which maps to our channel account
-    const subscriptionId = outlookInboundAdapter.resolveChannelAccountExternalId(body);
-
-    // Find channel account by subscriptionId stored in platformMeta
-    let channelAccount;
-    if (subscriptionId) {
-      // Search by subscriptionId in platformMeta
-      const accounts = await prisma.channelAccount.findMany({
-        where: { channel: "OUTLOOK", isActive: true },
-      });
-      channelAccount = accounts.find((a) => {
-        const meta = a.platformMeta as any;
-        return meta?.subscriptionId === subscriptionId;
-      });
+    // Each notification is checked against the clientState stored on the
+    // account its subscriptionId names (auth writes it at subscription time).
+    // One env value could never match a per-subscription random secret, so
+    // every notification was rejected (2026-10-09). No stored value, no
+    // account or a mismatch drops the whole delivery, in every environment.
+    const notifications: any[] = body.value;
+    const accounts = await prisma.channelAccount.findMany({
+      where: { channel: "OUTLOOK", isActive: true },
+    });
+    const accountFor = (subscriptionId: unknown) =>
+      typeof subscriptionId === "string" && subscriptionId
+        ? accounts.find((a) => (a.platformMeta as any)?.subscriptionId === subscriptionId)
+        : undefined;
+    const verified: Array<{ notification: any; account: (typeof accounts)[number] }> = [];
+    for (const n of notifications) {
+      const account = accountFor(n?.subscriptionId);
+      const stored = (account?.platformMeta as any)?.clientState;
+      if (!account) {
+        console.warn(`No Outlook channel account found for subscription: ${n?.subscriptionId}`);
+        return;
+      }
+      if (typeof stored !== "string" || !timingSafeEqualStr(stored, n?.clientState)) {
+        console.error(`[WEBHOOK] Rejected Outlook webhook: Outlook clientState ${typeof stored === "string" && stored ? "token mismatch" : "not stored"}`);
+        return;
+      }
+      verified.push({ notification: n, account });
     }
 
-    if (!channelAccount) {
-      console.warn(`No Outlook channel account found for subscription: ${subscriptionId}`);
-      return;
-    }
-
-    const tenantId = channelAccount.tenantId;
-    const channelAccountId = channelAccount.id;
-
-    const messages = outlookInboundAdapter.extractMessages(body);
-    for (const msg of messages) {
+    // Per notification, so a batch from two mailboxes never lands on one.
+    // Each names a message; the message itself is read from Graph (2026-10-14):
+    // the route used to queue the Graph path as the sender and a placeholder
+    // as the text. Drafts, the account's own mail and mail no person wrote
+    // (bounces, reports, auto-replies, bulk) are dropped here, logged.
+    for (const { notification, account } of verified) {
+      if (notification?.changeType !== "created") continue;
+      const graphId = String(notification?.resourceData?.id ?? "");
+      if (!graphId) continue;
+      const rawCreds = account.credentials;
+      let credentials: any = {};
+      try {
+        credentials = typeof rawCreds === "string" ? decryptCredentials(rawCreds) : (rawCreds ?? {});
+      } catch (err: any) {
+        console.error(`[WEBHOOK] Outlook ${account.id}: credentials unreadable: ${err?.message}`);
+        continue;
+      }
+      const got = await fetchOutlookMessage(credentials, graphId, String(account.externalId ?? ""));
+      if (!got.ok) {
+        console.log(`[WEBHOOK] Outlook ${account.id}: message ${graphId} not taken: ${got.reason}`);
+        continue;
+      }
+      const msg = got.message;
       await incomingMessageQueue.add(
         "process",
         {
-          tenantId,
+          tenantId: account.tenantId,
           channel: "OUTLOOK",
-          channelAccountId,
+          channelAccountId: account.id,
           normalizedMessage: {
-            externalMessageId: msg.externalMessageId,
+            externalMessageId: msg.messageId,
             senderId: msg.senderId,
             senderDisplayName: msg.senderDisplayName,
-            timestamp: msg.timestamp.toISOString(),
-            contentType: msg.content.type,
-            body: msg.content.text || "",
-            messageType: "text",
+            timestamp: new Date().toISOString(),
+            contentType: "text",
+            body: msg.body,
+            subject: msg.subject,
+            messageType: "email",
+            // The ids a reply needs (Message.metadata.email), as for Gmail.
+            metadata: { email: msg.email },
           },
         },
         { attempts: 3, backoff: { type: "exponential", delay: 1000 } }

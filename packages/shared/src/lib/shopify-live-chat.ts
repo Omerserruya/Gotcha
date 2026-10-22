@@ -27,6 +27,7 @@ import {
   migrateLegacyWelcome,
   type ShopifyChatUx,
 } from "./shopify-chat-ux";
+import { effectivePoweredBy } from "./powered-by";
 
 import {
   normalizeRecommendationSet,
@@ -498,7 +499,7 @@ export function normalizeShopifyLiveChatConfig(
       direction: ["auto", "ltr", "rtl"].includes(a.direction)
         ? a.direction
         : base.appearance.direction,
-      showPoweredBy: bool(a.showPoweredBy, base.appearance.showPoweredBy),
+      showPoweredBy: effectivePoweredBy(a.showPoweredBy, base.appearance.showPoweredBy),
     },
     welcome: {
       headline: sanitizeToken(w.headline, MAX_HEADLINE) || base.welcome.headline,
@@ -734,10 +735,30 @@ const PAGE_TYPES: StorefrontPageType[] = [
 
 const HANDLE_RE = /^[a-z0-9][a-z0-9-_]{0,120}$/;
 
+/**
+ * A page's product / collection slug as the browser sent it: a Shopify handle
+ * (ASCII) or a WooCommerce slug, which is often Hebrew and arrives
+ * percent-encoded (/product/%D7%A0...). Decoded, then letters, digits, "-"
+ * and "_" only (2026-10-14: Hebrew slugs were dropped).
+ */
+const CONTEXT_SLUG_RE = /^[\p{L}\p{N}][\p{L}\p{N}\p{M}_-]{0,120}$/u;
+
+function contextSlug(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  let v = raw.trim();
+  if (v.includes("%")) {
+    try { v = decodeURIComponent(v); } catch { return null; }
+  }
+  v = v.normalize("NFC").toLowerCase();
+  return CONTEXT_SLUG_RE.test(v) ? v : null;
+}
+
 export interface StorefrontContext {
   pageType: StorefrontPageType;
-  /** Product handle when on a product page - the only product hint we keep. */
+  /** Product handle / slug when on a product page - a lookup key, never a fact. */
   productHandle: string | null;
+  /** The product's numeric id when the page names it (WooCommerce's postid-<id>). A lookup key too. */
+  productId: string | null;
   collectionHandle: string | null;
   /** Path only. Query strings routinely carry PII and marketing ids. */
   path: string | null;
@@ -756,9 +777,7 @@ export interface StorefrontContext {
  */
 export function normalizeStorefrontContext(raw: unknown): StorefrontContext {
   const src = (raw && typeof raw === "object" ? raw : {}) as Record<string, any>;
-  const handle = typeof src.productHandle === "string" ? src.productHandle.trim().toLowerCase() : "";
-  const collection =
-    typeof src.collectionHandle === "string" ? src.collectionHandle.trim().toLowerCase() : "";
+  const productIdRaw = typeof src.productId === "number" ? String(src.productId) : typeof src.productId === "string" ? src.productId.trim() : "";
 
   let path: string | null = null;
   if (typeof src.path === "string" && src.path.startsWith("/")) {
@@ -777,8 +796,9 @@ export function normalizeStorefrontContext(raw: unknown): StorefrontContext {
 
   return {
     pageType: PAGE_TYPES.includes(src.pageType) ? src.pageType : "other",
-    productHandle: HANDLE_RE.test(handle) ? handle : null,
-    collectionHandle: HANDLE_RE.test(collection) ? collection : null,
+    productHandle: contextSlug(src.productHandle),
+    productId: /^\d{1,12}$/.test(productIdRaw) ? productIdRaw : null,
+    collectionHandle: contextSlug(src.collectionHandle),
     path,
     cartItemCount: Number.isFinite(count) && count >= 0 && count < 10000 ? Math.floor(count) : null,
     currency: /^[A-Z]{3}$/.test(currency) ? currency : null,

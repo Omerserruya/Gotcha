@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSocket } from "@/lib/socket";
+import { getSocket, joinConversation, leaveConversation } from "@/lib/socket";
 import { useI18n } from "@/context/I18nContext";
 import { useVoiceCall, type CopilotSuggestion } from "@/context/VoiceCallContext";
 
@@ -33,6 +33,11 @@ export function CopilotSuggestionsCard({ conversationId }: Props) {
     if (!conversationId) return;
     const socket = getSocket();
     if (!socket) return;
+
+    // Suggestions arrive in the conversation's room now, not tenant-wide, so
+    // this card joins it. Refcounted, so holding the same room as the call
+    // context is safe and the last one out releases it.
+    joinConversation(conversationId);
 
     const onSuggestions = (data: unknown) => {
       const d = data as { conversationId?: string; suggestions?: CopilotSuggestion[] };
@@ -67,6 +72,7 @@ export function CopilotSuggestionsCard({ conversationId }: Props) {
     return () => {
       socket.off("voice.copilot.suggestions", onSuggestions);
       socket.off("voice.frame.updated", onFrame);
+      leaveConversation(conversationId);
     };
   }, [conversationId]);
 

@@ -82,7 +82,7 @@ const SUBMIT_SUGGESTIONS_TOOL = {
       properties: {
         suggestions: {
           type: "array",
-          description: "2–3 plan-aligned suggestions, each a distinct approach to the goal",
+          description: "2-3 plan-aligned suggestions, each a distinct approach to the goal",
           items: {
             type: "object",
             properties: {
@@ -117,9 +117,9 @@ const SUBMIT_SUGGESTIONS_TOOL = {
               evidence: {
                 type: "string",
                 description:
-                  "Exact verbatim substring (1–80 chars) from the customer's latest inbound message.",
+                  "Exact verbatim substring (1-80 chars) from the customer's latest inbound message.",
               },
-              confidence: { type: "number", description: "0–1 (only ≥ 0.85 will be persisted)" },
+              confidence: { type: "number", description: "0-1 (only ≥ 0.85 will be persisted)" },
             },
             required: ["kind", "severity", "evidence", "confidence"],
           },
@@ -704,7 +704,8 @@ export class OpenAIProvider implements AIProvider {
               "• **What they asked**: the concrete questions or topics they explored, as a short sub-list when there were several.\n" +
               "• **Status**: where things stand from the CUSTOMER's side (e.g. exploring, asked X and awaiting an answer, ready to buy, issue resolved). A human agent reads this AFTER claiming the conversation - they ARE the human now handling it - so never phrase status as \"waiting to be connected to a human agent\" or \"needs to be handed off\"; describe what the customer actually needs next.\n" +
               "• **Opportunity**: any sales/expansion signal - interest in a capability, evaluation intent, buying signal. Write \"none clear\" if genuinely absent. Do NOT invent one.\n\n" +
-              "Rules: ground every point in what was actually said - never fabricate. Don't mislabel a discovery/evaluation chat as \"support\". Keep it brief." + langInstruction,
+              "Rules: ground every point in what was actually said - never fabricate. Don't mislabel a discovery/evaluation chat as \"support\". Keep it brief. " +
+              "Call the AI that answers customers GOTCHA and the business's people \"the team\" (in Hebrew \"הצוות\"); never \"the agent\", \"the bot\" or \"הסוכן\". No long dashes." + langInstruction,
           },
           { role: "user", content: messagesText },
         ],

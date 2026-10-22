@@ -157,14 +157,55 @@ export function defaultDecisionWithoutPolicy(actionKind: BusinessActionKind): Bu
   };
 }
 
+/**
+ * An amount from a tool's arguments: a number, or a numeric string (WooCommerce
+ * tools take "549.00"). Anything else is no amount. Without this a string
+ * amount was never compared with a cap.
+ */
+export function policyAmount(v: unknown): number | undefined {
+  if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
+  if (typeof v === "string" && /^\s*\d+(\.\d+)?\s*$/.test(v)) return Number(v);
+  return undefined;
+}
+
 /** Map a tool name to the action kind it represents; null = not governed. */
 export function actionKindForTool(tool: string): BusinessActionKind | null {
-  if (/\.process_refund$|(^|\.)issue_refund$/.test(tool)) return "REFUND";
+  if (/\.process_refund$|(^|\.)issue_refund$|^woocommerce\.create_refund$/.test(tool)) return "REFUND";
   if (/\.cancel_order$/.test(tool)) return "CANCEL_ORDER";
   if (/issue_compensation_coupon$/.test(tool)) return "COMPENSATION";
   if (/create_(discount_code|one_time_coupon|vip_coupon)$|disable_coupon$/.test(tool)) return "COUPON";
   if (/\.(update_customer|create_note|add_tag|remove_tag|update_metafield)$/.test(tool)) return "CUSTOMER_WRITE";
   return null;
+}
+
+/**
+ * The action kind of one CALL, when the arguments change what it is
+ * (2026-10-14, Omer's decision): woocommerce.create_coupon WITH an order_id is
+ * a store credit for that order, a refund paid as credit, so it is a REFUND
+ * (allowed with approval, bounded by the refund caps when configured);
+ * WITHOUT one it is an open promotion code, a COUPON (denied unless the
+ * tenant has a coupon policy, like Shopify's create_discount_code).
+ */
+export function actionKindForCall(tool: string, args: Record<string, unknown> | null | undefined): BusinessActionKind | null {
+  if (tool === "woocommerce.create_coupon") {
+    return String(args?.order_id ?? "").trim() ? "REFUND" : "COUPON";
+  }
+  return actionKindForTool(tool);
+}
+
+/** What kind of compensation a coupon call proposes, for prohibitedTypes. */
+export function couponRequestedType(tool: string, args: Record<string, unknown> | null | undefined): string | undefined {
+  if (tool !== "woocommerce.create_coupon") return undefined;
+  return args?.discount_type === "fixed_cart" || args?.discount_type === "fixed_product" ? "fixed_coupon" : "percentage_coupon";
+}
+
+/**
+ * The amount a call asks for, as a policy compares it: a percent coupon has
+ * no amount (its percent is not money); everything else its numeric amount.
+ */
+export function policyRequestedAmount(tool: string, args: Record<string, unknown> | null | undefined): number | undefined {
+  if (couponRequestedType(tool, args) === "percentage_coupon") return undefined;
+  return policyAmount(args?.amount);
 }
 
 const SENSITIVE_KINDS = new Set<BusinessActionKind>([

@@ -43,30 +43,52 @@ const H = vi.hoisted(() => {
     updateConversation: v.fn().mockResolvedValue({}),
     createMessage: v.fn().mockResolvedValue({ id: "msg1" }),
     updateChannel: v.fn().mockResolvedValue({}),
+    executeRaw: v.fn(async () => 1),
     validateCartLine: v.fn(),
+    createHandover: v.fn(async () => ({ id: "ho1", fromHandler: null, toHandler: "human", at: new Date() })),
   };
+});
+
+/**
+ * The one prisma double. The route's `prisma` AND the shared library's
+ * internal one resolve to it: `recordHandover` (shared) writes the handler
+ * change and its history row through its own `prisma.$transaction`, so that
+ * module is pointed here too and nothing reaches a real database.
+ */
+const prismaDouble = vi.hoisted(() => {
+  const v: any = vi;
+  const db: any = {
+    channelAccount: {
+      findFirst: v.fn(async () => H.channelRow.current),
+      update: H.updateChannel,
+    },
+    tenant: { findUnique: v.fn(async () => H.tenantRow.current) },
+    conversation: {
+      findFirst: v.fn(async () => H.conversationRow.current),
+      create: H.createConversation,
+      update: H.updateConversation,
+    },
+    message: {
+      findMany: v.fn(async () => H.messages.current),
+      create: H.createMessage,
+    },
+    conversationHandover: { create: H.createHandover },
+    $executeRaw: H.executeRaw,
+  };
+  db.$transaction = v.fn(async (fn: (tx: unknown) => unknown) => fn(db));
+  return db;
+});
+
+vi.mock("../../../../packages/shared/src/lib/prisma", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return { ...actual, prisma: prismaDouble };
 });
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
-    prisma: {
-      channelAccount: {
-        findFirst: vi.fn(async () => H.channelRow.current),
-        update: H.updateChannel,
-      },
-      tenant: { findUnique: vi.fn(async () => H.tenantRow.current) },
-      conversation: {
-        findFirst: vi.fn(async () => H.conversationRow.current),
-        create: H.createConversation,
-        update: H.updateConversation,
-      },
-      message: {
-        findMany: vi.fn(async () => H.messages.current),
-        create: H.createMessage,
-      },
-    },
+    prisma: prismaDouble,
     withCrossTenantAccess: (fn: () => Promise<unknown>) => fn(),
     incomingMessageQueue: { add: H.enqueue },
     analyticsQueue: { add: vi.fn().mockResolvedValue(undefined) },
@@ -77,6 +99,16 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
 
 vi.mock("../services/shopify-catalog.service", () => ({
   validateCartLine: H.validateCartLine,
+}));
+
+// The installation bookkeeping, spied: a live install for the shop, so the
+// heartbeat path runs and its stale-"uninstalled" clearing can be observed.
+const INSTALL = vi.hoisted(() => ({ clear: vi.fn(async () => true), heartbeat: vi.fn(async () => undefined) }));
+vi.mock("../services/shopify-chat-install.service", async (importOriginal) => ({
+  ...(await importOriginal<any>()),
+  findLiveInstallation: vi.fn(async () => ({ id: "inst1", status: "ACTIVE", tenantId: "t1", channelAccountId: "ch1" })),
+  recordInstallationHeartbeat: INSTALL.heartbeat,
+  clearStaleUninstalledError: INSTALL.clear,
 }));
 
 import router from "../routes/shopify-chat-public";
@@ -284,10 +316,15 @@ describe("POST /bootstrap", () => {
     // The heartbeat is fire-and-forget by design: a storefront must never
     // wait on it. Let its microtask settle before asserting.
     await new Promise((r) => setTimeout(r, 10));
-    expect(H.updateChannel).toHaveBeenCalled();
-    const arg = H.updateChannel.mock.calls[0][0];
-    expect(arg.data.platformMeta.shopifyLiveChat.install.lastHeartbeatAt).toBeTruthy();
-    expect(arg.data.platformMeta.shopifyLiveChat.install.lastThemeId).toBe("12345");
+    // One statement that replaces only the install block on the stored row
+    // (never the whole config read at bootstrap).
+    expect(H.executeRaw).toHaveBeenCalled();
+    const [strings, ...values] = H.executeRaw.mock.calls[0];
+    expect(strings.join("?")).toContain("'install'");
+    const install = JSON.parse(values.find((x: unknown) => typeof x === "string" && x.startsWith("{")));
+    expect(install.lastHeartbeatAt).toBeTruthy();
+    expect(install.lastThemeId).toBe("12345");
+    expect(H.updateChannel).not.toHaveBeenCalled();
   });
 
   it("rate limits repeated bootstraps from one channel and ip", async () => {
@@ -616,5 +653,25 @@ describe("POST /lead", () => {
       .set("Origin", ORIGIN)
       .send({ sessionToken: session(), message: "hi", consent: true });
     expect(res.status).toBe(403);
+  });
+});
+
+
+describe("★ a working storefront clears a stale \"uninstalled\" (2026-10-09)", () => {
+  beforeEach(() => { INSTALL.clear.mockClear(); INSTALL.heartbeat.mockClear(); });
+
+  it("on bootstrap: the live installation's heartbeat, then the clearing", async () => {
+    await request(app()).post("/api/shopify-chat/bootstrap").set("Origin", ORIGIN).send({ publicKey: freshKey() });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(INSTALL.heartbeat).toHaveBeenCalledWith("inst1");
+    expect(INSTALL.clear).toHaveBeenCalledWith(expect.objectContaining({ id: "inst1", channelAccountId: "ch1", tenantId: "t1" }));
+  });
+
+  it("on a shopper's message too, without holding up the reply", async () => {
+    const res = await request(app()).post("/api/shopify-chat/message").set("Origin", ORIGIN)
+      .send({ sessionToken: session(), body: "hi", clientId: "abc123def456" });
+    expect(res.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(INSTALL.clear).toHaveBeenCalled();
   });
 });

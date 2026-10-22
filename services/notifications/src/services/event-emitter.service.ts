@@ -45,7 +45,30 @@ export type SystemEventType =
   | "credit.exhausted"
   | "credit.auto_purchase_succeeded"
   | "credit.auto_purchase_failed"
-  | "credit.auto_purchase_ceiling_reached";
+  | "credit.auto_purchase_ceiling_reached"
+  // Emitted by services/ai when POST /api/integrations/:slug/test writes
+  // status ERROR. That write is gated on the failure looking like auth, and
+  // only runs when someone tests - so this is "we checked and the credentials
+  // were rejected", NOT "the provider is down" and NOT continuous monitoring.
+  //
+  // NOTE: this union is duplicated in services/ai/src/services/notifications-emit.ts
+  // and the two have already drifted - the billing types above exist only here.
+  // A type added to one side compiles in that service and fails in the other.
+  | "integration.check_failed"
+  // Emitted by services/outgoing-worker when every recipient of a broadcast
+  // has reached a terminal state. Not "campaign succeeded" - failures count
+  // toward completion, so the body states both numbers.
+  | "broadcast.completed"
+  // Emitted by services/conversation when a conversation is REASSIGNED to a
+  // different agent. Deliberately NOT emitted for self-claims: telling someone
+  // they picked up the conversation they just clicked is the noise this screen
+  // exists to prevent.
+  | "conversation.assigned"
+  // A money-shaped tool ATTEMPTED and broke. Emitted only for
+  // failure === "errored"; a refusal is the product working correctly and is
+  // not worth interrupting anyone. The kind (refund/discount/meeting) rides in
+  // the payload so one type covers the family, mirroring the success side.
+  | "tool.action_failed";
 
 export interface SystemEventMetadata {
   conversationId?: string;

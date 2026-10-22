@@ -10,6 +10,28 @@ const { aIAgent, department, conversation } = vi.hoisted(() => ({
 }));
 
 vi.mock("@chatcenter/shared", () => ({
+  /**
+   * ★ A FAITHFUL DOUBLE, NOT A NO-OP.
+   *
+   * The routing service no longer writes the conversation itself - it delegates
+   * to `recordHandover`, which performs the `conversation.update` inside a
+   * transaction. This export was missing from the barrel entirely, so the real
+   * call threw and took four tests down with it. Stubbing it as
+   * `async () => undefined` fixed the throw and then failed two of them for the
+   * opposite reason: the write the assertions are about never happened, so the
+   * tests were reporting on the stub rather than on the routing.
+   *
+   * So the double does what the real one does - the caller's columns plus
+   * `handledBy`, through the same mocked prisma - which is what keeps these
+   * assertions about the conversation that gets pinned.
+   */
+  recordHandover: async ({ conversationId, to, data }: any) => {
+    await conversation.update({
+      where: { id: conversationId },
+      data: { ...(data ?? {}), handledBy: to },
+    });
+    return { id: "handover-1", from: null, to, at: new Date() };
+  },
   // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
   // mocks of this barrel must supply them or the read path throws instead of
   // returning "not configured". Default: nothing configured.

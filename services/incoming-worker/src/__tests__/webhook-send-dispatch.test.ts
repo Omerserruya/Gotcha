@@ -206,6 +206,55 @@ describe("send_message_template - context-free explicit recipient", () => {
     expect(conversation.findUnique).not.toHaveBeenCalled();
   });
 
+  it("★ a MARKETING template without the removal line is never sent; with it, it is", async () => {
+    const tmpl = (body: string) => ({ id: "tmpl-m", tenantId: "tenant-1", name: "promo", language: "he", status: "APPROVED", category: "MARKETING", body, headerType: null, headerContent: null, variables: [] });
+    const nodes: TestNode[] = [
+      { id: "n1", type: "start", data: {} },
+      { id: "n2", type: "send_message_template", data: { templateId: "tmpl-m", recipient: "{{body.phone_number}}" } },
+    ];
+    const edges: TestEdge[] = [{ id: "e1", source: "n1", target: "n2" }];
+    chatbotFlow.findFirst.mockResolvedValue(flowGraph(nodes, edges));
+    adapter.sendTemplateMessage.mockClear();
+
+    messageTemplate.findFirst.mockResolvedValue(tmpl("מבצע סוף עונה, 20% הנחה"));
+    const without = await executeWebhookFlow({ tenantId: "tenant-1", workflowId: "flow-1", payload: { phone_number: "+972501234567" } });
+    expect(without.trace.find((t) => t.type === "send_message_template")?.action).toBe("skipped_missing_removal_line");
+    expect(adapter.sendTemplateMessage).not.toHaveBeenCalled();
+
+    messageTemplate.findFirst.mockResolvedValue(tmpl("מבצע סוף עונה, 20% הנחה\n\nלהסרה השיבו הסר"));
+    const withLine = await executeWebhookFlow({ tenantId: "tenant-1", workflowId: "flow-1", payload: { phone_number: "+972501234567" } });
+    expect(withLine.trace.find((t) => t.type === "send_message_template")?.action).toBe("sent");
+    expect(adapter.sendTemplateMessage).toHaveBeenCalledTimes(1);
+  });
+
+  // 2026-10-09: the removal line is for MARKETING templates only. A UTILITY or
+  // AUTHENTICATION template is sent without it, even inside a marketing run
+  // (a cart run, an order run after a wait); a MARKETING one still is not.
+  it("★ UTILITY / AUTHENTICATION templates need no removal line, even in a marketing run", async () => {
+    const tmpl = (category: string) => ({ id: "tmpl-u", tenantId: "tenant-1", name: "shipped", language: "he", status: "APPROVED", category, body: "ההזמנה שלך נשלחה", headerType: null, headerContent: null, variables: [] });
+    const nodes: TestNode[] = [
+      { id: "n1", type: "start", data: {} },
+      { id: "n2", type: "send_message_template", data: { templateId: "tmpl-u", recipient: "{{body.phone_number}}" } },
+    ];
+    chatbotFlow.findFirst.mockResolvedValue(flowGraph(nodes, [{ id: "e1", source: "n1", target: "n2" }]));
+    const run = () => ({ id: "run-1", flowId: "flow-1", answered: false, currentNodeId: null, prevOwner: null, marketing: true });
+    const go = () => executeWebhookFlow({ tenantId: "tenant-1", workflowId: "flow-1", payload: { phone_number: "+972501234567" }, run: run() });
+
+    for (const category of ["UTILITY", "AUTHENTICATION", "utility"]) {
+      adapter.sendTemplateMessage.mockClear();
+      messageTemplate.findFirst.mockResolvedValue(tmpl(category));
+      const r = await go();
+      expect(r.trace.find((t) => t.type === "send_message_template")?.action).toBe("sent");
+      expect(adapter.sendTemplateMessage).toHaveBeenCalledTimes(1);
+    }
+
+    adapter.sendTemplateMessage.mockClear();
+    messageTemplate.findFirst.mockResolvedValue(tmpl("MARKETING"));
+    const m = await go();
+    expect(m.trace.find((t) => t.type === "send_message_template")?.action).toBe("skipped_missing_removal_line");
+    expect(adapter.sendTemplateMessage).not.toHaveBeenCalled();
+  });
+
   it("still no-ops when the template node has no explicit recipient", async () => {
     const nodes: TestNode[] = [
       { id: "n1", type: "start", data: {} },

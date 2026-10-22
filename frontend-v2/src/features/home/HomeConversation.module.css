@@ -1,0 +1,852 @@
+@layer features {
+  /*
+   * 01a, measured: a 60px bar (← Home · rule · title · Share), the turns in a
+   * 780px column, newest at the bottom, and the dark box docked under them
+   * (radius 16, `14px 16px 12px 18px`).
+   */
+  .chat {
+    display: flex;
+    flex-direction: column;
+    block-size: 100%;
+    min-block-size: 0;
+    background-color: var(--panel-base);
+    line-height: normal;
+  }
+
+  .bar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    block-size: 60px;
+    padding-inline: 28px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  /*
+   * ★ NOTHING IN THE BAR OVERLAPS, AT ANY WIDTH (supervisor, dev at 700px:
+   * the title shrank to nothing and the pencil sat on the scope). The title
+   * row grows and keeps a minimum (its title ellipsed inside it); the scope
+   * gives way first, ellipsing its words; Home, the rule and the end keep
+   * their size.
+   */
+  .back {
+    flex: none;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .back:dir(rtl) svg {
+    transform: scaleX(-1);
+  }
+
+  .rule {
+    flex: none;
+    inline-size: 1px;
+    block-size: 14px;
+    background-color: var(--border-default);
+  }
+
+  .title {
+    min-inline-size: 0;
+    margin: 0;
+    overflow: hidden;
+    font-size: 13.5px;
+    font-weight: var(--font-weight-semibold);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .barEnd {
+    flex: none;
+    display: inline-flex;
+    gap: var(--space-10);
+    align-items: center;
+    margin-inline-start: auto;
+  }
+
+  /* The title (or its field) grows into the room left, and never below 120px. */
+  .titleRow,
+  .titleEdit {
+    display: inline-flex;
+    flex: 1 1 auto;
+    gap: 6px;
+    align-items: center;
+    min-inline-size: 120px;
+  }
+
+  .titleInput {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    max-inline-size: 420px;
+    padding: 4px 8px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 7px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .titleProblem {
+    font-size: 11.5px;
+    color: var(--intent-urgent-text);
+    white-space: nowrap;
+  }
+
+  .iconButton {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    inline-size: 26px;
+    block-size: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .iconButton:hover {
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+  }
+
+  /* 01a's "THIS WEEK · ALL CHANNELS", beside the title - and a menu to change it. */
+  .scope {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    flex: 0 1 auto;
+    min-inline-size: 0;
+  }
+
+  .scopeText {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .scopeChip {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+    padding: 3px 7px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+    cursor: pointer;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+
+  .scopeChip svg {
+    flex: none;
+  }
+
+  .scopeChip:hover {
+    background-color: var(--panel-field);
+    color: var(--text-secondary);
+  }
+
+  .dialogActions {
+    display: flex;
+    gap: var(--space-10);
+    justify-content: flex-end;
+  }
+
+  .quiet,
+  .danger {
+    padding: 8px 14px;
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: 9px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .danger {
+    border-color: transparent;
+    background-color: var(--intent-urgent-text);
+    color: var(--frame-text);
+  }
+
+  .danger:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .scroll {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    padding: var(--space-24) 40px 18px;
+  }
+
+  /* 03's Ask: what this thread is about, and the way back to it. */
+  .about {
+    max-inline-size: 780px;
+    margin: 0 auto var(--space-16);
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .aboutLink {
+    color: var(--text-body);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .turns {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    max-inline-size: 780px;
+    margin: 0 auto;
+    padding: 0;
+    list-style: none;
+  }
+
+  .turn {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .question {
+    align-self: flex-end;
+    max-inline-size: 520px;
+    margin: 0;
+    padding: 11px 16px;
+    border-radius: 16px 16px 4px;
+    background-color: var(--panel-inset);
+    font-size: 14px;
+    line-height: 1.5;
+    text-align: start;
+  }
+
+  .question:dir(rtl) {
+    border-radius: 16px 16px 16px 4px;
+  }
+
+  .answerRow {
+    display: flex;
+    gap: var(--space-14);
+  }
+
+  .avatar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 28px;
+    block-size: 28px;
+    border-radius: 50%;
+    background-color: var(--frame-raised);
+  }
+
+  .avatar > span {
+    inline-size: 8px;
+    block-size: 8px;
+    border-radius: 50%;
+    background-color: var(--signal-ai);
+  }
+
+  .answerBody {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .step {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
+  .stepMark {
+    display: inline-flex;
+    justify-content: center;
+    inline-size: 12px;
+    color: var(--signal-done-text);
+  }
+
+  .step[data-status='failed'] .stepMark,
+  .step[data-status='denied'] .stepMark {
+    color: var(--intent-urgent-text);
+  }
+
+  .stepState {
+    color: var(--text-faint);
+  }
+
+  .stepTime {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-faint);
+  }
+
+  .stepDetail {
+    flex-basis: 100%;
+    padding-inline-start: 20px;
+    color: var(--text-muted);
+  }
+
+  .spinner {
+    inline-size: 10px;
+    block-size: 10px;
+    border: 1.5px solid var(--border-default);
+    border-block-start-color: var(--text-subtle);
+    border-radius: 50%;
+    animation: turn-spin 0.8s linear infinite;
+  }
+
+  @keyframes turn-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinner {
+      animation: none;
+    }
+  }
+
+  .working,
+  .note {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
+  .answer {
+    margin: 0;
+    text-align: start;
+    font-size: 14.5px;
+    line-height: 1.6;
+    white-space: pre-line;
+    text-wrap: pretty;
+  }
+
+  /* The markdown subset's lists, in the answer's own direction. */
+  .answerList {
+    margin: 0;
+    padding-inline-start: 1.3em;
+    font-size: 14.5px;
+    line-height: 1.6;
+  }
+
+  .answer + .answer,
+  .answer + .answerList,
+  .answerList + .answer {
+    margin-block-start: 8px;
+  }
+
+  .stepLink {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  /* ── Stage 3 (design 7): a proposed plan, decided here or in Approvals ── */
+  .proposal {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-inline-size: 0;
+    margin-block-start: 4px;
+    padding: 16px 18px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+  }
+
+  .proposalSteps,
+  .proposalRun {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    margin: 0;
+    padding-inline-start: 18px;
+    font-size: 13px;
+  }
+
+  .proposalStep {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    align-items: baseline;
+  }
+
+  .proposalConfirm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding-block-start: var(--space-10);
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .proposalAsk {
+    margin: 0;
+    font-size: 13px;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .proposalActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-12);
+    align-items: center;
+    margin: 0;
+  }
+
+  .proposalGo {
+    padding-block: var(--space-6);
+    padding-inline: var(--space-14);
+    border: none;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--action-text);
+    cursor: pointer;
+  }
+
+  .proposalGo:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .proposalQuiet {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  /* ── Stage 2 (01a): the work under the words ── */
+  .blocks {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-block-start: 4px;
+  }
+
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-inline-size: 0;
+    padding: 16px 18px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+  }
+
+  .blockHead {
+    display: flex;
+    gap: var(--space-10);
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .blockTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .blockMeta {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .blockFoot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    align-items: center;
+  }
+
+  .blockNote {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  /* 01a's "Open in Analytics ↗", in the step lavender. */
+  .blockOpen {
+    margin-inline-start: auto;
+    font-size: 11.5px;
+    color: var(--step-next);
+    text-decoration: none;
+  }
+
+  /* The chart: bars over the days, the days that matter in terracotta. */
+  .bars {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+    block-size: 128px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .barSlot {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+    min-inline-size: 0;
+  }
+
+  .barGroup {
+    display: flex;
+    flex: 1;
+    gap: 2px;
+    align-items: flex-end;
+    inline-size: 100%;
+  }
+
+  .chartBar {
+    flex: 1;
+    border-radius: 4px;
+    background-color: var(--border-emphasis);
+  }
+
+  .barSlot[data-highlight] .chartBar[data-series='0'] {
+    background-color: var(--intent-urgent-edge);
+  }
+
+  .chartBar[data-series='1'] {
+    background-color: var(--step-next);
+  }
+
+  .chartBar[data-series='2'] {
+    background-color: var(--text-disabled);
+  }
+
+  .barLabel {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-subtle);
+  }
+
+  .legend {
+    display: flex;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  /* The breakdown: label and value, a 5px bar for its share. */
+  .parts {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .part {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .partLine {
+    display: flex;
+    gap: var(--space-10);
+    justify-content: space-between;
+    font-size: 12px;
+  }
+
+  .partLabel {
+    min-inline-size: 0;
+    color: var(--text-secondary);
+  }
+
+  .partValue {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-muted);
+  }
+
+  .partTrack {
+    display: block;
+    block-size: 5px;
+    border-radius: 3px;
+    background-color: var(--panel-well);
+  }
+
+  .partFill {
+    display: block;
+    block-size: 5px;
+    border-radius: 3px;
+    background-color: var(--text-disabled);
+  }
+
+  .partFill[data-first] {
+    background-color: var(--intent-urgent-edge);
+  }
+
+  /* The rows behind a number. */
+  .records {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .recordRow {
+    display: flex;
+    gap: var(--space-10);
+    align-items: baseline;
+    padding-block: 7px;
+    font-size: 12.5px;
+  }
+
+  .recordRow + .recordRow {
+    border-block-start: var(--border-width-thin) solid var(--panel-well);
+  }
+
+  .recordLink {
+    display: flex;
+    flex: 1;
+    gap: 8px;
+    align-items: baseline;
+    min-inline-size: 0;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .recordTitle {
+    font-weight: var(--font-weight-medium);
+  }
+
+  .recordPreview {
+    overflow: hidden;
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .recordSub,
+  .recordMeta {
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .moreRows {
+    align-self: flex-start;
+    padding: 5px 11px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 8px;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .fields {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 14px;
+    margin: 0;
+    font-size: 12.5px;
+  }
+
+  .field {
+    display: contents;
+  }
+
+  .field dt {
+    color: var(--text-subtle);
+  }
+
+  .field dd {
+    margin: 0;
+  }
+
+  /* 01a's chips under the answer: what it stands on. */
+  .sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .source {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    padding: 5px 10px;
+    border-radius: 7px;
+    background-color: var(--panel-well);
+    font-size: 11.5px;
+    color: var(--text-muted);
+    text-decoration: none;
+  }
+
+  /* A citation where it stands in the text: the same chip, smaller. */
+  .sourceInline {
+    margin-inline-start: 4px;
+    padding: 1px 7px;
+    font-size: 11px;
+    vertical-align: 1px;
+  }
+
+  /* The word before a citation, its chips and the punctuation after: one unbreakable group. */
+  .citeGroup {
+    white-space: nowrap;
+  }
+
+  .sourceDot {
+    flex: none;
+    inline-size: 5px;
+    block-size: 5px;
+    border-radius: 50%;
+    background-color: var(--step-next);
+  }
+
+  .problem {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--intent-urgent-text);
+  }
+
+  .dock {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    inline-size: min(780px, calc(100% - 80px));
+    margin: 0 auto var(--space-24);
+    padding: 14px 16px 12px 18px;
+    border-radius: 16px;
+    background-color: var(--frame-raised);
+  }
+
+  .input {
+    min-inline-size: 0;
+    max-block-size: 160px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: var(--frame-text);
+    resize: none;
+    field-sizing: content;
+  }
+
+  .dockRow {
+    display: flex;
+    gap: var(--space-10);
+    align-items: center;
+  }
+
+  /* The follow-ups: chips beside the arrow, pushing it to the end. */
+  .suggestions {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-inline-size: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .dockRow > .send {
+    margin-inline-start: auto;
+  }
+
+  .suggestion {
+    padding: 5px 11px;
+    border: var(--border-width-thin) solid var(--frame-line);
+    border-radius: 999px;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    color: var(--frame-text-muted);
+    cursor: pointer;
+  }
+
+  .suggestion:hover {
+    border-color: var(--frame-dot-idle);
+    color: var(--frame-text);
+  }
+
+  .input::placeholder {
+    color: var(--frame-text-faint);
+  }
+
+  .input:focus {
+    outline: none;
+  }
+
+  .send {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 30px;
+    block-size: 30px;
+    border: 0;
+    border-radius: 50%;
+    background-color: var(--signal-ai);
+    color: var(--frame-base);
+    cursor: pointer;
+  }
+
+  .send:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}

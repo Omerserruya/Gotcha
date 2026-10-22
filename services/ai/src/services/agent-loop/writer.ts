@@ -15,6 +15,7 @@
 
 import type { ReplyIntent, TerminationReason } from "@chatcenter/shared";
 import { generateResponse } from "../ai.service";
+import { humanizeReply } from "../reply-style";
 
 export interface WriteOptions {
   language?: string;
@@ -74,7 +75,7 @@ export async function writeReply(intent: ReplyIntent, opts: WriteOptions): Promi
       metadata: { conversationId: opts.conversationId, type: "chat" },
     });
     const text = res.content?.trim();
-    return text && text.length > 0 ? text : deterministic;
+    return text && text.length > 0 ? humanizeReply(text)! : deterministic;
   } catch {
     // Metering block / provider error / abort - never break the turn on expression.
     return deterministic;

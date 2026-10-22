@@ -255,11 +255,20 @@ describe("the Gmail connect callback", () => {
   it("starts the history cursor where the watch was armed, not before it", async () => {
     // An id from before the watch would replay mail that arrived while nothing
     // was listening; the watch response is the authoritative starting point.
-    await connect();
-
-    expect(state.posts).toContain("https://gmail.googleapis.com/gmail/v1/users/me/watch");
-    const written = state.channelWrites.find((w) => w.externalId === "support@acme.test");
-    expect(written.platformMeta.lastHistoryId).toBe("222");
+    // The topic is set HERE: this case read it from the ambient environment
+    // (.env), so it passed in the container and failed wherever the variable
+    // was unset, which says nothing about the code.
+    const topic = process.env.GMAIL_PUBSUB_TOPIC;
+    process.env.GMAIL_PUBSUB_TOPIC = "projects/test/topics/gmail";
+    try {
+      await connect();
+      expect(state.posts).toContain("https://gmail.googleapis.com/gmail/v1/users/me/watch");
+      const written = state.channelWrites.find((w) => w.externalId === "support@acme.test");
+      expect(written.platformMeta.lastHistoryId).toBe("222");
+    } finally {
+      if (topic === undefined) delete process.env.GMAIL_PUBSUB_TOPIC;
+      else process.env.GMAIL_PUBSUB_TOPIC = topic;
+    }
   });
 
   it("falls back to the profile history id when the watch could not be armed", async () => {

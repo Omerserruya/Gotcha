@@ -50,3 +50,21 @@ export function currentPeriod(anchor: Date): Period {
 export function nextPeriod(periodEnd: Date): Period {
   return { start: periodEnd, end: addMonths(periodEnd, 1), key: periodKeyFor(periodEnd) };
 }
+
+/**
+ * The credit month that contains `now`, within a billing period that starts
+ * at `periodStart` (Omer, 2026-10-07: AI credits reset EVERY month on every
+ * plan, whatever the billing period's length). Months are counted from the
+ * period's own anchor day, the same way a monthly period is, so for a
+ * one-month period the credit month IS the billing period and the key matches
+ * the renewal's. Clamped to the period's end, never past it.
+ */
+export function creditMonthOf(periodStart: Date, periodEnd: Date | null, now: Date): Period {
+  let k = 0;
+  // Count whole months from the anchor (bounded: a period never runs a century).
+  while (k < 1200 && addMonths(periodStart, k + 1) <= now) k++;
+  const start = addMonths(periodStart, k);
+  const naturalEnd = addMonths(periodStart, k + 1);
+  const end = periodEnd && periodEnd < naturalEnd ? periodEnd : naturalEnd;
+  return { start, end, key: periodKeyFor(start) };
+}

@@ -13,7 +13,9 @@ import {
   ALL_PERMISSION_KEYS,
   BUILTIN_ROLES,
   builtinRoleForLegacy,
+  ceilingKeysFor,
   expandPermissionPatterns,
+  type BuiltinRoleKey,
   isPermissionKey,
   licenseKeysFor,
   ALL_LICENSE_KEYS,
@@ -53,13 +55,21 @@ interface CacheEntry<T> {
 }
 
 const tenantFeatureCache = new Map<string, CacheEntry<Map<string, boolean>>>();
-const userGrantCache = new Map<string, CacheEntry<Map<string, boolean>>>();
+/** A grant row as cached: the expiry travels with it so the CHECK, not the cache, decides. */
+interface CachedGrant {
+  granted: boolean;
+  /** Epoch ms, or null for a grant with no end date. */
+  expiresAt: number | null;
+}
+const userGrantCache = new Map<string, CacheEntry<Map<string, CachedGrant>>>();
 const userRoleFeatureCache = new Map<string, CacheEntry<Set<string>>>();
 
 // New hierarchical-permission caches (permission-catalog driven).
 const tenantLicenseCache = new Map<string, CacheEntry<Map<string, boolean>>>();
 const userPermissionCache = new Map<string, CacheEntry<Set<string>>>();
 const userScopeCache = new Map<string, CacheEntry<PermissionScope>>();
+/** The keys this person's built-in role can never hold (ROLE_CEILINGS). */
+const userCeilingCache = new Map<string, CacheEntry<Set<string>>>();
 
 function getCached<T>(map: Map<string, CacheEntry<T>>, key: string): T | undefined {
   const hit = map.get(key);
@@ -83,6 +93,7 @@ export function invalidatePermissionsCache(opts: { tenantId?: string; userId?: s
     tenantLicenseCache.clear();
     userPermissionCache.clear();
     userScopeCache.clear();
+    userCeilingCache.clear();
     userBuiltinRoleCache.clear();
     return;
   }
@@ -95,6 +106,7 @@ export function invalidatePermissionsCache(opts: { tenantId?: string; userId?: s
     userRoleFeatureCache.delete(opts.userId);
     userPermissionCache.delete(opts.userId);
     userScopeCache.delete(opts.userId);
+    userCeilingCache.delete(opts.userId);
     userBuiltinRoleCache.delete(opts.userId);
   }
 }
@@ -143,17 +155,44 @@ async function loadTenantFeatures(tenantId: string): Promise<Map<string, boolean
   return map;
 }
 
-async function loadUserGrants(userId: string): Promise<Map<string, boolean>> {
-  const cached = getCached(userGrantCache, userId);
-  if (cached) return cached;
+/**
+ * A user's per-feature overrides that are IN FORCE right now.
+ *
+ * ★ AN EXPIRED GRANT IS NOT A GRANT. `expiresAt` is checked here, at read
+ * time, on every call - not by a sweeper and not by the cache TTL - so a
+ * "7 days" grant stops granting the moment it ends, in every service that
+ * resolves permissions, with nothing that has to run on time. The cache holds
+ * the rows WITH their expiry and is filtered per call, so a grant cached one
+ * second before it ends cannot outlive it by the cache's 30 seconds.
+ *
+ * An expired row is simply absent from the answer: the user falls back to
+ * what their role gives them, exactly as if the override had been deleted.
+ * That holds for both directions - an expired revoke (`granted: false`)
+ * restores the role's access.
+ */
+async function loadUserGrants(userId: string, now: number = Date.now()): Promise<Map<string, boolean>> {
+  let rows = getCached(userGrantCache, userId);
+  if (!rows) {
+    const grants = await prisma.userFeatureGrant.findMany({
+      where: { userId },
+      select: { feature: true, granted: true, expiresAt: true },
+    });
+    rows = new Map<string, CachedGrant>();
+    for (const g of grants) {
+      rows.set(g.feature, { granted: g.granted, expiresAt: g.expiresAt ? g.expiresAt.getTime() : null });
+    }
+    setCached(userGrantCache, userId, rows, USER_CACHE_TTL_MS);
+  }
+  return grantsInForce(rows, now);
+}
 
-  const grants = await prisma.userFeatureGrant.findMany({
-    where: { userId },
-    select: { feature: true, granted: true },
-  });
+/** Pure: the overrides from `rows` still in force at `now`. Exported for tests. */
+export function grantsInForce(rows: Map<string, CachedGrant>, now: number): Map<string, boolean> {
   const map = new Map<string, boolean>();
-  for (const g of grants) map.set(g.feature, g.granted);
-  setCached(userGrantCache, userId, map, USER_CACHE_TTL_MS);
+  for (const [feature, g] of rows) {
+    if (g.expiresAt !== null && g.expiresAt <= now) continue;
+    map.set(feature, g.granted);
+  }
   return map;
 }
 
@@ -399,7 +438,12 @@ export async function isPermissionLicensed(tenantId: string, permissionKey: stri
 interface RoleResolution {
   patterns: string[];
   scope: PermissionScope;
+  /** Whose ceiling applies: the most privileged built-in among the person's roles. */
+  ceilingRole: BuiltinRoleKey | null;
 }
+
+/** Most privileged first; a person holding two built-ins is capped by the higher. */
+const CEILING_ORDER: BuiltinRoleKey[] = ["owner", "admin", "department_manager", "agent"];
 
 /** Load this user's role-derived permission patterns + effective scope. */
 async function loadUserRoleResolution(user: PermissionPrincipal): Promise<RoleResolution> {
@@ -421,6 +465,7 @@ async function loadUserRoleResolution(user: PermissionPrincipal): Promise<RoleRe
       role: {
         select: {
           defaultScope: true,
+          builtinKey: true,
           features: { select: { feature: true } },
         },
       },
@@ -430,23 +475,38 @@ async function loadUserRoleResolution(user: PermissionPrincipal): Promise<RoleRe
   if (assignments.length > 0) {
     const patterns: string[] = [];
     let scope: PermissionScope = "own";
+    const builtins = new Set<string>();
     for (const a of assignments) {
       for (const f of a.role.features) patterns.push(f.feature);
+      if (a.role.builtinKey) builtins.add(a.role.builtinKey);
       const effective = a.scope
         ? DB_TO_SCOPE[a.scope]
         : DB_TO_SCOPE[a.role.defaultScope] ?? "own";
       scope = maxScope(scope, effective);
     }
-    return { patterns, scope };
+    // Someone whose roles are all custom is capped like an Agent: a custom
+    // role is never a way around the ceiling (Omer, 2026-10-11).
+    const ceilingRole = CEILING_ORDER.find((k) => builtins.has(k)) ?? "agent";
+    return { patterns, scope, ceilingRole };
   }
 
   // Migration bridge: no explicit assignment yet → derive the built-in role
   // from the legacy enum. Permissions still come from the role's catalog
   // definition; this maps an identity to a role, it is not an authz decision.
   const bk = builtinRoleForLegacy(user.role, user.departmentRole);
-  if (!bk) return { patterns: [], scope: "own" };
+  if (!bk) return { patterns: [], scope: "own", ceilingRole: "agent" };
   const def = BUILTIN_ROLES[bk];
-  return { patterns: def.permissions, scope: def.defaultScope };
+  return { patterns: def.permissions, scope: def.defaultScope, ceilingRole: bk };
+}
+
+/** The keys this person can never hold, by their built-in role (ROLE_CEILINGS). */
+async function loadUserCeiling(user: PermissionPrincipal): Promise<Set<string>> {
+  const cached = getCached(userCeilingCache, user.userId);
+  if (cached) return cached;
+  const { ceilingRole } = await loadUserRoleResolution(user);
+  const set = ceilingKeysFor(ceilingRole);
+  setCached(userCeilingCache, user.userId, set, USER_CACHE_TTL_MS);
+  return set;
 }
 
 /** Expanded set of permission keys granted by the user's role(s). */
@@ -467,6 +527,10 @@ export async function hasPermission(user: PermissionPrincipal, key: string): Pro
 
   // License layer.
   if (!(await isPermissionLicensed(user.tenantId, key))) return false;
+
+  // Ceiling: what this person's role can never hold - not by a grant, a
+  // wildcard, or a custom role (permission-catalog ROLE_CEILINGS).
+  if ((await loadUserCeiling(user)).has(key)) return false;
 
   // Explicit per-user grant/revoke wins over role-derived permissions.
   const grants = await loadUserGrants(user.userId);
@@ -534,6 +598,7 @@ export async function getUserPermissions(user: PermissionPrincipal): Promise<str
     if (granted) effective.add(k);
     else effective.delete(k);
   }
+  for (const k of await loadUserCeiling(user)) effective.delete(k);
   const license = await loadTenantLicense(user.tenantId);
   const licenseKeySet = new Set(ALL_LICENSE_KEYS);
   const isLicensed = (key: string): boolean => {

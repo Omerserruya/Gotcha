@@ -1,0 +1,37 @@
+@layer features {
+  /* Where an employee answers: a row per channel, its plate, name and how often. */
+  .reach {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .item {
+    display: flex;
+    gap: var(--space-8);
+    align-items: center;
+    font-size: var(--font-size-meta);
+  }
+
+  .name {
+    color: var(--text-primary);
+  }
+
+  .when {
+    margin-inline-start: auto;
+    color: var(--text-subtle);
+  }
+
+  .where {
+    margin: 0;
+  }
+}

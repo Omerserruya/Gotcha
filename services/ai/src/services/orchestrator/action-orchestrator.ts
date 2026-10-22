@@ -3,13 +3,19 @@ import {
   publishEvent,
   evaluatePolicies,
   createApprovalRequest,
+  describeApprovalAction,
   getRedis,
-  actionKindForTool,
+  actionKindForCall,
+  couponRequestedType,
+  policyRequestedAmount,
   evaluateBusinessPolicy,
   type PolicyResult,
 } from "@chatcenter/shared";
 import { CircuitBreakers, withRetry, pushToDlq } from "./runner";
+import { channels } from "../intelligence/events/channels";
+import { labelKeyFor, statusForEvent } from "../ai-activity.service";
 import { precheckAdapterAction } from "../connectors/integration-framework";
+import { withOrderCurrency } from "../approval-currency";
 import type {
   ExecutionResult,
   ProposedAction,
@@ -41,6 +47,13 @@ export interface SubmitLedgerOpts {
    * to a normal execution. Off by default → non-bot callers are unaffected.
    */
   idempotency?: boolean;
+  /**
+   * TIGHTEN-ONLY approval hook (business skills: a step's "ask you over X").
+   * Consulted only when the policy gate says ALLOW; a returned reason turns that
+   * into REQUIRE_APPROVAL. It is never consulted for DENY or REQUIRE_APPROVAL,
+   * so it cannot loosen anything.
+   */
+  tightenApproval?: (action: ProposedAction) => string | null;
 }
 
 /** Redelivery window for cross-turn idempotency. WhatsApp/webhook retries land
@@ -149,6 +162,7 @@ export class ActionOrchestrator {
         tenantId: action.tenantId,
         toolName: action.tool,
         args: action.args,
+        employeeId: action.aiAgentId,
       });
     } catch (err: any) {
       // Gate failure must not silently auto-execute. Treat as deny so the
@@ -162,6 +176,13 @@ export class ActionOrchestrator {
       return recordIfLedger(await this.recordDeny(action, gate.reason, "policy"));
     }
 
+    // Tighten only: an ALLOW may become REQUIRE_APPROVAL, nothing else changes.
+    if (gate.decision === "ALLOW" && opts?.tightenApproval) {
+      let why: string | null = null;
+      try { why = opts.tightenApproval(action); } catch { why = null; }
+      if (why) gate = { ...gate, decision: "REQUIRE_APPROVAL", reason: why } as PolicyResult;
+    }
+
     // ── Tenant BUSINESS policy (deterministic, prompt-proof) ──────────────
     // Evaluated BEFORE an approval request exists and BEFORE auto-execution,
     // so the model can neither promise the customer an action the tenant
@@ -169,7 +190,7 @@ export class ActionOrchestrator {
     // the configured cap come back as a denial that NAMES the permitted
     // maximum - the model may re-propose within it, a manager never has to
     // catch an over-limit ask. FAIL_CLOSED (engine unavailable) denies too.
-    const bizKind = actionKindForTool(action.tool);
+    const bizKind = actionKindForCall(action.tool, action.args as Record<string, unknown>);
     if (bizKind) {
       const args = action.args as Record<string, any>;
       const biz = await evaluateBusinessPolicy({
@@ -179,7 +200,8 @@ export class ActionOrchestrator {
         correlationId: action.id,
         facts: {
           tool: action.tool,
-          requestedAmount: typeof args.amount === "number" ? args.amount : undefined,
+          requestedAmount: policyRequestedAmount(action.tool, args),
+          requestedType: couponRequestedType(action.tool, args),
           orderName: typeof args.order_name === "string" ? args.order_name : undefined,
           reasonCode: typeof args.reason_code === "string" ? args.reason_code : undefined,
           conversationId: action.conversationId || undefined,
@@ -203,9 +225,9 @@ export class ActionOrchestrator {
       }
       if (
         biz.decision === "ALLOWED_WITH_LIMIT" &&
-        typeof args.amount === "number" &&
+        policyRequestedAmount(action.tool, args) != null &&
         biz.maxAmount != null &&
-        args.amount > biz.maxAmount + 0.005
+        policyRequestedAmount(action.tool, args)! > biz.maxAmount + 0.005
       ) {
         return recordIfLedger(
           await this.recordDeny(
@@ -370,19 +392,25 @@ export class ActionOrchestrator {
     executionId: string,
     approvedBy: string,
   ): Promise<ExecutionResult> {
+    let row: { tenantId?: string; conversationId?: string; tool?: string } | null = null;
     try {
-      await (prisma as any).toolExecutionRequest.update({
+      row = await (prisma as any).toolExecutionRequest.update({
         where: { id: executionId },
         data: {
           status: "approved",
           decidedAt: new Date(),
           actor: { agentId: approvedBy },
         },
+        select: { tenantId: true, conversationId: true, tool: true },
       });
     } catch (err: any) {
       console.warn("[orchestrator] approve persist failed:", err?.message);
     }
-    await this.emit("tool.execution.approved", executionId, { approvedBy });
+    // The tenant and conversation come from the row: this event used to carry
+    // neither, so it was published with tenantId "" and reached nobody.
+    await this.emit("tool.execution.approved", executionId, {
+      tenantId: row?.tenantId, conversationId: row?.conversationId, tool: row?.tool, approvedBy,
+    });
     return { status: "approved", attempts: 0 };
   }
 
@@ -391,8 +419,9 @@ export class ActionOrchestrator {
     deniedBy: string,
     reason: string,
   ): Promise<void> {
+    let row: { tenantId?: string; conversationId?: string; tool?: string } | null = null;
     try {
-      await (prisma as any).toolExecutionRequest.update({
+      row = await (prisma as any).toolExecutionRequest.update({
         where: { id: executionId },
         data: {
           status: "denied",
@@ -400,11 +429,14 @@ export class ActionOrchestrator {
           error: reason,
           actor: { agentId: deniedBy },
         },
+        select: { tenantId: true, conversationId: true, tool: true },
       });
     } catch (err: any) {
       console.warn("[orchestrator] deny persist failed:", err?.message);
     }
-    await this.emit("tool.execution.denied", executionId, { deniedBy, reason });
+    await this.emit("tool.execution.denied", executionId, {
+      tenantId: row?.tenantId, conversationId: row?.conversationId, tool: row?.tool, deniedBy, reason,
+    });
   }
 
   // ── Internal pipeline steps ────────────────────────────────
@@ -431,8 +463,51 @@ export class ActionOrchestrator {
         tenantId: action.tenantId,
         conversationId: action.conversationId || undefined,
         tool: action.tool,
-        params: action.args,
-        summary: action.rationale || `Approve ${action.tool}`,
+        // The order's own currency, so "refund 179" says 179 of what. Absent
+        // when there is no order or it cannot be read - never a guess.
+        params: await withOrderCurrency(action.tenantId, action.tool, action.args as Record<string, unknown>, {
+          conversationId: action.conversationId || undefined,
+        }),
+        // ★ NOT `action.rationale`. That is the CALLER's note to itself - the
+        // inbox path passes the literal string "ai-bot inbox tool call" - and it
+        // was landing in the one field an operator reads while deciding whether
+        // to move money. 27 of 54 rows said exactly that. The rationale belongs
+        // in `reason`, which is a separate column that exists for it.
+        //
+        // ★★ AND THE FALLBACK IS NOT DEAD CODE, unlike most `typeof` guards.
+        //
+        // This service mounts `services/ai/src` but NOT `packages/shared`, which
+        // is a symlink to the BAKED copy. So this file can be newer than the
+        // shared package the container loads - and as of 2026-09-27 it is: the
+        // mounted source calls `describeApprovalAction`, the baked August shared
+        // does not export it (verified inside the container: file present,
+        // 0 matches).
+        //
+        // Neither package declares `"type": "module"`, so tsx emits CommonJS and
+        // a missing named import is a property read yielding `undefined` rather
+        // than a load error. Unguarded, the call throws, the catch below turns it
+        // into a warning, and NO APPROVAL ROW IS WRITTEN - a gated tool made
+        // invisible to the person who has to approve it. Under ESM the service
+        // would have crash-looped instead, which is louder and safer.
+        //
+        // `restart: unless-stopped` means a daemon restart or a host reboot arms
+        // that without anybody deciding to. A stale title is recoverable; a lost
+        // approval row is not.
+        //
+        // ★★★ AND THIS GUARD IS PERMANENT, NOT TEMPORARY. I first wrote "delete
+        // it once `ai` is rebuilt" - which was wrong, because the condition is
+        // STRUCTURAL to the mount/bake split rather than a one-off.
+        //
+        // `ai` mounts its own source and bakes `packages/shared`. So the moment
+        // anybody edits `services/ai/src` again - which happens continuously -
+        // the mounted source is newer than the image once more, and any shared
+        // export added in the meantime is missing from it again. The rebuild on
+        // 2026-09-27 (BUILD_SHA 37285241) closed this instance; it did not close
+        // the class. Removing the guard would just re-arm it on the next edit.
+        summary:
+          typeof describeApprovalAction === "function"
+            ? describeApprovalAction(action.tool, action.args as Record<string, unknown>)
+            : action.rationale || `Approve ${action.tool}`,
         reason: gate.reason,
         riskLevel: action.urgency === "high" ? "high" : action.urgency === "medium" ? "medium" : "low",
         requestedBy: `${action.proposedBy.system}:${action.proposedBy.mode}`,
@@ -491,6 +566,7 @@ export class ActionOrchestrator {
       await this.emit("tool.execution.completed", action.id, {
         tenantId: action.tenantId,
         conversationId: action.conversationId,
+        tool: action.tool,
         result: outcome.result,
         durationMs,
       });
@@ -525,6 +601,7 @@ export class ActionOrchestrator {
     await this.emit("tool.execution.failed", action.id, {
       tenantId: action.tenantId,
       conversationId: action.conversationId,
+      tool: action.tool,
       error: errMsg,
       attempts: outcome.attempts,
       durationMs,
@@ -594,17 +671,55 @@ export class ActionOrchestrator {
     }
   }
 
+  /**
+   * Publish a tool lifecycle event - to ONE conversation's room, never to the
+   * tenant, and never with what the tool was given or returned.
+   *
+   * ★ THIS WAS A LEAK. Events were published with no `data.channel`, so the
+   * Socket.IO bridge sent them to `tenant:{id}` - every open tab in the
+   * workspace, past the `canViewConversation` check that guards a
+   * conversation's room. `tool.execution.completed` carried `result` (a
+   * Shopify order: the customer's name, address, phone) and `proposed`
+   * carried `args`. An agent restricted to one department received other
+   * departments' customers' orders in their socket.
+   *
+   * Now: the room is `conv:{conversationId}` (the bridge honours it, and
+   * joining it is gated per conversation), and `args`/`result` are dropped
+   * here - in the one emitter - so no caller can reintroduce them. The row in
+   * tool_execution_requests keeps both for the routes that check permission.
+   * An event with no conversation is not published at all: tenant-wide is
+   * exactly the failure being removed.
+   */
   private async emit(
     event: string,
     executionId: string,
-    payload: Record<string, unknown> & { tenantId?: string },
+    payload: Record<string, unknown> & { tenantId?: string; conversationId?: string },
   ): Promise<void> {
     try {
+      const { args: _args, result: _result, ...safe } = payload;
+      if (!safe.tenantId || !safe.conversationId) {
+        console.warn(`[orchestrator] emit ${event} skipped: no tenant/conversation to scope it to (execution ${executionId})`);
+        return;
+      }
+      const channel = channels.conversation(String(safe.conversationId));
+      const ts = new Date().toISOString();
       await publishEvent({
         event,
-        tenantId: String(payload.tenantId ?? ""),
-        data: { executionId, ...payload, ts: new Date().toISOString() },
+        tenantId: String(safe.tenantId),
+        data: { executionId, ...safe, channel, ts },
       });
+      // The inbox panel's live line. One small event per step, same room, same
+      // no-args/no-result rule; the panel re-reads GET .../ai-activity for the
+      // full list.
+      const status = statusForEvent(event);
+      if (status) {
+        const tool = typeof safe.tool === "string" ? safe.tool : "";
+        await publishEvent({
+          event: "ai.activity.updated",
+          tenantId: String(safe.tenantId),
+          data: { conversationId: safe.conversationId, id: executionId, tool, labelKey: labelKeyFor(tool), status, channel, ts },
+        });
+      }
     } catch (err: any) {
       console.warn(`[orchestrator] emit ${event} failed:`, err?.message);
     }

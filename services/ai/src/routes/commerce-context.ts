@@ -16,39 +16,16 @@ import {
   resolveTenant,
   requireActiveTenant,
   requirePermission,
-  hasPermission,
   isCustomerScopedAction,
   isOrderScopedAction,
-  type PermissionPrincipal,
+  visibleConversationFrom,
 } from "@chatcenter/shared";
 import { buildCommerceContextResponse } from "../services/commerce-context.service";
+import { principalOf, commercePerms } from "../services/commerce-perms";
 import { executeCommerceAction } from "../services/commerce-actions.service";
+import { readerLocale } from "../lib/reader-locale";
 
 const router = Router();
-
-function principalOf(req: Request & { tenantId?: string }): PermissionPrincipal {
-  const u = (req as any).user ?? {};
-  return {
-    userId: u.userId,
-    tenantId: req.tenantId || u.tenantId,
-    role: u.role,
-    departmentRole: u.departmentRole,
-  };
-}
-
-async function commercePerms(p: PermissionPrincipal) {
-  const [canRead, canOpen, canCancel, canRefund, canReturn, canTag, canNote, canNotify] = await Promise.all([
-    hasPermission(p, "customer:commerce:read"),
-    hasPermission(p, "customer:commerce:open"),
-    hasPermission(p, "customer:commerce:cancel"),
-    hasPermission(p, "customer:commerce:refund"),
-    hasPermission(p, "customer:commerce:return"),
-    hasPermission(p, "customer:commerce:tag"),
-    hasPermission(p, "customer:commerce:note"),
-    hasPermission(p, "customer:commerce:notify"),
-  ]);
-  return { canRead, canOpen, canCancel, canRefund, canReturn, canTag, canNote, canNotify };
-}
 
 /** Which permission a given action needs. One table, so the route gate and the
  *  service gate cannot disagree about what an action costs. */
@@ -62,11 +39,8 @@ const PERMISSION_FOR: Record<string, "canCancel" | "canRefund" | "canReturn" | "
   add_note: "canNote",
 };
 
-function localeOf(req: Request): string | undefined {
-  const q = typeof req.query.locale === "string" ? req.query.locale : undefined;
-  const b = typeof (req.body as any)?.locale === "string" ? (req.body as any).locale : undefined;
-  return q || b || (req.headers["accept-language"] as string | undefined);
-}
+// The reader's language: explicit, else the user's / workspace's (lib/reader-locale).
+const localeOf = (req: Request) => readerLocale(req);
 
 // ── GET commerce context for a conversation ────────────────────────────────
 router.get(
@@ -74,6 +48,10 @@ router.get(
   authenticate,
   resolveTenant,
   requireActiveTenant(),
+  // After authenticate: this router authenticates per route, so a router.param
+  // hook would run before the user exists. 404 for a conversation this viewer
+  // may not see.
+  visibleConversationFrom("conversationId"),
   requirePermission("customer:commerce:read"),
   async (req: Request & { tenantId?: string }, res: Response) => {
     try {
@@ -86,7 +64,7 @@ router.get(
       const result = await buildCommerceContextResponse({
         tenantId,
         conversationId,
-        locale: localeOf(req),
+        locale: await localeOf(req),
         perms,
         recentLimit: Number.isFinite(limitRaw) ? limitRaw : undefined,
         forceRefresh: req.query.refresh === "1" || req.query.refresh === "true",
@@ -105,6 +83,10 @@ router.post(
   authenticate,
   resolveTenant,
   requireActiveTenant(),
+  // After authenticate: this router authenticates per route, so a router.param
+  // hook would run before the user exists. 404 for a conversation this viewer
+  // may not see.
+  visibleConversationFrom("conversationId"),
   // Needs at least one action permission; the specific action is checked below.
   requirePermission(
     "customer:commerce:cancel",
@@ -172,7 +154,7 @@ router.post(
           idempotencyKey,
           params: body.params ?? {},
         },
-        locale: localeOf(req),
+        locale: await localeOf(req),
         correlationId,
       });
 

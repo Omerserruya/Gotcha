@@ -1,6 +1,7 @@
 import { prisma } from "@chatcenter/shared";
 import { generateResponse } from "./ai.service";
 import { getPolicyPrompt } from "./policy.service";
+import { humanizeReply } from "./reply-style";
 
 /**
  * F6.3 - Follow-up message generator.
@@ -63,8 +64,11 @@ export async function generateFollowup(
 
   try {
     const parsed = JSON.parse(response.content) as { body?: string; reason?: string };
-    if (!parsed.body || !parsed.body.trim()) return null;
-    return { body: parsed.body.trim(), reason: parsed.reason ?? "re-engagement" };
+    // The same customer-facing style pass as every other AI reply (no wide
+    // dashes, no spaced-hyphen clause joins). It used to send the model's text raw.
+    const body = humanizeReply(parsed.body ?? null)?.trim();
+    if (!body) return null;
+    return { body, reason: parsed.reason ?? "re-engagement" };
   } catch {
     return null;
   }

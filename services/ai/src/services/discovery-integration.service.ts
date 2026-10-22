@@ -24,7 +24,7 @@ import {
 } from "@chatcenter/shared";
 import { extractFieldsLive } from "./intelligence-live-extract.service";
 import { prisma } from "@chatcenter/shared";
-import { normalizeShopifyProducts, type ProductSearchEnvelope } from "./product-search.service";
+import { normalizeShopifyProducts, normalizeWooProducts, type ProductSearchEnvelope, type ProductProvider } from "./product-search.service";
 import { getCatalogFacets, profileForStore } from "./shopify-facets.service";
 // STATIC import on purpose. A dynamic `await import(...)` of this module
 // resolved to a second instance whose adapter REGISTRY was empty - the
@@ -32,11 +32,50 @@ import { getCatalogFacets, profileForStore } from "./shopify-facets.service";
 // only the startup instance has run - so every call came back
 // `unknown_provider:shopify`. Same specifier as every other caller, same
 // instance, populated registry.
-import { executeAdapterTool } from "./connectors/integration-framework";
+import { executeAdapterTool, loadConnection } from "./connectors/integration-framework";
+import { fetchWooStoreCurrency } from "./connectors/woocommerce.adapter";
+
+/**
+ * Which store a product tool reads, or null when it is not one this typed
+ * path covers. Named per provider: the old suffix match also caught
+ * `woocommerce.get_product` and `wix.get_product` and grounded them against
+ * the Shopify store (wrong domain, empty handle).
+ */
+export function productSearchProviderOf(toolName: string | undefined): ProductProvider | null {
+  switch (toolName) {
+    case "search_products":
+    case "get_product":
+    case "shopify.search_products":
+    case "shopify.get_product":
+      return "shopify";
+    case "woocommerce.list_products":
+    case "woocommerce.get_product":
+      return "woocommerce";
+    default:
+      return null;
+  }
+}
 
 /** Product-search tool names this typed path covers (scoped - NOT generic). */
 export function isProductSearchTool(toolName: string | undefined): boolean {
-  return !!toolName && /(^|\.)(search_products|get_product)$/.test(toolName);
+  return productSearchProviderOf(toolName) !== null;
+}
+
+/** The store's currency for a WooCommerce connection, cached on its config like Shopify's. */
+export async function resolveWooCurrency(tenantId: string): Promise<{ storeUrl: string | null; currency: string | undefined }> {
+  const conn = await loadConnection({ tenantId, slug: "woocommerce" });
+  if (!conn) return { storeUrl: null, currency: undefined };
+  const storeUrl = String(conn.config?.storeUrl || conn.credentials?.storeUrl || conn.credentials?.store_url || "").replace(/\/+$/, "") || null;
+  const cached = conn.config?.storeCurrency;
+  if (typeof cached === "string" && cached.length === 3) return { storeUrl, currency: cached };
+  const currency = await fetchWooStoreCurrency(conn.credentials, conn.config).catch(() => null);
+  if (currency) {
+    await (prisma as any).tenantIntegration.update({
+      where: { id: conn.tenantIntegrationId },
+      data: { config: { ...(conn.config ?? {}), storeCurrency: currency } },
+    }).catch((err: any) => console.warn("[discovery] store currency cache failed (non-fatal):", err?.message));
+  }
+  return { storeUrl, currency: currency ?? undefined };
 }
 
 /** Parse a budget fact (`"700 USD"`, `700`, or `{target,currency}`) → typed budget. */
@@ -48,7 +87,9 @@ function parseBudget(v: unknown): { target: number; currency: string } | undefin
   const s = String(v ?? "");
   const num = s.match(/\d[\d.,]*/);
   if (!num) return undefined;
-  const cur = /ILS|₪|שקל/i.test(s) ? "ILS" : /EUR|€/i.test(s) ? "EUR" : "USD";
+  // ש"ח / ש״ח (the usual way to write shekels) and NIS read as ILS too;
+  // they used to fall through to USD.
+  const cur = /ILS|NIS|₪|שקל|ש["״']ח/i.test(s) ? "ILS" : /EUR|€/i.test(s) ? "EUR" : "USD";
   const t = Number(num[0].replace(/,/g, ""));
   return Number.isFinite(t) ? { target: t, currency: cur } : undefined;
 }
@@ -127,11 +168,12 @@ export async function enrichProductSearchArgs(opts: {
   args: Record<string, any>;
 }): Promise<Record<string, any>> {
   try {
-    if (!isProductSearchTool(opts.toolName)) return opts.args;
+    const provider = productSearchProviderOf(opts.toolName);
+    if (!provider) return opts.args;
     if (opts.args?.price_max !== undefined) return opts.args;
 
     const conn = await (prisma as any).tenantIntegration.findFirst({
-      where: { tenantId: opts.tenantId, integration: { slug: "shopify" } },
+      where: { tenantId: opts.tenantId, integration: { slug: provider } },
       select: { config: true },
     });
     if (!conn) return opts.args;
@@ -146,7 +188,9 @@ export async function enrichProductSearchArgs(opts: {
     const budget = parseBudget(facts.get("budget")?.valueJson);
     if (!budget) return opts.args;
 
-    const shopCurrency = await resolveShopCurrency(opts.tenantId, conn?.config);
+    const shopCurrency = provider === "woocommerce"
+      ? (await resolveWooCurrency(opts.tenantId)).currency
+      : await resolveShopCurrency(opts.tenantId, conn?.config);
     if (shopCurrency && budget.currency !== shopCurrency) {
       console.log(
         `[discovery] budget ${budget.currency} vs shop ${shopCurrency} - not passing price_max conv=${opts.conversationId}`,
@@ -176,25 +220,36 @@ export async function groundProductSearchResult(opts: {
   provider?: boolean;
 }): Promise<ProductSearchEnvelope | null> {
   try {
-    if (!isProductSearchTool(opts.toolName)) return null;
+    const provider = productSearchProviderOf(opts.toolName);
+    if (!provider) return null;
     let parsed: any = opts.rawContent;
     if (typeof parsed === "string") { try { parsed = JSON.parse(parsed); } catch { return null; } }
     // Provider failure/denied → an ERROR envelope (never no-results).
     if (parsed && parsed.ok === false) {
-      return { provider: "shopify", tool: "shopify_product_search", status: "error", candidates: [], appliedFilters: [], unavailableFilters: [], safeModelSummary: "" };
+      return { provider, tool: `${provider}_product_search`, status: "error", candidates: [], appliedFilters: [], unavailableFilters: [], safeModelSummary: "" };
     }
     let products: any = parsed;
     if (products && typeof products === "object" && "result" in products) products = products.result;
     if (products && !Array.isArray(products)) products = [products]; // get_product → single
     if (!Array.isArray(products)) products = [];
 
-    const conn = await (prisma as any).tenantIntegration.findFirst({
-      where: { tenantId: opts.tenantId, integration: { slug: "shopify" } },
-      select: { config: true },
-    });
-    const shopDomain = (conn?.config as any)?.shopDomain;
-    if (!shopDomain) return null;
-    const shopCurrency = await resolveShopCurrency(opts.tenantId, conn?.config);
+    let shopDomain: string | null = null;
+    let storeUrl: string | null = null;
+    let shopCurrency: string | undefined;
+    if (provider === "woocommerce") {
+      const woo = await resolveWooCurrency(opts.tenantId);
+      if (!woo.storeUrl) return null;
+      storeUrl = woo.storeUrl;
+      shopCurrency = woo.currency;
+    } else {
+      const conn = await (prisma as any).tenantIntegration.findFirst({
+        where: { tenantId: opts.tenantId, integration: { slug: "shopify" } },
+        select: { config: true },
+      });
+      shopDomain = (conn?.config as any)?.shopDomain ?? null;
+      if (!shopDomain) return null;
+      shopCurrency = await resolveShopCurrency(opts.tenantId, conn?.config);
+    }
 
     const profile = getDiscoveryProfile("product_recommendation") as DiscoveryProfile;
     const session = await getOrCreateActiveSession({ tenantId: opts.tenantId, conversationId: opts.conversationId, goalKey: profile.goalKey });
@@ -205,7 +260,9 @@ export async function groundProductSearchResult(opts: {
       ...(facts.has("flex") ? ["flex"] : []),
       ...(facts.has("riding_style") ? ["riding_style"] : []),
     ];
-    return normalizeShopifyProducts(products, { shopDomain, budget, requestedFilters, shopCurrency });
+    return provider === "woocommerce"
+      ? normalizeWooProducts(products, { storeUrl: storeUrl!, budget, requestedFilters, storeCurrency: shopCurrency })
+      : normalizeShopifyProducts(products, { shopDomain: shopDomain!, budget, requestedFilters, shopCurrency });
   } catch (err: any) {
     console.warn("[discovery] product envelope build failed (non-fatal):", err?.message);
     return null;
@@ -233,9 +290,7 @@ export function productDiscoveryApplies(opts: {
   availableToolNames: string[];
 }): boolean {
   const salesish = ["sales", "sdr", "customer_success"].includes(String(opts.role || "").toLowerCase());
-  const hasProductTool = opts.availableToolNames.some(
-    (t) => t === "shopify.search_products" || t === "search_products" || t.endsWith(".search_products"),
-  );
+  const hasProductTool = opts.availableToolNames.some(isCatalogSearchTool);
   // Applies when this is a sales-type employee. Whether the store tool is
   // available only changes execute vs honest-blocker, not whether we track.
   return salesish || hasProductTool;
@@ -243,10 +298,18 @@ export function productDiscoveryApplies(opts: {
 
 /** Is the product-search tool actually in this turn's offered surface? */
 export function productToolAvailable(availableToolNames: string[]): { available: boolean; tool: string } {
-  const tool = availableToolNames.find(
-    (t) => t === "shopify.search_products" || t === "search_products" || t.endsWith(".search_products"),
-  );
+  // A Shopify-style search first (unchanged), then the WooCommerce catalogue
+  // search: a Woo-only sales employee used to be told the catalogue was
+  // unavailable because only "*.search_products" counted.
+  const tool =
+    availableToolNames.find((t) => t === "shopify.search_products" || t === "search_products" || t.endsWith(".search_products")) ??
+    availableToolNames.find((t) => t === "woocommerce.list_products");
   return { available: !!tool, tool: tool || "shopify.search_products" };
+}
+
+/** A catalogue search the discovery flow can drive (not a single-product lookup). */
+function isCatalogSearchTool(t: string): boolean {
+  return t === "shopify.search_products" || t === "search_products" || t.endsWith(".search_products") || t === "woocommerce.list_products";
 }
 
 /** Map extractor output → typed ProposedFacts (all customer_explicit; the

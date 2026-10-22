@@ -67,6 +67,9 @@ describe("analyzeBrandVoice", () => {
     expect(isPlaceholder("[image message]")).toBe(true);
     expect(isPlaceholder("[media_placeholder message]")).toBe(true);
     expect(isPlaceholder("[Location: 31.812, 34.6624]")).toBe(true);
+    expect(isPlaceholder("[Shared location: Eilat Port, Derech HaNamal 1 (29.55, 34.95)]")).toBe(true);
+    expect(isPlaceholder("[Shared location]")).toBe(true);
+    expect(isPlaceholder("I shared my location with you")).toBe(false);
     // A real message that merely mentions one is not a placeholder.
     expect(isPlaceholder("שלחתי לך [image message] תראי")).toBe(false);
 
@@ -191,8 +194,12 @@ describe("parseItems", () => {
   it("coerces a scope value written into category instead of dropping the item", async () => {
     const { parseItems } = await import("../services/historical-intelligence/knowledge-extraction.stage");
     // The model confuses the two enums because the prompt asks for both.
-    const out = parseItems([good({ category: "PROCESS" }), good({ category: "PRODUCT" })]);
-    expect(out).toHaveLength(2);
+    // Only scope values that share no meaningful word with any category are
+    // used here: "PRODUCT"/"PRODUCT_FACT" deliberately map to PRODUCT_AND_SPECS
+    // (see category-normalization.test.ts), so they cannot show the coercion.
+    const scopes = ["PROCESS", "POLICY", "HOW_WE_WORK", "STANDING_RULE", "ONE_OFF"];
+    const out = parseItems(scopes.map((category) => good({ category })));
+    expect(out).toHaveLength(scopes.length);
     expect(out.every((i) => i.category === "OTHER")).toBe(true);
   });
 

@@ -20,6 +20,7 @@
 
 import { generateResponse, getMicroModel } from "./ai.service";
 import { roleToSkill } from "./skills";
+import type { SkillSelectionCandidate } from "./skill-runtime.service";
 import {
   OBJECTIVE_CHAINS,
   EMPTY_WIZARD_FACTS,
@@ -38,6 +39,11 @@ export async function evaluateWizardBinding(opts: {
   salesContext?: unknown;
   transcript: string;
   signal?: AbortSignal;
+  /** The employee's business skills (on + watch), in its order. Absent → the
+   *  call and its prompt are exactly what they were before skills existed. */
+  skills?: SkillSelectionCandidate[];
+  /** The skill of this conversation's open run, if any (stickiness hint). */
+  openSkillId?: string | null;
 }): Promise<WizardRuntimeFacts> {
   const sc = opts.salesContext && typeof opts.salesContext === "object" ? (opts.salesContext as Record<string, unknown>) : {};
   const disqualifiers = asStringArray(sc.disqualifiers);
@@ -45,8 +51,11 @@ export async function evaluateWizardBinding(opts: {
   const icp = typeof sc.idealCustomerProfile === "string" ? sc.idealCustomerProfile.trim() : "";
   const goal = typeof opts.goal === "string" ? opts.goal.trim() : "";
 
-  // Nothing configured to bind → skip the call (no cost), facts stay absent.
-  if (!disqualifiers.length && !signals.length && !icp && !goal) return EMPTY_WIZARD_FACTS;
+  const skills = opts.skills ?? [];
+  const hasConfig = !!(disqualifiers.length || signals.length || icp || goal);
+  // Nothing configured to bind and no skills to choose from → skip the call
+  // (no cost), facts stay absent.
+  if (!hasConfig && !skills.length) return EMPTY_WIZARD_FACTS;
   if (!opts.transcript?.trim()) return EMPTY_WIZARD_FACTS;
 
   const chain = OBJECTIVE_CHAINS[roleToSkill(opts.role)] ?? [];
@@ -60,6 +69,16 @@ export async function evaluateWizardBinding(opts: {
     '- "qualificationMet": boolean - true when enough configured qualification signals are evidenced to justify proposing a demo/meeting; false when not yet established.',
     '- "signalsMet": array of the configured qualification-signal strings (verbatim) that are evidenced; [] if none.',
     `- "goalObjective": which objective the CONFIGURED GOAL targets as its endpoint - one of [${chain.map((c) => `"${c}"`).join(", ")}] - or null if the goal does not clearly map to one.`,
+    // Only when the employee has business skills: the prompt is otherwise
+    // byte-identical to what it was before skills existed.
+    ...(skills.length
+      ? [
+          '- "skillId": the id of the ONE business skill (listed below) that fits the customer\'s LATEST message, or null. Decide from the LATEST CUSTOMER MESSAGE (shown last below); the earlier transcript is only context. Choose only from the listed ids.',
+          '  * A skill marked OPEN is in progress. Choose it again ONLY when the latest message continues that case: a short reply ("ok", "thanks"), an answer to a question you asked, or a detail that case needed. A NEW request that matches another skill\'s "when to use" means the customer changed subject: choose THAT skill.',
+          '  * A skill marked DONE already finished in this conversation. Choose it again ONLY for a genuinely new request of that kind, never for a thank-you or a reply to what was just done.',
+          '  * If an exclusion of a skill describes the request, do not choose that skill (choose the skill it names instead, if listed). If several fit equally, choose the one listed first. If none clearly fits, null.'
+        ]
+      : []),
   ].join("\n");
 
   const user = [
@@ -67,10 +86,14 @@ export async function evaluateWizardBinding(opts: {
     icp ? `IDEAL CUSTOMER PROFILE: ${icp}` : "IDEAL CUSTOMER PROFILE: (none)",
     signals.length ? `QUALIFICATION SIGNALS:\n${signals.map((s) => `- ${s}`).join("\n")}` : "QUALIFICATION SIGNALS: (none)",
     disqualifiers.length ? `DISQUALIFIERS:\n${disqualifiers.map((d) => `- ${d}`).join("\n")}` : "DISQUALIFIERS: (none)",
+    ...(skills.length ? ["", renderSkillChoices(skills, opts.openSkillId ?? null)] : []),
     "",
     "CONVERSATION (resolved facts + recent transcript):",
     opts.transcript.slice(0, 4000),
     "",
+    // The message the skill choice is about, separated so a long transcript
+    // about an earlier case does not outweigh it.
+    ...(skills.length ? [`LATEST CUSTOMER MESSAGE: ${latestCustomerLine(opts.transcript)}`, ""] : []),
     "Return the JSON verdict now.",
   ].join("\n");
 
@@ -89,7 +112,14 @@ export async function evaluateWizardBinding(opts: {
       signal: opts.signal,
     });
     const raw = JSON.parse(resp.content ?? "{}");
-    return normalize(raw, { signals, disqualifiers, chain });
+    // With skills only, the config facts stay EMPTY: nothing downstream changes
+    // meaning just because an employee has skills.
+    const facts = hasConfig ? normalize(raw, { signals, disqualifiers, chain }) : { ...EMPTY_WIZARD_FACTS };
+    if (skills.length) {
+      // Whitelist: only an offered id counts; anything else is "none fits".
+      facts.matchedSkillId = skills.some((k) => k.id === raw?.skillId) ? raw.skillId : null;
+    }
+    return facts;
   } catch (err: any) {
     console.warn("[wizard-binding] eval failed (non-fatal, facts absent):", err?.message);
     return EMPTY_WIZARD_FACTS;
@@ -118,4 +148,27 @@ function normalize(
   const goalObjective: ObjectiveName | null = ctx.chain.includes(raw?.goalObjective) ? raw.goalObjective : null;
 
   return { evaluated: true, fit, disqualifierMatched, qualificationMet, signalsMet, goalObjective };
+}
+
+/** The skills as the judgement sees them: ids, when to use, examples, exclusions. */
+function renderSkillChoices(skills: SkillSelectionCandidate[], openSkillId: string | null): string {
+  const lines = ["BUSINESS SKILLS (choose at most one, by id):"];
+  for (const k of skills) {
+    const tag = k.id === openSkillId ? " (OPEN in this conversation)" : k.doneInConversation ? " (DONE earlier in this conversation)" : "";
+    lines.push(`- id "${k.id}": ${k.name}${tag}`);
+    if (k.gathering?.length) lines.push(`  it is gathering: ${k.gathering.join(", ")} (a message giving one of these continues it)`);
+    if (k.situation) lines.push(`  situation: ${k.situation.slice(0, 300)}`);
+    if (k.whenToUse) lines.push(`  when to use: ${k.whenToUse.slice(0, 500)}`);
+    if (k.examples.length) lines.push(`  examples: ${k.examples.map((e) => `"${e.slice(0, 120)}"`).join("; ")}`);
+    for (const e of k.exclusions) {
+      lines.push(`  NOT for: ${e.text.slice(0, 200)}${e.useSkillInstead ? ` (use "${e.useSkillInstead}" instead)` : ""}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+/** The last customer line of the transcript (the turn being answered). */
+function latestCustomerLine(transcript: string): string {
+  const lines = transcript.split("\n").filter((l) => l.startsWith("Customer:"));
+  return (lines[lines.length - 1] ?? "").replace(/^Customer:\s*/, "").slice(0, 600) || "(none)";
 }

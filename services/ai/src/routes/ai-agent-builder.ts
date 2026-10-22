@@ -16,7 +16,8 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, prisma } from "@chatcenter/shared";
+import { Prisma } from "@prisma/client";
+import { authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, prisma, defaultIntegrationAccess, normalizeGuardrails, GuardrailsError, requireEntitlement, requireCapacity } from "@chatcenter/shared";
 import {
   runBuilder,
   loadDraftSnapshot,
@@ -27,9 +28,16 @@ import {
   type SeededDraftContext,
 } from "../services/agent-builder.service";
 import { generateReadinessReport } from "../services/agent-readiness.service";
+import { markReadinessRunning, markReadinessFinished } from "../services/readiness-status";
 import { generateSalesContext } from "../services/sales-context-generator.service";
+import { createSkill, setAgentSkills, SkillValidationError, SKILL_MODES } from "../services/business-skills.service";
+import { processDocument } from "../services/embedding.service";
 
 const router = Router();
+
+const MAX_KB_NAME = 120;
+// Under the 100kb request body limit even for Hebrew (two bytes a character).
+const MAX_DOC_CONTENT = 50_000;
 
 // Onboarding renders this SAME wizard (setup Movement 8 mounts the shared
 // components/aiEmployee/AgentBuilder), and during onboarding the tenant is
@@ -138,6 +146,8 @@ router.post("/start", async (req: Request, res: Response) => {
           status: "DRAFT",
           builderStep: "chat",
           departmentId: departmentId || null,
+          // Every system the workspace has today; one connected later stays off.
+          integrationAccess: await defaultIntegrationAccess(tenantId),
           ...(companyOverview ? { identity: { companyOverview } } : {}),
         },
       });
@@ -184,7 +194,7 @@ router.get("/:id/options", async (req: Request, res: Response) => {
     const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true } });
     if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
 
-    const [toolRows, kbs, grantedTools, linkedKbs] = await Promise.all([
+    const [toolRows, kbs, grantedTools, linkedKbs, skills, agentSkills] = await Promise.all([
       prisma.tenantTool.findMany({
         where: { tenantId, isEnabled: true, tenantIntegration: { status: "CONNECTED" } },
         select: {
@@ -197,7 +207,11 @@ router.get("/:id/options", async (req: Request, res: Response) => {
       prisma.knowledgeBase.findMany({ where: { tenantId, isActive: true }, select: { id: true, name: true }, take: 200 }),
       prisma.agentToolPermission.findMany({ where: { tenantId, aiAgentId: agentId, isAllowed: true }, select: { tenantToolId: true } }),
       prisma.aIAgentKnowledge.findMany({ where: { aiAgentId: agentId }, select: { knowledgeBaseId: true } }),
+      // The workspace's skills to pick from (B5); archived ones cannot be given.
+      prisma.businessSkill.findMany({ where: { tenantId, status: { not: "archived" } }, select: { id: true, name: true, category: true, status: true }, orderBy: { name: "asc" }, take: 200 }),
+      prisma.agentSkill.findMany({ where: { tenantId, aiAgentId: agentId }, select: { skillId: true, mode: true } }),
     ]);
+    const skillMode = new Map(agentSkills.map((r: any) => [r.skillId, r.mode as string]));
     const attachedTools = new Set(grantedTools.map((r: any) => r.tenantToolId));
     const attachedKbs = new Set(linkedKbs.map((r: any) => r.knowledgeBaseId));
 
@@ -211,6 +225,7 @@ router.get("/:id/options", async (req: Request, res: Response) => {
           attached: attachedTools.has(t.id),
         })),
         knowledgeBases: kbs.map((k: any) => ({ id: k.id, name: k.name, attached: attachedKbs.has(k.id) })),
+        skills: skills.map((k: any) => ({ id: k.id, name: k.name, category: k.category, status: k.status, attached: skillMode.has(k.id), mode: skillMode.get(k.id) ?? null })),
       },
     });
   } catch (err: any) {
@@ -224,11 +239,34 @@ router.post("/:id/tool", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId! as string;
     const agentId = req.params.id as string;
-    const { tenantToolId, attach } = req.body || {};
+    const { tenantToolId, toolName, attach } = req.body || {};
     const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true } });
     if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
-    const tt = await prisma.tenantTool.findFirst({ where: { id: String(tenantToolId), tenantId }, select: { id: true } });
-    if (!tt) { res.status(404).json({ error: "tool not found" }); return; }
+    // By tenantToolId, or by the tool's name ("woocommerce.create_coupon"),
+    // the key the employee's tools page lists. A name resolves to the tool of
+    // the CONNECTED connection.
+    let tt: { id: string } | null = null;
+    if (typeof toolName === "string" && toolName.includes(".")) {
+      const dot = toolName.indexOf(".");
+      tt = await prisma.tenantTool.findFirst({
+        where: {
+          tenantId,
+          catalogTool: { slug: toolName.slice(dot + 1) },
+          tenantIntegration: { status: "CONNECTED", integration: { slug: toolName.slice(0, dot) } },
+        },
+        select: { id: true },
+      });
+      if (!tt) {
+        res.status(404).json({
+          error: `"${toolName}" is not set up in this workspace: give it a workspace level first, or connect its integration.`,
+          code: "TOOL_NOT_PROVISIONED",
+        });
+        return;
+      }
+    } else {
+      tt = await prisma.tenantTool.findFirst({ where: { id: String(tenantToolId), tenantId }, select: { id: true } });
+      if (!tt) { res.status(404).json({ error: "tool not found" }); return; }
+    }
 
     if (attach !== false) {
       const existing = await prisma.agentToolPermission.findFirst({ where: { tenantId, aiAgentId: agentId, tenantToolId: tt.id }, select: { id: true } });
@@ -306,6 +344,124 @@ router.post("/:id/knowledge", async (req: Request, res: Response) => {
   }
 });
 
+// ─── Knowledge and skills picked in the hire (B5, 2026-10-14) ─────────────
+// Step 3 picks from what the workspace has, or adds a new one, instead of an
+// on/off switch per item. Knowledge is picked as a whole base. These sit in the
+// builder (ADMIN, onboarding or active) because the workspace's own skill
+// routes need an ACTIVE tenant and a hire also happens during onboarding.
+
+// POST /:id/knowledge/new {name, description?, title?, content?}: a new base
+// that this employee reads (scope "agent"; attaching it to another employee
+// later shares it), with an optional first document. Same entitlement and
+// capacity as creating a base in Knowledge Center.
+router.post(
+  "/:id/knowledge/new",
+  requireEntitlement("ai.knowledge_base"),
+  requireCapacity("limit:knowledge_sources", (tenantId) => prisma.knowledgeBase.count({ where: { tenantId } })),
+  async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.tenantId! as string;
+      const agentId = req.params.id as string;
+      const b = req.body || {};
+      const name = typeof b.name === "string" ? b.name.trim() : "";
+      const title = typeof b.title === "string" ? b.title.trim() : "";
+      const content = typeof b.content === "string" ? b.content.trim() : "";
+      if (!name) { res.status(400).json({ error: "A name is required", code: "NAME_REQUIRED" }); return; }
+      if (name.length > MAX_KB_NAME) { res.status(400).json({ error: "The name is too long", code: "NAME_TOO_LONG", max: MAX_KB_NAME }); return; }
+      if (!!title !== !!content) { res.status(400).json({ error: "A first document needs both a title and content", code: "DOCUMENT_INCOMPLETE" }); return; }
+      if (content.length > MAX_DOC_CONTENT) { res.status(400).json({ error: "The content is too long", code: "CONTENT_TOO_LONG", max: MAX_DOC_CONTENT }); return; }
+      const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true } });
+      if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
+
+      const kb = await prisma.knowledgeBase.create({
+        data: { tenantId, name, description: typeof b.description === "string" && b.description.trim() ? b.description.trim().slice(0, 500) : null, scope: "agent", scopeAgentId: agentId },
+        select: { id: true, name: true },
+      });
+      await prisma.aIAgentKnowledge.createMany({ data: [{ aiAgentId: agentId, knowledgeBaseId: kb.id }], skipDuplicates: true });
+      let documentId: string | null = null;
+      if (title) {
+        const doc = await prisma.knowledgeDocument.create({
+          data: { knowledgeBaseId: kb.id, tenantId, title: title.slice(0, 200), content, sourceType: "text", status: "pending" },
+          select: { id: true },
+        });
+        documentId = doc.id;
+        // Embedded in the background, as Knowledge Center's own upload does.
+        processDocument(doc.id).catch((err) => console.error(`[builder] knowledge/new ${doc.id} did not embed:`, err?.message));
+      }
+      res.status(201).json({ data: { knowledgeBase: kb, documentId, draft: await loadDraftSnapshot(tenantId, agentId) } });
+    } catch (err: any) {
+      console.error("Builder new knowledge error:", err);
+      res.status(500).json({ error: "Failed to add knowledge" });
+    }
+  },
+);
+
+/** The employee's skills as setAgentSkills takes them, in their order. */
+async function currentSkillItems(tenantId: string, agentId: string) {
+  const rows = await prisma.agentSkill.findMany({ where: { tenantId, aiAgentId: agentId }, orderBy: { order: "asc" }, select: { skillId: true, mode: true, order: true } });
+  return rows.map((r: any) => ({ skillId: r.skillId, mode: r.mode, order: r.order }));
+}
+
+function skillModeOf(v: unknown): string | null {
+  return typeof v === "string" && (SKILL_MODES as readonly string[]).includes(v) ? v : null;
+}
+
+// POST /:id/skill {skillId, attach, mode?}: give one skill to the draft, or
+// take it away. A new one goes last in "watch" unless a mode is given; a
+// given one keeps its place. Removing it ends its open runs (setAgentSkills).
+router.post("/:id/skill", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agentId = req.params.id as string;
+    const { skillId, attach, mode } = req.body || {};
+    if (typeof skillId !== "string" || !skillId) { res.status(400).json({ error: "skillId is required", code: "SKILL_REQUIRED" }); return; }
+    if (mode !== undefined && !skillModeOf(mode)) { res.status(400).json({ error: `mode must be one of ${SKILL_MODES.join(", ")}`, code: "INVALID_MODE" }); return; }
+    const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true } });
+    if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
+    const skill = await prisma.businessSkill.findFirst({ where: { id: skillId, tenantId, status: { not: "archived" } }, select: { id: true } });
+    if (!skill) { res.status(404).json({ error: "skill not found", code: "SKILL_NOT_FOUND" }); return; }
+
+    const items = await currentSkillItems(tenantId, agentId);
+    const at = items.findIndex((i) => i.skillId === skill.id);
+    if (attach === false) {
+      if (at >= 0) items.splice(at, 1);
+    } else if (at >= 0) {
+      if (mode) items[at]!.mode = mode;
+    } else {
+      items.push({ skillId: skill.id, mode: skillModeOf(mode) ?? "watch", order: items.length ? Math.max(...items.map((i) => i.order)) + 1 : 0 });
+    }
+    await setAgentSkills(tenantId, agentId, items);
+    res.json({ data: { draft: await loadDraftSnapshot(tenantId, agentId) } });
+  } catch (err: any) {
+    if (err instanceof SkillValidationError) { res.status(422).json({ error: err.message, field: err.field, code: "INVALID_SKILLS" }); return; }
+    console.error("Builder toggle skill error:", err);
+    res.status(500).json({ error: "Failed to toggle skill" });
+  }
+});
+
+// POST /:id/skill/new {...the business-skills create body, mode?}: create a
+// skill (validated exactly as POST /api/business-skills) and give it to the
+// draft, last, in "watch" unless a mode is given.
+router.post("/:id/skill/new", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agentId = req.params.id as string;
+    const { mode, ...body } = req.body || {};
+    if (mode !== undefined && !skillModeOf(mode)) { res.status(400).json({ error: `mode must be one of ${SKILL_MODES.join(", ")}`, code: "INVALID_MODE" }); return; }
+    const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true } });
+    if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
+    const skill = await createSkill(tenantId, (req as any).user?.userId, body);
+    const items = await currentSkillItems(tenantId, agentId);
+    items.push({ skillId: skill.id, mode: skillModeOf(mode) ?? "watch", order: items.length ? Math.max(...items.map((i) => i.order)) + 1 : 0 });
+    await setAgentSkills(tenantId, agentId, items);
+    res.status(201).json({ data: { skill, draft: await loadDraftSnapshot(tenantId, agentId) } });
+  } catch (err: any) {
+    if (err instanceof SkillValidationError) { res.status(422).json({ error: err.message, field: err.field, code: "INVALID_SKILL" }); return; }
+    console.error("Builder new skill error:", err);
+    res.status(500).json({ error: "Failed to create the skill" });
+  }
+});
+
 // POST /:id/refinements - save the optional creation-wizard refinements
 // (display name, conversation flow, custom guardrails) DETERMINISTICALLY,
 // from the dedicated wizard step - instead of relying on the conversational
@@ -349,12 +505,20 @@ router.post("/:id/refinements", async (req: Request, res: Response) => {
       data.conversationFlow = flow.length ? flow : null;
     }
 
-    if (Array.isArray(customGuardrails)) {
-      const rules = customGuardrails
-        .map((r: any) => String(r || "").trim())
-        .filter(Boolean)
-        .map((r: string) => r.slice(0, 280));
-      data.customGuardrails = rules.length ? rules : null;
+    // The employee's own rules (B4): the same list and limits as PUT
+    // /api/ai-agents/:id/rules; over a limit is refused, never cut.
+    if (customGuardrails === null) data.customGuardrails = Prisma.DbNull;
+    else if (customGuardrails !== undefined) {
+      try {
+        const rules = normalizeGuardrails(customGuardrails);
+        data.customGuardrails = rules.length ? rules : Prisma.DbNull;
+      } catch (e) {
+        if (e instanceof GuardrailsError) {
+          res.status(400).json({ error: e.message, code: e.code, field: "customGuardrails", reason: e.reason, ...(e.max !== undefined ? { max: e.max } : {}), ...(e.index !== undefined ? { index: e.index } : {}) });
+          return;
+        }
+        throw e;
+      }
     }
 
     if (Object.keys(data).length > 0) {
@@ -442,7 +606,20 @@ router.post("/:id/complete", async (req: Request, res: Response) => {
         ...(salesContext !== undefined ? { salesContext: salesContext as any } : {}),
       },
     });
-    res.json({ data: { ok: true, salesContextAutofilled: salesContext !== undefined } });
+    // A hire (DRAFT -> ACTIVE) runs the readiness report in the background
+    // (A6, Omer 2026-10-13): one LLM call, stored on the employee; the manual
+    // route re-runs it. Never blocks or fails the hire.
+    const hired = agent.status === "DRAFT";
+    if (hired) {
+      // "running" is written BEFORE the answer, so the page's first read of
+      // the employee already shows the check in progress.
+      const runId = await markReadinessRunning(tenantId, agentId);
+      void resolveLocale(tenantId, req.body?.locale)
+        .then((locale) => runAndStoreReadiness(tenantId, agentId, locale, runId))
+        .then((r) => { if ("error" in r) console.warn(`[readiness] after hire ${agentId}: ${r.error}`); })
+        .catch((err: any) => console.warn(`[readiness] after hire ${agentId} failed:`, err?.message));
+    }
+    res.json({ data: { ok: true, salesContextAutofilled: salesContext !== undefined, readinessQueued: hired } });
   } catch (err: any) {
     console.error("Builder complete error:", err);
     res.status(500).json({ error: "Failed to complete builder" });
@@ -482,6 +659,39 @@ router.post("/:id/finalize", async (req: Request, res: Response) => {
 });
 
 // ─── Readiness Test ─────────────────────────────────────────
+/**
+ * Generate the readiness report and store it on the employee
+ * (AIAgent.readinessReport), so it can be re-viewed without re-running.
+ * Persisting is best-effort: a failure never blocks returning the report.
+ * Shared by the manual route and the automatic run after a hire.
+ */
+export async function runAndStoreReadiness(tenantId: string, agentId: string, locale: string, runId?: string, opts: { regenerateQuestions?: boolean } = {}) {
+  // The run's status (running / done / failed) is stored beside the report,
+  // so the page shows the truth instead of guessing how long a check takes.
+  const run = runId ?? (await markReadinessRunning(tenantId, agentId));
+  let report: Awaited<ReturnType<typeof generateReadinessReport>>;
+  try {
+    report = await generateReadinessReport(tenantId, agentId, locale, opts);
+  } catch (err) {
+    await markReadinessFinished(tenantId, agentId, run, { ok: false, error: "internal_error" });
+    throw err;
+  }
+  if ("error" in report) {
+    await markReadinessFinished(tenantId, agentId, run, { ok: false, error: String(report.error) });
+    return report;
+  }
+  try {
+    await prisma.aIAgent.update({ where: { id: agentId }, data: { readinessReport: report as any } });
+  } catch (persistErr: any) {
+    console.warn("[readiness-test] persist failed (non-fatal):", persistErr?.message);
+    // The report was made but not kept: the page has nothing new to show.
+    await markReadinessFinished(tenantId, agentId, run, { ok: false, error: "persist_failed" });
+    return report;
+  }
+  await markReadinessFinished(tenantId, agentId, run, { ok: true });
+  return report;
+}
+
 // Generates the realistic customer questions this employee will face, scores
 // how well it's covered (knowledge + tools), and lists concrete gap fixes.
 router.post("/:id/readiness-test", async (req: Request, res: Response) => {
@@ -492,20 +702,12 @@ router.post("/:id/readiness-test", async (req: Request, res: Response) => {
     if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
 
     const locale = await resolveLocale(tenantId, req.body?.locale);
-    const report = await generateReadinessReport(tenantId, agentId, locale);
+    // regenerateQuestions: a fresh question set; otherwise the stored one is
+    // judged again, and an unchanged input returns the same report (B6).
+    const report = await runAndStoreReadiness(tenantId, agentId, locale, undefined, { regenerateQuestions: req.body?.regenerateQuestions === true });
     if ("error" in report) {
       res.status(report.error === "agent_not_found" ? 404 : 502).json({ error: report.error });
       return;
-    }
-    // Persist so the owner can re-view without re-running the generator (P1-5).
-    // Best-effort: a persistence failure never blocks returning the report.
-    try {
-      await prisma.aIAgent.update({
-        where: { id: agentId },
-        data: { readinessReport: report as any },
-      });
-    } catch (persistErr: any) {
-      console.warn("[readiness-test] persist failed (non-fatal):", persistErr?.message);
     }
     res.json({ data: report });
   } catch (err: any) {

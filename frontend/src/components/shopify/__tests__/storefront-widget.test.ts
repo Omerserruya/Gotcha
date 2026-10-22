@@ -72,6 +72,14 @@ async function boot(
     sounds?: boolean;
     /** Settings-editor preview: renders everything, takes nothing (not even focus). */
     preview?: boolean;
+    /** The bootstraps' widget.brand { name, initial } (Backend ef8ce568). */
+    brand?: { name: string; initial: string } | null;
+    /** A host that can start a fresh conversation (the code snippet). */
+    resetConversation?: () => void;
+    /** A host that can step its bubble aside for a docked panel (the code snippet). */
+    onDock?: (docked: boolean) => void;
+    /** A host that completes Add to cart its own way (the web chat's store, W9c). */
+    addToCart?: (line: any) => Promise<{ cartPage: string | null }>;
   } = {},
 ): Promise<Harness> {
   const host = document.createElement("div");
@@ -109,6 +117,9 @@ async function boot(
     post,
     shadow,
     ...(options.preview ? { preview: true } : {}),
+    ...(options.resetConversation ? { resetConversation: options.resetConversation } : {}),
+    ...(options.onDock ? { onDock: options.onDock } : {}),
+    ...(options.addToCart ? { addToCart: options.addToCart } : {}),
     setUnread: vi.fn(),
     onOpened: vi.fn(),
     onClosed: vi.fn(),
@@ -148,6 +159,7 @@ async function boot(
       offline: { active: false, message: "Away", behavior: "ai", formFields: [], consentRequired: false, consentText: "" },
       features: { humanHandoff: true, productMessaging: true, addToCart: true, ...(options.features ?? {}) },
       ux: options.ux,
+      ...(options.brand !== undefined ? { brand: options.brand } : {}),
     },
   };
 
@@ -219,25 +231,22 @@ describe("welcome polish", () => {
     expect(sheet).toContain("padding:var(--pad) var(--pad) var(--s4);");
   });
 
-  it("hangs the avatar off the hero with no margin of its own", async () => {
-    // The gap to the title belongs to .wel, so there is one number to tune
-    // rather than a margin here fighting a gap there.
-    const h = await boot({
-      messages: [],
-      ux: { ...hero(), welcome: { avatarUrl: "https://cdn.example.com/a.png" } },
-    });
-    const av = h.shadow.querySelector(".wel-av") as HTMLImageElement;
-    expect(av.style.marginTop).toBe("-30px");
-    expect(css(h.shadow)).toContain("box-shadow:0 3px 10px rgba(15,23,42,.14);margin-bottom:0;");
+  it("★ design 7: the brand's disc hangs 56px over the cover's edge, with the green dot", async () => {
+    const h = await boot({ messages: [], ux: hero(), brand: { name: "Urban Supply", initial: "U" } });
+    const disc = h.shadow.querySelector(".gw .disc") as HTMLElement;
+    expect(disc.previousElementSibling!.className).toBe("cv");
+    expect(css(h.shadow)).toContain("width:100px;height:100px;margin:-56px auto 0;");
+    expect(disc.querySelector(".disc-on")).toBeTruthy();
+    // No logo: the brand's wordmark, sized by its longest word (frontend-v2 brandMark/logoFit).
+    expect(disc.querySelector(".disc-wm")!.textContent).toBe("URBAN SUPPLY");
+    expect(disc.querySelector(".disc-wm")!.getAttribute("data-fit")).toBe("m");
   });
 
-  it("groups the title and subtitle so they read as one thought", async () => {
+  it("★ design 7 opens on the questions: no title, the assistant's name under the disc", async () => {
     const h = await boot({ messages: [] });
-    const copy = h.shadow.querySelector(".wel-cp")!;
-    expect(copy.querySelector(".wel-h")).toBeTruthy();
-    expect(copy.querySelector(".wel-s")).toBeTruthy();
-    // A tighter gap inside the pair than between it and the questions.
-    expect(css(h.shadow)).toContain(".wel-cp{display:flex;flex-direction:column;gap:var(--s1);}");
+    expect(h.shadow.querySelector(".wel-h")).toBeNull();
+    expect(h.shadow.textContent).not.toContain("Hi there");
+    expect(h.shadow.querySelector(".disc-nm")!.textContent).toBe("Store Assistant");
   });
 
   it("gives the subtitle a measure so it breaks where a person would", async () => {
@@ -354,13 +363,12 @@ describe("welcome polish", () => {
 
   // (19) Every hero media type still lays out.
   for (const mediaType of ["image", "gif", "video"] as const) {
-    it(`lays out a ${mediaType} hero`, async () => {
+    it(`lays out a ${mediaType} cover at design 7's 168px, whatever height was configured`, async () => {
       const url = mediaType === "video" ? "https://cdn.example.com/c.mp4" : "https://cdn.example.com/h.jpg";
       const h = await boot({ messages: [], ux: { hero: { mediaType, mediaUrl: url, height: 124, mobileHeight: 108 } } });
-      const heroEl = h.shadow.querySelector(".hero") as HTMLElement;
-      expect(heroEl).toBeTruthy();
-      expect(heroEl.style.height).toBe("124px");
-      expect(h.shadow.querySelector(mediaType === "video" ? "video.hero-m" : "img.hero-m")).toBeTruthy();
+      expect(h.shadow.querySelector(".cv")).toBeTruthy();
+      expect(css(h.shadow)).toContain(".cv{position:relative;height:168px;");
+      expect(h.shadow.querySelector(mediaType === "video" ? "video.cv-m" : "img.cv-m")).toBeTruthy();
     });
   }
 });
@@ -381,15 +389,17 @@ describe("panel layout", () => {
     expect(css(shadow)).toContain(".panel[data-view='welcome'][data-hero='1'] .hd{display:none;}");
   });
 
-  it("keeps the header when the welcome screen has NO hero", async () => {
-    // Hiding it unconditionally left a bare white strip with the title
-    // against the top edge and the close button - restyled white for
-    // legibility over a photograph - invisible on it. Merchants went looking
-    // for a blank placeholder image to prop the thing open.
+  it("★ a welcome with no image still has its cover, in the cover colour; the header waits for the conversation", async () => {
+    // Design 7 always draws the cover: the plain colour stands in for a
+    // missing image, so the tools on it are never on a bare strip.
     const { shadow } = await boot({ messages: [] });
     const panel = shadow.querySelector(".panel")!;
     expect(panel.getAttribute("data-view")).toBe("welcome");
-    expect(panel.hasAttribute("data-hero")).toBe(false);
+    expect(panel.getAttribute("data-hero")).toBe("1");
+    expect(shadow.querySelector(".cv")).toBeTruthy();
+    expect(shadow.querySelector(".cv-m")).toBeNull();
+    expect(css(shadow)).toContain("background:#F1ECE8;");
+    expect(css(shadow)).toContain(".panel[data-look='gotcha'][data-view='welcome'] .hd{display:none;}");
   });
 
   it("gives the welcome screen a floor as well as a ceiling", async () => {
@@ -449,13 +459,15 @@ describe("panel layout", () => {
     expect(preview.shadow.activeElement).toBe(before);
   });
 
-  it("hangs the close button off the panel, not the header", async () => {
+  it("hangs the tools - minimise last - off the panel, not the header", async () => {
     // Otherwise hiding the header in the welcome view would take the only
     // way out with it.
     const { shadow } = await boot({ messages: [], ux: hero() });
     const x = shadow.querySelector('[data-act="close"]')!;
-    expect(x).toBeTruthy();
-    expect((x.parentElement as HTMLElement).className).toContain("panel");
+    const tools = x.parentElement as HTMLElement;
+    expect(tools.className).toBe("tools");
+    expect((tools.parentElement as HTMLElement).className).toContain("panel");
+    expect(tools.lastElementChild).toBe(x);
   });
 
   it("does not stack the mute button on top of the close button", async () => {
@@ -549,10 +561,9 @@ describe("welcome state", () => {
     expect(names).toEqual(["Store Assistant", "dana"]);
   });
 
-  it("renders the merchant's headline and suggested questions", async () => {
+  it("renders the assistant's name and the suggested questions", async () => {
     const { shadow } = await boot();
     const text = shadow.textContent ?? "";
-    expect(text).toContain("Hi there");
     expect(text).toContain("Which product is right for me?");
     expect(text).toContain("Store Assistant");
   });
@@ -586,7 +597,7 @@ describe("welcome state", () => {
       },
     });
     expect(rtlShadow.querySelector(".panel")!.getAttribute("dir")).toBe("rtl");
-    expect(rtlShadow.textContent).toContain("שלום");
+    expect(rtlShadow.textContent).toContain("עוזר");
     expect(shadow).toBeTruthy();
   });
 
@@ -1184,7 +1195,8 @@ describe("close and reopen", () => {
   it("carries an accessible label and is reachable by keyboard", async () => {
     const h = await boot();
     const close = h.shadow.querySelector('button[data-act="close"]') as HTMLButtonElement;
-    expect(close.getAttribute("aria-label")).toBe("Close chat");
+    // Design 7's chevron: it minimises the chat (the conversation stays).
+    expect(close.getAttribute("aria-label")).toBe("Minimise");
     expect(close.tagName).toBe("BUTTON");
     expect(close.disabled).toBe(false);
   });
@@ -1268,9 +1280,9 @@ function hero(overrides: Record<string, any> = {}) {
 }
 
 describe("welcome hero", () => {
-  it("renders an image hero above the welcome copy", async () => {
+  it("renders an image cover above the disc and the questions", async () => {
     const h = await boot({ messages: [], ux: hero() });
-    const img = h.shadow.querySelector(".hero .hero-m") as HTMLImageElement;
+    const img = h.shadow.querySelector(".cv .cv-m") as HTMLImageElement;
     expect(img).toBeTruthy();
     expect(img.tagName).toBe("IMG");
     expect(img.getAttribute("src")).toBe("https://cdn.example.com/hero.jpg");
@@ -1284,7 +1296,7 @@ describe("welcome hero", () => {
       messages: [],
       ux: hero({ mediaType: "gif", mediaUrl: "https://cdn.example.com/loop.gif" }),
     });
-    const img = h.shadow.querySelector(".hero .hero-m") as HTMLImageElement;
+    const img = h.shadow.querySelector(".cv .cv-m") as HTMLImageElement;
     expect(img.tagName).toBe("IMG");
     expect(img.getAttribute("src")).toContain(".gif");
   });
@@ -1294,7 +1306,7 @@ describe("welcome hero", () => {
       messages: [],
       ux: hero({ mediaType: "video", mediaUrl: "https://cdn.example.com/clip.mp4", posterUrl: "https://cdn.example.com/p.jpg" }),
     });
-    const v = h.shadow.querySelector(".hero .hero-m") as HTMLVideoElement;
+    const v = h.shadow.querySelector(".cv .cv-m") as HTMLVideoElement;
     expect(v.tagName).toBe("VIDEO");
     expect(v.muted).toBe(true);
     expect(v.hasAttribute("playsinline")).toBe(true);
@@ -1304,62 +1316,62 @@ describe("welcome hero", () => {
     expect(v.preload).toBe("none");
   });
 
-  it("fades the media into the chat surface", async () => {
+  it("fades the cover into the widget over its last 96px, to design 7's #FBF8F3", async () => {
     const h = await boot({ messages: [], ux: hero() });
-    const fade = h.shadow.querySelector(".hero .hero-fd") as HTMLElement;
-    expect(fade).toBeTruthy();
-    // Transparent at the top, the panel's own colour at the bottom.
-    expect(fade.style.background).toContain("linear-gradient");
-    expect(fade.style.background).toContain("rgba(255,255,255,0)");
+    expect(h.shadow.querySelector(".cv .cv-fd")).toBeTruthy();
+    const sheet = (h.shadow.querySelector("style") as HTMLStyleElement).textContent ?? "";
+    expect(sheet).toContain(".cv-fd{position:absolute;left:0;right:0;bottom:0;height:96px;");
+    expect(sheet).toContain("rgba(251,248,243,0) 0%,rgba(251,248,243,.85) 62%,#FBF8F3 100%");
   });
 
-  it("overlaps the avatar onto the bottom edge of the media", async () => {
-    // The avatar belongs to the WELCOME block, not the hero: it survives
-    // when the merchant removes the media, so it cannot be a hero field.
+  it("the disc carries the merchant's logo when there is one, and its wordmark if the logo fails", async () => {
     const h = await boot({
       messages: [],
-      ux: { ...hero(), welcome: { avatarUrl: "https://cdn.example.com/a.png", avatarOverlap: 28, avatarSize: 64 } },
+      ux: hero(),
+      appearance: { logoUrl: "https://cdn.example.com/logo.png" },
+      brand: { name: "Aviv & Co.", initial: "A" },
     });
-    const av = h.shadow.querySelector(".wel-av") as HTMLImageElement;
-    expect(av).toBeTruthy();
-    expect(av.style.marginTop).toBe("-28px");
-    expect(av.style.width).toBe("64px");
+    const img = h.shadow.querySelector(".disc img") as HTMLImageElement;
+    expect(img.getAttribute("src")).toBe("https://cdn.example.com/logo.png");
+    img.dispatchEvent(new Event("error"));
+    expect(h.shadow.querySelector(".disc img")).toBeNull();
+    expect(h.shadow.querySelector(".disc .disc-wm")!.textContent).toBe("AVIV & CO.");
   });
 
-  it("shows no hero at all when there is no media", async () => {
+  it("no media: the plain cover, and the questions still there", async () => {
     const h = await boot({ messages: [], ux: { hero: { mediaType: "none", mediaUrl: null } } });
-    expect(h.shadow.querySelector(".hero")).toBeNull();
-    // ...and the welcome copy is still there.
-    expect(h.shadow.querySelector(".wel-h")).toBeTruthy();
+    expect(h.shadow.querySelector(".cv")).toBeTruthy();
+    expect(h.shadow.querySelector(".cv-m")).toBeNull();
+    expect(h.shadow.querySelectorAll(".q").length).toBe(1);
   });
 
   it("survives a config with no ux block at all", async () => {
     // An existing channel, configured long before any of this shipped.
     const h = await boot({ messages: [] });
-    expect(h.shadow.querySelector(".hero")).toBeNull();
-    expect(h.shadow.querySelector(".wel")).toBeTruthy();
+    expect(h.shadow.querySelector(".gw .cv")).toBeTruthy();
+    expect(h.shadow.querySelector(".cv-m")).toBeNull();
   });
 
-  it("collapses the frame if the media fails to load", async () => {
+  it("a cover image that fails to load leaves the plain cover, never a broken image", async () => {
     const h = await boot({ messages: [], ux: hero() });
-    const img = h.shadow.querySelector(".hero .hero-m") as HTMLImageElement;
+    const img = h.shadow.querySelector(".cv .cv-m") as HTMLImageElement;
     img.dispatchEvent(new Event("error"));
-    // A broken-image glyph at the top of the chat is worse than no hero.
-    expect(h.shadow.querySelector(".hero")).toBeNull();
+    expect(h.shadow.querySelector(".cv-m")).toBeNull();
+    expect(h.shadow.querySelector(".cv")).toBeTruthy();
   });
 });
 
 describe("welcome to conversation", () => {
   it("drops the hero once the shopper sends the first message", async () => {
     const h = await boot({ messages: [], ux: hero() });
-    expect(h.shadow.querySelector(".hero")).toBeTruthy();
+    expect(h.shadow.querySelector(".cv")).toBeTruthy();
 
     const suggestion = h.shadow.querySelector(".sug-b") as HTMLButtonElement;
     suggestion.click();
     await new Promise((r) => setTimeout(r, 30));
 
     // Compact chat: the message list owns the space now.
-    expect(h.shadow.querySelector(".hero")).toBeNull();
+    expect(h.shadow.querySelector(".cv")).toBeNull();
     expect(h.shadow.querySelector(".msgs")).toBeTruthy();
   });
 
@@ -1494,5 +1506,310 @@ describe("close button ergonomics", () => {
     expect(WIDGET_SOURCE).toContain('".x:focus-visible::before,.mute:focus-visible::before{outline:2px solid "');
     // The svg must not swallow the click and defeat the hit area.
     expect(WIDGET_SOURCE).toContain("stroke-width:2.1;stroke-linecap:round;pointer-events:none;}");
+  });
+});
+
+// ─── Design 7 (live widget L2) ───────────────────────────────
+describe("★★ design 7's panel (live widget L2)", () => {
+  const sheetOf = (shadow: ShadowRoot) => (shadow.querySelector("style") as HTMLStyleElement).textContent ?? "";
+
+  it("400 × min(680), radius 22, 96px up and 22px in, on #FBF8F3 - whatever corner radius was configured", async () => {
+    const h = await boot({ appearance: { cornerRadius: 8 } });
+    const sheet = sheetOf(h.shadow);
+    expect(sheet).toContain(".panel[data-look='gotcha']{bottom:96px;right:22px;width:400px;");
+    expect(sheet).toContain("height:min(680px, calc(100vh - 120px));border-radius:22px;");
+    expect(sheet).toContain(".panel[data-look='gotcha']{background:#FBF8F3;");
+  });
+
+  it("the header: the brand's initial with the online dot, the name, and who answers", async () => {
+    const h = await boot({ messages: [{ id: "m1", direction: "OUTBOUND", body: "Hello", createdAt: "2026-10-14T08:00:00Z" }], brand: { name: "Urban Supply", initial: "U" } });
+    const av = h.shadow.querySelector(".hd .hd-av")!;
+    expect(av.textContent).toBe("U");
+    expect(av.querySelector(".hd-dot")).toBeTruthy();
+    expect(h.shadow.querySelector(".hd-st")!.textContent).toBe("Replies right away");
+  });
+
+  it("while a reply is on its way the status says so", async () => {
+    const h = await boot({ messages: [] });
+    (h.shadow.querySelector(".sug-b") as HTMLButtonElement).click();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(h.shadow.querySelector(".hd-st")!.textContent).toBe("Typing…");
+  });
+
+  it("the visitor's bubble takes the ink that reads on the main colour; the assistant's reply is text", async () => {
+    const h = await boot({ appearance: { primaryColor: "#f5e6c8", contrastColor: "#ffffff" } });
+    const sheet = sheetOf(h.shadow);
+    expect(sheet).toContain(".panel[data-look='gotcha'] .row[data-me='1'] .bub{background:#f5e6c8;color:#2B2622;");
+    expect(sheet).toContain(".panel[data-look='gotcha'] .row[data-me='0'] .bub{background:none;");
+    expect(sheet).toContain(".panel[data-look='gotcha'] .snd{width:40px;height:40px;border-radius:50%;background:#f5e6c8;color:#2B2622;}");
+    expect(sheet).toContain(".panel[data-look='gotcha'] .snd:disabled{opacity:1;background:#D6CCBF;");
+  });
+
+  it("questions are rows with an arrow, none bordered as a chip", async () => {
+    const h = await boot({ messages: [], ux: { welcome: { suggestedQuestions: ["One?", "Two?", " "] } } });
+    const rows = Array.from(h.shadow.querySelectorAll(".qs .q")) as HTMLElement[];
+    expect(rows.map((q) => q.textContent)).toEqual(["One?", "Two?"]);
+    expect(rows[0]!.querySelector("svg")).toBeTruthy();
+    expect(sheetOf(h.shadow)).toContain(".panel[data-look='gotcha'] .q:first-child{border-top:0;}");
+  });
+
+  it("★ New conversation, where the host can start one: the host forgets it and the welcome returns", async () => {
+    const reset = vi.fn();
+    const h = await boot({ messages: [{ id: "m1", direction: "OUTBOUND", body: "Hello", createdAt: "2026-10-14T08:00:00Z" }], resetConversation: reset });
+    expect(h.shadow.querySelector(".panel")!.getAttribute("data-view")).toBe("conversation");
+    const tools = Array.from(h.shadow.querySelectorAll(".tools > button")).map((b) => b.getAttribute("data-act"));
+    expect(tools).toEqual(["new", "close"]);
+    (h.shadow.querySelector('[data-act="new"]') as HTMLButtonElement).click();
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(h.shadow.querySelector(".panel")!.getAttribute("data-view")).toBe("welcome");
+    expect(h.shadow.querySelector(".msgs")).toBeNull();
+    // The next message asks for a fresh conversation, never the one just left.
+    h.post.mockClear();
+    (h.shadow.querySelector(".qs .q") as HTMLButtonElement).click();
+    await new Promise((r) => setTimeout(r, 10));
+    const conv = h.post.mock.calls.find((c) => String(c[0]).endsWith("/conversation"));
+    expect(conv![1]).toEqual({ fresh: true });
+  });
+
+  it("a host that cannot start a fresh conversation is not offered one (the storefront)", async () => {
+    const h = await boot({ messages: [] });
+    expect(h.shadow.querySelector('[data-act="new"]')).toBeNull();
+  });
+
+  it("★ Powered by: the words and our logo, linked to gotcha.co.il", async () => {
+    const h = await boot();
+    const a = h.shadow.querySelector("a.pwl") as HTMLAnchorElement;
+    expect(a.getAttribute("href")).toBe("https://gotcha.co.il");
+    expect(a.getAttribute("target")).toBe("_blank");
+    expect(a.getAttribute("dir")).toBe("ltr");
+    expect(a.textContent).toBe("Powered by");
+    expect(a.querySelector("img")!.getAttribute("src")).toBe("https://app.gotcha.co.il/widget/gotcha-line-dark.png");
+    expect(a.hidden).toBe(false);
+  });
+
+  it("offline: no green dots", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const shadow = host.attachShadow({ mode: "open" });
+    const app = (window as any).__gotchaShopifyChatApp({
+      api: "x", assets: "y", context: {}, availability: "offline",
+      store: { get: () => null, set: () => {}, del: () => {} },
+      post: vi.fn(async () => ({ data: {} })),
+      shadow,
+      widget: {
+        appearance: { primaryColor: "#000000", contrastColor: "#ffffff", launcherPosition: "right", language: "en", direction: "auto", showPoweredBy: true },
+        welcome: { headline: "", subline: "", assistantName: "Ava", suggestedQuestions: [] },
+        offline: { active: true, message: "Back at nine.", behavior: "ai", formFields: [] },
+        features: { humanHandoff: false, productMessaging: false, addToCart: false },
+      },
+    });
+    app.open();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(shadow.querySelector(".hd-dot")).toBeNull();
+    expect(shadow.querySelector(".disc-on")).toBeNull();
+    expect(shadow.textContent).toContain("Back at nine.");
+  });
+
+  it("the WhatsApp look keeps its own panel: no cover, no disc, its ✕", async () => {
+    const h = await boot({ messages: [], ux: { look: "whatsapp" } });
+    expect(h.shadow.querySelector(".cv")).toBeNull();
+    expect(h.shadow.querySelector(".tools")).toBeNull();
+    expect(h.shadow.querySelector('[data-act="close"]')!.className).toBe("x");
+  });
+});
+
+describe("★★ design 7's docking (live widget L3)", () => {
+  const wide = (yes: boolean) => {
+    (window as any).matchMedia = vi.fn().mockImplementation((q: string) => ({
+      matches: q === "(min-width: 900px)" ? yes : false,
+      media: q, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(),
+    }));
+  };
+  afterEach(() => {
+    document.documentElement.style.paddingRight = "";
+    document.documentElement.style.transition = "";
+  });
+
+  it("a host that can step its bubble aside offers it; the page makes 400px of room, and gets back exactly what it had", async () => {
+    wide(true);
+    document.documentElement.style.paddingRight = "7px";
+    const onDock = vi.fn();
+    const h = await boot({ messages: [], onDock });
+    const dock = h.shadow.querySelector('[data-act="dock"]') as HTMLButtonElement;
+    expect(dock.getAttribute("aria-label")).toBe("Dock to the side of the screen");
+    expect(Array.from(h.shadow.querySelectorAll(".tools > button")).map((b) => b.getAttribute("data-act"))).toEqual(["dock", "close"]);
+    dock.click();
+    const panel = h.shadow.querySelector(".panel")!;
+    expect(panel.getAttribute("data-docked")).toBe("1");
+    expect(document.documentElement.style.paddingRight).toBe("400px");
+    expect(dock.getAttribute("aria-pressed")).toBe("true");
+    expect(dock.getAttribute("aria-label")).toBe("Undock");
+    expect(onDock).toHaveBeenLastCalledWith(true);
+    dock.click();
+    expect(panel.hasAttribute("data-docked")).toBe(false);
+    expect(document.documentElement.style.paddingRight).toBe("7px");
+    expect(onDock).toHaveBeenLastCalledWith(false);
+  });
+
+  it("minimising a docked panel gives the page its room back", async () => {
+    wide(true);
+    const onDock = vi.fn();
+    const h = await boot({ messages: [], onDock });
+    (h.shadow.querySelector('[data-act="dock"]') as HTMLButtonElement).click();
+    (h.shadow.querySelector('[data-act="close"]') as HTMLButtonElement).click();
+    expect(document.documentElement.style.paddingRight).toBe("");
+    expect(h.shadow.querySelector(".panel")!.hasAttribute("data-docked")).toBe(false);
+    expect(onDock).toHaveBeenLastCalledWith(false);
+  });
+
+  it("a screen too narrow keeps the page beside it: no docking", async () => {
+    wide(false);
+    const onDock = vi.fn();
+    const h = await boot({ messages: [], onDock });
+    (h.shadow.querySelector('[data-act="dock"]') as HTMLButtonElement).click();
+    expect(h.shadow.querySelector(".panel")!.hasAttribute("data-docked")).toBe(false);
+    expect(document.documentElement.style.paddingRight).toBe("");
+    expect(onDock).not.toHaveBeenCalled();
+  });
+
+  it("a host that cannot step its bubble aside is not offered it (the storefront)", async () => {
+    wide(true);
+    const h = await boot({ messages: [] });
+    expect(h.shadow.querySelector('[data-act="dock"]')).toBeNull();
+  });
+});
+
+describe("★★ Add to cart on a web chat's store (live widget L6, W9c)", () => {
+  const card = {
+    id: "w1",
+    direction: "OUTBOUND",
+    body: "This one",
+    messageType: "woo_product",
+    author: "AI",
+    authorKind: "ai",
+    createdAt: new Date().toISOString(),
+    commerce: { addToCartEnabled: true, products: [makeProduct({ selectedVariantId: "9001", productUrl: "https://shop.example/product/runner/" })] },
+  };
+  const addBtn = (shadow: ShadowRoot) =>
+    Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Add to cart") as HTMLButtonElement;
+
+  it("the host completes the line with the server's answer; no Shopify cart, and no cart page it doesn't know", async () => {
+    const addToCart = vi.fn(async () => ({ cartPage: null }));
+    const { shadow, post, fetchMock } = await boot({ messages: [card], addToCart });
+    addBtn(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(post.mock.calls.some((c) => String(c[0]).includes("/cart/validate"))).toBe(true);
+    expect(addToCart).toHaveBeenCalledWith(expect.objectContaining({ variantId: "9001", quantity: 1 }));
+    expect(fetchMock.mock.calls.some((c: any[]) => String(c[0]).includes("/cart/add.js"))).toBe(false);
+    expect(shadow.textContent).toContain("Added to cart");
+    expect(Array.from(shadow.querySelectorAll("a")).some((a) => a.textContent === "View cart")).toBe(false);
+    expect(Array.from(shadow.querySelectorAll("button")).some((b) => b.textContent === "Keep shopping")).toBe(true);
+  });
+
+  it("the storefront keeps its cart page", async () => {
+    const { shadow } = await boot({ messages: [card] });
+    addBtn(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+    const view = Array.from(shadow.querySelectorAll("a")).find((a) => a.textContent === "View cart")!;
+    expect(view.getAttribute("href")).toBe("/cart");
+  });
+
+  it.each([
+    ["cart_disabled", "Add to cart is switched off for this store right now."],
+    ["not_for_sale", "This product isn't for sale right now."],
+    ["out_of_stock", "This one is sold out."],
+    ["choose_variant", "Choose an option first."],
+    ["variant_not_found", "That option isn't available anymore."],
+    ["product_not_found", "That option isn't available anymore."],
+    ["choose_on_product_page", "Opening the product page to choose the options."],
+  ])("the store's refusal %s, in words", async (code, sentence) => {
+    const { shadow, post } = await boot({ messages: [card], addToCart: vi.fn() as any });
+    post.mockImplementation(async (p: string) => {
+      if (String(p).includes("/cart/validate")) {
+        // The web chat adapter's error: the code as the message, no body.
+        const err: any = new Error(code);
+        err.status = code === "cart_disabled" ? 403 : 422;
+        throw err;
+      }
+      return { data: {} };
+    });
+    addBtn(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(shadow.querySelector(".cart-err")!.textContent).toBe(sentence);
+  });
+});
+
+describe("★★ the visitor's language (live widget L7, W10)", () => {
+  async function talk(h: Harness, said: string | null, texts: Record<string, string> = {}) {
+    h.post.mockImplementation(async (p: string, body: any) => {
+      if (String(p).endsWith("/conversation")) return { data: { conversationId: "conv1", status: "OPEN", isHandedOver: false, messages: [] } };
+      if (String(p).endsWith("/message")) return { data: { messageId: "m1", locale: said } };
+      if (String(p).endsWith("/texts")) return { data: { locale: body.locale, texts } };
+      return { data: {} };
+    });
+    (h.shadow.querySelector(".qs .q") as HTMLButtonElement).click();
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  const textsCalls = (h: Harness) => h.post.mock.calls.filter((c) => String(c[0]).endsWith("/texts"));
+
+  it("★ the answer says Hebrew: the panel turns Hebrew and right to left, once, and asks for the merchant's texts", async () => {
+    const reset = vi.fn();
+    const h = await boot({ messages: [], resetConversation: reset });
+    await talk(h, "he", { "welcome.suggestedQuestions.0": "איזה מוצר מתאים לי?" });
+    const panel = h.shadow.querySelector(".panel")!;
+    expect(panel.getAttribute("lang")).toBe("he");
+    expect(panel.getAttribute("dir")).toBe("rtl");
+    expect(h.shadow.querySelector("textarea")!.getAttribute("placeholder")).toBe("אפשר לשאול אותנו הכל");
+    expect(h.shadow.querySelector('[data-act="close"]')!.getAttribute("aria-label")).toBe("מזעור");
+    expect(textsCalls(h)).toEqual([[expect.stringMatching(/\/texts$/), { locale: "he" }, "opaque-session-token"]]);
+    // The tools move to the Hebrew corner: the stylesheet follows the direction.
+    const sheet = (h.shadow.querySelector("style") as HTMLStyleElement).textContent ?? "";
+    expect(sheet).toContain("display:flex;gap:6px;top:15px;left:12px;}");
+    // The merchant's question, translated, where the welcome shows it.
+    (h.shadow.querySelector('[data-act="new"]') as HTMLButtonElement).click();
+    expect(h.shadow.querySelector(".qs .q .q-t")!.textContent).toBe("איזה מוצר מתאים לי?");
+    // The assistant's name is never translated.
+    expect(h.shadow.querySelector(".disc-nm")!.textContent).toBe("Store Assistant");
+  });
+
+  it("a second Hebrew answer asks nothing again", async () => {
+    const h = await boot({ messages: [] });
+    await talk(h, "he");
+    h.post.mockClear();
+    (h.shadow.querySelector("textarea") as HTMLTextAreaElement).value = "עוד שאלה";
+    h.shadow.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(textsCalls(h)).toHaveLength(0);
+  });
+
+  it("once: a later answer in the page's language does not switch it back", async () => {
+    const h = await boot({ messages: [] });
+    await talk(h, "he");
+    h.post.mockImplementation(async (p: string) =>
+      String(p).endsWith("/message") ? { data: { messageId: "m2", locale: "en" } } : { data: {} },
+    );
+    (h.shadow.querySelector("textarea") as HTMLTextAreaElement).value = "and in English?";
+    h.shadow.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(h.shadow.querySelector(".panel")!.getAttribute("lang")).toBe("he");
+    expect(textsCalls(h)).toHaveLength(1);
+  });
+
+  it("a merchant's fixed direction is kept; the words still change", async () => {
+    const h = await boot({ messages: [], appearance: { direction: "ltr" } });
+    await talk(h, "he");
+    const panel = h.shadow.querySelector(".panel")!;
+    expect(panel.getAttribute("lang")).toBe("he");
+    expect(panel.getAttribute("dir")).toBe("ltr");
+  });
+
+  it("no word on the language, or the page's own: nothing changes", async () => {
+    for (const said of [null, "en"]) {
+      document.body.innerHTML = "";
+      const h = await boot({ messages: [] });
+      await talk(h, said);
+      expect(h.shadow.querySelector(".panel")!.getAttribute("lang")).toBe("en");
+      expect(textsCalls(h)).toHaveLength(0);
+    }
   });
 });

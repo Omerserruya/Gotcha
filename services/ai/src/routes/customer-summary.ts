@@ -12,7 +12,7 @@
  */
 
 import { Router, Request, Response } from "express";
-import { authenticate, resolveTenant, requireActiveTenant, prisma } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireActiveTenant, prisma, canViewConversation, visibilityClause, viewerOf, resolveEffectiveLocale } from "@chatcenter/shared";
 import {
   getCustomerBrief,
   refreshCustomerBriefFromConversation,
@@ -20,6 +20,49 @@ import {
 } from "../services/customer-brief.service";
 
 const router = Router();
+
+/**
+ * The person's most recent conversation, for a caller holding a Contact id.
+ *
+ * Returns "not_found" for an unknown contact, null for a real contact who has
+ * simply never had a conversation, and an id otherwise - three outcomes the
+ * caller must tell apart, because two of them are normal and one is a mistake.
+ *
+ * ★ NAMES ORIGIN. `applyLiveByDefault` injects `origin: "LIVE"` into bulk
+ * Conversation reads, so a customer whose history was imported and who has no
+ * live conversation yet would resolve to null - reported as "no prior
+ * interactions" about someone with years of them.
+ */
+async function conversationForContact(tenantId: string, contactId: string): Promise<string | null | "not_found"> {
+  const contact = await (prisma as any).contact.findFirst({ where: { id: contactId, tenantId } });
+  if (!contact) return "not_found";
+
+  // Follow the soft-merge pointer: a merged-away contact is still a valid
+  // entry point and must resolve to the surviving person's history.
+  const effective = contact.mergedIntoId
+    ? await (prisma as any).contact.findFirst({ where: { id: contact.mergedIntoId, tenantId } })
+    : contact;
+  if (!effective) return "not_found";
+
+  const { findSiblingContacts } = await import("@chatcenter/shared");
+  const siblings = await findSiblingContacts(tenantId, effective);
+  const meta = (effective.metadata as Record<string, unknown>) || {};
+  const aliases = Array.isArray((meta as any).aliases)
+    ? ((meta as any).aliases as Array<{ channel: string; externalId: string }>)
+    : [];
+  const orClauses = [
+    ...siblings.map((s: any) => ({ channel: s.channel, customerExternalId: s.externalId })),
+    ...aliases.map((a) => ({ channel: a.channel as any, customerExternalId: a.externalId })),
+  ];
+  if (orClauses.length === 0) return null;
+
+  const conv = await prisma.conversation.findFirst({
+    where: { tenantId, OR: orClauses, origin: { in: ["LIVE", "HISTORICAL_IMPORT"] } as any },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true },
+  });
+  return conv?.id ?? null;
+}
 
 interface CustomerSummaryPayload {
   ok: boolean;
@@ -37,13 +80,52 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), async (req:
     // client-supplied body field. Trusting body.tenantId here would let a user
     // in tenant A read tenant B's customer brief by naming B's conversation id.
     const tenantId = req.tenantId || "";
-    const conversationId = body.conversationId as string;
     const localeRaw = typeof body.locale === "string" ? body.locale.toLowerCase().slice(0, 8) : "";
-    const locale = localeRaw || "en";
+    // Asked for none: the reader's own language, else the workspace's, never
+    // English by default (a Hebrew workspace's panel read "Returning customer -
+    // see prior conversations for context", 2026-10-08).
+    const locale = localeRaw || (await Promise.resolve().then(() => resolveEffectiveLocale({ tenantId, userId: (req as any).user?.userId })).then((r) => r.effective).catch(() => "en"));
     const forceRefresh = !!body.refresh;
-    if (!tenantId || !conversationId) {
-      res.status(400).json({ error: "tenantId and conversationId required" });
+
+    // ── Entering by CONTACT as well as by conversation ──
+    //
+    // The brief already summarises everything: `refreshCustomerBriefFromConversation`
+    // loads the cross-channel bundle, so `refresh: true` has always been the
+    // "summarise all of it" button. It was only reachable from a conversation
+    // id, and a customer screen holds a Contact id - so the capability existed
+    // in an id space its caller could not get to.
+    //
+    // This resolves a contact to the person's most recent conversation and
+    // delegates. It does NOT add a second summariser: one brief, one writer.
+    let conversationId = typeof body.conversationId === "string" ? body.conversationId : "";
+    const contactId = typeof body.contactId === "string" ? body.contactId : "";
+    if (!tenantId || (!conversationId && !contactId)) {
+      res.status(400).json({ error: "conversationId or contactId required" });
       return;
+    }
+
+    if (!conversationId && contactId) {
+      const resolved = await conversationForContact(tenantId, contactId);
+      if (resolved === "not_found") {
+        res.status(404).json({ error: "contact_not_found" });
+        return;
+      }
+      if (!resolved) {
+        // A contact with no conversations is a real, ordinary state - not an
+        // error and not an empty brief pretending to be one.
+        res.json({
+          ok: true,
+          summary: locale === "he"
+            ? "לקוח חדש - אין אינטראקציות קודמות מתועדות."
+            : "New customer with no recorded prior interactions.",
+          signals: [],
+          generated_at: new Date().toISOString(),
+          cached: false,
+          meta: { conversation_count: 0, crm_linked: false, person_linked: false, reason: "no_conversations" },
+        });
+        return;
+      }
+      conversationId = resolved;
     }
 
     // Resolve identity hints from the conversation so we can look up the
@@ -54,6 +136,13 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), async (req:
       select: { channel: true, customerExternalId: true, tenantId: true },
     });
     if (!conv || conv.tenantId !== tenantId) {
+      res.status(404).json({ error: "conversation_not_found" });
+      return;
+    }
+    // Here, after the contactId → conversation resolution above, so both ways
+    // in are checked: a conversation this viewer may not see is the same 404.
+    const viewer = viewerOf(req);
+    if (visibilityClause(viewer) && !(await canViewConversation(tenantId, conversationId, viewer))) {
       res.status(404).json({ error: "conversation_not_found" });
       return;
     }

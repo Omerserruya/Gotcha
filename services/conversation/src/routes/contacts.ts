@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { contactLabel } from "../lib/contact-label";
 import {
   prisma,
   authenticate,
@@ -11,6 +12,8 @@ import {
   searchContacts as crmSearchContacts,
   getConnectedCrm,
   type CrmRecord,
+  auditUser,
+  AuditAction,
 } from "@chatcenter/shared";
 
 const router = Router();
@@ -258,7 +261,25 @@ router.post("/segment", async (req: Request, res: Response) => {
   try {
     const { rules, channel, countOnly } = req.body;
 
-    const where: any = { tenantId: req.tenantId! };
+    // Tombstones excluded HERE, in the shared `where`, so every query below
+    // inherits it - the count, the countOnly short-circuit and the list.
+    //
+    // It was first written onto findMany alone, which meant `total` counted
+    // rows the list excluded: on a tenant that had ever merged, a screen would
+    // read "showing 2 of 3" with no third person to show. The predicate was
+    // correct and living in one place instead of two is what makes it stay
+    // correct.
+    //
+    // A merge is SOFT by design - the row is kept so an inbound webhook lookup
+    // still resolves through mergedIntoId - but nothing filtered it, so after
+    // any merge the same person appeared twice, once alive and once dead.
+    // Merging is the action the product offers to FIX duplicates and it was
+    // making the list longer.
+    //
+    // Chosen deliberately, not by default: this is a customer list and a
+    // merged-away row is not a customer. A consumer that needs tombstones
+    // should ask for them rather than have every caller inherit them.
+    const where: any = { tenantId: req.tenantId!, mergedIntoId: null };
     if (channel) where.channel = channel;
 
     if (Array.isArray(rules)) {
@@ -283,6 +304,14 @@ router.post("/segment", async (req: Request, res: Response) => {
           case "email":
             if (rule.operator === "contains") AND.push({ email: { contains: rule.value, mode: "insensitive" } });
             else AND.push({ email: { equals: rule.value, mode: "insensitive" } });
+            break;
+          // The thing a human reaches for first. `displayName` was already in
+          // the select and in no rule, so the list could show Dana and not
+          // find her. Mirrors `email` rather than `phone`: both are free text
+          // where case is noise, whereas a phone prefix is meaningful.
+          case "name":
+            if (rule.operator === "contains") AND.push({ displayName: { contains: rule.value, mode: "insensitive" } });
+            else AND.push({ displayName: { equals: rule.value, mode: "insensitive" } });
             break;
           case "lastSeenAfter":
             AND.push({ lastSeenAt: { gte: new Date(rule.value) } });
@@ -335,11 +364,17 @@ router.post("/segment", async (req: Request, res: Response) => {
     const contacts = await prisma.contact.findMany({
       where,
       take: 500,
-      select: { id: true, externalId: true, displayName: true, channel: true, phone: true, email: true, tags: true, lastInteractionAt: true, source: true },
+      // personId and mergedIntoId are BOTH already indexed (@@index([tenantId,
+      // personId]) and @@index([mergedIntoId])) and neither was ever selected
+      // or queried. personId is what lets one human on WhatsApp and Instagram
+      // collapse to one row instead of two.
+      select: { id: true, externalId: true, displayName: true, channel: true, phone: true, email: true, tags: true, lastInteractionAt: true, source: true, personId: true, mergedIntoId: true },
       orderBy: { lastSeenAt: "desc" },
     });
 
-    res.json({ data: contacts, total: count });
+    // displayLabel: what to call each row, never a raw Instagram/Messenger id
+    // (lib/contact-label.ts).
+    res.json({ data: contacts.map((c) => ({ ...c, displayLabel: contactLabel(c) })), total: count });
   } catch (err) {
     console.error("Segment query error:", err);
     res.status(500).json({ error: "Failed to query contacts" });
@@ -427,8 +462,10 @@ router.post("/:id/opt-out", async (req: Request, res: Response) => {
     });
     if (!contact) { res.status(404).json({ error: "Contact not found" }); return; }
 
-    const { channel, optOut } = req.body; // channel: string, optOut: boolean
-    const currentOptOut = (contact.optOutChannels as string[]) || [];
+    const { optOut } = req.body; // channel: string, optOut: boolean
+    const channel = String(req.body?.channel ?? "").trim().toUpperCase();
+    if (!channel) { res.status(400).json({ error: "channel is required" }); return; }
+    const currentOptOut = ((contact.optOutChannels as string[]) || []).map((c) => String(c).toUpperCase());
 
     let newOptOut: string[];
     if (optOut) {
@@ -443,6 +480,20 @@ router.post("/:id/opt-out", async (req: Request, res: Response) => {
         optOutChannels: newOptOut,
         optedOutAt: newOptOut.length > 0 ? (contact.optedOutAt || new Date()) : null,
       },
+    });
+
+    // One record wherever the change came from (a customer's "הסר" / "START"
+    // reply writes the same): the consent ledger and the audit log.
+    const userId = (req as any).user?.userId ?? null;
+    await prisma.consentRecord.create({
+      data: {
+        tenantId: req.tenantId!, subjectType: "contact", subjectId: contact.id,
+        purpose: `marketing_${channel.toLowerCase()}`, granted: !optOut, source: "admin",
+        evidence: { channel, userId },
+      },
+    }).catch((err: any) => console.warn(`[opt-out] consent record failed contact=${contact.id}: ${err?.message}`));
+    await auditUser(req.tenantId!, userId, optOut ? AuditAction.CONSENT_WITHDRAWN : AuditAction.CONSENT_GRANTED, { type: "contact", id: contact.id }, {
+      purpose: `marketing_${channel.toLowerCase()}`, source: "admin", channel,
     });
 
     res.json({ data: updated });

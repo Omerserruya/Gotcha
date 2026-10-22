@@ -46,6 +46,10 @@ const H = vi.hoisted(() => {
     linkCalls: [] as any[],
     /** The store a connect would REPLACE. null = nothing to replace. */
     replacing: { current: null as string | null },
+    /** Durable per-tenant settings, keyed `${tenant}|${key}`. */
+    settings: new Map<string, string | null>(),
+    /** Which workspace holds a shop, for the billing return. */
+    owner: { current: null as { tenantId: string; connectionId: string; status: string } | null },
   };
 });
 
@@ -63,6 +67,8 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     requireOnboardingOrActiveTenant: () => (_req: any, _res: any, next: any) => next(),
     requirePermission: () => (_req: any, res: any, next: any) =>
       H.permission.granted ? next() : res.status(403).json({ error: "forbidden" }),
+    readDurableSetting: async (t: string, k: string) => H.settings.get(`${t}|${k}`) ?? null,
+    writeDurableSetting: async (t: string, k: string, v: string | null) => { H.settings.set(`${t}|${k}`, v); },
   };
 });
 
@@ -117,7 +123,7 @@ vi.mock("../services/shopify-connection-link.service", () => ({
   // (nothing to replace) so existing cases keep the plain connect path; the
   // multiple-store cases override H.replacing.
   pendingStoreReplacement: vi.fn(async () => H.replacing.current),
-  findShopOwner: vi.fn(async () => null),
+  findShopOwner: vi.fn(async () => H.owner.current),
 }));
 
 import router from "../routes/shopify-install";
@@ -175,6 +181,10 @@ beforeEach(() => {
 
 // ─── The button ──────────────────────────────────────────────
 
+// 2026-10-09: a refused install lands on the v2 studio with the same code it
+// always carried; v1's /settings/business-systems never read the param.
+const INSTALL_REFUSED = "https://app.gotcha.co.il/studio/capabilities?system=shopify&error=invalid_request";
+
 describe("GET /connectors/shopify/install/start", () => {
   it("returns a SHOPIFY-owned URL and never asks for a shop domain", async () => {
     // The listing has to be marked live for a URL to exist at all; before
@@ -205,6 +215,10 @@ describe("GET /connectors/shopify/install/start", () => {
     H.intents.clear();
     await request(app()).get("/api/connectors/shopify/install/start?flow=https://evil.com");
     expect(H.intents.get(INTENT).flow).toBeUndefined();
+
+    // The redesigned app's flow, so its callback can land in /v2.
+    await request(app()).get("/api/connectors/shopify/install/start?flow=redesign_studio");
+    expect(H.intents.get(INTENT).flow).toBe("redesign_studio");
   });
 
   it("does NOT send the merchant to a listing that is not live yet", async () => {
@@ -322,7 +336,7 @@ describe("GET /connectors/shopify/install (public)", () => {
     q.set("hmac", "0".repeat(64));
     const res = await request(app()).get(`/api/connectors/shopify/install?${q}`);
     expect(res.status).toBe(302);
-    expect(res.headers.location).toContain("shopify_install_error=invalid_request");
+    expect(res.headers.location).toBe(INSTALL_REFUSED);
     expect(res.headers.location).not.toContain("myshopify.com/admin/oauth");
   });
 
@@ -330,13 +344,13 @@ describe("GET /connectors/shopify/install (public)", () => {
     const q = new URLSearchParams(entryQuery());
     q.delete("hmac");
     const res = await request(app()).get(`/api/connectors/shopify/install?${q}`);
-    expect(res.headers.location).toContain("shopify_install_error=invalid_request");
+    expect(res.headers.location).toBe(INSTALL_REFUSED);
   });
 
   it("rejects a stale timestamp", async () => {
     const stale = entryQuery({}, Date.now() - 3600_000);
     const res = await request(app()).get(`/api/connectors/shopify/install?${stale}`);
-    expect(res.headers.location).toContain("shopify_install_error=invalid_request");
+    expect(res.headers.location).toBe(INSTALL_REFUSED);
   });
 
   it("rejects deceptive shop hostnames, signed or not", async () => {
@@ -344,7 +358,7 @@ describe("GET /connectors/shopify/install (public)", () => {
       const base = { shop, timestamp: String(Math.floor(Date.now() / 1000)) };
       const q = new URLSearchParams({ ...base, hmac: sign(base) }).toString();
       const res = await request(app()).get(`/api/connectors/shopify/install?${q}`);
-      expect(res.headers.location, shop).toContain("shopify_install_error=invalid_request");
+      expect(res.headers.location, shop).toBe(INSTALL_REFUSED);
     }
   });
 
@@ -360,7 +374,27 @@ describe("GET /connectors/shopify/install (public)", () => {
   it("rejects duplicated parameters", async () => {
     const q = `${entryQuery()}&shop=${encodeURIComponent("attacker.myshopify.com")}`;
     const res = await request(app()).get(`/api/connectors/shopify/install?${q}`);
-    expect(res.headers.location).toContain("shopify_install_error=invalid_request");
+    expect(res.headers.location).toBe(INSTALL_REFUSED);
+  });
+
+  it("★ an unconfigured app lands on v2 with error=not_configured (2026-10-09)", async () => {
+    const saved = process.env.SHOPIFY_REDIRECT_URI;
+    delete process.env.SHOPIFY_REDIRECT_URI;
+    try {
+      const res = await request(app()).get(`/api/connectors/shopify/install?${entryQuery()}`);
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=shopify&error=not_configured");
+    } finally {
+      process.env.SHOPIFY_REDIRECT_URI = saved;
+    }
+  });
+
+  it("the refusal landing ignores the request's Host", async () => {
+    const q = new URLSearchParams(entryQuery());
+    q.set("hmac", "0".repeat(64));
+    const res = await request(app()).get(`/api/connectors/shopify/install?${q}`)
+      .set("Host", "evil.example").set("X-Forwarded-Host", "evil.example");
+    expect(res.headers.location).toBe(INSTALL_REFUSED);
   });
 
   it("does not log the shop or the hmac when the signature fails", async () => {
@@ -652,7 +686,7 @@ describe("installation works with no SHOPIFY_APP_HANDLE configured", () => {
     const q = new URLSearchParams(entryQuery());
     q.set("hmac", "0".repeat(64));
     const res = await request(app()).get(`/api/connectors/shopify/install?${q}`);
-    expect(res.headers.location).toContain("shopify_install_error=invalid_request");
+    expect(res.headers.location).toBe(INSTALL_REFUSED);
   });
 
   it("...and still works with no GOTCHA session at all", async () => {
@@ -770,5 +804,40 @@ describe("shopify install claim", () => {
         .send({ handle });
       expect(res.status, String(handle)).toBe(404);
     }
+  });
+});
+
+
+// ─── The return from Shopify's plan page ─────────────────────
+
+describe("GET /connectors/shopify/billing/return", () => {
+  beforeEach(() => { H.settings.clear(); H.owner.current = null; });
+  const ret = (q: string) => request(app()).get(`/api/connectors/shopify/billing/return?${q}`);
+
+  it("★ install/start remembers which app the connect began in (and forgets on an old-app start)", async () => {
+    await request(app()).get("/api/connectors/shopify/install/start?flow=redesign_studio");
+    expect(H.settings.get("tenant-A|shopify.returnFlow")).toBe("redesign_studio");
+    await request(app()).get("/api/connectors/shopify/install/start");
+    expect(H.settings.get("tenant-A|shopify.returnFlow")).toBeNull();
+  });
+
+  it("★ a v2 workspace's return lands in the app to verify there (at the root since 2026-10-21)", async () => {
+    H.owner.current = { tenantId: "tenant-A", connectionId: "c1", status: "CONNECTED" };
+    H.settings.set("tenant-A|shopify.returnFlow", "redesign_studio");
+    const r = await ret(`plan_handle=pro&shop=${SHOP}`);
+    expect(r.status).toBe(302);
+    expect(r.headers.location).toMatch(/[^2]\/studio\/capabilities\?system=shopify&billing=verify&shop=urban-supply-dev\.myshopify\.com$/);
+    expect(r.headers.location).not.toContain("/v2/");
+  });
+
+  it("★ everyone else gets today's page, with Shopify's query passed through untouched", async () => {
+    H.owner.current = { tenantId: "tenant-A", connectionId: "c1", status: "CONNECTED" };
+    const r = await ret(`plan_handle=pro&shop=${SHOP}`);
+    expect(r.headers.location).toMatch(new RegExp(`/integrations/shopify/billing/complete\\?plan_handle=pro&shop=${SHOP.replace(/\./g, "\\.")}$`));
+  });
+
+  it("an unknown shop, or no shop, gets today's page - never a guess", async () => {
+    expect((await ret(`plan_handle=pro&shop=nobody.myshopify.com`)).headers.location).toContain("/integrations/shopify/billing/complete?");
+    expect((await ret(`plan_handle=pro`)).headers.location).toContain("/integrations/shopify/billing/complete?plan_handle=pro");
   });
 });

@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
  * one side of it visible.
  */
 
+const prismaRef = vi.hoisted(() => ({ current: null as any }));
 const { isInboundExcluded, prisma, publishEvent } = vi.hoisted(() => ({
   isInboundExcluded: vi.fn().mockResolvedValue(false),
   prisma: {
@@ -24,9 +25,16 @@ const { isInboundExcluded, prisma, publishEvent } = vi.hoisted(() => ({
     conversation: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     channelAccount: { findUnique: vi.fn() },
     contact: { update: vi.fn() },
+    // The conversation find-or-create runs in a transaction under an advisory
+    // lock (services/inbound-dedupe.ts); the real client hands the callback a
+    // transaction client with the same models.
+    $executeRaw: vi.fn().mockResolvedValue(1),
+    $transaction: vi.fn(async (fn: (tx: any) => unknown): Promise<unknown> => fn(prismaRef.current)),
   },
   publishEvent: vi.fn().mockResolvedValue(undefined),
 }));
+
+prismaRef.current = prisma;
 
 vi.mock("@chatcenter/shared", () => ({
   // The uploads write probe runs at module load. Stubbed as writable so these

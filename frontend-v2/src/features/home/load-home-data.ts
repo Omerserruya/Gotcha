@@ -1,0 +1,343 @@
+import 'server-only';
+
+import { serverApi } from '@/api/client/server-api';
+import { tenantGateFrom, type TenantGate } from '@/api/client/tenant-gate';
+import {
+  analyticsOverviewSchema,
+  activityFeedSchema,
+  analyticsQueueSchema,
+  inFlightSchema,
+  insightsSchema,
+  channelPerformanceSchema,
+  queueItemsSchema,
+  quietDaySchema,
+  timeSavedSchema,
+  usageAllowanceSchema,
+  type AnalyticsOverview,
+  type AnalyticsQueue,
+  type ActivityEvent,
+  type ChannelPerformance,
+  type InFlight,
+  type Insight,
+  type QueueItems,
+  type QuietDay,
+  type TimeSaved,
+  type UsageAllowance,
+} from '@/api/contracts/analytics';
+import {
+  intelligenceReviewsSchema,
+  type IntelligenceReview,
+} from '@/api/contracts/intelligence-reviews';
+import { presenceRosterSchema, type AgentPresence } from '@/api/contracts/presence';
+import {
+  knowledgeIngestSchema,
+  setupStatusSchema,
+  type KnowledgeIngest,
+  type SetupStatus,
+} from '@/api/contracts/setup';
+import { teamSchema, type Team } from '@/api/contracts/team';
+import { unreadCountSchema } from '@/api/contracts/notifications';
+import {
+  authEndpoints,
+  analyticsEndpoints,
+  intelligenceReviewEndpoints,
+  setupEndpoints,
+  usageEndpoints,
+  notificationEndpoints,
+  presenceEndpoints,
+} from '@/api/endpoints/registry';
+import { currentUserSchema } from '@/api/contracts/identity';
+import { logger } from '@/observability/logger';
+
+/**
+ * Home's data, fetched on the server.
+ *
+ * Each figure is independently nullable. A single failing endpoint must not
+ * blank the page: Home is the first thing an operator sees each morning, and
+ * one dead analytics query is not a reason to show them nothing. The sections
+ * that resolved render; the ones that did not say so.
+ *
+ * The two calls run in parallel - they are unrelated, and sequencing them
+ * would double the wait for no benefit.
+ */
+/** 01b's card shows four rows; a read that returns this many may have more. */
+export const QUIET_DAY_LIMIT = 4;
+
+export interface HomeData {
+  readonly overview: AnalyticsOverview | null;
+  readonly channels: ChannelPerformance | null;
+  readonly queue: AnalyticsQueue | null;
+  /**
+   * The ranked "needs you now" list.
+   *
+   * Null means the call failed, which is not the same as an empty queue: one
+   * says "we could not find out", the other says "nobody is waiting". The
+   * screen must not render the second when it means the first.
+   */
+  readonly queueItems: QueueItems | null;
+  /** What GOTCHA has done, newest first. Null when the call failed. */
+  readonly activity: readonly ActivityEvent[] | null;
+  /**
+   * Seconds saved, with the arithmetic. The `basis` travels with it: this is
+   * the easiest figure in the product to inflate, and a platform average must
+   * not be shown with the confidence of a measured one.
+   */
+  readonly timeSaved: TimeSaved | null;
+  /** What GOTCHA is doing right now - present tense, unlike `activity`. */
+  readonly inFlight: InFlight | null;
+  /** Conversation headroom. `limit` null means the plan is uncapped. */
+  readonly allowance: UsageAllowance | null;
+  /**
+   * "Worth knowing". `kind` + `values`; the wording is ours.
+   *
+   * Null when the call failed, empty when nothing stands out - a distinction
+   * the screen keeps, because "nothing to report" is a real and good state.
+   */
+  readonly insights: readonly Insight[] | null;
+  /**
+   * The quiet day's ranked list. Null when the call failed; empty `data` means
+   * nothing stands out, which is a good morning rather than a failure.
+   */
+  readonly quietDay: QuietDay | null;
+  /**
+   * Setup progress. Null when the call failed - which is NOT the same as a
+   * workspace being live, so the day-one block is withheld rather than the
+   * screen claiming the workspace is ready.
+   */
+  readonly setup: SetupStatus | null;
+  /** The site scan's result. Null when no scan has ever run. */
+  readonly ingest: KnowledgeIngest;
+  readonly team: Team | null;
+  /**
+   * Presence, keyed by agent id.
+   *
+   * A separate call from `/api/analytics/agents` - one is workload, the other
+   * availability, and the frontend joins them. Empty when it fails: a missing
+   * dot is a smaller lie than a wrong one.
+   */
+  readonly presence: ReadonlyMap<string, AgentPresence>;
+  /**
+   * Things GOTCHA learned that two sources disagree about. Only `conflict`
+   * reviews: `low_confidence` and `scope_review` are a different question and
+   * belong on a different surface.
+   */
+  readonly conflicts: readonly IntelligenceReview[];
+  /**
+   * Whether nothing is waiting on a person.
+   *
+   * Derived, because the backend has no such signal. `waiting` counts
+   * unassigned OPEN/WAITING conversations tenant-wide - the nearest thing to
+   * "needs somebody", though not the same as it, since no classification of
+   * "needing a person" exists.
+   */
+  readonly isQuiet: boolean;
+  /** Unread notifications - the "2 signals" pill. Null when unavailable. */
+  readonly signals: number | null;
+  /**
+   * Set when the platform refused because the tenant itself is gated.
+   *
+   * Per-endpoint degradation is right for one dead query and wrong for this:
+   * every call fails at once, and the result is a page that looks like a
+   * working product with nothing in it. That reads as "you have no work",
+   * which is a lie. Home renders the reason instead.
+   */
+  readonly gate: TenantGate | null;
+}
+
+/** Today, as the backend expects it: ISO instants bounding the local day. */
+function today(): { from: string; to: string } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return { from: start.toISOString(), to: now.toISOString() };
+}
+
+/**
+ * How far back the channel split looks.
+ *
+ * Deliberately NOT today. A distribution over a single day is decided by
+ * whoever happened to write that morning - one wholesale customer on email
+ * swings it from "mostly WhatsApp" to "mostly email" - and on a quiet morning
+ * there is no distribution at all, which is when the strip has least to say
+ * and the bar simply vanished.
+ *
+ * A fixed window is also better than falling back to one: a bar that means
+ * "today" on a busy day and "this month" on a slow one is the same picture
+ * making two different claims, with nothing on screen to tell them apart. So
+ * it is always this window, and the label says so.
+ */
+export const CHANNEL_SPLIT_DAYS = 30;
+
+function lastDays(days: number): { from: string; to: string } {
+  const now = new Date();
+  const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  return { from: start.toISOString(), to: now.toISOString() };
+}
+
+export async function loadHomeData(): Promise<HomeData> {
+  const api = serverApi();
+  const range = today();
+
+  let gate: TenantGate | null = null;
+
+  /**
+   * Logs the failure, remembers a tenant gate, and yields the section's
+   * fallback so one dead endpoint still cannot blank the page.
+   */
+  const degrade =
+    <T>(event: string, value: T) =>
+    (cause: unknown): T => {
+      gate ??= tenantGateFrom(cause);
+      logger.warn(event, { cause });
+      return value;
+    };
+
+  const [
+    overview,
+    channels,
+    queue,
+    queueItems,
+    activity,
+    timeSaved,
+    inFlight,
+    allowance,
+    insights,
+    quietDay,
+    setup,
+    ingest,
+    team,
+    conflicts,
+    signals,
+    presence,
+  ] = await Promise.all([
+    api
+      .get({
+        endpoint: analyticsEndpoints.overview(),
+        query: range,
+        payload: analyticsOverviewSchema,
+      })
+      .catch(degrade('home.overview_failed', null)),
+    api
+      .get({
+        endpoint: analyticsEndpoints.channelPerformance(),
+        query: lastDays(CHANNEL_SPLIT_DAYS),
+        payload: channelPerformanceSchema,
+      })
+      .catch(degrade('home.channels_failed', null)),
+    api
+      .get({ endpoint: analyticsEndpoints.queue(), payload: analyticsQueueSchema })
+      .catch(degrade('home.queue_failed', null)),
+    api
+      .get({
+        endpoint: analyticsEndpoints.queueItems(),
+        // The design's card shows four rows and then "N more waiting".
+        query: { limit: 4 },
+        payload: queueItemsSchema,
+        // `data` is a sibling of `nextCursor` and `totalWaiting`, not the payload.
+        raw: true,
+      })
+      .catch(degrade('home.queue_items_failed', null)),
+    api
+      .get({
+        endpoint: analyticsEndpoints.activity(),
+        // The design's card lists four; one more proves there is a next page.
+        query: { limit: 5 },
+        payload: activityFeedSchema,
+        // `data` is a sibling of `nextCursor`, not the payload.
+        raw: true,
+      })
+      .then((feed) => feed.data)
+      .catch(degrade<readonly ActivityEvent[] | null>('home.activity_failed', null)),
+    api
+      .get({
+        endpoint: analyticsEndpoints.timeSaved(),
+        query: range,
+        payload: timeSavedSchema,
+      })
+      .catch(degrade('home.time_saved_failed', null)),
+    api
+      .get({ endpoint: analyticsEndpoints.inFlight(), payload: inFlightSchema })
+      .catch(degrade('home.in_flight_failed', null)),
+    api
+      .get({ endpoint: usageEndpoints.allowance(), payload: usageAllowanceSchema })
+      .catch(degrade('home.allowance_failed', null)),
+    api
+      .get({ endpoint: analyticsEndpoints.insights(), payload: insightsSchema })
+      .catch(degrade<readonly Insight[] | null>('home.insights_failed', null)),
+    api
+      .get({
+        endpoint: analyticsEndpoints.quietDay(),
+        // The design's card shows four rows.
+        query: { limit: QUIET_DAY_LIMIT },
+        payload: quietDaySchema,
+        // `data` is a sibling of `sources` and `weekKey`, not the payload.
+        raw: true,
+      })
+      .catch(degrade('home.quiet_day_failed', null)),
+    api
+      .get({ endpoint: setupEndpoints.state(), payload: setupStatusSchema })
+      .catch(degrade('home.setup_failed', null)),
+    api
+      .get({ endpoint: setupEndpoints.knowledgeIngest(), payload: knowledgeIngestSchema })
+      .catch(degrade<KnowledgeIngest>('home.ingest_failed', null)),
+    api
+      .get({ endpoint: analyticsEndpoints.agents(), payload: teamSchema })
+      .catch(degrade('home.team_failed', null)),
+    api
+      .get({
+        endpoint: intelligenceReviewEndpoints.list(),
+        payload: intelligenceReviewsSchema,
+        // `{ ok, pending, reviews }` - `data` is not the payload here.
+        raw: true,
+      })
+      .then((result) => result.reviews.filter((review) => review.reason === 'conflict'))
+      .catch(degrade<readonly IntelligenceReview[]>('home.reviews_failed', [])),
+    api
+      .get({
+        endpoint: notificationEndpoints.unreadCount(),
+        payload: unreadCountSchema,
+        raw: true,
+      })
+      .then((result) => result.count)
+      .catch(degrade<number | null>('home.signals_failed', null)),
+    api
+      .get({ endpoint: presenceEndpoints.roster(), payload: presenceRosterSchema })
+      .catch(degrade<readonly AgentPresence[]>('home.presence_failed', [])),
+  ]);
+
+  return {
+    overview,
+    channels,
+    queue,
+    queueItems,
+    activity,
+    timeSaved,
+    inFlight,
+    allowance,
+    insights,
+    quietDay,
+    setup,
+    ingest,
+    team,
+    conflicts,
+    // Unknown counts as busy: showing the calm screen when we cannot tell
+    // would be the more damaging mistake of the two.
+    signals,
+    presence: new Map(presence.map((entry) => [entry.agentId, entry])),
+    isQuiet: queue !== null && queue.waiting === 0,
+    gate,
+  };
+}
+
+/**
+ * 01c's "Your workspace is ready, Maya": the viewer's first name, from
+ * `/api/auth/me`. `null` when unread or unnamed - then the heading has none.
+ */
+export async function loadViewerFirstName(): Promise<string | null> {
+  return serverApi()
+    .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
+    .then((me) => me.user.name?.trim().split(/\s+/)[0] || null)
+    .catch((cause: unknown) => {
+      logger.warn('home.me_failed', { cause });
+      return null;
+    });
+}

@@ -45,6 +45,9 @@ vi.mock("@chatcenter/shared", async () => {
     requireActiveTenant: () => (_req: any, _res: any, next: any) => next(),
     requireOnboardingOrActiveTenant: () => (_req: any, _res: any, next: any) => next(),
     requireRole: () => (_req: any, _res: any, next: any) => next(),
+    // 2026-10-09: Drive init gates on ai:knowledge:write now; its semantics
+    // are pinned in connect-oauth-permissions.test.ts.
+    requirePermissionOrRole: () => (_req: any, _res: any, next: any) => next(),
     mintOAuthState: () => ({ state: "st_1", jti: "st_1" }),
   };
 });

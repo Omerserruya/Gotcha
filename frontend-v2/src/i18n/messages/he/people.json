@@ -1,0 +1,82 @@
+{
+  "title": "אנשים וצוותים",
+  "description": "כל מי שעונה ללקוחות, אנושי ו‑AI, ברשימה אחת.",
+  "summary": "{people, plural, =0 {אין אנשים} one {אדם אחד} two {שני אנשים} other {# אנשים}}, {ai, plural, =0 {אין עובדי AI} one {עובד AI אחד} two {שני עובדי AI} other {# עובדי AI}}, {teams, plural, =0 {אין צוותים} one {צוות אחד} two {שני צוותים} other {# צוותים}}.",
+  "membersUnavailable": "לא הצלחנו לטעון את רשימת האנשים כרגע.",
+  "aiUnavailable": "לא הצלחנו לטעון את עובדי ה‑AI כרגע.",
+  "teamsUnavailable": "לא הצלחנו לטעון את הצוותים כרגע.",
+  "column": {
+    "person": "אדם",
+    "canDo": "מה מותר",
+    "team": "צוות",
+    "rightNow": "כרגע"
+  },
+  "empty": "עדיין אין כאן אף אחד. הזמינו מישהו כדי להתחיל.",
+  "aiEmployee": "עובד AI",
+  "noTeam": "ללא צוות",
+  "noRole": "לא הוקצה תפקיד",
+  "aiRole": {
+    "customer_support": "תמיכת לקוחות",
+    "sales": "מכירות",
+    "booking": "הזמנות",
+    "billing": "חיובים",
+    "custom": "מותאם"
+  },
+  "presence": {
+    "ONLINE": "מחובר",
+    "BUSY": "עסוק",
+    "AWAY": "לא זמין",
+    "OFFLINE": "מנותק"
+  },
+  "awayUntil": "לא זמין עד {time}",
+  "paused": "מושהה",
+  "draft": "טיוטה",
+  "deactivated": "מושבת",
+  "openConversations": "{count, plural, =0 {אין שיחות פתוחות} one {שיחה אחת פתוחה} two {שתי שיחות פתוחות} other {# שיחות פתוחות}}",
+  "teams": {
+    "heading": "צוותים",
+    "members": "{count, plural, =0 {אין חברים} one {אדם אחד} two {שני אנשים} other {# אנשים}}",
+    "open": "{count, plural, =0 {אין שיחות פתוחות} one {שיחה אחת פתוחה} two {שתי שיחות פתוחות} other {# שיחות פתוחות}}",
+    "none": "עדיין אין צוותים.",
+    "inactive": "לא פעיל",
+    "add": "הוספת צוות",
+    "name": "שם הצוות",
+    "description": "למה הצוות הזה משמש",
+    "descriptionHint": "לא חובה. מוצג בכרטיס הצוות.",
+    "create": "יצירת צוות",
+    "creating": "יוצר…",
+    "duplicate": "כבר קיים צוות בשם הזה.",
+    "limit": "אין מקום בתוכנית שלכם לצוות נוסף.",
+    "failed": "השמירה נכשלה. נסו שוב."
+  },
+  "cancel": "ביטול",
+  "invite": {
+    "open": "הזמנת אדם",
+    "email": "אימייל",
+    "emailPlaceholder": "name@yourbusiness.co.il",
+    "name": "שם",
+    "nameHint": "איך יקראו לו ב‑GOTCHA, וכך גם תפנה אליו ההזמנה.",
+    "teams": "צוותים",
+    "send": "שליחת הזמנה",
+    "sending": "שולח…",
+    "sent": "ההזמנה נשלחה.",
+    "linkLabel": "אם האימייל לא הגיע, שלחו לו את הקישור הזה:",
+    "existingAccount": "כבר יש לו חשבון, ולכן אין צורך בקישור הקמה.",
+    "duplicate": "האדם הזה כבר חבר בסביבת העבודה הזו.",
+    "seatLimit": "לא נותרו מקומות בתוכנית שלכם. השבתת חבר צוות מפנה מקום.",
+    "forbidden": "אין לכם הרשאה לפעולה הזו.",
+    "failed": "ההזמנה לא נשלחה. נסו שוב.",
+    "role": "תפקיד",
+    "roleAgent": "נציג/ה",
+    "unknownRole": "התפקיד הזה כבר לא קיים בסביבת העבודה, ולכן אף אחד לא הוזמן. בחרו תפקיד אחר.",
+    "noTeam": "בלי צוות",
+    "teamsCount": "{count, plural, one {צוות אחד} other {# צוותים}}",
+    "noTeams": "עוד אין צוותים."
+  },
+  "tabs": {
+    "label": "אנשים וצוותים",
+    "people": "אנשים",
+    "roles": "תפקידים",
+    "teams": "צוותים"
+  }
+}

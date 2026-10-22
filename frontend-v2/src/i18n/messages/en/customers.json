@@ -1,0 +1,559 @@
+{
+  "title": "Customers",
+  "description": "Everyone who has talked to you, on whichever channel they used.",
+  "unavailable": "We couldn't read your customers just now.",
+  "search": {
+    "label": "Find someone",
+    "placeholder": "Search a name, phone, email or order…",
+    "noneLead": "Nothing matched \"{query}\".",
+    "lookedAt": {
+      "name": "We looked at names.",
+      "phone": "We looked at phone numbers.",
+      "email": "We looked at email addresses.",
+      "order": "We looked at phone numbers and the store’s order numbers."
+    },
+    "busy": "Searching…"
+  },
+  "list": {
+    "count": "{count, plural, =0 {No one yet} =1 {One person} other {# people}}",
+    "none": "Nobody has talked to you yet.",
+    "unnamed": "No name or handle on this contact",
+    "truncated": "Showing the first {shown} records. There are {total} in all, and some may turn out to be the same person.",
+    "footer": "{count, plural, =1 {One person} other {# people}}",
+    "footerTruncated": "Showing the first {shown} of {total} records",
+    "generic": {
+      "INSTAGRAM": "Instagram customer",
+      "MESSENGER": "Messenger customer",
+      "WEBCHAT": "Website visitor",
+      "SHOPIFY_LIVE_CHAT": "Store chat visitor",
+      "other": "Customer"
+    }
+  },
+  "channel": {
+    "WHATSAPP": "WhatsApp",
+    "INSTAGRAM": "Instagram",
+    "MESSENGER": "Messenger",
+    "EMAIL": "Email",
+    "WEBCHAT": "Web chat",
+    "VOICE": "Phone",
+    "SMS": "SMS",
+    "TELEGRAM": "Telegram"
+  },
+  "identityLimit": "If the same person writes from WhatsApp and from Instagram, they can appear here twice. GOTCHA joins the two on its own when it has proof, like a phone number or email it already knows them by, and suggests the rest for you to decide.",
+  "detail": {
+    "unavailable": "We couldn't load this customer.",
+    "brief": {
+      "generated": "Written from their history on {when}.",
+      "none": "There's no written summary for this person yet. GOTCHA writes one when a conversation ends.",
+      "noConversations": "No written summary - there are no conversations with this person to write one from."
+    },
+    "memory": {
+      "heading": "What GOTCHA remembers",
+      "source": "Learned from {source}, across {count} messages.",
+      "unknownSource": "an earlier import",
+      "noPerFactTrace": "GOTCHA records which conversation each of these came from, but those conversations can't be opened from here yet - so there's nothing to follow. They also can't be corrected or removed from here.",
+      "none": "GOTCHA hasn't learned anything durable about this person yet.",
+      "unavailable": "We couldn't read what GOTCHA remembers about this person.",
+      "window": "Observed between {from} and {to}."
+    },
+    "timeline": {
+      "heading": "Recent activity",
+      "everyChannel": "Every channel this person reaches you on, in one stream - including numbers and handles that were merged into them.",
+      "empty": "Nothing recorded with this person yet.",
+      "INBOUND": "from them",
+      "OUTBOUND": "to them",
+      "noBody": "(no text)",
+      "imported": "imported",
+      "partial": "Showing {shown, number} of {total, number} messages with this person.",
+      "whole": "{total, plural, one {# message} other {All {total, number} messages}} with this person.",
+      "scanTruncated": "This person has more conversations than we scan in one go, so the oldest may not be represented here.",
+      "handover": "Handed to {to}.",
+      "handoverWithReason": "Handed to {to} - {reason}.",
+      "kind": {
+        "handover": "handover",
+        "ai_action": "action",
+        "message": "message"
+      },
+      "action": {
+        "proposed": "{tool} - waiting for approval",
+        "approved": "{tool} - approved",
+        "running": "{tool} - running",
+        "completed": "{tool} - done",
+        "failed": "{tool} - didn’t go through",
+        "denied": "{tool} - declined"
+      }
+    },
+    "absent": {
+      "money": "Spend, order count and refunds aren't shown here. Reading them means calling your store live for each customer, so they appear where one person is being decided about - on an approval - rather than on every page."
+    },
+    "neverWritten": "This person has never written to you. There's nothing to summarise, no conversation history, no orders and no notes - not because anything failed, but because nothing has happened yet.",
+    "notes": {
+      "heading": "Notes",
+      "noCrm": "Notes are kept in your CRM, and there isn't one connected. Connect one in Business core and notes about your customers will appear here.",
+      "noLink": "You have a CRM connected, but this person isn't linked to a record in it - so there's nowhere for their notes to live yet.",
+      "empty": "No notes on this person in your CRM.",
+      "unavailable": "We couldn't read notes from your CRM.",
+      "anonymous": "Your CRM doesn't record who wrote a note, so these show a date and no author.",
+      "readOnly": "Notes are read here and written in your CRM. Writing one from this page would file it against the wrong conversation, so it isn't offered yet."
+    }
+  },
+  "orders": {
+    "heading": "Orders",
+    "unread": "We couldn't read this customer's orders.",
+    "state": {
+      "not_connected": "No store is connected, so there are no orders to show. Connect one in Business core.",
+      "connection_unhealthy": "Your store is connected and not working, so orders can't be read right now. Fix it in Business core rather than connecting it again.",
+      "customer_not_linked": "Your store has no customer record matching this person, so there are no orders to show against them.",
+      "verification_required": "This person hasn't been verified as the owner of this account, so their orders aren't shown.",
+      "no_orders": "No orders from this person yet.",
+      "unavailable": "Orders couldn't be loaded just now. This usually passes - try again in a moment.",
+      "ok": ""
+    },
+    "missingScopes": "Your store connection is working, but GOTCHA was never granted permission to read orders. Grant these in Shopify: {scopes}.",
+    "item": "{quantity} × {title}",
+    "moreItems": "{count, plural, one {# more item} other {# more items}} on this order.",
+    "amountUnknown": "amount not available",
+    "refunded": "{amount} already refunded.",
+    "refundableMax": "Up to {amount} can still be refunded.",
+    "possible": "On this order you could: {actions}.",
+    "action": {
+      "cancel": "Cancel order",
+      "create_return": "Open a return",
+      "exchange_item": "Exchange an item",
+      "refund": "Refund"
+    },
+    "running": "Working…",
+    "pendingApproval": "This is waiting for someone to approve it. It hasn't happened yet, and it hasn't failed - it's in your Approvals queue until a person decides.",
+    "denied": "This wasn't allowed: {reason}. Nothing was changed.",
+    "actionUnavailable": "This couldn't be done just now: {reason}. Nothing was changed.",
+    "noReason": "no reason given",
+    "outcomeUnknown": "We don't know whether that went through. Please do NOT try it again - check the order in your store first, and contact us if it looks wrong.",
+    "noConversationToActThrough": "These orders can't be acted on from here - there's no conversation with this person to carry the action.",
+    "count": "{count, plural, one {# order} other {# orders}}",
+    "openCount": "{count} open",
+    "synced": "From Shopify · synced {when}",
+    "filterEmpty": "No orders here.",
+    "moreShort": "+{count} more",
+    "qty": "Qty {count}",
+    "filter": {
+      "all": "All",
+      "open": "Open",
+      "returns": "Returns"
+    },
+    "fact": {
+      "tracking": "Tracking",
+      "shipTo": "Ship to",
+      "carrierCase": "Carrier case",
+      "money": "Money"
+    },
+    "openInShopify": "Open in Shopify",
+    "side": {
+      "heading": "Across their orders",
+      "average": "average order",
+      "onTime": "arrived on time",
+      "open": "open now",
+      "buys": "What they buy",
+      "buysNone": "Nothing yet.",
+      "onFile": "On file",
+      "address": "Address",
+      "payment": "Payment",
+      "returns": "Returns",
+      "returnsValue": "{count, plural, =0 {None} other {# refunded or cancelled}}"
+    },
+    "notPossible": "That isn’t possible for this order."
+  },
+  "actions": {
+    "title": "What was done here",
+    "forbidden": "You don't have permission to read this workspace's record of actions. Whoever administers GOTCHA can grant it.",
+    "failed": "We couldn't read the record of what was done for this person just now.",
+    "none": "Nothing has been recorded against this person yet.",
+    "truncated": "This covers the {count, plural, =1 {one conversation} other {# conversations}} we could scan - the oldest may not be included.",
+    "more": "Older entries exist than the ones shown here.",
+    "actor": {
+      "ai": "GOTCHA",
+      "user": "Someone on your team",
+      "system": "The system",
+      "unknown": "Not recorded",
+      "flow": "An automation"
+    },
+    "outcome": {
+      "worked": "Recorded as done",
+      "failed": "Recorded as failed",
+      "not_recorded": "Outcome not recorded",
+      "contradicts": "This entry disagrees with itself"
+    },
+    "hint": {
+      "named_ok": "named as a success, though the outcome was never recorded",
+      "named_err": "named as a failure, though the outcome was never recorded"
+    },
+    "name": {
+      "aiResponded": "GOTCHA replied",
+      "aiBotTurn": "GOTCHA took a turn in the conversation",
+      "aiPausedForApproval": "GOTCHA paused and asked for approval",
+      "aiToolCall": "GOTCHA: {detail}",
+      "aiBudgetAborted": "GOTCHA stopped, out of budget for {detail}",
+      "messageSent": "A message was sent",
+      "productMessageSent": "A product was sent in the chat",
+      "crossCustomerDenied": "A request for another customer's data was refused",
+      "adapterCall": "Store: {tool}",
+      "commerceExecuted": "A change to the customer's record was sent to the store",
+      "commerceFailed": "A change to the customer's record did not go through",
+      "commerceDenied": "A change to the customer's record was not allowed",
+      "commerceUnverified": "A change to the customer's record could not be confirmed with the store",
+      "unsupportedOutcomeClaim": "GOTCHA's reply claimed something no tool had done",
+      "unsupportedActionClaim": "GOTCHA's reply said it was doing something it wasn't",
+      "exitCriteriaBlocked": "GOTCHA was held back: details it needed were still missing",
+      "outputValidatorBlocked": "A reply was replaced before it went out: it broke a rule"
+    },
+    "lead": "Everything done on their account, newest first",
+    "gapsShort": "{count, plural, one {One kind of action isn't counted here} other {# kinds of action aren't counted here}}",
+    "waitingOnYou": "Waiting on you",
+    "openInApprovals": "Open in Approvals",
+    "filterEmpty": "Nothing here.",
+    "filter": {
+      "all": "All",
+      "gotcha": "GOTCHA",
+      "team": "Team",
+      "money": "Money"
+    },
+    "side": {
+      "who": "Who did what",
+      "byGotcha": "by GOTCHA",
+      "byTeam": "by your team",
+      "byAutomations": "by automations",
+      "money": "Money moved on their account",
+      "refunded": "Refunded",
+      "discounts": "Discounts",
+      "waiting": "Waiting on approval",
+      "waitingValue": "{count, plural, =0 {None} one {# request} other {# requests}}",
+      "may": "What GOTCHA may do for them",
+      "change": "Change in Studio · Capabilities"
+    },
+    "dayReplied": "{count, plural, one {GOTCHA replied once} other {GOTCHA replied # times}}",
+    "daySent": "{count, plural, one {Your team sent a message} other {Your team sent # messages}}",
+    "budget": {
+      "turn": "GOTCHA paused: this reply reached its AI budget",
+      "conversation": "GOTCHA paused: this conversation's AI budget ran out",
+      "tenant_day": "GOTCHA paused: the workspace's daily AI budget ran out",
+      "other": "GOTCHA paused: an AI budget ran out"
+    },
+    "policy": {
+      "kind": {
+        "REFUND": "Refunds",
+        "CANCEL_ORDER": "Cancelling an order",
+        "COUPON": "Coupons",
+        "COMPENSATION": "Compensation",
+        "DISCOUNT": "Discounts",
+        "CUSTOMER_WRITE": "Changes to their record"
+      },
+      "never": "{name}: never - switched off.",
+      "neverByDefault": "{name}: never - no rule set.",
+      "unset": "{name}: no rule set.",
+      "noLimit": "{name}: allowed, no limit set.",
+      "limits": "{name}: {rules}.",
+      "upTo": "up to {amount}",
+      "upToPercent": "up to {percent} of the order",
+      "approvalAbove": "a person approves above {amount}"
+    },
+    "decide": {
+      "approve": "Approve",
+      "decline": "Decline",
+      "changeAmount": "Change amount",
+      "approveAsk": "Approve it? It runs now.",
+      "approveYes": "Yes, approve",
+      "declineAsk": "Why not?",
+      "notNow": "Not now",
+      "approvedRan": "Approved - it ran.",
+      "approvedNotRun": "Approved, and it didn’t run - see Approvals.",
+      "declined": "Declined.",
+      "refused": {
+        "stale": "Someone already decided this one.",
+        "forbidden": "You can’t decide this one.",
+        "failed": "That didn’t go through - nothing changed."
+      }
+    }
+  },
+  "teamNotes": {
+    "title": "Notes",
+    "write": "Add a note about this customer",
+    "save": "Save note",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteConfirm": "Delete for good?",
+    "edited": "edited",
+    "none": "Nobody has written a note about this person yet.",
+    "unread": "We couldn't read the notes for this person just now. This doesn't mean there are none.",
+    "empty": "A note needs something in it.",
+    "tooLong": "That's longer than {max} characters. Shorten it and try again.",
+    "notTheAuthor": "Only whoever wrote a note can change or delete it.",
+    "writeFailed": "That didn't save. Try again.",
+    "noReason": "no reason given",
+    "yourCrm": "your CRM",
+    "aiUsable": "GOTCHA may use this when replying",
+    "aiUsableOn": "It will be sent to your CRM and GOTCHA can repeat it to this customer.",
+    "aiUsableOff": "Team only. It stays in GOTCHA and never reaches your CRM.",
+    "where": {
+      "synced": "Also written to {system}.",
+      "pending": "We're still sending this to your CRM - we don't know yet whether it arrived.",
+      "failed": "This did NOT reach your CRM. Your CRM said: {reason}.",
+      "private": "Kept in GOTCHA only - a private note doesn't go to a shared CRM.",
+      "not_ai_usable": "Kept in GOTCHA only, because it isn't marked for GOTCHA to use.",
+      "no_crm": "Kept in GOTCHA only - no CRM is connected.",
+      "not_linked": "Kept in GOTCHA only - your CRM is connected, but this person isn't matched to a record in it.",
+      "nothing_to_push": "Kept in GOTCHA only - there was nothing to send it through."
+    },
+    "teamOnly": "Team only",
+    "mayUse": "GOTCHA may use",
+    "placeholder": "Write a note about this customer…",
+    "placeholderNamed": "Write a note about {name}…",
+    "filterEmpty": "No notes here.",
+    "filter": {
+      "all": "All",
+      "mayUse": "GOTCHA may use",
+      "teamOnly": "Team only"
+    },
+    "side": {
+      "heading": "Notes",
+      "notes": "notes",
+      "mayUse": "GOTCHA may use",
+      "teamOnly": "team only",
+      "reads": "What GOTCHA reads from here",
+      "readsNone": "Nothing yet.",
+      "readsCaption": "Team-only notes are never shown to the AI and never reach the customer."
+    }
+  },
+  "titleCount": "{count, plural, =1 {One customer} other {# customers}}",
+  "subline": "One person, however many channels they write from.",
+  "composition": {
+    "heading": "Who your customers are",
+    "byChannel": "By the channel they write on"
+  },
+  "card": {
+    "since": "with you since {when}",
+    "reaches": "reaches you on {channels}",
+    "noSummary": "No summary yet - GOTCHA writes one once there's enough to go on.",
+    "addNote": "Add note",
+    "message": "Message",
+    "tabs": {
+      "everything": "Everything",
+      "conversations": "Conversations",
+      "orders": "Orders",
+      "actions": "Actions",
+      "notes": "Notes"
+    },
+    "allChannels": "All channels",
+    "today": "Today",
+    "messages": "{count, plural, one {# message} other {# messages}}",
+    "handedTo": "Handed to {to}",
+    "handover": "Handed over",
+    "order": "Order {number}",
+    "note": "Note · {author}",
+    "empty": "Nothing here yet.",
+    "worth": "Worth",
+    "lifetime": "lifetime",
+    "orders": "orders",
+    "refunds": "refunds",
+    "remembers": "GOTCHA remembers",
+    "remembersNone": "Nothing yet.",
+    "reach": "Reach them",
+    "reachNone": "No handle recorded.",
+    "noteCard": "Note · {author}, {when}",
+    "noNote": "No notes yet.",
+    "crumb": "Customers",
+    "conv": {
+      "heading": "{count, plural, one {One conversation} other {# conversations}}, newest first",
+      "summarise": "Summarise all of it",
+      "openIt": "Open it",
+      "imported": "Imported",
+      "noWords": "No words recorded in this conversation.",
+      "older": "{count, plural, one {One older conversation below} other {# older conversations below}}",
+      "showOlder": "Show older conversations"
+    },
+    "pattern": {
+      "heading": "In their own pattern",
+      "conversations": "conversations",
+      "channels": "channels",
+      "neededPerson": "needed a person",
+      "writes": "How they write",
+      "writesNone": "Nothing yet.",
+      "asks": "What they ask about",
+      "asksNone": "Nothing yet."
+    },
+    "promise": {
+      "heading": "An open promise",
+      "none": "No open promises."
+    },
+    "approval": {
+      "PENDING": "Waiting for your approval",
+      "APPROVED": "Approved",
+      "REJECTED": "Rejected",
+      "EXPIRED": "Expired before anyone decided",
+      "CANCELLED": "Cancelled",
+      "APPROVEDBy": "Approved by {name}",
+      "REJECTEDBy": "Rejected by {name}"
+    },
+    "aiAction": {
+      "proposed": "GOTCHA · waiting for approval",
+      "approved": "GOTCHA · approved",
+      "running": "GOTCHA · running",
+      "completed": "GOTCHA · done",
+      "failed": "GOTCHA · didn’t go through",
+      "denied": "GOTCHA · declined"
+    }
+  },
+  "segments": {
+    "label": "Who",
+    "everyone": "Everyone",
+    "talking": "Talking to you now",
+    "quiet": "Gone quiet",
+    "count": "{label} · {count}",
+    "countCapped": "{label} · {count}+",
+    "sorted": "Sorted by last contact"
+  },
+  "add": {
+    "label": "Add a customer",
+    "name": "Name",
+    "phone": "Phone",
+    "email": "Email (optional)",
+    "note": "They’re added as a WhatsApp customer. If the number is already here, that person opens instead.",
+    "submit": "Add",
+    "cancel": "Cancel",
+    "problem": {
+      "name": "Give them a name.",
+      "phone": "That doesn't look like a phone number - try 054-123 4567 or +972 54 123 4567.",
+      "email": "That email doesn't look right.",
+      "forbidden": "You don't have permission to add customers.",
+      "failed": "They weren't added - try again."
+    }
+  },
+  "today": {
+    "waiting": "Waiting on you",
+    "noWord": "No conversation read for them",
+    "phone": "Reach: {handle}",
+    "mood": {
+      "frustrated": "Frustrated today",
+      "about_to_buy": "About to buy"
+    },
+    "orders": "{count, plural, one {# order} other {# orders}}",
+    "noOrders": "no orders yet",
+    "valueWhy": {
+      "unread": "The store’s orders couldn’t be read.",
+      "no_store_connected": "No store is connected, so there are no orders to read.",
+      "store_unreachable": "The store couldn’t be reached, so its orders weren’t read.",
+      "provider_not_supported": "Orders from this store aren’t read here yet.",
+      "capped": "Only the store’s newest orders were read, so an older one may be missing.",
+      "mixed": "Their orders are in more than one currency, so they aren’t added up."
+    },
+    "wrote": "{count, plural, other {wrote # times}}"
+  },
+  "since": {
+    "minutes": "{n}m ago",
+    "hours": "{n}h ago",
+    "yesterday": "Yesterday",
+    "days": "{n} days",
+    "months": "{n, plural, one {# month} other {# months}}"
+  },
+  "reach": {
+    "eyebrow": "Worth reaching out to",
+    "body": "{count, plural, one {# person wrote to you more than once, then went quiet.} other {# people wrote to you more than once, then went quiet.}}",
+    "bodyCapped": "At least {count} people wrote to you more than once, then went quiet.",
+    "none": "Nobody has gone quiet.",
+    "unread": "We couldn't read who has gone quiet.",
+    "write": "Write to them",
+    "seeList": "See the list"
+  },
+  "dupes": {
+    "title": "Two accounts look like one person",
+    "why": {
+      "phone": "The same phone number.",
+      "email": "The same email address.",
+      "other": "GOTCHA found something they have in common.",
+      "sameName": "The same name on two channels.",
+      "similarName": "Similar names on two channels.",
+      "shopifyCustomer": "The same Shopify customer."
+    },
+    "evidence": {
+      "name": "Names on the two accounts: <first></first> and <second></second>",
+      "phone": "The phone number: {value}",
+      "email": "The email address: {value}",
+      "shopifyProfile": "Verified through a profile update."
+    },
+    "keeps": "They'll show as one person, and all their messages are kept.",
+    "merge": "Merge them",
+    "confirm": "Show these two as one person?",
+    "confirmYes": "Yes, merge",
+    "cancel": "Cancel",
+    "notSame": "Not the same",
+    "done": "Done. They now show as one person.",
+    "failed": {
+      "gone": "One of them no longer exists.",
+      "not_same": "These two were marked as different people, so they weren't merged.",
+      "forbidden": "You don't have permission to merge customers.",
+      "failed": "They weren't merged - try again."
+    },
+    "notSameDone": "Marked as two people. GOTCHA won't suggest them together again.",
+    "notSameFailed": {
+      "gone": "One of them no longer exists.",
+      "already_same": "These two are already one person.",
+      "forbidden": "You don't have permission to change customers.",
+      "failed": "That wasn't saved - try again."
+    }
+  },
+  "who": {
+    "title": "Who your customers are",
+    "bought": "Bought once",
+    "came": "Came back",
+    "wholesale": "Wholesale",
+    "never": "Never bought",
+    "reason": {
+      "unread": "The store’s orders couldn’t be read.",
+      "no_store_connected": "No store is connected, so there are no orders to count.",
+      "store_unreachable": "The store couldn’t be reached, so its orders weren’t counted.",
+      "provider_not_supported": "Orders from this store aren’t counted here yet."
+    },
+    "capped": "Counted from the store’s newest orders only."
+  },
+  "footerToday": "Showing {shown} of {total} · shift-click to pick several, then message or tag them",
+  "select": {
+    "label": "Picked customers",
+    "count": "{count, plural, one {1 selected} other {# selected}}",
+    "message": "Message",
+    "tag": "Tag",
+    "clear": "Clear",
+    "tagLabel": "Tag to add",
+    "tagPlaceholder": "A tag, e.g. Wholesale",
+    "tagAdd": "Add",
+    "tagAdding": "Adding…",
+    "tagCancel": "Cancel",
+    "tagTooMany": "Tag at most {max} people at a time.",
+    "tagRefused": {
+      "invalid": "A tag is 1-40 characters.",
+      "too_many_people": "Tag at most {max} people at a time.",
+      "too_many_tags": "Someone here already has too many tags.",
+      "not_found": "Someone here is no longer a customer - refresh and pick again.",
+      "forbidden": "You don’t have permission to tag customers.",
+      "failed": "Nobody was tagged - try again."
+    }
+  },
+  "links": {
+    "title": "Linked accounts",
+    "unavailable": "We couldn't read the linked accounts just now.",
+    "unnamed": "Unnamed",
+    "automatic": "Linked automatically",
+    "byPerson": "Linked by a person",
+    "on": "on {date}",
+    "through": "through {name}",
+    "unlink": "Unlink",
+    "confirm": "Unlink {name}? They will show as a separate customer again.",
+    "confirmYes": "Unlink",
+    "cancel": "Cancel",
+    "undone": "Unlinked. They show as a separate customer again.",
+    "problem": {
+      "not_linked": "This link no longer exists.",
+      "forbidden": "You don't have permission to unlink customers.",
+      "failed": "That didn't work. Try again."
+    }
+  }
+}

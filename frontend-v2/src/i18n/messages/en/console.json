@@ -1,0 +1,354 @@
+{
+  "home": {
+    "title": "Platform console",
+    "description": "Every workspace on the platform, in one place: who they are, how they pay and what they are charged."
+  },
+  "sections": {
+    "tenants": "Tenants",
+    "tenantsLine": "Every organization on the platform: the plan it holds and what it owes.",
+    "coupons": "Coupons",
+    "couponsLine": "Discounts on what an organization is charged: issue them, and switch them on or off."
+  },
+  "tenants": {
+    "title": "Tenants",
+    "description": "Every organization on the platform: its plan, its billing state and how many people use it.",
+    "search": {
+      "label": "Search tenants",
+      "placeholder": "Name or slug",
+      "submit": "Search"
+    },
+    "columns": {
+      "organization": "Organization",
+      "users": "Users",
+      "conversations": "Open conversations",
+      "channels": "Connected channels",
+      "plan": "Plan",
+      "status": "Status"
+    },
+    "shown": "Showing the newest {shown} of {total}. Search to find the others.",
+    "empty": "There are no tenants yet.",
+    "noMatch": "No tenant's name or slug contains “{search}”.",
+    "unread": "The tenants couldn't be read. Reload the page to try again."
+  },
+  "plan": {
+    "ACTIVE_PAID": "Paid plan",
+    "ACTIVE_POC": "POC",
+    "ACTIVE_TRIAL": "Trial",
+    "ACTIVE_MANUAL_CONTRACT": "Manual contract",
+    "PENDING_PAYMENT": "Pending payment",
+    "SETUP_INCOMPLETE": "Plan setup incomplete",
+    "EXPIRED": "Access ended",
+    "CONFLICTING": "Two active plans, needs review",
+    "MISSING": "No plan, needs action",
+    "unknown": "Plan unknown"
+  },
+  "billing": {
+    "PENDING_PAYMENT_READY": "Pending payment",
+    "BILLING_SETUP_INCOMPLETE": "Billing setup incomplete",
+    "BILLING_UNREAD": "Billing state unread"
+  },
+  "status": {
+    "ACTIVE": "Active",
+    "PENDING_ADMIN_SETUP": "Waiting for admin setup",
+    "PENDING_ONBOARDING": "Onboarding",
+    "SUSPENDED": "Suspended",
+    "disabled": "Disabled"
+  },
+  "confirm": {
+    "cancel": "Cancel",
+    "working": "Working…"
+  },
+  "refusal": {
+    "held": "Billing writes are off in this environment, because its billing is the live payment account. Nothing was sent.",
+    "forbidden": "The platform refused: this needs a platform administrator.",
+    "not_found": "This tenant no longer exists.",
+    "no_request": "No billing setup was ever requested for this tenant, so there is nothing to repair. Assign a plan instead.",
+    "not_pending_payment": "This tenant is not awaiting payment, so there is nothing to send or repair.",
+    "already_complete": "Billing setup is already complete. Resend the payment link instead.",
+    "provisioning_failed": "Billing setup did not complete. Nothing was charged. The billing state below is the platform's answer now.",
+    "setup_incomplete": "Billing setup never completed, so there is no payment link to resend. Repair the setup first.",
+    "rate_limited": "Too many sends. Try again in a minute.",
+    "rate_limited_wait": "Too many sends. Try again in {seconds, plural, one {# second} other {# seconds}}.",
+    "link_not_available": "This checkout can no longer be resumed. Assign the tenant a plan again.",
+    "email_failed": "A new payment link was issued and the old one no longer works, but the email did not send. Try again in a few minutes.",
+    "no_admin": "This tenant has no active administrator to send to.",
+    "already_has_plan": "This tenant already holds a plan. The page now shows it.",
+    "invalid_plan": "That plan can no longer be assigned. Choose another.",
+    "awaiting_payment": "This tenant is on a paid plan and has not paid. The onboarding email would let them into setup without paying, so it was not sent. Resend the payment link instead.",
+    "already_onboarded": "This tenant has already finished onboarding.",
+    "failed": "The console couldn't confirm what happened. The page now shows the tenant as the platform has it.",
+    "invalid_code": "A code is 2 to 32 letters, digits, dashes or underscores.",
+    "name_required": "Give the coupon a name.",
+    "percent_out_of_range": "A percentage is a whole number from 1 to 100.",
+    "amount_required": "Enter an amount greater than zero.",
+    "currency_required_for_fixed": "A fixed-amount coupon needs a currency.",
+    "invalid_duration": "A duration is a whole number of months.",
+    "unknown_coupon": "That coupon no longer exists.",
+    "coupon_inactive": "This coupon is disabled. Enable it before giving it.",
+    "coupon_exhausted": "This coupon has been given to as many organizations as it allows.",
+    "unknown_tenant": "That organization no longer exists.",
+    "already_assigned": "This organization already has this coupon. Revoke that one first."
+  },
+  "detail": {
+    "unreadTitle": "Tenant",
+    "missing": "There is no tenant with this address.",
+    "unread": "This tenant couldn't be read. Reload the page to try again.",
+    "billingHeld": "Billing writes are off in this environment: its billing is the live payment account. Repair, resend, plans and coupons are refused here, and say so.",
+    "facts": "The tenant",
+    "slug": "Slug",
+    "created": "Created",
+    "status": "Status",
+    "plan": "Plan",
+    "count": {
+      "users": "Users",
+      "conversations": "Conversations",
+      "messages": "Messages",
+      "channels": "Channels",
+      "teams": "Teams"
+    },
+    "channels": "Channels",
+    "connected": "Connected",
+    "notConnected": "Not connected"
+  },
+  "billingPanel": {
+    "title": "Billing",
+    "plan": "Plan",
+    "setup": "Billing setup",
+    "setupUnread": "Couldn't be read. Reload the page to try again.",
+    "setupNone": "Never requested.",
+    "setupState": {
+      "PENDING": "Requested, not started",
+      "PROCESSING": "In progress",
+      "COMPLETED": "Complete",
+      "FAILED_RETRYABLE": "Failed, can be retried",
+      "FAILED_PERMANENT": "Failed, can't be retried",
+      "CANCELLED": "Cancelled",
+      "other": "{state}"
+    },
+    "attempts": "Attempts",
+    "attemptsCount": "{count, plural, =0 {None yet} one {# attempt} other {# attempts}}",
+    "attemptsLast": "{count, plural, one {# attempt} other {# attempts}}, the last on {at}",
+    "lastFailure": "Last failure",
+    "resend": {
+      "label": "Resend payment link",
+      "what": "A new payment link for the same checkout goes to the tenant's first administrator.",
+      "old": "The link sent before stops working. Nothing is charged here.",
+      "yes": "Send the link",
+      "done": "A new payment link was sent to {email}. The previous link no longer works."
+    },
+    "repair": {
+      "label": "Repair billing setup",
+      "what": "This runs billing setup again for this tenant and, once it is done, emails the payment link.",
+      "nothing": "It does not charge the customer, activate the plan or grant credits.",
+      "yes": "Repair the setup",
+      "done": "Billing setup is complete.",
+      "doneEmailed": "Billing setup is complete. The customer was emailed a payment link.",
+      "doneNotEmailed": "Billing setup is complete, but the email did not send. Resend the payment link.",
+      "impossible": "This setup failed in a way that retrying can't fix. Assign the tenant a plan again."
+    }
+  },
+  "missingPlan": {
+    "title": "This tenant has no plan to work on",
+    "why": {
+      "MISSING": "It has no plan, and can't use the product until it is given one.",
+      "EXPIRED": "Its access has ended. It can't use the product until it is given a plan.",
+      "SETUP_INCOMPLETE": "A plan was requested and its setup never finished. Repair it above, or choose a plan below.",
+      "CONFLICTING": "It holds more than one active plan. Nothing was changed automatically: which one is right is a commercial decision."
+    },
+    "blocked": "Sign-in, account security and billing still work for it. The inbox, AI, channels and everything else do not.",
+    "plansUnread": "The plans couldn't be read. Reload the page to try again.",
+    "plansNone": "No plan can be assigned: none is active and public.",
+    "plan": "Plan",
+    "choose": "Choose a plan",
+    "assign": {
+      "label": "Assign and request payment",
+      "what": "{plan} is assigned. The tenant moves to Pending payment and its administrator is emailed a payment link.",
+      "nothing": "Nothing is charged here, and no access is granted until payment is confirmed.",
+      "poc": "To give access without charging, set the tenant up as a POC instead.",
+      "yes": "Assign the plan",
+      "done": "The plan was assigned. The tenant is pending payment and was emailed a payment link.",
+      "doneNotEmailed": "The plan was assigned and the tenant is pending payment, but the email did not send. Resend the payment link."
+    }
+  },
+  "controls": {
+    "title": "Tenant settings",
+    "rename": {
+      "label": "Name",
+      "save": "Save name",
+      "saving": "Saving…",
+      "done": "Name saved."
+    },
+    "disable": {
+      "label": "Disable tenant",
+      "what": "Nobody in this tenant can sign in until it is enabled again. Nothing is deleted.",
+      "yes": "Disable",
+      "done": "The tenant is disabled."
+    },
+    "enable": {
+      "label": "Enable tenant",
+      "what": "The tenant's people can sign in again.",
+      "yes": "Enable",
+      "done": "The tenant is enabled."
+    },
+    "onboarding": {
+      "label": "Resend onboarding email",
+      "what": "The tenant's administrator is emailed a new setup link.",
+      "yes": "Send the email",
+      "done": "The onboarding email was sent to {email}."
+    }
+  },
+  "tenantCoupons": {
+    "title": "Coupons",
+    "what": "A coupon discounts what this organization is charged. Its plan and contracted price don't change.",
+    "unread": "This tenant's coupons couldn't be read. Reload the page to try again.",
+    "fullPrice": "Paying full price: no coupon is discounting its charges.",
+    "liveUntil": "Discounted by {codes} right now, until {until}.",
+    "liveOpen": "Discounted by {codes} right now, with no end date.",
+    "window": "{from} to {until}",
+    "windowOpen": "From {from}, no end date",
+    "state": {
+      "live": "Discounting now",
+      "ACTIVE": "Not discounting now",
+      "EXPIRED": "Expired",
+      "REVOKED": "Revoked",
+      "other": "Not discounting"
+    },
+    "revoke": {
+      "label": "Revoke",
+      "what": "{code} stops discounting. The next charge is the full plan price.",
+      "yes": "Revoke the coupon",
+      "done": "{code} was revoked. The next charge is the full plan price."
+    },
+    "assignableUnread": "The coupons to give couldn't be read. Reload the page to try again.",
+    "assignableNone": "There is no active coupon to give. Create one in Coupons.",
+    "give": {
+      "coupon": "Give a coupon",
+      "choose": "Choose a coupon",
+      "months": "Months",
+      "monthsDefault": "Coupon's default",
+      "label": "Give the coupon",
+      "what": "{code} discounts every charge from today for {months, plural, one {# month} other {# months}}.",
+      "whatOpen": "{code} discounts every charge from today until it is revoked.",
+      "unchanged": "The plan and its contracted price don't change.",
+      "yes": "Give the coupon",
+      "done": "The coupon was given. It applies from the next charge."
+    }
+  },
+  "coupons": {
+    "title": "Coupons",
+    "description": "A coupon discounts what an organization is charged. It never changes its plan or its contracted price: when the window closes, the charge returns to the plan price on its own.",
+    "held": "Billing writes are off in this environment: its billing is the live payment account. Creating, enabling and disabling coupons are refused here, and say so.",
+    "unread": "The coupons couldn't be read. Reload the page to try again.",
+    "empty": "No coupon has been issued yet.",
+    "issued": "Issued coupons",
+    "window": "{months, plural, one {# month} other {# months}} by default",
+    "windowOpen": "Until revoked",
+    "given": "{count, plural, =0 {Given to no organization} one {Given to # organization} other {Given to # organizations}}",
+    "givenOfMax": "Given to {count} of at most {max}",
+    "active": "Active",
+    "disabled": "Disabled",
+    "disable": {
+      "label": "Disable",
+      "what": "{code} stops discounting at once, for every organization it was given to, and can't be given again until it is enabled.",
+      "yes": "Disable the coupon",
+      "done": "{code} is disabled. It stopped discounting everywhere it was given."
+    },
+    "enable": {
+      "label": "Enable",
+      "what": "{code} discounts again wherever its window is still open, and can be given again.",
+      "yes": "Enable the coupon",
+      "done": "{code} is enabled."
+    },
+    "create": {
+      "title": "Create a coupon",
+      "code": "Code",
+      "nameEn": "Name in English",
+      "nameHe": "Name in Hebrew (optional)",
+      "type": "Discount",
+      "percent": "A percentage",
+      "fixed": "A fixed amount",
+      "percentOff": "Percent off",
+      "amountOff": "Amount off",
+      "currency": "Currency",
+      "months": "Default months",
+      "monthsNone": "No end date",
+      "max": "At most this many organizations",
+      "maxNone": "No limit",
+      "note": "Internal note (optional)",
+      "notePlaceholder": "Never shown to the customer",
+      "wholeMonths": "A whole number of months, 1 or more.",
+      "wholeNumber": "A whole number, 1 or more.",
+      "example": "{price} becomes {after} ({off} off)",
+      "exampleOtherCurrency": "A {currency} coupon only discounts charges made in {currency}.",
+      "exampleFor": "On a plan of {price} a month: {example}, every month for {months, plural, one {# month} other {# months}}.",
+      "exampleOpen": "On a plan of {price} a month: {example}, every month until it is revoked.",
+      "submit": "Create coupon",
+      "creating": "Creating…",
+      "done": "The coupon was created. It discounts nothing until it is given to an organization."
+    }
+  },
+  "create": {
+    "open": "New tenant",
+    "title": "Create a tenant",
+    "name": "Organization name",
+    "slug": "Slug",
+    "slugHint": "Lowercase letters, digits and dashes. It never changes.",
+    "slugInvalid": "2 to 50 lowercase letters, digits or dashes.",
+    "adminName": "Admin's name",
+    "adminEmail": "Admin's email",
+    "billingType": "Billing",
+    "paid": "Paid plan",
+    "poc": "POC",
+    "plansUnread": "The plans couldn't be read. Reload the page to try again.",
+    "plan": "Plan",
+    "choosePlan": "Choose a plan",
+    "chatVolume": "Chat conversations a business day",
+    "voiceVolume": "Voice calls a business day",
+    "planDefault": "The plan's default",
+    "perDay": "{count} a day",
+    "quoting": "Asking for the price…",
+    "quoteRefused": {
+      "plan_gone": "That plan is no longer available. Choose another.",
+      "volume_invalid": "That volume isn't valid for this plan.",
+      "failed": "The price couldn't be read. Change the selection to ask again."
+    },
+    "quote": {
+      "plan": "Plan",
+      "total": "Recurring total",
+      "per": "{amount} {interval, select, year {a year} other {a month}}",
+      "credits": "Included credits",
+      "after": "After creating",
+      "pendingPayment": "Pending payment. The plan activates only once payment is confirmed.",
+      "notChargeable": "Payments in this plan's currency can't be taken yet. The tenant is created pending payment."
+    },
+    "credits": "Credit budget",
+    "creditsInvalid": "A whole number from 1 to 1,000,000.",
+    "expires": "Expires on",
+    "expiresPast": "The expiry has to be in the future.",
+    "domainsUnread": "The feature areas couldn't be read. Reload the page before creating a POC.",
+    "areas": "Feature areas",
+    "areasOff": "Anything not selected is switched off for this organization.",
+    "pocFree": "No charge and no renewal: no card is collected, and access stops when the credits run out or the expiry passes.",
+    "note": "Internal note (optional)",
+    "notePlaceholder": "Never shown to the customer",
+    "cancel": "Close",
+    "submit": "Create tenant",
+    "yes": "Create it",
+    "confirmPaid": "{name} is created pending payment. {email} is emailed a setup link and a payment link.",
+    "confirmPaidNothing": "Nothing is charged here. The plan activates only once the customer pays.",
+    "confirmPoc": "{name} is created on a POC with {credits} credits, starting now. {email} is emailed a setup link. Nothing is ever charged.",
+    "donePaid": "{name} was created and is pending payment. No subscription is active and no credits were granted yet.",
+    "donePoc": "{name} was created on a POC. No charge and no renewal.",
+    "setupIncomplete": "{name} was created, but its billing setup did not complete. No payment link was sent and nothing was charged. Repair it on the tenant's page; don't create it again.",
+    "refusal": {
+      "held": "Billing writes are off in this environment, because its billing is the live payment account. Nothing was created.",
+      "slug_taken": "A tenant with this slug already exists. Choose another.",
+      "invalid": "The platform refused a field. Check the name, slug and admin's email.",
+      "expiry_past": "The expiry has to be in the future.",
+      "unknown_domain": "A feature area is no longer offered. Reload the page.",
+      "invalid_billing": "That plan or volume can no longer be chosen. Choose again.",
+      "forbidden": "The platform refused: this needs a platform administrator.",
+      "failed": "The console couldn't confirm whether the tenant was created. Search the list before trying again."
+    }
+  }
+}

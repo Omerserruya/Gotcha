@@ -21,6 +21,7 @@
 import { prisma } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel } from "./ai.service";
 import { getCompanyContext } from "./company-context.service";
+import { withoutWideDashes } from "../lib/wide-dash";
 
 export interface SalesContext {
   whatWeSell?: string;
@@ -153,7 +154,7 @@ export async function generateSalesContext(
     } catch {
       return null;
     }
-    return normalize(parsed);
+    return normalize(withoutWideDashes(parsed));
   } catch (err: any) {
     console.warn("[sales-context-generator] generation failed:", err?.message);
     return null;

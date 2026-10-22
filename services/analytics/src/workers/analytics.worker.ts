@@ -1,7 +1,10 @@
 import { Job } from "bullmq";
 import { getRedis, createWorker, AnalyticsJob } from "@chatcenter/shared";
 
-async function processAnalyticsEvent(job: Job<AnalyticsJob>): Promise<void> {
+// Exported for its test. The handler is where the claim_time semantics live, and
+// the property that matters - a second reply records nothing - is only observable
+// by invoking it twice.
+export async function processAnalyticsEvent(job: Job<AnalyticsJob>): Promise<void> {
   const { tenantId, event, data, timestamp } = job.data;
   const redis = getRedis();
   const dateKey = timestamp.slice(0, 10);
@@ -37,7 +40,18 @@ async function processAnalyticsEvent(job: Job<AnalyticsJob>): Promise<void> {
     }
     case "agent_response": {
       if (data.conversationId && data.agentId) {
-        const claimTime = await redis.get(`analytics:${tenantId}:claim_time:${data.conversationId}`);
+        // ★ GETDEL, not GET. The key was SET with a 7-day TTL and never deleted,
+        // so every agent reply for the next week measured from the ORIGINAL
+        // claim: the second reply in a thread reported a larger "response time"
+        // than the first, the fifth reported hours, and the daily mean drifted
+        // upward with conversation LENGTH rather than with responsiveness.
+        //
+        // Beside a person's name that made whoever handles the long difficult
+        // cases look slowest - on a screen built specifically not to rank anyone.
+        //
+        // Reading and deleting atomically also makes this measure what it always
+        // claimed to: the FIRST reply after a claim, once.
+        const claimTime = await redis.getdel(`analytics:${tenantId}:claim_time:${data.conversationId}`);
         if (claimTime) {
           const responseMs = new Date(timestamp).getTime() - new Date(claimTime).getTime();
           await redis.lpush(`analytics:${tenantId}:response_times:${dateKey}`, responseMs.toString());

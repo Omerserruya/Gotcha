@@ -45,8 +45,16 @@ function purgeableCategories(): string[] {
 
 function apiAllowlist(): string[] {
   const src = readFileSync(AUTH, "utf-8");
-  const line = src.split("\n").find((l) => l.includes("const allowed = new Set(["))!;
-  return [...line.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+  // Parses `const RETENTION_CATEGORIES = [...] as const;`.
+  //
+  // It used to read the inline `const allowed = new Set([...])` on the PUT
+  // route. That list was hoisted to a module constant so the categories the API
+  // ACCEPTS and the categories GET /retention REPORTS could not drift apart -
+  // which made this parser find nothing and throw. The guarantee is now
+  // stronger than when this test was written: one constant feeds both.
+  const start = src.indexOf("const RETENTION_CATEGORIES");
+  const block = src.slice(start, src.indexOf("] as const;", start));
+  return [...block.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
 }
 
 describe("retention categories agree across services", () => {

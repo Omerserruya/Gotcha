@@ -27,18 +27,41 @@ vi.mock("../services/ai.service", () => ({
   getDefaultModel: vi.fn().mockReturnValue("gpt-4o-mini"),
 }));
 
-vi.mock("@chatcenter/shared", () => {
+// Spread the real module and override only what this test needs: the DB, Redis,
+// and the middlewares that stand between a request and the handlers under test.
+vi.mock("@chatcenter/shared", async (importOriginal) => {
+  const actual: any = await importOriginal();
   const mockPrisma = {
     conversation: { findFirst: vi.fn() },
-    message: { findMany: vi.fn() },
+    message: { findMany: vi.fn(), findFirst: vi.fn().mockResolvedValue(null) },
     aIAgent: { findMany: vi.fn().mockResolvedValue([]) },
     businessPolicy: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn() },
+  };
+  // Suggestions are read from Redis (copilot-suggestions.service), never
+  // generated on a GET. The fake holds one stored generation for "c1".
+  const store = new Map<string, string>([
+    ["copilot:suggestions:tenant-1:c1", JSON.stringify({
+      suggestions: [{ id: "s1", text: "Thanks for reaching out!", confidence: 0.9, type: "reply" }],
+      copilotMode: "READY_MESSAGE",
+      basedOnMessageId: null,
+      generatedAt: new Date(0).toISOString(),
+      trigger: "inbound",
+    })],
+  ]);
+  const fakeRedis = {
+    get: vi.fn(async (k: string) => store.get(k) ?? null),
+    set: vi.fn(async () => "OK"),
+    ttl: vi.fn(async () => -1),
+    incr: vi.fn(async () => 1),
+    expire: vi.fn(async () => 1),
   };
   const passthrough = (_req: any, _res: any, next: any) => next();
   const factory = () => passthrough;
 
   return {
+    ...actual,
     prisma: mockPrisma,
+    getRedis: () => fakeRedis,
     authenticate: (req: any, _res: any, next: any) => {
       req.user = { userId: "user-1", tenantId: "tenant-1", role: "ADMIN", email: "admin@test.com" };
       req.tenantId = "tenant-1";
@@ -51,6 +74,13 @@ vi.mock("@chatcenter/shared", () => {
     requireActiveTenant: factory,
     requireRole: () => passthrough,
     requireSystemAdmin: passthrough,
+    requireInternalKey: passthrough,
+    requireEntitlement: factory,
+    // A router.param handler: (req, res, next, id). Visibility is not under
+    // test here; the handlers' own not-found path is.
+    requireVisibleConversation: (_req: any, _res: any, next: any) => next(),
+    resolveConversationLocale: vi.fn().mockResolvedValue({ effective: "en" }),
+    resolveEffectiveLocale: vi.fn().mockResolvedValue({ effective: "en" }),
     createServiceApp: (config: any) => {
       const app = express();
       app.use(express.json());

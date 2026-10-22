@@ -14,25 +14,16 @@ const { aggregateMock, auditCreateMock } = vi.hoisted(() => ({
   auditCreateMock: (vi as any).fn().mockResolvedValue({}),
 }));
 
-vi.mock("@chatcenter/shared", () => ({
-  // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
-  // mocks of this barrel must supply them or the read path throws instead of
-  // returning "not configured". Default: nothing configured.
-  readDurableSetting: async () => null,
-  writeDurableSetting: async () => undefined,
-  settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,
-  // Version pins now live in shared modules, so exhaustive mocks of this
-  // barrel must supply them. Returning the real defaults keeps any URL the
-  // code builds meaningful instead of "undefined/...".
-  shopifyApiVersion: () => "2026-07",
-  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
-  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
-  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
-  prisma: {
-    usageLog: { aggregate: aggregateMock },
-    auditLog: { create: auditCreateMock },
-  },
-}));
+vi.mock("@chatcenter/shared", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return {
+    ...actual,
+    prisma: {
+      usageLog: { aggregate: aggregateMock },
+      auditLog: { create: auditCreateMock },
+    },
+  };
+});
 
 import {
   createTurnBudget,
@@ -88,8 +79,8 @@ describe("createTurnBudget - preflight conversation cap", () => {
   it("throws when prior conversation usage already exceeds cap", async () => {
     aggregateMock.mockImplementation(async ({ where }: any) => {
       // First call: conversation lookup. Second call: tenant lookup.
-      if (where?.metadata) return { _sum: { tokensTotal: 5_000_000 } };
-      return { _sum: { tokensTotal: 0 } };
+      if (where?.metadata) return { _sum: { tokensEquivalent: 5_000_000 } };
+      return { _sum: { tokensEquivalent: 0 } };
     });
 
     const b = createTurnBudget({
@@ -103,8 +94,8 @@ describe("createTurnBudget - preflight conversation cap", () => {
 
   it("throws when tenant daily usage exceeds cap", async () => {
     aggregateMock.mockImplementation(async ({ where }: any) => {
-      if (where?.metadata) return { _sum: { tokensTotal: 0 } };
-      return { _sum: { tokensTotal: 50_000_000 } };
+      if (where?.metadata) return { _sum: { tokensEquivalent: 0 } };
+      return { _sum: { tokensEquivalent: 50_000_000 } };
     });
 
     const b = createTurnBudget({
@@ -123,7 +114,7 @@ describe("createTurnBudget - preflight conversation cap", () => {
   });
 
   it("passes preflight when nothing is over budget", async () => {
-    aggregateMock.mockResolvedValue({ _sum: { tokensTotal: 0 } });
+    aggregateMock.mockResolvedValue({ _sum: { tokensEquivalent: 0 } });
     const b = createTurnBudget({ tenantId: "t1", conversationId: "c1" });
     await expect(b.preflight()).resolves.toBeUndefined();
   });

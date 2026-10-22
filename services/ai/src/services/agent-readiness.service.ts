@@ -2,26 +2,73 @@
  * AI Employee Readiness Test.
  *
  * After the builder wizard, we run a "will this employee actually cope?" audit:
- * generate the realistic customer questions this employee will face (from the
- * business, its role/goal, its attached knowledge, and its granted tools),
- * then judge how well it's covered and where the gaps are.
+ * the realistic customer questions this employee will face (from the business
+ * and its role/goal), judged against what it can actually use (its knowledge
+ * and its runnable tools), with the gaps and how to close them.
  *
- * One JSON-mode LLM call (lives in services/ai - the only service allowed to
- * make new LLM calls). The score is computed deterministically from the
- * per-question coverage so it can't drift with the model's mood.
+ * Lives in services/ai - the only service allowed to make new LLM calls. The
+ * score is computed deterministically from the per-question coverage.
+ *
+ * STABLE BY DESIGN (B6, 2026-10-14). One call at temperature 0.5 used to both
+ * invent the questions and judge them, so Maya scored 34 then 45 with nothing
+ * changed. Now:
+ *  - The QUESTION SET is made once and stored (TenantSetting
+ *    "agent:readiness-questions:<id>"), each question with a stable id. It is
+ *    remade only when what a CUSTOMER would ask changes: role, goal, success
+ *    criteria, the business, the language (questionFingerprint), or on request
+ *    (regenerateQuestions). Knowledge and tools are NOT in it on purpose: the
+ *    point is to re-judge the same questions after knowledge is added.
+ *  - Each run JUDGES that fixed set, in batches of JUDGE_BATCH at medium
+ *    reasoning. NOT at "temperature 0": the gpt-5 models this runs on accept
+ *    only the default temperature, and ai.service drops any other value, so
+ *    temperature buys nothing here. The cache below is what makes it stable.
+ *  - A verdict counts only with EVIDENCE the code can check (B6b): the judge
+ *    names the documents and tools it relied on, the code keeps only names that
+ *    were in its input, and a "full" or "partial" with none left becomes
+ *    "none". gpt-5-mini at low effort over 32 questions at once called all 32
+ *    "partial" and said order changes had no tool while Update Order Status
+ *    was in its list.
+ *  - The judgement is keyed by everything it depends on (inputFingerprint:
+ *    the question set, the readable knowledge, the runnable tools, the
+ *    answered questions). When that is unchanged the stored report is returned
+ *    as it is, with no model call (unchanged: true): nothing changed, same score.
+ *  - A question a person answered (readiness-answers) is covered by that
+ *    answer: it joins the set if it is not in it, and is marked full without
+ *    asking the judge.
+ *  - Each question is judged against what the employee would RETRIEVE for it
+ *    (2026-10-14): the same retrieveRelevantChunks call, top 5, scoped to the
+ *    employee, as a live chat. The judge used to see the first 200 characters
+ *    of each document, so an FAQ answer past them read as "none". If retrieval
+ *    finds nothing for any question while documents exist (the index down),
+ *    the judge gets the documents' full text instead, up to FULL_TEXT_BUDGET.
+ * No migration: two TenantSetting keys; the report stays in AIAgent.readinessReport.
  */
 
-import { prisma } from "@chatcenter/shared";
+import crypto from "crypto";
+import { prisma, clusterKeyFor, readDurableSetting, writeDurableSetting } from "@chatcenter/shared";
 import { generateResponse } from "./ai.service";
+import { readableKnowledgeBaseIds, retrieveRelevantChunks } from "./knowledge.service";
+import { readAnsweredQuestions } from "./readiness-answers";
+import { withoutWideDashes } from "../lib/wide-dash";
 
 export type Coverage = "full" | "partial" | "none";
 
 export interface ReadinessQuestion {
+  /** Stable across runs: a hash of the question's cluster key. */
+  id: string;
   question: string;
   coverage: Coverage;
   reason: string;
   /** What's missing for the uncovered/partly-covered ones. */
   gapType: "knowledge" | "tool" | "data" | "none";
+  /** True for a question a person answered (B2): covered by that answer. */
+  answered?: boolean;
+  /**
+   * What the verdict rests on, each checked against the input: a knowledge
+   * document, a tool, or the business description ("business"), which reaches
+   * the employee's prompt at runtime too.
+   */
+  evidence?: Array<{ kind: "doc" | "tool" | "business"; name: string }>;
 }
 
 export interface ReadinessRecommendation {
@@ -37,12 +84,53 @@ export interface ReadinessReport {
   questions: ReadinessQuestion[];
   recommendations: ReadinessRecommendation[];
   generatedAt: string;
+  /** When the question set being judged was made. */
+  questionSetGeneratedAt?: string;
+  /** Everything the judgement depends on; equal means nothing changed. */
+  inputFingerprint?: string;
+  /** True when this run found nothing changed and returned the stored report. */
+  unchanged?: boolean;
+}
+
+export interface StoredQuestionSet {
+  fingerprint: string;
+  locale: string;
+  generatedAt: string;
+  questions: Array<{ id: string; question: string }>;
 }
 
 const LANG_NAMES: Record<string, string> = { en: "English", he: "Hebrew (עברית)", ar: "Arabic (العربية)" };
 
 const MAX_KB_DOCS = 40;
+/** Chunks per question, as the live chat retrieves them (ai-bot.service). */
+export const RETRIEVE_PER_QUESTION = 5;
+/** The fallback when retrieval is unavailable: all documents' text, up to this many characters. */
+export const FULL_TEXT_BUDGET = 30_000;
 const MAX_TOOLS = 60;
+/** Bumped when the judging prompt changes, so old judgements are not reused. */
+// 4: judged on retrieval per question (987c2378), so stored judgements are judged again.
+const JUDGE_VERSION = "4";
+/** Questions per judge call: 32 at once came back all "partial". */
+export const JUDGE_BATCH = 8;
+/**
+ * Output budgets per judge attempt (the visible answer; ai.service adds the
+ * reasoning headroom on top). The second is the retry for an answer cut off
+ * while the model was still reasoning.
+ */
+export const JUDGE_TOKEN_BUDGETS = [6000, 12000];
+
+export function questionSetKey(aiAgentId: string): string {
+  return `agent:readiness-questions:${aiAgentId}`;
+}
+
+/** A question's stable id: the same question (by cluster key) always has the same id. */
+export function questionIdFor(question: string): string {
+  return "q_" + crypto.createHash("sha256").update(clusterKeyFor(question)).digest("hex").slice(0, 12);
+}
+
+function hashOf(v: unknown): string {
+  return crypto.createHash("sha256").update(JSON.stringify(v)).digest("hex").slice(0, 32);
+}
 
 interface ReadinessContext {
   agentName: string;
@@ -53,29 +141,44 @@ interface ReadinessContext {
   organizationName: string;
   industry: string;
   businessDescription: string;
-  knowledgeDocs: Array<{ kb: string; title: string; snippet: string }>;
+  knowledgeDocs: Array<{ kb: string; title: string; snippet: string; content: string }>;
+  /** Every readable document by id and last change: what the knowledge part of the fingerprint is. */
+  knowledgeVersion: Array<[string, string]>;
   tools: Array<{ name: string; integration: string; description: string }>;
   knowledgeCount: number;
+  /** Questions a person answered: always covered. */
+  answered: string[];
+  previousReport: ReadinessReport | null;
 }
 
 async function loadContext(tenantId: string, agentId: string): Promise<ReadinessContext | null> {
   const agent = await prisma.aIAgent.findFirst({
     where: { id: agentId, tenantId },
-    select: { id: true, name: true, role: true, goal: true, successCriteria: true, identity: true },
+    select: { id: true, name: true, role: true, goal: true, successCriteria: true, identity: true, readinessReport: true },
   });
   if (!agent) return null;
 
-  const [profile, kbLinks, toolRows] = await Promise.all([
+  const [profile, readableKbIds, toolRows] = await Promise.all([
     prisma.businessProfile.findUnique({
       where: { tenantId },
       select: { organizationName: true, industry: true, businessDescription: true },
     }),
-    prisma.aIAgentKnowledge.findMany({
-      where: { aiAgentId: agentId },
-      select: { knowledgeBase: { select: { id: true, name: true } } },
-    }),
+    // The bases the employee can actually retrieve from at runtime: attached,
+    // tenant-wide, its department's and its own (B2).
+    readableKnowledgeBaseIds(tenantId, agentId),
+    // Only tools that can run: a CONNECTED connection and an enabled tool.
+    // Grants on a disconnected store stay on the employee but do nothing, and
+    // counting them scored Maya 67 on returns and exchanges she could not do
+    // (68 dead Shopify grants; the employee hired after her scored 34).
+    // Ordered by name so the MAX_TOOLS cap keeps the same tools every run.
     prisma.agentToolPermission.findMany({
-      where: { tenantId, aiAgentId: agentId, isAllowed: true },
+      where: {
+        tenantId,
+        aiAgentId: agentId,
+        isAllowed: true,
+        tenantTool: { isEnabled: true, tenantIntegration: { status: "CONNECTED" } },
+      },
+      orderBy: [{ tenantTool: { catalogTool: { name: "asc" } } }, { id: "asc" }],
       select: {
         tenantTool: {
           select: {
@@ -88,8 +191,15 @@ async function loadContext(tenantId: string, agentId: string): Promise<Readiness
     }),
   ]);
 
-  const kbIds = kbLinks.map((l: any) => l.knowledgeBase?.id).filter(Boolean);
-  const kbNameById = new Map<string, string>(kbLinks.map((l: any) => [l.knowledgeBase.id, l.knowledgeBase.name]));
+  const kbIds: string[] = readableKbIds;
+  const [kbRows, answered, versions] = await Promise.all([
+    kbIds.length ? prisma.knowledgeBase.findMany({ where: { tenantId, id: { in: kbIds } }, select: { id: true, name: true } }) : Promise.resolve([] as Array<{ id: string; name: string }>),
+    readAnsweredQuestions(tenantId, agentId),
+    kbIds.length
+      ? prisma.knowledgeDocument.findMany({ where: { tenantId, knowledgeBaseId: { in: kbIds } }, select: { id: true, updatedAt: true }, orderBy: { id: "asc" } })
+      : Promise.resolve([] as Array<{ id: string; updatedAt: Date }>),
+  ]);
+  const kbNameById = new Map<string, string>(kbRows.map((k: any) => [k.id, k.name]));
 
   let knowledgeDocs: ReadinessContext["knowledgeDocs"] = [];
   if (kbIds.length) {
@@ -97,16 +207,18 @@ async function loadContext(tenantId: string, agentId: string): Promise<Readiness
       where: { tenantId, knowledgeBaseId: { in: kbIds } },
       select: { knowledgeBaseId: true, title: true, content: true },
       take: MAX_KB_DOCS,
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     });
     knowledgeDocs = docs.map((d: any) => ({
       kb: kbNameById.get(d.knowledgeBaseId) || "Knowledge",
       title: d.title,
       snippet: (d.content || "").replace(/\s+/g, " ").slice(0, 200),
+      content: String(d.content || ""),
     }));
   }
 
   const identity = (agent.identity as any) || {};
+  const prev = agent.readinessReport as any;
   return {
     agentName: agent.name,
     role: agent.role,
@@ -117,24 +229,32 @@ async function loadContext(tenantId: string, agentId: string): Promise<Readiness
     industry: profile?.industry || "",
     businessDescription: profile?.businessDescription || "",
     knowledgeDocs,
+    knowledgeVersion: versions.map((v: any) => [v.id, new Date(v.updatedAt).toISOString()] as [string, string]),
     tools: toolRows.map((t: any) => ({
       name: t.tenantTool.catalogTool.name,
       integration: t.tenantTool.tenantIntegration.integration.name,
       description: t.tenantTool.catalogTool.description || "",
     })),
     knowledgeCount: kbIds.length,
+    answered: answered.map((a) => a.question),
+    previousReport: prev && typeof prev === "object" && Array.isArray(prev.questions) ? (prev as ReadinessReport) : null,
   };
 }
 
-function buildPrompt(ctx: ReadinessContext, locale: string): string {
-  const lang = LANG_NAMES[locale] || "English";
-  const kbBlock = ctx.knowledgeDocs.length
-    ? ctx.knowledgeDocs.map((d) => `- [${d.kb}] ${d.title}: ${d.snippet}`).join("\n")
-    : "(no knowledge documents attached)";
-  const toolBlock = ctx.tools.length
-    ? ctx.tools.map((t) => `- ${t.name} (${t.integration})${t.description ? `: ${t.description}` : ""}`).join("\n")
-    : "(no action tools granted)";
+/** What a customer would ask depends on these, and only these. */
+function questionFingerprint(ctx: ReadinessContext, locale: string): string {
+  return hashOf({
+    role: ctx.role,
+    goal: ctx.goal,
+    successCriteria: ctx.successCriteria,
+    organizationName: ctx.organizationName,
+    industry: ctx.industry,
+    business: ctx.businessDescription || ctx.companyOverview,
+    locale,
+  });
+}
 
+function businessBlock(ctx: ReadinessContext): string {
   return `## Business
 Organization: ${ctx.organizationName || "unknown"}
 Industry: ${ctx.industry || "unknown"}
@@ -144,7 +264,61 @@ What they do: ${ctx.businessDescription || ctx.companyOverview || "unknown"}
 Name: ${ctx.agentName}
 Role: ${ctx.role}
 Goal: ${ctx.goal || "(not set)"}
-Success criteria: ${ctx.successCriteria || "(not set)"}
+Success criteria: ${ctx.successCriteria || "(not set)"}`;
+}
+
+function buildQuestionsPrompt(ctx: ReadinessContext, locale: string): string {
+  const lang = LANG_NAMES[locale] || "English";
+  const answeredBlock = ctx.answered.length
+    ? `\n## Questions the business already answered (do NOT include these or near-duplicates)\n${ctx.answered.map((q) => `- ${q}`).join("\n")}\n`
+    : "";
+  return `${businessBlock(ctx)}
+${answeredBlock}
+## Your task
+Generate 28-36 realistic questions a real customer would ask THIS employee, given the business, industry and the employee's role. Cover the full spread: high-frequency everyday questions, edge cases, awkward/angry customers, pricing, logistics, policy, and post-sale - not just easy ones. Do not pad with near-duplicates; each question must be meaningfully distinct. Do not judge whether the employee can answer them.
+
+Respond ONLY with JSON of exactly this shape:
+{"questions":["...","..."]}
+Write the questions in ${lang}.`;
+}
+
+/** What the judge reads for each question: what retrieval found for it, or (fallback) every document in full. */
+export type JudgeKnowledge =
+  | { mode: "retrieved"; byQuestion: Map<string, Array<{ title: string; text: string }>> }
+  | { mode: "full_text" };
+
+function fullTextBlock(ctx: ReadinessContext): string {
+  let left = FULL_TEXT_BUDGET;
+  const parts: string[] = [];
+  for (const d of ctx.knowledgeDocs) {
+    if (left <= 0) break;
+    const text = d.content.replace(/\s+/g, " ").trim().slice(0, left);
+    left -= text.length;
+    parts.push(`### doc "${d.title}" [${d.kb}]\n${text}`);
+  }
+  return parts.join("\n\n");
+}
+
+export function buildJudgePrompt(ctx: ReadinessContext, questions: Array<{ id: string; question: string }>, locale: string, knowledge: JudgeKnowledge = { mode: "full_text" }): string {
+  const lang = LANG_NAMES[locale] || "English";
+  const titles = ctx.knowledgeDocs.length
+    ? ctx.knowledgeDocs.map((d) => `- doc "${d.title}" [${d.kb}]`).join("\n")
+    : "(no knowledge documents available)";
+  const kbBlock = knowledge.mode === "retrieved"
+    ? `${titles}\n(For each question below, the knowledge the employee finds when a customer asks it is listed under the question. Judge by that.)`
+    : ctx.knowledgeDocs.length ? `${titles}\n\n${fullTextBlock(ctx)}` : titles;
+  const toolBlock = ctx.tools.length
+    ? ctx.tools.map((t) => `- tool "${t.name}" (${t.integration})${t.description ? `: ${t.description}` : ""}`).join("\n")
+    : "(no action tools granted)";
+  const questionLines = questions.map((q) => {
+    if (knowledge.mode !== "retrieved") return `- [${q.id}] ${q.question}`;
+    const found = knowledge.byQuestion.get(q.id) ?? [];
+    const kb = found.length
+      ? found.map((c) => `    > doc "${c.title}": ${c.text.replace(/\s+/g, " ").trim()}`).join("\n")
+      : "    > (the employee finds nothing in its knowledge for this)";
+    return `- [${q.id}] ${q.question}\n${kb}`;
+  }).join("\n");
+  return `${businessBlock(ctx)}
 
 ## Knowledge base documents available to it
 ${kbBlock}
@@ -152,19 +326,20 @@ ${kbBlock}
 ## Action tools available to it
 ${toolBlock}
 
-## Your task
-Generate 28–36 realistic questions a real customer would ask THIS employee, given the business, industry and the employee's role. Cover the full spread: high-frequency everyday questions, edge cases, awkward/angry customers, pricing, logistics, policy, and post-sale - not just easy ones. Do not pad with near-duplicates; each question must be meaningfully distinct.
+## Customer questions to judge (fixed list; judge every id, add none)
+${questionLines}
 
-For EACH question decide:
-- coverage: "full" (answerable now from the knowledge above and/or an available tool), "partial" (only some of it is covered, or it needs data we don't clearly have), or "none" (cannot be handled).
-- gapType: if not full, the single biggest missing thing - "knowledge" (missing info/policy/FAQ), "tool" (needs an action/integration we don't have, e.g. order lookup, shipping, refund), or "data" (needs structured business data, e.g. price list, size/measurement table, product catalog). Use "none" only when coverage is "full".
+## Your task
+For EACH question id decide:
+- evidence: what above answers it: a document or tool by its exact quoted name, or the "## Business" section itself: [{"kind":"doc","name":"<doc title>"}, {"kind":"tool","name":"<tool name>"}, {"kind":"business","name":"business"}]. Cite a document only for what is written in that document. Only what is listed above; [] when nothing does.
+- coverage: "full" (the evidence answers it completely), "partial" (the evidence answers part of it), or "none" (nothing listed answers it). A tool that does what the customer asks (e.g. looking up or changing their order) IS evidence. With no evidence the coverage is "none" - do not hedge with "partial".
+- gapType: if not full, the single biggest missing thing - "knowledge" (missing info/policy/FAQ), "tool" (needs an action/integration not listed, e.g. refunds when no refund tool is listed), or "data" (needs structured business data, e.g. price list, size/measurement table, product catalog). Use "none" only when coverage is "full".
 - reason: one short sentence in ${lang}.
 
-Then produce "recommendations": concrete, deduplicated fixes for the gaps you found. Each has a "type" from: "add_knowledge", "connect_tool", "add_business_data", "add_faq", "create_workflow", "other". Examples: add shipping provider integration, upload return policy, add size/measurement table, add product catalog, connect Shopify orders, add FAQ content, create refund workflow. title + detail in ${lang}.
+Then produce "recommendations": concrete, deduplicated fixes for the gaps you found. Each has a "type" from: "add_knowledge", "connect_tool", "add_business_data", "add_faq", "create_workflow", "other". title + detail in ${lang}.
 
 Respond ONLY with JSON of exactly this shape:
-{"questions":[{"question":"...","coverage":"full|partial|none","gapType":"knowledge|tool|data|none","reason":"..."}],"recommendations":[{"type":"...","title":"...","detail":"..."}]}
-Write all customer-facing text (questions, reasons, titles, details) in ${lang}.`;
+{"judgements":[{"id":"q_...","evidence":[{"kind":"doc|tool|business","name":"..."}],"coverage":"full|partial|none","gapType":"knowledge|tool|data|none","reason":"..."}],"recommendations":[{"type":"...","title":"...","detail":"..."}]}`;
 }
 
 function computeScore(questions: ReadinessQuestion[]): { score: number; totals: ReadinessReport["totals"] } {
@@ -178,65 +353,269 @@ function computeScore(questions: ReadinessQuestion[]): { score: number; totals: 
   return { score, totals };
 }
 
+const ANSWERED_REASON: Record<string, string> = {
+  en: "Answered by the team; the answer is in the knowledge.",
+  he: "הצוות ענה על השאלה, והתשובה נמצאת בידע.",
+};
+const NO_EVIDENCE_REASON: Record<string, string> = {
+  en: "No document or tool it has answers this.",
+  he: "אין מסמך או כלי שעונים על השאלה הזו.",
+};
+const NOT_JUDGED_REASON: Record<string, string> = {
+  en: "The check did not return a verdict for this question.",
+  he: "הבדיקה לא החזירה תשובה לשאלה הזו.",
+};
+
 const VALID_COVERAGE = new Set<Coverage>(["full", "partial", "none"]);
 const VALID_GAP = new Set(["knowledge", "tool", "data", "none"]);
 const VALID_REC = new Set(["add_knowledge", "connect_tool", "add_business_data", "add_faq", "create_workflow", "other"]);
+
+export async function readQuestionSet(tenantId: string, aiAgentId: string): Promise<StoredQuestionSet | null> {
+  try {
+    const raw = await readDurableSetting(tenantId, questionSetKey(aiAgentId));
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    if (!v || typeof v.fingerprint !== "string" || !Array.isArray(v.questions)) return null;
+    return v as StoredQuestionSet;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A failed write never fails the run: the report is still right, the set is
+ * only made again next time (and the score may then move, as before B6).
+ */
+async function storeQuestionSet(tenantId: string, aiAgentId: string, set: StoredQuestionSet): Promise<void> {
+  try {
+    await writeDurableSetting(tenantId, questionSetKey(aiAgentId), JSON.stringify(set), "readiness");
+  } catch (err: any) {
+    console.warn(`[readiness] question set write failed for ${aiAgentId}:`, err?.message);
+  }
+}
+
+/**
+ * Retrieval per question, the live chat's call (record:false: a readiness test
+ * is not a customer, its misses are not gaps). Nothing found for any question
+ * while documents exist means the index could not answer: fall back to the
+ * full text, and say so in the log.
+ */
+async function judgeKnowledgeFor(tenantId: string, agentId: string, ctx: ReadinessContext, questions: Array<{ id: string; question: string }>): Promise<JudgeKnowledge> {
+  if (!questions.length || !ctx.knowledgeDocs.length) return { mode: "retrieved", byQuestion: new Map() };
+  const found = await Promise.all(questions.map(async (q) => {
+    try {
+      const chunks = await retrieveRelevantChunks(tenantId, q.question, RETRIEVE_PER_QUESTION, agentId, { record: false });
+      return [q.id, (chunks as any[]).map((c) => ({ title: String(c?.documentTitle ?? c?.title ?? "Knowledge"), text: String(c?.content ?? "") })).filter((c) => c.text.trim())] as const;
+    } catch {
+      return [q.id, []] as const;
+    }
+  }));
+  if (found.every(([, c]) => c.length === 0)) {
+    console.warn(`[readiness] ${agentId}: retrieval found nothing for any of ${questions.length} questions; judging on the documents' full text`);
+    return { mode: "full_text" };
+  }
+  return { mode: "retrieved", byQuestion: new Map(found.map(([id, c]) => [id, [...c]])) };
+}
+
+/** Keep each question once (by id), in order. */
+function uniqueQuestions(qs: Array<{ id: string; question: string }>): Array<{ id: string; question: string }> {
+  const seen = new Set<string>();
+  return qs.filter((q) => (seen.has(q.id) ? false : (seen.add(q.id), true)));
+}
+
+/**
+ * The question set to judge: the stored one when it still fits, else a new
+ * one. Answered questions are always in it (an older answer, from before the
+ * set existed, joins it here).
+ */
+async function questionSetFor(
+  tenantId: string,
+  agentId: string,
+  ctx: ReadinessContext,
+  locale: string,
+  regenerate: boolean,
+): Promise<StoredQuestionSet | { error: string }> {
+  const fingerprint = questionFingerprint(ctx, locale);
+  const answered = ctx.answered.map((q) => ({ id: questionIdFor(q), question: q }));
+  let set = regenerate ? null : await readQuestionSet(tenantId, agentId);
+  if (set && set.fingerprint !== fingerprint) set = null;
+
+  if (!set) {
+    let raw: string;
+    try {
+      const res = await generateResponse({
+        tenantId,
+        messages: [
+          { role: "system", content: "You write the realistic questions customers ask a business. You output only valid JSON." },
+          { role: "user", content: buildQuestionsPrompt(ctx, locale) },
+        ],
+        temperature: 0.5,
+        maxTokens: 3000,
+        responseFormat: { type: "json_object" },
+        metadata: { type: "agent_readiness_questions", aiAgentId: agentId },
+      } as any);
+      raw = (res as any)?.content || "";
+    } catch (err: any) {
+      console.error("[readiness] question generation failed:", err?.message);
+      return { error: "llm_unavailable" };
+    }
+    let parsed: any;
+    try {
+      parsed = withoutWideDashes(JSON.parse(raw));
+    } catch {
+      return { error: "bad_model_output" };
+    }
+    const made = (Array.isArray(parsed.questions) ? parsed.questions : [])
+      .map((q: any) => String(typeof q === "string" ? q : q?.question || "").trim().slice(0, 400))
+      .filter(Boolean)
+      .map((q: string) => ({ id: questionIdFor(q), question: q }));
+    set = { fingerprint, locale, generatedAt: new Date().toISOString(), questions: uniqueQuestions([...made, ...answered]) };
+    await storeQuestionSet(tenantId, agentId, set);
+    return set;
+  }
+
+  const have = new Set(set.questions.map((q) => q.id));
+  const missing = answered.filter((a) => !have.has(a.id));
+  if (missing.length) {
+    set = { ...set, questions: [...set.questions, ...missing] };
+    await storeQuestionSet(tenantId, agentId, set);
+  }
+  return set;
+}
 
 export async function generateReadinessReport(
   tenantId: string,
   agentId: string,
   locale = "en",
+  opts: { regenerateQuestions?: boolean } = {},
 ): Promise<ReadinessReport | { error: string }> {
   const ctx = await loadContext(tenantId, agentId);
   if (!ctx) return { error: "agent_not_found" };
 
-  let raw: string;
-  try {
-    const res = await generateResponse({
-      tenantId,
-      messages: [
-        { role: "system", content: "You are a meticulous QA auditor for AI customer-service employees. You output only valid JSON." },
-        { role: "user", content: buildPrompt(ctx, locale) },
-      ],
-      temperature: 0.5,
-      maxTokens: 4500,
-      responseFormat: { type: "json_object" },
-      metadata: { type: "agent_readiness", aiAgentId: agentId },
-    } as any);
-    raw = (res as any)?.content || "";
-  } catch (err: any) {
-    console.error("[readiness] LLM call failed:", err?.message);
-    return { error: "llm_unavailable" };
+  const set = await questionSetFor(tenantId, agentId, ctx, locale, !!opts.regenerateQuestions);
+  if ("error" in set) return set;
+
+  const answeredIds = new Set(ctx.answered.map((q) => questionIdFor(q)));
+  const inputFingerprint = hashOf({
+    v: JUDGE_VERSION,
+    set: [set.fingerprint, set.generatedAt, set.questions.map((q) => q.id)],
+    knowledge: ctx.knowledgeVersion,
+    tools: ctx.tools.map((t) => [t.name, t.integration]),
+    answered: [...answeredIds].sort(),
+    locale,
+  });
+  // Nothing it depends on changed: the same report, with no model call.
+  if (ctx.previousReport && ctx.previousReport.inputFingerprint === inputFingerprint) {
+    return { ...ctx.previousReport, unchanged: true };
   }
 
-  let parsed: any;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { error: "bad_model_output" };
-  }
+  const toJudge = set.questions.filter((q) => !answeredIds.has(q.id));
+  const judged = new Map<string, { coverage: Coverage; gapType: ReadinessQuestion["gapType"]; reason: string; evidence: NonNullable<ReadinessQuestion["evidence"]> }>();
+  // The business section is evidence only when there is something in it.
+  const hasBusiness = !!(ctx.businessDescription || ctx.companyOverview).trim();
+  const recs: ReadinessRecommendation[] = [];
+  // Only names that were in the judge's input count as evidence.
+  const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+  const docNames = new Map(ctx.knowledgeDocs.map((d) => [norm(d.title), d.title]));
+  const toolNames = new Map(ctx.tools.map((t) => [norm(t.name), t.name]));
+  // What the employee would find for each question, as in a live chat.
+  const knowledge = await judgeKnowledgeFor(tenantId, agentId, ctx, toJudge);
+  const batches: Array<Array<{ id: string; question: string }>> = [];
+  for (let i = 0; i < toJudge.length; i += JUDGE_BATCH) batches.push(toJudge.slice(i, i + JUDGE_BATCH));
 
-  const questions: ReadinessQuestion[] = (Array.isArray(parsed.questions) ? parsed.questions : [])
-    .map((q: any) => {
-      const coverage: Coverage = VALID_COVERAGE.has(q?.coverage) ? q.coverage : "none";
-      const gapType = VALID_GAP.has(q?.gapType) ? q.gapType : (coverage === "full" ? "none" : "knowledge");
-      return {
-        question: String(q?.question || "").slice(0, 400),
-        coverage,
-        gapType: gapType as ReadinessQuestion["gapType"],
-        reason: String(q?.reason || "").slice(0, 400),
+  // One judge call for a batch, parsed. An empty or broken answer is retried
+  // once with more room: at medium reasoning gpt-5-mini can spend the whole
+  // budget thinking (finish_reason "length", reasoning_tokens == the cap) and
+  // return no text at all. On dev that failed Maya's whole report on its 4th
+  // batch with "bad_model_output" (2026-10-14).
+  const judgeBatch = async (batch: Array<{ id: string; question: string }>, index: number): Promise<{ parsed: any } | { error: string }> => {
+    for (const [attempt, maxTokens] of JUDGE_TOKEN_BUDGETS.entries()) {
+      let raw: string;
+      try {
+        const res = await generateResponse({
+          tenantId,
+          messages: [
+            { role: "system", content: "You are a meticulous QA auditor for AI customer-service employees. You output only valid JSON." },
+            { role: "user", content: buildJudgePrompt(ctx, batch, locale, knowledge) },
+          ],
+          // Ignored by the gpt-5 models (see the header); harmless elsewhere.
+          temperature: 0,
+          reasoningEffort: "medium",
+          maxTokens,
+          responseFormat: { type: "json_object" },
+          metadata: { type: "agent_readiness", aiAgentId: agentId, batch: index, attempt },
+        } as any);
+        raw = String((res as any)?.content || "");
+      } catch (err: any) {
+        console.error(`[readiness] judge batch ${index} call failed:`, err?.message);
+        return { error: "llm_unavailable" };
+      }
+      try {
+        const parsed = withoutWideDashes(JSON.parse(raw));
+        if (parsed && typeof parsed === "object" && Array.isArray(parsed.judgements)) return { parsed };
+        console.warn(`[readiness] judge batch ${index} attempt ${attempt}: no judgements array`);
+      } catch {
+        console.warn(`[readiness] judge batch ${index} attempt ${attempt}: unreadable answer (${raw.length} chars, budget ${maxTokens}), ${attempt + 1 < JUDGE_TOKEN_BUDGETS.length ? "retrying with more room" : "giving up"}`);
+      }
+    }
+    return { error: "judge_incomplete" };
+  };
+
+  const outs = await Promise.all(batches.map((batch, i) => judgeBatch(batch, i)));
+
+  for (const out of outs) {
+    if ("error" in out) return { error: out.error };
+    const parsed = out.parsed;
+    for (const j of Array.isArray(parsed.judgements) ? parsed.judgements : []) {
+      if (typeof j?.id !== "string") continue;
+      const evidence = (Array.isArray(j.evidence) ? j.evidence : [])
+        .map((e: any) => {
+          const kind = e?.kind === "tool" ? "tool" : e?.kind === "doc" ? "doc" : e?.kind === "business" ? "business" : null;
+          const name = kind === "tool" ? toolNames.get(norm(e?.name)) : kind === "doc" ? docNames.get(norm(e?.name)) : kind === "business" && hasBusiness ? "business" : undefined;
+          return kind && name ? { kind, name } : null;
+        })
+        .filter((e: any, i: number, all: any[]) => e && all.findIndex((x) => x && x.kind === e.kind && x.name === e.name) === i);
+      let coverage: Coverage = VALID_COVERAGE.has(j.coverage) ? j.coverage : "none";
+      let gapType = VALID_GAP.has(j.gapType) ? j.gapType : (coverage === "full" ? "none" : "knowledge");
+      let reason = String(j.reason || "").slice(0, 400);
+      // A verdict with nothing real behind it is "none".
+      if (coverage !== "none" && evidence.length === 0) {
+        coverage = "none";
+        if (gapType === "none") gapType = "knowledge";
+        reason = NO_EVIDENCE_REASON[locale] ?? NO_EVIDENCE_REASON.en!;
+      }
+      if (coverage !== "full" && gapType === "none") gapType = "knowledge";
+      judged.set(j.id, { coverage, gapType, reason, evidence });
+    }
+    for (const r of Array.isArray(parsed.recommendations) ? parsed.recommendations : []) {
+      const rec = {
+        type: (VALID_REC.has(r?.type) ? r.type : "other") as ReadinessRecommendation["type"],
+        title: String(r?.title || "").slice(0, 200),
+        detail: String(r?.detail || "").slice(0, 500),
       };
-    })
-    .filter((q: ReadinessQuestion) => q.question);
+      // One per title across the batches.
+      if (rec.title && !recs.some((x) => norm(x.title) === norm(rec.title))) recs.push(rec);
+    }
+  }
+  const recommendations = recs.slice(0, 12);
 
-  const recommendations: ReadinessRecommendation[] = (Array.isArray(parsed.recommendations) ? parsed.recommendations : [])
-    .map((r: any) => ({
-      type: (VALID_REC.has(r?.type) ? r.type : "other") as ReadinessRecommendation["type"],
-      title: String(r?.title || "").slice(0, 200),
-      detail: String(r?.detail || "").slice(0, 500),
-    }))
-    .filter((r: ReadinessRecommendation) => r.title);
+  const questions: ReadinessQuestion[] = set.questions.map((q) => {
+    if (answeredIds.has(q.id)) {
+      return { id: q.id, question: q.question, coverage: "full", gapType: "none", reason: ANSWERED_REASON[locale] ?? ANSWERED_REASON.en!, answered: true };
+    }
+    // A question the judge skipped is counted as not handled, and says so.
+    const j = judged.get(q.id) ?? { coverage: "none" as Coverage, gapType: "knowledge" as const, reason: NOT_JUDGED_REASON[locale] ?? NOT_JUDGED_REASON.en!, evidence: [] };
+    return { id: q.id, question: q.question, ...j };
+  });
 
   const { score, totals } = computeScore(questions);
-  return { score, totals, questions, recommendations, generatedAt: new Date().toISOString() };
+  return {
+    score,
+    totals,
+    questions,
+    recommendations,
+    generatedAt: new Date().toISOString(),
+    questionSetGeneratedAt: set.generatedAt,
+    inputFingerprint,
+  };
 }

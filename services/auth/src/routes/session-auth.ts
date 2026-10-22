@@ -75,7 +75,7 @@ router.get("/login", async (req: Request, res: Response): Promise<void> => {
     res.redirect(302, buildAuthorizeUrl(disco, cfg, { state, nonce, challenge, loginHint }));
   } catch (err) {
     console.error("[session-auth] login start failed"); // no secrets
-    res.redirect(302, `${appOrigin()}/login?error=login_failed`);
+    res.redirect(302, `${appOrigin()}/sign-in?error=login_failed`);
   }
 });
 
@@ -84,7 +84,7 @@ router.get("/callback", async (req: Request, res: Response): Promise<void> => {
   if (!ensureEnabled(res)) return;
   const idpError = typeof req.query.error === "string" ? req.query.error : null;
   if (idpError) {
-    res.redirect(302, `${appOrigin()}/login?error=${encodeURIComponent(idpError)}`);
+    res.redirect(302, `${appOrigin()}/sign-in?error=${encodeURIComponent(idpError)}`);
     return;
   }
   const code = typeof req.query.code === "string" ? req.query.code : null;
@@ -121,7 +121,7 @@ router.get("/callback", async (req: Request, res: Response): Promise<void> => {
       },
     });
     if (!identity || identity.memberships.every((m) => !m.isActive)) {
-      res.redirect(302, `${appOrigin()}/login?error=no_account`);
+      res.redirect(302, `${appOrigin()}/sign-in?error=no_account`);
       return;
     }
 
@@ -143,7 +143,7 @@ router.get("/callback", async (req: Request, res: Response): Promise<void> => {
     res.redirect(302, `${appOrigin()}${ls.returnTo}`);
   } catch (err) {
     console.error("[session-auth] callback failed"); // never log code/token/verifier
-    res.redirect(302, `${appOrigin()}/login?error=signin_failed`);
+    res.redirect(302, `${appOrigin()}/sign-in?error=signin_failed`);
   }
 });
 

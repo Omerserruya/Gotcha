@@ -1,5 +1,7 @@
-import { prisma, createWorker, outgoingMessageQueue, publishEvent, broadcastQueue } from "@chatcenter/shared";
+import { randomUUID } from "crypto";
+import { prisma, createWorker, outgoingMessageQueue, publishEvent, broadcastQueue, notificationsQueue } from "@chatcenter/shared";
 import type { BroadcastJob } from "@chatcenter/shared";
+import { isOptedOutOn } from "@chatcenter/shared/src/lib/marketing-optout";
 
 /** Extract `{{var}}` placeholder keys from a string, preserving order of
  *  appearance. Used to know which variable values to send to Meta. */
@@ -117,8 +119,8 @@ async function processBroadcastMessage(job: any) {
   if (recipient.contactId) {
     const contact = await prisma.contact.findUnique({ where: { id: recipient.contactId } });
     if (contact) {
-      const optOutChannels = ((contact as any).optOutChannels as string[]) || [];
-      if (optOutChannels.includes(channel)) {
+      // Compared without case: opt-outs written by a "STOP" reply are uppercase.
+      if (isOptedOutOn((contact as any).optOutChannels, channel)) {
         await prisma.broadcastRecipient.update({
           where: { id: recipientId },
           data: { status: "skipped", error: "Contact opted out" },
@@ -287,6 +289,29 @@ export async function checkBroadcastCompletion(broadcastId: string) {
       data: { status: "COMPLETED", completedAt: new Date() },
     });
     await publishBroadcastUpdate(broadcastId, broadcast.tenantId);
+    // Screen 15's "a campaign finishes". Enqueued directly rather than through
+    // an emit helper because this service has none, and the payload shape is
+    // the one the notifications worker already consumes from billing.
+    // Fire-and-forget: a notification outage must not leave a completed
+    // broadcast looking unfinished.
+    notificationsQueue
+      .add(
+        "system-event",
+        {
+          id: randomUUID(),
+          type: "broadcast.completed",
+          tenantId: broadcast.tenantId,
+          data: {
+            broadcastId,
+            name: broadcast.name,
+            sentCount: broadcast.sentCount,
+            failedCount: broadcast.failedCount,
+          },
+          metadata: { timestamp: new Date().toISOString() },
+        },
+        { removeOnComplete: 1000, removeOnFail: 100, attempts: 5, backoff: { type: "exponential", delay: 2_000 } },
+      )
+      .catch((err: any) => console.warn("[BROADCAST] completion notify failed:", err?.message ?? err));
     console.log(`[BROADCAST] ${broadcastId} completed: ${broadcast.sentCount} sent, ${broadcast.failedCount} failed`);
   }
 }

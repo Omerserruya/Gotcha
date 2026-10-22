@@ -1,0 +1,100 @@
+@layer primitives {
+  /*
+   * Omer's loader (gotcha-loader.html), as he wrote it: the GOTCHA mark twice,
+   * a faint one under a full one that fills from the bottom and empties
+   * through the top, while the whole mark breathes. Same keyframes, timings
+   * and opacities. The mark is an image set inline (`--mark`), because a url
+   * in this file would not carry the app's /v2 base path.
+   */
+  .loader {
+    position: relative;
+    display: inline-block;
+    inline-size: var(--size, 48px);
+    aspect-ratio: 512 / 503;
+    animation: breath 1.8s ease-in-out infinite;
+  }
+
+  .loader::before,
+  .loader::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--mark) center / contain no-repeat;
+  }
+
+  .loader::before {
+    opacity: 0.12;
+  }
+
+  .loader::after {
+    animation: fill 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  }
+
+  .loader[data-tone='light']::before {
+    opacity: 0.18;
+  }
+
+  @keyframes fill {
+    0% {
+      clip-path: inset(100% 0 0 0);
+    }
+
+    46% {
+      clip-path: inset(0);
+    }
+
+    62% {
+      clip-path: inset(0);
+    }
+
+    100% {
+      clip-path: inset(0 0 100% 0);
+    }
+  }
+
+  @keyframes breath {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+
+    50% {
+      transform: scale(0.96);
+    }
+  }
+
+  /* Still: one mark at 60%, and the label for whoever cannot see it. */
+  @media (prefers-reduced-motion: reduce) {
+    .loader,
+    .loader::after {
+      animation: none;
+    }
+
+    .loader::before {
+      opacity: 0;
+    }
+
+    .loader::after {
+      opacity: 0.6;
+    }
+  }
+
+  /* Centred in whatever area is waiting: a page's card, a section, the screen. */
+  .centered {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    inline-size: 100%;
+    min-block-size: var(--min, 160px);
+  }
+
+  /*
+   * The whole area, not a band at its top (measured on dev: the mark sat at
+   * y≈254 of an 876px card). The parent gives the height; this takes it.
+   */
+  .centered[data-fill] {
+    align-self: stretch;
+    min-block-size: 100%;
+  }
+}

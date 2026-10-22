@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import { getSocket } from "@/lib/socket";
+import { getSocket, joinConversation, leaveConversation } from "@/lib/socket";
 
 const LS_INDEX = "copilot.replay.index";
 const LS_KEY = (sessionId: string) => `copilot.replay.${sessionId}`;
@@ -161,6 +161,12 @@ export function useCueRecorder(
     const socket = getSocket();
     if (!socket) return;
 
+    // The recorder is a listener like any other, so it joins the room too
+    // rather than relying on whoever else happens to be mounted. Refcounted in
+    // lib/socket, so this and the call context can both hold the same room and
+    // whichever unmounts last releases it.
+    joinConversation(conversationId);
+
     const rec = createRecorder(sessionId);
     handleRef.current = rec;
     rec.push("call_started", { sessionId, conversationId });
@@ -180,6 +186,7 @@ export function useCueRecorder(
       rec.push("call_ended", { sessionId });
       rec.flush();
       handleRef.current = null;
+      leaveConversation(conversationId);
     };
   }, [sessionId, conversationId]);
 

@@ -33,12 +33,24 @@ interface StoredFact {
   confidence?: unknown;
 }
 
-export async function renderHistoricalMemoryBlock(args: {
+/** The historical memory exactly as the prompt uses it, or null when there is none. */
+export interface HistoricalMemoryForPrompt {
+  summary: string | null;
+  /** Fact texts after the prompt's own confidence filter and cap. */
+  facts: string[];
+}
+
+/**
+ * The ONE read of imported history for a customer. The prompt block below
+ * renders from it and `GET /api/ai-assist/:id/customer-memory` returns it, so the screen
+ * cannot show a fact the model does not get (or hide one it does).
+ */
+export async function loadHistoricalMemoryForPrompt(args: {
   tenantId: string;
   customerExternalId: string | null | undefined;
-}): Promise<string> {
+}): Promise<HistoricalMemoryForPrompt | null> {
   const { tenantId } = args;
-  if (!args.customerExternalId) return "";
+  if (!args.customerExternalId) return null;
 
   // The memory row is keyed by the normalized number, while a conversation
   // carries whatever the channel handed us. Probing both is what stops
@@ -58,18 +70,28 @@ export async function renderHistoricalMemoryBlock(args: {
     // Context is an enhancement. A failure here must never cost the customer a
     // reply.
     console.warn(`[historical-memory] lookup failed: ${err?.message}`);
-    return "";
+    return null;
   }
-  if (!memory) return "";
+  if (!memory) return null;
 
-  const facts = Array.isArray(memory.facts) ? (memory.facts as StoredFact[]) : [];
-  const usable = facts
+  const stored = Array.isArray(memory.facts) ? (memory.facts as StoredFact[]) : [];
+  const facts = stored
     .filter((f) => typeof f.text === "string" && f.text.trim().length > 0)
     .filter((f) => MIN_CONFIDENCE.has(String(f.confidence ?? "low")))
     .slice(0, MAX_FACTS)
-    .map((f) => `- ${String(f.text).trim()}`);
+    .map((f) => String(f.text).trim());
 
-  if (usable.length === 0 && !memory.summary) return "";
+  if (facts.length === 0 && !memory.summary) return null;
+  return { summary: memory.summary?.trim() || null, facts };
+}
+
+export async function renderHistoricalMemoryBlock(args: {
+  tenantId: string;
+  customerExternalId: string | null | undefined;
+}): Promise<string> {
+  const memory = await loadHistoricalMemoryForPrompt(args);
+  if (!memory) return "";
+  const usable = memory.facts.map((t) => `- ${t}`);
 
   const lines: string[] = [];
   lines.push("## What we know about this customer from before");
@@ -78,7 +100,7 @@ export async function renderHistoricalMemoryBlock(args: {
   );
   lines.push("");
   if (memory.summary) {
-    lines.push(memory.summary.trim());
+    lines.push(memory.summary);
     lines.push("");
   }
   if (usable.length > 0) {

@@ -9,7 +9,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { authenticate, resolveTenant, requireActiveTenant } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireActiveTenant, visibleConversationFrom } from "@chatcenter/shared";
 import { buildCustomerSnapshot } from "../services/customer-snapshot.service";
 
 const router = Router();
@@ -19,6 +19,8 @@ router.get(
   authenticate,
   resolveTenant,
   requireActiveTenant(),
+  // A snapshot by conversation answers only for a conversation this viewer may see.
+  visibleConversationFrom("conversationId", "query"),
   async (req: Request & { tenantId?: string }, res: Response) => {
     const tenantId = req.tenantId;
     if (!tenantId) {

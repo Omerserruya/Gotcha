@@ -1,0 +1,446 @@
+@layer shell {
+  /*
+   * Screen 00a. The frame holds two halves: an editorial dark panel carrying
+   * the product's voice, and the light work surface where the actual act
+   * happens. Same frame as the app, so signing in already looks like the
+   * product rather than like a door in front of it.
+   */
+  .frame {
+    display: flex;
+    block-size: 100dvh;
+    background-color: var(--frame-base);
+    padding: var(--size-frame-inset);
+    font-family: var(--font-sans);
+    overflow: hidden;
+  }
+
+  /*
+   * ═════════════════════════════════════════════════════════════════════════
+   * ★★ 508px IS THE DESIGN'S NUMBER, NOT A CHOICE
+   * ═════════════════════════════════════════════════════════════════════════
+   * `Directions.dc.html`, screen 00a, the mock's own markup:
+   *
+   *     frame     width:1440px height:900px padding:12px radius:26px  #121212
+   *     editorial width:508px  flex:none    padding:32px 34px
+   *
+   * It was 460px - 48px narrow, which is what "the left column is too narrow"
+   * was. Omer read it off the screen; this is the same finding with the
+   * design's number attached.
+   *
+   * ★ `--size-frame-inset` is already 12px and `--space-32` is 32px, so the
+   *   frame and the block padding were right. Only the width was not.
+   *
+   * ⚠ THE INLINE PADDING IS 32px HERE AND 34px IN THE DESIGN, AND I HAVE LEFT
+   *   IT. `34px` appears nowhere else in the product; carrying it would mean a
+   *   one-screen token or a raw literal beside a scale that exists to stop
+   *   exactly that. 2px of inline padding against 48px of width is a different
+   *   order of thing - but it IS a deviation from "stick to the design", so it
+   *   is written here rather than absorbed silently. Reported alongside.
+   */
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ 2.6 SECONDS OF AN EMPTY #121212 PAGE, AND IT WAS ASSERTED ON PURPOSE
+   * ════════════════════════════════════════════════════════════════════════
+   * Sampled every 350ms from the submit click: the panel at 0.4s, a navigation
+   * at 2.2s, then **eight elements on `rgb(18,18,18)` until 5.2s**. Our origin,
+   * our background, nothing drawn.
+   *
+   * ★ It is the finishing hop's own page. `FinishSignIn` rendered a hidden
+   *   marker and nothing else - and a test of mine asserted exactly that,
+   *   because at the time the component had nothing to say. **The design was
+   *   the defect**, not a regression against it.
+   *
+   * ★ The brand stays put. The person was looking at a frame with GOTCHA in
+   *   the corner a moment ago; keeping it means the screen does not blank and
+   *   repopulate, it simply waits.
+   *
+   * ⚠ NO ENTRANCE ANIMATION, DELIBERATELY. The give-up path navigates away,
+   *   sometimes in 200ms, and a loader that fades in over 300ms would flash
+   *   and be torn out - worse than the blank it replaces. It is stable across
+   *   both outcomes because it does not move.
+   */
+  .finishing {
+    min-block-size: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-16);
+    padding: var(--space-32);
+    color: var(--frame-text);
+  }
+
+  .finishingWord {
+    font-size: var(--font-size-meta);
+    /* On the DARK frame, so not `--text-subtle` - that is the light-card
+       role, and reaching for it here is the eyebrow mistake from this
+       morning. */
+    color: var(--frame-text-muted);
+  }
+
+  .editorial {
+    inline-size: 508px;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    /*
+     * 00a: `padding:32px 34px 32px 34px`. The inline pair is 34, not 32 -
+     * taken to the nearest existing step before `--space-34` existed.
+     */
+    padding-block: var(--space-32);
+    padding-inline: var(--space-34);
+    color: var(--frame-text);
+  }
+
+  /*
+   * Sign-in carries the brand at a larger size than the rail does.
+   *
+   * The rail's mark is wayfinding and sits at 26px beside seven destinations;
+   * here it is the first thing on the screen and has a whole panel to itself.
+   * The wordmark scales with it so the lockup keeps its proportions rather
+   * than growing a large mark next to small type.
+   */
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    font-size: var(--font-size-lead);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: var(--letter-spacing-brand);
+  }
+
+  /*
+   * The rotating panel.
+   *
+   * Three statements share one 250px box, each fading up and out on a 15s
+   * cycle offset by 5s - so one is always settled and the change is a roll
+   * rather than a flicker. Absolutely positioned so the box does not resize
+   * as the lines change length.
+   */
+  .editorialStage {
+    margin-block-start: auto;
+    position: relative;
+    block-size: 250px;
+  }
+
+  .editorialSlide {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    max-inline-size: 390px;
+    opacity: 0;
+    animation: editorial-roll 15s ease-in-out infinite;
+  }
+
+  .editorialSlide:nth-child(1) {
+    animation-delay: 0s;
+  }
+
+  .editorialSlide:nth-child(2) {
+    animation-delay: 5s;
+  }
+
+  .editorialSlide:nth-child(3) {
+    animation-delay: 10s;
+  }
+
+  @keyframes editorial-roll {
+    0% {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+
+    4% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    30% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    34% {
+      opacity: 0;
+      transform: translateY(-16px);
+    }
+
+    100% {
+      opacity: 0;
+      transform: translateY(-16px);
+    }
+  }
+
+  /*
+   * ═════════════════════════════════════════════════════════════════════════
+   * ★★ "WITH THE POSITION MARKED BY THREE TICKS" - 00a, VERBATIM
+   * ═════════════════════════════════════════════════════════════════════════
+   * The rotation shipped; the ticks did not. Sizes, colour and timing are the
+   * design's own values, read out of `Directions.dc.html` rather than chosen:
+   *
+   *     width:16px height:3px border-radius:2px background:#F7F5F1
+   *     opacity:.26  animation: gotchaDot 15s ease-in-out infinite
+   *     delays 0s / 5s / 10s
+   *     @keyframes gotchaDot { 0%,4%{opacity:1} 32%{opacity:1} 36%,100%{opacity:.26} }
+   *
+   * ★ CSS and not state, because the slides are CSS too. A tick driven from
+   *   React would need a timer that agrees with an animation it cannot see,
+   *   and the two would drift apart on any frame drop or tab suspension. One
+   *   cycle, one clock, three delays - the ticks cannot disagree with the
+   *   slides because they are on the same one.
+   *
+   * ★ `#f7f5f1` is `--frame-text`, which is the same value. The token is used
+   *   rather than the literal, so it stays the panel's ink if the panel's ink
+   *   changes.
+   */
+  /*
+   * ⚠ THE TICKS SIT IN THE STATUS ROW, NOT ABOVE IT - CORRECTED.
+   * I first built this as its own block with an invented 8px gap. The mock is
+   * one footer row holding four things:
+   *
+   *     margin-top:auto; padding-top:36px; display:flex;
+   *     align-items:center; gap:14px
+   *       [ three ticks, gap:5px ]
+   *       span 1×12px #2E2E2E      ← a vertical rule
+   *       span 6×6 round #A8C57A   ← the status dot
+   *       "All systems operational"
+   *
+   * `.systemStatus` below already carries that row. The ticks are its first
+   * child now, and the gap is the design's 5px rather than a token I reached
+   * for because it was nearby.
+   */
+  .editorialTicks {
+    display: flex;
+    /* 5px, from the mock. The scale has 4 and 6 and no 5. */
+    gap: 5px;
+    flex: none;
+  }
+
+  /*
+   * The rule between the position marker and the status line: `1×12px`.
+   *
+   * ⚠ The design's value is `#2E2E2E`; this is `--frame-line` (`#333`). Five
+   *   values apart and role-correct - a rule on the dark frame - where a raw
+   *   `#2e2e2e` would be the one hard-coded colour on a screen whose every
+   *   other colour is a token. Named rather than absorbed.
+   */
+  .editorialRule {
+    inline-size: 1px;
+    block-size: 12px;
+    background-color: var(--frame-line);
+    flex: none;
+  }
+
+  .editorialTick {
+    inline-size: 16px;
+    block-size: 3px;
+    border-radius: 2px;
+    background-color: var(--frame-text);
+    opacity: 0.26;
+    animation: editorial-tick 15s ease-in-out infinite;
+  }
+
+  .editorialTick:nth-child(1) {
+    animation-delay: 0s;
+  }
+
+  .editorialTick:nth-child(2) {
+    animation-delay: 5s;
+  }
+
+  .editorialTick:nth-child(3) {
+    animation-delay: 10s;
+  }
+
+  @keyframes editorial-tick {
+    0%,
+    4% {
+      opacity: 1;
+    }
+
+    32% {
+      opacity: 1;
+    }
+
+    36%,
+    100% {
+      opacity: 0.26;
+    }
+  }
+
+  /*
+   * Reduced motion: no travel, no fade, no cycle. Someone who asked their
+   * system to stop animating gets the first statement and nothing moving -
+   * cycling text they cannot stop is worse than a single line.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    .editorialSlide {
+      animation: none;
+    }
+
+    .editorialSlide:nth-child(1) {
+      opacity: 1;
+    }
+
+    .editorialSlide:not(:nth-child(1)) {
+      display: none;
+    }
+
+    /*
+     * ★ THE TICKS STAY, AND THE FIRST ONE STAYS LIT. The panel holds on
+     *   statement one, so one of three marked is the true picture. Hiding them
+     *   would be tidier and would say something false - that there is nothing
+     *   else to see.
+     */
+    .editorialTick {
+      animation: none;
+    }
+
+    .editorialTick:nth-child(1) {
+      opacity: 1;
+    }
+  }
+
+  /*
+   * ★★ 390px, AND THIS IS PROBABLY WHAT "TOO NARROW" MEANT.
+   *
+   * The mock: `font-size:13.5px; line-height:1.65; color:#A29D95;
+   * max-width:390px`. Ours was 340px - fifty pixels, 13% narrower, on the
+   * paragraph inside the panel.
+   *
+   * Omer said "the width of the left side with the changing sentences is too
+   * narrow". That was read as the panel and the panel was widened 460→508,
+   * which was also right - but **the element he was pointing at is this one**,
+   * and it was still short afterwards. Two different widths, one sentence,
+   * and the first fix would have looked like it missed.
+   */
+  .editorialSupport {
+    /*
+     * ════════════════════════════════════════════════════════════════════
+     * 00a AND 00b: `font-size:13.5px; line-height:1.65; color:#A29D95`
+     * ════════════════════════════════════════════════════════════════════
+     * The `bodySm` role gives 13px and 1.6, so BOTH were a step off - and
+     * the colour was already right, which is what made the other two easy
+     * to miss.
+     *
+     * ★ `--line-height-loose` was ALREADY 1.65 and already correct.
+     *   Nothing was using it here.
+     */
+    font-size: var(--font-size-editorial);
+    line-height: var(--line-height-loose);
+    color: var(--frame-text-secondary);
+    max-inline-size: 390px;
+  }
+
+  /*
+   * ⚠⚠ THE EYEBROW ON THIS PANEL IS NOT THE EYEBROW ON A LIGHT CARD.
+   * 00a draws it `color:#6E6A63`; the `eyebrow` role resolves
+   * `--text-subtle` (#8c887f), correct on a light surface and several steps
+   * too light on the dark frame.
+   *
+   * ★ `--frame-text-eyebrow` IS #6e6a63 and already exists - the shell and
+   *   the home screen both read it. This panel was the one dark-framed place
+   *   that did not.
+   *
+   * ⚠ A class, not `:first-child`. A positional selector is a proxy for
+   *   "the eyebrow" that holds only while the eyebrow is first, and this
+   *   file has had enough of those today.
+   */
+  .editorialEyebrow {
+    color: var(--frame-text-eyebrow);
+  }
+
+  .systemStatus {
+    margin-block-start: auto;
+    /* 00a's footer row: `margin-top:auto; padding-top:36px; gap:14px`. */
+    padding-block-start: var(--space-36);
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    font-size: var(--font-size-label);
+    color: var(--frame-text-muted);
+  }
+
+  .statusDot {
+    inline-size: var(--size-dot);
+    block-size: var(--size-dot);
+    border-radius: var(--radius-round);
+    background-color: var(--signal-done);
+    flex: none;
+  }
+
+  .surface {
+    flex: 1;
+    min-inline-size: 0;
+    background-color: var(--panel-base);
+    border-radius: var(--radius-panel);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-40);
+    overflow-y: auto;
+  }
+
+  /*
+   * 00a: `width:400px`. 00b: `width:430px` - see the rule below.
+   */
+  .form {
+    inline-size: 400px;
+    max-inline-size: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-20);
+  }
+
+  /*
+   * ★★ AND THE SLOTS FOLLOW WITHOUT BEING TOLD, WHICH IS THE POINT OF
+   *    HAVING USED THE DESIGN'S RULE RATHER THAN ITS NUMBER.
+   *
+   * The six code boxes are `flex: 1`, so they divide whatever this column is:
+   *
+   *     400px  →  (400 − 5×8) / 6  =  60px each
+   *     430px  →  (430 − 5×8) / 6  =  65px each
+   *
+   * Had they been hard-coded to the 60px the mock happens to show, this line
+   * would have widened the column and left them stranded in the middle of it
+   * - the same "stops short of the button" defect, reversed.
+   */
+  .form[data-screen='secondFactor'] {
+    inline-size: 430px;
+  }
+
+  .intro {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-7);
+  }
+
+  .notice {
+    background-color: var(--panel-sunken);
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-normal);
+    color: var(--text-secondary);
+  }
+
+  .footnote {
+    padding-block-start: var(--space-18);
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-normal);
+    color: var(--text-subtle);
+  }
+
+  /* The editorial panel stacks away before it squeezes the form. */
+  @media (width <= 900px) {
+    .editorial {
+      display: none;
+    }
+  }
+}

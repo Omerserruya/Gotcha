@@ -836,6 +836,9 @@ export interface WizardRuntimeFacts {
   /** The objective the configured goal maps to - the chain's ENDPOINT (objectives
    *  beyond it are not pursued). null → use the role-derived chain unchanged. */
   goalObjective: ObjectiveName | null;
+  /** Business skills: the candidate id the judgement chose, null when none fits,
+   *  ABSENT when no skills were offered (or the call did not run). */
+  matchedSkillId?: string | null;
 }
 
 export const EMPTY_WIZARD_FACTS: WizardRuntimeFacts = {

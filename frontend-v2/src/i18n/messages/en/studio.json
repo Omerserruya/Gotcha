@@ -1,0 +1,14 @@
+{
+  "title": "Studio",
+  "description": "Where GOTCHA is taught what to know, what it may do, and who does it.",
+  "index": {
+    "noAccess": "Your role does not include any of the Studio areas. Someone with an admin role can change that under Settings · People."
+  },
+  "sections": {
+    "employees": "Employees",
+    "knowledge": "Knowledge",
+    "automations": "Automations",
+    "capabilities": "Capabilities",
+    "skills": "Skills"
+  }
+}

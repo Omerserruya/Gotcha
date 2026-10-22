@@ -9,6 +9,7 @@ import {
   renderPlannerTools,
   renderSystemCapabilities,
 } from "../services/tool-registry";
+import { withoutWideDashes } from "../lib/wide-dash";
 
 /**
  * Command Center prompts live on disk as editable markdown files under
@@ -105,7 +106,7 @@ router.post("/plan", async (req: Request, res: Response) => {
 
     let plan: ExecutionPlan;
     try {
-      plan = JSON.parse(response.content);
+      plan = withoutWideDashes(JSON.parse(response.content));
     } catch {
       return res.status(502).json({ error: "Planner returned non-JSON", raw: response.content });
     }

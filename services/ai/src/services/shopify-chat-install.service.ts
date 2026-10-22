@@ -41,6 +41,7 @@ import {
 import { SHOPIFY_LIVE_CHAT, loadChannel, type ShopifyLiveChatChannel } from "./shopify-live-chat.service";
 import { resolveShopifyStore } from "./shopify-catalog.service";
 import { executeAdapterTool, loadConnection } from "./connectors/integration-framework";
+import { withErrorCode, ERROR_CODES_KNOWN } from "../lib/error-code";
 
 export type InstallStatus = "PENDING" | "ACTIVE" | "UNINSTALLED";
 
@@ -544,7 +545,7 @@ export async function markUninstalledByShop(shopDomain: string): Promise<ChatIns
           platformMeta: { shopifyLiveChat: next } as any,
           connectionStatus: "DISCONNECTED",
           isActive: false,
-          lastError: "Shopify Chat app was uninstalled from the store.",
+          lastError: withErrorCode("SHOPIFY_CHAT_UNINSTALLED"),
         },
       });
     }
@@ -566,6 +567,32 @@ export async function markUninstalledByShop(shopDomain: string): Promise<ChatIns
 }
 
 // ─── Heartbeat + activation ──────────────────────────────────
+
+/**
+ * A live installation whose storefront is serving shoppers is not
+ * uninstalled: clear a stale SHOPIFY_CHAT_UNINSTALLED error from its channel
+ * (2026-10-09: dev's channel was CONNECTED, the install ACTIVE and chatting,
+ * yet it still read "uninstalled" from an older code path). Only that error,
+ * only on a CONNECTED channel of this installation's tenant; status is never
+ * changed here. Returns whether a row was cleared.
+ */
+export async function clearStaleUninstalledError(installation: Pick<ChatInstallation, "channelAccountId" | "tenantId" | "status">): Promise<boolean> {
+  if (!installation.channelAccountId || !installation.tenantId || installation.status === "UNINSTALLED") return false;
+  const { count } = await prisma.channelAccount.updateMany({
+    where: {
+      id: installation.channelAccountId,
+      tenantId: installation.tenantId,
+      channel: "SHOPIFY_LIVE_CHAT",
+      connectionStatus: "CONNECTED",
+      OR: [
+        { lastError: withErrorCode("SHOPIFY_CHAT_UNINSTALLED") },
+        { lastError: ERROR_CODES_KNOWN.SHOPIFY_CHAT_UNINSTALLED },
+      ],
+    },
+    data: { lastError: null },
+  });
+  return count > 0;
+}
 
 export async function recordInstallationHeartbeat(installationId: string): Promise<void> {
   await withCrossTenantAccess(async () =>

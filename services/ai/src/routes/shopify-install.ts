@@ -49,6 +49,9 @@ import {
   buildShopifyAuthorizeUrl,
   singleValue,
   parseSessionCookie,
+  readDurableSetting,
+  writeDurableSetting,
+  normalizeShopifyShopDomain,
 } from "@chatcenter/shared";
 import {
   createInstallIntent,
@@ -65,6 +68,7 @@ import {
   SHOPIFY_OAUTH_SCOPES,
   linkShopifyShopToTenant,
   pendingStoreReplacement,
+  findShopOwner,
 } from "../services/shopify-connection-link.service";
 import { resolveShopifyBillingOutcome } from "../services/shopify-billing-bridge.service";
 
@@ -76,7 +80,7 @@ const canConnectSystems = requirePermission(
 );
 
 /** Recognised `flow` values - the same allow-list the OAuth callback uses. */
-const KNOWN_FLOWS = new Set(["onboarding", "settings_business_systems"]);
+const KNOWN_FLOWS = new Set(["onboarding", "settings_business_systems", "redesign_studio"]);
 function parseFlow(raw: unknown): string | undefined {
   const v = singleValue(raw);
   return v && KNOWN_FLOWS.has(v) ? v : undefined;
@@ -100,7 +104,11 @@ function installErrorRedirect(reason: string): string {
   } catch {
     base = "";
   }
-  return `${base}/settings/business-systems?shopify_install_error=${encodeURIComponent(reason)}`;
+  // 2026-10-09: lands on the v2 studio. The v1 target
+  // (/settings/business-systems?shopify_install_error=) never read the param,
+  // so a refused install told the merchant nothing.
+  const params = new URLSearchParams({ system: "shopify", error: reason });
+  return `${base}/studio/capabilities?${params.toString()}`;
 }
 
 /**
@@ -172,11 +180,21 @@ router.get(
     // the merchant to name their store, and neither branch does.
     const entry = resolveShopifyInstallEntry();
 
+    const flow = parseFlow(req.query.flow);
     const handle = await createInstallIntent({
       tenantId: req.tenantId!,
       userId: (req as any).user?.userId,
-      flow: parseFlow(req.query.flow),
+      flow,
     });
+    // Which app this workspace's latest Shopify connect started from. Shopify
+    // sends the merchant back from its plan page to ONE fixed URL per app, so
+    // the flow cannot travel through it; the billing return reads this instead.
+    // Best-effort: a failed write only means the old landing.
+    await writeDurableSetting(
+      req.tenantId!,
+      SHOPIFY_RETURN_FLOW_KEY,
+      flow === "redesign_studio" ? "redesign_studio" : null,
+    ).catch(() => undefined);
 
     // SameSite=Lax survives the top-level GET navigation Shopify performs back
     // to our install entry point, and blocks the cookie on cross-site POSTs
@@ -235,6 +253,49 @@ router.get(
     });
   },
 );
+
+/** Per-tenant durable setting: the app a Shopify connect last started from. */
+export const SHOPIFY_RETURN_FLOW_KEY = "shopify.returnFlow";
+
+/**
+ * Where Shopify's plan page should send the merchant, decided by the server.
+ *
+ * Shopify returns the merchant from its hosted plan page to ONE redirect URL
+ * per app (Partner Dashboard), with `plan_handle` and `shop` - so a v2 connect
+ * and an old-app connect come back to the same place. Pointed at this route,
+ * that place can tell them apart: the shop names its workspace, and the
+ * workspace remembers which app its latest connect began in.
+ *
+ *   redesign flow -> /studio/capabilities?system=shopify&billing=verify&shop=<shop>
+ *                    (the v2 screen POSTs /api/billing/shopify/complete with
+ *                     its own session, exactly as the old page does)
+ *   anything else -> /integrations/shopify/billing/complete?<the same query>,
+ *                    byte for byte the page Shopify sends people to today.
+ *
+ * Public, like the redirect it replaces. It grants nothing and reads nothing
+ * back to the caller: the query is not evidence of payment (the complete call
+ * re-verifies with Shopify), and the only thing a stranger learns is which of
+ * two pages a shop's workspace uses.
+ */
+router.get("/connectors/shopify/billing/return", async (req: Request, res: Response) => {
+  let base = "";
+  try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
+  const rawQuery = req.originalUrl.includes("?") ? req.originalUrl.slice(req.originalUrl.indexOf("?") + 1) : "";
+  const legacy = `${base}/integrations/shopify/billing/complete${rawQuery ? `?${rawQuery}` : ""}`;
+  try {
+    const shop = normalizeShopifyShopDomain(singleValue(req.query.shop) || "");
+    const owner = shop ? await findShopOwner(shop) : null;
+    const flow = owner ? await readDurableSetting(owner.tenantId, SHOPIFY_RETURN_FLOW_KEY) : null;
+    if (shop && flow === "redesign_studio") {
+      const p = new URLSearchParams({ system: "shopify", billing: "verify", shop });
+      res.redirect(`${base}/studio/capabilities?${p.toString()}`);
+      return;
+    }
+  } catch (err: any) {
+    console.warn("[shopify billing return] could not resolve the app, using the old page:", err?.message);
+  }
+  res.redirect(legacy);
+});
 
 // ─── 2. The public install handler ───────────────────────────
 

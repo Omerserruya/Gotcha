@@ -19,7 +19,8 @@
  * stream/event-sink contract, different tool surface + system prompt.
  */
 
-import { prisma } from "@chatcenter/shared";
+import { Prisma } from "@prisma/client";
+import { prisma, normalizeGuardrails, GuardrailsError } from "@chatcenter/shared";
 import { streamResponse } from "./ai.service";
 import {
   appendToMemory,
@@ -29,6 +30,7 @@ import {
 } from "./agent-memory.service";
 import { invalidateFunnelCache } from "./funnel-config.repo";
 import { isBrandArchetype } from "./brand-archetypes";
+import { withoutWideDashes } from "../lib/wide-dash";
 
 const MAX_ROUNDS = 6;
 
@@ -108,7 +110,6 @@ export interface BuilderDraftSnapshot {
   escalationMessage: string;
   conversationFlow: unknown[];
   customGuardrails: unknown[];
-  channels: unknown[];
   funnel: { id: string; funnelId: string; stageCount: number } | null;
   knowledge: Array<{ id: string; name: string }>;
   tools: Array<{ tenantToolId: string; name: string; integration: string }>;
@@ -194,7 +195,6 @@ export async function loadDraftSnapshot(
     escalationMessage: a.escalationMessage,
     conversationFlow: Array.isArray(a.conversationFlow) ? (a.conversationFlow as any[]) : [],
     customGuardrails: Array.isArray(a.customGuardrails) ? (a.customGuardrails as any[]) : [],
-    channels: Array.isArray(a.channels) ? (a.channels as any[]) : [],
     funnel,
     knowledge: a.knowledgeBases.map((k: any) => ({ id: k.knowledgeBase.id, name: k.knowledgeBase.name })),
     knowledgeTopics,
@@ -570,7 +570,9 @@ function buildBuilderTools(role: string): Array<Record<string, unknown>> {
 
 // ─── The loop ───────────────────────────────────────────────
 
-export async function runBuilder(input: BuilderRunInput, onEvent: BuilderEventSink): Promise<void> {
+export async function runBuilder(input: BuilderRunInput, sink: BuilderEventSink): Promise<void> {
+  // Everything the owner sees passes here: no wide dash in any event.
+  const onEvent: BuilderEventSink = (ev) => sink(withoutWideDashes(ev));
   await onEvent({ type: "ready", sessionId: input.agentId });
 
   let snapshot = await loadDraftSnapshot(input.tenantId, input.agentId);
@@ -655,7 +657,8 @@ export async function runBuilder(input: BuilderRunInput, onEvent: BuilderEventSi
 
     for (const tc of finalToolCalls) {
       let args: any = {};
-      try { args = JSON.parse(tc.function?.arguments || "{}"); } catch { /* keep {} */ }
+      // What the model writes into the draft (persona, instructions) is shown and kept: no wide dash.
+      try { args = withoutWideDashes(JSON.parse(tc.function?.arguments || "{}")); } catch { /* keep {} */ }
       const name = tc.function?.name || "unknown";
       await onEvent({ type: "tool_start", toolCallId: tc.id, name, args });
 
@@ -718,7 +721,7 @@ interface BuilderToolResult {
   toModel: unknown;
 }
 
-async function dispatchBuilderTool(
+export async function dispatchBuilderTool(
   name: string,
   args: any,
   input: BuilderRunInput,
@@ -822,10 +825,16 @@ async function dispatchBuilderTool(
       }
 
       case "set_rules": {
-        const rules = (Array.isArray(args.rules) ? args.rules : [])
-          .map((r: any) => String(r || "").trim())
-          .filter(Boolean);
-        await prisma.aIAgent.update({ where: { id: agentId }, data: { customGuardrails: rules.length ? rules : null } });
+        // The same list and limits as every other writer (B4); over a limit
+        // goes back to the model to shorten, never stored cut.
+        let rules: string[];
+        try {
+          rules = normalizeGuardrails((Array.isArray(args.rules) ? args.rules : []).map((r: any) => String(r ?? "")));
+        } catch (e) {
+          if (e instanceof GuardrailsError) return { mutated: false, summary: "rules refused", toModel: { ok: false, error: e.message, max: e.max } };
+          throw e;
+        }
+        await prisma.aIAgent.update({ where: { id: agentId }, data: { customGuardrails: rules.length ? rules : Prisma.DbNull } });
         return { mutated: true, summary: `${rules.length} rules`, toModel: { ok: true } };
       }
 

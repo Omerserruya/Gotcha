@@ -39,7 +39,18 @@ export type SystemEventType =
   | "conversation.escalated"
   | "high_value_lead.detected"
   | "payment.failed"
-  | "system.error.critical";
+  | "system.error.critical"
+  // A connection CHECK failed. Deliberately not "integration.down": the only
+  // write that sets status ERROR is gated on the failure looking like auth
+  // (401/403/invalid_token), and it runs when someone tests, not on a schedule.
+  // So this means "we checked and the credentials were rejected" - not that the
+  // provider is unreachable, and not that we are watching continuously.
+  | "integration.check_failed"
+  // A money-shaped tool ATTEMPTED and broke. Emitted only for
+  // failure === "errored"; a refusal is the product working correctly and is
+  // not worth interrupting anyone. The kind (refund/discount/meeting) rides in
+  // the payload so one type covers the family, mirroring the success side.
+  | "tool.action_failed";
 
 export interface SystemEventMetadata {
   conversationId?: string;

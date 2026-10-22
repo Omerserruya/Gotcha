@@ -1,0 +1,2396 @@
+@layer features {
+  /*
+   * Screen 02 · the Inbox.
+   *
+   * Nothing here styles a reaction, an intent edge or a transcript: none of
+   * the three has data behind it, and a style waiting for a feature is how a
+   * feature gets assumed to exist.
+   */
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ 02's STREAM - A BUBBLE, AND ITS TIME LINE UNDER IT
+   * ════════════════════════════════════════════════════════════════════════
+   * Measured: each message is a column at `gap:5px` - the bubble, then
+   * `09:12 · Support AI · read` at 10.5px `#A8A39A`. Inbound: white,
+   * `1px #E6E2DA`, radius `14 14 14 4`. Outbound: `#121212` on `#F0EDE7`,
+   * radius `14 14 4 14`. Text 13.5px at 1.5. The corner that is 4px is the
+   * one nearest the sender.
+   *
+   * ⚠ `line-height: normal` on the stream, as on the queue: 02 sets one only
+   *   on the message text, and the body's 1.6 made every meta line taller.
+   */
+  .stream {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    line-height: normal;
+  }
+
+  .message {
+    /* The hover bar is placed against it. */
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    /* 02: 314 of the 436px column. */
+    max-inline-size: 72%;
+  }
+
+  .message[data-direction='OUTBOUND'] {
+    align-self: flex-end;
+    align-items: flex-end;
+  }
+
+  /* Logical corners, so Hebrew mirrors the sharp one with no second rule. */
+  .bubble {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: 11px 15px;
+    border: 1px solid var(--border-default);
+    border-radius: 14px;
+    border-end-start-radius: var(--space-4);
+    background-color: var(--panel-field);
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+
+  .message[data-direction='OUTBOUND'] .bubble {
+    /* 02: no border at all - a transparent 1px still made the box 2px larger. */
+    border: 0;
+    border-radius: 14px;
+    border-end-end-radius: var(--space-4);
+    background-color: var(--action-base);
+    color: var(--panel-well);
+  }
+
+  .body {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+
+  /*
+   * 02's quote: `padding:2px 0 2px 9px`, a 2px `#D8D3C9` rule, 8px above the
+   * reply - who said it at 10.5px, then one line of it at 12px.
+   */
+  .quote {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    margin-block-end: var(--space-4);
+    padding-block: 2px;
+    padding-inline-start: 9px;
+    border-inline-start: 2px solid var(--border-emphasis);
+    color: var(--text-subtle);
+    line-height: normal;
+  }
+
+  .quoteWho {
+    font-size: 10.5px;
+  }
+
+  .quoteText {
+    font-size: var(--font-size-label);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .quoted,
+  .mediaNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .message[data-direction='OUTBOUND'] .quoted,
+  .message[data-direction='OUTBOUND'] .mediaNote,
+  .message[data-direction='OUTBOUND'] .fileSize,
+  .message[data-direction='OUTBOUND'] .quote {
+    color: var(--text-faint);
+  }
+
+  /* 02: 10.5px `#A8A39A`, 4px in from the bubble's sender side, `·` between. */
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-4);
+    margin: 0;
+    padding-inline: var(--space-4);
+    font-size: 10.5px;
+    color: var(--text-faint);
+  }
+
+  .meta > * + *::before {
+    content: '·';
+    margin-inline-end: var(--space-4);
+  }
+
+  .note {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ "SEE THAT THEY'RE IN A SEPARATE PART" - THE QUEUE IS A CARD
+   * ════════════════════════════════════════════════════════════════════════
+   * 02 gives the column its own surface with `border-radius:18px` and closes
+   * it with a footer bar. We drew rows straight onto the page background,
+   * which is why the column read as a list on a page rather than a panel
+   * beside two others.
+   *
+   * Ordering is worth only as much as `lastMessageAt` is - see below.
+   */
+  /*
+   * ★ The CARD is `.queueColumn` now - the panel the design draws. This is
+   *   the list inside it, so it carries no surface or radius of its own:
+   *   two rounded boxes with the same radius, one inside the other, is a
+   *   seam rather than a card.
+   */
+  .queue {
+    display: flex;
+    flex-direction: column;
+    min-block-size: 0;
+    flex: 1;
+  }
+
+  /*
+   * ⚠⚠ `min-block-size: 0` IS THE DECLARATION THE WHOLE THING TURNS ON.
+   *    Without it a flex child refuses to shrink below its content: the list
+   *    pushes the panel taller, the panel overflows the frame, and you get a
+   *    box with no bottom instead of a window that scrolls.
+   */
+  .queueScroll {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .queueList {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ THE ROW IS A LINK NOW, AND IT USED TO BE A `DIV` WITH NO CURSOR
+   * ════════════════════════════════════════════════════════════════════════
+   * Measured on the deployed build: `cursor: auto`, transparent on hover,
+   * nothing on right-click, zero focusable elements. The queue looked like a
+   * read-only list because it WAS one.
+   *
+   * ★ The prototype draws `padding:13px 16px` with a `border-left:3px` edge
+   *   and a per-row background; this is the interactive half of that - the
+   *   avatar, preview, badges and tags are the other half and are not here
+   *   yet. Naming that rather than letting it look finished.
+   */
+  /*
+   * The bar that closes the card. 02: `#F5F2EC`, `border-top 1px #EDE9E1`,
+   * and the radius only on the bottom corners so it meets the card's edge.
+   */
+  /*
+   * 02's queue header, measured: `[352x87]`, a COLUMN at `gap:12px` and
+   * `padding:18px 18px 12px` - the title row, then the filter row - over a
+   * `#EDE9E1` hairline. It was one row at `14px 18px` over `#F0EDE7`, which
+   * is the panel's well colour and not its divider.
+   */
+  .queueHeader {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    padding: 18px 18px var(--space-12);
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  /* 02: `justify-content:space-between` - the count sits hard right. */
+  .queueTitleRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+  }
+
+  .queueFilters {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+  }
+
+  /*
+   * 02's "All": `padding:6px 11px`, radius 8px, 11.5px, dark when it is the
+   * filter in force.
+   */
+  /* The period the list is narrowed to, and its way out. */
+  .periodChip {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    align-self: flex-start;
+    margin-block-start: 8px;
+    padding: 3px 9px;
+    border-radius: 7px;
+    background-color: var(--panel-well);
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    text-decoration: none;
+  }
+
+  .periodNote {
+    margin: 8px 0 0;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .filterAll {
+    padding: var(--space-6) 11px;
+    border-radius: 8px;
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+    background-color: var(--panel-well);
+    text-decoration: none;
+  }
+
+  .filterAll[aria-current] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  /*
+   * 02: 28×28 squares at radius 8px, the mark centred - the shared plate's
+   * `lg` (`ChannelPlate`), which draws the square. The link only holds it.
+   */
+  .filterChannel {
+    position: relative;
+    display: flex;
+    border-radius: var(--radius-chip);
+  }
+
+  /*
+   * ⚠ OURS, NOT 02's. The design draws only the "All" state, so it never
+   *   says how a chosen channel looks. A ring in the ink "All" is filled
+   *   with: "All" visibly lets go of the dark fill and this takes it up.
+   *   Drawn over the plate, on its edge, so the plate itself stays the one
+   *   every screen draws.
+   */
+  .filterChannel[aria-current]::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1.5px var(--action-base);
+    pointer-events: none;
+  }
+
+  .filterAll:focus-visible,
+  .filterChannel:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .queueHeading {
+    font-size: 15px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  /*
+   * The count, in the mono face the design uses for every number that is a
+   * quantity rather than a word.
+   */
+  .queueCount {
+    font-family: var(--font-mono);
+    /* 02: 11px, not the 11.5px caption. */
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .queueFooter {
+    flex: none;
+    margin: 0;
+    /* 02: `padding:11px 18px` on `#F5F2EC`. */
+    padding: 11px 18px;
+    background-color: var(--panel-footer);
+    border-block-start: 1px solid var(--border-subtle);
+    border-end-start-radius: 18px;
+    border-end-end-radius: 18px;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * 02's tags: `font-size:10.5px; padding:3px 8px; border-radius:6px`, and
+   * the colour carries the meaning rather than decorating.
+   */
+  .tagMine,
+  .tagNeutral {
+    flex: none;
+    font-size: 10.5px;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    white-space: nowrap;
+    /*
+     * ⚠ "You" IS NEUTRAL IN 02, NOT GREEN. Measured: `#F0EDE7` on `#55524C`,
+     *   the same as "Flow". The green there is "High intent" - a
+     *   classification, which is what the row's colour is spent on.
+     */
+    background-color: var(--panel-well);
+    color: var(--intent-neutral-text);
+  }
+
+  .queueItem {
+    list-style: none;
+  }
+
+  .queueRow {
+    display: flex;
+    /* The avatar is 40px and the text column is three lines: they align at
+       the top, not on a shared baseline. 02: `align-items:flex-start`. */
+    align-items: flex-start;
+    gap: var(--space-12);
+    /* 02: `padding:13px 16px`. */
+    padding: 13px var(--space-16);
+    /* 02 separates rows with a top hairline, so the selected row can drop
+       its own and meet the panel cleanly. */
+    border-block-start: 1px solid var(--border-subtle);
+    color: inherit;
+    text-decoration: none;
+    /*
+     * The edge the design carries per row. Transparent until there is
+     * something to say, so the rows do not shift by three pixels when one
+     * becomes current.
+     */
+    border-inline-start: 3px solid transparent;
+  }
+
+  .queueRow:hover {
+    background-color: var(--panel-sunken);
+  }
+
+  /*
+   * ⚠ THE OPEN CONVERSATION LOOKED LIKE EVERY OTHER ROW. In the capture, the
+   *   one on screen to the right was visually identical to the other nine -
+   *   a queue that cannot show you where you are is a list you re-read after
+   *   every reply.
+   */
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ "SEE HOW THEY'RE MARKED" - WHITE ROW, BLACK EDGE
+   * ════════════════════════════════════════════════════════════════════════
+   * 02's selected row: `background:#FFFFFF` against the panel's `#FAF8F4`,
+   * and the 3px left slot filled `#121212`. **Two signals, not one** - and
+   * the slot is on every row at `transparent`, so nothing shifts by three
+   * pixels when selection moves.
+   *
+   * ★ That is the reasoning I wrote for `aria-current` by hand. The design
+   *   had it as geometry all along.
+   *
+   * ⚠ And it loses its top border: a white row with a hairline above it
+   *   reads as the bottom of the row before it.
+   */
+  .queueRow[data-open] {
+    background-color: var(--panel-field);
+    border-inline-start-color: var(--action-base);
+    /* 02: `border-top: 0` - the width, not a transparent line still 1px tall. */
+    border-block-start-width: 0;
+  }
+
+  /*
+   * 02's row, verbatim: `padding:13px 16px`, a 40×40 initials circle, then a
+   * column of three lines at `gap:4px`.
+   */
+  /*
+   * 02's avatar is a STACK: a 42×42 disc with an 18×18 channel badge at
+   * `right:-2 bottom:-2`, bordered in the card's own colour so it punches
+   * out of the disc rather than sitting on it.
+   */
+  .avatarStack {
+    position: relative;
+    flex: none;
+    inline-size: 42px;
+    block-size: 42px;
+  }
+
+  .avatar {
+    display: block;
+    inline-size: 42px;
+    block-size: 42px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    /* 02: `#55524C`. */
+    color: var(--intent-neutral-text);
+    font-size: 13px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 42px;
+    text-align: center;
+  }
+
+  /* One of the five ways 02 draws a settled row quieter. */
+  .avatar[data-settled] {
+    background-color: var(--avatar-surface-settled);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * The corner badge: the shared plate (`xs`, 16) in an 18px cut. The cut is
+   * this site's, not the plate's: `--panel-base` IS #faf8f4 - the design’s
+   * own badge border. The card colour, not white: the badge cuts the disc’s
+   * edge rather than floating on it.
+   */
+  .channelBadge {
+    position: absolute;
+    inset-inline-end: -2px;
+    inset-block-end: -2px;
+    display: flex;
+    padding: var(--border-width-thin);
+    border-radius: var(--radius-badge);
+    background-color: var(--panel-base);
+  }
+
+  /* On the white open row the badge's cut follows the row, as 02 draws it. */
+  .queueRow[data-open] .channelBadge {
+    background-color: var(--panel-field);
+  }
+
+  /*
+   * ⚠⚠ A SETTLED ROW IS QUIETER IN FIVE WAYS, AND WE DREW EVERY ROW THE SAME.
+   * 02: name weight 400 and `#55524C`, preview `#8C887F`, time `#A8A39A`,
+   * avatar tinted down. That is why the column read flat - not spacing.
+   *
+   * ★ `CLOSED` is the only status that means settled. `OPEN` and `WAITING`
+   *   are both live. The design's third state - unread - is `data-unread`,
+   *   below.
+   */
+  .queueRow[data-settled] .who {
+    font-weight: var(--font-weight-regular);
+    color: var(--text-secondary);
+  }
+
+  .queueRow[data-settled] .preview {
+    color: var(--text-subtle);
+  }
+
+  .queueRow[data-settled] .rowTime {
+    color: var(--text-faint);
+  }
+
+  /*
+   * ★★ UNREAD FOR THE PERSON LOOKING: 02's name at 600, and the mark at the
+   *   end of the preview line. After the settled rule, so a resolved
+   *   conversation somebody marked unread still reads unread.
+   *
+   * ⚠ Never on the open row - the server leaves it out, and a row clicked and
+   *   still loading (`data-open` from the click) drops it here at once, as
+   *   02's `hasUnread: unread > 0 && !sel` does.
+   */
+  .queueRow[data-unread]:not([data-open]) .who {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .queueRow[data-open] .unreadBadge,
+  .queueRow[data-open] .unreadDot {
+    display: none;
+  }
+
+  /* 02: `display:flex; align-items:center; gap:8px` - the preview, then the mark. */
+  .previewLine {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  /*
+   * 02's badge: 18 tall, at least 18 wide, radius 9, `#121212` on `#F7F5F1`,
+   * 600 10px/18px, centred.
+   */
+  .unreadBadge {
+    flex: none;
+    min-inline-size: var(--space-18);
+    block-size: var(--space-18);
+    padding-inline: var(--space-4);
+    border-radius: var(--radius-item);
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--space-18);
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Unread and nobody counted: the badge's ink, as a dot. */
+  .unreadDot {
+    flex: none;
+    inline-size: var(--space-8);
+    block-size: var(--space-8);
+    border-radius: var(--radius-round);
+    background-color: var(--action-base);
+  }
+
+  .rowBody {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .rowTop {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-8);
+  }
+
+  /* `margin-inline-start: auto` in the design - the time sits hard right. */
+  .rowTime {
+    margin-inline-start: auto;
+    flex: none;
+    /* 02: 11px. */
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  /*
+   * ⚠⚠ THE LINE THE ROW EXISTS FOR, AND IT WAS NEVER DRAWN.
+   * `lastMessageBody` has been in the contract and rendered nowhere. One
+   * line, ellipsised: a preview that wraps is a paragraph, and the column is
+   * a list.
+   */
+  .preview {
+    /* Beside the unread mark: takes the line, and gives way to it. */
+    flex: 1;
+    min-inline-size: 0;
+    /* 02 has three lines on every row; an empty preview keeps its line. */
+    min-block-size: 1lh;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rowTags {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    flex-wrap: wrap;
+  }
+
+  .queueRow:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: -2px;
+  }
+
+  /*
+   * ★★ ONE LINE, TRUNCATED, AND THE REASON IT IS SAFE IS THE NEW HEADER.
+   * A Shopify live-chat `customerName` is "Shopper on
+   * urban-supply-gotcha-demo.myshopify.com" - a forty-character unbroken token
+   * that wrapped to three lines in a queue row, three times over on one screen.
+   *
+   * Truncating an identifier normally hides the thing that tells two customers
+   * apart, which is why the queue previously let it wrap. **The conversation
+   * header now carries the full name, the channel and the handle**, so the queue
+   * only has to be enough to recognise and click - and the value it truncates is
+   * one click from being read in full.
+   *
+   * `min-inline-size: 0` because a flex item will not shrink below its content
+   * without it, and `text-overflow` then never fires.
+   */
+  .who {
+    /*
+     * 02: 14px / -0.14px, and the WEIGHT IS A STATE: 600 unread, 500 read,
+     * 400 settled. Every row once drew 600 and claimed to be unread. 500 is
+     * the default; 600 is `data-unread`, which only the server's per-person
+     * read state sets.
+     */
+    font-size: 14px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: -0.01em;
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /*
+   * Never wrapped. "60 days waiting" broke across three lines in the narrow
+   * column, which is the one value on the row whose whole purpose is to be read
+   * at a glance.
+   */
+  /*
+   * ⚠ WAITING-AGE IS OURS, NOT 02's. The design's tag row carries STATUS -
+   *   `Flow`, `You`, `Support AI` - and puts nothing about age there.
+   *
+   * ★ It stays because it is what this queue is sorted by and what an agent
+   *   triages on, but as muted running text rather than a pill: the row has
+   *   one coloured slot and the design spends it on status.
+   */
+  /*
+   * ⚠ AND NOW A PILL, IN 02's NEUTRAL: `#8C887F` on `#F0EDE7`, as its
+   *   "Support AI" tag. As running text the line was 11h where 02's pill row
+   *   is 17h, which was the whole of the row's 76 against 82 - and 02 has no
+   *   plain-text line in that slot anywhere.
+   */
+  /* W2: close to the response target - quiet amber, the minutes left. */
+  .slaWarn {
+    flex: none;
+    font-size: 10.5px;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    white-space: nowrap;
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  /* W2: past it - red, with a dot that pulses gently. */
+  .slaLate {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10.5px;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    white-space: nowrap;
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .slaDot {
+    flex: none;
+    inline-size: 7px;
+    block-size: 7px;
+    border-radius: 50%;
+    background-color: var(--intent-urgent-text);
+    animation: sla-pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes sla-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.3;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slaDot {
+      animation: none;
+    }
+  }
+
+  .waiting {
+    flex: none;
+    font-size: 10.5px;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    white-space: nowrap;
+    background-color: var(--panel-well);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * A system divider. No bubble, no side: it records what a colleague did,
+   * and the stream's `align-self` would otherwise put it on the customer's.
+   */
+  /* 02: `gap:12px; padding:2px 0`, `#EDE9E1` rules, 11px `#8C887F` text. */
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    align-self: stretch;
+    padding-block: 2px;
+    color: var(--text-subtle);
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .divider::before,
+  .divider::after {
+    content: '';
+    flex: 1;
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .dividerText {
+    flex: 0 1 auto;
+  }
+
+  /* ── Who is driving, and how to change it ─────────────────────────────── */
+  /* 02: `gap:8px`, pushed to the row's end. */
+  .verbs {
+    margin-inline-start: auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-8);
+  }
+
+  /*
+   * 02's header buttons: `padding:6px 11px`, radius 8px, 11.5px. Outlined in
+   * `#E6E2DA` on `#55524C`; the one filled `#121212` is Resolve.
+   */
+  .verbButton,
+  .verbButtonPrimary {
+    padding: var(--space-6) 11px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    line-height: normal;
+    cursor: pointer;
+  }
+
+  .verbButton {
+    background-color: transparent;
+    color: var(--intent-neutral-text);
+    border: 1px solid var(--border-default);
+  }
+
+  .verbButton:hover:not(:disabled) {
+    background-color: var(--panel-well);
+  }
+
+  /* No border, as 02 draws it - which is why it measures 24 tall to 26. */
+  .verbButtonPrimary {
+    background-color: var(--action-base);
+    color: var(--action-text);
+    border: 0;
+  }
+
+  .verbButton:disabled,
+  .verbButtonPrimary:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  .verbButton:focus-visible,
+  .verbButtonPrimary:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .verbTransfer {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  .verbLabel {
+    color: var(--text-muted);
+    font-size: var(--font-size-caption);
+  }
+
+  .verbSelect {
+    font: inherit;
+    font-size: var(--font-size-meta);
+    padding: var(--space-4) var(--space-8);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    background: var(--panel-field);
+    color: var(--text-primary);
+  }
+
+  .verbNote,
+  .verbProblem {
+    flex-basis: 100%;
+    margin: 0;
+    /* Under the buttons it explains, which sit at the row's end. */
+    text-align: end;
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+  }
+
+  .verbNote {
+    color: var(--text-muted);
+  }
+
+  /* Every sentence here says something did not happen. */
+  .verbProblem {
+    color: var(--intent-urgent-text);
+  }
+
+  /*
+   * A reaction. Its own line, not a bubble: it is an annotation on another
+   * message and the customer did not "say" it.
+   */
+  .reaction {
+    align-self: flex-start;
+    padding-inline: var(--space-4);
+    color: var(--text-muted);
+    font-size: var(--font-size-caption);
+  }
+
+  /* ── Screen 02's three columns ────────────────────────────────────────── */
+  /*
+   * ★★ THE CONVERSATION COLUMN GOT THE EXTRA WIDTH AND THE QUEUE GOT NONE.
+   * `--size-rail` is `clamp(210px, 14.6%, 300px)` - a percentage of the
+   * container, so raising the page cap to 1600px moved it by about twelve
+   * pixels while the middle column gained four hundred. A walk found every
+   * Shopify row breaking its shop domain across three lines and "60 days
+   * waiting" across three more.
+   *
+   * The queue gets its own measure rather than borrowing the sidebar's: a rail
+   * of navigation labels and a rail of customer names and channel names are
+   * different jobs, and only one of them has arbitrary-length values in it.
+   */
+  .screen {
+    display: grid;
+    /*
+     * ⚠⚠ TWO PANELS. The computed tree shows `[352x876]` queue and
+     *    `[856x876]` chat side by side - and the Copilot INSIDE the chat.
+     */
+    grid-template-columns: var(--size-inbox-queue) minmax(0, 1fr);
+    /* 02: the three panels sit 10px apart, not 16. */
+    gap: 10px;
+    align-items: stretch;
+    /*
+     * ⚠⚠ THE SCREEN IS THE FRAME'S HEIGHT, AND NOT ONE PIXEL MORE.
+     *    02's panels are `876px` - the 900px frame less its 12px padding -
+     *    and `min-block-size: 0` is what lets this grid shrink to it. Without
+     *    that, a grid refuses to go below its content, the panels grow past
+     *    the viewport, and the PAGE scrolls instead of the panels.
+     */
+    block-size: 100%;
+    min-block-size: 0;
+    /*
+     * ⚠⚠ NO BACKGROUND HERE, AND IT USED TO BE `--panel-sunken`. That colour
+     *    came from a different frame in the design file. Rendered, 02's page
+     *    is `rgb(18,18,18)` - the DARK FRAME - and the three panels are light
+     *    cards on it.
+     *
+     * ★ The shell already paints that frame. What this screen needs is for
+     *   the shell's light work-surface to step aside, which
+     *   `data-owns-panels` asks for.
+     */
+  }
+
+  /*
+   * One column on a phone, in reading order: the queue, then the conversation
+   * it opens, then its context. The design puts them side by side and there
+   * is no width for that at 390.
+   */
+  @media (width <= 900px) {
+    .screen {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ "EVERY THING IN ITS OWN CONTAINER WITH A BORDER RADIUS"
+   * ════════════════════════════════════════════════════════════════════════
+   * 02 draws three panels on a `#F1EFE9` page: each `#FAF8F4`, each
+   * `border-radius:18px`, each `overflow:hidden`, 10px apart. We drew all
+   * three on one flat surface - which is why no amount of work inside a
+   * column made it look like a column.
+   *
+   * ⚠ `overflow: hidden` IS NOT DECORATION. It is what makes the rows' square
+   *   corners disappear into the rounded panel. Without it the first and last
+   *   row poke out and the result reads as a border drawn around a list
+   *   rather than a card containing one.
+   *
+   * ★ Every colour here was ALREADY A TOKEN. `--panel-base` IS #faf8f4 and
+   *   `--panel-sunken` IS #f1efe9 - a grep for the design's uppercase hex
+   *   found nothing because ours are lowercase, which nearly produced six
+   *   duplicate tokens for colours we already had.
+   */
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ THE CONVERSATION PANEL IS THE SAME SHAPE: FIXED, SCROLLING, FIXED
+   * ════════════════════════════════════════════════════════════════════════
+   * 02: a header at the top, the message stream scrolling, and the composer
+   * PINNED at the bottom - not at the end of a long page. Every direct child
+   * holds its height; only the stream gives.
+   *
+   * ★ `.stream` is `MessageStream`'s own root and a direct child here, so
+   *   this needs no wrapper in the JSX - the structure was already right and
+   *   nothing was telling it which part moves.
+   *
+   * ⚠ `min-block-size: 0` again. A flex child will not shrink below its
+   *   content without it, so the stream would push the composer off the
+   *   bottom rather than scrolling under it.
+   */
+  .conversationColumn > * {
+    flex: none;
+  }
+
+  /*
+   * 02: `[856x809] flex` - a ROW holding the conversation and the Copilot,
+   * below the panel's own 67px header.
+   */
+  .chatBody {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    min-inline-size: 0;
+  }
+
+  .conversationPane {
+    flex: 1;
+    min-inline-size: 0;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .conversationPane > * {
+    flex: none;
+  }
+
+  /*
+   * ⚠ NO INNER PADDING, AND EVERYTHING SAT FLUSH AGAINST THE PANEL EDGE.
+   *   02: the stream is `p:14px 24px 12px` with `gap:11px`, and the reply bar
+   *   and composer are 436 wide inside a 484 column - 24px either side - with
+   *   the composer 30px from the frame's bottom.
+   */
+  .conversationPane .stream {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    padding: var(--space-14) var(--space-24) var(--space-12);
+    gap: 11px;
+  }
+
+  .conversationPane > :not(.stream) {
+    margin-inline: var(--space-24);
+  }
+
+  /* The composer is the last thing in the pane: 18px of panel below it, so
+     its bottom sits 30px from the frame (18 + the frame's 12). */
+  .conversationPane > :last-child {
+    margin-block-end: 18px;
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ THE COPILOT IS DARK AND IT IS THE CHAT PANEL'S RIGHT-HAND WALL
+   * ════════════════════════════════════════════════════════════════════════
+   * `[372x809] bg:rgb(23,23,23) r:0 0 18px 18px ovf:hidden`, inside the
+   * `[856x876]` panel. **That radius is the giveaway** - it inherits the
+   * panel's bottom-right corner, which only a child can do.
+   *
+   * ⚠ It was a third sibling card on the light page. Two errors at once: the
+   *   wrong parent and the wrong colour.
+   */
+  .contextColumn {
+    flex: 0 0 372px;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--copilot-surface);
+    border-end-end-radius: 18px;
+    color: var(--frame-text);
+  }
+
+  .contextColumn > * {
+    flex: none;
+  }
+
+  /*
+   * The third of 02's three internal scrollers, and the same three
+   * declarations as the other two. `min-block-size: 0` again: without it the
+   * body pushes the wall taller than the panel it is part of.
+   */
+  .contextColumn > .copilotBody {
+    flex: 1;
+    /* A flex column, so a loader in it can take its whole height. */
+    display: flex;
+    flex-direction: column;
+    min-block-size: 0;
+    overflow-y: auto;
+    /*
+     * 02 pads every Copilot section 18px either side - and each section
+     * draws its own #262626 rule edge to edge, so the padding is the
+     * sections' (`wall/Wall.module.css`), not this container's.
+     */
+    padding: 0;
+  }
+
+  .contextColumn > .copilotBody > .note {
+    padding: var(--space-16) 18px;
+    color: var(--menu-dark-icon);
+  }
+
+  .queueColumn,
+  .conversationColumn {
+    /* The click's overlay (`PendingPane`) is placed against it. */
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    background-color: var(--panel-base);
+    border-radius: 18px;
+    /*
+     * ★ `overflow: hidden` is what makes the rows' square corners disappear
+     *   into the rounded panel AND what stops the panel growing past the
+     *   frame. One declaration, two jobs, and the second is the one Omer
+     *   asked for: a window you scroll inside.
+     */
+    overflow: hidden;
+    min-block-size: 0;
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ ONE CAUSE BEHIND EVERY HEIGHT IN THE QUEUE: THE LINE-HEIGHT
+   * ════════════════════════════════════════════════════════════════════════
+   * 02 sets no line-height anywhere in the queue, so each line is the
+   * browser's `normal` for Archivo. We inherited the body's 1.6, and every
+   * line came out taller with padding, gaps and sizes all correct - measured:
+   * name 15h → 22h, row 86h → 94h, header 87h → 97h, footer 35h → 43h.
+   *
+   * ★ Here, on the panel, because the shell is closed and the body's 1.6 is
+   *   right for the rest of the product.
+   */
+  .queueColumn {
+    line-height: normal;
+  }
+}
+
+@layer features {
+  /*
+   * ── Who this conversation is with ──────────────────────────────────────
+   *
+   * A bar, because the verbs inside it were floating: "Take control" and its
+   * siblings sat loose above the stream with nothing around them, so they read
+   * as the first thing IN the conversation rather than as controls over it.
+   */
+  /*
+   * ★★ THE BAR IS THE CONTAINER, NOT THE HEADER.
+   * The border used to sit on `.openHeader`, so the verbs rendered outside the
+   * card and "Take control" still read as detached - which is what a walk
+   * reported, and my commit message had already claimed was fixed. The card is
+   * now the thing that holds both.
+   */
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ 02: ONE ROW ACROSS THE WHOLE PANEL - `[856x67]`
+   * ════════════════════════════════════════════════════════════════════════
+   * `display:flex; align-items:center; gap:14px; padding:16px 22px` over a
+   * `#EDE9E1` hairline: avatar, the name over its subline, and the verbs
+   * pushed to the right end. It was a bordered white card stacking the
+   * identity above the verbs - two rows, inset from the panel.
+   *
+   * ⚠ `line-height: normal` for the reason the queue has it: 02 sets none,
+   *   and the body's 1.6 makes every line taller than the design's.
+   *
+   * ⚠ A note under the verbs (the greeting warning, a refused action) wraps
+   *   to a second line and makes the bar taller than 67. That is the cost of
+   *   saying it before the button is pressed, and it is deliberate.
+   */
+  .openBar {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-6) var(--space-14);
+    padding: var(--space-16) 22px;
+    border-block-end: 1px solid var(--border-subtle);
+    line-height: normal;
+  }
+
+  .openHeader {
+    flex: 0 1 auto;
+    min-inline-size: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+  }
+
+  /* 02: a 34px disc, initials at 11px/600. */
+  .openAvatar {
+    flex: none;
+    inline-size: 34px;
+    block-size: 34px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--intent-neutral-text);
+    font-size: 11px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 34px;
+    text-align: center;
+  }
+
+  .openWho {
+    min-inline-size: 0;
+  }
+
+  /* 02: the name and its chip on one line at `gap:9px`. */
+  .openNameRow {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    /*
+     * ⚠ RESERVED AT THE CHIP'S HEIGHT. The orders chip streams in after the
+     *   header paints, and it is 18 tall where the name alone is ~16 - so the
+     *   row grew as it arrived and moved everything under it. 02's row is 18.
+     */
+    min-block-size: 18px;
+  }
+
+  .openName {
+    margin: 0;
+    font-size: 15px;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  /* No name is an ordinary state, not an error. */
+  .openUnnamed {
+    color: var(--text-subtle);
+    font-style: italic;
+  }
+
+  /* 02's "Returning · 6 orders": `padding:3px 8px`, radius 6px, 11px, green. */
+  .openChip {
+    flex: none;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    background-color: var(--intent-opportunity-surface);
+    color: var(--intent-opportunity-text);
+  }
+
+  /* 02: 11.5px `#8C887F`, 2px under the name, one line. */
+  .openFacts {
+    margin: 2px 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* The channel's mark, on the subline's baseline, before the channel's name. */
+  .openFactsMark {
+    display: inline-flex;
+    vertical-align: -3px;
+    margin-inline-end: 6px;
+    color: var(--channel-web-mark);
+  }
+}
+
+@layer features {
+  /*
+   * A message the customer never received. The only delivery state on this
+   * screen that is a problem, so the only one that is coloured - if every state
+   * were marked, the one that matters would be as quiet as the rest.
+   */
+  .streamFailed {
+    color: var(--intent-urgent-text);
+    font-weight: 500;
+  }
+}
+
+@layer features {
+  /* ── The reply box ───────────────────────────────────────────────────────
+   *
+   * At the bottom of the conversation column, under the stream: who this is ·
+   * who is driving · what was said · what you are about to say. What GOTCHA
+   * would say is the wall's, beside it (`wall/`), and lands here on Use this.
+   */
+  /*
+   * 02's composer: a white card, `border:1px #E6E2DA`, radius 14px, clipped.
+   * The pane's own rule gives it 24px either side and 18px below.
+   */
+  .composer {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    line-height: normal;
+  }
+
+  /* The card is the field, so the card shows the focus. */
+  .composer:focus-within {
+    border-color: var(--border-focus);
+  }
+
+  /*
+   * 02: `padding:12px 15px 10px`, 13.5px. One line when empty, growing with
+   * what is typed up to a cap - 02 draws the idle state, a single line.
+   */
+  .composerInput {
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-block-size: 160px;
+    field-sizing: content;
+    resize: none;
+    padding: var(--space-12) 15px 10px;
+    font: inherit;
+    font-size: 13.5px;
+    color: var(--text-primary);
+    background-color: transparent;
+    border: 0;
+    outline: none;
+  }
+
+  .composerInput::placeholder {
+    color: var(--text-faint);
+  }
+
+  /*
+   * 02: `display:flex; align-items:center; gap:4px; padding:0 12px 11px`.
+   *
+   * ★ It wraps (B11, 14" sweep). The card clips (`.composer` is `hidden`), and
+   *   at 1280 the pane leaves it 320px: the Hebrew chips and the channel did
+   *   not fit, and Send was drawn outside the card. Measured in Chromium at
+   *   320px: the channel and Send take a second row, the chips stay whole;
+   *   from 480px it is 02's single row, unchanged.
+   */
+  .composerBar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-4);
+    padding: 0 var(--space-12) 11px;
+  }
+
+  /* 02's image and paperclip: bare 15px glyphs in `#8C887F`, radius 8px. */
+  .composerIcon {
+    flex: none;
+    inline-size: 26px;
+    block-size: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background-color: transparent;
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .composerIcon:hover:not(:disabled) {
+    background-color: var(--panel-inset);
+  }
+
+  /* 02: `[1x18] margin:0 6px #EDE9E1`. */
+  .composerDivider {
+    flex: none;
+    inline-size: 1px;
+    block-size: 18px;
+    margin-inline: var(--space-6);
+    background-color: var(--border-subtle);
+  }
+
+  /* With Undo, the chips alone can be wider than the bar: they wrap too. */
+  .composerChips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  /* 02: `padding:6px 11px; #F3F0EA; radius 7px; 11.5px #55524C`. */
+  .composerChip {
+    flex: none;
+    padding: var(--space-6) 11px;
+    border: 0;
+    border-radius: 7px;
+    background-color: var(--panel-inset);
+    color: var(--intent-neutral-text);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    line-height: normal;
+    cursor: pointer;
+  }
+
+  .composerChip:hover:not(:disabled) {
+    background-color: var(--panel-well);
+  }
+
+  .composerIcon:disabled,
+  .composerChip:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  .composerIcon:focus-visible,
+  .composerChip:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 1px;
+  }
+
+  /* What is being answered: 02's quote block, above the field. */
+  .composerQuote {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    padding: var(--space-12) 15px 0;
+  }
+
+  .composerQuote .quote {
+    flex: 1;
+    margin-block-end: 0;
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 02's HOVER BAR - `#171717`, radius 9px, `padding:4px`, under the message
+   * ════════════════════════════════════════════════════════════════════════
+   * Over the next message rather than between them, so hovering a message
+   * does not shift every message below it. Shown on hover and on keyboard
+   * focus - `opacity`, not `display`, so the button stays reachable by Tab.
+   */
+  .messageActions {
+    position: absolute;
+    inset-block-start: calc(100% + 1px);
+    inset-inline-start: 0;
+    z-index: 1;
+    display: flex;
+    gap: 1px;
+    padding: var(--space-4);
+    border-radius: 9px;
+    background-color: var(--copilot-surface);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .message[data-direction='OUTBOUND'] .messageActions {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+  }
+
+  .message:hover .messageActions,
+  .message:focus-within .messageActions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* 02: `padding:6px 11px`, 11.5px `#B8B4AC`, radius 6px. */
+  .messageAction {
+    padding: var(--space-6) 11px;
+    border: 0;
+    border-radius: 6px;
+    background-color: transparent;
+    color: var(--copilot-text-muted);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    line-height: normal;
+    cursor: pointer;
+  }
+
+  .messageAction:hover {
+    background-color: var(--copilot-raised);
+    color: var(--action-text);
+  }
+
+  .messageAction:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 1px;
+  }
+
+  /* The held file: one line between the field and the bar. */
+  .composerFile {
+    margin: 0;
+    padding: 0 15px var(--space-8);
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+  }
+
+  .composerFileName {
+    min-inline-size: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .composerFileNote {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  /* 02: 11px `#8C887F`, 9px before the send button, pushed right. */
+  .composerChannel {
+    min-inline-size: 0;
+    margin-inline: auto 9px;
+    overflow: hidden;
+    font-size: 11px;
+    color: var(--text-subtle);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 02: a 30px violet square at radius 9px, a white arrow. */
+  .composerSend {
+    flex: none;
+    margin-inline-start: auto;
+    inline-size: 30px;
+    block-size: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 9px;
+    background-color: var(--action-send);
+    color: var(--action-send-text);
+    cursor: pointer;
+  }
+
+  /* After the channel, the channel's own `auto` already pushed it. */
+  .composerChannel + .composerSend {
+    margin-inline-start: 0;
+  }
+
+  .composerSend:disabled {
+    cursor: default;
+    opacity: 0.45;
+  }
+
+  .composerSend:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .composerActions {
+    padding: 0 15px 11px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
+  .composerNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    max-inline-size: var(--size-reading);
+  }
+
+  .composerProblem {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+    max-inline-size: var(--size-reading);
+  }
+
+  /*
+   * The customer-service window (B7): what the box cannot do now, and the one
+   * thing that can be done instead. Above the field, inside the card.
+   */
+  .composerWindow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8) var(--space-12);
+    padding: var(--space-12) 15px 0;
+  }
+
+  .composerWindow .composerNote,
+  .composerWindow .composerProblem {
+    flex: 1 1 16rem;
+  }
+
+  /* The closing time, said quietly while the window is still open. */
+  .composerSoon {
+    margin: 0;
+    padding: var(--space-8) 15px 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .templatePicker {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin: var(--space-8) 15px 0;
+    padding: var(--space-12);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-item);
+    background-color: var(--panel-quiet);
+    max-block-size: 22rem;
+    overflow-y: auto;
+    font-size: var(--font-size-caption);
+  }
+
+  .templatePickerHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .templateList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-6);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .composerChip[aria-pressed='true'] {
+    background-color: var(--panel-well);
+    outline: 1px solid var(--border-strong);
+  }
+
+  .templatePreview {
+    margin: 0;
+    padding: var(--space-8) var(--space-12);
+    border-radius: var(--radius-chip);
+    background-color: var(--panel-inset);
+    white-space: pre-wrap;
+  }
+
+  .templatePreviewLabel {
+    margin: 0;
+    color: var(--text-subtle);
+  }
+
+  .templateFooter {
+    display: block;
+    color: var(--text-subtle);
+  }
+
+  .templateField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .templateField input {
+    padding: var(--space-6) var(--space-8);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-badge);
+    background-color: var(--panel-field);
+    color: inherit;
+    font: inherit;
+  }
+
+  .templateActions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+}
+
+@layer features {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ OMER'S CONTENT PLACEHOLDERS - the box of the real thing, quietly
+   * ════════════════════════════════════════════════════════════════════════
+   * Every size below is the measured size of what it stands in for (see
+   * `Skeletons.tsx`), so the content lands without moving anything. The
+   * colour is the panel's own well, and the motion a slow pulse - nothing
+   * that draws the eye - which stops for anyone who asked for less motion.
+   */
+  @keyframes skeleton-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.55;
+    }
+  }
+
+  .skeletonLine,
+  .skeletonPill,
+  .skeletonChip,
+  .skeletonDisc,
+  .skeletonBubble,
+  .skeletonBlock {
+    display: block;
+    flex: none;
+    background-color: var(--panel-well);
+    animation: skeleton-pulse 1.6s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeletonLine,
+    .skeletonPill,
+    .skeletonChip,
+    .skeletonDisc,
+    .skeletonBubble,
+    .skeletonBlock {
+      animation: none;
+    }
+  }
+
+  .skeletonLine {
+    block-size: 11px;
+    border-radius: 4px;
+  }
+
+  /* The queue's title row is 16 tall; its two lines sit in it. */
+  .skeletonLine[data-size='title'] {
+    inline-size: 120px;
+    /* The row is 16 tall because its text is; the line must be, too. */
+    block-size: 16px;
+  }
+
+  .skeletonLine[data-size='count'] {
+    inline-size: 16px;
+  }
+
+  /* A row's three lines: 15 + 15 + 17 at gap 4 - 55, as the real text. */
+  .skeletonLine[data-size='name'] {
+    inline-size: 45%;
+    block-size: 15px;
+  }
+
+  .skeletonLine[data-size='preview'] {
+    inline-size: 85%;
+    block-size: 15px;
+  }
+
+  .skeletonLine[data-size='tag'] {
+    inline-size: 64px;
+    block-size: 17px;
+    border-radius: 6px;
+  }
+
+  .skeletonLine[data-size='facts'] {
+    inline-size: 60%;
+    block-size: 12px;
+  }
+
+  /* On the dark wall, the wall's own raised colour. */
+  .skeletonLine[data-size='dark'],
+  .contextSkeleton .skeletonBlock {
+    background-color: var(--copilot-raised);
+  }
+
+  .skeletonLine[data-size='dark'] {
+    inline-size: 70%;
+    block-size: 12px;
+  }
+
+  /* The filter row: "All" at 36×24, then five 28px squares. */
+  .skeletonPill {
+    inline-size: 36px;
+    block-size: 24px;
+    border-radius: 8px;
+  }
+
+  .skeletonChip {
+    inline-size: 28px;
+    block-size: 28px;
+    border-radius: 8px;
+  }
+
+  .skeletonDisc {
+    border-radius: 50%;
+  }
+
+  .skeletonDisc[data-size='42'] {
+    inline-size: 42px;
+    block-size: 42px;
+  }
+
+  .skeletonDisc[data-size='34'] {
+    inline-size: 34px;
+    block-size: 34px;
+  }
+
+  /* 82: the real row's padding, gap and top hairline around 55 of lines. */
+  .skeletonRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-12);
+    padding: 13px var(--space-16);
+    border-block-start: 1px solid var(--border-subtle);
+    border-inline-start: 3px solid transparent;
+  }
+
+  .skeletonLines {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .openHeader .skeletonLines {
+    gap: 2px;
+  }
+
+  /* The stream's own box: it fills the pane, padded as the stream is. */
+  .streamSkeleton {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    padding: var(--space-14) var(--space-24) var(--space-12);
+    overflow: hidden;
+  }
+
+  .conversationPane > .streamSkeleton {
+    margin-inline: 0;
+  }
+
+  .skeletonBubble {
+    inline-size: 62%;
+    block-size: 42px;
+    border-radius: 14px;
+    border-end-start-radius: var(--space-4);
+  }
+
+  .skeletonBubble[data-side='out'] {
+    align-self: flex-end;
+    inline-size: 48%;
+    border-end-start-radius: 14px;
+    border-end-end-radius: var(--space-4);
+  }
+
+  /* The composer card at its idle height. */
+  .skeletonComposer {
+    block-size: 86px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .contextSkeleton {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .contextSkeleton .skeletonBlock {
+    block-size: 120px;
+    border-radius: var(--radius-card);
+  }
+
+  /*
+   * The click's answer, over the whole panel until the server's lands. The
+   * conversation being left stays mounted underneath it.
+   */
+  .pendingPane {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-base);
+  }
+
+  .pendingPane > * {
+    flex: none;
+  }
+
+  .pendingPane > .chatBody {
+    flex: 1;
+  }
+}
+
+@layer features {
+  /*
+   * A row picked with shift-click: the well's colour and a quiet edge, so it
+   * reads as "picked" and never as "open" - open is white with a black edge.
+   */
+  .queueRow[data-selected] {
+    background-color: var(--panel-well);
+    border-inline-start-color: var(--text-faint);
+  }
+
+  /* What the selection is, and what the menu did when it could not do all. */
+  .queueNotice {
+    margin: 0;
+    padding: var(--space-8) var(--space-16);
+    border-block-start: 1px solid var(--border-subtle);
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+    background-color: var(--panel-inset);
+  }
+
+  .queueNoticeAction {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  /* An item's label, with the greeting warning under it where it applies. */
+  .menuText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .menuHint {
+    font-size: 11px;
+    color: var(--menu-dark-icon);
+  }
+
+  .confirmNote {
+    margin: var(--space-8) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  .confirmActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-8);
+    margin-block-start: var(--space-16);
+  }
+
+  .confirmDanger {
+    padding: var(--space-6) 11px;
+    border: 0;
+    border-radius: 8px;
+    background-color: var(--intent-urgent-text);
+    color: var(--action-text);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    cursor: pointer;
+  }
+
+  .confirmDanger:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  .confirmDanger:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /* ── 02b, measured: the queue is clear ──────────────────────────────── */
+  .clear {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .clearHead {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-12);
+    padding: 34px 26px 0;
+    text-align: center;
+  }
+
+  .clearTile {
+    display: grid;
+    place-items: center;
+    inline-size: 44px;
+    block-size: 44px;
+    border-radius: var(--radius-round);
+    background-color: var(--signal-done-surface-soft);
+    color: var(--signal-done-text);
+  }
+
+  /* A filter with nothing in it: the same tile, neutral - not "done". */
+  .emptyTile {
+    background-color: var(--panel-inset);
+    color: var(--text-subtle);
+  }
+
+  .emptyWayOut {
+    padding: var(--space-8) var(--space-16);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+    text-decoration: none;
+  }
+
+  .emptyWayOut:hover {
+    color: var(--text-primary);
+  }
+
+  .clearTitle {
+    margin: 0;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .clearLine {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+
+  .going {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    margin: 26px 26px 0;
+    padding-block-start: var(--space-16);
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .goingTitle {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .goingList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .goingRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  .goingDot {
+    flex: none;
+    inline-size: 5px;
+    block-size: 5px;
+    border-radius: var(--radius-round);
+    background-color: var(--border-heavy);
+  }
+
+  .goingDot[data-kind='live'] {
+    background-color: var(--step-next);
+  }
+
+  .goingDot[data-kind='held'] {
+    background-color: var(--intent-blocked-edge);
+  }
+
+  .goingText {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .goingMeta {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-counter);
+    font-weight: 500;
+    color: var(--text-subtle);
+  }
+
+  .clearPane {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-block-size: 0;
+  }
+
+  .clearPaneBody {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-14);
+    padding-inline: 60px;
+    text-align: center;
+  }
+
+  .clearPaneTitle {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: 26px;
+    /* Italic in Latin, upright in Hebrew - the token decides. */
+    font-style: var(--font-serif-style);
+    color: var(--text-subtle);
+  }
+
+  .clearPaneLine {
+    max-inline-size: 520px;
+    margin: 0;
+    font-size: 17px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+
+  .clearPaneActions {
+    display: flex;
+    gap: var(--space-9);
+    margin-block-start: var(--space-12);
+  }
+
+  .clearPrimary {
+    padding: var(--space-10) var(--space-18);
+    border-radius: 10px;
+    font-size: var(--font-size-meta);
+    text-decoration: none;
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .clearStrip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 179fr)) minmax(0, 285fr);
+    margin: 0;
+    padding: var(--space-20) 30px;
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+    background-color: var(--panel-field);
+  }
+
+  .clearCell,
+  .clearCellNote {
+    padding-inline: var(--space-24);
+  }
+
+  .clearCell:first-child {
+    padding-inline-start: 0;
+  }
+
+  .clearCell + .clearCell,
+  .clearCell + .clearCellNote {
+    border-inline-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .clearCell dt {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .clearCell dd {
+    margin: var(--space-4) 0 0;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .clearCellNote {
+    align-self: center;
+    font-size: var(--font-size-meta);
+    color: var(--text-faint);
+  }
+
+  /* 02's photo: inside the bubble, radius 11, open it to see it whole. */
+  .photo {
+    display: block;
+    margin: -6px -10px var(--space-6);
+    border-radius: 11px;
+    overflow: hidden;
+    line-height: 0;
+  }
+
+  /* One box for every photo, small or large: 240 × 180, filled. */
+  .photo img {
+    display: block;
+    inline-size: min(100%, 240px);
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+  }
+
+  .sticker img {
+    display: block;
+    inline-size: 120px;
+    block-size: 120px;
+    object-fit: contain;
+  }
+
+  .video {
+    display: block;
+    max-inline-size: min(100%, 320px);
+    max-block-size: 240px;
+    margin-block-end: var(--space-6);
+    border-radius: 11px;
+  }
+
+  /* 02's voice note: the play mark, then the player, at least 290 wide. */
+  .voice {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    min-inline-size: min(290px, 100%);
+  }
+
+  .voiceMark {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: 28px;
+    block-size: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    cursor: pointer;
+  }
+
+  /* 02's waveform: 2px bars, played ones darker. */
+  .wave {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 2px;
+    block-size: 22px;
+  }
+
+  .wave > span {
+    inline-size: 2px;
+    border-radius: 1px;
+    background-color: var(--border-strong);
+  }
+
+  .wave > span[data-played='yes'] {
+    background-color: var(--text-subtle);
+  }
+
+  .voiceTime {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  /* The contact card's ways to reach them: small bordered pills, not browser blue. */
+  .contactLink {
+    padding: 1px var(--space-8);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    font-size: var(--font-size-caption);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .file {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    padding: var(--space-8) var(--space-10);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .fileName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-label);
+  }
+
+  /* The size beside the name never wraps or shrinks; the name takes the ellipsis. */
+  .fileSize {
+    flex: none;
+    white-space: nowrap;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .mediaGone {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    margin: 0;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  /* ★ W9b: the product cards a message carried; several are a row to scroll. */
+  .products,
+  .productRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .productRow {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-block-end: 4px;
+  }
+
+  .productRow .product {
+    flex: 0 0 220px;
+  }
+
+  .product {
+    display: flex;
+    gap: var(--space-8);
+    align-items: flex-start;
+    padding: var(--space-8);
+    border: var(--border-width-thin) solid var(--border-subtle);
+    border-radius: 10px;
+    background-color: var(--panel-field);
+  }
+
+  .productImage {
+    flex: none;
+    inline-size: 48px;
+    block-size: 48px;
+    border-radius: 8px;
+    background-color: var(--panel-inset);
+    object-fit: cover;
+  }
+
+  .productText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+    font-size: var(--font-size-label);
+  }
+
+  .productTitle {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .productPrice {
+    display: inline-flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+
+  .productWas {
+    color: var(--text-muted);
+  }
+
+  .productOut {
+    color: var(--text-muted);
+  }
+
+  .contacts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .contact {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: var(--font-size-label);
+  }
+
+  .contactName {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .contactOrg {
+    color: var(--text-subtle);
+  }
+
+  .contactPhone {
+    display: flex;
+    gap: var(--space-10);
+  }
+
+  /* Up to five held files, a picture as itself. */
+  /* The held files as a row of chips that wraps - the composer stays low. */
+  .composerFiles {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    margin: 0;
+    padding: 0 15px var(--space-8);
+    list-style: none;
+  }
+
+  .composerFiles > .composerFile {
+    max-inline-size: 200px;
+    padding: var(--space-4) var(--space-4) var(--space-4) var(--space-4);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+  }
+
+  .composerFiles .composerFileName {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The count on its own line, at the composer's own padding. */
+  .composerFiles > .composerFileNote {
+    flex-basis: 100%;
+  }
+
+  .composerThumb {
+    flex: none;
+    inline-size: 36px;
+    block-size: 36px;
+    border-radius: 6px;
+    object-fit: cover;
+  }
+
+  /* A file dragged over the composer: it says it will take it. */
+  .composer[data-dragging='yes'] {
+    outline: 2px dashed var(--border-strong);
+    outline-offset: 2px;
+  }
+}
+
+@layer features {
+  /* Nothing open: the faint mark in the middle, a line to pick one, and the Esc note. */
+  .nothingOpen {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-8);
+    min-block-size: 0;
+    padding: var(--space-24);
+    text-align: center;
+    line-height: normal;
+  }
+
+  .nothingOpenMark {
+    inline-size: 88px;
+    aspect-ratio: 512 / 503;
+    margin-block-end: var(--space-8);
+    opacity: 0.08;
+  }
+
+  .nothingOpenTitle {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .nothingOpenHint {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+}

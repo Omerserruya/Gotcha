@@ -43,37 +43,35 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("@chatcenter/shared", () => ({
-  // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
-  // mocks of this barrel must supply them or the read path throws instead of
-  // returning "not configured". Default: nothing configured.
-  readDurableSetting: async () => null,
-  writeDurableSetting: async () => undefined,
-  settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,
-  // Version pins now live in shared modules, so exhaustive mocks of this
-  // barrel must supply them. Returning the real defaults keeps any URL the
-  // code builds meaningful instead of "undefined/...".
-  shopifyApiVersion: () => "2026-07",
-  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
-  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
-  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
-  prisma: mocks.prismaMock,
-  authenticate: (req: any, _res: any, next: any) => {
-    req.user = { id: "u_test", role: "ADMIN" };
-    next();
-  },
-  resolveTenant: (req: any, _res: any, next: any) => { req.tenantId = mocks.tenantId; next(); },
-  // Factory that returns the middleware - matches the real shared signature.
-  requireActiveTenant: () => (_req: any, _res: any, next: any) => next(),
-  requireRole: () => (_req: any, _res: any, next: any) => next(),
-  encryptCredentials: (x: any) => x,
-  decryptCredentials: (x: any) => x,
-}));
+vi.mock("@chatcenter/shared", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return {
+    ...actual,
+    prisma: mocks.prismaMock,
+    authenticate: (req: any, _res: any, next: any) => {
+      req.user = { id: "u_test", role: "ADMIN" };
+      next();
+    },
+    resolveTenant: (req: any, _res: any, next: any) => { req.tenantId = mocks.tenantId; next(); },
+    // Factory that returns the middleware - matches the real shared signature.
+    requireActiveTenant: () => (_req: any, _res: any, next: any) => next(),
+    requireRole: () => (_req: any, _res: any, next: any) => next(),
+    encryptCredentials: (x: any) => x,
+    decryptCredentials: (x: any) => x,
+    // SSRF guard does DNS; no network in unit tests.
+    assertPublicUrl: async (u: string) => new URL(u),
+    // The real one reads the tenant through shared's own (real) prisma.
+    resolveEffectiveLocale: async () => ({ effective: "en", tenantDefault: "en", userOverride: null }),
+  };
+});
 
 vi.mock("../services/conversation-intelligence.service", () => ({
-  analyzeConversation: mocks.analyzeConversationMock,
   getConversationIntelligence: mocks.getConversationIntelligenceMock,
   getConversationReplay: mocks.getConversationReplayMock,
+}));
+// The analysis on close (conversation-analysis.service) replaced the old analyser.
+vi.mock("../services/conversation-analysis.service", () => ({
+  analyzeConversationOnClose: mocks.analyzeConversationMock,
 }));
 
 vi.mock("../services/zoho.service", () => ({
@@ -341,13 +339,13 @@ describe("POST /api/crm/conversation/:id/sync-close", () => {
     expect(body).toContain("Messages: 8");
     expect(body).toContain("Summary:");
     expect(body).toContain("Customer wants Pro demo.");
-    expect(body).toContain("Sentiment: positive");
+    expect(body).toContain("Sentiment: Positive"); // localized label (crm-adapter.impl renders sentiments by locale)
     expect(body).toContain("Qualification: warm");
-    expect(body).toContain("- Send pricing PDF");
+    expect(body).toContain("• Send pricing PDF"); // the note's bullet (crm-adapter.impl renderInteractionBody)
     expect(body).toContain(`[gotcha_source_interaction_id=${mocks.conversationId} v=1]`);
   });
 
-  it("invokes analyzeConversation when intelligence is missing", async () => {
+  it("runs the close analysis when intelligence is missing", async () => {
     setupZohoConnected();
     setupConversation({ crmContactId: "lead_a", crmObjectKind: "lead" });
     mocks.prismaMock.message.count.mockResolvedValue(2);
@@ -361,7 +359,7 @@ describe("POST /api/crm/conversation/:id/sync-close", () => {
       .post(`/api/crm/conversation/${mocks.conversationId}/sync-close`)
       .send({});
     expect(res.status).toBe(200);
-    expect(mocks.analyzeConversationMock).toHaveBeenCalledWith(mocks.tenantId, mocks.conversationId);
+    expect(mocks.analyzeConversationMock).toHaveBeenCalledWith(mocks.tenantId, mocks.conversationId, { trigger: "closed" });
   });
 
   it("returns synced=false reason=no_crm_link when conversation isn't linked", async () => {

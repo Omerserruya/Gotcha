@@ -3,6 +3,9 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import axios from "axios";
 import jwt from "jsonwebtoken";
+import { splitErrorCode, withErrorCode } from "../lib/error-code";
+// Every row a route answers with goes through this one serializer (2026-10-10).
+import { publicChannelAccount } from "../lib/channel-account-dto";
 import {
   prisma,
   // The website widget shares its experience config with the Shopify
@@ -12,6 +15,7 @@ import {
   authenticate,
   resolveTenant,
   requirePermission,
+  requirePermissionOrRole,
   requireCapacity,
   validate,
   getRedis,
@@ -19,14 +23,42 @@ import {
   decryptCredentials,
   mintOAuthState,
   consumeOAuthState,
+  getOAuthStateSecret,
   resolvePrincipal, metaGraphBaseUrl, metaGraphVersion,
   buildEmbeddedSignupLaunch,
   embeddedSignupDialogUrl,
   EMBEDDED_SIGNUP_DIALOG_VERSION,
   resolveAppPublicUrl,
+  hasPermission,
+  assertWithinLimit,
+  handleEntitlementError,
+  EntitlementDeniedError,
 } from "@chatcenter/shared";
+import { startPageSession, readPageSession, endPageSession, type PageCandidate } from "../services/messenger/page-session";
 
 const router = Router();
+
+/**
+ * What a WhatsApp number's account remembers about it: its WABA, and the
+ * number itself as Meta shows it. The number was fetched at connect and then
+ * dropped, so the channels screen could name the account but never show its
+ * phone number (2026-10-09). Merged into what is already there, so a
+ * reconnect never erases state another writer keeps on the same blob.
+ */
+export function whatsappMeta(
+  prev: unknown,
+  wabaId: string | undefined,
+  details: { display_phone_number?: string; verified_name?: string; quality_rating?: string },
+): Record<string, unknown> {
+  const base = prev && typeof prev === "object" && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {};
+  return {
+    ...base,
+    ...(wabaId ? { wabaId } : {}),
+    ...(details.quality_rating ? { qualityRating: details.quality_rating } : {}),
+    ...(details.display_phone_number ? { displayPhoneNumber: details.display_phone_number } : {}),
+    ...(details.verified_name ? { verifiedName: details.verified_name } : {}),
+  };
+}
 
 /**
  * Plan channel limit.
@@ -36,9 +68,30 @@ const router = Router();
  * every direct-connect route; OAuth callbacks re-check through the same helper
  * at the point they create the account.
  */
-const requireChannelCapacity = requireCapacity("limit:channels", (tenantId) =>
-  prisma.channelAccount.count({ where: { tenantId, connectionStatus: { not: "DISCONNECTED" } } }),
-);
+const countChannels = (tenantId: string) =>
+  prisma.channelAccount.count({ where: { tenantId, connectionStatus: { not: "DISCONNECTED" } } });
+const requireChannelCapacity = requireCapacity("limit:channels", countChannels);
+
+/**
+ * Starting a channel OAuth is a connect, so it takes the connect permission
+ * like every other connect route; a hard role==ADMIN refused a member who
+ * holds it. ADMIN still passes where licensing predates the catalog
+ * (2026-10-09).
+ */
+const requireChannelConnect = requirePermissionOrRole("channels:manage:update", "ADMIN");
+
+/** The provider's own reason, one short line, for the log sentence beside a code. */
+function providerReason(err: any): string {
+  const raw = err?.response?.data?.error?.message ?? err?.response?.data?.error_description ?? err?.message ?? "unknown error";
+  return String(raw).replace(/\s+/g, " ").slice(0, 300);
+}
+
+/**
+ * Codes that say "the token is fine, the subscription is not". A token check
+ * proves nothing about them, so it must not clear them (2026-10-09).
+ */
+const SUBSCRIPTION_GAP_CODES = new Set(["SUBSCRIBE_FAILED", "WATCH_FAILED", "OUTLOOK_SUBSCRIPTION_FAILED"]);
+
 
 
 const META_APP_ID = process.env.META_APP_ID || "";
@@ -146,6 +199,29 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
 
 router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (req: Request, res: Response) => {
   try {
+    // Optional volume window. `conversationsInWindow` is OMITTED when neither
+    // bound is given, never zero: "you did not ask" must not render as "there
+    // were none". One bound is legal and leaves the other end open.
+    const rawFrom = typeof req.query.from === "string" ? req.query.from : undefined;
+    const rawTo = typeof req.query.to === "string" ? req.query.to : undefined;
+    const badDates: Array<{ field: string; message: string }> = [];
+    const parse = (v: string | undefined, field: string): Date | undefined => {
+      if (v === undefined) return undefined;
+      const d = new Date(v);
+      if (Number.isNaN(d.getTime())) {
+        badDates.push({ field, message: `${field} must be an ISO-8601 date` });
+        return undefined;
+      }
+      return d;
+    };
+    const from = parse(rawFrom, "from");
+    const to = parse(rawTo, "to");
+    if (badDates.length > 0) {
+      res.status(422).json({ error: "Invalid channel window", details: badDates });
+      return;
+    }
+    const windowed = from !== undefined || to !== undefined;
+
     const accounts = await prisma.channelAccount.findMany({
       where: { tenantId: req.tenantId! },
       select: {
@@ -162,12 +238,54 @@ router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:
         platformMeta: true,
         createdAt: true,
         updatedAt: true,
-        responseMode: true,
         _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } },
       },
       orderBy: { createdAt: "asc" },
     });
-    res.json({ data: accounts });
+
+    // The code a writer stored beside the sentence (lib/error-code), served apart.
+    const withCode = <T extends { lastError: string | null; platformMeta: unknown }>(a: T) => ({
+      ...publicChannelAccount(a),
+      ...splitErrorCode(a.lastError),
+    });
+    if (!windowed) {
+      res.json({ data: accounts.map(withCode) });
+      return;
+    }
+
+    // One groupBy for every account rather than a count per row. Keyed by
+    // `createdAt`: the window counts conversations that STARTED in it, which is
+    // what "volume over a period" means - a long-running conversation belongs
+    // to the period it began, not to every period it stayed open through.
+    //
+    // Conversations whose `channelAccountId` is null are invisible here by
+    // construction, and that is the point: the relation is onDelete SetNull, so
+    // a null means either the account was deleted or one never existed, and
+    // those two are indistinguishable in the data. This surface is driven by
+    // accounts that EXIST, so it never has to label a bucket it cannot explain.
+    // Reconciling that volume is analytics' job, not this screen's.
+    const grouped = await prisma.conversation.groupBy({
+      by: ["channelAccountId"],
+      where: {
+        tenantId: req.tenantId!,
+        channelAccountId: { not: null },
+        createdAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) },
+      },
+      _count: { _all: true },
+    });
+    const inWindow = new Map<string, number>();
+    for (const row of grouped) {
+      if (row.channelAccountId) inWindow.set(row.channelAccountId, row._count._all);
+    }
+
+    res.json({
+      data: accounts.map((a) => ({
+        ...withCode(a),
+        // Absent from the group-by means zero, not unknown: the query covers
+        // every non-null assignment in the tenant for this window.
+        conversationsInWindow: inWindow.get(a.id) ?? 0,
+      })),
+    });
   } catch (err) {
     console.error("List channels error:", err);
     res.status(500).json({ error: "Failed to list channels" });
@@ -179,6 +297,92 @@ router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:
 // channel connected" vs "channel broken" vs "no conversations yet"), and
 // agents see those pages too - the full listing above is ADMIN-only. This
 // returns health COUNTS only: no tokens, external ids, or error details.
+/**
+ * GET /channels/state - one row per channel, not four counts.
+ *
+ * `/summary` answers "how many are connected". Day one has to say WHICH:
+ * "WhatsApp connected, Instagram awaiting verification". A count cannot name a
+ * channel and cannot distinguish connected-but-unverified from connected, and
+ * those are the two states the setup screen exists to tell apart.
+ *
+ * Any tenant member sees each channel and its state. The channel's identifier
+ * (a phone number id, a page id) and its last error are for people who manage
+ * channels (channels:manage:read): an agent's empty inbox needs to know a
+ * channel is broken, not the provider's message about why (2026-10-09 review).
+ */
+router.get("/state", authenticate, resolveTenant, async (req: Request, res: Response) => {
+  try {
+    const u = (req as any).user ?? {};
+    const manages = await hasPermission(
+      { userId: u.userId, tenantId: req.tenantId!, role: u.role, departmentRole: u.departmentRole },
+      "channels:manage:read",
+    ).catch(() => false);
+    const rows = await prisma.channelAccount.findMany({
+      where: { tenantId: req.tenantId! },
+      select: {
+        id: true,
+        channel: true,
+        displayName: true,
+        externalId: true,
+        connectionStatus: true,
+        isActive: true,
+        platformMeta: true,
+        lastError: true,
+      },
+      orderBy: [{ channel: "asc" }, { createdAt: "asc" }],
+    });
+
+    res.json({
+      data: rows.map((r) => {
+        const meta = (r.platformMeta ?? {}) as Record<string, unknown>;
+        return {
+          id: r.id,
+          // The platform's ChannelType, uppercase, as everywhere else.
+          channel: r.channel,
+          // What the owner calls it - a page name or a number - so the screen
+          // can say WHICH WhatsApp when there are three.
+          displayName: r.displayName ?? null,
+          identifier: manages ? r.externalId ?? null : null,
+          connectionStatus: r.connectionStatus,
+          isActive: r.isActive,
+          // Verification is a SEPARATE axis from connection: Meta hands back a
+          // connected number whose display name is still under review, and a
+          // screen that collapses the two tells the owner they are live when
+          // they cannot send.
+          verification: readVerification(meta),
+          ...splitErrorCode(manages ? r.lastError : null),
+        };
+      }),
+    });
+  } catch (err) {
+    console.error("Channel state error:", err);
+    res.status(500).json({ error: "Failed to get channel state" });
+  }
+});
+
+/**
+ * The provider's verification state, normalised to codes the client
+ * translates. Unknown rather than a guess when the provider has not said:
+ * a channel we have not heard about is not a channel that failed.
+ */
+function readVerification(meta: Record<string, unknown>): string {
+  const raw = [
+    meta.verificationStatus,
+    meta.verified_name_status,
+    meta.name_status,
+    meta.quality_rating ? "APPROVED" : undefined,
+  ].find((v) => typeof v === "string") as string | undefined;
+
+  if (!raw) return "UNKNOWN";
+  const v = raw.toUpperCase();
+  if (["APPROVED", "VERIFIED"].includes(v)) return "VERIFIED";
+  if (["PENDING", "PENDING_REVIEW", "IN_REVIEW", "SUBMITTED"].includes(v)) return "PENDING";
+  if (["DECLINED", "REJECTED", "FAILED"].includes(v)) return "REJECTED";
+  return "UNKNOWN";
+}
+
+// Any tenant member, on purpose: counts only, no names, ids or errors, so an
+// agent's empty Inbox can say "no channel connected" (2026-10-09 review).
 router.get("/summary", authenticate, resolveTenant, async (req: Request, res: Response) => {
   try {
     const rows = await prisma.channelAccount.findMany({
@@ -467,7 +671,8 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
       const credentials = encryptCredentials({ accessToken, wabaId, phoneNumber: displayPhone });
       const tokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // Business tokens don't expire
       const honestStatus = webhookSubscribed ? ("CONNECTED" as const) : ("PENDING" as const);
-      const honestError = webhookSubscribed ? null : `Webhook subscription failed - messages cannot arrive yet: ${webhookError}`;
+      // Coded (2026-10-10) so /:id/status cannot erase it and v2 can name it.
+      const honestError = webhookSubscribed ? null : withErrorCode("SUBSCRIBE_FAILED", `Webhook subscription failed - messages cannot arrive yet: ${webhookError}`);
 
       if (existing) {
         const updated = await prisma.channelAccount.update({
@@ -481,7 +686,7 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
             isActive: true,
             lastError: honestError,
             displayName: phoneDetails.verified_name || displayPhone,
-            platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating },
+            platformMeta: whatsappMeta((existing as any).platformMeta, wabaId, phoneDetails),
           },
         });
         connectedAccounts.push(updated);
@@ -499,7 +704,7 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
             connectedBy: req.user?.userId,
             tokenExpiresAt,
             isActive: true,
-            platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating },
+            platformMeta: whatsappMeta(null, wabaId, phoneDetails),
           },
         });
         connectedAccounts.push(account);
@@ -514,7 +719,7 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
     }
 
     console.log(`[WA-CONNECT] Persisted ${connectedAccounts.length} account(s), webhookSubscribed=${webhookSubscribed}`);
-    res.status(201).json({ data: connectedAccounts, webhookSubscribed });
+    res.status(201).json({ data: connectedAccounts.map(publicChannelAccount), webhookSubscribed });
   } catch (err: any) {
     console.error("[WA-CONNECT] Error:", err.response?.data || err.message);
     const metaError = err.response?.data?.error;
@@ -599,12 +804,12 @@ router.post("/connect/whatsapp-session", authenticate, resolveTenant, requirePer
       if (existing) {
         const updated = await prisma.channelAccount.update({
           where: { id: existing.id },
-          data: { credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: req.user?.userId, tokenExpiresAt, isActive: true, lastError: null, displayName: phoneDetails.verified_name || displayPhone, platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating } },
+          data: { credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: req.user?.userId, tokenExpiresAt, isActive: true, lastError: null, displayName: phoneDetails.verified_name || displayPhone, platformMeta: whatsappMeta((existing as any).platformMeta, wabaId, phoneDetails) },
         });
         connectedAccounts.push(updated);
       } else {
         const account = await prisma.channelAccount.create({
-          data: { tenantId: req.tenantId!, channel: "WHATSAPP", externalId: pnId, displayName: phoneDetails.verified_name || displayPhone, credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: req.user?.userId, tokenExpiresAt, isActive: true, platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating } },
+          data: { tenantId: req.tenantId!, channel: "WHATSAPP", externalId: pnId, displayName: phoneDetails.verified_name || displayPhone, credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: req.user?.userId, tokenExpiresAt, isActive: true, platformMeta: whatsappMeta(null, wabaId, phoneDetails) },
         });
         connectedAccounts.push(account);
       }
@@ -613,14 +818,420 @@ router.post("/connect/whatsapp-session", authenticate, resolveTenant, requirePer
     }
 
     console.log(`[WA-SESSION] Connected ${connectedAccounts.length} account(s)`);
-    res.status(201).json({ data: connectedAccounts });
+    res.status(201).json({ data: connectedAccounts.map(publicChannelAccount) });
   } catch (err: any) {
     console.error("[WA-SESSION] Error:", err.response?.data || err.message);
     res.status(500).json({ error: "Failed to complete WhatsApp setup" });
   }
 });
 
+/**
+ * The two WhatsApp onboarding choices a screen can offer: connect a number
+ * that already lives in the WhatsApp Business app (Coexistence), or a new
+ * number.
+ *
+ * What a choice can and cannot do is Meta's rule, encoded in
+ * buildEmbeddedSignupLaunch: on Embedded Signup v4 (the default) `extras` must
+ * be EMPTY - the unified dialog presents both choices itself, and adding
+ * `featureType` there "does nothing or silently downgrades the experience".
+ * So on v4 the choice steers our copy and the inspect `path`, not Meta's
+ * dialog. On v2/v3 the Coexistence flow IS selected by
+ * extras.featureType = "whatsapp_business_app_onboarding", and that is what a
+ * coexistence launch carries there. A dedicated Coexistence configuration, if
+ * one exists, comes from WHATSAPP_ES_COEXISTENCE_CONFIG_ID.
+ */
+const WHATSAPP_MODES = ["coexistence", "new_number"] as const;
+type WhatsappMode = (typeof WHATSAPP_MODES)[number];
+const COEXISTENCE_FEATURE_TYPE = "whatsapp_business_app_onboarding";
+
+function parseWhatsappMode(raw: unknown): WhatsappMode | undefined {
+  return typeof raw === "string" && (WHATSAPP_MODES as readonly string[]).includes(raw) ? (raw as WhatsappMode) : undefined;
+}
+
+export function embeddedSignupFor(mode: WhatsappMode | undefined, env: NodeJS.ProcessEnv = process.env) {
+  const base = buildEmbeddedSignupLaunch(env);
+  if (!mode) return base; // the configured default, unchanged
+  const extras: Record<string, unknown> = { ...base.extras };
+  let configId = base.configId;
+  if (mode === "coexistence") {
+    const coexConfig = (env.WHATSAPP_ES_COEXISTENCE_CONFIG_ID || "").trim();
+    if (coexConfig) configId = coexConfig;
+    if (base.esVersion !== "v4") extras.featureType = COEXISTENCE_FEATURE_TYPE;
+  } else {
+    delete extras.featureType;
+  }
+  return {
+    ...base,
+    configId,
+    extras,
+    configured: Boolean(base.appId && configId),
+    mode,
+    // Where the choice is actually made, so a screen does not promise what the
+    // dialog will not do: "meta_dialog" on v4, "feature_type" before it.
+    choiceMadeIn: base.esVersion === "v4" ? ("meta_dialog" as const) : ("feature_type" as const),
+    // The `path` POST /whatsapp-numbers/inspect expects for this choice.
+    inspectPath: mode === "coexistence" ? ("business-app" as const) : ("new" as const),
+  };
+}
+
 // ─── OAuth Init ──────────────────────────────────────────────
+
+const CHANNEL_PLATFORMS = ["messenger", "instagram", "whatsapp", "gmail", "outlook", "slack"] as const;
+
+/**
+ * Allow-listed `flow` values, signed into the state - never a return URL from
+ * the browser. `redesign_studio` lands in the redesigned app (/v2).
+ */
+const CHANNEL_FLOWS = new Set(["redesign_studio"]);
+function parseChannelFlow(raw: unknown): string | undefined {
+  return typeof raw === "string" && CHANNEL_FLOWS.has(raw) ? raw : undefined;
+}
+
+type ChannelInitOutcome =
+  | { kind: "url"; url: string }
+  | { kind: "not_configured"; platform: string }
+  | { kind: "bad_platform" };
+
+/**
+ * Everything both init entry points share: platform check, per-platform
+ * config check, the signed single-use state, and the provider URL. The two
+ * routes differ ONLY in how the caller is authenticated and how the answer is
+ * delivered (a redirect, or JSON for a BFF client).
+ */
+function buildChannelOAuth(opts: {
+  tenantId: string;
+  userId: string;
+  platform: unknown;
+  wabaId?: string;
+  phoneNumberId?: string;
+  flow?: string;
+  waMode?: unknown;
+}): ChannelInitOutcome {
+  const platform = String(opts.platform ?? "");
+  if (!(CHANNEL_PLATFORMS as readonly string[]).includes(platform)) return { kind: "bad_platform" };
+
+  // Validate platform-specific config. The platform named is the one asked
+  // for: WhatsApp used to be reported as "messenger".
+  if (["messenger", "whatsapp"].includes(platform) && (!META_APP_ID || !OAUTH_REDIRECT_URI)) return { kind: "not_configured", platform };
+  if (platform === "instagram" && (!INSTAGRAM_APP_ID || !INSTAGRAM_OAUTH_REDIRECT_URI)) return { kind: "not_configured", platform };
+  if (platform === "gmail" && (!GOOGLE_CLIENT_ID || !GOOGLE_OAUTH_REDIRECT_URI)) return { kind: "not_configured", platform };
+  if (platform === "outlook" && (!MICROSOFT_CLIENT_ID || !MICROSOFT_OAUTH_REDIRECT_URI)) return { kind: "not_configured", platform };
+  if (platform === "slack" && (!SLACK_CLIENT_ID || !SLACK_OAUTH_REDIRECT_URI)) return { kind: "not_configured", platform };
+
+  // Session info from the Embedded Signup popup (WhatsApp)
+  const wabaId = opts.wabaId || "";
+  const phoneNumberId = opts.phoneNumberId || "";
+
+  // Single-use state (shared store). `provider` is the constant
+  // "meta_channels" because this ONE callback serves every channel platform;
+  // the specific `platform` (and the return `flow`) are their own claims, read
+  // from the verified payload, never from the query string.
+  const { state } = mintOAuthState({
+    tenantId: opts.tenantId,
+    provider: "meta_channels",
+    userId: opts.userId,
+    platform,
+    wabaId,        // From Embedded Signup popup session info
+    phoneNumberId, // From Embedded Signup popup session info
+    flow: opts.flow,
+  });
+
+  let oauthUrl: string;
+
+  if (platform === "whatsapp") {
+    // Built from the SAME object the browser's FB.login uses, so the two
+    // entry points cannot describe different Embedded Signup experiences.
+    // The old hand-rolled URL sent `setup: { channel: "WHATSAPP" }`, which is
+    // not a documented field, and no version at all.
+    oauthUrl = embeddedSignupDialogUrl({
+      launch: embeddedSignupFor(parseWhatsappMode(opts.waMode)),
+      redirectUri: OAUTH_REDIRECT_URI,
+      state,
+      // The DIALOG version, which is not the Graph API version. This used to
+      // pass metaGraphVersion() (v24.0 by default), so the redirect path and
+      // the popup path opened two different dialogs - and the older one does
+      // not offer the WhatsApp Business app choice at all.
+      dialogVersion: EMBEDDED_SIGNUP_DIALOG_VERSION,
+    });
+  } else if (platform === "gmail") {
+    // Google OAuth2 for Gmail API
+    // ONE scope. gmail.modify is listed as an accepted authorization scope by
+    // every Gmail endpoint this channel touches: users.getProfile,
+    // users.watch, users.stop, users.history.list, users.messages.get and
+    // users.messages.send. gmail.readonly and gmail.send were strict subsets
+    // of it, and userinfo.email was only ever used to learn the mailbox
+    // address, which getProfile returns itself. A scope we do not need is
+    // still a scope Google has to review and a user has to grant.
+    const googleScopes = "https://www.googleapis.com/auth/gmail.modify";
+    oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(GOOGLE_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(googleScopes)}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`;
+  } else if (platform === "outlook") {
+    // Microsoft OAuth2 for Outlook Mail (Microsoft Graph)
+    const msScopes = [
+      "https://graph.microsoft.com/Mail.ReadWrite",
+      "https://graph.microsoft.com/Mail.Send",
+      "https://graph.microsoft.com/User.Read",
+      "offline_access",
+    ].join(" ");
+    oauthUrl = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?client_id=${MICROSOFT_CLIENT_ID}&redirect_uri=${encodeURIComponent(MICROSOFT_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(msScopes)}&state=${encodeURIComponent(state)}`;
+  } else if (platform === "slack") {
+    // Slack OAuth2 with bot scopes for messaging
+    const slackScopes = [
+      "channels:history",
+      "channels:read",
+      "chat:write",
+      "groups:history",
+      "groups:read",
+      "im:history",
+      "im:read",
+      "im:write",
+      "mpim:history",
+      "mpim:read",
+      "users:read",
+    ].join(",");
+    oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&redirect_uri=${encodeURIComponent(SLACK_OAUTH_REDIRECT_URI)}&scope=${encodeURIComponent(slackScopes)}&state=${encodeURIComponent(state)}`;
+  } else if (platform === "instagram") {
+    // Instagram API with Instagram Login - connects an Instagram professional
+    // (Business/Creator) account DIRECTLY. The consent screen is Instagram-only;
+    // there is no Facebook Page picker because no Page is involved. Scopes are
+    // comma-separated, business-prefixed.
+    const igScopes = [
+      "instagram_business_basic",
+      "instagram_business_manage_messages",
+      "instagram_business_manage_comments",
+    ].join(",");
+    oauthUrl = `https://www.instagram.com/oauth/authorize?client_id=${INSTAGRAM_APP_ID}&redirect_uri=${encodeURIComponent(INSTAGRAM_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(igScopes)}&state=${encodeURIComponent(state)}`;
+  } else {
+    // Messenger (Facebook Login for Pages)
+    const scopes: Record<string, string> = {
+      messenger: "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement",
+    };
+    oauthUrl = `https://www.facebook.com/v25.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(OAUTH_REDIRECT_URI)}&state=${encodeURIComponent(state)}&scope=${scopes[platform]}`;
+  }
+
+  return { kind: "url", url: oauthUrl };
+}
+
+/** Where a channel connect lands in the redesigned app. Fixed path, closed codes. */
+// The app has been at the root since 2026-10-21 (it was under /v2; the
+// gateway 301s any old /v2 link).
+const REDESIGN_BASE_PATH = "";
+const CHANNEL_ERROR_CODES = new Set([
+  "denied",
+  "token_exchange_failed",
+  "state_already_used",
+  "invalid_state",
+  "not_configured",
+  "already_connected",
+  "gmail_no_email",
+  "outlook_no_email",
+  "no_pages",
+  "no_instagram_account",
+  "no_whatsapp_numbers",
+  "slack_no_team",
+  "callback_error",
+  "limit_reached",
+  "picker_failed",
+]);
+/** The callback's existing codes, folded onto the closed list. */
+const CHANNEL_ERROR_ALIASES: Record<string, string> = {
+  gmail_already_connected: "already_connected",
+  outlook_already_connected: "already_connected",
+  slack_already_connected: "already_connected",
+  slack_token_failed: "token_exchange_failed",
+  connection_failed: "callback_error",
+  missing_params: "callback_error",
+};
+
+/** The reasons a connect can land as connected-but-pending (closed list). */
+const PENDING_REASONS = new Set(["SUBSCRIBE_FAILED"]);
+
+export function redesignChannelsUrl(origin: string, platform: string | undefined, legacyQuery: string): string {
+  const legacy = new URLSearchParams(legacyQuery);
+  const out = new URLSearchParams();
+  const err = legacy.get("error");
+  if (err) {
+    const code = CHANNEL_ERROR_ALIASES[err] ?? err;
+    if (platform) out.set("platform", platform);
+    out.set("error", CHANNEL_ERROR_CODES.has(code) ? code : "callback_error");
+  } else if (legacy.get("pick") === "1" && legacy.get("session")) {
+    // More than one Page was granted: the customer chooses (2026-10-09).
+    out.set("pick", "1");
+    if (platform) out.set("platform", platform);
+    out.set("session", String(legacy.get("session")));
+  } else {
+    out.set("connected", legacy.get("connected") || platform || "");
+    if (legacy.get("count") != null) out.set("count", String(legacy.get("count")));
+    if (legacy.get("pending") === "true") {
+      out.set("pending", "1");
+      // Connected but cannot receive yet, with a reason (2026-10-10): say
+      // which channel and why. WhatsApp's reasonless pending is unchanged.
+      const reason = legacy.get("reason");
+      if (reason && PENDING_REASONS.has(reason)) {
+        if (platform) out.set("platform", platform);
+        out.set("reason", reason);
+      }
+    }
+  }
+  return `${origin}${REDESIGN_BASE_PATH}/settings/channels?${out.toString()}`;
+}
+
+/**
+ * The flow carried by a state whose SIGNATURE is ours, even when it can no
+ * longer be consumed (replayed or expired). Choosing a landing page needs only
+ * proof that we issued it; nothing is granted on this read.
+ */
+function signedFlowOf(state: unknown): { flow?: string; platform?: string } {
+  if (typeof state !== "string" || !state) return {};
+  try {
+    const c: any = jwt.verify(state, getOAuthStateSecret(), { ignoreExpiration: true });
+    return c?.provider === "meta_channels" ? { flow: c.flow, platform: c.platform } : {};
+  } catch {
+    return {};
+  }
+}
+
+// ─── Messenger Pages: one connect path for the callback and the picker ───
+
+/**
+ * Where a Page stands for this tenant. "taken" is any row another tenant owns,
+ * whatever its status; "here" is a live row of ours. Only "new" needs a seat:
+ * a DISCONNECTED row of ours is not counted by countChannels (2026-10-09).
+ */
+type PageStanding = "taken" | "here" | "new";
+
+async function messengerStandings(
+  tenantId: string,
+  pageIds: string[],
+): Promise<Map<string, { standing: PageStanding; existing: any }>> {
+  const out = new Map<string, { standing: PageStanding; existing: any }>();
+  for (const pageId of pageIds) {
+    // findUnique on the unique index is exempt from TenantGuard (see prisma.ts),
+    // which is what lets us see a Page another tenant owns.
+    const existing = await prisma.channelAccount.findUnique({
+      where: { channel_externalId: { channel: "MESSENGER", externalId: pageId } },
+    });
+    const standing: PageStanding = !existing
+      ? "new"
+      : existing.tenantId !== tenantId
+        ? "taken"
+        : existing.connectionStatus === "DISCONNECTED"
+          ? "new"
+          : "here";
+    out.set(pageId, { standing, existing });
+  }
+  return out;
+}
+
+export interface MessengerPageResult {
+  id: string;
+  name: string;
+  status: "connected" | "reconnected" | "taken";
+  subscribed: boolean;
+}
+
+/**
+ * Connect ONE Page. The callback's loop and POST /messenger/select both run
+ * this, so the two cannot drift (2026-10-09).
+ *
+ * A Page another tenant owns is refused before anything is called or written.
+ * A failed subscribe keeps the page (its token is good) as PENDING with a code,
+ * as the WhatsApp connect does: CONNECTED would be a lie, and the 6-hourly Meta
+ * token sweep clears lastError on any CONNECTED row with a valid token, so the
+ * reason would vanish while nothing arrives.
+ */
+async function connectMessengerPage(
+  ctx: { tenantId: string; userId: string; tokenExpiresAt: Date },
+  page: PageCandidate,
+  existing: any,
+): Promise<MessengerPageResult> {
+  const { tenantId, userId, tokenExpiresAt } = ctx;
+  const pageId = page.id;
+  const pageName = page.name || pageId;
+
+  if (existing && existing.tenantId !== tenantId) {
+    console.warn(`Messenger page ${pageId} already connected to another tenant`);
+    return { id: pageId, name: pageName, status: "taken", subscribed: false };
+  }
+
+  // `feed` delivers comment + post events (the Comment Trigger);
+  // `message_reactions` delivers reactions to inbound messages.
+  let subscribeError: string | null = null;
+  try {
+    const pageSubResp = await axios.post(`${FB_API_URL}/${pageId}/subscribed_apps`, null, {
+      params: {
+        subscribed_fields: "messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads,message_reactions,feed",
+        access_token: page.accessToken,
+      },
+    });
+    console.log(`[MESSENGER-CALLBACK] Page ${pageId} subscribed_apps result:`, pageSubResp.data);
+  } catch (subErr: any) {
+    console.error(`[MESSENGER-CALLBACK] Page subscription FAILED for ${pageId}:`, subErr.response?.data || subErr.message);
+    subscribeError = withErrorCode(
+      "SUBSCRIBE_FAILED",
+      `Messenger page subscription failed, so messages cannot arrive: ${providerReason(subErr)}`,
+    );
+  }
+  const pageStatus = subscribeError ? ("PENDING" as const) : ("CONNECTED" as const);
+
+  const credentials = encryptCredentials({ accessToken: page.accessToken, userId, pageId, pageName });
+
+  if (existing) {
+    await prisma.channelAccount.update({
+      where: { id: existing.id },
+      data: {
+        credentials,
+        connectionStatus: pageStatus,
+        connectedAt: new Date(),
+        connectedBy: userId,
+        tokenExpiresAt,
+        isActive: true,
+        lastError: subscribeError,
+        displayName: pageName,
+      },
+    });
+  } else {
+    await prisma.channelAccount.create({
+      data: {
+        tenantId,
+        channel: "MESSENGER",
+        externalId: pageId,
+        displayName: pageName,
+        credentials,
+        connectionStatus: pageStatus,
+        lastError: subscribeError,
+        connectedAt: new Date(),
+        connectedBy: userId,
+        tokenExpiresAt,
+        isActive: true,
+      },
+    });
+  }
+
+  await getRedis().del(`channel_account:MESSENGER:${pageId}`);
+  return { id: pageId, name: pageName, status: existing ? "reconnected" : "connected", subscribed: !subscribeError };
+}
+
+/**
+ * Connect a set of Pages, after checking the plan has room for the NEW ones.
+ * A reconnect never needs a seat, so a tenant already over its limit (after a
+ * downgrade) can still refresh the Pages it has. Throws EntitlementDeniedError
+ * before anything is written.
+ */
+async function connectMessengerPages(
+  ctx: { tenantId: string; userId: string; tokenExpiresAt: Date },
+  pages: PageCandidate[],
+): Promise<MessengerPageResult[]> {
+  const standings = await messengerStandings(ctx.tenantId, pages.map((p) => p.id));
+  const adding = pages.filter((p) => standings.get(p.id)?.standing === "new").length;
+  if (adding > 0) {
+    await assertWithinLimit(ctx.tenantId, "limit:channels", await countChannels(ctx.tenantId), adding);
+  }
+  const results: MessengerPageResult[] = [];
+  for (const page of pages) {
+    results.push(await connectMessengerPage(ctx, page, standings.get(page.id)?.existing ?? null));
+  }
+  return results;
+}
 
 router.get("/oauth/init", async (req: Request, res: Response) => {
   // Special handling: accept token from query param since this is a redirect from frontend
@@ -648,135 +1259,76 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
   // Inject tenant/user context like the authenticate middleware would.
   req.tenantId = principal.tenantId;
   (req as any).userId = principal.userId;
+  (req as any).user = principal;
 
-  if (principal.role !== "ADMIN") {
-    res.status(403).json({ error: "Admin access required" });
-    return;
-  }
+  // The same connect gate as /oauth/init-url; it answers the 403 itself.
+  let allowed = false;
+  await requireChannelConnect(req, res, () => { allowed = true; });
+  if (!allowed) return;
 
   try {
-    const platform = req.query.platform as string;
-    if (!platform || !["messenger", "instagram", "whatsapp", "gmail", "outlook", "slack"].includes(platform)) {
+    const flow = parseChannelFlow(req.query.flow);
+    const outcome = buildChannelOAuth({
+      tenantId: req.tenantId!,
+      userId: principal.userId,
+      platform: req.query.platform,
+      wabaId: req.query.wabaId as string,
+      phoneNumberId: req.query.phoneNumberId as string,
+      waMode: req.query.mode,
+      flow,
+    });
+    if (outcome.kind === "bad_platform") {
       res.status(400).json({ error: "Invalid platform. Must be 'messenger', 'instagram', 'whatsapp', 'gmail', 'outlook', or 'slack'" });
       return;
     }
-
-    // Validate platform-specific config
-    if (["messenger", "whatsapp"].includes(platform) && (!META_APP_ID || !OAUTH_REDIRECT_URI)) {
-      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=messenger`);
+    if (outcome.kind === "not_configured") {
+      res.redirect(
+        flow === "redesign_studio"
+          ? redesignChannelsUrl(FRONTEND_URL, outcome.platform, "error=not_configured")
+          : `${FRONTEND_URL}/settings/channels?error=not_configured&platform=${outcome.platform}`,
+      );
       return;
     }
-    if (platform === "instagram" && (!INSTAGRAM_APP_ID || !INSTAGRAM_OAUTH_REDIRECT_URI)) {
-      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=instagram`);
-      return;
-    }
-    if (platform === "gmail" && (!GOOGLE_CLIENT_ID || !GOOGLE_OAUTH_REDIRECT_URI)) {
-      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=gmail`);
-      return;
-    }
-    if (platform === "outlook" && (!MICROSOFT_CLIENT_ID || !MICROSOFT_OAUTH_REDIRECT_URI)) {
-      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=outlook`);
-      return;
-    }
-    if (platform === "slack" && (!SLACK_CLIENT_ID || !SLACK_OAUTH_REDIRECT_URI)) {
-      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=slack`);
-      return;
-    }
-
-    // Capture session info from popup (passed as query params for WhatsApp)
-    const wabaId = req.query.wabaId as string || "";
-    const phoneNumberId = req.query.phoneNumberId as string || "";
-
-    // Generate signed state JWT (anti-CSRF + tenant context + session info)
-    // Single-use state (shared store). `provider` is the constant
-    // "meta_channels" because this ONE callback serves whatsapp / instagram /
-    // messenger; the specific `platform` stays its own claim and is read from
-    // the verified payload, never from the query string. The jti replaces the
-    // old hand-rolled `nonce`, which was never checked against anything.
-    const { state } = mintOAuthState({
-      tenantId: req.tenantId!,
-      provider: "meta_channels",
-      userId: principal.userId,
-      platform,
-      wabaId,        // From Embedded Signup popup session info
-      phoneNumberId, // From Embedded Signup popup session info
-    });
-
-    let oauthUrl: string;
-
-    if (platform === "whatsapp") {
-      // Built from the SAME object the browser's FB.login uses, so the two
-      // entry points cannot describe different Embedded Signup experiences.
-      // The old hand-rolled URL sent `setup: { channel: "WHATSAPP" }`, which is
-      // not a documented field, and no version at all.
-      oauthUrl = embeddedSignupDialogUrl({
-        launch: buildEmbeddedSignupLaunch(process.env),
-        redirectUri: OAUTH_REDIRECT_URI,
-        state,
-        // The DIALOG version, which is not the Graph API version. This used to
-        // pass metaGraphVersion() (v24.0 by default), so the redirect path and
-        // the popup path opened two different dialogs - and the older one does
-        // not offer the WhatsApp Business app choice at all.
-        dialogVersion: EMBEDDED_SIGNUP_DIALOG_VERSION,
-      });
-    } else if (platform === "gmail") {
-      // Google OAuth2 for Gmail API
-      // ONE scope. gmail.modify is listed as an accepted authorization scope by
-      // every Gmail endpoint this channel touches: users.getProfile,
-      // users.watch, users.stop, users.history.list, users.messages.get and
-      // users.messages.send. gmail.readonly and gmail.send were strict subsets
-      // of it, and userinfo.email was only ever used to learn the mailbox
-      // address, which getProfile returns itself. A scope we do not need is
-      // still a scope Google has to review and a user has to grant.
-      const googleScopes = "https://www.googleapis.com/auth/gmail.modify";
-      oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(GOOGLE_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(googleScopes)}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`;
-    } else if (platform === "outlook") {
-      // Microsoft OAuth2 for Outlook Mail (Microsoft Graph)
-      const msScopes = [
-        "https://graph.microsoft.com/Mail.ReadWrite",
-        "https://graph.microsoft.com/Mail.Send",
-        "https://graph.microsoft.com/User.Read",
-        "offline_access",
-      ].join(" ");
-      oauthUrl = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?client_id=${MICROSOFT_CLIENT_ID}&redirect_uri=${encodeURIComponent(MICROSOFT_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(msScopes)}&state=${encodeURIComponent(state)}`;
-    } else if (platform === "slack") {
-      // Slack OAuth2 with bot scopes for messaging
-      const slackScopes = [
-        "channels:history",
-        "channels:read",
-        "chat:write",
-        "groups:history",
-        "groups:read",
-        "im:history",
-        "im:read",
-        "im:write",
-        "mpim:history",
-        "mpim:read",
-        "users:read",
-      ].join(",");
-      oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&redirect_uri=${encodeURIComponent(SLACK_OAUTH_REDIRECT_URI)}&scope=${encodeURIComponent(slackScopes)}&state=${encodeURIComponent(state)}`;
-    } else if (platform === "instagram") {
-      // Instagram API with Instagram Login - connects an Instagram professional
-      // (Business/Creator) account DIRECTLY. The consent screen is Instagram-only;
-      // there is no Facebook Page picker because no Page is involved. Scopes are
-      // comma-separated, business-prefixed.
-      const igScopes = [
-        "instagram_business_basic",
-        "instagram_business_manage_messages",
-        "instagram_business_manage_comments",
-      ].join(",");
-      oauthUrl = `https://www.instagram.com/oauth/authorize?client_id=${INSTAGRAM_APP_ID}&redirect_uri=${encodeURIComponent(INSTAGRAM_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(igScopes)}&state=${encodeURIComponent(state)}`;
-    } else {
-      // Messenger (Facebook Login for Pages)
-      const scopes: Record<string, string> = {
-        messenger: "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement",
-      };
-      oauthUrl = `https://www.facebook.com/v25.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(OAUTH_REDIRECT_URI)}&state=${encodeURIComponent(state)}&scope=${scopes[platform]}`;
-    }
-
-    res.redirect(oauthUrl);
+    res.redirect(outcome.url);
   } catch (err) {
     console.error("OAuth init error:", err);
+    res.status(500).json({ error: "Failed to initialize OAuth" });
+  }
+});
+
+/**
+ * GET /oauth/init-url - the same init for a BFF client.
+ *
+ * The redirect variant above takes the user's token in the QUERY STRING,
+ * which a BFF browser does not have and which lands in logs and history. Here
+ * the caller authenticates the normal way (Authorization header or session
+ * cookie, through the one auth gate) and gets the provider URL back as JSON;
+ * the browser then navigates to it. Same platforms, same flows, same state.
+ */
+router.get("/oauth/init-url", authenticate, resolveTenant, requireChannelConnect, async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    const outcome = buildChannelOAuth({
+      tenantId: req.tenantId!,
+      userId: user.userId,
+      platform: req.query.platform,
+      wabaId: req.query.wabaId as string,
+      phoneNumberId: req.query.phoneNumberId as string,
+      waMode: req.query.mode,
+      flow: parseChannelFlow(req.query.flow),
+    });
+    if (outcome.kind === "bad_platform") {
+      res.status(400).json({ error: "invalid_platform", platforms: CHANNEL_PLATFORMS });
+      return;
+    }
+    if (outcome.kind === "not_configured") {
+      // `code` is the machine code every reader keys on (2026-10-09).
+      res.status(409).json({ error: "not_configured", code: "NOT_CONFIGURED", platform: outcome.platform });
+      return;
+    }
+    res.json({ url: outcome.url });
+  } catch (err) {
+    console.error("OAuth init-url error:", err);
     res.status(500).json({ error: "Failed to initialize OAuth" });
   }
 });
@@ -786,17 +1338,34 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
 router.get("/oauth/callback", async (req: Request, res: Response) => {
   // Note: This endpoint does NOT use authenticate middleware since it's a redirect from Meta
   const frontendUrl = resolveAppPublicUrl(process.env);
+  // Known once the state verifies. Until then every answer is the legacy one.
+  let flow: string | undefined;
+  let platformForReturn: string | undefined;
+  const back = (legacyQuery: string) =>
+    flow === "redesign_studio"
+      ? redesignChannelsUrl(frontendUrl, platformForReturn, legacyQuery)
+      : `${frontendUrl}/settings/channels?${legacyQuery}`;
 
   try {
     const { code, state, error: oauthError } = req.query;
 
     if (oauthError) {
-      res.redirect(`${frontendUrl}/channels?error=${encodeURIComponent(oauthError as string)}`);
+      // The user pressed Cancel at the provider. The state is still ours to
+      // spend: for the redesign flow it decides the landing (error=denied);
+      // every other flow gets exactly the answer it always had.
+      if (typeof state === "string" && state) {
+        const consumed = await consumeOAuthState<{ flow?: string; platform?: string }>(state, "meta_channels");
+        if (consumed.ok && consumed.claims.flow === "redesign_studio") {
+          res.redirect(redesignChannelsUrl(frontendUrl, consumed.claims.platform, "error=denied"));
+          return;
+        }
+      }
+      res.redirect(`${frontendUrl}/settings/channels?error=${encodeURIComponent(oauthError as string)}`);
       return;
     }
 
     if (!code || !state) {
-      res.redirect(`${frontendUrl}/channels?error=missing_params`);
+      res.redirect(`${frontendUrl}/settings/channels?error=missing_params`);
       return;
     }
 
@@ -810,12 +1379,18 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
     );
     if (!consumedState.ok) {
       console.error(`[OAUTH-CALLBACK] state rejected: ${consumedState.reason}`);
-      res.redirect(`${frontendUrl}/channels?error=${consumedState.reason === "replayed" ? "state_already_used" : "invalid_state"}`);
+      // A replayed or expired state of ours still says which app to land in.
+      const signed = signedFlowOf(state);
+      flow = parseChannelFlow(signed.flow);
+      platformForReturn = signed.platform;
+      res.redirect(back(`error=${consumedState.reason === "replayed" ? "state_already_used" : "invalid_state"}`));
       return;
     }
     const statePayload: any = consumedState.claims;
 
     const { tenantId, userId, platform } = statePayload;
+    flow = parseChannelFlow(statePayload.flow);
+    platformForReturn = platform;
 
     let accessToken: string;
     let tokenExpiresAt: Date;
@@ -853,7 +1428,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       }
 
       if (!token) {
-        res.redirect(`${frontendUrl}/channels?error=token_exchange_failed`);
+        res.redirect(back(`error=token_exchange_failed`));
         return;
       }
       accessToken = token;
@@ -920,7 +1495,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       }
 
       if (!shortLivedToken) {
-        res.redirect(`${frontendUrl}/channels?error=token_exchange_failed`);
+        res.redirect(back(`error=token_exchange_failed`));
         return;
       }
 
@@ -949,6 +1524,9 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
     }
 
     const connectedAccounts: string[] = [];
+    // Any account saved PENDING because its subscription failed: the landing
+    // says so instead of a plain "connected" (2026-10-10).
+    let subscribeGap = false;
     const redis = getRedis();
 
     if (platform === "whatsapp") {
@@ -980,7 +1558,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         // Store the token in Redis for later completion (when session info arrives from popup)
         console.log("[WA-CALLBACK] No WABA found. Storing token for session completion...");
         await redis.set(`wa_pending_token:${tenantId}`, accessToken, "EX", 300); // 5 min TTL
-        res.redirect(`${frontendUrl}/channels?connected=whatsapp&pending=true`);
+        res.redirect(back(`connected=whatsapp&pending=true`));
         return;
       }
 
@@ -1040,11 +1618,11 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         if (existing) {
           await prisma.channelAccount.update({
             where: { id: existing.id },
-            data: { credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: userId, tokenExpiresAt, isActive: true, lastError: null, displayName: phoneDetails.verified_name || displayPhone, platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating } },
+            data: { credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: userId, tokenExpiresAt, isActive: true, lastError: null, displayName: phoneDetails.verified_name || displayPhone, platformMeta: whatsappMeta(existing.platformMeta, wabaId, phoneDetails) },
           });
         } else {
           await prisma.channelAccount.create({
-            data: { tenantId, channel: "WHATSAPP", externalId: phoneNumberId, displayName: phoneDetails.verified_name || displayPhone, credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: userId, tokenExpiresAt, isActive: true, platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating } },
+            data: { tenantId, channel: "WHATSAPP", externalId: phoneNumberId, displayName: phoneDetails.verified_name || displayPhone, credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: userId, tokenExpiresAt, isActive: true, platformMeta: whatsappMeta(null, wabaId, phoneDetails) },
           });
         }
 
@@ -1053,7 +1631,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       }
 
       if (connectedAccounts.length === 0) {
-        res.redirect(`${frontendUrl}/channels?error=no_whatsapp_numbers`);
+        res.redirect(back(`error=no_whatsapp_numbers`));
         return;
       }
     } else if (platform === "messenger") {
@@ -1106,91 +1684,56 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         }
       }
 
-      if (pages.length === 0) {
-        console.error("[MESSENGER-CALLBACK] No pages found via /me/accounts or debug_token");
-        res.redirect(`${frontendUrl}/channels?error=no_pages`);
+      // A Page without its own token cannot be connected or chosen.
+      const usable: PageCandidate[] = [];
+      for (const page of pages) {
+        if (!page?.id || !page.access_token) {
+          console.warn(`[MESSENGER-CALLBACK] No access_token for page ${page?.id}, skipping`);
+          continue;
+        }
+        usable.push({ id: String(page.id), name: page.name || String(page.id), category: page.category ?? null, accessToken: page.access_token });
+      }
+
+      if (usable.length === 0) {
+        console.error("[MESSENGER-CALLBACK] No connectable pages via /me/accounts or debug_token");
+        res.redirect(back(`error=no_pages`));
         return;
       }
 
-      for (const page of pages) {
-        const pageId = page.id;
-        const pageAccessToken = page.access_token;
-        const pageName = page.name || pageId;
-
-        if (!pageAccessToken) {
-          console.warn(`[MESSENGER-CALLBACK] No access_token for page ${pageId}, skipping`);
-          continue;
-        }
-
-        // Subscribe page to webhooks. `feed` delivers comment + post events
-        // for the FB page - required for the Comment Trigger to fire.
-        // `message_reactions` delivers reactions to inbound messages.
+      // The redesigned app lets the customer choose when the grant holds more
+      // than one Page; connecting every Page a person can manage was never
+      // their choice (2026-10-09). v1 has no picker and keeps connecting all.
+      if (flow === "redesign_studio" && usable.length > 1) {
+        let sessionId: string;
         try {
-          const pageSubResp = await axios.post(`${FB_API_URL}/${pageId}/subscribed_apps`, null, {
-            params: {
-              subscribed_fields: "messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads,message_reactions,feed",
-              access_token: pageAccessToken,
-            },
-          });
-          console.log(`[MESSENGER-CALLBACK] Page ${pageId} subscribed_apps result:`, pageSubResp.data);
-        } catch (subErr: any) {
-          console.error(`[MESSENGER-CALLBACK] Page subscription FAILED for ${pageId}:`, subErr.response?.data || subErr.message);
+          sessionId = await startPageSession(tenantId, userId, { tokenExpiresAt: tokenExpiresAt.toISOString(), pages: usable });
+        } catch (sessErr: any) {
+          console.error("[MESSENGER-CALLBACK] could not keep the Page choices:", sessErr?.message);
+          res.redirect(back(`error=picker_failed`));
+          return;
         }
-
-        // Unique-key lookup on (channel, externalId). Detects a page bound
-        // to a different tenant so we can refuse instead of silently
-        // overwriting; findUnique on a unique index is exempt from
-        // TenantGuard (see prisma.ts).
-        const existing = await prisma.channelAccount.findUnique({
-          where: { channel_externalId: { channel: "MESSENGER", externalId: pageId } },
-        });
-
-        if (existing && existing.tenantId !== tenantId) {
-          console.warn(`Messenger page ${pageId} already connected to another tenant`);
-          continue;
-        }
-
-        const credentials = encryptCredentials({
-          accessToken: pageAccessToken,
-          userId,
-          pageId,
-          pageName,
-        });
-
-        if (existing) {
-          await prisma.channelAccount.update({
-            where: { id: existing.id },
-            data: {
-              credentials,
-              connectionStatus: "CONNECTED",
-              connectedAt: new Date(),
-              connectedBy: userId,
-              tokenExpiresAt,
-              isActive: true,
-              lastError: null,
-              displayName: pageName,
-            },
-          });
-        } else {
-          await prisma.channelAccount.create({
-            data: {
-              tenantId,
-              channel: "MESSENGER",
-              externalId: pageId,
-              displayName: pageName,
-              credentials,
-              connectionStatus: "CONNECTED",
-              connectedAt: new Date(),
-              connectedBy: userId,
-              tokenExpiresAt,
-              isActive: true,
-            },
-          });
-        }
-
-        await redis.del(`channel_account:MESSENGER:${pageId}`);
-        connectedAccounts.push(pageName);
+        res.redirect(back(`pick=1&session=${encodeURIComponent(sessionId)}`));
+        return;
       }
+
+      let results: MessengerPageResult[];
+      try {
+        results = await connectMessengerPages({ tenantId, userId, tokenExpiresAt }, usable);
+      } catch (capErr) {
+        if (capErr instanceof EntitlementDeniedError) {
+          res.redirect(back(`error=limit_reached`));
+          return;
+        }
+        throw capErr;
+      }
+      const saved = results.filter((r) => r.status !== "taken");
+      // Nothing saved used to land on "connected" with count=0 (2026-10-09).
+      if (saved.length === 0) {
+        res.redirect(back(`error=already_connected`));
+        return;
+      }
+      for (const r of saved) connectedAccounts.push(r.name);
+      if (saved.some((r) => r.subscribed === false)) subscribeGap = true;
     } else if (platform === "instagram") {
       // ─── INSTAGRAM (Instagram API with Instagram Login) ──
       // No Facebook Page involved: the IG professional account is connected
@@ -1213,7 +1756,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
 
       if (!igBusinessId) {
         console.error("[INSTAGRAM-CALLBACK] No IG account id resolved from token");
-        res.redirect(`${frontendUrl}/channels?error=no_instagram_account`);
+        res.redirect(back(`error=no_instagram_account`));
         return;
       }
 
@@ -1221,6 +1764,8 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       // Login the subscription is per-account (no Page), via /me/subscribed_apps.
       // The webhook callback URL + verify token are configured under the
       // Instagram product in the Meta App Dashboard, not via API.
+      // A failure is PENDING with a code, for the reason Messenger's is.
+      let subscribeError: string | null = null;
       try {
         const subResp = await axios.post(`${IG_API_URL}/me/subscribed_apps`, null, {
           params: {
@@ -1231,7 +1776,13 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         console.log(`[INSTAGRAM-CALLBACK] IG ${igBusinessId} subscribed_apps result:`, subResp.data);
       } catch (subErr: any) {
         console.error(`[INSTAGRAM-CALLBACK] IG subscription FAILED for ${igBusinessId}:`, subErr.response?.data || subErr.message);
+        subscribeError = withErrorCode(
+          "SUBSCRIBE_FAILED",
+          `Instagram app subscription failed, so messages cannot arrive: ${providerReason(subErr)}`,
+        );
       }
+      const igStatus = subscribeError ? ("PENDING" as const) : ("CONNECTED" as const);
+      if (subscribeError) subscribeGap = true;
 
       // Unique-key lookup on (channel, externalId) - see Messenger.
       const existing = await prisma.channelAccount.findUnique({
@@ -1240,7 +1791,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
 
       if (existing && existing.tenantId !== tenantId) {
         console.warn(`Instagram account ${igBusinessId} already connected to another tenant`);
-        res.redirect(`${frontendUrl}/channels?error=already_connected`);
+        res.redirect(back(`error=already_connected`));
         return;
       }
 
@@ -1256,12 +1807,12 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
           where: { id: existing.id },
           data: {
             credentials,
-            connectionStatus: "CONNECTED",
+            connectionStatus: igStatus,
             connectedAt: new Date(),
             connectedBy: userId,
             tokenExpiresAt,
             isActive: true,
-            lastError: null,
+            lastError: subscribeError,
             displayName: `@${igUsername}`,
           },
         });
@@ -1273,7 +1824,8 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             externalId: igBusinessId,
             displayName: `@${igUsername}`,
             credentials,
-            connectionStatus: "CONNECTED",
+            connectionStatus: igStatus,
+            lastError: subscribeError,
             connectedAt: new Date(),
             connectedBy: userId,
             tokenExpiresAt,
@@ -1287,7 +1839,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       connectedAccounts.push(`@${igUsername}`);
 
       if (connectedAccounts.length === 0) {
-        res.redirect(`${frontendUrl}/channels?error=no_instagram_account`);
+        res.redirect(back(`error=no_instagram_account`));
         return;
       }
     } else if (platform === "gmail") {
@@ -1323,7 +1875,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       }
 
       if (!emailAddress) {
-        res.redirect(`${frontendUrl}/channels?error=gmail_no_email`);
+        res.redirect(back(`error=gmail_no_email`));
         return;
       }
 
@@ -1337,9 +1889,21 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       // the mailbox history record at the moment the watch was armed, which is
       // the correct starting point: an older id would replay mail that arrived
       // before we were listening.
-      try {
-        const watchTopic = process.env.GMAIL_PUBSUB_TOPIC || "";
-        if (watchTopic) {
+      //
+      // No topic or a failed watch keeps the mailbox CONNECTED with a code,
+      // not PENDING as Messenger does: the daily watch renewal re-arms only
+      // CONNECTED Gmail rows and clears lastError only after a watch succeeds,
+      // so PENDING would turn a passing failure into a permanent one
+      // (2026-10-09).
+      let watchError: string | null = null;
+      const watchTopic = process.env.GMAIL_PUBSUB_TOPIC || "";
+      if (!watchTopic) {
+        watchError = withErrorCode(
+          "WATCH_FAILED",
+          "Gmail push is not set up on this server (no Pub/Sub topic), so new mail will not arrive.",
+        );
+      } else {
+        try {
           const watchRes = await axios.post(
             `https://gmail.googleapis.com/gmail/v1/users/me/watch`,
             { topicName: watchTopic, labelIds: ["INBOX"] },
@@ -1347,9 +1911,10 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
           );
           initialHistoryId = watchRes.data?.historyId?.toString() || initialHistoryId;
           console.log(`[GMAIL-CALLBACK] Push notifications enabled for ${emailAddress}`);
+        } catch (watchErr: any) {
+          console.warn("[GMAIL-CALLBACK] Watch setup warning:", watchErr.response?.data || watchErr.message);
+          watchError = withErrorCode("WATCH_FAILED", `Gmail watch failed, so new mail will not arrive: ${providerReason(watchErr)}`);
         }
-      } catch (watchErr: any) {
-        console.warn("[GMAIL-CALLBACK] Watch setup warning:", watchErr.response?.data || watchErr.message);
       }
 
       console.log(`[GMAIL-CALLBACK] Initial historyId: ${initialHistoryId}`);
@@ -1360,7 +1925,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       });
 
       if (existing && existing.tenantId !== tenantId) {
-        res.redirect(`${frontendUrl}/channels?error=gmail_already_connected`);
+        res.redirect(back(`error=gmail_already_connected`));
         return;
       }
 
@@ -1387,9 +1952,8 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             connectedBy: userId,
             tokenExpiresAt,
             isActive: true,
-            lastError: null,
+            lastError: watchError,
             displayName,
-            responseMode: "HUMAN_WITH_COPILOT",
             platformMeta: gmailPlatformMeta,
           },
         });
@@ -1402,11 +1966,11 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             displayName,
             credentials,
             connectionStatus: "CONNECTED",
+            lastError: watchError,
             connectedAt: new Date(),
             connectedBy: userId,
             tokenExpiresAt,
             isActive: true,
-            responseMode: "HUMAN_WITH_COPILOT",
             platformMeta: gmailPlatformMeta,
           },
         });
@@ -1445,16 +2009,42 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       const displayName = profileResponse.data.displayName || emailAddress;
 
       if (!emailAddress) {
-        res.redirect(`${frontendUrl}/channels?error=outlook_no_email`);
+        res.redirect(back(`error=outlook_no_email`));
         return;
       }
 
-      // Create a mail subscription for incoming messages via Microsoft Graph webhooks
+      // Unique-key lookup; refuse if mailbox is already bound elsewhere. BEFORE
+      // the Graph subscription: a refusal after it left a live subscription
+      // behind, pushing this mailbox's mail at us for nobody (2026-10-10).
+      const existing = await prisma.channelAccount.findUnique({
+        where: { channel_externalId: { channel: "OUTLOOK", externalId: emailAddress } },
+      });
+
+      if (existing && existing.tenantId !== tenantId) {
+        res.redirect(back(`error=outlook_already_connected`));
+        return;
+      }
+
+      // Create a mail subscription for incoming messages via Microsoft Graph webhooks.
+      //
+      // clientState is per account and STORED: the webhook compares each
+      // notification against it. It was random and dropped, so every
+      // notification failed the check (2026-10-09). A missing webhook URL or a
+      // refused subscription keeps the mailbox CONNECTED (the 6-hourly Outlook
+      // probe refreshes its 1h token only for CONNECTED/ERROR rows) with a code.
       const webhookUrl = process.env.OUTLOOK_WEBHOOK_URL || "";
       let subscriptionId: string | null = null;
-      if (webhookUrl) {
+      let storedClientState: string | null = null;
+      let subscriptionExpiresAt: string | null = null;
+      let subscriptionError: string | null = null;
+      if (!webhookUrl) {
+        subscriptionError = withErrorCode(
+          "OUTLOOK_SUBSCRIPTION_FAILED",
+          "Outlook push is not set up on this server (no webhook URL), so new mail will not arrive.",
+        );
+      } else {
         try {
-          const clientState = crypto.randomBytes(16).toString("hex");
+          const clientState = crypto.randomBytes(32).toString("hex");
           const subscriptionResponse = await axios.post(
             "https://graph.microsoft.com/v1.0/subscriptions",
             {
@@ -1466,21 +2056,19 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             },
             { headers: { Authorization: `Bearer ${outlookAccessToken}`, "Content-Type": "application/json" } }
           );
-          subscriptionId = subscriptionResponse.data.id;
+          // Without an id no notification can be matched to this mailbox.
+          if (!subscriptionResponse.data?.id) throw new Error("Graph returned no subscription id");
+          subscriptionId = String(subscriptionResponse.data.id);
+          storedClientState = clientState;
+          subscriptionExpiresAt = subscriptionResponse.data.expirationDateTime ?? null;
           console.log(`[OUTLOOK-CALLBACK] Webhook subscription created: ${subscriptionId}`);
         } catch (subErr: any) {
           console.warn("[OUTLOOK-CALLBACK] Subscription warning:", subErr.response?.data || subErr.message);
+          subscriptionError = withErrorCode(
+            "OUTLOOK_SUBSCRIPTION_FAILED",
+            `Outlook subscription failed, so new mail will not arrive: ${providerReason(subErr)}`,
+          );
         }
-      }
-
-      // Unique-key lookup; refuse if mailbox is already bound elsewhere.
-      const existing = await prisma.channelAccount.findUnique({
-        where: { channel_externalId: { channel: "OUTLOOK", externalId: emailAddress } },
-      });
-
-      if (existing && existing.tenantId !== tenantId) {
-        res.redirect(`${frontendUrl}/channels?error=outlook_already_connected`);
-        return;
       }
 
       const credentials = encryptCredentials({
@@ -1492,6 +2080,16 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         fromAddress: emailAddress,
       });
 
+      // All three are rewritten together: a reconnect's old clientState must
+      // not outlive the subscription it belonged to.
+      const prevMeta = existing?.platformMeta;
+      const outlookMeta = {
+        ...(prevMeta && typeof prevMeta === "object" && !Array.isArray(prevMeta) ? (prevMeta as Record<string, unknown>) : {}),
+        subscriptionId,
+        clientState: storedClientState,
+        subscriptionExpiresAt,
+      };
+
       if (existing) {
         await prisma.channelAccount.update({
           where: { id: existing.id },
@@ -1502,10 +2100,9 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             connectedBy: userId,
             tokenExpiresAt,
             isActive: true,
-            lastError: null,
+            lastError: subscriptionError,
             displayName,
-            platformMeta: { subscriptionId },
-            responseMode: "HUMAN_WITH_COPILOT",
+            platformMeta: outlookMeta,
           },
         });
       } else {
@@ -1517,12 +2114,12 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             displayName,
             credentials,
             connectionStatus: "CONNECTED",
+            lastError: subscriptionError,
             connectedAt: new Date(),
             connectedBy: userId,
             tokenExpiresAt,
             isActive: true,
-            platformMeta: { subscriptionId },
-            responseMode: "HUMAN_WITH_COPILOT",
+            platformMeta: outlookMeta,
           },
         });
       }
@@ -1550,7 +2147,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       const slackData = tokenResponse.data;
       if (!slackData.ok) {
         console.error("[SLACK-CALLBACK] Token exchange failed:", slackData.error);
-        res.redirect(`${frontendUrl}/channels?error=slack_token_failed`);
+        res.redirect(back(`error=slack_token_failed`));
         return;
       }
 
@@ -1562,7 +2159,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       tokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
       if (!teamId) {
-        res.redirect(`${frontendUrl}/channels?error=slack_no_team`);
+        res.redirect(back(`error=slack_no_team`));
         return;
       }
 
@@ -1572,7 +2169,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       });
 
       if (existing && existing.tenantId !== tenantId) {
-        res.redirect(`${frontendUrl}/channels?error=slack_already_connected`);
+        res.redirect(back(`error=slack_already_connected`));
         return;
       }
 
@@ -1620,47 +2217,114 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       connectedAccounts.push(teamName);
     }
 
-    res.redirect(`${frontendUrl}/channels?connected=${platform}&count=${connectedAccounts.length}`);
+    res.redirect(back(
+      `connected=${platform}&count=${connectedAccounts.length}` +
+        // v1's pending copy is WhatsApp's; only the redesign says this one.
+        (subscribeGap && flow === "redesign_studio" ? `&pending=true&reason=SUBSCRIBE_FAILED` : ""),
+    ));
   } catch (err: any) {
     console.error("OAuth callback error:", err.response?.data || err.message);
-    res.redirect(`${frontendUrl}/channels?error=connection_failed`);
+    res.redirect(back(`error=connection_failed`));
   }
 });
 
-// ─── Update Channel Response Mode ────────────────────────────
+// ─── Messenger Page picker (redesigned app) ──────────────────
 
-const responseModeSchema = z.object({
-  responseMode: z.enum(["HUMAN_WITH_COPILOT", "AI_AUTO_REPLY"]),
-});
+/** Same answer for missing, expired, another workspace's or another person's session. */
+const sessionExpired = (res: Response) => res.status(410).json({ error: "session_expired", code: "SESSION_EXPIRED" });
 
-router.patch("/:id/response-mode", authenticate, resolveTenant, requirePermission("channels:manage:update"), validate(responseModeSchema), async (req: Request, res: Response) => {
+/**
+ * GET /messenger/candidates?session= - the Pages a grant offered, to choose
+ * from. Names and ids only: the Page tokens stay in the encrypted session.
+ */
+router.get("/messenger/candidates", authenticate, resolveTenant, requireChannelConnect, async (req: Request, res: Response) => {
   try {
-    const account = await prisma.channelAccount.findFirst({
-      where: { id: req.params.id as string, tenantId: req.tenantId! },
-    });
-
-    if (!account) {
-      res.status(404).json({ error: "Channel not found" });
+    const sessionId = typeof req.query.session === "string" ? req.query.session : "";
+    const session = await readPageSession(req.tenantId!, sessionId, (req as any).user?.userId);
+    if (!session) {
+      sessionExpired(res);
       return;
     }
-
-    if (account.channel !== "GMAIL" && account.channel !== "OUTLOOK") {
-      res.status(400).json({ error: "Response mode is only configurable for Gmail and Outlook channels" });
-      return;
-    }
-
-    const updated = await prisma.channelAccount.update({
-      where: { id: account.id },
-      data: { responseMode: req.body.responseMode },
-      select: { id: true, channel: true, displayName: true, responseMode: true },
+    const standings = await messengerStandings(req.tenantId!, session.pages.map((p) => p.id));
+    res.json({
+      data: {
+        pages: session.pages.map((p) => ({
+          id: p.id,
+          name: p.name,
+          category: p.category ?? null,
+          connectedHere: standings.get(p.id)?.standing === "here",
+          takenElsewhere: standings.get(p.id)?.standing === "taken",
+        })),
+        expiresAt: session.expiresAt,
+      },
     });
-
-    res.json({ data: updated });
-  } catch (err) {
-    console.error("Update response mode error:", err);
-    res.status(500).json({ error: "Failed to update response mode" });
+  } catch (err: any) {
+    console.error("[MESSENGER-PICKER] candidates error:", err?.message);
+    res.status(500).json({ error: "Failed to load Pages" });
   }
 });
+
+const messengerSelectSchema = z.object({
+  session: z.string().min(1).max(100),
+  pageIds: z
+    .array(z.string().min(1).max(64))
+    .min(1)
+    .max(50)
+    .transform((ids) => Array.from(new Set(ids))),
+});
+
+/**
+ * POST /messenger/select { session, pageIds } - connect the chosen Pages.
+ * Only ids the grant offered are accepted. The session ends on success, so a
+ * replay is 410; a refusal (unknown id, limit) leaves it for another try.
+ */
+router.post("/messenger/select", authenticate, resolveTenant, requireChannelConnect, validate(messengerSelectSchema), async (req: Request, res: Response) => {
+  const tenantId = req.tenantId!;
+  const userId: string = (req as any).user?.userId;
+  try {
+    const { session: sessionId, pageIds } = req.body as z.infer<typeof messengerSelectSchema>;
+    const session = await readPageSession(tenantId, sessionId, userId);
+    if (!session) {
+      sessionExpired(res);
+      return;
+    }
+    const offered = new Map(session.pages.map((p) => [p.id, p]));
+    const unknown = pageIds.filter((id) => !offered.has(id));
+    if (unknown.length > 0) {
+      res.status(422).json({ error: "unknown_page", code: "UNKNOWN_PAGE", pageIds: unknown });
+      return;
+    }
+
+    let results: MessengerPageResult[];
+    try {
+      results = await connectMessengerPages(
+        { tenantId, userId, tokenExpiresAt: new Date(session.tokenExpiresAt) },
+        pageIds.map((id) => offered.get(id)!),
+      );
+    } catch (capErr) {
+      if (handleEntitlementError(capErr, res)) return;
+      throw capErr;
+    }
+
+    const connected = results.filter((r) => r.status !== "taken").length;
+    if (connected === 0) {
+      res.status(409).json({ error: "none_connected", code: "NONE_CONNECTED", data: { results, connected } });
+      return;
+    }
+    await endPageSession(tenantId, sessionId, userId);
+    res.json({ data: { results, connected } });
+  } catch (err: any) {
+    console.error("[MESSENGER-PICKER] select error:", err?.response?.data || err?.message);
+    res.status(500).json({ error: "Failed to connect Pages" });
+  }
+});
+
+// The per-channel "response mode" (AI answers / a person answers with AI
+// help) was removed 2026-10-07: nothing ever read it at runtime. Who answers
+// is decided by the playbook and automations (Conversation.handledBy), and
+// Copilot suggestions are generated per conversation, only while a person
+// owns or awaits it (ai copilot-suggestions isCopilotConversation). The column
+// stays, unread and unwritten, until its migration is approved.
 
 // ─── Disconnect Channel ──────────────────────────────────────
 
@@ -1730,13 +2394,16 @@ router.post("/:id/disconnect", authenticate, resolveTenant, requirePermission("c
       console.warn("Channel disconnect cleanup warning:", cleanupErr.response?.data || cleanupErr.message);
     }
 
-    // Soft disconnect: keep record, clear credentials
+    // Soft disconnect: keep record, clear credentials. A widget's "credentials"
+    // are its settings, not a secret: wiping them left nothing to come back to,
+    // so a widget keeps them and /webchat/create revives it (2026-10-10).
+    const keepsSettings = account.channel === "WEBCHAT";
     await prisma.channelAccount.update({
       where: { id: account.id },
       data: {
         connectionStatus: "DISCONNECTED",
         isActive: false,
-        credentials: {},
+        ...(keepsSettings ? {} : { credentials: {} }),
         lastError: null,
       },
     });
@@ -1869,8 +2536,12 @@ router.get("/:id/status", authenticate, resolveTenant, requirePermission("channe
       console.warn("Token debug error:", debugErr.response?.data || debugErr.message);
     }
 
-    const newStatus = tokenValid ? "CONNECTED" : "ERROR";
-    const lastError = tokenValid ? null : "Token is invalid or expired";
+    // A valid token says nothing about a failed subscription: keep that row's
+    // status and coded error, or this button would mark it healthy while
+    // nothing arrives (2026-10-09).
+    const keepsGap = tokenValid && SUBSCRIPTION_GAP_CODES.has(splitErrorCode(account.lastError).lastErrorCode ?? "");
+    const newStatus = keepsGap ? account.connectionStatus : tokenValid ? "CONNECTED" : "ERROR";
+    const lastError = keepsGap ? account.lastError : tokenValid ? null : "Token is invalid or expired";
 
     await prisma.channelAccount.update({
       where: { id: account.id },
@@ -1914,11 +2585,14 @@ router.post("/connect/email", authenticate, resolveTenant, requirePermission("ch
   try {
     const { emailAddress, displayName, smtpHost, smtpPort, smtpUser, smtpPass, imapHost, imapPort, imapUser, imapPass } = req.body;
 
-    // Check for duplicate
-    const existing = await prisma.channelAccount.findFirst({
-      where: { channel: "EMAIL", externalId: emailAddress, tenantId: req.tenantId! },
+    // Unique-key lookup (see /connect/whatsapp), so another tenant's address is
+    // a clean 409 rather than a failed create. Our own DISCONNECTED row is a
+    // reconnect: refusing it left the address unusable forever (2026-10-10).
+    const existing = await prisma.channelAccount.findUnique({
+      where: { channel_externalId: { channel: "EMAIL", externalId: emailAddress } },
     });
-    if (existing) {
+    const reconnecting = !!existing && existing.tenantId === req.tenantId! && existing.connectionStatus === "DISCONNECTED";
+    if (existing && !reconnecting) {
       res.status(409).json({ error: "This email address is already connected" });
       return;
     }
@@ -1928,6 +2602,24 @@ router.post("/connect/email", authenticate, resolveTenant, requirePermission("ch
       imapHost, imapPort, imapUser, imapPass,
       fromAddress: emailAddress,
     };
+
+    if (existing && reconnecting) {
+      const revived = await prisma.channelAccount.update({
+        where: { id: existing.id },
+        data: {
+          displayName,
+          credentials: encryptCredentials(credentials),
+          connectionStatus: "CONNECTED",
+          isActive: true,
+          lastError: null,
+          connectedAt: new Date(),
+          connectedBy: req.user!.userId,
+        },
+      });
+      await getRedis().del(`channel_account:EMAIL:${emailAddress}`);
+      res.json({ data: [publicChannelAccount(revived)] });
+      return;
+    }
 
     const channelAccount = await prisma.channelAccount.create({
       data: {
@@ -1942,7 +2634,7 @@ router.post("/connect/email", authenticate, resolveTenant, requirePermission("ch
       },
     });
 
-    res.json({ data: [channelAccount] });
+    res.json({ data: [publicChannelAccount(channelAccount)] });
   } catch (err: any) {
     console.error("Email connection error:", err);
     res.status(500).json({ error: "Failed to connect email channel" });
@@ -1961,8 +2653,22 @@ router.post("/webchat/create", authenticate, resolveTenant, requirePermission("c
       where: { tenantId: req.tenantId!, channel: "WEBCHAT" },
     });
 
+    // A disconnected widget comes back as the SAME widget, settings intact:
+    // its id is in the customer's embed code. PENDING, as a fresh create, since
+    // /bootstrap and /init (ai embedded-chat) accept only PENDING or CONNECTED
+    // and flip PENDING to CONNECTED on the first real load (2026-10-10).
+    if (existing && existing.connectionStatus === "DISCONNECTED") {
+      const revived = await prisma.channelAccount.update({
+        where: { id: existing.id },
+        data: { connectionStatus: "PENDING", isActive: true, lastError: null },
+      });
+      await getRedis().del(`channel_account:WEBCHAT:${existing.externalId}`);
+      res.json({ data: publicChannelAccount(revived) });
+      return;
+    }
+
     if (existing) {
-      res.json({ data: existing });
+      res.json({ data: publicChannelAccount(existing) });
       return;
     }
 
@@ -1982,7 +2688,7 @@ router.post("/webchat/create", authenticate, resolveTenant, requirePermission("c
       },
     });
 
-    res.status(201).json({ data: account });
+    res.status(201).json({ data: publicChannelAccount(account) });
   } catch (err) {
     console.error("Create webchat widget error:", err);
     res.status(500).json({ error: "Failed to create widget" });
@@ -1991,7 +2697,8 @@ router.post("/webchat/create", authenticate, resolveTenant, requirePermission("c
 
 // ─── Update Webchat Widget Settings ─────────────────────────
 
-router.put("/webchat/:id/settings", authenticate, resolveTenant, async (req: Request, res: Response) => {
+// Changing the widget is managing a channel (it used to need only sign-in).
+router.put("/webchat/:id/settings", authenticate, resolveTenant, requirePermission("channels:manage:update"), async (req: Request, res: Response) => {
   try {
     const account = await prisma.channelAccount.findFirst({
       where: { id: String(req.params.id), tenantId: req.tenantId!, channel: "WEBCHAT" },
@@ -2014,7 +2721,7 @@ router.put("/webchat/:id/settings", authenticate, resolveTenant, async (req: Req
       where: { id: account.id },
       data: { credentials: settings as any },
     });
-    res.json({ data: { ...updated, config: settings } });
+    res.json({ data: { ...publicChannelAccount(updated), config: settings } });
   } catch (err) {
     console.error("Update webchat settings error:", err);
     res.status(500).json({ error: "Failed to update widget settings" });
@@ -2023,7 +2730,7 @@ router.put("/webchat/:id/settings", authenticate, resolveTenant, async (req: Req
 
 // ─── Get Webchat Widget Settings ────────────────────────────
 
-router.get("/webchat/:id/settings", authenticate, resolveTenant, async (req: Request, res: Response) => {
+router.get("/webchat/:id/settings", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (req: Request, res: Response) => {
   try {
     const account = await prisma.channelAccount.findFirst({
       where: { id: String(req.params.id), tenantId: req.tenantId!, channel: "WEBCHAT" },
@@ -2041,7 +2748,7 @@ router.get("/webchat/:id/settings", authenticate, resolveTenant, async (req: Req
 
 // ─── Get OAuth Config (for frontend) ─────────────────────────
 
-router.get("/config", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (_req: Request, res: Response) => {
+router.get("/config", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (req: Request, res: Response) => {
   res.json({
     data: {
       metaAppId: META_APP_ID,
@@ -2049,7 +2756,14 @@ router.get("/config", authenticate, resolveTenant, requirePermission("channels:m
       // The canonical launch parameters. The browser passes these straight to
       // FB.login rather than assembling its own, which is what let the two
       // paths drift onto different Embedded Signup versions.
-      embeddedSignup: buildEmbeddedSignupLaunch(process.env),
+      // `?mode=coexistence|new_number` picks the launch for that choice; no
+      // mode is the configured default, as before.
+      embeddedSignup: embeddedSignupFor(parseWhatsappMode(req.query.mode)),
+      // Both choices at once, for a screen that offers them side by side.
+      embeddedSignupByMode: {
+        coexistence: embeddedSignupFor("coexistence"),
+        new_number: embeddedSignupFor("new_number"),
+      },
       oauthConfigured: !!(META_APP_ID && META_APP_SECRET && OAUTH_REDIRECT_URI),
       whatsappConfigured: !!(META_APP_ID && META_APP_SECRET && EMBEDDED_SIGNUP_CONFIG_ID),
       // Per-provider readiness: a provider whose app credentials are absent

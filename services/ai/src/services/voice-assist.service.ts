@@ -15,7 +15,8 @@
 
 import { Response } from "express";
 import { IncomingHttpHeaders } from "http";
-import { prisma, publishEvent, getRedis } from "@chatcenter/shared";
+import { prisma, getRedis } from "@chatcenter/shared";
+import { publishConvEvent } from "./intelligence/events";
 import { getEffectiveCopilotConfig, getSuggestions, type ConversationContext } from "./ai-assist.service";
 import { loadCustomerContext } from "./memory/customer-context.service";
 import { beginTurn, isAbortError } from "./turn-cancellation.service";
@@ -188,11 +189,14 @@ async function triggerAssist(tenantId: string, conversationId: string): Promise<
       console.warn(`[voice-assist] triggerAssist: no copilot config for tenant ${tenantId}`);
     }
 
-    await publishEvent({
-      event: "voice.copilot.suggestions",
-      tenantId,
-      data: { conversationId, suggestions },
-    } as any);
+    // publishConvEvent, not publishEvent: the suggestions are coaching for the
+    // one agent on this call, and the bridge routes by the target this sets.
+    // Published tenant-wide, they were every agent's hints in everyone's tab.
+    await publishConvEvent(
+      { kind: "conversation", id: conversationId },
+      "voice.copilot.suggestions",
+      { tenantId, conversationId, suggestions },
+    );
     console.log(
       `[voice-assist] triggerAssist ok conv=${conversationId} suggestions=${suggestions.length} ms=${Date.now() - t0}`,
     );

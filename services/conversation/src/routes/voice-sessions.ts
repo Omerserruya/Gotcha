@@ -33,8 +33,16 @@ import {
   type CallState,
 } from "@chatcenter/shared";
 import { getHistoryByCustomerExternalId } from "../services/conversation.service";
+import { canViewConversation, visibilityClause } from "../lib/conversation-visibility";
 
 const router = Router();
+
+/** The signed-in viewer, for the same conversation visibility as the inbox. */
+const viewerOf = (req: Request) => ({
+  userId: (req as any).user?.userId as string,
+  role: (req as any).user?.role as string | undefined,
+  departmentId: (req as any).user?.departmentId as string | undefined,
+});
 router.use(authenticate, resolveTenant, requireActiveTenant());
 
 // Feature-flag gate - short-circuits to 404 for non-enabled tenants.
@@ -56,6 +64,46 @@ async function voiceCopilotGate(req: Request, res: Response, next: NextFunction)
 }
 router.use(voiceCopilotGate);
 
+/**
+ * A call is a conversation, and answers only for a viewer who may see that
+ * conversation: the inbox rule, as on approvals/:id (2026-10-09). Every route
+ * addressed by a session id (including /missed/:id/*) goes through here, so a
+ * hidden call is a 404 identical to a missing one, before its transcript,
+ * contact, recording or controls are reached. A session that does not exist is
+ * left to the handler, which already 404s it.
+ */
+router.param("id", async (req: Request, res: Response, next: NextFunction, id: string) => {
+  try {
+    const viewer = viewerOf(req);
+    // An unrestricted viewer (admin, or no department) has nothing to check
+    // and keeps the exact behaviour, with no extra query.
+    if (!visibilityClause(viewer)) return next();
+    const session = await prisma.voiceCallSession.findFirst({
+      where: { id: String(id), tenantId: req.tenantId! },
+      select: { conversationId: true },
+    });
+    if (!session) return next();
+    if (!(await canViewConversation(req.tenantId!, session.conversationId, viewer))) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * The same rule for the lists and counts: a call on a conversation the viewer
+ * may not see is absent from history, the summary, /active and /missed, rather
+ * than filtered after the LIMIT. Empty for an unrestricted viewer, whose where
+ * stays exactly as it was.
+ */
+function visibleSessions(req: Request): Record<string, unknown> {
+  const clause = visibilityClause(viewerOf(req));
+  return clause ? { conversation: { OR: clause } } : {};
+}
+
 // Ensure the session exists and belongs to the agent's tenant.
 async function loadSessionForTenant(sessionId: string, tenantId: string) {
   const session = await prisma.voiceCallSession.findUnique({ where: { id: sessionId } });
@@ -64,11 +112,155 @@ async function loadSessionForTenant(sessionId: string, tenantId: string) {
 }
 
 // ─── GET /active ───────────────────────────────────────────────
+/**
+ * GET / - the call history. The screen's "Recent calls" list and the stats
+ * above it.
+ *
+ * Nineteen routes existed on this router and none was a bare list: /active,
+ * /missed and /:id could answer "what is happening now", "what did we miss"
+ * and "tell me about this one", but nothing could answer "what happened".
+ * The design's four tabs - All, Incoming, Outgoing, Missed - had an endpoint
+ * for exactly one of them.
+ *
+ * WHAT IS NOT RETURNED, and why each was a decision rather than an omission:
+ *   callSid        the provider's own call identifier. Useful for support
+ *                  escalation, meaningless in a list, and a foreign key into
+ *                  someone else's system. /:id serves it.
+ *   recordingUrl   a link to a recording of a customer. A list is the wrong
+ *                  place to hand out twenty of them; the detail route is
+ *                  where someone has chosen one call to listen to.
+ *   stateHistory   the full FSM transition log. It is debugging material and
+ *                  it is unbounded.
+ *   meta           provider payload, free-form.
+ *
+ * INDEXES, stated plainly because the tabs depend on them:
+ *   @@index([tenantId, startedAt])  serves the ordering and the window.
+ *   direction and status are NOT indexed. The tabs filter on them, so a tab
+ *   is a filtered scan within the tenant's window rather than an index seek.
+ *   Fine at current volume; worth revisiting if a tenant runs call centre
+ *   traffic.
+ *   Note @@index([tenantId, state]) exists and is a DIFFERENT column -
+ *   `state` is the typed FSM (CallState), `status` is the provider's string.
+ *   Indexing one does not help the other, and the names are one letter apart.
+ */
+router.get("/", async (req: Request, res: Response) => {
+  const tenantId = req.tenantId!;
+  const bad: Array<{ field: string; message: string }> = [];
+  for (const f of ["from", "to"] as const) {
+    const raw = req.query[f];
+    if (typeof raw === "string" && raw && Number.isNaN(new Date(raw).getTime())) {
+      bad.push({ field: f, message: `${f} must be an ISO-8601 date` });
+    }
+  }
+  if (bad.length > 0) {
+    res.status(422).json({ error: "Invalid call filter", details: bad });
+    return;
+  }
+
+  const where: any = { tenantId, ...visibleSessions(req) };
+  const direction = typeof req.query.direction === "string" ? req.query.direction.trim() : "";
+  if (direction) where.direction = direction;
+  const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
+  if (status) where.status = status;
+  const from = typeof req.query.from === "string" && req.query.from ? new Date(req.query.from) : null;
+  const to = typeof req.query.to === "string" && req.query.to ? new Date(req.query.to) : null;
+  if (from || to) where.startedAt = { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) };
+
+  const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 50;
+  const cursor = typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : null;
+
+  try {
+    const rows = await prisma.voiceCallSession.findMany({
+      where,
+      select: {
+        id: true, conversationId: true, direction: true, status: true,
+        customerNumber: true, customerId: true, agentId: true, assignedAgentId: true,
+        startedAt: true, answeredAt: true, endedAt: true, durationMs: true,
+        recordingStatus: true, endReason: true, state: true,
+      },
+      // startedAt is not unique, so id breaks the tie and keeps the cursor
+      // stable across pages.
+      orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    res.json({
+      data: page,
+      nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
+      // Always echoed, bounds included when absent, so a count can never be
+      // rendered without the period it covers.
+      window: { from: from ? from.toISOString() : null, to: to ? to.toISOString() : null },
+    });
+  } catch (err) {
+    console.error("voice-sessions list error:", err);
+    res.status(500).json({ error: "Failed to read call history" });
+  }
+});
+
+/**
+ * GET /summary - the stats row: "Calls this week 124 · answered 96 · average 2m 40s".
+ *
+ * Separate from the list, matching /api/policy-decisions, because the two
+ * change on different cadences and a failure in one should not blank the
+ * other. Sharing one `where` builder with the list is what stops the counts
+ * disagreeing with the rows beneath them.
+ *
+ * `averageDurationMs` is averaged ONLY over calls that have a duration.
+ * Prisma's avg already skips nulls, and that is the behaviour we want stated
+ * rather than inherited: a call that rang out never connected, and counting
+ * it as zero would drag the average toward a length no call actually took.
+ * `durationSampleSize` ships beside it so the caller can see how many calls
+ * the average is of - an average of two is not the same claim as an average
+ * of two hundred.
+ */
+router.get("/summary", async (req: Request, res: Response) => {
+  const tenantId = req.tenantId!;
+  const from = typeof req.query.from === "string" && req.query.from ? new Date(req.query.from) : null;
+  const to = typeof req.query.to === "string" && req.query.to ? new Date(req.query.to) : null;
+  if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime()))) {
+    res.status(422).json({ error: "Invalid call filter", details: [{ field: "from|to", message: "must be ISO-8601" }] });
+    return;
+  }
+  const where: any = { tenantId, ...visibleSessions(req) };
+  if (from || to) where.startedAt = { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) };
+
+  try {
+    const [total, byDirection, byStatus, durationAgg] = await Promise.all([
+      prisma.voiceCallSession.count({ where }),
+      prisma.voiceCallSession.groupBy({ by: ["direction"], where, _count: { _all: true } }),
+      prisma.voiceCallSession.groupBy({ by: ["status"], where, _count: { _all: true } }),
+      prisma.voiceCallSession.aggregate({
+        where: { ...where, durationMs: { not: null } },
+        _avg: { durationMs: true },
+        _count: { durationMs: true },
+      }),
+    ]);
+    res.json({
+      data: {
+        total,
+        byDirection: byDirection.map((r) => ({ direction: r.direction, count: r._count._all })),
+        byStatus: byStatus.map((r) => ({ status: r.status, count: r._count._all })),
+        // null, never 0, when no call in the window has a duration: "no call
+        // connected" and "calls averaged zero" are different statements.
+        averageDurationMs: durationAgg._avg.durationMs ?? null,
+        durationSampleSize: durationAgg._count.durationMs,
+      },
+      window: { from: from ? from.toISOString() : null, to: to ? to.toISOString() : null },
+    });
+  } catch (err) {
+    console.error("voice-sessions summary error:", err);
+    res.status(500).json({ error: "Failed to summarise call history" });
+  }
+});
+
 router.get("/active", async (req: Request, res: Response) => {
   try {
     const states: CallState[] = ["RINGING", ...Array.from(LIVE_STATES) as CallState[]];
     const sessions = await prisma.voiceCallSession.findMany({
-      where: { tenantId: req.tenantId!, state: { in: states } },
+      where: { tenantId: req.tenantId!, state: { in: states }, ...visibleSessions(req) },
       orderBy: { startedAt: "desc" },
       select: {
         id: true,
@@ -113,6 +305,7 @@ router.get("/missed", async (req: Request, res: Response) => {
         // Keeps the inbox cleared once the loop is closed, even when
         // the callback came from the WhatsApp template button.
         handledAt: null,
+        ...visibleSessions(req),
       },
       orderBy: { startedAt: "desc" },
       take: limit,
@@ -234,6 +427,10 @@ router.post("/missed/:id/handle", async (req: Request, res: Response) => {
         ...(session.customerNumber
           ? { customerNumber: session.customerNumber }
           : { id: session.id }),
+        // The cascade stops at what this viewer may see: handling a call must
+        // not clear (or count) another department's missed calls from the
+        // same number.
+        ...visibleSessions(req),
       },
       data: { handledAt: now },
     });
@@ -318,7 +515,7 @@ router.get("/missed/:id/detail", async (req: Request, res: Response) => {
       lastMessageAt: Date | null; customerName: string | null;
     }>();
     for (const seed of seedExternalIds) {
-      const rows = await getHistoryByCustomerExternalId(req.tenantId!, seed, session.conversationId)
+      const rows = await getHistoryByCustomerExternalId(req.tenantId!, seed, session.conversationId, viewerOf(req))
         .catch(() => [] as Awaited<ReturnType<typeof getHistoryByCustomerExternalId>>);
       for (const c of rows) {
         if (c.id === session.conversationId) continue;
@@ -386,7 +583,17 @@ router.get("/:id/transcript", async (req: Request, res: Response) => {
     const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     const messages = await prisma.message.findMany({
-      where: { conversationId: session.conversationId, channel: "VOICE" },
+      // ★ `tenantId` IS REQUIRED, AND ITS ABSENCE MEANT THIS ROUTE NEVER WORKED.
+      //
+      // `Message` has been tenant-guarded since 2026-04-15 (b8a9f493); this
+      // route was written on 2026-05-12 (d2433aab). The guard refuses a
+      // findMany with no tenantId in its where, the catch below turned that into
+      // `500 failed_to_load_transcript`, and so a call's transcript has failed
+      // to load from the day it was written.
+      //
+      // It changes no rows: `session` came from `loadSessionForTenant`, so
+      // `conversationId` is already this tenant's. It only satisfies the guard.
+      where: { tenantId: req.tenantId!, conversationId: session.conversationId, channel: "VOICE" },
       orderBy: { createdAt: "asc" },
       take: limit + 1,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
@@ -456,7 +663,7 @@ router.get("/:id/context", async (req: Request, res: Response) => {
           lastMessageAt: Date | null; aiSummary: string | null;
         }>();
         for (const seed of seedExternalIds) {
-          const rows = await getHistoryByCustomerExternalId(req.tenantId!, seed, session.conversationId)
+          const rows = await getHistoryByCustomerExternalId(req.tenantId!, seed, session.conversationId, viewerOf(req))
             .catch(() => [] as Awaited<ReturnType<typeof getHistoryByCustomerExternalId>>);
           for (const c of rows) {
             if (c.id === session.conversationId) continue;
@@ -798,8 +1005,12 @@ router.post("/start-outbound", requirePermissionOrRole("outbound:calls:create", 
     // it and let voice-copilot mint a new one.
     let forwardedConversationId: string | undefined = undefined;
     if (conversationId) {
+      // A conversation the caller may not see is treated as unknown, exactly
+      // like a missing id: dropped, and voice-copilot mints a fresh one, so a
+      // call cannot be written into a hidden thread (2026-10-09).
+      const clause = visibilityClause(viewerOf(req));
       const existing = await prisma.conversation.findFirst({
-        where: { id: conversationId, tenantId: req.tenantId! },
+        where: { id: conversationId, tenantId: req.tenantId!, ...(clause ? { OR: clause } : {}) },
         select: { id: true },
       });
       if (existing) forwardedConversationId = existing.id;

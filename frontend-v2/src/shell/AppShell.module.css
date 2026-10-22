@@ -1,0 +1,558 @@
+@layer shell {
+  /*
+   * "A black rounded shell holds everything, and the work happens on warm
+   * off-white panels floating inside it. The frame is the operating system;
+   * the panels are the layout."
+   *
+   * The frame fills the viewport rather than sitting at the design's fixed
+   * 1440×900, so the proportions hold on a real monitor. Its inset is
+   * asymmetric on purpose: the rail sits flush against the frame's edge, and
+   * only the work surface is inset.
+   */
+  .frame {
+    display: flex;
+    block-size: 100dvh;
+    background-color: var(--frame-base);
+    padding-block: var(--size-frame-inset);
+    padding-inline-end: var(--size-frame-inset);
+    padding-inline-start: 0;
+    font-family: var(--font-sans);
+    overflow: hidden;
+  }
+
+  /* ── Rail ──────────────────────────────────────────────────────────── */
+  .rail {
+    inline-size: var(--size-rail);
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding-block: var(--space-14) var(--space-12);
+    padding-inline: var(--space-18) var(--space-24);
+    color: var(--frame-text);
+  }
+
+  /*
+   * Logical padding means the rail's tighter edge is the one against the
+   * frame in both directions: 24px outside, 18px inside, mirrored in Hebrew
+   * with no second rule.
+   */
+
+  .railTop {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-18);
+    min-block-size: 0;
+    overflow-y: auto;
+    /*
+     * Settings has eight sections; on a laptop the rail runs out of room and
+     * has to scroll. A default scrollbar puts a bright bar down the middle of
+     * the dark frame, so it is thinned and tinted to the frame's own rule
+     * colour - present when needed, invisible otherwise.
+     */
+    scrollbar-width: thin;
+    scrollbar-color: var(--frame-selected) transparent;
+    /* Keeps the last row clear of the block below when scrolled to the end. */
+    padding-block-end: var(--space-7);
+  }
+
+  .railTop::-webkit-scrollbar {
+    inline-size: 6px;
+  }
+
+  .railTop::-webkit-scrollbar-thumb {
+    background-color: var(--frame-selected);
+    border-radius: var(--radius-key);
+  }
+
+  .railTop::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .railBottom {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    /* Never collides with the scrolling block above it. */
+    padding-block-start: var(--space-12);
+    flex: none;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    font-size: var(--font-size-control);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: var(--letter-spacing-brand);
+    color: var(--frame-text);
+    text-decoration: none;
+  }
+
+  .navList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .navLink {
+    display: flex;
+    align-items: center;
+    gap: var(--space-9);
+    padding-block: var(--space-9);
+    padding-inline: var(--space-12);
+    border-radius: var(--radius-item);
+    color: var(--frame-text-muted);
+    /*
+     * The design sets 13.5px on a 210px rail at 1440. The rail now scales with
+     * the frame, so the type takes one step up the design's own scale to keep
+     * pace - 14px is the size the design already uses for controls, not a new
+     * value invented for this.
+     */
+    font-size: var(--font-size-control);
+    text-decoration: none;
+    transition: background-color var(--duration-fast) var(--easing-standard);
+  }
+
+  .navLink:hover {
+    background-color: var(--frame-selected);
+    color: var(--frame-text);
+  }
+
+  /*
+   * The current destination is marked three ways at once - background, weight,
+   * and a lavender dot - so it survives both a monochrome screen and a viewer
+   * who cannot distinguish the dot's colour.
+   */
+  .navLink[aria-current='page'] {
+    background-color: var(--frame-selected);
+    color: var(--frame-text);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .navDot {
+    inline-size: var(--size-dot);
+    block-size: var(--size-dot);
+    border-radius: var(--radius-round);
+    background-color: var(--frame-dot-idle);
+    flex: none;
+  }
+
+  .navLink[aria-current='page'] .navDot {
+    background-color: var(--signal-ai);
+  }
+
+  /* Counts sit at the inline end, in mono, in the "waiting" amber. */
+  .navCount {
+    margin-inline-start: auto;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-counter);
+    font-weight: var(--font-weight-medium);
+    color: var(--signal-waiting);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * Sub-navigation.
+   *
+   * It sits AFTER the destination list, as its own group under a rule and a
+   * label - the seven destinations are never re-ordered, indented, or
+   * interrupted. The rail's first block always looks the same, whichever
+   * destination you are in, so its shape stays memorable and the eye can go
+   * straight to a known position.
+   */
+  .subNavGroup {
+    border-block-start: var(--border-width-thin) solid var(--frame-selected);
+    padding-block-start: var(--space-14);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .subNavLabel {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--frame-text-eyebrow);
+    padding-inline: var(--space-12);
+    padding-block-end: var(--space-4);
+  }
+
+  .subNavList {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .subNavLink {
+    display: flex;
+    align-items: center;
+    /*
+     * Tighter than a destination row. These are a filtered list read as a
+     * group, not seven separate places, and at eight entries the looser rhythm
+     * pushed the rail into scrolling on any normal laptop.
+     */
+    padding-block: 5px;
+    padding-inline: var(--space-12);
+    border-radius: var(--radius-chip);
+    color: var(--frame-text-muted);
+    /* One step up from the design's 12.5px, staying inside its scale. */
+    font-size: var(--font-size-body-sm);
+    text-decoration: none;
+    transition: background-color var(--duration-fast) var(--easing-standard);
+  }
+
+  .subNavLink:hover {
+    background-color: var(--frame-subtle);
+    color: var(--frame-text);
+  }
+
+  .subNavLink[aria-current='page'] {
+    background-color: var(--frame-subtle);
+    color: var(--frame-text);
+  }
+
+  /* A thread's title: one line, an ellipsis when long. */
+  .recentTitle {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* A Recent row: the link, and its ⋯ over the link's end on hover or focus. */
+  .recentRow {
+    position: relative;
+  }
+
+  .recentMore {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 2px;
+    display: grid;
+    place-items: center;
+    inline-size: 24px;
+    margin-block: auto;
+    block-size: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-chip);
+    background: none;
+    color: var(--frame-text-muted);
+    cursor: pointer;
+    opacity: 0;
+  }
+
+  .recentRow:hover .recentMore,
+  .recentRow:focus-within .recentMore,
+  .recentMore[data-state='open'] {
+    opacity: 1;
+  }
+
+  .recentMore:hover {
+    color: var(--frame-text);
+  }
+
+  /* Room for ⋯ when it shows, so the title's ellipsis ends before it. */
+  .recentRow:hover .subNavLink,
+  .recentRow:focus-within .subNavLink,
+  .recentRow:has(.recentMore[data-state='open']) .subNavLink {
+    padding-inline-end: 28px;
+  }
+
+  .recentEdit {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .recentInput {
+    inline-size: 100%;
+    padding-block: 4px;
+    padding-inline: var(--space-12);
+    border: var(--border-width-thin) solid var(--frame-selected);
+    border-radius: var(--radius-chip);
+    background-color: var(--frame-subtle);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    color: var(--frame-text);
+  }
+
+  .recentProblem {
+    margin: 0;
+    padding-inline: var(--space-12);
+    font-size: 12px;
+    color: var(--intent-urgent-text);
+  }
+
+  /* The delete confirmation is Home's, in a dialog over the page. */
+  .dialogActions {
+    display: flex;
+    gap: var(--space-10);
+    justify-content: flex-end;
+  }
+
+  .dialogQuiet,
+  .dialogDanger {
+    padding: 8px 14px;
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: 9px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .dialogDanger {
+    border-color: transparent;
+    background-color: var(--intent-urgent-text);
+    color: var(--frame-text);
+  }
+
+  .dialogDanger:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  /*
+   * A view's name, beside its numbers. It may shrink below its longest word:
+   * at the 210px rail "All conversations" with a four-digit size and a pill
+   * would otherwise push the pill past the row's end (Chromium, 2026-10-11).
+   * It wraps at a space first, and only a word that still cannot fit is cut.
+   */
+  /*
+   * ★ ONE LINE, ALWAYS (Omer, 2026-10-11). "מנוהל ע״י GOTCHA" with its size
+   *   and pill wrapped to two lines at 1440x900. The name keeps one line and
+   *   gives way with an ellipsis when the numbers need the room; its whole
+   *   self is still the link's name and the row's tooltip.
+   */
+  .subNavText {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /*
+   * A view's SIZE: plain muted text at the row's end - no fill, no shape, in
+   * the label's own grey and weight at the counter's smaller size, so it is
+   * there when looked for and never pulls the eye. It does not wrap, and the
+   * padding keeps it off a long label.
+   */
+  /*
+   * A view row that carries its size ends 4px tighter, so "Handled by
+   * GOTCHA 11" keeps its name whole at the narrowest desktop rail (Omer,
+   * 2026-10-11; measured in Chromium). The start padding is untouched, so
+   * the names stay aligned with the group's label.
+   */
+  .subNavLink:has(> .subNavCount) {
+    padding-inline-end: var(--space-8);
+  }
+
+  .subNavCount {
+    flex: none;
+    margin-inline-start: auto;
+    padding-inline-start: var(--space-4);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-counter);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--frame-text-muted);
+  }
+
+  /* After the size, the pill sits beside it rather than splitting the free space. */
+
+  .commandHint {
+    display: flex;
+    align-items: center;
+    gap: var(--space-9);
+    padding-inline: var(--space-12);
+    font-size: var(--font-size-caption);
+    color: var(--frame-text-faint);
+    background: none;
+    border: none;
+    inline-size: 100%;
+    text-align: start;
+    /* The rail is 210px; the hint is one line or it is noise. */
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .commandHintLabel {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .commandKey {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    border: var(--border-width-thin) solid var(--frame-line);
+    border-radius: var(--radius-key);
+    padding-block: 3px;
+    padding-inline: var(--space-7);
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .account {
+    display: flex;
+    align-items: center;
+    gap: var(--space-9);
+    padding-inline: var(--space-12);
+    background: none;
+    border: none;
+    inline-size: 100%;
+    text-align: start;
+    color: inherit;
+    min-inline-size: 0;
+  }
+
+  /* Name over workspace, each truncating on its own. */
+  .accountText {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+  }
+
+  .avatar {
+    inline-size: var(--size-avatar);
+    block-size: var(--size-avatar);
+    border-radius: var(--radius-round);
+    background-color: var(--signal-ai);
+    color: var(--text-primary);
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    display: grid;
+    place-items: center;
+    flex: none;
+  }
+
+  .accountName {
+    font-size: var(--font-size-meta);
+    color: var(--frame-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .accountWorkspace {
+    font-size: var(--font-size-counter);
+    color: var(--frame-text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── Work surface ──────────────────────────────────────────────────── */
+  /*
+   * Positioned: a drawer is `absolute; inset: 0` and must sit inside the
+   * frame - 12px in, with the frame's rounding - on a screen that does not
+   * position a wrapper of its own (05, 05c). Nearer positioned wrappers win.
+   */
+  .surface {
+    position: relative;
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-base);
+    border-radius: var(--radius-panel);
+    overflow: hidden;
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ A SCREEN THAT DRAWS ITS OWN PANELS GETS THE DARK FRAME, NOT THIS ONE
+   * ════════════════════════════════════════════════════════════════════════
+   * Measured by RENDERING the design rather than reading its markup: 02's
+   * frame computes to `rgb(18,18,18)` and the three columns are `#FAF8F4`
+   * cards floating on it. **Light on near-black - that is the separation.**
+   *
+   * ★ This surface is one big light card holding everything, which is right
+   *   for every screen that is a document. It is wrong for the inbox, where
+   *   light panels on a light surface made the separation invisible - and a
+   *   reviewer asked "what separated????".
+   *
+   * ★ `:has()` rather than a prop threaded through `AppShell`: the fact
+   *   belongs to the CONTENT - "I draw my own panels" - and the shell should
+   *   not need to know which screens those are. One rule, and a screen opts
+   *   in by saying so about itself.
+   */
+  .surface:has([data-owns-panels]) {
+    background-color: transparent;
+    border-radius: 0;
+    /*
+     * ⚠⚠ `hidden`, NOT `visible`. It was visible, and that is why the panels
+     *    ran off the bottom of the viewport: a screen that owns its own
+     *    panels needs them CLIPPED to the frame, not allowed to grow past it.
+     */
+    overflow: hidden;
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ "EVERY CONTAINER SHOULD BE A WINDOW YOU SCROLL INSIDE, NOT OUTSIDE"
+   * ════════════════════════════════════════════════════════════════════════
+   * Measured on the rendered 02: the frame is a FIXED 900px with
+   * `overflow:hidden`, and each panel is exactly `876px` - 900 less its 12px
+   * padding top and bottom - also `overflow:hidden`, also `display:flex`.
+   *
+   * ★ A fixed-height flex column that hides its overflow has one purpose: it
+   *   is a window whose INNER region scrolls. The mock reports no scrollers
+   *   because its content is pre-trimmed, but nothing else explains the
+   *   structure.
+   *
+   * ⚠ So this stops scrolling for such a screen. The page itself must never
+   *   scroll - only the regions inside the panels do. Leaving `overflow-y:
+   *   auto` here is what produced panels with no bottom edge.
+   */
+  .main:has([data-owns-panels]) {
+    overflow: hidden;
+  }
+
+  .main {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  /*
+   * Below this width the rail would crowd the work surface. The frame stays -
+   * it is the product's identity - and the rail becomes a drawer.
+   */
+  @media (width <= 900px) {
+    .rail {
+      display: none;
+    }
+
+    .frame {
+      padding-inline: var(--size-frame-inset);
+    }
+  }
+
+  /*
+   * Skip link. Hidden until focused, then pinned to the inline-start corner -
+   * top-left in English, top-right in Hebrew: where each reader's eye is.
+   */
+  .skipLink {
+    position: absolute;
+    inset-block-start: var(--space-12);
+    inset-inline-start: var(--space-12);
+    z-index: var(--z-toast);
+    padding-block: var(--space-9);
+    padding-inline: var(--space-12);
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    font-size: var(--font-size-meta);
+    transform: translateY(-250%);
+  }
+
+  .skipLink:focus-visible {
+    transform: none;
+  }
+}

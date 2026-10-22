@@ -29,11 +29,16 @@ vi.mock("@chatcenter/shared", () => {
     // Pass-through: webhook.ts mounts this as router-level middleware at module
     // load, so the mock must define it or the whole suite fails to import.
     crossTenantMiddleware: (_req: any, _res: any, next: any) => next(),
+    // The verifier reports a failed handshake before it answers. Without these
+    // two the double threw on ERROR_CODES.webhook_verification_failed and the
+    // route answered 500, which read as a broken verifier (2026-10-09).
+    reportOperationalFailure: vi.fn(),
+    ERROR_CODES: new Proxy({}, { get: (_t, k) => String(k) }),
   };
 });
 
 import webhookRoutes from "../routes/webhook";
-import { prisma, incomingMessageQueue, detectInboundAdapter, verifyWebhookSignature } from "@chatcenter/shared";
+import { prisma, incomingMessageQueue, detectInboundAdapter, verifyWebhookSignature, reportOperationalFailure } from "@chatcenter/shared";
 
 function createTestApp() {
   const app = express();
@@ -74,6 +79,25 @@ describe("Webhook Service", () => {
           "hub.challenge": "challenge-123",
         });
 
+      expect(res.status).toBe(403);
+      expect(res.text).not.toContain("challenge-123");
+      expect(reportOperationalFailure).toHaveBeenCalledWith(expect.objectContaining({ errorCode: "webhook_verification_failed" }));
+    });
+
+    it("answers the challenge for the right token, and reports nothing", async () => {
+      process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN = "test-token";
+      const res = await request(createTestApp()).get("/api/webhook")
+        .query({ "hub.mode": "subscribe", "hub.verify_token": "test-token", "hub.challenge": "challenge-123" });
+      expect(res.status).toBe(200);
+      expect(res.text).toBe("challenge-123");
+      expect(reportOperationalFailure).not.toHaveBeenCalled();
+    });
+
+    it("a reporter that throws still answers 403, never 500 (Meta retries a 5xx)", async () => {
+      process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN = "test-token";
+      (reportOperationalFailure as any).mockImplementationOnce(() => { throw new Error("sentry down"); });
+      const res = await request(createTestApp()).get("/api/webhook")
+        .query({ "hub.mode": "subscribe", "hub.verify_token": "wrong-token", "hub.challenge": "c" });
       expect(res.status).toBe(403);
     });
   });
@@ -241,5 +265,93 @@ describe("Webhook Service", () => {
       expect(incomingMessageQueue.add).not.toHaveBeenCalled();
       delete process.env.SLACK_SIGNING_SECRET;
     });
+  });
+});
+
+describe("★ a shared location → the queued message (2026-10-09)", () => {
+  it("carries the location's structure in the message metadata, the readable body beside it", async () => {
+    vi.clearAllMocks();
+    (prisma.channelAccount.findFirst as any).mockResolvedValue({ id: "ca-wa", tenantId: "tenant-1", externalId: "pn-1" });
+    const location = { latitude: 29.5577, longitude: 34.9519, name: "נמל אילת", url: "https://www.google.com/maps?q=29.5577,34.9519" };
+    (detectInboundAdapter as any).mockReturnValue({
+      channel: "WHATSAPP",
+      getSignatureHeader: () => "x-hub-signature-256",
+      verifySignature: vi.fn().mockReturnValue(true),
+      resolveChannelAccountExternalId: vi.fn().mockReturnValue("pn-1"),
+      extractMessages: vi.fn().mockReturnValue([{
+        externalMessageId: "wamid.loc", senderId: "972552633304", timestamp: new Date(),
+        content: { type: "location", text: "[Shared location: נמל אילת (29.5577, 34.9519)]", location },
+      }]),
+      extractStatusUpdates: vi.fn().mockReturnValue([]),
+    });
+    const res = await request(createTestApp()).post("/api/webhook").send({ object: "whatsapp_business_account", entry: [{ id: "waba", changes: [{}] }] });
+    expect(res.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(incomingMessageQueue.add).toHaveBeenCalledWith(
+      "process",
+      expect.objectContaining({
+        channel: "WHATSAPP",
+        normalizedMessage: expect.objectContaining({ body: "[Shared location: נמל אילת (29.5577, 34.9519)]", metadata: { location } }),
+      }),
+      expect.any(Object),
+    );
+  });
+});
+
+describe("Instagram story mention → the queued message", () => {
+  it("carries the story's link in the message metadata", async () => {
+    vi.clearAllMocks();
+    (prisma.channelAccount.findFirst as any).mockResolvedValue({ id: "ca-ig", tenantId: "tenant-1", externalId: "ig-1" });
+    (detectInboundAdapter as any).mockReturnValue({
+      channel: "INSTAGRAM",
+      getSignatureHeader: () => "x-hub-signature-256",
+      verifySignature: vi.fn().mockReturnValue(true),
+      resolveChannelAccountExternalId: vi.fn().mockReturnValue("ig-1"),
+      extractMessages: vi.fn().mockReturnValue([{
+        externalMessageId: "ig-msg-1", senderId: "igsid-1", timestamp: new Date(),
+        content: { type: "text", text: "[Story mention]", storyMention: { url: "https://lookaside.fbsbx.com/story/1" } },
+      }]),
+      extractStatusUpdates: vi.fn().mockReturnValue([]),
+    });
+    const res = await request(createTestApp()).post("/api/webhook").send({ object: "instagram", entry: [{ id: "ig-1", messaging: [{}] }] });
+    expect(res.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(incomingMessageQueue.add).toHaveBeenCalledWith(
+      "process",
+      expect.objectContaining({
+        channel: "INSTAGRAM",
+        normalizedMessage: expect.objectContaining({ body: "[Story mention]", metadata: { storyMention: { url: "https://lookaside.fbsbx.com/story/1" } } }),
+      }),
+      expect.any(Object),
+    );
+  });
+});
+
+
+describe("★ a WhatsApp sticker → the queued message (2026-10-09)", () => {
+  it("is queued as a sticker WITH its media id, so the worker downloads it", async () => {
+    vi.clearAllMocks();
+    (prisma.channelAccount.findFirst as any).mockResolvedValue({ id: "ca-wa", tenantId: "tenant-1", externalId: "pn-1" });
+    (detectInboundAdapter as any).mockReturnValue({
+      channel: "WHATSAPP",
+      getSignatureHeader: () => "x-hub-signature-256",
+      verifySignature: vi.fn().mockReturnValue(true),
+      resolveChannelAccountExternalId: vi.fn().mockReturnValue("pn-1"),
+      extractMessages: vi.fn().mockReturnValue([{
+        externalMessageId: "wamid.stk", senderId: "972552633304", timestamp: new Date(),
+        content: { type: "sticker", caption: "[Sticker]", mediaUrl: "MEDIA_STK", mimeType: "image/webp" },
+      }]),
+      extractStatusUpdates: vi.fn().mockReturnValue([]),
+    });
+    const res = await request(createTestApp()).post("/api/webhook").send({ object: "whatsapp_business_account", entry: [{ id: "waba", changes: [{}] }] });
+    expect(res.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(incomingMessageQueue.add).toHaveBeenCalledWith(
+      "process",
+      expect.objectContaining({
+        normalizedMessage: expect.objectContaining({ body: "[Sticker]", messageType: "sticker", mediaUrl: "MEDIA_STK", mimeType: "image/webp" }),
+      }),
+      expect.any(Object),
+    );
   });
 });

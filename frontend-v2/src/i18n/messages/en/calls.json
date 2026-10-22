@@ -1,0 +1,132 @@
+{
+  "title": "Phone calls",
+  "description": "GOTCHA answers what comes in, and calls out when you ask it to.",
+  "notEnabled": "Phone calls aren't switched on for this workspace.",
+  "notEnabledBody": "Nothing here will show calls until voice is enabled. Ask whoever set up GOTCHA for you.",
+  "unavailable": "We couldn't read your calls just now.",
+  "none": "No calls yet.",
+  "noneBody": "Calls appear here as they happen, whether GOTCHA answered them or you did.",
+  "noNumber": "No phone number is connected yet.",
+  "noNumberBody": "Phone calls are switched on for this workspace, but there's no number for anyone to reach you on. Whoever set up GOTCHA can connect one.",
+  "summary": {
+    "total": "Calls",
+    "average": "Average length",
+    "noDurations": "No call has a length recorded yet",
+    "fromSample": "{count, plural, =1 {from one call} other {from # calls}}"
+  },
+  "direction": {
+    "inbound": "They called",
+    "outbound": "GOTCHA called"
+  },
+  "unanswered": "nobody answered",
+  "hasRecording": "Recording",
+  "recordingFailed": "The recording failed",
+  "live": {
+    "onCall": "On the call",
+    "ended": "The call ended",
+    "transfer": "Transfer",
+    "end": "End call",
+    "listening": "Listening. Lines appear as each person finishes speaking.",
+    "you": "You",
+    "them": "Them",
+    "suggestions": "Things you could say",
+    "theyCalled": "they called you",
+    "youCalled": "you called them",
+    "notYet": "Not available from here yet.",
+    "transcript": "Live transcript",
+    "kept": "The transcript is kept in this conversation.",
+    "addNote": "Add a note",
+    "copilot": "Copilot",
+    "copilotListening": "Copilot is listening",
+    "stop": "stop",
+    "found": "What it found while they talked",
+    "foundNone": "Nothing found yet.",
+    "sayThis": "Say this",
+    "sayNone": "Nothing to suggest yet.",
+    "doNow": "Do this now, without hanging up",
+    "doNone": "Nothing to do yet.",
+    "careful": "Careful",
+    "carefulNone": "Nothing to watch for yet.",
+    "ask": "Ask Copilot something…",
+    "endFailed": "The call didn't end. Try again."
+  },
+  "availabilityUnknown": "We couldn't check whether voice is set up for this workspace, so there's nothing reliable to show here yet. This is our side, not yours - try again in a moment.",
+  "dialer": {
+    "title": "Who do you want to call?",
+    "sub": "Search a person, or paste a number",
+    "placeholder": "A name, a number or an email",
+    "customers": "Your customers",
+    "typeToSearch": "Type a name or a number.",
+    "searchFailed": "We couldn't search just now.",
+    "noMatch": "No one matches.",
+    "lists": "Or have GOTCHA call a list",
+    "listsNone": "Nothing yet.",
+    "call": "Call {name}",
+    "callSomeone": "Call",
+    "letGotcha": "Let GOTCHA call them",
+    "notYet": "Calling from here isn't available yet.",
+    "starting": "Calling…",
+    "ringing": "Ringing your line's phone - answer it, and they're connected.",
+    "inPlatform": "This line dials from a browser phone, which this app doesn't have yet. Nothing was dialled.",
+    "noNumber": "No phone number for this person.",
+    "error": {
+      "invalid_destination": "That isn't a number the line can call - use the full international form, like +972 50 123 4567.",
+      "no_active_voice_channel": "There's no active phone line to call from.",
+      "agent_phone_not_configured": "The line's agent has no phone number set, so nothing was dialled.",
+      "caller_id_not_configured": "The line has no caller ID set, so nothing was dialled.",
+      "forbidden": "You don't have permission to place calls.",
+      "failed": "The call didn't start. Nothing was dialled - try again."
+    },
+    "listQuiet": "{count, plural, one {# person who went quiet} other {# people who went quiet}}",
+    "listQuietCapped": "{count}+ people who went quiet",
+    "listQuietLine": "See them on Customers",
+    "listNotYet": "GOTCHA can’t call a list yet - this opens the people."
+  },
+  "stats": {
+    "week": "Calls this week",
+    "gotchaAnswered": "GOTCHA answered",
+    "average": "Average length",
+    "sale": "Ended in a sale"
+  },
+  "recent": {
+    "title": "Recent calls",
+    "filter": {
+      "all": "All",
+      "incoming": "Incoming",
+      "outgoing": "Outgoing",
+      "missed": "Missed"
+    },
+    "filterEmpty": "No calls here.",
+    "unknownNumber": "Unknown number",
+    "transcript": "Transcript",
+    "foot": "Every call is attached to the customer's conversation."
+  },
+  "when": {
+    "yesterday": "Yesterday"
+  },
+  "outcome": {
+    "missed": "Nobody picked up",
+    "notAnswered": "They didn't answer",
+    "failed": "The call didn't go through"
+  },
+  "transfer": {
+    "to": "Number to transfer to",
+    "placeholder": "+972 50 123 4567",
+    "fullNumber": "The full international number, starting with +.",
+    "add": "Add to the call",
+    "added": "{number} is on the call.",
+    "hold": "Hold {who}",
+    "resume": "Take {who} off hold",
+    "leave": "Hand over and leave",
+    "leaveConfirm": "Leave the call",
+    "stay": "Stay",
+    "leaveWhat": "You drop off; {who} and the person you added stay on the call.",
+    "left": "You left the call. It carries on without you.",
+    "error": {
+      "invalid_destination": "That isn't a number the line can call.",
+      "forbidden": "Only the person on the call, or an admin, can do that.",
+      "failed": "That didn't go through. The call is unchanged."
+    }
+  },
+  "startCall": "Start a call"
+}

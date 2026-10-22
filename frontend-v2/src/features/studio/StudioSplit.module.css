@@ -1,0 +1,151 @@
+@layer features {
+  /* Studio's split, measured on 07, 09 and 10. 02 sets no line-height. */
+  .split {
+    flex: 1;
+    display: flex;
+    min-block-size: 0;
+    min-inline-size: 0;
+    line-height: normal;
+  }
+
+  .list {
+    flex: none;
+    inline-size: 330px;
+    display: flex;
+    flex-direction: column;
+    min-block-size: 0;
+    overflow-y: auto;
+    border-inline-end: 1px solid var(--border-subtle);
+  }
+
+  /* 10's list: 290, `padding:18px 16px 0`, gap 4 - a search, then chips and rows. */
+  .list[data-width='narrow'] {
+    inline-size: 290px;
+    gap: var(--space-4);
+    padding: 18px var(--space-16) 0;
+  }
+
+  .detail {
+    flex: 1;
+    min-inline-size: 0;
+    min-block-size: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    padding: 30px var(--space-40);
+  }
+
+  .detail[data-pad='snug'] {
+    gap: 18px;
+    padding: 28px 36px;
+  }
+
+  .detail[data-pad='wide'] {
+    padding: 26px 36px;
+  }
+
+  /*
+   * A row of the list (07, 09): `padding:16px 20px`, gap 8, a rule between.
+   * The selected row is white with a 3px dark edge on its start side.
+   */
+  .row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-16) var(--space-20);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .row + .row {
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .row[aria-current='page'] {
+    padding-inline-start: 17px;
+    border-inline-start: 3px solid var(--action-base);
+    background-color: var(--panel-field);
+  }
+
+  /* 09's rows: `padding:15px 20px`, the name 13.5. */
+  .row[data-dense] {
+    padding-block: 15px;
+  }
+
+  .row[data-dense] .rowName {
+    font-size: var(--font-size-item);
+  }
+
+  .rowTop {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .dot {
+    flex: none;
+    inline-size: 8px;
+    block-size: 8px;
+    border-radius: 50%;
+    background-color: var(--text-disabled);
+  }
+
+  .dot[data-tone='live'] {
+    background-color: var(--signal-done);
+  }
+
+  .rowName {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: var(--font-size-control);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .row[aria-current='page'] .rowName {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .rowCount {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-counter);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  .rowState {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .rowLine {
+    margin: 0;
+    font-size: var(--font-size-label);
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+
+  /* The list's foot: a fact about all of them, `padding:16px 20px`, 12px. */
+  .listFoot {
+    margin: 0;
+    padding: var(--space-16) var(--space-20);
+    border-block-start: 1px solid var(--border-subtle);
+    font-size: var(--font-size-label);
+    line-height: 1.5;
+    color: var(--text-subtle);
+  }
+
+  @media (width < 64rem) {
+    .split {
+      flex-direction: column;
+    }
+
+    .list,
+    .list[data-width='narrow'] {
+      inline-size: auto;
+      border-inline-end: 0;
+      border-block-end: 1px solid var(--border-subtle);
+    }
+  }
+}

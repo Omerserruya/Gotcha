@@ -1,7 +1,10 @@
 import { Job } from "bullmq";
-import { prisma, createWorker, OutgoingMessageJob, analyticsQueue, publishEvent, getOutboundAdapter, decryptCredentials, describeSendError, sanitizeCustomerText, resolveEmailThread } from "@chatcenter/shared";
+import { prisma, createWorker, OutgoingMessageJob, analyticsQueue, publishEvent, getOutboundAdapter, decryptCredentials, describeSendError, sanitizeCustomerText, resolveEmailThread, hasReplyWindow, lastInboundAtForRecipient, replyWindowFor, sendAllowed } from "@chatcenter/shared";
 import type { ChannelCredentials, ProviderSendError } from "@chatcenter/shared";
 import { recordBroadcastResult } from "./broadcast.worker";
+import { outboundMediaUrl } from "../lib/outbound-media-url";
+// Deep import: the pure rule, because this service's tests mock the barrel.
+import { listUnsubscribeHeaders } from "@chatcenter/shared/src/lib/list-unsubscribe";
 
 const MEDIA_MESSAGE_TYPES = ["image", "video", "document"];
 
@@ -61,6 +64,43 @@ export async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Prom
     emailThread = resolveEmailThread(history) || undefined;
   }
 
+  // An email broadcast is marketing: it names how to unsubscribe in its
+  // headers too (RFC 2369 / 8058), for the recipient's contact on this channel.
+  if (EMAIL_CHANNELS.has(channel) && broadcastId && broadcastRecipientId) {
+    const recipient = await prisma.broadcastRecipient.findUnique({ where: { id: broadcastRecipientId }, select: { contactId: true } }).catch(() => null);
+    const extraHeaders = listUnsubscribeHeaders({
+      subject: { tenantId, contactId: recipient?.contactId ?? "", channel },
+      mailbox: String((credentials as any)?.fromAddress || channelAccount.externalId || ""),
+      // A recipient with no contact row: the mailto alone (its reply creates
+      // the contact and the reply keyword opts it out).
+      ...(recipient?.contactId ? {} : { origin: null }),
+    });
+    if (extraHeaders.length) emailThread = { ...(emailThread ?? { subject: "" }), extraHeaders };
+  }
+
+  // ── The customer-service window (B7, 2026-10-12) ──
+  //
+  // Here because every queued producer passes through: scheduled sends,
+  // approval continuations, the auto-greeting, idle reminders, opt-out
+  // confirmations. Past the window WhatsApp takes only a template and
+  // Instagram/Messenger take nothing; sending anyway fails at Meta (131047)
+  // and the retry below sent it three more times. A refusal is final: FAILED
+  // with a reason, never retried. If the window cannot be read, the send goes
+  // ahead and Meta decides, as before.
+  if (hasReplyWindow(channel) && recipientExternalId) {
+    let verdict: ReturnType<typeof sendAllowed> = { ok: true };
+    try {
+      const last = await lastInboundAtForRecipient({ tenantId, channel, channelAccountId, customerExternalId: recipientExternalId });
+      verdict = sendAllowed(replyWindowFor(channel, last), messageType);
+    } catch (err: any) {
+      console.warn(`[outgoing] reply window unreadable, sending anyway: ${err?.message}`);
+    }
+    if (!verdict.ok) {
+      await refuseOutsideWindow(job.data, { code: verdict.code, message: verdict.message });
+      return;
+    }
+  }
+
   const adapter = getOutboundAdapter(channel);
   if (!adapter) {
     const errMsg = `No outbound adapter for channel: ${channel}`;
@@ -90,7 +130,9 @@ export async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Prom
         credentials,
         channelAccount.externalId,
         recipientExternalId,
-        mediaUrl,
+        // A stored upload goes out as a signed link minted now (2026-10-10);
+        // inside the try, so a missing origin is a FAILED send with a reason.
+        outboundMediaUrl({ mediaUrl, messageId, tenantId, publicBaseUrl: job.data.publicBaseUrl }),
         messageType as "image" | "video" | "document",
         fileName,
         body || undefined
@@ -198,6 +240,60 @@ export async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Prom
   });
 
   if (status === "SENT") {
+    /**
+     * ★ THE SORT KEY MOVES HERE, BECAUSE THIS IS WHERE THE SEND BECAME TRUE.
+     *
+     * No queued outbound ever advanced `lastMessageAt`. Every path through this
+     * worker - scheduled sends, `contacts.ts`, approvals, the idle nudges,
+     * voice-callback - creates its Message row as PENDING and hands off, and the
+     * word `lastMessageAt` did not appear anywhere in this service. So a
+     * scheduled message really delivered to a real customer left the
+     * conversation sitting wherever it already was in the inbox.
+     *
+     * It does NOT belong at the site that creates the row. Advancing the key
+     * there would claim a delivery that has not happened yet - the same defect
+     * as advancing it on a FAILED send, just earlier. The rule belongs where the
+     * fact becomes true, which is here, on the success branch.
+     *
+     * ★★ `updateMany` WITH A `lt` PREDICATE, NOT `update`, AND THE PREDICATE IS
+     * THE POINT.
+     *
+     * The row is created at T0 and this runs at T1. A customer inbound arriving
+     * between them is NEWER than this message, so writing our timestamp
+     * unconditionally would drag the key BACKWARDS and bury someone who has just
+     * written in. The predicate makes the write a max() and does it in one
+     * statement, so there is no read-modify-write race between two workers.
+     *
+     * It also makes the double-write idempotent: `approvals.ts` already sets the
+     * key at enqueue time with `new Date()`, which is later than this row's
+     * `createdAt`, so this call correctly does nothing there.
+     *
+     * `tenantId` is required: the tenant guard blocks any bulk write whose where
+     * clause omits it. And `origin` is deliberately NOT mentioned - the
+     * live-by-default guard injects `origin: "LIVE"`, so an imported
+     * conversation can never have its key moved by a live send. That is the
+     * origin rule enforced for free rather than restated here.
+     *
+     * Never throws. The message is already on the wire; failing the job would
+     * retry the SEND and deliver the customer a second copy, which is a far
+     * worse outcome than a stale sort key.
+     */
+    if (updatedMessage?.conversationId) {
+      await prisma.conversation.updateMany({
+        where: {
+          id: updatedMessage.conversationId,
+          tenantId,
+          OR: [
+            { lastMessageAt: null },
+            { lastMessageAt: { lt: updatedMessage.createdAt } },
+          ],
+        },
+        data: { lastMessageAt: updatedMessage.createdAt },
+      }).catch((err: any) =>
+        console.warn("[outgoing] conversation sort-key update failed:", err?.message),
+      );
+    }
+
     prisma.usageLog.create({
       data: {
         tenantId,
@@ -235,6 +331,44 @@ export async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Prom
     // don't want BullMQ to also retry here (would double-count failures).
     throw new Error(`${channel} send failed - will retry`);
   }
+}
+
+/**
+ * A send refused because the customer-service window is closed: recorded the
+ * way a provider failure is (FAILED, errorMessage, metadata.sendError, the
+ * status event, the scheduled and broadcast mirrors), so every screen that
+ * shows a failed send shows this one with its reason. Not retried.
+ */
+async function refuseOutsideWindow(data: OutgoingMessageJob, why: { code: string; message: string }): Promise<void> {
+  const { tenantId, conversationId, channel, messageId, broadcastId, broadcastRecipientId } = data;
+  const sendError: ProviderSendError = {
+    channel: channel as ProviderSendError["channel"],
+    phase: "send",
+    type: why.code,
+    message: why.message,
+    retryable: false,
+    at: new Date().toISOString(),
+  };
+  const existing = await prisma.message.findUnique({ where: { id: messageId }, select: { metadata: true } });
+  const base = existing?.metadata && typeof existing.metadata === "object" ? (existing.metadata as Record<string, any>) : {};
+  const updated = await prisma.message.update({
+    where: { id: messageId },
+    data: { status: "FAILED", errorMessage: why.message, metadata: { ...base, sendError } as any },
+  });
+  console.warn(`[outgoing] ${channel} send refused (${why.code}) message=${messageId}`);
+  if (updated?.scheduledMessageId) {
+    await prisma.scheduledMessage
+      .update({ where: { id: updated.scheduledMessageId }, data: { status: "FAILED", error: why.message } })
+      .catch((err: any) => console.warn("[outgoing] scheduled-message status mirror failed:", err?.message));
+  }
+  if (conversationId) {
+    await publishEvent({
+      event: "message:status",
+      tenantId,
+      data: { messageId, conversationId, status: "FAILED", externalMessageId: null, error: why.message, sendError },
+    });
+  }
+  await recordBroadcastResult({ tenantId, broadcastId, broadcastRecipientId, success: false, errorMessage: why.message });
 }
 
 let worker: any;

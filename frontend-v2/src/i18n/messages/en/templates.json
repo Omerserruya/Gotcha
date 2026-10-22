@@ -1,0 +1,85 @@
+{
+  "title": "Message templates",
+  "description": "WhatsApp needs each template approved before you can send it to someone who has not written first",
+  "unavailable": "We couldn't read your templates just now.",
+  "none": "No templates yet.",
+  "noneBody": "Until you have one, you can only continue conversations other people start - never begin one.",
+  "window": "Once someone writes to you, you can reply freely for 24 hours - no template needed.",
+  "stance": {
+    "ready": "Ready to send",
+    "reviewing": "Being reviewed",
+    "rejected": "Rejected",
+    "unsent": "Not sent for review",
+    "exempt": "{channel} only",
+    "off": "Switched off"
+  },
+  "rejectedBecause": "WhatsApp's reason: {reason}",
+  "unchanged": "Unchanged since it was written.",
+  "head": {
+    "template": "Template",
+    "used": "Used",
+    "replies": "Replies",
+    "state": "State"
+  },
+  "preview": {
+    "filledFrom": "Filled in from",
+    "whoMay": "Who may send it",
+    "approved": "Approved",
+    "unchanged": "Yes · never changed since",
+    "changed": "Yes · changed since, now version {version}",
+    "noReview": "No review needed",
+    "approvedOff": "Yes · switched off, so nothing sends it"
+  },
+  "useInCampaign": "Use in a campaign",
+  "duplicate": "Duplicate and edit",
+  "rejected": {
+    "title": "{name} was rejected",
+    "noReason": "WhatsApp gave no reason.",
+    "seeRewrite": "See the rewrite",
+    "byEmail": "Send by email instead"
+  },
+  "worth": {
+    "title": "Worth knowing",
+    "none": "Nothing yet."
+  },
+  "newTemplate": "New template",
+  "useNeedsApproval": "Only an approved template can be sent.",
+  "submit": "Submit to Meta",
+  "submitNotYet": "Submitting for Meta's review is waiting for approval.",
+  "create": {
+    "title": "New template",
+    "line": "Saved as a draft. It reaches Meta only when submitted.",
+    "name": "Name",
+    "nameHint": "Lowercase letters, digits and underscores - Meta's rule.",
+    "language": "Language",
+    "lang": {
+      "he": "Hebrew",
+      "en": "English",
+      "ar": "Arabic"
+    },
+    "category": "Category",
+    "cat": {
+      "MARKETING": "Marketing",
+      "UTILITY": "Utility",
+      "AUTHENTICATION": "Authentication"
+    },
+    "number": "WhatsApp number",
+    "body": "Text",
+    "bodyHint": "Use '{{1}}', '{{2}}' for what changes per person.",
+    "footer": "Footer (optional)",
+    "save": "Save draft",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "draftNote": "A draft: not submitted to Meta.",
+    "error": {
+      "missing": "A name and the text are needed.",
+      "entitlement": "Templates aren't part of this plan.",
+      "forbidden": "Only an admin can create templates.",
+      "failed": "That didn't go through. Try again."
+    },
+    "removalLine": {
+      "label": "Last line",
+      "why": "Added to every marketing message, so a customer can reply to stop them. It can't be removed."
+    }
+  }
+}

@@ -4,9 +4,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // active-tenant gate, plus createWorker (referenced by startIncomingWorker, not
 // under test here). Everything else the module imports stays real but unused.
 // `vi.hoisted` exposes these mocks to the hoisted vi.mock factories below.
-const { tenant, executeWebhookFlow } = vi.hoisted(() => ({
+const { tenant, executeWebhookFlow, onCallEvent, onOrderEvent } = vi.hoisted(() => ({
   tenant: { findUnique: vi.fn() },
   executeWebhookFlow: vi.fn(),
+  onCallEvent: vi.fn(async () => ({ outcome: "completed" })),
+  onOrderEvent: vi.fn(async () => ({ outcome: "completed" })),
 }));
 vi.mock("@chatcenter/shared", () => ({
   // The uploads write probe runs at module load. Stubbed as writable so these
@@ -32,7 +34,9 @@ vi.mock("@chatcenter/shared", () => ({
   checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
   metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
   stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
-  prisma: { tenant, message: { findFirst: vi.fn() } },
+  // chatbotFlow: the webhook path asks whether the linked flow is an
+  // automation (has a trigger); null here = a plain flow, the legacy path.
+  prisma: { tenant, message: { findFirst: vi.fn() }, chatbotFlow: { findFirst: async () => null } },
   createWorker: vi.fn(),
   analyticsQueue: { add: vi.fn() },
   outgoingMessageQueue: { add: vi.fn() },
@@ -47,6 +51,8 @@ vi.mock("../services/comment-trigger.service", () => ({
   processCommentTrigger: vi.fn(),
 }));
 vi.mock("../services/flow-executor.service", () => ({ executeWebhookFlow }));
+vi.mock("../services/call-automation.service", () => ({ onCallEvent }));
+vi.mock("../services/order.service", () => ({ onOrderEvent }));
 
 import { dispatch } from "../workers/incoming.worker";
 
@@ -105,5 +111,33 @@ describe("incoming worker dispatch - webhook-trigger routing", () => {
     await dispatch({ name: "process-comment", data: {} } as any);
 
     expect(executeWebhookFlow).not.toHaveBeenCalled();
+  });
+});
+
+describe("incoming worker dispatch - call automation events", () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it("call_missed / call_answered reach the call automations with the session; an inactive tenant runs nothing", async () => {
+    tenant.findUnique.mockResolvedValue({ status: "ACTIVE" });
+    for (const type of ["call_missed", "call_answered"]) {
+      await dispatch({ name: "automation-event", data: { tenantId: "t1", type, eventKey: "call:vs1", payload: { sessionId: "vs1" } } } as any);
+    }
+    expect(onCallEvent.mock.calls.map((c: any) => c[0])).toEqual([
+      { tenantId: "t1", type: "call_missed", sessionId: "vs1" },
+      { tenantId: "t1", type: "call_answered", sessionId: "vs1" },
+    ]);
+    onCallEvent.mockClear();
+    tenant.findUnique.mockResolvedValue({ status: "SUSPENDED" });
+    await dispatch({ name: "automation-event", data: { tenantId: "t1", type: "call_missed", eventKey: "call:vs1", payload: { sessionId: "vs1" } } } as any);
+    expect(onCallEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe("incoming worker dispatch - order events", () => {
+  it("an order-event job reaches the order automations with its data", async () => {
+    vi.clearAllMocks();
+    const data = { tenantId: "t1", source: "shopify", orderId: "5001", status: "fulfilled", orderNumber: "#1042", customer: {}, items: [] };
+    await dispatch({ name: "order-event", data } as any);
+    expect(onOrderEvent).toHaveBeenCalledWith(data);
   });
 });

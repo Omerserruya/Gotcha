@@ -76,11 +76,13 @@ describe("WhatsApp inbound media", () => {
     expect(c.fileName).toBe("scan.pdf");
   });
 
-  it("treats a sticker as an image so it renders", () => {
+  it("keeps a sticker as a sticker, with its media id and mime (2026-10-09)", () => {
     const c = wa({ type: "sticker", sticker: { id: "MEDIA_E", mime_type: "image/webp" } });
 
-    expect(c.type).toBe("image");
+    expect(c.type).toBe("sticker");
     expect(c.mediaUrl).toBe("MEDIA_E");
+    expect(c.mimeType).toBe("image/webp");
+    expect(c.caption).toBe("[Sticker]");
   });
 
   it("still carries images and video with their mime", () => {
@@ -124,6 +126,13 @@ describe("Instagram inbound media", () => {
     expect(ig({ type: "audio", payload: { url: "https://cdn/a.m4a" } })).toMatchObject({
       type: "audio", mediaUrl: "https://cdn/a.m4a", voice: true,
     });
+  });
+
+  it("keeps a story mention's link (it used to be dropped, leaving only \"[Story mention]\")", () => {
+    expect(ig({ type: "story_mention", payload: { url: "https://lookaside.fbsbx.com/story/1" } })).toEqual({
+      type: "text", text: "[Story mention]", storyMention: { url: "https://lookaside.fbsbx.com/story/1" },
+    });
+    expect(ig({ type: "story_mention", payload: {} })).toMatchObject({ storyMention: { url: null } });
   });
 
   it("handles a file attachment rather than printing it as text", () => {

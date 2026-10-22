@@ -1,4 +1,5 @@
-import { getInternalServiceKey, readDurableSetting } from "@chatcenter/shared";
+import { toolCallRecord } from "@chatcenter/shared/src/lib/tool-call-record";
+import { getInternalServiceKey, readDurableSetting, recordHandover } from "@chatcenter/shared";
 /**
  * Autonomous AI bot - worker side.
  *
@@ -77,6 +78,9 @@ export async function processAIBot(
   conversationId: string,
   incomingMessage: string,
   aiAgentId?: string | null,
+  // An automation's "Run a skill": the employee starts this business skill
+  // on this turn instead of choosing one.
+  startSkillId?: string | null,
 ): Promise<boolean> {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
@@ -176,6 +180,7 @@ export async function processAIBot(
         conversationId,
         aiAgentId: resolvedAgentId,
         incomingMessage,
+        ...(startSkillId ? { startSkillId } : {}),
         // Closed + "active" policy: the AI answers, but must speak truthfully
         // about human availability. Localized next-opening wording is computed
         // HERE (the tenant config lives on this side) and injected as prompt
@@ -327,10 +332,13 @@ export async function processAIBot(
             metadata: { source: "ai_bot", kind: "bridge_ack_for_approval" },
           },
         });
-        await prisma.conversation.update({
-          where: { id: conversationId },
-          data: { lastMessageAt: new Date() },
-        });
+        // ★ ONLY WHEN THE SEND SUCCEEDED - see the reply path below for why.
+        if (extId) {
+          await prisma.conversation.update({
+            where: { id: conversationId },
+            data: { lastMessageAt: bridgeMsg.createdAt },
+          });
+        }
         await publishEvent({
           event: "message:new",
           tenantId,
@@ -388,10 +396,13 @@ export async function processAIBot(
             metadata: { source: "ai_bot", kind: "interim_ack" },
           },
         });
-        await prisma.conversation.update({
-          where: { id: conversationId },
-          data: { lastMessageAt: new Date() },
-        });
+        // ★ ONLY WHEN THE SEND SUCCEEDED - see the reply path below for why.
+        if (interimExtId) {
+          await prisma.conversation.update({
+            where: { id: conversationId },
+            data: { lastMessageAt: interimMsg.createdAt },
+          });
+        }
         await publishEvent({
           event: "message:new",
           tenantId,
@@ -441,7 +452,8 @@ export async function processAIBot(
       metadata: {
         source: "ai_bot",
         ...(result.toolCallLog.length > 0 && {
-          toolCalls: result.toolCallLog.map((tc) => ({ tool: tc.tool, decision: tc.decision })),
+          // Masked args and a result summary, never the payload (lib/tool-call-record).
+          toolCalls: result.toolCallLog.map((tc) => toolCallRecord(tc)),
         }),
         ...(sendErrorDetail ? { sendError: sendErrorDetail } : {}),
       },
@@ -450,10 +462,31 @@ export async function processAIBot(
 
   trackMessageUsage(tenantId, conversationId, aiMessage.id, sendContext.channel).catch(() => {});
 
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: { lastMessageAt: new Date() },
-  });
+  /**
+   * ★ A FAILED SEND DOES NOT MOVE THE CONVERSATION'S SORT KEY.
+   *
+   * The inbox orders by `lastMessageAt`. `status` is FAILED whenever no
+   * `externalMessageId` came back, and a reply the customer never received must
+   * not make the conversation look answered: the last real thing that happened
+   * is still their inbound question, and advancing the column would sink a
+   * customer who is still waiting below everyone the bot happened to answer.
+   *
+   * ★★ THIS PATH IS WHERE IT BIT HARDEST. The two ack writers above only reach
+   * their `create` when the adapter RETURNS - a thrown send skips them. Here the
+   * send error is caught further up so that the failure is persisted and
+   * diagnosable, which means this site is reached on a thrown send too, and
+   * therefore wrote a stale sort key on exactly the failures that matter most.
+   *
+   * The event below is still published for a FAILED row on purpose: the agent
+   * needs to SEE the failed reply in the thread. It is only the ordering claim
+   * that is withheld.
+   */
+  if (extId) {
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { lastMessageAt: aiMessage.createdAt },
+    });
+  }
 
   await publishEvent({
     event: "message:new",
@@ -746,7 +779,7 @@ function isHumanRequest(message: string): boolean {
 // ─── Business hours (tenant-persisted; shared evaluator) ─────
 const HEBREW_RE = /[֐-׿]/;
 
-async function getBusinessHoursState(
+export async function getBusinessHoursState(
   tenantId: string,
 ): Promise<{ cfg: BusinessHoursConfig | null; state: BusinessOpenState }> {
   try {
@@ -917,17 +950,17 @@ async function escalateToHuman(
     },
   });
 
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: {
-      isHandedOver: true,
-      status: "WAITING",
-      // Ownership follows the handoff. Leaving this as "ai_agent" (or
-      // "flow") described a conversation the AI had just handed away as
-      // still being driven by it, which is what let a refused AI turn keep
-      // presenting itself as an AI-owned conversation.
-      handledBy: "human",
-    },
+  // Ownership follows the handoff. Leaving this as "ai_agent" (or "flow")
+  // described a conversation the AI had just handed away as still being driven
+  // by it, which is what let a refused AI turn keep presenting itself as an
+  // AI-owned conversation. recordHandover writes the column and the history in
+  // one transaction, so the two cannot drift.
+  await recordHandover({
+    tenantId,
+    conversationId,
+    to: "human",
+    reason: "escalation",
+    data: { isHandedOver: true, status: "WAITING" },
   });
 
   await prisma.message.create({

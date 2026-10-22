@@ -2,6 +2,7 @@ import http from "http";
 import { createServiceApp } from "@chatcenter/shared";
 import notificationsRoutes from "./routes/notifications";
 import notificationPreferencesAdminRoutes from "./routes/notification-preferences-admin";
+import notificationPreferencesMeRoutes from "./routes/notification-preferences-me";
 import { startNotificationsDispatcherWorker } from "./services/dispatcher.worker";
 import { startNotificationsEmailWorker } from "./services/email-sender.worker";
 import { startNotificationEventBridge } from "./services/event-bridge";
@@ -11,6 +12,7 @@ const config = { name: "notifications-service", port: parseInt(process.env.PORT 
 const app = createServiceApp(config);
 
 app.use("/api", notificationsRoutes);
+app.use("/api", notificationPreferencesMeRoutes);
 app.use("/api", notificationPreferencesAdminRoutes);
 
 // Notification engine workers - disable via NOTIFICATIONS_ENABLED=false.

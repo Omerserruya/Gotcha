@@ -1,0 +1,559 @@
+{
+  "title": "לקוחות",
+  "description": "כל מי שדיבר איתכם, בכל ערוץ שבו בחר.",
+  "unavailable": "לא הצלחנו לקרוא את הלקוחות שלך כרגע.",
+  "search": {
+    "label": "חיפוש אדם",
+    "placeholder": "חיפוש לפי שם, טלפון, אימייל או הזמנה…",
+    "noneLead": "לא נמצאה התאמה ל\"{query}\".",
+    "lookedAt": {
+      "name": "חיפשנו בשמות.",
+      "phone": "חיפשנו במספרי טלפון.",
+      "email": "חיפשנו בכתובות אימייל.",
+      "order": "חיפשנו במספרי טלפון ובמספרי ההזמנות של החנות."
+    },
+    "busy": "מחפשים…"
+  },
+  "list": {
+    "count": "{count, plural, =0 {עוד אף אחד} one {אדם אחד} other {# אנשים}}",
+    "none": "עוד אף אחד לא דיבר איתכם.",
+    "unnamed": "אין שם או מזהה לאיש הקשר הזה",
+    "truncated": "מוצגות {shown} הרשומות הראשונות. בסך הכול יש {total}, וייתכן שחלקן הן אותו אדם.",
+    "footer": "{count, plural, =1 {אדם אחד} other {# אנשים}}",
+    "footerTruncated": "מוצגות {shown} הרשומות הראשונות מתוך {total}",
+    "generic": {
+      "INSTAGRAM": "לקוח/ה מאינסטגרם",
+      "MESSENGER": "לקוח/ה ממסנג׳ר",
+      "WEBCHAT": "מבקר/ת באתר",
+      "SHOPIFY_LIVE_CHAT": "מבקר/ת בצ׳אט של החנות",
+      "other": "לקוח/ה"
+    }
+  },
+  "channel": {
+    "WHATSAPP": "וואטסאפ",
+    "INSTAGRAM": "אינסטגרם",
+    "MESSENGER": "מסנג׳ר",
+    "EMAIL": "אימייל",
+    "WEBCHAT": "צ׳אט באתר",
+    "VOICE": "טלפון",
+    "SMS": "SMS",
+    "TELEGRAM": "טלגרם"
+  },
+  "identityLimit": "אם אותו אדם כותב מוואטסאפ ומאינסטגרם, הוא יכול להופיע כאן פעמיים. GOTCHA מאחדת את שתי הרשומות בעצמה כשיש לה הוכחה, כמו מספר טלפון או אימייל שכבר מוכרים לה, ואת השאר היא מציעה לכם לאשר.",
+  "detail": {
+    "unavailable": "לא הצלחנו לטעון את הלקוח הזה.",
+    "brief": {
+      "generated": "נכתב מההיסטוריה שלהם ב‑{when}.",
+      "none": "אין עדיין סיכום כתוב על האדם הזה. GOTCHA כותבת אחד כשהשיחה מסתיימת.",
+      "noConversations": "אין סיכום כתוב - אין שיחות עם האדם הזה שאפשר לכתוב ממנו."
+    },
+    "memory": {
+      "heading": "מה GOTCHA זוכרת",
+      "source": "נלמד מ‑{source}, מתוך {count} הודעות.",
+      "unknownSource": "ייבוא קודם",
+      "noPerFactTrace": "GOTCHA מתעדת מאיזו שיחה כל אחד מאלה הגיע, אבל אי אפשר לפתוח את השיחות האלה מכאן עדיין - ולכן אין למה לעקוב. גם אי אפשר לתקן או להסיר אותם מכאן.",
+      "none": "GOTCHA עדיין לא למדה משהו קבוע על האדם הזה.",
+      "unavailable": "לא הצלחנו לקרוא את מה ש‑GOTCHA זוכרת על האדם הזה.",
+      "window": "נצפה בין {from} ל‑{to}."
+    },
+    "timeline": {
+      "heading": "פעילות אחרונה",
+      "everyChannel": "כל ערוץ שהאדם הזה פונה אליכם דרכו, בזרם אחד - כולל מספרים ושמות משתמש שמוזגו אליו.",
+      "empty": "עדיין לא תועד שום דבר עם האדם הזה.",
+      "INBOUND": "מהם",
+      "OUTBOUND": "אליהם",
+      "noBody": "(אין טקסט)",
+      "imported": "מיובא",
+      "partial": "מוצגות {shown, number} מתוך {total, number} הודעות עם האדם הזה.",
+      "whole": "{total, plural, one {הודעה אחת} other {כל {total, number} ההודעות}} עם האדם הזה.",
+      "scanTruncated": "לאדם הזה יש יותר שיחות ממה שאנחנו סורקים בפעם אחת, ולכן ייתכן שהישנות ביותר לא מיוצגות כאן.",
+      "handover": "הועבר ל‑{to}.",
+      "handoverWithReason": "הועבר ל‑{to} - {reason}.",
+      "kind": {
+        "handover": "העברה",
+        "ai_action": "פעולה",
+        "message": "הודעה"
+      },
+      "action": {
+        "proposed": "{tool} - ממתין לאישור",
+        "approved": "{tool} - אושר",
+        "running": "{tool} - רץ",
+        "completed": "{tool} - בוצע",
+        "failed": "{tool} - לא עבר",
+        "denied": "{tool} - נדחה"
+      }
+    },
+    "absent": {
+      "money": "הוצאה, מספר הזמנות והחזרים לא מוצגים כאן. קריאה שלהם דורשת פנייה חיה לחנות שלכם לכל לקוח, ולכן הם מופיעים היכן שמחליטים על אדם אחד - על אישור - ולא בכל דף."
+    },
+    "neverWritten": "האדם הזה מעולם לא פנה אליכם. אין מה לסכם, אין היסטוריית שיחות, אין הזמנות ואין הערות - לא בגלל שמשהו נכשל, אלא כי עדיין לא קרה כלום.",
+    "notes": {
+      "heading": "הערות",
+      "noCrm": "הערות נשמרות ב‑CRM שלכם, ואין כזה מחובר. חברו אחד ב„ליבת העסק” והערות על הלקוחות שלכם יופיעו כאן.",
+      "noLink": "יש לכם CRM מחובר, אבל האדם הזה לא מקושר לרשומה בתוכו - ולכן אין עדיין איפה שההערות שלו יגורו.",
+      "empty": "אין הערות על האדם הזה ב‑CRM שלכם.",
+      "unavailable": "לא הצלחנו לקרוא הערות מה‑CRM שלכם.",
+      "anonymous": "ה‑CRM שלכם לא מתעד מי כתב הערה, ולכן מוצגים כאן תאריך וללא מחבר.",
+      "readOnly": "הערות נקראות כאן ונכתבות ב‑CRM שלכם. כתיבה מהדף הזה הייתה מתייקת אותן מול השיחה הלא נכונה, ולכן זה לא מוצע עדיין."
+    }
+  },
+  "orders": {
+    "heading": "הזמנות",
+    "unread": "לא הצלחנו לקרוא את ההזמנות של הלקוח הזה.",
+    "state": {
+      "not_connected": "אין חנות מחוברת, ולכן אין הזמנות להציג. חברו אחת ב„ליבת העסק”.",
+      "connection_unhealthy": "החנות שלכם מחוברת ולא עובדת, ולכן אי אפשר לקרוא הזמנות כרגע. תקנו אותה ב„ליבת העסק” במקום לחבר אותה שוב.",
+      "customer_not_linked": "בחנות שלכם אין רשומת לקוח שתואמת לאדם הזה, ולכן אין הזמנות להציג מולו.",
+      "verification_required": "האדם הזה לא אומת כבעל החשבון, ולכן ההזמנות שלו לא מוצגות.",
+      "no_orders": "עדיין אין הזמנות מהאדם הזה.",
+      "unavailable": "לא הצלחנו לטעון הזמנות כרגע. זה בדרך כלל חולף - נסו שוב בעוד רגע.",
+      "ok": ""
+    },
+    "missingScopes": "החיבור לחנות שלכם עובד, אבל ל‑GOTCHA מעולם לא ניתנה הרשאה לקרוא הזמנות. תנו את אלה ב‑Shopify: {scopes}.",
+    "item": "{quantity} × {title}",
+    "moreItems": "{count, plural, one {פריט נוסף אחד} other {עוד # פריטים}} בהזמנה הזו.",
+    "amountUnknown": "הסכום לא זמין",
+    "refunded": "{amount} כבר הוחזרו.",
+    "refundableMax": "אפשר להחזיר עוד עד {amount}.",
+    "possible": "על ההזמנה הזו תוכלו: {actions}.",
+    "action": {
+      "cancel": "ביטול הזמנה",
+      "create_return": "פתיחת החזרה",
+      "exchange_item": "החלפת פריט",
+      "refund": "החזר כספי"
+    },
+    "running": "מבצע…",
+    "pendingApproval": "זה ממתין שמישהו יאשר. זה עדיין לא קרה, וגם לא נכשל - זה בתור האישורים שלכם עד שאדם יחליט.",
+    "denied": "זה לא הותר: {reason}. שום דבר לא שונה.",
+    "actionUnavailable": "לא ניתן היה לבצע את זה כרגע: {reason}. שום דבר לא שונה.",
+    "noReason": "לא ניתנה סיבה",
+    "outcomeUnknown": "אנחנו לא יודעים אם זה עבר. אנא אל תנסו שוב - בדקו קודם את ההזמנה בחנות שלכם, וצרו איתנו קשר אם משהו נראה לא תקין.",
+    "noConversationToActThrough": "אי אפשר לפעול על ההזמנות האלה מכאן - אין שיחה עם האדם הזה שתישא את הפעולה.",
+    "count": "{count, plural, one {הזמנה אחת} other {# הזמנות}}",
+    "openCount": "{count} פתוחות",
+    "synced": "מ‑Shopify · סונכרן {when}",
+    "filterEmpty": "אין כאן הזמנות.",
+    "moreShort": "+{count} נוספים",
+    "qty": "כמות {count}",
+    "filter": {
+      "all": "הכול",
+      "open": "פתוחות",
+      "returns": "החזרות"
+    },
+    "fact": {
+      "tracking": "מעקב",
+      "shipTo": "משלוח אל",
+      "carrierCase": "פנייה למוביל",
+      "money": "כסף"
+    },
+    "openInShopify": "פתיחה ב‑Shopify",
+    "side": {
+      "heading": "לאורך ההזמנות",
+      "average": "הזמנה ממוצעת",
+      "onTime": "הגיעו בזמן",
+      "open": "פתוחות עכשיו",
+      "buys": "מה הם קונים",
+      "buysNone": "עדיין כלום.",
+      "onFile": "בתיק",
+      "address": "כתובת",
+      "payment": "תשלום",
+      "returns": "החזרות",
+      "returnsValue": "{count, plural, =0 {אין} other {# הוחזרו או בוטלו}}"
+    },
+    "notPossible": "זה לא אפשרי להזמנה הזו."
+  },
+  "actions": {
+    "title": "מה נעשה כאן",
+    "forbidden": "אין לכם הרשאה לקרוא את רישום הפעולות של סביבת העבודה. מי שמנהל את GOTCHA יכול להעניק אותה.",
+    "failed": "לא הצלחנו לקרוא כרגע את רישום מה שנעשה עבור האדם הזה.",
+    "none": "עדיין לא נרשמה שום פעולה עבור האדם הזה.",
+    "truncated": "זה מכסה את {count, plural, one {השיחה האחת} other {# השיחות}} שהצלחנו לסרוק - ייתכן שהישנות ביותר לא נכללות.",
+    "more": "קיימות רשומות ישנות יותר מאלה שמוצגות כאן.",
+    "actor": {
+      "ai": "GOTCHA",
+      "user": "מישהו מהצוות שלכם",
+      "system": "המערכת",
+      "unknown": "לא נרשם",
+      "flow": "אוטומציה"
+    },
+    "outcome": {
+      "worked": "נרשם כבוצע",
+      "failed": "נרשם ככישלון",
+      "not_recorded": "התוצאה לא נרשמה",
+      "contradicts": "הרשומה הזו סותרת את עצמה"
+    },
+    "hint": {
+      "named_ok": "נקראת כהצלחה, אף שהתוצאה מעולם לא נרשמה",
+      "named_err": "נקראת ככישלון, אף שהתוצאה מעולם לא נרשמה"
+    },
+    "name": {
+      "aiResponded": "GOTCHA השיבה",
+      "aiBotTurn": "GOTCHA לקחה תור בשיחה",
+      "aiPausedForApproval": "GOTCHA עצרה וביקשה אישור",
+      "aiToolCall": "GOTCHA: {detail}",
+      "aiBudgetAborted": "GOTCHA עצרה, נגמר התקציב עבור {detail}",
+      "messageSent": "נשלחה הודעה",
+      "productMessageSent": "נשלח מוצר בצ׳אט",
+      "crossCustomerDenied": "בקשה לנתונים של לקוח אחר נדחתה",
+      "adapterCall": "החנות: {tool}",
+      "commerceExecuted": "שינוי ברשומת הלקוח נשלח לחנות",
+      "commerceFailed": "שינוי ברשומת הלקוח לא עבר",
+      "commerceDenied": "שינוי ברשומת הלקוח לא הותר",
+      "commerceUnverified": "לא ניתן היה לאמת מול החנות שינוי ברשומת הלקוח",
+      "unsupportedOutcomeClaim": "התשובה של GOTCHA טענה למשהו שאף כלי לא ביצע",
+      "unsupportedActionClaim": "התשובה של GOTCHA אמרה שהיא עושה משהו שלא עשתה",
+      "exitCriteriaBlocked": "GOTCHA נעצרה: חסרים עדיין פרטים שהיה צריך",
+      "outputValidatorBlocked": "תשובה הוחלפה לפני שנשלחה: היא הפרה כלל"
+    },
+    "lead": "כל מה שנעשה בחשבון שלהם, מהחדש לישן",
+    "gapsShort": "{count, plural, one {סוג פעולה אחד לא נספר כאן} other {# סוגי פעולות לא נספרים כאן}}",
+    "waitingOnYou": "ממתין לך",
+    "openInApprovals": "פתיחה באישורים",
+    "filterEmpty": "אין כאן כלום.",
+    "filter": {
+      "all": "הכול",
+      "gotcha": "GOTCHA",
+      "team": "צוות",
+      "money": "כסף"
+    },
+    "side": {
+      "who": "מי עשה מה",
+      "byGotcha": "על ידי GOTCHA",
+      "byTeam": "על ידי הצוות",
+      "byAutomations": "על ידי אוטומציות",
+      "money": "כסף שזז בחשבון",
+      "refunded": "הוחזר",
+      "discounts": "הנחות",
+      "waiting": "ממתין לאישור",
+      "waitingValue": "{count, plural, =0 {אין} one {בקשה אחת} other {# בקשות}}",
+      "may": "מה GOTCHA רשאית לעשות עבורם",
+      "change": "שינוי ב‑Studio · יכולות"
+    },
+    "dayReplied": "{count, plural, one {GOTCHA ענתה פעם אחת} other {GOTCHA ענתה # פעמים}}",
+    "daySent": "{count, plural, one {הצוות שלח הודעה} other {הצוות שלח # הודעות}}",
+    "budget": {
+      "turn": "GOTCHA עצרה: התשובה הגיעה לתקציב ה‑AI שלה",
+      "conversation": "GOTCHA עצרה: תקציב ה‑AI של השיחה נגמר",
+      "tenant_day": "GOTCHA עצרה: תקציב ה‑AI היומי של סביבת העבודה נגמר",
+      "other": "GOTCHA עצרה: תקציב AI נגמר"
+    },
+    "policy": {
+      "kind": {
+        "REFUND": "החזרים",
+        "CANCEL_ORDER": "ביטול הזמנה",
+        "COUPON": "קופונים",
+        "COMPENSATION": "פיצוי",
+        "DISCOUNT": "הנחות",
+        "CUSTOMER_WRITE": "שינויים ברשומה שלהם"
+      },
+      "never": "{name}: אף פעם - כבוי.",
+      "neverByDefault": "{name}: אף פעם - לא נקבע כלל.",
+      "unset": "{name}: לא נקבע כלל.",
+      "noLimit": "{name}: מותר, ללא מגבלה.",
+      "limits": "{name}: {rules}.",
+      "upTo": "עד {amount}",
+      "upToPercent": "עד {percent} מההזמנה",
+      "approvalAbove": "אדם מאשר מעל {amount}"
+    },
+    "decide": {
+      "approve": "אישור",
+      "decline": "דחייה",
+      "changeAmount": "שינוי סכום",
+      "approveAsk": "לאשר? זה ירוץ עכשיו.",
+      "approveYes": "כן, לאשר",
+      "declineAsk": "למה לא?",
+      "notNow": "לא עכשיו",
+      "approvedRan": "אושר - זה רץ.",
+      "approvedNotRun": "אושר, וזה לא רץ - ראו באישורים.",
+      "declined": "נדחה.",
+      "refused": {
+        "stale": "מישהו כבר החליט על זה.",
+        "forbidden": "אין לך הרשאה להחליט על זה.",
+        "failed": "זה לא עבר - שום דבר לא השתנה."
+      }
+    }
+  },
+  "teamNotes": {
+    "title": "הערות",
+    "write": "הוסיפו הערה על הלקוח הזה",
+    "save": "שמירת הערה",
+    "saving": "שומרים…",
+    "cancel": "ביטול",
+    "edit": "עריכה",
+    "delete": "מחיקה",
+    "deleteConfirm": "למחוק לצמיתות?",
+    "edited": "נערך",
+    "none": "אף אחד עוד לא כתב הערה על האדם הזה.",
+    "unread": "לא הצלחנו לקרוא כרגע את ההערות על האדם הזה. זה לא אומר שאין כאלה.",
+    "empty": "הערה צריכה להכיל משהו.",
+    "tooLong": "זה ארוך מ‑{max} תווים. קצרו ונסו שוב.",
+    "notTheAuthor": "רק מי שכתב הערה יכול לשנות או למחוק אותה.",
+    "writeFailed": "זה לא נשמר. נסו שוב.",
+    "noReason": "לא נמסרה סיבה",
+    "yourCrm": "ה‑CRM שלכם",
+    "aiUsable": "GOTCHA רשאית להשתמש בזה בתשובות",
+    "aiUsableOn": "זה יישלח ל‑CRM שלכם ו‑GOTCHA תוכל לחזור על זה מול הלקוח.",
+    "aiUsableOff": "לצוות בלבד. זה נשאר ב‑GOTCHA ולא מגיע ל‑CRM שלכם.",
+    "where": {
+      "synced": "נכתב גם ל‑{system}.",
+      "pending": "אנחנו עדיין שולחים את זה ל‑CRM - עוד לא ידוע לנו אם הגיע.",
+      "failed": "זה לא הגיע ל‑CRM שלכם. ה‑CRM אמר: {reason}.",
+      "private": "נשמר ב‑GOTCHA בלבד - הערה פרטית לא נשלחת ל‑CRM משותף.",
+      "not_ai_usable": "נשמר ב‑GOTCHA בלבד, כי זה לא סומן לשימוש של GOTCHA.",
+      "no_crm": "נשמר ב‑GOTCHA בלבד - לא מחובר CRM.",
+      "not_linked": "נשמר ב‑GOTCHA בלבד - ה‑CRM שלכם מחובר, אבל האדם הזה לא מותאם לרשומה בו.",
+      "nothing_to_push": "נשמר ב‑GOTCHA בלבד - לא היה דרך מה לשלוח את זה."
+    },
+    "teamOnly": "לצוות בלבד",
+    "mayUse": "GOTCHA רשאית להשתמש",
+    "placeholder": "כתבו הערה על הלקוח…",
+    "placeholderNamed": "כתבו הערה על {name}…",
+    "filterEmpty": "אין כאן הערות.",
+    "filter": {
+      "all": "הכול",
+      "mayUse": "GOTCHA רשאית להשתמש",
+      "teamOnly": "לצוות בלבד"
+    },
+    "side": {
+      "heading": "הערות",
+      "notes": "הערות",
+      "mayUse": "GOTCHA רשאית להשתמש",
+      "teamOnly": "לצוות בלבד",
+      "reads": "מה GOTCHA קוראת מכאן",
+      "readsNone": "עדיין כלום.",
+      "readsCaption": "הערות לצוות בלבד לעולם לא מוצגות ל‑AI ולעולם לא מגיעות ללקוח."
+    }
+  },
+  "titleCount": "{count, plural, =1 {לקוח אחד} other {# לקוחות}}",
+  "subline": "אדם אחד, לא משנה מכמה ערוצים הוא כותב.",
+  "composition": {
+    "heading": "מי הלקוחות שלך",
+    "byChannel": "לפי הערוץ שבו הם כותבים"
+  },
+  "card": {
+    "since": "איתך מאז {when}",
+    "reaches": "פונה אליך ב־{channels}",
+    "noSummary": "עדיין אין סיכום - GOTCHA תכתוב אחד כשיהיה מספיק מידע.",
+    "addNote": "הוספת הערה",
+    "message": "הודעה",
+    "tabs": {
+      "everything": "הכול",
+      "conversations": "שיחות",
+      "orders": "הזמנות",
+      "actions": "פעולות",
+      "notes": "הערות"
+    },
+    "allChannels": "כל הערוצים",
+    "today": "היום",
+    "messages": "{count, plural, one {הודעה אחת} other {# הודעות}}",
+    "handedTo": "הועבר ל־{to}",
+    "handover": "הועבר",
+    "order": "הזמנה {number}",
+    "note": "הערה · {author}",
+    "empty": "עדיין אין כאן כלום.",
+    "worth": "שווי",
+    "lifetime": "לאורך הזמן",
+    "orders": "הזמנות",
+    "refunds": "החזרים",
+    "remembers": "GOTCHA זוכרת",
+    "remembersNone": "עדיין כלום.",
+    "reach": "איך להשיג",
+    "reachNone": "לא נרשם מזהה.",
+    "noteCard": "הערה · {author}, {when}",
+    "noNote": "עדיין אין הערות.",
+    "crumb": "לקוחות",
+    "conv": {
+      "heading": "{count, plural, one {שיחה אחת} other {# שיחות}}, החדשה ראשונה",
+      "summarise": "לסכם הכול",
+      "openIt": "לפתוח",
+      "imported": "יובא",
+      "noWords": "לא נרשמו מילים בשיחה הזו.",
+      "older": "{count, plural, one {שיחה ישנה אחת למטה} other {# שיחות ישנות למטה}}",
+      "showOlder": "הצגת שיחות ישנות"
+    },
+    "pattern": {
+      "heading": "בדפוס שלהם",
+      "conversations": "שיחות",
+      "channels": "ערוצים",
+      "neededPerson": "נזקקו לאדם",
+      "writes": "איך הם כותבים",
+      "writesNone": "עדיין כלום.",
+      "asks": "על מה הם שואלים",
+      "asksNone": "עדיין כלום."
+    },
+    "promise": {
+      "heading": "הבטחה פתוחה",
+      "none": "אין הבטחות פתוחות."
+    },
+    "approval": {
+      "PENDING": "ממתין לאישורך",
+      "APPROVED": "אושר",
+      "REJECTED": "נדחה",
+      "EXPIRED": "פג לפני שהוחלט",
+      "CANCELLED": "בוטל",
+      "APPROVEDBy": "אושר על ידי {name}",
+      "REJECTEDBy": "נדחה על ידי {name}"
+    },
+    "aiAction": {
+      "proposed": "GOTCHA · ממתין לאישור",
+      "approved": "GOTCHA · אושר",
+      "running": "GOTCHA · רץ",
+      "completed": "GOTCHA · בוצע",
+      "failed": "GOTCHA · לא עבר",
+      "denied": "GOTCHA · נדחה"
+    }
+  },
+  "segments": {
+    "label": "מי",
+    "everyone": "כולם",
+    "talking": "מדברים איתך עכשיו",
+    "quiet": "השתתקו",
+    "count": "{label} · {count}",
+    "countCapped": "{label} · {count}+",
+    "sorted": "לפי קשר אחרון"
+  },
+  "add": {
+    "label": "הוספת לקוח",
+    "name": "שם",
+    "phone": "טלפון",
+    "email": "אימייל (לא חובה)",
+    "note": "הלקוח נוסף כלקוח WhatsApp. אם המספר כבר קיים, נפתח האדם הקיים.",
+    "submit": "הוספה",
+    "cancel": "ביטול",
+    "problem": {
+      "name": "צריך שם.",
+      "phone": "זה לא נראה כמו מספר טלפון - למשל 054-123 4567 או ‎+972 54 123 4567.",
+      "email": "האימייל לא נראה תקין.",
+      "forbidden": "אין לך הרשאה להוסיף לקוחות.",
+      "failed": "הלקוח לא נוסף - אפשר לנסות שוב."
+    }
+  },
+  "today": {
+    "waiting": "מחכה לך",
+    "noWord": "לא נקראה שיחה איתם",
+    "phone": "דרך: {handle}",
+    "mood": {
+      "frustrated": "מתוסכל/ת היום",
+      "about_to_buy": "קרוב/ה לקנייה"
+    },
+    "orders": "{count, plural, one {הזמנה אחת} other {# הזמנות}}",
+    "noOrders": "עדיין אין הזמנות",
+    "valueWhy": {
+      "unread": "לא הצלחנו לקרוא את ההזמנות מהחנות.",
+      "no_store_connected": "אין חנות מחוברת, אז אין הזמנות לקרוא.",
+      "store_unreachable": "לא הצלחנו להגיע לחנות, אז ההזמנות לא נקראו.",
+      "provider_not_supported": "עדיין לא קוראים כאן הזמנות מהחנות הזו.",
+      "capped": "נקראו רק ההזמנות האחרונות של החנות, אז ייתכן שחסרה הזמנה ישנה.",
+      "mixed": "ההזמנות שלהם ביותר ממטבע אחד, אז הן לא מסוכמות."
+    },
+    "wrote": "{count, plural, other {כתב/ה # פעמים}}"
+  },
+  "since": {
+    "minutes": "לפני {n} דק׳",
+    "hours": "לפני {n} שע׳",
+    "yesterday": "אתמול",
+    "days": "{n} ימים",
+    "months": "{n, plural, one {חודש אחד} two {חודשיים} other {# חודשים}}"
+  },
+  "reach": {
+    "eyebrow": "כדאי לפנות אליהם",
+    "body": "{count, plural, one {לקוח אחד כתב לך יותר מפעם אחת ואז השתתק.} other {# לקוחות כתבו לך יותר מפעם אחת ואז השתתקו.}}",
+    "bodyCapped": "לפחות {count} לקוחות כתבו לך יותר מפעם אחת ואז השתתקו.",
+    "none": "אף אחד לא השתתק.",
+    "unread": "לא הצלחנו לקרוא מי השתתק.",
+    "write": "לכתוב להם",
+    "seeList": "לרשימה"
+  },
+  "dupes": {
+    "title": "שני חשבונות נראים כמו אדם אחד",
+    "why": {
+      "phone": "אותו מספר טלפון.",
+      "email": "אותה כתובת מייל.",
+      "other": "GOTCHA מצאה משהו משותף לשניהם.",
+      "sameName": "אותו שם בשני ערוצים.",
+      "similarName": "שמות דומים בשני ערוצים.",
+      "shopifyCustomer": "אותו לקוח בשופיפיי."
+    },
+    "evidence": {
+      "name": "השמות בשני החשבונות: <first></first> ו‑<second></second>",
+      "phone": "מספר הטלפון: {value}",
+      "email": "כתובת המייל: {value}",
+      "shopifyProfile": "אומת דרך עדכון פרופיל."
+    },
+    "keeps": "יוצגו כאדם אחד, וכל ההודעות של שניהם נשמרות.",
+    "merge": "למזג",
+    "confirm": "להציג את שניהם כאדם אחד?",
+    "confirmYes": "כן, למזג",
+    "cancel": "ביטול",
+    "notSame": "לא אותו אדם",
+    "done": "בוצע. עכשיו הם מוצגים כאדם אחד.",
+    "failed": {
+      "gone": "אחד מהם כבר לא קיים.",
+      "not_same": "השניים סומנו כאנשים שונים, ולכן לא מוזגו.",
+      "forbidden": "אין לך הרשאה למזג לקוחות.",
+      "failed": "לא מוזגו - אפשר לנסות שוב."
+    },
+    "notSameDone": "סומנו כשני אנשים. GOTCHA לא תציע אותם יחד שוב.",
+    "notSameFailed": {
+      "gone": "אחד מהם כבר לא קיים.",
+      "already_same": "השניים האלה כבר אדם אחד.",
+      "forbidden": "אין לך הרשאה לשנות לקוחות.",
+      "failed": "זה לא נשמר - אפשר לנסות שוב."
+    }
+  },
+  "who": {
+    "title": "מי הלקוחות שלך",
+    "bought": "קנו פעם אחת",
+    "came": "חזרו",
+    "wholesale": "סיטונאות",
+    "never": "לא קנו",
+    "reason": {
+      "unread": "לא הצלחנו לקרוא את ההזמנות מהחנות.",
+      "no_store_connected": "אין חנות מחוברת, אז אין הזמנות לספור.",
+      "store_unreachable": "לא הצלחנו להגיע לחנות, אז ההזמנות לא נספרו.",
+      "provider_not_supported": "עדיין לא סופרים כאן הזמנות מהחנות הזו."
+    },
+    "capped": "נספר מההזמנות האחרונות של החנות בלבד."
+  },
+  "footerToday": "מוצגים {shown} מתוך {total} · shift-קליק לבחירת כמה, ואז הודעה או תיוג",
+  "select": {
+    "label": "לקוחות שנבחרו",
+    "count": "{count, plural, one {נבחר אחד} other {נבחרו #}}",
+    "message": "הודעה",
+    "tag": "תיוג",
+    "clear": "ניקוי",
+    "tagLabel": "תגית להוספה",
+    "tagPlaceholder": "תגית, למשל סיטונאי",
+    "tagAdd": "הוספה",
+    "tagAdding": "מוסיפים…",
+    "tagCancel": "ביטול",
+    "tagTooMany": "אפשר לתייג עד {max} אנשים בכל פעם.",
+    "tagRefused": {
+      "invalid": "תגית היא 1-40 תווים.",
+      "too_many_people": "אפשר לתייג עד {max} אנשים בכל פעם.",
+      "too_many_tags": "למישהו כאן כבר יש יותר מדי תגיות.",
+      "not_found": "מישהו כאן כבר לא לקוח - רעננו ובחרו שוב.",
+      "forbidden": "אין לך הרשאה לתייג לקוחות.",
+      "failed": "אף אחד לא תויג - נסו שוב."
+    }
+  },
+  "links": {
+    "title": "חשבונות מקושרים",
+    "unavailable": "לא הצלחנו לקרוא את החשבונות המקושרים כרגע.",
+    "unnamed": "ללא שם",
+    "automatic": "קושר אוטומטית",
+    "byPerson": "קושר ידנית",
+    "on": "ב‑{date}",
+    "through": "דרך {name}",
+    "unlink": "ביטול צימוד",
+    "confirm": "לבטל את הצימוד של {name}? הוא יוצג שוב כלקוח נפרד.",
+    "confirmYes": "ביטול צימוד",
+    "cancel": "השארה",
+    "undone": "הצימוד בוטל. הוא יוצג שוב כלקוח נפרד.",
+    "problem": {
+      "not_linked": "הצימוד הזה כבר לא קיים.",
+      "forbidden": "אין לך הרשאה לבטל צימוד של לקוחות.",
+      "failed": "זה לא הצליח. נסו שוב."
+    }
+  }
+}

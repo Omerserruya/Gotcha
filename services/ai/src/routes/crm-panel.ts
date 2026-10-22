@@ -17,10 +17,8 @@
 import { Router, type Request, type Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, resolveEffectiveLocale } from "@chatcenter/shared";
 import { getCrmAdapter } from "../services/connectors/crm-adapter-resolver";
-import {
-  analyzeConversation,
-  getConversationIntelligence,
-} from "../services/conversation-intelligence.service";
+import { getConversationIntelligence } from "../services/conversation-intelligence.service";
+import { analyzeConversationOnClose } from "../services/conversation-analysis.service";
 import type { CrmObjectKind } from "../services/connectors/crm-adapter.types";
 import {
   linkOrCreateCrmContact,
@@ -29,6 +27,7 @@ import {
   type StrongChannel,
 } from "../services/connectors/crm-identity.service";
 import { loadCustomerContext } from "../services/memory/customer-context.service";
+import { withErrorCode } from "../lib/error-code";
 
 const router = Router();
 
@@ -290,6 +289,34 @@ async function persistCrmLinkage(args: {
   });
 }
 
+const CRM_CREDENTIALS_REFUSED = /(?:\b|_)40[13]\b|unauthori[sz]ed|forbidden|invalid_grant|invalid_token|invalid_client/i;
+const CRM_UNREACHABLE = /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|EAI_AGAIN|fetch failed|timed? ?out|(?:\b|_)5\d\d\b/i;
+const CODE_LIKE_REASON = /^[\w.:-]{1,64}$/;
+
+/**
+ * What a failed CRM call's reason looks like in the audit log: "[CODE] sentence".
+ * The raw reason can be a provider's whole HTML error page (Shopify's 401 on a
+ * token refresh, 2026-10-11), which the audit row stored verbatim. A short
+ * code-like reason ("not_found", "no_crm_link") is already clean and is kept.
+ */
+export function auditReason(raw: unknown): unknown {
+  if (typeof raw !== "string" || !raw) return raw;
+  if (CRM_CREDENTIALS_REFUSED.test(raw)) return withErrorCode("CREDENTIALS_INVALID");
+  if (CRM_UNREACHABLE.test(raw)) return withErrorCode("CONNECTION_FAILED");
+  if (CODE_LIKE_REASON.test(raw)) return raw;
+  return "[CRM_REQUEST_FAILED] The CRM did not accept the request.";
+}
+
+/**
+ * The same, for a reason that leaves this service in a response: a client
+ * never receives a provider's raw text (2026-10-11). The raw text is logged.
+ */
+function clientReason(raw: unknown, label: string): unknown {
+  const clean = auditReason(raw);
+  if (clean !== raw) console.warn(`[crm-panel] ${label} raw:`, String(raw).slice(0, 2000));
+  return clean;
+}
+
 async function auditCrmAction(args: {
   tenantId: string;
   conversationId: string;
@@ -297,6 +324,17 @@ async function auditCrmAction(args: {
   ok: boolean;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
+  const metadata: Record<string, unknown> = { ...(args.metadata || {}) };
+  if (!args.ok) {
+    for (const key of ["reason", "link_reason"]) {
+      const raw = metadata[key];
+      const clean = auditReason(raw);
+      if (clean === raw) continue;
+      // The raw text stays in the service log only, never in the audit row.
+      console.warn(`[crm-panel] ${args.action} conv=${args.conversationId} ${key} raw:`, String(raw).slice(0, 2000));
+      metadata[key] = clean;
+    }
+  }
   try {
     await (prisma as any).auditLog?.create?.({
       data: {
@@ -305,7 +343,7 @@ async function auditCrmAction(args: {
         action: args.action,
         targetType: "conversation",
         targetId: args.conversationId,
-        metadata: { ok: args.ok, ...(args.metadata || {}) },
+        metadata: { ok: args.ok, ...metadata },
       },
     });
   } catch (err: any) {
@@ -487,7 +525,7 @@ router.get(
           status: "needs_approval",
           contact: null,
           candidates: outcome.candidates,
-          link_reason: outcome.reason,
+          link_reason: clientReason(outcome.reason, "context needs_approval"),
           fallback,
         },
       });
@@ -500,7 +538,7 @@ router.get(
         vendor: adapter.vendor,
         status: "unmapped",
         contact: null,
-        link_reason: outcome.status === "error" ? outcome.reason : undefined,
+        link_reason: outcome.status === "error" ? clientReason(outcome.reason, "context error") : undefined,
         fallback,
       },
     });
@@ -570,13 +608,13 @@ router.post(
       res.status(409).json({
         error: "multiple_candidates",
         candidates: outcome.candidates,
-        reason: outcome.reason,
+        reason: clientReason(outcome.reason, "create-lead needs_approval"),
       });
       return;
     }
 
     if (outcome.status === "not_found" || outcome.status === "error") {
-      res.status(502).json({ error: outcome.reason ?? "create_failed" });
+      res.status(502).json({ error: clientReason(outcome.reason, "create-lead") ?? "create_failed" });
       return;
     }
 
@@ -639,7 +677,7 @@ router.post(
     // Verify the candidate still exists on the CRM side before pinning.
     const ctx = await adapter.getCustomerContext({ contact_id: crmContactId, kind });
     if (!ctx.ok || !ctx.context) {
-      res.status(404).json({ error: ctx.reason ?? "candidate_not_found" });
+      res.status(404).json({ error: clientReason(ctx.reason, "link candidate") ?? "candidate_not_found" });
       return;
     }
 
@@ -702,7 +740,7 @@ router.post(
       metadata: { vendor: adapter.vendor, reason: result.reason, body_length: body.length },
     });
 
-    if (!result.ok) { res.status(502).json({ error: result.reason ?? "note_create_failed" }); return; }
+    if (!result.ok) { res.status(502).json({ error: clientReason(result.reason, "notes") ?? "note_create_failed" }); return; }
     res.json({ data: { vendor: adapter.vendor, note_id: result.id ?? null, was_update: result.was_update ?? false } });
   },
 );
@@ -847,8 +885,8 @@ export async function syncCloseToCrm(
 
   let intel = await getConversationIntelligence(tenantId, conversationId).catch(() => null);
   if (!intel) {
-    try { await analyzeConversation(tenantId, conversationId); }
-    catch (err: any) { console.warn("[crm-panel] analyzeConversation failed:", err?.message); }
+    try { await analyzeConversationOnClose(tenantId, conversationId, { trigger: "closed" }); }
+    catch (err: any) { console.warn("[crm-panel] conversation analysis failed:", err?.message); }
     intel = await getConversationIntelligence(tenantId, conversationId).catch(() => null);
   }
 
@@ -922,7 +960,8 @@ export async function syncCloseToCrm(
     synced: result.ok,
     vendor: adapter.vendor,
     crm_activity_id: result.id ?? null,
-    reason: result.reason,
+    // The raw reason is in the result log line above; callers and clients get the code.
+    reason: result.ok ? result.reason : (auditReason(result.reason) as string | undefined),
   };
 }
 

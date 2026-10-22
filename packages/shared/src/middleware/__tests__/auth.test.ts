@@ -13,7 +13,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // vi.mock is hoisted above module scope, so the doubles it closes over must
 // be created with vi.hoisted rather than plain consts.
-const { prismaMock, resolvePrincipalMock, AuthErrorMock } = vi.hoisted(() => {
+const {
+  prismaMock,
+  resolvePrincipalMock,
+  readSessionCookieMock,
+  resolveFromSessionMock,
+  AuthErrorMock,
+} = vi.hoisted(() => {
   class AuthErrorMock extends Error {
     code: string;
     constructor(message: string, code: string) {
@@ -27,6 +33,8 @@ const { prismaMock, resolvePrincipalMock, AuthErrorMock } = vi.hoisted(() => {
       tenant: { findUnique: vi.fn() },
     },
     resolvePrincipalMock: vi.fn(),
+    readSessionCookieMock: vi.fn(),
+    resolveFromSessionMock: vi.fn(),
     AuthErrorMock,
   };
 });
@@ -35,6 +43,10 @@ vi.mock("../../lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("../../lib/principal", () => ({
   resolvePrincipal: resolvePrincipalMock,
   AuthError: AuthErrorMock,
+}));
+vi.mock("../../lib/session-principal", () => ({
+  readSessionCookie: readSessionCookieMock,
+  resolvePrincipalFromSessionToken: resolveFromSessionMock,
 }));
 
 import { authenticate } from "../auth";
@@ -55,6 +67,9 @@ describe("authenticate", () => {
     vi.clearAllMocks();
     delete process.env.INTERNAL_SERVICE_KEY;
     delete process.env.INTERNAL_SERVICE_TOKEN;
+    delete process.env.SESSION_COOKIE_ACCEPT;
+    delete process.env.COOKIE_ONLY_ENFORCE;
+    delete process.env.LEGACY_BEARER_ACCEPT;
     process.env.NODE_ENV = "test";
   });
 
@@ -254,6 +269,179 @@ describe("authenticate", () => {
       // The caller-supplied tenant header must be ignored for user tokens -
       // tenancy comes from the database, never from the request.
       expect(req.tenantId).toBe("t1");
+    });
+  });
+});
+
+/**
+ * The cookie door (SESSION_COOKIE_ACCEPT).
+ *
+ * The gate now has three credentials to reason about, and the dangerous
+ * mistakes are all about ORDER and FALL-THROUGH:
+ *   - a revoked session must not be rescued by a stale token in the same tab;
+ *   - turning browsers cookie-only must not sever service-to-service calls;
+ *   - and with the flag off, none of this exists.
+ */
+describe("authenticate · session cookie", () => {
+  const SESSION = "s".repeat(43);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.INTERNAL_SERVICE_KEY;
+    delete process.env.INTERNAL_SERVICE_TOKEN;
+    delete process.env.SESSION_COOKIE_ACCEPT;
+    delete process.env.COOKIE_ONLY_ENFORCE;
+    delete process.env.LEGACY_BEARER_ACCEPT;
+    process.env.NODE_ENV = "test";
+  });
+
+  it("is entirely inert while the flag is off", async () => {
+    readSessionCookieMock.mockReturnValue(SESSION);
+    const res = mockRes();
+    const next = vi.fn();
+
+    await authenticate(mockReq({ cookie: `gotcha_session_dev=${SESSION}` }), res, next);
+
+    // Not even read: a deployment that has not opted in behaves exactly as before.
+    expect(readSessionCookieMock).not.toHaveBeenCalled();
+    expect(resolveFromSessionMock).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(401);
+  });
+
+  it("admits a live session with no Authorization header at all", async () => {
+    process.env.SESSION_COOKIE_ACCEPT = "true";
+    readSessionCookieMock.mockReturnValue(SESSION);
+    resolveFromSessionMock.mockResolvedValue({
+      userId: "u1", tenantId: "t1", role: "ADMIN", email: "a@b.com",
+    });
+    const req = mockReq({ cookie: `gotcha_session_dev=${SESSION}` });
+    const res = mockRes();
+    const next = vi.fn();
+
+    await authenticate(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.tenantId).toBe("t1");
+    // The browser never had to produce a bearer.
+    expect(resolvePrincipalMock).not.toHaveBeenCalled();
+  });
+
+  it("passes the tenant hint through to the session resolver", async () => {
+    process.env.SESSION_COOKIE_ACCEPT = "true";
+    readSessionCookieMock.mockReturnValue(SESSION);
+    resolveFromSessionMock.mockResolvedValue({ userId: "u1", tenantId: "t2", role: "AGENT", email: "a@b.com" });
+
+    await authenticate(
+      mockReq({ cookie: "x", "x-tenant-id": "t2" }),
+      mockRes(),
+      vi.fn(),
+    );
+
+    expect(resolveFromSessionMock).toHaveBeenCalledWith(SESSION, "t2");
+  });
+
+  it("prefers the cookie over a bearer the same request also carries", async () => {
+    // The revocable credential wins over the one the server cannot withdraw.
+    process.env.SESSION_COOKIE_ACCEPT = "true";
+    readSessionCookieMock.mockReturnValue(SESSION);
+    resolveFromSessionMock.mockResolvedValue({ userId: "u1", tenantId: "t1", role: "ADMIN", email: "a@b.com" });
+
+    const next = vi.fn();
+    await authenticate(mockReq({ cookie: "x", authorization: "Bearer stale" }), mockRes(), next);
+
+    expect(next).toHaveBeenCalled();
+    expect(resolvePrincipalMock).not.toHaveBeenCalled();
+  });
+
+  // SECURITY: the whole point of a revocable session is that revoking it ends
+  // access. Falling through to Bearer here would mean a signed-out operator
+  // keeps working for as long as the token in their tab stays valid.
+  it("does NOT fall through to bearer when a presented session is invalid", async () => {
+    process.env.SESSION_COOKIE_ACCEPT = "true";
+    readSessionCookieMock.mockReturnValue(SESSION);
+    resolveFromSessionMock.mockRejectedValue(new AuthErrorMock("Session is no longer valid", "invalid_token"));
+    const res = mockRes();
+    const next = vi.fn();
+
+    await authenticate(mockReq({ cookie: "x", authorization: "Bearer still-valid" }), res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(resolvePrincipalMock).not.toHaveBeenCalled();
+  });
+
+  it("falls through to bearer when no cookie was presented", async () => {
+    process.env.SESSION_COOKIE_ACCEPT = "true";
+    readSessionCookieMock.mockReturnValue(null);
+    resolvePrincipalMock.mockResolvedValue({ userId: "u1", tenantId: "t1", role: "ADMIN", email: "a@b.com" });
+    const next = vi.fn();
+
+    await authenticate(mockReq({ authorization: "Bearer good" }), mockRes(), next);
+
+    expect(next).toHaveBeenCalled();
+    expect(resolvePrincipalMock).toHaveBeenCalled();
+  });
+
+  it("fails CLOSED when the session lookup throws unexpectedly", async () => {
+    process.env.SESSION_COOKIE_ACCEPT = "true";
+    readSessionCookieMock.mockReturnValue(SESSION);
+    resolveFromSessionMock.mockRejectedValue(new Error("connection terminated"));
+    const res = mockRes();
+    const next = vi.fn();
+
+    await authenticate(mockReq({ cookie: "x" }), res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(503);
+  });
+
+  describe("cookie-only enforcement", () => {
+    it("refuses a browser bearer once COOKIE_ONLY_ENFORCE is set", async () => {
+      process.env.SESSION_COOKIE_ACCEPT = "true";
+      process.env.COOKIE_ONLY_ENFORCE = "true";
+      readSessionCookieMock.mockReturnValue(null);
+      const res = mockRes();
+      const next = vi.fn();
+
+      await authenticate(mockReq({ authorization: "Bearer perfectly-valid" }), res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: "cookie_required" }));
+      // Refused on policy, so it is never even verified.
+      expect(resolvePrincipalMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses a browser bearer when LEGACY_BEARER_ACCEPT is turned off", async () => {
+      process.env.LEGACY_BEARER_ACCEPT = "false";
+      readSessionCookieMock.mockReturnValue(null);
+      const res = mockRes();
+      const next = vi.fn();
+
+      await authenticate(mockReq({ authorization: "Bearer perfectly-valid" }), res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(resolvePrincipalMock).not.toHaveBeenCalled();
+    });
+
+    // The flags govern BROWSER credentials. Services authenticate with a shared
+    // secret and have no cookie jar; locking browsers down must not take the
+    // platform's own plumbing with it.
+    it("still admits internal service calls under cookie-only enforcement", async () => {
+      process.env.SESSION_COOKIE_ACCEPT = "true";
+      process.env.COOKIE_ONLY_ENFORCE = "true";
+      process.env.LEGACY_BEARER_ACCEPT = "false";
+      process.env.INTERNAL_SERVICE_KEY = "s".repeat(40);
+      prismaMock.tenant.findUnique.mockResolvedValue({ id: "t9" });
+      readSessionCookieMock.mockReturnValue(null);
+
+      const req = mockReq({ authorization: `Bearer ${"s".repeat(40)}`, "x-tenant-id": "t9" });
+      const next = vi.fn();
+
+      await authenticate(req, mockRes(), next);
+
+      expect(next).toHaveBeenCalled();
+      expect(req.user.isInternal).toBe(true);
     });
   });
 });

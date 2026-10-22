@@ -22,6 +22,12 @@ const quotes = vi.fn();
 const sessions = vi.fn();
 const retention = vi.fn();
 const payg = vi.fn();
+// Stages added after this file was written. Unmocked, they ran their real code
+// here, failed, and were (correctly) contained: the tick reported "shopify" and
+// "usage-dispatch" as failed and every exact list below disagreed.
+const fx = vi.fn();
+const shopify = vi.fn();
+const usageDispatch = vi.fn();
 
 vi.mock("../services/subscription.service", () => ({ runBillingCycle: () => cycle() }));
 vi.mock("../services/dunning.service", () => ({ runDunning: () => dunning() }));
@@ -31,6 +37,9 @@ vi.mock("../services/payment-quote.service", () => ({ expireStaleQuotes: () => q
 vi.mock("../services/tokenization.service", () => ({ expireStaleSessions: () => sessions() }));
 vi.mock("../services/billing-retention.service", () => ({ purgeSpentCheckoutArtifacts: () => retention() }));
 vi.mock("../services/payg.service", () => ({ settleDuePaygAccruals: () => payg() }));
+vi.mock("../services/exchange-rate.service", () => ({ refreshOfficialRateIfDue: () => fx() }));
+vi.mock("../services/provider-subscription.service", () => ({ reconcileProviderSubscriptions: () => shopify() }));
+vi.mock("../services/usage-ledger.service", () => ({ dispatchPendingUsage: () => usageDispatch() }));
 vi.mock("@chatcenter/shared", async () => {
   const actual = await vi.importActual<any>("@chatcenter/shared");
   return { ...actual, settleDueConversations: () => usage() };
@@ -58,12 +67,15 @@ beforeEach(() => {
   sessions.mockResolvedValue(0);
   retention.mockResolvedValue(OK.retention);
   payg.mockResolvedValue(OK.payg);
+  fx.mockResolvedValue(undefined);
+  shopify.mockResolvedValue({ checked: 0, changed: 0, failed: 0 });
+  usageDispatch.mockResolvedValue({ considered: 0, dispatched: 0, skipped: 0, failed: 0, deadLettered: 0 });
 });
 
 describe("a clean tick runs everything", () => {
   it("calls every stage once and reports their results", async () => {
     const r = await runSchedulerTick();
-    for (const fn of [cycle, dunning, usage, payg, reconcile, leases, quotes, sessions, retention]) {
+    for (const fn of [fx, cycle, dunning, usage, payg, reconcile, shopify, usageDispatch, leases, quotes, sessions, retention]) {
       expect(fn).toHaveBeenCalledTimes(1);
     }
     expect(r.failed).toEqual([]);
@@ -105,7 +117,7 @@ describe("a failing stage is contained", () => {
   });
 
   it("survives every stage failing at once", async () => {
-    for (const fn of [cycle, dunning, usage, payg, reconcile, leases, quotes, sessions, retention]) {
+    for (const fn of [fx, cycle, dunning, usage, payg, reconcile, shopify, usageDispatch, leases, quotes, sessions, retention]) {
       fn.mockRejectedValue(new Error("everything is down"));
     }
     const r = await runSchedulerTick();
@@ -113,7 +125,7 @@ describe("a failing stage is contained", () => {
     // The tick itself must not throw - it is called from a setInterval with
     // nobody to catch it, and a rejected timer callback is how a scheduler dies
     // quietly.
-    expect(r.failed).toEqual(["cycle", "dunning", "usage", "payg", "reconcile", "leases", "quotes", "sessions", "retention"]);
+    expect(r.failed).toEqual(["fx", "cycle", "dunning", "usage", "payg", "reconcile", "shopify", "usage-dispatch", "leases", "quotes", "sessions", "retention"]);
     expect(r.reconciled.examined).toBe(0);
   });
 

@@ -1,4 +1,5 @@
 export * from "./email-thread";
+export * from "./auto-mail";
 export type {
   ChannelType,
   NormalizedInboundMessage,
@@ -31,7 +32,7 @@ export { instagramInboundAdapter, instagramOutboundAdapter } from "./instagram.a
 export { emailInboundAdapter, emailOutboundAdapter } from "./email.adapter";
 export { gmailInboundAdapter, gmailOutboundAdapter, resolveAccessToken as gmailResolveAccessToken, fetchNewMessages as gmailFetchNewMessages } from "./gmail.adapter";
 export type { GmailFetchedMessage } from "./gmail.adapter";
-export { outlookInboundAdapter, outlookOutboundAdapter } from "./outlook.adapter";
+export { outlookInboundAdapter, outlookOutboundAdapter, fetchOutlookMessage } from "./outlook.adapter";
 export { slackInboundAdapter, slackOutboundAdapter } from "./slack.adapter";
 export { webchatOutboundAdapter } from "./webchat.adapter";
 export { shopifyLiveChatOutboundAdapter } from "./shopify-live-chat.adapter";

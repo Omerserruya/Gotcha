@@ -1,0 +1,195 @@
+{
+  "title": "Notifications",
+  "description": "GOTCHA tells you when something needs a decision or something broke. On this device it can also chime, or show a desktop notification, when a customer writes.",
+  "device": {
+    "title": "On this device",
+    "note": "Kept in this browser only. Your other devices and browsers keep their own.",
+    "notKept": "This browser isn't keeping settings, so these go back to how they were when the page reloads.",
+    "quiet": "Quiet hours silence these too.",
+    "sound": {
+      "label": "Sound for incoming messages",
+      "about": "A short chime when a customer writes, unless that conversation is open in front of you."
+    },
+    "desktop": {
+      "label": "Desktop notifications",
+      "about": "A notification at the side of the screen when a customer writes, whatever tab or app you're in, while GOTCHA is open in this browser.",
+      "blocked": "Blocked in this browser - allow it in the site settings",
+      "unsupported": "This browser has no desktop notifications.",
+      "notAllowed": "Still off: the browser wasn't given permission. Turn it on again to be asked."
+    }
+  },
+  "heading": "Who hears about what",
+  "family": {
+    "work": "Work",
+    "systems": "Business systems",
+    "commerce": "Customers & campaigns",
+    "billing": "Billing"
+  },
+  "rules": {
+    "unavailable": "We couldn't read your notification rules just now.",
+    "noneLead": "No rules yet, so GOTCHA uses its own: an assignment reaches the person assigned; approvals, failures, campaigns and billing reach admins. In the app only - email goes only where a rule sends it.",
+    "noneBody": "A rule says who hears about an event, and on which channels. Here's everything GOTCHA can tell you about."
+  },
+  "event": {
+    "tool": {
+      "approval_required": "Something needs approval"
+    },
+    "conversation": {
+      "escalated": "A conversation is escalated",
+      "assigned": "A conversation is handed to someone"
+    },
+    "integration": {
+      "check_failed": "A business system's credentials were rejected"
+    },
+    "broadcast": {
+      "completed": "A campaign finishes sending"
+    },
+    "meeting": {
+      "scheduled": "A meeting is booked"
+    },
+    "discount": {
+      "applied": "A discount is applied"
+    },
+    "refund": {
+      "issued": "A refund is issued"
+    },
+    "payment": {
+      "failed": "A payment fails"
+    },
+    "invoice": {
+      "paid": "An invoice is paid"
+    },
+    "credit": {
+      "threshold": "Credits reach a threshold",
+      "exhausted": "Credits run out",
+      "auto_purchase_succeeded": "Credits top up automatically",
+      "auto_purchase_failed": "An automatic top-up fails",
+      "auto_purchase_ceiling_reached": "Automatic top-ups reach their ceiling"
+    },
+    "subscription": {
+      "activated": "The subscription starts",
+      "trial_started": "A trial starts",
+      "plan_changed": "The plan changes",
+      "past_due": "The subscription falls past due",
+      "suspended": "The subscription is suspended",
+      "resumed": "The subscription resumes",
+      "canceled": "The subscription is cancelled"
+    }
+  },
+  "caveat": {
+    "integration": {
+      "check_failed": "Fires when someone runs a connection test and the credentials are rejected - not continuous monitoring, and not \"the provider is down\"."
+    },
+    "conversation": {
+      "assigned": "Only when a conversation is handed to someone else. Never when they pick one up themselves."
+    },
+    "broadcast": {
+      "completed": "When every recipient has reached a final state - including the ones that failed."
+    }
+  },
+  "rule": {
+    "tell": "Tell {who} on {channels}."
+  },
+  "recipient": {
+    "tenant_owner": "the account owner",
+    "department_manager": "the manager of the team involved"
+  },
+  "channel": {
+    "email": "email",
+    "in_app": "in-app"
+  },
+  "scope": {
+    "allTeams": "Every team",
+    "team": "{team} only",
+    "unknownTeam": "A team we can't name - it may have been deleted"
+  },
+  "condition": {
+    "only": "Only when {conditions}"
+  },
+  "flag": {
+    "disabled": "Switched off. With no other rule for this event, GOTCHA's own route applies - in the app only.",
+    "shadowed": "Not used for a team that has its own rule for this event. GOTCHA uses the team's rule instead of this one - never both.",
+    "unfiring": "GOTCHA never raises this event, so this rule can never fire.",
+    "unknownEvent": "GOTCHA doesn't raise an event by this name. It was accepted when it was saved, and it will never match anything.",
+    "undeliverable": "{count, plural, =1 {{channels} can be saved but is never delivered.} other {{channels} can be saved but are never delivered.}}",
+    "deliversNothing": "Every channel on this rule is one GOTCHA never delivers, so it tells nobody.",
+    "unresolvedRecipients": "{count, plural, =1 {One named person no longer has an account here.} other {# named people no longer have accounts here.}}"
+  },
+  "matrix": {
+    "when": "Tell me when",
+    "channel": {
+      "inApp": "In app",
+      "email": "Email",
+      "whatsapp": "WhatsApp"
+    },
+    "row": {
+      "approval": "Something needs my approval",
+      "actionFailed": "An action failed",
+      "systemDown": "A connected system stops responding",
+      "employeeDown": "An AI employee stops working",
+      "complaints": "Complaints spike unusually",
+      "campaign": "A campaign finishes",
+      "assigned": "A conversation is assigned to me"
+    },
+    "nothingSends": "Nothing sends this yet",
+    "on": "on",
+    "off": "off",
+    "foot": "Your switches filter what reaches you. Who is told at all is <rules>the workspace's rules</rules>. With no rule for an event, an assignment reaches the person assigned and the rest above reach admins, in the app. Email goes only where a rule sends it.",
+    "quiet": {
+      "title": "Quiet hours",
+      "window": "{from} - {to}",
+      "none": "None set",
+      "note": "One window, every day, in the workspace's time zone. Inside it no email is sent - in-app still arrives, quietly - except for a refund or discount that failed.",
+      "from": "From",
+      "to": "To",
+      "same": "From and to can't be the same time.",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "change": "Change",
+      "set": "Set quiet hours",
+      "off": "Turn off",
+      "problem": {
+        "invalid": "That window isn't one the platform keeps - 24-hour times, and not the same twice.",
+        "forbidden": "This account has no preferences of its own.",
+        "failed": "Not saved. Try again."
+      }
+    },
+    "whatsapp": {
+      "title": "Where WhatsApp alerts go",
+      "none": "No number set",
+      "note": "Your own number, once WhatsApp alerts are available - they aren't yet."
+    },
+    "volume": {
+      "about": "You get about {n} a day",
+      "atLeast": "You get at least {n} a day",
+      "unknown": "How many you get isn't known",
+      "note": "Counted over the last {days} days.",
+      "nothing": "Nothing reached you in the last {days} days."
+    },
+    "about": {
+      "actionFailed": "A refund or cancellation didn't go through",
+      "systemDown": "Shopify, CRM, returns",
+      "complaints": "Compared with a normal week"
+    },
+    "channelSwitch": "{channel}, for everything below",
+    "approvalsSwitch": "Approvals reach me",
+    "cellWhy": "Set by the switch at the top of its column",
+    "saveProblem": {
+      "forbidden": "This account has no preferences of its own.",
+      "failed": "Not saved. Try again.",
+      "unknown": "This notification isn't available any more."
+    },
+    "whatsappUnavailable": {
+      "tag": "Not available yet",
+      "why": "WhatsApp alerts to you aren't available yet - there is no number for GOTCHA to send them from."
+    },
+    "notByEmail": "Not sent by email in this workspace",
+    "notInApp": "Doesn't reach you in the app in this workspace",
+    "rowSwitch": "{channel} - {event}"
+  },
+  "rulesPage": {
+    "title": "The workspace's rules",
+    "description": "Who is told at all. Each person's own channels then filter what reaches them."
+  }
+}

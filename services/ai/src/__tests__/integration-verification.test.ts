@@ -27,8 +27,8 @@ import "../services/connectors";
 // already plain (no encryption) so the framework's typeof-string branch is
 // skipped and we skip a key-derivation pass during testing.
 
-vi.mock("@chatcenter/shared", async () => {
-  const actual = await vi.importActual<any>("@chatcenter/shared");
+vi.mock("@chatcenter/shared", async (importOriginal) => {
+  const actual: any = await importOriginal();
   return {
     ...actual,
     prisma: {
@@ -39,6 +39,11 @@ vi.mock("@chatcenter/shared", async () => {
     },
     encryptCredentials: (x: any) => JSON.stringify(x),
     decryptCredentials: (x: any) => (typeof x === "string" ? JSON.parse(x) : x),
+    // The real SSRF guard resolves DNS (shop.example.com -> ENOTFOUND).
+    assertPublicUrl: async (u: string) => new URL(u),
+    // Main's per-capability Shopify entitlement check reads the database; the
+    // adapter behaviour under test assumes a funded store (merged 2026-10-21).
+    isShopifyAuthorized: async () => true,
   };
 });
 
@@ -246,7 +251,12 @@ describe("WooCommerce adapter", () => {
     expect(calls[0].init.method).toBe("PUT");
     const body = JSON.parse(String(calls[0].init.body));
     expect(body.status).toBe("completed");
-    expect(body.customer_note).toBe("done");
+    // The note is an order note the customer sees, not customer_note (that
+    // overwrote the customer's own note; fixed 2026-10-13).
+    expect(body.customer_note).toBeUndefined();
+    expect(calls[1].init.method).toBe("POST");
+    expect(new URL(calls[1].url).pathname).toBe("/wp-json/wc/v3/orders/1/notes");
+    expect(JSON.parse(String(calls[1].init.body))).toEqual({ note: "done", customer_note: true });
   });
 
   it("EDGE 401 surfaces as adapter error", async () => {

@@ -98,12 +98,12 @@ Exact names, where they are read, and whether production has them today.
 | `SHOPIFY_API_KEY` | `getShopifyAppIdentity()` (`packages/shared/src/lib/shopify-app-identity.ts`) → install handler, `oauth/init`; also `connectors-admin.ts` token exchange | App **client ID**. Public; appears in the authorize URL. | configured |
 | `SHOPIFY_API_SECRET` | same identity helper → `verifyAppEntryHmac`, `verifyOAuthCallbackHmac`, `verifyShopifyWebhookHmac`, app-proxy signatures | App **client secret**. Verifies every signature. | configured |
 | `SHOPIFY_REDIRECT_URI` | `getShopifyAppIdentity()` → `buildShopifyAuthorizeUrl` | Absolute OAuth **callback**. Must match `auth.redirect_urls` exactly. | configured |
-| `SHOPIFY_APP_URL` | `getShopifyAppIdentity()`; falls back to the origin of `SHOPIFY_REDIRECT_URI` | Public app base URL. | absent — **derived**, so not required |
-| `SHOPIFY_APP_STORE_HANDLE` | `resolveShopifyInstallUrl()` (Connect button) | **OPTIONAL.** App Store **listing slug**, used only in `apps.shopify.com/<slug>`. Not derivable, and not exposed by the Partner API. | unset — the button degrades to App Store search |
+| `SHOPIFY_APP_URL` | `getShopifyAppIdentity()`; falls back to the origin of `SHOPIFY_REDIRECT_URI` | Public app base URL. | absent - **derived**, so not required |
+| `SHOPIFY_APP_STORE_HANDLE` | `resolveShopifyInstallUrl()` (Connect button) | **OPTIONAL.** App Store **listing slug**, used only in `apps.shopify.com/<slug>`. Not derivable, and not exposed by the Partner API. | unset - the button degrades to App Store search |
 | `SHOPIFY_APP_PRICING_HANDLE` | `buildAppAdminLink()`, `shopifyPlanSelectionUrl()` | **APP handle**, used in admin deep links and `/charges/<handle>/pricing_plans`. `gotcha-3` for GOTCHA. | configured on `billing` |
 | `SHOPIFY_APP_STORE_SEARCH_TERM` | `resolveShopifyInstallEntry()` | What to search the App Store for when the listing slug is unknown. | default `GOTCHA` |
 | `SHOPIFY_APP_HANDLE` | fallback for BOTH of the above | Legacy single variable. Kept so existing deployments are unaffected. | see §"Two handles" below |
-| `SHOPIFY_API_VERSION` | `shopifyApiVersion()` (`packages/shared/src/lib/shopify-api-version.ts`) | Overrides the Admin API pin. | absent — default `2026-07` applies |
+| `SHOPIFY_API_VERSION` | `shopifyApiVersion()` (`packages/shared/src/lib/shopify-api-version.ts`) | Overrides the Admin API pin. | absent - default `2026-07` applies |
 | `FRONTEND_URL` | `resolveAppPublicUrl()` → post-OAuth redirects, install error page | Public app origin for redirects. | configured |
 | `DASHBOARD_URL` | `dashboardRedirect()` in `connectors-admin.ts` | Marketplace landing after connect. | configured |
 
@@ -122,14 +122,14 @@ guaranteed to be the same string:
 * the **app handle**, which appears in admin deep links including
   `/store/<store>/charges/<handle>/pricing_plans`.
 
-These were one variable, `SHOPIFY_APP_HANDLE`, until App Store review 132211 —
+These were one variable, `SHOPIFY_APP_HANDLE`, until App Store review 132211 -
 and that coupling was itself the defect. The app handle was known and correct
 (`gotcha-3`, confirmed from the live pricing URL); the listing slug was not.
 Because one variable fed both, the only way to keep the pricing URL correct was
 to leave the variable **empty**, which silently disabled the Connect button.
 
 The listing slug cannot be discovered at runtime. The Partner API's `App` type
-carries only `apiKey`, `events`, `id` and `name` — verified by introspection —
+carries only `apiKey`, `events`, `id` and `name` - verified by introspection -
 so it must be read off the Partner Dashboard listing page and configured. Open
 the resulting `apps.shopify.com` URL once before relying on it: a wrong slug is
 a 404 the merchant cannot diagnose, and guessing one is what produced this
@@ -186,7 +186,7 @@ There is deliberately **no** fallback that asks for a shop domain. Requirement
 landing page to be the listing specifically. Shopify's own
 authorization-code-grant documentation gives exactly one authorize URL and it is
 per-shop, and states that an install link not originating from the App Store
-must supply `shop` itself — so there is nothing else to fall back to.
+must supply `shop` itself - so there is nothing else to fall back to.
 
 The listing slug does **not** gate any of the following, and there are tests
 pinning each:
@@ -200,7 +200,7 @@ pinning each:
 There is deliberately **no `SHOPIFY_APP_INSTALL_URL`**. A custom-distribution
 install link is generated per store (the dashboard asks for the shop's domain
 first), so configuring one would hard-code a single merchant's shop into
-everyone's button — and custom distribution forecloses Shopify billing and
+everyone's button - and custom distribution forecloses Shopify billing and
 App Store review, irreversibly. There is also no `SHOPIFY_DEV_STORE`, no
 hardcoded shop, and no development-only OAuth bypass.
 
@@ -214,16 +214,16 @@ Every value below is taken from a route that exists in this repository:
 
 | Dashboard field | Exact value | Backing route |
 |---|---|---|
-| **App URL** | `https://app.gotcha.co.il/api/connectors/shopify/install` | `router.get("/connectors/shopify/install")` — `services/ai/src/routes/shopify-install.ts`, mounted at `/api` in `services/ai/src/index.ts` |
-| **Allowed redirection URL(s)** — 1 | `https://app.gotcha.co.il/api/connectors/shopify/oauth/callback` | `router.get("/connectors/shopify/oauth/callback")` — `services/ai/src/routes/connectors-admin.ts` |
-| **Allowed redirection URL(s)** — 2 | `https://gotcha.co.il/api/connectors/shopify/oauth/callback` | same route, apex host |
-| **Allowed redirection URL(s)** — 3 | `https://dev.gotcha.co.il/api/connectors/shopify/oauth/callback` | same route, dev host |
+| **App URL** | `https://app.gotcha.co.il/api/connectors/shopify/install` | `router.get("/connectors/shopify/install")` - `services/ai/src/routes/shopify-install.ts`, mounted at `/api` in `services/ai/src/index.ts` |
+| **Allowed redirection URL(s)** - 1 | `https://app.gotcha.co.il/api/connectors/shopify/oauth/callback` | `router.get("/connectors/shopify/oauth/callback")` - `services/ai/src/routes/connectors-admin.ts` |
+| **Allowed redirection URL(s)** - 2 | `https://gotcha.co.il/api/connectors/shopify/oauth/callback` | same route, apex host |
+| **Allowed redirection URL(s)** - 3 | `https://dev.gotcha.co.il/api/connectors/shopify/oauth/callback` | same route, dev host |
 | **App proxy URL** | `https://app.gotcha.co.il/api/shopify-chat/proxy` | `services/ai/src/routes/shopify-chat-public.ts` (unchanged) |
-| **Distribution** | Public distribution | — do **not** select Custom distribution; the choice is irreversible |
+| **Distribution** | Public distribution | - do **not** select Custom distribution; the choice is irreversible |
 
 Only the **App URL** changes in this rollout. The three redirect URLs, the app
 proxy and the webhook endpoints are unchanged, and all three redirects must
-stay listed — the manifest REPLACES the live allowlist on deploy.
+stay listed - the manifest REPLACES the live allowlist on deploy.
 
 Before any `shopify app` command:
 
@@ -319,7 +319,7 @@ docker logs --since 10m chatcenter-ai-1 2>&1 | grep -i "shopify install\|shopify
 ```
 
 * Success: no rejection line, followed by a capability probe.
-* Rejection: `[shopify install] app entry rejected: <reason>` — one of
+* Rejection: `[shopify install] app entry rejected: <reason>` - one of
   `shop_missing`, `shop_invalid`, `hmac_missing`, `hmac_invalid`,
   `timestamp_missing`, `timestamp_stale`, `not_configured`. The rejected shop
   value and the HMAC are deliberately never logged.
@@ -343,7 +343,7 @@ ORDER BY ti.connected_at DESC
 LIMIT 10;
 ```
 
-Never `SELECT *` here and never select `credentials` — that column holds the
+Never `SELECT *` here and never select `credentials` - that column holds the
 encrypted access token.
 
 Expect **exactly one row** for your dev store, with `tenant_id` equal to the
@@ -361,7 +361,7 @@ GROUP BY 1 HAVING COUNT(*) > 1;   -- must return zero rows
 
 1. Open a **private window**. Do not sign in to GOTCHA.
 2. Repeat 7.2 from the Partner Dashboard.
-3. OAuth must still run first — Shopify's consent screen appears with no
+3. OAuth must still run first - Shopify's consent screen appears with no
    GOTCHA login before it.
 4. After approving you land on `/settings/business-systems/shopify/finish?handle=…`
    and are asked to sign in. The page shows only the **shop name**.
@@ -369,7 +369,7 @@ GROUP BY 1 HAVING COUNT(*) > 1;   -- must return zero rows
 6. Re-run the SQL in 7.5: the store is attached to the workspace you signed
    into, still one row.
 7. Press the button again (or reload and re-submit): expect
-   `409 pending_install_already_used` — the claim is single-use.
+   `409 pending_install_already_used` - the claim is single-use.
 
 ### 7.7 Negative cases
 

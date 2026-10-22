@@ -1,29 +1,39 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@chatcenter/shared", () => ({
-  // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
-  // mocks of this barrel must supply them or the read path throws instead of
-  // returning "not configured". Default: nothing configured.
-  readDurableSetting: async () => null,
-  writeDurableSetting: async () => undefined,
-  settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,
-  // Version pins now live in shared modules, so exhaustive mocks of this
-  // barrel must supply them. Returning the real defaults keeps any URL the
-  // code builds meaningful instead of "undefined/...".
-  shopifyApiVersion: () => "2026-07",
-  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
-  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
-  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
-  prisma: {
-    auditLog: { create: vi.fn().mockResolvedValue({}) },
-    contact: {
-      findFirst: vi.fn().mockResolvedValue({ id: "c1", tenantId: "t1", tags: ["vip"] }),
-      findUnique: vi.fn().mockResolvedValue({ id: "c1", tags: ["vip"] }),
-      update: vi.fn().mockResolvedValue({ id: "c1", tags: ["vip", "churn"] }),
+vi.mock("@chatcenter/shared", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  // Workspace policy lives in shared now. The real getPolicy/setPolicy reach
+  // the DB, so they are replaced by an in-memory store; the REAL
+  // validateAgainstPolicy (from `actual`) stays, so policy checks are genuine.
+  const policyStore = new Map<string, any>();
+  return {
+    ...actual,
+    // Durable tenant settings read the DB; default: nothing configured.
+    readDurableSetting: async () => null,
+    writeDurableSetting: async () => undefined,
+    prisma: {
+      auditLog: { create: vi.fn().mockResolvedValue({}) },
+      contact: {
+        findFirst: vi.fn().mockResolvedValue({ id: "c1", tenantId: "t1", tags: ["vip"] }),
+        findUnique: vi.fn().mockResolvedValue({ id: "c1", tags: ["vip"] }),
+        update: vi.fn().mockResolvedValue({ id: "c1", tags: ["vip", "churn"] }),
+      },
     },
-  },
-  evaluateToolGate: vi.fn().mockResolvedValue({ decision: "ALLOW", reason: "test default" }),
-}));
+    evaluateToolGate: vi.fn().mockResolvedValue({ decision: "ALLOW", reason: "test default" }),
+    // tag_contact emits tag_added automation events onto a BullMQ queue
+    // (Redis). Same count as the real one, nothing enqueued.
+    emitTagsAdded: vi.fn(async (_t: string, _c: string, before: unknown, after: unknown) =>
+      actual.tagsAdded(before, after).length,
+    ),
+    getPolicy: async (tenantId: string) => policyStore.get(tenantId) ?? actual.DEFAULT_POLICY,
+    setPolicy: async (tenantId: string, patch: any) => {
+      const next = { ...(policyStore.get(tenantId) ?? actual.DEFAULT_POLICY), ...patch };
+      policyStore.set(tenantId, next);
+      return next;
+    },
+    getPolicyPrompt: async () => "",
+  };
+});
 
 import { validateAction, executeAction, PlannedAction } from "../services/action-executor.service";
 import { setPolicy } from "../services/policy.service";

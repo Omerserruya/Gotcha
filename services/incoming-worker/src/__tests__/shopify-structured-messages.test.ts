@@ -42,6 +42,23 @@ vi.mock("axios", () => ({
 vi.mock("@chatcenter/shared", () => ({
   // The uploads write probe runs at module load. Stubbed as writable so these
   // tests exercise their own subject rather than the storage check.
+  // ai-bot calls this at MODULE LOAD, so its absence from this exhaustive
+  // barrel mock threw during collection and this whole file ran 0 tests while
+  // still reporting as a test file. Kept beside the other load-time stubs.
+  // Business hours: these were absent, so the real code reached its catch and
+  // logged "treating as open". The open path was being taken BY ERROR rather
+  // than by configuration, which is not the same test.
+  BUSINESS_HOURS_KEY: "business_hours",
+  parseBusinessHours: () => null,
+  evaluateBusinessHours: () => ({ open: true }),
+  describeNextOpening: () => "tomorrow at 9",
+  getRedis: () => ({ get: async () => null, set: async () => "OK", del: async () => 1 }),
+  describeSendError: (err: any) => ({
+    sendError: { message: String(err?.message ?? err) },
+    errorMessage: String(err?.message ?? err),
+  }),
+  getInternalServiceKey: () => "test-internal-key",
+  recordHandover: async () => undefined,
   probeUploadsDir: () => ({ ok: true, dir: "/tmp/uploads" }),
   describeUploadsProbe: () => "uploads ok",
   classifyMediaFailure: (err: any) =>
@@ -84,6 +101,7 @@ vi.mock("@chatcenter/shared", () => ({
       count: H.countMessages,
       findMany: vi.fn().mockResolvedValue([]),
     },
+    contact: { findFirst: vi.fn(async () => ({ email: null, phone: "972500000000" })) },
     usageLog: { create: vi.fn().mockResolvedValue({}) },
     auditLog: { create: vi.fn().mockResolvedValue({}) },
   },

@@ -28,7 +28,7 @@ const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
 const APPLY = process.argv.includes("--apply");
 
 /** Tenant-scoped keys, stored under `tenant:{id}:{key}`. */
-const TENANT_KEYS = ["businessHours", "autoGreeting", "sla"] as const;
+const TENANT_KEYS = ["businessHours", "autoGreeting", "sla", "idleAutomation"] as const;
 
 async function main(): Promise<void> {
   const tenants = await prisma.tenant.findMany({ select: { id: true, slug: true } });

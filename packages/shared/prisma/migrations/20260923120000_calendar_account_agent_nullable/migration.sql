@@ -1,0 +1,13 @@
+-- Let a connected calendar outlive the AI employee that owned it.
+--
+-- Deleting an employee used to leave `calendar_accounts.ai_agent_id` pointing
+-- at a row that no longer exists, because the column is NOT NULL and there was
+-- nothing else to write. The two alternatives were worse: deleting the row
+-- disconnects the merchant's Google account, and reassigning it invents an
+-- owner nobody chose.
+--
+-- The unique index is deliberately left alone. Postgres treats NULLs as
+-- DISTINCT, so (NULL, 'GOOGLE_CALENDAR') can repeat while
+-- ('agent_x', 'GOOGLE_CALENDAR') still cannot - verified by probe before
+-- writing this, not assumed.
+ALTER TABLE "calendar_accounts" ALTER COLUMN "ai_agent_id" DROP NOT NULL;

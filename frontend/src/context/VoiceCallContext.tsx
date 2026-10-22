@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from "react";
 import { Device, Call } from "@twilio/voice-sdk";
 import { useAuth } from "@/context/AuthContext";
-import { getSocket } from "@/lib/socket";
+import { getSocket, joinConversation, leaveConversation } from "@/lib/socket";
 import { useVoiceFlags } from "@/lib/use-voice-flags";
 
 export type CallState = "idle" | "connecting" | "ringing" | "active" | "ended" | "error";
@@ -170,6 +170,12 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
 
     const handler = (data: LiveTranscript) => {
       if (!data || typeof data !== "object" || !data.speaker || !data.text) return;
+      // Same conversation check its two siblings below already made, and the
+      // reason is not only privacy: this handler committed whatever arrived, so
+      // with two calls live in one business the other call's lines were spliced
+      // into this agent's transcript. The room now makes cross-delivery
+      // impossible; this makes a mis-delivery visible instead of believed.
+      if (!data.conversationId || data.conversationId !== activeConversationIdRef.current) return;
       const speaker = data.speaker;
       if (data.isFinal) {
         // Commit the utterance + clear the live line for this speaker.
@@ -270,8 +276,17 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
   // Mirror the active call's conversationId into a ref so the socket handler
   // (attached once per token) can always read the current value without
   // re-attaching on every call state change.
+  //
+  // This is also where the socket joins and leaves the conversation's room.
+  // Live-call events are no longer broadcast to everyone logged in - the server
+  // sends them only to clients that joined the conversation and were entitled
+  // to it - so without this join the workspace connects and then shows nothing.
   useEffect(() => {
-    activeConversationIdRef.current = call?.conversationId;
+    const conversationId = call?.conversationId;
+    activeConversationIdRef.current = conversationId;
+    if (!conversationId) return;
+    joinConversation(conversationId);
+    return () => leaveConversation(conversationId);
   }, [call?.conversationId]);
 
   const stopTimer = useCallback(() => {

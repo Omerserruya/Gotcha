@@ -151,7 +151,12 @@ services:
       retries: 10
 
   authentik-server:
-    image: ghcr.io/goauthentik/server:2024.10
+    # The tag is a parameter for the 2024.10 -> 2026.2 upgrade, which must step
+    # through every release (2024.12.5 2025.2.3 2025.4.4 2025.6.4 2025.8.6
+    # 2025.10.4 2025.12.5 2026.2.7) with AUTHENTIK_TAG passed per step. The
+    # default is what production runs today, so a plain `up` never jumps
+    # versions; set AUTHENTIK_TAG=2026.2.7 in .env once the steps are done.
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2024.10.5}
     command: server
     <<: *default-restart
     logging: *default-logging
@@ -175,8 +180,13 @@ services:
       # talks from; a request from anywhere else has its headers ignored.
       AUTHENTIK_LISTEN__TRUSTED_PROXY_CIDRS: ${AUTHENTIK_TRUSTED_PROXY_CIDRS:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
       AUTHENTIK_WEB__THREADS: ${AUTHENTIK_WEB_THREADS:-2}
-      # Scoped to the apex so the session cookie is valid on auth.gotcha.co.il.
-      AUTHENTIK_COOKIE_DOMAIN: ${AUTHENTIK_COOKIE_DOMAIN:-gotcha.co.il}
+      # Scoped to the apex: the app's sign-in panel runs Authentik's flow at
+      # app.gotcha.co.il/auth-api/, and hands over to auth.gotcha.co.il for the
+      # stages it does not draw, so ONE cookie must be valid on both names.
+      # FIXED, not `${AUTHENTIK_COOKIE_DOMAIN:-...}`: on 2026-10-22 the box .env
+      # set it to auth.gotcha.co.il, the browser dropped the cookie on the app
+      # origin, and every sign-in restarted at the email step until it was fixed.
+      AUTHENTIK_COOKIE_DOMAIN: gotcha.co.il
       # Bootstrap only seeds the very first admin on an empty database; it is
       # a no-op afterwards. Leave unset in prod once the admin exists.
       AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
@@ -220,7 +230,7 @@ services:
         condition: service_healthy
 
   authentik-worker:
-    image: ghcr.io/goauthentik/server:2024.10
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2024.10.5}
     command: worker
     <<: *default-restart
     logging: *default-logging
@@ -294,6 +304,43 @@ services:
       - notifications
       - billing
       - authentik-server
+      # nginx resolves the app's upstream at start (since 2026-10-21).
+      - frontend-v2
+
+  # ─── The app (frontend-v2), served at the root by the gateway ─────────
+  # Since 2026-10-21 the application is this Node container (`next start`),
+  # not a static export baked into the gateway; the legacy frontend/ is code
+  # only. Its NEXT_PUBLIC_* values are frozen into the image at build (see
+  # scripts/docker-publish.sh); what is below is read at runtime.
+  # Explicit env only: a global SESSION_COOKIE_NAME (the platform's
+  # __Host-gotcha_session) must never reach this app's own session.
+  frontend-v2:
+    image: ${REGISTRY}/${REPO:-gotcha}:frontend-v2-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      APP_ENV: production
+      APP_ORIGIN: ${APP_ORIGIN}
+      # The platform API the BFF calls, through this same gateway.
+      API_BASE_URL: ${V2_API_BASE_URL:-https://app.gotcha.co.il}
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_CLIENT_ID: ${V2_OIDC_CLIENT_ID:-${OIDC_CLIENT_ID:-gotcha-app}}
+      # Encrypts the app's own session cookie. Minted by Omer; at least 32
+      # characters. Required: compose refuses to start without it rather than
+      # run an app that cannot sign anyone in.
+      SESSION_SECRET: ${V2_SESSION_SECRET:?V2_SESSION_SECRET required in prod (the app's session key, 32+ chars)}
+      # Fails closed: only the exact value `on` lets a payment, card or plan
+      # change go through from the app. Set it in .env.prod to open billing.
+      BILLING_WRITES: ${V2_BILLING_WRITES:-off}
+      SENTRY_DSN: ${V2_SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: production
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # ─── Microservices ───────────────────────────────────────
   auth:
@@ -401,6 +448,14 @@ services:
       # service creates, so it has to be present when the subscription is made.
       OUTLOOK_WEBHOOK_URL: ${OUTLOOK_WEBHOOK_URL:-}
       OUTLOOK_WEBHOOK_CLIENT_STATE: ${OUTLOOK_WEBHOOK_CLIENT_STATE:-}
+      # Inbound leads are written into the team Airtable beside the Telegram
+      # alert. Unset means the write is skipped and logged - the lead still
+      # reaches the database and the chat. Declared HERE and not only in .env:
+      # this service takes an explicit environment allowlist, so a variable
+      # that is only in the env file reaches the host and never the container.
+      AIRTABLE_LEADS_TOKEN: ${AIRTABLE_LEADS_TOKEN:-}
+      AIRTABLE_LEADS_BASE_ID: ${AIRTABLE_LEADS_BASE_ID:-}
+      AIRTABLE_LEADS_TABLE_ID: ${AIRTABLE_LEADS_TABLE_ID:-}
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -717,6 +772,8 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # The app is at the root (it was under /v2 until 2026-10-21).
+      V2_BASE_PATH: ""
       # Official Bank of Israel USD/ILS feed. Off by default: with it off there
       # is no chargeable rate, which is the safe direction.
       BOI_FX_ENABLED: ${BOI_FX_ENABLED:-false}
@@ -981,6 +1038,10 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # The https half of List-Unsubscribe on marketing email (one-click,
+      # RFC 8058) is built on this origin; without it only the mailto part is
+      # sent. Same value as conversation's.
+      PUBLIC_URL: ${NEXT_PUBLIC_API_URL:-}
       <<: *sentry-workers
       DATABASE_URL: ${DATABASE_URL}
       # Paid-access gate - see the `ai` service for the full note. Present here
@@ -1028,6 +1089,10 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # The https half of List-Unsubscribe on marketing email (one-click,
+      # RFC 8058) is built on this origin; without it only the mailto part is
+      # sent. Same value as conversation's.
+      PUBLIC_URL: ${NEXT_PUBLIC_API_URL:-}
       <<: *sentry-workers
       DATABASE_URL: ${DATABASE_URL}
       # Paid-access gate - see the `ai` service for the full note. Present here

@@ -1190,8 +1190,12 @@ const ShopifyAdapter: ProviderAdapter = {
         return projectOrderForAgent(o);
       }
       case "search_orders": {
+        // A period asks for more rows (the assistant counts a week of orders).
+        const period = !!args.created_from;
         return await searchOrders(ctx, {
-          limit: clampLimit(args.limit, 10, 100),
+          limit: clampLimit(args.limit, 10, period ? 250 : 100),
+          createdFrom: args.created_from ? String(args.created_from) : undefined,
+          createdTo: args.created_to ? String(args.created_to) : undefined,
           status: String(args.status || "any"),
           email: args.email ? String(args.email) : undefined,
           name: args.name ? String(args.name) : undefined,

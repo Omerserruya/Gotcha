@@ -12,7 +12,9 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, notificationCategory } from "@chatcenter/shared";
+import { oneLanguage } from "../services/templates";
+import { localeForRecipient } from "../services/platform-whatsapp";
 
 const router = Router();
 
@@ -41,7 +43,20 @@ router.get("/notifications", async (req: Request, res: Response) => {
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
   const hasMore = rows.length > limit;
-  const data = hasMore ? rows.slice(0, limit) : rows;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  // `category` is derived on the way out, never stored. The row keeps the
+  // SPECIFIC event that produced it - three different failures are three
+  // different events - while the bell gets the one small enum it branches on.
+  // Deriving also means historical rows classify under the current mapping
+  // instead of under whatever was true the day they were written.
+  // Rows written before 2026-10-08 hold both languages in one body: served in the reader's.
+  const locale = await localeForRecipient(tenantId, userId);
+  const data = page.map((r: any) => ({
+    ...r,
+    body: oneLanguage(r.body, locale),
+    category: notificationCategory(r.eventType),
+    target: { type: r.targetType ?? "none", id: r.targetId ?? null },
+  }));
   res.json({
     data,
     nextCursor: hasMore ? data[data.length - 1]?.id : null,

@@ -170,3 +170,124 @@ describe("Meta webhook signature - two apps, two secrets", () => {
     expect(queueAdd).not.toHaveBeenCalled();
   });
 });
+
+describe("Meta webhook signature - the Facebook app secret under both names", () => {
+  // Dev on 2026-10-10: WHATSAPP_APP_SECRET held the prod app's secret and
+  // META_APP_SECRET the dev app's. `WHATSAPP_APP_SECRET || META_APP_SECRET`
+  // never tried the second, so every delivery for a number or Page subscribed
+  // to the dev app was dropped while connect and health looked fine.
+  const PROD_APP = "prod-fb-app-secret-51e0";
+  const DEV_APP = "dev-fb-app-secret-7c42";
+
+  const MESSENGER_BODY = {
+    object: "page",
+    entry: [{
+      id: "PAGE_1",
+      time: 1760000000000,
+      messaging: [{
+        sender: { id: "PSID_1" },
+        recipient: { id: "PAGE_1" },
+        timestamp: 1760000000000,
+        message: { mid: "m_1", text: "hello" },
+      }],
+    }],
+  };
+
+  beforeEach(() => {
+    process.env.WHATSAPP_APP_SECRET = PROD_APP;
+    process.env.META_APP_SECRET = DEV_APP;
+    delete process.env.INSTAGRAM_APP_SECRET;
+  });
+
+  it("accepts WhatsApp signed by the app named in META_APP_SECRET", async () => {
+    await post(WA_BODY, DEV_APP);
+
+    expect(queueAdd).toHaveBeenCalledWith("process", expect.objectContaining({ channel: "WHATSAPP" }), expect.any(Object));
+  });
+
+  it("accepts Messenger signed by the app named in META_APP_SECRET", async () => {
+    await post(MESSENGER_BODY, DEV_APP);
+
+    expect(queueAdd).toHaveBeenCalledWith("process", expect.objectContaining({ channel: "MESSENGER" }), expect.any(Object));
+  });
+
+  it("still accepts WhatsApp signed by the app named in WHATSAPP_APP_SECRET", async () => {
+    await post(WA_BODY, PROD_APP);
+
+    expect(queueAdd).toHaveBeenCalledWith("process", expect.objectContaining({ channel: "WHATSAPP" }), expect.any(Object));
+  });
+
+  it("still rejects a signature from neither app", async () => {
+    await post(WA_BODY, "some-other-secret");
+    await post(MESSENGER_BODY, "some-other-secret");
+
+    expect(queueAdd).not.toHaveBeenCalled();
+  });
+
+  it("with only WHATSAPP_APP_SECRET set, behaves exactly as before", async () => {
+    delete process.env.META_APP_SECRET;
+
+    await post(WA_BODY, DEV_APP);
+    expect(queueAdd).not.toHaveBeenCalled();
+
+    await post(WA_BODY, PROD_APP);
+    expect(queueAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it("with only META_APP_SECRET set, behaves exactly as before", async () => {
+    delete process.env.WHATSAPP_APP_SECRET;
+
+    await post(WA_BODY, PROD_APP);
+    expect(queueAdd).not.toHaveBeenCalled();
+
+    await post(WA_BODY, DEV_APP);
+    expect(queueAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it("with no secret configured at all, still fails closed", async () => {
+    delete process.env.WHATSAPP_APP_SECRET;
+    delete process.env.META_APP_SECRET;
+
+    await post(WA_BODY, "");
+    await post(WA_BODY, DEV_APP);
+
+    expect(queueAdd).not.toHaveBeenCalled();
+  });
+});
+
+describe("which app signed a delivery is logged by env NAME, never the value", () => {
+  // Every Instagram event arrived twice ~400ms apart (2026-10-11); this line
+  // is what tells the two subscriptions apart.
+  it("names the secret that verified it", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    process.env.WHATSAPP_APP_SECRET = "prod-fb";
+    process.env.META_APP_SECRET = "dev-fb";
+    process.env.INSTAGRAM_APP_SECRET = IG_SECRET;
+
+    await post(IG_BODY, IG_SECRET);
+    await post(IG_BODY, "dev-fb");
+    await post(WA_BODY, "prod-fb");
+
+    const lines = log.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("signature verified"));
+    expect(lines).toEqual([
+      "[WEBHOOK] INSTAGRAM signature verified via=INSTAGRAM_APP_SECRET",
+      "[WEBHOOK] INSTAGRAM signature verified via=META_APP_SECRET",
+      "[WEBHOOK] WHATSAPP signature verified via=WHATSAPP_APP_SECRET",
+    ]);
+    expect(lines.join(" ")).not.toMatch(/prod-fb|dev-fb|ig-app-secret/);
+    log.mockRestore();
+  });
+
+  it("two names holding the same secret are one candidate, named by the first", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    process.env.WHATSAPP_APP_SECRET = FB_SECRET;
+    process.env.META_APP_SECRET = FB_SECRET;
+
+    await post(WA_BODY, FB_SECRET);
+
+    expect(log.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("signature verified"))).toEqual([
+      "[WEBHOOK] WHATSAPP signature verified via=WHATSAPP_APP_SECRET",
+    ]);
+    log.mockRestore();
+  });
+});

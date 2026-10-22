@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   riskGroupFor,
   mayBeAlwaysAllowed,
+  isHighRiskGroup,
+  highRiskAutoRunPermitted,
   recommendedState,
   resolveToolAvailability,
   summarizeTools,
@@ -78,6 +80,18 @@ describe("recommended defaults", () => {
     }
     expect(mayBeAlwaysAllowed("read_only")).toBe(true);
     expect(mayBeAlwaysAllowed("create_update")).toBe(true);
+  });
+
+  it("isHighRiskGroup is exactly delete, financial and administrative", () => {
+    expect(RISK_GROUPS.filter(isHighRiskGroup).sort()).toEqual(["administrative", "delete", "financial"]);
+  });
+
+  it("the workspace may choose always-allow for them unless HIGH_RISK_AUTORUN=off (Omer, 2026-10-12)", () => {
+    expect(highRiskAutoRunPermitted({})).toBe(true);
+    expect(highRiskAutoRunPermitted({ HIGH_RISK_AUTORUN: "on" })).toBe(true);
+    expect(highRiskAutoRunPermitted({ HIGH_RISK_AUTORUN: "" })).toBe(true);
+    expect(highRiskAutoRunPermitted({ HIGH_RISK_AUTORUN: "off" })).toBe(false);
+    expect(highRiskAutoRunPermitted({ HIGH_RISK_AUTORUN: " OFF " })).toBe(false);
   });
 });
 

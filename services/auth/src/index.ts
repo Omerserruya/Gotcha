@@ -1,5 +1,6 @@
 import { createServiceApp, startService, seedAllTenantsRbac } from "@chatcenter/shared";
 import authRoutes from "./routes/auth";
+import setupStateRoutes from "./routes/setup-state";
 import sessionAuthRoutes from "./routes/session-auth";
 import agentRoutes from "./routes/agents";
 import departmentRoutes from "./routes/departments";
@@ -16,10 +17,14 @@ import tenantSecurityRoutes from "./routes/tenant-security";
 import gdprRoutes from "./routes/gdpr";
 import internalRoutes from "./routes/internal";
 import setupLinkRoutes from "./routes/setup-link";
+import realtimeRoutes from "./routes/realtime";
+import agentPresenceRoutes from "./routes/agent-presence";
 import { startNudgeWorker } from "./services/nudge-engine.service";
 import rateLimit from "express-rate-limit";
 
 const config = { name: "auth-service", port: parseInt(process.env.PORT || "4001", 10) };
+import workspaceRoutes from "./routes/workspace";
+import auditLogRoutes from "./routes/audit-logs";
 const app = createServiceApp(config);
 
 // Stricter rate limit for auth endpoints
@@ -41,13 +46,20 @@ app.use("/api/waitlist", authLimiter);
 // BFF server-side login/callback/logout (migration §A5). Mounted before the
 // legacy auth routes; every route 404s unless SESSION_COOKIE_CREATE is on, so
 // this is inert by default.
+app.use("/api", setupStateRoutes);
+app.use("/api", workspaceRoutes);
+app.use("/api", auditLogRoutes);
 app.use("/api/auth", sessionAuthRoutes);
 // Password-setup links. PUBLIC and mounted before the authenticated auth
 // routes: the caller is someone who does not have a credential yet, which is
 // the whole reason they are here. The token in the URL is the identification.
 app.use("/api/auth/setup", setupLinkRoutes);
 app.use("/api/auth", authRoutes);
+// BEFORE agentRoutes: that router owns "/:id", and mounting presence after it
+// would make /api/agents/presence a lookup for an agent whose id is "presence".
+app.use("/api/agents/presence", agentPresenceRoutes);
 app.use("/api/agents", agentRoutes);
+app.use("/api/realtime", realtimeRoutes);
 app.use("/api/departments", departmentRoutes);
 // Per-number WhatsApp management. Mounted BEFORE the generic channel routes so
 // /api/channels/whatsapp/... resolves here rather than falling into

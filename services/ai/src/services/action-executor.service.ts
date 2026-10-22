@@ -1,8 +1,9 @@
-import { prisma, evaluateToolGate } from "@chatcenter/shared";
+import { prisma, evaluateToolGate, emitTagsAdded } from "@chatcenter/shared";
 import type { ToolGateResult, ScheduleMeetingArgs } from "@chatcenter/shared";
 import { getPolicy, validateAgainstPolicy } from "./policy.service";
 import { getCrmConnector, getMessagingConnector } from "./connectors/types";
 import { makeScheduleMeetingHandler } from "./schedule-handler.service";
+import { PLAN_ACTIONS } from "../lib/plan-actions";
 
 /**
  * Internal HTTP helper - calls the conversation service over the service
@@ -22,7 +23,16 @@ async function callConversationService(
   body: unknown,
   ctx: { tenantId: string; authToken?: string },
 ): Promise<{ ok: boolean; status: number; data?: unknown; error?: string }> {
-  const base = process.env.CONVERSATION_SERVICE_URL ?? "http://conversation-service:3000";
+  return callService(process.env.CONVERSATION_SERVICE_URL ?? "http://conversation-service:3000", method, path, body, ctx);
+}
+
+async function callService(
+  base: string,
+  method: "GET" | "POST" | "PATCH" | "DELETE",
+  path: string,
+  body: unknown,
+  ctx: { tenantId: string; authToken?: string },
+): Promise<{ ok: boolean; status: number; data?: unknown; error?: string }> {
   const url = `${base.replace(/\/$/, "")}${path}`;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const token = ctx.authToken ?? process.env.INTERNAL_SERVICE_TOKEN;
@@ -75,7 +85,63 @@ export type ActionTool =
   | "resolve_identity"
   | "merge_contacts"
   | "link_customer_identifier"
+  | "propose_plan"
+  | "claim_conversation"
+  | "assign_conversation"
+  | "close_conversation"
+  | "return_to_gotcha"
+  | "add_note"
+  | "answer_question"
   | "noop";
+
+/**
+ * The approver's own token, or null. Conversation, note and knowledge actions
+ * run AS the person who approved them, through the app's own routes, so the
+ * routes' rules (tenant, the inbox's visibility, permissions) are checked at
+ * execution, not only when the plan was proposed. Never the internal service
+ * token: an approval decided outside the app (a WhatsApp button) has no
+ * person to act as, and fails closed.
+ */
+function approverToken(ctx: ExecutorContext): string | null {
+  if (!ctx.approved || !ctx.approvedBy) return null;
+  const raw = String(ctx.authToken ?? "").replace(/^Bearer\s+/i, "").trim();
+  if (!raw) return null;
+  const internal = [process.env.INTERNAL_SERVICE_TOKEN, process.env.INTERNAL_SERVICE_KEY].filter(Boolean);
+  return internal.includes(raw) ? null : raw;
+}
+
+/** A call to one of the app's routes as the approver; throws in words when it is refused. */
+async function asApprover(tenantId: string, ctx: ExecutorContext, path: string, body: unknown, base?: string): Promise<unknown> {
+  const token = approverToken(ctx);
+  if (!token) throw new Error("this action runs as the person who approves it: approve it in GOTCHA");
+  const r = base
+    ? await callService(base, "POST", path, body, { tenantId, authToken: token })
+    : await callConversationService("POST", path, body, { tenantId, authToken: token });
+  if (!r.ok) {
+    throw new Error(r.status === 404 ? "not found, or not something the approver may change" : r.status === 403 ? `not allowed for the approver: ${r.error}` : (r.error ?? `failed (${r.status})`));
+  }
+  return r.data;
+}
+
+const enc = (v: unknown) => encodeURIComponent(String(v ?? ""));
+
+/**
+ * The conversation a step was pinned to, as the approver sees it now: gone
+ * from their view, or closed since it was proposed, and the step does
+ * nothing (it would otherwise act on something else than what was approved).
+ */
+async function stillOpenForApprover(tenantId: string, ctx: ExecutorContext, conversationId: string, closing = false): Promise<void> {
+  const token = approverToken(ctx);
+  if (!token) throw new Error("this action runs as the person who approves it: approve it in GOTCHA");
+  const r = await callConversationService("GET", `/api/conversations/${enc(conversationId)}`, null, { tenantId, authToken: token });
+  if (!r.ok) throw new Error(r.status === 404 ? "not found, or not something the approver may change" : (r.error ?? `failed (${r.status})`));
+  const status = String((r.data as any)?.data?.status ?? "");
+  if (status === "CLOSED") throw new Error(closing ? "the conversation is already closed; nothing was done" : "the conversation was closed since this was proposed; nothing was done");
+}
+const need = (v: unknown, what: string): string => {
+  if (typeof v !== "string" || !v.trim()) throw new Error(`${what} is required`);
+  return v.trim();
+};
 
 export interface PlannedAction {
   tool: ActionTool;
@@ -228,11 +294,79 @@ export async function executeAction(
           data: { tags: merged as any },
           select: { id: true, tags: true },
         });
+        // Tag-added automations (the AI employee's tag counts; an
+        // automation's own add_tag never comes through here).
+        await emitTagsAdded(tenantId, contactId, existing.tags, merged);
         break;
       }
       case "noop":
         output = { note: (action.params as { note?: string } | undefined)?.note ?? action.reason };
         break;
+      case "propose_plan": {
+        // An approved plan runs its steps, in order, and stops at the first
+        // that fails. It used to reach here as ONE step named propose_plan
+        // and throw "unsupported tool", so no approved plan ever ran.
+        const p = (action.params ?? {}) as { steps?: unknown; conversationId?: unknown };
+        const steps = Array.isArray(p.steps) ? (p.steps as Array<{ tool?: string; params?: Record<string, unknown>; reason?: string; riskLevel?: PlannedAction["riskLevel"] }>) : [];
+        if (!steps.length) throw new Error("the plan has no steps");
+        // Checked again here, before anything runs: the proposal's check is not the last word.
+        const bad = [...new Set(steps.map((st) => String(st?.tool ?? "")).filter((t) => !(PLAN_ACTIONS as readonly string[]).includes(t)))];
+        if (bad.length) throw new Error(`these steps cannot be carried out: ${bad.join(", ")}`);
+        const results: ExecutionResult[] = [];
+        for (const [i, st] of steps.entries()) {
+          const params = { ...(st.params ?? {}) };
+          if (!params.conversationId && typeof p.conversationId === "string" && p.conversationId) params.conversationId = p.conversationId;
+          const r = await executeAction(tenantId, { tool: st.tool as ActionTool, params, reason: st.reason ?? action.reason, riskLevel: st.riskLevel ?? "medium" }, ctx);
+          results.push(r);
+          if (!r.ok) {
+            output = { ok: false, error: `step ${i + 1} (${st.tool}) did not run: ${r.error ?? r.skipReason ?? "failed"}`, steps: results };
+            break;
+          }
+        }
+        if (!output) output = { steps: results };
+        break;
+      }
+      case "claim_conversation": {
+        const id = need((action.params as any)?.conversationId, "conversationId");
+        await stillOpenForApprover(tenantId, ctx, id);
+        output = await asApprover(tenantId, ctx, `/api/conversations/${enc(id)}/claim`, {});
+        break;
+      }
+      case "assign_conversation": {
+        const { conversationId, agentId, departmentId } = (action.params ?? {}) as Record<string, unknown>;
+        const id = need(conversationId, "conversationId");
+        if (!agentId && !departmentId) throw new Error("agentId or departmentId is required");
+        await stillOpenForApprover(tenantId, ctx, id);
+        output = await asApprover(tenantId, ctx, `/api/conversations/${enc(id)}/reassign`, { ...(agentId ? { agentId } : {}), ...(departmentId ? { departmentId } : {}) });
+        break;
+      }
+      case "close_conversation": {
+        const id = need((action.params as any)?.conversationId, "conversationId");
+        await stillOpenForApprover(tenantId, ctx, id, true);
+        output = await asApprover(tenantId, ctx, `/api/conversations/${enc(id)}/close`, {});
+        break;
+      }
+      case "return_to_gotcha": {
+        const id = need((action.params as any)?.conversationId, "conversationId");
+        await stillOpenForApprover(tenantId, ctx, id);
+        output = await asApprover(tenantId, ctx, `/api/conversations/${enc(id)}/return-to-ai`, {});
+        break;
+      }
+      case "add_note": {
+        const { contactId, body } = (action.params ?? {}) as Record<string, unknown>;
+        const id = need(contactId, "contactId");
+        const text = need(body, "body").slice(0, 4000);
+        output = await asApprover(tenantId, ctx, `/api/identity/${enc(id)}/notes`, { body: text, visibility: "TEAM" });
+        break;
+      }
+      case "answer_question": {
+        // The 08 answer: the owner's answer becomes knowledge (design 08).
+        const { unansweredQuestionId, answer } = (action.params ?? {}) as Record<string, unknown>;
+        const id = need(unansweredQuestionId, "unansweredQuestionId");
+        const text = need(answer, "answer");
+        output = await asApprover(tenantId, ctx, `/api/knowledge/unanswered-questions/${enc(id)}/answer`, { answer: text }, process.env.AI_SERVICE_URL ?? "http://ai:4006");
+        break;
+      }
       case "send_message": {
         const conn = getMessagingConnector();
         if (!conn) throw new Error("no messaging connector registered");

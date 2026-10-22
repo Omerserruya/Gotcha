@@ -22,16 +22,19 @@ import path from "path";
 import { streamResponse } from "./ai.service";
 import {
   appendToMemory,
-  getAgentMemory,
+  getSessionMemory,
   memoryToChatMessages,
   sanitizeHistoryForLLM,
 } from "./agent-memory.service";
+import { withoutWideDashes } from "../lib/wide-dash";
 import { buildAgentContext } from "./agent-context.service";
 import type { ClientContext, OperatorContext } from "./agent-context.service";
 import {
   buildSystemAgentTools,
   dispatchSystemToolCall,
+  stepText,
 } from "./system-tools.service";
+import { connectedStore } from "./assistant-commerce-query.service";
 
 const MAX_ROUNDS = 5;
 const PROMPTS_DIR = path.resolve(__dirname, "../prompts");
@@ -43,14 +46,17 @@ export type AgentRuntimeEvent =
   | { type: "ready"; sessionId: string }
   | { type: "context_attached"; resolved: { conversationId: string | null; contactId: string | null; route: string | null } }
   | { type: "token"; text: string }
-  | { type: "tool_start"; toolCallId: string; name: string; args: unknown }
-  | { type: "tool_end"; toolCallId: string; name: string; ok: boolean; resultSummary: string }
-  | { type: "plan_proposed"; approvalRequestId: string; summary: string }
+  | { type: "tool_start"; toolCallId: string; name: string; args: unknown; label: string }
+  | { type: "tool_end"; toolCallId: string; name: string; ok: boolean; resultSummary: string; label: string }
+  | { type: "plan_proposed"; approvalRequestId: string; summary: string; steps?: unknown[] }
   | { type: "awaiting_approval"; approvalRequestId: string; tool: string }
   | { type: "denied"; tool: string; reason: string }
   | { type: "round_end"; round: number; hadToolCalls: boolean }
   | { type: "done"; usage: { input_tokens: number; output_tokens: number; total_tokens: number }; rounds: number }
-  | { type: "error"; message: string };
+  | { type: "cancelled" }
+  /** Stage 2: cards and their source, computed by a query tool (shown as they are). */
+  | { type: "artifacts"; toolCallId: string; blocks: unknown[]; source: unknown }
+  | { type: "error"; message: string; code?: "BUDGET_EXCEEDED" | "AI_UNAVAILABLE" };
 
 export interface AgentRunInput {
   operator: OperatorContext;
@@ -70,6 +76,20 @@ export interface AgentRunInput {
   aiAgentId?: string | null;
   /** Bearer token for downstream service calls dispatched by tool runs. */
   authToken?: string;
+  /** Aborting stops the model call in flight and every round/tool after it. */
+  signal?: AbortSignal;
+  /** Tokens all model calls of this run may use together; reaching it ends the run. */
+  tokenBudget?: number;
+  /** Extra system lines for this run (a thread's scope, its answer format). */
+  extraSystem?: string[];
+  /** The period query tools default to (a thread's scope as workspace days). */
+  defaultPeriod?: { from: string; to: string };
+  /** The approval request a Home thread is about (design 03): the default of system_read_approval. */
+  contextApprovalId?: string;
+  /** Where the user asks: a Home thread, or the Ctrl+K palette (the default). */
+  surface?: "home" | "command_bar";
+  /** Told the names of the tools this run may call (a Home thread keeps only suggestions one of them can answer). */
+  onTools?: (names: string[]) => void;
 }
 
 export type AgentEventSink = (event: AgentRuntimeEvent) => void | Promise<void>;
@@ -78,8 +98,12 @@ export type AgentEventSink = (event: AgentRuntimeEvent) => void | Promise<void>;
 
 export async function runAgent(
   input: AgentRunInput,
-  onEvent: AgentEventSink,
+  sink: AgentEventSink,
 ): Promise<void> {
+  // Everything the operator sees passes here: no wide dash in any event
+  // (Omer's rule; the model writes them anyway). A dash is one character, so
+  // a per-delta replace never splits one.
+  const onEvent: AgentEventSink = (ev) => sink(withoutWideDashes(ev));
   await onEvent({ type: "ready", sessionId: input.sessionId });
 
   // 1. UI context - resolved IDs travel with the tool dispatcher so calls
@@ -89,14 +113,20 @@ export async function runAgent(
   await onEvent({ type: "context_attached", resolved: ctxBuilt.resolved });
 
   // 2. Memory + new user turn.
-  const history = await getAgentMemory({
+  // Memory is per session (a Cmd-K opening, a Home chat thread), never the
+  // user's whole history: the global window mixed unrelated sessions, and the
+  // AI-Employee Builder's interview turns (same table) leaked into it.
+  const history = await getSessionMemory({
     tenantId: input.operator.tenantId,
     userId: input.operator.userId,
+    sessionId: input.sessionId,
+    limit: 30,
   });
 
   const chatMessages: any[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "system", content: ctxBuilt.block },
+    ...(input.extraSystem ?? []).map((content) => ({ role: "system", content })),
     ...sanitizeHistoryForLLM(memoryToChatMessages(history)),
     { role: "user", content: input.message },
   ];
@@ -112,16 +142,33 @@ export async function runAgent(
   }
 
   // 3. Tool surface for the operator.
+  // Store tools only for a caller who may read orders, and only with a store.
+  const commerce = !!input.operator.canReadCommerce && !!(await connectedStore(input.operator.tenantId).catch(() => null));
   const tools = await buildSystemAgentTools({
     tenantId: input.operator.tenantId,
     aiAgentId: input.aiAgentId ?? null,
+    commerce,
+    knowledge: !!input.operator.canReadKnowledge,
   });
+  input.onTools?.(tools.map((t: any) => String(t?.function?.name ?? "")).filter(Boolean));
 
   let totalUsage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
   let round = 0;
-  let stopReason: "final" | "max_rounds" | "error" = "final";
+  let stopReason: "final" | "max_rounds" | "error" | "cancelled" | "budget" = "final";
+  const aborted = () => !!input.signal?.aborted;
+  // One id space per answer: "b1", "s1"... across every query tool call.
+  const seq = { b: 0, s: 0 };
+  const nextId = (k: "b" | "s") => `${k}${++seq[k]}`;
+  // One answer reads each thing once. The model asks the same query twice in
+  // a turn, and the user got two identical cards and two sources
+  // (Omer, 2026-10-08): a repeat gets the first result, with no new step,
+  // card or source. Reads only (system_*); an action is never skipped here.
+  const answered = new Map<string, string>(); // a read call → its result
+  const drawn = new Map<string, string>(); // a source's query → the result that drew it
 
   for (round = 0; round < MAX_ROUNDS; round++) {
+    if (aborted()) { stopReason = "cancelled"; break; }
+    if (input.tokenBudget && totalUsage.total_tokens >= input.tokenBudget) { stopReason = "budget"; break; }
     let finalContent = "";
     let finalToolCalls: any[] | undefined;
 
@@ -134,6 +181,7 @@ export async function runAgent(
         maxTokens: 1024,
         tools,
         metadata: { type: "system_copilot", aiAgentId: input.aiAgentId ?? undefined },
+        signal: input.signal,
       })) {
         if (ev.contentDelta) await onEvent({ type: "token", text: ev.contentDelta });
         if (ev.done) {
@@ -149,8 +197,9 @@ export async function runAgent(
         }
       }
     } catch (err: any) {
+      if (aborted()) { stopReason = "cancelled"; break; }
       stopReason = "error";
-      await onEvent({ type: "error", message: err?.message || "stream failed" });
+      await onEvent({ type: "error", message: err?.message || "stream failed", code: "AI_UNAVAILABLE" });
       break;
     }
 
@@ -162,7 +211,7 @@ export async function runAgent(
           userId: input.operator.userId,
           sessionId: input.sessionId,
           role: "assistant",
-          content: finalContent,
+          content: withoutWideDashes(finalContent),
         });
       }
       await onEvent({ type: "round_end", round, hadToolCalls: false });
@@ -184,7 +233,7 @@ export async function runAgent(
         userId: input.operator.userId,
         sessionId: input.sessionId,
         role: "assistant",
-        content: finalContent || "",
+        content: withoutWideDashes(finalContent || ""),
         toolCalls: finalToolCalls,
       });
     }
@@ -192,13 +241,33 @@ export async function runAgent(
     let pausedForApproval: { approvalRequestId: string; tool: string } | null = null;
 
     for (const tc of finalToolCalls) {
+      if (aborted()) break;
       let parsedArgs: unknown = {};
       try { parsedArgs = JSON.parse(tc.function?.arguments || "{}"); } catch { /* keep raw */ }
+      const readKey = (tc.function?.name || "").startsWith("system_") ? `${tc.function.name}:${canonical(parsedArgs)}` : null;
+      const again = readKey ? answered.get(readKey) : undefined;
+      if (again !== undefined) {
+        chatMessages.push({ role: "tool", tool_call_id: tc.id, content: again });
+        if (!input.ephemeral) {
+          await appendToMemory({
+            tenantId: input.operator.tenantId,
+            userId: input.operator.userId,
+            sessionId: input.sessionId,
+            role: "tool",
+            content: again,
+            toolCallId: tc.id,
+            toolName: tc.function?.name || undefined,
+          });
+        }
+        continue;
+      }
+      const label = stepText(tc.function?.name || "", parsedArgs, input.operator.locale ?? "en");
       await onEvent({
         type: "tool_start",
         toolCallId: tc.id,
         name: tc.function?.name || "unknown",
         args: parsedArgs,
+        label,
       });
 
       const r = await dispatchSystemToolCall(tc, {
@@ -207,7 +276,27 @@ export async function runAgent(
         selectedConversationId: ctxBuilt.resolved.conversationId,
         selectedContactId: ctxBuilt.resolved.contactId,
         authToken: input.authToken,
+        viewer: input.operator.viewer,
+        locale: input.operator.locale ?? "en",
+        defaultPeriod: input.defaultPeriod,
+        nextId,
+        canReadCommerce: !!input.operator.canReadCommerce,
+        canReadContacts: !!input.operator.canReadContacts,
+        canReadKnowledge: !!input.operator.canReadKnowledge,
+        userName: input.operator.userName,
+        surface: input.surface ?? "command_bar",
+        contextApprovalId: input.contextApprovalId,
       });
+      // Other words, same query (a default spelled out): the first card stands.
+      const sourceKey = r.artifacts ? canonical((r.artifacts.source as any)?.query ?? null) : null;
+      const sameAs = sourceKey ? drawn.get(sourceKey) : undefined;
+      if (sameAs !== undefined) {
+        r.content = sameAs;
+      } else if (r.artifacts) {
+        if (sourceKey) drawn.set(sourceKey, r.content);
+        await onEvent({ type: "artifacts", toolCallId: tc.id, blocks: r.artifacts.blocks, source: r.artifacts.source });
+      }
+      if (readKey) answered.set(readKey, r.content);
 
       // Surface side-effects to the consumer for UI cues (toast, badge, etc).
       if (r.sideEffect?.kind === "proposed_plan") {
@@ -215,6 +304,7 @@ export async function runAgent(
           type: "plan_proposed",
           approvalRequestId: r.sideEffect.approvalRequestId,
           summary: r.sideEffect.planSummary,
+          steps: r.sideEffect.steps,
         });
       } else if (r.sideEffect?.kind === "awaiting_approval") {
         await onEvent({
@@ -237,6 +327,7 @@ export async function runAgent(
         name: tc.function?.name || "unknown",
         ok,
         resultSummary: summariseToolResult(r.content),
+        label,
       });
 
       chatMessages.push({
@@ -268,6 +359,9 @@ export async function runAgent(
   }
 
   if (round >= MAX_ROUNDS) stopReason = "max_rounds";
+  if (stopReason !== "cancelled" && aborted()) stopReason = "cancelled";
+  if (stopReason === "cancelled") await onEvent({ type: "cancelled" });
+  if (stopReason === "budget") await onEvent({ type: "error", code: "BUDGET_EXCEEDED", message: "this answer reached its size limit" });
 
   await onEvent({ type: "done", usage: totalUsage, rounds: round });
 
@@ -278,14 +372,33 @@ export async function runAgent(
   }
 }
 
+/** A value as one string, whatever the order of its keys; empty values count as absent. */
+export function canonical(v: unknown): string {
+  const norm = (x: any): any => {
+    if (Array.isArray(x)) return x.map(norm);
+    if (x && typeof x === "object") {
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(x).sort()) {
+        const val = x[k];
+        if (val === undefined || val === null || val === "") continue;
+        out[k] = norm(val);
+      }
+      return out;
+    }
+    return x;
+  };
+  return JSON.stringify(norm(v)) ?? "";
+}
+
 function summariseToolResult(jsonStr: string): string {
   // Compress noisy JSON down to a single line for the SSE event consumer.
   try {
     const parsed = JSON.parse(jsonStr);
     if (parsed?.ok === false) return `error: ${String(parsed.error || "unknown").slice(0, 120)}`;
     if (Array.isArray(parsed?.results)) return `results: ${parsed.results.length}`;
-    if (typeof parsed?.count === "number") return `count: ${parsed.count}`;
-    if (typeof parsed?.value === "number") return `value: ${parsed.value}`;
+    // "3 conversations waiting for someone on your team to answer", not "value: 3".
+    if (typeof parsed?.count === "number") return parsed.label ? `${parsed.count} ${parsed.label}` : String(parsed.count);
+    if (typeof parsed?.value === "number") return parsed.label ? `${parsed.value} ${parsed.label}` : String(parsed.value);
     if (parsed?.proposed_plan) return `plan_proposed`;
     if (parsed?.awaiting_approval) return `awaiting_approval`;
     return "ok";

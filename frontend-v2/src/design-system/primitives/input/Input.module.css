@@ -1,0 +1,85 @@
+@layer primitives {
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-9);
+    min-inline-size: 0;
+  }
+
+  .label {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .input {
+    inline-size: 100%;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-14);
+    padding-inline: 15px;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-control);
+    line-height: 1.2;
+    transition: border-color var(--duration-fast) var(--easing-standard);
+  }
+
+  .input::placeholder {
+    color: var(--text-faint);
+  }
+
+  .input:hover:not(:disabled) {
+    border-color: var(--border-heavy);
+  }
+
+  /*
+   * A focused field takes the ink colour and a thicker rule, exactly as the
+   * design draws it - no glow, no tint. The 1.5px is compensated by the
+   * matching drop in padding so the field does not shift by half a pixel.
+   */
+  .input:focus {
+    outline: none;
+    border-width: var(--border-width-thick);
+    border-color: var(--border-focus);
+    padding-block: calc(var(--space-14) - 0.5px);
+    padding-inline: 14.5px;
+  }
+
+  .input:disabled {
+    background-color: var(--panel-sunken);
+    color: var(--text-disabled);
+    cursor: not-allowed;
+  }
+
+  .input[aria-invalid='true'] {
+    border-color: var(--signal-ai-strong);
+  }
+
+  .hint {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .error {
+    font-size: var(--font-size-caption);
+    color: var(--signal-ai-strong);
+  }
+
+  .control {
+    position: relative;
+    display: block;
+  }
+
+  .inputWithTrailing {
+    padding-inline-end: 64px;
+  }
+
+  .trailing {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: var(--space-12);
+    display: flex;
+    align-items: center;
+  }
+}

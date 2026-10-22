@@ -11,6 +11,7 @@
 
 import { prisma, encryptCredentials, decryptCredentials, isShopifyAuthorized, shopifyCapabilityForTool } from "@chatcenter/shared";
 import type { ShopifyCapability } from "@chatcenter/shared";
+import { withErrorCode, type KnownErrorCode } from "../../lib/error-code";
 
 export interface ToolDefinition {
   /** Tool function name surfaced to the LLM (e.g. "stripe.refund_payment"). */
@@ -313,6 +314,25 @@ export async function setConnectionStatus(opts: {
 }
 
 /**
+ * A failed token refresh, said cleanly. The provider's text can be a whole HTML
+ * page (Shopify's 401, 2026-10-11), which was stored in lastError and carried
+ * in every caller's reason. Now lastError is "[CODE] sentence", and the thrown
+ * message keeps only the HTTP status beside it: "401" and "token" are what the
+ * approval classifiers read (conversation toCustomerSafeReason, frontend-v2
+ * dispatch failures), so they answer exactly as before. The raw text is logged.
+ */
+export function describeRefreshFailure(slug: string, err: unknown): { lastError: string; message: string } {
+  const raw = String((err as { message?: string })?.message || err || "unknown");
+  const status = /(?:^|\D)([45]\d\d)(?!\d)/.exec(raw)?.[1];
+  const code: KnownErrorCode =
+    /(?:\b|_)40[13]\b|unauthori[sz]ed|forbidden|invalid_grant|invalid_token|invalid_client|invalid_request/i.test(raw) ? "CREDENTIALS_INVALID"
+    : /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|EAI_AGAIN|fetch failed|timed? ?out|(?:\b|_)5\d\d\b/i.test(raw) ? "CONNECTION_FAILED"
+    : "TOKEN_REFRESH_FAILED";
+  const clean = withErrorCode(code);
+  return { lastError: clean, message: `Token refresh failed for ${slug}${status ? ` (${status})` : ""}: ${clean}` };
+}
+
+/**
  * Ensure access token is fresh; refresh when within the buffer. Returns
  * the credentials object the adapter should use for this call.
  */
@@ -370,12 +390,14 @@ export async function ensureFreshToken(opts: {
   } catch (err: any) {
     // Only a refresh FAILURE (e.g. revoked/invalid refresh token) is a real,
     // unrecoverable error - a mere access-token expiry is handled above.
+    const failure = describeRefreshFailure(opts.adapter.slug, err);
+    console.warn(`[integration-framework] token refresh failed for ${opts.adapter.slug} raw:`, String(err?.message || err).slice(0, 2000));
     await setConnectionStatus({
       tenantIntegrationId: opts.tenantIntegrationId,
       status: "ERROR",
-      lastError: `token_refresh_failed:${err?.message || "unknown"}`,
+      lastError: failure.lastError,
     });
-    throw new Error(`Token refresh failed for ${opts.adapter.slug}: ${err?.message || "unknown"}`);
+    throw new Error(failure.message);
   }
 }
 
@@ -634,6 +656,19 @@ async function auditAdapterCall(opts: {
   args: Record<string, unknown>;
   ok: boolean;
   reason?: string;
+  /**
+   * WHICH KIND of not-ok, mirroring `executeAdapterTool`'s own return type.
+   *
+   * Without it this record collapses a guard doing its job and an integration
+   * breaking into one `adapter.err`, and anything counting failures per
+   * capability then reports a working HITL policy as a broken connector. The
+   * distinction already exists at the return site; it was simply not written
+   * down, so the reader had to guess from a free-form `reason` string.
+   *
+   * Absent on rows written before this field existed. A consumer must treat
+   * missing as UNCLASSIFIED rather than assuming either kind.
+   */
+  failure?: "refused" | "errored";
   durationMs: number;
 }): Promise<void> {
   try {
@@ -650,6 +685,11 @@ async function auditAdapterCall(opts: {
           args: scrubSecrets(opts.args),
           ok: opts.ok,
           reason: opts.reason,
+          // Omitted entirely on success, and on the pre-existing rows that
+          // predate this field - `undefined` does not survive into JSON, so
+          // "absent" stays distinguishable from any value a reader might
+          // otherwise infer.
+          failure: opts.failure,
           durationMs: opts.durationMs,
           source: "integration-framework",
         },
@@ -865,27 +905,43 @@ export async function executeAdapterTool(opts: {
    * AI-supplied "isAuthorized" can never influence it.
    */
   accessScope?: "internal" | "customer";
-}): Promise<{ ok: true; result: unknown } | { ok: false; reason: string }> {
+}): Promise<
+  | { ok: true; result: unknown }
+  // `failure` says WHICH KIND of not-ok this is, set at each return site where
+  // the answer is already known locally: a guard knows it is refusing, a catch
+  // knows it broke. Callers cannot recover this from `reason` - the strings are
+  // free-form and a new one added later would be silently misclassified by any
+  // prefix match, which is the defect this field exists to prevent.
+  //
+  //   refused - a guard, a policy, a rate limit or a missing precondition
+  //             declined. The product working correctly.
+  //   errored - it was attempted and something broke (token refresh, provider
+  //             5xx, transport). Only this kind is worth interrupting a human.
+  //
+  // Additive: every existing caller ignores it and none needed changing.
+  | { ok: false; reason: string; failure: "refused" | "errored" }
+> {
   const start = Date.now();
   const dot = opts.toolFunctionName.indexOf(".");
-  if (dot < 0) return { ok: false, reason: `bad_tool_name:${opts.toolFunctionName}` };
+  if (dot < 0) return { ok: false, failure: "refused", reason: `bad_tool_name:${opts.toolFunctionName}` };
   const slug = opts.toolFunctionName.slice(0, dot);
   const toolName = opts.toolFunctionName.slice(dot + 1);
 
   // ── Cross-customer access guard (customer channel only) ─────────────────
   let guardIdentity: import("./customer-access-guard").RequesterIdentity | null = null;
-  if (opts.accessScope === "customer" && slug === "shopify" && opts.conversationId) {
+  if (opts.accessScope === "customer" && (slug === "shopify" || slug === "woocommerce") && opts.conversationId) {
     const guard = await import("./customer-access-guard");
     // Self-scoped tools carry no selector in their schema, so there is nothing
     // to verify - only something to supply. Whatever the model sent that looks
     // like a selector is discarded here, before the adapter, and replaced with
     // the identity the channel authenticated.
-    if (guard.SELF_SCOPED_SHOPIFY_TOOLS.has(toolName)) {
+    if (slug === "shopify" && guard.SELF_SCOPED_SHOPIFY_TOOLS.has(toolName)) {
       guardIdentity = await guard.resolveRequesterIdentity(opts.tenantId, opts.conversationId);
       const scoped = guardIdentity ? guard.applySelfScope(guardIdentity, opts.args as Record<string, any>) : null;
       if (!guardIdentity || !scoped) {
         return {
           ok: false,
+          failure: "refused",
           reason:
             "access_denied: this conversation has no authenticated identity, so there is no profile to change. " +
             "Do not ask the customer to supply a customer id, phone or email as proof - it would not be accepted.",
@@ -899,14 +955,30 @@ export async function executeAdapterTool(opts: {
           toolName,
           reason: `self_scope_selector_stripped:${scoped.stripped.join(",")}`,
           args: opts.args as Record<string, any>,
+          provider: "shopify",
         });
       }
       opts.args = scoped.args;
     }
-    if (guard.PROTECTED_SHOPIFY_TOOLS.has(toolName)) {
+    if (guard.protectedToolsFor(slug)?.has(toolName)) {
       guardIdentity = await guard.resolveRequesterIdentity(opts.tenantId, opts.conversationId);
       if (!guardIdentity) {
-        return { ok: false, reason: "access_denied: requester identity could not be resolved for this conversation" };
+        return { ok: false, failure: "refused", reason: "access_denied: requester identity could not be resolved for this conversation" };
+      }
+      // "Where is my order?" with no phone or email: the customer's OWN proven
+      // ones, never asked for (2026-10-14; guest orders carry only these).
+      if (slug === "woocommerce" && toolName === "list_customer_orders") {
+        opts.args = guard.withOwnOrderSelectors(guardIdentity, opts.args as Record<string, any>);
+      }
+      // From a customer conversation a coupon is only ever a store credit for
+      // one of their own orders, limited to its customer (the adapter sets
+      // the restriction from the order). Never an open code anyone can use.
+      if (slug === "woocommerce" && toolName === "create_coupon" && !String((opts.args as any)?.order_id ?? "").trim()) {
+        return {
+          ok: false,
+          failure: "refused",
+          reason: "store_credit_needs_order: in a customer conversation a coupon is a store credit for one of the customer's orders. Pass that order's order_id.",
+        };
       }
       const pre = guard.checkArgsAllowed(guardIdentity, toolName, opts.args as Record<string, any>);
       if (!pre.allowed) {
@@ -917,9 +989,11 @@ export async function executeAdapterTool(opts: {
           toolName,
           reason: pre.reason,
           args: opts.args as Record<string, any>,
+          provider: slug === "woocommerce" ? "woocommerce" : "shopify",
         });
         return {
           ok: false,
+          failure: "refused",
           reason:
             "access_denied_cross_customer: this chat may only access the customer's own records. " +
             "Do NOT reveal any of the requested data or confirm whether it exists. Offer to send a " +
@@ -930,10 +1004,10 @@ export async function executeAdapterTool(opts: {
   }
 
   const adapter = getAdapter(slug);
-  if (!adapter) return { ok: false, reason: `unknown_provider:${slug}` };
+  if (!adapter) return { ok: false, failure: "refused", reason: `unknown_provider:${slug}` };
   const toolDef = adapter.tools().find((t) => t.name === opts.toolFunctionName);
   if (!toolDef) {
-    return { ok: false, reason: `unknown_tool:${opts.toolFunctionName}` };
+    return { ok: false, failure: "refused", reason: `unknown_tool:${opts.toolFunctionName}` };
   }
 
   // Rate limit BEFORE loading the connection - denial is cheap.
@@ -942,10 +1016,10 @@ export async function executeAdapterTool(opts: {
     const reason = `rate_limited:${slug}:retry_after_ms=${rl.retryAfterMs}`;
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
-      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason,
+      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason, failure: "refused",
       durationMs: Date.now() - start,
     });
-    return { ok: false, reason };
+    return { ok: false, failure: "refused", reason };
   }
 
   // Which Shopify entitlement this specific tool needs. An unmapped Shopify
@@ -955,7 +1029,7 @@ export async function executeAdapterTool(opts: {
   const shopifyCapability =
     slug === SHOPIFY_SLUG ? shopifyCapabilityForTool(opts.toolFunctionName) : undefined;
   if (slug === SHOPIFY_SLUG && !shopifyCapability) {
-    return { ok: false, reason: "shopify_tool_not_classified" };
+    return { ok: false, failure: "refused", reason: "shopify_tool_not_classified" };
   }
   const conn = await loadConnection({
     tenantId: opts.tenantId,
@@ -966,10 +1040,10 @@ export async function executeAdapterTool(opts: {
     const reason = `not_connected:${slug}`;
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
-      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason,
+      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason, failure: "refused",
       durationMs: Date.now() - start,
     });
-    return { ok: false, reason };
+    return { ok: false, failure: "refused", reason };
   }
 
   // Capability gate: a scope the merchant never granted fails identically on
@@ -982,6 +1056,7 @@ export async function executeAdapterTool(opts: {
   if (blockedScopes.length) {
     return {
       ok: false,
+      failure: "refused",
       reason: `missing_scope:${blockedScopes[0]} - ${slug} connection needs re-authorization (merchant approval)`,
     };
   }
@@ -1002,10 +1077,51 @@ export async function executeAdapterTool(opts: {
     const reason = (err?.message || "token_refresh_failed").slice(0, 240);
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
-      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason,
+      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason, failure: "errored",
       durationMs: Date.now() - start,
     });
-    return { ok: false, reason };
+    return { ok: false, failure: "errored", reason };
+  }
+
+  // A WooCommerce tool that names an order, in a customer conversation: the
+  // order is fetched and must belong to the requester BEFORE the tool runs
+  // (2026-10-13). For a write, the post-flight check would only see a change
+  // that already happened (and a tool can now run without approval); for a
+  // read of refunds, notes or tracking, the result carries no owner fields to
+  // check. get_order itself is checked on its own result.
+  if (slug === "woocommerce" && guardIdentity && opts.conversationId && toolName !== "get_order" && (opts.args as any)?.order_id != null) {
+    const guard = await import("./customer-access-guard");
+    let ownedOrder = false;
+    try {
+      const order = await adapter.execute({
+        ctx: { tenantId: opts.tenantId, tenantIntegrationId: conn.tenantIntegrationId, conversationId: opts.conversationId, contactId: opts.contactId },
+        toolName: "get_order",
+        args: { order_id: (opts.args as any).order_id },
+        credentials: fresh,
+        config: conn.config,
+      });
+      ownedOrder = guard.wooOrderOwned(guardIdentity, order);
+    } catch {
+      ownedOrder = false;
+    }
+    if (!ownedOrder) {
+      await guard.recordSecurityDenial({
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        channelSenderId: guardIdentity.channelSenderId,
+        toolName,
+        reason: "write_order_not_owned",
+        args: opts.args as Record<string, any>,
+        provider: "woocommerce",
+      });
+      return {
+        ok: false,
+        failure: "refused",
+        reason:
+          "access_denied_cross_customer: this order could not be confirmed as the customer's own, so nothing was changed. " +
+          "Do NOT reveal anything about it. Offer identity verification or a human agent.",
+      };
+    }
   }
 
   const runExecute = (creds: Record<string, any>) =>
@@ -1070,7 +1186,7 @@ export async function executeAdapterTool(opts: {
     // requester's own entries.
     if (guardIdentity && opts.conversationId) {
       const guard = await import("./customer-access-guard");
-      const post = guard.checkResultAllowed(guardIdentity, toolName, result);
+      const post = guard.checkResultAllowed(guardIdentity, toolName, result, slug === "woocommerce" ? "woocommerce" : "shopify");
       if (!post.allowed) {
         await guard.recordSecurityDenial({
           tenantId: opts.tenantId,
@@ -1079,9 +1195,11 @@ export async function executeAdapterTool(opts: {
           toolName,
           reason: post.reason,
           args: opts.args as Record<string, any>,
+          provider: slug === "woocommerce" ? "woocommerce" : "shopify",
         });
         return {
           ok: false,
+          failure: "refused",
           reason:
             "access_denied_cross_customer: the requested record belongs to a different customer. " +
             "Do NOT reveal any of its details or confirm what exists. Offer identity verification " +
@@ -1089,6 +1207,12 @@ export async function executeAdapterTool(opts: {
         };
       }
       result = post.result;
+      // A guest order of theirs may carry another identifier of theirs (the
+      // checkout email): link it the way any identifier is linked. Off the
+      // reply's path.
+      if (slug === "woocommerce") {
+        void guard.linkFromWooOrders(opts.tenantId, opts.conversationId, guardIdentity, result);
+      }
       // A self-scoped write may have changed the very identifier ownership is
       // compared against. Record the resolved Shopify customer id on the
       // contact so the next turn still recognises them - the controlled
@@ -1134,10 +1258,10 @@ export async function executeAdapterTool(opts: {
     const reason = message.slice(0, 240);
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
-      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason,
+      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason, failure: "errored",
       durationMs: Date.now() - start,
     });
-    return { ok: false, reason };
+    return { ok: false, failure: "errored", reason };
   }
 }
 

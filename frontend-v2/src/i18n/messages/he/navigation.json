@@ -1,0 +1,112 @@
+{
+  "primary": {
+    "home": "בית",
+    "inbox": "תיבת הודעות",
+    "approvals": "אישורים",
+    "customers": "לקוחות",
+    "outreach": "פנייה יזומה",
+    "studio": "סטודיו",
+    "analytics": "אנליטיקה",
+    "settings": "הגדרות"
+  },
+  "workspace": {
+    "label": "סביבת עבודה",
+    "switch": "החלפת סביבת עבודה",
+    "noneSelected": "בחרו סביבת עבודה",
+    "unnamed": "סביבת העבודה שלכם"
+  },
+  "account": {
+    "label": "חשבון",
+    "signOut": "התנתקות"
+  },
+  "skipToContent": "דילוג לתוכן הראשי",
+  "toggleSidebar": "פתיחה וסגירה של הניווט",
+  "commandPalette": "חיפוש או פעולה",
+  "totalCount": "{count, plural, one {שיחה אחת} other {# שיחות}}",
+  "mainNavigation": "ניווט ראשי",
+  "inbox": {
+    "queue": "ממתין בתור",
+    "mine": "מוקצה לי",
+    "active": "פעיל",
+    "gotcha": "מנוהל ע״י GOTCHA",
+    "resolved": "טופל",
+    "all": "כל השיחות"
+  },
+  "studio": {
+    "employees": "עובדים",
+    "knowledge": "ידע",
+    "skills": "מיומנויות",
+    "automations": "אוטומציות",
+    "capabilities": "אינטגרציות"
+  },
+  "analytics": {
+    "overview": "סקירה",
+    "ai": "AI",
+    "humans": "אנשים",
+    "sales": "מכירות",
+    "topics": "נושאים"
+  },
+  "settings": {
+    "workspace": "סביבת עבודה",
+    "people": "אנשים וצוותים",
+    "channels": "ערוצים",
+    "whatsapp": "מספרי וואטסאפ",
+    "systems": "ליבת העסק",
+    "notifications": "התראות",
+    "security": "אבטחה",
+    "billing": "שימוש וחיוב",
+    "billingPlan": "תוכנית ותמחור",
+    "developer": "מפתחים"
+  },
+  "groups": {
+    "views": "תצוגות"
+  },
+  "settingsFootnote": "איך GOTCHA מתנהגת נמצא ב<studio>סטודיו</studio>, לא כאן.",
+  "settingsDescription": {
+    "workspace": "העובדות שעובדי ה‑AI שלכם מצטטים ללקוחות. שינוי אחד כאן, וכל ערוץ עקבי תוך דקה.",
+    "people": "אנשים ועובדי AI ברשימה אחת, כי תפעולית הם אותו משאב.",
+    "channels": "איפה הלקוחות מגיעים אליכם. הכל נוחת בתיבה אחת.",
+    "systems": "מה ש‑GOTCHA יכולה לראות ולשנות בשמכם. חיבור מערכת נותן לעובדי ה‑AI דברים חדשים שהם יכולים לעשות - אתם מחליטים אילו.",
+    "notifications": "GOTCHA לא מצלצלת לכם על הודעה נכנסת - בשביל זה יש תיבה. היא מודיעה כשצריך החלטה או כשמשהו נשבר.",
+    "security": "מי יכול להיכנס, ורישום של כל מה שקרה - על ידי אדם או על ידי GOTCHA.",
+    "billing": "התוכנית שלכם, מה שהחודש צרך, ומה זה נתן.",
+    "developer": "למי שבונה מול GOTCHA. שום דבר כאן לא משפיע על איך GOTCHA מתנהגת.",
+    "pending": "עוד לא נבנה."
+  },
+  "outreach": {
+    "campaigns": "קמפיינים",
+    "templates": "תבניות",
+    "calls": "שיחות"
+  },
+  "settingsDocs": "לקריאת התיעוד ↗",
+  "settingsDocsNone": "עדיין לא פורסם תיעוד למפתחים.",
+  "palette": {
+    "close": "סגירה",
+    "esc": "ESC לסגירה",
+    "group": {
+      "do": "לעשות",
+      "go": "לעבור אל",
+      "ask": "לשאול"
+    },
+    "someone": "מישהו",
+    "conversation": "שיחה",
+    "ask": "לשאול את GOTCHA: “{question}”",
+    "askMeta": "בדף הבית",
+    "searchFailed": "לא הצלחנו לחפש כרגע.",
+    "keys": "↑↓ מעבר · ↵ פתיחה · esc סגירה",
+    "everywhere": "עובד מכל מסך",
+    "customer": "לקוח/ה",
+    "order": "הזמנה #{number}",
+    "needsApproval": "ממתין לאישור",
+    "orderNoMatch": "אין כאן לקוח שתואם להזמנה #{number} ב‑{store}.",
+    "orderNoStore": "אין חנות מחוברת שאפשר לחפש בה הזמנות."
+  },
+  "recent": "אחרונות",
+  "untitled": "שיחה חדשה",
+  "recentMenu": {
+    "more": "עוד עבור {title}",
+    "rename": "שינוי שם",
+    "delete": "מחיקה"
+  },
+  "console": "ניהול מערכת"
+}

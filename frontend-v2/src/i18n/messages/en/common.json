@@ -1,0 +1,50 @@
+{
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "retry": "Try again",
+    "confirm": "Confirm",
+    "discard": "Discard",
+    "search": "Search",
+    "clear": "Clear",
+    "more": "More"
+  },
+  "state": {
+    "loading": "Loading…",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "unsavedChanges": "You have unsaved changes"
+  },
+  "count": "{count, plural, =0 {No items} one {# item} other {# items}}",
+  "selectedCount": "{count, plural, =0 {Nothing selected} one {# selected} other {# selected}}",
+  "language": {
+    "label": "Language"
+  },
+  "productDescription": "The Customer Operations OS. Conversations, actions, approvals and AI in one place.",
+  "loading": "Loading",
+  "duration": {
+    "minutes": "{count, plural, =1 {1 minute} other {# minutes}}",
+    "hours": "{count, plural, =1 {1 hour} other {# hours}}",
+    "days": "{count, plural, =1 {1 day} other {# days}}"
+  },
+  "person": {
+    "shopper": "Website shopper",
+    "signedInShopper": "Signed-in website shopper"
+  },
+  "platformError": {
+    "shopify_chat_uninstalled": "The app was removed from the store. Install it again to bring the chat back.",
+    "shopify_app_uninstalled": "The GOTCHA app was removed from the store. Install it again to reconnect.",
+    "unknown": "Something is wrong with this channel. Open it to see what it needs.",
+    "voice_credentials_unreadable": "The saved Twilio credentials can't be read.",
+    "voice_credentials_rejected": "Twilio no longer accepts the saved credentials.",
+    "voice_twilio_unreachable": "The Twilio account couldn't be reached on the last check.",
+    "voice_outbound_not_set_up": "Calls come in, but outgoing calls weren't set up on Twilio.",
+    "subscribe_failed": "Connected, but messages can't arrive: the platform refused GOTCHA's subscription to them. Reconnect to try again.",
+    "gmail_watch_failed": "Connected, but new mail won't arrive: Gmail's notifications couldn't be set up. Reconnect to try again.",
+    "outlook_subscription_failed": "Connected, but new mail won't arrive: Outlook's notifications couldn't be set up. Reconnect to try again.",
+    "voice_number_not_found": "This number wasn't found on the Twilio account.",
+    "voice_webhook_not_updated": "Twilio didn't accept GOTCHA's call address for this number, so calls may not reach GOTCHA.",
+    "voice_public_url_missing": "Calls can't be routed to GOTCHA yet: the server's voice address isn't set up. Nothing to fix on your side."
+  }
+}

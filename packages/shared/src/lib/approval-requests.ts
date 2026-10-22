@@ -104,6 +104,66 @@ export function computeOperationKey(
   return `${tool}:${identity}`;
 }
 
+/**
+ * A sentence an operator can act on, built from the tool and its own parameters.
+ *
+ * ★ WHY THIS EXISTS AT ALL.
+ *
+ * `summary` is a plain `String` column with one writer and six callers, and the
+ * callers had invented five different conventions for it: a debug breadcrumb
+ * ("ai-bot inbox tool call", 27 of 54 rows), a function signature
+ * ("issue_refund()"), an instruction ("Approve: ..."), and - in the two places
+ * somebody had thought about it - an actual sentence ("Cancel order #1006").
+ * A `String` accepts every convention equally, so there was nothing to notice.
+ *
+ * The operator reading this row is deciding whether to move money. Shown
+ * engineering shorthand, they cannot.
+ *
+ * ── The keys are MEASURED, not guessed ──
+ * Taken from what the tools reaching approval actually carry: `order_name` is
+ * present on 7 of the 9 distinct tools, `amount` only on refunds, `subject` on
+ * tasks. Anything not in this list is left out rather than stringified, because
+ * dumping the parameter bag is how `issue_refund(...)` happened.
+ *
+ * ★★ AND THE AMOUNT CARRIES NO CURRENCY, DELIBERATELY. The params hold a bare
+ * number and no unit, so a symbol here would be invented. Rendering "₪179" from
+ * a field that does not say shekels is the kind of confident wrongness that a
+ * money screen must not have.
+ */
+export function describeApprovalAction(
+  tool: string,
+  params: Record<string, unknown> = {},
+): string {
+  // `shopify.cancel_order`, `integration.hubspot.create_deal` and
+  // `integration_cancel_order` all name an action; the provider is not what the
+  // approver is deciding about.
+  const bare = String(tool || "").split(".").pop()!.replace(/^integration_/, "");
+  const words = bare.replace(/_+/g, " ").trim();
+  if (!words) return "Approve this action";
+  const verb = words.charAt(0).toUpperCase() + words.slice(1);
+
+  const p = params ?? {};
+  const scalar = (v: unknown): string => {
+    if (typeof v === "string") return v.trim();
+    if (typeof v === "number" && Number.isFinite(v)) return String(v);
+    return "";
+  };
+  const order = scalar(p.order_name) || scalar(p.orderName);
+  const subject = scalar(p.subject) || scalar(p.title) || scalar(p.name);
+  const amount = scalar(p.amount);
+
+  let out = verb;
+  if (amount && /refund/i.test(words)) out += ` of ${amount}`;
+  if (order) {
+    // "Cancel order" + "#1006" reads as one phrase; "Resend confirmation" needs
+    // the noun. Tested on the real tool names rather than assumed.
+    out += /\border$/i.test(verb) ? ` ${order}` : ` for order ${order}`;
+  } else if (subject) {
+    out += `: ${subject}`;
+  }
+  return out;
+}
+
 export interface CreateApprovalRequestInput {
   tenantId: string;
   /** Optional: System Copilot plans aren't always conversation-scoped

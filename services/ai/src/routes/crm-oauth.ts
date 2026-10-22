@@ -4,7 +4,7 @@
  * Mounted at /api/integrations BEFORE the authenticated `integrationRoutes`
  * router, so the public /callback path is not caught by the admin auth gate.
  *
- *   GET /oauth/zoho_crm/init      (ADMIN) → signs JWT state, returns auth URL
+ *   GET /oauth/zoho_crm/init      (connect) → signs JWT state, returns auth URL
  *   GET /oauth/zoho_crm/callback  (public) → verifies state, exchanges code,
  *                                        upserts TenantIntegration(CONNECTED),
  *                                        creates default TenantTool rows,
@@ -15,7 +15,7 @@
  */
 import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, mintOAuthState, consumeOAuthState,
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermission, mintOAuthState, consumeOAuthState,
   resolveAppPublicUrl,
 } from "@chatcenter/shared";
 import {
@@ -24,7 +24,13 @@ import {
   ZOHO_DEFAULT_SCOPES,
 } from "../services/zoho.service";
 
+import { parseConnectFlow, redesignCapabilitiesUrl, redirectRedesignDenied, REDESIGN_FLOW } from "../services/redesign-return";
 const router = Router();
+
+// 2026-10-09: the connect permission every other integration uses (see
+// integrations.ts / connectors-admin.ts), not role ADMIN. A member delegated
+// connect could start HubSpot but got 403 on this one. Admin/Owner hold it.
+const canConnectSystems = requirePermission("integrations:connections:connect", "business-systems:connections:connect");
 
 
 // ─── Zoho CRM OAuth ─────────────────────────────────────────
@@ -34,16 +40,16 @@ router.get(
   authenticate,
   resolveTenant,
   requireOnboardingOrActiveTenant(),
-  requireRole("ADMIN"),
+  canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.ZOHO_CLIENT_ID;
     const redirectUri = process.env.ZOHO_REDIRECT_URI;
     if (!clientId || !redirectUri) {
-      res.status(500).json({ error: "Zoho OAuth not configured (set ZOHO_CLIENT_ID + ZOHO_REDIRECT_URI)" });
+      res.status(409).json({ error: "Zoho OAuth not configured (set ZOHO_CLIENT_ID + ZOHO_REDIRECT_URI)", code: "NOT_CONFIGURED" });
       return;
     }
 
-    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
+    const flow = parseConnectFlow(req.query.flow);
     // Single-use state. `integrationSlug` is kept alongside `provider` because
     // the callback uses it to look up the catalog row.
     const { state } = mintOAuthState({
@@ -68,11 +74,13 @@ router.get(
 
 router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
   const frontendUrl = resolveAppPublicUrl(process.env);
+  let flow: string | undefined;
   try {
     const { code, state, error: zohoError } = req.query;
 
+    if (await redirectRedesignDenied(req, res, "zoho_crm", "zoho_crm")) return;
     if (zohoError) {
-      res.redirect(`${frontendUrl}/integrations?error=${encodeURIComponent(String(zohoError))}`);
+      res.redirect(redesignCapabilitiesUrl("zoho_crm", { error: "denied" }));
       return;
     }
     if (!code || !state) {
@@ -89,6 +97,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
       return;
     }
     const payload = consumed.claims;
+    flow = payload.flow;
 
     const redirectUri = process.env.ZOHO_REDIRECT_URI!;
     const tokens = await exchangeZohoCode({ code: String(code), redirectUri });
@@ -100,7 +109,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
     });
     if (!catalog) {
       console.error("[Zoho OAuth] Catalog entry not found:", payload.integrationSlug);
-      res.redirect(`${frontendUrl}/integrations?error=catalog_missing`);
+      res.redirect(flow === REDESIGN_FLOW ? redesignCapabilitiesUrl("zoho_crm", { error: "catalog_missing" }) : redesignCapabilitiesUrl("zoho_crm", { error: "catalog_missing" }));
       return;
     }
 
@@ -187,12 +196,14 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
       });
     }
 
-    // During onboarding, return to /setup so the boot logic detects the
-    // connected core system and finishes activation; otherwise integrations.
+    // During onboarding, return to the onboarding screen; otherwise the
+    // app's capabilities page (the legacy pages are gone since 2026-10-21).
     res.redirect(
-      payload.flow === "onboarding"
-        ? `${frontendUrl}/setup?connected=${payload.integrationSlug}`
-        : `${frontendUrl}/integrations?connected=${payload.integrationSlug}`,
+      payload.flow === REDESIGN_FLOW
+        ? redesignCapabilitiesUrl(payload.integrationSlug)
+        : payload.flow === "onboarding"
+          ? `${frontendUrl}/onboarding`
+          : redesignCapabilitiesUrl(payload.integrationSlug),
     );
   } catch (err: any) {
     console.error("[Zoho OAuth] Callback error:", err?.message ?? err);
@@ -204,7 +215,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
       cause: err,
       context: { stage: "callback" },
     });
-    res.redirect(`${frontendUrl}/integrations?error=oauth_callback_failed`);
+    res.redirect(flow === REDESIGN_FLOW ? redesignCapabilitiesUrl("zoho_crm", { error: "callback_error" }) : redesignCapabilitiesUrl("zoho_crm", { error: "callback_error" }));
   }
 });
 

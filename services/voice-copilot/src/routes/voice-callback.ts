@@ -18,7 +18,7 @@
 import crypto from "crypto";
 import express, { Router, Request, Response } from "express";
 import twilio from "twilio";
-import { prisma, getRedis, normalizePhone, publishEvent, outgoingMessageQueue, decryptCredentials, verifyInternalServiceKey, getInternalServiceKey } from "@chatcenter/shared";
+import { prisma, getRedis, normalizePhone, publishEvent, outgoingMessageQueue, verifyInternalServiceKey, getInternalServiceKey } from "@chatcenter/shared";
 import type { Logger } from "../lib/logger";
 import type { VoiceProvider, VoiceProviderResolver } from "../providers/voice-provider";
 import { NoActiveVoiceChannelError } from "../providers/resolve-provider";
@@ -93,6 +93,30 @@ function verifyCallbackToken(token: string): CallbackTokenPayload | null {
 }
 
 export { signCallbackToken, verifyCallbackToken };
+
+/**
+ * The name the missed-call message is approved under. Fixed: it is the
+ * "missed_call" role of conversation lib/required-templates.ts, which a person
+ * approves and submits there (B1, 2026-10-14).
+ */
+export const MISSED_CALL_TEMPLATE_NAME = "missed_call_callback";
+
+/**
+ * The tenant's APPROVED missed-call template, in the workspace's language
+ * when there is a choice, a number-bound one before an unbound one. Null when
+ * none is approved: the message is then not sent.
+ */
+export async function approvedMissedCallTemplate(tenantId: string) {
+  const rows = await prisma.messageTemplate.findMany({
+    where: { tenantId, name: MISSED_CALL_TEMPLATE_NAME, status: "APPROVED", isActive: true, channel: "WHATSAPP" as any },
+    select: { id: true, name: true, language: true, channelAccountId: true },
+  });
+  if (rows.length === 0) return null;
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { defaultLocale: true } }).catch(() => null);
+  const lang = String(tenant?.defaultLocale ?? "").toLowerCase().startsWith("he") ? "he" : "en";
+  const rank = (t: { language: string | null; channelAccountId: string | null }) => (t.language === lang ? 0 : 2) + (t.channelAccountId ? 0 : 1);
+  return [...rows].sort((a, b) => rank(a) - rank(b))[0]!;
+}
 
 export function createVoiceCallbackRouter(opts: {
   resolveProvider: VoiceProviderResolver;
@@ -555,10 +579,19 @@ export function createVoiceCallbackRouter(opts: {
       return;
     }
 
-    // Pick the tenant's active WhatsApp channel - same convention used
-    // by Broadcast. If none exists we can't send a template.
+    // The APPROVED missed-call template (B1, 2026-10-14): a required
+    // template a person approved and submitted (conversation
+    // lib/required-templates.ts, role missed_call). Nothing here creates or
+    // submits one; without an approved one the message is not sent.
+    const tmpl = await approvedMissedCallTemplate(session.tenantId);
+    if (!tmpl) {
+      res.status(409).json({ error: "template_not_approved" });
+      return;
+    }
+    // Sent from the number the template is approved on, else (an unbound
+    // one) the tenant's active WhatsApp number, as Broadcast does.
     const waChannel = await prisma.channelAccount.findFirst({
-      where: { tenantId: session.tenantId, channel: "WHATSAPP", isActive: true },
+      where: { tenantId: session.tenantId, channel: "WHATSAPP", isActive: true, ...(tmpl.channelAccountId ? { id: tmpl.channelAccountId } : {}) },
       select: { id: true },
     });
     if (!waChannel) {
@@ -616,11 +649,8 @@ export function createVoiceCallbackRouter(opts: {
       },
     });
 
-    // Approved template name lives in env so each tenant can override
-    // without a code change - the WABA template approval process is
-    // tenant-account-bound.
-    const templateName = process.env.MISSED_CALL_TEMPLATE_NAME || "missed_call_callback";
-    const templateLanguage = process.env.MISSED_CALL_TEMPLATE_LANGUAGE || "en";
+    const templateName = tmpl.name;
+    const templateLanguage = tmpl.language || "en";
 
     await outgoingMessageQueue.add("send", {
       tenantId: session.tenantId,
@@ -666,141 +696,10 @@ export function createVoiceCallbackRouter(opts: {
     res.json({ data: { messageId: message.id } });
   });
 
-  // ─── POST /callbacks/ensure-template (internal) ──────────────
-  // Make sure the tenant's WABA has the missed-call template approved.
-  // Idempotent: checks the existing list first via Graph API and only
-  // POSTs a create when the template name isn't already registered.
-  // Returns { exists, created } so the caller can show the admin
-  // whether anything new was submitted for review.
-  router.post("/callbacks/ensure-template", async (req: Request, res: Response) => {
-    if (!verifyInternalServiceKey(req.headers["x-internal-key"])) {
-      res.status(403).json({ error: "forbidden" });
-      return;
-    }
-    const tenantId = String((req.body as Record<string, unknown>)?.tenantId || "").trim();
-    if (!tenantId) {
-      res.status(400).json({ error: "tenantId_required" });
-      return;
-    }
-
-    const waChannel = await prisma.channelAccount.findFirst({
-      where: { tenantId, channel: "WHATSAPP", isActive: true },
-      select: { id: true, credentials: true },
-    });
-    if (!waChannel) {
-      res.status(409).json({ error: "no_whatsapp_channel" });
-      return;
-    }
-    let creds: Record<string, unknown>;
-    try {
-      creds = typeof waChannel.credentials === "string"
-        ? decryptCredentials(waChannel.credentials)
-        : (waChannel.credentials as Record<string, unknown>);
-    } catch (err) {
-      logger.error({ err }, "ensure-template: decrypt failed");
-      res.status(500).json({ error: "decrypt_failed" });
-      return;
-    }
-    const wabaId = String(creds.wabaId || "").trim();
-    const accessToken = String(creds.accessToken || "").trim();
-    if (!wabaId || !accessToken) {
-      res.status(409).json({ error: "missing_waba_credentials" });
-      return;
-    }
-
-    const templateName = process.env.MISSED_CALL_TEMPLATE_NAME || "missed_call_callback";
-    const templateLanguage = process.env.MISSED_CALL_TEMPLATE_LANGUAGE || "en";
-    const apiVersion = process.env.FB_API_VERSION || "v22.0";
-    const graphRoot = `https://graph.facebook.com/${apiVersion}`;
-
-    // Step 1: does it already exist?
-    try {
-      const listRes = await fetch(
-        `${graphRoot}/${encodeURIComponent(wabaId)}/message_templates?name=${encodeURIComponent(templateName)}`,
-        { headers: { Authorization: `Bearer ${accessToken}` } },
-      );
-      if (listRes.ok) {
-        const json = await listRes.json() as { data?: Array<{ name?: string; status?: string; language?: string }> };
-        const hit = (json.data ?? []).find(
-          (t) => t.name === templateName && (!t.language || t.language === templateLanguage),
-        );
-        if (hit) {
-          res.json({ data: { exists: true, created: false, status: hit.status || "UNKNOWN" } });
-          return;
-        }
-      } else {
-        const txt = await listRes.text().catch(() => "");
-        logger.warn({ status: listRes.status, body: txt.slice(0, 200) }, "ensure-template: list failed; will attempt create");
-      }
-    } catch (err) {
-      logger.warn({ err }, "ensure-template: list threw; will attempt create");
-    }
-
-    // Step 2: create. Approved template content is intentionally
-    // generic - admins can change the BODY copy by editing it in
-    // Meta Business Manager after first approval. The URL button is
-    // the load-bearing part and must keep the {{1}} variable suffix
-    // because we paste a fresh signed token there on each send.
-    // VOICE origin, not the application one - this URL is baked into an
-    // approved WhatsApp template and cannot be corrected without a re-approval.
-    const baseUrl = publicBaseUrl.replace(/\/$/, "");
-    const urlTemplate = `${baseUrl}/api/voice-copilot/callbacks/click/{{1}}`;
-    const exampleToken = "examplepayload.examplesignature";
-    const createBody = {
-      name: templateName,
-      language: templateLanguage,
-      category: "UTILITY",
-      components: [
-        {
-          // Agent-facing copy: {{1}} is the customer's name/phone the
-          // sender passes in templateComponents.body[].parameters[0].
-          // Tap the URL button → server dials this agent's mobile, then
-          // bridges the customer in once they pick up.
-          type: "BODY",
-          text: "{{1}} tried to reach you. Tap below to call them back - we'll ring your phone first.",
-          example: { body_text: [["Omer Serruya"]] },
-        },
-        {
-          type: "BUTTONS",
-          buttons: [
-            {
-              type: "URL",
-              text: "Call them back",
-              url: urlTemplate,
-              example: [`${baseUrl}/api/voice-copilot/callbacks/click/${exampleToken}`],
-            },
-          ],
-        },
-      ],
-    };
-    try {
-      const createRes = await fetch(`${graphRoot}/${encodeURIComponent(wabaId)}/message_templates`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(createBody),
-      });
-      const txt = await createRes.text().catch(() => "");
-      if (!createRes.ok) {
-        // 409-ish "already exists" sometimes returns inside a 400 body.
-        // We treat any "name already exists" response as success.
-        if (/already exists/i.test(txt)) {
-          res.json({ data: { exists: true, created: false, status: "ALREADY_EXISTS" } });
-          return;
-        }
-        logger.warn({ status: createRes.status, body: txt.slice(0, 500) }, "ensure-template: create failed");
-        res.status(502).json({ error: "create_failed", detail: txt.slice(0, 300) });
-        return;
-      }
-      const json = (() => { try { return JSON.parse(txt) as { status?: string; id?: string }; } catch { return {}; } })();
-      res.json({ data: { exists: false, created: true, status: json.status || "PENDING_REVIEW", templateId: json.id } });
-    } catch (err: any) {
-      logger.error({ err }, "ensure-template: create threw");
-      res.status(502).json({ error: "create_threw", detail: err?.message });
-    }
-  });
+  // POST /callbacks/ensure-template is gone (B1, 2026-10-14): it created the
+  // missed-call template at Meta by itself, in English, with no person
+  // approving it. The template is a required template now, approved and
+  // submitted by a person on the number's required templates.
 
   return router;
 }

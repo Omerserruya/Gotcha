@@ -1,0 +1,340 @@
+@layer features {
+  /*
+   * 09e · Add a step (design 6): a 1040px sheet - title and the path's line,
+   * search, close - over four columns divided by rules: Triggers (red),
+   * Logic (blue), Send (green), Do (brown). Each step: name, line, and the
+   * channels it works on; dimmed where it cannot run.
+   */
+  .sheet {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-dialog);
+    display: flex;
+    flex-direction: column;
+    inline-size: min(1040px, calc(100vw - var(--space-40)));
+    block-size: min(760px, calc(100dvh - var(--space-40)));
+    margin: auto;
+    overflow: hidden;
+    border-radius: 18px;
+    background-color: var(--panel-base);
+    box-shadow: 0 30px 70px -20px rgb(0 0 0 / 50%);
+    line-height: normal;
+  }
+
+  .head {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    padding: 20px 24px 16px;
+    border-block-end: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .titles {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .title {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+  }
+
+  .context {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .search {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    inline-size: 280px;
+    padding: 9px 12px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-field);
+    color: var(--text-faint);
+  }
+
+  .search input {
+    flex: 1;
+    min-inline-size: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-primary);
+    outline: none;
+  }
+
+  .close {
+    display: grid;
+    place-items: center;
+    inline-size: 30px;
+    block-size: 30px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .unread {
+    margin: 0;
+    padding: 24px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .columns {
+    display: grid;
+    flex: 1;
+    grid-template-columns: repeat(4, 1fr);
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 18px 14px;
+  }
+
+  .group + .group {
+    border-inline-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .groupTitle {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin: 0 10px 6px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .groupTitle::before {
+    content: '';
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 2px;
+    background-color: var(--intent-urgent-edge);
+  }
+
+  .groupTitle[data-group='logic']::before {
+    background-color: var(--ai-avatar-text);
+  }
+
+  .groupTitle[data-group='send']::before {
+    background-color: var(--signal-done-text);
+  }
+
+  .groupTitle[data-group='do']::before {
+    background-color: var(--intent-blocked-text);
+  }
+
+  .groupNote {
+    margin-inline-start: auto;
+    letter-spacing: 0.04em;
+    text-transform: none;
+  }
+
+  .items {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    inline-size: 100%;
+    padding: 8px 10px;
+    border: var(--border-width-thin) solid transparent;
+    border-radius: 10px;
+    background: none;
+    color: var(--text-primary);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  button.item:hover,
+  button.item:focus-visible {
+    border-color: var(--border-default);
+    background-color: var(--panel-field);
+  }
+
+  .item[data-unavailable] {
+    color: var(--text-faint);
+    cursor: default;
+  }
+
+  .item[data-unavailable] .itemName {
+    color: var(--text-muted);
+  }
+
+  .itemText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .itemName {
+    font-size: 12.5px;
+  }
+
+  .itemLine {
+    font-size: 10.5px;
+    color: var(--text-subtle);
+  }
+
+  .channels {
+    display: inline-flex;
+    flex: none;
+    gap: 3px;
+    padding-block-start: 2px;
+    color: var(--text-muted);
+  }
+
+  /*
+   * Each channel on the shared plate (`ChannelPlate`), in its brand's own
+   * colours; grey only where the step cannot run. A brand mark carries its
+   * colours on the element, so `color` cannot grey it - the filter does.
+   */
+  .item[data-unavailable] .channels {
+    filter: grayscale(1);
+  }
+
+  .dangerButton {
+    padding: 9px 16px;
+    border: 0;
+    border-radius: 9px;
+    background-color: var(--intent-urgent-text);
+    color: var(--frame-text);
+    font: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+
+  .dangerButton:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  /* New automation: the trigger chosen, then what it cannot go without. */
+  .setup {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-block-start: 14px;
+    line-height: normal;
+  }
+
+  .chosen {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .field input {
+    padding: 9px 12px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 9px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .days {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .daysTitle {
+    flex-basis: 100%;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .day {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    font-size: 12px;
+  }
+
+  .problem {
+    margin: 0;
+    font-size: 12px;
+    color: var(--intent-urgent-text);
+  }
+
+  .setupActions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    padding: 9px 16px;
+    border-radius: 9px;
+    font: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+
+  .primaryButton {
+    border: 0;
+    background-color: var(--text-primary);
+    color: var(--frame-text);
+  }
+
+  .primaryButton:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .secondaryButton {
+    border: var(--border-width-thin) solid var(--border-muted);
+    background-color: var(--panel-field);
+    color: var(--text-secondary);
+  }
+
+  @media (width <= 900px) {
+    .columns {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .search {
+      inline-size: auto;
+      flex: 1;
+    }
+  }
+}

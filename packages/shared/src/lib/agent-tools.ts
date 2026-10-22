@@ -13,6 +13,8 @@
 
 export interface AgentToolContext {
   tenantId: string;
+  /** The AI employee acting: its own stricter tool levels apply at dispatch (A1). */
+  aiAgentId?: string;
   conversationId?: string;
   /** Required for link_customer_identifier dispatch. */
   contactId?: string;
@@ -437,7 +439,7 @@ export const CLOSE_CONVERSATION_TOOL = {
         },
         summary: {
           type: "string",
-          description: "1–2 sentence outcome for the CRM record. Customer-language not required.",
+          description: "1-2 sentence outcome for the CRM record. Customer-language not required.",
         },
       },
       required: ["resolution", "summary"],
@@ -888,11 +890,11 @@ export const SEND_PRODUCT_CARD_TOOL = {
       properties: {
         product_id: {
           type: "string",
-          description: "Shopify product id, from a product search or lookup. Preferred.",
+          description: "The store's product id, from a product search or lookup. Preferred.",
         },
         handle: {
           type: "string",
-          description: "Shopify product handle, if you have that instead of an id.",
+          description: "The product's handle (Shopify only), if you have that instead of an id.",
         },
         variant_id: {
           type: "string",
@@ -926,8 +928,8 @@ export const SEND_PRODUCT_CAROUSEL_TOOL = {
           items: {
             type: "object",
             properties: {
-              product_id: { type: "string", description: "Shopify product id. Preferred." },
-              handle: { type: "string", description: "Shopify product handle." },
+              product_id: { type: "string", description: "The store's product id. Preferred." },
+              handle: { type: "string", description: "The product's handle (Shopify only)." },
               variant_id: { type: "string", description: "Variant id, only if already chosen." },
               reason: { type: "string", description: "One short sentence on why this one fits." },
             },
@@ -1058,14 +1060,11 @@ export async function buildAgentToolsForAIAgent(
   let integrationTools: Array<Record<string, unknown>> = [];
   try {
     const { prisma } = await import("./prisma");
+    const { loadIntegrationAccess, agentGrantWhere } = await import("./integration-access");
+    // Granted + enabled + CONNECTED + on the employee's allowlist of systems.
+    const access = await loadIntegrationAccess(tenantId, aiAgentId);
     const rows = await prisma.agentToolPermission.findMany({
-      where: {
-        tenantId,
-        aiAgentId,
-        isAllowed: true,
-        tenantTool: {
-          isEnabled: true,
-          tenantIntegration: { status: "CONNECTED" },
+      where: agentGrantWhere(tenantId, aiAgentId, access, {
           // Calendar tools are NOT surfaced through this HTTP-catalog path, to
           // avoid double-surfacing the same tool under two names. Availability is
           // the first-class `check_availability` built-in (validated against the
@@ -1076,8 +1075,7 @@ export async function buildAgentToolsForAIAgent(
           // surfaced. This exclusion is purely routing (which path), not a
           // capability/authorization gate.
           catalogTool: { integration: { category: { not: "CALENDAR" } } },
-        },
-      },
+      }) as any,
       include: {
         tenantTool: {
           include: { catalogTool: true },
@@ -1285,7 +1283,74 @@ export async function dispatchToolCall(
     }
   } catch { /* unparseable content is not a countable failure */ }
 
+  void recordCatalogueDemand(toolName, parsedArgs, result.content, ctx);
+
   return result;
+}
+
+/**
+ * Tools that answer "do you sell this?".
+ *
+ * Matched on the bare name so a dotted integration form (`shopify.search_products`)
+ * counts as the same act - the prefix is a routing detail, not a different
+ * question. Vendor-neutral by construction: this sits at the ONE dispatch
+ * boundary every connector goes through, so a non-Shopify catalogue is
+ * instrumented the day it is added, with nothing to remember.
+ */
+const CATALOGUE_SEARCH_TOOLS = new Set([
+  "search_products", "product_search", "find_product", "find_products", "list_products",
+]);
+
+/**
+ * Record what a shopper asked the catalogue for, and whether it had one.
+ *
+ * The MISS is the point - "22 people asked for navy towels this week, you do
+ * not stock them" - but hits are recorded too, so a term that stops matching
+ * after a product is delisted shows up as a change in an existing row rather
+ * than as a brand-new gap. Those are different things and the owner acts on
+ * them differently.
+ *
+ * Never throws and never awaited by the caller: a shopper's answer must not
+ * depend on our bookkeeping about it.
+ */
+async function recordCatalogueDemand(
+  toolName: string,
+  args: Record<string, unknown>,
+  content: string | undefined,
+  ctx: AgentToolContext,
+): Promise<void> {
+  try {
+    const bare = toolName.includes(".") ? toolName.slice(toolName.lastIndexOf(".") + 1) : toolName;
+    if (!CATALOGUE_SEARCH_TOOLS.has(bare)) return;
+
+    const term = String((args.query ?? args.q ?? args.search ?? "") || "").trim();
+    // An empty query is "show me the catalogue", not demand for anything.
+    if (!term) return;
+    if (!ctx.tenantId) return;
+
+    const payload = JSON.parse(content || "null");
+    // A failed call says nothing about the catalogue - it says the connector
+    // was unreachable. Recording it as "not stocked" would invent a gap out of
+    // an outage, and the owner would go looking for a product they already sell.
+    if (payload && typeof payload === "object" && !Array.isArray(payload) && payload.ok === false) return;
+
+    const rows = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.products)
+        ? payload.products
+        : Array.isArray(payload?.results)
+          ? payload.results
+          : null;
+    if (rows === null) return;
+
+    const { recordProductDemand } = await import("./knowledge-gaps");
+    await recordProductDemand({
+      tenantId: ctx.tenantId,
+      term,
+      inCatalogue: rows.length > 0,
+      askerKey: ctx.conversationId ?? null,
+    });
+  } catch { /* bookkeeping never breaks the answer */ }
 }
 
 async function dispatchToolCallInner(
@@ -1367,13 +1432,14 @@ async function dispatchToolCallInner(
   }
 
   try {
-    const { evaluateToolGate, createApprovalRequest } = await import("./tool-gate").then(
+    const { evaluateToolGate, createApprovalRequest, describeApprovalAction } = await import("./tool-gate").then(
       async (g) => ({
         evaluateToolGate: g.evaluateToolGate,
         createApprovalRequest: (await import("./approval-requests")).createApprovalRequest,
+        describeApprovalAction: (await import("./approval-requests")).describeApprovalAction,
       }),
     );
-    const gate = await evaluateToolGate(ctx.tenantId, name);
+    const gate = await evaluateToolGate(ctx.tenantId, name, undefined, ctx.aiAgentId);
     if (gate.decision === "DENY") {
       return {
         toolCallId: toolCall.id,
@@ -1496,7 +1562,9 @@ async function dispatchToolCallInner(
         messageId: ctx.messageId,
         tool: name,
         params: args,
-        summary: summarizeToolCall(name, args),
+        // Was `summarizeToolCall`, which rendered "issue_refund()" - the call,
+        // not the act. Nine rows read like that.
+        summary: describeApprovalAction(name, args),
         reason: gate.reason,
         // riskLevel here is a display field on the ApprovalRequest row, not a
         // gating signal - the gate decision lives in tool-gate.ts. Tag as
@@ -2170,11 +2238,4 @@ function str(raw: unknown): string | null {
   return v ? v.slice(0, 200) : null;
 }
 
-function summarizeToolCall(name: string, args: Record<string, unknown>): string {
-  const preview = Object.entries(args)
-    .filter(([, v]) => v !== undefined && v !== null && v !== "")
-    .slice(0, 3)
-    .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
-    .join(", ");
-  return preview ? `${name}(${preview})` : `${name}()`;
-}
+

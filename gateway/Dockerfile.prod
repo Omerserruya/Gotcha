@@ -1,22 +1,18 @@
-# Production gateway = API reverse-proxy + two static sites in one nginx image.
+# Production gateway = API reverse-proxy + the static marketing sites in one
+# nginx image. The application is NOT here: since 2026-10-21 it is the
+# frontend-v2 container, proxied at `location /`. The legacy frontend/ is code
+# only and its export is no longer built or copied.
 #
-#   frontend/out  the application, served on app.gotcha.co.il
-#   landing/out   the marketing site, served on gotcha.co.il, trust. and help.
+#   landing/out             the marketing site: gotcha.co.il, trust. and help.
+#   campaigns/out           campaign landings: go.gotcha.co.il
+#   frontend/public/widget  the embeddable widget, served at /widget/
 #
 # Build context MUST be the repo root so this Dockerfile can COPY from
-# frontend/, landing/ AND gateway/.
+# frontend/public, landing/, campaigns/ AND gateway/.
 #
-# IMPORTANT: this Dockerfile assumes both `out/` directories already exist.
-# Generate them on the HOST before building:
+# The `out/` directories must exist before building; generate them on the HOST:
 #
 #   cd landing && NEXT_TELEMETRY_DISABLED=1 NEXT_OUTPUT=export npm run build
-#
-# and, for the application:
-#
-#   cd frontend && NEXT_TELEMETRY_DISABLED=1 NEXT_OUTPUT=export \
-#     NEXT_PUBLIC_API_URL=… NEXT_PUBLIC_WS_URL=… \
-#     NEXT_PUBLIC_META_APP_ID=… NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID=… \
-#     npm run build
 #
 # Then from repo root:
 #
@@ -34,8 +30,21 @@
 
 FROM nginx:alpine
 
-# Pre-built Next.js static exports (run the builds on the host first).
-COPY frontend/out /usr/share/nginx/html
+# The legacy app's public files still linked from outside the app: the logo in
+# every brand email (${app}/full_icon_white.png), integration logo URLs stored
+# in the database, channel icons, favicons. nginx serves them and falls back to
+# the app for any name not here.
+COPY frontend/public/icons        /usr/share/nginx/legacy-public/icons
+COPY frontend/public/integrations /usr/share/nginx/legacy-public/integrations
+COPY frontend/public/platforms    /usr/share/nginx/legacy-public/platforms
+COPY frontend/public/favicon.ico frontend/public/favicon-16.png frontend/public/favicon-32.png \
+     frontend/public/favicon-48.png frontend/public/favicon-96.png frontend/public/apple-touch-icon.png \
+     frontend/public/logo.png frontend/public/logo_icon.png frontend/public/full_icon_white.png \
+     /usr/share/nginx/legacy-public/
+# The embeddable widget, served by nginx itself at /widget/ (2026-10-21). The
+# publish script runs `node scripts/widget/build-widget.mjs --check` first, so
+# the files copied here are the current build.
+COPY frontend/public/widget /usr/share/nginx/widget
 
 # The marketing site is a second export with its own root. Kept separate rather
 # than merged under one tree: both are Next.js builds with their own /_next

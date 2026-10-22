@@ -1,4 +1,5 @@
 import { prisma, outgoingMessageQueue, createWorker, scheduledMessageQueue, flowResumeQueue } from "@chatcenter/shared";
+import { isOptedOutOn } from "@chatcenter/shared/src/lib/marketing-optout";
 
 /** Walk the template body in placeholder order. Mirrors the broadcast
  *  worker's helper so scheduled template sends honor named + numeric
@@ -97,8 +98,8 @@ async function processScheduledMessages(): Promise<void> {
         scheduledMessage.recipientExternalId,
       );
       if (contact) {
-        const optOutChannels = ((contact as any).optOutChannels as string[]) || [];
-        if (optOutChannels.includes(scheduledMessage.channel as string)) {
+        // Compared without case: opt-outs written by a "STOP" reply are uppercase.
+        if (isOptedOutOn((contact as any).optOutChannels, scheduledMessage.channel as string)) {
           await prisma.scheduledMessage.update({
             where: { id: scheduledMessage.id },
             data: { status: "CANCELLED", error: "Recipient opted out" },

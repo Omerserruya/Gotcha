@@ -109,27 +109,31 @@ export async function saveChannelConfig(
   return toChannel(row);
 }
 
+/**
+ * Only the `install` block is written, in one statement on the stored row.
+ * It used to write back the WHOLE config read at bootstrap, so a merchant's
+ * save landing between a visitor's bootstrap and its heartbeat was undone.
+ */
 export async function recordHeartbeat(
   channelId: string,
   config: ShopifyLiveChatConfig,
   seen: { themeId?: string | null; path?: string | null },
 ): Promise<void> {
-  const next: ShopifyLiveChatConfig = {
-    ...config,
-    install: {
-      ...config.install,
-      lastHeartbeatAt: new Date().toISOString(),
-      lastThemeId: seen.themeId ?? config.install.lastThemeId,
-      lastSeenPath: seen.path ?? config.install.lastSeenPath,
-    },
+  const install = {
+    lastHeartbeatAt: new Date().toISOString(),
+    lastThemeId: seen.themeId ?? config.install.lastThemeId,
+    lastSeenPath: seen.path ?? config.install.lastSeenPath,
   };
-  await prisma.channelAccount.update({
-    where: { id: channelId },
-    data: {
-      platformMeta: { shopifyLiveChat: next } as any,
-      lastHealthCheck: new Date(),
-    },
-  });
+  await prisma.$executeRaw`
+    UPDATE "channel_accounts"
+       SET "platform_meta" = jsonb_set(
+             COALESCE("platform_meta", '{}'::jsonb),
+             '{shopifyLiveChat}',
+             COALESCE("platform_meta"->'shopifyLiveChat', '{}'::jsonb)
+               || jsonb_build_object('install', COALESCE("platform_meta"->'shopifyLiveChat'->'install', '{}'::jsonb) || ${JSON.stringify(install)}::jsonb),
+             true),
+           "last_health_check" = ${new Date()}
+     WHERE "id" = ${channelId}`;
 }
 
 // ─── Public bootstrap resolution ─────────────────────────────

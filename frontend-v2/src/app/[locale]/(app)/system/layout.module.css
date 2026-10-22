@@ -1,0 +1,43 @@
+@layer shell {
+  /*
+   * The console splits the work surface as Settings does (settings/
+   * layout.module.css): its sections on one side, the page on the other.
+   * No footnote row - the console has none.
+   */
+  .split {
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--size-settings-nav) 1fr;
+    grid-template-areas: 'nav page';
+    block-size: 100%;
+    min-block-size: 0;
+  }
+
+  .section {
+    grid-area: page;
+    min-inline-size: 0;
+    min-block-size: 0;
+    overflow-y: auto;
+    padding-block: var(--space-32);
+    padding-inline: var(--space-40);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  /* As Settings: below this the sections become a strip, the page first in reading. */
+  @media (width <= 900px) {
+    .split {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr;
+      grid-template-areas:
+        'nav'
+        'page';
+    }
+
+    .section {
+      padding-block: var(--space-22);
+      padding-inline: var(--space-20);
+    }
+  }
+}

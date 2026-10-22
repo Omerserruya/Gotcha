@@ -1,0 +1,915 @@
+@layer features {
+  /*
+   * Settings · Workspace - screen 11.
+   *
+   * `padding: 15px 18px; gap: 20px; label width 190px` in the source, and the
+   * rows share one card with a hairline between them rather than each being a
+   * card, so the six facts read as one list.
+   */
+  .facts {
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+    min-inline-size: 0;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-20);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-18);
+    line-height: normal;
+  }
+
+  .row + .row,
+  .rowEditing {
+    border-block-start: var(--border-width-thin) solid var(--panel-base);
+  }
+
+  .label {
+    inline-size: var(--size-fact-label);
+    flex: none;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .value {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: var(--font-size-item);
+  }
+
+  /* A fact the workspace has not filled in. Absent, never an empty string. */
+  .unset {
+    color: var(--text-faint);
+  }
+
+  /* 02: plain grey "Edit", 11px - a link or a button, never underlined. */
+  .edit {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+    text-decoration: none;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    flex: none;
+  }
+
+  .edit:hover {
+    color: var(--text-primary);
+  }
+
+  /*
+   * Edit closes the row, at its END side in either direction (Omer,
+   * 2026-10-12, W3) - whatever fills the row before it, or does not.
+   */
+  .row > .edit {
+    margin-inline-start: auto;
+  }
+
+  /*
+   * A row that edits in place: the whole row starts it, and its Edit is the
+   * one tab stop. Focus is drawn on the ROW, inset, because the card clips
+   * anything outside it - so a keyboard user sees the line they are on.
+   */
+  .rowEditable {
+    cursor: pointer;
+  }
+
+  .rowEditable:hover {
+    background-color: var(--table-head-surface);
+  }
+
+  .rowEditable:hover .edit {
+    color: var(--text-primary);
+  }
+
+  .rowEditable:has(.edit:focus-visible) {
+    outline: var(--focus-ring-width) solid var(--border-focus);
+    outline-offset: calc(-1 * var(--focus-ring-width));
+  }
+
+  .rowEditable .edit:focus-visible {
+    outline: none;
+  }
+
+  /* A value with lines under it - the website, then what the scan read. */
+  .valueStack {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  .valueStack .rowCaveat {
+    margin: 0;
+  }
+
+  /* ── The row, while it is being edited ──────────────────────────────── */
+  .rowEditing {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-9);
+    padding-block: var(--space-15);
+    padding-inline: var(--space-18);
+    background-color: var(--panel-base);
+  }
+
+  .editFields {
+    display: flex;
+    gap: var(--space-12);
+    flex-wrap: wrap;
+  }
+
+  /*
+   * The week, as a table rather than seven stacked forms.
+   *
+   * It was built as seven flex rows, each carrying its own "Opens" and
+   * "Closes" labels: the headings repeated down the page and landed between
+   * rows, the columns drifted rightward, and the one thing the form exists to
+   * say - which pair of times belongs to which day - became unreadable.
+   *
+   * One grid, three columns, one set of headings. Every cell in a column
+   * shares an origin because the grid gives it one, not because each row
+   * happens to be the same width.
+   */
+  .hoursGrid {
+    display: grid;
+    grid-template-columns: minmax(var(--size-hours-day), auto) 1fr 1fr;
+    gap: var(--space-8) var(--space-12);
+    align-items: center;
+    max-inline-size: var(--size-reading);
+  }
+
+  .hoursHeading {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .hoursDay {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-body-sm);
+  }
+
+  .hoursInput {
+    inline-size: 100%;
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-item);
+    padding-block: var(--space-7);
+    padding-inline: var(--space-9);
+  }
+
+  .hoursInput:focus-visible {
+    outline: var(--focus-ring-width) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  /* A closed day keeps its cells, so the grid does not reflow as days toggle. */
+  .hoursInput:disabled {
+    color: var(--text-disabled);
+    background-color: var(--panel-inset);
+  }
+
+  .editActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  /*
+   * A per-row message: the field's own validation, or the notice that someone
+   * else saved first. It sits with the row rather than at the top of the page,
+   * because that is where the thing to fix is.
+   */
+  .rowNote {
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  .rowNoteQuiet {
+    color: var(--text-subtle);
+  }
+
+  /* ── Voice ──────────────────────────────────────────────────────────── */
+  .voiceGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-16);
+    align-items: start;
+  }
+
+  @media (width <= 900px) {
+    .voiceGrid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .voiceField {
+    inline-size: 100%;
+    min-block-size: 160px;
+    resize: block;
+    font: inherit;
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-primary);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding: var(--space-12);
+  }
+
+  .voiceField:focus-visible {
+    outline: var(--focus-ring-width) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .voiceFooter {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    margin-block-start: var(--space-9);
+    flex-wrap: wrap;
+  }
+
+  /* Counts toward the 40-character minimum, so it is caught here, not by a 422. */
+  .counter {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+    margin-inline-start: auto;
+  }
+
+  /* ── Narrow ─────────────────────────────────────────────────────────── */
+  @media (width <= 600px) {
+    /*
+     * The three columns stop being columns.
+     *
+     * A 190px label beside a fixed Edit button leaves a phone about five
+     * characters of value: "Urban Supply - GOTCHA Demo" rendered as five
+     * stacked lines, and "What you sell" became a vertical ribbon dozens of
+     * lines deep that pushed the rest of the page off the screen.
+     *
+     * The label goes above its value, which is what a label does when there is
+     * no room beside it. Placement is explicit rather than auto, because the
+     * optional "Saved" note sits between the value and the button in the DOM
+     * and auto-placement would deal it into the button's cell.
+     */
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: var(--space-4) var(--space-12);
+      align-items: start;
+    }
+
+    .row .label {
+      grid-row: 1;
+      grid-column: 1 / -1;
+      inline-size: auto;
+    }
+
+    .row .value,
+    .row .valueStack {
+      grid-row: 2;
+      grid-column: 1;
+    }
+
+    .row .edit {
+      grid-row: 2;
+      grid-column: 2;
+    }
+
+    .row .rowNoteQuiet {
+      grid-row: 3;
+      grid-column: 1 / -1;
+    }
+
+    /*
+     * The week loses its heading row and gains a line per day.
+     *
+     * Three columns at this width squeeze both time inputs below the width a
+     * time control needs. The day now spans its own line with its two times
+     * side by side under it, and the headings go: every input already carries
+     * an `aria-label` reading "Sunday - Opens", so nothing is lost with them.
+     */
+    .hoursGrid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .hoursSpacer,
+    .hoursHeading {
+      display: none;
+    }
+
+    .hoursDay {
+      grid-column: 1 / -1;
+      margin-block-start: var(--space-4);
+    }
+  }
+
+  .counterShort {
+    color: var(--intent-urgent-text);
+  }
+
+  /* The sample. A real reply, so it is set like one rather than like a field. */
+  .sample {
+    background-color: var(--panel-inset);
+    border: var(--border-width-thin) solid var(--border-subtle);
+    border-radius: var(--radius-control);
+    padding: var(--space-14);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-primary);
+  }
+
+  .sampleCaption {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    margin-block-start: var(--space-7);
+  }
+
+  .sampleUnavailable {
+    color: var(--text-muted);
+  }
+
+  /* ── Never say ──────────────────────────────────────────────────────── */
+  /* Inside its card: rows, not a second card. */
+  .claims {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .claim {
+    display: flex;
+    align-items: center;
+    gap: var(--space-9);
+    padding-block: var(--space-4);
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  .claim + .claim,
+  .claimAdd {
+    border-block-start: var(--border-width-thin) solid var(--panel-base);
+  }
+
+  .claimText {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .claimRemove {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    flex: none;
+  }
+
+  .claimRemove:hover {
+    color: var(--intent-urgent-text);
+  }
+
+  .claimAdd {
+    display: flex;
+    gap: var(--space-8);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-18);
+  }
+
+  .sectionTitle {
+    font-size: var(--font-size-item);
+    font-weight: var(--font-weight-semibold);
+    margin-block-end: var(--space-9);
+  }
+
+  .status {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .statusError {
+    color: var(--intent-urgent-text);
+  }
+
+  .provenanceNote {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /* The inline "From website" badge, where the design puts it. */
+  /*
+   * 02's "From website" chip - on the rows and as the banner's legend, one
+   * look for both: violet, radius 6, `padding:3px 8px`, 10.5px, a dot.
+   */
+  /* "Also found" - what else the scan saw, as quiet chips. */
+  .alsoFound {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-block-start: 6px;
+  }
+
+  .alsoFoundLabel {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .alsoFoundChip {
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--panel-well);
+    font-size: var(--font-size-caption);
+    color: var(--intent-neutral-text);
+  }
+
+  .fromWebsite {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-inline-start: var(--space-8);
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--ai-avatar-surface);
+    font-size: var(--font-size-counter);
+    line-height: normal;
+    color: var(--ai-avatar-text);
+    white-space: nowrap;
+  }
+
+  .fromWebsite::before {
+    content: '';
+    inline-size: 5px;
+    block-size: 5px;
+    border-radius: 50%;
+    background-color: currentcolor;
+  }
+
+  /* A caveat under a value - never a second value. */
+  .rowCaveat {
+    grid-column: 2;
+    margin: var(--space-2) 0 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  /* The header above the fact rows. */
+  .factsIntro {
+    margin: 0 0 var(--space-12);
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /* ── Screen 11c · opening hours ──────────────────────────────────────── */
+
+  .hoursCopy {
+    align-self: start;
+    margin-block-start: var(--space-8);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-body);
+    background: none;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-6);
+    padding-inline: var(--space-12);
+    cursor: pointer;
+  }
+
+  .hoursNote {
+    margin: var(--space-4) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-calm-text);
+  }
+
+  /*
+   * What this screen cannot store, said rather than omitted. A missing
+   * control is indistinguishable from one somebody failed to find.
+   */
+  .hoursAbsent {
+    margin: var(--space-8) 0 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .hoursSectionHeading {
+    margin: var(--space-14) 0 var(--space-6);
+    font-size: var(--font-size-caption);
+    font-weight: 500;
+    color: var(--text-subtle);
+  }
+
+  .hoursChoice {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .hoursChoiceLabel {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .hoursSelect {
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-12);
+  }
+
+  /* ── Screen 11d · languages ──────────────────────────────────────────── */
+
+  .languages {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .languageRows {
+    list-style: none;
+    margin: var(--space-6) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .languageRow {
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  /* The two cards under the facts: the voice (the rest) and Never say (340). */
+  .cards {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-14);
+    line-height: normal;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    min-inline-size: 0;
+    padding: 18px var(--space-20);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .card[data-card='voice'] {
+    flex: 1;
+  }
+
+  .card[data-card='claims'] {
+    flex: none;
+    inline-size: 340px;
+  }
+
+  .cardTitle {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  /* A quiet link at a card's foot: "Edit", "Add a rule", "Done". */
+  .cardLink {
+    align-self: flex-start;
+    padding: 0;
+    border: 0;
+    border-block-end: 1px solid var(--border-strong);
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .cardLink:hover {
+    color: var(--text-primary);
+  }
+
+  /* A card's Edit sits at the END side, as every row's does (W3). */
+  .cardLinkEnd {
+    align-self: flex-end;
+  }
+
+  /* The voice, read: its words at 13px - where 02 has tone chips. */
+  .voiceText {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    line-height: 1.5;
+    color: var(--text-body);
+  }
+
+  .voiceUnset {
+    color: var(--text-subtle);
+  }
+
+  /* A rule, read: a bullet. */
+  .claim::before {
+    content: '';
+    flex: none;
+    inline-size: 4px;
+    block-size: 4px;
+    border-radius: 50%;
+    background-color: var(--text-subtle);
+  }
+
+  .claimEmpty {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  @media (width < 64rem) {
+    .cards {
+      flex-direction: column;
+    }
+
+    .card[data-card='claims'] {
+      inline-size: auto;
+    }
+  }
+
+  /* The open row's editor, which owns the Enter/Esc keys. */
+  .rowEditor {
+    display: contents;
+  }
+}
+
+@layer features {
+  /* The drawers' Save: 02's dark button. */
+  .saveButton {
+    padding-block: var(--space-10);
+    padding-inline: var(--space-18);
+    border: none;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .saveButton:disabled {
+    cursor: wait;
+    opacity: 0.6;
+  }
+
+  /* ── 11c · the week: day 92 · switch · opens - closes · + Split ──────── */
+  .weekRows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .weekRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    padding-block: var(--space-6);
+  }
+
+  .weekDay {
+    flex: none;
+    inline-size: 92px;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .weekRow[data-open='no'] .weekDay {
+    color: var(--text-subtle);
+  }
+
+  .weekSwitch {
+    display: flex;
+    cursor: pointer;
+  }
+
+  /* 02's switch, as drawn: ink with its knob at the end when on. */
+  .weekPill {
+    position: relative;
+    flex: none;
+    inline-size: 32px;
+    block-size: 18px;
+    border-radius: 9px;
+    background-color: var(--border-strong);
+  }
+
+  .weekPill::after {
+    content: '';
+    position: absolute;
+    inset-block-start: 2px;
+    inset-inline-start: 2px;
+    inline-size: 14px;
+    block-size: 14px;
+    border-radius: var(--radius-round);
+    background-color: var(--panel-field);
+  }
+
+  .weekUse {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  /* Switched off, the week stays visible - quieter, not closed. */
+  .weekRows[data-in-use='no'] {
+    opacity: 0.55;
+  }
+
+  .weekUse:has(input:checked) .weekPill,
+  .weekSwitch:has(input:checked) .weekPill,
+  .weekPill[data-on='yes'] {
+    background-color: var(--action-base);
+  }
+
+  .weekUse:has(input:checked) .weekPill::after,
+  .weekSwitch:has(input:checked) .weekPill::after,
+  .weekPill[data-on='yes']::after {
+    inset-inline-start: 16px;
+  }
+
+  .weekSwitch:has(input:focus-visible) .weekPill {
+    outline: var(--focus-ring-width) solid var(--action-base);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .weekRange {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .weekTime {
+    inline-size: 76px;
+    padding: 7px var(--space-8);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-chip);
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .weekDash {
+    font-size: 16px;
+    color: var(--text-faint);
+  }
+
+  .weekClosed {
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .weekSplit {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-faint);
+    cursor: not-allowed;
+  }
+
+  .weekAbsent {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-subtle);
+  }
+}
+
+@layer features {
+  /* 11e on its own row: the row's label, the controls in the value column. */
+  .rowInline {
+    display: grid;
+    grid-template-columns: var(--size-fact-label) minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--space-20);
+    row-gap: var(--space-6);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-18);
+    border-block-start: var(--border-width-thin) solid var(--panel-base);
+    line-height: normal;
+  }
+
+  .inlineControls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .inlineSelect,
+  .inlineCombo {
+    padding-block: 7px;
+    padding-inline: var(--space-10);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-chip);
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .inlineCombo {
+    inline-size: 200px;
+  }
+
+  /* 11e's field for a typed value: the box takes the row, the buttons follow. */
+  .inlineInput,
+  .inlineText {
+    flex: 1;
+    min-inline-size: 0;
+    padding-block: 7px;
+    padding-inline: var(--space-10);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-chip);
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .inlineText {
+    flex-basis: 100%;
+    min-block-size: 72px;
+    line-height: var(--line-height-snug);
+    resize: block;
+  }
+
+  .inlineInput:focus-visible,
+  .inlineText:focus-visible {
+    outline: var(--focus-ring-width) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .inlineInput[aria-invalid='true'],
+  .inlineText[aria-invalid='true'] {
+    border-color: var(--intent-urgent-text);
+  }
+
+  .inlineSave {
+    padding-block: 7px;
+    padding-inline: var(--space-14);
+    border: none;
+    border-radius: var(--radius-chip);
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    cursor: pointer;
+  }
+
+  .inlineCancel {
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .inlineHint {
+    grid-column: 2;
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+}

@@ -123,6 +123,7 @@ vi.mock("../services/integration-provisioning.service", () => ({
 }));
 
 import router from "../routes/connectors-admin";
+import { consumeOAuthState } from "@chatcenter/shared";
 
 const SECRET = "core-app-secret";
 const SHOP = "urban-supply-dev.myshopify.com";
@@ -188,6 +189,14 @@ beforeEach(() => {
 
 // ─── Signature ───────────────────────────────────────────────
 
+// 2026-10-09: a refused callback lands on the v2 studio with a closed code
+// instead of plain text on the API host (which stranded the browser).
+const LANDING = "https://app.gotcha.co.il/studio/capabilities?system=shopify";
+const refusedWith = (res: any, code: string) => {
+  expect(res.status).toBe(302);
+  expect(res.headers.location).toBe(`${LANDING}&error=${code}`);
+};
+
 describe("callback signature", () => {
   it("accepts a correctly signed callback and links the workspace", async () => {
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
@@ -199,7 +208,10 @@ describe("callback signature", () => {
     const q = new URLSearchParams(callback());
     q.delete("hmac");
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${q}`);
-    expect(res.status).toBe(400);
+    refusedWith(res, "invalid_state");
+    // 2026-10-09: "before touching state" is checked, not assumed. The shop
+    // binding check would also refuse this one, which hid a skipped HMAC.
+    expect(consumeOAuthState).not.toHaveBeenCalled();
     expect(H.exchange).not.toHaveBeenCalled();
     expect(H.linkCalls).toHaveLength(0);
   });
@@ -208,7 +220,8 @@ describe("callback signature", () => {
     const q = new URLSearchParams(callback());
     q.set("hmac", "0".repeat(64));
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${q}`);
-    expect(res.status).toBe(400);
+    refusedWith(res, "invalid_state");
+    expect(consumeOAuthState).not.toHaveBeenCalled();
     expect(H.exchange).not.toHaveBeenCalled();
   });
 
@@ -216,7 +229,7 @@ describe("callback signature", () => {
     const base = { shop: SHOP, code: "auth-code-123", state: "minted-state" };
     const q = new URLSearchParams({ ...base, hmac: sign(base), shop: "attacker.myshopify.com" });
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${q}`);
-    expect(res.status).toBe(400);
+    refusedWith(res, "invalid_state");
     expect(H.exchange).not.toHaveBeenCalled();
   });
 });
@@ -227,16 +240,14 @@ describe("callback state", () => {
   it("rejects an EXPIRED state", async () => {
     H.stateResult.current = { ok: false, reason: "expired" };
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
-    expect(res.status).toBe(400);
-    expect(res.text).toBe("bad_state");
+    refusedWith(res, "invalid_state");
     expect(H.exchange).not.toHaveBeenCalled();
   });
 
-  it("rejects a REUSED state and says so distinctly", async () => {
+  it("rejects a REUSED state (told apart from forged only in our log)", async () => {
     H.stateResult.current = { ok: false, reason: "replayed" };
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
-    expect(res.status).toBe(400);
-    expect(res.text).toBe("state_already_used");
+    refusedWith(res, "invalid_state");
     expect(H.exchange).not.toHaveBeenCalled();
   });
 
@@ -244,7 +255,7 @@ describe("callback state", () => {
     const base = { shop: SHOP, code: "auth-code-123" };
     const q = new URLSearchParams({ ...base, hmac: sign(base) });
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${q}`);
-    expect(res.status).toBe(400);
+    refusedWith(res, "callback_error");
     expect(H.exchange).not.toHaveBeenCalled();
   });
 
@@ -257,8 +268,7 @@ describe("callback state", () => {
       claims: { ...WITH_INTENT.claims, shop: "some-other-store.myshopify.com" },
     };
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
-    expect(res.status).toBe(400);
-    expect(res.text).toBe("bad_state");
+    refusedWith(res, "invalid_state");
     expect(H.exchange).not.toHaveBeenCalled();
     expect(H.linkCalls).toHaveLength(0);
   });
@@ -271,8 +281,9 @@ describe("workspace linking", () => {
     H.stateResult.current = WITHOUT_INTENT;
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
     expect(res.status).toBe(302);
-    expect(res.headers.location).toContain("/settings/business-systems/shopify/finish");
-    expect(res.headers.location).toContain("handle=");
+    expect(res.headers.location).toContain("/studio/capabilities?system=shopify&pending=1&reason=claim");
+    // The handle travels in the HttpOnly cookie; the URL carries none.
+    expect(res.headers.location).not.toContain("handle=");
     // Nothing is written to any tenant yet.
     expect(H.linkCalls).toHaveLength(0);
     expect(H.pendingCalls[0]).toMatchObject({ shopDomain: SHOP });
@@ -307,7 +318,7 @@ describe("workspace linking", () => {
       claims: { tenantId: "", provider: "shopify", shop: SHOP, hasIntent: true, jti: "j" },
     };
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
-    expect(res.headers.location).toContain("/shopify/finish");
+    expect(res.headers.location).toContain("system=shopify&pending=1");
     expect(H.linkCalls).toHaveLength(0);
   });
 
@@ -316,7 +327,7 @@ describe("workspace linking", () => {
     const q = `${callback()}&tenantId=tenant-EVIL&workspaceId=tenant-EVIL`;
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${q}`);
     // Adding params breaks the signature, which is itself the defence.
-    expect(res.status).toBe(400);
+    refusedWith(res, "invalid_state");
     expect(H.linkCalls).toHaveLength(0);
   });
 
@@ -332,8 +343,9 @@ describe("workspace linking", () => {
   it("redirects with a conflict marker when the store belongs to another workspace", async () => {
     H.linkResult.current = { ok: false, reason: "shop_taken", conflictingTenantId: "tenant-Z" };
     const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    // 2026-10-09: on v2, for every flow (v1's target never read the param).
     expect(res.status).toBe(302);
-    expect(res.headers.location).toContain("shopify_install_error=shop_connected_elsewhere");
+    expect(res.headers.location).toBe(`${LANDING}&error=shop_connected_elsewhere`);
     expect(res.headers.location).not.toContain("tenant-Z");
   });
 
@@ -397,5 +409,69 @@ describe("GET /connectors/shopify/oauth/init - reauthorization only", () => {
     H.connection.current = { config: { shopDomain: SHOP } };
     const res = await request(app()).get("/api/connectors/shopify/oauth/init");
     expect(res.status).toBe(403);
+  });
+});
+
+// ─── The redesigned app (flow=redesign_studio) ───────────────
+
+describe("redesign_studio flow", () => {
+  const REDESIGN = { ...WITH_INTENT, claims: { ...WITH_INTENT.claims, flow: "redesign_studio" } };
+  const V2 = "https://app.gotcha.co.il/studio/capabilities";
+
+  it("★ a linked store lands on /studio/capabilities?system=shopify&connected=1", async () => {
+    H.stateResult.current = REDESIGN;
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toBe(`${V2}?system=shopify&connected=1`);
+  });
+
+  it("★ replacing a store parks it and lands pending=1 - the handle stays in the HttpOnly cookie, not the URL", async () => {
+    H.stateResult.current = REDESIGN;
+    H.replacing.current = "old-store.myshopify.com";
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toBe(`${V2}?system=shopify&pending=1&reason=replace_store`);
+    expect(res.headers.location).not.toContain("p".repeat(64));
+    expect(String(res.headers["set-cookie"] || "")).toContain("gotcha_shopify_pending=");
+    expect(H.linkCalls).toHaveLength(0);
+  });
+
+  it("a store held by another workspace → error=shop_connected_elsewhere in v2", async () => {
+    H.stateResult.current = REDESIGN;
+    H.linkResult.current = { ok: false, reason: "shop_taken", conflictingTenantId: "tenant-Z" };
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toBe(`${V2}?system=shopify&error=shop_connected_elsewhere`);
+  });
+
+  it("a failed token exchange → error=token_exchange_failed in v2", async () => {
+    H.stateResult.current = REDESIGN;
+    H.exchange.mockResolvedValue(null as any);
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toBe(`${V2}?system=shopify&error=token_exchange_failed`);
+  });
+
+  it("without the flow, replacing goes to the app's replace screen (the legacy finish page is gone)", async () => {
+    H.replacing.current = "old-store.myshopify.com";
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toContain("/studio/capabilities?system=shopify&pending=1&reason=replace_store");
+  });
+});
+
+describe("an install that began on Shopify (no GOTCHA session)", () => {
+  it("lands on the app's claim screen by default (the legacy finish page is gone)", async () => {
+    H.stateResult.current = WITHOUT_INTENT;
+    delete process.env.SHOPIFY_ANONYMOUS_INSTALL_LANDING;
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toContain("/studio/capabilities?system=shopify&pending=1&reason=claim");
+  });
+
+  it("★ with SHOPIFY_ANONYMOUS_INSTALL_LANDING=v2 it lands on v2 to claim, the handle only in the cookie", async () => {
+    H.stateResult.current = WITHOUT_INTENT;
+    process.env.SHOPIFY_ANONYMOUS_INSTALL_LANDING = "v2";
+    try {
+      const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+      expect(res.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=shopify&pending=1&reason=claim");
+      expect(String(res.headers["set-cookie"] || "")).toContain("gotcha_shopify_pending=");
+    } finally {
+      delete process.env.SHOPIFY_ANONYMOUS_INSTALL_LANDING;
+    }
   });
 });

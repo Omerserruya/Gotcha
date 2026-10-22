@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { autoMailReason } from "./auto-mail";
 import type {
   InboundAdapter,
   OutboundAdapter,
@@ -285,6 +286,17 @@ export async function fetchNewMessages(
 
       // Skip if sender is the account itself (self-sent)
       if (email.toLowerCase() === accountEmail.toLowerCase()) continue;
+
+      // A bounce, delivery report, auto-reply or bulk mail: nobody to answer.
+      const auto = autoMailReason({
+        headers: Object.fromEntries(headersArr.map((h) => [h.name, h.value])),
+        from: email,
+        contentType: header("Content-Type") || msgData.payload?.mimeType,
+      });
+      if (auto) {
+        console.log(`[Gmail] dropped auto-generated mail ${msgId}: ${auto}`);
+        continue;
+      }
 
       const messageIdHeader = parseMessageIdList(header("Message-ID"))[0];
       // The chain to inherit: what this email referenced, plus what it was a

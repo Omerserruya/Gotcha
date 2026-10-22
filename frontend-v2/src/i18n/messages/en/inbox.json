@@ -1,0 +1,494 @@
+{
+  "title": "Inbox",
+  "description": "Every conversation, and what GOTCHA knows about the person on the other end.",
+  "stream": {
+    "unavailable": "We couldn't read this conversation just now.",
+    "empty": "Nothing has been said here yet.",
+    "quotedMissing": "Replying to an earlier message we don't have.",
+    "voiceNoTranscript": "A voice note. GOTCHA can't read it out for you - you'll need to listen.",
+    "unknownType": "Something was sent here that we can't show yet.",
+    "customerRead": "read",
+    "delivered": "delivered",
+    "media": {
+      "image": "A photo.",
+      "sticker": "A sticker.",
+      "video": "A video.",
+      "document": "A file."
+    },
+    "system": {
+      "agent_claimed": "{name} took control",
+      "agent_transferred": "{from} transferred this to {to}",
+      "department_transferred": "This was transferred to another team",
+      "returned_to_ai": "Handed back to the AI",
+      "ai_stopped": "AI stopped",
+      "ai_bot_escalation": "GOTCHA handed the conversation to the team",
+      "ai_bot_escalation_because": "GOTCHA handed the conversation to the team: {reason}",
+      "flow_ended_handoff": "The automation ended and handed the conversation to the team",
+      "visitor_requested_human": "The visitor asked for a person in the website chat",
+      "auto_closed": "Closed automatically after no activity",
+      "whatsapp_app_takeover": "Someone replied from the WhatsApp Business app, so GOTCHA stopped replying",
+      "continued_on_whatsapp": "The conversation continues on WhatsApp",
+      "continued_from_website": "Continued from the website chat",
+      "approval_execution_failed": "An approved action failed",
+      "other": "System update",
+      "reason": {
+        "daily_budget": "the daily AI budget ran out",
+        "budget": "the AI budget ran out",
+        "customer_asked": "a person was asked for",
+        "ai_paused": "the AI employee is paused",
+        "ai_inactive": "the AI employee is not active",
+        "ai_failed": "the AI could not produce a reply",
+        "message_limit": "the AI reached its message limit for this conversation"
+      }
+    },
+    "reaction": {
+      "toMessage": "They reacted {emoji} to “{preview}”",
+      "toEarlier": "They reacted {emoji} to an earlier message",
+      "removed": "They took their reaction back"
+    },
+    "unsupported": "They sent something GOTCHA can't show. WhatsApp calls it a “{type}”.",
+    "pending": "Still sending",
+    "sent": "Handed to the channel, not confirmed delivered",
+    "failed": "This did not send. The customer never received it.",
+    "failedTemplateRequired": "This did not send: 24 hours had passed since the customer last wrote, and WhatsApp then allows only an approved template.",
+    "failedWindowClosed": "This did not send: 24 hours had passed since the customer last wrote, and nothing more can go out until they write again.",
+    "deliveryUnknown": "We can’t tell whether this arrived.",
+    "quote": {
+      "customer": "Customer",
+      "team": "Your team",
+      "noText": "A message with no text",
+      "kind": {
+        "photo": "Photo",
+        "sticker": "Sticker",
+        "video": "Video",
+        "voice": "Voice message",
+        "file": "File",
+        "location": "Location",
+        "contact": "Contact"
+      }
+    },
+    "reply": "Reply",
+    "replyTo": "Reply to this message",
+    "mediaUnavailable": "This attachment couldn't be fetched - WhatsApp keeps media only a few days.",
+    "openPhoto": "Open the photo",
+    "file": "Download the file",
+    "fileSize": {
+      "kb": "{size, number} KB",
+      "mb": "{size, number} MB"
+    },
+    "contact": "A contact",
+    "call": "Call",
+    "play": "Play the voice note",
+    "pause": "Pause",
+    "location": {
+      "title": "Shared location",
+      "open": "Open in map",
+      "unreadable": "A location was shared, but its place didn't come through."
+    },
+    "products": "Products sent",
+    "product": {
+      "view": "View product",
+      "soldOut": "Out of stock"
+    }
+  },
+  "queue": {
+    "cap": "Showing the {count} most recent.",
+    "empty": "Nothing is waiting.",
+    "unavailable": "We couldn't read the queue just now.",
+    "unnamed": "Someone",
+    "unread": "Unread",
+    "unreadMessages": "{count, plural, one {# unread message} other {# unread messages}}",
+    "unknownChannel": "Unknown channel",
+    "undated": "{count, plural, =1 {One conversation has no last-message time, so we can't place it in the order above} other {# conversations have no last-message time, so we can't place them in the order above}}",
+    "capAll": "{count, plural, =0 {} =1 {One conversation, and that's all of them.} other {# conversations, and that's all of them.}}",
+    "undatedThisPage": "{count, plural, =1 {One conversation on this page has no last-message time} other {# conversations on this page have no last-message time}} - and any others are at the very end of the queue, past the pages you've loaded.",
+    "undatedInView": "{count, plural, =0 {No conversation here is missing a last-message time.} =1 {One conversation in this view has no last-message time, so we can't place it in the order} other {# conversations in this view have no last-message time, so we can't place them in the order}}",
+    "label": "Waiting",
+    "waitingFor": {
+      "minutes": "{value}m waiting",
+      "hours": "{value, plural, =1 {1 hour waiting} other {# hours waiting}}",
+      "days": "{value, plural, =1 {1 day waiting} other {# days waiting}}"
+    },
+    "tag": {
+      "you": "You",
+      "flow": "Flow"
+    },
+    "heading": "Waiting in queue",
+    "filter": {
+      "label": "Filter by channel",
+      "all": "All",
+      "emptyChannel": {
+        "title": "No conversations on {channel}",
+        "line": "Nothing in this view came in on this channel.",
+        "all": "Show every channel"
+      },
+      "emptyPeriod": {
+        "title": "No conversations opened in this period",
+        "all": "Show every date"
+      },
+      "wooChat": "WooCommerce chat"
+    },
+    "menu": {
+      "label": "Actions on this conversation",
+      "assignToMe": "Assign to me",
+      "assignToSomeone": "Assign to someone",
+      "release": "Put back in the queue",
+      "resolve": "Mark resolved",
+      "remove": "Delete",
+      "greets": "Sends your workspace’s greeting to the customer",
+      "greetsMaybe": "May send your workspace’s greeting to the customer",
+      "several": "{count} conversations",
+      "partial": "Done for {done} of {total}. The rest didn’t go through - reload to see where things stand.",
+      "failed": "That didn’t go through, and nothing changed. Try again in a moment.",
+      "confirmTitle": "{count, plural, one {Delete this conversation?} other {Delete # conversations?}}",
+      "confirmBody": "{count, plural, one {It and every message in it are deleted for everyone. This can’t be undone.} other {They and every message in them are deleted for everyone. This can’t be undone.}}",
+      "confirmActive": "{count, plural, one {It is still open - deleting it ends it now.} other {# of them are still open - deleting them ends them now.}}",
+      "confirm": "Delete",
+      "cancel": "Keep it",
+      "selected": "{count} selected - right-click for actions",
+      "clearSelection": "Clear the selection",
+      "stopAi": "Stop AI",
+      "backToAi": "Back to the AI",
+      "moved": "{count, plural, one {One conversation moved} other {# conversations moved}} to <link>{view}</link>.",
+      "markUnread": "Mark as unread",
+      "markRead": "Mark as read",
+      "markedUnread": "{count, plural, one {Marked as unread, for you only.} other {# conversations marked as unread, for you only.}}",
+      "markedRead": "{count, plural, one {Marked as read, for you only.} other {# conversations marked as read, for you only.}}"
+    },
+    "period": {
+      "range": "Started {from} to {to}",
+      "from": "Started from {from}",
+      "to": "Started until {to}",
+      "clear": "{period} - show every date",
+      "invalid": "This link's period couldn't be read, so conversations from every date are shown.",
+      "day": "Started {day}"
+    },
+    "shownMore": "{count} shown · more below",
+    "sla": {
+      "left": "{count, plural, one {1 min left} other {# min left}}",
+      "late": "Past SLA",
+      "warningTitle": "Close to the {minutes} min response target.",
+      "lateTitle": "Waiting longer than the {minutes} min response target."
+    }
+  },
+  "identity": {
+    "unnamed": "Someone",
+    "unavailable": "We couldn't read who this is just now.",
+    "noHandles": "No channel handle is recorded for this person.",
+    "joinedUp": "Their channels - every one we've matched to this person.",
+    "thisChannelOnly": "The channel this conversation came in on. We can't show their other channels from here yet."
+  },
+  "verbs": {
+    "claim": "Take control",
+    "returnToAi": "Return to the AI",
+    "transferTo": "Transfer to",
+    "transferPick": "Choose someone",
+    "transfer": "Transfer",
+    "greetingSends": "Taking control sends your workspace's greeting to this customer, with your name in it.",
+    "greetingMaybe": "If your workspace has a greeting set up, taking control sends it to this customer with your name in it. We can't check that from here.",
+    "noAiEmployee": "There's no AI employee on this conversation, so there's nobody to hand it back to. Whoever set up GOTCHA can assign one.",
+    "problem": {
+      "already_claimed": "A colleague took this one first, so nothing changed. Ask them before taking it over - the customer would get a second greeting.",
+      "no_ai_employee": "There's no AI employee on this conversation to hand it back to, so nothing changed.",
+      "not_yours": "You can only transfer a conversation you're holding. Take control first, and then you can pass it on.",
+      "not_found": "This conversation, or the person you picked, isn't there any more. Reload to see where things stand.",
+      "failed": "That didn't go through, and nothing changed. Try again in a moment.",
+      "not_allowed": "Only an admin can delete conversations, so nothing changed."
+    },
+    "resolve": "Resolve"
+  },
+  "open": {
+    "label": "This conversation",
+    "unavailable": "We couldn't read the queue, so there's no conversation to show. This is our side, not yours.",
+    "status": {
+      "OPEN": "Open",
+      "WAITING": "Waiting on them",
+      "CLOSED": "Closed"
+    },
+    "waitingUnknown": "No last-message time, so we can’t say how long they have waited.",
+    "noName": "No name yet",
+    "waitingUnknownShort": "wait unknown",
+    "orders": {
+      "returning": "Returning · {count} orders",
+      "count": "{count, plural, one {# order} other {# orders}}"
+    },
+    "notAvailable": "This conversation isn’t available - it may have been deleted, or it isn’t yours to see.",
+    "openFailed": "We couldn’t open this conversation just now. This is our side, not yours.",
+    "pick": "Pick a conversation to read",
+    "escHint": "Esc closes the one you’re reading"
+  },
+  "context": {
+    "label": "About this customer"
+  },
+  "copilot": {
+    "heading": "What GOTCHA would say",
+    "none": "GOTCHA has nothing to suggest for this one. Write the reply yourself.",
+    "unavailable": "We couldn’t reach GOTCHA for a suggestion just now. Nothing is wrong with the conversation.",
+    "notOnPlan": "Suggested replies are not part of your plan, so GOTCHA is not drafting for this conversation.",
+    "limitReached": "You have used all the suggested replies your plan includes for now.",
+    "notBuilt": "GOTCHA does not offer suggested replies. This is not something a plan change would add.",
+    "whereToChange": "Someone with an admin role can change the plan under Settings · Plan & pricing.",
+    "otherMode": "This workspace has GOTCHA set up to be asked questions rather than to draft replies, and that panel is not built yet.",
+    "proposal": "an action it would take, not a reply",
+    "confidence": {
+      "high": "Confident",
+      "medium": "Fairly confident",
+      "low": "Unsure",
+      "unstated": "Confidence not reported"
+    },
+    "providerFailed": "GOTCHA couldn’t draft a reply just now. Nothing is wrong with the conversation, and this is our side rather than yours.",
+    "noProvider": "GOTCHA has no AI provider set up, so it cannot draft replies yet. Someone with an admin role can connect one.",
+    "switchedOff": "Suggested replies are switched off for this workspace. Someone with an admin role can turn them on.",
+    "noEmployee": "There is no AI employee to draft with. One can be created under Studio · Employees."
+  },
+  "composer": {
+    "label": "Your reply",
+    "labelOn": "Your reply, on {channel}",
+    "placeholder": "Write the reply. Enter makes a new line.",
+    "send": "Send to the customer",
+    "sending": "Sending…",
+    "queued": "Queued. It will show above as it goes out, and say so if it fails.",
+    "error": {
+      "channelGone": "This channel is no longer connected, so nothing can be sent on it. Your reply is still here.",
+      "gone": "This conversation is no longer there.",
+      "empty": "There is nothing to send yet.",
+      "failed": "That didn’t go through. Your reply is still here.",
+      "tooLarge": "That file is over {limit} MB, the most this conversation can take. Nothing was sent.",
+      "quoteGone": "The message you were replying to isn’t in this conversation any more. Your reply is still here."
+    },
+    "attachImage": "Attach a photo",
+    "attachFile": "Attach a file",
+    "removeFile": "Remove {name}",
+    "attached": "Will be sent with your reply",
+    "compose": {
+      "rewrite": "Rewrite",
+      "shorter": "Shorter",
+      "translate": "Translate",
+      "undo": "Undo",
+      "working": "Working on the draft…",
+      "label": "Rework the draft with GOTCHA",
+      "failed": "GOTCHA couldn’t rework the draft just now. Your text is unchanged.",
+      "blank": "GOTCHA came back with nothing, so your text is unchanged.",
+      "done": "GOTCHA rewrote the draft. Read it before you send - Undo puts yours back.",
+      "unitsExhausted": "This workspace has used up its AI units, so GOTCHA can’t rework drafts until it’s topped up. Your text is unchanged.",
+      "unitsLink": "Usage & billing"
+    },
+    "replyingTo": "Replying to {who}",
+    "cancelReply": "Don’t reply to this message",
+    "noFileOnReply": "A file can’t be sent as a reply to a message",
+    "attachedCount": "{count} of {max} · sent when you press send",
+    "window": {
+      "templateOnly": "The 24-hour window has closed. To pick the conversation back up, send an approved template.",
+      "closed": "This conversation can’t continue: 24 hours have passed since the customer’s last message. It’s best to close it.",
+      "close": "Close the conversation",
+      "closing": "Closing…",
+      "closeFailed": "The conversation wasn’t closed. Try again in a moment.",
+      "closesInHours": "The reply window closes in {count, plural, one {# hour} other {# hours}}",
+      "closesInMinutes": "The reply window closes in {count, plural, one {# minute} other {# minutes}}"
+    },
+    "template": {
+      "open": "Send a template",
+      "title": "Choose an approved template",
+      "loading": "Reading the templates…",
+      "loadFailed": "We couldn’t read the templates just now.",
+      "retry": "Try again",
+      "none": "No approved template yet.",
+      "noneLink": "You can create one in Outreach > Templates",
+      "field": "Variable {key}",
+      "preview": "What the customer will receive",
+      "send": "Send the template to the customer",
+      "sending": "Sending…",
+      "cancel": "Close",
+      "blank": "Fill in every variable before sending.",
+      "error": {
+        "notUsable": "This template is no longer approved for this number. Nothing was sent.",
+        "whatsappOnly": "Templates are sent on WhatsApp only. Nothing was sent.",
+        "failed": "That didn’t go through. Try again in a moment."
+      }
+    }
+  },
+  "clear": {
+    "title": "The queue is clear",
+    "answered": "{count, plural, one {GOTCHA answered # conversation today.} other {GOTCHA answered # conversations today.}}",
+    "anything": "Anything it cannot handle will appear here.",
+    "going": "Still going on",
+    "on": "{count, plural, one {GOTCHA is on # conversation} other {GOTCHA is on # conversations}}",
+    "onNone": "GOTCHA is not in a conversation right now",
+    "live": "live",
+    "held": "Held by a broken system",
+    "heldNone": "Nothing records what is held while a system is down.",
+    "waiting": "Waiting on the customer to reply",
+    "waitingNone": "Nothing counts the conversations waiting on a customer.",
+    "foot": "New conversations land here unless an automation is running them.",
+    "nothing": "Nothing to read",
+    "allAlone": "Every conversation today was answered without a person.",
+    "nothingWaiting": "Nothing is waiting on you.",
+    "seeAnswered": "See what GOTCHA answered",
+    "stat": {
+      "answered": "Answered today",
+      "reply": "Average reply time",
+      "passed": "Passed to a person",
+      "seconds": "{count}s",
+      "minutes": "{count}m",
+      "whyNone": "Nothing records why a conversation was passed to a person."
+    }
+  },
+  "wall": {
+    "name": "Copilot",
+    "previous": "Previous",
+    "next": "Next",
+    "carousel": "carousel",
+    "nothingOpen": "Open a conversation to see what GOTCHA knows about the person in it.",
+    "activity": {
+      "title": "What it did",
+      "unread": "Couldn’t read what the AI did here just now.",
+      "idle": "Nothing is running right now.",
+      "workingOn": "Working on this",
+      "stop": "stop",
+      "stopTitle": "Stop the AI on this conversation - the same as Stop AI above. Nobody is assigned.",
+      "stopFailed": "Couldn’t stop the AI just now. Try Stop AI above.",
+      "none": "Nothing yet",
+      "steps": "{count, plural, =1 {1 step} other {# steps}}",
+      "ms": "{ms}ms",
+      "seconds": "{s}s",
+      "label": {
+        "looking_up_order": "Order lookup",
+        "checking_products": "Product check",
+        "processing_refund": "Refund",
+        "cancelling_order": "Order cancellation",
+        "handling_return": "Return",
+        "checking_delivery": "Delivery check",
+        "updating_order": "Order update",
+        "creating_discount": "Discount",
+        "sending_order_email": "Order email",
+        "adding_note": "Note",
+        "checking_calendar": "Calendar check",
+        "booking_meeting": "Meeting booking",
+        "identifying_customer": "Customer identification",
+        "saving_customer": "Customer record",
+        "tagging_customer": "Customer tag",
+        "scheduling_followup": "Follow-up",
+        "handing_to_team": "Handover to the team",
+        "working": "A step",
+        "checking_refund": "Refund check",
+        "checking_payment": "Payment check",
+        "sending_payment_link": "Payment link",
+        "checking_discount": "Discount check",
+        "creating_task": "Task"
+      },
+      "status": {
+        "proposed": "waiting for approval",
+        "approved": "approved",
+        "running": "…",
+        "completed": "done",
+        "failed": "failed",
+        "denied": "declined"
+      }
+    },
+    "answers": {
+      "title": "{count, plural, =0 {Ways to answer} =1 {One way to answer} =2 {Two ways to answer} =3 {Three ways to answer} other {# ways to answer}}",
+      "position": "{at} of {count} open",
+      "reading": "Reading what GOTCHA would say…",
+      "waiting": "Suggestions come when the customer writes.",
+      "writing": "Writing suggestions…",
+      "stale": "The customer wrote since - new ones are on the way.",
+      "recommended": "Recommended",
+      "another": "Another way",
+      "use": "Use this",
+      "useTitle": "Puts this reply in the box below. Nothing is sent until you press Send.",
+      "edit": "Edit",
+      "editTitle": "Puts this reply in the box below, selected, to change. Nothing is sent.",
+      "retry": "Try again",
+      "trying": "Asking…",
+      "wait": "Try again in {seconds}s",
+      "waitUnnamed": "Just refreshed - try again in a moment."
+    },
+    "orders": {
+      "title": "Orders",
+      "number": "Order #{number}",
+      "position": "{at} of {count}",
+      "carousel": "orders",
+      "noImage": "The store sent no image for this item.",
+      "more": "+{count} more",
+      "cancelled": "Cancelled",
+      "refund": "Refund",
+      "replace": "Replace",
+      "track": "Track",
+      "noTracking": "No tracking link on this order yet.",
+      "shopify": "Open in Shopify ↗",
+      "woo": "Open in WooCommerce ↗",
+      "noAdmin": "The store sent no admin link for this order.",
+      "readOnly": "Refunds from here work with Shopify only for now.",
+      "matchedBy": {
+        "email": "Matched by email",
+        "phone": "Matched by phone"
+      },
+      "storeNotChosen": "Two stores are connected - choose which one is your store in Business core.",
+      "chooseStore": "Choose the store",
+      "storeUnreachable": "Your store couldn’t be reached just now, so its orders can’t be shown.",
+      "noIdentifiers": "There’s no email or phone on this customer to find their orders by.",
+      "noWooOrders": "No orders from this customer in WooCommerce."
+    },
+    "person": {
+      "unnamed": "No name on record",
+      "since": "Since {date}",
+      "profile": "Profile ↗",
+      "noContact": "This conversation does not name its customer yet, so their profile can’t be read. Backend is adding it.",
+      "unread": "Couldn’t read this just now.",
+      "lifetime": "Lifetime",
+      "orders": "Orders",
+      "refunds": "Refunds",
+      "mood": "Mood",
+      "none": "None",
+      "refundsPartial": "Only some of their orders were read, so refunds can’t be counted.",
+      "noMood": "GOTCHA hasn’t read a mood in their messages.",
+      "moods": {
+        "frustrated": "Upset",
+        "about_to_buy": "About to buy"
+      },
+      "noFacts": "GOTCHA hasn’t learned anything about this customer yet.",
+      "learned": "What GOTCHA learned",
+      "howItLearns": "It learns from what they say in conversations, and from what your team enters about them.",
+      "fromBefore": "From before",
+      "fromBeforeTitle": "Learned from an imported history - background, not confirmed.",
+      "source": {
+        "conversation": "from a conversation",
+        "person": "entered by a person",
+        "crm": "from your CRM",
+        "worked_out": "worked out"
+      },
+      "visitor": "An unidentified visitor - history, memory and orders appear once they’re identified."
+    },
+    "history": {
+      "title": "History across all channels",
+      "none": "No other conversations with this person.",
+      "back": "‹ Back",
+      "count": "{count, plural, =1 {1 conversation} other {# conversations}}",
+      "calls": "{count, plural, =1 {1 call} other {# calls}}",
+      "more": "Showing the newest {shown} of {total}.",
+      "thisOne": "this one",
+      "noSummary": "No summary yet",
+      "openWhole": "Open the whole conversation",
+      "reading": "Reading the conversation…",
+      "wholeFailed": "Couldn’t read this conversation just now.",
+      "wholeLabel": "The whole conversation, to read",
+      "customer": "Customer",
+      "yourSide": "Your side",
+      "attachment": "An attachment"
+    },
+    "ask": {
+      "placeholder": "Ask Copilot anything…",
+      "label": "Ask Copilot",
+      "title": "GOTCHA answers by writing a reply into the box below. Nothing is sent to the customer.",
+      "nothingOpen": "Open a conversation to ask about it.",
+      "send": "Ask",
+      "asking": "Asking…",
+      "failed": {
+        "empty": "Write a question first.",
+        "blank": "GOTCHA had nothing to write for that.",
+        "units_exhausted": "The workspace has used its AI units. Someone with an admin role can top up.",
+        "failed": "Couldn’t reach GOTCHA just now. Nothing was sent."
+      }
+    }
+  }
+}

@@ -56,6 +56,7 @@ import {
   capabilityStateIsFresh,
   missingScopesFromConfig,
 } from "../services/connectors/integration-framework";
+import { readerLocale } from "../lib/reader-locale";
 
 const router = Router();
 
@@ -66,12 +67,8 @@ router.use(
   requirePermissionOrRole("ai:tools:read", "ADMIN"),
 );
 
-/** "he" when the caller asked for Hebrew, else "en". Tool labels are localized. */
-function localeOf(req: Request): "en" | "he" {
-  const q = typeof req.query.locale === "string" ? req.query.locale : undefined;
-  const h = req.headers["accept-language"] as string | undefined;
-  return String(q || h || "en").toLowerCase().startsWith("he") ? "he" : "en";
-}
+/** Tool labels are localized: in the reader's language (lib/reader-locale). */
+const localeOf = (req: Request) => readerLocale(req);
 
 /** Internal GOTCHA tools an admin can set policy on: the mutating ones plus reads. */
 function internalTools() {
@@ -200,6 +197,7 @@ router.get("/:id", async (req: Request, res: Response) => {
           .catch(() => [] as any[]),
       ]);
       const permByName = new Map((perms as any[]).map((p) => [p.toolName, p]));
+      const locale = await localeOf(req);
 
       const rows = internalTools().map((t) => {
         const row = permByName.get(t.name);
@@ -210,7 +208,7 @@ router.get("/:id", async (req: Request, res: Response) => {
         });
         return {
           name: t.name,
-          displayName: toolDisplayName(t.name, null, localeOf(req)),
+          displayName: toolDisplayName(t.name, null, locale),
           description: t.description ?? "",
           riskGroup: availability.riskGroup,
           availability,
@@ -302,6 +300,7 @@ router.get("/:id", async (req: Request, res: Response) => {
     const missing = missingScopesFromConfig(cfg);
     const granted = capabilityStateFromConfig(cfg).grantedScopes;
 
+    const locale = await localeOf(req);
     const rows = governable.map((t) => {
       // The runtime's own scope rule, applied here so the row and the tool
       // surface agree: blocked when any REQUIRED scope is known-missing.
@@ -321,7 +320,7 @@ router.get("/:id", async (req: Request, res: Response) => {
       });
       return {
         name: t.name,
-        displayName: toolDisplayName(t.name, t.displayName, localeOf(req)),
+        displayName: toolDisplayName(t.name, t.displayName, locale),
         description: t.description,
         riskGroup: availability.riskGroup,
         availability,

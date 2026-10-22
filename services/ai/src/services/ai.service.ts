@@ -57,6 +57,12 @@ export interface AIRequestParams {
    * complete and replying twice.
    */
   signal?: AbortSignal;
+  /**
+   * Reasoning effort for THIS call on a reasoning model (else the
+   * OPENAI_REASONING_EFFORT default). A tiny bounded task (a translation)
+   * takes "minimal", which is what keeps it fast.
+   */
+  reasoningEffort?: "minimal" | "low" | "medium" | "high";
 }
 
 export interface AIResponse {
@@ -278,6 +284,7 @@ function applyTokenAndTemperatureParams(
   model: string,
   temperature: number | undefined,
   maxTokens: number | undefined,
+  reasoningEffort?: string,
 ): void {
   const tokens = maxTokens ?? 1024;
   if (modelRequiresCompletionTokens(model)) {
@@ -293,7 +300,7 @@ function applyTokenAndTemperatureParams(
     // Keep reasoning light so the bot stays responsive (default 'medium' on
     // gpt-5 makes chat turns slow and reasoning-token heavy). Override via env;
     // "none" omits the param entirely.
-    const effort = process.env.OPENAI_REASONING_EFFORT || "low";
+    const effort = reasoningEffort || process.env.OPENAI_REASONING_EFFORT || "low";
     if (effort && effort !== "none") req.reasoning_effort = effort;
     // Only the default temperature (1) is supported - send it only when it is
     // exactly the default, otherwise omit so the model uses its required value.
@@ -374,7 +381,7 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
     model,
     messages: sanitizeMessagesForOpenAI(params.messages),
   };
-  applyTokenAndTemperatureParams(requestParams as any, model, params.temperature, params.maxTokens);
+  applyTokenAndTemperatureParams(requestParams as any, model, params.temperature, params.maxTokens, params.reasoningEffort);
 
   // Pin to a stable backend route so OpenAI's automatic prefix cache can
   // hit consistently across turns in the same conversation/call.
@@ -601,7 +608,7 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
     if (params.toolChoice) (requestParams as any).tool_choice = sanitizeToolChoice(params.toolChoice);
   }
 
-  const stream = await client.chat.completions.create(requestParams);
+  const stream = await client.chat.completions.create(requestParams, params.signal ? { signal: params.signal } : undefined);
 
   let accumulatedContent = "";
   // OpenAI delivers tool_calls in deltas keyed by an `index`. We assemble

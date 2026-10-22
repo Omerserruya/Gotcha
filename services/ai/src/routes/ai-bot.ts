@@ -25,12 +25,15 @@ router.use(requireInternalKey);
 //   returns: AIBotReplyResult
 router.post("/reply", async (req: Request, res: Response) => {
   try {
-    const { tenantId, conversationId, aiAgentId, incomingMessage, closedHours } = req.body || {};
+    const { tenantId, conversationId, aiAgentId, incomingMessage, closedHours, startSkillId } = req.body || {};
     if (!tenantId || !conversationId || !aiAgentId || typeof incomingMessage !== "string") {
       res.status(400).json({ error: "tenantId, conversationId, aiAgentId, and incomingMessage are required" });
       return;
     }
-    const result = await generateAIBotReply({ tenantId, conversationId, aiAgentId, incomingMessage, closedHours });
+    const result = await generateAIBotReply({
+      tenantId, conversationId, aiAgentId, incomingMessage, closedHours,
+      ...(typeof startSkillId === "string" && startSkillId ? { startSkillId } : {}),
+    });
     res.json(result);
   } catch (err: any) {
     const status = err?.status || 500;

@@ -1,0 +1,910 @@
+@layer features {
+  /*
+   * Screen 01.
+   *
+   * The page fills the work surface rather than sitting in a centred column:
+   * 40px of inline padding, and the queue and activity columns take the width
+   * they are given. An earlier version constrained this to a 1120px centred
+   * measure, which pushed the two columns into one and lost the arrangement
+   * entirely.
+   */
+  /*
+   * 01, measured: everything sits inside the frame - head, the command box,
+   * the strip, and three columns whose cards scroll inside themselves. So
+   * the page is the frame's height, not at least it.
+   */
+  .page {
+    display: flex;
+    flex-direction: column;
+    block-size: 100%;
+    min-block-size: 0;
+  }
+
+  /* Home while it is read: the page's padding (34 / 40), its blocks spaced as the real ones. */
+  .loading {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-24);
+    padding-block: 34px;
+    padding-inline: var(--space-40);
+  }
+
+  /*
+   * 34 again, as 02. The 26 trim bought back what body line-height cost the
+   * blocks below; with those at `normal`, 02's own numbers fit the frame.
+   */
+  .statusStrip {
+    padding-block: 34px 0;
+    padding-inline: var(--space-40);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-14);
+  }
+
+  .statusPill {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    background-color: var(--intent-neutral-surface);
+    border-radius: var(--radius-item);
+    /* 02: `padding: 7px 12px`, line-height normal - 28 tall. */
+    padding-block: 7px;
+    padding-inline: var(--space-12);
+    font-size: var(--font-size-label);
+    line-height: normal;
+    color: var(--intent-neutral-text);
+    /* A link drawn as a pill. */
+    text-decoration: none;
+  }
+
+  /* 01c: setup, in the lavender of the next step. */
+  .statusSetup {
+    background-color: var(--step-next-chip-surface);
+    color: var(--step-next-chip-text);
+  }
+
+  .statusSetup .statusDot {
+    background-color: var(--step-next);
+  }
+
+  .statusDot {
+    inline-size: var(--size-dot);
+    block-size: var(--size-dot);
+    border-radius: var(--radius-round);
+    background-color: var(--intent-blocked-edge);
+    flex: none;
+  }
+
+  /* Quiet turns the pill green - the one place the screen says "all clear". */
+  .statusCalm {
+    background-color: var(--intent-calm-surface);
+    color: var(--intent-calm-text);
+  }
+
+  .statusCalm .statusDot {
+    background-color: var(--signal-done-text);
+  }
+
+  /* 01b: a second clause, set apart by a rule as 02 draws it. */
+  .statusAside {
+    margin-inline-start: var(--space-14);
+    padding-inline-start: var(--space-14);
+    border-inline-start: var(--border-width-thin) solid var(--border-strong);
+  }
+
+  .statusMeta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * The greeting is centred; nothing below it is.
+   *
+   * That asymmetry is deliberate in the design and earns its place: the
+   * greeting and the ask box are one addressed moment at the top of the day,
+   * and everything under them is a scan.
+   */
+  .greeting {
+    /* `padding: 20px 40px 0` in the source. 02 sets no line-height. */
+    line-height: normal;
+    padding-block: var(--space-20) 0;
+    padding-inline: var(--space-40);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .greetingHeading {
+    margin-block-start: var(--space-8);
+  }
+
+  .greetingSummary {
+    margin-block-start: var(--space-10);
+  }
+
+  /* ── The day in figures ────────────────────────────────────────────── */
+  .strip {
+    margin-block-start: var(--space-22);
+    margin-inline: var(--space-40);
+    display: flex;
+    align-items: stretch;
+    border-block: var(--border-width-thin) solid var(--border-default);
+    flex-wrap: wrap;
+    /* 02 sets no line-height: body 1.6 made each cell 11px taller. */
+    line-height: normal;
+  }
+
+  .metric {
+    padding-block: var(--space-16) var(--space-18);
+    padding-inline: var(--space-28);
+  }
+
+  /* The first figure sits flush with the page's inline start. */
+  .strip > .metric:first-child {
+    padding-inline-start: 0;
+  }
+
+  .metric + .metric,
+  .channels {
+    border-inline-start: var(--border-width-thin) solid var(--border-default);
+  }
+
+  .metricValue {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-9);
+    margin-block-start: var(--space-4);
+  }
+
+  /*
+   * The Text roles inside set their own line-heights (the date 24, the
+   * subline 24, a label 17); 02's are all normal. Measured on dev: the head,
+   * the box and every strip cell land within 1px of 02.
+   */
+  .greeting > *,
+  .metric *,
+  .channels * {
+    line-height: normal;
+  }
+
+  /* A label on its own line, so its line box is its own 12px. */
+  .metric > :first-child {
+    display: block;
+  }
+
+  .share {
+    font-size: var(--font-size-caption);
+    color: var(--signal-done-text-soft);
+    background-color: var(--signal-done-surface);
+    border-radius: var(--radius-badge);
+    padding-block: var(--space-3);
+    padding-inline: var(--space-7);
+  }
+
+  .channels {
+    flex: 1;
+    min-inline-size: 220px;
+    padding-block: var(--space-16) var(--space-18);
+    padding-inline-start: var(--space-28);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  /* `height: 8px; border-radius: 4px` in the source. */
+  .bar {
+    display: flex;
+    block-size: var(--space-8);
+    border-radius: var(--space-4);
+    overflow: hidden;
+    margin-block-start: var(--space-9);
+    background-color: var(--panel-well);
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-14);
+    margin-block-start: var(--space-8);
+    font-size: var(--font-size-counter);
+    color: var(--text-subtle);
+  }
+
+  /* ── The two columns ───────────────────────────────────────────────── */
+  /*
+   * The cards absorb whatever is left and scroll inside it; the page itself
+   * never overflows.
+   *
+   * Trimming padding got the design onto a short window, but only for one
+   * window - the next laptop with a toolbar takes it back. This is the same
+   * model the frame already uses: chrome fixed, content scrolls. It also puts
+   * the scroll in the better place, since the command box is the screen's
+   * primary action and should not be the first thing to leave.
+   */
+  .columns {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    /* As the rail: present when needed, not a bright bar down the panel. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-heavy) transparent;
+    display: grid;
+    grid-template-columns: minmax(0, 447fr) minmax(0, 331fr) minmax(0, 331fr);
+    /* Bounded, so each column's card scrolls inside rather than growing. */
+    grid-template-rows: minmax(0, 1fr);
+    gap: var(--space-14);
+    /* `padding: 20px 40px 30px`, as 02. */
+    padding-block: var(--space-20) 30px;
+    padding-inline: var(--space-40);
+  }
+
+  /* 01b, measured: two columns on a quiet day - 646 · 478. */
+  .columnsQuiet {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    /* As the rail: present when needed, not a bright bar down the panel. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-heavy) transparent;
+    display: grid;
+    grid-template-columns: minmax(0, 646fr) minmax(0, 478fr);
+    /* Bounded, so each column's card scrolls inside rather than growing. */
+    grid-template-rows: minmax(0, 1fr);
+    gap: var(--space-14);
+    /* `padding: 20px 40px 30px`, as 02. */
+    padding-block: var(--space-20) 30px;
+    padding-inline: var(--space-40);
+  }
+
+  .columns::-webkit-scrollbar {
+    inline-size: 6px;
+  }
+
+  .columns::-webkit-scrollbar-thumb {
+    background-color: var(--border-heavy);
+    border-radius: var(--radius-key);
+  }
+
+  .columns::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* The queue is the widest: it is what the screen is for. */
+  .queueColumn,
+  .activityColumn,
+  .asideColumn {
+    min-inline-size: 0;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .asideColumn {
+    gap: var(--space-14);
+    overflow-y: auto;
+  }
+
+  /* The dark card takes the column's height, as 02's does. */
+  .activityColumn > * {
+    flex: 1;
+    min-block-size: 0;
+  }
+
+  /* The list scrolls inside its card; the card never pushes the page. */
+  .queueColumn > .queueCard {
+    flex: 0 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  /* 01b: the work card fills the column, its foot pinned to the bottom. */
+  .queueColumn > .workCard {
+    flex: 1 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .sectionHeader {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-block-end: var(--space-9);
+  }
+
+  .queueCard {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+    min-inline-size: 0;
+  }
+
+  /* ── Queue rows ─────────────────────────────────────────────────────── */
+
+  /*
+   * The row is a link: the design says clicking one opens it in Inbox with the
+   * conversation already selected. Styled as a row rather than a link so the
+   * card reads as a list, not as four hyperlinks.
+   */
+  .queueRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    padding-block: var(--space-13);
+    padding-inline: var(--space-16);
+    /*
+     * The intent edge. Always present, transparent when the intent carries no
+     * signal, so a coloured row is not 3px wider than a neutral one.
+     */
+    border-inline-start: var(--space-3) solid transparent;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .queueRow + .queueRow {
+    border-block-start: var(--border-width-thin) solid var(--panel-well);
+  }
+
+  .queueRow:hover {
+    background-color: var(--panel-inset);
+  }
+
+  .queueRowUrgent {
+    border-inline-start-color: var(--intent-urgent-edge);
+  }
+
+  .queueRowOpportunity {
+    border-inline-start-color: var(--intent-opportunity-edge);
+  }
+
+  .queueRowBlocked {
+    border-inline-start-color: var(--intent-blocked-edge);
+  }
+
+  .queueAvatar {
+    inline-size: var(--size-avatar-lg);
+    block-size: var(--size-avatar-lg);
+    border-radius: var(--radius-round);
+    background-color: var(--avatar-surface);
+    color: var(--text-body);
+    font-size: var(--font-size-counter);
+    font-weight: var(--font-weight-semibold);
+    display: grid;
+    place-items: center;
+    flex: none;
+  }
+
+  .queueRowText {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* One line: the name, cut if it must be, and the channel beside it. */
+  .queueRowIdentity {
+    display: flex;
+    gap: var(--space-8);
+    align-items: baseline;
+    min-inline-size: 0;
+  }
+
+  .queueRowName {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-item);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .queueRowChannel {
+    flex: none;
+    white-space: nowrap;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-tag);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  /* One line. A preview that wraps turns a scannable list into a paragraph. */
+  .queueRowPreview {
+    font-size: var(--font-size-meta);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .queueChip {
+    font-size: var(--font-size-micro);
+    border-radius: var(--radius-badge);
+    padding-block: var(--space-4);
+    padding-inline: var(--space-9);
+    flex: none;
+    background-color: var(--intent-neutral-surface);
+    color: var(--intent-neutral-text);
+  }
+
+  .queueChipUrgent {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .queueChipOpportunity {
+    background-color: var(--intent-opportunity-surface);
+    color: var(--intent-opportunity-text);
+  }
+
+  .queueChipBlocked {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  /* Fixed width so the times form a column instead of ragging. */
+  .queueWait {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+    inline-size: var(--size-wait-column);
+    text-align: end;
+    flex: none;
+  }
+
+  .queueFooter {
+    padding-block: var(--space-11);
+    padding-inline: var(--space-16);
+    border-block-start: var(--border-width-thin) solid var(--panel-well);
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .queueFooter:hover {
+    color: var(--text-body);
+  }
+
+  /* ── The dark activity card ────────────────────────────────────────── */
+  .activityCard {
+    background-color: var(--frame-raised);
+    border-radius: var(--radius-card);
+    padding: var(--space-18);
+    color: var(--frame-text);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .activityTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .activityDot {
+    inline-size: var(--size-dot);
+    block-size: var(--size-dot);
+    border-radius: var(--radius-round);
+    background-color: var(--signal-ai);
+    flex: none;
+  }
+
+  /* The lead line under the card's title. */
+  .activityLead {
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-relaxed);
+    color: var(--frame-text-secondary);
+    margin-block-start: var(--space-10);
+  }
+
+  .activityList {
+    margin-block-start: var(--space-16);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-9);
+  }
+
+  .activityEvent {
+    display: flex;
+    align-items: center;
+    gap: var(--space-9);
+    font-size: var(--font-size-label);
+    color: var(--frame-text-body);
+  }
+
+  /*
+   * The dot carries the outcome. It is never the only carrier: the wording
+   * says "failed" or "waiting" too, so this reads the same without colour.
+   */
+  .activityEventDot {
+    inline-size: var(--size-dot-sm);
+    block-size: var(--size-dot-sm);
+    border-radius: var(--radius-round);
+    flex: none;
+    background-color: var(--signal-done);
+  }
+
+  .activityEventDotFailed {
+    background-color: var(--intent-urgent-edge);
+  }
+
+  .activityEventDotAwaiting {
+    background-color: var(--intent-blocked-edge);
+  }
+
+  .activityEventText {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .activityEventTime {
+    margin-inline-start: auto;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-timestamp);
+    color: var(--frame-text-eyebrow);
+    flex: none;
+  }
+
+  .activityFooter {
+    margin-block-start: auto;
+    padding-block-start: var(--space-16);
+    border-block-start: var(--border-width-thin) solid var(--frame-rule);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-11);
+  }
+
+  .activityTimeSaved {
+    font-size: var(--font-size-label);
+    color: var(--frame-text-secondary);
+  }
+
+  .activityTimeSavedValue {
+    color: var(--frame-text);
+    font-weight: var(--font-weight-medium);
+  }
+
+  /*
+   * Where the figure came from. Not optional: this is the easiest number in
+   * the product to inflate, and a platform average must not be shown with the
+   * confidence of a measured one.
+   */
+  .activityBasis {
+    font-size: var(--font-size-micro);
+    color: var(--frame-text-faint);
+    margin-block-start: var(--space-6);
+  }
+
+  .allowanceHeader {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    font-size: var(--font-size-label);
+    color: var(--frame-text-secondary);
+  }
+
+  .allowanceValue {
+    color: var(--frame-text);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .allowanceTrack {
+    block-size: var(--size-meter);
+    border-radius: var(--radius-mark);
+    background-color: var(--frame-track);
+    margin-block-start: var(--space-7);
+    overflow: hidden;
+  }
+
+  .allowanceFill {
+    block-size: var(--size-meter);
+    border-radius: var(--radius-mark);
+    background-color: var(--signal-ai);
+  }
+
+  /* Under a week of headroom. The design turns it amber and raises a notice. */
+  .allowanceFillLow {
+    background-color: var(--intent-blocked-edge);
+  }
+
+  .allowanceProjection {
+    font-size: var(--font-size-micro);
+    color: var(--frame-text-faint);
+    margin-block-start: var(--space-6);
+  }
+
+  /* ── "Worth knowing" ───────────────────────────────────────────────── */
+  .insightTitle {
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-semibold);
+    margin-block-end: var(--space-8);
+  }
+
+  .insightBody {
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  .insightBody b {
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .insightActions {
+    display: flex;
+    gap: var(--space-8);
+    margin-block-start: var(--space-12);
+  }
+
+  /* ── Team panel ────────────────────────────────────────────────────── */
+  .teamBody {
+    padding: var(--space-18);
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
+
+  .teamList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .teamRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .avatarSmall {
+    inline-size: var(--size-avatar);
+    block-size: var(--size-avatar);
+    border-radius: var(--radius-round);
+    background-color: var(--avatar-surface);
+    color: var(--text-body);
+    font-size: var(--font-size-initials);
+    font-weight: var(--font-weight-semibold);
+    display: grid;
+    place-items: center;
+    flex: none;
+  }
+
+  .teamText {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    flex: 1;
+  }
+
+  /* Availability. Grey by default - unknown and offline read the same. */
+  .presenceDot {
+    inline-size: var(--size-dot);
+    block-size: var(--size-dot);
+    border-radius: var(--radius-round);
+    background-color: var(--border-emphasis);
+    flex: none;
+  }
+
+  .presenceOnline {
+    background-color: var(--signal-done);
+  }
+
+  .presenceAway {
+    background-color: var(--intent-blocked-edge);
+  }
+
+  .teamNote {
+    margin-block-start: auto;
+    padding-block-start: var(--space-14);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .inlineLink {
+    color: var(--text-primary);
+    text-decoration: none;
+    border-block-end: var(--border-width-thin) solid var(--border-emphasis);
+  }
+
+  /* `padding: 18px` white card, as the queue and team cards. */
+  .insightCard {
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding: var(--space-18);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  /* ── The quiet day's work card ─────────────────────────────────────── */
+  .workCard {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+    min-inline-size: 0;
+    flex: 1;
+  }
+
+  /* `padding: 14px 16px; gap: 14px; border-left: 3px` in the source. */
+  .workRow {
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    border-inline-start: 3px solid transparent;
+  }
+
+  .workRow + .workRow {
+    border-block-start: var(--border-width-thin) solid var(--panel-well);
+  }
+
+  /* 02's edge by type: amber a gap, red a conflict, green an opportunity. */
+  .workRowGap {
+    border-inline-start-color: var(--intent-blocked-edge);
+  }
+
+  .workRowConflict {
+    border-inline-start-color: var(--intent-urgent-edge);
+  }
+
+  .workRowOpportunity {
+    border-inline-start-color: var(--intent-opportunity-edge);
+  }
+
+  .workRowText {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .workRowTitle {
+    font-size: var(--font-size-item);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  /* One line, as 02's: the questions cut with an ellipsis. */
+  .workRowBody {
+    font-size: var(--font-size-meta);
+    color: var(--text-muted);
+    margin-block-start: var(--space-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workRowActions {
+    display: flex;
+    gap: var(--space-8);
+    flex: none;
+  }
+
+  /* `padding: 6px 12px; radius 8px; font 11.5px` in the source. */
+  .actionPrimary,
+  .actionSecondary {
+    font-size: var(--font-size-caption);
+    border-radius: var(--radius-chip);
+    padding-block: var(--space-6);
+    padding-inline: var(--space-12);
+    cursor: pointer;
+    white-space: nowrap;
+    /* Links drawn as buttons. */
+    text-decoration: none;
+  }
+
+  .actionPrimary {
+    background-color: var(--action-base);
+    color: var(--action-text);
+    border: none;
+  }
+
+  .actionSecondary {
+    background: none;
+    color: var(--text-body);
+    border: var(--border-width-thin) solid var(--border-default);
+  }
+
+  .actionPrimary:disabled,
+  .actionSecondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* `padding: 11px 16px` in the source - the card's closing line. */
+  .workFooter {
+    padding-block: var(--space-11);
+    padding-inline: var(--space-16);
+    border-block-start: var(--border-width-thin) solid var(--panel-well);
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    line-height: var(--line-height-relaxed);
+    margin-block-start: auto;
+  }
+
+  .quietStack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  .emptyNote {
+    padding-block: var(--space-18);
+    color: var(--text-subtle);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-relaxed);
+  }
+
+  .emptyNoteOnDark {
+    color: var(--frame-text-faint);
+  }
+
+  /*
+   * ★★ A SHORT WINDOW SCROLLS THE PAGE, NOT THE CARDS (Omer on a 14",
+   * 2026-10-07). Below ~880px of height there is not room for three windows
+   * side by side: the third row of "Needs you now" and the team card were cut
+   * mid-line, with no scrollbar showing on a Mac. So here every card takes
+   * its natural height and the body below the command box scrolls as one.
+   * Above it, the windows stay - each fading at its edge when it has more.
+   */
+  @media (height < 880px) {
+    .columns,
+    .columnsQuiet {
+      grid-template-rows: auto;
+    }
+
+    /* Each column at least its content, or the row stops at the window again. */
+    .queueColumn,
+    .activityColumn,
+    .asideColumn {
+      min-block-size: auto;
+    }
+
+    .queueColumn > .queueCard,
+    .queueColumn > .workCard {
+      flex: none;
+      min-block-size: auto;
+      overflow: clip;
+    }
+
+    .asideColumn {
+      overflow: visible;
+    }
+
+    .activityColumn > * {
+      flex: none;
+      min-block-size: auto;
+    }
+  }
+
+  /* Below this the two columns stop fitting side by side. */
+  @media (width <= 1100px) {
+    .columns {
+      flex-direction: column;
+    }
+  }
+
+  /* 01c: "Book a setup call", quietly, at the strip's end. */
+  .statusCall {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+  }
+}

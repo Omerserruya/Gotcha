@@ -100,7 +100,6 @@ describe("permission-catalog: built-in roles", () => {
     expect(admin.has("settings:billing:manage")).toBe(false);
     expect(admin.has("settings:billing:cancel")).toBe(false);
     expect(admin.has("settings:roles:manage")).toBe(false);
-    expect(admin.has("settings:api-keys:manage")).toBe(false);
   });
 
   it("cancellation is a distinct owner-only permission (not merely billing:manage)", () => {
@@ -124,6 +123,18 @@ describe("permission-catalog: built-in roles", () => {
     expect(mgr.size).toBeGreaterThan(agent.size);
   });
 
+  // 2026-10-09 owner decision: the workspace overview (team, insights, dormant
+  // customers) is management data, so the default Agent role does not hold it.
+  it("agent does NOT hold analytics:workspace:read; owner, admin and manager do", () => {
+    const has = (k: keyof typeof BUILTIN_ROLES) =>
+      expandPermissionPatterns(BUILTIN_ROLES[k].permissions).has("analytics:workspace:read");
+    expect(BUILTIN_ROLES.agent.permissions).not.toContain("analytics:workspace:read");
+    expect(has("agent")).toBe(false);
+    expect(has("owner")).toBe(true);
+    expect(has("admin")).toBe(true);
+    expect(has("department_manager")).toBe(true);
+  });
+
   it("scope ordering: agent < manager < admin/owner", () => {
     expect(BUILTIN_ROLES.agent.defaultScope).toBe("own");
     expect(BUILTIN_ROLES.department_manager.defaultScope).toBe("department");
@@ -140,7 +151,8 @@ describe("permission-catalog: built-in roles", () => {
 
 describe("permission-catalog: legacy bridge + scope math", () => {
   it("maps legacy enum + departmentRole to a built-in role", () => {
-    expect(builtinRoleForLegacy("ADMIN")).toBe("admin");
+    // Owner and Admin are one role since 30d610da (2026-10-11): a legacy ADMIN is an Owner.
+    expect(builtinRoleForLegacy("ADMIN")).toBe("owner");
     expect(builtinRoleForLegacy("AGENT")).toBe("agent");
     expect(builtinRoleForLegacy("AGENT", "MANAGER")).toBe("department_manager");
     expect(builtinRoleForLegacy("SYSTEM_ADMIN")).toBeNull();

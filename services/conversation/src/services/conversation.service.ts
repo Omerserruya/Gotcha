@@ -1,7 +1,78 @@
-import { getInternalServiceKey, readDurableSetting } from "@chatcenter/shared";
-import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords } from "@chatcenter/shared";
+import { getInternalServiceKey, readDurableSetting, recordHandover, waitingForPersonClause, parseBusinessHours, isWorkspaceDay, dayStart, nextWorkspaceDay } from "@chatcenter/shared";
+import { randomUUID } from "crypto";
+import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords, notificationsQueue, replyWindowsFor, type ReplyWindow } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
+import { visibilityClause } from "../lib/conversation-visibility";
+import { contactIdsFor, contactIdOf } from "../lib/conversation-contact";
+import { unreadStates } from "../lib/unread-state";
+import { waitingSinceFor } from "../lib/waiting-since";
 import * as messageService from "./message.service";
+import { presentMessageMedia } from "../lib/message-media";
+
+/**
+ * Keyset pagination for the conversation list.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * WHY NOT OFFSET
+ *
+ * The list is ordered by recency. With `skip`/`take`, a message arriving between
+ * page 1 and page 2 shifts every row down one: the agent sees one conversation
+ * twice and **never sees another at all**. A skipped conversation in an inbox is
+ * not a cosmetic defect - it is somebody waiting who never appears, and the list
+ * looks complete.
+ *
+ * Deduplicating by id was rejected deliberately: it hides the duplicate and not
+ * the skip, so it removes the only visible symptom of the invisible fault.
+ *
+ * ── The cursor is the sort key, and `lastMessageAt` is NULLABLE ──
+ *
+ * `(lastMessageAt, id)` with nulls last. The column is a denormalised cache that
+ * ~9 message writers never maintained, so historical rows exist with it NULL
+ * even though the live paths are fixed now. Nulls sort after every real value,
+ * so the cursor carries the literal `"null"` once paging reaches that tail and
+ * orders by id alone inside it. Without that, the tail is unreachable and those
+ * conversations become the very thing this change exists to prevent.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+export function encodeConversationCursor(lastMessageAt: Date | null, id: string): string {
+  return `${lastMessageAt ? lastMessageAt.toISOString() : "null"}~${id}`;
+}
+
+export function decodeConversationCursor(raw: string): { at: Date | null; id: string } | null {
+  const sep = raw.indexOf("~");
+  if (sep <= 0) return null;
+  const head = raw.slice(0, sep);
+  const id = raw.slice(sep + 1);
+  if (!id) return null;
+  if (head === "null") return { at: null, id };
+  const at = new Date(head);
+  if (Number.isNaN(at.getTime())) return null;
+  return { at, id };
+}
+
+/**
+ * "Strictly after this point" in `(lastMessageAt desc nulls last, id desc)`.
+ *
+ * ★ RETURNED AS A CLAUSE TO PUT IN `AND`, NEVER ASSIGNED TO `where.OR`.
+ * `where.OR` on this query already holds the DEPARTMENT/AGENT VISIBILITY clause.
+ * Assigning a keyset predicate to it replaces that scoping silently: the list
+ * then returns conversations the agent must never see, perfectly ordered, with
+ * no error, and the diff reads as pagination.
+ */
+export function conversationKeysetClause(c: { at: Date | null; id: string }): Record<string, unknown> {
+  if (c.at === null) {
+    // Already inside the null tail: only id separates rows.
+    return { AND: [{ lastMessageAt: null }, { id: { lt: c.id } }] };
+  }
+  return {
+    OR: [
+      { lastMessageAt: { lt: c.at } },
+      { AND: [{ lastMessageAt: c.at }, { id: { lt: c.id } }] },
+      // Nulls sort last, so every null row is after any real timestamp.
+      { lastMessageAt: null },
+    ],
+  };
+}
 
 export interface ConversationFilters {
   status?: string;
@@ -11,6 +82,8 @@ export interface ConversationFilters {
   search?: string;
   page?: number;
   limit?: number;
+  /** Keyset cursor. When present, `page` is ignored and no total is counted. */
+  cursor?: string;
   includeAutomated?: boolean;
   /**
    * Return ONLY the conversations an automation currently owns - the exact
@@ -23,20 +96,61 @@ export interface ConversationFilters {
    * is the narrower, more specific ask.
    */
   automatedOnly?: boolean;
+  /**
+   * "queue": the inbox's "Waiting in queue" view - exactly the conversations
+   * waiting for a person (the shared waitingForPersonClause, the same one Home
+   * counts), and `viewTotal` for its header. It used to be the route's default:
+   * every status (closed included) and every assignee, so it disagreed with
+   * Home (10 vs 9).
+   */
+  view?: "queue";
+  /**
+   * A period in the workspace's days (YYYY-MM-DD, `to` inclusive): the
+   * conversations STARTED in it, cut at the business-hours time zone's
+   * midnight - the same days the Home chat's charts count, so a chart's link
+   * opens the same rows. Either end may be omitted.
+   */
+  from?: string;
+  to?: string;
+  /** Keyset callers that show a header total ask for it (offset requests always have it). */
+  withTotal?: boolean;
   // User context for scoping
   userRole?: string;
   userId?: string;
   userDepartmentId?: string;
 }
 
+/** The business-hours time zone: the workspace's days are cut there. */
+async function workspaceTimeZone(tenantId: string): Promise<string> {
+  try {
+    return parseBusinessHours(await readDurableSetting(tenantId, "businessHours"))?.timezone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
 /** What "an automation owns this" means, in one place. */
 const AUTOMATED_HANDLERS = ["ai_agent", "flow"];
 
-export async function list(tenantId: string, filters: ConversationFilters) {
-  const { status, assignedAgentId, channel, departmentId, search, page = 1, limit = 50, includeAutomated = false, automatedOnly = false, userRole, userId, userDepartmentId } = filters;
+/**
+ * The list's WHERE for a set of filters: view, status, automation rule,
+ * assignee, period, channel, department, the sandbox exclusion, the viewer's
+ * visibility and the search. Shared by `list` and `unreadCounts`, so a count
+ * can never disagree with the rows it counts. No cursor: that is the page's.
+ */
+export async function listWhere(tenantId: string, filters: ConversationFilters): Promise<any> {
+  const { status, assignedAgentId, channel, departmentId, search, includeAutomated = false, automatedOnly = false, view, from, to, userRole, userId, userDepartmentId } = filters;
   const where: any = { tenantId };
-  if (status) where.status = status;
-  if (automatedOnly) {
+  if (view === "queue") {
+    // One AND element carrying the whole definition (its own OR inside), so the
+    // visibility clause below keeps the top-level OR. Status and the
+    // automation rule come from the definition, not from the query.
+    const { AND: inner, ...flat } = waitingForPersonClause();
+    where.AND = [{ ...flat, ...inner[0] }];
+  } else if (status) where.status = status;
+  if (view === "queue") {
+    // Fully defined above.
+  } else if (automatedOnly) {
     // All three conditions are required, and each one alone is wrong:
     // `handledBy` names the driver, `isHandedOver` is the latch a takeover
     // sets, and `assignedAgentId` catches a claim that never flipped the
@@ -64,17 +178,38 @@ export async function list(tenantId: string, filters: ConversationFilters) {
     });
   }
   if (assignedAgentId) where.assignedAgentId = assignedAgentId;
+  if (from || to) {
+    const tz = await workspaceTimeZone(tenantId);
+    where.AND = where.AND || [];
+    where.AND.push({ createdAt: { ...(from ? { gte: dayStart(from, tz) } : {}), ...(to ? { lt: dayStart(nextWorkspaceDay(to), tz) } : {}) } });
+  }
   if (channel) where.channel = channel;
   if (departmentId) where.departmentId = departmentId;
 
-  // Scope: ADMIN sees all, agents see only unassigned + assigned to them
-  if (userRole && userRole !== "ADMIN" && userDepartmentId) {
-    where.OR = [
-      { departmentId: userDepartmentId, assignedAgentId: null },
-      { departmentId: null, assignedAgentId: null },
-      { assignedAgentId: userId },
-    ];
-  }
+  // Scope: ADMIN sees all, agents see only unassigned + assigned to them.
+  // The rule itself now lives in lib/conversation-visibility.ts so the socket
+  // room join asks the identical question - see the header there for the two
+  // holes it preserves.
+  /**
+   * Sandbox rehearsals are not inbox items.
+   *
+   * ★ IDENTIFIED BY THE `sandbox:` PREFIX, NOT BY `isTest`. The row that exposed
+   * this has `is_test = false`, `status = OPEN` and two messages, so an `isTest`
+   * filter would not have caught it - and the same confusion has already produced
+   * two counting bugs in analytics, where a figure filtered `isTest` and counted
+   * every rehearsal as business.
+   *
+   * Filtering on the thing that is actually true rather than on the thing that
+   * sounds like it. Whether `isTest` SHOULD also be set on these rows is a
+   * separate question and not folded in here.
+   *
+   * Pushed into AND, like everything else that is not the visibility clause.
+   */
+  where.AND = where.AND || [];
+  (where.AND as unknown[]).push({ NOT: { customerExternalId: { startsWith: "sandbox:" } } });
+
+  const visibility = visibilityClause({ userId: userId!, role: userRole, departmentId: userDepartmentId });
+  if (visibility) where.OR = visibility;
 
   if (search) {
     where.AND = where.AND || [];
@@ -85,34 +220,248 @@ export async function list(tenantId: string, filters: ConversationFilters) {
       ],
     });
   }
-  const skip = (page - 1) * limit;
-  const [conversations, total] = await Promise.all([
+  return where;
+}
+
+export async function list(tenantId: string, filters: ConversationFilters) {
+  const { page = 1, limit = 50, cursor, view, from, to, withTotal = false, userId } = filters;
+  if ((from !== undefined && !isWorkspaceDay(from)) || (to !== undefined && !isWorkspaceDay(to)) || (from && to && from > to)) {
+    throw Object.assign(new Error("invalid_period: from and to are YYYY-MM-DD days, from <= to"), { status: 400 });
+  }
+  const decodedCursor = cursor ? decodeConversationCursor(cursor) : null;
+  if (cursor && !decodedCursor) {
+    // Refused by name rather than silently restarting from the top, which a
+    // paging UI renders as a list that never ends.
+    throw Object.assign(new Error("invalid_cursor"), { status: 400 });
+  }
+  const keyset = cursor !== undefined;
+  const where: any = await listWhere(tenantId, filters);
+  /**
+   * How many conversations in THIS VIEW have no `lastMessageAt`.
+   *
+   * ════════════════════════════════════════════════════════════════════════════
+   * THE INSTRUMENT FOR THE INVISIBLE HALF
+   *
+   * ~9 message writers never maintained this column, so a conversation can carry
+   * a stale or absent sort key and drift down the queue while somebody waits.
+   * Two properties make a count the only honest answer:
+   *
+   *   · nulls sort LAST, so the undated rows sit at the very end of the queue.
+   *     Any group rendered from a page is empty on every page but the last, and
+   *     empty entirely on a capped list - so the instrument for the problem is
+   *     invisible for exactly the tenants large enough to have it.
+   *   · a number does not require loading the whole queue to obtain.
+   *
+   * ★ SCOPED TO THE VIEW, NOT TO THE PAGE. It reuses the caller's filters
+   * INCLUDING the visibility clause - a count that ignored visibility would
+   * report a figure about conversations this agent may not see. And it is built
+   * BEFORE the keyset predicate is pushed, because "how many are undated in this
+   * view" must not change as somebody scrolls.
+   *
+   * Cost: one extra `count` per list request, narrow (`lastMessageAt IS NULL`)
+   * and on the same filters. Deliberate - the total we dropped was a full scan
+   * for a figure nobody asked for; this is a small one for a figure that is the
+   * only way to tell "we fixed it" from "we stopped looking".
+   * ════════════════════════════════════════════════════════════════════════════
+   */
+  // The view's own total, for its header (the queue, "All conversations", a
+  // status, an assignee, automatedOnly, a period, a channel): same filters and
+  // visibility as the rows, before the cursor, like undatedWhere. Without it a
+  // keyset page's header could only print the page (the Home chat counted 81
+  // for September, the inbox said 50). Offset requests already count `total`
+  // on these filters, so it is reused; a keyset request counts only when asked
+  // (`withTotal`, or the queue view), so scrolling pays no full scan nobody reads.
+  const viewWhere = keyset && (view === "queue" || withTotal) ? { ...where, AND: [...((where.AND as unknown[]) ?? [])] } : null;
+  const undatedWhere = {
+    ...where,
+    // A fresh array: `where.AND` is about to be mutated by the push below, and
+    // sharing it would let the cursor leak into a count that must not see it.
+    AND: [...((where.AND as unknown[]) ?? [])],
+    lastMessageAt: null,
+  };
+
+  // ★ ADDITIVE. `where.OR` is the visibility clause - see
+  // conversationKeysetClause's note. `search` above already pushes its own
+  // `{ OR: [...] }` into AND, which is the shape to copy.
+  if (decodedCursor) {
+    where.AND = where.AND || [];
+    where.AND.push(conversationKeysetClause(decodedCursor));
+  }
+
+  const include = {
+    assignedAgent: { select: { id: true, name: true, email: true } },
+    department: { select: { id: true, name: true } },
+    _count: { select: { messages: true } },
+    /**
+     * ★ THE LAST MESSAGE, NOT THE LAST ROW.
+     *
+     * A FAILED outbound is a message the customer never received, and taking it
+     * as the conversation's last message broke the inbox in two ways at once:
+     *
+     *  - `lastMessageDirection` came back OUTBOUND, and the list's `isUnread`
+     *    returns false for anything not INBOUND. So a customer whose question
+     *    the bot failed to answer STOPPED SHOWING AS UNREAD - the row went
+     *    quiet at the exact moment it needed attention.
+     *  - `lastMessageBody` previewed text that was never delivered, so the row
+     *    read as answered.
+     *
+     * The same rule already governs `lastMessageAt` (a failed send does not
+     * advance the sort key). Without it here the two disagreed: the column
+     * skipped the failed row and this projection did not, which is worse than
+     * either behaviour on its own.
+     *
+     * The thread itself is unaffected - `listByConversation` still returns the
+     * failed message, because the AGENT does need to see that a send failed.
+     * It is only the summary of what the CUSTOMER has seen that excludes it.
+     */
+    messages: {
+      where: { status: { not: "FAILED" as const } },
+      orderBy: { createdAt: "desc" as const },
+      take: 1,
+      // messageType lets the row say "Photo" / "Voice message" instead of the
+      // adapter's "[Image]" filler (2026-10-09). metadata is NOT selected: a
+      // nested take is applied in memory, so it would load every message's JSON.
+      select: { direction: true, body: true, createdAt: true, messageType: true },
+    },
+  };
+  // id breaks ties so two conversations sharing a millisecond cannot straddle a
+  // page boundary and reproduce the skip in a rarer form.
+  const orderBy = [
+    { lastMessageAt: { sort: "desc" as const, nulls: "last" as const } },
+    { id: "desc" as const },
+  ];
+
+  // Keyset takes `limit + 1` to learn whether more exist, and counts NO total:
+  // a keyset list cannot page to a known end, and the count was a second full
+  // scan for a figure the caller does not need.
+  const [conversations, total, undatedCount, viewTotal] = await Promise.all([
     prisma.conversation.findMany({
       where,
-      include: {
-        assignedAgent: { select: { id: true, name: true, email: true } },
-        department: { select: { id: true, name: true } },
-        _count: { select: { messages: true } },
-        messages: { orderBy: { createdAt: "desc" }, take: 1, select: { direction: true, body: true, createdAt: true } },
-      },
-      orderBy: { lastMessageAt: { sort: "desc", nulls: "last" } },
-      skip, take: limit,
+      include,
+      orderBy,
+      take: keyset ? limit + 1 : limit,
+      ...(keyset ? {} : { skip: (page - 1) * limit }),
     }),
-    prisma.conversation.count({ where }),
+    keyset ? Promise.resolve(null) : prisma.conversation.count({ where }),
+    prisma.conversation.count({ where: undatedWhere }),
+    viewWhere ? prisma.conversation.count({ where: viewWhere }) : Promise.resolve(null),
   ]);
+  const hasMore = keyset && conversations.length > limit;
+  const pageRows = hasMore ? conversations.slice(0, limit) : conversations;
 
-  // Flatten last message info
-  const data = conversations.map((c) => {
+  // Flatten last message info, and the contact behind each row (one batched,
+  // read-only lookup for the page - see lib/conversation-contact.ts).
+  const rows = keyset ? pageRows : conversations;
+  const [contactMap, unread, waiting, windows] = await Promise.all([
+    contactIdsFor(tenantId, rows as any[]),
+    // The VIEWER's read state, one query for the page (lib/unread-state.ts).
+    // Decoration: if it fails the inbox still loads, its rows served as read.
+    userId
+      ? unreadStates(tenantId, userId, rows.map((c) => c.id)).catch((err) => {
+          console.warn("[conversations] unread state unavailable, rows served as read:", (err as Error)?.message);
+          return new Map();
+        })
+      : Promise.resolve(new Map()),
+    // Since when the customer has waited for a reply (lib/waiting-since.ts),
+    // for the SLA dot. Decoration too: on failure, nobody is shown waiting.
+    waitingSinceFor(tenantId, rows.map((c) => c.id)).catch((err) => {
+      console.warn("[conversations] waitingSince unavailable:", (err as Error)?.message);
+      return new Map<string, string | null>();
+    }),
+    // What may be sent now (B7), one query for the page. null if unreadable.
+    // Through a promise so even a synchronous throw stays decoration.
+    Promise.resolve().then(() => replyWindowsFor(tenantId, rows.map((c) => c.id))).catch((err) => {
+      console.warn("[conversations] reply windows unavailable:", (err as Error)?.message);
+      return new Map<string, ReplyWindow>();
+    }),
+  ]);
+  const data = rows.map((c) => {
     const lastMsg = c.messages[0] || null;
     const { messages, ...rest } = c;
-    return { ...rest, lastMessageDirection: lastMsg?.direction || null, lastMessageBody: lastMsg?.body || null };
+    const state = unread.get(c.id);
+    return {
+      ...rest,
+      contactId: contactIdOf(contactMap, c as any),
+      lastMessageDirection: lastMsg?.direction || null,
+      lastMessageBody: lastMsg?.body || null,
+      lastMessageType: lastMsg?.messageType ?? null,
+      unread: state?.unread ?? false,
+      unreadCount: state?.unreadCount ?? 0,
+      lastReadAt: state?.lastReadAt ?? null,
+      waitingSince: waiting.get(c.id) ?? null,
+      replyWindow: windows.get(c.id) ?? null,
+    };
   });
 
-  return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+  if (keyset) {
+    const last = pageRows[pageRows.length - 1];
+    return {
+      data,
+      page: {
+        limit,
+        hasMore: !!hasMore,
+        nextCursor: hasMore && last ? encodeConversationCursor(last.lastMessageAt, last.id) : null,
+      },
+      // For the whole view, not this page. See undatedWhere above.
+      undatedCount,
+      ...(viewTotal !== null ? { viewTotal } : {}),
+    };
+  }
+  // Legacy offset callers keep the exact shape they had, total included.
+  const t = total as number;
+  return { data, meta: { total: t, page, limit, totalPages: Math.ceil(t / limit) }, undatedCount, viewTotal: t };
+}
+
+/**
+ * The inbox views, as list filters: the same mapping as frontend-v2's
+ * `viewQuery` (features/inbox/inbox-views.ts), so a count and its list agree.
+ */
+export const UNREAD_COUNT_VIEWS = ["queue", "mine", "active", "gotcha", "all", "resolved"] as const;
+export type UnreadCountView = (typeof UNREAD_COUNT_VIEWS)[number];
+
+function viewFilters(view: UnreadCountView, userId: string): Partial<ConversationFilters> {
+  switch (view) {
+    case "queue": return { view: "queue" };
+    case "mine": return { assignedAgentId: userId, includeAutomated: true };
+    case "active": return { status: "OPEN" };
+    case "gotcha": return { automatedOnly: true };
+    case "all": return { includeAutomated: true };
+    case "resolved": return { status: "CLOSED", includeAutomated: true };
+  }
+}
+
+/**
+ * How many conversations in each view are unread for this viewer, and how
+ * many the view holds. Each view's set comes from `listWhere`, with the list's
+ * own filters and visibility, so `totals[view]` is that list's `viewTotal`; the
+ * unread rule is `unreadStates`, the one the rows carry. One id read per view
+ * and one unread query for all of them.
+ */
+export async function unreadCounts(
+  tenantId: string,
+  viewer: { userId: string; role?: string; departmentId?: string },
+  views: UnreadCountView[],
+): Promise<{ unread: Record<string, number>; totals: Record<string, number> }> {
+  const sets = await Promise.all(views.map(async (view) => {
+    const where = await listWhere(tenantId, {
+      ...viewFilters(view, viewer.userId),
+      userId: viewer.userId, userRole: viewer.role, userDepartmentId: viewer.departmentId,
+    });
+    const rows = await prisma.conversation.findMany({ where, select: { id: true } });
+    return { view, ids: rows.map((r) => r.id) };
+  }));
+  const states = await unreadStates(tenantId, viewer.userId, Array.from(new Set(sets.flatMap((s) => s.ids))));
+  const unread: Record<string, number> = {};
+  const totals: Record<string, number> = {};
+  for (const { view, ids } of sets) {
+    unread[view] = ids.filter((id) => states.get(id)?.unread).length;
+    totals[view] = ids.length;
+  }
+  return { unread, totals };
 }
 
 export async function getById(tenantId: string, id: string) {
-  return prisma.conversation.findFirst({
+  const conversation = await prisma.conversation.findFirst({
     where: { id, tenantId },
     include: {
       assignedAgent: { select: { id: true, name: true, email: true } },
@@ -121,6 +470,19 @@ export async function getById(tenantId: string, id: string) {
       messages: { orderBy: { createdAt: "asc" } },
     },
   });
+  if (!conversation) return null;
+  const contactMap = await contactIdsFor(tenantId, [conversation as any]);
+  return {
+    ...conversation,
+    // Stored uploads go out as the logged-in media route (2026-10-10).
+    ...(Array.isArray(conversation.messages) ? { messages: conversation.messages.map((m) => presentMessageMedia(m)) } : {}),
+    contactId: contactIdOf(contactMap, conversation as any),
+  };
+}
+
+/** The customer and channel an assignment notice names ("the conversation with Dana on WhatsApp"). */
+function whoAndWhere(c: { customerName?: string | null; customerExternalId?: string | null; channel?: unknown }) {
+  return { customerName: c.customerName || c.customerExternalId || null, channel: c.channel ? String(c.channel) : null };
 }
 
 export async function transferToDepartment(tenantId: string, conversationId: string, departmentId: string) {
@@ -165,6 +527,33 @@ export async function transferToDepartment(tenantId: string, conversationId: str
   });
 
   emitToTenant(tenantId, "conversation:updated", updated);
+
+  // Keyed on assignedAgentId being non-null, NOT on queueMode. A ROUND_ROBIN
+  // department with no active members leaves this null and the conversation
+  // WAITING - there is nobody to tell. That is the same fact the status one
+  // line above keys off, so the two cannot disagree.
+  //
+  // This is the case that most needs telling: with a reassign a person chose
+  // you and usually says so, while here the system picked you by lowest
+  // workload and nobody is on the other end of it.
+  //
+  // Cannot double-fire with reassign(): the only callers are the two branches
+  // of one if/else in routes/conversations.ts, so a request takes exactly one.
+  if (assignedAgentId) {
+    notificationsQueue
+      .add(
+        "system-event",
+        {
+          id: randomUUID(),
+          type: "conversation.assigned",
+          tenantId,
+          data: { conversationId, departmentName: department.name, assignedToName: agentName ?? null, ...whoAndWhere(conversation) },
+          metadata: { conversationId, userId: assignedAgentId, timestamp: new Date().toISOString() },
+        },
+        { removeOnComplete: 1000, removeOnFail: 100, attempts: 5, backoff: { type: "exponential", delay: 2_000 } },
+      )
+      .catch((err: any) => console.warn("[conversation] department assignment notify failed:", err?.message ?? err));
+  }
 
   // Auto-greeting if agent was auto-assigned via round-robin
   if (assignedAgentId) {
@@ -240,9 +629,15 @@ export async function returnToAi(tenantId: string, conversationId: string) {
     throw Object.assign(new Error("No AI employee is bound to this conversation"), { status: 409 });
   }
 
-  const updated = await prisma.conversation.update({
+  await recordHandover({
+    tenantId,
+    conversationId,
+    to: "ai_agent",
+    reason: "return_to_ai",
+    data: { assignedAgentId: null, isHandedOver: false, status: "OPEN" },
+  });
+  const updated = await prisma.conversation.findUniqueOrThrow({
     where: { id: conversationId },
-    data: { assignedAgentId: null, isHandedOver: false, handledBy: "ai_agent", status: "OPEN" },
     include: { assignedAgent: { select: { id: true, name: true, email: true } } },
   });
 
@@ -251,7 +646,43 @@ export async function returnToAi(tenantId: string, conversationId: string) {
   return updated;
 }
 
-export async function reassign(tenantId: string, conversationId: string, newAgentId: string) {
+/**
+ * Stop the AI on a conversation WITHOUT assigning it to anyone - the inverse of
+ * returnToAi. Sets the isHandedOver latch the bot already respects
+ * (ai-bot.service and the incoming worker skip a handed-over conversation), so
+ * the next inbound waits for a person instead of getting an AI reply. Nobody is
+ * assigned: the conversation stays in the shared queue for whoever picks it up.
+ * returnToAi undoes it.
+ */
+export async function stopAi(tenantId: string, conversationId: string, actorUserId?: string) {
+  const conversation = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId } });
+  if (!conversation) throw Object.assign(new Error("Conversation not found"), { status: 404 });
+
+  await recordHandover({
+    tenantId,
+    conversationId,
+    to: "human",
+    actorUserId,
+    reason: "ai_stopped",
+    data: { isHandedOver: true },
+  });
+  const updated = await prisma.conversation.findUniqueOrThrow({
+    where: { id: conversationId },
+    include: { assignedAgent: { select: { id: true, name: true, email: true } } },
+  });
+
+  await createSystemMessage(tenantId, conversationId, "ai_stopped", {});
+  emitToTenant(tenantId, "conversation:updated", updated);
+  return updated;
+}
+
+/**
+ * `actorUserId` is the person who moved it; without one it was GOTCHA (an AI
+ * or an automation). The notification names the ACTOR: it used to name the
+ * previous assignee ("Unknown" when there was none), so "X assigned you a
+ * conversation" could name someone who did nothing.
+ */
+export async function reassign(tenantId: string, conversationId: string, newAgentId: string, actorUserId?: string) {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
     include: { assignedAgent: { select: { name: true } } },
@@ -271,6 +702,33 @@ export async function reassign(tenantId: string, conversationId: string, newAgen
 
   // System divider: conversation transferred
   await createSystemMessage(tenantId, conversationId, "agent_transferred", { fromAgentName, toAgentName });
+
+  // Screen 15's "a conversation is assigned to me". ONLY here: the other
+  // writers of assignedAgentId are self-claims (a user picking up their own
+  // conversation), and telling someone they claimed the thing they just
+  // clicked is the noise that screen exists to prevent. `userId` carries the
+  // recipient, so the dispatcher can address the person assigned rather than
+  // the tenant. Fire-and-forget - a notification outage must not undo a
+  // transfer that has already happened.
+  // Nobody is told they assigned something to themselves. A failed name
+  // lookup must not fail a transfer that has already happened.
+  const actor = actorUserId
+    ? await prisma.user.findFirst({ where: { id: actorUserId, tenantId }, select: { name: true } }).catch(() => null)
+    : null;
+  const assignedByName = actorUserId ? (actor?.name ?? null) : "GOTCHA";
+  if (actorUserId !== newAgentId) notificationsQueue
+    .add(
+      "system-event",
+      {
+        id: randomUUID(),
+        type: "conversation.assigned",
+        tenantId,
+        data: { conversationId, assignedByName, assignedToName: toAgentName, ...whoAndWhere(conversation) },
+        metadata: { conversationId, userId: newAgentId, timestamp: new Date().toISOString() },
+      },
+      { removeOnComplete: 1000, removeOnFail: 100, attempts: 5, backoff: { type: "exponential", delay: 2_000 } },
+    )
+    .catch((err: any) => console.warn("[conversation] assignment notify failed:", err?.message ?? err));
 
   emitToTenant(tenantId, "conversation:updated", updated);
 
@@ -349,6 +807,10 @@ export async function getHistoryByCustomerExternalId(
   tenantId: string,
   customerExternalId: string,
   conversationId?: string,
+  /** The viewer. Their visibility applies, as in the list: a department-
+   *  restricted agent does not get another department's threads (and their
+   *  last message) through a customer's history. */
+  viewer?: { userId: string; role?: string; departmentId?: string },
 ) {
   // Cross-platform history walk. The bare (tenantId, customerExternalId) lookup
   // only finds same-channel conversations (Instagram PSID matches the PSID,
@@ -449,11 +911,13 @@ export async function getHistoryByCustomerExternalId(
   // So this one call site opts in deliberately, and every row carries its
   // `origin` onward so the panel can label imported threads rather than
   // passing them off as conversations that happened in GOTCHA.
+  const historyVisibility = viewer ? visibilityClause(viewer) : null;
   const conversations = await withHistoricalRecords(() =>
     prisma.conversation.findMany({
       where: {
         tenantId,
         customerExternalId: { in: Array.from(externalIds) },
+        ...(historyVisibility ? { OR: historyVisibility } : {}),
       },
       include: {
         assignedAgent: { select: { id: true, name: true } },

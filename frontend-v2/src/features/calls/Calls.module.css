@@ -1,0 +1,959 @@
+@layer features {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 05d, measured - the dialer and a column: the week, the recent calls
+   * ════════════════════════════════════════════════════════════════════════
+   * `padding:22px 40px 30px`, `gap:14px`; a 400 dialer drawn in focus
+   * (`#C9BCF7`), the column the rest. Each card scrolls inside itself.
+   * The four-figure strip draws all four: what nothing records is "-".
+   */
+  .screen {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    gap: var(--space-14);
+    padding: 22px var(--space-40) 30px;
+    line-height: normal;
+  }
+
+  .dialer {
+    flex: none;
+    inline-size: 400px;
+    display: flex;
+    flex-direction: column;
+    overflow: clip;
+    min-inline-size: 0;
+    background-color: var(--panel-field);
+    border: 1px solid var(--signal-ai);
+    border-radius: var(--radius-card);
+  }
+
+  .dialerHead {
+    padding: 15px 18px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .dialerTitle {
+    margin: 0;
+    font-size: 13px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .dialerSub {
+    margin: 3px 0 0;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .dialerSearch {
+    padding: var(--space-14) 18px 0;
+  }
+
+  /* `#FAF8F4`, radius 10, `padding:11px 13px`. */
+  .dialerInput {
+    inline-size: 100%;
+    padding: 11px 13px;
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .dialerInput:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 1px;
+  }
+
+  .dialerBody {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    padding-block-start: var(--space-12);
+  }
+
+  .dialerEyebrow {
+    margin: 0;
+    padding: 6px 18px var(--space-8);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-mono);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .dialerEyebrowRule {
+    margin-block-start: var(--space-8);
+    padding-block-start: var(--space-14);
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .dialerNone {
+    margin: 0;
+    padding: var(--space-4) 18px var(--space-8);
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  .dialerList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* A person: `padding:11px 18px`, `gap:12px`; the first chosen, 02's dark edge. */
+  .dialerRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: 11px 18px;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .dialerRow[aria-current='true'] {
+    padding-inline-start: 15px;
+    background-color: var(--panel-quiet);
+    border-inline-start: 3px solid var(--action-base);
+  }
+
+  .dialerRow:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: -2px;
+  }
+
+  .dialerDisc {
+    flex: none;
+    inline-size: 32px;
+    block-size: 32px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--intent-neutral-text);
+    font-size: 10.5px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 32px;
+    text-align: center;
+  }
+
+  .dialerWho {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  /* 02's list rows: 13px name, 11px line, a quiet chevron. */
+  .dialerListRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: 11px 18px;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .dialerListName {
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .dialerChevron {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .dialerName {
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .dialerLine {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  /* The merchant's tag, in 02's violet chip. */
+  .dialerTag {
+    flex: none;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--ai-avatar-surface);
+    font-size: 11px;
+    color: var(--ai-avatar-text);
+  }
+
+  /* The foot: `padding:14px 18px`, `gap:10px`; dark "Call", outlined "Let GOTCHA". */
+  .dialerFoot {
+    flex: none;
+    display: flex;
+    gap: var(--space-10);
+    padding: var(--space-14) 18px;
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .dialerCall,
+  .dialerHand {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    border-radius: 10px;
+    font-size: 12.5px;
+  }
+
+  .dialerCall {
+    padding: 10px 18px;
+    border: none;
+    background-color: var(--action-base);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--action-text);
+    cursor: pointer;
+  }
+
+  .dialerHand {
+    padding: 10px var(--space-16);
+    border: 1px solid var(--border-default);
+    color: var(--intent-neutral-text);
+  }
+
+  .dialerFoot > [aria-disabled='true'] {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .dialerCall:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .dialerNote {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .dialerNote[data-kind='problem'] {
+    color: var(--alert-text);
+  }
+
+  .column {
+    flex: 1;
+    min-inline-size: 0;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  /* The week: four cells at `padding:15px 18px`, `#EDE9E1` between. */
+  .stats {
+    flex: none;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    margin: 0;
+    overflow: clip;
+    min-inline-size: 0;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .statCell {
+    padding: 15px 18px;
+  }
+
+  .statCell + .statCell {
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+
+  .statCell dt {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .statCell dd {
+    margin: var(--space-4) 0 0;
+    font-size: 22px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .recent {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .recentHead {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: 13px 18px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .recentTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .recentFilters {
+    margin-inline-start: auto;
+    display: flex;
+    gap: 6px;
+  }
+
+  .recentFilter {
+    padding: var(--space-4) var(--space-10);
+    border-radius: 7px;
+    background-color: var(--panel-well);
+    font-size: 11px;
+    color: var(--intent-neutral-text);
+    text-decoration: none;
+  }
+
+  .recentFilter[aria-current='true'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .recentFilter:focus-visible,
+  .recentTranscript:focus-visible,
+  .recentName:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .recentBody {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .recentNone {
+    margin: 0;
+    padding: var(--space-16) 18px;
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  .recentList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* A call: `padding:13px 18px`, `gap:14px`, `#F7F5F1` under it. */
+  .recentRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    padding: 13px 18px;
+    border-block-end: 1px solid var(--row-divider);
+  }
+
+  .recentIcon {
+    flex: none;
+    inline-size: 26px;
+    block-size: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--space-8);
+    background-color: var(--panel-well);
+    color: var(--intent-neutral-text);
+  }
+
+  .recentIcon[data-missed] {
+    color: var(--intent-urgent-text);
+  }
+
+  .recentWho {
+    flex: none;
+    inline-size: 150px;
+    min-inline-size: 0;
+  }
+
+  .recentName {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  /* Mono 11/500, as 02 sets a length. */
+  .recentLength {
+    flex: none;
+    inline-size: 64px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  .recentOutcome {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+  }
+
+  .recentDot {
+    flex: none;
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background-color: var(--signal-done);
+  }
+
+  .recentOutcome[data-tone='missed'] .recentDot {
+    background-color: var(--intent-urgent-edge);
+  }
+
+  .recentOutcome[data-tone='other'] .recentDot {
+    background-color: var(--intent-blocked-edge);
+  }
+
+  .recentWhen {
+    flex: none;
+    inline-size: 80px;
+    text-align: end;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .recentTranscript {
+    flex: none;
+    font-size: 11px;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .recentFoot {
+    flex: none;
+    margin: 0;
+    padding: var(--space-12) 18px;
+    background-color: var(--table-head-surface);
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  @media (width < 64rem) {
+    .screen {
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .dialer {
+      inline-size: auto;
+    }
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 05e, measured - on a call
+   * ════════════════════════════════════════════════════════════════════════
+   * The call's header across the panel, then the transcript (818) and
+   * Copilot in the dark (400), each scrolling inside itself.
+   */
+  .liveCall {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: normal;
+  }
+
+  /* `padding:22px 40px 18px`, `gap:16px`, `#EDE9E1` under it. */
+  .liveHead {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-16);
+    padding: 22px var(--space-40) 18px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .liveDisc {
+    flex: none;
+    inline-size: 44px;
+    block-size: 44px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--intent-neutral-text);
+    font-size: 14px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 44px;
+    text-align: center;
+  }
+
+  .liveWhoBlock {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .liveTop {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .liveWho {
+    font-size: 18px;
+    font-weight: var(--font-weight-semibold);
+    /* 02: `-0.02em` on the name - measured, as the screen titles were. */
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  /* "On the call · 1:24": `#F1F5EC`, radius 8, `padding:5px 11px`, a green dot. */
+  .liveState {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 11px;
+    border-radius: var(--space-8);
+    background-color: var(--intent-calm-surface);
+    font-size: 11.5px;
+    color: var(--intent-calm-text);
+  }
+
+  .liveState::before {
+    content: '';
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background-color: var(--signal-done-text);
+  }
+
+  .liveState[data-ended] {
+    background-color: var(--panel-well);
+    color: var(--intent-neutral-text);
+  }
+
+  .liveState[data-ended]::before {
+    background-color: var(--border-emphasis);
+  }
+
+  .liveLine {
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .liveActions {
+    flex: none;
+    display: flex;
+    gap: var(--space-8);
+  }
+
+  .liveAction,
+  .liveEnd {
+    padding: 9px var(--space-14);
+    border-radius: 9px;
+    font: inherit;
+    font-size: var(--font-size-label);
+    cursor: pointer;
+  }
+
+  .liveAction {
+    border: 1px solid var(--border-default);
+    background: transparent;
+    color: var(--intent-neutral-text);
+  }
+
+  .liveEnd {
+    padding-inline: var(--space-16);
+    border: 0;
+    background-color: var(--danger-action);
+    color: var(--danger-action-text);
+  }
+
+  .liveAction:disabled,
+  .liveEnd:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .liveBody {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+  }
+
+  .liveMain {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* `padding:16px 30px 12px`, `gap:12px`. */
+  .liveMainHead {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: var(--space-16) 30px var(--space-12);
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .liveTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  /* 02's waveform: twelve thin bars; flat once the call ends. */
+  .liveWave {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    block-size: 14px;
+  }
+
+  .liveWave > span {
+    inline-size: 2px;
+    block-size: 60%;
+    border-radius: 1px;
+    background-color: var(--border-emphasis);
+  }
+
+  .liveWave > span:nth-child(3n) {
+    block-size: 100%;
+  }
+
+  .liveWave > span:nth-child(4n + 1) {
+    block-size: 35%;
+  }
+
+  .liveWave[data-ended] > span {
+    block-size: 2px;
+  }
+
+  .transcript {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    padding: 18px 30px;
+  }
+
+  .transcriptWaiting {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  .transcriptLines {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  /* A line: the time (52, mono 10.5/500), then who and what, `gap:12px`. */
+  .transcriptLine {
+    display: flex;
+    gap: var(--space-12);
+  }
+
+  .lineTime {
+    flex: none;
+    inline-size: 52px;
+    padding-block-start: 3px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  .lineBody {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .speaker {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .said {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text-primary);
+  }
+
+  /* The customer's words carry the weight; the agent's are context. */
+  .transcriptLine[data-speaker='agent'] .said {
+    color: var(--text-secondary);
+  }
+
+  /* `padding:12px 30px 18px`, `#EDE9E1` above. */
+  .liveFoot {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    padding: var(--space-12) 30px 18px;
+    border-block-start: 1px solid var(--border-subtle);
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .liveNote {
+    margin-inline-start: auto;
+    padding: 6px var(--space-12);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    font-size: 11.5px;
+    color: var(--intent-neutral-text);
+    text-decoration: none;
+  }
+
+  .liveNote[aria-disabled='true'] {
+    opacity: 0.5;
+  }
+
+  .liveNote:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /* Copilot: 400, the dark panel, blocks at `14px 18px` with `#262626` between. */
+  .copilot {
+    flex: none;
+    inline-size: 400px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    background-color: var(--copilot-surface);
+    color: var(--frame-text);
+  }
+
+  .copilotHead {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 15px 18px;
+    border-block-end: 1px solid var(--copilot-raised);
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+  }
+
+  .copilotDot {
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background-color: var(--signal-ai);
+  }
+
+  .copilotDot[data-ended] {
+    background-color: var(--menu-dark-icon);
+  }
+
+  .copilotBlock {
+    padding: var(--space-14) 18px;
+    border-block-end: 1px solid var(--copilot-raised);
+  }
+
+  .copilotEyebrow {
+    margin: 0 0 var(--space-10);
+    font-size: 11.5px;
+    color: var(--menu-dark-icon);
+  }
+
+  .copilotTitle {
+    margin: 0 0 var(--space-10);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-medium);
+    color: var(--frame-text);
+  }
+
+  .copilotNone {
+    margin: 0;
+    font-size: 12px;
+    color: var(--menu-dark-icon);
+  }
+
+  /* "Say this": `#1F1F1F`, radius 12, `padding:12px`, a violet edge. */
+  .sayCard {
+    padding: var(--space-12);
+    border: 1px solid var(--copilot-say-edge);
+    border-radius: 12px;
+    background-color: var(--copilot-card);
+  }
+
+  .sayLead {
+    margin: 0 0 var(--space-8);
+    font-size: 11px;
+    color: var(--signal-ai);
+  }
+
+  .suggestionList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .suggestion {
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--copilot-text-strong);
+  }
+
+  /*
+   * The foot fills the rest (`padding:14px 18px`, gap 10): "Careful" at its
+   * top, straight after "Do this now", and the ask box at its bottom.
+   */
+  .copilotAsk {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding: var(--space-14) 18px;
+  }
+
+  .copilotAsk > .copilotInput {
+    margin-block-start: auto;
+  }
+
+  /* "stop", at the header's end: 11px `#8E8A83`. */
+  .copilotStop {
+    margin-inline-start: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--menu-dark-icon);
+  }
+
+  .copilotStop:disabled {
+    cursor: default;
+  }
+
+  /* "Careful": `#1F1F1F`, radius 11, `padding:12px 13px`. */
+  .carefulCard {
+    padding: var(--space-12) 13px;
+    border-radius: 11px;
+    background-color: var(--copilot-card);
+  }
+
+  .carefulTitle {
+    margin: 0 0 5px;
+    font-size: 11.5px;
+    color: var(--signal-ai);
+  }
+
+  .carefulBody {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--frame-text-body);
+  }
+
+  .copilotInput {
+    inline-size: 100%;
+    padding: 11px 13px;
+    border: 0;
+    border-radius: 11px;
+    background-color: var(--copilot-card);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--frame-text);
+  }
+
+  .copilotInput::placeholder {
+    color: var(--menu-dark-icon);
+  }
+
+  .copilotInput:disabled {
+    cursor: default;
+  }
+
+  @media (width < 64rem) {
+    .liveBody {
+      flex-direction: column;
+    }
+
+    .copilot {
+      inline-size: auto;
+    }
+  }
+
+  /* 05e's transfer: a row under the call's head. */
+  .transfer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-12) var(--space-24);
+    border-block-end: 1px solid var(--border-subtle);
+    background-color: var(--panel-inset);
+  }
+
+  .transferRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .transferInput {
+    min-inline-size: 220px;
+    padding: 8px var(--space-12);
+    border: 1px solid var(--border-default);
+    border-radius: 9px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: var(--font-size-label);
+  }
+
+  .transferNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .transferProblem {
+    margin: 0;
+    padding: 0 var(--space-24);
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+}

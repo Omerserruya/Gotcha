@@ -1,0 +1,1056 @@
+{
+  "title": "Channels",
+  "description": "Where customers reach you. Everything lands in one inbox.",
+  "unavailable": "The channels could not be loaded just now.",
+  "empty": "No channels connected yet.",
+  "openNow": "{count, plural, =0 {nothing open now} one {# open now} other {# open now}}",
+  "inWindow": "{count} started in the last {days} days",
+  "name": {
+    "WHATSAPP": "WhatsApp",
+    "MESSENGER": "Messenger",
+    "INSTAGRAM": "Instagram",
+    "EMAIL": "Email",
+    "GMAIL": "Gmail",
+    "OUTLOOK": "Outlook",
+    "SLACK": "Slack",
+    "VOICE": "Phone calls",
+    "WEBCHAT": "Web chat",
+    "SHOPIFY_LIVE_CHAT": "Shopify live chat",
+    "other": "Another channel"
+  },
+  "pitch": {
+    "WHATSAPP": "Connect your WhatsApp Business number",
+    "MESSENGER": "Connect your Facebook page",
+    "INSTAGRAM": "DMs and story replies",
+    "EMAIL": "Connect a mailbox over IMAP",
+    "GMAIL": "Connect a Gmail account",
+    "OUTLOOK": "Connect an Outlook account",
+    "SLACK": "Connect a Slack workspace",
+    "WEBCHAT": "A chat widget on every page",
+    "VOICE": "",
+    "SHOPIFY_LIVE_CHAT": ""
+  },
+  "status": {
+    "CONNECTED": "Connected",
+    "PENDING": "Finishing setup",
+    "ERROR": "Not working",
+    "DISCONNECTED": "Disconnected"
+  },
+  "connect": {
+    "heading": "Connecting {channel}",
+    "close": "Close",
+    "then": "Conversations from this channel appear in your inbox and count towards your monthly total.",
+    "webchatName": "Widget name",
+    "webchatHint": "Optional. Only you see this.",
+    "create": "Create widget",
+    "creating": "Creating…",
+    "connect": "Connect",
+    "connecting": "Connecting…",
+    "later": "Do this later",
+    "open": "Connect",
+    "emailAddress": "Email address",
+    "emailDisplayName": "Sender name",
+    "smtpHost": "SMTP server",
+    "smtpPort": "SMTP port",
+    "smtpUser": "SMTP username",
+    "smtpPass": "SMTP password",
+    "unavailable": "Authorising {channel} isn't available from here yet. Nothing is wrong with your setup.",
+    "duplicate": "That channel is already connected.",
+    "limit": "Your plan has no room for another channel.",
+    "forbidden": "You don't have permission to do that.",
+    "failed": "That didn't connect. Try again.",
+    "oauthLead": "You'll sign in to {channel} and approve GOTCHA there, then come back here.",
+    "continueTo": "Continue to {channel}",
+    "opening": "Opening…",
+    "start": {
+      "not_configured": "{channel} isn't set up on GOTCHA's side yet.",
+      "forbidden": "You don't have permission to connect a channel.",
+      "failed": "{channel} couldn't be opened - try again."
+    },
+    "notSetUp": "Not set up yet",
+    "whoAnswersNote": "Who answers here is set in <automations>Studio · Automations</automations> and the playbook, not on the channel"
+  },
+  "whatsapp": {
+    "title": "WhatsApp numbers",
+    "description": "Every WhatsApp number on this workspace, and whether it is sending and receiving.",
+    "unavailable": "We could not load your WhatsApp numbers just now. This does not mean you have none.",
+    "empty": "No WhatsApp numbers are connected to this workspace.",
+    "delivery": {
+      "working": "Sending and receiving",
+      "inbound_only": "Receiving, but not sending",
+      "outbound_only": "Sending, but not receiving",
+      "down": "Not sending or receiving",
+      "inboundOnlyDetail": "Customer messages are still arriving and your team can see them. Replies are the part that is blocked.",
+      "outboundOnlyDetail": "Replies are going out, but new customer messages are not reaching GOTCHA."
+    },
+    "blocking": "Stopping messages now",
+    "advisory": "Worth knowing",
+    "checkUnknown": "Not checked",
+    "repair": {
+      "title": "What we can try",
+      "RESUBSCRIBE_WEBHOOKS": "Re-subscribe to message notifications",
+      "REFRESH_STATUS": "Re-read this number's status from Meta",
+      "REQUEST_HISTORY_SYNC": "Ask Meta for this business's message history"
+    },
+    "register": {
+      "title": "You can fix this here",
+      "body": "This number is registered with Meta but was never activated for messaging, which is why it can receive and cannot send. Activating it takes your two-step PIN if the number has one.",
+      "action": "Activate this number"
+    },
+    "customerActions": {
+      "title": "You will need to fix this in Meta",
+      "body": "These cannot be resolved from GOTCHA. They are settings on your Meta Business account."
+    },
+    "unprofiled": {
+      "body": "This number is connected and working. It was set up before GOTCHA could check individual numbers, so there is nothing to report about its health and no repairs to offer. Reconnecting it would enable both.",
+      "noHealth": "No health data",
+      "quality": {
+        "GREEN": "Quality: green",
+        "YELLOW": "Quality: yellow",
+        "RED": "Quality: red"
+      },
+      "qualityWhy": "Meta's rating of how customers have been receiving this number's messages lately.",
+      "verifiedName": "Verified name on Meta:"
+    },
+    "lastChecked": "Last checked {date}.",
+    "neverChecked": "This number's health has not been checked yet.",
+    "templatesPaused": {
+      "title": "WhatsApp templates are paused",
+      "body": "Meta is not delivering your reminders, cart recovery or campaigns from this number.",
+      "repliesStillFlow": "Replies to customers who messaged you in the last 24 hours still go out.",
+      "reasonLabel": "Meta's reason",
+      "noReason": "Meta did not say why.",
+      "fixInMeta": "This is fixed in your Meta Business account, not here.",
+      "badge": "Templates paused"
+    },
+    "import": {
+      "heading": "Learning from this number's history",
+      "live": "The number is already live. Everything below happens alongside it and does not hold anything up.",
+      "stage": {
+        "transferring": "Bringing the history across",
+        "analyzing": "Reading it",
+        "ready": "Ready to review",
+        "failed": "Stopped",
+        "unavailable": "No history to learn from"
+      },
+      "whatHappens": "While this runs, GOTCHA is learning your language and tone, finding the questions you answer most and the answers you give, and remembering the customers it meets.",
+      "noOrder": "Those happen together rather than one after another, so there is no order to watch.",
+      "conversations": "{read} of {total} conversations read",
+      "conversationsNoTotal": "{read} conversations read so far",
+      "customers": "{read} of {total} customers looked at",
+      "answers": "{count, plural, =0 {No answers found yet} one {# answer found} other {# answers found}}",
+      "notCountedYet": "Nothing has been counted yet. The first numbers appear once the history finishes arriving.",
+      "safeToClose": "Safe to close this page - it keeps running.",
+      "emailOnDone": "An email goes to the workspace owners when the report is ready.",
+      "emailNeedsAddress": "That email only goes to owners who have an email address on their account.",
+      "readyBody": "GOTCHA has finished reading. Nothing it learned is in use until you approve it.",
+      "failedWithStage": "It stopped while {stage}. Nothing from this import is in use.",
+      "failedBare": "It stopped before finishing. Nothing from this import is in use.",
+      "unavailableBody": "This number has no history GOTCHA can read - usually because it is new, or because the source declined to share it."
+    },
+    "review": {
+      "heading": "What GOTCHA learned",
+      "nothingUsedYet": "None of this is in use. GOTCHA only answers from what you approve here - an answer that is still waiting cannot reach a customer.",
+      "evidenceNotTruth": "These are things your team actually said. That makes them evidence, not policy: an agent may have made an exception once, or been wrong.",
+      "group": {
+        "needs_a_look": "Needs a look",
+        "ready": "Approved",
+        "rejected": "Rejected",
+        "already_covered": "Already covered"
+      },
+      "alreadyCoveredBody": "You already have an answer for these, so they were not added a second time. Nothing was turned down.",
+      "empty": "Nothing in this group.",
+      "evidence": "Said {occurrences, plural, one {once} other {# times}} to {customers, plural, one {one customer} other {# customers}}, {from} to {to}.",
+      "evidenceNoDates": "Said {occurrences, plural, one {once} other {# times}} to {customers, plural, one {one customer} other {# customers}}.",
+      "liveLookup": "Do not let the AI state this as fact. It is true in general and depends on something that changes - stock, a calendar, a price - so the AI is told to check before answering rather than promise.",
+      "curation": {
+        "kept": "Kept as your team wrote it.",
+        "rewritten": "Reworded for clarity.",
+        "live_data": "Marked as needing a live check."
+      },
+      "conflict": "Your team gave more than one answer to this. Choose or write the right one - GOTCHA will not pick for you.",
+      "duplicateOf": "You already have an answer to this in your knowledge base.",
+      "approve": "Approve",
+      "reject": "Reject",
+      "bulkApprove": "Approve the {count} that are ready",
+      "bulkSafe": "This only takes suggestions with no conflict and enough evidence behind them. The list is worked out here, not on this page, so it cannot approve a conflict however it is pressed.",
+      "rerun": "Look again",
+      "rerunSafe": "Looking again updates the counts on these suggestions. It does not ask you about anything you have already rejected.",
+      "noLanguageShortcut": "The design offers to add a missing reply language from here. There is nowhere to add one - GOTCHA stores a single language and answers each customer in their own regardless."
+    },
+    "close": "Close",
+    "panelLine": "WhatsApp Business account · {count, plural, =0 {no numbers yet} one {one number} other {# numbers}}",
+    "tab": {
+      "numbers": "Numbers",
+      "templates": "Templates",
+      "contacts": "Private contacts",
+      "activity": "Activity"
+    },
+    "panelTitle": "WhatsApp",
+    "footNotYet": "Not from here yet.",
+    "foot": {
+      "add": "{count, plural, =0 {No ready answers to add} one {Add 1 ready answer} other {Add # ready answers}}",
+      "addAsk": "{count, plural, one {GOTCHA starts answering with this one. Add it?} other {GOTCHA starts answering with these #. Add them?}}",
+      "addAtMost": "The platform adds up to {most} per press, in no set order - press again for the rest.",
+      "addYes": "Yes, add them",
+      "adding": "Adding…",
+      "added": "{count, plural, one {1 answer added} other {# answers added}}{skipped, plural, =0 {.} other {; # were skipped - they stay to review.}}",
+      "refused": {
+        "forbidden": "You don't have permission to change what GOTCHA knows.",
+        "failed": "They weren't added - try again."
+      },
+      "rerun": "Run the analysis again",
+      "rerunAsk": "This clears this report - the suggestions, the ones you decided too, and what it remembered about customers - and reads the history again. Answers already in your knowledge stay. Run it again?",
+      "rerunYes": "Yes, run it again",
+      "rerunning": "Starting…",
+      "rerunRefused": {
+        "not_settled": "It's still running - run it again once it has finished.",
+        "forbidden": "You don't have permission to run it again.",
+        "failed": "It didn't start - try again."
+      },
+      "cancel": "Not now",
+      "refresh": "Refresh from Meta",
+      "activity": "Activity log",
+      "disconnect": "Disconnect this number",
+      "thisNumber": "this number",
+      "refreshing": "Refreshing…",
+      "refreshResult": {
+        "done": "Updated just now",
+        "not_found": "That number isn't connected here any more.",
+        "forbidden": "You don't have permission to refresh this number.",
+        "failed": "Couldn't reach Meta just now. Try again in a moment.",
+        "too_soon": "It was refreshed a moment ago. Try again in a minute.",
+        "reconnect": "GOTCHA's access to this number has expired. Reconnect it to refresh.",
+        "meta_silent": "Meta didn't answer for this number. Nothing was changed."
+      },
+      "noRecord": "This number isn't fully set up in GOTCHA yet, so there's nothing to refresh or disconnect from here.",
+      "disconnectMany": "There's more than one number here: disconnecting one at a time from its card isn't available yet.",
+      "disconnectTitle": "Disconnect {number}?",
+      "disconnectWhat": "Messages to this number stop reaching GOTCHA, and its private contacts and activity log are removed. The conversations you already have are kept. To use it again, connect it from the start.",
+      "disconnectYes": "Disconnect {number}",
+      "disconnecting": "Disconnecting…",
+      "disconnectFailed": {
+        "not_found": "That number isn't connected here any more.",
+        "forbidden": "You don't have permission to disconnect this number.",
+        "failed": "It wasn't disconnected. Try again in a moment."
+      },
+      "disconnectCancel": "Cancel",
+      "noRecordDisconnect": "This number isn't fully set up in GOTCHA yet, so it can't be disconnected from here."
+    },
+    "rows": {
+      "hours": "Hours",
+      "hoursWorkspace": "The workspace's hours",
+      "modeAsk": {
+        "AI_AUTO_REPLY": "Let GOTCHA answer on its own on this number?",
+        "HUMAN_WITH_COPILOT": "Have GOTCHA draft and a person send on this number?"
+      },
+      "modeYes": "Yes, switch",
+      "modeNo": "Not now",
+      "modeFailed": "That didn’t switch - nothing changed.",
+      "whoAnswers": "Who answers here is set in <automations>Studio · Automations</automations> and the playbook"
+    },
+    "addNumber": "+ Add another number",
+    "learn": {
+      "rowImporting": "Learning in progress · importing {percent}%",
+      "rowLearning": "Learning in progress · {percent}%",
+      "rowReady": "Report ready · {count, plural, one {# answer} other {# answers}}",
+      "steps": "Setting up",
+      "step": {
+        "where": "Where it lives",
+        "meta": "Meta",
+        "number": "Number",
+        "learn": "Learn"
+      },
+      "connected": "Connected - new messages already arrive in your inbox.",
+      "connectedStep": "Number connected",
+      "imported": "History imported",
+      "conversations": "{count} conversations",
+      "learning": "Learning how you write",
+      "learningSub": "Language, tone and the phrases you use",
+      "answers": "Finding questions and answers",
+      "answersSub": "Taken from your replies, not guessed",
+      "customers": "Remembering customers",
+      "soFar": "So far",
+      "mostAsked": "Most asked about",
+      "close": "Close and keep going",
+      "review": "Review report",
+      "reviewWhenReady": "The report opens when GOTCHA has finished reading.",
+      "rerun": "Run the analysis again",
+      "rerunNoHistory": "The history didn't arrive in full, so there is nothing whole to analyse again.",
+      "setting": "Setting up {name}",
+      "learned": "What GOTCHA learned from {name}",
+      "nothingUsed": "Nothing is used until you approve it.",
+      "stat": {
+        "conversations": "conversations",
+        "customers": "customers",
+        "period": "period",
+        "answers": "answers found"
+      },
+      "card": {
+        "languages": "Languages",
+        "sound": "How you sound",
+        "customers": "Customers"
+      },
+      "noImportData": "This import doesn't report it yet.",
+      "customersRead": "{count} customers read",
+      "chip": {
+        "conflict": "Conflict",
+        "live": "Needs a live check",
+        "low": "Low confidence"
+      },
+      "chats": "{count, plural, one {# chat} other {# chats}}",
+      "use": "Use {answer}",
+      "edit": "Edit",
+      "skip": "Skip",
+      "readyCard": "{count, plural, one {# more is ready} other {# more are ready}} - high confidence, no conflicts",
+      "addReady": "{count, plural, one {Add # ready answer} other {Add # ready answers}}",
+      "later": "Finish later",
+      "coexistence": "Coexistence · the app on your phone keeps working",
+      "closeAnytime": "You can close this - we'll email the workspace owners when the report is ready.",
+      "tab": {
+        "needs_a_look": "Needs a look",
+        "ready_to_add": "Ready to add",
+        "rejected": "Rejected",
+        "already_covered": "Already covered"
+      },
+      "qa": "Questions and answers",
+      "saidLead": "Your replies said",
+      "saidAnd": "and",
+      "saidIn": "in {count, plural, one {# chat} other {# chats}}",
+      "saidInShort": "in {count}",
+      "quoted": "“{answer}”",
+      "seeChats": "See the chats",
+      "previewFive": "Preview five"
+    },
+    "wizard": {
+      "title": "Connect WhatsApp",
+      "line": "About three minutes.",
+      "cancel": "Cancel",
+      "steps": {
+        "where": "Where it lives",
+        "meta": "Meta",
+        "number": "Number",
+        "templates": "Required templates",
+        "learn": "Learn"
+      },
+      "where": {
+        "question": "Where does this number live today?",
+        "mostCommon": "Most common",
+        "business_app": {
+          "title": "On the WhatsApp Business app",
+          "body": "Keep using the app on your phone - conversations show up in both places. GOTCHA can import up to 6 months of history to learn from."
+        },
+        "new": {
+          "title": "Not on WhatsApp yet, or with another provider",
+          "body": "The number moves fully to GOTCHA and can't be used in the app afterwards. There's no history to import."
+        },
+        "note": "A Meta window opens. Finish there and you'll land back here to pick the number.",
+        "continue": "Continue with Meta",
+        "again": "Meta asks this again in its window - pick the same answer there."
+      },
+      "needs": {
+        "title": "You'll need",
+        "login": "A Facebook login that's an admin of your business on Meta",
+        "phone": "The phone with this number nearby, for a code",
+        "payment": "A payment method on the WhatsApp account - you can add it later"
+      },
+      "meta": {
+        "waiting": "Finish in the Meta window - this sheet waits for you.",
+        "reading": "Reading your numbers…"
+      },
+      "number": {
+        "question": "Which number should GOTCHA answer?",
+        "lead": "{count, plural, one {Meta shared one number.} other {Meta shared # numbers. Connect one now - add the others later without signing in again.}}",
+        "none": "Meta didn't share any numbers. Nothing was connected.",
+        "flow": {
+          "businessApp": "On the WhatsApp Business app · history can be imported",
+          "pin": "Registered with two-step verification · needs its 6-digit PIN",
+          "new": "Not registered yet",
+          "connected": "Already connected to GOTCHA",
+          "blocked": "Can't be connected right now",
+          "blockedBy": {
+            "connectedElsewhere": "Connected to another GOTCHA workspace - disconnect it there first",
+            "onPremise": "Runs on WhatsApp's older on-premise system, which can't be connected to GOTCHA",
+            "banned": "WhatsApp has banned this number",
+            "otherPlatform": "Another platform receives this number's messages - disconnect it there first",
+            "permission": "GOTCHA wasn't given full WhatsApp permission - connect again and accept every permission"
+          }
+        },
+        "pin": "Its 6-digit PIN",
+        "pinInvalid": "The PIN is six digits.",
+        "owner": "Who answers it",
+        "ownerNotYet": "Who answers is set on the number once it's connected.",
+        "import": "Import the last 6 months",
+        "importBody": "Meta sends this once, only during setup. GOTCHA learns your answers, tone and customers from it. Nothing is sent to anyone.",
+        "importWhy": "Meta sends the history on its own when a Business app number connects - there is nothing to switch.",
+        "contacts": "Family or friends on this number? Mark chats GOTCHA should ignore.",
+        "contactsNotYet": "Choosing contacts before the import comes next; private contacts can be added from the number's settings.",
+        "connect": "Connect",
+        "connectImport": "Connect and import",
+        "back": "Back",
+        "pending": "Meta needs one more step from you before this number works.",
+        "failed": "The number wasn't connected - try again.",
+        "pendingAction": {
+          "twoStepPin": "This number needs its 6-digit two-step PIN before it works.",
+          "verificationCode": "Meta needs to verify this number with a code it sends before it works.",
+          "businessAppConfirmation": "Confirm the connection in your WhatsApp Business app before this number works.",
+          "businessVerification": "Meta needs your business to finish Business Verification before this number works.",
+          "displayNameReview": "Meta is reviewing this number's display name. It works once the name is approved."
+        }
+      },
+      "problem": {
+        "notConfigured": "Meta's sign-up isn't set up for this workspace yet.",
+        "unavailable": "Meta's sign-in couldn't load here - an ad blocker or a company network often blocks it.",
+        "cancelled": "You closed Meta’s window - nothing was connected.",
+        "noCode": "Meta didn't hand back a way to read your numbers. Nothing was connected - try again.",
+        "inspectFailed": "We couldn't read the numbers on that account. Nothing was connected - try again."
+      },
+      "continue": "Continue"
+    },
+    "decide": {
+      "approved": "Approved - GOTCHA answers with it now.",
+      "rejected": "Set aside - GOTCHA won’t use it.",
+      "saveApprove": "Save and approve",
+      "cancel": "Cancel",
+      "refused": {
+        "already_covered": "Your knowledge already answers this - nothing new was added.",
+        "no_knowledge_base": "There is no knowledge base to add it to yet - create one in Studio → Knowledge.",
+        "not_found": "This suggestion was already decided or is gone.",
+        "forbidden": "You don't have permission to change what GOTCHA knows.",
+        "too_long": "That answer is too long to save - shorten it.",
+        "failed": "That didn’t go through - try again."
+      },
+      "confirm": {
+        "title": "This is what GOTCHA will read, word for word",
+        "note": "It goes into your knowledge and GOTCHA answers customers with it. Nothing is used until you press Yes.",
+        "yes": "Yes, use it with customers",
+        "using": "Adding…",
+        "back": "Back"
+      }
+    },
+    "tabs": {
+      "unread": "Couldn't read this just now. Try again in a moment.",
+      "templates": {
+        "none": "No WhatsApp templates yet.",
+        "create": "Create one in Outreach · Templates"
+      },
+      "contacts": {
+        "lead": "GOTCHA doesn't take messages from these numbers on the WhatsApp number each is set for: they're yours to answer.",
+        "none": "No private contacts. Every number that writes in reaches GOTCHA.",
+        "add": "Add",
+        "adding": "Adding…",
+        "numberLabel": "Number",
+        "numberPlaceholder": "054-123-4567",
+        "noteLabel": "Note (optional)",
+        "notePlaceholder": "e.g. My mother",
+        "remove": "Remove",
+        "removeConfirm": "Messages from {number} will reach GOTCHA again.",
+        "removeYes": "Remove",
+        "keep": "Keep",
+        "removeFailed": "It wasn't removed. Try again in a moment.",
+        "problem": {
+          "format": "Enter a phone number with at least {min} digits.",
+          "invalid_number": "Enter a phone number with at least {min} digits.",
+          "not_found": "That rule isn't here any more.",
+          "forbidden": "You don't have permission to change private contacts.",
+          "failed": "It wasn't added. Try again in a moment.",
+          "which": "Choose which of your WhatsApp numbers it's private on.",
+          "number_gone": "That WhatsApp number isn't connected here any more. Reload and choose another."
+        },
+        "allNumbers": "All numbers",
+        "otherNumber": "A number no longer connected",
+        "onLabel": "On",
+        "onChoose": "Choose a WhatsApp number",
+        "onOne": "Private on {number}.",
+        "noNumbers": "Connect a WhatsApp number first: a private contact is private on one of your numbers."
+      },
+      "activity": {
+        "none": "Nothing recorded for these numbers yet.",
+        "step": {
+          "EXCHANGE_TOKEN": "Connected to Meta",
+          "SUBSCRIBE_WEBHOOKS": "Messages turned on",
+          "REGISTER_NUMBER": "Number registered",
+          "HEALTH_CHECK": "Health check",
+          "REPAIR_WEBHOOKS": "Messages repaired"
+        },
+        "outcome": {
+          "SUCCESS": "done",
+          "FAILED": "failed",
+          "SKIPPED": "skipped",
+          "ACTION_REQUIRED": "needs you"
+        }
+      }
+    },
+    "notYet": "Not available yet",
+    "aNumber": "A WhatsApp number",
+    "chats": {
+      "title": "The chats behind an answer",
+      "back": "Back to the report",
+      "count": "{count, plural, one {# chat} other {# chats}} behind this answer, newest first.",
+      "none": "No chats are kept for this answer.",
+      "unread": "The chats couldn't be read just now.",
+      "customer": "Customer",
+      "reply": "Your reply",
+      "team": "Your team",
+      "open": "Open the chat",
+      "close": "Back to the chats",
+      "thread": "The chat",
+      "threadWith": "The chat with {name}",
+      "threadUnread": "This chat couldn't be opened - it may be gone."
+    },
+    "profiles": {
+      "title": "Five customers, as GOTCHA remembers them",
+      "back": "Back to the report",
+      "line": "What GOTCHA learned about the five you talked with most. Nothing here is sent to anyone.",
+      "messages": "{count, plural, one {# message} other {# messages}}",
+      "none": "Nothing was learned about this customer.",
+      "unread": "What was learned about this customer couldn't be read.",
+      "listUnread": "The customers couldn't be read just now.",
+      "empty": "No customers came in with this history.",
+      "open": "Open the customer"
+    },
+    "phoneNotRead": "Number not read from Meta yet",
+    "required": {
+      "title": "Required templates",
+      "lead": "Once 24 hours pass since a customer's last message, WhatsApp only takes a template Meta approved. These are the two GOTCHA needs on this number.",
+      "role": {
+        "reopen": {
+          "title": "Reopen a conversation",
+          "purpose": "Reopens a conversation after 24 hours"
+        },
+        "followup": {
+          "title": "Follow-up",
+          "purpose": "A reminder to a customer who didn't reply"
+        }
+      },
+      "state": {
+        "missing": "Not saved yet",
+        "draft": "Draft",
+        "pending": "Waiting for Meta",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "unknown": "Unknown state"
+      },
+      "bodyLabel": "Text",
+      "variable": "{token} is replaced with the customer's name.",
+      "button": "Button:",
+      "reason": "Meta's reason:",
+      "notConnected": "This number isn't connected yet. The templates can be sent to Meta once it is; until then, Save keeps them as drafts.",
+      "none": "This number has no required templates.",
+      "save": "Save as draft",
+      "saving": "Saving…",
+      "submit": "Approve and send to Meta",
+      "sending": "Sending…",
+      "confirm": "Send the templates to Meta for review? After that they can be edited only in Outreach · Templates.",
+      "confirmYes": "Send to Meta",
+      "confirmNo": "Cancel",
+      "editInOutreach": "Edit in Outreach · Templates",
+      "forbidden": "Only an Owner can save these templates and send them to Meta.",
+      "forbiddenRead": "Only an Owner can see and send the required templates.",
+      "unread": "We couldn't read the required templates right now. Try again in a moment.",
+      "notFound": "We couldn't find the new number yet. Its required templates wait in Settings · Channels · WhatsApp · Templates.",
+      "outcome": {
+        "saved": "Saved as a draft.",
+        "submitted": "Sent to Meta for review.",
+        "not_connected": "Saved as a draft. The number isn't connected yet, so it can be sent to Meta once it is.",
+        "already_submitted": "It was already sent to Meta, so it's edited in Outreach · Templates.",
+        "refused": "Saved as a draft, but Meta didn't accept it. Fix the text and send it again.",
+        "bad_body": "The text needs 1 to {max} characters.",
+        "not_found": "This number isn't connected here anymore.",
+        "failed": "It wasn't saved. Try again in a moment."
+      }
+    }
+  },
+  "rowSettings": "Settings",
+  "banner": {
+    "title": "{channel} needs attention",
+    "more": "{count, plural, one {and one more channel} other {and # more channels}}"
+  },
+  "chipTrouble": "Needs attention",
+  "landing": {
+    "connected": "{channel} connected.",
+    "connectedCount": "{count, plural, =0 {{channel} connected - no accounts came with it.} one {{channel} connected - 1 account.} other {{channel} connected - # accounts.}}",
+    "pending": "{channel} is connected, and Meta needs one more step - finish it in the number’s settings.",
+    "pendingOther": "{channel} is connected, but it isn't ready for messages yet. Its row below says what it needs.",
+    "pendingReason": {
+      "subscribe_failed": "{channel} is connected, but messages can't arrive: the platform refused GOTCHA's subscription to them. Reconnect it from its row below."
+    },
+    "error": {
+      "denied": "You cancelled at {channel} - nothing was connected.",
+      "token_exchange_failed": "{channel} didn't confirm the connection. Nothing was connected - try again.",
+      "state_already_used": "That sign-in was already used. Start again from Connect.",
+      "invalid_state": "That sign-in couldn't be matched to this workspace. Start again from Connect.",
+      "not_configured": "{channel} isn't set up on GOTCHA's side yet.",
+      "already_connected": "{channel} is already connected to this workspace.",
+      "gmail_no_email": "Google didn't share an email address, so Gmail wasn't connected.",
+      "outlook_no_email": "Microsoft didn't share an email address, so Outlook wasn't connected.",
+      "no_pages": "No Facebook Page came with that sign-in - choose a Page you manage and try again.",
+      "no_instagram_account": "No Instagram business account is linked to that Page. Link one in Meta, then try again.",
+      "no_whatsapp_numbers": "Meta shared no WhatsApp numbers. Nothing was connected.",
+      "slack_no_team": "Slack didn't say which workspace - try again.",
+      "callback_error": "Something went wrong on the way back from {channel}. Nothing was connected - try again.",
+      "limit_reached": "Your plan has no room for another channel, so {channel} wasn't connected.",
+      "picker_failed": "Your Pages couldn't be kept for you to choose from, so nothing was connected. Connect {channel} again.",
+      "other": "{channel} didn't connect. Try again."
+    },
+    "unnamed": {
+      "denied": "You cancelled - nothing was connected.",
+      "token_exchange_failed": "The connection wasn't confirmed. Nothing was connected - try again.",
+      "not_configured": "That channel isn't set up on GOTCHA's side yet.",
+      "already_connected": "That account is already connected to this workspace.",
+      "callback_error": "Something went wrong on the way back. Nothing was connected - try again.",
+      "limit_reached": "Your plan has no room for another channel, so nothing was connected.",
+      "picker_failed": "Your Pages couldn't be kept for you to choose from, so nothing was connected. Try again.",
+      "other": "The connection didn't go through. Try again."
+    }
+  },
+  "twilio": {
+    "friendlyName": "Name",
+    "accountSid": "Account SID",
+    "accountSidHint": "From your Twilio console - starts with AC.",
+    "accountSidBad": "An Account SID is AC followed by 32 letters and digits.",
+    "authToken": "Auth Token",
+    "connect": "Check and continue",
+    "checking": "Checking with Twilio…",
+    "later": "Do this later",
+    "pick": "{count, plural, one {Twilio has one number on this account. Choose it to answer calls with GOTCHA.} other {Twilio has # numbers on this account. Choose which ones GOTCHA answers.}}",
+    "noNumbers": "This Twilio account has no phone numbers yet. Buy one in Twilio, then come back.",
+    "activate": "{count, plural, one {Answer calls on 1 number} other {Answer calls on # numbers}}",
+    "activating": "Setting up the numbers…",
+    "done": "{count, plural, one {GOTCHA answers calls on 1 number now.} other {GOTCHA answers calls on # numbers now.}}",
+    "donePartly": "{done} set up; {failed} could not be - try those again from Phone calls.",
+    "close": "Done",
+    "error": {
+      "invalid": "Fill in every field, as Twilio gives them.",
+      "twilio": "Twilio didn't accept those details - check the Account SID and Auth Token.",
+      "not_offered": "Phone calls aren't available for this workspace yet.",
+      "forbidden": "Only an admin can connect phone calls.",
+      "failed": "That didn't connect - try again."
+    },
+    "help": "Where to find these in the Twilio console → Account → API keys & tokens",
+    "show": "Show",
+    "hide": "Hide"
+  },
+  "embed": {
+    "lead": "Paste this before the closing </body> tag on every page where the chat should appear.",
+    "copy": "Copy code",
+    "copied": "Copied",
+    "copyFailed": "The code couldn't be copied - select it and copy it by hand.",
+    "done": "Done"
+  },
+  "webchat": {
+    "crumbs": "Breadcrumbs",
+    "channels": "Channels",
+    "title": "Website widget",
+    "subtitle": "One widget for your website. Set it up, check it in the preview, then install",
+    "live": "Live",
+    "notLive": "Not live yet",
+    "goLive": "Go live",
+    "tabsLabel": "Website widget settings",
+    "tabs": {
+      "appearance": "Appearance",
+      "conversation": "Conversation",
+      "behaviour": "Behaviour",
+      "install": "Install"
+    },
+    "saving": {
+      "saving": "Saving…",
+      "saved": "Saved",
+      "failed": "Not saved. Change it again to retry",
+      "nowhere": "Not saved: the widget isn't installed anywhere yet. Get the code under Install first",
+      "number": "Not saved: that WhatsApp number isn't one of this workspace's. Choose another",
+      "kindNumber": "Not saved: a WhatsApp widget needs a connected WhatsApp number. Choose one.",
+      "couponPersonal": "Not saved: a customer's personal coupon can't be a deal. Uncheck it."
+    },
+    "unread": "Couldn't read the widget's settings. Try again in a moment.",
+    "appearance": {
+      "colour": "Main colour",
+      "custom": "Your own colour",
+      "hue": "Hue",
+      "code": "Colour code",
+      "codeHint": "Paste any hex code",
+      "codeBad": "A hex code looks like #C96A4B",
+      "logo": "Logo",
+      "logoHint": "Shown at the top of the chat",
+      "cover": "Cover image",
+      "coverHint": "Shown at the top of the widget",
+      "position": "Position",
+      "side": {
+        "right": "Right",
+        "left": "Left"
+      },
+      "replace": "Replace",
+      "look": "Look",
+      "lookHint": "What customers see on your site",
+      "looks": {
+        "gotcha": "GOTCHA",
+        "whatsapp": "WhatsApp"
+      },
+      "lookWhy": "Choosing the WhatsApp look isn't available yet: it comes with the next widget update",
+      "colourWaLook": "The WhatsApp look uses WhatsApp's colours. Your main colour is used in the GOTCHA look",
+      "coverWaLook": "The WhatsApp look shows no cover image. Yours is used in the GOTCHA look",
+      "waKindLook": "A WhatsApp widget looks like WhatsApp: there's no colour, logo or cover to set. Only its side.",
+      "eyedropper": "Pick a colour from the screen",
+      "upload": {
+        "limits": "PNG, JPG, WEBP or GIF, up to {mb} MB and {width}×{height} pixels",
+        "file": "Upload a file",
+        "busy": "Uploading…",
+        "remove": "Remove",
+        "link": "Link to the image",
+        "linkPlaceholder": "https://… or a Google Drive link",
+        "add": "Add",
+        "problem": {
+          "not_image": "That isn't an image we can use. PNG, JPG, WEBP or GIF.",
+          "too_large": "The file is too big: up to {mb} MB.",
+          "too_big": "The image is {width}×{height} pixels; this place takes up to {maxWidth}×{maxHeight}.",
+          "too_big_unknown": "The image is too big: up to {maxWidth}×{maxHeight} pixels.",
+          "url_invalid": "That isn't a link we can read. It needs to start with https://, or be a Google Drive share link.",
+          "not_image_link": "There's no image at that link. A Google Drive file must be shared with anyone with the link.",
+          "fetch_failed": "The image couldn't be downloaded from that link. Check that it opens.",
+          "forbidden": "You don't have permission to change the widget.",
+          "failed": "The image wasn't saved. Try again."
+        },
+        "removeFor": {
+          "logo": "Remove the logo",
+          "cover": "Remove the cover image"
+        }
+      }
+    },
+    "conversation": {
+      "name": "Assistant name",
+      "popup": "Pop-up message",
+      "questions": "Opening questions",
+      "question": "Opening question {n}",
+      "questionsHint": "Your three most common questions. One tap and the customer gets an answer",
+      "employee": "Assigned AI employee",
+      "required": "Required",
+      "employeeHint": "What it knows, how it sounds and when it hands over are set on the employee in Studio",
+      "employeesUnread": "Couldn't read your AI employees.",
+      "paused": "paused",
+      "language": "Language",
+      "languages": {
+        "auto": "In the customer's language",
+        "he": "Always Hebrew",
+        "en": "Always English"
+      },
+      "employeeNone": "The playbook doesn't send website conversations to one employee",
+      "employeeWhere": "Who answers is set in <automations>Studio · Automations</automations> and the playbook, not here",
+      "assign": {
+        "adminsOnly": "Only an admin can change who answers the widget.",
+        "noPlace": "Who answers can be chosen once the widget has a place - create its code on the Install tab.",
+        "how": {
+          "always": "An employee",
+          "conditional": "Conditions in the playbook decide",
+          "team": "A team, not one employee",
+          "flow": "A chatbot flow",
+          "none": "No one yet"
+        },
+        "conditional": "{channels}: conditions in the playbook decide who answers - change them in <automations>Studio · Automations</automations>.",
+        "choose": "Who answers the widget",
+        "inactive": "Not working",
+        "inactiveWhy": "Start this employee in Studio to choose them here.",
+        "playbook": "This changes the playbook: from the moment it's saved, website conversations go to this employee.",
+        "shared": {
+          "ask": "The widget shares one route in the playbook with {channels}, so this also moves {channels} to {name}.",
+          "askUnnamed": "The widget shares one route in the playbook with other channels, so this also moves them to {name}.",
+          "yes": "Move them too",
+          "no": "Cancel"
+        },
+        "save": "Save: {name}",
+        "saveNothing": "Save",
+        "saving": "Saving…",
+        "saved": "Saved. {name} answers the widget from now on.",
+        "problem": {
+          "conditional": "Conditions in the playbook decide this now - change it in Studio · Automations.",
+          "employee_gone": "That employee isn't working now. Choose another.",
+          "no_place": "The widget isn't installed anywhere yet - create its code on the Install tab first.",
+          "forbidden": "Only an admin can change who answers the widget.",
+          "failed": "Not changed. Try again."
+        }
+      },
+      "greeting": "Greeting",
+      "greetingHint": "The first message in the WhatsApp panel",
+      "teaser": "Line above the button"
+    },
+    "behaviour": {
+      "popup": "Pop-up message",
+      "popupHint": "A small bubble above the button, once per visit",
+      "when": "When to show",
+      "rightAway": "Right away",
+      "seconds": "{s}s",
+      "whatsapp": "Continue on WhatsApp",
+      "whatsappHint": "A button that continues the same conversation on your WhatsApp",
+      "whatsappWhy": "Not available yet: it comes with the next widget update",
+      "poweredByLead": "Powered by",
+      "poweredBy": "Powered by GOTCHA",
+      "poweredByHint": "Always shown, in both widgets.",
+      "products": {
+        "label": "Recommend products",
+        "hint": "Product cards from your catalogue, in stock only"
+      },
+      "cart": {
+        "label": "Add to cart from the chat",
+        "hint": "Customers add to cart without leaving the chat"
+      },
+      "deals": {
+        "label": "Show active deals",
+        "hint": "Only deals set up in your store",
+        "choose": "Choose deals",
+        "change": "Change",
+        "chosen": "{count, plural, =0 {None chosen} one {# chosen} other {# chosen}}",
+        "max": "Up to {max} deals, shown in the order you choose them",
+        "loading": "Reading your store's coupons…",
+        "unreachable": "Your store didn't answer.",
+        "failed": "The coupons couldn't be read.",
+        "retry": "Try again",
+        "notConnected": "Your WooCommerce store isn't connected to GOTCHA right now.",
+        "none": "Your store has no coupons yet.",
+        "percent": "{n}% off",
+        "fixedCart": "{n} off the cart",
+        "fixedProduct": "{n} off a product",
+        "live": "Shows now",
+        "held": {
+          "unpublished": "Not shown: not published",
+          "expired": "Not shown: expired",
+          "usedUp": "Not shown: used up",
+          "personal": "A customer's personal coupon, not shown as a deal"
+        },
+        "done": "Done",
+        "freeShipping": "Free shipping"
+      },
+      "noCatalogue": "Not available yet: it needs a store connected to GOTCHA (Shopify or WooCommerce)",
+      "onInShopify": "On in your Shopify store",
+      "codeNoProducts": "Not on sites that use the code",
+      "noDeals": "Not available yet: it needs a WooCommerce store connected to GOTCHA",
+      "whatsappNumber": "The WhatsApp number it continues on",
+      "whatsappNone": "No WhatsApp number is connected yet. Connect one in <channels>Settings · Channels</channels>.",
+      "whatsappReason": {
+        "not_connected": "This number isn't connected",
+        "number_unknown": "We don't know this number's phone yet; reconnect it in <channels>Settings · Channels</channels>"
+      },
+      "whatsappHidden": "The button won't show on your site until a number that can take it is chosen.",
+      "cartNeedsProducts": "Turn on Recommend products first: Add to cart is on a product card"
+    },
+    "install": {
+      "shopify": "Shopify",
+      "shopifyHint": "One click, reads stock and orders",
+      "woo": "WooCommerce",
+      "wooHint": "One plugin, no code",
+      "wooWhy": "There is no WooCommerce plugin yet. Until there is, the code below works on a WooCommerce site",
+      "wooButton": "Connect",
+      "other": "Any other site · one line of code",
+      "otherHint": "Paste it before </body>. Changes in these settings reach the site without touching the code again",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyFailed": "Couldn't copy. Select the code and copy it",
+      "liveNow": "Live. Visitors to your site can chat now",
+      "waiting": "Waiting for the first visit from your site. The status changes to Live on its own",
+      "unread": "Couldn't read where the widget is installed. Try again in a moment.",
+      "shop": {
+        "active": "Installed, the chat shows in your theme",
+        "quiet": "Installed, but the store's theme hasn't loaded the chat in the last week",
+        "off": "Installed, but the chat is switched off in your theme",
+        "removed": "The GOTCHA app was removed from this store"
+      },
+      "shopTag": {
+        "active": "Active",
+        "quiet": "Not showing",
+        "off": "Off"
+      },
+      "data": {
+        "ok": "Connected to stock and orders",
+        "failing": "Stock and orders aren't connected: the connection is failing",
+        "none": "Stock and orders aren't connected",
+        "unread": "Couldn't check the stock and orders connection",
+        "fix": "Fix the connection",
+        "connect": "Connect",
+        "title": "Stock and orders"
+      },
+      "themeEditor": "Open the theme editor",
+      "liveOn": "Live. Last seen on {host}",
+      "noCode": "There's no code yet. It's made once, and every change here reaches it",
+      "getCode": "Get the code",
+      "gettingCode": "Making the code…",
+      "getCodeProblem": {
+        "limit": "Your plan has no room for another channel",
+        "forbidden": "You don't have permission to add a channel",
+        "failed": "The code wasn't made. Try again"
+      },
+      "wooPlugin": {
+        "pluginName": "GOTCHA for WooCommerce",
+        "steps": "Download \"{name}\", then in WordPress: Plugins → Add New → Upload Plugin. Turn it on, and press \"Connect to GOTCHA\" under WooCommerce → GOTCHA.",
+        "download": "Download the plugin",
+        "downloading": "Downloading…",
+        "downloadProblem": {
+          "forbidden": "You need permission to connect business systems to download it.",
+          "failed": "It didn't download. Try again."
+        },
+        "site": "WooCommerce site",
+        "tag": {
+          "connected": "Connected",
+          "deactivated": "Turned off",
+          "removed": "Removed"
+        },
+        "line": {
+          "connected": "The plugin shows the chat on this site.",
+          "deactivated": "The plugin is turned off in WordPress - turn it on there to show the chat.",
+          "removed": "The plugin was removed from this site."
+        },
+        "lastSeen": "Last heard from {when}.",
+        "version": "Plugin {version}.",
+        "remove": {
+          "button": "Disconnect",
+          "title": "Disconnect {host}?",
+          "what": "The chat stops on this site, and its plugin shows \"Not connected\". You can connect it again from WordPress.",
+          "yes": "Disconnect",
+          "keep": "Keep it",
+          "removing": "Disconnecting…",
+          "problem": {
+            "gone": "It's already gone.",
+            "forbidden": "You need permission to disconnect business systems.",
+            "failed": "It wasn't disconnected. Try again."
+          }
+        }
+      },
+      "reconnect": "The connection to {platform} needs reconnecting. <systems>Open systems</systems>"
+    },
+    "preview": {
+      "label": "Preview",
+      "assistant": "Assistant",
+      "type": "Type a message",
+      "waTitle": "Chat with us",
+      "waSub": "Write here and we'll continue on WhatsApp.",
+      "waContinue": "Continue on WhatsApp",
+      "waType": "Type a message",
+      "now": "now",
+      "replies": "replies right away"
+    },
+    "notYet": "Not available yet",
+    "comingSoon": "Coming soon",
+    "notInLook": "Not in this look",
+    "kind": {
+      "label": "Which widget",
+      "chat": {
+        "name": "Chat widget with an AI employee",
+        "hint": "Answers on your site, with your AI employee"
+      },
+      "whatsapp": {
+        "name": "WhatsApp widget",
+        "hint": "Takes the customer to a WhatsApp conversation with you"
+      },
+      "number": "On WhatsApp with {name} {phone}.",
+      "changeNumber": "Change number",
+      "pickNumber": "Which WhatsApp number it continues on",
+      "noNumber": "A WhatsApp widget needs a connected WhatsApp number. Connect one in <channels>Settings · Channels</channels>.",
+      "numberWhy": {
+        "not_connected": "Not connected",
+        "number_unknown": "Its phone number isn't known yet"
+      },
+      "ask": {
+        "whatsapp": "Switch the widget on your site to a WhatsApp widget? Visitors will see it right away.",
+        "chat": "Switch the widget on your site to a chat widget with an AI employee? Visitors will see it right away.",
+        "yes": "Switch",
+        "no": "Cancel"
+      }
+    }
+  },
+  "widgetRow": {
+    "name": "Website widget",
+    "nowhere": "Not installed anywhere yet"
+  },
+  "wooConnect": {
+    "tabTitle": "Connect WooCommerce",
+    "incomplete": "This link is missing what WordPress sends with it. Press \"Connect to GOTCHA\" in WordPress again.",
+    "title": "Connect {site} to GOTCHA",
+    "workspace": "Workspace: {workspace}",
+    "workspaceUnread": "The workspace you're signed in to.",
+    "otherWorkspace": "To connect another workspace, sign in to it, then press \"Connect to GOTCHA\" in WordPress again.",
+    "back": {
+      "denied": "The store didn't approve GOTCHA. Approve it to continue.",
+      "insufficient_permissions": "Your WordPress user can't approve this - a store administrator must.",
+      "other": "The store's approval didn't finish. Try again."
+    },
+    "store": {
+      "this": "{site} is connected to this workspace.",
+      "other": "This workspace is connected to another store, {store}. Press Connect in that store's WordPress, or change the store in Studio · Business systems.",
+      "none": "First, {site} approves GOTCHA - you'll come back here.",
+      "unknown": "GOTCHA checks that {site} is this workspace's store."
+    },
+    "widget": {
+      "create": "The website chat is created for this workspace - the same one the code snippet loads."
+    },
+    "returnStep": "Then back to WordPress, where the plugin finishes connecting.",
+    "approve": "Approve on {site}",
+    "opening": "Opening…",
+    "connect": "Connect",
+    "connecting": "Connecting…",
+    "cancel": "Back to WordPress",
+    "problem": {
+      "store_not_connected": "This store isn't connected to the workspace yet - approve it first.",
+      "bad_return": "The plugin's page isn't on this store. Press \"Connect to GOTCHA\" in WordPress again.",
+      "bad_nonce": "This link isn't valid anymore. Press \"Connect to GOTCHA\" in WordPress again.",
+      "no_widget": "The website chat isn't there yet. Try again.",
+      "forbidden": "You need permission to connect business systems.",
+      "invalid_store": "That isn't a store address GOTCHA can open.",
+      "failed": "It didn't connect. Try again."
+    }
+  },
+  "rowSettingsNone": {
+    "tag": "Nothing to set",
+    "why": "The platform has no settings for this channel yet, so there is nothing to change here."
+  },
+  "disconnect": {
+    "action": "Disconnect",
+    "title": "Disconnect {channel}?",
+    "what": "Messages from {channel} will stop reaching GOTCHA. The conversations you already have are kept.",
+    "yes": "Disconnect {channel}",
+    "working": "Disconnecting…",
+    "cancel": "Cancel",
+    "failed": {
+      "not_found": "This channel isn't connected here any more.",
+      "forbidden": "You don't have permission to disconnect this channel.",
+      "failed": "It wasn't disconnected. Try again in a moment."
+    }
+  },
+  "reconnect": {
+    "action": "Reconnect",
+    "label": "Reconnect {channel}"
+  },
+  "pick": {
+    "heading": "Choose the Facebook Pages to connect",
+    "lead": "Your sign-in shared these Pages. Only the ones you choose are connected to Messenger here.",
+    "here": "Already connected here. Choosing it reconnects it.",
+    "taken": "Connected to another GOTCHA workspace, so it can't be connected here.",
+    "confirm": "{count, plural, one {Connect # Page} other {Connect # Pages}}",
+    "connecting": "Connecting…",
+    "chooseOne": "Choose at least one Page to connect.",
+    "tooMany": "Choose up to {max} Pages at a time.",
+    "noneAvailable": "Every Page from this sign-in is connected to another GOTCHA workspace, so there is nothing to connect here.",
+    "later": "Not now",
+    "again": "Connect Messenger again",
+    "opening": "Opening…",
+    "read": {
+      "expired": "This choice has expired. Connect Messenger again to choose your Pages.",
+      "forbidden": "You don't have permission to connect a channel.",
+      "failed": "Your Pages couldn't be loaded. Connect Messenger again to choose them."
+    },
+    "refused": {
+      "expired": "This choice has expired. Connect Messenger again to choose your Pages.",
+      "limit": "Your plan has no room for that many new channels. Choose fewer new Pages; Pages already connected here don't count.",
+      "none_connected": "None of those Pages were connected: each one is connected to another GOTCHA workspace.",
+      "unknown_page": "Some of those Pages weren't part of this sign-in. Connect Messenger again to choose from your Pages.",
+      "forbidden": "You don't have permission to connect a channel.",
+      "failed": "Those Pages didn't connect. Try again."
+    },
+    "resultHeading": "What happened to each Page",
+    "result": {
+      "connected": "Connected.",
+      "reconnected": "Reconnected.",
+      "taken": "Not connected: it's connected to another GOTCHA workspace.",
+      "unknown": "Its answer couldn't be read. Its row in the list shows where it stands.",
+      "connectedNotSubscribed": "Connected, but messages can't arrive: the platform refused GOTCHA's subscription to them. Reconnect to try again.",
+      "reconnectedNotSubscribed": "Reconnected, but messages can't arrive: the platform refused GOTCHA's subscription to them. Reconnect to try again."
+    },
+    "done": "Done"
+  }
+}

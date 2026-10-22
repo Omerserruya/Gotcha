@@ -138,13 +138,21 @@ export function toSafeSessionView(s: Record<string, any>): SafeSessionView {
 /**
  * Aggregate startup assertion. NO-OP unless cookie-session infrastructure is
  * actually enabled by a flag - so today's deployments (all flags off) are
- * unaffected. When enabled, a missing/invalid session key, an unsafe cookie
- * contract, or an absent production APP_ORIGIN stops boot. Wire this into
- * service startup in the commit that turns the flags on, not here.
+ * unaffected. When enabled, an unsafe cookie contract or an absent production
+ * APP_ORIGIN stops boot.
+ *
+ * The ENCRYPTION key is required only where sessions are CREATED. Reading a
+ * session never unseals the provider tokens it carries - `session-principal`
+ * resolves the principal from the row's own identity and membership columns -
+ * so a service that merely ACCEPTS cookies has no use for SESSION_ENCRYPTION_KEY
+ * and must not be made to hold one. Demanding it everywhere would push the key
+ * that guards every user's provider tokens into nine services that never touch
+ * them, which is a larger blast radius bought for nothing.
  */
 export function assertSessionInfraReady(env: NodeJS.ProcessEnv = process.env): void {
-  if (!sessionInfraEnabled(readSessionFlags(env))) return;
-  assertSessionEncryptionReady(env);
+  const flags = readSessionFlags(env);
+  if (!sessionInfraEnabled(flags)) return;
+  if (flags.cookieCreate) assertSessionEncryptionReady(env);
   assertAppOriginReady(env);
   resolveSessionCookieContract(env); // throws on an unsafe prod cookie contract
 }

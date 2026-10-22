@@ -66,3 +66,22 @@ export function isEncrypted(value: any): boolean {
     return false;
   }
 }
+
+/**
+ * Plaintext `credentials` objects that are NOT secrets and must stay readable as
+ * objects (found on prod 2026-10-22 by scripts/encrypt-plaintext-credentials.ts):
+ * - a WEBCHAT channel account keeps its widget CONFIG in `credentials`, read raw by
+ *   normalizeWebchatConfig. Encrypting it turns the object into a string and the
+ *   widget silently falls back to the default appearance and behaviour.
+ * - the calendar connect writes a marker `{ provider, accountEmail }` on its
+ *   tenant integration; the tokens live encrypted on CalendarAccount.
+ */
+const CALENDAR_MARKER_KEYS = new Set(["provider", "accountEmail"]);
+export function plaintextCredentialsNotSecret(
+  row: { table: "channel_accounts"; channel: string } | { table: "tenant_integrations" },
+  credentials: Record<string, unknown>,
+): boolean {
+  if (row.table === "channel_accounts") return row.channel === "WEBCHAT";
+  const keys = Object.keys(credentials);
+  return keys.length > 0 && keys.every((k) => CALENDAR_MARKER_KEYS.has(k));
+}

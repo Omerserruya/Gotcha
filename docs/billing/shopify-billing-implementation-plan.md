@@ -1,4 +1,4 @@
-# Shopify Billing — implementation plan
+# Shopify Billing - implementation plan
 
 Companion to
 [shopify-billing-architecture-assessment.md](./shopify-billing-architecture-assessment.md).
@@ -13,12 +13,12 @@ split billing is **unanswered**, so the code must support every policy without
 choosing one.
 
 Everything ships **disabled by default**. A missing or disabled flag must land in
-a non-charging `BILLING_PENDING` state — never in accidental paid access, and
+a non-charging `BILLING_PENDING` state - never in accidental paid access, and
 never in a real charge.
 
 ---
 
-## Decision 1 — a second port, above `PaymentProvider`, not beside it
+## Decision 1 - a second port, above `PaymentProvider`, not beside it
 
 `PaymentProvider` (tokenize → charge → refund) is a card-movement contract.
 Shopify moves the money itself, so it cannot implement it (assessment §2.3).
@@ -48,17 +48,17 @@ export interface BillingSourceProvider {
 - `ShopifyAppPricingSource` and `ShopifyManualBillingSource` are two
   implementations behind one `SHOPIFY_BILLING_MODE` switch, so we can move
   between App Pricing and the manual GraphQL Billing API **without touching
-  entitlement logic** — which the prompt requires and which the unresolved
+  entitlement logic** - which the prompt requires and which the unresolved
   non-embedded question (assessment §4.1) makes genuinely likely.
 
 Capabilities are copied from `providers/capabilities.ts` and **fail closed on
 `unverified`**. This is how "Shopify has not confirmed split billing" is
 expressed in code rather than in a comment.
 
-## Decision 2 — do NOT relax `Subscription.billableEntityId @unique` in phase 1
+## Decision 2 - do NOT relax `Subscription.billableEntityId @unique` in phase 1
 
-Split billing needs more than one subscription per payer. The obvious change —
-swap the unique for `@@unique([billableEntityId, billingSource])` — breaks **22
+Split billing needs more than one subscription per payer. The obvious change -
+swap the unique for `@@unique([billableEntityId, billingSource])` - breaks **22
 call sites across 11 files** that do `findUnique({ where: { billableEntityId } })`
 (`subscription.service.ts`, `dunning.service.ts`, `checkout-activation.service.ts`,
 `grandfather.service.ts`, `refund.service.ts`, `poc.service.ts`,
@@ -75,13 +75,13 @@ subscription, only mirror it.
 Reversibility: the new table is purely additive; dropping it restores today's
 behaviour exactly. If split billing is confirmed and we later want one unified
 table, that is a separate migration that folds `ProviderSubscription` into
-`Subscription` — deliberately deferred, not designed out.
+`Subscription` - deliberately deferred, not designed out.
 
 ---
 
 ## Schema changes (all additive)
 
-`packages/shared/prisma/schema.prisma` — new enums:
+`packages/shared/prisma/schema.prisma` - new enums:
 
 ```
 BillingSource            GOTCHA_EXTERNAL | SHOPIFY | EXEMPT | FREE
@@ -103,16 +103,16 @@ New/changed models:
 |---|---|
 | `Subscription.billingSource` | New column, default `GOTCHA_EXTERNAL`. Makes today's rows self-describing. No constraint change. |
 | `ProviderSubscription` | Provider-owned subscription mirror. `billableEntityId`, `tenantId`, `billingSource`, `providerSubscriptionId`, `providerCustomerId`, `planKey`/`planVersion`, `status`, **`providerStatusRaw`** (never lose the provider's own word), trial/period dates, `cancelAtPeriodEnd`, `commerceConnectionId`, `metadata`. `@@unique([billingSource, environment, providerSubscriptionId])` and `@@unique([billableEntityId, billingSource, productKey])`. |
-| `CommerceConnection` | Shopify/Woo/etc. connection **separate from billing**. `tenantId`, `platform`, `externalShopId`, `shopDomain`, `status`, `installedAt`/`uninstalledAt`. `@@unique([platform, externalShopId])` — the constraint that makes cross-tenant shop capture impossible. |
+| `CommerceConnection` | Shopify/Woo/etc. connection **separate from billing**. `tenantId`, `platform`, `externalShopId`, `shopDomain`, `status`, `installedAt`/`uninstalledAt`. `@@unique([platform, externalShopId])` - the constraint that makes cross-tenant shop capture impossible. |
 | `BillingPolicyDecision` | Append-only audit: `policy`, `reason`, `acquisitionSource`, `accountCreatedAt`, `cohort`, `grandfathered`, `evidence` (Json), `evidenceQuality`, `decidedAt`, `codeVersion`, `configVersion`. |
 | `UsageLedgerEntry` | Canonical append-only usage. `tenantId`, `subscriptionRef`, `entitlementKey`, `metric`, `quantity`, `occurredAt`, **`idempotencyKey @unique`**, `billingSource`, `status`, `providerEventId`, `failureCode`, `attempts`, `reversalOfId`. |
-| `BillingOutboxEntry` | Provider calls made durable — never inside a DB transaction. |
+| `BillingOutboxEntry` | Provider calls made durable - never inside a DB transaction. |
 | `TenantEntitlement.fundedBy…` | `fundedByBillingSource` + `fundedByProviderSubscriptionId`, nullable. Lets a Shopify lapse revoke exactly the Shopify-funded entitlements and nothing else. |
 | `EntitlementSource` | Add `SHOPIFY_SUBSCRIPTION`. |
 
 Migration is one additive SQL migration under
 `packages/shared/prisma/migrations/`. Backfill is conservative: existing
-subscriptions get `GOTCHA_EXTERNAL`; **nothing is inferred as grandfathered** —
+subscriptions get `GOTCHA_EXTERNAL`; **nothing is inferred as grandfathered** -
 absent evidence yields `UNKNOWN`/`REVIEW_REQUIRED`.
 
 ---
@@ -158,18 +158,18 @@ frontend/src/components/billing/BillingSourceStates.tsx
 ## Files to modify
 
 - `packages/shared/prisma/schema.prisma` + one migration.
-- `packages/shared/src/lib/billing/entitlements.ts` — `materializeEntitlements`
+- `packages/shared/src/lib/billing/entitlements.ts` - `materializeEntitlements`
   stamps funding; revocation becomes source-scoped.
-- `packages/shared/src/lib/billing/entitlement-resolver.ts` — unchanged public
+- `packages/shared/src/lib/billing/entitlement-resolver.ts` - unchanged public
   API. **No call site changes**, which is the point.
-- `services/billing/src/index.ts` — mount new routes, `assertShopifyBillingConfig()`
+- `services/billing/src/index.ts` - mount new routes, `assertShopifyBillingConfig()`
   before `startService`, add the reconciliation stage to `runSchedulerTick`.
-- `services/ai/src/routes/shopify-webhooks.ts` — on verified `app/uninstalled`,
+- `services/ai/src/routes/shopify-webhooks.ts` - on verified `app/uninstalled`,
   additionally mark the `CommerceConnection` disconnected and disable
   Shopify-funded entitlements. **Existing compliance handling untouched.**
-- `docker-compose.yml` **and** `docker-compose.prod.yml` — declare the new vars
+- `docker-compose.yml` **and** `docker-compose.prod.yml` - declare the new vars
   (required by `env-wiring.test.ts`), all disabled.
-- `frontend/src/app/settings/billing/page.tsx` — billing-source section.
+- `frontend/src/app/settings/billing/page.tsx` - billing-source section.
 
 ## Flags (all default off / non-charging)
 
@@ -192,7 +192,7 @@ SHOPIFY_ALLOW_LIVE_BILLING=false               # explicit acknowledgement
    `GOTCHA_EXTERNAL`. Prove the existing 773 billing tests still pass.
 2. **`BillingSourceProvider` port + `GotchaExternalBillingSource`.** Behaviour
    change: none. This is the safety net for everything after it.
-3. **Entitlement funding attribution** — stamp and revoke by source.
+3. **Entitlement funding attribution** - stamp and revoke by source.
 4. **Billing Policy Resolver** + `BillingPolicyDecision` audit, defaulting to
    `UNRESOLVED` → `BILLING_PENDING`.
 5. **Shopify adapters** (App Pricing + manual) behind the mode flag, with the
@@ -207,13 +207,13 @@ SHOPIFY_ALLOW_LIVE_BILLING=false               # explicit acknowledgement
 11. **Tests** for the 23 listed scenarios.
 12. **Docs**: developer guide, rollout/rollback, Partner Dashboard steps.
 
-## Open questions — RESOLUTION STATUS (updated 2026-09-02)
+## Open questions - RESOLUTION STATUS (updated 2026-09-02)
 
 See [shopify-billing-confirmed-model.md](./shopify-billing-confirmed-model.md).
 
 | # | Question | Status |
 |---|---|---|
-| 1 | Split billing permitted? | **ANSWERED — yes.** Confirmed by Shopify App Review. Core stays external, Shopify bills the connector. `SHOPIFY_BILLING_POLICY_MODE=connector_addon` is the model; both flags still default off. |
+| 1 | Split billing permitted? | **ANSWERED - yes.** Confirmed by Shopify App Review. Core stays external, Shopify bills the connector. `SHOPIFY_BILLING_POLICY_MODE=connector_addon` is the model; both flags still default off. |
 | 2 | Non-embedded + App Pricing | **Still open.** Both adapters exist precisely for this; `manual` is the fallback. |
 | 3 | Partner API credential | **Still open.** Needed only for `app_pricing`. |
 | 4 | Chat app has `scopes = ""` and no token | **MOOT.** The unified-app cutover shipped; there is one app with a real Admin token. The assessment §3 table is stale and now carries a correction. |
@@ -225,11 +225,11 @@ the **publication cutoff** (`SHOPIFY_APP_PUBLICATION_CUTOFF`) and the **plan
 catalog** (`SHOPIFY_BILLING_PLAN_CATALOG`). Neither has a default, and the
 absence of each fails closed.
 
-## Open questions — original text
+## Open questions - original text
 
 1. **Split billing**: permitted? Drives `SHOPIFY_ALLOW_SPLIT_BILLING`.
 2. **Non-embedded + App Pricing**: undocumented (assessment §4.1). If
-   unsupported, `SHOPIFY_BILLING_MODE=manual` is the answer — which is why both
+   unsupported, `SHOPIFY_BILLING_MODE=manual` is the answer - which is why both
    adapters exist.
 3. **Partner API credential**: App Pricing verification needs an org-level
    Partner API token GOTCHA does not have. The manual Billing API needs only the
@@ -237,6 +237,6 @@ absence of each fails closed.
 4. **The Chat app requests `scopes = ""`** and stores no access token. The manual
    Billing API needs a token for the shop; App Pricing does not. This may decide
    the mode on its own.
-5. **Which app is billed** — Chat or Core? They are separate Partner apps
+5. **Which app is billed** - Chat or Core? They are separate Partner apps
    (assessment §3) and a plan belongs to exactly one.
 6. **Commercial metric** for PAYG, and its Partner-Dashboard meter handle.

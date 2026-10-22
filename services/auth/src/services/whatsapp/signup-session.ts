@@ -14,6 +14,25 @@
  *
  * Sessions are tenant-scoped in the key itself, so a `sessionId` leaked from
  * one workspace cannot be replayed against another.
+ *
+ * ── Why the "current" pointer is scoped to the PERSON, not the workspace ──
+ *
+ * Replacing the previous session is deliberate, and the reasoning below holds
+ * for ONE person relaunching. It does not hold for two.
+ *
+ * With a per-tenant pointer, two admins connecting at the same time collided:
+ * the second one's `/inspect` silently destroyed the first one's session. The
+ * first then pressed Connect and got a failure with nothing to explain it -
+ * from their side they did nothing wrong and nothing visible happened. Meta's
+ * authorization codes being single-use means they could not retry the same
+ * authorization either; they had to go back through the popup without being
+ * told why.
+ *
+ * ★ THE SESSION KEY IS UNCHANGED and still carries `tenantId`, so the
+ * cross-workspace property does not depend on this pointer at all. The pointer
+ * exists only to find the previous session to delete, and "the previous one" is
+ * a fact about a PERSON's relaunch. Scoping it per user keeps the original
+ * intent exactly and lets two grants coexist.
  */
 
 import { getRedis } from "@chatcenter/shared";
@@ -37,9 +56,17 @@ export function signupSessionKey(tenantId: string, sessionId: string): string {
   return `wa_signup:${tenantId}:${sessionId}`;
 }
 
-/** Points at the tenant's one live session so the previous one can be killed. */
-export function signupCurrentKey(tenantId: string): string {
-  return `wa_signup_current:${tenantId}`;
+/**
+ * Points at one PERSON's live session, so their previous one can be killed
+ * without touching a colleague's in-flight flow.
+ *
+ * `userId` is optional because the caller reads it from the request and it is
+ * typed optional there. A missing user falls back to a tenant-wide pointer,
+ * which is the old behaviour: worse, but never worse than losing the ability to
+ * replace a session at all.
+ */
+export function signupCurrentKey(tenantId: string, userId?: string | null): string {
+  return userId ? `wa_signup_current:${tenantId}:${userId}` : `wa_signup_current:${tenantId}`;
 }
 
 /**
@@ -56,15 +83,17 @@ export function signupCurrentKey(tenantId: string): string {
  *     stale `sessionId` connect numbers under a grant that no longer reflects
  *     what the customer chose.
  *
- * One live session per tenant, always.
+ * One live session per PERSON. Two admins in one workspace can connect at the
+ * same time; the same admin relaunching replaces their own.
  */
 export async function startSignupSession(
   tenantId: string,
   payload: SignupSession,
+  userId?: string | null,
 ): Promise<string> {
   const redis = getRedis();
 
-  const previous = await redis.get(signupCurrentKey(tenantId));
+  const previous = await redis.get(signupCurrentKey(tenantId, userId));
   if (previous) {
     await redis.del(signupSessionKey(tenantId, previous));
   }
@@ -76,7 +105,7 @@ export async function startSignupSession(
     "EX",
     SIGNUP_SESSION_TTL_SECONDS,
   );
-  await redis.set(signupCurrentKey(tenantId), sessionId, "EX", SIGNUP_SESSION_TTL_SECONDS);
+  await redis.set(signupCurrentKey(tenantId, userId), sessionId, "EX", SIGNUP_SESSION_TTL_SECONDS);
   return sessionId;
 }
 
@@ -100,12 +129,24 @@ export async function readSignupSession(
   }
 }
 
-/** Explicitly end a session, e.g. when the customer abandons the picker. */
-export async function endSignupSession(tenantId: string, sessionId: string): Promise<void> {
+/**
+ * Explicitly end a session, e.g. when the customer abandons the picker.
+ *
+ * ⚠ NOTHING CALLS THIS. Grepped repo-wide excluding tests: the only references
+ * are its own definition and the test that exercises it. Kept rather than
+ * deleted because abandonment IS a real state the picker should report, and
+ * leaving the credential to expire on its own is the thing this would improve.
+ * Recorded here so the next reader does not assume it is load-bearing.
+ */
+export async function endSignupSession(
+  tenantId: string,
+  sessionId: string,
+  userId?: string | null,
+): Promise<void> {
   const redis = getRedis();
   await redis.del(signupSessionKey(tenantId, sessionId));
-  const current = await redis.get(signupCurrentKey(tenantId));
+  const current = await redis.get(signupCurrentKey(tenantId, userId));
   if (current === sessionId) {
-    await redis.del(signupCurrentKey(tenantId));
+    await redis.del(signupCurrentKey(tenantId, userId));
   }
 }

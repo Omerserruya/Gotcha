@@ -1,0 +1,130 @@
+{
+  "title": "Business core",
+  "description": "What GOTCHA is allowed to look at, and which system it asks.",
+  "unavailable": "We could not read your business core just now.",
+  "useCase": {
+    "heading": "Your business runs on",
+    "hint": "This decides which parts GOTCHA asks you about. A leads business is never asked about shipping or returns.",
+    "ecommerce": "Online store",
+    "leads": "Leads & sales",
+    "both": "Both",
+    "unset": "Choose one to see the parts that apply to you.",
+    "changes": "Changing it adds or hides parts below",
+    "error": {
+      "forbidden": "You don’t have permission to change this.",
+      "failed": "That didn’t save. Nothing was changed."
+    }
+  },
+  "part": {
+    "ecommerce": "Store",
+    "payments": "Payments",
+    "shipping": "Shipping",
+    "returns": "Returns",
+    "crm": "Customer records"
+  },
+  "state": {
+    "impossible": "Nothing can do this yet. GOTCHA has no shipping systems to connect, so there is nothing here for you to choose - this is not something you are missing.",
+    "nothing_connected": "Nothing connected. Connect one in the marketplace and come back - {systems} would work.",
+    "connected_but_failing": "{name} is connected and not working, so it cannot be used here yet. Fix it in the marketplace rather than connecting it again.",
+    "connected_none_chosen": "Connected and not chosen yet.",
+    "chosen": "{name} does this.",
+    "inferred": "{name} is what GOTCHA falls back to here, because it can do the job - nobody chose it. Choosing one properly is done on the returns screen.",
+    "chosen_failing": "{name} is chosen here and isn’t working - fix it in Integrations; the choice stays."
+  },
+  "crm": {
+    "elsewhere": "Customer records are chosen on the Integrations screen, not here - there is one place for it so this screen can never disagree with the system the AI actually calls."
+  },
+  "marketplace": "Go to Integrations",
+  "notesHeading": "Worth knowing",
+  "choosing": {
+    "notYet": "Choosing which system plays a part is not offered here yet. The way to save it exists and has never once run against a real connection - no system on this workspace is connected and working - so it is not being put in front of you as though it were proven.",
+    "crmWorks": "Customer records are the exception: that choice has its own screen and has been in use for a long time."
+  },
+  "writeback": {
+    "heading": "What GOTCHA writes back",
+    "sourceOfTruth": "GOTCHA reads your connected systems and writes into them. It does not keep a second copy to reconcile later. So where something below is not offered as a setting, that is not a blank somebody forgot to fill in - it means the system itself decides and GOTCHA follows it.",
+    "perRule": "What gets written back is decided by the kind of action, the same way every time. There is no per-rule choice, and nowhere to make one.",
+    "oneBoard": "Where a connected system has boards or lists - Monday, for example, which isn't connected here - work goes to one of them per workspace. Sending escalations to one board and follow-ups to another isn't something that can be expressed.",
+    "language": "Anything GOTCHA writes in its own words - the summary it leaves after a conversation - is written in the workspace language. The field values it writes are the customer's own data, and they go across exactly as they are.",
+    "crmDefault": "Right now, your customer records live in Shopify - and nobody chose that. When no dedicated CRM is connected, GOTCHA uses a connected Shopify as the source of truth by default. Connecting a CRM changes it; the setting that would override it either way isn't offered on this screen.",
+    "identityNoMatch": "When nobody in your records matches the person writing in, a new record is created for them.",
+    "identityOneMatch": "When exactly one person matches, GOTCHA fills in what's missing on that record - a phone number, an email, a social handle it learned from the conversation. It writes to the record, it doesn't just read it.",
+    "identityManyMatches": "When two or more match, GOTCHA merges them only if your system supports merging and the evidence is strong. Otherwise it stops and waits for a person in your Approvals queue, because merging the wrong two customers cannot be undone.",
+    "stillSourceWhileFailing": "A system that's failing stays the source of truth. A broken connection doesn't quietly move your customer records somewhere else - that's deliberate, because a connection that has only lost its access can come back, and writing it off would strand everything it holds. It does mean the system GOTCHA writes to is the one that's currently down."
+  },
+  "elect": {
+    "label": "Which system does this",
+    "none": "Not chosen",
+    "saving": "Saving…",
+    "saved": "Saved.",
+    "replaced": "Saved. It was {name} before.",
+    "connectNew": "Connecting a new system happens in the GOTCHA marketplace, not on this screen. Once it is connected and working it appears in this list.",
+    "error": {
+      "notConnected": "That system stopped being connected while this page was open, so it can't be used here yet. Fix it in the marketplace and come back.",
+      "failed": "That didn't save. Nothing was changed."
+    },
+    "connectedHeading": "Connected in Integrations",
+    "notWorking": "Needs reconnecting"
+  },
+  "returns": {
+    "elsewhere": "Returns are chosen on their own switch, not here - an explicit choice there wins over whatever GOTCHA would otherwise fall back to."
+  },
+  "group": {
+    "store": "Online store",
+    "storeNote": "where orders and products come from",
+    "leads": "Leads & sales",
+    "leadsNote": "enquiries, deals and contacts",
+    "both": "Across both"
+  },
+  "chip": {
+    "chosen": "Working",
+    "inferred": "Fallback",
+    "connected_none_chosen": "Choose one",
+    "connected_but_failing": "Needs fixing",
+    "nothing_connected": "Not connected",
+    "impossible": "Not available",
+    "chosen_failing": "Not working"
+  },
+  "purpose": {
+    "ecommerce": "the catalogue and orders",
+    "payments": "charges and refunds",
+    "shipping": "where a parcel is",
+    "returns": "exchanges and returns",
+    "crm": "who this is"
+  },
+  "both": {
+    "identity": "Who is this customer",
+    "identityPurpose": "the first system GOTCHA asks",
+    "writeback": "After every conversation",
+    "writebackPurpose": "what gets written back"
+  },
+  "foot": "Connections themselves are added and managed in <link>Studio · Integrations</link>. Here you only decide which one plays which part.",
+  "drawer": {
+    "connection": "Connection",
+    "connectedIn": "Connected in Integrations",
+    "available": "Available",
+    "connect": "Connect ↗",
+    "reads": "What GOTCHA reads",
+    "readsNone": "Nothing here says what GOTCHA reads from this part, or how much of it, yet.",
+    "mayDo": "What GOTCHA may do there",
+    "actionsUnread": "We couldn't read this system's actions just now.",
+    "noActions": "This system has no actions GOTCHA can take.",
+    "manage": "Manage the connection in Integrations ↗",
+    "askedFirst": "Asked first",
+    "whatWhere": "What goes where",
+    "acrossTitle": "Across both · what goes where",
+    "acrossLine": "One customer, asked for in order, and what GOTCHA writes where.",
+    "needsFixing": "Hidden while {name} needs fixing.",
+    "notSetUp": "Not turned on for this workspace yet - that happens in Integrations.",
+    "notSetUpShort": "Not set up",
+    "checked": "checked {date}",
+    "newRecord": "Anyone else - a new record is made",
+    "summaryIn": "AI summary, in {language}",
+    "summary": "AI summary",
+    "save": "Save",
+    "cancel": "Cancel",
+    "nothingToSave": "Nothing here is a setting: the order is who holds customer records, then GOTCHA, and write-back follows the kind of action."
+  },
+  "open": "Open {part}",
+  "openAcross": "Open across both"
+}

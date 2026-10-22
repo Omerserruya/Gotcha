@@ -1,0 +1,112 @@
+{
+  "primary": {
+    "home": "Home",
+    "inbox": "Inbox",
+    "approvals": "Approvals",
+    "customers": "Customers",
+    "outreach": "Outreach",
+    "studio": "Studio",
+    "analytics": "Analytics",
+    "settings": "Settings"
+  },
+  "workspace": {
+    "label": "Workspace",
+    "switch": "Switch workspace",
+    "noneSelected": "Choose a workspace",
+    "unnamed": "Your workspace"
+  },
+  "account": {
+    "label": "Account",
+    "signOut": "Sign out"
+  },
+  "skipToContent": "Skip to main content",
+  "toggleSidebar": "Toggle navigation",
+  "commandPalette": "Search or do anything",
+  "totalCount": "{count, plural, one {# conversation} other {# conversations}}",
+  "mainNavigation": "Main navigation",
+  "inbox": {
+    "queue": "Waiting in queue",
+    "mine": "Assigned to me",
+    "active": "Active",
+    "gotcha": "Handled by GOTCHA",
+    "resolved": "Resolved",
+    "all": "All conversations"
+  },
+  "studio": {
+    "employees": "Employees",
+    "knowledge": "Knowledge",
+    "skills": "Skills",
+    "automations": "Automations",
+    "capabilities": "Integrations"
+  },
+  "analytics": {
+    "overview": "Overview",
+    "ai": "AI",
+    "humans": "People",
+    "sales": "Sales",
+    "topics": "Topics"
+  },
+  "settings": {
+    "workspace": "Workspace",
+    "people": "People & teams",
+    "channels": "Channels",
+    "whatsapp": "WhatsApp numbers",
+    "systems": "Business core",
+    "notifications": "Notifications",
+    "security": "Security",
+    "billing": "Usage & billing",
+    "billingPlan": "Plan & pricing",
+    "developer": "Developer"
+  },
+  "groups": {
+    "views": "Views"
+  },
+  "settingsFootnote": "How GOTCHA behaves lives in <studio>Studio</studio>, not here.",
+  "settingsDescription": {
+    "workspace": "The facts your AI employees quote to customers. Change one here and every channel is consistent within a minute.",
+    "people": "Humans and AI employees in one list, because operationally they are the same resource.",
+    "channels": "Where customers reach you. Everything lands in one inbox.",
+    "systems": "What GOTCHA can see and change on your behalf. Connecting a system gives your AI employees new things they can do - you decide which.",
+    "notifications": "GOTCHA never pings you for an incoming message - that's what the inbox is for. It tells you when something needs a decision or something broke.",
+    "security": "Who can get in, and a record of everything that happened - by a person or by GOTCHA.",
+    "billing": "Your plan, what the month has used, and what it bought you.",
+    "developer": "For whoever builds against GOTCHA. Nothing here affects how GOTCHA behaves.",
+    "pending": "Not built yet."
+  },
+  "outreach": {
+    "campaigns": "Campaigns",
+    "templates": "Templates",
+    "calls": "Calls"
+  },
+  "settingsDocs": "Read the docs ↗",
+  "settingsDocsNone": "No developer documentation is published yet.",
+  "palette": {
+    "close": "Close",
+    "esc": "ESC to close",
+    "group": {
+      "do": "Do this",
+      "go": "Go to",
+      "ask": "Ask"
+    },
+    "someone": "Someone",
+    "conversation": "conversation",
+    "ask": "Ask GOTCHA: “{question}”",
+    "askMeta": "on Home",
+    "searchFailed": "Couldn’t search just now.",
+    "keys": "↑↓ move · ↵ open · esc close",
+    "everywhere": "Works from every screen",
+    "customer": "customer",
+    "order": "Order #{number}",
+    "needsApproval": "Needs approval",
+    "orderNoMatch": "No customer here matches order #{number} in {store}.",
+    "orderNoStore": "No store is connected to search orders in."
+  },
+  "recent": "Recent",
+  "untitled": "New conversation",
+  "recentMenu": {
+    "more": "More for {title}",
+    "rename": "Rename",
+    "delete": "Delete"
+  },
+  "console": "Console"
+}

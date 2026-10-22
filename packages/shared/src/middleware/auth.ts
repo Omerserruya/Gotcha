@@ -1,7 +1,43 @@
 import { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import { resolvePrincipal, AuthError } from "../lib/principal";
+import { readSessionCookie, resolvePrincipalFromSessionToken } from "../lib/session-principal";
+import { readSessionFlags } from "../lib/session-flags";
 import { prisma } from "../lib/prisma";
+
+/**
+ * The ACTIVE-tenant hint. Client-supplied, therefore never trusted as-is: both
+ * resolvers validate it against the identity's memberships and reject a tenant
+ * the caller does not belong to. Absent header = the identity's default tenant,
+ * so single-membership callers need no header at all.
+ */
+function tenantHintOf(req: Request): string | null {
+  const raw = req.headers["x-tenant-id"];
+  return typeof raw === "string" && raw.length > 0 ? raw : null;
+}
+
+/**
+ * The one place a failed identity resolution becomes a response, shared by the
+ * cookie and Bearer paths so the two cannot drift into answering differently
+ * about the same rejection.
+ */
+function respondToAuthFailure(res: Response, err: unknown): void {
+  if (err instanceof AuthError) {
+    // A valid credential whose subject has no GOTCHA user means the identity is
+    // real but was never invited here (or was removed). Authentication
+    // succeeded; access does not follow from it - hence 403, not 401.
+    // Same for a hint naming a tenant the identity has no membership in.
+    const status = err.code === "no_account" || err.code === "tenant_denied" ? 403 : 401;
+    res.status(status).json({ error: err.message, code: err.code });
+    return;
+  }
+  // SECURITY: fail CLOSED. An earlier implementation called next() when the
+  // lookup threw, so a database blip admitted deactivated users and requests
+  // with no resolved tenant. Availability is not a reason to skip an
+  // authorization decision.
+  console.error("[auth] identity resolution failed:", err);
+  res.status(503).json({ error: "Authentication temporarily unavailable" });
+}
 
 /**
  * Constant-time secret comparison.
@@ -83,55 +119,84 @@ async function tryInternalAuth(req: Request, token: string): Promise<boolean> {
 /**
  * The single authentication gate for every GOTCHA service.
  *
- * A request arrives bearing an Authentik-issued access token. We verify it
- * against Authentik's JWKS, then resolve the token's `sub` to a local user to
- * load tenancy and role. Authentik proves WHO you are; the local database
- * decides WHAT you may do - Authentik never carries authorization data.
+ * A request arrives one of three ways, checked in this order:
+ *
+ *   1. An INTERNAL Bearer secret - service-to-service. Always accepted; the
+ *      flags below govern browser credentials only, and a rollout that locks
+ *      browsers to cookies must not sever the platform's own plumbing.
+ *   2. The opaque session COOKIE (SESSION_COOKIE_ACCEPT). Server-side session,
+ *      revocable, and the only credential the browser holds under the BFF model.
+ *   3. A browser Bearer access token (LEGACY_BEARER_ACCEPT, on by default).
+ *      Verified against Authentik's JWKS, then the token's `sub` is resolved to
+ *      a local user.
+ *
+ * Authentik proves WHO you are; the local database decides WHAT you may do -
+ * Authentik never carries authorization data, whichever door was used.
+ *
+ * The cookie is tried BEFORE the browser Bearer so that a session survives a
+ * stale token left in a tab's storage: the credential the server can revoke
+ * wins over the one it cannot.
  */
 export async function authenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const flags = readSessionFlags(process.env);
   const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
+  const bearer = header?.startsWith("Bearer ") ? header.slice(7) : null;
+
+  // ── 1. Internal service secret ────────────────────────────
+  if (bearer) {
+    try {
+      if (await tryInternalAuth(req, bearer)) {
+        next();
+        return;
+      }
+    } catch {
+      res.status(401).json({ error: "Invalid internal service credentials" });
+      return;
+    }
+  }
+
+  // ── 2. Session cookie ─────────────────────────────────────
+  if (flags.cookieAccept) {
+    const rawSession = readSessionCookie(req.headers.cookie, process.env);
+    if (rawSession) {
+      try {
+        const principal = await resolvePrincipalFromSessionToken(rawSession, tenantHintOf(req));
+        req.user = principal as any;
+        req.tenantId = principal.tenantId;
+        next();
+        return;
+      } catch (err) {
+        // A presented-but-invalid session is a hard failure, never a silent
+        // fall-through to Bearer: a revoked session must not be rescued by a
+        // token the same browser still happens to be holding.
+        respondToAuthFailure(res, err);
+        return;
+      }
+    }
+  }
+
+  // ── 3. Browser Bearer (legacy) ────────────────────────────
+  if (!bearer) {
     res.status(401).json({ error: "Missing or invalid authorization header" });
     return;
   }
-  const token = header.slice(7);
-
-  try {
-    if (await tryInternalAuth(req, token)) {
-      next();
-      return;
-    }
-  } catch {
-    res.status(401).json({ error: "Invalid internal service credentials" });
+  if (flags.cookieOnlyEnforce || !flags.legacyBearerAccept) {
+    // The token may well be valid. It is refused because this deployment has
+    // moved browsers to cookie sessions, and accepting both would leave the
+    // weaker credential live for exactly as long as anyone kept using it.
+    res.status(401).json({
+      error: "Browser bearer tokens are not accepted; sign in to receive a session",
+      code: "cookie_required",
+    });
     return;
   }
 
   try {
-    // The ACTIVE-tenant hint. Client-supplied, therefore never trusted as-is:
-    // resolvePrincipal validates it against the identity's memberships and
-    // rejects a tenant the caller does not belong to. Absent header = the
-    // identity's default tenant (single-membership users need no header).
-    const rawHint = req.headers["x-tenant-id"];
-    const tenantHint = typeof rawHint === "string" && rawHint.length > 0 ? rawHint : null;
-    const principal = await resolvePrincipal(token, tenantHint);
+    const principal = await resolvePrincipal(bearer, tenantHintOf(req));
     req.user = principal as any;
     req.tenantId = principal.tenantId;
     next();
   } catch (err) {
-    if (err instanceof AuthError) {
-      // A valid token whose subject has no GOTCHA user means the identity is
-      // real but was never invited here (or was removed). Authentication
-      // succeeded; access does not follow from it - hence 403, not 401.
-      // Same for a hint naming a tenant the identity has no membership in.
-      const status = err.code === "no_account" || err.code === "tenant_denied" ? 403 : 401;
-      res.status(status).json({ error: err.message, code: err.code });
-      return;
-    }
-    // SECURITY: fail CLOSED. The previous implementation called next() when
-    // the lookup threw, so a database blip admitted deactivated users and
-    // requests with no resolved tenant. Availability is not a reason to skip
-    // an authorization decision.
-    console.error("[auth] identity resolution failed:", err);
-    res.status(503).json({ error: "Authentication temporarily unavailable" });
+    respondToAuthFailure(res, err);
   }
 }

@@ -1,0 +1,91 @@
+/*
+ * Password recovery, screen one.
+ *
+ * ★★ EVERY VALUE HERE IS ALREADY IN THE SYSTEM. The design has no recovery
+ *    screen - 69 rendered frames in `Directions.dc.html` and not one heading
+ *    mentions reset, recovery, forgot or password - so rather than invent
+ *    numbers, this borrows 00a's: the same field, label, input and spacing
+ *    tokens the sign-in panel uses.
+ */
+@layer components {
+  .form,
+  .done {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  /* 00a's lede sits under the title at the same rhythm. */
+  .lede {
+    margin-block-start: calc(var(--space-8) * -1);
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .label {
+    font-size: var(--font-size-meta);
+    color: var(--text-secondary);
+  }
+
+  .fieldControl {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .input {
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding: var(--space-14) var(--space-16);
+    font: inherit;
+    font-size: var(--font-size-body);
+    color: var(--text-primary);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+  }
+
+  .input:focus-visible {
+    border-width: var(--border-width-thick);
+    border-color: var(--border-focus);
+    outline: none;
+  }
+
+  /*
+   * ⚠ THIS FIRST USED `--text-danger`, WHICH DOES NOT EXIST.
+   *   `stylelint` passed it - nothing in this project checks that a custom
+   *   property is defined - and an undefined one makes the whole declaration
+   *   invalid, so the text would have rendered in the inherited colour. That
+   *   is the `--font-serif-style` defect from this morning, which I fixed, in
+   *   code I wrote hours later.
+   *
+   * ★ It now borrows 00a's own notice: a sunken panel rather than red text,
+   *   which is what the sign-in screen already does for the same job.
+   */
+  .notice {
+    margin: 0;
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+    font-size: var(--font-size-meta);
+    color: var(--text-secondary);
+    background-color: var(--panel-sunken);
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: var(--radius-control);
+  }
+
+  /*
+   * The way back to sign-in. An anchor, not a button: it leaves this flow for
+   * another page, and a person should be able to open it in a new tab or see
+   * where it goes before pressing it.
+   */
+  .back {
+    font-size: var(--font-size-meta);
+    color: var(--text-secondary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}

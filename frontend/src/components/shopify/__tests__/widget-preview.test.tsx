@@ -223,7 +223,7 @@ describe("preview shell", () => {
 
     expect(() => app.open()).not.toThrow();
     expect(shadow.querySelector(".panel")).toBeTruthy();
-    expect(shadow.querySelector(".wel")).toBeTruthy();
+    expect(shadow.querySelector(".gw")).toBeTruthy();
   });
 
   it("says the preview is unavailable rather than drawing an imitation", async () => {

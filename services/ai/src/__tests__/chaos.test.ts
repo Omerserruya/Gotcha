@@ -1,24 +1,32 @@
 import { describe, it, expect, vi } from "vitest";
 
 const { auditCreate } = vi.hoisted(() => ({ auditCreate: vi.fn().mockResolvedValue({}) }));
-vi.mock("@chatcenter/shared", () => ({
-  // Version pins now live in shared modules, so exhaustive mocks of this
-  // barrel must supply them. Returning the real defaults keeps any URL the
-  // code builds meaningful instead of "undefined/...".
-  shopifyApiVersion: () => "2026-07",
-  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
-  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
-  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
-  prisma: {
-    auditLog: { create: auditCreate },
-    contact: {
-      findFirst: vi.fn().mockResolvedValue({ id: "c1", tenantId: "t1", tags: [] }),
-      findUnique: vi.fn().mockResolvedValue(null),
-      update: vi.fn().mockResolvedValue({ id: "c1", tags: ["x"] }),
+vi.mock("@chatcenter/shared", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  // Workspace policy lives in shared now. The real getPolicy/setPolicy reach
+  // the DB, so they are replaced by an in-memory store; the REAL
+  // validateAgainstPolicy (from `actual`) stays, so policy checks are genuine.
+  const policyStore = new Map<string, any>();
+  return {
+    ...actual,
+    prisma: {
+      auditLog: { create: auditCreate },
+      contact: {
+        findFirst: vi.fn().mockResolvedValue({ id: "c1", tenantId: "t1", tags: [] }),
+        findUnique: vi.fn().mockResolvedValue(null),
+        update: vi.fn().mockResolvedValue({ id: "c1", tags: ["x"] }),
+      },
     },
-  },
-  evaluateToolGate: vi.fn().mockResolvedValue({ decision: "ALLOW", reason: "test default" }),
-}));
+    evaluateToolGate: vi.fn().mockResolvedValue({ decision: "ALLOW", reason: "test default" }),
+    getPolicy: async (tenantId: string) => policyStore.get(tenantId) ?? actual.DEFAULT_POLICY,
+    setPolicy: async (tenantId: string, patch: any) => {
+      const next = { ...(policyStore.get(tenantId) ?? actual.DEFAULT_POLICY), ...patch };
+      policyStore.set(tenantId, next);
+      return next;
+    },
+    getPolicyPrompt: async () => "",
+  };
+});
 
 vi.mock("../services/connectors/types", async () => {
   const mod = await vi.importActual<any>("../services/connectors/types");

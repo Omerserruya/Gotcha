@@ -1,6 +1,71 @@
-import { prisma } from "@chatcenter/shared";
+import { prisma, recordUnansweredQuestion } from "@chatcenter/shared";
+import { isSemanticallyRetrievable } from "./behavior-engine.service";
+
+/**
+ * Is a knowledge miss on this message a question the owner should be asked
+ * to teach? Not when it came from the test chat (an operator rehearsing, the
+ * same rule that keeps test runs out of skill stats: a sandbox turn, or a
+ * "sandbox:" conversation). Not when the message carries no question at all -
+ * "thanks", "ok", a greeting, an emoji, a bare number - by the SAME classifier
+ * that decides whether a message is worth a knowledge search; a strategy that
+ * always searches used to record "תודה רבה" as a gap.
+ */
+export function shouldRecordKnowledgeGap(t: { sandbox?: boolean; customerExternalId?: string | null; message: string }): boolean {
+  if (t.sandbox) return false;
+  if (String(t.customerExternalId ?? "").startsWith("sandbox:")) return false;
+  if (isOnlyCourtesy(t.message)) return false;
+  return isSemanticallyRetrievable(t.message);
+}
+
+/**
+ * Words that make up a message with nothing to answer. The WHOLE message must
+ * be made of them: "thanks, do you ship to Eilat?" is a question, "תודה רבה"
+ * is not. (The retrieval classifier's prefix patterns end in \b, which in JS
+ * only works for ASCII, so "תודה רבה" slipped past it.)
+ */
+const COURTESY_WORDS = new Set([
+  "thanks", "thank", "you", "thx", "ty", "so", "much", "very", "a", "lot", "ok", "okay", "k", "great", "perfect",
+  "cool", "nice", "good", "fine", "sure", "got", "it", "bye", "goodbye", "hi", "hello", "hey", "all", "set",
+  "תודה", "רבה", "רבות", "מאוד", "ממש", "מעולה", "סבבה", "אחלה", "בסדר", "גמור", "אוקי", "אוקיי", "יופי",
+  "נהדר", "מצוין", "שלום", "היי", "להתראות", "ביי", "לכם", "לך", "על", "הכל", "הכול", "טוב", "בטח", "מושלם",
+]);
+
+export function isOnlyCourtesy(message: string): boolean {
+  const words = String(message ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  // Nothing but emoji / punctuation, or only courtesy words.
+  return words.length === 0 || words.every((w) => COURTESY_WORDS.has(w));
+}
 import { generateEmbedding } from "./embedding.service";
 import { searchSimilar, SearchResult } from "./qdrant.service";
+import { translatedQuery } from "./query-translation.service";
+
+/**
+ * Below this top similarity score (the best of the direct and the translated
+ * search) a question is recorded as one the Knowledge could not answer.
+ *
+ * 0.30, measured on dev 2026-10-07 (text-embedding-3-small, two Hebrew
+ * documents): answerable questions scored 0.294-0.428 (median ~0.35), clearly
+ * unanswerable ones 0.191-0.312 (median ~0.27). The old 0.35 recorded four of
+ * six ANSWERED questions as gaps; at 0.30 one answered question (0.294) is
+ * still recorded and two unanswered ones (0.308, 0.312) are not. The ranges
+ * overlap, so no number separates them perfectly; a sample this thin should be
+ * re-measured on a tenant with richer Knowledge. (It was 0.35 in
+ * @chatcenter/shared; this service is its only reader.)
+ */
+export const KNOWLEDGE_GAP_SCORE = 0.30;
+
+/** Two result lists as one: each chunk once, at its best score, best first. */
+export function mergeByBestScore(lists: SearchResult[][], limit: number): SearchResult[] {
+  const best = new Map<string, SearchResult>();
+  for (const list of lists) {
+    for (const r of list) {
+      const key = `${r.documentId ?? r.documentTitle}#${r.chunkIndex}`;
+      const prev = best.get(key);
+      if (!prev || (r.score ?? 0) > (prev.score ?? 0)) best.set(key, r);
+    }
+  }
+  return [...best.values()].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, limit);
+}
 
 export type { SearchResult as RetrievedChunk };
 
@@ -26,7 +91,7 @@ export type { SearchResult as RetrievedChunk };
  * onboarding tuning chat) the old tenant-wide behaviour is kept deliberately -
  * there is no employee whose scope could be applied.
  */
-async function readableKnowledgeBaseIds(
+export async function readableKnowledgeBaseIds(
   tenantId: string,
   aiAgentId?: string | null,
 ): Promise<string[]> {
@@ -73,14 +138,64 @@ export async function retrieveRelevantChunks(
    * before.
    */
   aiAgentId?: string | null,
+  /**
+   * Record a miss as a knowledge gap.
+   *
+   * Opt-in, because not every caller is answering a customer. A readiness test,
+   * an admin probe or a KB preview that finds nothing is not a gap in the
+   * business's knowledge, and recording those would fill the owner's list with
+   * questions no customer ever asked.
+   */
+  gap: { record?: boolean; askerKey?: string | null } = {},
 ): Promise<SearchResult[]> {
   try {
-    const queryEmbedding = await generateEmbedding(query, { tenantId });
+    // A question in another language than the Knowledge is also searched in
+    // the Knowledge's language (see query-translation.service); null = no
+    // mismatch, or the translation was refused / failed: the plain search stands.
+    const [queryEmbedding, translated] = await Promise.all([
+      generateEmbedding(query, { tenantId }),
+      translatedQuery(tenantId, query).catch(() => null),
+    ]);
 
     const activeKBIds = await readableKnowledgeBaseIds(tenantId, aiAgentId);
-    if (activeKBIds.length === 0) return [];
+    if (activeKBIds.length === 0) {
+      // No readable knowledge base at all is the purest "no_knowledge" there is.
+      if (gap.record) {
+        void recordUnansweredQuestion({
+          tenantId, question: query, reason: "no_knowledge", askerKey: gap.askerKey,
+        });
+      }
+      return [];
+    }
 
-    return await searchSimilar(tenantId, queryEmbedding, limit, activeKBIds);
+    const direct = await searchSimilar(tenantId, queryEmbedding, limit, activeKBIds);
+    let results = direct;
+    if (translated) {
+      try {
+        const translatedEmbedding = await generateEmbedding(translated, { tenantId });
+        results = mergeByBestScore([direct, await searchSimilar(tenantId, translatedEmbedding, limit, activeKBIds)], limit);
+      } catch (err: any) {
+        console.warn("[Knowledge] translated search failed, using the direct one:", err?.message ?? err);
+      }
+    }
+
+    // Recorded HERE, where the scores are, and never inferred later from a
+    // conversation that happened to escalate. By the time anything downstream
+    // can see the outcome, the reason why is gone.
+    if (gap.record) {
+      const topScore = results.length > 0 ? (results[0]!.score ?? 0) : 0;
+      if (results.length === 0) {
+        void recordUnansweredQuestion({
+          tenantId, question: query, reason: "no_knowledge", askerKey: gap.askerKey,
+        });
+      } else if (topScore < KNOWLEDGE_GAP_SCORE) {
+        void recordUnansweredQuestion({
+          tenantId, question: query, reason: "low_confidence", askerKey: gap.askerKey,
+        });
+      }
+    }
+
+    return results;
   } catch (err: any) {
     console.error("[Knowledge] Retrieval error:", err.message);
     return [];

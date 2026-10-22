@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { authenticate, resolveTenant, requireActiveTenant, publishEvent, prisma, verifyInternalServiceKey } from "@chatcenter/shared";
 import { handleVoiceStream } from "../services/voice-assist.service";
+import { channels } from "../services/intelligence/events/channels";
 
 // ─── Zod schemas ─────────────────────────────────────────────
 
@@ -126,6 +127,10 @@ router.post(
         event: "voice.session.starting",
         tenantId: req.tenantId!,
         data: {
+          // To this conversation's room, not the tenant: the payload carries the
+          // customer's phone, name and the agent's notes, and with no channel
+          // the bridge sent it to every tab in the workspace.
+          channel: channels.conversation(conversationId),
           conversationId,
           agentId: req.user!.userId,
           phone: context.phone,

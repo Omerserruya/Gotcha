@@ -1,10 +1,11 @@
 /**
  * Every NEXT_PUBLIC_* the frontend reads must be baked by the publisher.
  *
- * `NEXT_PUBLIC_*` is frozen into the static bundle at build time. In production
- * the bundle is baked into the gateway image, so a variable the publisher never
- * exports is not "unset until someone fixes .env" - it is `undefined` forever,
- * and no amount of editing .env on the box changes it.
+ * `NEXT_PUBLIC_*` is frozen into the bundle at build time. In production the
+ * bundle is baked into the app's image, so a variable the publisher never
+ * passes is not "unset until someone fixes .env" - it is `undefined` forever,
+ * and no amount of editing .env on the box changes it. (The examples below are
+ * from the legacy frontend, which hit exactly this; the rule is the same.)
  *
  * That failure is silent by construction, because the code that reads these has
  * to tolerate absence:
@@ -60,69 +61,77 @@ function stripComments(src: string): string {
 }
 
 /** Every NEXT_PUBLIC_* the frontend source actually reads. */
-function readByFrontend(): Set<string> {
+/**
+ * The app (frontend-v2) is the only frontend built since 2026-10-21; the legacy
+ * frontend/ is code only. Every NEXT_PUBLIC_* is inlined into the browser
+ * bundle at `next build`, so a value the publisher does not pass as a build
+ * arg is undefined in production, permanently and silently.
+ */
+function readByApp(): Set<string> {
   const found = new Set<string>();
   const walk = (dir: string) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) { walk(p); continue; }
-      if (!/\.tsx?$/.test(e.name) || p.includes("__tests__")) continue;
+      if (!/\.tsx?$/.test(e.name) || /\.test\.tsx?$/.test(e.name) || p.includes("__tests__")) continue;
       const code = stripComments(fs.readFileSync(p, "utf8"));
-      for (const m of code.matchAll(/process\.env\.(NEXT_PUBLIC_[A-Z0-9_]+)/g)) {
-        found.add(m[1]);
-      }
+      for (const m of code.matchAll(/process\.env\.(NEXT_PUBLIC_[A-Z0-9_]+)/g)) found.add(m[1]);
     }
   };
-  walk(path.join(ROOT, "frontend/src"));
+  walk(path.join(ROOT, "frontend-v2/src"));
   return found;
 }
 
-/** Every NEXT_PUBLIC_* docker-publish.sh exports into the build. */
-function bakedByPublisher(): Set<string> {
-  const script = fs.readFileSync(path.join(ROOT, "scripts/docker-publish.sh"), "utf8");
-  return new Set([...script.matchAll(/(NEXT_PUBLIC_[A-Z0-9_]+)="/g)].map((m) => m[1]));
+const publisher = () => fs.readFileSync(path.join(ROOT, "scripts/docker-publish.sh"), "utf8");
+
+/** `--build-arg "NEXT_PUBLIC_X=` in the publisher, split by whether it is conditional. */
+function passedByPublisher(): { always: Set<string>; any: Set<string> } {
+  const script = publisher();
+  const any = new Set([...script.matchAll(/--build-arg "(NEXT_PUBLIC_[A-Z0-9_]+)=/g)].map((m) => m[1]));
+  const always = new Set(
+    [...script.matchAll(/^\s+--build-arg "(NEXT_PUBLIC_[A-Z0-9_]+)=/gm)].map((m) => m[1]),
+  );
+  return { always, any };
 }
 
-describe("frontend build-time environment", () => {
-  it("finds the variables the frontend reads", () => {
-    expect(readByFrontend().size).toBeGreaterThan(5);
+/**
+ * Read by the app but deliberately not always passed:
+ *   FLOW_EXECUTOR_BASE   unset means `/auth-api`, the gateway's proxy; only the
+ *                        auth-origin build sets it.
+ *   SENTRY_*             optional; an ARG passed empty is SET, and the app's
+ *                        schema rejects '', so these are passed only when set.
+ */
+const OPTIONAL = new Set(["NEXT_PUBLIC_FLOW_EXECUTOR_BASE", "NEXT_PUBLIC_SENTRY_DSN", "NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE"]);
+const REQUIRED = ["NEXT_PUBLIC_BASE_PATH", "NEXT_PUBLIC_APP_ENV", "NEXT_PUBLIC_REALTIME_URL", "NEXT_PUBLIC_RELEASE"];
+
+describe("the app's build-time environment (frontend-v2)", () => {
+  it("finds the variables the app reads", () => {
+    expect(readByApp().size).toBeGreaterThan(3);
   });
 
-  it("bakes every NEXT_PUBLIC_* the frontend reads", () => {
-    const baked = bakedByPublisher();
-    const missing = [...readByFrontend()].filter((v) => !baked.has(v)).sort();
-    expect(
-      missing,
-      "these resolve to undefined in the production bundle, permanently and silently",
-    ).toEqual([]);
+  it("passes every NEXT_PUBLIC_* the app reads, or lists why not", () => {
+    const { any } = passedByPublisher();
+    const missing = [...readByApp()].filter((v) => !any.has(v) && !OPTIONAL.has(v)).sort();
+    expect(missing, "these resolve to undefined in the production bundle").toEqual([]);
   });
 
-  /**
-   * A NEXT_PUBLIC_* that falls back to a non-prefixed twin only works if the
-   * twin is actually in the environment when the build runs. The publisher
-   * loads its variables from .env.prod itself, so a twin missing from that
-   * loader makes the fallback unreachable: the default fires, and the bundle
-   * is baked with the wrong value while .env.prod plainly says otherwise.
-   *
-   * That is precisely what happened to NEXT_PUBLIC_PRICING_ENABLED. The
-   * fallback to PUBLIC_PRICING_ENABLED was correct and the value in .env.prod
-   * was correct, and the build still baked "false", because the loader only
-   * matched NEXT_PUBLIC_* lines.
-   */
-  it("loads every non-prefixed twin its own fallbacks depend on", () => {
-    const script = fs.readFileSync(path.join(ROOT, "scripts/docker-publish.sh"), "utf8");
-    // Twins named in a ${NEXT_PUBLIC_X:-${TWIN:-...}} style fallback.
-    const twins = new Set(
-      [...script.matchAll(/NEXT_PUBLIC_[A-Z0-9_]+:-\$\{([A-Z][A-Z0-9_]*):-/g)].map((m) => m[1]),
-    );
-    expect(twins.size, "expected at least one twin fallback").toBeGreaterThan(0);
+  it("always passes the ones the bundle cannot do without", () => {
+    const { always } = passedByPublisher();
+    expect(REQUIRED.filter((v) => !always.has(v))).toEqual([]);
+    // Root-mounted: the app is the whole site.
+    expect(publisher()).toMatch(/--build-arg "NEXT_PUBLIC_BASE_PATH="\n/);
+  });
 
-    // The loader's case arms, i.e. what it actually exports from the env file.
-    const loader = /while IFS= read -r _line[\s\S]*?done < "\$FRONTEND_ENV"/.exec(script)?.[0] ?? "";
-    const missing = [...twins].filter((t) => !loader.includes(`${t}=*`)).sort();
-    expect(
-      missing,
-      "these fallbacks can never fire - the loader never puts the twin in the environment",
-    ).toEqual([]);
+  it("declares an ARG for every value it is passed (an undeclared build arg is ignored)", () => {
+    const dockerfile = fs.readFileSync(path.join(ROOT, "frontend-v2/Dockerfile"), "utf8");
+    const declared = new Set([...dockerfile.matchAll(/^ARG (NEXT_PUBLIC_[A-Z0-9_]+)\s*$/gm)].map((m) => m[1]));
+    expect([...passedByPublisher().any].filter((v) => !declared.has(v)).sort()).toEqual([]);
+  });
+
+  it("never builds the legacy frontend", () => {
+    const script = publisher();
+    expect(script).not.toMatch(/frontend\/out/);
+    expect(script).not.toMatch(/^\s*cd frontend\s*$/m);
+    expect(script).toMatch(/push_image frontend-v2 frontend-v2\/Dockerfile frontend-v2/);
   });
 });

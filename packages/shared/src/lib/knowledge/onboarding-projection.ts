@@ -98,7 +98,10 @@ export interface ProjectedEntry {
  * changes shape enough that existing documents should be refreshed even
  * though their inputs did not change.
  */
-export const SCAN_VERSION = 1;
+// 2: clean page text, real page titles, one document per page, Hebrew topics
+// for a Hebrew workspace (2026-10-14). Bumped so every generated document is
+// rewritten once (title included); an edited one is still preserved.
+export const SCAN_VERSION = 2;
 
 // ─── URL normalization ──────────────────────────────────────
 
@@ -256,7 +259,22 @@ function readMeta(raw: unknown): Partial<KbSourceMetadata> | null {
 export function reconcile(
   projected: ProjectedEntry[],
   existing: ExistingDoc[],
-  options: { removeMissing?: boolean; removeScope?: KbSourceType[] } = {},
+  options: {
+    removeMissing?: boolean;
+    removeScope?: KbSourceType[];
+    /**
+     * Topics this scan left out on purpose (no facts in them). Their machine
+     * made documents are retired too, so a topic that turned thin does not
+     * stay behind as last time's empty doc (2026-10-14). Needs removeMissing.
+     */
+    retireTopics?: KbTopic[];
+    /**
+     * Pages this scan could not read (a timeout, a 5xx), as opposed to pages
+     * that are gone. Their documents are kept: a slow answer is not a page
+     * leaving the site (2026-10-14).
+     */
+    keepUrls?: string[];
+  } = {},
 ): ReconcilePlan {
   const items: ReconcileItem[] = [];
 
@@ -266,12 +284,23 @@ export function reconcile(
     if (!meta || meta.origin !== "onboarding" || !meta.dedupeKey) continue;
     // First writer wins: if a historical bug produced two documents under one
     // key, we refresh the first and report the rest as removable duplicates
-    // rather than updating an arbitrary one of them.
-    if (owned.has(meta.dedupeKey)) {
+    // rather than updating an arbitrary one of them. A person's edit outranks
+    // that order: an edited copy is the one kept, and an edited duplicate is
+    // never removed (2026-10-12, K11).
+    const kept = owned.get(meta.dedupeKey);
+    if (kept) {
+      const editedNow = meta.manualEdit === true;
+      const editedKept = readMeta(kept.metadata)?.manualEdit === true;
+      if (editedNow && editedKept) {
+        items.push({ action: "preserved", dedupeKey: meta.dedupeKey, existingId: doc.id, reason: "manual_edit" });
+        continue;
+      }
+      const loser = editedNow ? kept : doc;
+      if (editedNow) owned.set(meta.dedupeKey, doc);
       items.push({
         action: "remove",
         dedupeKey: meta.dedupeKey,
-        existingId: doc.id,
+        existingId: loser.id,
         reason: "duplicate",
       });
       continue;
@@ -316,11 +345,19 @@ export function reconcile(
 
   if (options.removeMissing) {
     const scope = options.removeScope;
+    const keep = new Set((options.keepUrls ?? []).map((u) => normalizeUrl(u)).filter((u): u is string => !!u));
     for (const [key, doc] of owned) {
       if (seen.has(key)) continue;
       const meta = readMeta(doc.metadata)!;
-      if (scope && !scope.includes(meta.sourceType as KbSourceType)) continue;
-      items.push({ action: "remove", dedupeKey: key, existingId: doc.id, reason: "no_longer_found" });
+      const retiredTopic = meta.sourceType === "onboarding_scan" && !!meta.topic && !!options.retireTopics?.includes(meta.topic as KbTopic);
+      if (scope && !scope.includes(meta.sourceType as KbSourceType) && !retiredTopic) continue;
+      if (meta.sourceType === "url" && meta.sourceUrl && keep.has(normalizeUrl(meta.sourceUrl) ?? "")) continue;
+      // A page gone from the site does not take a person's correction with it.
+      if (meta.manualEdit === true) {
+        items.push({ action: "preserved", dedupeKey: key, existingId: doc.id, reason: "manual_edit" });
+        continue;
+      }
+      items.push({ action: "remove", dedupeKey: key, existingId: doc.id, reason: retiredTopic ? "topic_skipped" : "no_longer_found" });
     }
   }
 

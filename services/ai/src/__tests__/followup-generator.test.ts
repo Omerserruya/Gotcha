@@ -1,33 +1,38 @@
 import { describe, it, expect, vi } from "vitest";
 
-vi.mock("@chatcenter/shared", () => ({
-  // Durable tenant settings (business hours, auto-greeting, SLA). Exhaustive
-  // mocks of this barrel must supply them or the read path throws instead of
-  // returning "not configured". Default: nothing configured.
-  readDurableSetting: async () => null,
-  writeDurableSetting: async () => undefined,
-  settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,
-  // Version pins now live in shared modules, so exhaustive mocks of this
-  // barrel must supply them. Returning the real defaults keeps any URL the
-  // code builds meaningful instead of "undefined/...".
-  shopifyApiVersion: () => "2026-07",
-  checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
-  metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
-  stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
-  prisma: {
-    conversation: {
-      findFirst: vi.fn(async ({ where }: any) =>
-        where.id === "missing" ? null : { id: "conv1", tenantId: "t1" },
-      ),
+vi.mock("@chatcenter/shared", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  // Workspace policy lives in shared now. The real getPolicy/setPolicy reach
+  // the DB, so they are replaced by an in-memory store; the REAL
+  // validateAgainstPolicy (from `actual`) stays, so policy checks are genuine.
+  const policyStore = new Map<string, any>();
+  return {
+    ...actual,
+    // Durable tenant settings read the DB; default: nothing configured.
+    readDurableSetting: async () => null,
+    writeDurableSetting: async () => undefined,
+    prisma: {
+      conversation: {
+        findFirst: vi.fn(async ({ where }: any) =>
+          where.id === "missing" ? null : { id: "conv1", tenantId: "t1" },
+        ),
+      },
+      message: {
+        findMany: vi.fn(async () => [
+          { id: "m2", direction: "OUTBOUND", body: "hi", createdAt: new Date() },
+          { id: "m1", direction: "INBOUND", body: "question?", createdAt: new Date() },
+        ]),
+      },
     },
-    message: {
-      findMany: vi.fn(async () => [
-        { id: "m2", direction: "OUTBOUND", body: "hi", createdAt: new Date() },
-        { id: "m1", direction: "INBOUND", body: "question?", createdAt: new Date() },
-      ]),
+    getPolicy: async (tenantId: string) => policyStore.get(tenantId) ?? actual.DEFAULT_POLICY,
+    setPolicy: async (tenantId: string, patch: any) => {
+      const next = { ...(policyStore.get(tenantId) ?? actual.DEFAULT_POLICY), ...patch };
+      policyStore.set(tenantId, next);
+      return next;
     },
-  },
-}));
+    getPolicyPrompt: async () => "",
+  };
+});
 
 vi.mock("../services/ai.service", () => ({
   generateResponse: vi.fn().mockResolvedValue({

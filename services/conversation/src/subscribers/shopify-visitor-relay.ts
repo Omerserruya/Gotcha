@@ -20,6 +20,8 @@ import {
   type ServiceEvent,
 } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
+// Deep import: the pure rule, because this service's tests mock the barrel.
+import { projectWooCommerce } from "@chatcenter/shared/src/lib/woo-commerce-cards";
 
 /**
  * Channel config is read once per channel and cached briefly. A relay
@@ -45,7 +47,8 @@ export async function relayToVisitor(event: ServiceEvent): Promise<void> {
   const message = event.data?.message;
   const conversationId = event.data?.conversationId;
   if (!message?.id || !conversationId) return;
-  if (event.data?.channel !== "SHOPIFY_LIVE_CHAT" && message.channel !== "SHOPIFY_LIVE_CHAT") {
+  const isWebchat = event.data?.channel === "WEBCHAT" || message.channel === "WEBCHAT";
+  if (!isWebchat && event.data?.channel !== "SHOPIFY_LIVE_CHAT" && message.channel !== "SHOPIFY_LIVE_CHAT") {
     return;
   }
 
@@ -57,6 +60,39 @@ export async function relayToVisitor(event: ServiceEvent): Promise<void> {
     const sockets = await getIO().in(`visitor:${conversationId}`).fetchSockets();
     if (sockets.length === 0) return;
   } catch {
+    return;
+  }
+
+  // The website widget's code snippet (web chat): the same shape its polling
+  // endpoint returns, so the widget treats a pushed message and a polled one
+  // alike. System events carry no text for a visitor.
+  if (isWebchat) {
+    if ((message.messageType ?? "text") === "system") return;
+    // Product cards (W9): projected exactly as the poll projects them, only
+    // when they are this widget's and the store is still the connected one.
+    let commerce = null as ReturnType<typeof projectWooCommerce>;
+    if ((message.metadata as any)?.commerce) {
+      const [conv, store] = await Promise.all([
+        prisma.conversation.findFirst({ where: { id: conversationId, tenantId: event.tenantId }, select: { channelAccountId: true } }),
+        prisma.tenantIntegration.findFirst({
+          where: { tenantId: event.tenantId, status: "CONNECTED" as any, integration: { slug: "woocommerce" } },
+          select: { config: true },
+        }),
+      ]);
+      const storeUrl = typeof (store?.config as any)?.storeUrl === "string" ? (store!.config as any).storeUrl as string : null;
+      commerce = projectWooCommerce(message.metadata, { storeUrl, channelAccountId: conv?.channelAccountId ?? "" });
+    }
+    room.emit("visitor:message", {
+      conversationId,
+      message: {
+        id: message.id,
+        direction: message.direction,
+        body: message.body ?? "",
+        senderName: message.senderName ?? null,
+        createdAt: message.createdAt ?? new Date().toISOString(),
+        commerce,
+      },
+    });
     return;
   }
 

@@ -142,7 +142,9 @@ router.post("/knowledge-backfill", async (req: Request, res: Response): Promise<
       }).catch(() => null);
 
       const ctx = {
-        language: profile?.primaryLanguage || tenant.defaultLocale || "en",
+        // The workspace's system language first, as discover and the rescan
+        // (business-scan.service systemLanguage, 2026-10-14).
+        language: (String(tenant.defaultLocale ?? "").toLowerCase().startsWith("he") ? "he" : String(tenant.defaultLocale ?? "").toLowerCase().startsWith("en") ? "en" : null) ?? profile?.primaryLanguage ?? "en",
         // The ORIGINAL scan time, not "now". This value becomes the entry's
         // lastRefreshedAt, and it should say when the knowledge was actually
         // learned - not when an operator happened to run a migration. Stamping

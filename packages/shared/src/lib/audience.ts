@@ -499,7 +499,7 @@ const CRM_IDENTITY_FIELDS = new Set(["name", "displayName", "phone", "email", "c
  * locally - fan-out picks them up when the field is one of the basic
  * identity fields.
  */
-function buildLocalContactWhere(
+export function buildLocalContactWhere(
   tenantId: string,
   rules: AudienceFilterGroup,
   reasoning: string[],
@@ -516,11 +516,55 @@ function buildLocalContactWhere(
       }
       continue;
     }
+    if (localField === "tags") {
+      const clause = tagsToPrismaClause(f.op, f.value);
+      if (clause) {
+        clauses.push(clause);
+      } else {
+        // Fail CLOSED. Every other field drops a rule it cannot translate,
+        // which widens the audience - and a widened audience on a broadcast
+        // is a message to people nobody chose.
+        reasoning.push(`tags rule "${f.op}" is not supported on a tag list - it matches no contacts`);
+        clauses.push(MATCH_NO_CONTACT);
+      }
+      continue;
+    }
     const clause = filterToPrismaClause(localField, f.op, f.value);
     if (clause) clauses.push(clause);
   }
   if (clauses.length === 0) return { tenantId };
   return { tenantId, [op]: clauses } as Record<string, unknown>;
+}
+
+const MATCH_NO_CONTACT: Record<string, unknown> = { id: { in: [] } };
+
+/**
+ * `Contact.tags` is Json (a string[] defaulting to `[]`), not a scalar, so the
+ * generic translation below is wrong for it in both directions:
+ *   - contains/in/starts_with are not Json filters at all, so Prisma throws
+ *     and the audience fails to resolve;
+ *   - equals compares the WHOLE array to a string and never matches;
+ *   - exists was `not: null`, and no row is SQL NULL (the default is `[]`),
+ *     so "has a tag" selected EVERY contact - a broadcast to the whole list.
+ *
+ * Matching is exact and case-sensitive ("vip" is not "VIP"): Json
+ * `array_contains` compares elements, and that was the accepted trade-off.
+ * Returns null for an operator with no meaning on a tag list; the caller
+ * turns that into a clause matching nobody, never into a dropped rule.
+ */
+export function tagsToPrismaClause(op: FilterOp, value: unknown): Record<string, unknown> | null {
+  const tags = (Array.isArray(value) ? value : value == null || value === "" ? [] : [value]).map(String);
+  const hasAll = (t: string[]) => ({ tags: { array_contains: t } });
+  switch (op) {
+    case "exists":     return { NOT: { tags: { equals: [] } } };
+    case "not_exists": return { tags: { equals: [] } };
+    case "equals":
+    case "contains":   return tags.length ? hasAll(tags) : null;
+    case "not_equals": return tags.length ? { NOT: hasAll(tags) } : null;
+    case "in":         return tags.length ? { OR: tags.map((t) => hasAll([t])) } : null;
+    case "not_in":     return tags.length ? { NOT: { OR: tags.map((t) => hasAll([t])) } } : null;
+    default:           return null;
+  }
 }
 
 function filterToPrismaClause(field: string, op: FilterOp, value: unknown): Record<string, unknown> | null {

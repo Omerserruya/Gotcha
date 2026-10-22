@@ -42,7 +42,13 @@ import {
   MAX_VISITOR_MESSAGE_CHARS,
   type VisitorSessionPayload,
   type StorefrontContext,
-} from "@chatcenter/shared";
+  type HandoffRecord,
+  visitorLocaleOf,
+  widgetTextsOf,
+  isWidgetLocale,
+  handoffMessage,
+  waMeUrl,
+  recordHandover } from "@chatcenter/shared";
 import { sanitizeUntrusted } from "../services/prompt-sanitizer.service";
 import {
   resolveForBootstrap,
@@ -51,9 +57,12 @@ import {
   type ShopifyLiveChatChannel,
 } from "../services/shopify-live-chat.service";
 import { validateCartLine } from "../services/shopify-catalog.service";
+import { handoffTarget, mintHandoffRef, brandOf } from "../services/website-widget.service";
+import { translateWidgetTexts } from "../services/widget-text-translation.service";
 import {
   findLiveInstallation,
   recordInstallationHeartbeat,
+  clearStaleUninstalledError,
   isKnownStorefrontOrigin,
 } from "../services/shopify-chat-install.service";
 
@@ -180,7 +189,10 @@ router.use(async (req: Request, res: Response, next: NextFunction) => {
 async function touchInstallationHeartbeat(shopDomain: string | null | undefined): Promise<void> {
   if (!shopDomain) return;
   const installation = await findLiveInstallation(shopDomain);
-  if (installation) await recordInstallationHeartbeat(installation.id);
+  if (!installation) return;
+  await recordInstallationHeartbeat(installation.id);
+  // A storefront that is serving shoppers is installed (2026-10-09).
+  await clearStaleUninstalledError(installation).catch(() => false);
 }
 
 /**
@@ -300,6 +312,17 @@ router.post("/bootstrap", bootstrapLimiter, async (req: Request, res: Response) 
       shopDomain: channel.config.shopDomain!,
     });
 
+    // "Continue on WhatsApp" / the WhatsApp kind: only when its number can
+    // take it. The number never reaches the storefront.
+    const waTarget = channel.config.ux.whatsapp.enabled
+      ? await handoffTarget(channel.tenantId, channel.config.ux).catch(() => null)
+      : null;
+    if (channel.config.ux.kind === "whatsapp" && !waTarget) {
+      unavailable(res, "whatsapp kind without a number that can take it");
+      return;
+    }
+    const widget = publicWidgetConfig(channel, availability, productMessagingEnabled);
+
     res.json({
       data: {
         session: { token: sessionToken },
@@ -307,7 +330,12 @@ router.post("/bootstrap", bootstrapLimiter, async (req: Request, res: Response) 
         // Whether we know who this is. A boolean, never the id: the
         // storefront has no use for it and every reason not to hold it.
         identified: !!customerId,
-        widget: publicWidgetConfig(channel, availability, productMessagingEnabled),
+        widget: {
+          ...widget,
+          // The business's wordmark on the bubble and pop-up (design 7).
+          brand: await brandOf(channel.tenantId).catch(() => null),
+          features: { ...widget.features, whatsappHandoff: !!waTarget },
+        },
       },
     });
   } catch (err) {
@@ -428,7 +456,24 @@ router.post("/conversation", conversationLimiter, async (req: Request, res: Resp
   if (!ctx) return;
   try {
     const { session, channel } = ctx;
-    const conversation = await findOrCreateConversation(session, channel);
+    // "New conversation" (2026-10-14): the visitor's open conversation is
+    // DETACHED, not closed: it stays open in the inbox for staff, untouched
+    // (no conversation:closed, so no closing automations, post-chat or CSAT
+    // now; its SLA and idle policy carry on like any conversation the customer
+    // walked away from), and a new one starts. Every later lookup takes the
+    // newest open conversation, so the visitor is on the new one.
+    const fresh = (req.body as any)?.fresh === true;
+    let conversation;
+    if (fresh) {
+      // No note is written on either conversation: a system message on the
+      // old one would switch its idle policy off (it acts only when the last
+      // message is an agent's), and one on the new one would count as its
+      // first inbound message for automations. Both share the visitor's
+      // customer key, so staff see them under the same customer.
+      conversation = await createConversation(session, channel);
+    } else {
+      conversation = await findOrCreateConversation(session, channel);
+    }
     const messages = await loadVisibleMessages(session.tenantId, conversation.id, channel);
     res.json({
       data: {
@@ -484,7 +529,11 @@ async function findOrCreateConversation(
     orderBy: { createdAt: "desc" },
   });
   if (existing) return existing;
+  return createConversation(session, channel);
+}
 
+function createConversation(session: VisitorSessionPayload, channel: ShopifyLiveChatChannel) {
+  const externalId = conversationKey(session);
   return prisma.conversation.create({
     data: {
       tenantId: session.tenantId,
@@ -564,12 +613,17 @@ router.post("/message", messageLimiter, async (req: Request, res: Response) => {
       { attempts: 3, backoff: { type: "exponential", delay: 1000 } },
     );
 
+    // A shopper's message is the storefront working: same bookkeeping as
+    // the bootstrap heartbeat, never in the way of the reply.
+    touchInstallationHeartbeat(channel.config.shopDomain).catch(() => undefined);
+
     trackEvent(session.tenantId, "shopify_chat_message_sent", {
       conversationId: conversation.id,
       pageType: context.pageType,
     });
 
-    res.json({ data: { accepted: true, conversationId: conversation.id, clientId } });
+    // The language the shopper wrote in, for the widget to switch to (W10).
+    res.json({ data: { accepted: true, conversationId: conversation.id, clientId, locale: visitorLocaleOf(body) } });
   } catch (err) {
     console.error("[shopify-chat] message error:", (err as Error)?.message);
     res.status(500).json({ error: "unavailable" });
@@ -742,11 +796,14 @@ router.post("/handoff", conversationLimiter, async (req: Request, res: Response)
       return;
     }
     const conversation = await findOrCreateConversation(session, channel);
-    await prisma.conversation.update({
-      where: { id: conversation.id },
-      data: { isHandedOver: true, status: "WAITING", handledBy: "human" },
+    await recordHandover({
+      tenantId: session.tenantId,
+      conversationId: conversation.id,
+      to: "human",
+      reason: "takeover",
+      data: { isHandedOver: true, status: "WAITING" },
     });
-    await prisma.message.create({
+    const handoffMessage = await prisma.message.create({
       data: {
         tenantId: session.tenantId,
         conversationId: conversation.id,
@@ -759,6 +816,15 @@ router.post("/handoff", conversationLimiter, async (req: Request, res: Response)
         metadata: { systemEvent: "visitor_requested_human" },
       },
     });
+    // The inbox orders by `lastMessageAt`, and this path never set it - so a
+    // storefront visitor who asked for a human sorted as though nothing had
+    // happened since whichever earlier writer last remembered. Uses the
+    // message's own `createdAt`, matching message.service.ts:85 rather than
+    // `new Date()`.
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: handoffMessage.createdAt },
+    });
     // Routing and agent notification are the existing platform's job -
     // this event is the same one every other channel raises on handoff.
     await publishEvent({
@@ -770,6 +836,66 @@ router.post("/handoff", conversationLimiter, async (req: Request, res: Response)
     res.json({ data: { handedOver: true } });
   } catch (err) {
     console.error("[shopify-chat] handoff error:", (err as Error)?.message);
+    res.status(500).json({ error: "unavailable" });
+  }
+});
+
+// ─── POST /whatsapp-start - the WhatsApp kind ────────────────
+//
+// { sessionToken, text?, locale?, context? } -> { url, ref }. No storefront
+// conversation: the shopper's message opens wa.me pre-filled to the
+// business number with a code; the code carries the page (product handle,
+// re-resolved before anything quotes it) to the WhatsApp side. 404 unless
+// the channel is the WhatsApp kind and its number can take it.
+
+router.post("/whatsapp-start", conversationLimiter, async (req: Request, res: Response) => {
+  const ctx = await requireVisitor(req, res);
+  if (!ctx) return;
+  try {
+    const { session, channel } = ctx;
+    if (channel.config.ux.kind !== "whatsapp") { res.status(404).json({ error: "unavailable" }); return; }
+    const target = await handoffTarget(session.tenantId, channel.config.ux);
+    if (!target) { res.status(404).json({ error: "unavailable" }); return; }
+    const page = normalizeStorefrontContext((req.body as any)?.context);
+    const record: HandoffRecord = {
+      tenantId: session.tenantId,
+      conversationId: null,
+      whatsappChannelAccountId: target.channelAccountId,
+      createdAt: new Date().toISOString(),
+      context: { pageType: page.pageType, productHandle: page.productHandle, productId: page.productId, path: page.path },
+    };
+    const ref = await mintHandoffRef(record, (n) => crypto.randomBytes(n));
+    if (!ref) { res.status(503).json({ error: "try_again" }); return; }
+    const asked = (req.body as any)?.locale;
+    const locale = asked === "he" || asked === "en" ? asked : channel.config.appearance.language === "he" ? "he" : "en";
+    const raw = (req.body as any)?.text;
+    const text = typeof raw === "string" ? sanitizeUntrusted(raw, { wrap: false, maxLength: 500 }).trim() : "";
+    const prefilled = text ? `${text} (${ref})` : handoffMessage(ref, locale);
+    trackEvent(session.tenantId, "shopify_chat_whatsapp_start", {});
+    res.json({ data: { url: waMeUrl(target.digits, prefilled), ref } });
+  } catch (err) {
+    console.error("[shopify-chat] whatsapp-start error:", (err as Error)?.message);
+    res.status(500).json({ error: "unavailable" });
+  }
+});
+
+// ─── POST /texts - the merchant's texts in the shopper's language (W10) ──
+//
+// { sessionToken, locale: "he" | "en" } -> { locale, texts: { key: text } }:
+// only the texts written in another language, translated once per text and
+// language (cached). Same keys as /api/embedded-chat/texts.
+
+router.post("/texts", conversationLimiter, async (req: Request, res: Response) => {
+  const ctx = await requireVisitor(req, res);
+  if (!ctx) return;
+  try {
+    const locale = (req.body as any)?.locale;
+    if (!isWidgetLocale(locale)) { res.status(400).json({ error: "locale must be he or en" }); return; }
+    const { session, channel } = ctx;
+    const texts = await translateWidgetTexts(session.tenantId, widgetTextsOf(channel.config.ux, channel.config.hours.offlineMessage), locale);
+    res.json({ data: { locale, texts } });
+  } catch (err) {
+    console.error("[shopify-chat] texts error:", (err as Error)?.message);
     res.status(500).json({ error: "unavailable" });
   }
 });
@@ -808,7 +934,7 @@ router.post("/lead", conversationLimiter, async (req: Request, res: Response) =>
         isHandedOver: true,
       },
     });
-    await prisma.message.create({
+    const offlineMessage = await prisma.message.create({
       data: {
         tenantId: session.tenantId,
         conversationId: conversation.id,
@@ -820,6 +946,12 @@ router.post("/lead", conversationLimiter, async (req: Request, res: Response) =>
         status: "DELIVERED",
         metadata: { source: "offline_form", email: email || null, consent: true },
       },
+    });
+    // Same reason. The `update` above sets status/isHandedOver and predates the
+    // message, so the ordering column is set here from the message itself.
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: offlineMessage.createdAt },
     });
     await publishEvent({
       event: "conversation:updated",

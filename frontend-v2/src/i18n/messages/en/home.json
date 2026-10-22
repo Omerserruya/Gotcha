@@ -1,0 +1,522 @@
+{
+  "greeting": {
+    "morning": "Good morning",
+    "afternoon": "Good afternoon",
+    "evening": "Good evening",
+    "quiet": {
+      "morning": "Quiet morning",
+      "afternoon": "Quiet afternoon",
+      "evening": "Quiet evening"
+    },
+    "named": {
+      "morning": "Good morning, {name}",
+      "afternoon": "Good afternoon, {name}",
+      "evening": "Good evening, {name}",
+      "quiet": {
+        "morning": "Quiet morning, {name}",
+        "afternoon": "Quiet afternoon, {name}",
+        "evening": "Quiet evening, {name}"
+      }
+    }
+  },
+  "summary": "{total, plural, =0 {Nothing has come in yet today.} one {One conversation today, # handled without you.} other {# conversations today, {handled} handled without you.}}",
+  "summaryBacklog": "{waiting, plural, one {Nothing new today. # conversation is still waiting from before.} other {Nothing new today. # conversations are still waiting from before.}}",
+  "command": {
+    "label": "Ask GOTCHA a question, or tell it what to do",
+    "placeholder": "Ask anything, or tell GOTCHA what to do…",
+    "try": "Try",
+    "send": "Send",
+    "stop": "Stop",
+    "suggestions": {
+      "summarise": "Summarise today",
+      "waiting": "Who's waiting on a reply?",
+      "campaign": "Send a campaign"
+    },
+    "awaitingApproval": "Waiting for your approval: {what}",
+    "failed": "That didn't finish. Try again.",
+    "step": {
+      "running": "working",
+      "succeeded": "done",
+      "failed": "failed",
+      "denied": "not permitted"
+    },
+    "whileQuiet": "While it is quiet",
+    "quiet": {
+      "answer": "Answer the open questions",
+      "dormant": "Write to the people who went quiet",
+      "recap": "Read yesterday back to me",
+      "answerCounted": "{count, plural, one {Answer the open question} other {Answer the # open questions}}"
+    },
+    "dayOne": {
+      "learned": "What did you learn from my site?",
+      "test": "Send me a test message",
+      "store": "Connect my store"
+    }
+  },
+  "metrics": {
+    "conversations": "Conversations today",
+    "conversationsSoFar": "Conversations so far",
+    "handledByGotcha": "Handled by GOTCHA",
+    "allOfThem": "all of them",
+    "byYourTeam": "By your team",
+    "needingYou": "Needing you",
+    "waitingOnApproval": "Approvals waiting for you",
+    "whereItCameFrom": "Where it came from · last {days} days"
+  },
+  "needsYou": {
+    "title": "Needs you now",
+    "sortedBy": "Sorted by risk",
+    "empty": "Nobody is waiting on a reply.",
+    "unavailable": "The queue could not be loaded just now.",
+    "more": "{count, plural, one {# more waiting} other {# more waiting}} · open Inbox",
+    "wait": {
+      "minutes": "{count}m",
+      "hours": "{count}h",
+      "days": "{count}d"
+    },
+    "intent": {
+      "FRUSTRATED": "Frustrated",
+      "COMPLAINT": "Complaint",
+      "HIGH_INTENT": "High intent",
+      "REFUND": "Refund",
+      "SHIPPING_ISSUE": "Shipping",
+      "RETURN": "Return",
+      "ORDER_CHANGE": "Order change",
+      "PRODUCT_QUESTION": "Question",
+      "WAITING_EXTERNAL": "Waiting",
+      "OTHER": "Other"
+    }
+  },
+  "working": {
+    "title": "GOTCHA is working",
+    "event": {
+      "refund": {
+        "completed": "Refunded{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Refund failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: refund{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "refund_check": {
+        "completed": "Checked refund{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Refund check failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: refund check{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "order_cancel": {
+        "completed": "Cancelled order{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Order cancellation failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: cancel order{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "order_edit": {
+        "completed": "Edited order{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Order edit failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: edit order{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "order_note": {
+        "completed": "Added order note{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Order note failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: order note{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "order_exchange": {
+        "completed": "Exchanged item{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Exchange failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: exchange{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "order_lookup": {
+        "completed": "Looked up order{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Order lookup failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: order lookup{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "return": {
+        "completed": "Created return{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Return failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: create return{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "return_check": {
+        "completed": "Checked return{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Return check failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: return check{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "tracking": {
+        "completed": "Sent tracking{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Tracking failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: tracking{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "contact": {
+        "completed": "Updated contact{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Contact update failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: contact update{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "customer": {
+        "completed": "Updated customer{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Customer update failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: customer update{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "lead": {
+        "completed": "Created lead{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Lead failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: lead{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "lead_convert": {
+        "completed": "Converted lead{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Lead conversion failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: lead conversion{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "deal": {
+        "completed": "Updated deal{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Deal update failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: deal update{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "discount": {
+        "completed": "Applied discount{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Discount failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: discount{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "invoice": {
+        "completed": "Issued invoice{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Invoice failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: invoice{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "payment_link": {
+        "completed": "Sent payment link{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Payment link failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: payment link{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "tag": {
+        "completed": "Tagged conversation{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "Tagging failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: tag{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      },
+      "fallback": {
+        "completed": "{action}{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "{action} failed{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "Waiting: {action}{amount, select, none {} other { {amount}}}{customer, select, none {} other { to {customer}}}{subject, select, none {} other { · {subject}}}"
+      }
+    },
+    "empty": "GOTCHA has not done anything yet today.",
+    "unavailable": "GOTCHA's activity could not be loaded just now.",
+    "timeSaved": "Time saved today",
+    "timeSavedMeasured": "Based on your own conversations",
+    "timeSavedDefault": "Based on a platform average, not your own history",
+    "duration": {
+      "hours": "{count}h",
+      "minutes": "{count}m",
+      "days": "{count}d"
+    },
+    "now": {
+      "lead": "Right now: {summary}.",
+      "idle": "Nothing is running right now.",
+      "conversations": "{count, plural, one {answering # conversation} other {answering # conversations}}",
+      "approvals": "{count, plural, one {holding # action for your approval} other {holding # actions for your approval}}",
+      "tool": {
+        "order": "{count, plural, one {checking # order} other {checking # orders}}",
+        "customer": "{count, plural, one {updating # customer} other {updating # customers}}",
+        "contact": "{count, plural, one {updating # contact} other {updating # contacts}}",
+        "lead": "{count, plural, one {working # lead} other {working # leads}}",
+        "deal": "{count, plural, one {working # deal} other {working # deals}}",
+        "conversation": "{count, plural, one {handling # conversation} other {handling # conversations}}"
+      }
+    },
+    "allowance": {
+      "label": "Conversations left this month",
+      "uncapped": "No monthly cap on this plan.",
+      "unavailable": "The monthly allowance could not be loaded.",
+      "projection": "At today's pace that lasts until {date}",
+      "projectionNone": "At today's pace it lasts the whole period"
+    }
+  },
+  "summaryUnavailable": "Today's figures aren't available right now.",
+  "summaryQuiet": "GOTCHA has answered everything so far. Nothing is waiting on you.",
+  "quietWork": {
+    "title": "Worth an hour, while it is quiet",
+    "subtitle": "GOTCHA picked these",
+    "footnote": "None of this is urgent. It is simply what would make next week easier.",
+    "empty": "Nothing to work on right now.",
+    "unavailable": "This list could not be loaded just now.",
+    "missingSource": "Knowledge conflicts are not in this ranking yet.",
+    "item": {
+      "gaps": {
+        "title": "{count, plural, one {A question it could not answer} other {# questions it could not answer}}",
+        "body": "{questions} - asked {asked, plural, one {once} other {# times}}",
+        "action": "{count, plural, one {Answer it} other {Answer them}}"
+      },
+      "conflicts": {
+        "title": "{count, plural, one {Two sources still disagree about {fields}} other {Sources disagree about # things}}",
+        "body": "{count, plural, one {Until you pick one, GOTCHA passes every question touching it to a person.} other {{fields} - until you pick, GOTCHA passes those questions to a person.}}",
+        "action": "Resolve it"
+      },
+      "demandOne": {
+        "title": "{askedBy, plural, one {# person} other {# people}} asked for {term}",
+        "body": "You do not stock it. {weeksRunning, plural, =1 {First week.} other {# weeks running.}}",
+        "action": "See who"
+      },
+      "demandMany": {
+        "title": "{count} things people asked for that you do not stock",
+        "body": "{terms} - asked {asked, plural, one {once} other {# times}}",
+        "action": "See who"
+      },
+      "dormant": {
+        "title": "{count, plural, one {# customer has} other {# customers have}} gone quiet",
+        "body": "No contact for {quietForDays, plural, one {# day} other {# days}}. Reaching them starts conversations rather than ending them.",
+        "action": "Start a campaign"
+      }
+    }
+  },
+  "conflicts": {
+    "title": "Two sources still disagree",
+    "body": "GOTCHA found conflicting answers for {field}. Until you pick one, it passes every question about it to a person.",
+    "accept": "Use the new value",
+    "keep": "Keep current",
+    "failed": "That didn't save. The conflict is still open."
+  },
+  "team": {
+    "title": "Your team right now",
+    "online": "{count, plural, =0 {Nobody online} one {# online} other {# online}}",
+    "load": "{open} open · replies in {reply}",
+    "awayUntil": "Away until {time}",
+    "imbalance": "{name} is carrying most of the queue -",
+    "rebalance": "open Inbox",
+    "none": "No one on the team yet.",
+    "unavailable": "We couldn't read your team just now.",
+    "loadAi": "{open} open · AI employee"
+  },
+  "status": {
+    "nothingNeedsYou": "Nothing needs you",
+    "signals": "{count, plural, one {# signal} other {# signals}}",
+    "noSignals": "No signals",
+    "signalsUnknown": "Signals unavailable",
+    "waitingOnYou": "{count, plural, =0 {Nothing waiting on you} one {# waiting on you} other {# waiting on you}}",
+    "waitingUnknown": "Waiting count unavailable",
+    "lastHandover": "Last handover",
+    "lastHandoverNone": "Nothing records when a conversation was last handed to a person.",
+    "notLive": "Setting up · not live yet",
+    "trial": "{days, plural, one {Trial · # day left} other {Trial · # days left}}",
+    "setupCall": "Book a setup call"
+  },
+  "insight": {
+    "title": "Worth knowing",
+    "empty": "Nothing stands out right now.",
+    "unavailable": "Insights could not be loaded just now.",
+    "dismiss": "Dismiss",
+    "act": "Take a look",
+    "kind": {
+      "intent": {
+        "automatable": "<b>{count}</b> conversations in the last {days} days were about the same thing. An automated answer would take them off the queue.",
+        "multiple_automatable": "<b>{count}</b> recurring topics came up at least {minOccurrences} times each in the last {days} days. Each one is a flow waiting to be written."
+      },
+      "escalation": {
+        "rate_high": "<b>{percent}%</b> of analysed conversations were escalated to a person in the last {days} days - {escalated} of {analyzed}."
+      },
+      "confidence": {
+        "below_threshold": "GOTCHA was unsure on <b>{percent}%</b> of analysed conversations in the last {days} days - {count} of {analyzed}, below {threshold}% confidence."
+      },
+      "channel": {
+        "highest_volume": "<b>{count}</b> conversations came through {channel} in the last {days} days, more than any other channel."
+      },
+      "department": {
+        "load_imbalance": "<b>{count}</b> conversations went to one department in the last {days} days, well ahead of the rest."
+      },
+      "fallback": "GOTCHA noticed something worth a look."
+    }
+  },
+  "firstSteps": {
+    "title": "First steps",
+    "progress": "{done, plural, one {One done} other {# done}} · about {minutes, plural, one {# minute} other {# minutes}} left",
+    "allDone": "All done",
+    "hide": "Hide - finish later in Settings",
+    "next": "DO THIS NEXT",
+    "estimate": "{minutes} min",
+    "unavailable": "Setup progress could not be loaded just now.",
+    "ingest": "{pages, plural, one {# page} other {# pages}} read, {drafted, plural, one {# answer} other {# answers}} drafted",
+    "step": {
+      "connect_channel": {
+        "title": "Connect a channel",
+        "body": "WhatsApp, Instagram or email - wherever your customers already write to you.",
+        "action": "Connect",
+        "after": "After you connect a channel."
+      },
+      "connect_store": {
+        "title": "Connect your store",
+        "body": "Until this is done GOTCHA can answer about orders, but not refund, cancel or track them.",
+        "action": "Connect store",
+        "after": "After you connect your store."
+      },
+      "add_knowledge": {
+        "title": "Add what GOTCHA should know",
+        "body": "Point it at your site and it reads the pages itself.",
+        "action": "Add knowledge",
+        "after": "After you add what GOTCHA should know."
+      },
+      "hire_employee": {
+        "title": "Hire your first AI employee",
+        "body": "Pick its job and where it answers.",
+        "action": "Hire",
+        "after": "After you hire your first AI employee."
+      },
+      "handover_rules": {
+        "title": "Set the handover rules",
+        "body": "When a person takes over - anger, money, wholesale - and what happens outside working hours.",
+        "action": "Set rules",
+        "after": "After you set the handover rules."
+      },
+      "approval_limits": {
+        "title": "Choose what needs your approval",
+        "body": "Refunds above an amount you set, cancellations, discounts.",
+        "action": "Set limits",
+        "after": "After you choose what needs your approval."
+      },
+      "test_conversation": {
+        "title": "Send yourself a test",
+        "body": "A conversation you mark as a test, to see how GOTCHA answers.",
+        "action": "Send a test",
+        "after": "After you send yourself a test."
+      },
+      "invite_team": {
+        "title": "Invite your team",
+        "body": "The people who will take over when GOTCHA hands a conversation across.",
+        "action": "Invite",
+        "after": "After you invite your team."
+      }
+    },
+    "noScreen": "No screen sets this yet.",
+    "ingestWaiting": "{count, plural, one {# needs your word} other {# need your word}}",
+    "goLive": {
+      "title": "Go live",
+      "body": "GOTCHA starts answering real customers.",
+      "locked": "Locked",
+      "go": "Go live",
+      "lockedBy": "Waiting on: {steps}",
+      "confirm": "GOTCHA starts answering real customers. Go live?",
+      "yes": "Yes, go live",
+      "going": "Going live…",
+      "cancel": "Not yet",
+      "connectStore": "Connect your store",
+      "failed": {
+        "store": "Connect your store first - GOTCHA needs it to act on orders.",
+        "profile": "Your business profile needs filling in first.",
+        "admin": "The workspace needs an active admin first.",
+        "forbidden": "Only an admin can take the workspace live.",
+        "failed": "That didn't go live - try again."
+      },
+      "opensOnce": "Opens once {steps} are set."
+    },
+    "foot": "Once you go live, today's numbers and the queue take this space.",
+    "blockedBy": "Waiting on: {step}",
+    "and": "and",
+    "testMessage": "Send yourself a test message",
+    "testMessageNotYet": "Sending a test message from here comes next - message your WhatsApp number from your own phone meanwhile."
+  },
+  "dayOne": {
+    "eyebrow": "Day one",
+    "heading": "Your workspace is ready",
+    "read": "GOTCHA read {pages, plural, one {# page} other {# pages}} and drafted {drafted, plural, one {# answer} other {# answers}}.",
+    "stepsLeft": "{count, plural, one {One step left before it can go live.} other {# steps left before it can go live.}}",
+    "allSteps": "Every step is done.",
+    "headingNamed": "Your workspace is ready, {name}"
+  },
+  "conversation": {
+    "label": "Conversation with GOTCHA",
+    "home": "Home",
+    "placeholder": "Reply, or tell GOTCHA what to do next…",
+    "send": "Send",
+    "stop": "Stop",
+    "working": "Working on it…",
+    "failed": "It couldn't answer just now. Try again in a moment.",
+    "stopped": "Stopped.",
+    "step": {
+      "running": "working",
+      "failed": "failed",
+      "seconds": "{count, plural, =0 {· under 1s} other {· #s}}",
+      "done": "done",
+      "waiting_approval": "waiting for your approval",
+      "openApprovals": "Open Approvals"
+    },
+    "opening": "Opening the conversation…",
+    "missing": "This conversation isn't here. It may have been deleted, or it belongs to someone else.",
+    "openFailed": "Couldn't open this conversation. Try again in a moment.",
+    "stopping": "Stopping…",
+    "suggestions": "Follow-up questions",
+    "title": {
+      "label": "Conversation title",
+      "rename": "Rename",
+      "failed": "Not renamed. Try again."
+    },
+    "scope": {
+      "label": "What the answers look at: {scope}",
+      "range": {
+        "this_week": "This week",
+        "last_7": "Last 7 days",
+        "last_30": "Last 30 days",
+        "custom": "{from} to {to}"
+      },
+      "channels": {
+        "all": "All channels",
+        "some": "{count, plural, one {# channel} other {# channels}}"
+      },
+      "failed": "Not changed. Try again."
+    },
+    "delete": {
+      "button": "Delete conversation",
+      "title": "Delete this conversation?",
+      "what": "Its questions and answers are deleted with it. This can't be undone.",
+      "yes": "Delete",
+      "cancel": "Keep it",
+      "deleting": "Deleting…",
+      "failed": "It wasn't deleted. Try again."
+    },
+    "problem": {
+      "budget": "The answer stopped here: it reached the most it can write at once. Ask about a narrower part.",
+      "unavailable": "The AI service didn't answer. Try again in a moment.",
+      "busy": "An answer is still being written in this conversation. Wait for it, or stop it.",
+      "rate": "That's more than 10 questions in a minute. Try again in {seconds, plural, one {# second} other {# seconds}}.",
+      "rateSoon": "That's more than 10 questions in a minute. Try again in a minute.",
+      "credits": "Your workspace can't use AI right now: its credits have run out. See <billing>Settings · Billing</billing>.",
+      "missing": "This conversation isn't here any more. It may have been deleted.",
+      "failed": "It couldn't answer just now. Try again in a moment."
+    },
+    "blocks": {
+      "coverage": "Recorded for {covered} of {of} conversations",
+      "capped": "Counted from the first {cap}",
+      "storeLimit": "Part of what the store returned",
+      "open": "Open ↗",
+      "total": "{total} in all",
+      "rows": "{count, plural, one {# in all} other {# in all}}",
+      "showAll": "Show all",
+      "showMore": "Show more",
+      "reading": "Reading…",
+      "readFailed": "Couldn't read the rest. Try again in a moment.",
+      "storeGone": "The store can't be read right now, so the rest can't be shown.",
+      "sources": "What this answer is based on",
+      "none": "None"
+    },
+    "about": {
+      "title": "About a request",
+      "line": "About a request waiting for approval. GOTCHA can explain it here; deciding it stays on its page.",
+      "open": "Open the request"
+    },
+    "proposal": {
+      "ready": "{count, plural, one {1 change ready} other {# changes ready}}",
+      "notLive": "Nothing is live yet",
+      "state": {
+        "approved": "Approved - not run yet",
+        "executed": "Done",
+        "rejected": "Rejected - nothing ran",
+        "expired": "Expired - nothing ran"
+      },
+      "open": "Open",
+      "approve": "Approve and apply",
+      "edit": "Edit",
+      "openRequest": "Open the request",
+      "confirm": {
+        "ask": "{count, plural, one {This will run now:} other {These # will run now:}}",
+        "yes": "Yes, run it",
+        "back": "Back"
+      },
+      "ran": "Approved, and it ran.",
+      "notRun": "Approved, but it didn’t run. Open the request to see why and try again.",
+      "refused": {
+        "stale": "Someone else decided this, or its deadline passed. It now shows where it stands.",
+        "forbidden": "You don’t have permission to decide this one.",
+        "failed": "That didn’t go through. Nothing ran."
+      }
+    }
+  }
+}

@@ -9,6 +9,7 @@ import {
   AuditAction,
   withHistoricalRecords,
 } from "@chatcenter/shared";
+import { marksNaming } from "../lib/not-same";
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"));
@@ -178,6 +179,8 @@ router.delete("/:id", async (req: Request, res: Response) => {
         const deletedContacts = await tx.contact.deleteMany({
           where: { tenantId: req.tenantId!, id: { in: allContactIds } },
         });
+        // "Not the same person" marks naming an erased customer (identity routes).
+        if (allContactIds.length) await tx.tenantSetting.deleteMany({ where: marksNaming(req.tenantId!, allContactIds) });
 
         // Everything the import learned ABOUT this person, which lives outside
         // the message tables and would otherwise survive their erasure.

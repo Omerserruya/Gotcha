@@ -22,14 +22,14 @@
  * overrides → TenantFeature). Included credits use rolloverIncluded() (expire
  * the old period, grant the new). Purchased credits are NEVER touched here.
  */
-import { prisma, materializeEntitlements, rolloverIncluded, grantUnits, getBalance, expireDueLots, refreshUsdIlsRate } from "@chatcenter/shared";
+import { prisma, materializeEntitlements, rolloverIncluded, rolloverIncludedOnce, grantUnits, getBalance, expireDueLots, refreshUsdIlsRate } from "@chatcenter/shared";
 import type { Subscription, SubscriptionStatus } from "@prisma/client";
 import { ensureBillableEntity, getEntityIdForTenant, tenantsForEntity } from "./billable-entity.service";
 import { getPlan, getActivePlanVersion, isUpgrade, assertSelectable } from "./plan.service";
 import { quote, snapshotFor } from "./pricing.service";
-import { currentPeriod, nextPeriod, periodKeyFor } from "../lib/period";
+import { currentPeriod, nextPeriod, periodKeyFor, creditMonthOf } from "../lib/period";
 import { emitBillingEvent } from "../lib/events";
-import { chargeFor } from "./invoice.service";
+import { chargeFor, chargeFigures, chargeRefusal, type ChargeFigures } from "./invoice.service";
 import { unsuspendTenants } from "./tenant-status.service";
 import { expireDuePocs, reconcileLiveEvaluations } from "./poc.service";
 import { resolveDiscount, expireDueAssignments } from "./coupon.service";
@@ -260,6 +260,13 @@ export interface ChangePlanInput {
   chatVolumeOptionKey?: string | null;
   voiceVolumeOptionKey?: string | null;
   actor?: string;
+  /**
+   * What the confirm showed (previewPlanChange): the exact gross and the rate
+   * version. When given, an upgrade that would charge anything else is refused
+   * with charge_amount_changed and nothing is charged.
+   */
+  expectedChargeAmount?: string;
+  expectedFxRateVersion?: number;
 }
 
 export interface ChangePlanResult {
@@ -282,7 +289,11 @@ export interface ChangePlanResult {
  * period end, so a downgrade never takes away capability the customer has
  * already paid for.
  */
-export async function changePlan(input: ChangePlanInput): Promise<ChangePlanResult> {
+/**
+ * What a change would do, read only: shared by changePlan and the preview so
+ * the two can never decide differently.
+ */
+export async function decidePlanChange(input: ChangePlanInput) {
   const entityId = await getEntityIdForTenant(input.tenantId);
   if (!entityId) throw new Error("no billable entity");
   const sub = await prisma.subscription.findUnique({ where: { billableEntityId: entityId } });
@@ -327,6 +338,56 @@ export async function changePlan(input: ChangePlanInput): Promise<ChangePlanResu
   const tierUp = samePlan ? false : await isUpgrade(sub.planKey, target.key, sub.planVersion, target.version);
   const goingUp = newPrice > currentPrice || (tierUp && newPrice >= currentPrice);
 
+  // Charge the prorated difference FIRST. Granting the new plan's features and
+  // credits on a failed charge would hand out paid entitlements to a declined
+  // card. A TRIALING subscription has no money due yet, so it upgrades without
+  // an immediate charge and the higher price lands at trial-end activation.
+  const proration = Math.max(0, newPrice - currentPrice);
+  const chargeDue = goingUp && proration > 0 && sub.status !== "TRIALING";
+  return { entityId, sub, target, samePlan, chatKey, voiceKey, q, currentPrice, newPrice, goingUp, proration, chargeDue };
+}
+
+export interface PlanChangePreview {
+  applied: "immediate" | "scheduled";
+  /** The exact amount the card is charged now (VAT included), or null when nothing is charged now. */
+  chargeNow: (Omit<ChargeFigures, "hasPaymentMethod"> & { vatIncluded: true }) | null;
+  /** Why the charge would be refused, with the code the charge itself records. Then chargeNow is null. */
+  refused: { code: "charge_not_priceable" | "charge_not_taxable"; reason: string } | null;
+  /** False: the charge would fail no_payment_method. */
+  hasPaymentMethod: boolean | null;
+  effectiveAt: string;
+  newMonthly: { amount: string; currency: string };
+}
+
+/**
+ * What change-plan would do and charge, with no side effect: the same
+ * decision (decidePlanChange) and the same figures (chargeFigures) the change
+ * itself uses. Reads only; never the provider.
+ */
+export async function previewPlanChange(input: ChangePlanInput, now = new Date()): Promise<PlanChangePreview> {
+  const d = await decidePlanChange(input);
+  const newMonthly = { amount: d.newPrice.toFixed(2), currency: d.q.currency };
+  if (!d.goingUp) {
+    return { applied: "scheduled", chargeNow: null, refused: null, hasPaymentMethod: null, effectiveAt: (d.sub.currentPeriodEnd ?? now).toISOString(), newMonthly };
+  }
+  if (!d.chargeDue) {
+    return { applied: "immediate", chargeNow: null, refused: null, hasPaymentMethod: null, effectiveAt: now.toISOString(), newMonthly };
+  }
+  try {
+    const { hasPaymentMethod, ...figures } = await chargeFigures({ entityId: d.entityId, amount: d.proration, currency: d.q.currency, now });
+    return { applied: "immediate", chargeNow: { ...figures, vatIncluded: true }, refused: null, hasPaymentMethod, effectiveAt: now.toISOString(), newMonthly };
+  } catch (err) {
+    return { applied: "immediate", chargeNow: null, refused: chargeRefusal(err), hasPaymentMethod: null, effectiveAt: now.toISOString(), newMonthly };
+  }
+}
+
+export class ChargeAmountChanged extends Error {
+  constructor() { super("charge_amount_changed"); this.name = "ChargeAmountChanged"; }
+}
+
+export async function changePlan(input: ChangePlanInput): Promise<ChangePlanResult> {
+  const { entityId, sub, target, samePlan, chatKey, voiceKey, q, goingUp, proration, chargeDue } = await decidePlanChange(input);
+
   const snapshot = snapshotFor(q);
   const priceString = snapshot.snapshotPrice;
 
@@ -335,13 +396,19 @@ export async function changePlan(input: ChangePlanInput): Promise<ChangePlanResu
     const periodEnd = sub.currentPeriodEnd ?? new Date();
     const tenantId = input.tenantId;
 
-    // Charge the prorated difference FIRST. Granting the new plan's features and
-    // credits on a failed charge would hand out paid entitlements to a declined
-    // card. A TRIALING subscription has no money due yet, so it upgrades without
-    // an immediate charge and the higher price lands at trial-end activation.
-    const proration = Math.max(0, newPrice - currentPrice);
-    const chargeDue = proration > 0 && sub.status !== "TRIALING";
     if (chargeDue) {
+      // The confirm's figure, held to: refused before anything is written when
+      // the charge has moved since (a new rate, a changed price).
+      let expectedGross: string | undefined;
+      if (input.expectedChargeAmount !== undefined) {
+        let now: ChargeFigures | null = null;
+        try { now = await chargeFigures({ entityId, amount: proration, currency: q.currency }); } catch { now = null; }
+        expectedGross = Number(input.expectedChargeAmount).toFixed(2);
+        const moved = !now || now.gross !== expectedGross ||
+          (input.expectedFxRateVersion !== undefined && now.fxRateVersion !== input.expectedFxRateVersion);
+        // Unpriceable now: chargeFor refuses with its own code, as it always has.
+        if (now && moved) throw new ChargeAmountChanged();
+      }
       // Scope the idempotency key to the payment method that will be charged.
       // A failed attempt (no/declined card) must not permanently block a retry
       // after the customer adds a valid card; a double-click on the SAME card
@@ -359,7 +426,10 @@ export async function changePlan(input: ChangePlanInput): Promise<ChangePlanResu
         amount: proration,
         currency: q.currency,
         description: samePlan ? `${target.name} volume change (prorated)` : `Upgrade to ${target.name} (prorated)`,
-        idempotencyKey: `upgrade:${sub.id}:${periodKey}:${target.key}:${target.version}:${selection}:${pmKey}`,
+        // A confirmed figure is part of the key: a re-preview at a new figure is a
+        // new attempt, a double-click on the same one stays idempotent.
+        idempotencyKey: `upgrade:${sub.id}:${periodKey}:${target.key}:${target.version}:${selection}:${pmKey}${expectedGross ? `:${expectedGross}` : ""}`,
+        ...(expectedGross ? { expectedGross } : {}),
       });
       if (res.outcomeUnknown) {
         // The plan is NOT flipped - we cannot confirm they paid for it. But
@@ -374,6 +444,9 @@ export async function changePlan(input: ChangePlanInput): Promise<ChangePlanResu
         });
         throw new Error("upgrade_payment_outcome_unknown");
       }
+      // Moved between the check above and the charge: nothing was charged, and
+      // it is not a failed payment; the screen asks again with the new figure.
+      if (!res.success && res.failureCode === "charge_amount_changed") throw new ChargeAmountChanged();
       if (!res.success) {
         await emitBillingEvent({ type: "payment.failed", tenantId, data: { invoiceId: res.invoiceId, reason: res.failureCode, context: "upgrade", targetPlan: target.key } });
         throw new Error(`upgrade_payment_failed:${res.failureCode ?? "charge_failed"}`);
@@ -557,6 +630,41 @@ async function renewInIsolation(subscriptionId: string, reason: "trial_end" | "r
   }
 }
 
+/**
+ * Reset AI credits monthly inside billing periods longer than a month.
+ *
+ * Renewal grants a period's allowance once, at the period start. A period
+ * longer than a month (an annual contract, a hand-set term) therefore stayed
+ * on its first month's allowance until renewal - the dev wallet sat at 0 from
+ * August on a one-year period. Each tick, every active subscription gets its
+ * CURRENT credit month: the previous month's included remainder expires (not
+ * carried over) and the monthly allowance is granted, once per tenant per
+ * month (rolloverIncludedOnce). Purchased and promo credits are untouched.
+ * The billing period and its charge are not changed. For a one-month period
+ * the credit month is the period itself, already granted at renewal: no-op.
+ */
+export async function rollMonthlyCredits(now = new Date()): Promise<number> {
+  const subs = await prisma.subscription.findMany({
+    where: { status: "ACTIVE", currentPeriodStart: { not: null, lte: now } },
+    select: { id: true, billableEntityId: true, planKey: true, planVersion: true, currentPeriodStart: true, currentPeriodEnd: true, snapshotIncludedCredits: true },
+  });
+  let granted = 0;
+  for (const sub of subs) {
+    try {
+      const month = creditMonthOf(sub.currentPeriodStart!, sub.currentPeriodEnd, now);
+      if (sub.currentPeriodEnd && month.start >= sub.currentPeriodEnd) continue; // the period is over; renewal owns it
+      const plan = await getPlan(sub.planKey, sub.planVersion);
+      const allowance = contractedCredits(sub, plan);
+      for (const tenantId of await tenantsForEntity(sub.billableEntityId)) {
+        if (await rolloverIncludedOnce(tenantId, month.key, allowance, month.end, `plan:${sub.planKey}:monthly`)) granted++;
+      }
+    } catch (err: any) {
+      console.error(`[billing][cycle] monthly credits failed for subscription ${sub.id}; continuing:`, err?.message ?? err);
+    }
+  }
+  return granted;
+}
+
 export async function runBillingCycle(now = new Date()): Promise<{
   trials: number;
   renewals: number;
@@ -571,6 +679,11 @@ export async function runBillingCycle(now = new Date()): Promise<{
 
   const renewals = await prisma.subscription.findMany({ where: { status: "ACTIVE", cancelAtPeriodEnd: false, currentPeriodEnd: { lte: now } } });
   for (const s of renewals) await renewInIsolation(s.id, "renewal");
+
+  // AI credits reset every month, whatever the billing period's length.
+  await rollMonthlyCredits(now).catch((err) =>
+    console.warn("[billing][cycle] monthly credit reset failed:", err?.message ?? err),
+  );
 
   // POCs never renew (cancelAtPeriodEnd=true keeps them out of the sweep
   // above); expiring them is their entire lifecycle.

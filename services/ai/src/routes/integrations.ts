@@ -1,13 +1,33 @@
 import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
 import { enableReadToolsForIntegration } from "../services/integration-provisioning.service";
-import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermission, requirePermissionOrRole, encryptCredentials, decryptCredentials, searchLeads as crmSearchLeads, searchContacts as crmSearchContacts } from "@chatcenter/shared";
-import { executeAdapterTool, getAdapter, clearMissingScopes } from "../services/connectors/integration-framework";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermission, requirePermissionOrRole, encryptCredentials, decryptCredentials, searchLeads as crmSearchLeads, searchContacts as crmSearchContacts, readDurableSetting, writeDurableSetting } from "@chatcenter/shared";
+
+/** Where the chosen use case lives. A tenant setting, so no migration. */
+const BUSINESS_MODEL_KEY = "businessModel";
+import { executeAdapterTool, getAdapter, clearMissingScopes, capabilityStateFromConfig } from "../services/connectors/integration-framework";
 import { invalidateCrmAdapterCache, getCrmAdapter, resolveCrmVendor } from "../services/connectors/crm-adapter-resolver";
 import { maskPhone, maskEmail } from "../lib/mask";
+import { tryEmit } from "../services/notifications-emit";
 import { getSourceOfTruth, type SourceOfTruthCapability } from "../services/connectors/source-of-truth";
+import {
+  BUSINESS_ROLES,
+  ROLES_FOR_USE_CASE,
+  candidatesForRole,
+  roleAvailability,
+  isUseCase,
+  isBusinessRole,
+  rolesFor,
+  planRoleElection,
+} from "../services/connectors/business-roles";
+import { getBusinessCoreMap } from "../services/connectors/part-systems";
+import { readerLocale } from "../lib/reader-locale";
+import { catalogDescription } from "../lib/catalog-descriptions";
+import { catalogTool } from "../lib/catalog-tools-he";
+import { splitErrorCode } from "../lib/error-code";
+import { probeConnectCredentials } from "../services/connect-probe";
 import { requestShopifySelfUninstall } from "../services/connectors/shopify-self-uninstall.service";
-import { removeTenantToolAssignments, stripLiveConnectionClaims } from "../services/connectors/integration-teardown";
+import { stripLiveConnectionClaims } from "../services/connectors/integration-teardown";
 
 const router = Router();
 
@@ -22,6 +42,30 @@ const router = Router();
 // domain's key. The router-level gate is the READ floor; mutating routes add
 // stronger per-route gates below.
 const canReadSystems = requirePermission("integrations:connections:read", "business-systems:connections:read");
+
+/**
+ * Bound what a connection row hands back.
+ *
+ * `lastError` is the platform's own text, and one of the write paths truncates
+ * it to 200 while others do not - the shopify row on dev is 255 characters and
+ * opens with `<!DOCTYPE html>`, which is a provider returning an HTML error
+ * page rather than JSON. Truncating only on write means the cap depends on
+ * which code path failed; doing it here makes the served field bounded whatever
+ * produced it, including rows written before any cap existed.
+ *
+ * Not sanitised beyond length: the text is shown to an admin as the platform
+ * said it, because a paraphrased provider error is a worse debugging aid than
+ * an ugly one. The one exception is an HTML page, which splitErrorCode serves
+ * as its cause's sentence (2026-10-11); the raw page is in the service log.
+ */
+const LAST_ERROR_MAX = 200;
+function boundConnection<T extends { lastError?: string | null }>(row: T | undefined): (T & { lastErrorCode: string | null }) | null {
+  if (!row) return null;
+  // The code a writer stored beside the sentence (lib/error-code), served apart.
+  const { lastError, lastErrorCode } = splitErrorCode(row.lastError);
+  const bounded = typeof lastError === "string" && lastError.length > LAST_ERROR_MAX ? lastError.slice(0, LAST_ERROR_MAX) : lastError;
+  return { ...row, lastError: bounded, lastErrorCode };
+}
 const canConnectSystems = requirePermission("integrations:connections:connect", "business-systems:connections:connect");
 const canManageSystems = requirePermission("integrations:connections:disconnect", "business-systems:connections:manage");
 const canSelectSot = requirePermission("business-systems:sot:select");
@@ -54,22 +98,44 @@ router.get("/", async (req: Request, res: Response) => {
           // record from a plain connection: the Settings toggle rendered OFF
           // for a tenant whose config.useAsCrm was true. `credentials` stays
           // out - it is the encrypted secret and no list view needs it.
-          select: { id: true, status: true, createdAt: true, config: true },
+          //
+          // The three health columns are written by /test in six places and,
+          // until now, read by nothing: a client could learn status ERROR but
+          // never WHEN it broke or WHY. Both of those are what the failure
+          // banner says out loud.
+          //
+          // `lastTestedAt` is a CONNECTION TEST and nothing else. There is no
+          // sync concept for integrations anywhere in this system - nothing
+          // records "pulled N records at T" - so this must never be surfaced
+          // or renamed as "last synced". It would tell a customer their data
+          // is current when all that happened is a credential check passing,
+          // which is wrong in the reassuring direction.
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            config: true,
+            lastTestedAt: true,
+            lastTestResult: true,
+            lastError: true,
+          },
         },
       },
       orderBy: { sortOrder: "asc" },
     });
 
+    const locale = await readerLocale(req);
     const data = catalog.map((entry) => ({
       ...entry,
+      description: catalogDescription(entry.slug, entry.description, locale),
       catalogTools: entry.catalogTools.map((ct: any) => ({
-        ...ct,
+        ...catalogTool(entry.slug, ct, locale),
         tenantTool: ct.tenantTools?.[0] || null,
         tenantTools: undefined,
       })),
       authType: entry.authType,
       authSchema: entry.authSchema,
-      tenantConnection: entry.tenantConnections[0] || null,
+      tenantConnection: boundConnection(entry.tenantConnections[0]),
       tenantConnections: undefined,
     }));
 
@@ -77,6 +143,392 @@ router.get("/", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("List catalog integrations error:", err);
     res.status(500).json({ error: "Failed to list integrations" });
+  }
+});
+
+/**
+ * GET /commerce/capabilities - can this WORKSPACE act on orders at all?
+ *
+ * The same flags already exist on /api/commerce-context/:conversationId, but
+ * that endpoint is scoped to one conversation, so there was no way to ask the
+ * question Go live actually turns on: not "may this agent refund this order"
+ * but "has this store granted us refunds in the first place". Registered
+ * BEFORE /:slug so the literal path wins.
+ *
+ * These are the STORE's grants, not the reader's permissions. A viewer with no
+ * refund permission still needs a truthful answer about whether the workspace
+ * could refund, because that is what the setup screen is reporting on.
+ *
+ * `probed: false` means no successful probe has ever run for this store. It is
+ * NOT "the store granted nothing" and must never be rendered as a capability
+ * of no - the honest reading is that we do not know yet, and the screen shows
+ * a reconnect prompt rather than a red cross.
+ */
+const COMMERCE_SCOPE_FOR: Record<string, string[]> = {
+  readOrders: ["read_orders"],
+  refund: ["write_orders"],
+  cancel: ["write_orders"],
+  track: ["read_fulfillments"],
+};
+
+router.get("/commerce/capabilities", async (req: Request, res: Response) => {
+  try {
+    const connection = await prisma.tenantIntegration.findFirst({
+      where: {
+        tenantId: req.tenantId!,
+        status: "CONNECTED",
+        integration: { category: "ECOMMERCE" },
+      },
+      select: { config: true, integration: { select: { slug: true, name: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!connection) {
+      // No commerce system is a real, common state - not an error, and not a
+      // set of capabilities that are all false, which would read as "connected
+      // but forbidden".
+      res.json({ data: { connected: false, provider: null, probed: false, can: null } });
+      return;
+    }
+
+    const state = capabilityStateFromConfig(connection.config as Record<string, unknown> | null);
+    const granted = new Set(state.grantedScopes);
+    const probed = state.grantedScopes.length > 0 || state.lastCheckedAt !== null;
+
+    const can: Record<string, boolean> = {};
+    for (const [capability, scopes] of Object.entries(COMMERCE_SCOPE_FOR)) {
+      can[capability] = scopes.every((sc) => granted.has(sc));
+    }
+
+    res.json({
+      data: {
+        connected: true,
+        provider: connection.integration.slug,
+        probed,
+        lastCheckedAt: state.lastCheckedAt,
+        grantedScopes: state.grantedScopes,
+        can,
+      },
+    });
+  } catch (err) {
+    console.error("Commerce capabilities error:", err);
+    res.status(500).json({ error: "Failed to resolve commerce capabilities" });
+  }
+});
+
+// ─── Business core (screen 14) ───────────────────────────────
+
+/**
+ * GET /business-core - the use case, and which system serves each part.
+ *
+ * The election mechanism this builds on is already capability-honest and already
+ * SEPARATE FROM CONNECTING: a tenant elects by flagging an integration it has
+ * already connected. So this endpoint never connects anything - it reports the
+ * parts, who can serve each, and who currently does. Connecting stays in the
+ * marketplace, which is the duplication the design wanted removed.
+ *
+ * ★ A PART WITH NO POSSIBLE SYSTEM SAYS SO. `shipping` has a category and zero
+ * integrations, so its list is empty for every tenant forever. Reported as
+ * `available: false` with a reason rather than an empty array, because "nothing
+ * exists to choose" and "nothing connected yet" need different sentences and an
+ * empty list reads as the second.
+ *
+ * Storage needs no migration: the use case is a durable tenant setting, and a
+ * role election lives on `TenantIntegration.config.roles` - the same place
+ * `config.useAsCrm` already elects the CRM.
+ */
+router.get("/business-core", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const [rawUseCase, catalogue, connected, partMap] = await Promise.all([
+      readDurableSetting(tenantId, BUSINESS_MODEL_KEY),
+      prisma.integrationCatalog.findMany({
+        where: { isPublished: true },
+        select: { slug: true, name: true, category: true, canActAsCrm: true },
+      }),
+      prisma.tenantIntegration.findMany({
+        where: { tenantId },
+        select: { status: true, config: true, integration: { select: { slug: true, name: true } } },
+      }),
+      getBusinessCoreMap(tenantId),
+    ]);
+
+    const useCase = isUseCase(rawUseCase) ? rawUseCase : null;
+    const catalogueRows = catalogue.map((c) => ({ ...c, category: String(c.category) }));
+    // ★ STATUS, NOT PRESENCE. A TenantIntegration row exists for anything a
+    // tenant has ever started connecting, including one sitting in ERROR - and
+    // reporting that as "connected" is the reassuring direction: the screen would
+    // offer a system as ready while the election endpoint refuses it, and the
+    // merchant would have no way to see why.
+    //
+    // Three states, not two: connected, never connected, and connected-but-
+    // failing. The raw status travels so the screen can say which.
+    const statusBySlug = new Map(connected.map((c) => [c.integration.slug, String(c.status)]));
+
+    const roles = (useCase ? ROLES_FOR_USE_CASE[useCase] : BUSINESS_ROLES).map((role) => {
+      const availability = roleAvailability(role);
+      const candidates = candidatesForRole(role, catalogueRows).map((slug) => {
+        const row = catalogueRows.find((c) => c.slug === slug)!;
+        const status = statusBySlug.get(slug) ?? null;
+        return {
+          slug,
+          name: row.name,
+          // Only a CONNECTED row may be elected, and the write enforces the same
+          // thing - so this cannot claim a system the write would refuse.
+          connected: status === "CONNECTED",
+          // null = never connected. Any other value = a row exists and is not
+          // usable yet, which needs a different sentence from "not connected".
+          status,
+        };
+      });
+
+      // ★ READ THROUGH THE SAME FACADE THE AI USES, so the screen cannot show a
+      // system the model does not resolve to. Each part delegates to whichever
+      // elector its consumer already reads - the CRM resolver, the returns
+      // resolver, or `config.roles` for the parts that had none.
+      const resolved = partMap.find((m) => m.part === role)!;
+      const electedRow = resolved.slug
+        ? catalogueRows.find((c) => c.slug === resolved.slug) ?? null
+        : null;
+
+      // ★ TWO DIFFERENT FACTS USED TO SHARE `reason`, AND THE PROSE WON.
+      // `...availability` spread the enum `reason: "no_integrations_exist"`, and
+      // `reason: resolved.reason` then overwrote it with a sentence. Nothing
+      // broke - `available` and `detail` both survived, so the screen still told
+      // "nothing exists to choose" from "nothing connected yet" - but the enum
+      // became unobtainable, and a consumer trusting the documented meaning got
+      // prose where a code is specified.
+      //
+      // So the availability code travels as `unavailableReason` and `reason`
+      // keeps the prose it already carried. ADD-ONLY, deliberately: the
+      // available/detail shape is byte-identical to before, because the
+      // consumer's contract is a strict `z.object` and nulling or removing a key
+      // is what broke the voice screen when `basis.messagesAnalysed` went from
+      // 0 to null. An unexpected key is stripped; a changed type is refused.
+      const availabilityFields = availability.available
+        ? { available: true as const }
+        : {
+            available: false as const,
+            detail: availability.detail,
+            unavailableReason: availability.reason,
+          };
+
+      return {
+        role,
+        ...availabilityFields,
+        elected: resolved.slug ? { slug: resolved.slug, name: electedRow?.name ?? resolved.slug } : null,
+        // WHY it is that system: chosen by the merchant, inferred by a resolver,
+        // or not set. "Inferred" must not read as a decision somebody made.
+        source: resolved.source,
+        // Prose, always present. The availability CODE is `unavailableReason`.
+        reason: resolved.reason,
+        // The same why as a code (and the values it names), for a screen to
+        // word in its own language. Add-only: `reason` keeps its prose.
+        reasonCode: resolved.reasonCode,
+        reasonParams: resolved.reasonParams ?? {},
+        candidates,
+      };
+    });
+
+    res.json({
+      data: {
+        useCase,
+        roles,
+        // Named so a screen can show the two facts the catalogue cannot express,
+        // rather than each client rediscovering them. See business-roles.ts.
+        catalogueNotes: [
+          "The shipping category exists and contains no integrations, so that part cannot be offered yet.",
+          "ReturnGo is stored under the ecommerce category but serves returns, and is listed under returns here.",
+        ],
+        // The same two facts as codes, in the same order, for a screen to word.
+        // Beside the sentences, not instead: a strict client refuses a changed type.
+        catalogueNoteCodes: ["shipping_category_empty", "returngo_listed_under_returns"],
+      },
+    });
+  } catch (err) {
+    console.error("business-core read error:", err);
+    res.status(500).json({ error: "Failed to read the business core" });
+  }
+});
+
+/**
+ * PUT /business-core/role - choose which connected system serves one part.
+ *
+ * ★ THIS IS THE WRITE MY OWN READ SIDE IMPLIED AND DID NOT HAVE. `GET
+ * /business-core` reported who serves each part, and nothing in the monorepo
+ * ever wrote `config.roles` - 32 tenantIntegration writes, none of them this one.
+ * So a five-part dropdown would have saved for the CRM and silently done nothing
+ * for the other four: a control that looks configurable and is not, which is the
+ * failure this codebase keeps finding and I had just built a fresh one of.
+ *
+ * ── It ELECTS, it does not connect ──
+ *
+ * Only an already-CONNECTED integration can be chosen. Connecting stays in the
+ * marketplace; this is a dropdown over what a tenant already has.
+ *
+ * ── It DISPLACES, and says what it replaced ──
+ *
+ * One system per part is the rule. Refusing when a part is taken would recreate
+ * the undeletable-employee trap: the merchant is blocked by a state they cannot
+ * see and did not know about. Silent displacement is the reassuring direction. So
+ * the write succeeds and the response NAMES the incumbent, which is the only way
+ * a screen can say "it was Shopify".
+ *
+ * ── The CRM part is NOT electable here, deliberately ──
+ *
+ * `config.useAsCrm` and its resolver already elect the customer system of record,
+ * and the GET reads that resolver so this screen cannot disagree with the system
+ * the bot actually calls. A second way to elect a CRM would be two sources for
+ * one decision - the shape that has cost this repo a day already. Refused with a
+ * pointer to the one path.
+ *
+ * ── A part that cannot be served is refused, not stored ──
+ *
+ * `shipping` has a category and zero integrations, so the GET reports
+ * `available: false`. Accepting an election for it would store something the read
+ * will immediately contradict.
+ */
+router.put("/business-core/role", canSelectSot, async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const role = body.role;
+  const slug = body.slug;
+
+  if (!isBusinessRole(role)) {
+    res.status(422).json({ error: `role must be one of: ${BUSINESS_ROLES.join(", ")}` });
+    return;
+  }
+  if (role === "crm") {
+    res.status(409).json({
+      error: "The CRM is elected through PUT /api/integrations/:slug/crm-source, which is the one path for it",
+      code: "CRM_ELECTED_ELSEWHERE",
+    });
+    return;
+  }
+  if (role === "returns") {
+    // ★ SAME REASON AS THE CRM, discovered later. `config.returnProvider` is
+    // already the explicit switch for returns and `getReturnProvider` already
+    // reads it in the AI's decision path - "explicit selection wins over
+    // inference", in its own words. Writing `config.roles` here instead would
+    // store the merchant's choice where nothing reads it while the AI kept
+    // resolving returns from capabilities. One elector per part, and for this
+    // part it already exists.
+    res.status(409).json({
+      error: "Returns are elected through config.returnProvider, which the AI already reads. Use that switch.",
+      code: "RETURNS_ELECTED_ELSEWHERE",
+    });
+    return;
+  }
+  const availability = roleAvailability(role);
+  if (!availability.available) {
+    res.status(409).json({ error: availability.detail, code: availability.reason.toUpperCase() });
+    return;
+  }
+  // `null` clears the part rather than electing anything - a merchant saying
+  // "nothing serves this" is a real answer and distinct from never choosing.
+  if (slug !== null && typeof slug !== "string") {
+    res.status(422).json({ error: "slug must be an integration slug, or null to clear the part" });
+    return;
+  }
+
+  try {
+    const tenantId = req.tenantId!;
+    const connected = await prisma.tenantIntegration.findMany({
+      where: { tenantId },
+      select: { id: true, status: true, config: true, integration: { select: { slug: true, name: true, category: true, canActAsCrm: true } } },
+    });
+
+    let elect: (typeof connected)[number] | null = null;
+    if (slug !== null) {
+      elect = connected.find((c) => c.integration.slug === slug) ?? null;
+      if (!elect) {
+        res.status(404).json({ error: "Connect that system first - this screen chooses between systems you already have" });
+        return;
+      }
+      if (elect.status !== "CONNECTED") {
+        res.status(409).json({ error: "That system must be connected before it can serve a part of your business" });
+        return;
+      }
+      const can = rolesFor(elect.integration.slug, {
+        canActAsCrm: elect.integration.canActAsCrm,
+        category: String(elect.integration.category),
+      });
+      if (!can.includes(role)) {
+        // Refused rather than stored: the GET derives candidates from the same
+        // map, so storing this would produce an elected system the read does not
+        // list as a candidate for the part.
+        res.status(409).json({ error: `${elect.integration.name} cannot serve ${role}`, code: "ROLE_NOT_SUPPORTED" });
+        return;
+      }
+    }
+
+    const electable = connected.map((c) => {
+      const cfg = (c.config && typeof c.config === "object" ? c.config : {}) as Record<string, unknown>;
+      return {
+        id: c.id,
+        slug: c.integration.slug,
+        name: c.integration.name,
+        status: String(c.status),
+        roles: Array.isArray(cfg.roles) ? (cfg.roles as unknown[]).filter((r): r is string => typeof r === "string") : [],
+      };
+    });
+
+    const plan = planRoleElection(role, slug, electable);
+    for (const w of plan.writes) {
+      const row = connected.find((c) => c.id === w.id)!;
+      const cfg = (row.config && typeof row.config === "object" ? row.config : {}) as Record<string, unknown>;
+      cfg.roles = w.roles;
+      await prisma.tenantIntegration.update({ where: { id: w.id }, data: { config: cfg as any } });
+    }
+
+    res.json({
+      data: {
+        role,
+        elected: plan.elected,
+        replaced: plan.replaced,
+      },
+    });
+  } catch (err) {
+    console.error("business-core role write error:", err);
+    res.status(500).json({ error: "Failed to choose a system for that part" });
+  }
+});
+
+/**
+ * PUT /business-core/use-case - what kind of business this is.
+ *
+ * Decides which parts the screen asks about at all. A durable setting rather
+ * than a column: it is a tenant-level choice, the store is already the one
+ * `businessHours` uses, and it needs no migration.
+ *
+ * Deliberately NOT read from `BusinessDiscovery.business.businessModel`, which
+ * is free text the website scan produced. A scan's guess is not a choice, and
+ * this value decides which questions a merchant is asked.
+ */
+// Gated on the SAME permission as electing a source of truth, because that is
+// what this is: choosing which system serves a part of the business. A new
+// permission key for the same act would be a second answer to one question.
+router.put("/business-core/use-case", canSelectSot, async (req: Request, res: Response) => {
+  const value = (req.body ?? {}).useCase;
+  if (!isUseCase(value)) {
+    res.status(422).json({ error: "useCase must be one of: ecommerce, leads, both" });
+    return;
+  }
+  try {
+    // ★ THE RAW STRING, NOT JSON.stringify. `writeDurableSetting` mirrors
+    // EXACTLY what it is given into the Redis cache, while the database gets
+    // `JSON.parse(value)` when that succeeds. So stringifying a bare string
+    // stores `leads` in Postgres and `"leads"` - with quotes - in the cache:
+    // the value then reads back correctly after an eviction and WRONGLY while
+    // cached, which is the worst shape a bug can have.
+    //
+    // Caught live: the PUT returned 200 and the GET still reported no use case.
+    // `businessHours` passes JSON.stringify because it stores an OBJECT and its
+    // reader parses; a scalar must not.
+    await writeDurableSetting(req.tenantId!, BUSINESS_MODEL_KEY, value, (req as any).user?.userId);
+    res.json({ data: { useCase: value } });
+  } catch (err) {
+    console.error("business-core use-case write error:", err);
+    res.status(500).json({ error: "Failed to save the use case" });
   }
 });
 
@@ -297,7 +749,24 @@ router.get("/:slug", async (req: Request, res: Response) => {
         catalogTools: { orderBy: { name: "asc" } },
         tenantConnections: {
           where: { tenantId: req.tenantId! },
-          select: { id: true, status: true, credentials: true, config: true, createdAt: true, updatedAt: true },
+          // `credentials` was selected here and spread into the response, twelve
+          // lines from a sibling route that excludes it for the reason stated
+          // there. Nothing read it: every consumer reads `.status`, and the
+          // credential write paths take NEW values rather than the stored ones.
+          // The gate on this router is the READ permission, so a member granted
+          // only "view business systems" was receiving the encrypted secret for
+          // every connected integration - viewing a screen and holding the
+          // tenant's credentials should not be the same grant.
+          select: {
+            id: true,
+            status: true,
+            config: true,
+            createdAt: true,
+            updatedAt: true,
+            lastTestedAt: true,
+            lastTestResult: true,
+            lastError: true,
+          },
         },
       },
     });
@@ -307,14 +776,16 @@ router.get("/:slug", async (req: Request, res: Response) => {
       return;
     }
 
-    const tenantConnection = entry.tenantConnections[0] || null;
+    const tenantConnection = boundConnection(entry.tenantConnections[0]);
+    const locale = await readerLocale(req);
 
     res.json({
       data: {
         ...entry,
+        description: catalogDescription(entry.slug, entry.description, locale),
         authType: entry.authType,
         authSchema: entry.authSchema,
-        catalogTools: entry.catalogTools,
+        catalogTools: entry.catalogTools.map((ct: any) => catalogTool(entry.slug, ct, locale)),
         tenantConnection,
         tenantConnections: undefined,
       },
@@ -360,6 +831,35 @@ router.post("/:slug/connect", canConnectSystems, async (req: Request, res: Respo
       where: { tenantId: req.tenantId!, integrationId: entry.id },
       select: { id: true },
     });
+
+    // PROOF BEFORE "CONNECTED". This route stored whatever was pasted and
+    // called it connected; a wrong key surfaced only when a customer asked
+    // something. An adapter that can check a credential (validate) is asked
+    // first, and a refusal writes NOTHING - not even over an existing working
+    // connection.
+    const adapter = getAdapter(slug);
+    if (adapter && typeof adapter.validate === "function") {
+      const verdict = await adapter
+        .validate({ ctx: { tenantId: req.tenantId!, tenantIntegrationId: existing?.id ?? "" }, credentials, config: cfg })
+        .catch((err: any) => ({ ok: false, error: `The credentials could not be checked (${String(err?.message || "error").slice(0, 80)}).` }));
+      if (!verdict.ok) {
+        res.status(422).json({ error: "validation_failed", message: verdict.error ?? "The credentials were rejected." });
+        return;
+      }
+    } else {
+      // Form systems with no validate() get one read-only probe (2026-10-09).
+      // Same contract as above: a refusal writes nothing, and the 422 keeps
+      // the shape v2 maps; `code` says which kind of refusal it was.
+      const probe = await probeConnectCredentials({ slug, tenantId: req.tenantId!, credentials, config: cfg });
+      if (probe && !probe.ok) {
+        if ("missing" in probe) {
+          res.status(400).json({ error: "credentials required", missingFields: probe.missing });
+          return;
+        }
+        res.status(422).json({ error: "validation_failed", code: probe.code, message: probe.message });
+        return;
+      }
+    }
     let tenantIntegration: any;
     if (existing) {
       tenantIntegration = await prisma.tenantIntegration.update({
@@ -372,6 +872,22 @@ router.post("/:slug/connect", canConnectSystems, async (req: Request, res: Respo
           lastError: null,
         },
       });
+      // A connection that lost its tool rows (the old disconnect deleted
+      // them) gets the catalogue's tools back, enabled; rows that exist keep
+      // the admin's choices.
+      const have = new Set(
+        (await prisma.tenantTool.findMany({
+          where: { tenantId: req.tenantId!, tenantIntegrationId: existing.id },
+          select: { catalogToolId: true },
+        })).map((t) => t.catalogToolId),
+      );
+      const missing = entry.catalogTools.filter((tool) => !have.has(tool.id));
+      if (missing.length) {
+        await prisma.tenantTool.createMany({
+          data: missing.map((tool) => ({ tenantId: req.tenantId!, tenantIntegrationId: existing.id, catalogToolId: tool.id, isEnabled: true })),
+          skipDuplicates: true,
+        });
+      }
     } else {
       tenantIntegration = await prisma.tenantIntegration.create({
         data: {
@@ -410,6 +926,22 @@ router.post("/:slug/connect", canConnectSystems, async (req: Request, res: Respo
 //
 // Marks the integration CONNECTED on success and ERROR (with lastError) on
 // failure, so the marketplace UI reflects reality.
+/**
+ * Connection test. NOT a read - it WRITES `status`, `lastTestedAt`,
+ * `lastTestResult` and `lastError` on every call.
+ *
+ * DO NOT fire this casually against a dev tenant to "check the route works".
+ * On the shared dev database the single failing integration row is the only
+ * evidence several things rest on: it is the Business-systems failure banner's
+ * only example, the audit screen's only `succeeded: false` case, and the only
+ * `lastError` longer than 200 characters - which is the sole proof that the
+ * read-side truncation in this file does real work rather than restating a
+ * write-side cap that already existed. One call to this endpoint overwrites
+ * all three, and nothing regenerates them.
+ *
+ * Verify this route by reading it, or by rendering the notification template
+ * it emits. Label that as what it is rather than as an end-to-end check.
+ */
 router.post("/:slug/test", canConnectSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
@@ -497,6 +1029,21 @@ router.post("/:slug/test", canConnectSystems, async (req: Request, res: Response
       }
       // Some READ tools require args (e.g. shopify.get_order needs an order id)
       // - that's fine: an HTTP-level auth failure is what we're testing.
+      //
+      // WHAT `status: ERROR` MEANS, AND WHAT IT DOES NOT
+      // The gate below is the ONLY path in this file that writes ERROR, and it
+      // fires only when the failure looks like auth. Everything else - a
+      // timeout, a 500, an unreachable host - takes the branch under it and is
+      // recorded as CONNECTED, because "the request reached the provider".
+      //
+      // So ERROR means "the provider rejected our credentials" and NEVER
+      // "the provider is down". A genuinely unreachable Shopify is stored as
+      // healthy. Anything rendering this state must say credentials, and offer
+      // reconnect rather than wait - which is why the notification emitted
+      // below is `integration.check_failed` and not `integration.down`.
+      //
+      // It is also on demand: nothing probes on a schedule, so this state is
+      // only ever as fresh as the last time a person pressed test.
       const reason = String(r.reason || "");
       const looksLikeAuth = /401|403|invalid_token|unauthor/i.test(reason);
       if (!looksLikeAuth) {
@@ -511,6 +1058,17 @@ router.post("/:slug/test", canConnectSystems, async (req: Request, res: Response
       const updated = await prisma.tenantIntegration.update({
         where: { id: tenantIntegration.id },
         data: { status: "ERROR" as any, lastTestedAt: new Date(), lastTestResult: false, lastError: reason.slice(0, 200) },
+      });
+      // The only place in the product that learns a connection is unusable.
+      // Emitted HERE rather than from a prober because no prober exists: this
+      // runs when a person tests, so the event means "we checked and it was
+      // rejected", never "it went down just now". tryEmit so a notification
+      // failure cannot turn a successful diagnosis into a 500.
+      tryEmit({
+        type: "integration.check_failed",
+        tenantId: req.tenantId!,
+        data: { slug, displayName: entry.name ?? slug, reason: reason.slice(0, 200) },
+        metadata: { userId: (req as any).user?.userId },
       });
       res.status(400).json({ error: reason, data: updated });
       return;
@@ -614,13 +1172,13 @@ router.post("/:slug/disconnect", canManageSystems, async (req: Request, res: Res
       return;
     }
 
-    // Shared with the verified app/uninstalled webhook so the two teardown
-    // paths cannot drift. They already had: the webhook was not doing this,
-    // so a store uninstalled from Shopify Admin kept its tool assignments.
-    await removeTenantToolAssignments({
-      tenantId: req.tenantId!,
-      tenantIntegrationId: tenantIntegration.id,
-    });
+    // The tool rows are KEPT (2026-10-10), as POST /api/connectors/:slug/disconnect
+    // keeps them: they hold the admin's per-tool choices, a tool is only offered
+    // while its connection is CONNECTED, and /connect never recreated them, so a
+    // reconnect after this route left the system with no actions at all.
+    // The app/uninstalled webhook is different: the store itself is gone,
+    // so that path removes the rows (removeTenantToolAssignments, merged
+    // from main 2026-10-21). A reconnect re-creates any missing row either way.
 
     // Clearing credentials is not enough. `config` carries claims about a
     // LIVE connection - `useAsCrm` elects this integration as the customer

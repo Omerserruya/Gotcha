@@ -18,6 +18,7 @@ const H = vi.hoisted(() => {
     channel: { current: null as any },
     sockets: { current: [{ id: "s1" }] as any[] },
     emit: v.fn(),
+    integration: { current: null as any },
   };
 });
 
@@ -28,6 +29,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     prisma: {
       conversation: { findFirst: vi.fn(async () => H.conversation.current) },
       channelAccount: { findFirst: vi.fn(async () => H.channel.current) },
+      tenantIntegration: { findFirst: vi.fn(async (a: any) => (H.integration.current && a.where.status === "CONNECTED" && a.where.integration.slug === "woocommerce" ? H.integration.current : null)) },
     },
   };
 });
@@ -197,5 +199,35 @@ describe("relayConversationState", () => {
       data: { id: "conv1", channel: "WHATSAPP", status: "WAITING" },
     } as any);
     expect(H.emit).not.toHaveBeenCalled();
+  });
+});
+
+describe("★ web chat: WooCommerce cards ride the push exactly as the poll projects them (W9)", () => {
+  const STORE = "https://demo-store.example.com";
+  const card = { productId: "41", handle: "p41", title: "Product 41", imageUrl: null, productUrl: `${STORE}/product/p41/`, currency: "ILS", price: "100", compareAtPrice: null, available: true, published: true, selectedVariantId: "41", optionNames: [], reason: null, variants: [] };
+  const webEvent = (commerce: any) => event({
+    data: { channel: "WEBCHAT" },
+    message: { channel: "WEBCHAT", messageType: "woo_product", body: "Product 41 - 100 ILS", metadata: { source: "ai_bot", commerce } },
+  });
+  const payload = (o: any = {}) => ({ kind: "woo_commerce", storeUrl: STORE, channelAccountId: "ca_web", products: [card], addToCartEnabled: true, source: "ai", ...o });
+
+  beforeEach(() => {
+    H.conversation.current = { channelAccountId: "ca_web" };
+    H.integration.current = { config: { storeUrl: STORE } };
+  });
+
+  it("this widget's card from the connected store: projected, no metadata", async () => {
+    await relayToVisitor(webEvent(payload()) as any);
+    const sent = H.emit.mock.calls.at(-1)![1].message;
+    expect(sent.commerce).toMatchObject({ addToCartEnabled: true, products: [expect.objectContaining({ productId: "41" })] });
+    expect(sent).not.toHaveProperty("metadata");
+  });
+
+  it("★ another widget, or a store no longer connected: the text only", async () => {
+    await relayToVisitor(webEvent(payload({ channelAccountId: "ca_other" })) as any);
+    expect(H.emit.mock.calls.at(-1)![1].message.commerce).toBeNull();
+    H.integration.current = null;
+    await relayToVisitor(webEvent(payload()) as any);
+    expect(H.emit.mock.calls.at(-1)![1].message).toMatchObject({ body: "Product 41 - 100 ILS", commerce: null });
   });
 });

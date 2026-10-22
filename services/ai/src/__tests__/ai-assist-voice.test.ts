@@ -36,6 +36,13 @@ const { prismaMock, redisMock, publishEventMock } = vi.hoisted(() => {
 });
 
 vi.mock("@chatcenter/shared", () => ({
+  // Conversation visibility guard, pass-through: this suite covers other
+  // behaviour; the guard is proved in conversation-visibility-ai.test.ts.
+  requireVisibleConversation: (_q: any, _s: any, n: any) => n(),
+  visibleConversationFrom: () => (_q: any, _s: any, n: any) => n(),
+  canViewConversation: async () => true,
+  visibilityClause: () => null,
+  viewerOf: (req: any) => ({ userId: req?.user?.userId }),
   // Internal-service key gate. The Security v2 remediation removed the silent
   // fallback that let these routes run unauthenticated, and this exhaustive
   // mock never grew the export - so the suite failed to load rather than

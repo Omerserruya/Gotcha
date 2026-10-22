@@ -22,6 +22,7 @@ import {
   resolveTenant,
   requireOnboardingOrActiveTenant,
   requireRole,
+  requirePermission,
   encryptCredentials,
   getOAuthStateSecret,
   mintOAuthState,
@@ -30,9 +31,15 @@ import {
 } from "@chatcenter/shared";
 import jwt from "jsonwebtoken";
 
+import { parseConnectFlow, redesignCapabilitiesUrl, redirectRedesignDenied, REDESIGN_FLOW } from "../services/redesign-return";
 const router = Router();
 // OAuth `state` signing only - not user auth. See getOAuthStateSecret().
 const OAUTH_STATE_SECRET = getOAuthStateSecret();
+
+// 2026-10-09: the connect permission every other integration uses (see
+// integrations.ts / connectors-admin.ts), not role ADMIN. A member delegated
+// connect could start HubSpot but got 403 on this one. Admin/Owner hold it.
+const canConnectSystems = requirePermission("integrations:connections:connect", "business-systems:connections:connect");
 
 // ─── Google Calendar ────────────────────────────────────────
 
@@ -55,12 +62,12 @@ router.get(
   authenticate,
   resolveTenant,
   requireOnboardingOrActiveTenant(),
-  requireRole("ADMIN"),
+  canConnectSystems,
   async (req: Request, res: Response) => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const redirectUri = process.env.GOOGLE_CALENDAR_REDIRECT_URI;
     if (!clientId || !redirectUri) {
-      res.status(500).json({ error: "Google Calendar OAuth not configured" });
+      res.status(409).json({ error: "Google Calendar OAuth not configured", code: "NOT_CONFIGURED" });
       return;
     }
     // aiAgentId is optional. Marketplace UI doesn't pass it; in that case we
@@ -75,7 +82,7 @@ router.get(
     // callback so a captured state cannot be replayed within its TTL.
     const { state } = mintOAuthState({
       tenantId: req.tenantId!, aiAgentId, userId: (req as any).userId, provider: "google",
-      flow: typeof req.query.flow === "string" ? req.query.flow : undefined,
+      flow: parseConnectFlow(req.query.flow),
     });
     const params = new URLSearchParams({
       client_id: clientId,
@@ -91,7 +98,9 @@ router.get(
 );
 
 router.get(["/oauth/google_calendar/callback", "/oauth/google-calendar/callback"], async (req: Request, res: Response) => {
+  let flow: string | undefined;
   try {
+    if (await redirectRedesignDenied(req, res, "google", "google_calendar")) return;
     const { code, state } = req.query;
     if (!code || !state) {
       res.status(400).json({ error: "Missing code or state" });
@@ -104,6 +113,7 @@ router.get(["/oauth/google_calendar/callback", "/oauth/google-calendar/callback"
       return;
     }
     const payload = consumed.claims;
+    flow = payload.flow;
     const { tenantId, aiAgentId } = payload;
     const clientId = process.env.GOOGLE_CLIENT_ID!;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
@@ -123,6 +133,7 @@ router.get(["/oauth/google_calendar/callback", "/oauth/google-calendar/callback"
     if (!tokenRes.ok) {
       const err = await tokenRes.text();
       console.error("[GCal OAuth] token exchange failed:", err);
+      if (flow === REDESIGN_FLOW) { res.redirect(redesignCapabilitiesUrl("google_calendar", { error: "token_exchange_failed" })); return; }
       res.status(400).send("Token exchange failed");
       return;
     }
@@ -177,6 +188,7 @@ router.get(["/oauth/google_calendar/callback", "/oauth/google-calendar/callback"
     res.redirect(connectedRedirect(aiAgentId, "google_calendar", payload.flow));
   } catch (err: any) {
     console.error("[GCal OAuth callback]", err);
+    if (flow === REDESIGN_FLOW) { res.redirect(redesignCapabilitiesUrl("google_calendar", { error: "callback_error" })); return; }
     res.status(500).json({ error: err?.message || "callback failed" });
   }
 });
@@ -192,12 +204,12 @@ router.get(
   authenticate,
   resolveTenant,
   requireOnboardingOrActiveTenant(),
-  requireRole("ADMIN"),
+  canConnectSystems,
   async (req: Request, res: Response) => {
     const clientId = process.env.CALENDLY_CLIENT_ID;
     const redirectUri = process.env.CALENDLY_REDIRECT_URI;
     if (!clientId || !redirectUri) {
-      res.status(500).json({ error: "Calendly OAuth not configured" });
+      res.status(409).json({ error: "Calendly OAuth not configured", code: "NOT_CONFIGURED" });
       return;
     }
     const aiAgentId = await resolveAiAgentId(String(req.tenantId), String(req.query.aiAgentId || ""));
@@ -207,7 +219,7 @@ router.get(
     }
     const { state } = mintOAuthState({
       tenantId: req.tenantId!, aiAgentId, userId: (req as any).userId, provider: "calendly",
-      flow: typeof req.query.flow === "string" ? req.query.flow : undefined,
+      flow: parseConnectFlow(req.query.flow),
     });
     const params = new URLSearchParams({
       client_id: clientId,
@@ -220,7 +232,9 @@ router.get(
 );
 
 router.get("/oauth/calendly/callback", async (req: Request, res: Response) => {
+  let flow: string | undefined;
   try {
+    if (await redirectRedesignDenied(req, res, "calendly", "calendly")) return;
     const { code, state } = req.query;
     if (!code || !state) {
       res.status(400).json({ error: "Missing code or state" });
@@ -233,6 +247,7 @@ router.get("/oauth/calendly/callback", async (req: Request, res: Response) => {
       return;
     }
     const payload = consumed.claims;
+    flow = payload.flow;
     const { tenantId, aiAgentId } = payload;
     const clientId = process.env.CALENDLY_CLIENT_ID!;
     const clientSecret = process.env.CALENDLY_CLIENT_SECRET!;
@@ -251,6 +266,7 @@ router.get("/oauth/calendly/callback", async (req: Request, res: Response) => {
     });
     if (!tokenRes.ok) {
       console.error("[Calendly OAuth] token exchange failed:", await tokenRes.text());
+      if (flow === REDESIGN_FLOW) { res.redirect(redesignCapabilitiesUrl("calendly", { error: "token_exchange_failed" })); return; }
       res.status(400).send("Token exchange failed");
       return;
     }
@@ -305,6 +321,7 @@ router.get("/oauth/calendly/callback", async (req: Request, res: Response) => {
     res.redirect(connectedRedirect(aiAgentId, "calendly", payload.flow));
   } catch (err: any) {
     console.error("[Calendly OAuth callback]", err);
+    if (flow === REDESIGN_FLOW) { res.redirect(redesignCapabilitiesUrl("calendly", { error: "callback_error" })); return; }
     res.status(500).json({ error: err?.message || "callback failed" });
   }
 });
@@ -421,10 +438,13 @@ function connectedRedirect(
   // dropped the user on the marketplace page and onboarding looked reset.
   if (flow === "onboarding") {
     const base = resolveAppPublicUrl(process.env);
-    return `${base}/setup?connected=${provider}`;
+    return `${base}/onboarding`;
   }
-  const path = `/ai-studio/marketplace/${provider}?calendar=connected&aiAgentId=${aiAgentId}`;
-  return process.env.DASHBOARD_URL ? `${process.env.DASHBOARD_URL}${path}` : path;
+  if (flow === REDESIGN_FLOW) return redesignCapabilitiesUrl(provider);
+  // The legacy marketplace page is gone (2026-10-21): every other flow lands
+  // on the app's capabilities page too. aiAgentId is no longer needed there.
+  void aiAgentId;
+  return redesignCapabilitiesUrl(provider);
 }
 
 export default router;

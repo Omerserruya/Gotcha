@@ -6,7 +6,8 @@ import type {
   NormalizedStatusUpdate,
   ChannelCredentials,
 } from "./types";
-import { type EmailThreadContext, outgoingSubject } from "./email-thread";
+import { type EmailThreadContext, outgoingSubject, parseMessageIdList, type EmailMessageMeta } from "./email-thread";
+import { autoMailReason } from "./auto-mail";
 
 // ─── Outlook Inbound Adapter ───────────────────────────────
 
@@ -29,8 +30,9 @@ export const outlookInboundAdapter: InboundAdapter = {
     for (const notification of body.value || []) {
       if (notification.changeType !== "created") continue;
 
-      // Microsoft Graph sends a notification with resource data
-      // The full message content is fetched via Graph API by the incoming worker
+      // Only the notification: the message itself is fetched by the webhook
+      // route with fetchOutlookMessage (2026-10-14). This placeholder shape is
+      // kept for callers that only need to know a message arrived.
       const resourceData = notification.resourceData || {};
       const senderId = resourceData["@odata.id"] || notification.resource || "";
 
@@ -127,6 +129,9 @@ export const outlookOutboundAdapter: OutboundAdapter = {
         console.error("Outlook reply error, falling back to sendMail:", replyErr);
       }
 
+      // thread.extraHeaders (List-Unsubscribe on marketing mail) are NOT sent
+      // here: Graph's sendMail accepts only custom "X-" headers, so a marketing
+      // email from Outlook carries the removal line in its text only.
       const internetHeaders = [
         ...(thread?.inReplyTo ? [{ name: "In-Reply-To", value: thread.inReplyTo }] : []),
         ...(thread?.references?.length ? [{ name: "References", value: thread.references.join(" ") }] : []),
@@ -254,4 +259,80 @@ async function resolveAccessToken(credentials: ChannelCredentials): Promise<stri
     }
   }
   return credentials.accessToken;
+}
+
+// ─── Inbound: the message a notification is about (2026-10-14) ──────────────
+//
+// A Graph notification names a message and carries nothing else useful: the
+// route used to queue its Graph path as the sender and "[Outlook
+// notification]" as the text. This reads the message itself: the real sender,
+// subject and text, and the ids a reply needs (internetMessageId and
+// References for the headers, conversationId and the Graph id for Outlook's
+// own reply), the same EmailMessageMeta the Gmail path stores.
+
+export interface OutlookFetchedMessage {
+  messageId: string;
+  senderId: string;
+  senderDisplayName?: string;
+  subject: string;
+  body: string;
+  email: EmailMessageMeta;
+}
+
+const MAX_INBOUND_BODY = 20_000;
+
+/**
+ * The message, or why it was not taken: "not_found", "draft", "self" (the
+ * account's own mail), or an auto-generated mail's reason (bounce, report,
+ * auto-reply, bulk).
+ */
+export async function fetchOutlookMessage(
+  credentials: ChannelCredentials,
+  messageId: string,
+  accountEmail: string,
+): Promise<{ ok: true; message: OutlookFetchedMessage } | { ok: false; reason: string }> {
+  const accessToken = await resolveAccessToken(credentials);
+  const select = "from,sender,subject,bodyPreview,body,uniqueBody,internetMessageId,conversationId,internetMessageHeaders,isDraft";
+  const res = await fetch(`${GRAPH_API_URL}/me/messages/${encodeURIComponent(messageId)}?$select=${select}`, {
+    headers: { Authorization: `Bearer ${accessToken}`, Prefer: 'outlook.body-content-type="text"' },
+  });
+  if (!res.ok) {
+    console.error(`[Outlook] message ${messageId} could not be read: ${res.status}`);
+    return { ok: false, reason: "not_found" };
+  }
+  const m = (await res.json()) as Record<string, any>;
+  if (m.isDraft) return { ok: false, reason: "draft" };
+  const fromAddr = String(m.from?.emailAddress?.address ?? m.sender?.emailAddress?.address ?? "").trim();
+  const fromName = String(m.from?.emailAddress?.name ?? "").trim();
+  if (!fromAddr) return { ok: false, reason: "not_found" };
+  if (accountEmail && fromAddr.toLowerCase() === accountEmail.toLowerCase()) return { ok: false, reason: "self" };
+
+  const headerList: Array<{ name: string; value: string }> = Array.isArray(m.internetMessageHeaders) ? m.internetMessageHeaders : [];
+  const headers = Object.fromEntries(headerList.map((h) => [h.name, h.value]));
+  const header = (name: string) => headerList.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value ?? "";
+  const auto = autoMailReason({ headers, from: fromAddr });
+  if (auto) return { ok: false, reason: auto };
+
+  const subject = String(m.subject ?? "").trim() || "(no subject)";
+  // The new text of a reply when Graph can tell it apart, else the whole body.
+  const body = String(m.uniqueBody?.content ?? m.body?.content ?? m.bodyPreview ?? "").trim().slice(0, MAX_INBOUND_BODY);
+  const references = [...parseMessageIdList(header("References")), ...parseMessageIdList(header("In-Reply-To"))]
+    .filter((id, i, all) => all.indexOf(id) === i);
+  return {
+    ok: true,
+    message: {
+      messageId: String(m.id ?? messageId),
+      senderId: fromAddr,
+      ...(fromName && fromName !== fromAddr ? { senderDisplayName: fromName } : {}),
+      subject,
+      body,
+      email: {
+        messageIdHeader: parseMessageIdList(String(m.internetMessageId ?? ""))[0],
+        references,
+        subject,
+        threadId: typeof m.conversationId === "string" ? m.conversationId : undefined,
+        providerMessageId: String(m.id ?? messageId),
+      },
+    },
+  };
 }

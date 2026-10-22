@@ -27,6 +27,12 @@ const TENANT_SCOPED_MODELS = new Set<string>([
   "ChatbotFlow",
   "Contact",
   "Conversation",
+  // Carries `tenantId`, so it belongs here: the guard is what forces the NEXT
+  // reader to scope its query. The obvious future read is
+  // `findMany({ where: { tenantId, userId, markedUnread: true } })` to build an
+  // agent's unread set, and without this entry a missing tenantId there is
+  // nobody's error until it is somebody else's inbox.
+  "ConversationReadState",
   "CreditTransaction",
   "Department",
   "DepartmentMember",

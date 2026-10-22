@@ -48,7 +48,7 @@ vi.mock("@chatcenter/shared", () => ({
 vi.mock("../services/whatsapp-approval-inbound.service", () => ({ handleApprovalButtonReply: vi.fn() }));
 vi.mock("../services/comment-trigger.service", () => ({ processCommentTrigger: vi.fn() }));
 
-import { resolveWhatsAppMedia } from "../workers/incoming.worker";
+import { resolveWhatsAppMedia, mediaFacts } from "../workers/incoming.worker";
 
 /** Meta's two-step download: metadata call, then the CDN fetch. */
 function mockDownload(contentType: string) {
@@ -92,6 +92,14 @@ describe("resolveWhatsAppMedia", () => {
     expect(res!.localUrl.endsWith(".xlsx")).toBe(true);
   });
 
+  it("★ a sender's extension a browser could run is stored as .bin, never guessed (2026-10-09)", async () => {
+    for (const fileName of ["x.html", "logo.SVG", "a.js"]) {
+      const res = await resolveWhatsAppMedia("MEDIA_X", "tok", "document", { fileName, mimeType: "text/html" });
+      expect(res?.fileName, fileName).toMatch(/^[0-9a-f-]{36}\.bin$/);
+      expect(res?.displayName).toBe(fileName);
+    }
+  });
+
   it("falls back to the MIME the channel declared", async () => {
     mockDownload("application/octet-stream");
 
@@ -121,5 +129,49 @@ describe("resolveWhatsAppMedia", () => {
     get.mockRejectedValue(new Error("404 not found"));
 
     await expect(resolveWhatsAppMedia("GONE", "tok", "image")).resolves.toBeNull();
+  });
+
+  it("★ reports the media facts: declared mime, bytes received, sender's name (2026-10-09)", async () => {
+    mockDownload("application/octet-stream");
+
+    const res = await resolveWhatsAppMedia("MEDIA_6", "tok", "document", {
+      fileName: "Invoice 2026-08.pdf",
+      mimeType: "Application/PDF; charset=binary",
+    });
+
+    expect(res!.media).toEqual({ mimeType: "application/pdf", byteSize: Buffer.byteLength("filebytes"), originalName: "Invoice 2026-08.pdf" });
+  });
+
+  it("media facts fall back to the download's content-type, and have no name when none was sent", async () => {
+    mockDownload("image/png");
+
+    const res = await resolveWhatsAppMedia("MEDIA_7", "tok", "image");
+
+    expect(res!.media).toEqual({ mimeType: "image/png", byteSize: 9, originalName: null });
+  });
+
+  it("media facts never carry a path in the sender's name", async () => {
+    const res = await resolveWhatsAppMedia("MEDIA_8", "tok", "document", { fileName: "../../etc/passwd" });
+
+    expect(res!.media.originalName).not.toContain("/");
+  });
+
+  it("★ a sticker with no declared or known type is still stored as .webp (2026-10-09)", async () => {
+    mockDownload("application/octet-stream");
+
+    const res = await resolveWhatsAppMedia("MEDIA_S", "tok", "sticker");
+
+    expect(res!.localUrl).toMatch(/^\/api\/uploads\/[0-9a-f-]{36}\.webp$/);
+  });
+});
+
+describe("mediaFacts", () => {
+  it("is all null when nothing is known, and drops a non-numeric size", () => {
+    expect(mediaFacts({})).toEqual({ mimeType: null, byteSize: null, originalName: null });
+    expect(mediaFacts({ byteSize: Number.NaN, declaredMime: "  " })).toEqual({ mimeType: null, byteSize: null, originalName: null });
+  });
+
+  it("keeps a zero-byte size, which is a fact and not an absence", () => {
+    expect(mediaFacts({ byteSize: 0 }).byteSize).toBe(0);
   });
 });

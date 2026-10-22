@@ -1,5 +1,28 @@
 import { Router, Request, Response } from "express";
-import { authenticate, resolveTenant, requireRole } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireRole, requirePermission, resolveEffectiveLocale, viewerOf } from "@chatcenter/shared";
+
+/**
+ * The reader's language for text this service writes (intent labels): an
+ * explicit ?locale= wins; then an Accept-Language that is ONE deliberate tag
+ * ("he", "en", "he-IL": what the v2 app sends for the page, frontend 1850b9f);
+ * then the user's interface language, then the workspace's. A browser's own
+ * list ("en-US,en;q=0.9") says nothing about the page and is ignored (Hebrew
+ * screens got English labels).
+ */
+export async function readerLocale(req: Request): Promise<"he" | "en"> {
+  const q = String(req.query.locale ?? "").toLowerCase();
+  if (q === "he" || q === "en") return q;
+  const h = String(req.headers["accept-language"] ?? "").trim().toLowerCase();
+  // Anchored: a browser's list ("en-US,en;q=0.9") never matches.
+  const one = /^(he|en)(-[a-z]{2,4})?$/.exec(h);
+  if (one) return one[1] as "he" | "en";
+  try {
+    const r = await resolveEffectiveLocale({ tenantId: (req as any).tenantId, userId: (req as any).user?.userId ?? null });
+    return String(r.effective).toLowerCase().startsWith("he") ? "he" : "en";
+  } catch {
+    return "en";
+  }
+}
 import * as analyticsService from "../services/analytics.service";
 
 const router = Router();
@@ -37,7 +60,7 @@ router.post("/events", async (req: Request, res: Response) => {
   res.json({ data: { ok: true } });
 });
 
-router.get("/dashboard", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/dashboard", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const stats = await analyticsService.getDashboardStats(req.tenantId!);
     res.json({ data: stats });
@@ -47,7 +70,7 @@ router.get("/dashboard", requireRole("ADMIN"), async (req: Request, res: Respons
   }
 });
 
-router.get("/agents", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/agents", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
     const stats = await analyticsService.getAgentStats(req.tenantId!);
     res.json({ data: stats });
@@ -57,7 +80,7 @@ router.get("/agents", requireRole("ADMIN"), async (req: Request, res: Response) 
   }
 });
 
-router.get("/hourly", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/hourly", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const date = req.query.date as string | undefined;
     const data = await analyticsService.getHourlyVolume(req.tenantId!, date);
@@ -68,7 +91,7 @@ router.get("/hourly", requireRole("ADMIN"), async (req: Request, res: Response) 
   }
 });
 
-router.get("/daily", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/daily", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const days = req.query.days ? parseInt(req.query.days as string, 10) : 30;
     const data = await analyticsService.getDailyVolume(req.tenantId!, days);
@@ -79,7 +102,7 @@ router.get("/daily", requireRole("ADMIN"), async (req: Request, res: Response) =
   }
 });
 
-router.get("/queue", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/queue", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
     const data = await analyticsService.getQueueDepth(req.tenantId!);
     res.json({ data });
@@ -89,7 +112,86 @@ router.get("/queue", requireRole("ADMIN"), async (req: Request, res: Response) =
   }
 });
 
-router.get("/overview", requireRole("ADMIN"), async (req: Request, res: Response) => {
+/**
+ * The ranked queue behind Home's "needs you now".
+ *
+ * 2026-10-09: inbox data, so gated on the inbox read (conversation:messages:read,
+ * which agents hold) and scoped by the inbox's visibility rule: it names
+ * customers and quotes their messages, so another department's queue is not
+ * this agent's to read. Not an analytics permission: an agent keeps their own
+ * work queue while analytics stays closed to them.
+ */
+router.get("/queue/items", requirePermission("conversation:messages:read"), async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
+    const result = await analyticsService.getQueueItems(req.tenantId!, { limit, cursor, viewer: viewerOf(req) });
+    res.json(result);
+  } catch (err) {
+    console.error("Queue items error:", err);
+    res.status(500).json({ error: "Failed to get queue items" });
+  }
+});
+
+/**
+ * The time-ordered activity stream behind Home's activity card.
+ *
+ * 2026-10-09: same gate and same visibility rule as the queue: each entry is a
+ * tool run or approval in one conversation, with its parameters.
+ */
+router.get("/activity", requirePermission("conversation:messages:read"), async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
+    const result = await analyticsService.getActivity(req.tenantId!, { limit, cursor, viewer: viewerOf(req) });
+    res.json(result);
+  } catch (err) {
+    console.error("Activity stream error:", err);
+    res.status(500).json({ error: "Failed to get activity" });
+  }
+});
+
+/**
+ * Seconds the AI saved, with the arithmetic attached. Any tenant member: it is
+ * a headline on Home, not a management report.
+ */
+router.get("/time-saved", async (req: Request, res: Response) => {
+  try {
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+    const data = await analyticsService.getTimeSaved(req.tenantId!, from, to);
+    res.json({ data });
+  } catch (err) {
+    console.error("Time saved error:", err);
+    res.status(500).json({ error: "Failed to get time saved" });
+  }
+});
+
+// 06c Team: people + AI employees, with the cards above them.
+router.get("/team", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
+  try {
+    const days = Number(req.query.days ?? 7);
+    res.json({ data: await analyticsService.getTeamReport(req.tenantId!, days) });
+  } catch (err) {
+    console.error("Team report error:", err);
+    res.status(500).json({ error: "Failed to get team report" });
+  }
+});
+
+// Per-day series for the Overview chart (gotcha/team) and 06b (alone/passedOver).
+// NOT "/daily": that path already serves getDailyVolume to the old app (above),
+// and Express answers the first registration - this one never ran there.
+router.get("/daily-series", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
+  try {
+    const days = Number(req.query.days ?? 7);
+    res.json({ data: await analyticsService.getDailySeries(req.tenantId!, days) });
+  } catch (err) {
+    console.error("Daily series error:", err);
+    res.status(500).json({ error: "Failed to get daily series" });
+  }
+});
+
+router.get("/overview", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
@@ -101,12 +203,12 @@ router.get("/overview", requireRole("ADMIN"), async (req: Request, res: Response
   }
 });
 
-router.get("/top-questions", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/top-questions", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
-    const data = await analyticsService.getTopQuestions(req.tenantId!, from, to, limit);
+    const data = await analyticsService.getTopQuestions(req.tenantId!, from, to, limit, await readerLocale(req));
     res.json({ data });
   } catch (err) {
     console.error("Top questions error:", err);
@@ -114,7 +216,7 @@ router.get("/top-questions", requireRole("ADMIN"), async (req: Request, res: Res
   }
 });
 
-router.get("/tool-usage", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/tool-usage", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
@@ -126,7 +228,33 @@ router.get("/tool-usage", requireRole("ADMIN"), async (req: Request, res: Respon
   }
 });
 
-router.get("/channel-performance", requireRole("ADMIN"), async (req: Request, res: Response) => {
+/**
+ * GET /language-share - the language mix of recent conversations.
+ *
+ * Gated on EITHER permission, deliberately. It is read by the workspace
+ * language settings screen, whose admins hold `settings:workspace:read`, and it
+ * belongs in analytics because that is what owns conversation aggregates. Gating
+ * it on the analytics permission alone would ship an endpoint the screen that
+ * needs it cannot call.
+ */
+router.get(
+  "/language-share",
+  requirePermission("settings:workspace:read", "analytics:workspace:read"),
+  async (req: Request, res: Response) => {
+    try {
+      const raw = Number(req.query.days);
+      // Bounded rather than trusted: an unbounded window turns a settings panel
+      // into a full-table scan, and a nonsense value should not decide the query.
+      const days = Number.isFinite(raw) && raw > 0 ? Math.min(365, Math.round(raw)) : 30;
+      res.json({ data: await analyticsService.getLanguageShare(req.tenantId!, days) });
+    } catch (err) {
+      console.error("Language share error:", err);
+      res.status(500).json({ error: "Failed to get language share" });
+    }
+  },
+);
+
+router.get("/channel-performance", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
@@ -138,7 +266,7 @@ router.get("/channel-performance", requireRole("ADMIN"), async (req: Request, re
   }
 });
 
-router.get("/department-performance", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/department-performance", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
@@ -150,7 +278,7 @@ router.get("/department-performance", requireRole("ADMIN"), async (req: Request,
   }
 });
 
-router.get("/ai-performance", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/ai-performance", requirePermission("analytics:dashboard:read"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
@@ -162,13 +290,124 @@ router.get("/ai-performance", requireRole("ADMIN"), async (req: Request, res: Re
   }
 });
 
-router.get("/insights", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/insights", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
     const data = await analyticsService.getAIInsights(req.tenantId!);
     res.json({ data });
   } catch (err) {
     console.error("AI insights error:", err);
     res.status(500).json({ error: "Failed to get AI insights" });
+  }
+});
+
+/**
+ * Hide an insight. The "Worth knowing" card is informational - a trend and a
+ * Dismiss - and this is the whole of its interaction. Anything that ACTS on an
+ * insight belongs in Outreach, behind broadcast validation, template approval
+ * and audience preview, not behind a second send path with none of them.
+ *
+ * ADMIN: dismissing hides the card for everyone in the tenant, so it is not
+ * one agent's call. 2026-10-09: the role gate this said it had, now applied.
+ */
+router.post("/insights/:id/dismiss", requirePermission("analytics:dashboard:read"), requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const insightId = String(req.params.id ?? "").trim();
+    if (!insightId || insightId.length > 128) {
+      res.status(400).json({ error: "Invalid insight id" });
+      return;
+    }
+    await analyticsService.dismissInsight(req.tenantId!, insightId, (req as any).user?.userId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Dismiss insight error:", err);
+    res.status(500).json({ error: "Failed to dismiss insight" });
+  }
+});
+
+/**
+ * "Worth an hour, while it is quiet" - the four sources in one ranked list.
+ *
+ * Ranked server-side so Home and any other surface showing this list cannot
+ * order it differently.
+ */
+router.get("/quiet-day", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const result = await analyticsService.getQuietDayList(req.tenantId!, { limit });
+    res.json(result);
+  } catch (err) {
+    console.error("Quiet-day list error:", err);
+    res.status(500).json({ error: "Failed to build quiet-day list" });
+  }
+});
+
+/**
+ * What the AI is doing at this instant - the dark card's opening line.
+ *
+ * Part of the shared operational picture, so it rides the same permission as
+ * the queue rather than the reporting one.
+ */
+router.get("/in-flight", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
+  try {
+    const data = await analyticsService.getInFlight(req.tenantId!);
+    res.json({ data });
+  } catch (err) {
+    console.error("In-flight error:", err);
+    res.status(500).json({ error: "Failed to get in-flight summary" });
+  }
+});
+
+/**
+ * Questions GOTCHA could not answer. Any tenant member: the point of the card
+ * is that whoever sees it can go and write the missing answer.
+ */
+router.get("/unanswered-questions", async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const includeResolved = req.query.includeResolved === "true";
+    const from = typeof req.query.from === "string" ? req.query.from : undefined;
+    const to = typeof req.query.to === "string" ? req.query.to : undefined;
+    const result = await analyticsService.getUnansweredQuestions(req.tenantId!, {
+      limit, includeResolved, from, to,
+    });
+    res.json(result);
+  } catch (err) {
+    console.error("Unanswered questions error:", err);
+    res.status(500).json({ error: "Failed to get unanswered questions" });
+  }
+});
+
+/** What shoppers asked the catalogue for, by ISO week. */
+router.get("/product-demand", async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const weekKey = typeof req.query.week === "string" ? req.query.week : undefined;
+    const includeStocked = req.query.includeStocked === "true";
+    const result = await analyticsService.getProductDemand(req.tenantId!, { limit, weekKey, includeStocked });
+    res.json(result);
+  } catch (err) {
+    console.error("Product demand error:", err);
+    res.status(500).json({ error: "Failed to get product demand" });
+  }
+});
+
+/**
+ * Customers who have gone quiet. ADMIN: this is a list of named customers with
+ * their phone numbers, which is a different thing from a queue of conversations
+ * already assigned to nobody, and it is the input to an outreach decision.
+ */
+router.get("/dormant-customers", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const days = req.query.days ? parseInt(req.query.days as string, 10) : undefined;
+    const minConversations = req.query.minConversations
+      ? parseInt(req.query.minConversations as string, 10)
+      : undefined;
+    const result = await analyticsService.getDormantCustomers(req.tenantId!, { limit, days, minConversations });
+    res.json(result);
+  } catch (err) {
+    console.error("Dormant customers error:", err);
+    res.status(500).json({ error: "Failed to get dormant customers" });
   }
 });
 

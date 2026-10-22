@@ -1,15 +1,26 @@
 import { getInternalServiceKey, safeFetch,
   resolveAppPublicUrl,
   canvasHasRunnableProcess,
-} from "@chatcenter/shared";
+  requirePermission } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
+import { CORE_SYSTEM_SLUGS, connectedCoreSystem } from "../services/onboarding-state.service";
 import { z } from "zod";
 import * as crypto from "crypto";
-import { promises as dns } from "dns";
-import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, projectReadinessAnswers } from "@chatcenter/shared";
+import {
+  crawlSite,
+  fetchPageRaw,
+  classifyBusinessType,
+  extractSignals,
+  type DiscoverySignals,
+} from "../services/site-crawl.service";
+import { callDiscoverBusiness, persistCrawlReach, systemLanguage, crawlPagesForProjection, thinTopicsToRetire } from "../services/business-scan.service";
+import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, projectReadinessAnswers, withoutWideDashes, clampGuardrails, type SkippedTopic } from "@chatcenter/shared";
 import { applyProjection, type SyncReport } from "../services/onboarding-knowledge.service";
 import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
 import { inviteUser, resendSetupLink } from "../services/invitation.service";
+import { resolveInviteRoleStrict, resolveInviteRoleWithFallback, ensureRoleAssignment }
+  from "../services/invite-role.service";
+import { actorOf, inviteRoleRefusal } from "../lib/grant-ceiling";
 import { ingestTaughtDocument, updateTaughtDocument } from "../services/teach-ingest";
 import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
 import { syncDiscoveryRecommendations, listRecommendations, setRecommendationStatus, addStoreInspectionRecs, reconcileConnectSystemRecs } from "../services/recommendations.service";
@@ -180,7 +191,8 @@ async function hireRecommendedEmployee(tenantId: string, authHeader: string, rec
       const existingGuards = Array.isArray(target.customGuardrails)
         ? (target.customGuardrails as unknown[]).filter((g): g is string => typeof g === "string")
         : [];
-      data.customGuardrails = [...existingGuards, ...instr.map((i) => `Owner instruction: ${i}`)];
+      // Within the employee's rule limits (B4): the owner's earlier rules first.
+      data.customGuardrails = clampGuardrails([...existingGuards, ...instr.map((i) => `Owner instruction: ${i}`)]);
     }
   }
 
@@ -363,7 +375,8 @@ ${deptDetails}`;
       return fallbackReply(message, businessContext, chatHistory, locale);
     }
 
-    const parsed = JSON.parse(content);
+    // No wide dash in what the owner reads (the model writes them anyway).
+    const parsed = withoutWideDashes(JSON.parse(content));
     return {
       reply: parsed.reply || "I'm having trouble processing that. Could you try again?",
       readyToGenerate: !!parsed.readyToGenerate,
@@ -457,8 +470,13 @@ function fallbackReplyHebrew(
 }
 
 // ─── Get Onboarding Status ──────────────────────────────────
+// Any member of the workspace (authenticate + resolveTenant above): it is this
+// workspace's own setup state, and every page reads it to send an unpaid or
+// still-onboarding workspace to the right screen. It was gated on
+// analytics:workspace:read, which agents no longer hold (2026-10-09), and the
+// redirect would silently stop for them. /setup-map keeps its gate.
 
-router.get("/status", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+router.get("/status", async (req: Request, res: Response): Promise<void> => {
   try {
     const tenant = await prisma.tenant.findUnique({
       where: { id: req.tenantId! },
@@ -539,7 +557,7 @@ const businessProfileSchema = z.object({
   primaryLanguage: z.string().max(10).optional(),
 });
 
-router.post("/business-profile", requireRole("ADMIN"), validate(businessProfileSchema), async (req: Request, res: Response): Promise<void> => {
+router.post("/business-profile", requirePermission("settings:workspace:update"), validate(businessProfileSchema), async (req: Request, res: Response): Promise<void> => {
   try {
     const tenant = await prisma.tenant.findUnique({
       where: { id: req.tenantId! },
@@ -1401,29 +1419,9 @@ router.get("/journey", requireRole("ADMIN"), async (req: Request, res: Response)
 // These slugs match the IntegrationCatalog rows + OAuth routes in the AI
 // service (note Zoho's catalog slug is `zoho_crm`).
 
-const CORE_SYSTEM_SLUGS = ["hubspot", "salesforce", "zoho_crm", "shopify", "fireberry", "airtable"] as const;
-
-/** Returns the slug of the first CONNECTED + usable core system, or null.
- *  Airtable is only "usable" once its column mapping is saved (a CONNECTED
- *  Airtable with no fieldMap is mid-setup, not a working source of truth). */
-async function connectedCoreSystem(tenantId: string): Promise<string | null> {
-  const rows = await prisma.tenantIntegration.findMany({
-    where: { tenantId, status: "CONNECTED", integration: { slug: { in: CORE_SYSTEM_SLUGS as unknown as string[] } } },
-    include: { integration: true },
-    orderBy: { createdAt: "asc" },
-  });
-  for (const ti of rows) {
-    const slug = ti?.integration?.slug as string | undefined;
-    if (!slug) continue;
-    if (slug === "airtable") {
-      const cfg = (ti.config && typeof ti.config === "object" ? ti.config : {}) as any;
-      const fm = cfg.fieldMap;
-      if (!fm || !(fm.email || fm.phone) || !fm.display_name) continue; // unmapped → not usable yet
-    }
-    return slug;
-  }
-  return null;
-}
+// The list and the "connected + usable" rule live in ONE place,
+// services/onboarding-state.service.ts (the onboarding snapshot, the nudge
+// engine and system views read the same list).
 
 // POST /core-system - record the chosen system of truth. For Shopify we flip
 // `config.useAsCrm` so the CRM resolver treats it as the source of truth
@@ -1472,7 +1470,7 @@ router.post("/core-system", requireRole("ADMIN"), validate(coreSystemSchema), as
 // real product signals (no manual check-offs). Tiles tagged stage:"later"
 // (Channels, extra Integrations) are shown but excluded from the headline
 // progress count.
-router.get("/setup-map", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+router.get("/setup-map", requirePermission("analytics:workspace:read"), async (req: Request, res: Response): Promise<void> => {
   try {
     const tenantId = req.tenantId!;
     const [coreSlug, kbCount, aiAgent, canvas, flowCount, userCount, channel, connectedIntegrations, profile] = await Promise.all([
@@ -1707,7 +1705,7 @@ Set any field you cannot determine to an empty string. Do not invent specifics.`
 
       const content = response.choices[0]?.message?.content;
       if (content) {
-        const p = JSON.parse(content);
+        const p = withoutWideDashes(JSON.parse(content));
         const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
         const desc = str(p.description);
         if (desc.length >= 10) {
@@ -1754,305 +1752,18 @@ Set any field you cannot determine to an empty string. Do not invent specifics.`
 // it (Business Health, Movement 3), and its first recommendation is read
 // straight off the report (Movement 4).
 
-/** Fetch a page returning BOTH raw HTML (for signal regexes) and stripped text
- *  (for the LLM). Best-effort - returns null on any failure. */
-async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ html: string; text: string } | null> {
-  try {
-    // Present as a real browser. Many stores sit behind bot filters that 403 a
-    // generic crawler UA - a partial/blocked fetch is a root cause of false
-    // negatives, so we look like Chrome and send the browser header set.
-    // SSRF-hardened: the crawl target is user-supplied, so safeFetch enforces
-    // the scheme allowlist, blocks private/link-local/metadata addresses at
-    // DNS resolution, and revalidates every redirect hop.
-    const r = await safeFetch(url, {
-      method: "GET",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "he,en-US;q=0.9,en;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Upgrade-Insecure-Requests": "1",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-      },
-      timeoutMs,
-    });
-    if (!r.ok) return null;
-    const ct = r.contentType || "";
-    if (!ct.includes("text/html") && !ct.includes("xhtml")) return null;
-    const html = r.text;
-    const text = html
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/gi, " ")
-      .replace(/&amp;/gi, "&")
-      .replace(/&lt;/gi, "<")
-      .replace(/&gt;/gi, ">")
-      .replace(/\s+/g, " ")
-      .trim();
-    return { html: html.slice(0, 400000), text };
-  } catch {
-    return null;
-  }
-}
-
-// Same-origin internal links worth reading - the pages that carry a business's
-// knowledge and policies. We only ever follow a handful.
-// Link text / path keywords worth following - the pages where policies, contact
-// details, and knowledge actually live. Bilingual (EN + HE) because Hebrew
-// stores label these in Hebrew even when the slug is English.
-const LINK_KEYWORDS =
-  /(about|faq|help|support|contact|shipping|deliver|return|refund|exchange|warranty|policy|policies|terms|privacy|legal|pricing|plans|q-?a|אודות|צור.?קשר|יצירת.?קשר|שאלות|עזרה|תמיכה|משלוח|החזר|החזרה|החזרות|ביטול|תקנון|מדיניות|פרטיות|אחריות|תנאי)/i;
-
-// Well-known convention paths we always TRY even if not linked from the home
-// page - most false negatives on Shopify/WordPress stores are policies that
-// exist at a predictable URL but aren't in the top nav. fetchPageRaw returns
-// null fast on a 404, so probing these is cheap.
-const CANDIDATE_PATHS = [
-  "/policies/refund-policy", "/policies/shipping-policy", "/policies/terms-of-service",
-  "/policies/privacy-policy", "/policies/legal-notice", "/policies/contact-information",
-  "/pages/contact", "/pages/contact-us", "/pages/faq", "/pages/about", "/pages/about-us",
-  "/pages/shipping", "/pages/returns", "/pages/warranty", "/pages/terms", "/pages/accessibility",
-  "/contact", "/contact-us", "/faq", "/about", "/terms", "/privacy",
-  "/shipping", "/returns", "/refund-policy", "/policies", "/help", "/support",
-];
-
-function extractInternalLinks(html: string, origin: string, cap = 10): string[] {
-  const originHost = (() => { try { return new URL(origin).hostname; } catch { return ""; } })();
-  const out = new Set<string>();
-  const re = /<a\b[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) && out.size < cap * 4) {
-    const href = m[1];
-    const label = (m[2] || "").replace(/<[^>]+>/g, " ");
-    if (!href) continue;
-    let abs: URL;
-    try { abs = new URL(href, origin); } catch { continue; }
-    if (abs.hostname !== originHost) continue;
-    if (!/^https?:$/.test(abs.protocol)) continue;
-    if (LINK_KEYWORDS.test(decodeURIComponent(abs.pathname)) || LINK_KEYWORDS.test(label)) {
-      abs.hash = "";
-      out.add(abs.toString());
-    }
-  }
-  return Array.from(out).slice(0, cap);
-}
-
-// ─── Structured signal extraction (deterministic, LLM-free) ──
-//
-// Platform detection is STRENGTH-SCORED so we can tell an ACTIVE platform
-// (many strong signals - e.g. Shopify's CDN + theme + section markup) from a
-// LEGACY ARTIFACT (a single stray "magento" string). The AI is handed the
-// scores and told to trust the strongest, so an old tag never gets recommended
-// as an equal.
-
-interface PlatformDef { slug: string; name: string; patterns: RegExp[] }
-const PLATFORM_DEFS: PlatformDef[] = [
-  { slug: "shopify", name: "Shopify", patterns: [/cdn\.shopify\.com/i, /\/cdn\/shop\//i, /Shopify\.theme/i, /myshopify\.com/i, /x-shopify/i, /shopify-section/i, /window\.Shopify/i] },
-  { slug: "woocommerce", name: "WooCommerce", patterns: [/wp-content\/plugins\/woocommerce/i, /woocommerce/i, /wc-block/i, /wc_add_to_cart/i] },
-  { slug: "wix", name: "Wix", patterns: [/wixstatic\.com/i, /wix\.com/i, /X-Wix/i, /_wixCssStates/i, /wixapps/i] },
-  { slug: "magento", name: "Magento", patterns: [/mage\/cookies/i, /Magento_/i, /\/static\/version\d+\/frontend/i, /mage-cache/i, /magento/i] },
-  { slug: "bigcommerce", name: "BigCommerce", patterns: [/bigcommerce\.com/i, /stencil-utils/i] },
-  { slug: "squarespace", name: "Squarespace", patterns: [/squarespace\.com/i, /static1\.squarespace/i, /SQUARESPACE_CONTEXT/i] },
-  { slug: "webflow", name: "Webflow", patterns: [/webflow\.com/i, /w-webflow/i, /data-wf-/i] },
-];
-const TRACKING_DEFS: Array<{ slug: string; name: string; re: RegExp }> = [
-  { slug: "google_analytics", name: "Google Analytics", re: /google-analytics\.com|googletagmanager\.com|gtag\(|_gaq/i },
-  { slug: "meta_pixel", name: "Meta Pixel", re: /connect\.facebook\.net|fbq\(/i },
-  { slug: "tiktok_pixel", name: "TikTok Pixel", re: /analytics\.tiktok\.com|ttq\./i },
-  { slug: "hotjar", name: "Hotjar", re: /hotjar\.com|hjSiteSettings/i },
-];
-// Third-party tools / apps (incl. the Shopify ecosystem the recommender uses).
-const TOOL_DEFS: Array<{ slug: string; name: string; re: RegExp; chat?: boolean }> = [
-  { slug: "hubspot", name: "HubSpot", re: /hs-scripts\.com|js\.hs-|hubspot\.com|hsforms/i },
-  { slug: "salesforce", name: "Salesforce", re: /salesforce\.com|force\.com|pardot/i },
-  { slug: "zendesk", name: "Zendesk", re: /zendesk\.com|zdassets\.com/i, chat: true },
-  { slug: "intercom", name: "Intercom", re: /intercom\.io|widget\.intercom/i, chat: true },
-  { slug: "crisp", name: "Crisp", re: /crisp\.chat/i, chat: true },
-  { slug: "tawk", name: "Tawk.to", re: /tawk\.to/i, chat: true },
-  { slug: "gorgias", name: "Gorgias", re: /gorgias\.(com|chat)/i, chat: true },
-  { slug: "tidio", name: "Tidio", re: /tidio\.co/i, chat: true },
-  { slug: "drift", name: "Drift", re: /drift\.com/i, chat: true },
-  { slug: "zopim", name: "Zopim", re: /zopim/i, chat: true },
-  { slug: "stripe", name: "Stripe", re: /js\.stripe\.com|stripe\.com\/v3/i },
-  { slug: "paypal", name: "PayPal", re: /paypal\.com\/sdk|paypalobjects/i },
-  { slug: "calendly", name: "Calendly", re: /calendly\.com/i },
-  { slug: "klaviyo", name: "Klaviyo", re: /klaviyo\.com|static\.klaviyo/i },
-  { slug: "yotpo", name: "Yotpo", re: /yotpo\.com|staticw2\.yotpo/i },
-  { slug: "judgeme", name: "Judge.me", re: /judge\.me|judgeme/i },
-  { slug: "loox", name: "Loox", re: /loox\.io/i },
-  { slug: "returngo", name: "ReturnGO", re: /returngo\.ai|returngo/i },
-];
-
-function collectMatches(re: RegExp, hay: string, group = 1, cap = 12): string[] {
-  const out = new Set<string>();
-  const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
-  let m: RegExpExecArray | null;
-  while ((m = g.exec(hay)) && out.size < cap) { if (m[group]) out.add(m[group].trim()); }
-  return Array.from(out);
-}
-
-const EMAIL_JUNK = /(sentry|wix(press)?|example\.com|\.png|\.jpg|\.gif|@2x|@3x|godaddy|schema\.org|sentry\.io|w3\.org|core\.js)/i;
-
-export interface DiscoverySignals {
-  emails: string[];
-  phones: string[];
-  whatsapp: string[];
-  instagram: string[];
-  facebook: string[];
-  messenger: string[];
-  telegram: string[];
-  tiktok: string[];
-  contactForm: boolean;
-  liveChat: string | null;
-  platform: { slug: string; name: string; strength: number } | null;
-  otherPlatforms: Array<{ slug: string; name: string; strength: number }>;
-  tracking: string[];
-  tools: string[];
-  social: string[];
-  coverage: string[]; // URLs actually read
-  /** email → "gmail" | "outlook" from an MX lookup of the email's domain. */
-  emailProviders?: Record<string, string>;
-}
-
-/**
- * Which mail platform serves the found addresses - a deterministic MX lookup
- * per unique domain (google → Gmail/Workspace, outlook/microsoft → Microsoft
- * 365). Lets the briefing show the real provider logo and offer the matching
- * one-click connect. Best-effort: DNS failures simply yield no provider.
- */
-async function detectEmailProviders(emails: string[]): Promise<Record<string, string>> {
-  const out: Record<string, string> = {};
-  const domains = Array.from(new Set(emails.map((e) => e.split("@")[1]).filter((d): d is string => !!d))).slice(0, 4);
-  await Promise.all(domains.map(async (domain) => {
-    try {
-      const mx = await dns.resolveMx(domain);
-      const hosts = mx.map((m) => m.exchange.toLowerCase()).join(" ");
-      const provider = /google|gmail/.test(hosts) ? "gmail" : /outlook|microsoft|office365/.test(hosts) ? "outlook" : null;
-      if (provider) for (const e of emails) if (e.toLowerCase().endsWith("@" + domain)) out[e] = provider;
-    } catch { /* unresolvable domain - no provider claim */ }
-  }));
-  return out;
-}
-
-/** Parse JSON-LD blocks for org contact info + social profiles (sameAs). */
-function parseJsonLd(html: string): { emails: string[]; phones: string[]; social: string[] } {
-  const emails = new Set<string>(), phones = new Set<string>(), social = new Set<string>();
-  for (const block of collectMatches(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi, html, 1, 8)) {
-    let data: any;
-    try { data = JSON.parse(block); } catch { continue; }
-    const nodes: any[] = Array.isArray(data) ? data : data["@graph"] && Array.isArray(data["@graph"]) ? data["@graph"] : [data];
-    for (const n of nodes) {
-      if (!n || typeof n !== "object") continue;
-      if (typeof n.email === "string") emails.add(n.email.replace(/^mailto:/i, "").trim());
-      if (typeof n.telephone === "string") phones.add(n.telephone.trim());
-      const sa = n.sameAs;
-      if (Array.isArray(sa)) sa.forEach((u: any) => typeof u === "string" && social.add(u));
-      else if (typeof sa === "string") social.add(sa);
-      const cp = n.contactPoint;
-      const cps = Array.isArray(cp) ? cp : cp ? [cp] : [];
-      for (const c of cps) { if (c?.telephone) phones.add(String(c.telephone).trim()); if (c?.email) emails.add(String(c.email).replace(/^mailto:/i, "").trim()); }
-    }
-  }
-  return { emails: [...emails], phones: [...phones], social: [...social] };
-}
-
-function extractSignals(pages: Array<{ url: string; html: string }>): DiscoverySignals {
-  const html = pages.map((p) => p.html).join("\n");
-
-  const emails = new Set<string>();
-  collectMatches(/mailto:([^"'>?\s]+)/gi, html).forEach((e) => emails.add(decodeURIComponent(e).toLowerCase()));
-  collectMatches(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, html, 0, 20).forEach((e) => emails.add(e.toLowerCase()));
-
-  const phones = new Set<string>();
-  collectMatches(/tel:(\+?[\d][\d\-\s().]{5,})/gi, html).forEach((p) => phones.add(p.replace(/[\s().]/g, "")));
-
-  const whatsapp = new Set<string>();
-  // Broadened so WhatsApp isn't silently dropped: classic wa.me / api links,
-  // the whatsapp:// app scheme, and wa.link short links all count.
-  [
-    /wa\.me\/(\+?\d{6,15})/gi,
-    /api\.whatsapp\.com\/send\?phone=(\d{6,15})/gi,
-    /whatsapp[^"']*?phone=(\d{6,15})/gi,
-    /whatsapp:\/\/send\?phone=(\+?\d{6,15})/gi,
-    /wa\.link\/(\+?\d{6,15})/gi,
-  ].forEach((re) => collectMatches(re, html).forEach((n) => whatsapp.add(n.replace(/^\+/, ""))));
-
-  const handle = (re: RegExp, exclude: RegExp) =>
-    collectMatches(re, html).filter((h) => !exclude.test(h));
-  const instagram = handle(/instagram\.com\/([A-Za-z0-9_.]{2,40})/gi, /^(p|reel|reels|explore|accounts|stories|tv|about)$/i);
-  const facebook = handle(/facebook\.com\/([A-Za-z0-9_.]{2,60})/gi, /^(sharer|tr|plugins|dialog|events|groups|profile\.php|permalink\.php|photo|login|help|policies|policy|terms|privacy|legal|about|business|ads|settings|watch|marketplace|gaming)$/i);
-  const messenger = collectMatches(/m\.me\/([A-Za-z0-9_.]+)/gi, html);
-  const telegram = handle(/t\.me\/([A-Za-z0-9_]{3,32})/gi, /^(share|joinchat)$/i);
-  const tiktok = handle(/tiktok\.com\/@([A-Za-z0-9_.]{2,30})/gi, /^$/);
-
-  const jsonld = parseJsonLd(html);
-  jsonld.emails.forEach((e) => e && emails.add(e.toLowerCase()));
-  jsonld.phones.forEach((p) => p && phones.add(p.replace(/[\s().]/g, "")));
-
-  // Platform strength scoring.
-  const scored = PLATFORM_DEFS
-    .map((d) => ({ slug: d.slug, name: d.name, strength: d.patterns.reduce((s, re) => s + (re.test(html) ? 1 : 0), 0) }))
-    .filter((p) => p.strength > 0)
-    .sort((a, b) => b.strength - a.strength);
-  const platform = scored[0] || null;
-  const otherPlatforms = scored.slice(1);
-
-  const tracking = TRACKING_DEFS.filter((t) => t.re.test(html)).map((t) => t.slug);
-  const matchedTools = TOOL_DEFS.filter((t) => t.re.test(html));
-  const tools = matchedTools.map((t) => t.slug);
-  const liveChat = matchedTools.find((t) => t.chat)?.name || null;
-
-  const contactForm = /<form[\s\S]{0,6000}(contact|message|inquir|נשמח|צור.?קשר|שליחה|get in touch)/i.test(html);
-
-  const social = new Set<string>(jsonld.social);
-  instagram.forEach((h) => social.add(`https://instagram.com/${h}`));
-  facebook.forEach((h) => social.add(`https://facebook.com/${h}`));
-
-  const clean = (arr: string[]) => arr.filter((e) => !EMAIL_JUNK.test(e));
-  return {
-    emails: clean([...emails]).slice(0, 8),
-    phones: [...phones].slice(0, 6),
-    whatsapp: [...whatsapp].slice(0, 4),
-    instagram: instagram.slice(0, 4),
-    facebook: facebook.slice(0, 4),
-    messenger: messenger.slice(0, 3),
-    telegram: telegram.slice(0, 3),
-    tiktok: tiktok.slice(0, 3),
-    contactForm,
-    liveChat,
-    platform,
-    otherPlatforms,
-    tracking,
-    tools,
-    social: [...social].slice(0, 10),
-    coverage: pages.map((p) => p.url),
-  };
-}
-
-/** Call the AI service to run the deep 5-domain LLM scan. Forwards the admin
- *  JWT exactly like callAIGenerateConfigs. Returns the report or null. */
+// The site crawl and its deterministic signal extraction now live in
+// services/site-crawl.service.ts - see `crawlSite`. Onboarding calls that
+// service rather than holding its own copy, so the rescan route and this
+// flow cannot drift into crawling differently while sharing a name.
 async function callAIDiscoverBusiness(
   authHeader: string,
   body: { domain: string; locale: string; pages: Array<{ url: string; text: string }>; signals: DiscoverySignals; businessType?: string },
 ): Promise<any | null> {
-  try {
-    const res = await fetchWithTimeout(`${AI_SERVICE_URL}/api/ai-assist/discover-business`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: authHeader },
-      body: JSON.stringify(body),
-    }, 60000);
-    if (!res.ok) return null;
-    const json = (await res.json()) as { data?: { ok?: boolean; report?: any } };
-    if (!json?.data?.ok || !json.data.report) return null;
-    return json.data.report;
-  } catch (err: any) {
-    console.warn("[Onboarding] AI discover-business failed:", err?.message);
-    return null;
-  }
+  // ONE bridge, shared with the rescan path - see business-scan.service.
+  // A second copy is a second place for the timeout and the failure handling
+  // to drift, and the two would then disagree about what a failed scan is.
+  return callDiscoverBusiness(authHeader, body, fetchWithTimeout as any);
 }
 
 // Business types for which shipping/returns/refund policies are a genuine,
@@ -2179,8 +1890,19 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
       create: { tenantId: req.tenantId!, status: "SCANNING", websiteDomain: origin, scanPhase: "homepage" },
     });
 
-    const home = await fetchPageRaw(origin);
-    if (!home) {
+    // ONE crawler. This flow and the rescan route both go through crawlSite,
+    // so neither can start crawling differently while sharing the name. The
+    // phase callback is what keeps the ceremony's checkmarks tied to real
+    // events rather than a timer - the frontend polls GET /discovery during
+    // the scan.
+    const crawl = await crawlSite(origin, {
+      onPhase: async (phase) => {
+        if (phase === "pages") {
+          await prisma.businessDiscovery.update({ where: { tenantId: req.tenantId! }, data: { scanPhase: "pages" } }).catch(() => {});
+        }
+      },
+    });
+    if (!crawl) {
       await prisma.businessDiscovery.update({
         where: { tenantId: req.tenantId! },
         data: { status: "FAILED" },
@@ -2188,38 +1910,20 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
       res.json({ data: { ok: false, reason: "fetch_failed", domain: origin } });
       return;
     }
+    const { home, okPages, pages, signals } = crawl;
 
-    // Ceremony phase: homepage read - now exploring the site's own pages. The
-    // frontend polls GET /discovery during the scan, so each write here lands a
-    // REAL checkmark (no timers).
-    await prisma.businessDiscovery.update({ where: { tenantId: req.tenantId! }, data: { scanPhase: "pages" } }).catch(() => {});
+    // What the crawl could SEE, recorded alongside what the model concluded.
+    // The review screen reads this row, and without it the screen can only quote
+    // pages.length - which on a password-protected store is 17 for a site nobody
+    // could read. See persistCrawlReach and the schema comment on `crawl`.
+    await persistCrawlReach(req.tenantId!, {
+      requested: crawl.requested.length,
+      pagesRead: crawl.pages.length,
+      distinctTextPages: crawl.distinctTextPages,
+      coverage: crawl.pages.map((p) => p.url),
+    });
 
-    // Deep same-origin crawl: discovered policy/contact links + well-known
-    // convention paths (deduped). This is the accuracy fix - most "missing"
-    // policies/contact details live in the footer or at a predictable URL, not
-    // on the home page. fetchPageRaw returns null fast on a 404, so probing is
-    // cheap; we cap total fetches to stay polite.
-    const discovered = extractInternalLinks(home.html, origin, 10);
-    const candidates = CANDIDATE_PATHS.map((p) => { try { return new URL(p, origin).toString(); } catch { return null; } }).filter((u): u is string => !!u);
-    const toFetch = Array.from(new Set([...discovered, ...candidates])).filter((u) => u !== origin && u !== origin + "/").slice(0, 16);
-    const fetched = (await Promise.all(toFetch.map((u) => fetchPageRaw(u, 6000)))).map((page, i) => ({ url: toFetch[i]!, page }));
-    const okPages = fetched.filter((e) => e.page).map((e) => ({ url: e.url, html: e.page!.html, text: e.page!.text }));
-
-    // Cap the text we ship to the AI so the JSON body stays under its
-    // body-parser limit. The AI trims further when building the LLM corpus.
-    const pages = [
-      { url: origin, text: home.text.slice(0, 9000) },
-      ...okPages.map((e) => ({ url: e.url, text: e.text.slice(0, 2800) })),
-    ];
-
-    const signals = extractSignals([{ url: origin, html: home.html }, ...okPages]);
-    signals.emailProviders = await detectEmailProviders(signals.emails);
-
-    // Usecase-aware analysis starts HERE: classify the business deterministically
-    // from its own pages (event venue ≠ Shopify store ≠ B2B SaaS) and thread it
-    // through the whole scan so the LLM, health, and gaps all reason about the
-    // RIGHT business - no more inventing a "return policy" for a SaaS.
-    const businessType = classifyBusinessType([home.text, ...okPages.map((p) => p.text)].join(" "), signals);
+    const businessType = crawl.businessType;
 
     // Deterministic findings, persisted at the synthesis boundary. This is what
     // the ceremony renders as LIVE facts while the LLM thinks ("Found WhatsApp,
@@ -2248,7 +1952,9 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
       },
     }).catch(() => {});
 
-    const report = await callAIDiscoverBusiness(req.headers.authorization!, { domain: origin, locale, pages, signals, businessType });
+    // The workspace's system language, not the request's (2026-10-14).
+    const language = await systemLanguage(req.tenantId!, locale);
+    const report = await callAIDiscoverBusiness(req.headers.authorization!, { domain: origin, locale: language, pages, signals, businessType });
     if (!report) {
       // The deterministic signals were already persisted at the synthesis
       // boundary above - the review still shows the channels/tech we KNOW we
@@ -2343,20 +2049,17 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
         },
       }).catch(() => null);
 
-      const ctx = { language: locale || profile?.primaryLanguage || "en", now: new Date().toISOString() };
+      const ctx = { language, now: new Date().toISOString() };
+      const skippedTopics: SkippedTopic[] = [];
       const projected = [
-        ...projectDiscoveryTopics(saved as any, profile ?? {}, ctx),
+        ...projectDiscoveryTopics(saved as any, profile ?? {}, ctx, skippedTopics),
         // `okPages`, not `pages`: the latter is truncated to 2800 chars per
         // page purely to keep the LLM request under its body-parser limit.
         // Ingesting that truncation would put a knowingly half-read shipping
         // policy in front of customers. The knowledge base gets the full text.
-        ...projectPages(
-          [
-            { url: origin, content: home.text },
-            ...okPages.map((p) => ({ url: p.url, content: p.text })),
-          ],
-          ctx,
-        ),
+        // Titled pages, one per content, the shared header and footer removed
+        // (projectPages); full text, not the model's 2800-character cut.
+        ...projectPages(crawlPagesForProjection(origin, { home, okPages }), ctx),
       ];
 
       knowledgeSync = await applyProjection(
@@ -2366,7 +2069,15 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
         // Only crawled pages may be retired by a re-scan. A topic summary the
         // synthesis step failed to produce this time must not delete the good
         // summary from the previous scan.
-        { removeMissing: true, removeScope: ["url"] },
+        // Topics left out for having no facts retire their old documents too,
+        // once two scans in a row found them thin; pages that only failed to
+        // answer this time keep theirs (2026-10-14).
+        {
+          removeMissing: true,
+          removeScope: ["url"],
+          retireTopics: await thinTopicsToRetire(req.tenantId!, skippedTopics.filter((t) => t.reason === "thin").map((t) => t.topic)),
+          keepUrls: crawl.unreadable,
+        },
       );
 
       void writeAudit({
@@ -2419,87 +2130,69 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
 // animation. Falls back to a generic plan on any failure so the ceremony always
 // has steps to show. The heavy /discover call runs right after, and the final
 // step holds until it returns - so duration reflects the real work.
-const ECOM_PLATFORMS = new Set(["shopify", "woocommerce", "magento", "bigcommerce", "prestashop", "wix_stores", "squarespace_commerce", "ecwid", "shopware", "opencart"]);
-
-function classifyBusinessType(text: string, signals: DiscoverySignals): string {
-  const t = (text || "").toLowerCase();
-  const plat = (signals.platform?.slug || "").toLowerCase();
-  const has = (...ws: string[]) => ws.some((w) => t.includes(w));
-  if (ECOM_PLATFORMS.has(plat) || has("add to cart", "add to bag", "checkout", "free shipping", "in stock", "sold out", "my cart", "shopping cart", "עגלה", "הוסף לסל", "משלוח חינם", "לרכישה")) return "ecommerce";
-  if (has("law firm", "attorney", "lawyer", "litigation", "practice areas", "legal services", "counsel", "עורך דין", "עורכי דין", "ייעוץ משפטי", "משרד עורכי")) return "legal";
-  if (has("free trial", "start free", "start for free", "/pricing", "api documentation", "integrations", "sign up free", "our platform", "software platform", "for developers", "open source")) return "saas";
-  if (has("event venue", "event space", "wedding venue", "banquet", "event hall", "host your event", "weddings", "corporate events", "our venue", "book the venue", "אולם אירועים", "גן אירועים", "אולמי אירועים", "חתונות", "בר מצווה", "בת מצווה", "הפקת אירועים", "קייטרינג לאירועים")) return "events";
-  if (has("book now", "tours", "vacation", "itinerary", "destinations", "guided tour", "travel", "book your", "טיול", "חופשה", "יעדים", "הזמנת מקום")) return "tourism";
-  if (has("view menu", "our menu", "reservation", "reserve a table", "order online", "delivery & pickup", "restaurant", "תפריט", "הזמנת שולחן", "משלוחים", "מסעדה")) return "restaurant";
-  if (has("book an appointment", "clinic", "our patients", "treatment", "our doctors", "medical", "dental", "מרפאה", "לקביעת תור", "טיפול", "רופא")) return "health";
-  if (has("properties", "listings", "for sale", "for rent", "real estate", "square feet", 'נדל"ן', "דירות", "להשכרה", "למכירה")) return "realestate";
-  return "generic";
-}
-
-// [key, English, Hebrew] - each step is a genuine phase of the scan.
 const DISCOVERY_PLANS: Record<string, Array<[string, string, string]>> = {
   ecommerce: [
     ["platform", "Detecting your ecommerce platform", "מזהה את פלטפורמת המסחר שלכם"],
-    ["catalog", "Reading your product catalog", "קורא את קטלוג המוצרים"],
-    ["policies", "Finding your shipping & return policies", "מוצא את מדיניות המשלוח וההחזרות"],
+    ["catalog", "Reading your product catalog", "קוראת את קטלוג המוצרים"],
+    ["policies", "Finding your shipping & return policies", "מוצאת את מדיניות המשלוח וההחזרות"],
     ["channels", "Detecting your customer communication channels", "מזהה את ערוצי התקשורת עם הלקוחות"],
-    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+    ["employee", "Preparing your first AI Employee", "מכינה את עובד ה-AI הראשון שלכם"],
   ],
   legal: [
-    ["services", "Understanding your legal services", "מבין את השירותים המשפטיים שלכם"],
-    ["areas", "Reading your practice areas", "קורא את תחומי ההתמחות"],
-    ["appointments", "Finding your appointment methods", "מוצא את דרכי קביעת הפגישות"],
+    ["services", "Understanding your legal services", "מבינה את השירותים המשפטיים שלכם"],
+    ["areas", "Reading your practice areas", "קוראת את תחומי ההתמחות"],
+    ["appointments", "Finding your appointment methods", "מוצאת את דרכי קביעת הפגישות"],
     ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
-    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+    ["employee", "Preparing your first AI Employee", "מכינה את עובד ה-AI הראשון שלכם"],
   ],
   saas: [
-    ["product", "Understanding your product", "מבין את המוצר שלכם"],
-    ["docs", "Reading your documentation", "קורא את התיעוד שלכם"],
+    ["product", "Understanding your product", "מבינה את המוצר שלכם"],
+    ["docs", "Reading your documentation", "קוראת את התיעוד שלכם"],
     ["helpcenter", "Detecting your Help Center", "מזהה את מרכז העזרה"],
     ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
-    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+    ["employee", "Preparing your first AI Employee", "מכינה את עובד ה-AI הראשון שלכם"],
   ],
   tourism: [
-    ["offering", "Understanding your destinations & tours", "מבין את היעדים והטיולים שלכם"],
-    ["booking", "Reading your booking options", "קורא את אפשרויות ההזמנה"],
-    ["policies", "Finding your cancellation & travel policies", "מוצא את מדיניות הביטול והנסיעה"],
+    ["offering", "Understanding your destinations & tours", "מבינה את היעדים והטיולים שלכם"],
+    ["booking", "Reading your booking options", "קוראת את אפשרויות ההזמנה"],
+    ["policies", "Finding your cancellation & travel policies", "מוצאת את מדיניות הביטול והנסיעה"],
     ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
-    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+    ["employee", "Preparing your first AI Employee", "מכינה את עובד ה-AI הראשון שלכם"],
   ],
   restaurant: [
-    ["menu", "Reading your menu", "קורא את התפריט שלכם"],
-    ["ordering", "Finding your reservation & ordering options", "מוצא את אפשרויות ההזמנה והשולחנות"],
+    ["menu", "Reading your menu", "קוראת את התפריט שלכם"],
+    ["ordering", "Finding your reservation & ordering options", "מוצאת את אפשרויות ההזמנה והשולחנות"],
     ["hours", "Detecting your hours & locations", "מזהה את שעות הפעילות והסניפים"],
     ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
-    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+    ["employee", "Preparing your first AI Employee", "מכינה את עובד ה-AI הראשון שלכם"],
   ],
   health: [
-    ["services", "Understanding your services", "מבין את השירותים שלכם"],
-    ["appointments", "Finding your appointment methods", "מוצא את דרכי קביעת התורים"],
-    ["policies", "Reading your patient information", "קורא את המידע למטופלים"],
+    ["services", "Understanding your services", "מבינה את השירותים שלכם"],
+    ["appointments", "Finding your appointment methods", "מוצאת את דרכי קביעת התורים"],
+    ["policies", "Reading your patient information", "קוראת את המידע למטופלים"],
     ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
-    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+    ["employee", "Preparing your first AI Employee", "מכינה את עובד ה-AI הראשון שלכם"],
   ],
   realestate: [
-    ["listings", "Understanding your listings", "מבין את הנכסים שלכם"],
-    ["services", "Reading your services", "קורא את השירותים שלכם"],
-    ["contact", "Finding your contact & viewing methods", "מוצא את דרכי יצירת הקשר והצפייה"],
+    ["listings", "Understanding your listings", "מבינה את הנכסים שלכם"],
+    ["services", "Reading your services", "קוראת את השירותים שלכם"],
+    ["contact", "Finding your contact & viewing methods", "מוצאת את דרכי יצירת הקשר והצפייה"],
     ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
-    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+    ["employee", "Preparing your first AI Employee", "מכינה את עובד ה-AI הראשון שלכם"],
   ],
   events: [
-    ["offering", "Understanding your venue & event types", "מבין את המקום וסוגי האירועים"],
-    ["availability", "Reading your booking & availability options", "קורא את אפשרויות ההזמנה והזמינות"],
-    ["packages", "Finding your packages & pricing", "מוצא את החבילות והמחירים"],
+    ["offering", "Understanding your venue & event types", "מבינה את המקום וסוגי האירועים"],
+    ["availability", "Reading your booking & availability options", "קוראת את אפשרויות ההזמנה והזמינות"],
+    ["packages", "Finding your packages & pricing", "מוצאת את החבילות והמחירים"],
     ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
-    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+    ["employee", "Preparing your first AI Employee", "מכינה את עובד ה-AI הראשון שלכם"],
   ],
   generic: [
-    ["website", "Reading your website", "קורא את האתר שלכם"],
-    ["about", "Understanding what you do", "מבין מה אתם עושים"],
-    ["brand", "Learning your brand voice", "לומד את קול המותג שלכם"],
+    ["website", "Reading your website", "קוראת את האתר שלכם"],
+    ["about", "Understanding what you do", "מבינה מה אתם עושים"],
+    ["brand", "Learning your brand voice", "לומדת את קול המותג שלכם"],
     ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
-    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+    ["employee", "Preparing your first AI Employee", "מכינה את עובד ה-AI הראשון שלכם"],
   ],
 };
 
@@ -3093,15 +2786,73 @@ router.post("/employee-chat", requireRole("ADMIN"), validate(employeeChatSchema)
 
 const inviteTeamSchema = z.object({
   emails: z.array(z.string().email()).min(1).max(25),
-  role: z.enum(["ADMIN", "AGENT"]).optional().default("AGENT"),
+  // A TenantRole id, or the keywords "ADMIN"/"AGENT".
+  //
+  // It was `z.enum(["ADMIN","AGENT"])`, which meant a tenant could create a
+  // custom role through /api/permissions/roles and then had no way to invite
+  // anybody into it. The keywords still work, so every existing caller is
+  // unaffected; anything else is resolved against THIS tenant's roles and
+  // refused if it names nothing - see invite-role.service.ts.
+  role: z.string().min(1).max(64).optional().default("AGENT"),
 });
+
+/**
+ * Record that somebody joined on a different role from the one they were
+ * offered, because the offered one had been deleted meanwhile.
+ *
+ * Its own audit ACTION rather than metadata on role.assigned: the audit-log
+ * API does not return `metadata`, so a fallback recorded only there would be
+ * invisible in the one place an admin looks. Someone silently joining with
+ * fewer permissions than they were promised is the kind of wrong that nobody
+ * goes looking for, so it has to be legible from the action alone.
+ *
+ * Never throws - an audit failure must not fail an acceptance.
+ */
+async function recordRoleFallback(
+  invite: { tenantId: string; role: string; id: string },
+  userId: string,
+  resolved: { fellBack: boolean; roleName: string | null; tenantRoleId: string | null },
+): Promise<void> {
+  if (!resolved.fellBack) return;
+  try {
+    await writeAudit({
+      tenantId: invite.tenantId,
+      actorType: "system",
+      action: AuditAction.ROLE_ASSIGNED_FALLBACK,
+      targetType: "user",
+      targetId: userId,
+      metadata: {
+        requestedRole: invite.role,
+        requestedRoleExists: false,
+        grantedRole: resolved.roleName,
+        grantedRoleId: resolved.tenantRoleId,
+        inviteId: invite.id,
+      },
+    });
+  } catch (err: unknown) {
+    console.error("[invite] role fallback audit failed:", (err as { message?: string })?.message ?? err);
+  }
+}
 
 const INVITE_LINK_EXPIRY_DAYS = 14;
 
 router.post("/invite-team", requireRole("ADMIN"), validate(inviteTeamSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { emails, role } = req.body as { emails: string[]; role: "ADMIN" | "AGENT" };
+    const { emails, role } = req.body as { emails: string[]; role: string };
     const tenantId = req.tenantId!;
+
+    // Resolved ONCE, before any invitation is sent. An unknown or
+    // other-tenant role id is refused outright here rather than downgraded -
+    // an admin who mistypes a role should be told, not discover later that
+    // twenty-five people joined as agents.
+    const resolved = await resolveInviteRoleStrict(tenantId, role);
+    if (!resolved) {
+      res.status(400).json({ error: "unknown_role", role });
+      return;
+    }
+    // Nobody invites into a role above their own; Owner by an Owner only.
+    const refusal = await inviteRoleRefusal(actorOf(req), tenantId, resolved);
+    if (refusal) { res.status(refusal.status).json({ error: refusal.error, code: refusal.code, ...(refusal.missing ? { missing: refusal.missing } : {}) }); return; }
     const inviter = await prisma.user.findUnique({
       where: { id: req.user!.userId },
       select: { name: true, email: true },
@@ -3136,9 +2887,15 @@ router.post("/invite-team", requireRole("ADMIN"), validate(inviteTeamSchema), as
           tenantId,
           email,
           email.split("@")[0] || "Teammate",
-          role,
+          resolved.coarse,
         );
         const user = { id: invited.user.id };
+
+        // BOTH systems, not either. `inviteUser` writes the coarse enum that
+        // `requireRole` reads; this writes the assignment that the permission
+        // system reads. Until now only the first happened, so every invited
+        // user had no entry in the real role system at all.
+        await ensureRoleAssignment(user.id, resolved.tenantRoleId, req.user!.userId);
 
         const inviteToken = crypto.randomBytes(24).toString("hex");
         const expiresAt = new Date(Date.now() + INVITE_LINK_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
@@ -3182,7 +2939,18 @@ router.post("/invite-team", requireRole("ADMIN"), validate(inviteTeamSchema), as
 router.post("/invite-link", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const tenantId = req.tenantId!;
-    const role = (req.body?.role as "ADMIN" | "AGENT") === "ADMIN" ? "ADMIN" : "AGENT";
+    // Same resolution as invite-team. This route collapsed anything that was
+    // not the literal string "ADMIN" to "AGENT", so a custom role id pasted
+    // here produced a link that silently granted agent.
+    const requestedRole = String(req.body?.role ?? "AGENT");
+    const resolved = await resolveInviteRoleStrict(tenantId, requestedRole);
+    if (!resolved) {
+      res.status(400).json({ error: "unknown_role", role: requestedRole });
+      return;
+    }
+    const refusal = await inviteRoleRefusal(actorOf(req), tenantId, resolved);
+    if (refusal) { res.status(refusal.status).json({ error: refusal.error, code: refusal.code, ...(refusal.missing ? { missing: refusal.missing } : {}) }); return; }
+    const role = requestedRole;
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -3218,6 +2986,21 @@ router.post("/invite-link", requireRole("ADMIN"), async (req: Request, res: Resp
 // the user fills the form. Auth NOT required.
 const publicRouter = Router();
 
+/**
+ * Why an invite cannot be used, for the /join page to say so (2026-10-21).
+ * The token is a long random secret, so whoever holds an existing one is that
+ * invite's own recipient: "used" and "expired" tell them nothing about anyone
+ * else. A token that matches nothing is "invalid", the same answer for every
+ * unknown token, so nothing leaks about tokens of other workspaces.
+ * The `error` value is unchanged for existing readers.
+ */
+export function inviteRejection(invite: { acceptedAt: Date | null; expiresAt: Date } | null, now = new Date()): "used" | "expired" | "invalid" | null {
+  if (!invite) return "invalid";
+  if (invite.acceptedAt) return "used";
+  if (invite.expiresAt < now) return "expired";
+  return null;
+}
+
 publicRouter.get("/invite/:token", async (req: Request, res: Response): Promise<void> => {
   try {
     const token = req.params.token as string;
@@ -3225,8 +3008,9 @@ publicRouter.get("/invite/:token", async (req: Request, res: Response): Promise<
       where: { token },
       include: { tenant: { select: { name: true, slug: true } } },
     });
-    if (!invite || invite.acceptedAt || invite.expiresAt < new Date()) {
-      res.status(404).json({ error: "invite_invalid_or_expired" });
+    const rejected = inviteRejection(invite);
+    if (rejected || !invite) {
+      res.status(404).json({ error: "invite_invalid_or_expired", reason: rejected ?? "invalid" });
       return;
     }
     res.json({
@@ -3259,8 +3043,9 @@ publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Re
     };
 
     const invite = await prisma.tenantInvite.findUnique({ where: { token } });
-    if (!invite || invite.acceptedAt || invite.expiresAt < new Date()) {
-      res.status(404).json({ error: "invite_invalid_or_expired" });
+    const rejected = inviteRejection(invite);
+    if (rejected || !invite) {
+      res.status(404).json({ error: "invite_invalid_or_expired", reason: rejected ?? "invalid" });
       return;
     }
 
@@ -3286,6 +3071,21 @@ publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Re
       });
       user = updated;
       setupLink = await resendSetupLink(updated.id);
+
+      // THE BRANCH THAT USED TO IGNORE THE ROLE ENTIRELY. invite-team creates
+      // the user at INVITE time, so this path only confirmed a name - which
+      // meant a fix applied to the open-link branch below would have left
+      // invite-team exactly as broken as it was.
+      //
+      // Re-resolved rather than trusted: if the role was deleted in between,
+      // the assignment made at invite time has already cascaded away, and this
+      // is the last moment anyone can notice.
+      const resolved = await resolveInviteRoleWithFallback(invite.tenantId, invite.role);
+      if (resolved.fellBack) {
+        await prisma.user.update({ where: { id: updated.id }, data: { role: resolved.coarse as any } });
+      }
+      await ensureRoleAssignment(updated.id, resolved.tenantRoleId, invite.invitedBy);
+      await recordRoleFallback(invite, updated.id, resolved);
     } else {
       // Open-link invite - provision identity + account now.
       const existing = await prisma.user.findUnique({
@@ -3296,14 +3096,20 @@ publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Re
         res.status(409).json({ error: "email_already_in_tenant" });
         return;
       }
+      // Fallback rather than strict: a role can be deleted while an invitation
+      // is outstanding, and acceptance is the last step of someone joining a
+      // company. The invitee is the one person who cannot fix it.
+      const resolved = await resolveInviteRoleWithFallback(invite.tenantId, invite.role);
       const invited = await inviteUser(
         invite.tenantId,
         finalEmail,
         name,
-        invite.role === "ADMIN" ? "ADMIN" : "AGENT",
+        resolved.coarse,
       );
       user = { id: invited.user.id, tenantId: invited.user.tenantId };
       setupLink = invited.setupLink;
+      await ensureRoleAssignment(user.id, resolved.tenantRoleId, invite.invitedBy);
+      await recordRoleFallback(invite, user.id, resolved);
     }
 
     await prisma.tenantInvite.update({

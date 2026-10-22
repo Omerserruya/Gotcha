@@ -115,7 +115,7 @@ export async function applyProjection(
   },
   tenantId: string,
   projected: ProjectedEntry[],
-  options: { removeMissing?: boolean; removeScope?: ExistingDoc extends never ? never : any[] } = {},
+  options: { removeMissing?: boolean; removeScope?: ExistingDoc extends never ? never : any[]; retireTopics?: string[]; keepUrls?: string[] } = {},
 ): Promise<SyncReport> {
   const { prisma, fetchFn, authHeader } = deps;
 

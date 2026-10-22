@@ -179,6 +179,17 @@ window.__gotchaShopifyChatApp = function (boot) {
       online: "Online",
       offline: "Away",
       close: "Close chat",
+      replies: "Replies right away",
+      minimise: "Minimise",
+      newChat: "New conversation",
+      dock: "Dock to the side of the screen",
+      undock: "Undock",
+      continueWa: "Continue on WhatsApp",
+      waTitle: "Chat with us",
+      waSub: "Write here and we'll continue on WhatsApp.",
+      waPlaceholder: "Type a message",
+      waOpening: "Continuing on WhatsApp",
+      waOpenLink: "Open WhatsApp",
       mute: "Mute chat sounds",
       unmute: "Unmute chat sounds",
       placeholder: "Ask us anything",
@@ -205,6 +216,11 @@ window.__gotchaShopifyChatApp = function (boot) {
       cartDisabled: "Add to cart is switched off for this store right now.",
       cartSessionExpired: "This chat session has expired. Refresh the page and try again.",
       cartStoreBusy: "The store did not answer. Please try again in a moment.",
+      notForSale: "This product isn't for sale right now.",
+      outOfStock: "This one is sold out.",
+      chooseVariantFirst: "Choose an option first.",
+      variantGone: "That option isn't available anymore.",
+      chooseOnPage: "Opening the product page to choose the options.",
       viewProduct: "View product",
       viewCart: "View cart",
       keepShopping: "Keep shopping",
@@ -228,6 +244,17 @@ window.__gotchaShopifyChatApp = function (boot) {
       online: "זמינים",
       offline: "לא זמינים",
       close: "סגירת הצ׳אט",
+      replies: "עונה מיד",
+      minimise: "מזעור",
+      newChat: "שיחה חדשה",
+      dock: "הצמדה לצד המסך",
+      undock: "ביטול ההצמדה",
+      continueWa: "המשך בוואטסאפ",
+      waTitle: "דברו איתנו",
+      waSub: "כתבו כאן ונמשיך בוואטסאפ.",
+      waPlaceholder: "הקלידו הודעה",
+      waOpening: "ממשיכים בוואטסאפ",
+      waOpenLink: "פתיחת וואטסאפ",
       mute: "השתקת צלילי הצ׳אט",
       unmute: "ביטול השתקה",
       placeholder: "אפשר לשאול אותנו הכל",
@@ -250,6 +277,11 @@ window.__gotchaShopifyChatApp = function (boot) {
       cartDisabled: "ההוספה לסל כבויה בחנות הזו כרגע.",
       cartSessionExpired: "החיבור לצ׳אט פג. רעננו את הדף ונסו שוב.",
       cartStoreBusy: "החנות לא הגיבה. אפשר לנסות שוב עוד רגע.",
+      notForSale: "המוצר הזה לא למכירה כרגע.",
+      outOfStock: "המוצר הזה אזל מהמלאי.",
+      chooseVariantFirst: "צריך לבחור אפשרות קודם.",
+      variantGone: "האפשרות הזו כבר לא זמינה.",
+      chooseOnPage: "פותחים את דף המוצר כדי לבחור אפשרויות.",
       viewProduct: "למוצר",
       viewCart: "לסל הקניות",
       keepShopping: "להמשיך לגלוש",
@@ -280,6 +312,14 @@ window.__gotchaShopifyChatApp = function (boot) {
         ? "he"
         : "en";
   var T = STRINGS[lang] || STRINGS.en;
+
+  // ── Look and "Continue on WhatsApp" (website widget, stage B) ──
+  // The look is the merchant's choice; the handoff exists only when the
+  // server says its number can take it AND the host page gave us a way to
+  // ask for the link (the code snippet does; a host without it never shows
+  // the button rather than showing one that cannot work).
+  var LOOK = widget.ux && widget.ux.look === "whatsapp" ? "whatsapp" : "gotcha";
+  var WA_ON = !!(widget.features && widget.features.whatsappHandoff) && typeof boot.whatsappHandoff === "function";
   var BIDI = window.__gotchaBidi;
 
   // The merchant's explicit choice, or "auto". Passed to every per-message
@@ -328,6 +368,8 @@ window.__gotchaShopifyChatApp = function (boot) {
     opened: false,
     lastCursor: null,
     unread: 0,
+    waLink: null, // the WhatsApp link after a handoff, kept in the chat
+    docked: false,
   };
 
   var socket = null;
@@ -445,6 +487,47 @@ window.__gotchaShopifyChatApp = function (boot) {
     }
   }
 
+  /**
+   * The text colour that reads on the main colour: design 7's cream or its
+   * ink, whichever contrasts more. Mirrors inkOn() in chatcenter-widget.js
+   * and frontend-v2/src/lib/brand-mark.ts. The stored contrastColor is not
+   * used for it: Settings never writes it, so it stays #ffffff on a pale
+   * colour.
+   */
+  function inkOn(hex) {
+    var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ""));
+    if (!m) return "#FBF8F3";
+    var lum = function (r, g, b) {
+      var c = [r, g, b].map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    };
+    var l = lum(parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16));
+    var cream = (lum(251, 248, 243) + 0.05) / (l + 0.05);
+    var ink = (l + 0.05) / (lum(43, 38, 34) + 0.05);
+    return cream >= ink ? "#FBF8F3" : "#2B2622";
+  }
+
+  /** The brand's initial: the server's (widget.brand), else the assistant name's first letter or digit. */
+  function brandInitial() {
+    if (widget.brand && widget.brand.initial) return String(widget.brand.initial);
+    var name = String((widget.brand && widget.brand.name) || welcome.assistantName || "");
+    var letter = Array.from(name).filter(function (ch) { return /[\p{L}\p{N}]/u.test(ch); })[0] || "";
+    return letter.toUpperCase();
+  }
+
+  /** The disc's wordmark: the brand up to 16 letters of whole words (frontend-v2 brandMark().logo). */
+  function brandWordmark() {
+    var raw = String((widget.brand && widget.brand.name) || welcome.assistantName || "");
+    var head = (raw.split(/\s[-|·:\u2013\u2014]\s|\s*[|·]\s*/)[0] || raw).trim().toUpperCase();
+    var logo = "";
+    head.split(/\s+/).some(function (word) {
+      if (logo && (logo + " " + word).length > 16) return true;
+      logo = logo ? logo + " " + word : word;
+      return false;
+    });
+    return logo.replace(/[\s\-|·:,;\u2013\u2014]+$/, "");
+  }
+
   // ── Styles ──────────────────────────────────────────────────────
 
   var radius = Math.max(0, Math.min(28, Number(appearance.cornerRadius) || 20));
@@ -452,7 +535,9 @@ window.__gotchaShopifyChatApp = function (boot) {
   var onBrand = appearance.contrastColor;
   var side = appearance.launcherPosition === "left" ? "left" : "right";
 
-  var css = [
+  // A function, not a constant: the direction it lays out in changes when
+  // the conversation turns out to be in another language (W10).
+  function buildCss() { return [
     // `el.hidden = true` only hides anything because of the UA stylesheet's
     // `[hidden]{display:none}` - the weakest rule there is. Every element
     // below that sets its own `display` (the panel is `display:flex`) beat
@@ -834,10 +919,172 @@ window.__gotchaShopifyChatApp = function (boot) {
     "  .panel,.card,.bub{border:1px solid CanvasText;}",
     "  .btn-p,.snd{border:1px solid ButtonText;}",
     "}",
-  ].join("\n");
+
+    // ── "Continue on WhatsApp" in the GOTCHA look: a chip beside close ──
+    ".wa{position:absolute;top:var(--s2);" + (dir === "rtl" ? "left" : "right") + ":calc(var(--s2) + 40px);z-index:6;",
+    "  width:32px;height:32px;border-radius:50%;border:0;background:#25D366;color:#fff;cursor:pointer;",
+    "  display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(15,23,42,.18);}",
+    ".wa svg{width:18px;height:18px;fill:currentColor;}",
+    ".wa:focus-visible{outline:2px solid #25D366;outline-offset:3px;}",
+    ".wa-note{align-self:center;margin:var(--s2) 0;font-size:12.5px;color:#475569;text-align:center;}",
+    ".wa-note a{color:#008069;font-weight:600;}",
+
+    // ── The WhatsApp look ──
+    // A green header in every view (no hero), the beige chat surface,
+    // WhatsApp's bubbles, a pill composer and a round green send.
+    ".panel[data-look='whatsapp'] .hero,.panel[data-look='whatsapp'] .wel-av,.panel[data-look='whatsapp'] .wel-lg,.panel[data-look='whatsapp'] .wa{display:none!important;}",
+    ".panel[data-look='whatsapp'] .hd{display:flex!important;background:#008069;color:#fff;border-bottom:0;}",
+    ".panel[data-look='whatsapp'] .hd-nm{color:#fff;}",
+    ".panel[data-look='whatsapp'] .hd-st{color:rgba(255,255,255,.88);}",
+    ".panel[data-look='whatsapp'] .hd-st .dot{display:none;}",
+    ".panel[data-look='whatsapp'] .hd-av{border-radius:50%;background:#fff;}",
+    ".panel[data-look='whatsapp'] .hd-mono{color:#008069;}",
+    // WhatsApp opens on the greeting alone; the visitor writes their own question.
+    ".panel[data-look='whatsapp'] .sug{display:none!important;}",
+    ".panel[data-look='whatsapp'] .x{color:#fff;}",
+    ".panel[data-look='whatsapp'] .x::before{background:transparent;}",
+    ".panel[data-look='whatsapp'] .bd{background:#EFEAE2;padding-top:var(--s4)!important;}",
+    ".panel[data-look='whatsapp'] .wel{padding-top:0!important;}",
+    ".panel[data-look='whatsapp'] .wel-h{display:inline-block;background:#fff;color:#111b21;font-size:14.5px;font-weight:400;",
+    "  padding:8px 12px;border-radius:8px;box-shadow:0 1px .5px rgba(11,20,26,.13);margin:0;}",
+    ".panel[data-look='whatsapp'] .bub{border-radius:8px;box-shadow:0 1px .5px rgba(11,20,26,.13);}",
+    ".panel[data-look='whatsapp'] .row[data-me='0'] .bub{background:#fff;color:#111b21;}",
+    ".panel[data-look='whatsapp'] .row[data-me='1'] .bub{background:#D9FDD3;color:#111b21;}",
+    ".panel[data-look='whatsapp'] .ta{border-radius:22px;border-color:transparent;background:#fff;}",
+    ".panel[data-look='whatsapp'] .ft{background:#EFEAE2;}",
+    ".panel[data-look='whatsapp'] .snd{border-radius:50%;background:#00a884;color:#fff;}",
+    // On a desktop the WhatsApp panel hugs the conversation, as WhatsApp's own
+    // web widget does, and grows (then scrolls) with it.
+    "@media (min-width: 561px){.panel[data-look='whatsapp'],.panel[data-look='whatsapp'][data-view='welcome']{height:auto;min-height:0;max-height:min(640px, calc(100vh - 120px));}",
+    "  .panel[data-look='whatsapp'] .bd{min-height:96px;}}",
+    // The greeting is a bubble on the business's side, not a full-width title.
+    ".panel[data-look='whatsapp'] .wel,.panel[data-look='whatsapp'] .wel-cp{align-items:flex-start;}",
+    ".panel[data-look='whatsapp'] .wel-h{max-width:84%;}",
+
+    // ── Design 7 ("GOTCHA Widgets on Store"): the chat widget ──
+    //
+    // Fixed geometry (supervisor-approved): 400 × min(680), radius 22, 96px
+    // up and 22px in from the bubble's side, on #FBF8F3. The legacy editor's
+    // corner radius, hero height, fade and avatar size are not read.
+    "@media (min-width: 561px){",
+    "  .panel[data-look='gotcha']{bottom:96px;" + side + ":22px;width:400px;max-width:min(400px, calc(100vw - 44px));",
+    "    height:min(680px, calc(100vh - 120px));border-radius:22px;",
+    "    box-shadow:0 0 0 1px rgba(43,38,34,.08),0 2px 4px rgba(43,38,34,.04),0 28px 64px -12px rgba(43,38,34,.30);}",
+    "  .panel[data-look='gotcha'][data-view='welcome']{height:min(680px, calc(100vh - 120px));min-height:0;max-height:none;}",
+    "}",
+    ".panel[data-look='gotcha']{background:#FBF8F3;color:#2B2622;font:400 15px/1.5 Heebo,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;}",
+    // Header (the conversation): a 38px avatar with the initial and the dot,
+    // the name and who answers, then the tools.
+    ".panel[data-look='gotcha'] .hd{min-height:62px;max-height:none;gap:11px;padding-block:12px;padding-inline:18px var(--tools, 56px);",
+    "  border-bottom:1px solid #EEE7DC;background:#FBF8F3;}",
+    ".panel[data-look='gotcha'] .hd-av{position:relative;width:38px;height:38px;border-radius:50%;background:" + brand + ";color:" + inkOn(brand) + ";",
+    "  display:flex;align-items:center;justify-content:center;overflow:visible;",
+    "  font:500 22px/1 'Cormorant Garamond',Georgia,'Times New Roman',serif;}",
+    ".panel[data-look='gotcha'] .hd-dot{position:absolute;bottom:0;left:0;width:11px;height:11px;box-sizing:border-box;border-radius:50%;",
+    "  background:#5FA578;border:2px solid #FBF8F3;}",
+    ".panel[data-look='gotcha'] .hd-nm{font-size:15.5px;font-weight:600;line-height:1.2;letter-spacing:-.005em;color:#2B2622;}",
+    ".panel[data-look='gotcha'] .hd-st{font-size:12.5px;color:#8A7A6C;margin-top:2px;}",
+    ".panel[data-look='gotcha'] .hd-st .dot{display:none;}",
+    // The tools: WhatsApp, a new conversation, mute, minimise. On the cover
+    // they are glass circles; in the header, quiet squares.
+    ".panel[data-look='gotcha'] .tools{position:absolute;z-index:6;display:flex;gap:6px;top:15px;" + (dir === "rtl" ? "left" : "right") + ":12px;}",
+    ".panel[data-look='gotcha'] .tl{position:relative;width:32px;height:32px;border-radius:9px;border:0;background:transparent;color:#5A4E45;",
+    "  display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;transition:background .15s ease;}",
+    ".panel[data-look='gotcha'] .tl:hover{background:#F1EAE0;}",
+    ".panel[data-look='gotcha'] .tl:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
+    ".panel[data-look='gotcha'] .tl svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}",
+    ".panel[data-look='gotcha'] .tl[data-act='whatsapp'] svg{fill:#25D366;stroke:none;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tools{top:12px;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tl{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.78);color:#2B2622;",
+    "  box-shadow:0 2px 8px rgba(43,38,34,.08);}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tl:hover{background:#fff;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tl[data-act='new']{display:none;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .hd{display:none;}",
+    // Welcome: a 168px cover dissolving into the widget, the brand's disc
+    // over its edge, the name, and the opening questions as rows.
+    ".panel[data-look='gotcha'][data-view='welcome'] .bd{padding:0;}",
+    ".panel[data-look='gotcha'] .cv{position:relative;height:168px;flex:none;overflow:hidden;background:#F1ECE8;}",
+    ".panel[data-look='gotcha'] .cv-m{display:block;width:100%;height:100%;object-fit:cover;}",
+    ".panel[data-look='gotcha'] .cv-fd{position:absolute;left:0;right:0;bottom:0;height:96px;pointer-events:none;",
+    "  background:linear-gradient(180deg,rgba(251,248,243,0) 0%,rgba(251,248,243,.85) 62%,#FBF8F3 100%);}",
+    ".panel[data-look='gotcha'] .disc{position:relative;z-index:2;width:100px;height:100px;margin:-56px auto 0;border-radius:50%;background:#fff;",
+    "  box-shadow:0 0 0 1px rgba(43,38,34,.05),0 14px 34px rgba(43,38,34,.14);",
+    "  display:flex;align-items:center;justify-content:center;color:#2B2622;flex:none;}",
+    ".panel[data-look='gotcha'] .disc img{max-width:64px;max-height:64px;object-fit:contain;}",
+    ".panel[data-look='gotcha'] .disc-wm{font:500 15px/1.15 'Cormorant Garamond',Georgia,'Times New Roman',serif;letter-spacing:.18em;",
+    "  text-align:center;max-width:84px;}",
+    ".panel[data-look='gotcha'] .disc-wm[data-fit='m']{font-size:13px;}",
+    ".panel[data-look='gotcha'] .disc-wm[data-fit='s']{font-size:11px;letter-spacing:.12em;}",
+    ".panel[data-look='gotcha'] .disc-wm[data-fit='initials']{font-size:30px;letter-spacing:.04em;}",
+    ".panel[data-look='gotcha'] .disc-on{position:absolute;bottom:4px;left:4px;width:20px;height:20px;box-sizing:border-box;border-radius:50%;",
+    "  background:#4FB06A;border:3px solid #fff;box-shadow:0 0 0 1px rgba(79,176,106,.35);}",
+    ".panel[data-look='gotcha'] .hd-dot::after,.panel[data-look='gotcha'] .disc-on::after{content:'';position:absolute;inset:-3px;border-radius:50%;",
+    "  background:rgba(80,190,100,.4);animation:gpulse 1.8s ease-out infinite;pointer-events:none;}",
+    "@keyframes gpulse{0%{transform:scale(1);opacity:.9}70%{transform:scale(2.8);opacity:0}100%{transform:scale(2.8);opacity:0}}",
+    ".panel[data-look='gotcha'] .disc-nm{margin-top:10px;text-align:center;font-size:13px;color:#8A7A6C;}",
+    ".panel[data-look='gotcha'] .gw{display:flex;flex-direction:column;}",
+    ".panel[data-look='gotcha'] .gw-in{padding:16px 20px 4px;display:flex;flex-direction:column;gap:14px;}",
+    ".panel[data-look='gotcha'] .gw-in .wel-s{margin:0 auto;text-align:center;color:#8A7A6C;}",
+    ".panel[data-look='gotcha'] .qs{display:flex;flex-direction:column;}",
+    ".panel[data-look='gotcha'] .q{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:12px 0;border:0;",
+    "  border-top:1px solid #ECE4D8;border-radius:0;background:none;color:#2B2622;font:inherit;font-size:14.5px;line-height:1.4;",
+    "  text-align:start;cursor:pointer;transition:color .15s ease;}",
+    ".panel[data-look='gotcha'] .q:first-child{border-top:0;}",
+    ".panel[data-look='gotcha'] .q:hover{color:#8A5240;}",
+    ".panel[data-look='gotcha'] .q:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
+    ".panel[data-look='gotcha'] .q-t{flex:1;min-width:0;}",
+    ".panel[data-look='gotcha'] .q svg{flex:none;width:16px;height:16px;fill:none;stroke:#B3A698;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}",
+    ".panel[data-look='gotcha'] .gw-in .sug-more{align-self:center;}",
+    // Messages: the visitor's in the main colour; the assistant's as text.
+    ".panel[data-look='gotcha'] .bd{padding:18px 20px 12px;}",
+    ".panel[data-look='gotcha'] .msgs{gap:14px;}",
+    ".panel[data-look='gotcha'] .row[data-me='1'] .bub{background:" + brand + ";color:" + inkOn(brand) + ";max-width:80%;padding:10px 14px;",
+    "  border-radius:16px;border-end-end-radius:4px;line-height:1.5;}",
+    ".panel[data-look='gotcha'] .row[data-me='0'] .bub{background:none;color:#3A322D;max-width:92%;padding:0;border-radius:0;line-height:1.65;}",
+    ".panel[data-look='gotcha'] .typ{background:none;padding:2px 0;}",
+    ".panel[data-look='gotcha'] .typ i{background:#A99C8E;}",
+    ".panel[data-look='gotcha'] .who{color:#A99C8E;}",
+    // The composer: a white pill, a round send in the main colour once there is something to send.
+    ".panel[data-look='gotcha'] .ft{border-top:1px solid #EEE7DC;padding:12px 14px 6px;padding-bottom:calc(6px + env(safe-area-inset-bottom));background:#FBF8F3;}",
+    ".panel[data-look='gotcha'] .cmp{align-items:center;gap:6px;background:#fff;border:1px solid #E6DDD0;border-radius:99px;",
+    "  padding-block:5px;padding-inline:18px 5px;}",
+    ".panel[data-look='gotcha'] .ta{border:0;background:transparent;border-radius:0;padding:10px 0;min-height:40px;font-size:16px;color:#2B2622;}",
+    "@media (min-width: 561px){.panel[data-look='gotcha'] .ta{font-size:14.5px;}}",
+    ".panel[data-look='gotcha'] .ta:focus{border:0;box-shadow:none;}",
+    ".panel[data-look='gotcha'] .cmp:focus-within{border-color:" + brand + ";}",
+    ".panel[data-look='gotcha'] .snd{width:40px;height:40px;border-radius:50%;background:" + brand + ";color:" + inkOn(brand) + ";}",
+    ".panel[data-look='gotcha'] .snd:disabled{opacity:1;background:#D6CCBF;color:#FBF8F3;}",
+    ".panel[data-look='gotcha'] .snd svg{width:18px;height:18px;stroke-width:1.9;}",
+    ".panel[data-look='gotcha'] .sub{justify-content:center;gap:12px;margin-top:4px;}",
+    // Powered by, with our logo, linked.
+    ".pwl{display:flex;align-items:center;justify-content:center;gap:6px;padding:2px 0 0;color:#A99C8E;",
+    "  font-size:10.5px;line-height:1;text-decoration:none;opacity:.9;}",
+    // Design 7's logo is 30px tall with padding round it; ours is cropped to
+    // the mark, so the same visible size (12px, 36px → 14px) is set directly.
+    ".pwl img{height:12px;width:auto;display:block;opacity:.7;}",
+    ".panel[data-look='whatsapp'] .pwl{color:#667781;font-size:11px;}",
+    ".panel[data-look='whatsapp'] .pwl img{height:14px;opacity:1;}",
+    // Docked (design 7): the full height of the screen, flush to its side,
+    // the page making room beside it.
+    "@media (min-width: 900px){",
+    "  .panel[data-look='gotcha'][data-docked='1']{top:0;bottom:0;" + side + ":0;width:400px;max-width:400px;height:100vh;",
+    "    border-radius:0;animation:none;box-shadow:" + (side === "right" ? "-1px 0 0 #E6DDD0,-12px 0 40px rgba(43,38,34,.08)" : "1px 0 0 #E6DDD0,12px 0 40px rgba(43,38,34,.08)") + ";}",
+    "  .panel[data-look='gotcha'][data-docked='1'][data-view='welcome']{height:100vh;}",
+    "}",
+    ".panel[data-look='gotcha'] .tl[data-act='dock'][aria-pressed='true']{background:#EDE5D9;}",
+    ".panel[data-look='gotcha'][data-view='welcome'] .tl[data-act='dock'][aria-pressed='true']{background:#fff;}",
+    "@media (max-width: 899px){.panel[data-look='gotcha'] .tl[data-act='dock']{display:none;}}",
+    // Product cards (design 7): warm rules, the main colour's ink on its buttons.
+    ".panel[data-look='gotcha'] .card{border-color:#ECE4D8;border-radius:14px;}",
+    ".panel[data-look='gotcha'] .btn-p{background:" + brand + ";color:" + inkOn(brand) + ";border-radius:9px;}",
+    ".panel[data-look='gotcha'] .btn-s{border-color:#E3DACE;color:#2B2622;border-radius:9px;}",
+    ".panel[data-look='gotcha'] .chip{border-color:#E3DACE;}",
+    ".panel[data-look='gotcha'] .chip[aria-pressed='true']{color:" + inkOn(brand) + ";}",
+    "@media (prefers-reduced-motion: reduce){.panel[data-look='gotcha'] .hd-dot::after,.panel[data-look='gotcha'] .disc-on::after{animation:none;opacity:0}.panel[data-look='gotcha'] .q,.panel[data-look='gotcha'] .tl{transition:none}}",
+  ].join("\n"); }
 
   var styleNode = document.createElement("style");
-  styleNode.textContent = css;
+  styleNode.textContent = buildCss();
   shadow.appendChild(styleNode);
 
   // ── Panel shell ─────────────────────────────────────────────────
@@ -858,10 +1105,16 @@ window.__gotchaShopifyChatApp = function (boot) {
     hidden: "",
   });
 
+  panel.setAttribute("data-look", LOOK);
   var header = el("div", "hd");
   var logo = safeUrl(appearance.logoUrl) || safeUrl(appearance.avatarUrl);
   var headerAvatar;
-  if (logo) {
+  if (LOOK === "gotcha") {
+    // Design 7: the brand's initial on the main colour, and the dot while someone answers.
+    headerAvatar = el("div", "hd-av", brandInitial());
+    attr(headerAvatar, { "aria-hidden": "true" });
+    if (boot.availability !== "offline") headerAvatar.appendChild(el("span", "hd-dot"));
+  } else if (logo) {
     headerAvatar = document.createElement("img");
     headerAvatar.className = "hd-av";
     headerAvatar.alt = "";
@@ -874,7 +1127,9 @@ window.__gotchaShopifyChatApp = function (boot) {
   }
 
   var headerText = el("div", "hd-tx");
-  var headerName = el("div", "hd-nm", welcome.assistantName || "");
+  // In the WhatsApp look with a working handoff, the header says what the
+  // panel does ("Chat with us / write here and we continue on WhatsApp").
+  var headerName = el("div", "hd-nm", LOOK === "whatsapp" && WA_ON ? T.waTitle : welcome.assistantName || "");
   var headerStatus = el("div", "hd-st");
   var statusDot = el("span", "dot");
   var statusText = el("span", null, "");
@@ -923,6 +1178,97 @@ window.__gotchaShopifyChatApp = function (boot) {
   // header to live in, and duplicating it would mean two handlers.
   panel.appendChild(closeBtn);
 
+  var WA_ICON =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.2.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.1.6a2.7 2.7 0 0 0 1.8-1.3 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z"/></svg>';
+  var waBtn = null;
+  if (WA_ON && LOOK === "gotcha") {
+    waBtn = el("button", "wa");
+    attr(waBtn, { type: "button", "aria-label": T.continueWa, title: T.continueWa, "data-act": "whatsapp" });
+    waBtn.innerHTML = WA_ICON;
+    on(waBtn, "click", function () { continueOnWhatsapp(""); });
+    panel.appendChild(waBtn);
+  }
+
+  // Design 7's tools, in one row at the panel's top corner: WhatsApp, a new
+  // conversation (where the host can start one), mute, and minimise - the
+  // one close control, so `data-act="close"` still names it. Glass circles
+  // over the cover, quiet squares in the header.
+  var dockBtn = null;
+  var newBtn = null;
+  if (LOOK === "gotcha") {
+    var tools = el("div", "tools");
+    closeBtn.className = "tl";
+    attr(closeBtn, { "aria-label": T.minimise, title: T.minimise });
+    closeBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+    if (waBtn) { waBtn.className = "tl"; tools.appendChild(waBtn); }
+    if (typeof boot.resetConversation === "function") {
+      newBtn = el("button", "tl");
+      attr(newBtn, { type: "button", "aria-label": T.newChat, title: T.newChat, "data-act": "new" });
+      newBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>';
+      on(newBtn, "click", newConversation);
+      tools.appendChild(newBtn);
+    }
+    // Docking needs a host that can step its bubble aside (the snippet), and
+    // a screen wide enough to keep the page beside the panel.
+    if (typeof boot.onDock === "function") {
+      dockBtn = el("button", "tl");
+      attr(dockBtn, { type: "button", "data-act": "dock" });
+      dockBtn.innerHTML = side === "right"
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>';
+      on(dockBtn, "click", function () { setDocked(!S.docked); });
+      tools.appendChild(dockBtn);
+      paintDock();
+    }
+    if (muteBtn) { muteBtn.className = "tl"; tools.appendChild(muteBtn); }
+    tools.appendChild(closeBtn);
+    panel.appendChild(tools);
+    // The header keeps its text clear of them.
+    panel.style.setProperty("--tools", tools.children.length * 38 + 12 + "px");
+  }
+
+  /**
+   * Design 7's docking: the panel takes the full height of the screen on
+   * its side and the page makes room for it - a padding on <html>, restored
+   * to exactly what it was. Undone by Minimise, Escape, and a screen too
+   * narrow to keep the page beside it.
+   */
+  var pagePad = null;
+  var padSide = side === "right" ? "paddingRight" : "paddingLeft";
+  function wideEnough() {
+    try { return window.matchMedia("(min-width: 900px)").matches; } catch (e) { return false; }
+  }
+  function paintDock() {
+    if (!dockBtn) return;
+    var label = S.docked ? T.undock : T.dock;
+    attr(dockBtn, { "aria-label": label, title: label, "aria-pressed": S.docked ? "true" : "false" });
+  }
+  function setDocked(docked) {
+    docked = !!docked && wideEnough();
+    if (docked === !!S.docked) return;
+    S.docked = docked;
+    var root = document.documentElement;
+    if (docked) {
+      pagePad = { value: root.style[padSide], transition: root.style.transition };
+      root.style.transition = "padding .32s ease";
+      root.style[padSide] = "400px";
+      panel.setAttribute("data-docked", "1");
+    } else {
+      panel.removeAttribute("data-docked");
+      if (pagePad) {
+        root.style[padSide] = pagePad.value;
+        var before = pagePad.transition;
+        setTimeout(function () { root.style.transition = before; }, 400);
+      }
+      pagePad = null;
+    }
+    paintDock();
+    if (typeof boot.onDock === "function") boot.onDock(docked);
+  }
+  window.addEventListener("resize", function () {
+    if (S.docked && !wideEnough()) setDocked(false);
+  });
+
   var banner = el("div", "banner");
   banner.hidden = true;
 
@@ -941,8 +1287,8 @@ window.__gotchaShopifyChatApp = function (boot) {
   attr(textarea, {
     rows: "1",
     dir: "auto",
-    placeholder: T.placeholder,
-    "aria-label": T.placeholder,
+    placeholder: LOOK === "whatsapp" ? T.waPlaceholder : T.placeholder,
+    "aria-label": LOOK === "whatsapp" ? T.waPlaceholder : T.placeholder,
     maxlength: "2000",
   });
   var sendBtn = el("button", "snd");
@@ -958,7 +1304,16 @@ window.__gotchaShopifyChatApp = function (boot) {
   var humanBtn = el("button", "lnk", T.talkToHuman);
   attr(humanBtn, { type: "button" });
   if (!features.humanHandoff) humanBtn.hidden = true;
-  var poweredBy = el("span", "pw", appearance.showPoweredBy ? T.poweredBy : "");
+  // Design 7: "Powered by" and our logo, linked - in both looks.
+  var poweredBy = document.createElement("a");
+  poweredBy.className = "pwl";
+  attr(poweredBy, { href: "https://gotcha.co.il", target: "_blank", rel: "noopener", dir: "ltr", "aria-label": T.poweredBy });
+  poweredBy.appendChild(el("span", null, "Powered by"));
+  var poweredLogo = document.createElement("img");
+  poweredLogo.src = ASSETS + "/widget/gotcha-line-dark.png";
+  poweredLogo.alt = "";
+  poweredBy.appendChild(poweredLogo);
+  if (!appearance.showPoweredBy) poweredBy.hidden = true;
   subRow.appendChild(humanBtn);
   subRow.appendChild(poweredBy);
 
@@ -972,6 +1327,82 @@ window.__gotchaShopifyChatApp = function (boot) {
   shadow.appendChild(panel);
 
   els = { panel: panel, body: body, footer: footer, textarea: textarea, sendBtn: sendBtn };
+
+  // ── The visitor's language (W10) ───────────────────────────────
+  //
+  // The widget starts in the page's language. The first reply that says the
+  // conversation is in another one (the message answer's `locale`) switches
+  // the chrome to it - strings, direction, labels - once, and asks for the
+  // merchant's texts in it (/texts: only the ones written in another
+  // language; the assistant's name is never translated).
+  var langSwitched = false;
+
+  function relabel() {
+    var typeLabel = LOOK === "whatsapp" ? T.waPlaceholder : T.placeholder;
+    attr(textarea, { placeholder: typeLabel, "aria-label": typeLabel });
+    attr(sendBtn, { "aria-label": T.send });
+    sendBtn.innerHTML =
+      dir === "rtl"
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4M10 6l-6 6 6 6"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16M14 6l6 6-6 6"/></svg>';
+    humanBtn.textContent = T.talkToHuman;
+    attr(poweredBy, { "aria-label": T.poweredBy });
+    if (LOOK === "gotcha") attr(closeBtn, { "aria-label": T.minimise, title: T.minimise });
+    else attr(closeBtn, { "aria-label": T.close });
+    if (waBtn) attr(waBtn, { "aria-label": T.continueWa, title: T.continueWa });
+    if (newBtn) attr(newBtn, { "aria-label": T.newChat, title: T.newChat });
+    if (LOOK === "whatsapp" && WA_ON) headerName.textContent = T.waTitle;
+    paintDock();
+    paintMute();
+  }
+
+  function overlayTexts(texts) {
+    if (!texts || typeof texts !== "object") return;
+    var W = (widget.ux && widget.ux.welcome) || null;
+    Object.keys(texts).forEach(function (key) {
+      var value = texts[key];
+      if (typeof value !== "string" || !value.trim()) return;
+      if (key === "welcome.title") {
+        if (W) W.title = value;
+        welcome.headline = value;
+      } else if (key === "welcome.subtitle") {
+        if (W) W.subtitle = value;
+        welcome.subline = value;
+      } else if (key === "offline.message") {
+        if (widget.offline) widget.offline.message = value;
+      } else {
+        var m = /^welcome\.suggestedQuestions\.(\d+)$/.exec(key);
+        if (!m) return;
+        var i = Number(m[1]);
+        if (W && W.suggestedQuestions && i < W.suggestedQuestions.length) {
+          W.suggestedQuestions = W.suggestedQuestions.slice();
+          W.suggestedQuestions[i] = value;
+        }
+        if (welcome.suggestedQuestions && i < welcome.suggestedQuestions.length) {
+          welcome.suggestedQuestions = welcome.suggestedQuestions.slice();
+          welcome.suggestedQuestions[i] = value;
+        }
+      }
+    });
+  }
+
+  function switchLanguage(next) {
+    if (langSwitched || (next !== "he" && next !== "en") || next === lang) return;
+    langSwitched = true;
+    lang = next;
+    T = STRINGS[lang] || STRINGS.en;
+    dir = BIDI.resolveMessageDirection({ override: dirOverride, conversationLocale: lang, widgetLocale: null }).direction;
+    attr(panel, { dir: dir, lang: lang });
+    styleNode.textContent = buildCss();
+    relabel();
+    render();
+    api("/texts", { locale: lang })
+      .then(function (res) {
+        overlayTexts(res && res.data && res.data.texts);
+        render();
+      })
+      .catch(function () {});
+  }
 
   // ── Networking ──────────────────────────────────────────────────
 
@@ -1051,7 +1482,10 @@ window.__gotchaShopifyChatApp = function (boot) {
         socket = io(API, {
           path: "/socket.io",
           transports: ["websocket", "polling"],
-          auth: { visitorToken: token(), conversationId: S.conversationId },
+          // A host whose visitors prove themselves differently (the code
+          // snippet's session token) says how; the storefront's signed token
+          // otherwise.
+          auth: typeof boot.socketAuth === "function" ? boot.socketAuth() : { visitorToken: token(), conversationId: S.conversationId },
           reconnectionDelay: 800,
           reconnectionDelayMax: 8000,
           // Bounded on purpose. On a network that blocks websockets the
@@ -1072,7 +1506,7 @@ window.__gotchaShopifyChatApp = function (boot) {
           if (!payload || payload.conversationId !== S.conversationId) return;
           // The only genuinely live delivery path, and so the only one
           // allowed to make a sound.
-          ingest([payload.message], true);
+          ingest(typeof boot.normalize === "function" ? boot.normalize([payload.message]) : [payload.message], true);
         });
         socket.on("visitor:conversation", function (payload) {
           if (!payload || payload.conversationId !== S.conversationId) return;
@@ -1193,7 +1627,11 @@ window.__gotchaShopifyChatApp = function (boot) {
   function renderStatus() {
     var offline = boot.availability === "offline";
     statusDot.setAttribute("data-off", offline ? "1" : "0");
-    statusText.textContent = offline ? T.offline : T.online;
+    statusText.textContent =
+      LOOK === "whatsapp" && WA_ON ? T.waSub
+        : offline ? T.offline
+        : LOOK === "gotcha" ? (S.awaitingReply ? T.waitingAi : T.replies)
+        : T.online;
   }
 
   function renderBanner() {
@@ -1222,7 +1660,8 @@ window.__gotchaShopifyChatApp = function (boot) {
     renderStatus();
     renderBanner();
 
-    var inWelcome = !S.messages.length && !S.pending.length && S.phase === "welcome";
+    // A handoff ends the welcome screen: the WhatsApp link belongs in the chat.
+    var inWelcome = !S.messages.length && !S.pending.length && S.phase === "welcome" && !S.waLink;
     setPanelView(inWelcome ? "welcome" : "conversation");
 
     if (S.phase === "offline_form") { setPanelView("conversation"); renderOfflineForm(); return; }
@@ -1336,7 +1775,133 @@ window.__gotchaShopifyChatApp = function (boot) {
     try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; }
   }
 
+  /**
+   * Design 7's welcome: a 168px cover (the merchant's image, or the plain
+   * cover colour) dissolving into the widget over 96px, the brand's disc
+   * over its edge with the green dot, the assistant's name, and the opening
+   * questions as rows. No title: the questions are the opening.
+   */
+  function renderWelcomeG() {
+    footer.hidden = false;
+    var W = (boot.widget && boot.widget.ux && boot.widget.ux.welcome) || null;
+    var wrap = el("div", "gw");
+    var cover = el("div", "cv");
+    var h = (boot.widget && boot.widget.ux && boot.widget.ux.hero) || null;
+    var url = h && h.mediaType !== "none" ? safeUrl(h.mediaUrl) : null;
+    if (url) {
+      var media;
+      if (h.mediaType === "video") {
+        media = document.createElement("video");
+        media.muted = true;
+        media.defaultMuted = true;
+        media.setAttribute("muted", "");
+        media.setAttribute("playsinline", "");
+        media.playsInline = true;
+        media.loop = h.videoLoop !== false;
+        media.preload = "none";
+        var poster = safeUrl(h.posterUrl);
+        if (poster) media.poster = poster;
+        media.src = url;
+        if (!reducedMotion() && h.videoAutoplay !== false) {
+          var playing = media.play();
+          if (playing && playing.catch) playing.catch(function () {});
+        }
+        heroVideo = media;
+      } else {
+        media = document.createElement("img");
+        media.alt = "";
+        media.decoding = "async";
+        media.src = url;
+      }
+      media.className = "cv-m";
+      if (h.focalPoint) media.style.objectPosition = h.focalPoint;
+      // A dead link leaves the plain cover, never a broken-image glyph.
+      media.onerror = function () { if (media.parentNode) media.parentNode.removeChild(media); };
+      cover.appendChild(media);
+    }
+    cover.appendChild(el("div", "cv-fd"));
+    wrap.appendChild(cover);
+    setPanelHero(true);
+
+    var disc = el("div", "disc");
+    attr(disc, { "aria-hidden": "true" });
+    var wordmark = function () {
+      var mark = brandWordmark();
+      var longest = Math.max.apply(null, [0].concat(mark.split(/\s+/).map(function (w) { return Array.from(w).length; })));
+      var fit = longest <= 5 ? "l" : longest <= 6 ? "m" : longest <= 7 ? "s" : "initials";
+      var text = fit === "initials" ? brandInitial() : mark;
+      var span = el("span", "disc-wm", text);
+      attr(span, { dir: "auto", "data-fit": fit });
+      return span;
+    };
+    var logoUrl = safeUrl(appearance.logoUrl);
+    if (logoUrl) {
+      var img = document.createElement("img");
+      img.alt = "";
+      img.src = logoUrl;
+      img.onerror = function () { if (img.parentNode) disc.replaceChild(wordmark(), img); };
+      disc.appendChild(img);
+    } else {
+      disc.appendChild(wordmark());
+    }
+    if (boot.availability !== "offline") disc.appendChild(el("span", "disc-on"));
+    wrap.appendChild(disc);
+    if (welcome.assistantName) wrap.appendChild(directedEl("div", "disc-nm", welcome.assistantName));
+
+    var inner = el("div", "gw-in");
+    if (boot.availability === "offline" && widget.offline && widget.offline.message) {
+      inner.appendChild(directedEl("p", "wel-s", widget.offline.message));
+    }
+    var questions = (W && W.suggestedQuestions && W.suggestedQuestions.length ? W.suggestedQuestions : welcome.suggestedQuestions) || [];
+    questions = questions.filter(function (q) { return String(q || "").trim(); });
+    if (questions.length) {
+      var list = el("div", "qs sug");
+      attr(list, { role: "group", "aria-label": T.startConversation });
+      var VISIBLE = 3;
+      var hidden = [];
+      var arrow = dir === "rtl"
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>';
+      questions.forEach(function (q, i) {
+        var b = el("button", "q sug-b");
+        attr(b, { type: "button" });
+        b.appendChild(directedEl("span", "q-t", q));
+        b.insertAdjacentHTML("beforeend", arrow);
+        on(b, "click", function () {
+          track("suggested_question_clicked");
+          submit(q);
+        });
+        if (i >= VISIBLE) {
+          b.hidden = true;
+          hidden.push(b);
+        }
+        list.appendChild(b);
+      });
+      inner.appendChild(list);
+      if (hidden.length) {
+        var more = el("button", "sug-more", T.showMore.replace("{n}", String(hidden.length)));
+        attr(more, { type: "button", "aria-expanded": "false" });
+        on(more, "click", function () {
+          hidden.forEach(function (b) { b.hidden = false; });
+          more.remove();
+          if (hidden[0].scrollIntoView) hidden[0].scrollIntoView({ block: "nearest" });
+        });
+        inner.appendChild(more);
+      }
+    }
+    if (boot.availability === "offline" && widget.offline && widget.offline.behavior === "form") {
+      var toForm = el("button", "btn btn-p", T.submit);
+      attr(toForm, { type: "button" });
+      on(toForm, "click", function () { S.phase = "offline_form"; render(); });
+      inner.appendChild(toForm);
+      footer.hidden = true;
+    }
+    wrap.appendChild(inner);
+    clear(body).appendChild(wrap);
+  }
+
   function renderWelcome() {
+    if (LOOK === "gotcha") { renderWelcomeG(); return; }
     footer.hidden = false;
     var wrap = el("div", "wel");
     // Canonical source. `welcome` (the legacy block) is still read by the
@@ -1453,6 +2018,9 @@ window.__gotchaShopifyChatApp = function (boot) {
       previousAuthor = m.author;
     });
     S.pending.forEach(function (p) { list.appendChild(pendingRow(p)); });
+    // After a handoff: the link stays in the chat (a blocked window, or a
+    // visitor who closed WhatsApp and wants it back).
+    if (S.waLink) list.appendChild(waNote(S.waLink));
 
     if (S.awaitingReply && !S.ended) {
       var typing = el("div", "row");
@@ -1694,9 +2262,13 @@ window.__gotchaShopifyChatApp = function (boot) {
         ok.appendChild(el("span", null, "✓ " + T.added));
         card.appendChild(ok);
         var after = el("div", "acts");
-        var cart = el("a", "btn btn-s", T.viewCart);
-        attr(cart, { href: storefrontRoute("cart"), target: "_top" });
-        after.appendChild(cart);
+        // Only where the cart page is known (the storefront's; a web chat
+        // store's is not, so it offers none rather than a guess).
+        if (vState.cartPage) {
+          var cart = el("a", "btn btn-s", T.viewCart);
+          attr(cart, { href: vState.cartPage, target: "_top" });
+          after.appendChild(cart);
+        }
         var keep = el("button", "btn btn-s", T.keepShopping);
         attr(keep, { type: "button" });
         on(keep, "click", function () { vState.done = false; paint(); });
@@ -1836,6 +2408,14 @@ window.__gotchaShopifyChatApp = function (boot) {
     })
       .then(function (res) {
         var v = res.data;
+        // A host whose store is not Shopify completes the line its own way
+        // (the web chat: the store's ?add-to-cart= link, W9c).
+        if (typeof boot.addToCart === "function") {
+          return boot.addToCart(v).then(function (done) {
+            vState.cartPage = done && done.cartPage ? safeUrl(done.cartPage) : null;
+          });
+        }
+        vState.cartPage = storefrontRoute("cart");
         return fetch(storefrontRoute("cart/add.js"), {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -1874,6 +2454,12 @@ window.__gotchaShopifyChatApp = function (boot) {
         repaint();
         scrollToEnd();
         api("/cart/result", { ok: false }).catch(function () {});
+        // An option the link cannot name ("any size"): the product's own page asks it.
+        var code = err && ((err.body && err.body.error) || err.message);
+        var page = safeUrl(product.productUrl);
+        if (code === "choose_on_product_page" && page) {
+          try { window.top.location.href = page; } catch (e) { window.location.href = page; }
+        }
       });
   }
 
@@ -1897,7 +2483,13 @@ window.__gotchaShopifyChatApp = function (boot) {
     if (err.storefront && err.message) return err.message;
     if (err.status === 409 && err.message) return err.message;
     var code = (err.body && err.body.error) || err.message;
-    if (code === "add_to_cart_disabled") return T.cartDisabled;
+    if (code === "add_to_cart_disabled" || code === "cart_disabled") return T.cartDisabled;
+    // The web chat's store (WooCommerce) names its refusals by code (W9c).
+    if (code === "not_for_sale") return T.notForSale;
+    if (code === "out_of_stock") return T.outOfStock;
+    if (code === "choose_variant") return T.chooseVariantFirst;
+    if (code === "variant_not_found" || code === "product_not_found") return T.variantGone;
+    if (code === "choose_on_product_page") return T.chooseOnPage;
     if (code === "session_expired") return T.cartSessionExpired;
     if (code === "unavailable") return T.cartStoreBusy;
     return T.failed;
@@ -2031,7 +2623,11 @@ window.__gotchaShopifyChatApp = function (boot) {
 
   function ensureConversation() {
     if (S.conversationId) return Promise.resolve(S.conversationId);
-    return api("/conversation", {}).then(function (res) {
+    // After "New conversation": the next one is a fresh one, not the open
+    // conversation the server would otherwise resume.
+    var fresh = !!S.fresh;
+    return api("/conversation", fresh ? { fresh: true } : {}).then(function (res) {
+      S.fresh = false;
       var data = res.data || {};
       S.conversationId = data.conversationId;
       if (S.conversationId) store.set("conversation", S.conversationId);
@@ -2043,9 +2639,98 @@ window.__gotchaShopifyChatApp = function (boot) {
     });
   }
 
+  /**
+   * Opens WhatsApp with the message pre-filled (and the code that links the
+   * two conversations). The window is opened synchronously, inside the click,
+   * and pointed at the link once the server answers: a window opened after an
+   * await is what popup blockers block. If it is blocked anyway, the link is
+   * shown in the chat to tap.
+   */
+  function continueOnWhatsapp(text) {
+    var w = null;
+    try { w = window.open("", "_blank"); } catch (e) { w = null; }
+    if (text) {
+      var entry = { clientId: clientId(), body: text, failed: false };
+      S.pending.push(entry);
+      S.phase = "active";
+      render();
+    }
+    ensureConversation()
+      .then(function () { return boot.whatsappHandoff({ locale: lang, text: text || undefined }); })
+      .then(function (data) {
+        var url = data && data.url;
+        if (!url) throw new Error("unavailable");
+        if (w) {
+          try { w.opener = null; } catch (e) {}
+          w.location.href = url;
+        }
+        showWaNote(url, !w);
+        if (text) catchUp();
+        track("whatsapp_handoff");
+      })
+      .catch(function () {
+        if (w) { try { w.close(); } catch (e) {} }
+        if (text && S.pending.length) S.pending[S.pending.length - 1].failed = true;
+        render();
+      });
+  }
+
+  /**
+   * Design 7's "New conversation": the host forgets this visitor's
+   * conversation (only a host that can start a fresh one offers it), and the
+   * widget returns to its welcome. The old conversation stays in the inbox.
+   */
+  function newConversation() {
+    boot.resetConversation();
+    S.fresh = true;
+    if (socket) { try { socket.disconnect(); } catch (e) {} socket = null; }
+    stopPolling();
+    S.messages = [];
+    S.pending = [];
+    S.conversationId = null;
+    S.awaitingReply = false;
+    S.handedOver = false;
+    S.ended = false;
+    S.error = null;
+    S.rateLimited = false;
+    S.waLink = null;
+    S.lastCursor = null;
+    S.phase = "welcome";
+    shownProducts = {};
+    render();
+  }
+
+  function showWaNote(url, blocked) {
+    S.waLink = url;
+    render();
+    if (blocked) {
+      var a = body.querySelector(".wa-note a");
+      if (a) a.focus();
+    }
+  }
+
+  function waNote(url) {
+    var note = el("div", "wa-note");
+    note.appendChild(document.createTextNode(T.waOpening + " "));
+    var a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.textContent = T.waOpenLink;
+    note.appendChild(a);
+    return note;
+  }
+
   function submit(text) {
     var body = String(text || "").trim();
     if (!body || S.ended) return;
+    // The WhatsApp look: "write here and we continue on WhatsApp".
+    if (LOOK === "whatsapp" && WA_ON) {
+      textarea.value = "";
+      autoGrow();
+      continueOnWhatsapp(body);
+      return;
+    }
     var entry = { clientId: clientId(), body: body, failed: false };
     S.pending.push(entry);
     S.phase = "active";
@@ -2067,7 +2752,10 @@ window.__gotchaShopifyChatApp = function (boot) {
           context: boot.context,
         });
       })
-      .then(function () {
+      .then(function (res) {
+        // The server's word on the conversation's language (W10); null keeps it.
+        var said = res && res.data && res.data.locale;
+        if (said) switchLanguage(said);
         // The chime belongs here, not in submit(): it means "delivered",
         // and a send that failed must never sound like one that worked.
         if (boot.playSound) boot.playSound("outgoing", { sendFailed: false });
@@ -2237,7 +2925,10 @@ window.__gotchaShopifyChatApp = function (boot) {
         // character - they had to click back into the box per letter.
         if (boot.preview) return;
         setTimeout(function () {
-          var target = S.phase === "welcome" ? focusables()[0] : textarea;
+          // Design 7's welcome is a composer with questions above it: the
+          // caret goes where the visitor types (the first focusable was the
+          // minimise button).
+          var target = S.phase === "welcome" && LOOK !== "gotcha" ? focusables()[0] : textarea;
           try { (target || closeBtn).focus({ preventScroll: true }); } catch (e) {}
         }, 60);
       });
@@ -2287,6 +2978,8 @@ window.__gotchaShopifyChatApp = function (boot) {
   }
 
   function close(reason) {
+    // A docked panel minimised gives the page its room back.
+    setDocked(false);
     setPanelOpen(false);
     // An explicit shopper close is a decision that outlives this render:
     // nothing may auto-open the panel again for the rest of the page

@@ -1,0 +1,31 @@
+@layer patterns {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ A WINDOW YOU SCROLL INSIDE - the pattern for `PageContainer fill`
+   * ════════════════════════════════════════════════════════════════════════
+   * Omer's rule from the inbox, for every screen of cards: the card takes the
+   * rest of the body's height and its LIST scrolls, so the card has a bottom
+   * and its footer sits at it. Both declarations matter, and the second is the
+   * one that is always forgotten: a flex child will not shrink below its
+   * content without `min-block-size: 0`, and then it pushes the page instead.
+   *
+   *   <PageContainer layout="screen" fill>
+   *     <section className={`${fill.fillCard} …`}>       ← the card
+   *       <header>…</header>
+   *       <ol className={fill.fillScroll}>…</ol>          ← what scrolls
+   *       <p>footer</p>
+   *     </section>
+   */
+  .fillCard {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .fillScroll {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+}

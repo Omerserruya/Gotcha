@@ -17,8 +17,13 @@ import {
   AuditAction,
   getLastLoginBySubject,
   normalizeE164,
-  userMayApprove, readDurableSetting, writeDurableSetting } from "@chatcenter/shared";
+  userMayApprove, readDurableSetting, writeDurableSetting, requirePermission,
+  encryptCredentials,
+} from "@chatcenter/shared";
 import * as invitations from "../services/invitation.service";
+import { resolveInviteRoleStrict, ensureRoleAssignment } from "../services/invite-role.service";
+import { actorOf, inviteRoleRefusal } from "../lib/grant-ceiling";
+import { publicChannelAccount } from "../lib/channel-account-dto";
 
 const router = Router();
 // API-level MFA enforcement: a required-but-unenrolled caller is 403'd here, not
@@ -102,6 +107,10 @@ const inviteAgentSchema = z.object({
   // Zero, one or many departments. Every id is validated against the ACTIVE
   // tenant below - ids arriving from frontend state are never trusted as-is.
   departmentIds: z.array(z.string().min(1)).max(20).optional(),
+  // A TenantRole id, or a built-in keyword ("AGENT", "ADMIN"). Absent means
+  // agent, as before. Resolved against THIS tenant (invite-role.service) and
+  // never above the inviter's own role (lib/grant-ceiling), 2026-10-11.
+  role: z.string().min(1).max(64).optional(),
 });
 
 // Seat limit. Counts ACTIVE members only, so deactivating someone frees their
@@ -127,7 +136,20 @@ router.post(
         return;
       }
     }
-    const result = await invitations.inviteUser(req.tenantId!, email, name, "AGENT");
+    const resolved = await resolveInviteRoleStrict(req.tenantId!, (req.body as { role?: string }).role ?? "AGENT");
+    if (!resolved) {
+      res.status(400).json({ error: "unknown_role", code: "UNKNOWN_ROLE" });
+      return;
+    }
+    const refusal = await inviteRoleRefusal(actorOf(req), req.tenantId!, resolved);
+    if (refusal) {
+      res.status(refusal.status).json({ error: refusal.error, code: refusal.code, ...(refusal.missing ? { missing: refusal.missing } : {}) });
+      return;
+    }
+    const result = await invitations.inviteUser(req.tenantId!, email, name, resolved.coarse);
+    // Both role systems, as every invite path does: the coarse enum above and
+    // the real assignment here.
+    await ensureRoleAssignment(result.user.id, resolved.tenantRoleId, (req as any).user?.userId ?? null);
     if (wantedDepts.length > 0) {
       await prisma.departmentMember.createMany({
         data: wantedDepts.map((departmentId) => ({
@@ -141,7 +163,7 @@ router.post(
     void writeAudit({
       tenantId: req.tenantId!, actorType: "user", actorId: (req as any).user?.userId,
       action: AuditAction.INVITE_CREATED, targetType: "user", targetId: result.user.id,
-      metadata: { email, role: "AGENT", departmentIds: wantedDepts },
+      metadata: { email, role: resolved.coarse, roleId: resolved.tenantRoleId, roleName: resolved.roleName, departmentIds: wantedDepts },
     });
     res.status(201).json(result);
   } catch (err: any) {
@@ -344,10 +366,13 @@ router.post("/settings/channels", requireRole("ADMIN"), validate(createChannelSc
         channel,
         externalId,
         displayName,
-        credentials,
+        // Encrypted like every other channel writer (2026-10-10): this
+        // legacy route stored the access token as plain JSON.
+        credentials: encryptCredentials(credentials),
       },
     });
-    res.status(201).json({ data: account });
+    // Never the stored credentials or any other secret on the wire.
+    res.status(201).json({ data: publicChannelAccount(account) });
   } catch (err) {
     console.error("Create channel account error:", err);
     res.status(500).json({ error: "Failed to create channel account" });
@@ -377,13 +402,13 @@ router.patch("/settings/channels/:id", requireRole("ADMIN"), validate(updateChan
     };
     const data: Record<string, unknown> = {};
     if (displayName !== undefined) data.displayName = displayName;
-    if (credentials !== undefined) data.credentials = credentials;
+    if (credentials !== undefined) data.credentials = encryptCredentials(credentials as Record<string, unknown>);
     if (isActive !== undefined) data.isActive = isActive;
     const updated = await prisma.channelAccount.update({
       where: { id: req.params.id as string },
       data,
     });
-    res.json({ data: updated });
+    res.json({ data: publicChannelAccount(updated) });
   } catch (err) {
     console.error("Update channel account error:", err);
     res.status(500).json({ error: "Failed to update channel account" });
@@ -538,15 +563,30 @@ const dayScheduleSchema = z.object({
 const businessHoursSchema = z.object({
   enabled: z.boolean(),
   timezone: z.string().min(1),
-  autoResponse: z.string().optional().default(""),
+  // ★ NO .default() ON ANY OF THE THREE OPTIONAL FIELDS, and that is the fix.
+  // Zod's .default() MATERIALISES a field when the request omits it, and this
+  // route then persisted `req.body` wholesale - so omission was not "leave
+  // unchanged", it was "overwrite with the default".
+  //
+  // The one that matters is `aiOutsideHours` reverting to "active": a merchant
+  // who deliberately set "silent" got the AI answering customers while the shop
+  // was closed, from a request that never mentioned the field. Read at
+  // incoming-worker/ai-bot.service.ts:137. `autoResponse` and
+  // `outsideHoursHandoffMessage` had the same shape - an omitted away-message
+  // was silently blanked.
+  //
+  // Nothing was broken in practice because the only caller sends every field.
+  // That is the defect: the safety lived entirely in the caller, so the next
+  // client to touch this endpoint would unsilence the AI without mentioning it.
+  autoResponse: z.string().optional(),
   // Outside-hours AI policy (shared/lib/business-hours.ts owns the semantics):
   // "active" = the AI employee keeps answering while closed (handoffs must say
   // the team is away and when it returns); "silent" = no AI replies while
   // closed - the autoResponse (or a generated default) is sent instead.
-  aiOutsideHours: z.enum(["active", "silent"]).optional().default("active"),
+  aiOutsideHours: z.enum(["active", "silent"]).optional(),
   // Optional owner-written line appended to human-handoff messages while
   // closed (a generated line with the real next opening time is the default).
-  outsideHoursHandoffMessage: z.string().max(500).optional().default(""),
+  outsideHoursHandoffMessage: z.string().max(500).optional(),
   schedule: z.object({
     sunday: dayScheduleSchema,
     monday: dayScheduleSchema,
@@ -558,26 +598,35 @@ const businessHoursSchema = z.object({
   }),
 });
 
-router.get("/settings/business-hours", requireRole("ADMIN"), async (req: Request, res: Response) => {
+/**
+ * What a workspace that has never configured hours gets.
+ *
+ * One definition, used by the GET and by the PUT when a field has no stored
+ * value to preserve. Two copies would drift, and the pair that decides whether
+ * the AI answers a closed shop is not a good place for drift.
+ */
+const BUSINESS_HOURS_DEFAULTS = {
+  enabled: false,
+  timezone: "Asia/Jerusalem",
+  autoResponse: "",
+  aiOutsideHours: "active" as const,
+  outsideHoursHandoffMessage: "",
+  schedule: {
+    sunday:    { enabled: true,  open: "09:00", close: "18:00" },
+    monday:    { enabled: true,  open: "09:00", close: "18:00" },
+    tuesday:   { enabled: true,  open: "09:00", close: "18:00" },
+    wednesday: { enabled: true,  open: "09:00", close: "18:00" },
+    thursday:  { enabled: true,  open: "09:00", close: "18:00" },
+    friday:    { enabled: false },
+    saturday:  { enabled: false },
+  },
+};
+
+router.get("/settings/business-hours", requirePermission("settings:workspace:read"), async (req: Request, res: Response) => {
   try {
     const raw = await readDurableSetting(req.tenantId!, "businessHours");
     if (!raw) {
-      res.json({
-        enabled: false,
-        timezone: "Asia/Jerusalem",
-        autoResponse: "",
-        aiOutsideHours: "active",
-        outsideHoursHandoffMessage: "",
-        schedule: {
-          sunday:    { enabled: true,  open: "09:00", close: "18:00" },
-          monday:    { enabled: true,  open: "09:00", close: "18:00" },
-          tuesday:   { enabled: true,  open: "09:00", close: "18:00" },
-          wednesday: { enabled: true,  open: "09:00", close: "18:00" },
-          thursday:  { enabled: true,  open: "09:00", close: "18:00" },
-          friday:    { enabled: false },
-          saturday:  { enabled: false },
-        },
-      });
+      res.json(BUSINESS_HOURS_DEFAULTS);
       return;
     }
     res.json(JSON.parse(raw));
@@ -587,10 +636,39 @@ router.get("/settings/business-hours", requireRole("ADMIN"), async (req: Request
   }
 });
 
-router.put("/settings/business-hours", requireRole("ADMIN"), validate(businessHoursSchema), async (req: Request, res: Response) => {
+router.put("/settings/business-hours", requirePermission("settings:workspace:update"), validate(businessHoursSchema), async (req: Request, res: Response) => {
   try {
-    await writeDurableSetting(req.tenantId!, "businessHours", JSON.stringify(req.body), req.user?.userId);
-    res.json(req.body);
+    // A field the request did not mention keeps whatever is stored, and falls
+    // back to the documented default only when nothing is stored. This makes the
+    // two writers of `businessHours` agree: PATCH /api/workspace already merges
+    // into the existing object, and this one used to replace it.
+    const existingRaw = await readDurableSetting(req.tenantId!, "businessHours");
+    let existing: Record<string, unknown> = {};
+    if (existingRaw) {
+      try {
+        existing = JSON.parse(existingRaw) as Record<string, unknown>;
+      } catch {
+        // Unparseable stored settings cannot be preserved. Falling back to the
+        // documented defaults is better than persisting `undefined` into the
+        // field that decides whether the AI answers a closed shop.
+        console.warn("[business-hours] stored settings did not parse; preserving nothing");
+      }
+    }
+    const body = req.body as Record<string, unknown>;
+    const keep = <K extends "autoResponse" | "aiOutsideHours" | "outsideHoursHandoffMessage">(k: K) =>
+      body[k] !== undefined ? body[k] : existing[k] !== undefined ? existing[k] : BUSINESS_HOURS_DEFAULTS[k];
+
+    const merged = {
+      ...body,
+      autoResponse: keep("autoResponse"),
+      aiOutsideHours: keep("aiOutsideHours"),
+      outsideHoursHandoffMessage: keep("outsideHoursHandoffMessage"),
+    };
+
+    await writeDurableSetting(req.tenantId!, "businessHours", JSON.stringify(merged), req.user?.userId);
+    // The MERGED object, not the request. Returning `req.body` would report a
+    // state the store does not hold for any field the caller omitted.
+    res.json(merged);
   } catch (err) {
     console.error("Update business hours error:", err);
     res.status(500).json({ error: "Failed to update business hours" });
@@ -605,7 +683,10 @@ const slaSettingsSchema = z.object({
   warningThreshold: z.number().min(0).max(100).optional(), // percentage of SLA time before warning
 });
 
-router.get("/settings/sla", requireRole("ADMIN"), async (req: Request, res: Response) => {
+// The two GETs are read by everyone who answers conversations: the inbox's SLA
+// warning is for the agent, who got 403 here when they were ADMIN-only
+// (2026-10-12). Tenant-scoped by key. The PUTs stay ADMIN (Owner).
+router.get("/settings/sla", requirePermissionOrRole("conversation:messages:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const redis = getRedis();
     const raw = await readDurableSetting(req.tenantId!, "sla");
@@ -632,7 +713,7 @@ router.put("/settings/sla", requireRole("ADMIN"), validate(slaSettingsSchema), a
 });
 
 // Department-level SLA override
-router.get("/settings/sla/department/:departmentId", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/settings/sla/department/:departmentId", requirePermissionOrRole("conversation:messages:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const redis = getRedis();
     const raw = await readDurableSetting(req.tenantId!, `department:${req.params.departmentId}:sla`);
@@ -677,16 +758,27 @@ const idleAutomationSchema = z.object({
 
 router.get("/settings/idle-automation", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
-    const redis = getRedis();
-    const raw = await redis.get(`tenant:${req.tenantId!}:idleAutomation`);
+    // Durable (TenantSetting, read cache-first under the same Redis key the
+    // value used to live in alone), 2026-10-12: a Redis flush lost it.
+    const raw = await readDurableSetting(req.tenantId!, "idleAutomation");
     if (!raw) {
+      // Nothing stored: the suggested texts in the workspace's language
+      // (2026-10-13), so a Hebrew workspace that only switches the reminder on
+      // does not send its customers English.
+      const tenant = await prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { defaultLocale: true } }).catch(() => null);
+      const he = String(tenant?.defaultLocale ?? "").toLowerCase().startsWith("he");
       res.json({
         reminderEnabled: false,
         reminderDelayMinutes: 60,
-        reminderMessage: "Hi! We're still here and waiting for your response. Is there anything else we can help you with?",
+        reminderMessage: he
+          ? "היי, אנחנו עדיין כאן. אפשר לעזור במשהו נוסף?"
+          : "Hi! We're still here and waiting for your response. Is there anything else we can help you with?",
         autoCloseEnabled: false,
         autoCloseDelayMinutes: 1440,
-        autoCloseMessage: "Due to the lack of response, this conversation has been closed. Feel free to reach out again anytime!",
+        autoCloseMessage: he
+          ? "השיחה נסגרה כי לא שמענו ממך. אפשר לכתוב לנו שוב בכל זמן."
+          : "Due to the lack of response, this conversation has been closed. Feel free to reach out again anytime!",
+        defaultsLanguage: he ? "he" : "en",
       });
       return;
     }
@@ -699,8 +791,7 @@ router.get("/settings/idle-automation", requireRole("ADMIN"), async (req: Reques
 
 router.put("/settings/idle-automation", requireRole("ADMIN"), validate(idleAutomationSchema), async (req: Request, res: Response) => {
   try {
-    const redis = getRedis();
-    await redis.set(`tenant:${req.tenantId!}:idleAutomation`, JSON.stringify(req.body));
+    await writeDurableSetting(req.tenantId!, "idleAutomation", JSON.stringify(req.body), req.user?.userId);
     res.json(req.body);
   } catch (err) {
     console.error("Update idle automation error:", err);
@@ -798,7 +889,7 @@ router.put("/me/locale", validate(localeSchema), async (req: Request, res: Respo
   }
 });
 
-router.put("/settings/locale", requireRole("ADMIN"), validate(localeSchema), async (req: Request, res: Response) => {
+router.put("/settings/locale", requirePermission("settings:workspace:update"), validate(localeSchema), async (req: Request, res: Response) => {
   try {
     const raw = (req.body as { locale?: string }).locale;
     if (!raw || !isSupportedLocale(raw)) {

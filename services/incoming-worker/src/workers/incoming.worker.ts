@@ -4,8 +4,10 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
-import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, HistoricalImportChunkJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, isInboundExcluded, probeUploadsDir, describeUploadsProbe, classifyMediaFailure, reportOperationalFailure, ERROR_CODES, type MediaFailureReason, type InboundReferral } from "@chatcenter/shared";
+import { prisma, createWorker, type AutomationEventJob, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, HistoricalImportChunkJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, suggestBySameName, isInboundExcluded, probeUploadsDir, describeUploadsProbe, classifyMediaFailure, reportOperationalFailure, ERROR_CODES, type MediaFailureReason, type InboundReferral } from "@chatcenter/shared";
+import { safeUploadExtension } from "@chatcenter/shared/src/lib/upload-safety";
 import { processCommentTrigger } from "../services/comment-trigger.service";
+import { claimInboundMessage, releaseInboundClaim, findOrCreateOpenConversation } from "../services/inbound-dedupe";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
 // Intentionally OUTSIDE central Meta versioning: graph.instagram.com
@@ -14,16 +16,6 @@ const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com
 const WA_API_URL = metaGraphBaseUrl(process.env.WHATSAPP_API_URL);
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.resolve(process.cwd(), "uploads");
 const UPLOADS_BASE_URL = process.env.UPLOADS_BASE_URL || "/api/uploads";
-
-// Media kinds we cannot turn into anything an agent or a bot can act on, and
-// which therefore get an auto-reply asking for something else.
-//
-// `audio` was on this list, which is why voice notes were answered with "we
-// don't support this type of media" and then dropped before the bot ever saw
-// them. They are received now: the recording is downloaded and playable in the
-// inbox. Sending audio is still not supported, and deliberately so - a voice
-// note costs the customer nothing and would cost us a synthesis bill.
-const UNSUPPORTED_MEDIA_TYPES = ["location"];
 
 // Prove at boot that media can actually be stored.
 //
@@ -46,8 +38,11 @@ if (!uploadsProbe.ok) {
   console.log(describeUploadsProbe(uploadsProbe, "incoming-worker"));
 }
 
-async function fetchMetaProfile(senderId: string, accessToken: string, channel: string, pageId?: string, igLogin?: boolean): Promise<{ name: string | null; avatarUrl: string | null }> {
+async function fetchMetaProfile(senderId: string, accessToken: string, channel: string, pageId?: string, igLogin?: boolean): Promise<{ name: string | null; username: string | null; avatarUrl: string | null }> {
   let name: string | null = null;
+  // Instagram's handle, kept apart from the name (2026-10-11): it is how the
+  // customer is shown when they have no name, and it was being dropped.
+  let username: string | null = null;
   let avatarUrl: string | null = null;
 
   // Try direct profile lookup first
@@ -64,7 +59,8 @@ async function fetchMetaProfile(senderId: string, accessToken: string, channel: 
       params: { fields, access_token: accessToken },
     });
     if (channel === "INSTAGRAM") {
-      name = res.data.name || res.data.username || null;
+      username = typeof res.data.username === "string" && res.data.username ? res.data.username : null;
+      name = res.data.name || (username ? `@${username}` : null);
       avatarUrl = res.data.profile_pic || null;
     } else {
       const { first_name, last_name, name: fullName, picture } = res.data;
@@ -98,7 +94,7 @@ async function fetchMetaProfile(senderId: string, accessToken: string, channel: 
     }
   }
 
-  return { name, avatarUrl };
+  return { name, username, avatarUrl };
 }
 
 /**
@@ -160,7 +156,7 @@ export async function resolveWhatsAppMedia(
   // they beat anything we can infer: `application/octet-stream` is a very
   // common content-type on the download and tells us nothing.
   opts?: { fileName?: string; mimeType?: string },
-): Promise<{ localUrl: string; fileName: string; displayName: string } | null> {
+): Promise<{ localUrl: string; fileName: string; displayName: string; media: MediaFacts } | null> {
   try {
     // Step 1: Get the CDN download URL
     const metaRes = await axios.get(`${WA_API_URL}/${mediaId}`, {
@@ -181,7 +177,9 @@ export async function resolveWhatsAppMedia(
     const contentType = String(fileRes.headers["content-type"] ?? "");
     const senderExt = opts?.fileName ? path.extname(opts.fileName) : "";
     const declaredExt = extensionFromMimeOrEmpty(opts?.mimeType);
-    const ext = senderExt || declaredExt || getExtensionFromMime(contentType, messageType);
+    // Only an allowlisted extension is ever written: the sender's name could
+    // say ".html" and the file would be served as a page (2026-10-09).
+    const ext = safeUploadExtension(senderExt, declaredExt, getExtensionFromMime(contentType, messageType));
 
     // Stored under a UUID (never the sender's name - that is attacker-supplied
     // text and this path is written straight to disk), but the sender's name
@@ -195,7 +193,14 @@ export async function resolveWhatsAppMedia(
     return {
       localUrl: `${UPLOADS_BASE_URL}/${fileName}`,
       fileName,
-      displayName: sanitizeDisplayName(opts?.fileName) || fileName,
+      // No sender name: a readable one, never the stored uuid (2026-10-10).
+      displayName: sanitizeDisplayName(opts?.fileName) || defaultMediaName(messageType, ext, new Date()),
+      media: mediaFacts({
+        declaredMime: opts?.mimeType,
+        downloadedMime: contentType,
+        byteSize: byteLengthOf(fileRes.data),
+        senderFileName: opts?.fileName,
+      }),
     };
   } catch (err: any) {
     // Which half failed matters, and the two have completely different fixes:
@@ -220,6 +225,80 @@ export async function resolveWhatsAppMedia(
     lastMediaFailure = reason;
     return null;
   }
+}
+
+/**
+ * What we know about an attachment, kept at `metadata.media` (2026-10-09) so
+ * the inbox can say "PDF, 2.1 MB" without fetching the file. Never a provider
+ * URL or token: only these three facts.
+ */
+export interface MediaFacts {
+  mimeType: string | null;
+  byteSize: number | null;
+  originalName: string | null;
+}
+
+/**
+ * The channel's declared MIME wins over the download's content-type, which is
+ * often a generic application/octet-stream. Parameters are dropped.
+ */
+export function mediaFacts(input: {
+  declaredMime?: string | null;
+  downloadedMime?: string | null;
+  byteSize?: number | null;
+  senderFileName?: string | null;
+}): MediaFacts {
+  const baseMime = (raw?: string | null) => raw?.split(";")[0]?.trim().toLowerCase() || null;
+  return {
+    mimeType: baseMime(input.declaredMime) ?? baseMime(input.downloadedMime),
+    byteSize: typeof input.byteSize === "number" && Number.isFinite(input.byteSize) ? input.byteSize : null,
+    originalName: sanitizeDisplayName(input.senderFileName ?? undefined) || null,
+  };
+}
+
+/**
+ * A readable name for an attachment the sender did not name (2026-10-10):
+ * "<kind>-<YYYY-MM-DD>.<ext>", e.g. "image-2026-10-10.jpg", "voice-2026-10-10.ogg".
+ * The stored file keeps its uuid; this is only what people see.
+ */
+export function defaultMediaName(messageType: string, ext: string | null | undefined, at: Date): string {
+  const kind: Record<string, string> = { image: "image", sticker: "sticker", audio: "voice", video: "video", document: "file" };
+  const day = (Number.isNaN(at.getTime()) ? new Date() : at).toISOString().slice(0, 10);
+  const e = typeof ext === "string" && /^\.[a-z0-9]{1,8}$/i.test(ext) ? ext.toLowerCase() : "";
+  return `${kind[messageType] ?? "file"}-${day}${e}`;
+}
+
+/** The extension a MIME maps to, or "" when unknown (never ".bin"). */
+function extFromMime(mime: string | null | undefined): string {
+  const e = getExtensionFromMime(String(mime ?? "").split(";")[0].trim().toLowerCase(), "__none__");
+  return e === ".bin" ? "" : e;
+}
+
+/** The hosts Meta serves Messenger and Instagram media from. */
+const META_MEDIA_HOSTS = /(^|\.)(fbcdn\.net|fbsbx\.com|cdninstagram\.com|facebook\.com|instagram\.com)$/i;
+
+/**
+ * What Meta's CDN says about a Messenger/Instagram attachment we do not
+ * download: one HEAD for its type and size (2026-10-10). Best effort and
+ * bounded: https Meta hosts only, 4s, never throws.
+ */
+export async function headMetaMedia(url: string): Promise<{ mime: string | null; size: number | null }> {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" || !META_MEDIA_HOSTS.test(u.hostname)) return { mime: null, size: null };
+    const r = await axios.head(url, { timeout: 4000, maxRedirects: 3, validateStatus: (s) => s >= 200 && s < 300 });
+    const len = Number(r.headers["content-length"]);
+    return { mime: (r.headers["content-type"] as string) || null, size: Number.isFinite(len) && len >= 0 ? len : null };
+  } catch {
+    return { mime: null, size: null };
+  }
+}
+
+function byteLengthOf(data: unknown): number | null {
+  if (data && typeof (data as { byteLength?: unknown }).byteLength === "number") {
+    return (data as { byteLength: number }).byteLength;
+  }
+  return typeof data === "string" ? Buffer.byteLength(data) : null;
 }
 
 /**
@@ -281,6 +360,8 @@ function getExtensionFromMime(contentType: string, messageType: string): string 
   // Fallback based on message type
   switch (messageType) {
     case "image": return ".jpg";
+    // WhatsApp stickers are always webp (2026-10-09).
+    case "sticker": return ".webp";
     case "video": return ".mp4";
     case "audio": return ".ogg";
     case "document": return ".pdf";
@@ -365,12 +446,34 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // target (personId) instead of presenting as a fresh row. Without this,
   // a merged WhatsApp contact would miss the direct lookup and downstream
   // code would see null, losing displayName/avatar continuity.
-  const { resolveContactByChannelId } = await import("@chatcenter/shared");
-  const savedContact = await resolveContactByChannelId(tenantId, channel, senderId);
+  //
+  // GET-or-create, not a second lookup. This was a read, and the read is still
+  // the first thing it does - `ensureContactForInbound` calls the same resolver
+  // and only creates when it returns null, so merged-away senders still route
+  // to their surviving target and never produce a new row.
+  //
+  // The customer never had to type an identifier for us to have one: the
+  // channel they are talking through IS a contact method. Before this, contacts
+  // existed only for senders who happened to type an email or phone into the
+  // message body - 89 conversations, 2 contacts.
+  //
+  // Safe here specifically because both of the things that must NOT become
+  // customers are already intercepted ABOVE this line: excluded senders return
+  // early, and an approval button reply is handled under a comment reading
+  // "before any contact/conversation is created - otherwise a staff phone
+  // number becomes a customer and gets handed to the bot".
+  const { ensureContactForInbound } = await import("../services/ensure-contact.service");
+  const savedContact = await ensureContactForInbound({
+    tenantId,
+    channel,
+    externalId: senderId,
+    displayName: senderDisplayName,
+  });
 
   // For Messenger/Instagram, fetch display name + avatar from Graph API if not provided
   let displayName = senderDisplayName || savedContact?.displayName || null;
   let avatarUrl: string | null = savedContact?.avatarUrl || null;
+  let profileUsername: string | null = null;
   if ((!displayName || !conversation?.customerAvatarUrl) && (channel === "MESSENGER" || channel === "INSTAGRAM") && channelAccountId) {
     const channelAccount = await prisma.channelAccount.findUnique({ where: { id: channelAccountId } });
     const creds = channelAccount?.credentials;
@@ -381,6 +484,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       const profile = await fetchMetaProfile(senderId, accessToken, channel, pageId, decrypted?.igLogin);
       if (!displayName) displayName = profile.name;
       avatarUrl = profile.avatarUrl;
+      profileUsername = profile.username;
     }
   }
 
@@ -399,8 +503,13 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   }
 
   if (!conversation) {
-    conversation = await prisma.conversation.create({
-      data: {
+    // Race-safe: a concurrent message from the same customer may have created
+    // it since the read above; then that one is used (services/inbound-dedupe.ts).
+    ({ conversation } = await findOrCreateOpenConversation<NonNullable<typeof conversation>>({
+      tenantId,
+      channel,
+      customerExternalId: senderId,
+      create: {
         tenantId,
         channel,
         channelAccountId: channelAccountId || undefined,
@@ -410,7 +519,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         status: "OPEN",
         ...referralFields(referral),
       },
-    });
+    }));
   } else {
     const updates: any = {};
     if (displayName && !conversation.customerName) updates.customerName = displayName;
@@ -427,11 +536,28 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // Also update Contact avatarUrl if we got one. Target the resolved
   // contact's id so a merged-away row doesn't receive the write (and so
   // avatars keep updating on the surviving target).
-  if (avatarUrl && savedContact && !savedContact.avatarUrl) {
-    await prisma.contact.update({
-      where: { id: savedContact.id },
-      data: { avatarUrl },
-    });
+  //
+  // The name too (2026-10-11): Instagram and Messenger send no name with the
+  // message, so the contact was created nameless and the profile's name only
+  // ever reached the conversation; the Customers list showed the raw IGSID.
+  // Written only while the contact has none, so a name set by hand stays, and
+  // the Instagram handle is kept beside it.
+  if (savedContact) {
+    const data: Record<string, unknown> = {};
+    if (avatarUrl && !savedContact.avatarUrl) data.avatarUrl = avatarUrl;
+    if (displayName && !savedContact.displayName) data.displayName = displayName;
+    const meta = (savedContact.metadata && typeof savedContact.metadata === "object" ? savedContact.metadata : {}) as Record<string, unknown>;
+    if (profileUsername && meta.instagramUsername !== profileUsername) data.metadata = { ...meta, instagramUsername: profileUsername };
+    if (Object.keys(data).length > 0) {
+      await prisma.contact.update({ where: { id: savedContact.id }, data });
+    }
+    // A contact that just got its first name may be someone already known on
+    // another channel: suggested to a person, never linked on a name alone
+    // (shared lib/identity-links). Best-effort.
+    if (typeof data.displayName === "string") {
+      await suggestBySameName({ tenantId, contactId: savedContact.id, displayName: data.displayName, channel })
+        .catch((err) => console.warn("[incoming-worker] same-name suggestion failed:", (err as Error)?.message));
+    }
   }
 
   // Resolve media URL (download WhatsApp media, pass through Messenger/Instagram URLs)
@@ -441,6 +567,9 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // on the message so the inbox can say the file did not arrive, instead of
   // rendering a bare "[Document]" that looks like the customer sent the word.
   let mediaError: string | undefined;
+  // metadata.media (2026-10-09). On a failed download it still records what
+  // was declared, so the inbox can name the file that did not arrive.
+  let media: MediaFacts | undefined;
   if (rawMediaUrl) {
     if (channel === "WHATSAPP") {
       // WhatsApp gives us a media ID, not a URL - resolve and download it
@@ -456,6 +585,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
           resolvedMediaUrl = resolved.localUrl;
           // The name the AGENT sees. The file on disk keeps its UUID.
           resolvedFileName = resolved.displayName;
+          media = resolved.media;
         } else {
           // Meta expires media after a few days and the id is the only handle
           // on it, so a download failure here is permanent for that file. A
@@ -467,10 +597,21 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       } else {
         mediaError = "no_channel_token";
       }
+      media ??= mediaFacts({ declaredMime: senderMimeType, senderFileName });
     } else {
       // Messenger/Instagram: URL is directly usable
       resolvedMediaUrl = rawMediaUrl;
+      // Their facts too (2026-10-10): the CDN's own type and size, one HEAD.
+      const head = await headMetaMedia(rawMediaUrl);
+      media = mediaFacts({ declaredMime: senderMimeType, downloadedMime: head.mime, byteSize: head.size, senderFileName });
       resolvedFileName = senderFileName;
+    }
+    // No sender name: a readable default, for the facts and the bubble alike.
+    if (media && !media.originalName) {
+      const storedExt = resolvedMediaUrl?.startsWith(UPLOADS_BASE_URL) ? path.extname(resolvedMediaUrl) : "";
+      const name = defaultMediaName(messageType, storedExt || extFromMime(media.mimeType), new Date(normalizedMessage.timestamp ?? Date.now()));
+      media = { ...media, originalName: name };
+      if (!sanitizeDisplayName(senderFileName ?? undefined)) resolvedFileName = name;
     }
   }
 
@@ -511,19 +652,77 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       // under the interactive reply so a channel can attach its own
       // context - e.g. the Shopify storefront page a visitor asked from.
       metadata:
-        interactiveReply || producerMetadata || mediaError
+        interactiveReply || producerMetadata || mediaError || media
           ? {
               ...(producerMetadata ?? {}),
               ...(interactiveReply ? { interactiveReply } : {}),
               // Why the attachment is not here. The bubble reads this to
               // explain itself rather than showing an empty "[Document]".
               ...(mediaError ? { mediaError } : {}),
+              ...(media ? { media } : {}),
             }
           : undefined,
       mediaUrl: resolvedMediaUrl,
       fileName: resolvedFileName,
     },
   });
+
+  // "Continue on WhatsApp" from the website widget: the first message carries
+  // a code; link the two conversations before anything answers, so the bot
+  // already has the website chat as context. Never costs the message.
+  if (channel === "WHATSAPP") {
+    try {
+      const { linkWebsiteHandoff } = await import("../services/whatsapp-handoff-link.service");
+      const linked = await linkWebsiteHandoff({
+        tenantId,
+        channelAccountId,
+        whatsappConversationId: conversation.id,
+        whatsappContact: savedContact ? { id: savedContact.id, personId: (savedContact as any).personId ?? null } : null,
+        body,
+      });
+      if (linked.linked) console.log(linked.websiteConversationId
+        ? `[incoming] website chat ${linked.websiteConversationId} continued on WhatsApp ${conversation.id} (identity ${linked.identity})`
+        : `[incoming] WhatsApp ${conversation.id} started from the website's WhatsApp widget`);
+    } catch (err: any) {
+      console.warn("[incoming] website handoff link failed (message kept):", err?.message);
+    }
+  }
+
+  // Contact.lastInteractionAt - the column the customer list sorts and filters
+  // on, which until now had exactly ONE writer: the merge carry-forward at
+  // identity.ts:172, computing max(existing, existing). Nothing ever
+  // initialised it, so merging two nulls yielded null and the column was
+  // permanently empty - taking inactiveDays, lastInteractionBefore/After and
+  // lastSeenAfter down with it.
+  //
+  // Written HERE, after the message is persisted, because there is nothing to
+  // extend: the inbound path only READS the contact (resolveContactByChannelId
+  // at the top of this function), the one contact.update on this path is
+  // conditional on an avatar arriving, and Message has no relation to Contact
+  // to fold a nested write into. This is an added round trip, honestly named.
+  //
+  // Three properties, each deliberate:
+  //   updateMany, not update - a row merged away or deleted mid-flight no-ops
+  //     instead of throwing P2025.
+  //   not awaited, error caught - an inbound message that arrives and is NOT
+  //     STORED because a sort-order timestamp threw is a catastrophic trade.
+  //     Nothing here may fail the message.
+  //   guarded on savedContact - most senders have no Contact row at all
+  //     (contacts are created only when a message contains an email or phone),
+  //     so this costs nothing for the majority.
+  //
+  // lastSeenAt is deliberately NOT set. On every other model in this codebase
+  // it means "when a system last observed this row" - on CustomerProfile it is
+  // stamped with new Date() on every pipeline pass. Making Contact.lastSeenAt
+  // mean customer activity would give one name two meanings to buy a sort
+  // order. Sort on lastInteractionAt instead.
+  if (savedContact) {
+    void prisma.contact
+      .updateMany({ where: { id: savedContact.id, tenantId }, data: { lastInteractionAt: new Date() } })
+      .catch((err: any) =>
+        console.warn("[incoming] lastInteractionAt update failed:", err?.message ?? err),
+      );
+  }
 
   // First-inbound language detection - populates Conversation.detectedLocale
   // once per thread. Drives suggested-reply language so drafts match the
@@ -587,54 +786,50 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     timestamp: new Date().toISOString(),
   });
 
-  // Auto-reply for unsupported media types
-  if (UNSUPPORTED_MEDIA_TYPES.includes(messageType) && channelAccountId) {
-    try {
-      const autoReplyBody = "We currently don't support this type of media. Please send text, images, or documents instead.";
-      const autoReplyMsg = await prisma.message.create({
-        data: {
-          tenantId,
-          conversationId: conversation.id,
-          channel,
-          direction: "OUTBOUND",
-          body: autoReplyBody,
-          messageType: "text",
-          senderName: "System",
-          status: "PENDING",
-        },
-      });
-
-      await prisma.conversation.update({
-        where: { id: conversation.id },
-        data: { lastMessageAt: new Date() },
-      });
-
-      await outgoingMessageQueue.add("send", {
-        tenantId,
-        conversationId: conversation.id,
-        channel,
-        channelAccountId,
-        recipientExternalId: senderId,
-        body: autoReplyBody,
-        messageType: "text",
-        senderName: "System",
-        messageId: autoReplyMsg.id,
-      }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
-
-      await publishEvent({
-        event: "message:new",
-        tenantId,
-        data: { message: autoReplyMsg, conversationId: conversation.id },
-      });
-    } catch (err) {
-      console.error("[incoming-worker] Failed to send unsupported media auto-reply:", err);
-    }
-    return; // Skip bot processing for unsupported media
+  // A "הסר" / "STOP" reply opts the customer out of marketing on this channel
+  // (marketing works by opt-out: the customer's one control, so it is checked
+  // before anything can answer, whoever owns the conversation). Its
+  // confirmation is the only reply this message gets.
+  {
+    const { interceptOptOutReply } = await import("../services/marketing-optout.service");
+    const handled = await interceptOptOutReply({
+      tenantId, contactId: savedContact?.id ?? "", channel, conversationId: conversation.id,
+      channelAccountId, recipientExternalId: senderId, messageId: message.id, messageType, body,
+    });
+    if (handled) return;
   }
+
+  // No automatic "unsupported media" reply (2026-10-09). The only type that
+  // triggered it was a shared location, which is not unsupported: it reaches
+  // the AI as "[Shared location: ...]" with its details in metadata. Anything
+  // the AI or a person cannot use is theirs to answer, in the workspace's
+  // language, never a fixed English line.
 
   // Process bot if no agent assigned
   if (!conversation.assignedAgentId && !conversation.isHandedOver) {
     try {
+      // Automations (Studio > Automations) first. A run parked on this
+      // conversation takes the reply; otherwise live message automations fire.
+      // One responder per inbound: when one of them answered, nothing else
+      // (AI employee, playbook) answers this message too. They never run while
+      // a person owns the conversation (this whole block is skipped then).
+      const { automationsForInbound, automationAnsweredBefore } = await import("../services/automation-runner.service");
+      const answeredByAutomation = await automationsForInbound({
+        tenantId,
+        conversation: conversation as any,
+        messageId: message.id,
+        message: body,
+        channel: channel.toLowerCase(),
+        replyPayload: interactiveReply?.payload ?? null,
+        contactId: savedContact?.id ?? null,
+        storyMention: ((producerMetadata as any)?.storyMention as { url: string | null } | undefined) ?? null,
+      });
+      if (answeredByAutomation) return;
+      // An automation may have moved ownership while it ran (hand to AI,
+      // assign); the branches below read the current row.
+      conversation = (await prisma.conversation.findFirst({ where: { id: conversation.id, tenantId } })) ?? conversation;
+      if (conversation.assignedAgentId || conversation.isHandedOver) return;
+
       // Department / role picker override (deterministic safety net).
       // When the customer taps a department-picker button ("מכירה" / "שירות"),
       // route by ROLE to an ACTIVE matching employee + set the department,
@@ -665,10 +860,13 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         }
       }
 
-      // Check if this is a new conversation needing routing
-      const messageCount = await prisma.message.count({ where: { conversationId: conversation.id } });
-
-      if (messageCount <= 1 && !conversation.departmentId) {
+      // The playbook routes the conversation's first message - or, while it
+      // is still unowned, the first one after replies that were not an answer
+      // (an automation's, or the system's: an opt-out confirmation, the
+      // unsupported-media notice). See first-unanswered.service.
+      const { isFirstUnanswered } = await import("../services/first-unanswered.service");
+      const firstUnanswered = await isFirstUnanswered(tenantId, conversation as any, automationAnsweredBefore);
+      if (firstUnanswered && !conversation.departmentId) {
         // New conversation - route via playbook rules
         const { routeConversation } = await import("../services/routing.service");
         const routing = await routeConversation(tenantId, conversation.id, body, channel);
@@ -727,7 +925,21 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
             data: { flowExpiresAt: null },
           });
         }
-        const { executeMainFlow } = await import("../services/flow-executor.service");
+        const { executeMainFlow, executeSubFlow } = await import("../services/flow-executor.service");
+        // A sub-flow parked here resumes in THAT flow. Resuming the main
+        // canvas with a node id it does not have restarted it from its entry.
+        if ((conversation as any).chatbotFlowId) {
+          await executeSubFlow({
+            tenantId,
+            conversationId: conversation.id,
+            message: body,
+            channel: channel.toLowerCase(),
+            flowId: (conversation as any).chatbotFlowId,
+            resumeNodeId: (conversation as any).chatbotNodeId,
+            replyPayload: interactiveReply?.payload ?? null,
+          });
+          return;
+        }
         await executeMainFlow({
           tenantId,
           conversationId: conversation.id,
@@ -769,6 +981,18 @@ async function processWebhookTrigger(job: Job<WebhookTriggerJob>): Promise<void>
     return;
   }
 
+  // An automation with a webhook trigger: same walk, plus a run in its log.
+  // The job id is the event: BullMQ's own retries of this job run it once.
+  if (targetMode !== "connected") {
+    const flow = await prisma.chatbotFlow.findFirst({ where: { id: workflowId, tenantId }, select: { triggerType: true } });
+    if (flow?.triggerType) {
+      const { runContextFree } = await import("../services/automation-runner.service");
+      const r = await runContextFree({ tenantId, flowId: workflowId, triggerType: "webhook", eventKey: `hook:${job.id}`, payload });
+      console.log(`[incoming-worker] webhook-trigger automation=${workflowId} run=${r?.id ?? "duplicate"} status=${r?.status ?? "-"}`);
+      return;
+    }
+  }
+
   const { executeWebhookFlow } = await import("../services/flow-executor.service");
   const mode = targetMode === "connected" ? "connected" : "flow";
   const result = await executeWebhookFlow({ tenantId, workflowId, payload, targetMode: mode });
@@ -776,6 +1000,23 @@ async function processWebhookTrigger(job: Job<WebhookTriggerJob>): Promise<void>
     `[incoming-worker] webhook-trigger flow=${workflowId} trigger=${triggerId} mode=${mode} ` +
       `executed=${result.executed} halted=${result.halted} reason=${result.reason ?? "-"} steps=${result.trace.length}`,
   );
+}
+
+/** Automation events that do not come with an inbound message (tag added). */
+async function processAutomationEvent(job: Job<AutomationEventJob>): Promise<void> {
+  const ev = job.data;
+  const tenant = await prisma.tenant.findUnique({ where: { id: ev.tenantId }, select: { status: true } });
+  if (!tenant || tenant.status !== "ACTIVE") return;
+  if (ev.type === "tag_added" && ev.contactId && ev.tag) {
+    const { runTagAdded } = await import("../services/automation-runner.service");
+    const r = await runTagAdded({ tenantId: ev.tenantId, contactId: ev.contactId, tag: ev.tag, eventKey: ev.eventKey });
+    console.log(`[incoming-worker] automation-event tag_added contact=${ev.contactId} runs=${r.runs.length}`);
+  }
+  if ((ev.type === "call_missed" || ev.type === "call_answered") && typeof ev.payload?.sessionId === "string") {
+    const { onCallEvent } = await import("../services/call-automation.service");
+    const r = await onCallEvent({ tenantId: ev.tenantId, type: ev.type, sessionId: ev.payload.sessionId });
+    console.log(`[incoming-worker] automation-event ${ev.type} session=${ev.payload.sessionId} outcome=${r.outcome}`);
+  }
 }
 
 // Dispatcher: same queue, multiple job names. Keeps DM, comment-trigger, and
@@ -799,6 +1040,27 @@ export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob 
     await processWebhookTrigger(job as Job<WebhookTriggerJob>);
     return;
   }
+  if (job.name === "cart-event") {
+    const { onCartEvent } = await import("../services/cart.service");
+    await onCartEvent((job as any).data);
+    return;
+  }
+  if (job.name === "cart-check") {
+    const { onCartCheck } = await import("../services/cart.service");
+    const r = await onCartCheck((job as any).data);
+    console.log(`[incoming-worker] cart-check checkout=${(job as any).data?.checkoutId} outcome=${r.outcome}`);
+    return;
+  }
+  if (job.name === "order-event") {
+    const { onOrderEvent } = await import("../services/order.service");
+    const r = await onOrderEvent((job as any).data);
+    console.log(`[incoming-worker] order-event order=${(job as any).data?.orderId} status=${(job as any).data?.status} outcome=${r.outcome}`);
+    return;
+  }
+  if (job.name === "automation-event") {
+    await processAutomationEvent(job as unknown as Job<AutomationEventJob>);
+    return;
+  }
   if (job.name === "process-history") {
     // A batch of the business's PAST conversations. Data import only: the
     // handler writes rows and never reaches the bot, the router or a flow.
@@ -808,8 +1070,22 @@ export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob 
     await processHistoricalChunk(job as Job<HistoricalImportChunkJob>);
     return;
   }
-  // Default ("process") - DM / message path.
-  await processIncomingMessage(job as Job<IncomingMessageJob>);
+  // Default ("process") - DM / message path. Claimed first: a second delivery
+  // of the same message is dropped here, before any contact, conversation,
+  // notification or AI turn (services/inbound-dedupe.ts).
+  const data = job.data as IncomingMessageJob;
+  const claimArgs = { tenantId: data.tenantId, channel: data.channel, externalMessageId: data.normalizedMessage?.externalMessageId };
+  const claim = await claimInboundMessage(claimArgs);
+  if (claim === "duplicate") {
+    console.log(`[incoming-worker] duplicate delivery dropped channel=${data.channel} tenant=${data.tenantId} mid=...${String(claimArgs.externalMessageId).slice(-12)}`);
+    return;
+  }
+  try {
+    await processIncomingMessage(job as Job<IncomingMessageJob>);
+  } catch (err) {
+    if (claim === "claimed") await releaseInboundClaim(claimArgs);
+    throw err;
+  }
 }
 
 let worker: any;

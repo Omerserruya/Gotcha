@@ -1,0 +1,348 @@
+@layer features {
+  /* 09 after an archive: one quiet line above the library. */
+  .archivedNote {
+    margin: 0 0 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+    font-size: 12.5px;
+  }
+
+  /*
+   * 09 · Studio · Skills (design 6), from its markup: a list column beside a
+   * 290px side, gap 20; 12px filter pills; a white table card (radius 14) with
+   * a five-column grid - skill, steps and tools, used by (90), this week
+   * (110), standing (130) - rows at 13px 18px.
+   */
+  .library {
+    display: flex;
+    gap: var(--space-20);
+    min-block-size: 0;
+    line-height: normal;
+  }
+
+  .main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-12);
+    min-inline-size: 0;
+  }
+
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .filter {
+    padding: 6px 11px;
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--text-body);
+    text-decoration: none;
+  }
+
+  .filter[aria-current='page'] {
+    border-color: var(--text-primary);
+    background-color: var(--text-primary);
+    color: var(--frame-text);
+  }
+
+  .note {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+
+  .table {
+    display: flex;
+    flex-direction: column;
+    overflow: clip;
+    min-inline-size: 0;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+  }
+
+  .head,
+  .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.3fr) 90px 110px 130px;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .head {
+    padding: 10px 18px;
+    border-block-end: var(--border-width-thin) solid var(--table-head-rule);
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .row {
+    padding: 13px 18px;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .row + .row {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .row:hover,
+  .row:focus-visible {
+    background-color: var(--panel-quiet);
+  }
+
+  .who {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .name {
+    font-size: 13.5px;
+    font-weight: 500;
+  }
+
+  .situation,
+  .muted {
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
+  .tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .stepCount {
+    margin-inline-end: 3px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--text-subtle);
+  }
+
+  .toolChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background-color: var(--panel-inset);
+    font-size: 11px;
+    color: var(--text-body);
+    white-space: nowrap;
+  }
+
+  .avatars {
+    display: flex;
+  }
+
+  .avatar {
+    flex: none;
+    inline-size: 24px;
+    block-size: 24px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px var(--panel-field);
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 24px;
+    text-align: center;
+    color: var(--text-primary);
+  }
+
+  .avatar + .avatar {
+    margin-inline-start: -6px;
+  }
+
+  .avatar[data-tone='1'] {
+    background-color: var(--employee-avatar-1);
+  }
+
+  .avatar[data-tone='2'] {
+    background-color: var(--employee-avatar-2);
+  }
+
+  .avatar[data-tone='3'] {
+    background-color: var(--employee-avatar-3);
+  }
+
+  .week {
+    display: flex;
+    flex-direction: column;
+    font-size: 13px;
+  }
+
+  .week .muted {
+    font-size: 11px;
+  }
+
+  .standing {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .chip[data-standing='live'] {
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+  }
+
+  .chip[data-standing='watch'] {
+    background-color: var(--ai-avatar-surface);
+    color: var(--ai-avatar-text);
+  }
+
+  .chip[data-standing='approval'] {
+    background-color: var(--approval-chip-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .chip[data-standing='draft'],
+  .chip[data-standing='unused'] {
+    background-color: var(--panel-inset);
+    color: var(--text-muted);
+  }
+
+  .dot {
+    inline-size: 5px;
+    block-size: 5px;
+    border-radius: 50%;
+    background-color: currentcolor;
+  }
+
+  .side {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: var(--space-12);
+    inline-size: 290px;
+  }
+
+  .missing {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px;
+    border-radius: 14px;
+    background-color: var(--copilot-surface);
+    color: var(--frame-text);
+  }
+
+  .missingTitle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--signal-ai);
+  }
+
+  .missingDot {
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background-color: var(--signal-ai);
+  }
+
+  .missingWhy {
+    margin: 0;
+    padding-block-start: 12px;
+    border-block-start: var(--border-width-thin) solid var(--copilot-well);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--frame-text-secondary);
+  }
+
+  .explainer {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px 18px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+  }
+
+  .explainerTitle {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .explainerBody {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+
+  .explainerLink {
+    align-self: flex-start;
+    border-block-end: var(--border-width-thin) solid var(--border-emphasis);
+    font-size: 12px;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  /* The header's two actions: 09's secondary and primary. */
+  .secondary,
+  .primary {
+    padding: 8px 14px;
+    border-radius: 9px;
+    font: inherit;
+    font-size: 12.5px;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .secondary {
+    border: var(--border-width-thin) solid var(--border-muted);
+    background-color: var(--panel-field);
+    color: var(--text-secondary);
+  }
+
+  .secondary:disabled {
+    color: var(--text-faint);
+    cursor: default;
+  }
+
+  .primary {
+    padding: 9px 16px;
+    border: 0;
+    background-color: var(--text-primary);
+    color: var(--frame-text);
+  }
+
+  .headerActions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .toolMark {
+    flex: none;
+    inline-size: 11px;
+    block-size: 11px;
+    object-fit: contain;
+    color: var(--text-muted);
+  }
+}

@@ -18,7 +18,7 @@ import { getInternalServiceKey } from "@chatcenter/shared";
  * already belongs to another contact in the same tenant.
  */
 
-import { prisma } from "@chatcenter/shared";
+import { prisma, resolveContactByChannelId, autoLinkByIdentifier } from "@chatcenter/shared";
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
@@ -109,8 +109,25 @@ export async function tryLinkIdentifierFromInbound(args: {
     // fall-through that uses the channel external_id as the phone hint.
     const conversation = await prisma.conversation.findUnique({
       where: { id: args.conversationId },
-      select: { channel: true },
+      select: { channel: true, customerExternalId: true },
     });
+
+    // The customer typed a phone or email: link their contact to the contact
+    // whose CHANNEL proves that identifier (a WhatsApp number, an email
+    // channel's address), or suggest when only a typed value matches
+    // (shared lib/identity-links). Best-effort and apart from the CRM link
+    // below; a display fact only - order access never follows a link.
+    if (id && conversation?.customerExternalId) {
+      try {
+        const sender = await resolveContactByChannelId(args.tenantId, conversation.channel as any, conversation.customerExternalId);
+        if (sender) {
+          const r = await autoLinkByIdentifier({ tenantId: args.tenantId, senderContactId: sender.id, identifier: id });
+          if (r.outcome !== "no_match") log(`contact link ${id.type}: ${r.outcome}${r.targetContactId ? ` target=${r.targetContactId}` : ""}`);
+        }
+      } catch (err: any) {
+        console.warn(`[identity-link] conv=${args.conversationId} contact link failed:`, err?.message);
+      }
+    }
     const channelLower = (conversation?.channel || "").toLowerCase();
     const phoneDerivedChannel = channelLower === "whatsapp" || channelLower === "sms" || channelLower === "voice";
 

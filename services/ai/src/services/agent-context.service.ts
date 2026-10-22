@@ -15,7 +15,7 @@
  *  - Fail open: a context-fetch error must never break the agent loop.
  */
 
-import { prisma } from "@chatcenter/shared";
+import { prisma, visibilityClause, type Viewer } from "@chatcenter/shared";
 
 export interface ClientContext {
   /** Path the operator was on when they opened the palette (e.g. "/conversations"). */
@@ -35,6 +35,16 @@ export interface OperatorContext {
   userEmail?: string;
   userRole?: string;
   tenantName?: string;
+  /** Who is asking: conversation data follows the inbox's visibility rule. */
+  viewer?: Viewer;
+  /** The interface language (the answer follows the question; this is the fallback). */
+  locale?: "he" | "en";
+  /** The caller holds customer:commerce:read (resolved by the route; absent = no). */
+  canReadCommerce?: boolean;
+  /** The caller holds crm:contacts:read or is ADMIN (resolved by the route; absent = no). */
+  canReadContacts?: boolean;
+  /** The caller holds ai:knowledge:read or is ADMIN (absent = no). */
+  canReadKnowledge?: boolean;
 }
 
 export interface BuiltAgentContext {
@@ -66,6 +76,7 @@ export async function buildAgentContext(opts: {
   // an operator" - naming them helps the model's tone.
   lines.push(`- Operator: ${op.userName || op.userEmail || op.userId}`);
   if (op.userRole) lines.push(`- Role: ${op.userRole}`);
+  if (op.locale) lines.push(`- Interface language: ${op.locale === "he" ? "Hebrew" : "English"}`);
   if (op.tenantName) lines.push(`- Workspace: ${op.tenantName}`);
   if (client.route) lines.push(`- Current route: \`${client.route}\``);
 
@@ -74,10 +85,14 @@ export async function buildAgentContext(opts: {
   let resolvedConversationId: string | null = null;
   let resolvedContactId: string | null = null;
 
+  // The inbox's rule: a restricted operator (department) sees only their
+  // conversations, and the assistant sees no more than they do.
+  const clause = op.viewer ? visibilityClause(op.viewer) : null;
+
   if (client.conversationId) {
     try {
       const c = await prisma.conversation.findFirst({
-        where: { id: client.conversationId, tenantId: op.tenantId },
+        where: { id: String(client.conversationId), tenantId: op.tenantId, ...(clause ? { OR: clause } : {}) },
         select: {
           id: true,
           channel: true,
@@ -123,7 +138,7 @@ export async function buildAgentContext(opts: {
   // index on Message(tenantId, createdAt).
   try {
     const recent = await prisma.message.findMany({
-      where: { tenantId: op.tenantId, direction: "INBOUND" },
+      where: { tenantId: op.tenantId, direction: "INBOUND", ...(clause ? { conversation: { OR: clause } } : {}) },
       orderBy: { createdAt: "desc" },
       take: MAX_RECENT_LINES,
       select: {

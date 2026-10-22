@@ -213,7 +213,7 @@ function extractInstagramContent(message: any): NormalizedInboundMessage["conten
       case "share":
         return { type: "text", text: "[Shared post]" };
       case "story_mention":
-        return { type: "text", text: "[Story mention]" };
+        return { type: "text", text: "[Story mention]", storyMention: { url: attachment.payload?.url ?? null } };
       default:
         return { type: "text", text: `[${attachment.type} attachment]` };
     }

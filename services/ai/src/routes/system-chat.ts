@@ -26,6 +26,7 @@ import { parseFile, isAllowedMimeType, resolveMimeType } from "../services/file-
 import { retrieveRelevantChunks, buildKnowledgeContext } from "../services/knowledge.service";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
 import multer from "multer";
+import { withoutWideDashes } from "../lib/wide-dash";
 
 const router = Router();
 const CHAT_MODEL = process.env.OPENAI_DEFAULT_MODEL || getDefaultModel();
@@ -264,7 +265,7 @@ ${knowledgeContext ? `\n${knowledgeContext}` : "\nNo knowledge base documents ar
       metadata: { type: "chat" },
     });
 
-    const answer = result.content || "I was unable to generate a response.";
+    const answer = withoutWideDashes(result.content || "I was unable to generate a response.");
 
     const sources = chunks
       .filter((c) => c.score > 0.3)

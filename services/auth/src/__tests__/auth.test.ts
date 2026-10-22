@@ -35,6 +35,14 @@ vi.mock("@chatcenter/shared", () => {
     auditLog: {
       create: vi.fn(),
     },
+    // An invite resolves its role in this tenant and assigns it (G5,
+    // 2026-10-11): no role given means the tenant's agent role.
+    tenantRole: {
+      findFirst: vi.fn().mockResolvedValue({ id: "role_agent", name: "Agent", builtinKey: "agent" }),
+    },
+    userRoleAssignment: {
+      upsert: vi.fn().mockResolvedValue({}),
+    },
     // GOTCHA-owned password-setup links. An invite mints one instead of mailing
     // an Authentik recovery URL, so this table is on the invite path now.
     setupLink: {
@@ -101,6 +109,13 @@ vi.mock("@chatcenter/shared", () => {
     startService: vi.fn(),
   };
 });
+
+// The invite path checks the inviter may grant the role (lib/grant-ceiling);
+// that rule has its own tests. Here it never refuses.
+vi.mock("../lib/grant-ceiling", () => ({
+  actorOf: (req: any) => ({ userId: req.user?.userId, tenantId: req.tenantId, role: req.user?.role }),
+  inviteRoleRefusal: async () => null,
+}));
 
 import authRoutes from "../routes/auth";
 import agentRoutes from "../routes/agents";

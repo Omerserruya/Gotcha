@@ -1,0 +1,1293 @@
+@layer features {
+  /*
+   * Screen 03 · Approvals.
+   *
+   * A queue beside one decision. The queue is narrow and scannable; the
+   * decision gets the room, because the whole screen exists so that one
+   * question can be answered in seconds without scrolling.
+   */
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * Screen 03, measured - a 300px queue beside one decision
+   * ════════════════════════════════════════════════════════════════════════
+   * The page body is flush (`PageContainer flush`): the queue runs from the
+   * header to the panel's bottom, with `#EDE9E1` down its right edge, and the
+   * decision takes the rest at `padding:32px 40px`. `line-height: normal`
+   * throughout, as everywhere 02 is measured.
+   */
+  .screen {
+    flex: 1;
+    min-block-size: 0;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: normal;
+  }
+
+  /*
+   * Announced, never shown. Every outcome on this screen follows a keystroke,
+   * and a queue that advances silently tells a screen-reader user nothing
+   * about the one action that mattered.
+   */
+  .liveRegion {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .layout {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+  }
+
+  /* One decision at a time means one column at a time on a phone. */
+  @media (width < 60rem) {
+    .layout {
+      flex-direction: column;
+    }
+  }
+
+  /* ── The queue ───────────────────────────────────────────────────────── */
+  /* A column, so the foot (`margin-top: auto`) sits at its bottom, as in 02. */
+  .queueColumn {
+    display: flex;
+    flex-direction: column;
+    flex: none;
+    inline-size: 300px;
+    min-block-size: 0;
+    overflow-y: auto;
+    border-inline-end: 1px solid var(--border-subtle);
+  }
+
+  .queue {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* 02: `1px #EDE9E1` between rows. */
+  .queueItem + .queueItem {
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  /*
+   * 02: `padding:14px 20px`, `gap:5px`. The one on screen is white with a 3px
+   * `#121212` edge - and 02 lets its text move 3px for it, so ours does too.
+   */
+  .queueButton {
+    inline-size: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: var(--space-14) var(--space-20);
+    background: none;
+    border: 0;
+    text-align: start;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .queueButton[aria-current='true'] {
+    background-color: var(--panel-field);
+    /* Logical, so the marker is on the correct edge in Hebrew. */
+    border-inline-start: 3px solid var(--action-base);
+  }
+
+  .queueButton:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: -2px;
+  }
+
+  .queueTop {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-8);
+  }
+
+  /* 13.5px - 500 in the list, 600 on the one on screen. */
+  .queueSummary {
+    min-inline-size: 0;
+    font-size: 13.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .queueButton[aria-current='true'] .queueSummary {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  /* How long it has waited - or how long is left, in red, when it is close. */
+  .queueWhen {
+    flex: none;
+    font-size: 10.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  .queueWhen[data-soon] {
+    color: var(--intent-urgent-text);
+  }
+
+  .queueMeta {
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+  }
+
+  /* 02's pill: `padding:3px 8px`, radius 6, 10.5px, coloured by meaning. */
+  .queueTag {
+    align-self: flex-start;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    font-size: 10.5px;
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  /* "Moves money" in 02's violet - a reach, not a danger. */
+  .queueTag[data-tag='FINANCIAL'],
+  .queueTag[data-tag='MOVES_MONEY'],
+  .queueTag[data-tag='commerce'] {
+    background-color: var(--ai-avatar-surface);
+    color: var(--ai-avatar-text);
+  }
+
+  /* ── The decision ────────────────────────────────────────────────────── */
+  .detail {
+    flex: 1;
+    min-inline-size: 0;
+    min-block-size: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    padding: var(--space-32) var(--space-40);
+  }
+
+  /* 02: the heading on the left, "Reversible" on the right. */
+  .detailHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-24);
+    margin-block-end: var(--space-12);
+  }
+
+  .detailHeading {
+    min-inline-size: 0;
+  }
+
+  /* 02: 10px/500, `#8C887F`, capitals. */
+  .requestedBy {
+    margin: 0;
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-mono);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  /*
+   * A plan's eyebrow names the product ("Home"), which keeps its case; and
+   * Hebrew has no capitals, so there uppercase only shouts the Latin words.
+   */
+  .requestedBy[data-plan],
+  :root:lang(he) .requestedBy {
+    text-transform: none;
+  }
+
+  /* 02: 34px/600, 12px under the eyebrow. */
+  .detailSummary {
+    margin: var(--space-12) 0 0;
+    font-size: 34px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-hero);
+    color: var(--text-primary);
+  }
+
+  /*
+   * Risk labels, as labels. `IRREVERSIBLE` says the action cannot be taken
+   * back - it does NOT describe a window in which it could be, because no such
+   * window exists anywhere in this product.
+   */
+  .riskTags {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-6);
+    margin: var(--space-10) 0 0;
+    padding: 0;
+  }
+
+  .riskTag {
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    font-size: 10.5px;
+    color: var(--intent-urgent-text);
+    background-color: var(--intent-urgent-surface);
+  }
+
+  /* 02's cards: two across at `gap:14px`, white, radius 14, `16px 18px`. */
+  .detailCards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-14);
+  }
+
+  .detailCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-16) 18px;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .detailCardTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .reason,
+  .policyRule {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-body);
+  }
+
+  .policyRule {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* The product cannot say whether this one ran. Neither will the screen. */
+  .unknownOutcome,
+  .lapsed {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding: var(--space-12) var(--space-16);
+  }
+
+  /* 02's bar, at the bottom of the decision. */
+  .decision {
+    margin-block-start: auto;
+    padding-block-start: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .decisionRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  /* 02: `#121212`, radius 10, `padding:11px 22px`, 13.5px. */
+  .approve {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 22px;
+    border: 0;
+    border-radius: var(--space-10);
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font: inherit;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+
+  /* 02's Reject is quiet: no border, `#8C887F`. */
+  .reject {
+    padding: 11px var(--space-16);
+    border: 0;
+    border-radius: var(--space-10);
+    background: none;
+    color: var(--text-subtle);
+    font: inherit;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+
+  .approve:disabled,
+  .reject:disabled,
+  .retry:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .approve:focus-visible,
+  .reject:focus-visible,
+  .reasonChip:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .nextHint {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * 02's reject bar: white, radius 12, `padding:12px 16px`, the question and
+   * one-tap reasons. A rejection carries a reason by contract - the route
+   * answers 400 without one - so the field is part of the bar.
+   */
+  .rejectBar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
+    padding: var(--space-12) var(--space-16);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-12);
+  }
+
+  .reasonLabel {
+    font-size: var(--font-size-label);
+    color: var(--text-body);
+  }
+
+  .reasonInput {
+    flex: 1;
+    min-inline-size: 8rem;
+    padding: var(--space-6) var(--space-10);
+    border: 1px solid var(--border-default);
+    border-radius: 7px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+
+  /* 02: `#F3F0EA`, radius 7, `padding:6px 11px`, 11.5px. */
+  .reasonChip {
+    padding: var(--space-6) 11px;
+    border: 0;
+    border-radius: 7px;
+    background-color: var(--panel-inset);
+    color: var(--intent-neutral-text);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    cursor: pointer;
+  }
+
+  .retry {
+    align-self: flex-start;
+    padding: var(--space-10) var(--space-16);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-10);
+    background: none;
+    color: var(--text-body);
+    font: inherit;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+
+  /* 02's key legend in the header: a bordered chip, 11.5px. */
+  /* 02: the key hint in mono. */
+  .keys {
+    margin: 0;
+    padding: var(--space-4) var(--space-8);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    line-height: normal;
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 03b, measured - the moment after
+   * ════════════════════════════════════════════════════════════════════════
+   * The pane, `gap:14px`: the confirmation, what was sent, the pattern, and
+   * "Up next" at its foot. The decided row stays green at the queue's head.
+   */
+  .queueDone {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: var(--space-14) var(--space-20);
+    background-color: var(--intent-calm-surface);
+  }
+
+  .queueDone .queueSummary {
+    color: var(--intent-neutral-text);
+  }
+
+  .queueWhen[data-done] {
+    color: var(--signal-done-text);
+  }
+
+  .queueDone[data-failed] {
+    background-color: var(--intent-blocked-surface);
+  }
+
+  .queueDone[data-failed] .queueWhen[data-done] {
+    color: var(--intent-blocked-text);
+  }
+
+  .moment {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  /* White, radius 14, `1px #C9D8B4`; the head `#F1F5EC` at `15px 18px`. */
+  .momentDone {
+    overflow: clip;
+    min-inline-size: 0;
+    background-color: var(--panel-field);
+    border: 1px solid var(--calm-edge);
+    border-radius: var(--radius-card);
+  }
+
+  .momentDone[data-failed] {
+    border-color: var(--intent-blocked-edge);
+  }
+
+  .momentDoneHead {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 15px 18px;
+    background-color: var(--intent-calm-surface);
+  }
+
+  .momentDone[data-failed] .momentDoneHead {
+    background-color: var(--intent-blocked-surface);
+  }
+
+  .momentCheck {
+    flex: none;
+    inline-size: 19px;
+    block-size: 19px;
+    border-radius: 50%;
+    background-color: var(--signal-done-text);
+    color: var(--panel-field);
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 19px;
+    text-align: center;
+  }
+
+  .momentDone[data-failed] .momentCheck {
+    background-color: var(--intent-blocked-text);
+  }
+
+  .momentTitle {
+    margin: 0;
+    min-inline-size: 0;
+    font-size: 13.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--intent-calm-text);
+  }
+
+  .momentAgo {
+    flex: none;
+    font-size: 11.5px;
+    color: var(--signal-done-text-soft);
+  }
+
+  .momentHeadActions {
+    margin-inline-start: auto;
+    display: flex;
+    gap: var(--space-8);
+  }
+
+  /* `padding:6px 13px`, radius 8, white with the card's edge, 11.5px. */
+  .momentButton {
+    padding: 6px 13px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 11.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .momentDoneHead .momentButton {
+    border-color: var(--calm-edge);
+    color: var(--intent-calm-text);
+  }
+
+  button.momentButton {
+    cursor: pointer;
+  }
+
+  .momentButton[aria-disabled='true'],
+  .momentButton:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  button.momentButton:focus-visible,
+  .momentOpen:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /* The chain: steps along one row, `padding:14px 18px`, a dot before each. */
+  .momentChain {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8) var(--space-32);
+    margin: 0;
+    padding: var(--space-14) 18px;
+    list-style: none;
+  }
+
+  .momentStep {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    font-size: var(--font-size-label);
+    color: var(--intent-neutral-text);
+  }
+
+  .momentStep::before {
+    content: '';
+    flex: none;
+    inline-size: 6px;
+    block-size: 6px;
+    align-self: center;
+    border-radius: 50%;
+    background-color: var(--signal-done);
+  }
+
+  .momentStep[data-state='failed'] {
+    color: var(--intent-blocked-text);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .momentStep[data-state='failed']::before {
+    background-color: var(--intent-blocked-edge);
+  }
+
+  /* Not yet is not failed: delivery may still be retried. */
+  .momentStep[data-state='pending'] {
+    color: var(--text-subtle);
+  }
+
+  .momentStep[data-state='pending']::before {
+    background-color: var(--border-emphasis);
+  }
+
+  .momentDetail {
+    flex-basis: 100%;
+    font-size: var(--font-size-caption);
+    font-weight: var(--font-weight-regular);
+    color: var(--text-subtle);
+  }
+
+  .momentFix {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .momentFix:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /* "What GOTCHA sent": white, radius 14; head `12px 18px` with a violet dot. */
+  .momentCard {
+    overflow: clip;
+    min-inline-size: 0;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .momentCardHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    padding: var(--space-12) 18px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .momentDot {
+    flex: none;
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background-color: var(--step-next);
+  }
+
+  .momentCardTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .momentCardMeta {
+    margin-inline-start: auto;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .momentMessage {
+    margin: 0;
+    padding: var(--space-14) 18px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
+
+  .momentCardActions {
+    display: flex;
+    gap: var(--space-8);
+    padding: 0 18px var(--space-14);
+  }
+
+  /* 02's violet offer: `padding:17px 20px`, `gap:16px`, radius 14. */
+  .momentPattern {
+    display: flex;
+    align-items: center;
+    gap: var(--space-16);
+    padding: 17px var(--space-20);
+    background-color: var(--ai-card-surface);
+    border: 1px solid var(--ai-card-edge);
+    border-radius: var(--radius-card);
+  }
+
+  .momentPattern > div:first-child {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .momentPatternTitle {
+    margin: 0;
+    font-size: 13px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--ai-card-title);
+  }
+
+  .momentPatternBody {
+    margin: 5px 0 0;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--ai-card-text);
+  }
+
+  .momentPatternActions {
+    flex: none;
+    inline-size: 174px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .momentPatternPrimary,
+  .momentPatternSecondary {
+    padding: 9px 15px;
+    border-radius: 9px;
+    font-size: var(--font-size-label);
+    text-align: center;
+  }
+
+  .momentPatternPrimary {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .momentPatternSecondary {
+    border: 1px solid var(--ai-card-edge);
+    color: var(--ai-card-text);
+  }
+
+  .momentPatternActions > [aria-disabled='true'] {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* "Up next": at the pane's foot, `padding:16px 18px`, the title 17/600. */
+  .momentNext {
+    margin-block-start: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-16);
+    padding: var(--space-16) 18px;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .momentNextText {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .momentNextEyebrow {
+    margin: 0;
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-mono);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .momentNextTitle {
+    margin: 7px 0 0;
+    font-size: 17px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .momentNextLine {
+    margin: var(--space-4) 0 0;
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  /* "Open it": dark, radius 10, `padding:11px 20px`, 13/500. */
+  .momentOpen {
+    flex: none;
+    padding: 11px var(--space-20);
+    border: 0;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+  }
+
+  /* ── 03c · nothing waiting ───────────────────────────────────────────── */
+  /*
+   * An empty queue is the delegation working. It is styled as a state of its
+   * own rather than as a message sitting in a gap, which is the difference
+   * between "the product is doing its job" and "something is missing".
+   */
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 03c - 02's "What you decided earlier" card, measured
+   * ════════════════════════════════════════════════════════════════════════
+   * White, `1px #E6E2DA`, radius 14, clipped. A header row at `14px 18px`:
+   * the heading 12.5/600, a count 11.5 `#8C887F`. Rows at `12px 18px`,
+   * `gap:14px`: a 56px time in mono 10.5/500, the action 12.5px, how it
+   * ended 11px in its colour. A `#F5F2EC` footer bar at `12px 18px`.
+   * `line-height: normal`, as everywhere 02 is measured.
+   */
+  .decidedCard {
+    /* 02's body starts 36 below the header on Approvals: the body's 24 + 12. */
+    margin-block-start: var(--space-12);
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+    min-inline-size: 0;
+    line-height: normal;
+  }
+
+  .decidedCardHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+    padding: var(--space-14) 18px;
+    /* 02: `1px #F0EDE7` under the heading. */
+    border-block-end: 1px solid var(--panel-well);
+  }
+
+  .decidedHeading {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .decidedCount {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .decidedNote {
+    margin: 0;
+    padding: 0 18px var(--space-14);
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  .decidedList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .decidedRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    padding: var(--space-12) 18px;
+    /* 02: `1px #F7F5F1` between rows, none under the last. */
+    border-block-end: 1px solid var(--row-divider);
+  }
+
+  .decidedRow:last-child {
+    border-block-end: 0;
+  }
+
+  /* 02's 56 as a floor: "2 באוג׳" is wider in Hebrew and must stay one line. */
+  .decidedWhen {
+    flex: none;
+    min-inline-size: 56px;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  .decidedSummary {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: 12.5px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .decidedStatus {
+    flex: none;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  /* 02: Approved `#4F7A2E`, Rejected `#B0472A`, a deadline that passed amber. */
+  .decidedStatus[data-tone='approved'] {
+    color: var(--signal-done-text);
+  }
+
+  .decidedStatus[data-tone='rejected'] {
+    color: var(--intent-urgent-text);
+  }
+
+  /* 02: Edited amber. */
+  .decidedStatus[data-tone='edited'] {
+    color: var(--intent-blocked-text);
+  }
+
+  .decidedStatus[data-tone='lapsed'] {
+    color: var(--intent-blocked-text);
+  }
+
+  /* Approved and it did not run, or nobody recorded whether it did. */
+  .decidedStatus[data-tone='problem'] {
+    color: var(--intent-urgent-text);
+  }
+
+  .decidedFooter {
+    flex: none;
+    margin: 0;
+    padding: var(--space-12) 18px;
+    background-color: var(--panel-footer);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* 02's header figures: the label quiet, the number 11.5/600. */
+  .headerStats {
+    display: flex;
+    gap: var(--space-16);
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    line-height: normal;
+  }
+
+  .headerStats strong {
+    margin-inline-start: var(--space-4);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+}
+
+@layer features {
+  /*
+   * One day, as a group - drawn only when the queue spans days. `.queue`
+   * keeps its own dividers between items, so the day adds none.
+   */
+  .queueDay {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .queueDay + .queueDay {
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .queueDayLabel {
+    margin: 0;
+    padding: var(--space-8) var(--space-20);
+    font-size: 10.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+    background-color: var(--panel-base);
+    position: sticky;
+    inset-block-start: 0;
+  }
+
+  .queueDayItems {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .queueButton[data-lapsed='yes'] .queueWhen {
+    color: var(--intent-blocked-text);
+  }
+
+  /* 02: `#FCFBF8`, `padding:13px 20px`, `#EDE9E1` above, 11.5px, count right. */
+  .decidedLink {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-10);
+    padding: 13px var(--space-20);
+    background-color: var(--panel-quiet);
+    border-block-start: 1px solid var(--border-subtle);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .decidedLink:hover {
+    color: var(--text-secondary);
+  }
+
+  .decidedLink:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: -2px;
+  }
+
+  /* 03c's body: 02's two blocks, 20 apart, filling to the frame's foot. */
+  .rest {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-20);
+    min-block-size: 0;
+    padding-block-start: var(--space-12);
+  }
+
+  .rest .decidedCard {
+    flex: 1;
+    min-block-size: 0;
+    margin-block-start: 0;
+  }
+
+  /* 02: 1138×209, `#171717`, radius 16, `26px 28px`. */
+  .handled {
+    flex: none;
+    padding: 26px 28px;
+    border-radius: 16px;
+    background-color: var(--frame-raised);
+    line-height: normal;
+  }
+
+  .handledEyebrow {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--frame-text-eyebrow);
+  }
+
+  .handledLead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-12);
+    margin: 14px 0 0;
+    min-block-size: 52px;
+  }
+
+  .handledNumber {
+    font-size: 52px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-giant);
+    color: var(--frame-text);
+  }
+
+  .handledUnit,
+  .handledQuiet {
+    font-size: 15px;
+    color: var(--frame-text-secondary);
+  }
+
+  .handledQuiet {
+    align-self: center;
+    font-size: 19px;
+    color: var(--frame-text);
+  }
+
+  .handledFigures {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 22px 0 0;
+    padding-block-start: 18px;
+    border-block-start: 1px solid var(--frame-selected);
+  }
+
+  .handledFigure dt {
+    font-size: var(--font-size-caption);
+    color: var(--menu-dark-icon);
+  }
+
+  .handledFigure dd {
+    margin: 4px 0 0;
+    font-size: 19px;
+    color: var(--frame-text);
+  }
+
+  /* 02: the queue's foot, pinned - "Change what needs asking", underlined. */
+  .queueFoot {
+    margin: auto 0 0;
+    padding: var(--space-16) var(--space-20);
+    border-block-start: 1px solid var(--border-subtle);
+    font-size: var(--font-size-caption);
+    line-height: 1.5;
+    color: var(--text-subtle);
+  }
+
+  .queueFootLink {
+    padding-block-end: 2px;
+    border-block-end: 1px solid var(--border-strong);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  /* 02: "Order #1842 · damaged item · …", 14px under the title. */
+  .detailFacts {
+    margin: var(--space-6) 0 0;
+    font-size: 14px;
+    color: var(--intent-neutral-text);
+  }
+
+  /* 02's top right: the label quiet, the answer below it. */
+  .reversible {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 3px;
+    margin: 0;
+    text-align: end;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .reversible strong {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-primary);
+  }
+
+  /* 02: bullets, 8 apart, 9 from their mark. */
+  .whyList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .whyList li {
+    display: flex;
+    gap: 9px;
+  }
+
+  /* 02's dot: green - nothing classifies a reason as for or against. */
+  .whyList li::before {
+    content: '';
+    flex: none;
+    inline-size: 6px;
+    block-size: 6px;
+    margin-block-start: 5px;
+    border-radius: 50%;
+    background-color: var(--signal-done);
+  }
+
+  /* 02: label left, value right, 7 apart. */
+  .customerFacts {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin: 0;
+    font-size: 12.5px;
+  }
+
+  .customerFacts div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-12);
+  }
+
+  .customerFacts dt {
+    color: var(--text-subtle);
+  }
+
+  .customerFacts dd {
+    margin: 0;
+    color: var(--text-primary);
+  }
+
+  /* 02: chips joined by arrows, wrapping. */
+  .chain {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .chainStep {
+    padding: var(--space-6) 11px;
+    border-radius: 7px;
+    background-color: var(--panel-inset);
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  /* 02: the arrows lighter than the steps (`#B4AFA5`). */
+  .chainArrow {
+    font-size: 12.5px;
+    color: var(--text-disabled);
+  }
+
+  /* A plan's steps: its own sentences, numbered, each opening what it acts on. */
+  .planSteps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    margin: 0;
+    padding-inline-start: var(--space-16);
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .planStepLink {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--border-default);
+    text-underline-offset: 3px;
+  }
+
+  .planStepLink:hover {
+    text-decoration-color: currentcolor;
+  }
+
+  /* 02: the key on Approve - a small mono tile beside the word. */
+  .key {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background-color: var(--frame-selected);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--action-text);
+  }
+
+  /* 02: Edit amount, Ask - outlined, `11px 20px`, radius 10. */
+  .secondary {
+    padding: 11px var(--space-20);
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    background: none;
+    font: inherit;
+    font-size: 13.5px;
+    color: var(--intent-neutral-text);
+    cursor: pointer;
+  }
+
+  .secondary[aria-disabled='true'] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .editRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .editProblem {
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+
+  .askProblem {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+
+  .reasonChip[aria-pressed='true'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  /* Tried and failed today - amber on the dark card, with the repair. */
+  .handledFailed {
+    margin: var(--space-10) 0 0;
+    font-size: 13px;
+    color: var(--intent-blocked-edge);
+  }
+
+  .handledRepair {
+    color: var(--frame-text);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* `?id=` for a request that is not waiting: said above the page. */
+  .askedNotice {
+    margin: 0 0 var(--space-12);
+    padding: 10px 14px;
+    border-radius: 10px;
+    background-color: var(--panel-inset);
+    font-size: var(--font-size-meta);
+    color: var(--text-secondary);
+  }
+}

@@ -117,11 +117,8 @@ export async function consumeOAuthState<T = OAuthStateClaims>(
  * hard-coded marketplace path).
  */
 export function returnPathForFlow(flow: string | undefined, provider: string, query: Record<string, string> = {}): string {
-  const params = new URLSearchParams(query);
-  if (flow === "onboarding") {
-    params.set("connected", provider);
-    return `/setup?${params.toString()}`;
-  }
-  params.set("status", "connected");
-  return `/ai-studio/marketplace/${provider}?${params.toString()}`;
+  // The app's pages (the legacy /setup and marketplace are gone, 2026-10-21).
+  if (flow === "onboarding") return "/onboarding";
+  const params = new URLSearchParams({ system: provider, connected: "1", ...query });
+  return `/studio/capabilities?${params.toString()}`;
 }

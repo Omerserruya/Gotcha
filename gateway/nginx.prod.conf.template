@@ -52,14 +52,69 @@ http {
 
     # Authentik - the identity provider. Fronted at auth.gotcha.co.il by the
     # vhost at the bottom of this file. See docs/security/authentik-architecture.md.
-    upstream authentik_server {
-        server authentik-server:${AUTHENTIK_PORT};
+    # Authentik is reached through a VARIABLE, not an `upstream` block, so nginx
+    # resolves the name per request (Docker's DNS, below) instead of once at
+    # startup. With a static upstream (until 2026-10-22) a gateway started while
+    # Authentik was stopped refused to start ("host not found in upstream
+    # authentik-server:9000"; prod was down ~1 min in the release window), and
+    # after every Authentik recreate it kept the OLD container IP and answered
+    # 502 until `nginx -s reload`. `valid=10s` bounds how long a dead IP lingers.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    # The app (frontend-v2), a Node container since 2026-10-21. The legacy
+    # frontend's static export is no longer built or served. The port is
+    # hardcoded: this file's envsubst whitelist has no variable for it.
+    upstream frontend_v2 {
+        server frontend-v2:3000;
     }
 
-    # No `frontend` upstream in prod - the static export is baked into THIS
-    # nginx image at /usr/share/nginx/html and served from `location /` below.
-    # See gateway/Dockerfile.prod. Dev still uses an upstream (separate Node
-    # SSR container) via nginx/nginx.conf.template.
+    # Old app paths (the legacy frontend's, still in emails already sent and
+    # in bookmarks) 302 to their equivalent at the root, query kept where it
+    # means the same. Every host; the legacy app no longer answers anything.
+    # Unlisted paths fall through to the app (its own 404). Named captures
+    # only; dots excluded so an asset path is never redirected.
+    map $arg_id $v2_inbox_qs { default "?c=$arg_id"; "" ""; }
+    map "$arg_status$arg_calendar" $v2_cap_ok { default ""; ~connected "&connected=1"; }
+    map $uri $v2_dest {
+        default "";
+        ~^/login/?$                                                         /sign-in;
+        ~^/(dashboard|getting-started)/?$                                /home$is_args$args;
+        ~^/setup/?$                                                      /onboarding$is_args$args;
+        ~^/(conversations|history)/?$                                    /inbox$v2_inbox_qs;
+        ~^/contacts/(?<v2cid>[^/.]+)/?$                                  /customers/$v2cid;
+        ~^/(?<v2top>analytics|approvals)/?$                              /$v2top$is_args$args;
+        ~^/outbound(/(broadcasts|campaigns|scheduled))?/?$               /outreach$is_args$args;
+        ~^/outbound/templates/?$                                         /outreach/templates;
+        ~^/outbound/call/?$                                              /outreach/calls;
+        ~^/(settings/)?channels/?$                                       /settings/channels$is_args$args;
+        ~^/settings/channels/whatsapp/?$                                 /settings/channels/whatsapp$is_args$args;
+        ~^/settings/?$                                                   /settings;
+        ~^/(agents|settings/(people|users|agents))/?$                    /settings/people;
+        ~^/settings/permissions/?$                                       /settings/people/permissions;
+        ~^/settings/(?<v2set>security|notifications)/?$                  /settings/$v2set;
+        ~^/(usage|settings/usage|settings/billing(/(details|credits|usage-limit))?)/?$  /settings/billing$is_args$args;
+        ~^/settings/billing/(?<v2bill>plan|payment-method)/?$            /settings/billing/$v2bill$is_args$args;
+        ~^/settings/(business-systems|integrations)/?$                   /settings/systems$is_args$args;
+        ~^/settings/business-systems/shopify/finish/?$                   /studio/capabilities?system=shopify&pending=1&reason=claim;
+        ~^/integrations/shopify/billing/complete/?$                      /studio/capabilities?system=shopify&billing=verify&shop=$arg_shop;
+        ~^/integrations/?$                                               /studio/capabilities$is_args$args;
+        ~^/(integrations|ai-studio/marketplace)/(?<v2slug>[a-z0-9_-]+)/?$ /studio/capabilities?system=$v2slug$v2_cap_ok;
+        ~^/settings/(tools|policy|business-rules)/?$                     /studio/capabilities;
+        ~^/ai-studio/?$                                                  /studio$is_args$args;
+        ~^/(knowledge|business|ai-studio/knowledge)/?$                   /studio/knowledge$is_args$args;
+        ~^/ai-studio/agents/[^/.]+/?$                                    /studio/employees;
+    }
+
+    # Never redirect a page to itself. The map above was written for /v2 (old
+    # path -> /v2/new path); at the root, an old path that kept its name maps
+    # to itself (/approvals, /settings/security, /settings/billing...), which
+    # without this loops forever. Empty when the target's path equals the
+    # request's (a trailing slash aside), so the app serves it.
+    map "$v2_dest|$uri" $v2_go {
+        default $v2_dest;
+        "~^([^?|]*)(\?[^|]*)?\|\1/?$" "";
+    }
+
 
     # Real public scheme. TLS terminates at Cloudflare, so $scheme is always
     # "http" inside this container - passing it to Authentik would make it
@@ -121,8 +176,47 @@ http {
         ''      close;
     }
 
+    # The client's real address (2026-10-22). The only way in is a host
+    # cloudflared, so every request reached nginx from the docker bridge
+    # (dev: 172.19.0.1 for everyone) and each limit below - plus Express's
+    # `trust proxy 1` window, which reads the X-Forwarded-For entry nginx appends
+    # from $remote_addr - was ONE bucket shared by all users. Cloudflare sends
+    # the visitor's address in CF-Connecting-IP; trust it only from the private
+    # ranges the tunnel and the bridge use (the same list Authentik trusts).
+    set_real_ip_from 127.0.0.1;
+    set_real_ip_from 10.0.0.0/8;
+    set_real_ip_from 172.16.0.0/12;
+    set_real_ip_from 192.168.0.0/16;
+    real_ip_header CF-Connecting-IP;
+
     # Rate limiting zone
     limit_req_zone $binary_remote_addr zone=api:10m rate=100r/s;
+
+    # Authentik 2025.6+ (and the app's sign-in callback) answer with response
+    # headers past nginx's 4k default; behind the proxy that is a 502 ("upstream
+    # sent too big header") while the service itself is fine. Dev hit it at the
+    # 2025.6 step (389a1c5c) and set this at http level so every vhost has it.
+    # Production needs it BEFORE Authentik is stepped past 2025.4.
+    proxy_buffer_size 16k;
+    proxy_buffers     8 16k;
+    proxy_busy_buffers_size 32k;
+    # ★ 429, NOT NGINX'S DEFAULT 503. Without this every rate-limited route in
+    # the product answers "Service Unavailable" for "you sent too many requests",
+    # and the two are investigated in completely different places.
+    #
+    # It cost a real diagnosis: a capture run saw three 503s on
+    # /api/billing/credit-summary, the billing service had logged nothing about
+    # them - because it never received the requests - and the absence of any 429
+    # in the run was read as evidence that the rate limiter was NOT involved. It
+    # was the rate limiter. This nginx could not emit a 429 to be found.
+    #
+    # The client already classifies correctly and was being lied to:
+    # redesign/src/api/client/api-error.ts maps 429 -> 'rate_limited' and
+    # 502/503/504 -> 'integration'. So a throttled request was reported as an
+    # upstream failure. With this line, `integration` means an upstream problem
+    # again, and a throttle is findable by grepping for the status it deserves.
+    limit_req_status 429;
+
 
     # Authentik gets its own zone. Login/token endpoints deserve a tighter
     # limit than the general API, and they must not share a bucket with it -
@@ -147,6 +241,18 @@ http {
     server {
         listen 80 default_server;
         server_name app.gotcha.co.il _;
+
+        # Authentik's own UI paths on the APP host go to the IdP (2026-10-22).
+        # Links Authentik built before the X-Forwarded-Host fix (reset emails
+        # already in inboxes) and any relative link it hands the panel
+        # (recovery_url "/if/flow/...") land here; the app has no /if/ or
+        # /flows/ routes. 302 keeps the path and query (flow_token, itoken).
+        location ^~ /if/ {
+            return 302 https://auth.gotcha.co.il$request_uri;
+        }
+        location ^~ /flows/ {
+            return 302 https://auth.gotcha.co.il$request_uri;
+        }
 
         # Increase body size for webhooks
         client_max_body_size 10m;
@@ -188,6 +294,106 @@ http {
             add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
         }
 
+        # ─── The app's own server routes (frontend-v2) ───
+        # Exact matches, so they beat `location /api/auth` below while
+        # /api/auth/setup/:token and the rest stay on the auth service;
+        # /api/realtime/ticket stays there too.
+        location = /api/auth/login {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location = /api/auth/callback {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location = /api/auth/logout {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location = /api/session/ticket {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location ^~ /api/exports/ {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        # The BFF streams (SSE): nothing buffered between it and the browser.
+        location ^~ /api/bff/ {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_buffering off;
+            proxy_read_timeout 3600s;
+        }
+
+        # The app's sign-in panel drives Authentik's flow executor first-party
+        # (the password goes browser -> this proxy -> Authentik, never through
+        # Node). Same as dev's; see nginx/nginx.conf.template for the reasons.
+        location ^~ /auth-api/ {
+            set $authentik_origin http://authentik-server:${AUTHENTIK_PORT};
+            rewrite ^/auth-api/(.*)$ /api/v3/$1 break;
+            proxy_pass $authentik_origin;
+            # The executor redirects to its own absolute /api/v3/ paths.
+            proxy_redirect /api/v3/ /auth-api/;
+            proxy_http_version 1.1;
+            # Authentik's own name: it builds URLs and checks the origin by it.
+            proxy_set_header Host auth.gotcha.co.il;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $public_proto;
+            # ★ THE IdP'S NAME, NOT $host (2026-10-22). Authentik builds every absolute
+            #   link it emails (password reset, email verification, invitations) from
+            #   X-Forwarded-Host - a trusted proxy's value wins over Host. With $host
+            #   the reset email pointed at the APP host, where /if/flow/ is not
+            #   Authentik, and the link 404ed. Anonymous executor POSTs (the panel's
+            #   whole path) were measured to answer the same either way.
+            proxy_set_header X-Forwarded-Host auth.gotcha.co.il;
+            limit_req zone=authentik burst=40 nodelay;
+        }
+
         # ─── Auth Service ─────────────────────────────────
         location /api/auth {
             limit_req zone=api burst=20 nodelay;
@@ -212,6 +418,85 @@ http {
         location /api/permissions {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # The Security screen's audit log. Added here at the same time as the
+        # DEV template deliberately: this file and nginx/nginx.conf.template are
+        # maintained in parallel, and a route added to only one of them is the
+        # drift that leaves an endpoint working in DEV and 404ing in production.
+        location /api/audit-logs {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ─── Present in the DEV template and absent here until now ──────────
+        #
+        # These three, plus /api/usage/allowance further down, existed only in
+        # nginx/nginx.conf.template. The symptom was NOT a 404: there is no
+        # catch-all /api location in this server block, so an unlisted /api
+        # path fell through to `location /`, which does
+        # try_files … /index.html - and the caller received the SPA shell with
+        # status 200. `res.ok` passes, then JSON.parse fails somewhere far from
+        # the cause.
+        #
+        # /api/decision-timeline was the live one: services/ai serves it and
+        # the deployed inbox renders DecisionTimelinePanel behind a UI toggle,
+        # so a user could open it in production and get HTML.
+        #
+        # Service targets verified against each app.use rather than copied
+        # from a neighbouring block: workspace and setup are auth
+        # (auth/src/index.ts:50,49), decision-timeline is ai
+        # (ai/src/index.ts:171), allowance is billing (billing/src/index.ts:53).
+        #
+        # /api/docs/ stays DEV-only on purpose - see the note in the dev
+        # template. It is the one entry the diff between these files should
+        # still contain.
+        location /api/workspace {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/setup {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Customer detail for one approval. ai_service because the commerce
+        # facts live there; keyed on a single approval because each call is two
+        # live vendor round trips with no cache - never for a list.
+        location /api/customer-card {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/decision-timeline {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
@@ -247,6 +532,19 @@ http {
         # compensation / refund / coupon tools the Integrations & Tools workspace
         # displays. There was NEVER a location for this, so ActionPoliciesPanel
         # has always 404'd - the panel rendered and silently had no data.
+        # Policy-evaluation audit, read-only. Same service and gate family as
+        # /api/business-policies above; separate path because it is a record of
+        # decisions rather than the policies themselves.
+        location /api/policy-decisions {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://conversation_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /api/business-policies {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://conversation_service;
@@ -639,6 +937,17 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # Studio > Automations (chatbot service)
+        location /api/automations {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://chatbot_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # F1 identity (conversation service)
         location /api/identity {
             limit_req zone=api burst=20 nodelay;
@@ -881,6 +1190,17 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # AI Studio business skills (design 6) - ai service.
+        location /api/business-skills {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /api/router-rules {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
@@ -894,6 +1214,22 @@ http {
         location /api/flow-canvas {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Conversation headroom for the period, and the projected exhaustion
+        # date Home and Settings both render. BILLING, not ai - the broader
+        # /api/usage below goes to ai_service, and nginx picks the longest
+        # matching prefix, so this must exist for the allowance to reach the
+        # right service at all. Without it the request matches /api/usage and
+        # is answered by a service that does not serve it.
+        location /api/usage/allowance {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://billing_service;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
@@ -924,6 +1260,23 @@ http {
         location /api/ai-debug {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Home chat threads. Sending a message answers an SSE stream, and so
+        # does resuming one: no buffering, a long read timeout (as /api/agent).
+        location /api/assistant {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 600s;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
@@ -1007,6 +1360,33 @@ http {
 
         # Industry Intelligence Pack catalog + apply (Customer Intelligence V2).
         location /api/industry-packs {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Short-lived single-use WebSocket handshake tickets (§A9). Lets a
+        # cookie-only session open the inbox socket and the notifications
+        # stream without exposing a long-lived credential to page JavaScript.
+        location /api/realtime {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Human-review queue for uncertain or conflicting extracted intelligence
+        # (Customer Intelligence V2, Phase 2). Handler, approve and reject all
+        # exist; there was never a location for them, so every call 404'd at
+        # the gateway. Tenant ADMIN only, enforced in the service.
+        location /api/intelligence-reviews {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
@@ -1126,11 +1506,19 @@ http {
         #
         #   the HASHED bundle is immutable by construction: new content is
         #   a new filename, so it can be cached for a year safely.
+        # Docs shipped beside the widget (vendor READMEs and the like) are
+        # not served: the directory is the build output, not a website.
+        location ~ ^/widget/.*\.md$ {
+            return 404;
+        }
+
         location = /widget/gotcha-shopify-bootstrap.js {
-            # Served from the static export baked into THIS image - there is
-            # no `frontend` container in production. Proxying to one made nginx
-            # refuse to start outright ("host not found in upstream frontend"),
-            # which took the whole gateway down, not just the widget.
+            # Served from frontend/public/widget, copied into THIS image at
+            # /usr/share/nginx/widget (2026-10-21; it was the legacy app's
+            # static export, which is no longer built). There is no `frontend`
+            # container in production: proxying to one made nginx refuse to
+            # start ("host not found in upstream frontend").
+            root /usr/share/nginx;
             try_files $uri =404;
 
             add_header Access-Control-Allow-Origin "*" always;
@@ -1151,20 +1539,50 @@ http {
         }
 
         location /widget/ {
-            # Served from the static export baked into THIS image - there is
-            # no `frontend` container in production. Proxying to one made nginx
-            # refuse to start outright ("host not found in upstream frontend"),
-            # which took the whole gateway down, not just the widget.
+            # Served from frontend/public/widget, copied into THIS image at
+            # /usr/share/nginx/widget (2026-10-21; it was the legacy app's
+            # static export, which is no longer built). There is no `frontend`
+            # container in production: proxying to one made nginx refuse to
+            # start ("host not found in upstream frontend").
+            root /usr/share/nginx;
             try_files $uri =404;
 
             add_header Access-Control-Allow-Origin "*" always;
             add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
 
-            # The filename carries no content hash, so a long TTL would pin
-            # a broken widget in every shopper's cache until it expired.
-            # Short TTL plus revalidation until the assets are versioned.
-            # Content-hashed filenames: new bytes are a new URL, so this
-            # can be cached for a year without ever going stale.
+            # Everything here WITHOUT a content hash in its name - the snippet
+            # loader every customer site embeds (chatcenter-widget.js), the
+            # manifest it reads to find the current bundle, vendor files - is
+            # revalidated on every use: a cached copy costs a 304, and a fix
+            # reaches visitors on their next page view. It was "immutable for
+            # a year" (2026-10-14), so a loader or manifest fix would have
+            # reached a visitor only after a year. Hashed bundles: below.
+            add_header Cache-Control "public, no-cache, must-revalidate" always;
+
+            # Security headers repeated: this location declares add_header,
+            # which cancels server-level inheritance, so ALL six must be re-emitted.
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        }
+
+        # Content-hashed bundles (gotcha-shopify-chat.<12 hex>.js): new bytes
+        # are a new URL, so they are cached for a year and never go stale.
+        location ~ "^/widget/[A-Za-z0-9_-]+\.[0-9a-f]{12}\.js$" {
+            # Served from frontend/public/widget, copied into THIS image at
+            # /usr/share/nginx/widget (2026-10-21; it was the legacy app's
+            # static export, which is no longer built). There is no `frontend`
+            # container in production: proxying to one made nginx refuse to
+            # start ("host not found in upstream frontend").
+            root /usr/share/nginx;
+            try_files $uri =404;
+
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+
             add_header Cache-Control "public, max-age=31536000, immutable" always;
 
             # Security headers repeated: this location declares add_header,
@@ -1190,8 +1608,36 @@ http {
         location /api/shopify-chat {
             limit_req zone=api burst=30 nodelay;
             proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header Origin $http_origin;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ─── Website widget (authenticated admin: settings + install) ───
+        location /api/website-widget {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ─── GOTCHA for WooCommerce plugin (docs/api/woocommerce-plugin-v1.md):
+        #     bind / download / remove are authenticated; exchange and signal
+        #     are called by the store's server (a one-time code / a site key) ───
+        location /api/woocommerce-plugin {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -1201,6 +1647,8 @@ http {
         location /api/shopify-live-chat {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -1214,6 +1662,8 @@ http {
         location /api/shopify-chat-install {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            # Never forward a client-supplied internal key.
+            proxy_set_header X-Internal-Key "";
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -1259,6 +1709,15 @@ http {
 
         location ~ ^/t/([^/]+)/api/chatbot-flows(.*)$ {
             proxy_pass http://chatbot_service/api/chatbot-flows$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location ~ ^/t/([^/]+)/api/automations(.*)$ {
+            proxy_pass http://chatbot_service/api/automations$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
@@ -1401,6 +1860,24 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        location ~ ^/t/([^/]+)/api/realtime(.*)$ {
+            proxy_pass http://auth_service/api/realtime$2$is_args$args;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ~ ^/t/([^/]+)/api/intelligence-reviews(.*)$ {
+            proxy_pass http://ai_service/api/intelligence-reviews$2$is_args$args;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location ~ ^/t/([^/]+)/api/field-definitions(.*)$ {
             proxy_pass http://ai_service/api/field-definitions$2$is_args$args;
             proxy_set_header Host $host;
@@ -1461,6 +1938,15 @@ http {
 
         location ~ ^/t/([^/]+)/api/ai-agents(.*)$ {
             proxy_pass http://ai_service/api/ai-agents$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location ~ ^/t/([^/]+)/api/business-skills(.*)$ {
+            proxy_pass http://ai_service/api/business-skills$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
@@ -1623,93 +2109,77 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # ─── Static frontend (Next.js export, baked into this image) ──
-        root /usr/share/nginx/html;
-        index index.html;
+        # ─── The app (frontend-v2), at the root since 2026-10-21 ──────────
+        # It was the legacy app's static export, served from this image. Now
+        # every page, /_next/... and /monitoring go to the app container. A
+        # REGEX location beats a prefix one: any regex added to this server must
+        # be anchored so it cannot take app paths. (The old `^/(he|en)` 301 to
+        # gotcha.co.il is gone: every app route is /he/... or /en/....)
 
-        # Long-cache hashed assets - Next.js output has content hashes in every
-        # filename under /_next/static, so these are safe to cache aggressively.
-        location /_next/static/ {
-            expires 1y;
-            access_log off;
-            add_header Cache-Control "public, immutable";
-            # Security headers repeated: this location declares add_header,
-            # which cancels server-level inheritance, so ALL six must be re-emitted.
-            add_header X-Content-Type-Options "nosniff" always;
-            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-            add_header X-Frame-Options "SAMEORIGIN" always;
-            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        # ─── Legacy public assets, served by nginx (2026-10-21) ──────────
+        # The legacy app is gone but its public files are still linked from
+        # outside the app: /full_icon_white.png is the logo in EVERY brand email
+        # (packages/shared brand-email.ts), integration logo URLs are stored in
+        # the database (/integrations/*.svg), and channel icons, favicons and
+        # logos are referenced by old pages and mail. The legacy file is tried
+        # first; a name it does not have falls through to the app, which serves
+        # its own /integrations/*.png etc. (no names overlap today). Extensions
+        # only, so an old PAGE path (/integrations/hubspot) still reaches the
+        # redirect map in `location /`.
+        location ~ "^/(integrations|platforms|icons)/[A-Za-z0-9_.-]+\.(svg|png|jpe?g|webp|ico)$" {
+            root /usr/share/nginx/legacy-public;
+            try_files $uri @app;
+            expires 7d;
         }
-
-        # Next.js static-export dynamic [id] routes are emitted ONLY as a "_"
-        # placeholder dir (no per-id HTML), because the [id] pages have no
-        # generateStaticParams. Falling back to /index.html (as the generic
-        # block below does) serves the root shell, so the page never mounts and
-        # client-nav RSC (.txt) fetches receive HTML instead of an RSC payload -
-        # which is exactly why deep-linking / refreshing /ai-studio/agents/<id>,
-        # /agents/new, /system/tenants/<id>, etc. rendered nothing.
-        #
-        # Map /<base>/<id>/ and its /<id>/index.txt RSC to that "_" placeholder.
-        # Scoped to the known dynamic bases (alternation) so it can't touch /api,
-        # /_next, or real static pages - those still resolve via $uri first.
-        # Keep the .txt block first; both try $uri before the placeholder so the
-        # list pages (e.g. /system/tenants/index.txt) keep serving their own file.
-        location ~ ^/(departments|integrations|voice|contacts|system/tenants|ai-studio/flows|ai-studio/marketplace|ai-studio/agents|settings/voice-channels|settings/funnels|settings/business-systems|system/plans)/[^/]+/index\.txt$ {
-            try_files $uri /$1/_/index.txt /index.html;
+        location ~ "^/(favicon\.ico|favicon-(16|32|48|96)\.png|apple-touch-icon\.png|logo_icon\.png|logo\.png|full_icon_white\.png)$" {
+            root /usr/share/nginx/legacy-public;
+            try_files $uri @app;
+            expires 7d;
         }
-        location ~ ^/(departments|integrations|voice|contacts|system/tenants|ai-studio/flows|ai-studio/marketplace|ai-studio/agents|settings/voice-channels|settings/funnels|settings/business-systems|system/plans)/[^/]+/?$ {
-            try_files $uri $uri/index.html /$1/_/index.html /index.html;
-        }
-
-        # ...and the SUB-PAGES of a dynamic id, which the two rules above do not
-        # reach: `[^/]+` cannot cross a slash, so /settings/voice-channels/<id>/routing
-        # matched neither and fell through to /index.html - the root shell. The
-        # export emits these as /<base>/_/<sub>/index.html, and today that is
-        #   settings/voice-channels/_/routing   (inbound + outbound call routing)
-        #   departments/_/copilot
-        #   voice/_/replay
-        # all three of which were unreachable in production while building
-        # perfectly. A merchant reported it as "the option is gone from the UI",
-        # which is precisely what a page that never mounts looks like.
-        location ~ ^/(departments|integrations|voice|contacts|system/tenants|ai-studio/flows|ai-studio/marketplace|ai-studio/agents|settings/voice-channels|settings/funnels|settings/business-systems|system/plans)/[^/]+/([^/]+)/index\.txt$ {
-            try_files $uri /$1/_/$2/index.txt /index.html;
-        }
-        location ~ ^/(departments|integrations|voice|contacts|system/tenants|ai-studio/flows|ai-studio/marketplace|ai-studio/agents|settings/voice-channels|settings/funnels|settings/business-systems|system/plans)/[^/]+/([^/]+)/?$ {
-            try_files $uri $uri/index.html /$1/_/$2/index.html /index.html;
+        location @app {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # Next.js export with trailingSlash:true: /foo resolves to /foo/index.html.
-        # Unknown URLs fall back to /index.html so the SPA client router can mount
-        # the matching route at runtime.
-        # ─── Public pricing page (flag-gated, no auth) ────
-        # Placed before the static try_files fallback so a disabled flag wins.
-        # Both /pricing and /pricing/ are gated: the static export emits the
-        # trailing-slash form.
-        location = /pricing {
+        # The app lived under /v2 until 2026-10-21. A PERMANENT 308 (method and
+        # body kept, so a POST from an installed WooCommerce plugin with /v2
+        # baked in still lands), prefix stripped, query kept.
+        location ~ ^/v2(?:/(?<v2rest>.*))?$ {
             absolute_redirect off;
-            if ($public_pricing_enabled != "true") { return 302 /early-access; }
-            try_files $uri $uri/index.html $uri.html /404.html;
+            return 308 /$v2rest$is_args$args;
         }
 
-        location = /pricing/ {
-            absolute_redirect off;
-            if ($public_pricing_enabled != "true") { return 302 /early-access; }
-            try_files $uri $uri/index.html $uri.html /404.html;
-        }
+        # Pages that live on the marketing, trust and help sites.
+        location = /privacy-policy { return 301 https://gotcha.co.il$request_uri; }
+        location = /terms          { return 301 https://gotcha.co.il$request_uri; }
+        location ^~ /legal         { return 301 https://gotcha.co.il$request_uri; }
+        location ^~ /help          { return 301 https://help.gotcha.co.il$request_uri; }
 
-        # The old landing page, which the application build still ships at /he
-        # and /en. It was the marketing site once, and its own metadata still
-        # declares gotcha.co.il/he as its canonical address - which is now a
-        # different page entirely. Two designs answering to one name, with the
-        # older one claiming to be the newer: send them to the real thing.
-        location ~ ^/(he|en)(/|$) {
-            return 301 https://gotcha.co.il$request_uri;
-        }
+        location = /pricing  { return 302 https://gotcha.co.il/pricing; }
+        location = /pricing/ { return 302 https://gotcha.co.il/pricing; }
+        location ^~ /early-access { return 301 https://gotcha.co.il$request_uri; }
 
         location / {
-            try_files $uri $uri/index.html $uri.html /index.html;
+            # Old app paths 302 to their place in this one (the $v2_dest map).
+            # Relative Location: $scheme is http behind Cloudflare.
+            absolute_redirect off;
+            if ($v2_go != "") { return 302 $v2_go; }
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
         }
     }
 
@@ -1743,8 +2213,8 @@ http {
 
         client_max_body_size 1m;
         # The marketing site is its own build with its own /_next chunks, so it
-        # gets its own root. The application export stays at /usr/share/nginx/html
-        # and is still reachable from the few locations below that need it.
+        # gets its own root. (The application is no longer a static export
+        # here; the widget is served from /usr/share/nginx/widget.)
         root /usr/share/nginx/landing;
 
         add_header X-Content-Type-Options "nosniff" always;
@@ -1819,10 +2289,94 @@ http {
         # the catch-all redirect below turned both into a CROSS-ORIGIN 301 that
         # the browser then refused. Serving them here keeps the widget
         # same-origin, so no CORS is involved at all.
-        # The embeddable widget ships with the application build, not this one.
-        location /widget/ {
-            root /usr/share/nginx/html;
+        # The same files and headers as on the application host.
+        # Docs shipped beside the widget (vendor READMEs and the like) are
+        # not served: the directory is the build output, not a website.
+        location ~ ^/widget/.*\.md$ {
+            return 404;
+        }
+
+        location = /widget/gotcha-shopify-bootstrap.js {
+            # Served from frontend/public/widget, copied into THIS image at
+            # /usr/share/nginx/widget (2026-10-21; it was the legacy app's
+            # static export, which is no longer built). There is no `frontend`
+            # container in production: proxying to one made nginx refuse to
+            # start ("host not found in upstream frontend").
+            root /usr/share/nginx;
             try_files $uri =404;
+
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+
+            # `no-cache` still allows a cached copy - it requires it to be
+            # revalidated first, so an unchanged file costs a 304.
+            add_header Cache-Control "public, no-cache, must-revalidate" always;
+
+            # Security headers repeated: this location declares add_header,
+            # which cancels server-level inheritance, so ALL six must be re-emitted.
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        }
+
+        location /widget/ {
+            # Served from frontend/public/widget, copied into THIS image at
+            # /usr/share/nginx/widget (2026-10-21; it was the legacy app's
+            # static export, which is no longer built). There is no `frontend`
+            # container in production: proxying to one made nginx refuse to
+            # start ("host not found in upstream frontend").
+            root /usr/share/nginx;
+            try_files $uri =404;
+
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+
+            # Everything here WITHOUT a content hash in its name - the snippet
+            # loader every customer site embeds (chatcenter-widget.js), the
+            # manifest it reads to find the current bundle, vendor files - is
+            # revalidated on every use: a cached copy costs a 304, and a fix
+            # reaches visitors on their next page view. It was "immutable for
+            # a year" (2026-10-14), so a loader or manifest fix would have
+            # reached a visitor only after a year. Hashed bundles: below.
+            add_header Cache-Control "public, no-cache, must-revalidate" always;
+
+            # Security headers repeated: this location declares add_header,
+            # which cancels server-level inheritance, so ALL six must be re-emitted.
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        }
+
+        # Content-hashed bundles (gotcha-shopify-chat.<12 hex>.js): new bytes
+        # are a new URL, so they are cached for a year and never go stale.
+        location ~ "^/widget/[A-Za-z0-9_-]+\.[0-9a-f]{12}\.js$" {
+            # Served from frontend/public/widget, copied into THIS image at
+            # /usr/share/nginx/widget (2026-10-21; it was the legacy app's
+            # static export, which is no longer built). There is no `frontend`
+            # container in production: proxying to one made nginx refuse to
+            # start ("host not found in upstream frontend").
+            root /usr/share/nginx;
+            try_files $uri =404;
+
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+
+            # Security headers repeated: this location declares add_header,
+            # which cancels server-level inheritance, so ALL six must be re-emitted.
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
         }
 
         location /api/embedded-chat {
@@ -2059,13 +2613,29 @@ http {
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
+        # Authentik's static files, with NO limit_req (2026-10-22). The 2026.2 UI
+        # loads 100+ /static/dist/chunks/*.js at once; under the vhost's
+        # `zone=authentik burst=40` most of them got 429 and the authorize page
+        # spun forever after the password. The flow and API paths keep the limit.
+        # (`= /static/dist/custom.css` below is an exact match and still wins.)
+        location ^~ /static/ {
+            set $authentik_origin http://authentik-server:${AUTHENTIK_PORT};
+            proxy_pass $authentik_origin;
+            proxy_http_version 1.1;
+            proxy_set_header Host              $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Forwarded-Proto $public_proto;
+            add_header X-Content-Type-Options "nosniff" always;
+        }
+
         # The GOTCHA theme sheet: fetched by Authentik's JS and injected into
         # every shadow root. It carries no cache-buster (Authentik builds the
         # URL), and the CDN once pinned a stale copy for hours - users saw the
         # stock Authentik look until the edge cache expired. Force revalidation
         # so a theme change is live on the next page load.
         location = /static/dist/custom.css {
-            proxy_pass http://authentik_server;
+            set $authentik_origin http://authentik-server:${AUTHENTIK_PORT};
+            proxy_pass $authentik_origin;
             proxy_http_version 1.1;
             proxy_set_header Host              $host;
             proxy_set_header X-Internal-Key "";
@@ -2078,7 +2648,9 @@ http {
         location / {
             limit_req zone=authentik burst=40 nodelay;
 
-            proxy_pass http://authentik_server;
+            set $authentik_origin http://authentik-server:${AUTHENTIK_PORT};
+
+            proxy_pass $authentik_origin;
             proxy_http_version 1.1;
 
             # Authentik builds absolute URLs (and the OIDC `iss` claim) from

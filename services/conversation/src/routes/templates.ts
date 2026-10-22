@@ -1,5 +1,7 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, decryptCredentials, assertPublicUrl, metaGraphBaseUrl } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, decryptCredentials, assertPublicUrl, metaGraphBaseUrl, resolveVoicePublicUrl, AppOriginError } from "@chatcenter/shared";
+import { REMOVAL_LINE, hasRemovalLine } from "@chatcenter/shared/src/lib/marketing-optout";
+import { REQUIRED_TEMPLATES, REQUIRED_ROLES, draftFields, stateOf, languagesFor, requiredRolesFor, type RequiredRole, type TemplateLanguage } from "../lib/required-templates";
 
 const router = Router();
 
@@ -245,7 +247,10 @@ function buildMetaComponents(template: any, mediaHeaderHandle?: string | null) {
       const text = String(b.text).trim();
       const type = String(b.type || "QUICK_REPLY").toUpperCase();
       if (type === "URL") {
-        return { type: "URL", text, url: String(b.url || "").trim() };
+        // A URL with a {{1}} suffix needs an example full URL, or Meta rejects
+        // the template (the missed-call callback button, B1).
+        const url = String(b.url || "").trim();
+        return { type: "URL", text, url, ...(url.includes("{{1}}") && typeof b.example === "string" && b.example ? { example: [b.example] } : {}) };
       }
       if (type === "PHONE_NUMBER" || type === "PHONE") {
         return { type: "PHONE_NUMBER", text, phone_number: String(b.phoneNumber || b.phone_number || "").trim() };
@@ -288,6 +293,203 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requireRole(
   }
 });
 
+// ─── Required templates per WhatsApp number (B9, 2026-10-13) ───────────────
+//
+// Registered above "/:id" so it can never swallow these paths.
+
+async function whatsappAccount(tenantId: string, channelAccountId: unknown) {
+  if (typeof channelAccountId !== "string" || !channelAccountId) return null;
+  return prisma.channelAccount.findFirst({
+    where: { id: channelAccountId, tenantId, channel: "WHATSAPP" },
+    select: { id: true, connectionStatus: true, isActive: true },
+  });
+}
+
+/** Is the missed-call message in use: a voice number forwarding to an agent and calling back agent-first? */
+async function voiceMissedCallInUse(tenantId: string): Promise<boolean> {
+  const v = await prisma.voiceChannel.findFirst({
+    where: { inboundMode: "FORWARD_TO_AGENT" as any, outboundMode: "AGENT_FIRST" as any, parent: { tenantId } },
+    select: { id: true },
+  });
+  return !!v;
+}
+
+/** The public voice address, or null when it is not configured (production without VOICE_PUBLIC_URL). */
+function voiceOrigin(): string | null {
+  try { return resolveVoicePublicUrl(); } catch (e) { if (e instanceof AppOriginError) return null; throw e; }
+}
+
+/** The required templates of one number, each with its state. */
+router.get("/required", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const account = await whatsappAccount(tenantId, req.query.channelAccountId);
+    if (!account) { res.status(404).json({ error: "WhatsApp number not found", code: "NUMBER_NOT_FOUND" }); return; }
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { defaultLocale: true } });
+    const languages = languagesFor(tenant?.defaultLocale);
+    // missed_call only while a voice number uses it (B1).
+    const roles = requiredRolesFor({ voiceMissedCall: await voiceMissedCallInUse(tenantId) });
+    const origin = voiceOrigin();
+    const names = roles.map((r) => REQUIRED_TEMPLATES[r].name);
+    const existing = await prisma.messageTemplate.findMany({
+      where: { tenantId, channel: "WHATSAPP" as any, name: { in: names }, OR: [{ channelAccountId: account.id }, { channelAccountId: null }] },
+    });
+    const items = roles.flatMap((role) =>
+      languages.map((language) => {
+        // This number's own row first, else an unbound one.
+        const rows = existing.filter((t: any) => t.name === REQUIRED_TEMPLATES[role].name && t.language === language);
+        const t: any = rows.find((x: any) => x.channelAccountId === account.id) ?? rows[0] ?? null;
+        const urlRole = REQUIRED_TEMPLATES[role].buttonKind === "URL";
+        const suggestion = urlRole && !origin ? { body: REQUIRED_TEMPLATES[role].text[language].body, buttons: [] } : draftFields(role, language, undefined, origin ?? undefined);
+        return {
+          role,
+          // Required because a feature in use sends it (missed_call), not always.
+          conditional: !!REQUIRED_TEMPLATES[role].when,
+          name: REQUIRED_TEMPLATES[role].name,
+          language,
+          category: REQUIRED_TEMPLATES[role].category,
+          state: stateOf(t),
+          templateId: t?.id ?? null,
+          reason: t?.rejectionReason ?? null,
+          body: t?.body ?? suggestion.body,
+          buttons: t?.buttons ?? suggestion.buttons,
+        };
+      }),
+    );
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({
+      data: {
+        channelAccountId: account.id,
+        connectionStatus: account.connectionStatus,
+        // Meta accepts a template only from a connected number.
+        canSubmit: account.connectionStatus === "CONNECTED" && account.isActive,
+        languages,
+        items,
+      },
+    });
+  } catch (err) {
+    console.error("Required templates error:", err);
+    res.status(500).json({ error: "Failed to list required templates" });
+  }
+});
+
+/**
+ * Approve (or edit) one required template: saved as a DRAFT on this number,
+ * and submitted to Meta only when `submit` is true and the number is
+ * connected. An approved or pending one is not changed here (Outreach >
+ * templates edits it).
+ */
+router.post("/required", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const { channelAccountId, role, language, body, button, submit } = (req.body ?? {}) as {
+      channelAccountId?: string; role?: string; language?: string; body?: string; button?: string | null; submit?: boolean;
+    };
+    if (!REQUIRED_ROLES.includes(role as RequiredRole)) { res.status(400).json({ error: "Unknown role", code: "UNKNOWN_ROLE" }); return; }
+    if (language !== "he" && language !== "en") { res.status(400).json({ error: "language must be he or en", code: "BAD_LANGUAGE" }); return; }
+    if (body !== undefined && (typeof body !== "string" || !body.trim() || body.length > 1024)) {
+      res.status(400).json({ error: "body must be 1-1024 characters", code: "BAD_BODY" }); return;
+    }
+    const account = await whatsappAccount(tenantId, channelAccountId);
+    if (!account) { res.status(404).json({ error: "WhatsApp number not found", code: "NUMBER_NOT_FOUND" }); return; }
+
+    let origin: string | undefined;
+    if (REQUIRED_TEMPLATES[role as RequiredRole].buttonKind === "URL") {
+      origin = voiceOrigin() ?? undefined;
+      if (!origin) { res.status(409).json({ error: "The server has no public voice address (VOICE_PUBLIC_URL), so the callback button has nowhere to point", code: "VOICE_PUBLIC_URL_MISSING" }); return; }
+    }
+    const fields = draftFields(role as RequiredRole, language as TemplateLanguage, { body, button }, origin);
+    const current = await prisma.messageTemplate.findFirst({
+      where: { tenantId, channel: "WHATSAPP" as any, channelAccountId: account.id, name: fields.name, language: fields.language },
+    });
+    if (current && (current.status === "APPROVED" || current.status === "PENDING_APPROVAL")) {
+      res.status(409).json({ error: "Already submitted; edit it in Outreach > templates", code: "ALREADY_SUBMITTED", data: current }); return;
+    }
+    const saved = current
+      ? await prisma.messageTemplate.update({ where: { id: current.id }, data: { body: fields.body, buttons: fields.buttons as any, variables: fields.variables as any, category: fields.category } })
+      : await prisma.messageTemplate.create({ data: { tenantId, channelAccountId: account.id, ...fields, buttons: fields.buttons as any, variables: fields.variables as any, status: "DRAFT" } as any });
+
+    if (!submit) { res.status(current ? 200 : 201).json({ data: saved, submitted: false }); return; }
+    if (account.connectionStatus !== "CONNECTED" || !account.isActive) {
+      res.status(409).json({ error: "The number is still connecting; the template is saved and can be submitted once it is connected", code: "NUMBER_NOT_CONNECTED", data: saved }); return;
+    }
+    const out = await submitTemplateToMeta(tenantId, saved.id);
+    res.status(out.status).json({ ...out.body, submitted: out.status === 200 });
+  } catch (err) {
+    console.error("Save required template error:", err);
+    res.status(500).json({ error: "Failed to save the template" });
+  }
+});
+
+/**
+ * Read this number's templates from Meta (GET /{waba}/message_templates) into
+ * our rows: statuses and Meta ids for the ones we know, new rows for the ones
+ * made elsewhere (WhatsApp Manager). Nothing is written to Meta.
+ */
+router.post("/sync", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const account = await whatsappAccount(tenantId, req.body?.channelAccountId);
+    if (!account) { res.status(404).json({ error: "WhatsApp number not found", code: "NUMBER_NOT_FOUND" }); return; }
+    const resolved = await resolveWabaCreds(tenantId, { channelAccountId: account.id });
+    if ("error" in resolved) { res.status(409).json({ error: resolved.error, code: "NUMBER_NOT_CONNECTED" }); return; }
+    const out = await syncTemplatesFromMeta(tenantId, account.id, resolved.wabaId, resolved.accessToken);
+    res.json({ data: out });
+  } catch (err) {
+    console.error("Template sync error:", err);
+    res.status(500).json({ error: "Failed to read templates from Meta" });
+  }
+});
+
+const META_STATUS: Record<string, "APPROVED" | "PENDING_APPROVAL" | "REJECTED"> = {
+  APPROVED: "APPROVED",
+  PENDING: "PENDING_APPROVAL",
+  IN_APPEAL: "PENDING_APPROVAL",
+  REJECTED: "REJECTED",
+  PAUSED: "REJECTED",
+  DISABLED: "REJECTED",
+};
+
+/** Exported for tests: the Meta list in, our rows out. */
+export async function syncTemplatesFromMeta(tenantId: string, channelAccountId: string, wabaId: string, accessToken: string) {
+  let url: string | null = `${FB_API_URL}/${wabaId}/message_templates?fields=id,name,language,status,category,components,rejected_reason&limit=100`;
+  let created = 0, updated = 0, seen = 0, skipped = 0;
+  for (let page = 0; url && page < 20; page++) {
+    const r: any = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const json: any = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(json?.error?.message || `Meta answered ${r.status}`);
+    for (const t of (json.data ?? []) as any[]) {
+      seen++;
+      const status = META_STATUS[String(t.status)];
+      if (!status || !t.name || !t.language) { skipped++; continue; }
+      const comps: any[] = Array.isArray(t.components) ? t.components : [];
+      const bodyText = comps.find((c) => c.type === "BODY")?.text ?? "";
+      const header = comps.find((c) => c.type === "HEADER");
+      const footer = comps.find((c) => c.type === "FOOTER")?.text ?? null;
+      const buttons = (comps.find((c) => c.type === "BUTTONS")?.buttons ?? []).map((b: any) => ({ type: b.type, text: b.text, ...(b.url ? { url: b.url } : {}), ...(b.phone_number ? { phoneNumber: b.phone_number } : {}) }));
+      const reason = status === "APPROVED" ? null : t.status !== "REJECTED" && status === "REJECTED" ? `[${t.status}] ${t.rejected_reason && t.rejected_reason !== "NONE" ? t.rejected_reason : ""}`.trim() : (t.rejected_reason && t.rejected_reason !== "NONE" ? String(t.rejected_reason) : null);
+      const mine = await prisma.messageTemplate.findFirst({
+        where: { tenantId, channel: "WHATSAPP" as any, language: t.language, OR: [{ metaTemplateId: String(t.id) }, { name: t.name, channelAccountId }, { name: t.name, channelAccountId: null }] },
+      });
+      if (mine) {
+        await prisma.messageTemplate.update({ where: { id: mine.id }, data: { status, metaTemplateId: String(t.id), rejectionReason: reason, category: String(t.category ?? mine.category) } });
+        updated++;
+      } else {
+        await prisma.messageTemplate.create({
+          data: {
+            tenantId, channelAccountId, channel: "WHATSAPP", name: t.name, language: t.language, category: String(t.category ?? "UTILITY"),
+            body: bodyText, footer, buttons, status, metaTemplateId: String(t.id), rejectionReason: reason,
+            headerType: header?.format ?? null, headerContent: header?.format === "TEXT" ? header.text ?? null : null,
+          } as any,
+        });
+        created++;
+      }
+    }
+    url = json?.paging?.next ?? null;
+  }
+  return { seen, created, updated, skipped };
+}
+
 router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const template = await prisma.messageTemplate.findFirst({
@@ -301,11 +503,23 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRo
   }
 });
 
+/**
+ * A marketing template carries the removal line in its text (opt-out model,
+ * docs/product/ai-studio-skills-automations.md §6): on WhatsApp it is part of
+ * the approved text, not a button, so the customer's reply "הסר" opts out.
+ * Added once, in the template's language, when it is missing.
+ */
+export function withMarketingRemovalLine(category: unknown, body: string, language: unknown): string {
+  if (String(category ?? "").toUpperCase() !== "MARKETING" || hasRemovalLine(body)) return body;
+  const line = String(language ?? "").toLowerCase().startsWith("he") ? REMOVAL_LINE.he : REMOVAL_LINE.en;
+  return `${String(body).replace(/\s+$/, "")}\n\n${line}`;
+}
+
 router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const {
       name,
-      body,
+      body: rawBody,
       category = "general",
       language = "en",
       channel,
@@ -318,10 +532,11 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
       status = "DRAFT",
     } = req.body;
 
-    if (!name || !body) {
+    if (!name || !rawBody) {
       res.status(400).json({ error: "name and body are required" });
       return;
     }
+    const body = withMarketingRemovalLine(category, String(rawBody), language);
 
     let resolvedChannel: string | null = channel ?? null;
     if (channelAccountId) {
@@ -400,6 +615,12 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       data.channel = account.channel;
     }
 
+    // The category or the body may change on their own: the result decides.
+    if ("body" in data || "category" in data || "language" in data) {
+      const nextBody = withMarketingRemovalLine(data.category ?? existing.category, String(data.body ?? existing.body), data.language ?? existing.language);
+      if (nextBody !== (data.body ?? existing.body)) data.body = nextBody;
+    }
+
     const template = await prisma.messageTemplate.update({
       where: { id: existing.id },
       data,
@@ -473,7 +694,7 @@ router.post("/:id/duplicate", authenticate, resolveTenant, requireActiveTenant()
       data: {
         tenantId: req.tenantId! as string,
         name: `${original.name} (Copy)`,
-        body: original.body,
+        body: withMarketingRemovalLine(original.category, original.body, original.language),
         category: original.category,
         language: original.language,
         channel: original.channel ?? null,
@@ -494,31 +715,38 @@ router.post("/:id/duplicate", authenticate, resolveTenant, requireActiveTenant()
 });
 
 // ─── Submit Template to Meta ────────────────────────────────
-router.post("/:id/submit-to-meta", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
-  try {
+/**
+ * Submit one template to Meta (POST /{waba}/message_templates). The route
+ * below and the required-templates step share it. A real Meta write: on dev it
+ * runs only on Omer's specific OK for that test.
+ */
+export async function submitTemplateToMeta(tenantId: string, templateId: string): Promise<{ status: number; body: any }> {
     const template = await prisma.messageTemplate.findFirst({
-      where: { id: req.params.id as string, tenantId: req.tenantId! as string },
+      where: { id: templateId, tenantId },
     });
-    if (!template) { res.status(404).json({ error: "Template not found" }); return; }
+    if (!template) return { status: 404, body: { error: "Template not found" } };
 
     if (template.status !== "DRAFT" && template.status !== "REJECTED") {
-      res.status(400).json({ error: "Only DRAFT or REJECTED templates can be submitted to Meta" });
-      return;
+      return { status: 400, body: { error: "Only DRAFT or REJECTED templates can be submitted to Meta" } };
     }
 
     if (template.channel !== "WHATSAPP") {
-      res.status(400).json({ error: "Only WhatsApp templates can be submitted to Meta" });
-      return;
+      return { status: 400, body: { error: "Only WhatsApp templates can be submitted to Meta" } };
     }
 
-    const resolved = await resolveWabaCreds(req.tenantId! as string, template);
-    if ("error" in resolved) { res.status(400).json({ error: resolved.error }); return; }
+    // An older marketing template saved before the rule: not submitted
+    // without its removal line (an approved text cannot gain it later).
+    if (String(template.category ?? "").toUpperCase() === "MARKETING" && !hasRemovalLine(template.body)) {
+      return { status: 422, body: { error: "A marketing template must end with the removal line (להסרה השיבו הסר / Reply STOP to unsubscribe)", code: "MISSING_REMOVAL_LINE" } };
+    }
+
+    const resolved = await resolveWabaCreds(tenantId, template);
+    if ("error" in resolved) return { status: 400, body: { error: resolved.error } };
     const { accessToken, wabaId } = resolved;
 
     const metaName = normalizeMetaName(template.name);
     if (!metaName) {
-      res.status(400).json({ error: "Template name must contain at least one letter or digit" });
-      return;
+      return { status: 400, body: { error: "Template name must contain at least one letter or digit" } };
     }
 
     // For REJECTED resubmit: delete the existing rejected template on Meta so we can re-create with the same name
@@ -540,18 +768,16 @@ router.post("/:id/submit-to-meta", authenticate, resolveTenant, requireActiveTen
     ) {
       const exampleUrl = (template.headerContent || "").trim();
       if (!exampleUrl) {
-        res.status(400).json({
+        return { status: 400, body: {
           error: `An example media URL is required for ${template.headerType} header templates`,
-        });
-        return;
+        } };
       }
       mediaHeaderHandle = await uploadMediaForTemplateExample(exampleUrl, accessToken);
       if (!mediaHeaderHandle) {
-        res.status(400).json({
+        return { status: 400, body: {
           error:
             "Failed to upload example media to Meta. Verify the URL is publicly reachable and the file format is supported.",
-        });
-        return;
+        } };
       }
     }
 
@@ -575,11 +801,10 @@ router.post("/:id/submit-to-meta", authenticate, resolveTenant, requireActiveTen
 
     if (!metaRes.ok) {
       console.error("Meta template submission error:", metaData);
-      res.status(400).json({
+      return { status: 400, body: {
         error: metaData.error?.message || "Failed to submit template to Meta",
         metaError: metaData.error,
-      });
-      return;
+      } };
     }
 
     const updated = await prisma.messageTemplate.update({
@@ -592,7 +817,13 @@ router.post("/:id/submit-to-meta", authenticate, resolveTenant, requireActiveTen
       },
     });
 
-    res.json({ data: updated, meta: metaData });
+    return { status: 200, body: { data: updated, meta: metaData } };
+}
+
+router.post("/:id/submit-to-meta", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const out = await submitTemplateToMeta(req.tenantId! as string, req.params.id as string);
+    res.status(out.status).json(out.body);
   } catch (err) {
     console.error("Submit template to Meta error:", err);
     res.status(500).json({ error: "Failed to submit template to Meta" });

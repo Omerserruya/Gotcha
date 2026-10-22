@@ -19,8 +19,16 @@ import {
   BUILTIN_ROLES,
   BUILTIN_ROLE_ORDER,
   builtinRoleForLegacy,
+  rolesEditable,
   type BuiltinRoleKey,
 } from "./permission-catalog";
+
+/**
+ * Marks a built-in role a workspace has edited. The seed leaves its features
+ * alone from then on; "Reset to default" removes the marker. A TenantSetting
+ * row, so no migration (2026-10-11).
+ */
+export const customizedRoleKey = (roleId: string) => `rbac:customized:${roleId}`;
 import { scopeToDb as toDbScope, invalidatePermissionsCache } from "./permissions";
 
 /** Ensure the 4 built-in system roles + their permission rows exist for a tenant. */
@@ -66,9 +74,15 @@ export async function seedTenantRoles(tenantId: string): Promise<Record<BuiltinR
     }
     ids[key] = roleId;
 
-    // Built-in roles are system-managed: their permission set is AUTHORITATIVE
-    // from the catalog, so catalog changes propagate on re-seed. (Custom roles
-    // are never touched here.) Replace the feature rows to match the catalog.
+    // Built-in roles follow the catalog - so catalog changes propagate on
+    // re-seed - UNTIL a workspace edits one (2026-10-11): an edited built-in
+    // is the workspace's, and a restart must not wipe it. With the kill switch
+    // (ROLES_EDITABLE=false) every built-in follows the catalog again.
+    // Custom roles are never touched here.
+    if (rolesEditable()) {
+      const customized = await prisma.tenantSetting.findFirst({ where: { tenantId, key: customizedRoleKey(roleId) }, select: { key: true } });
+      if (customized) continue;
+    }
     await prisma.$transaction([
       prisma.tenantRoleFeature.deleteMany({ where: { roleId } }),
       prisma.tenantRoleFeature.createMany({
@@ -143,11 +157,9 @@ export async function backfillTenantAssignments(tenantId: string): Promise<numbe
     );
     if (!target) continue;
 
-    // First/oldest ADMIN becomes the Owner.
-    if (target === "admin" && !ownerAssigned) {
-      target = "owner";
-      ownerAssigned = true;
-    }
+    // Owner and Admin are one role (2026-10-11): every legacy ADMIN is an
+    // Owner (builtinRoleForLegacy), not only the oldest.
+    if (target === "owner") ownerAssigned = true;
 
     await prisma.userRoleAssignment.create({
       data: {

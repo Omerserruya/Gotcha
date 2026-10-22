@@ -194,6 +194,9 @@ export interface AssemblePlanContextInput {
   /** Conversation messages → wizard transcript (last turns). */
   messages: Array<{ direction: string; body?: string | null }>;
   signal?: AbortSignal;
+  /** Business skills to choose from (employee only; the copilot passes none). */
+  skills?: import("./skill-runtime.service").SkillSelectionCandidate[];
+  openSkillId?: string | null;
 }
 
 /** Everything the planner needs that's DERIVED per turn (no LLM beyond wizard). */
@@ -243,6 +246,9 @@ export async function assemblePlanContext(input: AssemblePlanContextInput): Prom
     salesContext: input.salesContext as any,
     transcript: wizardTranscript,
     signal: input.signal,
+    // Skill selection rides THIS call - no extra LLM call per turn.
+    skills: input.skills,
+    openSkillId: input.openSkillId,
   });
 
   // Capability Layer hints: integration tool → Integration.category.

@@ -1,0 +1,538 @@
+@layer features {
+  /*
+   * Settings · Notifications - screen 15.
+   *
+   * On a tenant with no rules the empty state IS the screen, so it is styled
+   * as a first-class surface rather than as a message in a gap.
+   */
+
+  .dayOne {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .dayOneLead {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 500;
+  }
+
+  .dayOneBody {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  /* ── The vocabulary ─────────────────────────────────────────────────── */
+  .families {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(var(--size-reading-half), 1fr));
+    gap: var(--space-16);
+  }
+
+  .family {
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+  }
+
+  .familyName {
+    margin: 0 0 var(--space-9);
+    font-size: var(--font-size-caption);
+    font-weight: 500;
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .familyEvents {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .event {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .eventName {
+    font-size: var(--font-size-meta);
+  }
+
+  /*
+   * What the event does NOT mean, in its emitter's own words.
+   *
+   * With the event rather than in a footnote: someone deciding whether to be
+   * told about "a system check failed" needs to know it is not continuous
+   * monitoring at the moment they decide, not three paragraphs later.
+   */
+  .eventCaveat {
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  /* ── Rules ──────────────────────────────────────────────────────────── */
+  .configured {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .listHeading {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 500;
+  }
+
+  .groups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-20);
+  }
+
+  .group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .groupName {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+  }
+
+  /*
+   * A problem with the EVENT, so it sits above every rule that targets it:
+   * one broken event type can hold several rules, and the reason none of them
+   * fires is the same reason for all of them.
+   */
+  .groupProblem {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+  }
+
+  .rules {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+    min-inline-size: 0;
+  }
+
+  .rule {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+    font-size: var(--font-size-meta);
+  }
+
+  /* A switched-off rule reads as present but inactive, never as missing. */
+  .rule[data-enabled='no'] .ruleSentence {
+    color: var(--text-subtle);
+  }
+
+  .ruleSentence {
+    margin: 0;
+  }
+
+  .ruleScope,
+  .ruleCondition {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * Why this rule does less than it looks like it does. Same treatment as a
+   * broken event: this is not decoration, it is the reason nobody is told.
+   */
+  .ruleProblem {
+    margin-block: var(--space-4) 0;
+    margin-inline: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+  }
+
+  .rule + .rule {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  /* "We could not find out" - never the same as "there are none". */
+  .unavailable {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  /* ── 15: "Tell me when" × In app · Email · WhatsApp ─────────────────── */
+  .matrix {
+    overflow: clip;
+    min-inline-size: 0;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+    line-height: normal;
+  }
+
+  .matrixHead,
+  .matrixRow {
+    display: flex;
+    align-items: center;
+    padding-inline: 18px;
+  }
+
+  .matrixHead {
+    padding-block: 11px;
+    background-color: var(--table-head-surface);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .matrixRows {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .matrixRow {
+    padding-block: 14px;
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .matrixEvent {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .matrixName {
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .matrixSub {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .matrixCell {
+    display: flex;
+    flex: none;
+    justify-content: flex-start;
+    inline-size: 90px;
+  }
+
+  .matrixCell:last-child {
+    inline-size: 110px;
+  }
+
+  .matrixNone {
+    font-size: var(--font-size-meta);
+    color: var(--text-faint);
+  }
+
+  /*
+   * 02's toggle: a plain pill, 34 × 18, no knob - on is ink, off is the
+   * hairline colour. It shows a state; nothing slides.
+   */
+  /* A channel's head: its name, and its switch under it. */
+  .matrixHeadCell {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+    inline-size: 90px;
+  }
+
+  .matrixHeadCell:last-child {
+    inline-size: 110px;
+  }
+
+  .switchWrap {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  /* A real switch: a button, with its knob at the end it is set to. */
+  .switch {
+    position: relative;
+    display: block;
+    inline-size: 34px;
+    block-size: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 9px;
+    background-color: var(--border-default);
+    cursor: pointer;
+  }
+
+  .switch::after {
+    content: '';
+    position: absolute;
+    inset-block-start: 2px;
+    inset-inline-start: 2px;
+    inline-size: 14px;
+    block-size: 14px;
+    border-radius: 50%;
+    background-color: var(--panel-field);
+  }
+
+  .switch[data-on='yes'] {
+    background-color: var(--action-base);
+  }
+
+  .switch[data-on='yes']::after {
+    inset-inline-start: 18px;
+  }
+
+  .switch:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .switch:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .switchProblem {
+    font-size: var(--font-size-caption);
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--intent-urgent-text);
+  }
+
+  .matrixRowSwitch {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    margin-block-start: 6px;
+  }
+
+  /* What reaches you, per cell: a mark, not a control - its switch is the column's. */
+  .cellState {
+    display: block;
+    inline-size: 9px;
+    block-size: 9px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 50%;
+  }
+
+  .cellState[data-on='yes'] {
+    border-color: var(--action-base);
+    background-color: var(--action-base);
+  }
+
+  .matrixFootLink {
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .matrixFoot {
+    margin: 0;
+    padding: var(--space-12) 18px;
+    background-color: var(--table-head-surface);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* The three cards under it; the last is 02's violet. */
+  .prefCards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-14);
+    line-height: normal;
+  }
+
+  .prefCard,
+  .prefCardAi {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: 18px var(--space-20);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .prefCardAi {
+    border-color: var(--ai-card-edge);
+    background-color: var(--ai-card-surface);
+  }
+
+  .prefTitle,
+  .prefTitleAi {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .prefTitleAi {
+    color: var(--ai-card-title);
+  }
+
+  .prefValue {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-secondary);
+  }
+
+  .prefNote,
+  .prefNoteAi {
+    margin: 0;
+    font-size: var(--font-size-label);
+    line-height: 1.45;
+    color: var(--text-subtle);
+  }
+
+  .prefNoteAi {
+    font-size: var(--font-size-meta);
+    color: var(--ai-card-text);
+  }
+
+  @media (width < 64rem) {
+    .prefCards {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* This device's alerts for an incoming message: a card across the row. */
+  .deviceCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    margin-block-start: var(--space-14);
+    padding: 18px var(--space-20);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+    line-height: normal;
+  }
+
+  .deviceRow {
+    display: flex;
+    gap: var(--space-12);
+    align-items: flex-start;
+  }
+
+  .deviceRow > .switch {
+    flex: none;
+    margin-block-start: 1px;
+  }
+
+  .deviceText {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-inline-size: 0;
+  }
+
+  .deviceLabel {
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .deviceState {
+    font-size: var(--font-size-label);
+    color: var(--intent-urgent-text);
+  }
+
+  /* Quiet hours, edited where they are read. */
+  .quietForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .quietFields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-12);
+  }
+
+  .quietField {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .quietField input {
+    padding: 4px 6px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 7px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .quietActions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+
+  .quietPrimary,
+  .quietSecondary {
+    padding: 5px 11px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: var(--font-size-label);
+    cursor: pointer;
+  }
+
+  .quietPrimary {
+    border: 0;
+    background-color: var(--action-base);
+    color: var(--frame-text);
+  }
+
+  .quietSecondary {
+    border: var(--border-width-thin) solid var(--border-default);
+    background-color: transparent;
+    color: var(--text-secondary);
+  }
+
+  .quietPrimary:disabled,
+  .quietSecondary:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}

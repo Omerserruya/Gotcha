@@ -39,6 +39,8 @@ const H = vi.hoisted(() => {
     updateConnection: v.fn(async () => ({})),
     updateInstallations: v.fn(async () => ({ count: 1 })),
     createAudit: v.fn(async () => ({})),
+    enqueue: v.fn(async () => ({})),
+    toolRowsRemoval: v.fn(async () => ({ count: 68 })),
   };
 });
 
@@ -47,6 +49,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   return {
     ...actual,
     withCrossTenantAccess: async (fn: any) => fn(),
+    incomingMessageQueue: { add: H.enqueue },
     getRedis: () => ({
       // Mirrors SET NX: first claim wins, later ones are replays.
       set: vi.fn(async (key: string, _v: string, _ex: string, _ttl: number, mode: string) => {
@@ -62,6 +65,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         update: H.updateConnection,
       },
       shopifyChatInstallation: { updateMany: H.updateInstallations },
+      tenantTool: { deleteMany: H.toolRowsRemoval },
     },
   };
 });
@@ -71,6 +75,14 @@ vi.mock("../services/shopify-chat-install.service", () => ({
   findLatestInstallation: vi.fn(async () => H.installation.current),
   disableChatForUninstalledShop: H.disableChatOnUninstall,
 }));
+
+// app/uninstalled tells billing over HTTP. Left real, that fetch resolved
+// after its test had finished and failed the NEXT one; it is not what these
+// tests are about, and a test must not reach the network.
+vi.mock("../services/shopify-billing-bridge.service", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return { ...actual, notifyShopifyUninstalled: vi.fn(async () => {}) };
+});
 
 import router from "../routes/shopify-webhooks";
 
@@ -152,6 +164,23 @@ describe("chat app/uninstalled", () => {
 });
 
 describe("core app/uninstalled", () => {
+  it("★ removes the tenant's tool rows for that store, both ids in the where (merged 2026-10-21)", async () => {
+    H.connections.current = [{ id: "ti1", tenantId: "t1", config: { shopDomain: SHOP } }];
+    await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
+    await new Promise((r) => setImmediate(r));
+    expect(H.toolRowsRemoval).toHaveBeenCalledWith({ where: { tenantId: "t1", tenantIntegrationId: "ti1" } });
+  });
+
+  it("★ a failed tool removal still disables the storefront chat", async () => {
+    H.connections.current = [{ id: "ti1", tenantId: "t1", config: { shopDomain: SHOP } }];
+    H.toolRowsRemoval.mockRejectedValueOnce(new Error("db down"));
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
+    await new Promise((r) => setImmediate(r));
+    expect(H.disableChatOnUninstall).toHaveBeenCalledWith(SHOP);
+    err.mockRestore();
+  });
+
   it("disconnects the commerce connection and drops its credentials", async () => {
     const res = await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
     expect(res.status).toBe(200);
@@ -159,7 +188,8 @@ describe("core app/uninstalled", () => {
     expect(H.updateConnection).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "ti1" },
-        data: expect.objectContaining({ status: "DISCONNECTED", credentials: {} }),
+        // The reason carries its code, so a reader never matches the sentence.
+        data: expect.objectContaining({ status: "DISCONNECTED", credentials: {}, lastError: "[SHOPIFY_APP_UNINSTALLED] The GOTCHA Shopify app was uninstalled from this store." }),
       }),
     );
   });
@@ -199,11 +229,21 @@ describe("core app/uninstalled", () => {
     expect(H.updateConnection).not.toHaveBeenCalled();
   });
 
-  it("ignores a shop with no matching connection", async () => {
+  it("ignores a shop with no matching connection, but still stops its storefront chat (2026-10-10)", async () => {
+    // A store disconnected here first has no CONNECTED row; the chat used to
+    // stay on after the merchant removed the app.
     H.connections.current = [{ id: "ti9", tenantId: "t9", config: { shopDomain: "other.myshopify.com" } }];
     await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
     await new Promise((r) => setImmediate(r));
     expect(H.updateConnection).not.toHaveBeenCalled();
+    expect(H.disableChatOnUninstall).toHaveBeenCalledWith(SHOP);
+  });
+
+  it("an unmatched uninstall whose chat disable throws is still acknowledged", async () => {
+    H.connections.current = [];
+    H.disableChatOnUninstall.mockRejectedValueOnce(new Error("boom"));
+    const res = await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
+    expect(res.status).toBe(200);
   });
 });
 
@@ -243,3 +283,96 @@ describe("mandatory compliance webhooks", () => {
     expect(H.updateInstallations).toHaveBeenCalledTimes(1);
   });
 });
+
+// ── Commerce events → cart left behind ─────────────────────────────────────
+
+import { cartEventFromShopifyCheckout, cartCompletionFromShopifyOrder, orderEventFromShopifyOrder } from "../services/shopify-cart-events";
+
+const CHECKOUT = {
+  token: "chk_tok_1", updated_at: "2026-10-07T10:00:00Z", completed_at: null,
+  email: "dana@example.com", phone: "+972501234567", currency: "ILS", total_price: "590.00",
+  abandoned_checkout_url: "https://my-store.myshopify.com/checkouts/recover",
+  buyer_accepts_marketing: true, buyer_accepts_sms: false,
+  customer: { first_name: "Dana" },
+  line_items: [{ title: "Cotton Trench Coat", quantity: 1, price: "590.00" }],
+};
+
+async function postTopic(path: string, topic: string, body: any, id = "d-1", secret = "core-app-secret") {
+  const raw = JSON.stringify(body);
+  return request(app()).post(path).set("Content-Type", "application/json")
+    .set("X-Shopify-Hmac-Sha256", sign(raw, secret)).set("X-Shopify-Shop-Domain", SHOP)
+    .set("X-Shopify-Topic", topic).set("X-Shopify-Webhook-Id", id).send(raw);
+}
+
+describe("★ checkouts and orders → cart events", () => {
+  it("a checkout becomes the shared cart event, with the store's consent", () => {
+    expect(cartEventFromShopifyCheckout("t1", CHECKOUT)).toEqual({
+      tenantId: "t1", source: "shopify", checkoutId: "chk_tok_1", completed: false, updatedAt: "2026-10-07T10:00:00Z",
+      customer: { email: "dana@example.com", phone: "+972501234567", firstName: "Dana" },
+      items: [{ title: "Cotton Trench Coat", quantity: 1, price: 590 }], total: 590, currency: "ILS",
+      cartUrl: "https://my-store.myshopify.com/checkouts/recover", marketingConsent: { email: true, sms: false },
+    });
+    expect(cartEventFromShopifyCheckout("t1", { ...CHECKOUT, completed_at: "2026-10-07T10:05:00Z" })!.completed).toBe(true);
+    expect(cartCompletionFromShopifyOrder("t1", { checkout_token: "chk_tok_1", created_at: "x" })).toMatchObject({ checkoutId: "chk_tok_1", completed: true });
+    expect(cartCompletionFromShopifyOrder("t1", {})).toBeNull();
+  });
+
+  it("★ a verified delivery for a connected shop is queued once; a replay is not", async () => {
+    expect((await postTopic("/api/connectors/shopify/webhooks/checkouts-update", "checkouts/update", CHECKOUT)).status).toBe(200);
+    await postTopic("/api/connectors/shopify/webhooks/checkouts-update", "checkouts/update", CHECKOUT); // same webhook id
+    await new Promise((r) => setImmediate(r));
+    expect(H.enqueue).toHaveBeenCalledTimes(1);
+    expect(H.enqueue.mock.calls[0]).toEqual(["cart-event", expect.objectContaining({ tenantId: "t1", checkoutId: "chk_tok_1" }), expect.any(Object)]);
+    await postTopic("/api/connectors/shopify/webhooks/orders-create", "orders/create", { checkout_token: "chk_tok_1" }, "d-2");
+    await new Promise((r) => setImmediate(r));
+    expect(H.enqueue.mock.calls[1][1]).toMatchObject({ checkoutId: "chk_tok_1", completed: true });
+  });
+
+  it("a bad signature is refused; a shop with no connection is acknowledged and ignored", async () => {
+    expect((await postTopic("/api/connectors/shopify/webhooks/checkouts-create", "checkouts/create", CHECKOUT, "d-3", "wrong")).status).toBe(401);
+    H.connections.current = [];
+    expect((await postTopic("/api/connectors/shopify/webhooks/checkouts-create", "checkouts/create", CHECKOUT, "d-4")).status).toBe(200);
+    await new Promise((r) => setImmediate(r));
+    expect(H.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe("★ orders → order events", () => {
+  const ORDER = {
+    id: 5001, name: "#1042", order_number: 1042, email: "dana@example.com", current_total_price: "590.00", currency: "ILS",
+    order_status_url: "https://my-store.myshopify.com/orders/abc", checkout_token: "chk_tok_1",
+    customer: { first_name: "Dana", phone: "+972501234567" }, line_items: [{ title: "Cotton Trench Coat", quantity: 1 }],
+  };
+
+  it("an order payload becomes the shared order event", () => {
+    expect(orderEventFromShopifyOrder("t1", ORDER, "fulfilled")).toEqual({
+      tenantId: "t1", source: "shopify", orderId: "5001", status: "fulfilled", orderNumber: "#1042", total: 590, currency: "ILS",
+      customer: { email: "dana@example.com", phone: "+972501234567", firstName: "Dana" },
+      items: [{ title: "Cotton Trench Coat", quantity: 1 }], orderUrl: "https://my-store.myshopify.com/orders/abc",
+      marketingConsent: { email: null, sms: null },
+    });
+    // The store's own consent record travels with the order (read like a checkout's).
+    expect(orderEventFromShopifyOrder("t1", { ...ORDER, buyer_accepts_marketing: true, customer: { ...ORDER.customer, sms_marketing_consent: { state: "subscribed" } } }, "paid")!.marketingConsent)
+      .toEqual({ email: true, sms: true });
+    expect(orderEventFromShopifyOrder("t1", {}, "paid")).toBeNull();
+  });
+
+  it("★ each orders/* topic queues its status; orders/create also completes the checkout", async () => {
+    await postTopic("/api/connectors/shopify/webhooks/orders-create", "orders/create", ORDER, "o-1");
+    for (const [path, topic, id] of [["orders-paid", "orders/paid", "o-2"], ["orders-fulfilled", "orders/fulfilled", "o-3"], ["orders-cancelled", "orders/cancelled", "o-4"]]) {
+      expect((await postTopic(`/api/connectors/shopify/webhooks/${path}`, topic, ORDER, id)).status).toBe(200);
+    }
+    await postTopic("/api/connectors/shopify/webhooks/orders-paid", "orders/paid", ORDER, "o-2"); // a replay
+    await new Promise((r) => setImmediate(r));
+    expect(H.enqueue.mock.calls.map((c: any) => [c[0], c[1].status ?? (c[1].completed ? "checkout-bought" : "?")])).toEqual([
+      ["cart-event", "checkout-bought"], ["order-event", "created"], ["order-event", "paid"], ["order-event", "fulfilled"], ["order-event", "cancelled"],
+    ]);
+  });
+
+  it("a forged orders/paid is refused", async () => {
+    expect((await postTopic("/api/connectors/shopify/webhooks/orders-paid", "orders/paid", ORDER, "o-9", "wrong")).status).toBe(401);
+    await new Promise((r) => setImmediate(r));
+    expect(H.enqueue).not.toHaveBeenCalled();
+  });
+});
+
