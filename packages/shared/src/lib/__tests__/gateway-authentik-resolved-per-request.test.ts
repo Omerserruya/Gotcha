@@ -40,7 +40,7 @@ describe.each(TEMPLATES)("%s", (file) => {
 
   it("★ every Authentik location proxies to the variable it sets itself", () => {
     const locs = authentikLocations(conf);
-    expect(locs.map(([h]) => h)).toEqual(["^~ /auth-api/", "= /static/dist/custom.css", "/"]);
+    expect(locs.map(([h]) => h)).toEqual(["^~ /auth-api/", "^~ /static/", "= /static/dist/custom.css", "/"]);
     for (const [, body] of locs) {
       expect(body).toContain("set $authentik_origin http://authentik-server:${AUTHENTIK_PORT};");
       expect(body).toMatch(/proxy_pass \$authentik_origin;/);

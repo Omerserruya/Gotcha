@@ -176,6 +176,19 @@ http {
         ''      close;
     }
 
+    # The client's real address (2026-10-22). The only way in is a host
+    # cloudflared, so every request reached nginx from the docker bridge
+    # (dev: 172.19.0.1 for everyone) and each limit below - plus Express's
+    # `trust proxy 1` window, which reads the X-Forwarded-For entry nginx appends
+    # from $remote_addr - was ONE bucket shared by all users. Cloudflare sends
+    # the visitor's address in CF-Connecting-IP; trust it only from the private
+    # ranges the tunnel and the bridge use (the same list Authentik trusts).
+    set_real_ip_from 127.0.0.1;
+    set_real_ip_from 10.0.0.0/8;
+    set_real_ip_from 172.16.0.0/12;
+    set_real_ip_from 192.168.0.0/16;
+    real_ip_header CF-Connecting-IP;
+
     # Rate limiting zone
     limit_req_zone $binary_remote_addr zone=api:10m rate=100r/s;
 
@@ -2581,6 +2594,21 @@ http {
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+        # Authentik's static files, with NO limit_req (2026-10-22). The 2026.2 UI
+        # loads 100+ /static/dist/chunks/*.js at once; under the vhost's
+        # `zone=authentik burst=40` most of them got 429 and the authorize page
+        # spun forever after the password. The flow and API paths keep the limit.
+        # (`= /static/dist/custom.css` below is an exact match and still wins.)
+        location ^~ /static/ {
+            set $authentik_origin http://authentik-server:${AUTHENTIK_PORT};
+            proxy_pass $authentik_origin;
+            proxy_http_version 1.1;
+            proxy_set_header Host              $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Forwarded-Proto $public_proto;
+            add_header X-Content-Type-Options "nosniff" always;
+        }
 
         # The GOTCHA theme sheet: fetched by Authentik's JS and injected into
         # every shadow root. It carries no cache-buster (Authentik builds the
