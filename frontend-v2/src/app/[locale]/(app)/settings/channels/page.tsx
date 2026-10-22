@@ -13,7 +13,12 @@ import {
   ProfilesPanel,
   ReportPanel,
 } from '@/features/channels/LearnPanels';
+import { channelName } from '@/api/contracts/inbox';
+import { ChannelTile } from '@/features/channels/ChannelTile';
+import { EmailTemplateEditor } from '@/features/channels/EmailTemplateEditor';
+import { loadEmailTemplate, loadPreviewNames } from '@/features/channels/load-email-template';
 import { loadChannels } from '@/features/channels/load-channels';
+import { hasEmailTemplate } from '@/features/channels/rows';
 import {
   loadEvidence,
   loadExclusions,
@@ -38,6 +43,7 @@ import { WhatsAppPanel } from '@/features/channels/WhatsAppPanel';
 import { loadWidgetInstall } from '@/features/webchat/load-website-widget';
 import { redirect } from '@/i18n/navigation';
 import { pageMetadata } from '@/shell/page-metadata';
+import drawer from '@/design-system/styles/drawer.module.css';
 import { Drawer } from '@/shell/Drawer';
 import { SettingsSection } from '@/shell/SettingsSection';
 
@@ -77,6 +83,8 @@ export default async function Page({
     readonly tab?: string;
     /** The web chat's old embed link: its code is the widget's Install tab now. */
     readonly embed?: string;
+    /** `?panel=email&id=`: which mailbox's template is open. */
+    readonly id?: string;
   }>;
 } = {}) {
   const t = await getTranslations('channels');
@@ -138,6 +146,18 @@ export default async function Page({
             : learn && params.view === 'progress'
               ? 'progress'
               : null;
+  /*
+    A mailbox's template (`?panel=email&id=`): only a row this list has, and
+    an email one - any other id opens nothing rather than a 404 in a drawer.
+  */
+  const mailbox =
+    params.panel === 'email' && params.id
+      ? (channels?.find((c) => c.id === params.id && hasEmailTemplate(c)) ?? null)
+      : null;
+  const mailboxAddress = mailbox?.displayName?.trim() || mailbox?.externalId?.trim() || null;
+  const [mailboxTemplate, previewNames] = mailbox
+    ? await Promise.all([loadEmailTemplate(mailbox.id), loadPreviewNames()])
+    : [null, null];
   // 13b's open tab (`?tab=`), when 13b itself is what is open.
   const panelTab = tabOf(view === null ? params.tab : undefined);
 
@@ -237,6 +257,35 @@ export default async function Page({
             bulkMinConfidence={whatsapp[1].bulkMinConfidence}
             tab={params.tab}
           />
+        </Drawer>
+      ) : null}
+
+      {mailbox && mailboxTemplate && previewNames ? (
+        <Drawer
+          title={t('emailTemplate.title')}
+          // The address, as its row shows it; the platform's name when there is none.
+          line={mailboxAddress ?? channelName(mailbox.channel, t) ?? t('name.other')}
+          userLine={mailboxAddress !== null}
+          lead={<ChannelTile channel={mailbox.channel} />}
+          closeHref="/settings/channels"
+          width={860}
+          testId="drawer-email-template"
+        >
+          <div className={drawer.drawerBody}>
+            {mailboxTemplate.state === 'ok' ? (
+              <EmailTemplateEditor
+                // A fresh editor per mailbox: one's unsaved html never shows on another.
+                key={mailbox.id}
+                channelId={mailbox.id}
+                stored={mailboxTemplate.template}
+                names={previewNames}
+              />
+            ) : (
+              <p role="alert" data-testid="email-template-read">
+                {t(`emailTemplate.read.${mailboxTemplate.state}`)}
+              </p>
+            )}
+          </div>
         </Drawer>
       ) : null}
 

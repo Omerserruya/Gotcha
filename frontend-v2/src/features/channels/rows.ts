@@ -127,6 +127,20 @@ export function needsReconnect(row: ConnectedRow): boolean {
 }
 
 /** A Disconnect on this row - never on one that is disconnected already. */
+/**
+ * Email accounts: each mailbox has its own HTML template (Backend, 2026-10-22),
+ * so each email row has a Settings that opens it (`?panel=email&id=`).
+ */
+export const EMAIL_TEMPLATE_CHANNELS = [
+  'GMAIL',
+  'OUTLOOK',
+  'EMAIL',
+] as const satisfies readonly ChannelType[];
+
+export function hasEmailTemplate(row: Pick<ConnectedRow, 'channel'>): boolean {
+  return (EMAIL_TEMPLATE_CHANNELS as readonly ChannelType[]).includes(row.channel);
+}
+
 export function canDisconnect(row: ConnectedRow): boolean {
   return (
     (DISCONNECTABLE_CHANNELS as readonly ChannelType[]).includes(row.channel) &&

@@ -1052,5 +1052,90 @@
       "reconnectedNotSubscribed": "Reconnected, but messages can't arrive: the platform refused GOTCHA's subscription to them. Reconnect to try again."
     },
     "done": "Done"
+  },
+  "emailTemplate": {
+    "title": "Email template",
+    "lead": "Every email this mailbox sends, from your team or your AI employees, goes out inside this HTML. The message goes where <ph>{placeholder}</ph> stands.",
+    "switch": {
+      "label": "Send every email in this template",
+      "on": "On: every email from this mailbox goes out in this template.",
+      "off": "Off: emails go out without a template.",
+      "needsTemplate": "Save a template to turn this on."
+    },
+    "editor": {
+      "label": "Template HTML",
+      "upload": "Upload .html",
+      "size": "{used} of {max}",
+      "safety": "When you save, scripts, iframes, forms and inline event handlers are removed for email safety.",
+      "unsaved": "Unsaved changes"
+    },
+    "kb": "{n} KB",
+    "problem": {
+      "empty": "Paste or upload the template HTML.",
+      "noContent": "Add <ph>{placeholder}</ph> where the message goes. Without it, the email has nowhere to go.",
+      "tooLarge": "This template is {size}. The limit is {max}."
+    },
+    "upload": {
+      "notHtml": "Choose an .html file.",
+      "failed": "That file could not be read."
+    },
+    "placeholders": {
+      "title": "Placeholders",
+      "hint": "Click one to insert it at the cursor.",
+      "required": "Required",
+      "content": "The message itself.",
+      "agent_name": "Who answered: a person on your team or your AI employee.",
+      "business_name": "Your business name.",
+      "customer_name": "The customer's name, when it is known."
+    },
+    "preview": {
+      "title": "Preview",
+      "frameTitle": "Preview of the email template",
+      "content": "Your message appears here",
+      "empty": "Paste a template to see it here.",
+      "note": "Fonts and stylesheets loaded from other sites are not shown in this preview. Most email apps leave them out too."
+    },
+    "save": "Save template",
+    "saving": "Saving…",
+    "saved": "Saved.",
+    "removed": {
+      "lead": "Removed for email safety: {list}. The editor now shows the template as it was saved.",
+      "script": "scripts",
+      "iframe": "iframes",
+      "object": "embedded objects",
+      "embed": "embeds",
+      "form": "forms",
+      "onHandlers": "inline event handlers",
+      "javascriptLinks": "javascript: links"
+    },
+    "saveProblem": {
+      "content_missing": "The saved HTML has no <ph>{placeholder}</ph>. If it was inside a script, it was removed with it.",
+      "too_large": "The template is over the {max} limit.",
+      "not_set": "Save a template before turning it on.",
+      "forbidden": "You do not have permission to change channel settings.",
+      "not_found": "This mailbox is no longer connected to this workspace.",
+      "failed": "The template was not saved. Try again."
+    },
+    "test": {
+      "button": "Send a test to myself",
+      "sending": "Sending…",
+      "hint": "Sends the saved template, through this mailbox, to your own address only.",
+      "saveFirst": "Save your changes first. The test uses the saved template.",
+      "sent": "Test sent to <ph>{address}</ph>.",
+      "problem": {
+        "not_set": "There is no saved template to send yet.",
+        "no_sender": "Your account has no email address, so we can't send you a test.",
+        "not_connected": "This mailbox is not connected, so it cannot send. Reconnect it from the channel list.",
+        "send_failed": "The email provider refused the test: {detail}",
+        "send_failedBare": "The email provider refused the test.",
+        "forbidden": "You do not have permission to send from this channel.",
+        "failed": "The test was not sent. Try again."
+      }
+    },
+    "read": {
+      "failed": "The template could not be read, so nothing is shown to edit. Try again in a moment.",
+      "forbidden": "You do not have permission to see this channel's settings.",
+      "not_found": "This mailbox was not found in this workspace."
+    }
   }
 }

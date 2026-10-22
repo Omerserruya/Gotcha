@@ -353,6 +353,21 @@
     color: var(--frame-text-eyebrow);
   }
 
+  /*
+   * Hebrew has no capitals, and the mono face has no Hebrew glyphs: the
+   * tracked mono eyebrow fell back to a monospace Hebrew and spaced each
+   * letter apart (supervisor, 2026-10-22). In Hebrew it is the sans,
+   * untracked - the same rule as the email template panel's labels. This
+   * frame only; the Text eyebrow role elsewhere is unchanged.
+   */
+  :root:lang(he) .editorialEyebrow {
+    font-family: var(--font-sans);
+    font-size: var(--font-size-caption);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: normal;
+    text-transform: none;
+  }
+
   .systemStatus {
     margin-block-start: auto;
     /* 00a's footer row: `margin-top:auto; padding-top:36px; gap:14px`. */

@@ -67,7 +67,7 @@ const channel = (id: string, type: string) =>
   channelSchema.parse({ id, channel: type, connectionStatus: 'CONNECTED' });
 
 describe('★ 13b is reached from its row on 13, now that it is not a section', () => {
-  it('WhatsApp’s "Settings" leads to 13b; a row with nothing to set says so', async () => {
+  it('WhatsApp’s "Settings" leads to 13b; a mailbox’s, even disconnected, to its template', async () => {
     render(
       await ChannelList({
         channels: [
@@ -83,15 +83,12 @@ describe('★ 13b is reached from its row on 13, now that it is not a section', 
       'href',
       '/settings/channels?panel=whatsapp',
     );
-    // A disconnected mailbox has nothing to set and nothing to disconnect:
-    // a status saying so, never a panel.
+    // A mailbox's Settings opens ITS template (2026-10-22), by its account id.
     expect(screen.queryByTestId('channel-disconnect-e1')).toBeNull();
-    const email = screen.getByTestId('channel-settings-e1');
-    expect(email).not.toHaveAttribute('href');
-    expect(email.closest('a,button')).toBeNull();
-    expect(email).toHaveAttribute('aria-disabled', 'true');
-    expect(email).toHaveTextContent('Nothing to set');
-    expect(email).toHaveAttribute('title', expect.stringMatching(/no settings for this channel/));
+    expect(screen.getByTestId('channel-settings-e1')).toHaveAttribute(
+      'href',
+      '/settings/channels?panel=email&id=e1',
+    );
   });
 });
 

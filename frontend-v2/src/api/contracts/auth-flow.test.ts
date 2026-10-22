@@ -630,3 +630,70 @@ describe('⚠⚠ the authorize URL we were handed, before we fetch it', () => {
     }
   });
 });
+
+describe('★★ password reset, screen two: the captured recovery stages', () => {
+  it('a reset link opens on consent, which carries the address and its own token', async () => {
+    const { readChallenge: read, consentBody } = await import('./auth-flow');
+    const { CAPTURED } = await import('./recovery-capture');
+    const step = read(CAPTURED.consent);
+    expect(step.kind).toBe('consent');
+    if (step.kind !== 'consent') return;
+    expect(step.challenge.pending_user).toBe('gotcha.dev.test@gmail.com');
+    expect(consentBody(step.challenge)).toEqual({
+      component: 'ak-stage-consent',
+      token: 'consent-token-1',
+    });
+  });
+
+  it('a consent with no token is not one we can answer', async () => {
+    const { readChallenge: read } = await import('./auth-flow');
+    const { CAPTURED } = await import('./recovery-capture');
+    expect(read({ ...CAPTURED.consent, token: '' }).kind).toBe('handOver');
+  });
+
+  it('the prompt is "a new password, twice", and its refusals stay prompts', async () => {
+    const {
+      readChallenge: read,
+      isNewPasswordPrompt,
+      newPasswordBody,
+    } = await import('./auth-flow');
+    const { CAPTURED } = await import('./recovery-capture');
+    for (const raw of [CAPTURED.prompt, CAPTURED.promptRules, CAPTURED.promptEmpty]) {
+      const step = read(raw);
+      expect(step.kind).toBe('prompt');
+      if (step.kind === 'prompt') expect(isNewPasswordPrompt(step.challenge)).toBe(true);
+    }
+    expect(newPasswordBody('a', 'b')).toEqual({
+      component: 'ak-stage-prompt',
+      password: 'a',
+      password_repeat: 'b',
+    });
+  });
+
+  it('★ a prompt with any other required field is not one the screen can submit', async () => {
+    const { readChallenge: read, isNewPasswordPrompt } = await import('./auth-flow');
+    const { CAPTURED } = await import('./recovery-capture');
+    const extra = {
+      ...CAPTURED.prompt,
+      fields: [...CAPTURED.prompt.fields, { field_key: 'name', type: 'text', required: true }],
+    };
+    const step = read(extra);
+    expect(step.kind === 'prompt' && isNewPasswordPrompt(step.challenge)).toBe(false);
+    const optional = {
+      ...CAPTURED.prompt,
+      fields: [...CAPTURED.prompt.fields, { field_key: 'hint', type: 'text', required: false }],
+    };
+    const ok = read(optional);
+    expect(ok.kind === 'prompt' && isNewPasswordPrompt(ok.challenge)).toBe(true);
+  });
+
+  it('a dead reset token restarts at identification; a dead invite is denied on submit', async () => {
+    const { readChallenge: read } = await import('./auth-flow');
+    const { CAPTURED } = await import('./recovery-capture');
+    expect(read(CAPTURED.identification).kind).toBe('identifyOnly');
+    expect(read(CAPTURED.accessDenied)).toEqual({
+      kind: 'handOver',
+      because: 'ak-stage-access-denied',
+    });
+  });
+});

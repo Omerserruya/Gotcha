@@ -110,6 +110,11 @@ export interface ApiErrorInit {
   /** A refusal's own reason, bound and place (`GUARDRAILS_INVALID`'s `reason`, `max`, `index`). */
   readonly reason?: string;
   readonly max?: number;
+  /**
+   * `detail` when a route sends it as a SENTENCE, not a record (the email
+   * template's test send: the provider's own refusal). Shown as it stands.
+   */
+  readonly detailText?: string;
   readonly index?: number;
   /** An image refused for its size (W3): the bounds it broke, and what it was. */
   readonly maxBytes?: number;
@@ -155,6 +160,11 @@ export class ApiError extends Error {
   /** A refusal's own reason, bound and place (`GUARDRAILS_INVALID`'s `reason`, `max`, `index`). */
   readonly reason?: string;
   readonly max?: number;
+  /**
+   * `detail` when a route sends it as a SENTENCE, not a record (the email
+   * template's test send: the provider's own refusal). Shown as it stands.
+   */
+  readonly detailText?: string;
   readonly index?: number;
   /** An image refused for its size (W3): the bounds it broke, and what it was. */
   readonly maxBytes?: number;
@@ -194,6 +204,7 @@ export class ApiError extends Error {
     this.field = init.field;
     this.reason = init.reason;
     this.max = init.max;
+    this.detailText = init.detailText;
     this.index = init.index;
     this.maxBytes = init.maxBytes;
     this.maxWidth = init.maxWidth;

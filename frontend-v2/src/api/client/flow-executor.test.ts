@@ -475,3 +475,30 @@ describe('⚠⚠ the four ways it gives up are four different facts', () => {
  *   provider. No amount of mocking `response.url` could have found that - it
  *   took signing out and then asking for a code.
  */
+
+describe('★★ a flow started from a link carries the link’s query (password reset, screen two)', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('passes the whole query, encoded, to the executor on start and on every submit', async () => {
+    fetchMock.mockImplementation(async () => jsonResponse(identification));
+    const query = 'flow_token=abc+/=&x=1';
+    await startFlow('default-recovery-flow', query);
+    await submitStage({ password: 'x' }, 'default-recovery-flow', query);
+    const urls = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(urls).toHaveLength(2);
+    for (const url of urls) {
+      expect(url).toMatch(/\/flows\/executor\/default-recovery-flow\/\?query=/);
+      expect(new URL(url, 'http://x').searchParams.get('query')).toBe(query);
+    }
+  });
+
+  it('without one, the URL is exactly as before', async () => {
+    fetchMock.mockImplementation(async () => jsonResponse(identification));
+    await startFlow('default-recovery-flow');
+    expect(String(fetchMock.mock.calls[0]![0])).toMatch(/\/default-recovery-flow\/$/);
+  });
+});

@@ -129,6 +129,20 @@ const executorUrl = (flow: string) =>
 const CSRF_HEADER = 'X-authentik-CSRF';
 const CSRF_COOKIE = 'authentik_csrf';
 
+/**
+ * The executor's `?query=`: the query of the page that started the flow,
+ * passed through whole. It is how a flow learns what its link carried - a
+ * recovery email's `flow_token` above all - and Authentik's own UI sends it on
+ * every request of the flow, so this does too.
+ *
+ * ⚠ The value is a credential when it holds a token. It goes into this one
+ *   request URL and nowhere else: never logged, never stored, never put in a
+ *   URL we render.
+ */
+function withQuery(url: string, query: string | undefined): string {
+  return query ? `${url}?query=${encodeURIComponent(query)}` : url;
+}
+
 function csrfToken(): string {
   const match = new RegExp(`(?:^|;\\s*)${CSRF_COOKIE}=([^;]*)`).exec(document.cookie);
   return match?.[1] ? decodeURIComponent(match[1]) : '';
@@ -146,9 +160,10 @@ export type SubmitOutcome = { readonly ok: true; readonly step: FlowStep } | { r
 async function call(
   init?: RequestInit,
   flow: string = AUTHENTICATION_FLOW,
+  query?: string,
 ): Promise<FlowStep | null> {
   try {
-    const response = await fetch(executorUrl(flow), {
+    const response = await fetch(withQuery(executorUrl(flow), query), {
       /*
        * The flow is stateful and its state is a cookie. Without this the
        * executor issues a fresh flow on every request and the second stage never
@@ -180,8 +195,8 @@ async function call(
  *   existing caller is unchanged. Recovery passes its own - a DIFFERENT flow,
  *   with its own cookie and its own stages, driven through the same executor.
  */
-export async function startFlow(flow?: string): Promise<FlowStep | null> {
-  return call(undefined, flow);
+export async function startFlow(flow?: string, query?: string): Promise<FlowStep | null> {
+  return call(undefined, flow, query);
 }
 
 /**
@@ -194,8 +209,9 @@ export async function startFlow(flow?: string): Promise<FlowStep | null> {
 export async function submitStage(
   body: Record<string, unknown>,
   flow?: string,
+  query?: string,
 ): Promise<SubmitOutcome> {
-  const step = await call({ method: 'POST', body: JSON.stringify(body) }, flow);
+  const step = await call({ method: 'POST', body: JSON.stringify(body) }, flow, query);
   return step ? { ok: true, step } : { ok: false };
 }
 

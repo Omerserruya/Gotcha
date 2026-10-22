@@ -709,3 +709,23 @@ describe('⚠⚠ "Keep me signed in" - on 00a, and it carries', () => {
     expect(submitStage).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('★ recovery’s stages, named since password reset screen two, still hand over HERE', () => {
+  it.each([['consent'], ['prompt']])(
+    'a %s stage on the sign-in flow is not drawn as 00a: it hands over, as before',
+    async (which) => {
+      /*
+       * Before 2026-10-22 these parsed as `handOver`. Naming them for the
+       * recovery screen must not change what sign-in does with them.
+       */
+      const { readChallenge } = await import('@/api/contracts/auth-flow');
+      const { CAPTURED } = await import('@/api/contracts/recovery-capture');
+      const step = readChallenge(which === 'consent' ? CAPTURED.consent : CAPTURED.prompt);
+      expect(step.kind).toBe(which);
+      startFlow.mockResolvedValue(step);
+      show();
+      await waitFor(() => expect(assign).toHaveBeenCalledWith(HANDOVER));
+      expect(screen.queryByTestId('sign-in-form')).toBeNull();
+    },
+  );
+});

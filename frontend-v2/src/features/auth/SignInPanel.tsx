@@ -275,7 +275,17 @@ export function SignInPanel({
       return;
     }
 
-    if (step.kind === 'handOver' || step.kind === 'identifyOnly') {
+    /*
+     * `consent` and `prompt` are recovery's stages (password reset, screen two),
+     * named since 2026-10-22. Before that they parsed as `handOver`, and on this
+     * panel they still are one: sign-in renders neither.
+     */
+    if (
+      step.kind === 'handOver' ||
+      step.kind === 'identifyOnly' ||
+      step.kind === 'consent' ||
+      step.kind === 'prompt'
+    ) {
       window.location.assign(handOverHref);
     }
   }, [step, handOverHref, callbackUrl]);
@@ -320,7 +330,14 @@ export function SignInPanel({
    *   a password. Rendering it would draw a password box the stage will reject.
    *   The recovery screen renders that stage instead.
    */
-  if (!step || step.kind === 'done' || step.kind === 'handOver' || step.kind === 'identifyOnly') {
+  if (
+    !step ||
+    step.kind === 'done' ||
+    step.kind === 'handOver' ||
+    step.kind === 'identifyOnly' ||
+    step.kind === 'consent' ||
+    step.kind === 'prompt'
+  ) {
     return <p className={styles.loading}>{t('signIn.starting')}</p>;
   }
 

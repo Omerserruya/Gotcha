@@ -1,0 +1,310 @@
+@layer features {
+  /*
+   * An email mailbox's template - inside the channel's drawer.
+   *
+   * The editor and its placeholders side by side where there is room, one
+   * column where there is not; the preview under both, full width, because
+   * an email is read at the width it is given.
+   */
+
+  .panel {
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    min-inline-size: 0;
+    line-height: normal;
+  }
+
+  .lead {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-secondary);
+  }
+
+  .eyebrow {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  /*
+   * Hebrew has no capitals and the mono face no Hebrew glyphs: a tracked mono
+   * label falls back to a monospace Hebrew and spaces each letter apart. In
+   * Hebrew the label is the sans, untracked.
+   */
+  :root:lang(he) .eyebrow {
+    font-family: var(--font-sans);
+    font-size: var(--font-size-caption);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: normal;
+    text-transform: none;
+  }
+
+  /* The switch: 02's plain pill, its label beside it, its state under both. */
+  .switchRow {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--space-4) var(--space-10);
+    align-items: center;
+    padding: var(--space-12) var(--space-14);
+    background-color: var(--panel-well);
+    border: var(--border-width-thin) solid var(--border-subtle);
+    border-radius: var(--radius-card);
+  }
+
+  .switch {
+    position: relative;
+    display: block;
+    inline-size: 34px;
+    block-size: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 9px;
+    background-color: var(--border-default);
+    cursor: pointer;
+  }
+
+  .switch::after {
+    content: '';
+    position: absolute;
+    inset-block-start: 2px;
+    inset-inline-start: 2px;
+    inline-size: 14px;
+    block-size: 14px;
+    border-radius: 50%;
+    background-color: var(--panel-field);
+  }
+
+  .switch[data-on='yes'] {
+    background-color: var(--action-base);
+  }
+
+  .switch[data-on='yes']::after {
+    inset-inline-start: 18px;
+  }
+
+  .switch:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .switch:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .switchLabel {
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .switchState {
+    grid-column: 2;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .work {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-16);
+  }
+
+  @container (width > 620px) {
+    .work {
+      grid-template-columns: minmax(0, 1fr) 220px;
+    }
+  }
+
+  .editorColumn {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  .editorHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+  }
+
+  /* Code, always left to right: HTML reads the same on a Hebrew page. */
+  .code {
+    box-sizing: border-box;
+    inline-size: 100%;
+    min-block-size: 280px;
+    padding: var(--space-12);
+    resize: block;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-step);
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-caption);
+    line-height: 1.55;
+    tab-size: 2;
+    white-space: pre;
+    overflow: auto;
+  }
+
+  .code:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .code[aria-invalid='true'] {
+    border-color: var(--intent-urgent-text);
+  }
+
+  .editorFoot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8) var(--space-12);
+    align-items: baseline;
+    font-size: var(--font-size-caption);
+  }
+
+  .size {
+    font-family: var(--font-mono);
+    color: var(--text-subtle);
+  }
+
+  .size[data-over='yes'] {
+    color: var(--intent-urgent-text);
+  }
+
+  .unsaved {
+    color: var(--intent-blocked-text);
+  }
+
+  .problem {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  .problem:empty {
+    display: none;
+  }
+
+  .done {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--signal-done-text);
+  }
+
+  .safety,
+  .hint {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .placeholders {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  .placeholderList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .placeholderList li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4) var(--space-6);
+    align-items: center;
+  }
+
+  .chip {
+    padding: var(--space-2) var(--space-6);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-badge);
+    background-color: var(--panel-inset);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-caption);
+    cursor: pointer;
+  }
+
+  .chip:hover {
+    border-color: var(--border-strong);
+  }
+
+  .chip:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .required {
+    font-size: var(--font-size-micro);
+    font-weight: var(--font-weight-semibold);
+    color: var(--intent-blocked-text);
+  }
+
+  .placeholderWhat {
+    flex-basis: 100%;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8) var(--space-12);
+    align-items: center;
+  }
+
+  .previewSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  /* A white page, as an email is drawn: the template brings its own colours. */
+  .preview {
+    display: block;
+    inline-size: 100%;
+    block-size: 480px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-step);
+    background-color: #fff;
+  }
+
+  .previewEmpty {
+    margin: 0;
+    padding: var(--space-26) var(--space-16);
+    border: var(--border-width-thin) dashed var(--border-default);
+    border-radius: var(--radius-step);
+    text-align: center;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .testRow {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-6);
+    padding-block-start: var(--space-16);
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+}

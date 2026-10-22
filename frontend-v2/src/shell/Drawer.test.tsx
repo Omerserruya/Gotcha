@@ -45,3 +45,30 @@ describe('Drawer as a dialog', () => {
     expect(pressed).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * A mailbox address on the head: Cloudflare's Email Address Obfuscation
+ * rewrites any email in the served HTML, and the client's text then differs
+ * (React #418 on dev, 2026-10-22). Read in the server's own output.
+ */
+describe('Drawer line', () => {
+  it('★ a platform’s value (userLine) reaches the HTML with no email pattern in it', async () => {
+    const { renderToString } = await import('react-dom/server');
+    const html = renderToString(
+      await Drawer({
+        title: 'Email template',
+        line: 'hello@shop.test',
+        userLine: true,
+        closeHref: '/x',
+        children: null,
+      }),
+    );
+    expect(html).not.toContain('hello@shop.test');
+    expect(html).toContain('hello<!-- -->@<!-- -->shop.test');
+  });
+
+  it('our own line is left as it is', async () => {
+    render(await Drawer({ title: 'Language', line: 'Pick one', closeHref: '/x', children: null }));
+    expect(screen.getByText('Pick one').querySelector('bdi')).toBeNull();
+  });
+});
