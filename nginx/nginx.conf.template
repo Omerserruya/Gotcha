@@ -226,6 +226,18 @@ http {
         listen 80;
         server_name _;
 
+        # Authentik's own UI paths on the APP host go to the IdP (2026-10-22).
+        # Links Authentik built before the X-Forwarded-Host fix (reset emails
+        # already in inboxes) and any relative link it hands the panel
+        # (recovery_url "/if/flow/...") land here; the app has no /if/ or
+        # /flows/ routes. 302 keeps the path and query (flow_token, itoken).
+        location ^~ /if/ {
+            return 302 https://auth-dev.gotcha.co.il$request_uri;
+        }
+        location ^~ /flows/ {
+            return 302 https://auth-dev.gotcha.co.il$request_uri;
+        }
+
         # Increase body size for webhooks
         client_max_body_size 10m;
 
@@ -2044,7 +2056,13 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_set_header X-Forwarded-Host $host;
+            # ★ THE IdP'S NAME, NOT $host (2026-10-22). Authentik builds every absolute
+            #   link it emails (password reset, email verification, invitations) from
+            #   X-Forwarded-Host - a trusted proxy's value wins over Host. With $host
+            #   the reset email pointed at the APP host, where /if/flow/ is not
+            #   Authentik, and the link 404ed. Anonymous executor POSTs (the panel's
+            #   whole path) were measured to answer the same either way.
+            proxy_set_header X-Forwarded-Host auth-dev.gotcha.co.il;
             # Same budget as the IdP's own location further down this file.
             limit_req zone=authentik burst=40 nodelay;
         }
