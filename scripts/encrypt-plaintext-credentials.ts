@@ -23,7 +23,7 @@
  */
 
 import { PrismaClient } from "@prisma/client";
-import { encryptCredentials } from "../packages/shared/src/lib/encryption";
+import { encryptCredentials, plaintextCredentialsNotSecret } from "../packages/shared/src/lib/encryption";
 
 const prisma = new PrismaClient();
 const APPLY = process.argv.includes("--apply");
@@ -45,6 +45,7 @@ async function main(): Promise<void> {
     const c = row.credentials as unknown;
     if (typeof c === "string") continue; // already encrypted
     if (!c || typeof c !== "object" || Object.keys(c).length === 0) continue;
+    if (plaintextCredentialsNotSecret({ table: "channel_accounts", channel: row.channel }, c as Record<string, unknown>)) continue;
     findings.push({
       table: "channel_accounts",
       id: row.id,
@@ -66,6 +67,7 @@ async function main(): Promise<void> {
     const c = row.credentials as unknown;
     if (typeof c === "string") continue;
     if (!c || typeof c !== "object" || Object.keys(c).length === 0) continue;
+    if (plaintextCredentialsNotSecret({ table: "tenant_integrations" }, c as Record<string, unknown>)) continue;
     findings.push({
       table: "tenant_integrations",
       id: row.id,
