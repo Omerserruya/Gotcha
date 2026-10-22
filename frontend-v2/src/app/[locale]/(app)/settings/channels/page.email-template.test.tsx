@@ -82,10 +82,15 @@ beforeEach(() => {
 describe('★ a mailbox’s template drawer', () => {
   it('opens for that mailbox: its address on the head, its stored template in the editor', async () => {
     const tree = await open({ panel: 'email', id: 'g1' });
-    const drawer = find<{ title: string; line: string; testId: string }>(tree, Drawer);
+    const drawer = find<{ title: string; line: string; userLine: boolean; testId: string }>(
+      tree,
+      Drawer,
+    );
     expect(drawer).toMatchObject({
       title: 'Email template',
       line: 'shop@halvo-dev.test',
+      // An address: through UserText, so an edge rewriting emails cannot reach it.
+      userLine: true,
       testId: 'drawer-email-template',
     });
     expect(reads.template).toHaveBeenCalledWith('g1');

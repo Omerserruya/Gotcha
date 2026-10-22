@@ -154,6 +154,7 @@ export default async function Page({
     params.panel === 'email' && params.id
       ? (channels?.find((c) => c.id === params.id && hasEmailTemplate(c)) ?? null)
       : null;
+  const mailboxAddress = mailbox?.displayName?.trim() || mailbox?.externalId?.trim() || null;
   const [mailboxTemplate, previewNames] = mailbox
     ? await Promise.all([loadEmailTemplate(mailbox.id), loadPreviewNames()])
     : [null, null];
@@ -263,11 +264,8 @@ export default async function Page({
         <Drawer
           title={t('emailTemplate.title')}
           // The address, as its row shows it; the platform's name when there is none.
-          line={
-            mailbox.displayName?.trim() ||
-            mailbox.externalId?.trim() ||
-            (channelName(mailbox.channel, t) ?? t('name.other'))
-          }
+          line={mailboxAddress ?? channelName(mailbox.channel, t) ?? t('name.other')}
+          userLine={mailboxAddress !== null}
           lead={<ChannelTile channel={mailbox.channel} />}
           closeHref="/settings/channels"
           width={860}

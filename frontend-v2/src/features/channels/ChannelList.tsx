@@ -1,5 +1,6 @@
 import { AlertTriangle } from 'lucide-react';
 import { getLocale, getTranslations } from 'next-intl/server';
+import type { ReactNode } from 'react';
 
 import {
   OAUTH_PLATFORMS,
@@ -7,6 +8,7 @@ import {
   type ChannelType,
   type VoiceChannel,
 } from '@/api/contracts/channels';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 import styles from './Channels.module.css';
 import { ChannelTile } from './ChannelTile';
@@ -89,9 +91,14 @@ export async function ChannelList({
    * number that silently changes meaning is worse than one that is wider than
    * you expected.
    */
-  const detail = (row: ConnectedRow): string => {
+  /*
+    The address is the platform's value, not our copy: UserText isolates its
+    direction and splits it at "@", so an edge that rewrites emails in the HTML
+    (Cloudflare's obfuscation) cannot make the server's text differ from the
+    client's (React #418 on dev, 2026-10-22).
+  */
+  const detail = (row: ConnectedRow): ReactNode => {
     const parts: string[] = [];
-    if (row.identity) parts.push(row.identity);
     if (row.openConversations != null) {
       parts.push(t('openNow', { count: row.openConversations }));
     }
@@ -100,7 +107,14 @@ export async function ChannelList({
         t('inWindow', { count: number.format(row.windowConversations), days: windowDays }),
       );
     }
-    return parts.join(' · ');
+    const counts = parts.join(' · ');
+    if (!row.identity) return counts;
+    return (
+      <>
+        <UserText>{row.identity}</UserText>
+        {counts ? ` · ${counts}` : null}
+      </>
+    );
   };
   const troubledRows = rows
     .flatMap((row): readonly ChannelRow[] => (row.kind === 'widget' ? row.parts : [row]))

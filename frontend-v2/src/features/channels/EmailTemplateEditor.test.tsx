@@ -318,3 +318,27 @@ describe('Hebrew', () => {
     expect(html()).toHaveAttribute('dir', 'ltr');
   });
 });
+
+describe('★★ the template is never in the server’s HTML', () => {
+  it('neither the editor nor the preview carries it, so an edge rewriting emails cannot reach it', async () => {
+    const { renderToString } = await import('react-dom/server');
+    const html = renderToString(
+      <NextIntlClientProvider locale="en" messages={{ channels }}>
+        <EmailTemplateEditor
+          channelId="ca1"
+          stored={{ ...STORED, html: '<p>{{content}}</p><footer>info@shop.test</footer>' }}
+          names={NAMES}
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(html).not.toContain('info@shop.test');
+    expect(html).not.toContain('srcdoc');
+    expect(html).toContain('data-testid="email-template-html"');
+  });
+
+  it('the client has it at once', () => {
+    editor({ ...STORED, html: '<p>{{content}}</p><footer>info@shop.test</footer>' });
+    expect(html().value).toContain('info@shop.test');
+    expect(screen.getByTestId('email-template-preview')).toBeInTheDocument();
+  });
+});

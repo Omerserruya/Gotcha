@@ -168,3 +168,24 @@ describe('the copy', () => {
     );
   });
 });
+
+describe('★ a mailbox address in the row (React #418 behind Cloudflare, dev 2026-10-22)', () => {
+  it('reaches the server’s HTML with no email pattern in it, and reads the same', async () => {
+    const { renderToString } = await import('react-dom/server');
+    const ui = await ChannelList({
+      channels: [account('g1', 'GMAIL', 'CONNECTED', 'hello@shop.test')],
+      voice: [],
+      voiceOffered: true,
+      windowDays: 30,
+    });
+    const html = renderToString(
+      <NextIntlClientProvider locale="en" messages={{ channels, common }}>
+        {ui}
+      </NextIntlClientProvider>,
+    );
+    expect(html).not.toContain('hello@shop.test');
+    expect(html).toContain('hello<!-- -->@<!-- -->shop.test');
+    await list([account('g1', 'GMAIL', 'CONNECTED', 'hello@shop.test')]);
+    expect(screen.getByTestId('channel-detail-g1')).toHaveTextContent(/^hello@shop\.test/);
+  });
+});

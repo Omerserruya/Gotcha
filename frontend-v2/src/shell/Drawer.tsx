@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
 
+import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
 
 import { DrawerPanel } from './DrawerPanel';
@@ -25,6 +26,7 @@ export async function Drawer({
   testId,
   lead,
   userTitle = false,
+  userLine = false,
   children,
 }: {
   readonly title: string;
@@ -35,6 +37,12 @@ export async function Drawer({
    */
   readonly userTitle?: boolean;
   readonly line?: string;
+  /**
+   * The line is a platform's value (a mailbox address), not our copy: it is
+   * isolated and split at "@" (UserText), so an edge that rewrites emails in
+   * the HTML cannot make the server's text differ from the client's.
+   */
+  readonly userLine?: boolean;
   readonly closeHref: string;
   /** 02's widths: 560 (11b, 11c), 600 (12d, 14c), 620 (11d), 820 (14e). */
   readonly width?: 560 | 600 | 620 | 820 | 860;
@@ -52,7 +60,9 @@ export async function Drawer({
           {lead}
           <div className={styles.titles}>
             <h2 className={styles.title}>{userTitle ? <bdi dir="auto">{title}</bdi> : title}</h2>
-            {line ? <p className={styles.line}>{line}</p> : null}
+            {line ? (
+              <p className={styles.line}>{userLine ? <UserText>{line}</UserText> : line}</p>
+            ) : null}
           </div>
           <Link href={closeHref} className={styles.close} aria-label={t('close')} data-sheet-close>
             <X size={16} aria-hidden="true" />

@@ -6,6 +6,7 @@ import {
   useId,
   useRef,
   useState,
+  useSyncExternalStore,
   useTransition,
   type ChangeEvent,
   type ReactNode,
@@ -49,6 +50,18 @@ const REMOVED_KEY: Readonly<Record<RemovedKind, string>> = {
  * A placeholder or an address inside a sentence: its own left-to-right run,
  * so on a Hebrew line the braces and the period around it stay in place.
  */
+/**
+ * ★★ THE TEMPLATE IS NEVER IN THE SERVER'S HTML. A template's footer often
+ * holds a contact address, and Cloudflare's Email Address Obfuscation
+ * rewrites every email in the HTML it serves - inside the textarea that would
+ * put "[email protected]" in the editor, and a Save would store it. So the
+ * server snapshot is `false`: the server and the hydrating client render the
+ * editor empty, and the client fills it straight after (dev, 2026-10-22).
+ */
+const noopSubscribe = () => () => {};
+const onClient = () => true;
+const onServer = () => false;
+
 const ph = (chunks: ReactNode) => <bdi dir="ltr">{chunks}</bdi>;
 
 type Notice =
@@ -102,6 +115,7 @@ export function EmailTemplateEditor({
   const max = kb(TEMPLATE_MAX_BYTES);
   const bytes = templateBytes(html);
 
+  const hydrated = useSyncExternalStore(noopSubscribe, onClient, onServer);
   const preview = useDeferredValue(html);
   const doc =
     preview.trim() === ''
@@ -245,7 +259,8 @@ export function EmailTemplateEditor({
             spellCheck={false}
             autoCapitalize="off"
             autoCorrect="off"
-            value={html}
+            value={hydrated ? html : ''}
+            readOnly={!hydrated}
             onChange={(event) => edit(event.target.value)}
             aria-invalid={problem !== null && problem !== 'empty'}
             aria-describedby={`${ids.size} ${ids.problem}`}
@@ -320,7 +335,10 @@ export function EmailTemplateEditor({
         <h3 id={`${ids.editor}-pv`} className={styles.eyebrow}>
           {t('preview.title')}
         </h3>
-        {doc === null ? (
+        {!hydrated ? (
+          // The frame's place, until the client has the template (see `onServer`).
+          <div className={styles.preview} aria-hidden="true" />
+        ) : doc === null ? (
           <p className={styles.previewEmpty} data-testid="email-template-preview-empty">
             {t('preview.empty')}
           </p>
