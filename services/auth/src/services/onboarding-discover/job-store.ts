@@ -53,6 +53,8 @@ export interface JobCounts {
 export interface JobFound {
   platform: string | null;
   productCount: number;
+  /** Product pages read when there was no feed: a sample, never a catalogue size. */
+  productsSampled: number;
   policies: string[];
   faqCount: number;
   contact: boolean;
@@ -109,7 +111,7 @@ export function useJobRows(delegate: JobDelegate | null): void {
 }
 
 const emptyCounts = (): JobCounts => ({ pagesPlanned: 0, pagesRead: 0, pagesBlocked: 0, products: 0, policies: 0, faqs: 0, documents: 0 });
-const emptyFound = (): JobFound => ({ platform: null, productCount: 0, policies: [], faqCount: 0, contact: false, hours: false, brand: false, tools: [], blocked: false });
+const emptyFound = (): JobFound => ({ platform: null, productCount: 0, productsSampled: 0, policies: [], faqCount: 0, contact: false, hours: false, brand: false, tools: [], blocked: false });
 
 export async function readJob(tenantId: string): Promise<DiscoverJob | null> {
   const row = await rows().findUnique({ where: { tenantId }, select: { job: true } });

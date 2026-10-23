@@ -175,19 +175,23 @@ describe("the learn stages", () => {
     await learnStages({ ai })(c as any);
     const sampled = events.find((e) => e.key === "products.sampled");
     expect(sampled).toMatchObject({ params: { count: 1 } });
-    expect(sampled.patch).toBeUndefined();
+    // A sample flag the chip can redraw after a reload - never productCount.
+    expect(sampled.patch).toEqual({ found: { productsSampled: 1 } });
     expect(events.some((e) => e.patch?.found?.productCount)).toBe(false);
   });
 
   it("suggests only the platform and tools the site loads that the catalogue has, with how to connect", async () => {
     H.connected = [{ integrationId: "c-kla" }];
-    const { ctx: c, events } = ctx({ tools: ["klaviyo", "returngo-not-in-catalog"] });
+    const { ctx: c, events } = ctx({
+      tools: ["klaviyo", "returngo-not-in-catalog"],
+      toolsSeen: [{ slug: "klaviyo", evidenceUrl: `${O}/pages/about` }, { slug: "returngo-not-in-catalog", evidenceUrl: null }],
+    });
     await learnStages({ ai })(c as any);
     expect(events.find((e) => e.key === "integrations.suggested")).toMatchObject({ params: { count: 2, slugs: "shopify,klaviyo" } });
     const { integrationSuggestions } = await import("../services/onboarding-discover/learn");
     expect(await integrationSuggestions("T")).toEqual([
       { slug: "shopify", name: "Shopify", reason: "platform", connect: { kind: "oauth" }, connected: false },
-      { slug: "klaviyo", name: "Klaviyo", reason: "detected_on_site", connect: { kind: "key" }, connected: true },
+      { slug: "klaviyo", name: "Klaviyo", reason: "detected_on_site", evidenceUrl: `${O}/pages/about`, connect: { kind: "key" }, connected: true },
     ]);
   });
 });

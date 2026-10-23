@@ -366,16 +366,36 @@ async function meterAndReact(
   }
 }
 
+/**
+ * AI calls the PLATFORM pays for (Omer, 2026-10-23): reading a new customer's
+ * site during onboarding. A tenant setting up has no plan or no credits yet,
+ * and gating or debiting these calls failed the scan with a 402 and charged
+ * the customer for our onboarding. They are still logged in full (usage row,
+ * marked billedTo "platform"); only the credit gate and the wallet debit are
+ * skipped.
+ *
+ * An exact list, never a prefix: a caller cannot opt out of billing by naming
+ * its call "onboarding_something".
+ */
+export const PLATFORM_PAID_AI_TYPES: ReadonlySet<string> = new Set([
+  "onboarding_discovery",
+  "onboarding_extract_policies",
+  "onboarding_extract_faq",
+  "onboarding_extract_profile",
+  "onboarding_extract_brand",
+]);
+
 export async function generateResponse(params: AIRequestParams): Promise<AIResponse> {
   const client = getClient();
   const model = params.model || defaultModel;
   const type = params.metadata?.type || "chat";
+  const platformPaid = PLATFORM_PAID_AI_TYPES.has(type);
 
   // Billing pre-flight: refuse AI when the tenant is out of AI Units or the
   // subscription isn't serviceable. Throws AiUnitsExhaustedError ONLY in
   // BILLING_ENFORCEMENT_MODE=hard; off/observe/soft never block. Callers map
   // the error to graceful degradation (bot escalates, copilot disables).
-  await assertAiAllowed(params.tenantId);
+  if (!platformPaid) await assertAiAllowed(params.tenantId);
 
   const requestParams: OpenAI.ChatCompletionCreateParamsNonStreaming = {
     model,
@@ -491,12 +511,15 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
       systemPromptHash: prefixAssertion?.hash ?? params.metadata?.systemPromptHash,
       systemPromptHashDrift: prefixAssertion?.drift ?? false,
       cachedPrefixUsed: cachedTokens > 0,
+      // Who pays: the audit trail says so on every row.
+      billedTo: platformPaid ? "platform" : "tenant",
     },
   }).catch((err) => console.error("[aiService] Usage tracking failed:", err.message));
 
   // Meter AI Units (cost-driven debit) + react to crossed thresholds. No-op
   // when BILLING_ENFORCEMENT_MODE=off. Fire-and-forget: never delays the reply.
-  void meterAndReact(params.tenantId, model, usage, params.metadata?.conversationId);
+  // Platform-paid calls are logged above and never debited.
+  if (!platformPaid) void meterAndReact(params.tenantId, model, usage, params.metadata?.conversationId);
 
   // Audit log (fire-and-forget)
   logAudit({

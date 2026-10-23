@@ -262,7 +262,7 @@ export function learnStages(deps: LearnDeps = {}) {
     } else {
       const sampled = pages.filter((p) => p.kind === "product").length;
       // Never a catalogue size: these are the few pages we read.
-      if (sampled) await emit("extract", "found", "products.sampled", { count: sampled });
+      if (sampled) await emit("extract", "found", "products.sampled", { count: sampled }, { found: { productsSampled: sampled } });
     }
 
     // ── policies ──
@@ -327,7 +327,7 @@ export function learnStages(deps: LearnDeps = {}) {
       technology: normalizeDiscoveryTechnology({
         ...d.technology,
         platform: harvest.platform ? { slug: harvest.platform, name: harvest.platform === "shopify" ? "Shopify" : "WooCommerce" } : d.technology.platform,
-        tools: ctx.tools.map((slug) => ({ slug, name: slug })),
+        tools: (ctx.toolsSeen ?? ctx.tools.map((slug) => ({ slug, evidenceUrl: null }))).map((t) => ({ slug: t.slug, name: t.slug, evidenceUrl: t.evidenceUrl })),
       }),
       status: "COMPLETE",
       scanPhase: "done",
@@ -350,6 +350,8 @@ export interface IntegrationSuggestion {
   slug: string;
   name: string;
   reason: "platform" | "detected_on_site";
+  /** The page that loads the tool ("we saw ReturnGO on ..."), when known. */
+  evidenceUrl?: string;
   connect: { kind: "oauth" | "key" };
   connected: boolean;
 }
@@ -364,6 +366,9 @@ export async function integrationSuggestions(tenantId: string): Promise<Integrat
   const tech = normalizeDiscoveryTechnology(disc?.technology);
   const platform = tech.platform?.slug ?? null;
   const tools = (tech.tools ?? []).map((t: any) => t.slug).filter(Boolean) as string[];
+  const evidence = new Map<string, string>(
+    ((disc?.technology as any)?.tools ?? []).filter((t: any) => t?.slug && t?.evidenceUrl).map((t: any) => [t.slug, t.evidenceUrl]),
+  );
   const wanted = [...(platform ? [platform] : []), ...tools.filter((t) => t !== platform)];
   if (!wanted.length) return [];
 
@@ -380,6 +385,7 @@ export async function integrationSuggestions(tenantId: string): Promise<Integrat
       slug: c.slug,
       name: c.name,
       reason: c.slug === platform ? ("platform" as const) : ("detected_on_site" as const),
+      ...(c.slug !== platform && evidence.get(c.slug) ? { evidenceUrl: evidence.get(c.slug)! } : {}),
       connect: { kind: String(c.authType).startsWith("OAUTH") ? ("oauth" as const) : ("key" as const) },
       connected: connectedIds.has(c.id),
     }));

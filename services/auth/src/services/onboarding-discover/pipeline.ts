@@ -48,8 +48,10 @@ export interface LearnContext {
   pages: ReadPage[];
   harvest: PlatformHarvest;
   signals: DiscoverySignals;
-  /** Tools the site's pages actually load (toolsFromAssets), not ones its copy names. */
+  /** Tools the site's pages actually load (toolEvidence), not ones its copy names. */
   tools: string[];
+  /** The page each of those tools was seen on. */
+  toolsSeen: Array<{ slug: string; evidenceUrl: string | null }>;
   emit: Emitter;
   /** Stages whose durable output already exists from an earlier attempt. */
   doneStages: Stage[];
@@ -86,14 +88,21 @@ const HEARTBEAT_MS = 15_000;
  * "detected" Judge.me (found on a real site, 2026-10-23).
  */
 export function toolsFromAssets(htmls: string[]): string[] {
-  const srcs: string[] = [];
-  for (const html of htmls) {
+  return toolEvidence(htmls.map((html) => ({ url: "", html }))).map((t) => t.slug);
+}
+
+/** Each tool a page loads, with the first page that loads it (the "we saw it on" link). */
+export function toolEvidence(pages: Array<{ url: string; html: string }>): Array<{ slug: string; evidenceUrl: string | null }> {
+  const found = new Map<string, string | null>();
+  for (const page of pages) {
+    const srcs: string[] = [];
     const re = /<(?:script|link|iframe|img)\b[^>]*?\b(?:src|href)=["']([^"']+)["']/gi;
     let m: RegExpExecArray | null;
-    while ((m = re.exec(html))) srcs.push(m[1]!);
+    while ((m = re.exec(page.html))) srcs.push(m[1]!);
+    const hay = srcs.join("\n");
+    for (const t of TOOL_DEFS) if (!found.has(t.slug) && t.re.test(hay)) found.set(t.slug, page.url || null);
   }
-  const hay = srcs.join("\n");
-  return TOOL_DEFS.filter((t) => t.re.test(hay)).map((t) => t.slug);
+  return [...found.entries()].map(([slug, evidenceUrl]) => ({ slug, evidenceUrl }));
 }
 
 /** A short, readable path for the feed ("/policies/refund-policy"). */
@@ -239,7 +248,8 @@ export async function runDiscoverJob(tenantId: string, jobId: string, deps: Pipe
     await Promise.all(Array.from({ length: Math.min(deps.concurrency ?? READ_CONCURRENCY, todo.length || 1) }, worker));
 
     const signals = extractSignals(pages.map((p) => ({ url: p.url, html: p.html })));
-    const tools = toolsFromAssets(pages.map((p) => p.html));
+    const toolsSeen = toolEvidence(pages.map((p) => ({ url: p.url, html: p.html })));
+    const tools = toolsSeen.map((t) => t.slug);
     await emit(stage, "progress", "pages.read", { count: read }, {
       counts: { pagesRead: read, pagesBlocked: blocked },
       found: {
@@ -261,7 +271,7 @@ export async function runDiscoverJob(tenantId: string, jobId: string, deps: Pipe
 
     // ── extract → write_knowledge → suggest_integrations ──
     if (deps.learn) {
-      await deps.learn({ tenantId, jobId, origin, locale: start.locale, pages, harvest, signals, tools, emit, doneStages });
+      await deps.learn({ tenantId, jobId, origin, locale: start.locale, pages, harvest, signals, tools, toolsSeen, emit, doneStages });
     }
 
     stage = "done";
