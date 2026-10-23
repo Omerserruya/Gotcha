@@ -23,6 +23,8 @@ import { resolveInviteRoleStrict, resolveInviteRoleWithFallback, ensureRoleAssig
 import { actorOf, inviteRoleRefusal } from "../lib/grant-ceiling";
 import { ingestTaughtDocument, updateTaughtDocument } from "../services/teach-ingest";
 import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
+import { readJob, startJob, reopenJob, isLive, viewOf } from "../services/onboarding-discover/job-store";
+import { enqueueDiscover } from "../services/onboarding-discover/queue";
 import { syncDiscoveryRecommendations, listRecommendations, setRecommendationStatus, addStoreInspectionRecs, reconcileConnectSystemRecs } from "../services/recommendations.service";
 import OpenAI from "openai";
 
@@ -1836,6 +1838,94 @@ const discoverSchema = z.object({
    * gate: the checkbox is the consent, this is the record of it.
    */
   legalAccepted: z.boolean().optional(),
+});
+
+// ─── Learn the site, as a job (onboarding v2, 2026-10-23) ─────────────────────
+//
+// POST starts (or resumes) the scan and returns at once; the worker does the
+// work; GET is polled about once a second for the feed. Nothing here can 409:
+// a scan already running for this domain is returned, a new domain supersedes
+// it, and a dead one can be retried. See services/onboarding-discover.
+
+/** The consent record the first setup screen produces. Never blocks the caller. */
+function recordLegalAcceptance(req: Request, locale: string): void {
+  prisma.auditLog.create({
+    data: {
+      tenantId: req.tenantId!,
+      actorType: "user",
+      actorId: (req as any).userId || null,
+      action: "legal.terms.accepted",
+      targetType: "tenant",
+      targetId: req.tenantId!,
+      metadata: { surface: "onboarding_setup", documents: ["terms-of-service", "privacy-policy"], locale },
+    },
+  }).catch((err: any) => console.warn("[onboarding] consent audit failed:", err?.message));
+}
+
+router.post("/discover/job", requireRole("ADMIN"), validate(discoverSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { domain, locale, legalAccepted } = req.body as { domain: string; locale: string; legalAccepted?: boolean };
+    const origin = normalizeDomain(domain);
+    if (!origin) {
+      res.status(400).json({ error: "That is not a website address", code: "INVALID_DOMAIN" });
+      return;
+    }
+    if (legalAccepted) recordLegalAcceptance(req, locale);
+
+    const current = await readJob(req.tenantId!);
+    if (current && current.domain === origin && isLive(current)) {
+      res.status(202).json({ data: { jobId: current.jobId, status: current.status, resumed: true } });
+      return;
+    }
+    // A new domain, or nothing live: a new run. Any older run is superseded
+    // by the jobId swap and stops at its next write.
+    const job = await startJob(req.tenantId!, origin, await systemLanguage(req.tenantId!, locale));
+    await enqueueDiscover(req.tenantId!, job.jobId);
+    res.status(202).json({ data: { jobId: job.jobId, status: job.status, resumed: false } });
+  } catch (err: any) {
+    console.error("[onboarding] discover job start failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not start reading the site", code: "DISCOVER_START_FAILED" });
+  }
+});
+
+router.get("/discover/job", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const since = Math.max(0, Number.parseInt(String(req.query.since ?? "0"), 10) || 0);
+    const job = await readJob(req.tenantId!);
+    if (!job) {
+      res.status(404).json({ error: "No scan has been started", code: "NO_JOB" });
+      return;
+    }
+    res.json({ data: viewOf(job, since) });
+  } catch (err: any) {
+    console.error("[onboarding] discover job read failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not read the scan", code: "DISCOVER_READ_FAILED" });
+  }
+});
+
+router.post("/discover/retry", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const job = await readJob(req.tenantId!);
+    if (!job) {
+      res.status(404).json({ error: "No scan has been started", code: "NO_JOB" });
+      return;
+    }
+    if (isLive(job)) {
+      // Nothing to retry: the run is alive. The client just keeps polling.
+      res.status(202).json({ data: { jobId: job.jobId, status: job.status, resumed: true } });
+      return;
+    }
+    if (job.status === "COMPLETE") {
+      res.status(409).json({ error: "This scan already finished", code: "JOB_COMPLETE" });
+      return;
+    }
+    const reopened = await reopenJob(req.tenantId!, job.jobId);
+    await enqueueDiscover(req.tenantId!, job.jobId, reopened.seq);
+    res.status(202).json({ data: { jobId: job.jobId, status: reopened.status, resumed: true } });
+  } catch (err: any) {
+    console.error("[onboarding] discover retry failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not retry the scan", code: "DISCOVER_RETRY_FAILED" });
+  }
 });
 
 router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (req: Request, res: Response): Promise<void> => {

@@ -608,7 +608,7 @@ async function mapLimited<T, R>(items: T[], limit: number, fn: (item: T) => Prom
   return out;
 }
 
-const isUnreadable = (r: unknown): r is UnreadablePage => !!r && typeof r === "object" && (r as any).unreadable === true;
+export const isUnreadable = (r: unknown): r is UnreadablePage => !!r && typeof r === "object" && (r as any).unreadable === true;
 
 /**
  * Crawl a site and extract what can be known without a model.

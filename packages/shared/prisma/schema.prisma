@@ -1854,6 +1854,15 @@ model BusinessDiscovery {
   /// row.
   crawl     Json?
 
+  /// The onboarding scan JOB (2026-10-23): the async learn-the-site run the v2
+  /// setup polls. { jobId, domain, status, stage, startedAt, heartbeatAt,
+  /// finishedAt, seq, events[], counts, found, error, doneStages[] }. Events are
+  /// stable keys + params, never copy; `found` is cumulative so a reload
+  /// redraws every chip from one read. Written only by the onboarding-discover
+  /// worker (services/auth/src/services/onboarding-discover), guarded by jobId so
+  /// a superseded run stops writing. Null until the first v2 scan.
+  job       Json?
+
   scannedAt DateTime? @map("scanned_at")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")

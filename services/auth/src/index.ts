@@ -20,6 +20,7 @@ import setupLinkRoutes from "./routes/setup-link";
 import realtimeRoutes from "./routes/realtime";
 import agentPresenceRoutes from "./routes/agent-presence";
 import { startNudgeWorker } from "./services/nudge-engine.service";
+import { startOnboardingDiscoverWorker } from "./services/onboarding-discover/queue";
 import rateLimit from "express-rate-limit";
 
 const config = { name: "auth-service", port: parseInt(process.env.PORT || "4001", 10) };
@@ -90,6 +91,7 @@ startService(app, config);
 // Lifecycle Nudge Engine - repeatable sweep that sends due onboarding nudges.
 // Best-effort: a failure here must never stop the auth service from serving.
 startNudgeWorker().catch((err) => console.error("[auth] nudge worker start failed:", err?.message));
+startOnboardingDiscoverWorker();
 
 // RBAC seed sweep: ensure every tenant has the built-in TenantRole rows +
 // legacy-derived assignments (idempotent upserts; custom roles and manual
