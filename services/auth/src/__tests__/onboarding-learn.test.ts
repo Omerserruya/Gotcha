@@ -296,6 +296,26 @@ describe("what the owner gives when the site blocks reading", () => {
     expect(H.docs.find((d) => d.metadata.dedupeKey === "profile").content).toContain("תל אביב");
   });
 
+  it("a file never replaces a policy already learned: it is reported in skipped, the scanned one stays", async () => {
+    H.extract.policies = { kind: "policies", policies: [{ kind: "returns", summary: "thin", terms: { windowDays: 7 } }, { kind: "warranty", summary: "1y", terms: { warranty: { months: 12 } } }] };
+    H.extract.faq = { kind: "faq", faq: [] };
+    H.extract.profile = null;
+    const before = H.docs.find((d) => d.metadata.dedupeKey === "policy:returns").content;
+    const v: any = await learnFromFile("T", upload, { ai, aiFile: file({ ok: true, status: 200, body: { data: { filename: "f.txt", text: "x" } } }) });
+    expect(v.added.policies).toEqual(["warranty"]);
+    expect(v.skipped).toEqual({ policies: ["returns"] });
+    expect(v.policies.find((p: any) => p.id === "returns")).toMatchObject({ summary: "30 יום להחזרה", terms: { windowDays: 30 } });
+    expect(H.docs.find((d) => d.metadata.dedupeKey === "policy:returns").content).toBe(before);
+  });
+
+  it("a file whose only policies are already learned, and nothing else new, is NOTHING_FOUND", async () => {
+    H.extract.policies = { kind: "policies", policies: [{ kind: "returns", summary: "thin", terms: {} }] };
+    H.extract.faq = { kind: "faq", faq: [] };
+    H.extract.profile = null;
+    await expect(learnFromFile("T", upload, { ai, aiFile: file({ ok: true, status: 200, body: { data: { filename: "f.txt", text: "x" } } }) }))
+      .rejects.toMatchObject({ code: "NOTHING_FOUND" });
+  });
+
   it("a file with nothing usable is NOTHING_FOUND (422), and nothing is written", async () => {
     H.extract = { policies: { kind: "policies", policies: [] }, faq: FAQ, profile: PROFILE };
     const before = JSON.stringify(H.disc); const docs = H.docs.length;

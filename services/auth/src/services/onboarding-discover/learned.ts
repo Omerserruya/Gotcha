@@ -222,9 +222,10 @@ export class LearnedUploadRefused extends Error {
 
 /**
  * A file the owner gives when the site blocks reading: its text comes from the
- * AI service, then the scan's own extraction runs on it. A policy replaces the
- * same kind; a question is added unless already there; profile and contact
- * fill only what is empty - never over what the owner or the scan set.
+ * AI service, then the scan's own extraction runs on it. Only what is missing
+ * is added: a policy of a kind not yet learned, a question not already there,
+ * profile and contact fields that are empty - never over what the owner or the
+ * scan set.
  */
 export async function learnFromFile(
   tenantId: string,
@@ -259,11 +260,14 @@ export async function learnFromFile(
   const knowledge = obj(d.knowledge);
   const structured = obj(knowledge.structured);
   const policies: any[] = Array.isArray(structured.policies) ? [...structured.policies] : [];
-  const newPolicies: any[] = (pol?.policies ?? []).map((p: any) => ({ ...p, sourceUrl: source }));
-  for (const p of newPolicies) {
-    const i = policies.findIndex((x) => x.kind === p.kind);
-    if (i < 0) policies.push(p); else policies[i] = p;
-  }
+  // A file fills what is missing; it never replaces a policy already learned.
+  // Found on dev: one FAQ line about shipping to Eilat came back as a thin
+  // "shipping" policy and replaced the site's full one (costs, times, free
+  // over). A known policy is the owner's to edit, so it is reported, not changed.
+  const fromFile: any[] = (pol?.policies ?? []).map((p: any) => ({ ...p, sourceUrl: source }));
+  const newPolicies = fromFile.filter((p, i) => !policies.some((x) => x.kind === p.kind) && fromFile.findIndex((y) => y.kind === p.kind) === i);
+  const skippedPolicies = [...new Set(fromFile.filter((p) => !newPolicies.includes(p)).map((p) => p.kind as string))];
+  policies.push(...newPolicies);
   const faqList: any[] = Array.isArray(structured.faq) ? [...structured.faq] : [];
   const known = new Set(faqList.map((f) => String(f.q).trim().toLowerCase()));
   let faqAdded = 0;
@@ -308,6 +312,8 @@ export async function learnFromFile(
   return {
     ...(await readLearned(tenantId)),
     added: { policies: newPolicies.map((p) => p.kind), faq: faqAdded, profile: profileChanged },
+    // Kinds the file also had, left as they were: already learned.
+    skipped: { policies: skippedPolicies },
     // The extraction reads the first 24,000 characters of a file.
     partial: text.length > PAGE_CHARS * MAX_PAGES,
   };
