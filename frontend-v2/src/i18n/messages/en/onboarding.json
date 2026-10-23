@@ -389,5 +389,83 @@
     "headline": "Check, then go live.",
     "lead": "Look over what was learned, fix what needs fixing, and press once.",
     "foot": "Nothing reaches a customer until you say so"
+  },
+  "review": {
+    "title": "Check what we learned",
+    "subtitle": "This is what GOTCHA uses when it answers customers. Fix or remove anything, and the fix takes effect right away.",
+    "notLearned": "We didn't learn this from the site. You can add it.",
+    "edit": "Edit",
+    "remove": "Remove",
+    "removeYes": "Yes, remove",
+    "removing": "Removing…",
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "source": "Where this came from",
+    "refused": {
+      "gone": "This item was already removed. The page shows what is left.",
+      "not_learned": "We haven't learned the site yet. Go back to the first step.",
+      "incomplete": "A question needs both a question and an answer.",
+      "failed": "We couldn't save. Try again in a moment."
+    },
+    "unavailable": {
+      "not_learned": "We haven't learned your site yet, so there is nothing to check.",
+      "unread": "We couldn't read what we learned just now. Reload the page to try again.",
+      "toWebsite": "To the first step"
+    },
+    "profile": {
+      "title": "The business",
+      "name": "Business name",
+      "industry": "Field",
+      "summary": "What the business does"
+    },
+    "products": {
+      "title": "Products",
+      "notLearned": "We didn't learn the products from the site.",
+      "count": "{count, plural, one {# product} other {# products}}{more, select, true {, and more} other {}}",
+      "sampled": "{count, plural, one {# product sampled} other {# products sampled}} from product pages",
+      "price": "Prices from {min} to {max}",
+      "fromStore": "Product and order details are checked in the store itself once it is connected."
+    },
+    "policies": {
+      "title": "Policies",
+      "none": "We didn't find policies on the site.",
+      "summary": "What the policy says"
+    },
+    "terms": {
+      "window": "Returns within {days, plural, one {# day} other {# days}}",
+      "exchange": "Exchanges allowed",
+      "exchangeHow": "Exchanges allowed: {how}",
+      "noExchange": "No exchanges",
+      "shippingTimes": "Shipping times: {times}",
+      "shippingCosts": "Shipping costs: {costs}",
+      "freeOver": "Free shipping over {amount}",
+      "refundMethod": "Refunds: {method}",
+      "refundDays": "Refunded within {days, plural, one {# day} other {# days}}",
+      "warranty": "{months, plural, one {# month} other {# months}} warranty"
+    },
+    "faq": {
+      "title": "Frequently asked questions",
+      "none": "We didn't find FAQs on the site.",
+      "q": "Question",
+      "a": "Answer",
+      "add": "Add a question"
+    },
+    "contact": {
+      "title": "Contact and hours",
+      "address": "Address",
+      "hours": "Opening hours",
+      "hoursLine": "Hours: {hours}"
+    },
+    "brand": {
+      "title": "Writing style",
+      "voice": "How you write to customers",
+      "greeting": "Example greeting",
+      "greetingLine": "Example greeting: {greeting}",
+      "never": "Never says: {words}"
+    },
+    "tools": {
+      "title": "Tools we saw on the site"
+    }
   }
 }

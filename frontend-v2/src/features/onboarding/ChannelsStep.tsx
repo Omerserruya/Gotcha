@@ -23,8 +23,8 @@ import { StepLink } from './StepLink';
 export const ONBOARDING_CHANNELS = ['WEBCHAT', 'WHATSAPP', 'INSTAGRAM', 'EMAIL'] as const;
 type OnboardingChannel = (typeof ONBOARDING_CHANNELS)[number];
 
-/** The step after this one (check and go live, once it exists). */
-export const afterChannels = (preview: boolean) => stepHref('/onboarding/learned', preview);
+/** The step after this one: check and go live. */
+export const afterChannels = (preview: boolean) => stepHref('/onboarding/live', preview);
 /** Where a connect flow that leaves the page comes back to. */
 const HERE = stepHref('/onboarding/channels', false) as string;
 

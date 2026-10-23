@@ -14,7 +14,7 @@ const STEP_HREF: Readonly<Record<ShellStep, (() => ReturnType<typeof stepHref>) 
   learn: () => stepHref('/onboarding/website', true),
   systems: () => stepHref('/onboarding/systems', true),
   channels: () => stepHref('/onboarding/channels', true),
-  live: () => stepHref('/onboarding/learned', true),
+  live: () => stepHref('/onboarding/live', true),
 };
 
 /**

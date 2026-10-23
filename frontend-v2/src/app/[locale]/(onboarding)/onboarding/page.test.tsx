@@ -53,8 +53,8 @@ describe('★★ /onboarding resumes where it really is', () => {
     });
   });
 
-  it('★ "live" opens the review screen until go-live has its own route', async () => {
-    expect(await open({ saved: 'live' })).toMatchObject({ href: '/onboarding/learned' });
+  it('★ "live" opens step 4, check and go live', async () => {
+    expect(await open({ saved: 'live' })).toMatchObject({ href: '/onboarding/live' });
   });
 
   it('a preview stays one', async () => {

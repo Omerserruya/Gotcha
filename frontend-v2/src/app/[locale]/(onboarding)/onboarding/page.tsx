@@ -21,8 +21,6 @@ export default async function Page({
   const facts = await loadResumeFacts();
   const step =
     facts.job === 'unread' ? (facts.saved ?? 'reading') : resumeAt({ ...facts, job: facts.job });
-  // "live" opens on the review screen until the go-live screen has its own route.
-  const screen = step === 'live' ? 'learned' : step;
   // A preview stays one: the step it resumes at keeps the flag.
-  redirect({ href: stepHref(`/onboarding/${screen}`, isPreview(await searchParams)), locale });
+  redirect({ href: stepHref(`/onboarding/${step}`, isPreview(await searchParams)), locale });
 }
