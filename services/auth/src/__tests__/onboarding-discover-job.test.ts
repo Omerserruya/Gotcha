@@ -59,12 +59,13 @@ const page = (title: string, body: string) => ({
   text: body,
   title,
 });
-function pages(map: Record<string, ReturnType<typeof page> | "unreadable" | null>) {
+function pages(map: Record<string, ReturnType<typeof page> | "unreadable" | "blocked" | null>) {
   const asked: string[] = [];
   const f = async (url: string) => {
     asked.push(url);
     const v = map[url.replace(/\/$/, "")] ?? map[url];
     if (v === "unreadable") return { unreadable: true as const };
+    if (v === "blocked") return { blocked: true as const, reason: "forbidden" as const };
     return v ?? null;
   };
   return Object.assign(f, { asked });
@@ -74,6 +75,8 @@ const SITE = {
   [`${O}/robots.txt`]: `User-agent: *\nDisallow: /cart\nSitemap: ${O}/sitemap.xml`,
   [`${O}/sitemap.xml`]: `<urlset><url><loc>${O}/pages/faq</loc></url><url><loc>${O}/pages/about</loc></url><url><loc>${O}/cart/x</loc></url></urlset>`,
   [`${O}/products.json?limit=250&page=1`]: JSON.stringify({ products: [{ title: "Shirt", handle: "shirt", product_type: "Tops", variants: [{ price: "120", available: true }] }] }),
+  // The probe detection asks when the home page gave no markers (it was blocked).
+  [`${O}/products.json?limit=1`]: JSON.stringify({ products: [{ title: "Shirt" }] }),
 };
 const PAGES = {
   [O]: page("Home", "Welcome"),
@@ -105,6 +108,18 @@ describe("the run", () => {
     // robots.txt kept /cart out; the platform's refund policy was read.
     expect(learnSeen[0]).toEqual(expect.arrayContaining([`${O}/policies/refund-policy`, `${O}/pages/faq`]));
     expect(learnSeen[0].some((u: string) => u.includes("/cart"))).toBe(false);
+  });
+
+  it("no sitemap at all: the home page's links and the conventional paths are scored instead", async () => {
+    const homeWithLinks = { ...page("Home", "Welcome"), html: '<html><body><a href="/returns">Returns</a><a href="/blog/x">Blog</a></body></html>' };
+    const job = await startJob("T", O, "he");
+    const seen = pages({ [O]: homeWithLinks, [`${O}/returns`]: page("Returns", "14 days") });
+    await runDiscoverJob("T", job.jobId, { fetch: fetcher({}), fetchPage: seen as any, concurrency: 1 });
+    const out = (await readJob("T"))!;
+    expect(out.events.find((e) => e.key === "pages.planned")).toMatchObject({ params: { fromSitemap: false } });
+    expect(seen.asked).toContain(`${O}/returns`);
+    // Not a Shopify store: Shopify's own conventions are not guessed.
+    expect(seen.asked.some((u) => u.includes("/policies/") || u.includes("/pages/"))).toBe(false);
   });
 
   it("a password-protected store says so instead of pretending it read 40 pages", async () => {
@@ -155,6 +170,48 @@ describe("the run", () => {
     });
     expect(await readJob("T")).toMatchObject({ status: "FAILED", error: { code: "extract_failed", stage: "extract" } });
   });
+});
+
+
+describe("a site that refuses an identified crawler", () => {
+  it("home blocked: the feed is still harvested, the run completes, and the owner is told why", async () => {
+    const job = await startJob("T", O, "he");
+    await runDiscoverJob("T", job.jobId, {
+      fetch: fetcher(SITE), concurrency: 1,
+      fetchPage: pages({ [O]: "blocked", [`${O}/policies/refund-policy`]: "blocked", [`${O}/pages/faq`]: "blocked", [`${O}/pages/about`]: "blocked" }) as any,
+    });
+    const out = (await readJob("T"))!;
+    expect(out.status).toBe("COMPLETE");
+    expect(out.events.find((e) => e.key === "site.blocked")).toMatchObject({ kind: "warn", params: { scope: "home", reason: "forbidden" } });
+    expect(out.found).toMatchObject({ blocked: true, platform: "shopify", productCount: 1 });
+    expect(out.counts).toMatchObject({ pagesRead: 0, pagesBlocked: 4 });
+  });
+
+  it("a few pages blocked: counted, the rest read, a softer warning", async () => {
+    const job = await startJob("T", O, "he");
+    await runDiscoverJob("T", job.jobId, {
+      fetch: fetcher(SITE), concurrency: 1,
+      fetchPage: pages({ ...PAGES, [`${O}/pages/about`]: "blocked" }) as any,
+    });
+    const out = (await readJob("T"))!;
+    expect(out.counts).toMatchObject({ pagesRead: 3, pagesBlocked: 1 });
+    expect(out.events.find((e) => e.key === "pages.blocked")).toMatchObject({ kind: "warn", params: { blocked: 1, of: 8 } });
+    expect(out.found.blocked).toBe(false);
+  });
+});
+
+describe("what counts as blocked", async () => {
+  const { blockedReason } = await import("../services/site-crawl.service");
+  it.each([
+    [403, "", "forbidden"],
+    [401, "", "forbidden"],
+    [429, "", "rate_limited"],
+    [503, "<title>Just a moment...</title><script src=/cdn-cgi/challenge-platform/x>", "challenge"],
+    [200, "<div id=cf-browser-verification>", "challenge"],
+    [404, "", null],
+    [500, "", null],
+    [200, "<p>Welcome</p>", null],
+  ])("%s → %s", (status, body, want) => expect(blockedReason(status as number, body as string)).toBe(want));
 });
 
 describe("reads", () => {

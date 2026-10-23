@@ -143,7 +143,24 @@ export function planPages(input: {
   add(input.origin, "page", 1000);
   for (const u of input.platformPolicyUrls) add(u, kindOf(u) === "other" ? "policy" : kindOf(u), 500);
 
+  // A language-prefixed copy of a page that is also listed without the prefix
+  // (/he/about next to /about) is usually the same document on sites that
+  // switch language in the browser - measured: 18 of 48 fetches on a real
+  // site came back identical. Read the unprefixed one only.
+  // The home page is always read, so /he is a copy of it too.
+  const listed = new Set([input.origin, ...input.sitemapUrls].map((u) => norm(u)).filter((u): u is string => !!u));
+  const langCopy = (u: string): boolean => {
+    try {
+      const x = new URL(u);
+      const m = /^\/(he|en|ar|ru|fr|es|de|it)(\/.*)?$/i.exec(x.pathname);
+      if (!m) return false;
+      x.pathname = m[2] || "/";
+      return listed.has(x.toString().replace(/\/$/, ""));
+    } catch { return false; }
+  };
+
   const ranked = input.sitemapUrls
+    .filter((u) => { const n = norm(u); return !n || !langCopy(n); })
     .map((u) => ({ u, kind: kindOf(u) }))
     .map(({ u, kind }) => ({ u, kind, score: KIND_PRIORITY[kind] - Math.min(20, (u.match(/\//g)?.length ?? 0)) }))
     .sort((a, b) => b.score - a.score);
@@ -163,7 +180,10 @@ export function planPages(input: {
 export async function discoverSitemapUrls(origin: string, fetch: Fetcher = defaultFetcher): Promise<{ urls: string[]; robots: RobotsRules; files: number }> {
   const robotsRes = await fetch(new URL("/robots.txt", origin).toString(), { accept: "text/plain", timeoutMs: 6000 });
   const robots = robotsRes?.ok ? parseRobots(robotsRes.text) : { sitemaps: [], disallow: [] };
-  const queue = robots.sitemaps.length ? [...robots.sitemaps] : [new URL("/sitemap.xml", origin).toString()];
+  // WordPress core publishes /wp-sitemap.xml and Yoast /sitemap_index.xml, and
+  // robots.txt often names neither (our own Woo test store, 2026-10-23).
+  const fallbacks = ["/sitemap.xml", "/wp-sitemap.xml", "/sitemap_index.xml"].map((p) => new URL(p, origin).toString());
+  const queue = robots.sitemaps.length ? [...robots.sitemaps] : [...fallbacks];
   const urls: string[] = [];
   let files = 0;
   const visited = new Set<string>();
@@ -179,6 +199,10 @@ export async function discoverSitemapUrls(origin: string, fetch: Fetcher = defau
     const { urls: u, sitemaps } = locsOf(r.text);
     urls.push(...u);
     queue.push(...sitemaps);
+    // One answering fallback is the sitemap; the others are the same list again.
+    if ((u.length || sitemaps.length) && fallbacks.includes(next)) {
+      for (const f of fallbacks) { const i = queue.indexOf(f); if (i >= 0) queue.splice(i, 1); }
+    }
   }
   return { urls, robots, files };
 }

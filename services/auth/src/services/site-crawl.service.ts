@@ -219,7 +219,7 @@ export function canonicalOf(html: string, base: string): string | null {
 
 export async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<FetchedPage | null> {
   const r = await fetchPageForCrawl(url, timeoutMs);
-  return r && !("unreadable" in r) ? r : null;
+  return r && !("unreadable" in r) && !("blocked" in r) ? r : null;
 }
 
 export type FetchedPage = { html: string; text: string; title?: string | null; canonical?: string | null; siteName?: string | null };
@@ -233,11 +233,36 @@ export type FetchedPage = { html: string; text: string; title?: string | null; c
  * the page.
  */
 export type UnreadablePage = { unreadable: true };
+/** A page that refused an identified crawler: a 401/403, a 429, or a bot challenge. */
+export type BlockedPage = { blocked: true; reason: "forbidden" | "rate_limited" | "challenge" };
+
+const CHALLENGE = /challenge-platform|cf-chl-|cf-browser-verification|<title>\s*Just a moment\.\.\.|Attention Required! \| Cloudflare|captcha-delivery|px-captcha|_Incapsula_Resource/i;
+
+/** Why a response is a refusal rather than a page, or null when it is not one. */
+export function blockedReason(status: number, body: string): BlockedPage["reason"] | null {
+  // A challenge can arrive as 403, 503 or even 200; its markup is what gives it away.
+  if (CHALLENGE.test((body || "").slice(0, 20000))) return "challenge";
+  if (status === 401 || status === 403) return "forbidden";
+  if (status === 429) return "rate_limited";
+  return null;
+}
+
+export const isBlocked = (r: unknown): r is BlockedPage => !!r && typeof r === "object" && (r as any).blocked === true;
 
 const transient = (status: number) => status === 0 || status === 408 || status === 429 || status >= 500;
 
+/**
+ * The user agent of a crawler that says who it is. The onboarding v2 scan reads
+ * as itself (2026-10-23); a site that refuses it is reported, not worked around.
+ */
+export const GOTCHA_CRAWLER_UA = "Mozilla/5.0 (compatible; GotchaOnboarding/1.0; +https://gotcha.co.il)";
+
 /** fetchPageRaw, telling a gone page (null) from one that could not be read now. */
-export async function fetchPageForCrawl(url: string, timeoutMs = 8000): Promise<FetchedPage | UnreadablePage | null> {
+export async function fetchPageForCrawl(
+  url: string,
+  timeoutMs = 8000,
+  opts: { identify?: boolean } = {},
+): Promise<FetchedPage | UnreadablePage | BlockedPage | null> {
   try {
     // Present as a real browser. Many stores sit behind bot filters that 403 a
     // generic crawler UA - a partial/blocked fetch is a root cause of false
@@ -247,7 +272,11 @@ export async function fetchPageForCrawl(url: string, timeoutMs = 8000): Promise<
     // DNS resolution, and revalidates every redirect hop.
     const r = await safeFetch(url, {
       method: "GET",
-      headers: {
+      headers: opts.identify ? {
+        "User-Agent": GOTCHA_CRAWLER_UA,
+        Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
+        "Accept-Language": "he,en-US;q=0.9,en;q=0.8",
+      } : {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "he,en-US;q=0.9,en;q=0.8",
@@ -259,6 +288,13 @@ export async function fetchPageForCrawl(url: string, timeoutMs = 8000): Promise<
       },
       timeoutMs,
     });
+    // Reading as ourselves, a refusal is its own answer: the site is there and
+    // will not be read automatically. Said honestly instead of retried as a
+    // browser. (The browser-UA crawl keeps its old meaning.)
+    if (opts.identify) {
+      const blocked = blockedReason(r.status, r.text);
+      if (blocked) return { blocked: true, reason: blocked };
+    }
     if (!r.ok) return transient(r.status) ? { unreadable: true } : null;
     const ct = r.contentType || "";
     if (!ct.includes("text/html") && !ct.includes("xhtml")) return null;
@@ -290,6 +326,14 @@ export const CANDIDATE_PATHS = [
   "/shipping", "/returns", "/refund-policy", "/policies", "/help", "/support",
 ];
 
+/**
+ * decodeURIComponent that never throws. A link with a stray "%" (found on a
+ * real site, 2026-10-23) threw URIError and took the whole scan down with it.
+ */
+export function safeDecode(s: string): string {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+
 export function extractInternalLinks(html: string, origin: string, cap = 10): string[] {
   const originHost = (() => { try { return new URL(origin).hostname; } catch { return ""; } })();
   const out = new Set<string>();
@@ -303,7 +347,7 @@ export function extractInternalLinks(html: string, origin: string, cap = 10): st
     try { abs = new URL(href, origin); } catch { continue; }
     if (abs.hostname !== originHost) continue;
     if (!/^https?:$/.test(abs.protocol)) continue;
-    if (LINK_KEYWORDS.test(decodeURIComponent(abs.pathname)) || LINK_KEYWORDS.test(label)) {
+    if (LINK_KEYWORDS.test(safeDecode(abs.pathname)) || LINK_KEYWORDS.test(label)) {
       abs.hash = "";
       out.add(abs.toString());
     }
@@ -336,7 +380,7 @@ const TRACKING_DEFS: Array<{ slug: string; name: string; re: RegExp }> = [
   { slug: "hotjar", name: "Hotjar", re: /hotjar\.com|hjSiteSettings/i },
 ];
 // Third-party tools / apps (incl. the Shopify ecosystem the recommender uses).
-const TOOL_DEFS: Array<{ slug: string; name: string; re: RegExp; chat?: boolean }> = [
+export const TOOL_DEFS: Array<{ slug: string; name: string; re: RegExp; chat?: boolean }> = [
   { slug: "hubspot", name: "HubSpot", re: /hs-scripts\.com|js\.hs-|hubspot\.com|hsforms/i },
   { slug: "salesforce", name: "Salesforce", re: /salesforce\.com|force\.com|pardot/i },
   { slug: "zendesk", name: "Zendesk", re: /zendesk\.com|zdassets\.com/i, chat: true },
@@ -434,7 +478,7 @@ export function extractSignals(pages: Array<{ url: string; html: string }>): Dis
   const html = pages.map((p) => p.html).join("\n");
 
   const emails = new Set<string>();
-  collectMatches(/mailto:([^"'>?\s]+)/gi, html).forEach((e) => emails.add(decodeURIComponent(e).toLowerCase()));
+  collectMatches(/mailto:([^"'>?\s]+)/gi, html).forEach((e) => emails.add(safeDecode(e).toLowerCase()));
   collectMatches(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, html, 0, 20).forEach((e) => emails.add(e.toLowerCase()));
 
   const phones = new Set<string>();
@@ -621,7 +665,8 @@ export async function crawlSite(
   origin: string,
   opts: { fetchPage?: PageFetcher; onPhase?: (phase: CrawlPhase) => void | Promise<void> } = {},
 ): Promise<SiteCrawl | null> {
-  const fetchPage: PageFetcher = opts.fetchPage ?? fetchPageForCrawl;
+  // Without `identify` the reader never answers "blocked", so it is a PageFetcher.
+  const fetchPage: PageFetcher = opts.fetchPage ?? (fetchPageForCrawl as PageFetcher);
   const phase = async (p: CrawlPhase) => { try { await opts.onPhase?.(p); } catch { /* narration must never fail a crawl */ } };
   const requested: string[] = [];
 

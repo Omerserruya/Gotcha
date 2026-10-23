@@ -12,16 +12,16 @@
  * store.
  */
 import { safeFetch } from "@chatcenter/shared";
+import { GOTCHA_CRAWLER_UA } from "../site-crawl.service";
 
 export interface FetchResult { ok: boolean; status: number; text: string; contentType?: string }
 export type Fetcher = (url: string, opts?: { timeoutMs?: number; accept?: string }) => Promise<FetchResult | null>;
 
-const UA = "Mozilla/5.0 (compatible; GotchaOnboarding/1.0; +https://gotcha.co.il)";
 
 export const defaultFetcher: Fetcher = async (url, opts = {}) => {
   const r = await safeFetch(url, {
     method: "GET",
-    headers: { "User-Agent": UA, Accept: opts.accept ?? "application/json,text/html;q=0.9,*/*;q=0.8" },
+    headers: { "User-Agent": GOTCHA_CRAWLER_UA, Accept: opts.accept ?? "application/json,text/html;q=0.9,*/*;q=0.8" },
     timeoutMs: opts.timeoutMs ?? 10_000,
   });
   return r.error && !r.status ? null : { ok: r.ok, status: r.status, text: r.text, contentType: r.contentType };
@@ -70,11 +70,27 @@ function topCategories(names: string[], cap = 8): string[] {
  * asked directly - a store can hide its theme markers, not its API.
  */
 export async function detectPlatform(origin: string, hinted: string | null | undefined, fetch: Fetcher = defaultFetcher): Promise<Platform> {
-  if (hinted === "shopify" || hinted === "woocommerce") return hinted;
+  // The data endpoint is the proof. A page that merely MENTIONS WooCommerce
+  // (a marketing site listing its integrations) is not a WooCommerce store,
+  // and found that way on a real site (2026-10-23).
   const shop = json(await fetch(new URL("/products.json?limit=1", origin).toString(), { timeoutMs: 6000 }));
   if (shop && Array.isArray(shop.products)) return "shopify";
   const woo = await fetch(new URL("/wp-json/wc/store/v1/products?per_page=1", origin).toString(), { timeoutMs: 6000 });
   if (Array.isArray(json(woo))) return "woocommerce";
+  // No answer from the data endpoints (a password store, a disabled API):
+  // fall back to the theme's own assets, never to words in the copy.
+  return hinted === "shopify" || hinted === "woocommerce" ? hinted : null;
+}
+
+/** Platform markers that only a store's own assets carry - not its text. */
+const ASSET_PLATFORM: Array<[Exclude<Platform, null>, RegExp]> = [
+  ["shopify", /cdn\.shopify\.com|\/cdn\/shop\/|window\.Shopify\s*=|shopify-section-/i],
+  ["woocommerce", /wp-content\/plugins\/woocommerce|wc-blocks?[-_]|woocommerce-(?:layout|general|smallscreen)\.css|wc_add_to_cart_params/i],
+];
+
+/** The platform a home page's own assets show, or null. Copy that names a platform does not count. */
+export function platformFromAssets(html: string): Platform {
+  for (const [platform, re] of ASSET_PLATFORM) if (re.test(html)) return platform;
   return null;
 }
 

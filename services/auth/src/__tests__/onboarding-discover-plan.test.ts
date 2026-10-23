@@ -67,6 +67,17 @@ describe("sitemaps", () => {
     expect(f.asked.indexOf(`${O}/sitemap_pages_1.xml`)).toBeLessThan(f.asked.indexOf(`${O}/sitemap_products_1.xml`));
   });
 
+  it("WordPress: /wp-sitemap.xml when robots names none, and only one of the fallbacks is read", async () => {
+    const f = site({
+      [`${O}/wp-sitemap.xml`]: `<sitemapindex><sitemap><loc>${O}/wp-sitemap-posts-page-1.xml</loc></sitemap></sitemapindex>`,
+      [`${O}/wp-sitemap-posts-page-1.xml`]: `<urlset><url><loc>${O}/returns</loc></url></urlset>`,
+      [`${O}/sitemap_index.xml`]: `<urlset><url><loc>${O}/dup</loc></url></urlset>`,
+    });
+    const out = await discoverSitemapUrls(O, f);
+    expect(out.urls).toEqual([`${O}/returns`]);
+    expect(f.asked).not.toContain(`${O}/sitemap_index.xml`);
+  });
+
   it("falls back to /sitemap.xml when robots names none", async () => {
     const f = site({ [`${O}/sitemap.xml`]: `<urlset><url><loc>${O}/about</loc></url></urlset>` });
     expect((await discoverSitemapUrls(O, f)).urls).toEqual([`${O}/about`]);
@@ -162,15 +173,49 @@ describe("WooCommerce Store API", () => {
   });
 });
 
-describe("platform detection", () => {
-  it("trusts the page markers when they speak", async () => {
-    const f = site({});
-    expect(await detectPlatform(O, "shopify", f)).toBe("shopify");
-    expect(f.asked).toEqual([]);
-  });
-  it("asks the data endpoints when the theme hides its platform", async () => {
+describe("platform detection: the data endpoint is the proof", () => {
+  it("a store answers its data endpoint", async () => {
     expect(await detectPlatform(O, null, site({ [`${O}/products.json?limit=1`]: JSON.stringify({ products: [] }) }))).toBe("shopify");
     expect(await detectPlatform(O, null, site({ [`${O}/wp-json/wc/store/v1/products?per_page=1`]: "[]" }))).toBe("woocommerce");
-    expect(await detectPlatform(O, "wix", site({}))).toBeNull();
+  });
+  it("asset markers count only when the endpoints say nothing (a password store)", async () => {
+    expect(await detectPlatform(O, "shopify", site({}))).toBe("shopify");
+    expect(await detectPlatform(O, null, site({}))).toBeNull();
+  });
+  it("a site that only MENTIONS a platform in its copy is not that platform (gotcha.co.il, 2026-10-23)", async () => {
+    const { platformFromAssets } = await import("../services/onboarding-discover/harvest");
+    expect(platformFromAssets("<p>We integrate with WooCommerce and Shopify.</p>")).toBeNull();
+    expect(platformFromAssets('<link rel=stylesheet href="/wp-content/plugins/woocommerce/assets/css/woocommerce-layout.css">')).toBe("woocommerce");
+    expect(platformFromAssets('<script src="https://cdn.shopify.com/s/files/x.js"></script>')).toBe("shopify");
+  });
+});
+
+describe("tools come from what the site LOADS, not what it says", async () => {
+  const { toolsFromAssets } = await import("../services/onboarding-discover/pipeline");
+  it("named in the copy: not a tool", () => {
+    expect(toolsFromAssets(["<p>Works with Judge.me, ReturnGO and Klaviyo</p>"])).toEqual([]);
+  });
+  it("loaded as a script: a tool", () => {
+    expect(toolsFromAssets(['<script src="https://static.klaviyo.com/onsite/js/klaviyo.js"></script>', '<script src="https://cdn.judge.me/widget.js"></script>'])).toEqual(expect.arrayContaining(["klaviyo", "judgeme"]));
+  });
+});
+
+describe("language copies are read once", () => {
+  it("/he/about next to /about: only /about; a Hebrew-only page is kept", () => {
+    const plan = planPages({
+      origin: O,
+      sitemapUrls: [`${O}/about`, `${O}/he/about`, `${O}/he/only-hebrew`, `${O}/he`],
+      platformPolicyUrls: [], haveProductFeed: true, robots: { sitemaps: [], disallow: [] },
+    });
+    expect(plan.map((p) => p.url)).toEqual([O, `${O}/about`, `${O}/he/only-hebrew`]);
+  });
+});
+
+describe("a malformed link never takes the scan down (URIError, found live 2026-10-23)", async () => {
+  const { extractInternalLinks, extractSignals } = await import("../services/site-crawl.service");
+  it("link extraction and mailto parsing survive a stray %", () => {
+    const html = '<a href="/returns%E0%A4%A">Returns</a><a href="mailto:bad%ZZ@x.com">m</a>';
+    expect(() => extractInternalLinks(html, O, 10)).not.toThrow();
+    expect(() => extractSignals([{ url: O, html }])).not.toThrow();
   });
 });

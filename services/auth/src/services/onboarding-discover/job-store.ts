@@ -42,6 +42,8 @@ export interface JobEvent {
 export interface JobCounts {
   pagesPlanned: number;
   pagesRead: number;
+  /** Pages that refused an identified crawler (403, 429, a bot challenge). */
+  pagesBlocked: number;
   products: number;
   policies: number;
   faqs: number;
@@ -57,6 +59,8 @@ export interface JobFound {
   hours: boolean;
   brand: boolean;
   tools: string[];
+  /** The site refuses automatic reading; the UI offers upload or paste. */
+  blocked: boolean;
 }
 
 export interface DiscoverJob {
@@ -91,15 +95,21 @@ export class JobSuperseded extends Error {
  * predate the column in a worktree, so it is reached through this narrow shape
  * rather than casts sprinkled across the module.
  */
-interface JobDelegate {
+export interface JobDelegate {
   findUnique(a: { where: { tenantId: string }; select: { job: true } }): Promise<{ job: unknown } | null>;
   upsert(a: unknown): Promise<unknown>;
   updateMany(a: unknown): Promise<{ count: number }>;
 }
-const rows = () => prisma.businessDiscovery as unknown as JobDelegate;
+let rowsOverride: JobDelegate | null = null;
+const rows = (): JobDelegate => rowsOverride ?? (prisma.businessDiscovery as unknown as JobDelegate);
 
-const emptyCounts = (): JobCounts => ({ pagesPlanned: 0, pagesRead: 0, products: 0, policies: 0, faqs: 0, documents: 0 });
-const emptyFound = (): JobFound => ({ platform: null, productCount: 0, policies: [], faqCount: 0, contact: false, hours: false, brand: false, tools: [] });
+/** Point the store at another row source (a script's in-memory one). Null restores the database. */
+export function useJobRows(delegate: JobDelegate | null): void {
+  rowsOverride = delegate;
+}
+
+const emptyCounts = (): JobCounts => ({ pagesPlanned: 0, pagesRead: 0, pagesBlocked: 0, products: 0, policies: 0, faqs: 0, documents: 0 });
+const emptyFound = (): JobFound => ({ platform: null, productCount: 0, policies: [], faqCount: 0, contact: false, hours: false, brand: false, tools: [], blocked: false });
 
 export async function readJob(tenantId: string): Promise<DiscoverJob | null> {
   const row = await rows().findUnique({ where: { tenantId }, select: { job: true } });

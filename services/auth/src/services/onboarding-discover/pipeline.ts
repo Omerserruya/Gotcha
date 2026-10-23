@@ -11,15 +11,20 @@
  * later stages skip the writes recorded in doneStages.
  */
 import {
+  type BlockedPage,
   type FetchedPage,
-  type PageFetcher,
+  type UnreadablePage,
   extractSignals,
   fetchPageForCrawl,
+  isBlocked,
   isUnreadable,
   stableTextOf,
+  TOOL_DEFS,
+  CANDIDATE_PATHS,
+  extractInternalLinks,
   type DiscoverySignals,
 } from "../site-crawl.service";
-import { type Fetcher, type PlatformHarvest, defaultFetcher, detectPlatform, harvestPlatform } from "./harvest";
+import { type Fetcher, type PlatformHarvest, defaultFetcher, detectPlatform, harvestPlatform, platformFromAssets } from "./harvest";
 import { type PageKind, discoverSitemapUrls, kindOf, planPages } from "./sitemap";
 import {
   type DiscoverJob,
@@ -57,9 +62,12 @@ export type Emitter = (
   patch?: { found?: Partial<JobFound>; counts?: Partial<JobCounts>; stageDone?: Stage },
 ) => Promise<void>;
 
+/** The scan's page reader: may answer that a page refused it. */
+export type ScanPageFetcher = (url: string, timeoutMs?: number) => Promise<FetchedPage | UnreadablePage | BlockedPage | null>;
+
 export interface PipelineDeps {
   fetch?: Fetcher;
-  fetchPage?: PageFetcher;
+  fetchPage?: ScanPageFetcher;
   learn?: LearnStages;
   /** Reading concurrency: polite on purpose. */
   concurrency?: number;
@@ -69,6 +77,22 @@ export interface PipelineDeps {
 const READ_CONCURRENCY = 3;
 const HEARTBEAT_MS = 15_000;
 
+/**
+ * Tools the site actually LOADS: matched against script and link sources only.
+ * The legacy signal matched page text too, so a site whose copy names Judge.me
+ * "detected" Judge.me (found on a real site, 2026-10-23).
+ */
+export function toolsFromAssets(htmls: string[]): string[] {
+  const srcs: string[] = [];
+  for (const html of htmls) {
+    const re = /<(?:script|link|iframe|img)\b[^>]*?\b(?:src|href)=["']([^"']+)["']/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(html))) srcs.push(m[1]!);
+  }
+  const hay = srcs.join("\n");
+  return TOOL_DEFS.filter((t) => t.re.test(hay)).map((t) => t.slug);
+}
+
 /** A short, readable path for the feed ("/policies/refund-policy"). */
 function pathOf(url: string): string {
   try { return decodeURIComponent(new URL(url).pathname) || "/"; } catch { return url; }
@@ -76,7 +100,8 @@ function pathOf(url: string): string {
 
 export async function runDiscoverJob(tenantId: string, jobId: string, deps: PipelineDeps = {}): Promise<void> {
   const fetch = deps.fetch ?? defaultFetcher;
-  const fetchPage = deps.fetchPage ?? fetchPageForCrawl;
+  // Reads as itself: the scan identifies us rather than posing as a browser.
+  const fetchPage: ScanPageFetcher = deps.fetchPage ?? ((url, timeoutMs) => fetchPageForCrawl(url, timeoutMs, { identify: true }));
   let stage: Stage = "detect_platform";
 
   const emit: Emitter = async (s, kind, key, params, patch) => {
@@ -104,6 +129,8 @@ export async function runDiscoverJob(tenantId: string, jobId: string, deps: Pipe
 
   const start = await mutateJob(tenantId, jobId, (job) => {
     job.status = "RUNNING";
+    // A retry runs from the top; the feed keeps its history.
+    job.stage = "detect_platform";
     pushEvent(job, job.stage, "progress", "job.started", { domain: job.domain });
   });
   const origin = start.domain;
@@ -121,13 +148,18 @@ export async function runDiscoverJob(tenantId: string, jobId: string, deps: Pipe
     await emit(stage, "progress", "site.opening", { domain: origin });
     let home = await fetchPage(origin);
     if (isUnreadable(home)) home = await fetchPage(origin, 15_000);
-    if (!home || isUnreadable(home)) {
+    // Refused is not unreachable: the site is there and will not be read
+    // automatically. Carry on with what the platform's own data gives, and
+    // tell the owner they can upload or paste the rest.
+    const homeBlocked = isBlocked(home) ? home : null;
+    if (homeBlocked) {
+      await emit(stage, "warn", "site.blocked", { scope: "home", reason: homeBlocked.reason }, { found: { blocked: true } });
+    } else if (!home || isUnreadable(home)) {
       await fail(tenantId, jobId, stage, "site_unreachable");
       return;
     }
-    const homePage = home as FetchedPage;
-    const homeSignals = extractSignals([{ url: origin, html: homePage.html }]);
-    const platform = await detectPlatform(origin, homeSignals.platform?.slug, fetch);
+    const homePage = homeBlocked ? null : (home as FetchedPage);
+    const platform = await detectPlatform(origin, homePage ? platformFromAssets(homePage.html) : null, fetch);
     await emit(stage, "found", platform ? "platform.detected" : "platform.none", platform ? { platform } : undefined, {
       found: { platform: platform ?? null },
     });
@@ -152,29 +184,43 @@ export async function runDiscoverJob(tenantId: string, jobId: string, deps: Pipe
     stage = "sitemap";
     await emit(stage, "progress", "sitemap.reading");
     const sm = await discoverSitemapUrls(origin, fetch);
+    // No sitemap anywhere: the home page's own links and the conventional
+    // policy paths, scored the same way.
+    const fromSitemap = sm.urls.length > 0;
+    const candidates = fromSitemap
+      ? sm.urls
+      : [
+          ...(homePage ? extractInternalLinks(homePage.html, origin, 40) : []),
+          // /policies/* and /pages/* are Shopify's conventions; elsewhere they are 404s.
+          ...CANDIDATE_PATHS.filter((p) => platform === "shopify" || !/^\/(policies|pages)\//.test(p)).map((p) => new URL(p, origin).toString()),
+        ];
     const plan = planPages({
       origin,
-      sitemapUrls: sm.urls,
+      sitemapUrls: candidates,
       platformPolicyUrls: harvest.policyUrls,
       haveProductFeed: !!harvest.products,
       robots: sm.robots,
     });
-    await emit(stage, "progress", "pages.planned", { count: plan.length, fromSitemap: sm.urls.length > 0 }, {
+    await emit(stage, "progress", "pages.planned", { count: plan.length, fromSitemap }, {
       counts: { pagesPlanned: plan.length },
     });
 
     // ── read_pages ──
     stage = "read_pages";
-    const pages: ReadPage[] = [{ url: origin, kind: "page", title: homePage.title ?? null, text: homePage.text, html: homePage.html }];
-    const texts = new Set<string>([stableTextOf(homePage.html)]);
+    const pages: ReadPage[] = homePage
+      ? [{ url: origin, kind: "page", title: homePage.title ?? null, text: homePage.text, html: homePage.html }]
+      : [];
+    const texts = new Set<string>(homePage ? [stableTextOf(homePage.html)] : []);
     const todo = plan.filter((p) => p.url !== origin && p.url !== origin.replace(/\/$/, ""));
     let next = 0;
-    let read = 1;
+    let read = pages.length;
+    let blocked = homeBlocked ? 1 : 0;
     const worker = async () => {
       while (next < todo.length) {
         const p = todo[next++]!;
         await emit(stage, "progress", "page.reading", { path: pathOf(p.url), kind: p.kind });
         const r = await fetchPage(p.url, 8000);
+        if (isBlocked(r)) { blocked++; continue; }
         if (!r || isUnreadable(r)) continue;
         const page = r as FetchedPage;
         const stable = stableTextOf(page.html);
@@ -188,16 +234,23 @@ export async function runDiscoverJob(tenantId: string, jobId: string, deps: Pipe
     await Promise.all(Array.from({ length: Math.min(deps.concurrency ?? READ_CONCURRENCY, todo.length || 1) }, worker));
 
     const signals = extractSignals(pages.map((p) => ({ url: p.url, html: p.html })));
-    const tools = signals.tools ?? [];
+    const tools = toolsFromAssets(pages.map((p) => p.html));
     await emit(stage, "progress", "pages.read", { count: read }, {
-      counts: { pagesRead: read },
+      counts: { pagesRead: read, pagesBlocked: blocked },
       found: {
         tools,
         contact: signals.emails.length + signals.phones.length + signals.whatsapp.length > 0,
       },
     });
     for (const slug of tools) await emit(stage, "found", "tool.detected", { slug });
-    if (read <= 1 && plan.length > 1) {
+    if (blocked > 0 && !homeBlocked) {
+      // Some pages refused us: the rest was read. Half or more is the site
+      // blocking automatic reading, which the owner can work around.
+      await emit(stage, "warn", blocked * 2 >= plan.length ? "site.blocked" : "pages.blocked", { scope: "pages", blocked, of: plan.length }, {
+        found: { blocked: blocked * 2 >= plan.length },
+      });
+    }
+    if (!homeBlocked && read <= 1 && plan.length > 1 && blocked === 0) {
       await emit(stage, "warn", "site.unreadable", { reason: texts.size <= 1 ? "same_page_everywhere" : "pages_unreadable" });
     }
 
