@@ -134,6 +134,15 @@ export const errorEnvelopeSchema = z.object({
    */
   blocked: z.array(z.string()).optional().catch(undefined),
   /**
+   * The kinds a refused upload had that were already learned - a 422
+   * `NOTHING_FOUND` from `POST /onboarding/learned/upload` (auth db73826b). A
+   * sibling of `code`, like `blocked`; a bad value is no list.
+   */
+  skipped: z
+    .object({ policies: z.array(z.string()).catch([]).default([]) })
+    .optional()
+    .catch(undefined),
+  /**
    * ★★ PRESENT ON A FAILURE ONLY WHEN THE CARD WAS ACTUALLY REACHED.
    *
    * `buyCredits` sets it solely from `chargeFor`'s result, so on a refusal it

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { learnedSchema } from '@/api/contracts/onboarding-v2';
 import onboardingEn from '@/i18n/messages/en/onboarding.json';
+import onboardingHe from '@/i18n/messages/he/onboarding.json';
 
 /** Step 4, checking what was learned. Mocked: nothing is rewritten. */
 const { edit, upload, router } = vi.hoisted(() => ({
@@ -64,9 +65,13 @@ const base = {
   tools: [{ slug: 'returngo', name: 'ReturnGO' }],
 };
 const learned = (over: object = {}) => learnedSchema.parse({ ...base, ...over });
-const show = (props: Partial<Parameters<typeof ReviewStep>[0]> = {}) =>
+const show = (props: Partial<Parameters<typeof ReviewStep>[0]> = {}, he = false) =>
   render(
-    <NextIntlClientProvider locale="en" timeZone="UTC" messages={{ onboarding: onboardingEn }}>
+    <NextIntlClientProvider
+      locale={he ? 'he' : 'en'}
+      timeZone="UTC"
+      messages={{ onboarding: he ? onboardingHe : onboardingEn }}
+    >
       <ReviewStep initial={learned()} {...props} />
     </NextIntlClientProvider>,
   );
@@ -371,6 +376,112 @@ describe('★★ when there is nothing to check', () => {
 /** With a policy learned, the add form waits behind one quiet line. */
 const openAdd = () => fireEvent.click(screen.getByTestId('review-add-open'));
 
+describe('★★ the employee after a policy change (Backend e7a2b75b)', () => {
+  const save = async () => {
+    fireEvent.click(screen.getByTestId('review-policy-returns-edit'));
+    const form = screen.getByTestId('review-edit-policies-returns');
+    fireEvent.change(within(form).getByLabelText('Days to return'), { target: { value: '30' } });
+    await act(async () => fireEvent.submit(form));
+  };
+
+  it.each([
+    [
+      'customized',
+      "The employee was edited by hand in the studio, so we didn't change its instructions.",
+    ],
+    ['failed', "The change is saved, but we couldn't update the employee. Saving again retries."],
+  ])('★★ %s: said in the policies card after Save', async (sync, text) => {
+    edit.editLearned.mockResolvedValue({ ok: true, learned: { ...learned(), employeeSync: sync } });
+    show();
+    await save();
+    expect(
+      within(screen.getByTestId('review-policies')).getByTestId(`review-sync-${sync}`),
+    ).toHaveTextContent(text);
+  });
+
+  it.each(['updated', 'unchanged', 'no_employee', null])('%s: nothing said', async (sync) => {
+    edit.editLearned.mockResolvedValue({ ok: true, learned: { ...learned(), employeeSync: sync } });
+    show();
+    await save();
+    expect(
+      screen.getByTestId('review-policies').querySelector('[data-testid^="review-sync-"]'),
+    ).toBeNull();
+  });
+
+  it('a removal and a paste say it too', async () => {
+    edit.editLearned.mockResolvedValue({
+      ok: true,
+      learned: { ...learned({ policies: [] }), employeeSync: 'customized' },
+    });
+    const { unmount } = show();
+    fireEvent.click(screen.getByTestId('review-policy-returns-remove'));
+    await act(async () => fireEvent.click(screen.getByTestId('review-policy-returns-remove-yes')));
+    expect(screen.getByTestId('review-sync-customized')).toBeInTheDocument();
+    unmount();
+    edit.addPolicy.mockResolvedValue({
+      ok: true,
+      learned: { ...learned(), employeeSync: 'failed' },
+    });
+    show();
+    openAdd();
+    fireEvent.change(screen.getByTestId('review-paste-text'), { target: { value: 'x' } });
+    await act(async () => fireEvent.submit(screen.getByTestId('review-paste')));
+    expect(screen.getByTestId('review-sync-failed')).toBeInTheDocument();
+  });
+});
+
+describe('★★ a term changed while the description still says the old number', () => {
+  const editReturns = (summary = 'Return within 14 days.') => {
+    show({
+      initial: learned({
+        policies: [{ ...base.policies[0], summary, terms: { windowDays: 14 } }],
+      }),
+    });
+    fireEvent.click(screen.getByTestId('review-policy-returns-edit'));
+    return screen.getByTestId('review-edit-policies-returns');
+  };
+
+  it('★★ said next to the description, in its unit; never rewritten; gone once the words agree', () => {
+    const form = editReturns();
+    expect(screen.queryByTestId('review-edit-stale-windowDays')).toBeNull();
+    fireEvent.change(within(form).getByLabelText('Days to return'), { target: { value: '30' } });
+    expect(screen.getByTestId('review-edit-stale-windowDays')).toHaveTextContent(
+      /^The description still says 14 days\. Update it too\.$/,
+    );
+    const words = within(form).getByLabelText('What the policy says');
+    expect(words).toHaveValue('Return within 14 days.');
+    fireEvent.change(words, { target: { value: 'Return within 30 days.' } });
+    expect(screen.queryByTestId('review-edit-stale-windowDays')).toBeNull();
+  });
+
+  it('★ a number that only contains the old one is not it ("140", "214", "3.14")', () => {
+    const form = editReturns('Up to 140 items, 214 in stock, 1.4 kg, 3.14 cm.');
+    fireEvent.change(within(form).getByLabelText('Days to return'), { target: { value: '30' } });
+    expect(screen.queryByTestId('review-edit-stale-windowDays')).toBeNull();
+  });
+
+  it('Hebrew', () => {
+    show(
+      {
+        initial: learned({
+          policies: [
+            { ...base.policies[0], summary: 'אפשר להחזיר תוך 14 יום.', terms: { windowDays: 14 } },
+          ],
+        }),
+      },
+      true,
+    );
+    fireEvent.click(screen.getByTestId('review-policy-returns-edit'));
+    const form = screen.getByTestId('review-edit-policies-returns');
+    fireEvent.change(within(form).getByLabelText('כמה ימים אפשר להחזיר'), {
+      target: { value: '30' },
+    });
+    expect(screen.getByTestId('review-edit-stale-windowDays')).toHaveTextContent(
+      /^התיאור עדיין אומר 14 יום\. כדאי לעדכן גם אותו\.$/,
+    );
+  });
+});
+
 describe('★★ adding what the site didn’t give us: paste a policy, or a file', () => {
   it('★★ in the policies card, after the list: one quiet line when some were learned, open when none were', () => {
     const { unmount } = show();
@@ -511,6 +622,24 @@ describe('★★ adding what the site didn’t give us: paste a policy, or a fil
     });
     await act(async () => fireEvent.submit(screen.getByTestId('review-upload')));
     expect(screen.getByTestId('review-upload-refused')).toHaveTextContent('Nothing was added.');
+    expect(screen.queryByTestId('review-upload-refused-skipped')).toBeNull();
+  });
+
+  it('★ nothing new, because the file’s kinds were already learned: each named', async () => {
+    upload.uploadLearned.mockResolvedValue({
+      ok: false,
+      reason: 'nothing_found',
+      skipped: ['returns'],
+    });
+    show();
+    openAdd();
+    fireEvent.change(screen.getByTestId('review-upload-file'), {
+      target: { files: [new File(['x'], 'a.txt')] },
+    });
+    await act(async () => fireEvent.submit(screen.getByTestId('review-upload')));
+    expect(screen.getByTestId('review-upload-refused-skipped')).toHaveTextContent(
+      'Already learned, left as it was: returns policy.',
+    );
   });
 
   it('read a file waits for one', () => {

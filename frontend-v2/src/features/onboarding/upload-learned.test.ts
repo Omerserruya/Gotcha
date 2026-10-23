@@ -67,6 +67,22 @@ describe('★★ a file into what was learned', () => {
     expect(await uploadLearned(file('a.pdf'))).toEqual({ ok: false, reason });
   });
 
+  it('★ nothing new in the file: the kinds already learned come with the refusal', async () => {
+    api.post.mockRejectedValue(
+      new ApiError({
+        kind: 'validation',
+        status: 422,
+        code: 'NOTHING_FOUND',
+        skipped: { policies: ['returns'] },
+      }),
+    );
+    expect(await uploadLearned(file('a.pdf'))).toEqual({
+      ok: false,
+      reason: 'nothing_found',
+      skipped: ['returns'],
+    });
+  });
+
   it('★ never logs the file or its name', async () => {
     api.post.mockRejectedValue(
       new ApiError({ kind: 'server', status: 502, code: 'UPLOAD_FAILED' }),

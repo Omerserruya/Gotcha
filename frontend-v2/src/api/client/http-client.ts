@@ -99,6 +99,7 @@ async function readErrorBody(response: Response): Promise<{
   errorData?: Readonly<Record<string, unknown>>;
   missing?: readonly string[];
   blocked?: readonly string[];
+  skipped?: { readonly policies: readonly string[] };
   invoiceId?: string | null;
   tenantStatus?: string;
   checkoutPath?: string;
@@ -138,6 +139,7 @@ async function readErrorBody(response: Response): Promise<{
     errorData: parsed.data.data,
     missing: parsed.data.missing,
     blocked: parsed.data.blocked,
+    skipped: parsed.data.skipped,
     invoiceId: parsed.data.invoiceId,
     tenantStatus: parsed.data.tenantStatus,
     checkoutPath: parsed.data.checkoutPath,
@@ -237,6 +239,7 @@ export class HttpClient {
         errorData,
         missing,
         blocked,
+        skipped,
         invoiceId,
         tenantStatus,
         checkoutPath,
@@ -278,6 +281,7 @@ export class HttpClient {
         errorData,
         missing,
         blocked,
+        skipped,
         invoiceId,
         tenantStatus,
         checkoutPath,

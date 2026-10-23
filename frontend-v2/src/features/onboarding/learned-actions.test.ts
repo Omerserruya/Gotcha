@@ -9,7 +9,7 @@ vi.mock('@/api/client/server-api', () => ({ serverApi: () => api }));
 vi.mock('@/api/client/signed-out', () => ({ signInIfSignedOut: vi.fn(async () => {}) }));
 vi.mock('@/observability/logger', () => ({ logger: { warn } }));
 
-import { learnedSchema } from '@/api/contracts/onboarding-v2';
+import { learnedEditSchema, learnedSchema } from '@/api/contracts/onboarding-v2';
 
 import { addPolicy, editLearned, readLearned } from './learned-actions';
 
@@ -46,7 +46,7 @@ describe('★★ correcting it', () => {
     const call = api.patch.mock.calls[0]![0];
     expect(call.endpoint.path).toBe('/api/onboarding/learned');
     expect(call.body).toEqual(edit);
-    expect(call.payload).toBe(learnedSchema);
+    expect(call.payload).toBe(learnedEditSchema);
   });
 
   it.each([

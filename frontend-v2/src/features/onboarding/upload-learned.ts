@@ -14,7 +14,12 @@ export type UploadRefusal =
 
 export type UploadResult =
   | { readonly ok: true; readonly result: LearnedUpload }
-  | { readonly ok: false; readonly reason: UploadRefusal };
+  | {
+      readonly ok: false;
+      readonly reason: UploadRefusal;
+      /** NOTHING_FOUND: the kinds the file had that were already learned (auth db73826b). */
+      readonly skipped?: readonly string[];
+    };
 
 const REFUSED: Readonly<Record<string, UploadRefusal>> = {
   FILE_TOO_LARGE: 'too_large',
@@ -53,6 +58,9 @@ export async function uploadLearned(file: File): Promise<UploadResult> {
     return { ok: true, result };
   } catch (cause) {
     const known = isApiError(cause) && cause.code ? REFUSED[cause.code] : undefined;
+    if (known === 'nothing_found' && isApiError(cause) && cause.skipped?.policies.length) {
+      return { ok: false, reason: known, skipped: cause.skipped.policies };
+    }
     if (known) return { ok: false, reason: known };
     // Never the file or its name: they are the tenant's.
     logger.warn('onboarding.upload_failed', {

@@ -84,6 +84,8 @@ export interface ApiErrorInit {
   readonly missing?: readonly string[];
   /** `ROLE_CEILING`'s keys the role can never hold. See `errorEnvelopeSchema.blocked`. */
   readonly blocked?: readonly string[];
+  /** A refused upload's already-learned kinds. See `errorEnvelopeSchema.skipped`. */
+  readonly skipped?: { readonly policies: readonly string[] };
   /** Set only where a charge was actually attempted. */
   readonly invoiceId?: string | null;
   /** Tenant lifecycle status the gate reported (402). */
@@ -145,6 +147,8 @@ export class ApiError extends Error {
   readonly missing?: readonly string[];
   /** `ROLE_CEILING`'s keys the role can never hold. */
   readonly blocked?: readonly string[];
+  /** A refused upload's already-learned kinds. See `errorEnvelopeSchema.skipped`. */
+  readonly skipped?: { readonly policies: readonly string[] };
   readonly invoiceId?: string | null;
   readonly tenantStatus?: string;
   readonly checkoutPath?: string;
@@ -192,6 +196,7 @@ export class ApiError extends Error {
     this.errorData = init.errorData;
     this.missing = init.missing;
     this.blocked = init.blocked;
+    this.skipped = init.skipped;
     this.invoiceId = init.invoiceId;
     this.tenantStatus = init.tenantStatus;
     this.checkoutPath = init.checkoutPath;

@@ -304,7 +304,22 @@ export type Learned = z.infer<typeof learnedSchema>;
  * POST /learned/upload → `{ data: { ...learned, added, partial } }` (Backend
  * e2e8623f): what a file added, and whether only its start was read.
  */
+/**
+ * After a policy changes, Backend re-syncs the go-live employee's prompt lines
+ * in the same request (e7a2b75b). Read as text, not an enum: the screen acts
+ * on "customized" and "failed" only, and a new value must never fail the save.
+ */
+const employeeSyncFields = {
+  employeeSync: text,
+  warnings: z.array(z.string()).catch([]).default([]),
+};
+
+/** PATCH /learned's answer: the learned view, plus the sync for a policy change. */
+export const learnedEditSchema = learnedSchema.extend(employeeSyncFields);
+export type LearnedEdited = z.infer<typeof learnedEditSchema>;
+
 export const learnedUploadSchema = learnedSchema.extend({
+  ...employeeSyncFields,
   added: z
     .object({
       policies: z.array(z.string()).catch([]).default([]),

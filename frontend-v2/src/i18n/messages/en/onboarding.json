@@ -516,7 +516,16 @@
       "freeOver": "Free shipping over",
       "refundMethod": "How refunds are paid",
       "refundDays": "Days to refund",
-      "warrantyMonths": "Warranty, in months"
+      "warrantyMonths": "Warranty, in months",
+      "stale": {
+        "days": "The description still says {count, plural, one {# day} other {# days}}. Update it too.",
+        "months": "The description still says {count, plural, one {# month} other {# months}}. Update it too.",
+        "amount": "The description still says {amount}. Update it too."
+      }
+    },
+    "sync": {
+      "customized": "The employee was edited by hand in the studio, so we didn't change its instructions. Update them there.",
+      "failed": "The change is saved, but we couldn't update the employee. Saving again retries."
     }
   },
   "goLive": {

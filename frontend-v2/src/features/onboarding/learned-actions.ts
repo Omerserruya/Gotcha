@@ -3,7 +3,13 @@
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { signInIfSignedOut } from '@/api/client/signed-out';
-import { learnedSchema, type Learned, type LearnedSection } from '@/api/contracts/onboarding-v2';
+import {
+  learnedEditSchema,
+  learnedSchema,
+  type Learned,
+  type LearnedEdited,
+  type LearnedSection,
+} from '@/api/contracts/onboarding-v2';
 import { onboardingEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
@@ -42,7 +48,7 @@ export interface LearnedEdit {
 }
 
 export type LearnedEditResult =
-  | { readonly ok: true; readonly learned: Learned }
+  | { readonly ok: true; readonly learned: LearnedEdited }
   | {
       readonly ok: false;
       /** gone: the item no longer exists (NOT_FOUND); incomplete: a question needs both halves. */
@@ -60,7 +66,7 @@ export async function editLearned(edit: LearnedEdit): Promise<LearnedEditResult>
     const learned = await serverApi().patch({
       endpoint: onboardingEndpoints.learned(),
       body: edit,
-      payload: learnedSchema,
+      payload: learnedEditSchema,
     });
     return { ok: true, learned };
   } catch (cause) {
@@ -73,7 +79,7 @@ export async function editLearned(edit: LearnedEdit): Promise<LearnedEditResult>
 }
 
 export type AddPolicyResult =
-  | { readonly ok: true; readonly learned: Learned }
+  | { readonly ok: true; readonly learned: LearnedEdited }
   | {
       readonly ok: false;
       readonly reason: 'text_required' | 'text_too_long' | 'bad_kind' | 'not_learned' | 'failed';
@@ -96,7 +102,7 @@ export async function addPolicy(kind: string, text: string): Promise<AddPolicyRe
     const learned = await serverApi().patch({
       endpoint: onboardingEndpoints.learned(),
       body: { section: 'policies', id: kind, value: { text: text.trim() } },
-      payload: learnedSchema,
+      payload: learnedEditSchema,
     });
     return { ok: true, learned };
   } catch (cause) {

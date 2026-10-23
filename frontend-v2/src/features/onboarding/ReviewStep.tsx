@@ -424,6 +424,12 @@ function useTerms(currency: string | null) {
 
 function Policies({ learned, onDone, preview }: SectionProps) {
   const t = useTranslations('onboarding.review');
+  // Every policy write answers with the employee's re-sync (Backend e7a2b75b).
+  const [sync, setSync] = useState<string | null>(null);
+  const onPolicyDone = (next: Learned & { readonly employeeSync?: string | null }) => {
+    onDone(next);
+    setSync(next.employeeSync ?? null);
+  };
   return (
     <Section title={t('policies.title')} testid="review-policies">
       {learned.policies.length === 0 ? (
@@ -435,17 +441,37 @@ function Policies({ learned, onDone, preview }: SectionProps) {
               key={policy.id}
               policy={policy}
               currency={currencyOf(learned)}
-              onDone={onDone}
+              onDone={onPolicyDone}
               preview={preview}
             />
           ))}
         </ul>
       )}
+      <SyncNote sync={sync} />
       {/* Under the last policy: one quiet line when some were learned, open when none were. */}
       {preview ? null : (
-        <AddMissing learned={learned} onDone={onDone} collapsed={learned.policies.length > 0} />
+        <AddMissing
+          learned={learned}
+          onDone={onPolicyDone}
+          collapsed={learned.policies.length > 0}
+        />
       )}
     </Section>
+  );
+}
+
+/**
+ * What became of the employee after a policy change: edited by hand in the
+ * studio (left as it is), or the update didn't reach it (saving again
+ * retries). Updated, unchanged or no employee yet say nothing.
+ */
+function SyncNote({ sync }: { readonly sync: string | null }) {
+  const t = useTranslations('onboarding.review.sync');
+  if (sync !== 'customized' && sync !== 'failed') return null;
+  return (
+    <p className={styles.why} role="status" data-testid={`review-sync-${sync}`}>
+      {t(sync)}
+    </p>
   );
 }
 
@@ -744,7 +770,7 @@ function AddMissing({
         /** Kinds already learned that the file also had: never replaced. */
         readonly skipped: readonly string[];
       }
-    | { readonly ok: false; readonly reason: UploadRefusal }
+    | { readonly ok: false; readonly reason: UploadRefusal; readonly skipped?: readonly string[] }
     | null
   >(null);
 
@@ -897,14 +923,36 @@ function AddMissing({
           </ul>
         ) : null}
         {upload && !upload.ok ? (
-          <p className={styles.problem} role="alert" data-testid="review-upload-refused">
-            {t(`add.uploadRefused.${upload.reason}`)}
-          </p>
+          <>
+            <p className={styles.problem} role="alert" data-testid="review-upload-refused">
+              {t(`add.uploadRefused.${upload.reason}`)}
+            </p>
+            {upload.skipped?.length ? (
+              <ul className={styles.terms} data-testid="review-upload-refused-skipped">
+                {upload.skipped.map((kind) => (
+                  <li key={kind}>
+                    {t('add.skipped', { policy: ts(`kinds.policy.${policyKind(kind)}`) })}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </>
         ) : null}
       </form>
     </div>
   );
 }
+
+/** The number terms whose old value the description may still say, and how it is said. */
+const STALE_UNIT = {
+  windowDays: 'days',
+  refundDays: 'days',
+  warrantyMonths: 'months',
+  freeOver: 'amount',
+} as const;
+/** The description says this number as a number of its own ("14", never the 14 in "140" or "1.4"). */
+const mentions = (text: string, value: string) =>
+  new RegExp(`(?<![\\d.])${value.replace('.', '\\.')}(?![.,]?\\d)`).test(text);
 
 /** A kind as sent, read as one we name; anything else is "other". */
 const policyKind = (kind: string): LearnedPolicy['kind'] =>
@@ -970,6 +1018,10 @@ function PolicyEdit({
   };
   const [values, setValues] = useState(initial);
   const { run, isPending, refused } = useEdit(onDone);
+  const stale = (Object.keys(STALE_UNIT) as (keyof typeof STALE_UNIT)[])
+    .filter((key) => initial[key] !== '' && values[key] !== initial[key])
+    .filter((key) => mentions(values.summary, initial[key]))
+    .map((key) => [key, initial[key]] as const);
   const set = (key: keyof typeof initial) => (event: { target: { value: string } }) =>
     setValues({ ...values, [key]: event.target.value });
   const changed = (Object.keys(initial) as (keyof typeof initial)[]).some(
@@ -1034,6 +1086,12 @@ function PolicyEdit({
           onChange={set('summary')}
         />
       </label>
+      {/* A term changed while the words above still say the old number: said, never rewritten. */}
+      {stale.map(([key, old]) => (
+        <p key={key} className={styles.why} data-testid={`review-edit-stale-${key}`}>
+          {t(`termFields.stale.${STALE_UNIT[key]}`, { count: Number(old), amount: old })}
+        </p>
+      ))}
       {keys.length ? <p className={styles.quiet}>{t('policies.termsNote')}</p> : null}
       <div className={styles.termGrid}>
         {keys.includes('windowDays') ? (
