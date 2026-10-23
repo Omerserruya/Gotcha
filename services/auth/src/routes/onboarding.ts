@@ -1994,10 +1994,11 @@ router.patch("/step", requireRole("ADMIN"), validate(z.object({ step: z.enum(ONB
 // One press: the first employee is hired from what the scan learned (in
 // services/ai, deterministic, idempotent), the channels route to it, and the
 // workspace opens - the same tenant and tracker writes the legacy /complete
-// makes, and the same refusal while a paid plan is unpaid. The press that
-// opens the workspace also runs /complete's after-activation steps (billing
-// entity, activation email, nudge) - once: a later press only updates the
-// employee and sends nothing.
+// makes. The press that opens the workspace also runs /complete's
+// after-activation steps (billing entity, activation email, nudge) - once: a
+// later press only updates the employee and sends nothing. A paid plan still
+// unpaid is set up the same way but stays PENDING_PAYMENT, with no email;
+// its payment opens it.
 
 /** A BusinessProfile from what the scan learned, only when none exists (the old finish's fields). */
 async function ensureProfileFromDiscovery(tenantId: string): Promise<void> {
@@ -2038,12 +2039,10 @@ router.post("/go-live", requireRole("ADMIN"), validate(goLiveSchema), async (req
       res.status(404).json({ error: "Tenant not found", code: "TENANT_NOT_FOUND" });
       return;
     }
-    // The paid plan's first payment opens the workspace, never this button;
-    // and a suspended workspace is billing's to reopen.
-    if (tenant.status === "PENDING_PAYMENT") {
-      res.status(409).json({ error: "The workspace opens once the plan is paid", code: "TENANT_AWAITING_PAYMENT" });
-      return;
-    }
+    // A suspended workspace is billing's to reopen. A paid plan awaiting its
+    // first payment is set up in full here, as /complete does, and left
+    // PENDING_PAYMENT: the payment opens it (checkout activation reads the
+    // tracker's completedAt), so paying is the last step, not a detour back.
     if (tenant.status === "SUSPENDED") {
       res.status(409).json({ error: "This workspace is suspended", code: "TENANT_SUSPENDED" });
       return;
@@ -2087,14 +2086,21 @@ router.post("/go-live", requireRole("ADMIN"), validate(goLiveSchema), async (req
       }),
     ]);
     const opened = (flip as { count: number }).count > 0;
+    const awaitingPayment = !opened
+      && (await prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true } }))?.status === "PENDING_PAYMENT";
     await writeDurableSetting(tenantId, ONBOARDING_STEP_KEY, "live", (req as any).userId ?? undefined).catch(() => {});
 
-    // /complete's after-activation steps, the same calls, best-effort.
+    // /complete's after-activation steps, the same calls, best-effort. Awaiting
+    // payment: everything but the email (/complete sends none until the
+    // workspace is live; billing's payment email says it then). Both calls
+    // are idempotent, so a repeated press while unpaid only re-arms them.
     let billingEntity: "provisioned" | "failed" | null = null;
-    if (opened) {
-      sendActivationConfirmation(tenantId).catch((err) => {
-        console.error("Failed to send activation confirmation:", err);
-      });
+    if (opened || awaitingPayment) {
+      if (opened) {
+        sendActivationConfirmation(tenantId).catch((err) => {
+          console.error("Failed to send activation confirmation:", err);
+        });
+      }
       scheduleOnboardingNudge(tenantId, "1d").catch(() => {});
       billingEntity = await provisionBilling(tenantId).then(() => "provisioned" as const, (err) => {
         console.error(`[Onboarding] Billing provisioning failed for tenant ${tenantId}:`, err.message);
@@ -2103,7 +2109,15 @@ router.post("/go-live", requireRole("ADMIN"), validate(goLiveSchema), async (req
     }
 
     const { suggestedOrderQuestion = null, ...live } = r.body.data ?? {};
-    res.json({ data: { ...live, activation: { opened, billingEntity }, test: { suggestedOrderQuestion } } });
+    res.json({
+      data: {
+        ...live,
+        activation: { opened, awaitingPayment, billingEntity },
+        // Everything is ready; it starts answering once the plan is paid.
+        paymentRequired: awaitingPayment,
+        test: { suggestedOrderQuestion },
+      },
+    });
   } catch (err: any) {
     console.error("[onboarding] go-live failed:", err?.message ?? err);
     res.status(500).json({ error: "Go-live failed", code: "GO_LIVE_FAILED" });

@@ -112,16 +112,31 @@ describe("go-live gating", () => {
     expect(r.body.data).toMatchObject({ employee: { id: "ag1" }, test: { suggestedOrderQuestion: null } });
   });
 
-  for (const [status, code] of [["PENDING_PAYMENT", "TENANT_AWAITING_PAYMENT"], ["SUSPENDED", "TENANT_SUSPENDED"]] as const) {
-    it(`${status}: refused with ${code}; no employee, no status change`, async () => {
-      H.status = status;
-      const r = await goLive();
-      expect(r.status).toBe(409);
-      expect(r.body.code).toBe(code);
-      expect(H.aiCalls).toEqual([]);
-      expect(H.tenantUpdates).toEqual([]);
-    });
-  }
+  it("SUSPENDED: refused with TENANT_SUSPENDED; no employee, no status change", async () => {
+    H.status = "SUSPENDED";
+    const r = await goLive();
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe("TENANT_SUSPENDED");
+    expect(H.aiCalls).toEqual([]);
+    expect(H.tenantUpdates).toEqual([]);
+  });
+
+  it("PENDING_PAYMENT: set up in full like /complete - employee, tracker, billing entity, nudge - but NOT opened and NO email", async () => {
+    H.status = "PENDING_PAYMENT";
+    const r = await goLive();
+    await new Promise((x) => setImmediate(x));
+    expect(r.status).toBe(200);
+    expect(H.aiCalls).toHaveLength(1);
+    expect(H.status).toBe("PENDING_PAYMENT");
+    expect(H.tenantUpdates).toEqual([]);
+    // completedAt is what lets checkout activation open it on payment
+    expect(H.onboarding[0]).toMatchObject({ currentStep: "COMPLETED", completedAt: expect.any(Date) });
+    expect(r.body.data.activation).toEqual({ opened: false, awaitingPayment: true, billingEntity: "provisioned" });
+    expect(r.body.data.paymentRequired).toBe(true);
+    expect(H.billing).toHaveLength(1);
+    expect(H.nudges).toEqual([["T", "1d"]]);
+    expect(H.emails).toEqual([]);
+  });
 
   it("an ACTIVE workspace stays as it is (no status write), the employee is still updated", async () => {
     H.status = "ACTIVE";
@@ -154,7 +169,8 @@ describe("go-live does what /complete does after the flip - once", () => {
   it("the press that opens the workspace: billing entity, activation email, nudge; reported in activation", async () => {
     const r = await goLive();
     await new Promise((x) => setImmediate(x));
-    expect(r.body.data.activation).toEqual({ opened: true, billingEntity: "provisioned" });
+    expect(r.body.data.activation).toEqual({ opened: true, awaitingPayment: false, billingEntity: "provisioned" });
+    expect(r.body.data.paymentRequired).toBe(false);
     expect(H.billing).toEqual([{ url: expect.stringMatching(/\/api\/internal\/billing\/ensure-entity$/), body: { tenantId: "T" } }]);
     expect(H.emails).toEqual(["T"]);
     expect(H.nudges).toEqual([["T", "1d"]]);
@@ -167,7 +183,7 @@ describe("go-live does what /complete does after the flip - once", () => {
     await new Promise((x) => setImmediate(x));
     expect(r.status).toBe(200);
     expect(H.aiCalls).toHaveLength(2);
-    expect(r.body.data.activation).toEqual({ opened: false, billingEntity: null });
+    expect(r.body.data.activation).toEqual({ opened: false, awaitingPayment: false, billingEntity: null });
     expect([H.billing, H.emails, H.nudges]).toEqual([[], [], []]);
   });
 
@@ -176,7 +192,7 @@ describe("go-live does what /complete does after the flip - once", () => {
     const r = await goLive();
     expect(r.status).toBe(200);
     expect(H.status).toBe("ACTIVE");
-    expect(r.body.data.activation).toEqual({ opened: true, billingEntity: "failed" });
+    expect(r.body.data.activation).toEqual({ opened: true, awaitingPayment: false, billingEntity: "failed" });
   });
 
   it("no business profile: made from the scan; an existing one is never touched", async () => {
