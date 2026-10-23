@@ -24,7 +24,7 @@ export default async function Page({
     redirect({ href: stepHref('/onboarding/website', preview), locale });
   }
   return (
-    <OnboardingShell step="reading" preview={preview}>
+    <OnboardingShell step="learn" screen="reading" preview={preview}>
       <ReadingStep initial={read.ok ? read.job : null} preview={preview} />
     </OnboardingShell>
   );

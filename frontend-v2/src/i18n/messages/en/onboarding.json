@@ -5,13 +5,13 @@
     "reading": "Reading it",
     "learned": "What it learned",
     "truth": "Source of truth",
-    "try": "Try it"
+    "try": "Try it",
+    "learn": "Learning your site",
+    "systems": "Connect systems",
+    "channels": "Channels",
+    "live": "Check and go live"
   },
-  "mostImportant": "Most important",
   "website": {
-    "headline": "It starts from what you already have.",
-    "lead": "Your website, your store, your past conversations. You confirm, GOTCHA reads.",
-    "foot": "Nothing reaches a customer until you say so",
     "title": "Is this your website?",
     "fromEmail": "We took it from {email}",
     "from": {
@@ -47,15 +47,7 @@
     "elsewhereWhy": "Starting from these isn't available yet. For now GOTCHA starts from a website",
     "consent": "By continuing you agree to the <terms>Terms of Service</terms> and the <privacy>Privacy Policy</privacy>"
   },
-  "reading": {
-    "headline": "It reads your website so you don't have to explain it.",
-    "lead": "Every line here is what it is really doing, right now.",
-    "foot": "You can close this tab, it keeps going"
-  },
   "learned": {
-    "headline": "What it knows, and how it will sound.",
-    "lead": "Approve once. Everything here lands in Knowledge, where you can change it any time.",
-    "foot": "Nothing reaches a customer until you say so",
     "title": "What GOTCHA knows now",
     "count": "{facts, plural, =1 {1 topic from your website} other {# topics from your website}}",
     "countFromPages": "{facts, plural, =1 {1 topic} other {# topics}} from {pages, plural, =1 {1 page} other {# pages}}",
@@ -94,61 +86,7 @@
       "adjust": "Adjust"
     }
   },
-  "truth": {
-    "headline": "The most important connection you'll make.",
-    "lead": "Your website explains how things work. Your store knows what's true right now. GOTCHA checks it before every answer about an order, a price or stock.",
-    "foot": "You decide what it may change. Reading is always safe",
-    "title": "Where does the truth live?",
-    "subtitle": "Orders, stock, prices and customers. GOTCHA checks here before every answer, so it never guesses from an old web page",
-    "systems": {
-      "shopify": "Shopify",
-      "woocommerce": "WooCommerce",
-      "priority": "Priority",
-      "wix": "Wix",
-      "google_sheets": "Google Sheets",
-      "custom_api": "Your API"
-    },
-    "how": {
-      "shopify": "One sign-in, at Shopify",
-      "woocommerce": "Your store's address, then approve in WooCommerce",
-      "priority": "An API key from Priority",
-      "wix": "One sign-in, at Wix",
-      "google_sheets": "A sheet you share with GOTCHA",
-      "custom_api": "Set up with GOTCHA's team"
-    },
-    "foundOn": "Found on <host></host>",
-    "connected": "Connected",
-    "unread": "Couldn't read your systems just now. Try again in a moment.",
-    "notOffered": "Connecting {name} isn't available yet.",
-    "comesBack": "Connecting opens {name}. When it's done you come back to Studio · Integrations, where the connection shows.",
-    "others": "Other systems",
-    "may": {
-      "title": "What GOTCHA may do there",
-      "read": "Read everything above",
-      "always": "Always on",
-      "actions": {
-        "address": "Change a delivery address",
-        "cancel": "Cancel an order that hasn't shipped",
-        "refund": "Refund or give credit",
-        "prices": "Change prices or stock"
-      },
-      "stances": {
-        "allowed": "Allowed",
-        "ask": "Ask me first",
-        "never": "Never"
-      },
-      "why": "You set these in Studio · Integrations once the workspace is live. They can't be set during setup yet"
-    },
-    "next": "Continue",
-    "skip": "Skip for now",
-    "skipWhy": "Without it, GOTCHA can explain your policies, but it can't check an order, a price or stock",
-    "failing": "Needs reconnecting",
-    "failingWhy": "{name} stopped letting GOTCHA in. Reconnect to sign in again."
-  },
   "try": {
-    "headline": "Judge it on your own questions.",
-    "lead": "Things your customers really ask. If an answer is off, fix it once and it's fixed everywhere",
-    "foot": "Setup mode: it only talks to your team until you go live",
     "title": "Try GOTCHA on real questions",
     "leadNone": "No customer questions to try yet. Ask your own below",
     "unread": "Couldn't read your customers' questions just now. You can still ask your own below",
@@ -365,14 +303,54 @@
       "stage_failed": "A step failed. You can carry on from where it stopped.",
       "nothing_learned": "We couldn't learn anything from the site.",
       "other": "Reading stopped. You can carry on from where it stopped.",
-      "stalled": "Reading stopped responding. You can carry on from where it stopped."
+      "stalled": "Reading stopped responding. You can carry on from where it stopped.",
+      "partway": "We stopped partway. Carry on from where we stopped, or continue with what we already found."
     },
     "blocked": "The site refuses automatic reading. We'll carry on with what we found, and at the check step you can upload files or paste your policies.",
     "retry": "Carry on from where it stopped",
     "retrying": "Carrying on…",
     "retryFailed": "Couldn't carry on. Try again in a moment.",
     "change": "Use another address",
+    "withFound": "Continue with what we found",
     "next": "Continue",
     "missed": "Couldn't check just now. Trying again in a second."
+  },
+  "stepOf": "Step {n} of {total}: {name}",
+  "learn": {
+    "headline": "It reads your website so you don't have to explain it.",
+    "lead": "Every line here is what it is really doing, right now.",
+    "foot": "You can close this tab, it keeps going"
+  },
+  "systems": {
+    "headline": "Your store knows what's true right now.",
+    "lead": "Connect the systems your site already uses, so GOTCHA checks them before answering about an order.",
+    "foot": "You can skip and connect later",
+    "title": "Connect your systems",
+    "subtitle": "Only what your site already uses. That way GOTCHA checks the store before every answer about an order, instead of guessing from an old page.",
+    "why": {
+      "platform": "Your site runs on <ltr>{name}</ltr>.",
+      "detected_on_site": "We saw <ltr>{name}</ltr> on your site."
+    },
+    "where": "Where we saw it",
+    "connected": "Connected",
+    "failing": "Needs reconnecting",
+    "failingWhy": "{name} stopped letting GOTCHA in. Reconnect to let it back in.",
+    "notOffered": "Connecting {name} isn't available yet.",
+    "catalogueUnread": "We couldn't check how it connects. Reload the page to try again.",
+    "unread": "We couldn't read what to connect. You can carry on and connect later.",
+    "empty": "We didn't find a system on your site to connect. You can connect systems later too.",
+    "next": "Continue",
+    "skip": "Continue without connecting",
+    "skipWhy": "Without a store connected, GOTCHA can explain your policies but can't check an order, a price or stock."
+  },
+  "channels": {
+    "headline": "Where your customers write.",
+    "lead": "Connect the channels GOTCHA will answer on. One is enough to start.",
+    "foot": "Nothing reaches a customer until you go live"
+  },
+  "live": {
+    "headline": "Check, then go live.",
+    "lead": "Look over what was learned, fix what needs fixing, and press once.",
+    "foot": "Nothing reaches a customer until you say so"
   }
 }

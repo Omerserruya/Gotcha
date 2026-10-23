@@ -1,31 +1,14 @@
-import { loadTruth } from '@/features/onboarding/load-onboarding';
-import { OnboardingShell } from '@/features/onboarding/OnboardingShell';
-import { isPreview } from '@/features/onboarding/preview';
-import { TruthStep } from '@/features/onboarding/TruthStep';
-import { pageMetadata } from '@/shell/page-metadata';
+import { isPreview, stepHref } from '@/features/onboarding/preview';
+import { redirect } from '@/i18n/navigation';
 
-/** 00g - Onboarding · Source of truth (design 6). `?system=` is a tile chosen. */
+/** The old 00g ("source of truth") is step 2 now: connect your systems. Old links still land. */
 export default async function Page({
+  params,
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ readonly system?: string; readonly preview?: string }>;
-} = {}) {
-  const params = await searchParams;
-  const preview = isPreview(params);
-  const system = params?.system ?? null;
-  const read = await loadTruth();
-  return (
-    <OnboardingShell step="truth" preview={preview}>
-      <TruthStep
-        integrations={read.integrations}
-        shopify={read.shopify}
-        detected={read.detected}
-        system={system}
-        coreSystem={read.coreSystem}
-        preview={preview}
-      />
-    </OnboardingShell>
-  );
+  readonly params: Promise<{ readonly locale: string }>;
+  readonly searchParams?: Promise<{ readonly preview?: string }>;
+}) {
+  const [{ locale }, query] = await Promise.all([params, searchParams]);
+  redirect({ href: stepHref('/onboarding/systems', isPreview(query)), locale });
 }
-
-export const generateMetadata = pageMetadata('steps.truth', 'onboarding');

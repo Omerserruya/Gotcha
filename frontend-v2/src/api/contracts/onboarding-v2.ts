@@ -358,6 +358,10 @@ export type EmployeeTest = z.infer<typeof employeeTestSchema>;
 
 // ─── The step reached ────────────────────────────────────────────────────────
 
+/** The four steps the column shows (Omer, 2026-10-23); website and reading are both "learn". */
+export const SHELL_STEPS = ['learn', 'systems', 'channels', 'live'] as const;
+export type ShellStep = (typeof SHELL_STEPS)[number];
+
 /** The four steps, as routes (website and reading are both step 1). */
 export const ONBOARDING_V2_STEPS = ['website', 'reading', 'systems', 'channels', 'live'] as const;
 export type OnboardingV2Step = (typeof ONBOARDING_V2_STEPS)[number];

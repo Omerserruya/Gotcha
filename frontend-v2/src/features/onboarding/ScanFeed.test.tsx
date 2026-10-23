@@ -2,8 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it } from 'vitest';
 
-import { ONBOARDING_STEPS } from '@/api/contracts/onboarding';
-import { jobEventSchema, jobFoundSchema } from '@/api/contracts/onboarding-v2';
+import { jobEventSchema, jobFoundSchema, SHELL_STEPS } from '@/api/contracts/onboarding-v2';
 import onboardingEn from '@/i18n/messages/en/onboarding.json';
 import onboardingHe from '@/i18n/messages/he/onboarding.json';
 
@@ -134,17 +133,18 @@ describe('★★ the feed catalogue: every key Backend named, in both languages'
 describe('★★ the step column: one sentence per step, never an object', () => {
   // reading.lead was an object of states while the shell rendered it as one
   // string: the column showed next-intl's fallback on every read (fixed 2026-10-23).
-  it.each(
-    ONBOARDING_STEPS.flatMap((step) => (['en', 'he'] as const).map((l) => [step, l] as const)),
-  )('%s in %s: headline, lead and foot are strings', (step, locale) => {
-    const catalogue = (locale === 'he' ? onboardingHe : onboardingEn) as unknown as Record<
-      string,
-      Record<string, unknown>
-    >;
-    for (const field of ['headline', 'lead', 'foot']) {
-      expect(typeof catalogue[step]?.[field]).toBe('string');
-    }
-  });
+  it.each(SHELL_STEPS.flatMap((step) => (['en', 'he'] as const).map((l) => [step, l] as const)))(
+    '%s in %s: headline, lead and foot are strings',
+    (step, locale) => {
+      const catalogue = (locale === 'he' ? onboardingHe : onboardingEn) as unknown as Record<
+        string,
+        Record<string, unknown>
+      >;
+      for (const field of ['headline', 'lead', 'foot']) {
+        expect(typeof catalogue[step]?.[field]).toBe('string');
+      }
+    },
+  );
 });
 
 describe('★★ found so far', () => {

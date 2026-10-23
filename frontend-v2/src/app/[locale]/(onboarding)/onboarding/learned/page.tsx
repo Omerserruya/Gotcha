@@ -13,7 +13,7 @@ export default async function Page({
   const preview = isPreview(await searchParams);
   const read = await loadLearned();
   return (
-    <OnboardingShell step="learned" preview={preview}>
+    <OnboardingShell step="live" screen="learned" preview={preview}>
       <LearnedStep
         discovery={read.discovery}
         facts={read.facts}

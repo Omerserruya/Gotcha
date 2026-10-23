@@ -5,6 +5,10 @@ import { serverApi } from '@/api/client/server-api';
 import { currentUserSchema } from '@/api/contracts/identity';
 import { integrationsSchema, type Integration } from '@/api/contracts/integrations';
 import { knowledgeListSchema } from '@/api/contracts/knowledge';
+import {
+  integrationSuggestionsSchema,
+  type IntegrationSuggestion,
+} from '@/api/contracts/onboarding-v2';
 import { workspaceVoiceSchema, type WorkspaceVoice } from '@/api/contracts/workspace';
 import {
   discoveryReadSchema,
@@ -232,4 +236,42 @@ export async function loadResumeState(): Promise<{
       .catch(() => null),
   ]);
   return { discovery, coreConnected: Boolean(status?.coreSystemConnected) };
+}
+
+export interface SystemsRead {
+  /** `null`: the suggestions could not be read - never "nothing to suggest". */
+  readonly suggestions: readonly IntegrationSuggestion[] | null;
+  /** The catalogue, for how each one connects; `null`: unread. */
+  readonly integrations: readonly Integration[] | null;
+  readonly shopify: Awaited<ReturnType<typeof loadShopifyAvailability>>;
+}
+
+/**
+ * Step 2: what the site job suggests connecting (the platform it runs on,
+ * tools it saw), and the catalogue rows that say how each one connects.
+ */
+export async function loadSystems(): Promise<SystemsRead> {
+  const [suggestions, integrations, shopify] = await Promise.all([
+    serverApi()
+      .get({
+        endpoint: onboardingEndpoints.integrationSuggestions(),
+        payload: integrationSuggestionsSchema,
+      })
+      .catch((cause: unknown) => {
+        logger.warn('onboarding.suggestions_failed', {
+          status: isApiError(cause) ? cause.status : undefined,
+        });
+        return null;
+      }),
+    serverApi()
+      .get({ endpoint: integrationEndpoints.list(), payload: integrationsSchema })
+      .catch((cause: unknown) => {
+        logger.warn('onboarding.integrations_failed', {
+          status: isApiError(cause) ? cause.status : undefined,
+        });
+        return null;
+      }),
+    loadShopifyAvailability(),
+  ]);
+  return { suggestions, integrations, shopify };
 }

@@ -17,7 +17,7 @@ export default async function Page({
   const skippedCore = params?.skipped === '1';
   const questions = await loadTry(await getLocale());
   return (
-    <OnboardingShell step="try" preview={preview}>
+    <OnboardingShell step="live" screen="try" preview={preview}>
       <TryStep questions={questions} skippedCore={skippedCore} preview={preview} />
     </OnboardingShell>
   );

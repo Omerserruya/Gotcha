@@ -16,8 +16,28 @@ import styles from './Onboarding.module.css';
 export const POLL_MS = 1000;
 /** After the job finishes, how long "Done" holds before moving on by itself. */
 export const ADVANCE_MS = 1500;
-/** The step after this one (systems, once it exists). */
-export const nextStep = (preview: boolean) => stepHref('/onboarding/learned', preview);
+/** The step after this one: connect your systems. */
+export const nextStep = (preview: boolean) => stepHref('/onboarding/systems', preview);
+
+/**
+ * Did the job get anywhere before it stopped? Pages read, or anything found.
+ * Then the address is not the problem, and what was found can be used.
+ */
+export function gotSomewhere(job: DiscoverJob): boolean {
+  const found = job.found;
+  return (
+    job.counts.pagesRead > 0 ||
+    found.platform !== null ||
+    found.productCount > 0 ||
+    found.productsSampled > 0 ||
+    found.policies.length > 0 ||
+    found.faqCount > 0 ||
+    found.contact ||
+    found.hours ||
+    found.brand ||
+    found.tools.length > 0
+  );
+}
 /** A host longer than this does not fit the headline at its size. */
 const LONG_HOST = 28;
 const FAILED_CODES = ['site_unreachable', 'stage_failed', 'nothing_learned'];
@@ -99,8 +119,11 @@ export function ReadingStep({
   const host = job?.domain ? siteHost(job.domain) : null;
   const status = job?.status ?? 'QUEUED';
   const stopped = status === 'FAILED' || status === 'STALLED';
-  const why =
-    status === 'STALLED'
+  // Stopped partway: never blame the address when pages were read or facts found.
+  const partway = stopped && job !== null && gotSomewhere(job);
+  const why = partway
+    ? t('failed.partway')
+    : status === 'STALLED'
       ? t('failed.stalled')
       : t(`failed.${FAILED_CODES.includes(job?.error?.code ?? '') ? job?.error?.code : 'other'}`);
 
@@ -163,13 +186,23 @@ export function ReadingStep({
             >
               {retrying === 'working' ? t('retrying') : t('retry')}
             </button>
-            <Link
-              href={stepHref('/onboarding/website', preview)}
-              className={styles.secondary}
-              data-testid="reading-change"
-            >
-              {t('change')}
-            </Link>
+            {partway ? (
+              <Link
+                href={nextStep(preview)}
+                className={styles.secondary}
+                data-testid="reading-with-found"
+              >
+                {t('withFound')}
+              </Link>
+            ) : (
+              <Link
+                href={stepHref('/onboarding/website', preview)}
+                className={styles.secondary}
+                data-testid="reading-change"
+              >
+                {t('change')}
+              </Link>
+            )}
           </span>
           {retrying === 'failed' ? (
             <p className={styles.quiet} data-testid="reading-retry-failed">

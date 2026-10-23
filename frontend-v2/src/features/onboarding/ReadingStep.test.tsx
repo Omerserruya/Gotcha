@@ -21,7 +21,14 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-import { ADVANCE_MS, mergeEvents, nextStep, POLL_MS, ReadingStep } from './ReadingStep';
+import {
+  ADVANCE_MS,
+  gotSomewhere,
+  mergeEvents,
+  nextStep,
+  POLL_MS,
+  ReadingStep,
+} from './ReadingStep';
 
 const event = (seq: number, key: string, params = {}, kind = 'progress') => ({
   seq,
@@ -141,23 +148,58 @@ describe('★★ reading the site, as it really goes', () => {
     expect(scan.readScan).not.toHaveBeenCalled();
   });
 
+  /** A job that stopped before reading anything: no pages, nothing found. */
+  const nothing = { counts: { pagesPlanned: 0, pagesRead: 0 }, found: {}, events: [] };
+
   it.each([
     ['site_unreachable', "We couldn't reach the site."],
     ['stage_failed', 'A step failed.'],
     ['nothing_learned', "We couldn't learn anything from the site."],
     ['a_new_code', 'Reading stopped.'],
-  ])('★★ FAILED with %s: the real reason, carry on, or another address', (code, text) => {
-    show(job({ status: 'FAILED', error: { code, stage: 'read_pages' } }));
-    const stopped = screen.getByTestId('reading-stopped');
-    expect(stopped).toHaveTextContent(text);
-    expect(screen.getByTestId('reading-retry')).toBeEnabled();
-    expect(screen.getByTestId('reading-change')).toHaveAttribute('href', '/onboarding/website');
+  ])(
+    '★★ FAILED with %s and nothing found: the real reason, carry on, or another address',
+    (code, text) => {
+      show(job({ ...nothing, status: 'FAILED', error: { code, stage: 'detect_platform' } }));
+      expect(screen.getByTestId('reading-stopped')).toHaveTextContent(text);
+      expect(screen.getByTestId('reading-retry')).toBeEnabled();
+      expect(screen.getByTestId('reading-change')).toHaveAttribute('href', '/onboarding/website');
+      expect(screen.queryByTestId('reading-with-found')).toBeNull();
+    },
+  );
+
+  it.each(['site_unreachable', 'stage_failed'])(
+    '★★ FAILED (%s) AFTER pages were read: "stopped partway", carry on OR continue with what was found; the address is never blamed',
+    (code) => {
+      show(job({ status: 'FAILED', error: { code, stage: 'extract' } }));
+      const stopped = screen.getByTestId('reading-stopped');
+      expect(stopped).toHaveTextContent('We stopped partway.');
+      expect(stopped).not.toHaveTextContent('address');
+      expect(screen.getByTestId('reading-retry')).toBeEnabled();
+      expect(screen.getByTestId('reading-with-found')).toHaveAttribute(
+        'href',
+        '/onboarding/systems',
+      );
+      expect(screen.queryByTestId('reading-change')).toBeNull();
+      // What was found stays on screen to continue with.
+      expect(screen.getByTestId('scan-chip-products')).toBeInTheDocument();
+    },
+  );
+
+  it('★ found something but read no page (the store feed only) is partway too', () => {
+    show(
+      job({
+        status: 'FAILED',
+        error: { code: 'stage_failed', stage: 'sitemap' },
+        counts: { pagesRead: 0 },
+      }),
+    );
+    expect(screen.getByTestId('reading-with-found')).toBeInTheDocument();
   });
 
-  it('★★ STALLED: said as stopped answering; Retry resumes it and polling starts again', async () => {
+  it('★★ STALLED with nothing found: said as stopped answering; Retry resumes it and polling starts again', async () => {
     scan.retryScan.mockResolvedValue(true);
     scan.readScan.mockResolvedValue({ ok: true, job: job() });
-    show(job({ status: 'STALLED' }));
+    show(job({ ...nothing, status: 'STALLED' }));
     expect(screen.getByTestId('reading-stopped')).toHaveTextContent('Reading stopped responding.');
     await act(async () => fireEvent.click(screen.getByTestId('reading-retry')));
     expect(scan.retryScan).toHaveBeenCalledTimes(1);
@@ -193,6 +235,23 @@ describe('★★ reading the site, as it really goes', () => {
     show(job({ status: 'COMPLETE' }), true);
     await tick(ADVANCE_MS * 2);
     expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['pages read', { counts: { pagesRead: 3 } }],
+    ['a platform', { found: { platform: 'shopify' } }],
+    ['products', { found: { productCount: 4 } }],
+    ['sampled products', { found: { productsSampled: 2 } }],
+    ['a policy', { found: { policies: ['returns'] } }],
+    ['FAQs', { found: { faqCount: 1 } }],
+    ['contact', { found: { contact: true } }],
+    ['hours', { found: { hours: true } }],
+    ['the writing style', { found: { brand: true } }],
+    ['a tool', { found: { tools: ['returngo'] } }],
+  ])('★★ gotSomewhere: %s ALONE is somewhere (never blame the address)', (_, over) => {
+    const empty = { counts: { pagesRead: 0 }, found: {} };
+    expect(gotSomewhere(job(empty))).toBe(false);
+    expect(gotSomewhere(job({ ...empty, ...over }))).toBe(true);
   });
 
   it('mergeEvents keeps one line per seq, in arrival order', () => {
