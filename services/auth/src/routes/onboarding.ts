@@ -25,7 +25,7 @@ import { ingestTaughtDocument, updateTaughtDocument } from "../services/teach-in
 import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
 import { readJob, startJob, reopenJob, isLive, viewOf } from "../services/onboarding-discover/job-store";
 import { enqueueDiscover } from "../services/onboarding-discover/queue";
-import { readLearned, editLearned, LearnedEditRefused, type LearnedEdit } from "../services/onboarding-discover/learned";
+import { readLearned, editLearned, LearnedEditRefused, learnFromFile, LearnedUploadRefused, type LearnedEdit } from "../services/onboarding-discover/learned";
 import { integrationSuggestions, aiInternal } from "../services/onboarding-discover/learn";
 import { syncDiscoveryRecommendations, listRecommendations, setRecommendationStatus, addStoreInspectionRecs, reconcileConnectSystemRecs } from "../services/recommendations.service";
 import OpenAI from "openai";
@@ -2059,6 +2059,54 @@ router.patch("/learned", requireRole("ADMIN"), validate(learnedEditSchema), asyn
     }
     console.error("[onboarding] learned edit failed:", err?.message ?? err);
     res.status(500).json({ error: "Could not save the edit", code: "LEARNED_EDIT_FAILED" });
+  }
+});
+
+// The owner's file when the site blocks reading (multipart, one field "file":
+// PDF, DOCX, TXT or MD up to 5MB). Passed through to the AI service for its
+// text; the scan's extraction then writes /learned and the knowledge.
+const UPLOAD_MAX_BYTES = 5 * 1024 * 1024 + 64 * 1024; // the file plus the multipart framing
+
+function readCapped(req: Request, max: number): Promise<Buffer | null> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let over = false;
+    req.on("data", (c: Buffer) => {
+      size += c.length;
+      if (size > max) over = true;
+      else chunks.push(c);
+    });
+    req.on("end", () => resolve(over ? null : Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+router.post("/learned/upload", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const contentType = String(req.headers["content-type"] ?? "");
+    if (!/^multipart\/form-data;\s*boundary=/i.test(contentType)) {
+      res.status(400).json({ error: "Send the file as multipart/form-data", code: "FILE_REQUIRED" });
+      return;
+    }
+    if (Number(req.headers["content-length"] ?? 0) > UPLOAD_MAX_BYTES) {
+      req.resume();
+      res.status(413).json({ error: "File too large (5MB)", code: "FILE_TOO_LARGE" });
+      return;
+    }
+    const body = await readCapped(req, UPLOAD_MAX_BYTES);
+    if (!body) {
+      res.status(413).json({ error: "File too large (5MB)", code: "FILE_TOO_LARGE" });
+      return;
+    }
+    res.json({ data: await learnFromFile(req.tenantId!, { body, contentType }) });
+  } catch (err: any) {
+    if (err instanceof LearnedUploadRefused) {
+      res.status(err.status).json({ error: "That file could not be used", code: err.code });
+      return;
+    }
+    console.error("[onboarding] learned upload failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not read the file", code: "UPLOAD_FAILED" });
   }
 });
 

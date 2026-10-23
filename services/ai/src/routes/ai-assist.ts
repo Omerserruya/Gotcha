@@ -35,6 +35,8 @@ import { generateFollowup } from "../services/followup-generator.service";
 import { buildCustomerState } from "../services/customer-state.service";
 import { getPolicy, setPolicy, validatePolicyPatch, PolicyValidationError } from "../services/policy.service";
 import voiceRouter from "./ai-assist-voice";
+import multer from "multer";
+import { parseFile, resolveMimeType } from "../services/file-parser.service";
 import { buildAgentPrompt } from "../services/prompt-builder.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { discoverBusiness, withoutWideDashes } from "../services/business-discovery.service";
@@ -103,6 +105,51 @@ router.post("/onboarding-extract", authenticate, resolveTenant, requireRole("ADM
     console.error("Onboarding extract error:", err?.message ?? err);
     res.status(500).json({ error: "Extraction failed", code: "EXTRACT_FAILED" });
   }
+});
+
+// Onboarding v2: the text of ONE file the owner gives when their site blocks
+// automatic reading (PDF, DOCX, TXT, MD; 5MB). Text only: auth runs the same
+// extraction the scan runs and writes the knowledge. Called by auth's
+// POST /api/onboarding/learned/upload with the internal key.
+export const ONBOARDING_FILE_MAX = 5 * 1024 * 1024;
+const ONBOARDING_FILE_TYPES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
+  "text/markdown",
+  "text/x-markdown",
+]);
+const onboardingFile = multer({ storage: multer.memoryStorage(), limits: { fileSize: ONBOARDING_FILE_MAX, files: 1 } }).single("file");
+router.post("/onboarding-file-text", authenticate, resolveTenant, requireRole("ADMIN"), (req: Request, res: Response) => {
+  onboardingFile(req, res, async (err: any) => {
+    if (err) {
+      const tooLarge = err?.code === "LIMIT_FILE_SIZE";
+      res.status(tooLarge ? 413 : 400).json({ error: tooLarge ? "File too large" : "Bad upload", code: tooLarge ? "FILE_TOO_LARGE" : "BAD_UPLOAD" });
+      return;
+    }
+    const file = (req as any).file as { buffer: Buffer; mimetype: string; originalname: string } | undefined;
+    if (!file) {
+      res.status(400).json({ error: "A file is required", code: "FILE_REQUIRED" });
+      return;
+    }
+    const mime = resolveMimeType(file.mimetype, file.originalname);
+    if (!ONBOARDING_FILE_TYPES.has(mime)) {
+      res.status(415).json({ error: "PDF, DOCX, TXT or MD only", code: "UNSUPPORTED_TYPE" });
+      return;
+    }
+    let text: string;
+    try {
+      text = await parseFile(file.buffer, mime);
+    } catch {
+      res.status(422).json({ error: "The file could not be read", code: "UNREADABLE_FILE" });
+      return;
+    }
+    if (!text.trim()) {
+      res.status(422).json({ error: "No text in this file", code: "NOTHING_FOUND" });
+      return;
+    }
+    res.json({ data: { filename: file.originalname.slice(0, 200), text } });
+  });
 });
 
 // Onboarding v2 go-live: hire (or update) the first employee from what the scan

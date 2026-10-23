@@ -42,7 +42,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
 });
 
 import { learnStages, pagesFor, siteLanguage } from "../services/onboarding-discover/learn";
-import { readLearned, editLearned, faqId } from "../services/onboarding-discover/learned";
+import { readLearned, editLearned, faqId, learnFromFile } from "../services/onboarding-discover/learned";
 import type { AiCall } from "../services/onboarding-discover/learn";
 
 /** The AI service: extraction answers from H.extract; documents stored in H.docs. */
@@ -237,5 +237,78 @@ describe("/learned and its edits", () => {
 
   it("an unknown id is NOT_FOUND, and nothing changes", async () => {
     await expect(editLearned("T", { section: "policies", id: "nope", value: {} }, ai)).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+});
+
+describe("what the owner gives when the site blocks reading", () => {
+  beforeEach(async () => { await learnStages({ ai })(ctx().ctx as any); H.aiCalls = []; });
+
+  const SHIPPING = { kind: "policies", policies: [{ kind: "shipping", summary: "משלוח תוך 3 ימים", terms: { windowDays: null, exchange: null, shipping: { times: "3 ימים", costs: "25", freeOver: 300 }, refund: null, warranty: null }, sourceUrl: "pasted" }] };
+  const PASTED = "משלוחים יוצאים תוך 3 ימי עסקים. עלות 25 ש\"ח, חינם מעל 300.";
+
+  it("a pasted policy the scan never read is created, with terms from the extraction and the owner's words kept whole", async () => {
+    H.extract.policies = SHIPPING;
+    const v: any = await editLearned("T", { section: "policies", id: "shipping", value: { text: PASTED } }, ai);
+    expect(H.aiCalls[0]).toMatchObject({ path: "/api/ai-assist/onboarding-extract", body: { kind: "policies", pages: [{ url: "pasted", text: PASTED }] } });
+    expect(v.policies.find((p: any) => p.id === "shipping")).toMatchObject({ sourceUrl: "pasted", text: PASTED, terms: { shipping: { freeOver: 300 } } });
+    const doc = H.docs.find((d) => d.metadata.dedupeKey === "policy:shipping");
+    expect(doc.content).toContain(PASTED);
+    expect(doc.content).not.toContain("pasted");
+    expect(doc.sourceUrl).toBeUndefined();
+    expect(H.disc.knowledge.policies.shipping).toBe(true);
+    expect(v.policies.find((p: any) => p.id === "returns")).toBeTruthy();
+  });
+
+  it("when the extraction finds nothing, the owner's words are the policy - no invented terms", async () => {
+    H.extract.policies = null;
+    const v: any = await editLearned("T", { section: "policies", id: "warranty", value: { text: "שנה אחריות" } }, ai);
+    expect(v.policies.find((p: any) => p.id === "warranty")).toMatchObject({
+      summary: "שנה אחריות", terms: { windowDays: null, exchange: null, shipping: null, refund: null, warranty: null },
+    });
+  });
+
+  it("a kind outside the list is BAD_KIND, empty text is TEXT_REQUIRED; nothing is called or written", async () => {
+    const before = JSON.stringify(H.disc);
+    await expect(editLearned("T", { section: "policies", id: "loyalty", value: { text: "x" } }, ai)).rejects.toMatchObject({ code: "BAD_KIND" });
+    await expect(editLearned("T", { section: "policies", id: "shipping", value: { text: "  " } }, ai)).rejects.toMatchObject({ code: "TEXT_REQUIRED" });
+    expect(H.aiCalls.filter((c) => c.path.includes("extract"))).toEqual([]);
+    expect(JSON.stringify(H.disc)).toBe(before);
+  });
+
+  const file = (reply: any) => async () => reply;
+  const upload = { body: Buffer.from("x"), contentType: "multipart/form-data; boundary=b" };
+
+  it("a file: its policies, new questions and empty profile fields land in /learned and the knowledge", async () => {
+    H.extract.policies = { kind: "policies", policies: [{ kind: "warranty", summary: "שנה", terms: { warranty: { months: 12 } }, sourceUrl: "upload:terms.pdf" }] };
+    H.extract.faq = { kind: "faq", faq: [{ q: "מתי המשלוח מגיע?", a: "אחר" }, { q: "יש איסוף?", a: "כן" }] };
+    H.extract.profile = { kind: "profile", profile: { name: "Other", industry: null, summary: null, valueProp: null }, contact: { emails: [], phones: ["03-1234567"], whatsapp: [], address: "תל אביב", hours: "24/7" } };
+    const v: any = await learnFromFile("T", upload, { ai, aiFile: file({ ok: true, status: 200, body: { data: { filename: "terms.pdf", text: "תקנון" } } }) });
+    expect(v.added).toEqual({ policies: ["warranty"], faq: 1, profile: true });
+    expect(v.partial).toBe(false);
+    expect(v.policies.find((p: any) => p.id === "warranty")).toMatchObject({ sourceUrl: "upload:terms.pdf" });
+    expect(v.faq.find((f: any) => f.q === "יש איסוף?")).toMatchObject({ sourceUrl: "upload:terms.pdf" });
+    // the scan's answer and the scan's facts stay; only empty ones fill
+    expect(v.faq.find((f: any) => f.q === "מתי המשלוח מגיע?").a).toBe("תוך 3 ימי עסקים");
+    expect(v.profile.name).toBe("Shop");
+    expect(v.contact).toMatchObject({ hours: "א-ה 9-17", address: "תל אביב", phones: ["03-1234567"], emails: ["hi@shop.example"] });
+    expect(H.docs.find((d) => d.metadata.dedupeKey === "policy:warranty")).toBeTruthy();
+    expect(H.docs.find((d) => d.metadata.dedupeKey === "faq").content).toContain("יש איסוף?");
+    expect(H.docs.find((d) => d.metadata.dedupeKey === "profile").content).toContain("תל אביב");
+  });
+
+  it("a file with nothing usable is NOTHING_FOUND (422), and nothing is written", async () => {
+    H.extract = { policies: { kind: "policies", policies: [] }, faq: FAQ, profile: PROFILE };
+    const before = JSON.stringify(H.disc); const docs = H.docs.length;
+    await expect(learnFromFile("T", upload, { ai, aiFile: file({ ok: true, status: 200, body: { data: { filename: "a.txt", text: "hello" } } }) }))
+      .rejects.toMatchObject({ code: "NOTHING_FOUND", status: 422 });
+    expect(JSON.stringify(H.disc)).toBe(before);
+    expect(H.docs.length).toBe(docs);
+  });
+
+  it("the AI service's refusal is passed on with its code; a failure is a 502", async () => {
+    await expect(learnFromFile("T", upload, { ai, aiFile: file({ ok: false, status: 415, body: { code: "UNSUPPORTED_TYPE" } }) }))
+      .rejects.toMatchObject({ code: "UNSUPPORTED_TYPE", status: 415 });
+    await expect(learnFromFile("T", upload, { ai, aiFile: file({ ok: false, status: 0, body: {} }) }))
+      .rejects.toMatchObject({ code: "UPLOAD_FAILED", status: 502 });
   });
 });

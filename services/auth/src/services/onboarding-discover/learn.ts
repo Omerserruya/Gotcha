@@ -47,6 +47,27 @@ export const aiInternal: AiCall = async (tenantId, method, path, body) => {
   }
 };
 
+/** A multipart body passed through to the AI service as it came (a file upload). Never throws. */
+export type AiFileCall = (tenantId: string, path: string, body: Buffer, contentType: string) => Promise<{ ok: boolean; status: number; body: any }>;
+export const aiInternalFile: AiFileCall = async (tenantId, path, body, contentType) => {
+  try {
+    const res = await fetch(`${AI_SERVICE_URL}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": contentType,
+        Authorization: `Bearer ${getInternalServiceKey()}`,
+        "X-Internal-Key": getInternalServiceKey(),
+        "x-tenant-id": tenantId,
+      },
+      body: new Uint8Array(body),
+      signal: AbortSignal.timeout(60_000),
+    });
+    return { ok: res.ok, status: res.status, body: await res.json().catch(() => ({})) };
+  } catch (err: any) {
+    return { ok: false, status: 0, body: { error: err?.message ?? "ai_unreachable" } };
+  }
+};
+
 // ── page selection ───────────────────────────────────────────────────────────
 
 const POLICY_TEXT = /(return|refund|exchange|shipping|delivery|warranty|terms|policy|החזר|החלפ|משלוח|אחריות|תקנון|מדיניות|ביטול)/i;
@@ -111,6 +132,9 @@ export interface KnowledgeDoc { key: string; title: string; content: string; sou
 export function policyDoc(p: any, lang: string): KnowledgeDoc {
   const t = tr(lang);
   const lines = [p.summary];
+  // The owner's own pasted wording, kept whole: the summary alone would lose
+  // the details a customer asks about.
+  if (typeof p.text === "string" && p.text.trim() && p.text.trim() !== p.summary) lines.push(p.text.trim());
   const terms = p.terms ?? {};
   if (terms.windowDays != null) lines.push(`${t.window}: ${terms.windowDays}`);
   if (terms.exchange) {
@@ -127,8 +151,10 @@ export function policyDoc(p: any, lang: string): KnowledgeDoc {
     if (terms.refund.days != null) lines.push(`${t.refundDays}: ${terms.refund.days}`);
   }
   if (terms.warranty?.months != null) lines.push(`${t.months}: ${terms.warranty.months}`);
-  if (p.sourceUrl) lines.push(`${t.source}: ${p.sourceUrl}`);
-  return { key: `policy:${p.kind}`, title: t[p.kind] ?? t.other!, content: lines.join("\n"), sourceUrl: p.sourceUrl ?? null };
+  // "pasted" and "upload:<file>" mark what the owner gave; only a page is a source link.
+  const url = typeof p.sourceUrl === "string" && /^https?:\/\//i.test(p.sourceUrl) ? p.sourceUrl : null;
+  if (url) lines.push(`${t.source}: ${url}`);
+  return { key: `policy:${p.kind}`, title: t[p.kind] ?? t.other!, content: lines.join("\n"), sourceUrl: url };
 }
 
 export function faqDoc(faq: Array<{ q: string; a: string }>, lang: string): KnowledgeDoc {

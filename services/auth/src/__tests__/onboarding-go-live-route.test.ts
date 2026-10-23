@@ -119,3 +119,16 @@ describe("the setup step", () => {
     expect((await request(app).patch("/api/onboarding/step").send({ step: "nowhere" })).status).toBe(400);
   });
 });
+
+describe("the file upload door", () => {
+  it("not multipart: FILE_REQUIRED; over 5MB by its length: FILE_TOO_LARGE; the AI is never called", async () => {
+    const plain = await request(app).post("/api/onboarding/learned/upload").send({ text: "x" });
+    expect(plain.status).toBe(400);
+    expect(plain.body.code).toBe("FILE_REQUIRED");
+    const big = await request(app).post("/api/onboarding/learned/upload")
+      .attach("file", Buffer.alloc(5 * 1024 * 1024 + 70 * 1024, 97), { filename: "big.txt", contentType: "text/plain" });
+    expect(big.status).toBe(413);
+    expect(big.body.code).toBe("FILE_TOO_LARGE");
+    expect(H.aiCalls).toEqual([]);
+  });
+});
