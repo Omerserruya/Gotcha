@@ -1940,10 +1940,22 @@ router.post("/discover/retry", requireRole("ADMIN"), async (req: Request, res: R
 export const ONBOARDING_STEPS = ["website", "reading", "systems", "channels", "live", "done"] as const;
 export const ONBOARDING_STEP_KEY = "onboarding:step";
 
+/** services/ai onboarding-employee EMPLOYEE_SETTING: the go-live employee's id. */
+const GO_LIVE_EMPLOYEE_KEY = "onboarding:employeeId";
+
 router.get("/step", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
-    const step = await readDurableSetting(req.tenantId!, ONBOARDING_STEP_KEY);
-    res.json({ data: { step: (ONBOARDING_STEPS as readonly string[]).includes(step ?? "") ? step : null } });
+    const [step, employeeId] = await Promise.all([
+      readDurableSetting(req.tenantId!, ONBOARDING_STEP_KEY),
+      readDurableSetting(req.tenantId!, GO_LIVE_EMPLOYEE_KEY),
+    ]);
+    // The employee go-live made (written by services/ai), so the screen can say
+    // "live as <name>" and prefill the name after a reload. Null when none, or
+    // when it was deleted since.
+    const employee = employeeId
+      ? await prisma.aIAgent.findFirst({ where: { id: employeeId, tenantId: req.tenantId! }, select: { id: true, name: true, status: true } })
+      : null;
+    res.json({ data: { step: (ONBOARDING_STEPS as readonly string[]).includes(step ?? "") ? step : null, employee } });
   } catch (err: any) {
     console.error("[onboarding] step read failed:", err?.message ?? err);
     res.status(500).json({ error: "Could not read the setup step", code: "STEP_READ_FAILED" });
@@ -1966,7 +1978,39 @@ router.patch("/step", requireRole("ADMIN"), validate(z.object({ step: z.enum(ONB
 // One press: the first employee is hired from what the scan learned (in
 // services/ai, deterministic, idempotent), the channels route to it, and the
 // workspace opens - the same tenant and tracker writes the legacy /complete
-// makes, and the same refusal while a paid plan is unpaid. Sends nothing.
+// makes, and the same refusal while a paid plan is unpaid. The press that
+// opens the workspace also runs /complete's after-activation steps (billing
+// entity, activation email, nudge) - once: a later press only updates the
+// employee and sends nothing.
+
+/** A BusinessProfile from what the scan learned, only when none exists (the old finish's fields). */
+async function ensureProfileFromDiscovery(tenantId: string): Promise<void> {
+  const existing = await prisma.businessProfile.findUnique({ where: { tenantId }, select: { id: true } });
+  if (existing) return;
+  const [d, tenant] = await Promise.all([
+    prisma.businessDiscovery.findUnique({ where: { tenantId }, select: { status: true, business: true, websiteDomain: true } }),
+    prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
+  ]);
+  // Before the scan finished, the AI refuses NOT_LEARNED anyway; make nothing.
+  if (!d || d.status !== "COMPLETE") return;
+  const b = (d.business && typeof d.business === "object" ? d.business : {}) as Record<string, any>;
+  const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  await prisma.businessProfile.create({
+    data: {
+      tenantId,
+      organizationName: text(b.name) ?? tenant?.name ?? "",
+      businessDescription: text(b.summary) ?? "",
+      industry: text(b.industry) ?? "Other",
+      businessPriority: "FAST_RESPONSE",
+      estimatedDailyConversations: 100,
+      numberOfAgents: 5,
+      ...(d.websiteDomain ? { websiteDomain: d.websiteDomain } : {}),
+    },
+  }).catch((err: any) => {
+    // A profile created by a concurrent press is fine; anything else is logged, not fatal.
+    if (err?.code !== "P2002") console.error(`[onboarding] go-live profile create failed for ${tenantId}:`, err?.message ?? err);
+  });
+}
 
 const goLiveSchema = z.object({ confirm: z.literal(true), employeeName: z.string().trim().min(1).max(40).optional() }).strict();
 
@@ -1988,6 +2032,15 @@ router.post("/go-live", requireRole("ADMIN"), validate(goLiveSchema), async (req
       res.status(409).json({ error: "This workspace is suspended", code: "TENANT_SUSPENDED" });
       return;
     }
+    // /complete's own precondition: a workspace never opens without an active admin.
+    const admin = await prisma.user.findFirst({ where: { tenantId, role: "ADMIN", isActive: true }, select: { id: true } });
+    if (!admin) {
+      res.status(400).json({ error: "An active admin account is required before activation", code: "NO_ACTIVE_ADMIN" });
+      return;
+    }
+    // /complete requires a business profile; the old finish made it from the
+    // scan. Go-live makes it the same way when it is missing - never over one.
+    await ensureProfileFromDiscovery(tenantId);
 
     const r = await aiInternal(tenantId, "POST", "/api/ai-assist/onboarding-employee", {
       employeeName: (req.body as { employeeName?: string }).employeeName,
@@ -2004,20 +2057,37 @@ router.post("/go-live", requireRole("ADMIN"), validate(goLiveSchema), async (req
 
     // Only a workspace still being set up is opened here. Re-read, so a status
     // that changed while the employee was being set up is honoured.
-    const now = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true } });
-    const opening = now?.status === "PENDING_ADMIN_SETUP" || now?.status === "PENDING_ONBOARDING";
-    await prisma.$transaction([
-      ...(opening ? [prisma.tenant.update({ where: { id: tenantId }, data: { status: "ACTIVE" } })] : []),
+    // The flip is conditional in the database itself, so two presses at once
+    // open the workspace (and send the email) exactly once.
+    const [flip] = await prisma.$transaction([
+      prisma.tenant.updateMany({
+        where: { id: tenantId, status: { in: ["PENDING_ADMIN_SETUP", "PENDING_ONBOARDING"] } },
+        data: { status: "ACTIVE" },
+      }),
       prisma.tenantOnboarding.upsert({
         where: { tenantId },
         create: { tenantId, currentStep: "COMPLETED", completedAt: new Date() },
         update: { currentStep: "COMPLETED", completedAt: new Date() },
       }),
     ]);
+    const opened = (flip as { count: number }).count > 0;
     await writeDurableSetting(tenantId, ONBOARDING_STEP_KEY, "live", (req as any).userId ?? undefined).catch(() => {});
 
+    // /complete's after-activation steps, the same calls, best-effort.
+    let billingEntity: "provisioned" | "failed" | null = null;
+    if (opened) {
+      sendActivationConfirmation(tenantId).catch((err) => {
+        console.error("Failed to send activation confirmation:", err);
+      });
+      scheduleOnboardingNudge(tenantId, "1d").catch(() => {});
+      billingEntity = await provisionBilling(tenantId).then(() => "provisioned" as const, (err) => {
+        console.error(`[Onboarding] Billing provisioning failed for tenant ${tenantId}:`, err.message);
+        return "failed" as const;
+      });
+    }
+
     const { suggestedOrderQuestion = null, ...live } = r.body.data ?? {};
-    res.json({ data: { ...live, test: { suggestedOrderQuestion } } });
+    res.json({ data: { ...live, activation: { opened, billingEntity }, test: { suggestedOrderQuestion } } });
   } catch (err: any) {
     console.error("[onboarding] go-live failed:", err?.message ?? err);
     res.status(500).json({ error: "Go-live failed", code: "GO_LIVE_FAILED" });

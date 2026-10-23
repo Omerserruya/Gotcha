@@ -222,8 +222,6 @@ export async function goLiveEmployee(input: { tenantId: string; actor?: string |
     fields.identity = { ...fields.identity, representationGuidelines: [...(fields.identity?.representationGuidelines ?? []), ...policies] };
   }
 
-  const name = (input.employeeName?.trim() || obj(discovery.recommendation).employeeName || (lang === "he" ? "נועה" : "Noa")).slice(0, 40);
-
   // ── the employee: the one go-live made before, or a new one ──
   const remembered = await readDurableSetting(tenantId, EMPLOYEE_SETTING);
   const existing = remembered
@@ -241,6 +239,9 @@ export async function goLiveEmployee(input: { tenantId: string; actor?: string |
   if (existing && lastWritten && employeeFingerprint(existing) !== lastWritten) {
     return customizedResult(tenantId, existing.id, existing.name, input.actor ?? null);
   }
+  // A name the owner typed wins; an update without one keeps the employee's
+  // current name; the recommendation or the default only names a new one.
+  const name = (input.employeeName?.trim() || existing?.name || obj(discovery.recommendation).employeeName || (lang === "he" ? "נועה" : "Noa")).slice(0, 40);
   const data = {
     ...fields,
     name,

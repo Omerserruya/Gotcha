@@ -171,6 +171,15 @@ describe("go-live", () => {
     expect(r.channels.every((c) => !c.routed)).toBe(true);
   });
 
+  it("an update without a name keeps the employee's name; a typed name renames; the default names only a new one", async () => {
+    const first = await goLiveEmployee({ tenantId: "T", employeeName: "Dana" });
+    expect(first.employee.name).toBe("Dana");
+    const again = await goLiveEmployee({ tenantId: "T" });
+    expect(again.employee).toMatchObject({ id: first.employee.id, name: "Dana" });
+    expect(H.agents[0].name).toBe("Dana");
+    expect((await goLiveEmployee({ tenantId: "T", employeeName: "Rona" })).employee.name).toBe("Rona");
+  });
+
   it("no channels and no platform are warnings, not failures", async () => {
     H.accounts = []; H.integrations = [];
     const r = await goLiveEmployee({ tenantId: "T" });
