@@ -40,7 +40,7 @@ import { parseFile, resolveMimeType } from "../services/file-parser.service";
 import { buildAgentPrompt } from "../services/prompt-builder.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { discoverBusiness, withoutWideDashes } from "../services/business-discovery.service";
-import { extractOnboarding, type ExtractKind } from "../services/onboarding-extract.service";
+import { extractOnboarding, withoutControlChars, type ExtractKind } from "../services/onboarding-extract.service";
 import { goLiveEmployee, GoLiveRefused } from "../services/onboarding-employee.service";
 import { testOnboardingEmployee, EmployeeTestRefused } from "../services/onboarding-employee-test.service";
 import { previewAnswer, previewQuestions, PREVIEW_STATUSES, QUESTION_MAX, type PreviewLocale } from "../services/onboarding-preview.service";
@@ -139,7 +139,7 @@ router.post("/onboarding-file-text", authenticate, resolveTenant, requireRole("A
     }
     let text: string;
     try {
-      text = await parseFile(file.buffer, mime);
+      text = withoutControlChars(await parseFile(file.buffer, mime));
     } catch {
       res.status(422).json({ error: "The file could not be read", code: "UNREADABLE_FILE" });
       return;
