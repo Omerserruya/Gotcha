@@ -93,7 +93,7 @@ beforeEach(() => {
   };
   H.integrations = [{ id: "ti-shop", integration: { slug: "shopify" } }];
   H.tools = [tool("t1", "get_order", "READ"), tool("t2", "track_shipment", "READ"), tool("t3", "create_refund", "WRITE"), tool("t4", "get_order_edit", "READ")];
-  H.accounts = [{ id: "ca1", channel: "WEBCHAT", displayName: "Site" }, { id: "ca2", channel: "WHATSAPP", displayName: "WA" }];
+  H.accounts = [{ id: "ca1", channel: "WEBCHAT", displayName: "Site" }, { id: "ca2", channel: "WHATSAPP", displayName: "WA", connectionStatus: "CONNECTED" }];
 });
 
 describe("go-live", () => {
@@ -191,6 +191,18 @@ describe("go-live", () => {
     const r = await goLiveEmployee({ tenantId: "T" });
     expect(r.channels.map((c) => [c.type, c.reach])).toEqual([["WEBCHAT", "waiting_for_install"], ["WHATSAPP", "live"]]);
     expect(r.warnings).not.toContain("no_reachable_channel");
+  });
+
+  it("WhatsApp, Instagram or email in ERROR or PENDING is waiting, not 'answering here'; CONNECTED is live", async () => {
+    H.accounts = [
+      { id: "w1", channel: "WHATSAPP", displayName: "WA", connectionStatus: "ERROR" },
+      { id: "i1", channel: "INSTAGRAM", displayName: "IG", connectionStatus: "PENDING" },
+      { id: "e1", channel: "EMAIL", displayName: "Mail", connectionStatus: "CONNECTED" },
+    ];
+    const r = await goLiveEmployee({ tenantId: "T" });
+    expect(r.channels.map((c) => [c.type, c.reach])).toEqual([["WHATSAPP", "waiting_for_install"], ["INSTAGRAM", "waiting_for_install"], ["EMAIL", "live"]]);
+    H.accounts = H.accounts.slice(0, 2);
+    expect((await goLiveEmployee({ tenantId: "T" })).warnings).toContain("no_reachable_channel");
   });
 
   it("ONLY a not-yet-installed widget: no_reachable_channel, never 'live on: website'", async () => {
