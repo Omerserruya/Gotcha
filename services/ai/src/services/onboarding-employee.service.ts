@@ -130,6 +130,52 @@ export function policyGuidelines(policies: any[]): string[] {
   return out.slice(0, 10);
 }
 
+export type PolicySync = "updated" | "unchanged" | "customized" | "no_employee";
+const POLICY_LINE = /^Store policy \(/;
+
+/**
+ * After the owner changes a policy (an edit, a paste, a file), the go-live
+ * employee's "Store policy" guideline lines are rewritten from the current
+ * policies, so the prompt and retrieval never disagree. Every other guideline
+ * line stays as it is. An employee edited in the studio since go-live wrote it
+ * (the fingerprint) is the owner's and is left untouched: "customized".
+ */
+export async function resyncEmployeePolicies(input: { tenantId: string; actor?: string | null }): Promise<PolicySync> {
+  const { tenantId } = input;
+  const agentId = await readDurableSetting(tenantId, EMPLOYEE_SETTING);
+  if (!agentId) return "no_employee";
+  const SELECT = {
+    id: true, name: true, role: true, departmentId: true, identity: true, goals: true, goal: true, successCriteria: true,
+    toneConfig: true, behavioral: true, persona: true, customGuardrails: true, status: true,
+  } as const;
+  const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: SELECT });
+  if (!agent) return "no_employee";
+  const lastWritten = await readDurableSetting(tenantId, EMPLOYEE_HASH_SETTING);
+  if (!lastWritten || employeeFingerprint(agent) !== lastWritten) return "customized";
+
+  const discovery = await prisma.businessDiscovery.findUnique({ where: { tenantId }, select: { knowledge: true } });
+  const lines = policyGuidelines(obj(obj(discovery?.knowledge).structured).policies);
+  const identity = obj(agent.identity);
+  const current: string[] = Array.isArray(identity.representationGuidelines) ? identity.representationGuidelines : [];
+  const next = [...current.filter((g) => !(typeof g === "string" && POLICY_LINE.test(g))), ...lines];
+  if (JSON.stringify(next) === JSON.stringify(current)) return "unchanged";
+
+  const updated = await prisma.aIAgent.update({
+    where: { id: agent.id },
+    data: { identity: { ...identity, representationGuidelines: next } as any },
+    select: SELECT,
+  });
+  await writeDurableSetting(tenantId, EMPLOYEE_HASH_SETTING, employeeFingerprint(updated), input.actor ?? undefined);
+  await logAudit({
+    tenantId,
+    actor: { type: input.actor ? "user" : "system", id: input.actor ?? undefined },
+    action: "onboarding.employee_policies_synced",
+    target: { type: "ai_agent", id: agent.id },
+    metadata: { lines: lines.length },
+  });
+  return "updated";
+}
+
 /**
  * "waiting_for_install": the channel exists but no customer can write there
  * yet - website code never seen on the site, a Shopify app embed that is off,

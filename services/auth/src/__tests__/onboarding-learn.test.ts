@@ -15,6 +15,7 @@ const H = vi.hoisted(() => ({
   connected: [] as any[],
   aiCalls: [] as any[],
   extract: {} as Record<string, any>,
+  sync: "updated" as string,
 }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
@@ -53,6 +54,7 @@ const ai: AiCall = async (tenantId, method, path, body: any) => {
     if (r === "down") return { ok: false, status: 502, body: {} };
     return { ok: true, status: 200, body: { data: r ? { ok: true, result: r } : { ok: false } } };
   }
+  if (path === "/api/ai-assist/onboarding-employee-policies") return { ok: true, status: 200, body: { data: { sync: H.sync } } };
   const m = /^\/api\/knowledge-bases\/([^/]+)\/documents(?:\/([^/]+))?$/.exec(path);
   if (m && method === "POST") {
     const doc = { id: `d${H.docs.length + 1}`, tenantId, knowledgeBaseId: m[1], ...body };
@@ -98,7 +100,7 @@ function ctx(over: any = {}) {
 
 beforeEach(() => {
   H.disc = { tenantId: "T", brand: null, business: null, knowledge: null, communication: null, technology: null, recommendation: null };
-  H.kbs = []; H.docs = []; H.aiCalls = [];
+  H.kbs = []; H.docs = []; H.aiCalls = []; H.sync = "updated";
   H.extract = { policies: POLICIES, faq: FAQ, profile: PROFILE, brand: BRAND };
   H.catalog = [
     { id: "c-shop", slug: "shopify", name: "Shopify", authType: "OAUTH2" },
@@ -330,5 +332,53 @@ describe("what the owner gives when the site blocks reading", () => {
       .rejects.toMatchObject({ code: "UNSUPPORTED_TYPE", status: 415 });
     await expect(learnFromFile("T", upload, { ai, aiFile: file({ ok: false, status: 0, body: {} }) }))
       .rejects.toMatchObject({ code: "UPLOAD_FAILED", status: 502 });
+  });
+});
+
+
+describe("the go-live employee follows every policy change", () => {
+  beforeEach(async () => { await learnStages({ ai })(ctx().ctx as any); H.aiCalls = []; });
+  const syncs = () => H.aiCalls.filter((c) => c.path === "/api/ai-assist/onboarding-employee-policies").length;
+
+  it("a policy edit re-syncs the employee in the same request and says so", async () => {
+    const v: any = await editLearned("T", { section: "policies", id: "returns", value: { terms: { windowDays: 30 } } }, ai);
+    expect(syncs()).toBe(1);
+    expect(v).toMatchObject({ employeeSync: "updated", warnings: [] });
+  });
+
+  it("removing and pasting a policy re-sync too", async () => {
+    await editLearned("T", { section: "policies", id: "returns", remove: true }, ai);
+    H.extract.policies = null;
+    await editLearned("T", { section: "policies", id: "warranty", value: { text: "One year." } }, ai);
+    expect(syncs()).toBe(2);
+  });
+
+  it("a studio-customized employee is left alone and the answer warns employee_customized", async () => {
+    H.sync = "customized";
+    const v: any = await editLearned("T", { section: "policies", id: "returns", value: { summary: "x" } }, ai);
+    expect(v).toMatchObject({ employeeSync: "customized", warnings: ["employee_customized"] });
+  });
+
+  it("a non-policy edit does not touch the employee", async () => {
+    await editLearned("T", { section: "faq", value: { q: "New?", a: "Yes" } }, ai);
+    expect(syncs()).toBe(0);
+  });
+
+  const upload = { body: Buffer.from("x"), contentType: "multipart/form-data; boundary=b" };
+  const file = (text: string) => async () => ({ ok: true, status: 200, body: { data: { filename: "f.txt", text } } });
+
+  it("a file that adds a policy re-syncs; one that adds only questions does not", async () => {
+    H.extract = { policies: { kind: "policies", policies: [{ kind: "warranty", summary: "1y", terms: {} }] }, faq: { kind: "faq", faq: [] }, profile: null };
+    expect(await learnFromFile("T", upload, { ai, aiFile: file("x") })).toMatchObject({ employeeSync: "updated" });
+    expect(syncs()).toBe(1);
+    H.extract = { policies: { kind: "policies", policies: [] }, faq: { kind: "faq", faq: [{ q: "Brand new?", a: "Yes" }] }, profile: null };
+    expect(await learnFromFile("T", upload, { ai, aiFile: file("y") })).toMatchObject({ employeeSync: "unchanged" });
+    expect(syncs()).toBe(1);
+  });
+
+  it("NOTHING_FOUND carries the kinds the file had that were already learned", async () => {
+    H.extract = { policies: { kind: "policies", policies: [{ kind: "returns", summary: "thin", terms: {} }] }, faq: { kind: "faq", faq: [] }, profile: null };
+    await expect(learnFromFile("T", upload, { ai, aiFile: file("x") }))
+      .rejects.toMatchObject({ code: "NOTHING_FOUND", status: 422, detail: { skipped: { policies: ["returns"] } } });
   });
 });

@@ -2186,7 +2186,7 @@ router.post("/learned/upload", requireRole("ADMIN"), async (req: Request, res: R
     res.json({ data: await learnFromFile(req.tenantId!, { body, contentType }) });
   } catch (err: any) {
     if (err instanceof LearnedUploadRefused) {
-      res.status(err.status).json({ error: "That file could not be used", code: err.code });
+      res.status(err.status).json({ error: "That file could not be used", code: err.code, ...err.detail });
       return;
     }
     console.error("[onboarding] learned upload failed:", err?.message ?? err);

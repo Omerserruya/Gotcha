@@ -41,7 +41,7 @@ import { buildAgentPrompt } from "../services/prompt-builder.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { discoverBusiness, withoutWideDashes } from "../services/business-discovery.service";
 import { extractOnboarding, withoutControlChars, type ExtractKind } from "../services/onboarding-extract.service";
-import { goLiveEmployee, GoLiveRefused } from "../services/onboarding-employee.service";
+import { goLiveEmployee, GoLiveRefused, resyncEmployeePolicies } from "../services/onboarding-employee.service";
 import { testOnboardingEmployee, EmployeeTestRefused } from "../services/onboarding-employee-test.service";
 import { previewAnswer, previewQuestions, PREVIEW_STATUSES, QUESTION_MAX, type PreviewLocale } from "../services/onboarding-preview.service";
 import { tuneEmployeeChat } from "../services/employee-tuning.service";
@@ -172,6 +172,20 @@ router.post("/onboarding-employee", authenticate, resolveTenant, requireRole("AD
     }
     console.error("Onboarding go-live error:", err?.message ?? err);
     res.status(500).json({ error: "Go-live failed", code: "GO_LIVE_FAILED" });
+  }
+});
+
+// Onboarding v2: after a policy edit, paste or upload, rewrite the go-live
+// employee's "Store policy" lines from the current policies (never over a
+// studio edit). Called by auth's /learned routes with the internal key.
+router.post("/onboarding-employee-policies", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const actor = (req.body ?? {}).actor;
+    const sync = await resyncEmployeePolicies({ tenantId: req.tenantId!, actor: typeof actor === "string" ? actor : null });
+    res.json({ data: { sync } });
+  } catch (err: any) {
+    console.error("Onboarding employee policy sync error:", err?.message ?? err);
+    res.status(500).json({ error: "Policy sync failed", code: "POLICY_SYNC_FAILED" });
   }
 });
 
