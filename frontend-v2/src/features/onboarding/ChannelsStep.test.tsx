@@ -237,20 +237,19 @@ describe('★★ step 3: where customers write - connect here, or skip', () => {
     });
     const withShop = (over: object) => ({ ...code('not_seen'), shopify: [shop(over)] });
 
-    it('off in the theme: the editor link first, then "or paste the code"; not connected', () => {
+    it('★★ off in the theme: ONE action (the editor), the code under a quiet toggle, the line naming the theme', () => {
       show({ install: withShop({ status: 'not_enabled' }) as never });
-      const link = screen.getByTestId('channels-shop-theme-sh1');
-      expect(link).toHaveAttribute(
+      expect(screen.getByTestId('channels-shop-theme-sh1')).toHaveAttribute(
         'href',
         'https://admin.shopify.com/store/avivco/themes/current/editor?context=apps',
       );
-      expect(screen.getByTestId('channels-website')).toHaveTextContent(
-        'Or paste the code into your site:',
+      expect(screen.queryByTestId('channels-code-snippet')).toBeNull();
+      expect(screen.getByTestId('channels-shop-waiting-WEBCHAT')).toHaveTextContent(
+        'Once you turn it on in the theme, it starts answering.',
       );
-      expect(
-        link.compareDocumentPosition(screen.getByTestId('channels-code-snippet')) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+      expect(screen.queryByTestId('channels-code-ready-WEBCHAT')).toBeNull();
+      fireEvent.click(screen.getByTestId('channels-show-code'));
+      expect(screen.getByTestId('channels-code-snippet')).toBeInTheDocument();
       expect(screen.getByTestId('channels-next').className).toMatch(/secondary/);
     });
 
@@ -261,6 +260,9 @@ describe('★★ step 3: where customers write - connect here, or skip', () => {
       );
       expect(screen.queryByTestId('channels-shop-theme-sh1')).toBeNull();
       expect(screen.getByTestId('channels-connected-WEBCHAT')).toBeInTheDocument();
+      // Live: no waiting line, and the code is plain to see (no toggle).
+      expect(screen.queryByTestId('channels-shop-waiting-WEBCHAT')).toBeNull();
+      expect(screen.queryByTestId('channels-show-code')).toBeNull();
     });
 
     it('★ enabled but its theme embed never seen: NOT connected, the editor link stays', () => {

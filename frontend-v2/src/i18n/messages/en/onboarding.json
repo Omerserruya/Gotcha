@@ -382,7 +382,8 @@
     "shopTheme": "Turn the chat on in Shopify's theme",
     "shopThemeHow": "In the theme editor: App embeds, switch GOTCHA on, and save.",
     "shopWaiting": "Waiting for the first visit to your shop. The status changes by itself.",
-    "orCode": "Or paste the code into your site:"
+    "shopNotLive": "We haven't seen the chat in your shop yet. Once you turn it on in the theme, it starts answering.",
+    "pasteYourself": "Paste the code yourself"
   },
   "live": {
     "headline": "Check, then go live.",

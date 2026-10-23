@@ -33,6 +33,11 @@ type Standing = 'connected' | 'codeReady' | 'none';
 type Shop = WidgetInstall['shopify'][number];
 /** A Shopify shop's chat is live: the app is enabled and its theme embed loaded recently. */
 const shopLive = (shop: Shop) => shop.status === 'active' && shop.embedLive;
+/** A shop not live yet whose theme can switch the chat on: the one way offered. */
+const themePath = (install: WidgetInstall | null) =>
+  (install?.shopify ?? []).some(
+    (shop) => shop.status !== 'uninstalled' && !shopLive(shop) && shop.themeEditorUrl !== null,
+  );
 
 /**
  * Step 3 - channels: where the business's customers write. Each one is
@@ -108,7 +113,12 @@ export function ChannelsStep({
                   </span>
                 ) : null}
               </span>
-              {state === 'codeReady' ? (
+              {/* The waiting line names the way offered: the theme toggle, or the code. */}
+              {channel === 'WEBCHAT' && state !== 'connected' && themePath(install) ? (
+                <p className={styles.quiet} data-testid={`channels-shop-waiting-${channel}`}>
+                  {t('shopNotLive')}
+                </p>
+              ) : state === 'codeReady' ? (
                 <p className={styles.quiet} data-testid={`channels-code-ready-${channel}`}>
                   {t('codeReady')}
                 </p>
@@ -194,6 +204,7 @@ export function ChannelsStep({
  */
 function Website({ install }: { readonly install: WidgetInstall | null }) {
   const t = useTranslations('onboarding.channels');
+  const [showCode, setShowCode] = useState(false);
   if (install === null) {
     return (
       <p className={styles.why} data-testid="channels-code-unread">
@@ -236,8 +247,17 @@ function Website({ install }: { readonly install: WidgetInstall | null }) {
           )}
         </div>
       ))}
-      {shops.length > 0 ? <span className={styles.quiet}>{t('orCode')}</span> : null}
-      {install.code ? (
+      {/* One clear action: with the theme path offered, the code waits under a quiet toggle. */}
+      {themePath(install) && !showCode ? (
+        <button
+          type="button"
+          className={styles.textButton}
+          onClick={() => setShowCode(true)}
+          data-testid="channels-show-code"
+        >
+          {t('pasteYourself')}
+        </button>
+      ) : install.code ? (
         <>
           <span className={styles.quiet}>{t('pasteCode')}</span>
           {/* The server's snippet, verbatim; it scrolls in its own box and copies whole. */}
