@@ -1,0 +1,161 @@
+/**
+ * Onboarding go-live (2026-10-23): the first employee, hired from what the scan
+ * learned, idempotent, READ order tools only, routing that never overwrites
+ * the owner's playbook. In-memory rows; no model is called.
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const H = vi.hoisted(() => ({
+  setting: new Map<string, string>(),
+  agents: [] as any[],
+  kbLinks: [] as any[],
+  perms: [] as any[],
+  canvas: null as any,
+  depts: [] as any[],
+  audits: [] as any[],
+  discovery: null as any,
+  tools: [] as any[],
+  integrations: [] as any[],
+  accounts: [] as any[],
+}));
+
+vi.mock("@chatcenter/shared", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  const pick = (row: any, select: any) => (select ? Object.fromEntries(Object.keys(select).map((k) => [k, row[k]])) : row);
+  return {
+    ...actual,
+    readDurableSetting: async (_t: string, k: string) => H.setting.get(k) ?? null,
+    writeDurableSetting: async (_t: string, k: string, v: string) => { H.setting.set(k, v); },
+    defaultIntegrationAccess: async () => ["shopify"],
+    prisma: {
+      tenant: { findUnique: async () => ({ name: "Acme" }) },
+      businessDiscovery: { findUnique: async () => H.discovery },
+      businessProfile: { findUnique: async () => null },
+      department: {
+        findFirst: async () => H.depts[0] ?? null,
+        create: async ({ data }: any) => { const d = { id: "dep1", slaTarget: null, autoGreetingEnabled: false, aiSuggestionsEnabled: true, escalateOnSlaBreach: false, autoCloseMinutes: null, ...data }; H.depts.push(d); return d; },
+      },
+      aIAgent: {
+        findFirst: async ({ where }: any) => H.agents.find((a) => a.id === where.id && a.tenantId === where.tenantId) ?? null,
+        create: async ({ data, select }: any) => { const a = { id: `ag${H.agents.length + 1}`, ...data }; H.agents.push(a); return pick(a, select); },
+        update: async ({ where, data, select }: any) => { const a = H.agents.find((x) => x.id === where.id); Object.assign(a, data); return pick(a, select); },
+      },
+      knowledgeBase: { findMany: async () => [{ id: "kb1" }, { id: "kb2" }] },
+      aIAgentKnowledge: {
+        upsert: async ({ create }: any) => { if (!H.kbLinks.some((l) => l.aiAgentId === create.aiAgentId && l.knowledgeBaseId === create.knowledgeBaseId)) H.kbLinks.push(create); },
+      },
+      tenantIntegration: { findMany: async () => H.integrations },
+      tenantTool: {
+        findMany: async ({ where }: any) => H.tools.filter((t) => t.tenantIntegrationId === where.tenantIntegrationId && t.isEnabled
+          && where.catalogTool.slug.in.includes(t.catalogTool.slug) && t.catalogTool.category === where.catalogTool.category),
+      },
+      agentToolPermission: {
+        findFirst: async ({ where }: any) => H.perms.find((p) => p.aiAgentId === where.aiAgentId && p.tenantToolId === where.tenantToolId) ?? null,
+        create: async ({ data }: any) => { H.perms.push({ id: `p${H.perms.length}`, ...data }); },
+      },
+      flowCanvas: {
+        findUnique: async () => H.canvas,
+        upsert: async ({ create, update }: any) => { H.canvas = H.canvas ? { ...H.canvas, ...update } : create; },
+      },
+      channelAccount: { findMany: async () => H.accounts },
+      auditLog: { create: async ({ data }: any) => { H.audits.push(data); } },
+    },
+  };
+});
+vi.mock("../services/employee-reach.service", () => ({
+  whereEmployeeAnswers: async (_t: string, agentId: string) => {
+    const nodes = H.canvas?.nodes ?? [];
+    const routes = nodes.some((n: any) => n.type === "route_target" && n.data?.targetId === agentId);
+    return H.accounts.map((a) => ({ channel: a.channel, reach: routes ? "always" : "never", accounts: [] }));
+  },
+}));
+
+import { goLiveEmployee, policyGuidelines, EMPLOYEE_SETTING } from "../services/onboarding-employee.service";
+
+const POLICIES = [{ kind: "returns", summary: "Return within 30 days.", terms: { windowDays: 30, exchange: { allowed: true, how: "form" } } }];
+const tool = (id: string, slug: string, category: string, ti = "ti-shop") => ({ id, tenantIntegrationId: ti, isEnabled: true, catalogTool: { slug, category } });
+
+beforeEach(() => {
+  H.setting = new Map(); H.agents = []; H.kbLinks = []; H.perms = []; H.canvas = null; H.depts = []; H.audits = [];
+  H.discovery = {
+    status: "COMPLETE", business: { name: "Acme", industry: "Fashion", summary: "Clothes" }, brand: { voice: "warm" },
+    knowledge: { structured: { lang: "he", policies: POLICIES } }, recommendation: { employeeName: "מאיה" }, technology: {}, primaryGoal: null,
+  };
+  H.integrations = [{ id: "ti-shop", integration: { slug: "shopify" } }];
+  H.tools = [tool("t1", "get_order", "READ"), tool("t2", "track_shipment", "READ"), tool("t3", "create_refund", "WRITE"), tool("t4", "get_order_edit", "READ")];
+  H.accounts = [{ id: "ca1", channel: "WEBCHAT", displayName: "Site" }, { id: "ca2", channel: "WHATSAPP", displayName: "WA" }];
+});
+
+describe("go-live", () => {
+  it("hires the employee from what was learned: its name, ACTIVE, a department, the policy terms in its guidelines", async () => {
+    const r = await goLiveEmployee({ tenantId: "T", actor: "u1" });
+    expect(r).toMatchObject({ created: true, employee: { name: "מאיה", status: "ACTIVE" }, knowledgeBases: 2, policiesApplied: 1, warnings: [] });
+    const a = H.agents[0];
+    expect(a).toMatchObject({ status: "ACTIVE", role: "customer_support", departmentId: "dep1", builderStep: null, integrationAccess: ["shopify"] });
+    expect(a.identity.representationGuidelines.join("\n")).toContain("Store policy (returns): Return within 30 days. [window 30 days; exchange allowed (form)]");
+    expect(H.depts[0]).toMatchObject({ name: "שירות לקוחות" });
+    expect(H.setting.get(EMPLOYEE_SETTING)).toBe(a.id);
+    expect(H.kbLinks.map((l) => l.knowledgeBaseId)).toEqual(["kb1", "kb2"]);
+    expect(H.audits).toEqual([expect.objectContaining({ action: "onboarding.go_live", targetId: a.id })]);
+  });
+
+  it("a second press updates the SAME employee: no second agent, no duplicate grants or links", async () => {
+    const first = await goLiveEmployee({ tenantId: "T" });
+    const second = await goLiveEmployee({ tenantId: "T", employeeName: "נועה" });
+    expect(second.employee.id).toBe(first.employee.id);
+    expect(second.created).toBe(false);
+    expect(H.agents).toHaveLength(1);
+    expect(H.agents[0].name).toBe("נועה");
+    expect(H.perms).toHaveLength(2);
+    expect(H.kbLinks).toHaveLength(2);
+  });
+
+  it("grants ONLY the platform's order tools the catalogue marks READ - never a write, never an unlisted read", async () => {
+    const r = await goLiveEmployee({ tenantId: "T" });
+    expect(r.tools).toEqual({ platform: "shopify", granted: ["shopify.get_order", "shopify.track_shipment"] });
+    expect(H.perms.map((p) => p.tenantToolId).sort()).toEqual(["t1", "t2"]);
+  });
+
+  it("an owner's explicit 'no' on a tool stays a no", async () => {
+    H.perms.push({ id: "px", tenantId: "T", aiAgentId: "ag1", tenantToolId: "t1", isAllowed: false });
+    const r = await goLiveEmployee({ tenantId: "T" });
+    expect(H.perms.find((p) => p.tenantToolId === "t1").isAllowed).toBe(false);
+    expect(r.tools.granted).toEqual(["shopify.track_shipment"]);
+  });
+
+  it("an empty playbook routes every channel to the employee", async () => {
+    const r = await goLiveEmployee({ tenantId: "T" });
+    expect(H.canvas.nodes.map((n: any) => n.type)).toEqual(["start", "route_target"]);
+    expect(H.canvas.nodes[1].data).toEqual({ routeType: "agent", targetId: r.employee.id });
+    expect(r.channels.every((c) => c.routed)).toBe(true);
+  });
+
+  it("an owner's customized playbook is LEFT AS IS, and the response says so", async () => {
+    const custom = { nodes: [{ id: "start-1", type: "start" }, { id: "kw", type: "keyword_trigger" }, { id: "r", type: "route_target", data: { routeType: "human" } }] };
+    H.canvas = JSON.parse(JSON.stringify(custom));
+    const r = await goLiveEmployee({ tenantId: "T" });
+    expect(H.canvas).toEqual(custom);
+    expect(r.warnings).toContain("playbook_customized");
+    expect(r.channels.every((c) => !c.routed)).toBe(true);
+  });
+
+  it("no channels and no platform are warnings, not failures", async () => {
+    H.accounts = []; H.integrations = [];
+    const r = await goLiveEmployee({ tenantId: "T" });
+    expect(r.warnings).toEqual(["no_channels", "no_platform_connected"]);
+    expect(r.tools).toEqual({ platform: null, granted: [] });
+  });
+
+  it("refuses before the scan finished: NOT_LEARNED, nothing created", async () => {
+    H.discovery = { ...H.discovery, status: "SCANNING" };
+    await expect(goLiveEmployee({ tenantId: "T" })).rejects.toMatchObject({ code: "NOT_LEARNED" });
+    expect(H.agents).toEqual([]);
+  });
+});
+
+describe("policy guidelines", () => {
+  it("only stated terms are written; a policy with no summary is skipped", () => {
+    expect(policyGuidelines([{ kind: "shipping", summary: "Ships fast.", terms: { shipping: { times: "2-3 days", freeOver: 300 } } }, { kind: "x", summary: "" }]))
+      .toEqual(["Store policy (shipping): Ships fast. [shipping 2-3 days; free over 300]"]);
+  });
+});

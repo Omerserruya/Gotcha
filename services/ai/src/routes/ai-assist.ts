@@ -39,6 +39,7 @@ import { buildAgentPrompt } from "../services/prompt-builder.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { discoverBusiness, withoutWideDashes } from "../services/business-discovery.service";
 import { extractOnboarding, type ExtractKind } from "../services/onboarding-extract.service";
+import { goLiveEmployee, GoLiveRefused } from "../services/onboarding-employee.service";
 import { previewAnswer, previewQuestions, PREVIEW_STATUSES, QUESTION_MAX, type PreviewLocale } from "../services/onboarding-preview.service";
 import { tuneEmployeeChat } from "../services/employee-tuning.service";
 
@@ -100,6 +101,29 @@ router.post("/onboarding-extract", authenticate, resolveTenant, requireRole("ADM
   } catch (err: any) {
     console.error("Onboarding extract error:", err?.message ?? err);
     res.status(500).json({ error: "Extraction failed", code: "EXTRACT_FAILED" });
+  }
+});
+
+// Onboarding v2 go-live: hire (or update) the first employee from what the scan
+// learned, give it every knowledge base and the platform's READ order tools,
+// route the channels to it and set it live. Idempotent. Called by auth's
+// POST /api/onboarding/go-live with the internal key; sends nothing.
+router.post("/onboarding-employee", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const { employeeName, actor } = (req.body ?? {}) as { employeeName?: string; actor?: string };
+    const result = await goLiveEmployee({
+      tenantId: req.tenantId!,
+      actor: typeof actor === "string" ? actor : null,
+      employeeName: typeof employeeName === "string" ? employeeName : null,
+    });
+    res.json({ data: result });
+  } catch (err: any) {
+    if (err instanceof GoLiveRefused) {
+      res.status(409).json({ error: "Cannot go live yet", code: err.code });
+      return;
+    }
+    console.error("Onboarding go-live error:", err?.message ?? err);
+    res.status(500).json({ error: "Go-live failed", code: "GO_LIVE_FAILED" });
   }
 });
 

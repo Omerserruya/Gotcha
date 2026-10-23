@@ -25,14 +25,14 @@ interface PersonaData {
   customAttributes?: Record<string, string>;
 }
 
-interface BusinessProfileData {
+export interface BusinessProfileData {
   organizationName: string;
   industry: string;
   businessDescription: string;
   businessPriority: string;
 }
 
-interface DepartmentData {
+export interface DepartmentData {
   id: string;
   name: string;
   slaTarget: number | null;
@@ -43,7 +43,7 @@ interface DepartmentData {
   autoCloseMinutes: number | null;
 }
 
-function generateIdentityBlock(profile: BusinessProfileData, dept: DepartmentData) {
+export function generateIdentityBlock(profile: BusinessProfileData, dept: DepartmentData) {
   const roleMap: Record<string, string> = {
     "Sales": "Sales Representative",
     "Customer Support": "Customer Support Agent",
@@ -318,44 +318,23 @@ async function buildDiscoveryEnrichment(tenantId: string): Promise<DiscoveryEnri
 }
 
 /**
- * Generates a structured AI Employee config for a department.
- * Creates or updates an AIAgent record and links it to the department via a RouterRule.
- * If an existing AIAgent is provided via agentId, updates that agent instead.
+ * The deterministic employee fields: identity, goals, tone, behaviour and
+ * persona from the business profile and department, enriched with the
+ * discovered brand. No model call. Shared by the legacy generator below and
+ * the onboarding v2 go-live (onboarding-employee.service), so both hire the
+ * same employee from the same facts.
  */
-export async function generateAgentConfig(
-  tenantId: string,
-  departmentId: string,
-  personaOverride?: PersonaData,
-  agentId?: string,
-): Promise<string> {
-  const [profile, department, discovery] = await Promise.all([
-    prisma.businessProfile.findUnique({ where: { tenantId } }),
-    prisma.department.findUnique({ where: { id: departmentId } }),
-    prisma.businessDiscovery.findUnique({ where: { tenantId }, select: { primaryGoal: true } }).catch(() => null),
-  ]);
-
-  if (!profile || !department) {
-    throw new Error("Business profile and department are required for agent config generation");
-  }
-
-  const profileData: BusinessProfileData = {
-    organizationName: profile.organizationName,
-    industry: profile.industry,
-    businessDescription: profile.businessDescription,
-    businessPriority: profile.businessPriority,
-  };
-
-  const deptData: DepartmentData = {
-    id: department.id,
-    name: department.name,
-    slaTarget: department.slaTarget,
-    autoGreetingEnabled: department.autoGreetingEnabled,
-    autoRepliesEnabled: department.autoRepliesEnabled,
-    aiSuggestionsEnabled: department.aiSuggestionsEnabled,
-    escalateOnSlaBreach: department.escalateOnSlaBreach,
-    autoCloseMinutes: department.autoCloseMinutes,
-  };
-
+export async function buildAgentFields(input: {
+  tenantId: string;
+  profileData: BusinessProfileData;
+  deptData: DepartmentData;
+  primaryGoal?: string | null;
+  extraGoals?: string[];
+  personaOverride?: PersonaData;
+}) {
+  const { tenantId, profileData, deptData, personaOverride } = input;
+  const discovery = { primaryGoal: input.primaryGoal ?? null };
+  const profile = { businessGoals: input.extraGoals ?? [] };
   const config = {
     identity: generateIdentityBlock(profileData, deptData),
     goals: generateGoalsBlock(profileData, deptData, discovery?.primaryGoal),
@@ -415,6 +394,59 @@ export async function generateAgentConfig(
     // how long it may run unattended).
     ...aiAgentCreationDefaults(),
   };
+
+  return agentData;
+}
+
+/**
+ * Generates a structured AI Employee config for a department.
+ * Creates or updates an AIAgent record and links it to the department via a RouterRule.
+ * If an existing AIAgent is provided via agentId, updates that agent instead.
+ */
+export async function generateAgentConfig(
+  tenantId: string,
+  departmentId: string,
+  personaOverride?: PersonaData,
+  agentId?: string,
+): Promise<string> {
+  const [profile, department, discovery] = await Promise.all([
+    prisma.businessProfile.findUnique({ where: { tenantId } }),
+    prisma.department.findUnique({ where: { id: departmentId } }),
+    prisma.businessDiscovery.findUnique({ where: { tenantId }, select: { primaryGoal: true } }).catch(() => null),
+  ]);
+
+  if (!profile || !department) {
+    throw new Error("Business profile and department are required for agent config generation");
+  }
+
+  const profileData: BusinessProfileData = {
+    organizationName: profile.organizationName,
+    industry: profile.industry,
+    businessDescription: profile.businessDescription,
+    businessPriority: profile.businessPriority,
+  };
+
+  const deptData: DepartmentData = {
+    id: department.id,
+    name: department.name,
+    slaTarget: department.slaTarget,
+    autoGreetingEnabled: department.autoGreetingEnabled,
+    autoRepliesEnabled: department.autoRepliesEnabled,
+    aiSuggestionsEnabled: department.aiSuggestionsEnabled,
+    escalateOnSlaBreach: department.escalateOnSlaBreach,
+    autoCloseMinutes: department.autoCloseMinutes,
+  };
+
+  const agentData = await buildAgentFields({
+    tenantId,
+    profileData,
+    deptData,
+    primaryGoal: discovery?.primaryGoal ?? null,
+    extraGoals: Array.isArray((profile as any).businessGoals)
+      ? ((profile as any).businessGoals as unknown[]).filter((x): x is string => typeof x === "string")
+      : [],
+    personaOverride,
+  });
 
   let agent;
   if (agentId) {

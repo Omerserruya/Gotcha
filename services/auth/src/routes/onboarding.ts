@@ -14,7 +14,7 @@ import {
   type DiscoverySignals,
 } from "../services/site-crawl.service";
 import { callDiscoverBusiness, persistCrawlReach, systemLanguage, crawlPagesForProjection, thinTopicsToRetire } from "../services/business-scan.service";
-import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, projectReadinessAnswers, withoutWideDashes, clampGuardrails, type SkippedTopic } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireRole, validate, readDurableSetting, writeDurableSetting, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, projectReadinessAnswers, withoutWideDashes, clampGuardrails, type SkippedTopic } from "@chatcenter/shared";
 import { applyProjection, type SyncReport } from "../services/onboarding-knowledge.service";
 import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
 import { inviteUser, resendSetupLink } from "../services/invitation.service";
@@ -26,7 +26,7 @@ import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
 import { readJob, startJob, reopenJob, isLive, viewOf } from "../services/onboarding-discover/job-store";
 import { enqueueDiscover } from "../services/onboarding-discover/queue";
 import { readLearned, editLearned, LearnedEditRefused, type LearnedEdit } from "../services/onboarding-discover/learned";
-import { integrationSuggestions } from "../services/onboarding-discover/learn";
+import { integrationSuggestions, aiInternal } from "../services/onboarding-discover/learn";
 import { syncDiscoveryRecommendations, listRecommendations, setRecommendationStatus, addStoreInspectionRecs, reconcileConnectSystemRecs } from "../services/recommendations.service";
 import OpenAI from "openai";
 
@@ -1927,6 +1927,90 @@ router.post("/discover/retry", requireRole("ADMIN"), async (req: Request, res: R
   } catch (err: any) {
     console.error("[onboarding] discover retry failed:", err?.message ?? err);
     res.status(500).json({ error: "Could not retry the scan", code: "DISCOVER_RETRY_FAILED" });
+  }
+});
+
+// ─── Where the owner is in the v2 setup (exact resume) ───────────────────────
+//
+// A durable tenant setting, not a column: the screen saves the step it reached
+// and reads it back after a reload. The screen still checks it against what
+// the server can prove (a scan, a connection), so a stale value only ever
+// sends the owner a step back, never past something unfinished.
+
+export const ONBOARDING_STEPS = ["website", "reading", "systems", "channels", "live", "done"] as const;
+export const ONBOARDING_STEP_KEY = "onboarding:step";
+
+router.get("/step", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const step = await readDurableSetting(req.tenantId!, ONBOARDING_STEP_KEY);
+    res.json({ data: { step: (ONBOARDING_STEPS as readonly string[]).includes(step ?? "") ? step : null } });
+  } catch (err: any) {
+    console.error("[onboarding] step read failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not read the setup step", code: "STEP_READ_FAILED" });
+  }
+});
+
+router.patch("/step", requireRole("ADMIN"), validate(z.object({ step: z.enum(ONBOARDING_STEPS) }).strict()), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { step } = req.body as { step: (typeof ONBOARDING_STEPS)[number] };
+    await writeDurableSetting(req.tenantId!, ONBOARDING_STEP_KEY, step, (req as any).userId ?? undefined);
+    res.json({ data: { step } });
+  } catch (err: any) {
+    console.error("[onboarding] step write failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not save the setup step", code: "STEP_WRITE_FAILED" });
+  }
+});
+
+// ─── Go live (onboarding v2) ─────────────────────────────────────────────────
+//
+// One press: the first employee is hired from what the scan learned (in
+// services/ai, deterministic, idempotent), the channels route to it, and the
+// workspace opens - the same tenant and tracker writes the legacy /complete
+// makes, and the same refusal while a paid plan is unpaid. Sends nothing.
+
+const goLiveSchema = z.object({ confirm: z.literal(true), employeeName: z.string().trim().min(1).max(40).optional() }).strict();
+
+router.post("/go-live", requireRole("ADMIN"), validate(goLiveSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tenantId = req.tenantId!;
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true } });
+    if (!tenant) {
+      res.status(404).json({ error: "Tenant not found", code: "TENANT_NOT_FOUND" });
+      return;
+    }
+    // The paid plan's first payment opens the workspace, never this button.
+    if (tenant.status === "PENDING_PAYMENT") {
+      res.status(409).json({ error: "The workspace opens once the plan is paid", code: "TENANT_AWAITING_PAYMENT" });
+      return;
+    }
+
+    const r = await aiInternal(tenantId, "POST", "/api/ai-assist/onboarding-employee", {
+      employeeName: (req.body as { employeeName?: string }).employeeName,
+      actor: (req as any).userId ?? null,
+    });
+    if (r.status === 409) {
+      res.status(409).json({ error: "Cannot go live yet", code: r.body?.code ?? "NOT_LEARNED" });
+      return;
+    }
+    if (!r.ok) {
+      res.status(502).json({ error: "The employee could not be set up; nothing went live", code: "GO_LIVE_FAILED" });
+      return;
+    }
+
+    await prisma.$transaction([
+      prisma.tenant.update({ where: { id: tenantId }, data: { status: "ACTIVE" } }),
+      prisma.tenantOnboarding.upsert({
+        where: { tenantId },
+        create: { tenantId, currentStep: "COMPLETED", completedAt: new Date() },
+        update: { currentStep: "COMPLETED", completedAt: new Date() },
+      }),
+    ]);
+    await writeDurableSetting(tenantId, ONBOARDING_STEP_KEY, "live", (req as any).userId ?? undefined).catch(() => {});
+
+    res.json({ data: { ...r.body.data, test: { suggestedOrderQuestion: null } } });
+  } catch (err: any) {
+    console.error("[onboarding] go-live failed:", err?.message ?? err);
+    res.status(500).json({ error: "Go-live failed", code: "GO_LIVE_FAILED" });
   }
 });
 
