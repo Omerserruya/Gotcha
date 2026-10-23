@@ -110,22 +110,6 @@ export async function loadDiscovery(): Promise<Discovery | null> {
   }
 }
 
-export interface ReadingRead {
-  readonly discovery: Discovery | null;
-  /** `null`: Knowledge could not be read - not "nothing found". */
-  readonly facts: readonly ScannedFact[] | null;
-}
-
-/**
- * 00e: the read's row, and the pages it has turned into Knowledge so far.
- * Throws when the row is unread: on 00e that is "couldn't look", never "it
- * has not started".
- */
-export async function loadReading(): Promise<ReadingRead> {
-  const [discovery, facts] = await Promise.all([readDiscovery(), loadScannedFacts()]);
-  return { discovery, facts };
-}
-
 export async function loadScannedFacts(): Promise<readonly ScannedFact[] | null> {
   try {
     const sources = await serverApi().get({

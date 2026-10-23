@@ -28,6 +28,7 @@
     "readThis": "Read this one",
     "back": "Back to {host}",
     "notAnAddress": "That doesn't look like a website address. Try something like yourbusiness.com",
+    "startFailed": "Reading couldn't start. Try again in a moment.",
     "noWebsite": "No website? Start from something else",
     "sources": {
       "instagram": {
@@ -48,35 +49,8 @@
   },
   "reading": {
     "headline": "It reads your website so you don't have to explain it.",
-    "lead": {
-      "starting": "Starting…",
-      "reading": "About two minutes. You can watch, or go make coffee",
-      "done": "Done. Here's what it found",
-      "failed": "It couldn't finish reading the site. You can try again, or try another address",
-      "notStarted": "The read hasn't started. Try again from your website"
-    },
-    "foot": "You can close this tab, it keeps going",
-    "title": "Reading <host></host>",
-    "titleNoHost": "Reading your website",
-    "progress": "How far the read is",
-    "tracks": {
-      "pages": "Pages",
-      "products": "Products",
-      "policies": "Policies",
-      "places": "Places",
-      "voice": "Voice"
-    },
-    "ofPages": "of {requested}",
-    "counting": "Counting as it reads",
-    "notCounted": "Not counted separately yet",
-    "found": "Found just now",
-    "factsSoon": "Facts appear here as pages are turned into knowledge",
-    "nothingWritten": "Nothing was added to Knowledge from this read",
-    "factsUnread": "Couldn't read Knowledge just now",
-    "notFound": "not found anywhere",
-    "missed": "Couldn't check just now. Trying again",
-    "next": "See what it learned",
-    "again": "Back to your website"
+    "lead": "Every line here is what it is really doing, right now.",
+    "foot": "You can close this tab, it keeps going"
   },
   "learned": {
     "headline": "What it knows, and how it will sound.",
@@ -250,5 +224,155 @@
     "why": "In preview nothing here changes your workspace",
     "banner": "A preview of onboarding. Your workspace is live, and nothing here changes it",
     "home": "Back to Home"
+  },
+  "scan": {
+    "title": "Reading <ltr>{host}</ltr>",
+    "titleNoHost": "Reading your website",
+    "status": {
+      "QUEUED": "Starting to read…",
+      "RUNNING": "{stage}",
+      "COMPLETE": "Done. Here is what we learned.",
+      "FAILED": "Reading stopped.",
+      "STALLED": "Reading stopped responding."
+    },
+    "stages": {
+      "detect_platform": "Finding what the site is built on",
+      "harvest_platform": "Reading the store",
+      "sitemap": "Mapping the site's pages",
+      "read_pages": "Reading the pages",
+      "extract": "Putting what we found in order",
+      "write_knowledge": "Saving it to Knowledge",
+      "suggest_integrations": "Checking which systems to connect",
+      "done": "Finishing up"
+    },
+    "counts": "{read} of {planned, plural, one {# page} other {# pages}} read",
+    "countsBlocked": "{count, plural, one {# page refused} other {# pages refused}} automatic reading",
+    "found": "Found so far",
+    "foundNothingYet": "Nothing found yet. It comes in a few seconds.",
+    "chips": {
+      "products": "{count, plural, one {# product} other {# products}}",
+      "productsSampled": "{count, plural, one {# product sampled} other {# products sampled}}",
+      "faq": "{count, plural, one {# FAQ} other {# FAQs}}",
+      "contact": "Contact details",
+      "hours": "Opening hours",
+      "brand": "Writing style",
+      "policy": {
+        "returns": "Returns policy",
+        "exchange": "Exchange policy",
+        "shipping": "Shipping policy",
+        "refund": "Refund policy",
+        "warranty": "Warranty",
+        "terms": "Terms of use",
+        "privacy": "Privacy policy",
+        "other": "Another policy"
+      }
+    },
+    "feedLabel": "What is happening now",
+    "feed": {
+      "job": {
+        "started": "Starting to read <ltr>{domain}</ltr>",
+        "done": "Finished reading the site",
+        "failed": "{code, select, site_unreachable {We couldn't reach the site} nothing_learned {We couldn't learn anything from the site} other {A step failed}}",
+        "retrying": "Carrying on from where it stopped"
+      },
+      "site": {
+        "opening": "Opening <ltr>{domain}</ltr>",
+        "unreadable": "{reason, select, same_page_everywhere {Every page looks the same, probably a password page} other {We couldn't read the site's pages}}",
+        "blocked": "The site refuses automatic reading"
+      },
+      "platform": {
+        "detected": "Found <ltr>{platform}</ltr>",
+        "none": "No known store platform found"
+      },
+      "products": {
+        "reading": "Reading the products from <ltr>{platform}</ltr>",
+        "found": "Found {count, plural, one {# product} other {# products}}{more, select, true {, and there are more} other {}}",
+        "feed_unavailable": "The store's product list is closed, so we'll read a few product pages",
+        "sampled": "Read {count, plural, one {# product page} other {# product pages}} as a sample"
+      },
+      "sitemap": {
+        "reading": "Mapping the site's pages"
+      },
+      "pages": {
+        "planned": "{count, plural, one {# page} other {# pages}} to read{fromSitemap, select, false {, from the site's links} other {}}",
+        "read": "{count, plural, one {Read # page} other {Read # pages}}",
+        "blocked": "{blocked} of {of} pages refused us; the rest were read"
+      },
+      "page": {
+        "reading": "Reading a page about {kind}"
+      },
+      "tool": {
+        "detected": "Saw <ltr>{tool}</ltr> on the site"
+      },
+      "extract": {
+        "reading": "Putting {kind} in order",
+        "none": "No pages about {kind}",
+        "failed": "Couldn't put {kind} in order",
+        "empty": "No details found about {kind}"
+      },
+      "policy": {
+        "found": "Found the {kind}"
+      },
+      "faq": {
+        "found": "Found {count, plural, one {# FAQ} other {# FAQs}}"
+      },
+      "profile": {
+        "found": "Found the business details"
+      },
+      "brand": {
+        "found": "Understood your writing style"
+      },
+      "knowledge": {
+        "written": "Saved to Knowledge: <user>{title}</user>",
+        "write_failed": "Couldn't save part of what we found"
+      },
+      "integrations": {
+        "suggested": "{count, plural, one {Found # system worth connecting} other {Found # systems worth connecting}}"
+      }
+    },
+    "kinds": {
+      "page": {
+        "policy": "a policy",
+        "returns": "returns",
+        "shipping": "shipping",
+        "faq": "FAQs",
+        "about": "the business",
+        "contact": "contact",
+        "help": "help",
+        "page": "the site",
+        "product": "a product",
+        "other": "the site"
+      },
+      "policy": {
+        "returns": "returns policy",
+        "exchange": "exchange policy",
+        "shipping": "shipping policy",
+        "refund": "refund policy",
+        "warranty": "warranty",
+        "terms": "terms of use",
+        "privacy": "privacy policy",
+        "other": "another policy"
+      },
+      "extract": {
+        "policies": "the policies",
+        "faq": "the FAQs",
+        "profile": "the business details",
+        "brand": "the writing style"
+      }
+    },
+    "failed": {
+      "site_unreachable": "We couldn't reach the site. Check the address is right and the site is up.",
+      "stage_failed": "A step failed. You can carry on from where it stopped.",
+      "nothing_learned": "We couldn't learn anything from the site.",
+      "other": "Reading stopped. You can carry on from where it stopped.",
+      "stalled": "Reading stopped responding. You can carry on from where it stopped."
+    },
+    "blocked": "The site refuses automatic reading. We'll carry on with what we found, and at the check step you can upload files or paste your policies.",
+    "retry": "Carry on from where it stopped",
+    "retrying": "Carrying on…",
+    "retryFailed": "Couldn't carry on. Try again in a moment.",
+    "change": "Use another address",
+    "next": "Continue",
+    "missed": "Couldn't check just now. Trying again in a second."
   }
 }

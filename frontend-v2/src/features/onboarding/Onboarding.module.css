@@ -523,6 +523,76 @@
     color: var(--frame-text-muted);
   }
 
+  /* Every feed line's mark in one box, so a dot and an icon line up. */
+  .feedMark {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: 13px;
+  }
+
+  /* The site job's feed: the newest line enters, older lines fade back. */
+  .feedRow[data-testid='scan-line'] {
+    animation: scan-in var(--duration-panel) ease-out both;
+  }
+
+  .feedRow[data-age='0'] {
+    font-weight: 500;
+  }
+
+  .feedRow[data-age='4'],
+  .feedRow[data-age='5'] {
+    opacity: 0.7;
+  }
+
+  .feedRow[data-age='6'],
+  .feedRow[data-age='7'] {
+    opacity: 0.45;
+  }
+
+  .feedRow[data-kind='warn'],
+  .feedRow[data-kind='error'] {
+    color: var(--frame-text-muted);
+  }
+
+  /* What was found so far: 00d's detected-fact chips, growing as they come. */
+  .found {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-block-start: 14px;
+  }
+
+  /* On the light surface, not the feed's dark panel: its own heading colour, no list indent. */
+  .found .feedHead {
+    color: var(--text-secondary);
+  }
+
+  .found .chips {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .found .chip {
+    animation: scan-in var(--duration-panel) ease-out both;
+  }
+
+  @keyframes scan-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .feedRow[data-testid='scan-line'],
+    .found .chip {
+      animation: none;
+    }
+  }
+
   .feedText {
     flex: 1;
     min-inline-size: 0;

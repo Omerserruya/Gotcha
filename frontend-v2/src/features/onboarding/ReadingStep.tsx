@@ -1,214 +1,191 @@
 'use client';
 
-import { Check, Circle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-import { readProgress, siteHost, type Discovery } from '@/api/contracts/onboarding';
-import { Link } from '@/i18n/navigation';
+import { siteHost } from '@/api/contracts/onboarding';
+import { isLiveJob, type DiscoverJob, type JobEvent } from '@/api/contracts/onboarding-v2';
+import { Link, useRouter } from '@/i18n/navigation';
 
-import type { ReadingRead } from './load-onboarding';
-import { readReading } from './onboarding-actions';
 import { stepHref } from './preview';
+import { readScan, retryScan } from './scan-actions';
+import { ScanChips, ScanFeed } from './ScanFeed';
 import styles from './Onboarding.module.css';
 
-/** How often 00e looks again while the read runs. A read takes about two minutes. */
-export const POLL_MS = 3000;
-/** How long a read may take to show it has started before 00e says it did not. */
-export const START_WAIT_MS = 60_000;
-
-const TRACKS = ['products', 'policies', 'places', 'voice'] as const;
+/** How often the screen reads the job while it runs (Backend: about once a second). */
+export const POLL_MS = 1000;
+/** After the job finishes, how long "Done" holds before moving on by itself. */
+export const ADVANCE_MS = 1500;
+/** The step after this one (systems, once it exists). */
+export const nextStep = (preview: boolean) => stepHref('/onboarding/learned', preview);
 /** A host longer than this does not fit the headline at its size. */
 const LONG_HOST = 28;
-const FEED = 6;
+const FAILED_CODES = ['site_unreachable', 'stage_failed', 'nothing_learned'];
 
-export type ReadingPhase = 'starting' | 'reading' | 'done' | 'failed';
-
-/**
- * Where the read is. A row older than this visit's start (`since`) is the
- * LAST read - this one has not reached it yet.
- */
-export function readingPhase(discovery: Discovery | null, since: string | null): ReadingPhase {
-  if (!discovery) return 'starting';
-  const fresh = since === null || (discovery.updatedAt ?? '') >= since;
-  if (discovery.status === 'SCANNING') return 'reading';
-  if (!fresh || discovery.status === 'PENDING') return 'starting';
-  return discovery.status === 'COMPLETE' ? 'done' : 'failed';
+/** Events merged by sequence: a poll that answers twice never draws a line twice. */
+export function mergeEvents(
+  held: readonly JobEvent[],
+  next: readonly JobEvent[],
+): readonly JobEvent[] {
+  const seen = new Set(held.map((event) => event.seq));
+  return [...held, ...next.filter((event) => !seen.has(event.seq))];
 }
 
 /**
- * 00e - Reading it (design 6). The read runs on the backend whether or not
- * this tab stays open; this screen looks at its row every few seconds until
- * it settles.
+ * 00e - Reading it, rebuilt on the site job (Omer, 2026-10-23): a rolling
+ * feed of what is REALLY happening, the stage in words, and what was found
+ * so far. No percentage: the job reports stages and events, not a fraction.
  *
- * ★ ONLY PAGES HAS A COUNT. The route reports its phase and the pages it read,
- *   not products / policies / places / voice: those four tiles say whether
- *   the read is still going, and say they are not counted - never a number.
- * ★ "Found just now" is what the read wrote to Knowledge, each with its page,
- *   and the gaps it reported.
+ * The job runs on the server whether or not this tab stays open. A reload
+ * reads it again from the start (`since` 0), so the feed and every chip come
+ * back at once. A job that stopped (FAILED, or STALLED with no heartbeat)
+ * says why, with a way to carry on from where it stopped.
  */
 export function ReadingStep({
   initial,
-  since,
   preview = false,
 }: {
-  /** `null`: the first look failed. */
-  readonly initial: ReadingRead | null;
-  readonly since: string | null;
+  /** `null`: the first look failed - said, and read again. */
+  readonly initial: DiscoverJob | null;
   /** Read-only: the links keep `?preview=1`. */
   readonly preview?: boolean;
 }) {
-  const t = useTranslations('onboarding.reading');
-  const [read, setRead] = useState(initial);
+  const t = useTranslations('onboarding.scan');
+  const router = useRouter();
+  const [job, setJob] = useState(initial);
+  const [events, setEvents] = useState<readonly JobEvent[]>(initial?.events ?? []);
   const [missed, setMissed] = useState(initial === null);
-  const [waitedOut, setWaitedOut] = useState(false);
-  const discovery = read?.discovery ?? null;
-  const phase = readingPhase(discovery, since);
-  const settled = phase === 'done' || phase === 'failed' || waitedOut;
+  const [retrying, setRetrying] = useState<'idle' | 'working' | 'failed'>('idle');
+  const since = useRef(Math.max(0, ...(initial?.events ?? []).map((event) => event.seq)));
+  const jobId = useRef(initial?.jobId ?? null);
+  const live = job === null || isLiveJob(job);
 
   useEffect(() => {
-    if (phase !== 'starting') return;
-    const timer = setTimeout(() => setWaitedOut(true), START_WAIT_MS);
-    return () => clearTimeout(timer);
-  }, [phase]);
-
-  useEffect(() => {
-    if (settled) return;
+    if (!live) return;
     const timer = setTimeout(() => {
-      void readReading().then((next) => {
-        setMissed(next === null);
-        if (next) setRead(next);
+      void readScan(since.current).then((read) => {
+        if (!read.ok) {
+          if (read.reason === 'none') router.replace(stepHref('/onboarding/website', preview));
+          else setMissed(true);
+          return;
+        }
+        setMissed(false);
+        // A different job superseded this one: its feed starts over.
+        const fresh = read.job.jobId !== jobId.current;
+        jobId.current = read.job.jobId;
+        setEvents((held) => (fresh ? read.job.events : mergeEvents(held, read.job.events)));
+        since.current = Math.max(fresh ? 0 : since.current, ...read.job.events.map((e) => e.seq));
+        setJob(read.job);
       });
     }, POLL_MS);
     return () => clearTimeout(timer);
-  }, [settled, read, missed]);
+  }, [live, job, missed, router, preview]);
 
-  const host = discovery?.websiteDomain ? siteHost(discovery.websiteDomain) : null;
-  const progress = phase === 'starting' ? 0 : (readProgress(discovery) ?? 0);
-  const crawl = phase === 'starting' ? null : (discovery?.crawl ?? null);
-  const facts = (read?.facts ?? []).filter((f) => since === null || (f.updatedAt ?? '') >= since);
-  const gaps = phase === 'done' ? (discovery?.gaps ?? []) : [];
-  const state = waitedOut && phase === 'starting' ? 'notStarted' : phase;
+  const done = job?.status === 'COMPLETE';
+  useEffect(() => {
+    if (!done || preview) return;
+    const timer = setTimeout(() => router.push(nextStep(false)), ADVANCE_MS);
+    return () => clearTimeout(timer);
+  }, [done, preview, router]);
+
+  const retry = async () => {
+    setRetrying('working');
+    const ok = await retryScan().catch(() => false);
+    setRetrying(ok ? 'idle' : 'failed');
+    // Back to polling: the job says RUNNING again on its next read.
+    if (ok && job) setJob({ ...job, status: 'QUEUED' });
+  };
+
+  const host = job?.domain ? siteHost(job.domain) : null;
+  const status = job?.status ?? 'QUEUED';
+  const stopped = status === 'FAILED' || status === 'STALLED';
+  const why =
+    status === 'STALLED'
+      ? t('failed.stalled')
+      : t(`failed.${FAILED_CODES.includes(job?.error?.code ?? '') ? job?.error?.code : 'other'}`);
 
   return (
-    <div className={styles.reading} data-phase={state} data-testid="reading">
-      {/* A long host (a *.myshopify.com) is set a step smaller rather than broken mid-word. */}
+    <div className={styles.reading} data-status={status} data-testid="reading">
       <h1
         className={styles.title}
         data-long={host && host.length > LONG_HOST ? '' : undefined}
         data-testid="reading-title"
       >
-        {host ? t.rich('title', { host: () => <bdi dir="ltr">{host}</bdi> }) : t('titleNoHost')}
+        {host
+          ? t.rich('title', { host, ltr: (chunks) => <bdi dir="ltr">{chunks}</bdi> })
+          : t('titleNoHost')}
       </h1>
-      <p className={styles.subtitle} data-testid="reading-lead" role="status">
-        {t(`lead.${state}`)}
-      </p>
-      <div
-        className={styles.bar}
-        role="progressbar"
-        aria-label={t('progress')}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(progress * 100)}
-        data-testid="reading-progress"
-      >
-        <span className={styles.barFill} style={{ inlineSize: `${progress * 100}%` }} />
-      </div>
-
-      <ul className={styles.tracks}>
-        <li className={styles.track} data-testid="reading-track-pages">
-          <span className={styles.trackHead}>
-            {t('tracks.pages')}
-            <TrackState phase={phase} />
-          </span>
-          <span className={styles.trackCount}>{crawl ? crawl.pagesRead : ' '}</span>
-          <span className={styles.trackSub}>
-            {crawl ? t('ofPages', { requested: crawl.requested }) : t('counting')}
-          </span>
-        </li>
-        {TRACKS.map((track) => (
-          <li key={track} className={styles.track} data-testid={`reading-track-${track}`}>
-            <span className={styles.trackHead}>
-              {t(`tracks.${track}`)}
-              <TrackState phase={phase} />
-            </span>
-            <span className={styles.trackSub}>{t('notCounted')}</span>
-          </li>
-        ))}
-      </ul>
-
-      <section className={styles.feed} aria-label={t('found')} data-testid="reading-feed">
-        <span className={styles.feedHead}>
-          <span className={styles.feedDot} aria-hidden="true" />
-          {t('found')}
-        </span>
-        {read?.facts === null ? (
-          <p className={styles.feedQuiet}>{t('factsUnread')}</p>
-        ) : facts.length === 0 && gaps.length === 0 ? (
-          <p className={styles.feedQuiet}>
-            {phase === 'done' ? t('nothingWritten') : t('factsSoon')}
-          </p>
+      <p className={styles.subtitle} role="status" data-testid="reading-stage">
+        {status === 'RUNNING' ? (
+          <>
+            <span className={styles.trackRunning} aria-hidden="true" />{' '}
+            {job?.stage ? t(`stages.${job.stage}`) : t('status.QUEUED')}
+          </>
         ) : (
-          <ul className={styles.feedRows}>
-            {facts.slice(0, FEED).map((fact) => (
-              <li key={fact.id} className={styles.feedRow}>
-                <Check size={13} aria-hidden="true" className={styles.feedCheck} />
-                <span className={styles.feedText}>
-                  <bdi dir="auto">{fact.title}</bdi>
-                </span>
-                {fact.path ? (
-                  <bdi dir="ltr" className={styles.feedPath}>
-                    {fact.path}
-                  </bdi>
-                ) : null}
-              </li>
-            ))}
-            {gaps.slice(0, 3).map((gap) => (
-              <li key={gap.label} className={styles.feedRow} data-gap="">
-                <Circle size={13} aria-hidden="true" className={styles.feedGap} />
-                <span className={styles.feedText}>
-                  <bdi dir="auto">{gap.label}</bdi>
-                </span>
-                <span className={styles.feedPath}>{t('notFound')}</span>
-              </li>
-            ))}
-          </ul>
+          t(`status.${status}`)
         )}
-      </section>
+      </p>
 
-      {missed && !settled ? (
+      {job && job.counts.pagesPlanned > 0 ? (
+        <p className={styles.quiet} data-testid="reading-counts">
+          {t('counts', { read: job.counts.pagesRead, planned: job.counts.pagesPlanned })}
+          {job.counts.pagesBlocked > 0
+            ? ` · ${t('countsBlocked', { count: job.counts.pagesBlocked })}`
+            : null}
+        </p>
+      ) : null}
+
+      <ScanFeed events={events} />
+      {job ? <ScanChips found={job.found} /> : null}
+
+      {job?.found.blocked ? (
+        <p className={styles.notYet} data-testid="reading-blocked">
+          {t('blocked')}
+        </p>
+      ) : null}
+
+      {missed && live ? (
         <p className={styles.quiet} data-testid="reading-missed">
           {t('missed')}
         </p>
       ) : null}
 
-      {phase === 'done' ? (
+      {stopped ? (
+        <div className={styles.problem} role="alert" data-testid="reading-stopped">
+          <p>{why}</p>
+          <span className={styles.actions}>
+            <button
+              type="button"
+              className={styles.primary}
+              onClick={retry}
+              disabled={retrying === 'working' || preview}
+              data-testid="reading-retry"
+            >
+              {retrying === 'working' ? t('retrying') : t('retry')}
+            </button>
+            <Link
+              href={stepHref('/onboarding/website', preview)}
+              className={styles.secondary}
+              data-testid="reading-change"
+            >
+              {t('change')}
+            </Link>
+          </span>
+          {retrying === 'failed' ? (
+            <p className={styles.quiet} data-testid="reading-retry-failed">
+              {t('retryFailed')}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {done ? (
         <span className={styles.actions}>
-          <Link
-            href={stepHref('/onboarding/learned', preview)}
-            className={styles.primary}
-            data-testid="reading-next"
-          >
+          <Link href={nextStep(preview)} className={styles.primary} data-testid="reading-next">
             {t('next')}
-          </Link>
-        </span>
-      ) : phase === 'failed' || state === 'notStarted' ? (
-        <span className={styles.actions}>
-          <Link
-            href={stepHref('/onboarding/website', preview)}
-            className={styles.secondary}
-            data-testid="reading-again"
-          >
-            {t('again')}
           </Link>
         </span>
       ) : null}
     </div>
   );
-}
-
-function TrackState({ phase }: { readonly phase: ReadingPhase }) {
-  if (phase === 'done') return <Check size={13} className={styles.trackDone} aria-hidden="true" />;
-  if (phase === 'reading') return <span className={styles.trackRunning} aria-hidden="true" />;
-  return null;
 }

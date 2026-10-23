@@ -9,6 +9,7 @@ import {
   previewAnswerSchema,
   previewQuestionsSchema,
 } from '@/api/contracts/onboarding';
+import { discoverJobSchema } from '@/api/contracts/onboarding-v2';
 import { workspaceVoiceSchema } from '@/api/contracts/workspace';
 import capabilitiesMessages from '@/i18n/messages/en/capabilities.json';
 import onboardingMessages from '@/i18n/messages/en/onboarding.json';
@@ -30,13 +31,17 @@ vi.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 const actions = vi.hoisted(() => ({
-  startReading: vi.fn(),
-  readReading: vi.fn(),
   teachAnswer: vi.fn(),
   finishOnboarding: vi.fn(),
   askPreview: vi.fn(),
 }));
 vi.mock('./onboarding-actions', () => actions);
+const scanActions = vi.hoisted(() => ({
+  startScan: vi.fn(),
+  readScan: vi.fn(),
+  retryScan: vi.fn(),
+}));
+vi.mock('./scan-actions', () => scanActions);
 const voiceActions = vi.hoisted(() => ({
   saveWorkspaceVoice: vi.fn(),
   previewVoiceSample: vi.fn(),
@@ -158,18 +163,16 @@ describe('★★ each step in preview: every write a status, every step link sti
       target: { value: 'other.co.il' },
     });
     fireEvent.submit(screen.getByTestId('website-address').closest('form')!);
-    expect(actions.startReading).not.toHaveBeenCalled();
+    expect(scanActions.startScan).not.toHaveBeenCalled();
   });
 
-  it('00e: its links stay previews', () => {
-    const done = discoverySchema.parse({
-      websiteDomain: 'https://avivco.il',
+  it('00e: its links stay previews, and a finished read does not move on by itself', () => {
+    const done = discoverJobSchema.parse({
+      jobId: 'j1',
+      domain: 'https://avivco.il',
       status: 'COMPLETE',
-      updatedAt: '2026-10-06T10:00:05.000Z',
     });
-    const { container } = wrap(
-      <ReadingStep initial={{ discovery: done, facts: [] }} since={null} preview />,
-    );
+    const { container } = wrap(<ReadingStep initial={done} preview />);
     expect(stepLinks(container)).toEqual(['/onboarding/learned?preview=1']);
   });
 

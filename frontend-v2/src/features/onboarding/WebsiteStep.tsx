@@ -15,7 +15,7 @@ import { useRouter } from '@/i18n/navigation';
 import { brandMark, brandName } from '@/lib/brand-mark';
 
 import type { GuessSource } from './load-onboarding';
-import { startReading } from './onboarding-actions';
+import { startScan } from './scan-actions';
 import styles from './Onboarding.module.css';
 import { stepHref } from './preview';
 
@@ -55,16 +55,18 @@ export function WebsiteStep({
   const router = useRouter();
   const [typing, setTyping] = useState(guess === null);
   const [address, setAddress] = useState('');
-  const [refused, setRefused] = useState(false);
+  const [refused, setRefused] = useState<'invalid' | 'failed' | null>(null);
   const [isStarting, start] = useTransition();
 
   const read = (host: string) =>
     start(async () => {
-      setRefused(false);
-      const since = new Date().toISOString();
-      if (await startReading(host, locale)) {
-        router.push(stepHref('/onboarding/reading', preview, { since }));
-      } else setRefused(true);
+      setRefused(null);
+      // The same address again resumes the live read (no 409): reading picks it up.
+      const started = await startScan(host, locale).catch(
+        () => ({ ok: false, reason: 'failed' }) as const,
+      );
+      if (started.ok) router.push(stepHref('/onboarding/reading', preview));
+      else setRefused(started.reason);
     });
 
   // A scan's findings belong on the card only when they are about this site.
@@ -183,7 +185,7 @@ export function WebsiteStep({
             e.preventDefault();
             if (preview) return;
             if (typed) read(typed);
-            else setRefused(true);
+            else setRefused('invalid');
           }}
         >
           <input
@@ -191,11 +193,11 @@ export function WebsiteStep({
             value={address}
             onChange={(e) => {
               setAddress(e.target.value);
-              setRefused(false);
+              setRefused(null);
             }}
             placeholder={t('placeholder')}
             aria-label={t('askTitle')}
-            aria-invalid={refused}
+            aria-invalid={refused === 'invalid'}
             inputMode="url"
             dir="ltr"
             data-testid="website-address"
@@ -243,7 +245,7 @@ export function WebsiteStep({
       </p>
       {refused ? (
         <p className={styles.problem} role="alert" data-testid="website-refused">
-          {t('notAnAddress')}
+          {refused === 'invalid' ? t('notAnAddress') : t('startFailed')}
         </p>
       ) : null}
 

@@ -11,8 +11,7 @@ const paymentPath = vi.hoisted(() => vi.fn(async (locale: string) => `/${locale}
 vi.mock('server-only', () => ({}));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get, post }) }));
 vi.mock('@/api/client/payment-path', () => ({ paymentPath }));
-vi.mock('./discover-after', () => ({ discoverAfterResponse: vi.fn() }));
-vi.mock('./load-onboarding', () => ({ loadDiscovery: vi.fn(), loadReading: vi.fn() }));
+vi.mock('./load-onboarding', () => ({ loadDiscovery: vi.fn() }));
 
 const { finishOnboarding } = await import('./onboarding-actions');
 

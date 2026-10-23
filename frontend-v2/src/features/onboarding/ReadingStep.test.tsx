@@ -1,211 +1,203 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { discoverySchema, scannedFacts, type Discovery } from '@/api/contracts/onboarding';
-import onboardingMessages from '@/i18n/messages/en/onboarding.json';
+import { discoverJobSchema, type DiscoverJob } from '@/api/contracts/onboarding-v2';
+import onboardingEn from '@/i18n/messages/en/onboarding.json';
 
+/** 00e on the site job. Mocked: nothing is read, nothing is started. */
+const { scan, router } = vi.hoisted(() => ({
+  scan: { readScan: vi.fn(), retryScan: vi.fn(), startScan: vi.fn() },
+  router: { push: vi.fn(), replace: vi.fn() },
+}));
+vi.mock('./scan-actions', () => scan);
 vi.mock('@/i18n/navigation', () => ({
-  Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
-    <a href={href} {...rest}>
+  useRouter: () => router,
+  Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
+    <a href={String(href)} {...rest}>
       {children}
     </a>
   ),
 }));
-const actions = vi.hoisted(() => ({ readReading: vi.fn(), startReading: vi.fn() }));
-vi.mock('./onboarding-actions', () => actions);
 
-import type { ReadingRead } from './load-onboarding';
-import { POLL_MS, ReadingStep, START_WAIT_MS, readingPhase } from './ReadingStep';
+import { ADVANCE_MS, mergeEvents, nextStep, POLL_MS, ReadingStep } from './ReadingStep';
 
-const SINCE = '2026-10-06T10:00:00.000Z';
-const row = (over: Record<string, unknown> = {}): Discovery =>
-  discoverySchema.parse({
-    websiteDomain: 'https://avivco.il',
-    status: 'SCANNING',
-    scanPhase: 'pages',
-    updatedAt: '2026-10-06T10:00:05.000Z',
+const event = (seq: number, key: string, params = {}, kind = 'progress') => ({
+  seq,
+  at: '',
+  stage: 'read_pages',
+  kind,
+  key,
+  params,
+});
+const job = (over: Record<string, unknown> = {}): DiscoverJob =>
+  discoverJobSchema.parse({
+    jobId: 'j1',
+    domain: 'https://avivco.il',
+    status: 'RUNNING',
+    stage: 'read_pages',
+    events: [event(1, 'platform.detected', { platform: 'shopify' }, 'found')],
+    counts: { pagesPlanned: 40, pagesRead: 12, pagesBlocked: 0 },
+    found: { platform: 'shopify', productCount: 34, policies: ['returns'] },
     ...over,
   });
-
-const show = (initial: ReadingRead | null, since: string | null = SINCE) =>
+const show = (initial: DiscoverJob | null, preview = false) =>
   render(
-    <NextIntlClientProvider locale="en" messages={{ onboarding: onboardingMessages }}>
-      <ReadingStep initial={initial} since={since} />
+    <NextIntlClientProvider locale="en" messages={{ onboarding: onboardingEn }}>
+      <ReadingStep initial={initial} preview={preview} />
     </NextIntlClientProvider>,
   );
+const tick = async (ms = POLL_MS) => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+};
+const lines = () => screen.queryAllByTestId('scan-line').map((li) => li.textContent);
 
 beforeEach(() => {
   vi.useFakeTimers();
-  actions.readReading.mockReset();
+  for (const each of [...Object.values(scan), ...Object.values(router)]) each.mockReset();
 });
-afterEach(() => {
-  vi.useRealTimers();
-});
+afterEach(() => vi.useRealTimers());
 
-describe('★ where the read is', () => {
-  it('a row from before this visit is the LAST read - this one is still starting', () => {
-    expect(
-      readingPhase(row({ status: 'COMPLETE', updatedAt: '2026-10-05T09:00:00Z' }), SINCE),
-    ).toBe('starting');
-    expect(readingPhase(row(), SINCE)).toBe('reading');
-    expect(readingPhase(row({ status: 'COMPLETE' }), SINCE)).toBe('done');
-    expect(readingPhase(row({ status: 'FAILED' }), SINCE)).toBe('failed');
-    expect(readingPhase(null, SINCE)).toBe('starting');
+describe('★★ reading the site, as it really goes', () => {
+  it('★★ the stage in words, the pages, the feed and the chips; no percentage anywhere', () => {
+    show(job());
+    expect(screen.getByTestId('reading-title')).toHaveTextContent('Reading avivco.il');
+    expect(screen.getByTestId('reading-stage')).toHaveTextContent('Reading the pages');
+    expect(screen.getByTestId('reading-counts')).toHaveTextContent('12 of 40 pages read');
+    expect(lines()).toEqual(['Found Shopify']);
+    expect(screen.getByTestId('scan-chip-products')).toHaveTextContent('34 products');
+    expect(screen.getByTestId('scan-chip-policy-returns')).toHaveTextContent('Returns policy');
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(screen.getByTestId('reading').textContent).not.toMatch(/%/);
   });
 
-  it('facts: only what a website read wrote, with its page, newest first', () => {
-    const facts = scannedFacts([
-      {
-        id: 'a',
-        title: 'Free delivery over 350',
-        status: 'ready',
-        sourceType: 'onboarding_scan',
-        sourceUrl: 'https://avivco.il/shipping/',
-        updatedAt: '2026-10-06T10:01:00Z',
-      },
-      {
-        id: 'b',
-        title: 'A note',
-        status: 'ready',
-        sourceType: 'text',
-        sourceUrl: null,
-        updatedAt: '2026-10-06T10:02:00Z',
-      },
-      {
-        id: 'c',
-        title: 'Exchanges within 30 days',
-        status: 'pending',
-        sourceType: 'url',
-        sourceUrl: 'https://avivco.il/faq',
-        updatedAt: '2026-10-06T10:03:00Z',
-      },
-    ]);
-    expect(facts.map((f) => [f.id, f.path])).toEqual([
-      ['c', '/faq'],
-      ['a', '/shipping'],
-    ]);
-  });
-});
-
-describe('★★ 00e - visible the whole time, never an invented count', () => {
-  it('reading: pages counted when the route has counted them; the other four say they are not', () => {
-    show({
-      discovery: row({ crawl: { requested: 220, pagesRead: 142, distinctTextPages: 140 } }),
-      facts: [],
-    });
-    expect(screen.getByTestId('reading-track-pages')).toHaveTextContent('142');
-    expect(screen.getByTestId('reading-track-pages')).toHaveTextContent('of 220');
-    for (const track of ['products', 'policies', 'places', 'voice']) {
-      expect(screen.getByTestId(`reading-track-${track}`)).toHaveTextContent(
-        'Not counted separately yet',
-      );
-      expect(screen.getByTestId(`reading-track-${track}`).textContent).not.toMatch(/\d/);
-    }
-    expect(screen.getByTestId('reading-progress')).toHaveAttribute('aria-valuenow', '45');
-  });
-
-  it('looks again until it settles, then stops', async () => {
-    actions.readReading.mockResolvedValue({
-      discovery: row({ status: 'COMPLETE', scanPhase: 'done', gaps: [{ label: 'Gift wrapping' }] }),
-      facts: [
-        {
-          id: 'f',
-          title: 'Free delivery over 350',
-          path: '/shipping',
-          ready: true,
-          updatedAt: '2026-10-06T10:01:00Z',
-        },
-      ],
-    });
-    show({ discovery: row(), facts: [] });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(POLL_MS);
-    });
-    expect(actions.readReading).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId('reading-feed')).toHaveTextContent('Free delivery over 350');
-    expect(screen.getByTestId('reading-feed')).toHaveTextContent('/shipping');
-    expect(screen.getByTestId('reading-feed')).toHaveTextContent('Gift wrapping');
-    expect(screen.getByTestId('reading-next')).toHaveAttribute('href', '/onboarding/learned');
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(POLL_MS * 3);
-    });
-    expect(actions.readReading).toHaveBeenCalledTimes(1);
-  });
-
-  it('a look that fails says so and keeps looking - it is not "not started"', async () => {
-    actions.readReading.mockResolvedValue(null);
-    show({ discovery: row(), facts: [] });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(POLL_MS);
-    });
-    expect(screen.getByTestId('reading-missed')).toBeInTheDocument();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(POLL_MS);
-    });
-    expect(actions.readReading).toHaveBeenCalledTimes(2);
-  });
-
-  it('a read that never shows up says it did not start, and offers the way back', async () => {
-    actions.readReading.mockResolvedValue({ discovery: null, facts: [] });
-    show({ discovery: null, facts: [] });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(START_WAIT_MS);
-    });
-    expect(screen.getByTestId('reading-lead')).toHaveTextContent("The read hasn't started");
-    expect(screen.getByTestId('reading-again')).toHaveAttribute('href', '/onboarding/website');
-  });
-
-  it('failed: says so, with the way back', () => {
-    show({ discovery: row({ status: 'FAILED', scanPhase: 'failed' }), facts: [] });
-    expect(screen.getByTestId('reading-lead')).toHaveTextContent("couldn't finish reading");
-    expect(screen.getByTestId('reading-again')).toBeInTheDocument();
-  });
-
-  it('facts from an earlier read are not "found just now"', () => {
-    show({
-      discovery: row(),
-      facts: [
-        {
-          id: 'old',
-          title: 'Old fact',
-          path: '/x',
-          ready: true,
-          updatedAt: '2026-10-01T00:00:00Z',
-        },
-      ],
-    });
-    expect(screen.getByTestId('reading-feed')).not.toHaveTextContent('Old fact');
-  });
-});
-
-describe('★ 00e, measured on dev', () => {
-  const EM = String.fromCharCode(0x2014);
-
-  it('a gap the model wrote with an em dash shows a plain hyphen', () => {
-    show({
-      discovery: row({
-        status: 'COMPLETE',
-        scanPhase: 'done',
-        gaps: [{ label: `Password protected ${EM} store pages blocked` }],
+  it('★★ polls every second with `since` the last seq; new lines on top, none drawn twice', async () => {
+    scan.readScan.mockResolvedValue({
+      ok: true,
+      job: job({
+        events: [
+          event(1, 'platform.detected', { platform: 'shopify' }, 'found'),
+          event(2, 'pages.planned', { count: 40, fromSitemap: true }),
+        ],
       }),
-      facts: [],
     });
-    expect(screen.getByTestId('reading-feed')).toHaveTextContent(
-      'Password protected - store pages blocked',
-    );
-    expect(screen.getByTestId('reading-feed').textContent).not.toContain(EM);
+    show(job());
+    await tick();
+    expect(scan.readScan).toHaveBeenLastCalledWith(1);
+    expect(lines()).toEqual(['40 pages to read', 'Found Shopify']);
+    await tick();
+    expect(scan.readScan).toHaveBeenLastCalledWith(2);
+    expect(lines()).toHaveLength(2);
   });
 
-  it('a long host is set a step smaller, a short one is not', () => {
-    const one = show({
-      discovery: row({ websiteDomain: 'https://urban-supply-gotcha-demo.myshopify.com' }),
-      facts: [],
+  it('★ a newer job (another address) starts the feed over', async () => {
+    scan.readScan.mockResolvedValue({
+      ok: true,
+      job: job({
+        jobId: 'j2',
+        events: [event(1, 'site.opening', { domain: 'https://other.co.il' })],
+      }),
     });
-    expect(screen.getByTestId('reading-title')).toHaveAttribute('data-long');
-    one.unmount();
-    show({ discovery: row(), facts: [] });
-    expect(screen.getByTestId('reading-title')).not.toHaveAttribute('data-long');
+    show(job());
+    await tick();
+    expect(lines()).toEqual(['Opening other.co.il']);
+  });
+
+  it('★ a look that failed is said, and the next one tries again', async () => {
+    scan.readScan.mockResolvedValueOnce({ ok: false, reason: 'unread' });
+    scan.readScan.mockResolvedValueOnce({ ok: true, job: job() });
+    show(job());
+    await tick();
+    expect(screen.getByTestId('reading-missed')).toBeInTheDocument();
+    await tick();
+    expect(screen.queryByTestId('reading-missed')).toBeNull();
+  });
+
+  it('★ the first look failed: still reads, never "not started"', async () => {
+    scan.readScan.mockResolvedValue({ ok: true, job: job() });
+    show(null);
+    expect(screen.getByTestId('reading-missed')).toBeInTheDocument();
+    await tick();
+    expect(screen.getByTestId('reading-stage')).toHaveTextContent('Reading the pages');
+  });
+
+  it('no job at all: back to the address', async () => {
+    scan.readScan.mockResolvedValue({ ok: false, reason: 'none' });
+    show(null);
+    await tick();
+    expect(router.replace).toHaveBeenCalledWith('/onboarding/website');
+  });
+
+  it('★★ finished: "Done", Continue, and it moves on by itself after a beat', async () => {
+    show(job({ status: 'COMPLETE', stage: 'done' }));
+    expect(screen.getByTestId('reading-stage')).toHaveTextContent('Done. Here is what we learned.');
+    expect(screen.getByTestId('reading-next')).toHaveAttribute('href', nextStep(false));
+    expect(router.push).not.toHaveBeenCalled();
+    await tick(ADVANCE_MS);
+    expect(router.push).toHaveBeenCalledWith(nextStep(false));
+    expect(scan.readScan).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['site_unreachable', "We couldn't reach the site."],
+    ['stage_failed', 'A step failed.'],
+    ['nothing_learned', "We couldn't learn anything from the site."],
+    ['a_new_code', 'Reading stopped.'],
+  ])('★★ FAILED with %s: the real reason, carry on, or another address', (code, text) => {
+    show(job({ status: 'FAILED', error: { code, stage: 'read_pages' } }));
+    const stopped = screen.getByTestId('reading-stopped');
+    expect(stopped).toHaveTextContent(text);
+    expect(screen.getByTestId('reading-retry')).toBeEnabled();
+    expect(screen.getByTestId('reading-change')).toHaveAttribute('href', '/onboarding/website');
+  });
+
+  it('★★ STALLED: said as stopped answering; Retry resumes it and polling starts again', async () => {
+    scan.retryScan.mockResolvedValue(true);
+    scan.readScan.mockResolvedValue({ ok: true, job: job() });
+    show(job({ status: 'STALLED' }));
+    expect(screen.getByTestId('reading-stopped')).toHaveTextContent('Reading stopped responding.');
+    await act(async () => fireEvent.click(screen.getByTestId('reading-retry')));
+    expect(scan.retryScan).toHaveBeenCalledTimes(1);
+    await tick();
+    expect(scan.readScan).toHaveBeenCalled();
+    expect(screen.queryByTestId('reading-stopped')).toBeNull();
+  });
+
+  it('★ a retry that fails is said, and the way back stays', async () => {
+    scan.retryScan.mockResolvedValue(false);
+    show(job({ status: 'FAILED', error: { code: 'stage_failed', stage: 'extract' } }));
+    await act(async () => fireEvent.click(screen.getByTestId('reading-retry')));
+    expect(screen.getByTestId('reading-retry-failed')).toBeInTheDocument();
+    expect(scan.readScan).not.toHaveBeenCalled();
+  });
+
+  it('★★ a site that refuses automatic reading: said, with what comes next', () => {
+    show(
+      job({
+        found: { blocked: true },
+        counts: { pagesPlanned: 40, pagesRead: 30, pagesBlocked: 10 },
+      }),
+    );
+    expect(screen.getByTestId('reading-blocked')).toHaveTextContent(
+      'The site refuses automatic reading.',
+    );
+    expect(screen.getByTestId('reading-counts')).toHaveTextContent(
+      '10 pages refused automatic reading',
+    );
+  });
+
+  it('in preview, a finished read never moves on by itself', async () => {
+    show(job({ status: 'COMPLETE' }), true);
+    await tick(ADVANCE_MS * 2);
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('mergeEvents keeps one line per seq, in arrival order', () => {
+    const a = event(1, 'job.started', { domain: 'https://a.co' });
+    const b = event(2, 'sitemap.reading');
+    expect(mergeEvents([a] as never, [a, b] as never).map((e) => e.seq)).toEqual([1, 2]);
   });
 });

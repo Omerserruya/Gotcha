@@ -14,8 +14,8 @@ vi.mock('@/i18n/navigation', () => ({
     <a href={href}>{children}</a>
   ),
 }));
-const actions = vi.hoisted(() => ({ startReading: vi.fn() }));
-vi.mock('./onboarding-actions', () => actions);
+const actions = vi.hoisted(() => ({ startScan: vi.fn() }));
+vi.mock('./scan-actions', () => actions);
 
 import { WebsiteStep } from './WebsiteStep';
 
@@ -37,7 +37,7 @@ const show = (props: Partial<Parameters<typeof WebsiteStep>[0]> = {}) =>
 
 beforeEach(() => {
   push.mockReset();
-  actions.startReading.mockReset();
+  actions.startScan.mockReset();
 });
 
 describe('★ the guess', () => {
@@ -90,7 +90,7 @@ describe('★★ 00d - confirm, not type; nothing is read until yes', () => {
     expect(screen.getByTestId('website-from')).toHaveTextContent('We took it from maya@avivco.il');
     expect(screen.getByTestId('website-card')).toHaveTextContent('avivco.il');
     expect(screen.queryByTestId('website-found')).toBeNull();
-    expect(actions.startReading).not.toHaveBeenCalled();
+    expect(actions.startScan).not.toHaveBeenCalled();
   });
 
   it('a scan of THIS site shows what it found; one of another site does not', () => {
@@ -109,7 +109,7 @@ describe('★★ 00d - confirm, not type; nothing is read until yes', () => {
   });
 
   it('Yes, read it: starts the read with consent, then 00e', async () => {
-    actions.startReading.mockResolvedValue(true);
+    actions.startScan.mockResolvedValue({ ok: true });
     show();
     expect(screen.getByTestId('website-consent')).toHaveTextContent(
       'By continuing you agree to the Terms of Service and the Privacy Policy',
@@ -127,10 +127,31 @@ describe('★★ 00d - confirm, not type; nothing is read until yes', () => {
     await act(async () => {
       fireEvent.click(screen.getByTestId('website-yes'));
     });
-    expect(actions.startReading).toHaveBeenCalledWith('avivco.il', 'en');
-    const [to] = push.mock.calls[0] as [{ pathname: string; query: { since: string } }];
-    expect(to.pathname).toBe('/onboarding/reading');
-    expect(Number.isNaN(Date.parse(to.query.since))).toBe(false);
+    expect(actions.startScan).toHaveBeenCalledWith('avivco.il', 'en');
+    // The job is the server's: reading reads it, no client clock in the address.
+    expect(push).toHaveBeenCalledWith('/onboarding/reading');
+  });
+
+  it.each([
+    ['invalid', "That doesn't look like a website address."],
+    ['failed', "Reading couldn't start. Try again in a moment."],
+  ] as const)('★ refused as %s: said, and nowhere else to go', async (reason, text) => {
+    actions.startScan.mockResolvedValue({ ok: false, reason });
+    show();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('website-yes'));
+    });
+    expect(screen.getByTestId('website-refused')).toHaveTextContent(text);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('★ a start that rejects (network, a deploy between) reads as failed', async () => {
+    actions.startScan.mockRejectedValue(new Error('Failed to fetch'));
+    show();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('website-yes'));
+    });
+    expect(screen.getByTestId('website-refused')).toHaveTextContent("Reading couldn't start.");
   });
 
   it('a different address: one that is not a site is refused here, never sent', async () => {
@@ -141,7 +162,7 @@ describe('★★ 00d - confirm, not type; nothing is read until yes', () => {
       fireEvent.click(screen.getByTestId('website-read'));
     });
     expect(screen.getByTestId('website-refused')).toBeInTheDocument();
-    expect(actions.startReading).not.toHaveBeenCalled();
+    expect(actions.startScan).not.toHaveBeenCalled();
   });
 
   it('nothing to guess from: the question opens at once', () => {
