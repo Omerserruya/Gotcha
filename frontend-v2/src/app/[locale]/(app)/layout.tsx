@@ -1,8 +1,10 @@
 import { NextIntlClientProvider } from 'next-intl';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import { signInHere } from '@/api/client/signed-out';
+import { RETURN_TO_HEADER } from '@/auth/return-to';
 import { activeSession } from '@/auth/session-store';
 import { loadPermissions } from '@/shell/load-permissions';
 import { loadMessages } from '@/i18n/load-messages';
@@ -11,6 +13,7 @@ import { AppProviders } from '@/shell/AppProviders';
 import { AppShell } from '@/shell/AppShell';
 import { paymentPath, readWorkspaceGate } from '@/shell/load-workspace-gate';
 import { WorkspaceGate } from '@/shell/WorkspaceGate';
+import { isConsolePath } from '@/shell/workspace-gate';
 import { redirect as localeRedirect } from '@/i18n/navigation';
 
 /**
@@ -47,9 +50,18 @@ export default async function AuthenticatedLayout({
     product as before. No rail and no ⌘K behind the closed door.
   */
   const resolved = isLocale(locale) ? locale : DEFAULT_LOCALE;
-  const { route, setupAdmin, tenantId } = await readWorkspaceGate();
+  const { route, setupAdmin, tenantId, consoleOnly } = await readWorkspaceGate();
   if (route === 'signed_out') redirect(await signInHere());
   if (route === 'onboarding') localeRedirect({ href: '/onboarding', locale: resolved });
+  /*
+    ★★ A system admin whose own tenant is not live (prod's "System"
+    placeholder, 2026-10-23) works in the console only: that tenant has no
+    plan, so its product pages are 402s. Every other path goes to /system.
+    No header (never on a page the proxy served) is left alone rather than
+    risk a loop.
+  */
+  const at = consoleOnly ? (await headers()).get(RETURN_TO_HEADER) : null;
+  if (at !== null && !isConsolePath(at)) localeRedirect({ href: '/system', locale: resolved });
   if (route === 'waiting' || route === 'unavailable' || route === 'payment') {
     return (
       <NextIntlClientProvider messages={await loadMessages(resolved)}>
@@ -87,7 +99,7 @@ export default async function AuthenticatedLayout({
         roleKey={roleKey}
         permissionsStatus={status}
       >
-        <AppShell>{children}</AppShell>
+        <AppShell consoleOnly={consoleOnly}>{children}</AppShell>
       </AppProviders>
     </NextIntlClientProvider>
   );

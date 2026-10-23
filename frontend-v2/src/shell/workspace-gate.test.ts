@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resumeStep, workspaceRoute } from './workspace-gate';
+import { consoleOnly, isConsolePath, resumeStep, workspaceRoute } from './workspace-gate';
 
 describe("★★ onboarding is a gate: each status to its place (the server's word)", () => {
   const at = (tenantStatus: string | null, role: string | null = 'ADMIN') =>
@@ -14,7 +14,29 @@ describe("★★ onboarding is a gate: each status to its place (the server's wo
   it('anyone else in it: waits - never the product', () => {
     expect(at('PENDING_ONBOARDING', 'AGENT')).toBe('waiting');
     expect(at('PENDING_ONBOARDING', null)).toBe('waiting');
-    expect(at('PENDING_ADMIN_SETUP', 'SYSTEM_ADMIN')).toBe('waiting');
+  });
+
+  /*
+   * ★★ PROD HOTFIX (2026-10-23). This test used to assert the defect itself:
+   * a SYSTEM_ADMIN in a PENDING_ADMIN_SETUP tenant waited. That is prod's
+   * admin@ and its "System" tenant - locked out of the console.
+   */
+  it.each([
+    ['PENDING_ADMIN_SETUP'],
+    ['PENDING_ONBOARDING'],
+    ['PENDING_PAYMENT'],
+    ['SUSPENDED'],
+    ['SOMETHING_NEW'],
+    ['ACTIVE'],
+    [null],
+  ])('★★ a SYSTEM_ADMIN passes whatever the status (%s): the product', (status) => {
+    expect(at(status, 'SYSTEM_ADMIN')).toBe('product');
+    // The role arrives in either case (`/permissions/me` sends it lower-case).
+    expect(at(status, 'system_admin')).toBe('product');
+  });
+
+  it('…but an unread /me stops even a system admin: then the role is unknown too', () => {
+    expect(workspaceRoute(null)).toBe('unavailable');
   });
 
   it('unpaid: payment, whoever it is', () => {
@@ -63,5 +85,42 @@ describe('★★ onboarding as a preview (Omer, 2026-10-07): a live workspace, a
     expect(asksForPreview('/en/onboarding/preview=1')).toBe(false);
     expect(asksForPreview('/en/onboarding/try')).toBe(false);
     expect(asksForPreview(null)).toBe(false);
+  });
+});
+
+describe('★★ a system admin of a tenant not live works in the console only', () => {
+  it('any status but ACTIVE, including unknown and unread status', () => {
+    for (const status of [
+      'PENDING_ADMIN_SETUP',
+      'PENDING_ONBOARDING',
+      'PENDING_PAYMENT',
+      'SUSPENDED',
+      'SOMETHING_NEW',
+      null,
+    ]) {
+      expect(consoleOnly({ tenantStatus: status, role: 'SYSTEM_ADMIN' })).toBe(true);
+    }
+  });
+
+  it('a system admin of a LIVE tenant, and everyone else, use the product', () => {
+    expect(consoleOnly({ tenantStatus: 'ACTIVE', role: 'SYSTEM_ADMIN' })).toBe(false);
+    expect(consoleOnly({ tenantStatus: 'PENDING_ADMIN_SETUP', role: 'ADMIN' })).toBe(false);
+    expect(consoleOnly({ tenantStatus: 'SUSPENDED', role: 'AGENT' })).toBe(false);
+    expect(consoleOnly(null)).toBe(false);
+  });
+
+  it('the console is /system and below, with or without a language - nothing that only starts like it', () => {
+    for (const p of [
+      '/system',
+      '/en/system',
+      '/he/system/tenants',
+      '/en/system/tenants/t1?tab=billing',
+      '/system/',
+    ]) {
+      expect(isConsolePath(p)).toBe(true);
+    }
+    for (const p of ['/en/home', '/en/systems', '/en/settings/system', '/he/inbox', '']) {
+      expect(isConsolePath(p)).toBe(false);
+    }
   });
 });

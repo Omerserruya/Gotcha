@@ -26,7 +26,18 @@ import { logger } from '@/observability/logger';
  * it as client JavaScript would cost every user a download for nothing. Only
  * the two controls that genuinely need interactivity are client components.
  */
-export async function AppShell({ children }: { children: ReactNode }) {
+export async function AppShell({
+  children,
+  consoleOnly = false,
+}: {
+  readonly children: ReactNode;
+  /**
+   * A system admin of a tenant not live (layout.tsx): the rail draws the
+   * console and the account, and nothing that reads or links the product -
+   * its pages are 402s there, so each would be a dead link.
+   */
+  readonly consoleOnly?: boolean;
+}) {
   const t = await getTranslations('navigation');
   const me = await whoIsHere();
 
@@ -44,27 +55,27 @@ export async function AppShell({ children }: { children: ReactNode }) {
           names are hashed and cannot be selected on. */}
       <div className={styles.rail} data-rail>
         <div className={styles.railTop}>
-          <Link href="/home" className={styles.brand}>
+          <Link href={consoleOnly ? '/system' : '/home'} className={styles.brand}>
             {/* No title: the wordmark beside it already names the product, and
                 announcing it twice is noise for a screen reader. */}
             <Logo variant="framed" size={26} />
             GOTCHA
           </Link>
-          <PrimaryNavigation />
+          {consoleOnly ? null : <PrimaryNavigation />}
           {/* 01a: the person's conversations with GOTCHA, one click back to each. */}
-          <RecentThreads />
+          {consoleOnly ? null : <RecentThreads />}
         </div>
 
         <div className={styles.railBottom}>
-          <CommandHint />
+          {consoleOnly ? null : <CommandHint />}
           <ConsoleNavigation />
-          <SettingsNavigation />
+          {consoleOnly ? null : <SettingsNavigation />}
           <AccountControl name={me?.name ?? null} workspace={me?.workspace ?? null} />
         </div>
       </div>
 
       {/* 19: ⌘K from every screen, inside a sheet too. */}
-      <CommandPalette />
+      {consoleOnly ? null : <CommandPalette />}
 
       <div className={styles.surface}>
         {/* `tabIndex={-1}` so the skip link can actually move focus here. */}

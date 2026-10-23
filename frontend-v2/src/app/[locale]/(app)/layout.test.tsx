@@ -18,13 +18,16 @@ vi.mock('server-only', () => ({}));
 vi.mock('@/auth/session-store', () => ({ activeSession }));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get }) }));
 vi.mock('next/navigation', () => ({ redirect }));
+/* Where the request is: the proxy's return-to header. A test may move it. */
+const at = vi.hoisted(() => ({ path: '/en/approvals?tab=done' }));
 vi.mock('next/headers', () => ({
-  headers: async () => new Headers({ 'x-gotcha-return-to': '/en/approvals?tab=done' }),
+  headers: async () => new Headers({ 'x-gotcha-return-to': at.path }),
 }));
 vi.mock('@/i18n/load-messages', () => ({ loadMessages: async () => ({}) }));
 const AppProviders = vi.hoisted(() => vi.fn(() => null));
 vi.mock('@/shell/AppProviders', () => ({ AppProviders }));
-vi.mock('@/shell/AppShell', () => ({ AppShell: () => null }));
+const AppShellMock = vi.hoisted(() => vi.fn(() => null));
+vi.mock('@/shell/AppShell', () => ({ AppShell: AppShellMock }));
 const WorkspaceGate = vi.hoisted(() => vi.fn(() => null));
 vi.mock('@/shell/WorkspaceGate', () => ({ WorkspaceGate }));
 const localeRedirect = vi.hoisted(() =>
@@ -39,6 +42,7 @@ const render = () => Layout({ children: null, params: Promise.resolve({ locale: 
 const SIGN_IN = `REDIRECT /api/auth/login?returnTo=${encodeURIComponent('/en/approvals?tab=done')}`;
 
 beforeEach(() => {
+  at.path = '/en/approvals?tab=done';
   activeSession.mockReset();
   get.mockReset();
   redirect.mockClear();
@@ -135,6 +139,66 @@ describe("★★ onboarding is a gate (Omer, 2026-10-07) - the server's status d
     me('ACTIVE');
     expect(gateIn(await render())).toBeNull();
     expect(localeRedirect).not.toHaveBeenCalled();
+  });
+
+  /*
+   * ★★ PROD HOTFIX (2026-10-23): admin@, a SYSTEM_ADMIN whose home tenant
+   * "System" is PENDING_ADMIN_SETUP, read "your workspace is still being set
+   * up". A system admin passes the gate whatever the status.
+   */
+  it.each([
+    ['PENDING_ADMIN_SETUP'],
+    ['PENDING_ONBOARDING'],
+    ['PENDING_PAYMENT'],
+    ['SUSPENDED'],
+    ['SOMETHING_NEW'],
+    ['ACTIVE'],
+  ])(
+    '★★ a SYSTEM_ADMIN in a %s tenant: through the gate - never "being set up"',
+    async (status) => {
+      me(status, 'SYSTEM_ADMIN');
+      at.path = '/en/system/tenants';
+      expect(gateIn(await render())).toBeNull();
+      expect(localeRedirect).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['/he/home'],
+    ['/en/inbox'],
+    ['/en/settings/billing'],
+    ['/en/systems'],
+    ['/en/studio/automations'],
+  ])('★★ a SYSTEM_ADMIN of a tenant not live: %s goes to the console', async (path) => {
+    me('PENDING_ADMIN_SETUP', 'SYSTEM_ADMIN');
+    at.path = path;
+    await expect(render()).rejects.toThrow('LOCALE REDIRECT /system');
+  });
+
+  it('…and the console stays put, with a console-only rail', async () => {
+    me('PENDING_ADMIN_SETUP', 'SYSTEM_ADMIN');
+    for (const path of ['/en/system', '/he/system/tenants', '/en/system/coupons?x=1']) {
+      at.path = path;
+      const tree = await render();
+      expect(gateIn(tree)).toBeNull();
+      expect(propsOf(AppShellMock, tree)).toMatchObject({ consoleOnly: true });
+    }
+    expect(localeRedirect).not.toHaveBeenCalled();
+  });
+
+  it('a SYSTEM_ADMIN of a LIVE tenant uses the product: no redirect, the whole rail', async () => {
+    me('ACTIVE', 'SYSTEM_ADMIN');
+    at.path = '/en/home';
+    const tree = await render();
+    expect(gateIn(tree)).toBeNull();
+    expect(propsOf(AppShellMock, tree)).toMatchObject({ consoleOnly: false });
+    expect(localeRedirect).not.toHaveBeenCalled();
+  });
+
+  it('an ADMIN in setup still goes to onboarding, and its Home is not the console', async () => {
+    me('PENDING_ADMIN_SETUP');
+    at.path = '/en/home';
+    await expect(render()).rejects.toThrow('LOCALE REDIRECT /onboarding');
   });
 
   it('status unread: Retry, not the product', async () => {
