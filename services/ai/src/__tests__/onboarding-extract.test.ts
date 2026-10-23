@@ -13,7 +13,7 @@ vi.mock("../services/ai.service", () => ({
   generateResponse: async (p: any) => { H.calls.push(p); return { content: H.reply }; },
 }));
 
-import { extractOnboarding, normalisePolicies, normaliseFaq, normaliseProfile, normaliseBrand } from "../services/onboarding-extract.service";
+import { extractOnboarding, normalisePolicies, normaliseFaq, normaliseProfile, normaliseBrand, withoutControlChars } from "../services/onboarding-extract.service";
 
 const PAGES = [{ url: "https://shop.example/policies/refund-policy", text: "Returns within 30 days." }];
 
@@ -47,6 +47,16 @@ describe("faq", () => {
     expect(out[0]).toEqual({ q: "Same?", a: "1", sourceUrl: null });
     expect(out.filter((f) => f.q.toLowerCase() === "same?")).toHaveLength(1);
     expect(out).toHaveLength(40);
+  });
+});
+
+describe("control characters (a NUL failed a dev scan: Postgres refuses it)", () => {
+  const NUL = String.fromCharCode(0);
+  it("never reach an answer, a summary or a list; tab and newline stay", () => {
+    expect(normaliseFaq({ faq: [{ q: `Ship${NUL}?`, a: `Yes${NUL}\tin 3\ndays` }] }, PAGES)[0]).toMatchObject({ q: "Ship?", a: "Yes\tin 3\ndays" });
+    expect(normalisePolicies({ policies: [{ kind: "returns", summary: `30${NUL} days`, terms: {} }] }, PAGES)[0].summary).toBe("30 days");
+    expect(normaliseProfile({ profile: {}, contact: { emails: [`a@b.c${NUL}`, NUL] } }).contact.emails).toEqual(["a@b.c"]);
+    expect(withoutControlChars(`a${String.fromCharCode(7)}b${String.fromCharCode(127)}c`)).toBe("abc");
   });
 });
 

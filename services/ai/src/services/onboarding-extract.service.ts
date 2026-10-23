@@ -87,17 +87,29 @@ const PROMPTS: Record<ExtractKind, string> = {
 
 function corpus(pages: ExtractPage[]): string {
   return pages
-    .map((p) => `# PAGE: ${p.url}${p.title ? ` (${p.title})` : ""}\n${(p.text || "").slice(0, PER_PAGE)}`)
+    .map((p) => `# PAGE: ${p.url}${p.title ? ` (${withoutControlChars(p.title)})` : ""}\n${withoutControlChars(p.text || "").slice(0, PER_PAGE)}`)
     .join("\n\n")
     .slice(0, TOTAL);
 }
 
+/**
+ * Control characters out (tab and newline stay). A page can carry a NUL, the
+ * model echoes it, and Postgres refuses it in text and JSON alike - found on
+ * dev, where one NUL in an FAQ answer failed the whole scan at write_knowledge.
+ */
+export function withoutControlChars(s: string): string {
+  return s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+}
+
 function stripFences(s: string): string { return s.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim(); }
-const str = (v: unknown, cap = 2000): string | null => (typeof v === "string" && v.trim() ? v.trim().slice(0, cap) : null);
+const str = (v: unknown, cap = 2000): string | null => {
+  const t = typeof v === "string" ? withoutControlChars(v).trim() : "";
+  return t ? t.slice(0, cap) : null;
+};
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null);
 const boolOrNull = (v: unknown): boolean | null => (typeof v === "boolean" ? v : null);
 const list = (v: unknown, cap: number): string[] =>
-  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()).map((s) => s.trim()).slice(0, cap) : [];
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").map((s) => withoutControlChars(s).trim()).filter(Boolean).slice(0, cap) : [];
 
 /** A source URL is kept only when it is one of the pages we gave the model. */
 function source(v: unknown, pages: ExtractPage[]): string | null {
