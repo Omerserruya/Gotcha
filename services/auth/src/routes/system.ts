@@ -30,7 +30,7 @@ import { sendOnboardingEmail, sendPaidOnboardingEmail} from "../services/notific
 import { createProvisioningRequest, runProvisioning, provisioningStatusForTenant } from "../services/billing-provisioning.service";
 import { scheduleOnboardingNudge, triggerNudgeNow } from "../services/nudge-engine.service";
 import { listOnboardingSnapshots, getOnboardingSnapshot } from "../services/onboarding-state.service";
-import { inviteUser, revokeUserAccess, syncIdentityNameByUser, syncMembershipAccess, tenantAdminEntry } from "../services/invitation.service";
+import { InviteRefused, inviteUser, revokeUserAccess, syncIdentityNameByUser, syncMembershipAccess, tenantAdminEntry } from "../services/invitation.service";
 import { issueSetupLink } from "../services/setup-link.service";
 
 const router = Router();
@@ -1462,7 +1462,18 @@ router.post("/tenants/:id/users", authenticate, requireSystemAdmin(), validate(c
       },
     });
     res.status(201).json({ data: result.user, setupLink: result.setupLink });
-  } catch (err) {
+  } catch (err: any) {
+    // Already a member (by this email, or the same person under another one):
+    // a 409 the console can explain, never a bare 500.
+    if (err instanceof InviteRefused) {
+      res.status(409).json({ error: err.message, code: err.code });
+      return;
+    }
+    // A unique clash at the row: the email is held by another login.
+    if (err?.code === "P2002") {
+      res.status(409).json({ error: "Another login already uses that email", code: "EMAIL_TAKEN" });
+      return;
+    }
     console.error("Create user error:", err);
     res.status(500).json({ error: "Failed to create user" });
   }

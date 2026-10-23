@@ -85,8 +85,15 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   };
 });
 
-vi.mock("../services/invitation.service", () => ({
+vi.mock("../services/invitation.service", async () => {
+  class InviteRefused extends Error { constructor(readonly code: string, m: string) { super(m); } }
+  return {
+  InviteRefused,
   inviteUser: async (tenantId: string, email: string, name: string, role: string) => {
+    if (H.users.some((u) => u.tenantId === tenantId && u.email.toLowerCase() === email.toLowerCase())) {
+      throw new InviteRefused("USER_EXISTS", "User with this email already exists for this tenant");
+    }
+    if (email === "clash@x.test") throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
     const user = { id: `u_${email}`, tenantId, email, name, role, isActive: true };
     H.users.push(user);
     return { user, setupLink: "https://auth.example/setup" };
@@ -95,7 +102,8 @@ vi.mock("../services/invitation.service", () => ({
   syncIdentityNameByUser: async () => {},
   syncMembershipAccess: async () => {},
   tenantAdminEntry: async () => null,
-}));
+  };
+});
 vi.mock("../services/role-guard", () => ({ ownerRemainsWithout: async () => H.owners }));
 vi.mock("../services/gdpr.service", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -301,6 +309,19 @@ describe("users: add and remove", () => {
     const r = await request(app).post("/api/system/tenants/T/users").send({ email: "new@acme.test", name: "New", role: "AGENT" });
     expect(r.status).toBe(201);
     expect(H.audits[0]).toMatchObject({ action: "user.created", metadata: { before: null, after: { email: "new@acme.test" }, reason: null } });
+  });
+
+  it("POST for an existing member: 409 USER_EXISTS, case-insensitive, never a 500", async () => {
+    const r = await request(app).post("/api/system/tenants/T/users").send({ email: "AGENT@acme.test", name: "Again", role: "AGENT" });
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe("USER_EXISTS");
+    expect(H.audits).toEqual([]);
+  });
+
+  it("POST whose email is held by another login: 409 EMAIL_TAKEN", async () => {
+    const r = await request(app).post("/api/system/tenants/T/users").send({ email: "clash@x.test", name: "C", role: "AGENT" });
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe("EMAIL_TAKEN");
   });
 
   it("DELETE revokes the login before the row goes, and audits before/after/reason", async () => {
