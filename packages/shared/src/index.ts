@@ -381,6 +381,7 @@ export {
   deleteIdentity,
   updateIdentity,
   findIdentityBySubject,
+  findIdentityByEmail,
   publicAuthentikOrigin,
   listUserSessions,
   terminateSession,

@@ -20,6 +20,7 @@ import {
   AuditAction,
 } from "@chatcenter/shared";
 import { eraseUserIdentity } from "./invitation.service";
+import { ERASED_EXPLICITLY } from "./tenant-erasure-tables";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
 
@@ -191,12 +192,148 @@ export async function exportTenant(tenantId: string, requestedBy?: string) {
  * Records a DSR + audit BEFORE deleting the tenant (the audit row is tenant-
  * scoped and would otherwise be cascade-deleted).
  */
-export async function eraseTenant(tenantId: string, requestedBy?: string) {
+/** Checkout states that mean the customer could still pay. */
+const OPEN_CHECKOUT_STATES = ["PENDING", "AWAITING_PROVIDER", "TOKENIZED"];
+
+/**
+ * Why this tenant must not be deleted right now, or null when it may be.
+ *
+ * Shared by every door into eraseTenant. Each refusal protects money moving
+ * after the organization is gone: a subscription that can still charge, a
+ * checkout a customer could still complete, or a Shopify subscription that
+ * Shopify keeps billing until the app is uninstalled on their side.
+ */
+export async function tenantDeletionRefusal(
+  tenantId: string,
+): Promise<{ code: "ACTIVE_PAID_SUBSCRIPTION" | "OPEN_CHECKOUT" | "SHOPIFY_BILLED"; detail?: string } | null> {
+  const shopify = await prisma.providerSubscription.findFirst({
+    where: { tenantId, billingSource: "SHOPIFY", status: { notIn: ["DECLINED", "EXPIRED"] as any } },
+    select: { id: true },
+  });
+  if (shopify) return { code: "SHOPIFY_BILLED" };
+
+  const links = await prisma.billableEntityTenant.findMany({
+    where: { tenantId },
+    select: { entity: { select: { subscription: true } } },
+  });
+  for (const l of links) {
+    const sub = l.entity?.subscription;
+    if (!sub) continue;
+    if (sub.billingSource === "SHOPIFY" && !["CANCELED"].includes(sub.status)) return { code: "SHOPIFY_BILLED" };
+    const plan = await prisma.plan.findFirst({ where: { key: sub.planKey, version: sub.planVersion }, select: { kind: true, basePrice: true } });
+    const evaluation = plan?.kind === "POC" || plan?.kind === "TRIAL";
+    const price = sub.snapshotPrice != null ? Number(sub.snapshotPrice) : plan?.basePrice != null ? Number(plan.basePrice) : 0;
+    // "Can still charge", not "is ACTIVE": a plan an operator set by hand with
+    // renewal off is ACTIVE and will never take money, and refusing it would
+    // make that organization undeletable until its end date.
+    const chargeable =
+      sub.status === "PAST_DUE" ||
+      (!evaluation && price > 0 && sub.status === "TRIALING") ||
+      (!evaluation && price > 0 && sub.status === "ACTIVE" && !sub.cancelAtPeriodEnd);
+    if (chargeable) return { code: "ACTIVE_PAID_SUBSCRIPTION", detail: sub.status };
+  }
+
+  const checkout = await prisma.pendingCheckout.findFirst({
+    where: { tenantId, status: { in: OPEN_CHECKOUT_STATES as any } },
+    select: { id: true },
+  });
+  if (checkout) return { code: "OPEN_CHECKOUT" };
+  return null;
+}
+
+/** A stored upload's file name, from a /api/uploads/<name> URL. Null for anything else. */
+function uploadNameOf(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const m = /\/api\/uploads\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]{1,8})(?:[?#].*)?$/i.exec(url);
+  return m ? m[1]! : null;
+}
+
+const CONVERSATION_SERVICE_URL = process.env.CONVERSATION_SERVICE_URL || "http://conversation:4002";
+
+/** Ask the service that owns the uploads volume to remove these files. Never throws. */
+async function purgeUploads(files: string[]): Promise<{ ok: boolean; removed: number; missing: number }> {
+  if (!files.length) return { ok: true, removed: 0, missing: 0 };
+  try {
+    const res = await fetch(`${CONVERSATION_SERVICE_URL}/internal/uploads/purge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-internal-key": getInternalServiceKey() },
+      body: JSON.stringify({ files }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const body: any = await res.json().catch(() => ({}));
+    // 207 is a fetch "ok": the body says whether every file actually went.
+    return { ok: res.ok && body?.ok === true, removed: Number(body?.removed ?? 0), missing: Number(body?.missing ?? 0) };
+  } catch (err: any) {
+    console.error("[gdpr] uploads purge call failed:", err?.message ?? err);
+    return { ok: false, removed: 0, missing: 0 };
+  }
+}
+
+/** What a channel leaves on the provider side when only our rows are removed. */
+const CHANNEL_LEFTOVER: Record<string, string> = {
+  WHATSAPP: "number stays registered on the WhatsApp Business Account; the app's webhook subscription remains",
+  MESSENGER: "page stays subscribed to the app's webhooks until removed in Meta",
+  INSTAGRAM: "account stays subscribed to the app's webhooks until removed in Meta",
+  GMAIL: "the OAuth grant (and any mailbox watch until it expires) stays at Google until revoked there",
+  OUTLOOK: "the OAuth grant stays at Microsoft until revoked there",
+  SLACK: "the app stays installed in the Slack workspace",
+  VOICE: "the number stays with the voice provider",
+  WEBCHAT: "the widget snippet stays on the customer's site (it stops answering)",
+  SHOPIFY_LIVE_CHAT: "the chat app stays installed in the store",
+};
+
+/**
+ * What stays connected on the PROVIDER side after our rows and tokens are gone.
+ *
+ * Nothing here calls a provider: disconnecting a real WhatsApp number, page or
+ * store from our side is irreversible for the customer, and the organization
+ * is being deleted, not migrated. The operator is told what is left instead.
+ */
+async function providerLeftovers(tenantId: string): Promise<string[]> {
+  const [channels, integrations, commerce, calendars, knowledge, shopifyChat] = await Promise.all([
+    prisma.channelAccount.findMany({ where: { tenantId }, select: { channel: true, displayName: true, externalId: true } }),
+    prisma.tenantIntegration.findMany({ where: { tenantId }, select: { status: true, integration: { select: { slug: true } } } }),
+    prisma.commerceConnection.findMany({ where: { tenantId }, select: { platform: true, shopDomain: true } }),
+    prisma.calendarAccount.findMany({ where: { tenantId }, select: { provider: true } }),
+    prisma.knowledgeIntegration.findMany({ where: { tenantId }, select: { provider: true, displayName: true } }),
+    prisma.shopifyChatInstallation.findMany({ where: { tenantId }, select: { shopDomain: true } }),
+  ]);
+  const out: string[] = [];
+  for (const c of channels) {
+    out.push(`${c.channel}:${c.displayName} (${c.externalId}): ${CHANNEL_LEFTOVER[c.channel] ?? "provider-side connection remains"}`);
+  }
+  for (const i of integrations) out.push(`integration:${i.integration?.slug ?? "unknown"}: the OAuth grant stays authorized at the provider until revoked there`);
+  for (const c of commerce) out.push(`${c.platform}:${c.shopDomain ?? "store"}: app/plugin and its webhooks stay installed in the store`);
+  for (const c of calendars) out.push(`calendar:${c.provider}: the OAuth grant stays authorized at the provider until revoked there`);
+  for (const k of knowledge) out.push(`knowledge:${k.provider}:${k.displayName}: the OAuth grant stays authorized at the provider until revoked there`);
+  for (const s of shopifyChat) out.push(`shopify-chat:${s.shopDomain}: the chat app stays installed until removed in Shopify`);
+  return out;
+}
+
+export async function eraseTenant(
+  tenantId: string,
+  requestedBy?: string,
+  opts: { reason?: string | null } = {},
+) {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, slug: true },
   });
   if (!tenant) return null;
+
+  // Counts and the provider-side picture, read while the rows still exist.
+  const [counts, leftovers] = await Promise.all([
+    prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { _count: { select: { users: true, conversations: true, messages: true, channelAccounts: true, contacts: true } } },
+    }).then((t) => t?._count ?? {}),
+    providerLeftovers(tenantId),
+  ]);
+  const media = await Promise.all([
+    prisma.message.findMany({ where: { tenantId, mediaUrl: { not: null } }, select: { mediaUrl: true } }),
+    prisma.scheduledMessage.findMany({ where: { tenantId, mediaUrl: { not: null } }, select: { mediaUrl: true } }),
+  ]);
+  const uploadFiles = Array.from(new Set(media.flat().map((m) => uploadNameOf(m.mediaUrl)).filter((n): n is string => !!n)));
 
   // 1. Authentik + local identities. Only erase a person whose ONLY
   //    membership lives in this tenant - an identity that also works in
@@ -224,39 +361,86 @@ export async function eraseTenant(tenantId: string, requestedBy?: string) {
   // 2. Qdrant vectors.
   const vectorsPurged = await purgeTenantVectors(tenantId);
 
-  // 3. DSR + audit recorded BEFORE the delete (they are tenant-scoped and the
-  //    tenant delete cascade would otherwise remove the DSR row).
-  await prisma.dataSubjectRequest.create({
-    data: {
-      tenantId, requestType: "erasure", subjectType: "tenant", subjectId: tenantId,
-      status: "COMPLETED", requestedBy: requestedBy ?? null,
-      result: { identitiesDeleted, vectorsPurged, users: users.length } as any,
-      completedAt: new Date(),
-    },
-  });
-  await writeAudit({
-    tenantId, actorType: requestedBy ? "user" : "system", actorId: requestedBy,
-    action: AuditAction.TENANT_DELETED, targetType: "tenant", targetId: tenantId,
-    metadata: { name: tenant.name, identitiesDeleted, vectorsPurged, userCount: users.length },
-  });
+  const record = {
+    deletedTenantId: tenantId,
+    slug: tenant.slug,
+    name: tenant.name,
+    counts,
+    identitiesDeleted,
+    vectorsPurged,
+    userCount: users.length,
+    uploadFiles: uploadFiles.length,
+    providerLeftovers: leftovers,
+    reason: opts.reason ?? null,
+  };
 
-  // 4. Postgres. Delete rows the tenant FK cascade does not own, then the
-  //    tenant (its onDelete: Cascade relations remove the rest: users,
-  //    conversations, messages, contacts, channels, etc.).
-  await prisma.$transaction([
-    prisma.usageLog.deleteMany({ where: { tenantId } }),
-    prisma.auditLog.deleteMany({ where: { tenantId } }),
-    prisma.consentRecord.deleteMany({ where: { tenantId } }),
-    prisma.dataRetentionPolicy.deleteMany({ where: { tenantId } }),
-    prisma.dataSubjectRequest.deleteMany({ where: { tenantId } }),
-    prisma.tenant.delete({ where: { id: tenantId } }),
+  // 3. Postgres, in ONE transaction: the tables the tenant cascade does not
+  //    reach (see tenant-erasure-tables.ts), the billing entity's subscription,
+  //    the tenant itself, the orphaned identities - and LAST the deletion's own
+  //    audit row, after the auditLog deleteMany, so it is the one row about
+  //    this tenant that survives.
+  await prisma.$transaction(async (tx) => {
+    const db = tx as any;
+
+    // A subscription on an entity that funds ONLY this tenant would outlive
+    // it with nobody to bill - and the refusal above already guarantees it
+    // cannot charge. Close it so no sweep ever picks it up again.
+    const links = await tx.billableEntityTenant.findMany({ where: { tenantId }, select: { billableEntityId: true } });
+    for (const { billableEntityId } of links) {
+      const funded = await tx.billableEntityTenant.count({ where: { billableEntityId } });
+      if (funded !== 1) continue;
+      const sub = await tx.subscription.findUnique({ where: { billableEntityId } });
+      if (!sub) continue;
+      await tx.pendingSubscriptionChange.deleteMany({ where: { subscriptionId: sub.id, appliedAt: null } });
+      if (sub.status !== "CANCELED") {
+        await tx.subscription.update({ where: { id: sub.id }, data: { status: "CANCELED", cancelAtPeriodEnd: true, trialEndsAt: null } });
+        await tx.subscriptionEvent.create({
+          data: { subscriptionId: sub.id, type: "tenant_deleted", fromStatus: sub.status, toStatus: "CANCELED", actor: requestedBy ?? "system", metadata: { tenantId } as any },
+        });
+      }
+    }
+
+    for (const model of ERASED_EXPLICITLY) {
+      await db[model].deleteMany({ where: { tenantId } });
+    }
+    await tx.tenant.delete({ where: { id: tenantId } });
     // Local identity rows whose last membership just cascade-deleted with the
     // tenant. Deleting the Identity would cascade to users, so it must come
-    // AFTER the tenant delete inside the same transaction.
-    ...(orphanIdentityIds.length
-      ? [prisma.identity.deleteMany({ where: { id: { in: orphanIdentityIds } } })]
-      : []),
-  ]);
+    // AFTER the tenant delete.
+    if (orphanIdentityIds.length) await tx.identity.deleteMany({ where: { id: { in: orphanIdentityIds } } });
 
-  return { deleted: true, identitiesDeleted, vectorsPurged, userCount: users.length };
+    await tx.auditLog.create({
+      data: {
+        tenantId, actorType: requestedBy ? "user" : "system", actorId: requestedBy ?? null,
+        action: AuditAction.TENANT_DELETED, targetType: "tenant", targetId: tenantId,
+        metadata: record as any,
+      },
+    });
+  }, { timeout: 300_000, maxWait: 30_000 });
+
+  // A second record that does not depend on the database at all.
+  console.log(`[gdpr] tenant deleted ${JSON.stringify({ ...record, actorId: requestedBy ?? null })}`);
+
+  // 4. Uploads, after the commit: a failed unlink must never leave a half-
+  //    deleted organization. On failure the names are logged so they can be
+  //    removed by hand, and the response says so.
+  const uploads = await purgeUploads(uploadFiles);
+  if (!uploads.ok) {
+    console.error(`[gdpr] uploads NOT removed for deleted tenant ${tenantId}: ${JSON.stringify(uploadFiles)}`);
+  }
+
+  return {
+    deleted: true,
+    tenantId,
+    slug: tenant.slug,
+    name: tenant.name,
+    counts,
+    identitiesDeleted,
+    vectorsPurged,
+    userCount: users.length,
+    uploadsRemoved: uploads.ok,
+    uploadFiles: uploadFiles.length,
+    uploadsLeftBehind: uploads.ok ? [] : uploadFiles,
+    providerLeftovers: leftovers,
+  };
 }

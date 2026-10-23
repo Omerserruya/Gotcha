@@ -52,6 +52,11 @@ export const AuditAction = {
   TENANT_DELETED: "tenant.deleted",
   TENANT_ACTIVATED: "tenant.activated",
   TENANT_DEACTIVATED: "tenant.deactivated",
+  // ── Console manual edits (SYSTEM_ADMIN). Metadata carries before, after
+  // and the operator's reason, so the row alone answers "who changed what".
+  TENANT_STATUS_SET_MANUALLY: "tenant.status_set_manually",
+  ADMIN_EMAIL_CHANGED: "user.admin_email_changed",
+  BILLING_MANUAL_EDIT: "billing.manual_edit",
   // ── Paid-tenant provisioning ──
   PAID_TENANT_PROVISIONING_REQUESTED: "billing.paid_tenant_provisioning_requested",
   PAID_TENANT_CREATED: "billing.paid_tenant_created",

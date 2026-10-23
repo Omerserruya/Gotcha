@@ -480,6 +480,15 @@ export async function getLastLoginBySubject(subject: string): Promise<string | n
 }
 
 /** Look up an identity's Authentik pk by subject (uuid). */
+/** Look an identity up by email without creating one. Exact match only. */
+export async function findIdentityByEmail(email: string): Promise<AuthentikIdentity | null> {
+  const res = await api<{ results: any[] }>(`/core/users/?email=${encodeURIComponent(email)}`);
+  const want = email.toLowerCase();
+  const u = res.results?.find((x) => typeof x.email === "string" && x.email.toLowerCase() === want);
+  if (!u) return null;
+  return { subject: u.uuid, pk: u.pk, email: u.email, username: u.username };
+}
+
 export async function findIdentityBySubject(subject: string): Promise<AuthentikIdentity | null> {
   const res = await api<{ results: any[] }>(`/core/users/?uuid=${encodeURIComponent(subject)}`);
   const u = res.results?.find((x) => x.uuid === subject);

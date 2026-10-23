@@ -323,6 +323,14 @@ router.post(
       body: { tenantId, units: (req.body as { units: number }).units, actor: req.user?.userId },
     });
     if (billing?.error) { res.status(502).json({ error: `Credit grant failed: ${billing.error}` }); return; }
+    // Every console write is audited; this one never was. New callers use
+    // POST /tenants/:id/billing/manual { action: "add_credits" }, which also
+    // records the balance before.
+    void writeAudit({
+      tenantId, actorType: "user", actorId: req.user?.userId,
+      action: AuditAction.BILLING_MANUAL_EDIT, targetType: "tenant", targetId: tenantId,
+      metadata: { action: "add_credits", units: (req.body as { units: number }).units, before: null, after: { balance: billing?.balance ?? null }, reason: null },
+    });
     res.json({ data: { ok: true, balance: billing?.balance ?? null } });
   },
 );

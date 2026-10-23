@@ -17,6 +17,13 @@ import { refundCharge, applyChargeback, applyRefundConfirmation } from "../servi
 import { provisionPoc, PocProvisioningRefused, POC_FEATURE_DOMAINS } from "../services/poc.service";
 import { auditTenantPlans } from "../services/tenant-plan-audit.service";
 import {
+  manualChangePlan,
+  manualSetEndDate,
+  manualSwitchToPoc,
+  manualAddCredits,
+  ManualEditRefused,
+} from "../services/manual-edit.service";
+import {
   provisionPaidTenant,
   resolveAndValidatePlan,
   ProvisioningRefused,
@@ -210,6 +217,53 @@ router.post("/internal/billing/grant-credits", async (req, res) => {
   }
   await grantUnits({ tenantId, bucket: "PURCHASED", grantType: "PROMO", units, source: `admin:${actor ?? "system"}` });
   res.json({ ok: true, balance: await getBalance(tenantId) });
+});
+
+/**
+ * SYSTEM_ADMIN console: a manual plan, end-date, POC or credit edit that never
+ * charges - see manual-edit.service for every way it keeps renewal from doing
+ * so. The auth system console validates the body and audits the result; this
+ * owns the billing rules. A refusal is a 409 with a code the console shows.
+ */
+router.post("/internal/billing/manual-edit", async (req, res) => {
+  const b = req.body ?? {};
+  const { tenantId, action, actor, reason } = b;
+  if (!tenantId || typeof reason !== "string" || !reason.trim()) {
+    return res.status(400).json({ error: "tenantId and reason required" });
+  }
+  const date = (v: unknown) => (typeof v === "string" ? new Date(v) : null);
+  try {
+    let result;
+    if (action === "change_plan") {
+      result = await manualChangePlan({
+        tenantId, actor, reason,
+        planVersionId: b.planVersionId,
+        chatVolumeOptionKey: b.chatVolumeOptionKey ?? null,
+        voiceVolumeOptionKey: b.voiceVolumeOptionKey ?? null,
+        endsAt: date(b.endsAt),
+      });
+    } else if (action === "set_end_date") {
+      result = await manualSetEndDate({ tenantId, actor, reason, endsAt: date(b.endsAt) as Date });
+    } else if (action === "switch_to_poc") {
+      result = await manualSwitchToPoc({
+        tenantId, actor, reason,
+        credits: b.pocCredits,
+        expiresAt: date(b.pocExpiresAt) as Date,
+        features: Array.isArray(b.pocFeatureAreas) ? b.pocFeatureAreas : [],
+      });
+    } else if (action === "add_credits") {
+      result = await manualAddCredits({ tenantId, actor, reason, units: b.units });
+    } else {
+      return res.status(400).json({ error: "unknown_action" });
+    }
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    if (err instanceof ManualEditRefused) {
+      return res.status(409).json({ error: err.code, detail: err.detail ?? null });
+    }
+    console.error("[billing] manual edit failed:", err?.message ?? err);
+    res.status(500).json({ error: "manual_edit_failed" });
+  }
 });
 
 /** SYSTEM_ADMIN console: subscription + wallet snapshot for one tenant. */
