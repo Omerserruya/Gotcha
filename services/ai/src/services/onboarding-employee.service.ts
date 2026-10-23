@@ -23,6 +23,7 @@ import crypto from "crypto";
 import { prisma, readDurableSetting, writeDurableSetting, defaultIntegrationAccess } from "@chatcenter/shared";
 import { buildAgentFields, type BusinessProfileData, type DepartmentData } from "./agent-config-generator";
 import { whereEmployeeAnswers } from "./employee-reach.service";
+import { installOf } from "./website-widget.service";
 import { logAudit } from "./audit.service";
 import { executeAdapterTool } from "./connectors/integration-framework";
 
@@ -129,10 +130,44 @@ export function policyGuidelines(policies: any[]): string[] {
   return out.slice(0, 10);
 }
 
+/**
+ * "waiting_for_install": the channel exists but no customer can write there
+ * yet - website code never seen on the site, or a Shopify app embed that is
+ * off, uninstalled or silent for a week. Every other active account is "live".
+ */
+export type ChannelReach = "live" | "waiting_for_install";
+export interface GoLiveChannel { id: string; type: string; displayName: string; routed: boolean; reach: ChannelReach }
+
+/** The active channels, where the employee answers, and whether a customer can reach each. */
+async function channelsOf(tenantId: string, agentId: string): Promise<GoLiveChannel[]> {
+  const reach = await whereEmployeeAnswers(tenantId, agentId).catch(() => []);
+  const answered = new Set(reach.filter((r: any) => r.reach === "always").map((r: any) => r.channel));
+  const accounts = await prisma.channelAccount.findMany({
+    where: { tenantId, isActive: true },
+    select: { id: true, channel: true, displayName: true, connectionStatus: true },
+  });
+  const liveShops = accounts.some((a) => String(a.channel) === "SHOPIFY_LIVE_CHAT")
+    ? new Set((await installOf(tenantId).catch(() => null))?.shopify.filter((s) => s.status === "active" && s.embedLive).map((s) => s.channelId) ?? [])
+    : new Set<string>();
+  return accounts.map((a) => {
+    const type = String(a.channel);
+    const live = type === "WEBCHAT" ? String(a.connectionStatus) === "CONNECTED"
+      : type === "SHOPIFY_LIVE_CHAT" ? liveShops.has(a.id)
+      : true;
+    return { id: a.id, type, displayName: a.displayName, routed: answered.has(type), reach: live ? "live" : "waiting_for_install" };
+  });
+}
+
+/** no_channels: none at all; no_reachable_channel: some, but none a customer can write to yet. */
+function channelWarnings(channels: GoLiveChannel[]): string[] {
+  if (!channels.length) return ["no_channels"];
+  return channels.some((c) => c.reach === "live") ? [] : ["no_reachable_channel"];
+}
+
 export interface GoLiveResult {
   employee: { id: string; name: string; status: "ACTIVE" };
   created: boolean;
-  channels: Array<{ id: string; type: string; displayName: string; routed: boolean }>;
+  channels: GoLiveChannel[];
   knowledgeBases: number;
   policiesApplied: number;
   tools: { platform: string | null; granted: string[] };
@@ -241,16 +276,9 @@ export async function goLiveEmployee(input: { tenantId: string; actor?: string |
   // ── routing ──
   const routing = await routeToEmployee(tenantId, agent.id, input.actor ?? null);
 
-  const reach = await whereEmployeeAnswers(tenantId, agent.id).catch(() => []);
-  const answered = new Set(reach.filter((r: any) => r.reach === "always").map((r: any) => r.channel));
-  const accounts = await prisma.channelAccount.findMany({
-    where: { tenantId, isActive: true },
-    select: { id: true, channel: true, displayName: true },
-  });
-  const channels = accounts.map((a) => ({ id: a.id, type: String(a.channel), displayName: a.displayName, routed: answered.has(String(a.channel)) }));
+  const channels = await channelsOf(tenantId, agent.id);
 
-  const warnings: string[] = [];
-  if (!accounts.length) warnings.push("no_channels");
+  const warnings: string[] = channelWarnings(channels);
   if (!tools.platform) warnings.push("no_platform_connected");
   if (routing === "customized") warnings.push("playbook_customized");
 
@@ -276,9 +304,7 @@ export async function goLiveEmployee(input: { tenantId: string; actor?: string |
 
 /** The owner's edited employee: nothing about it changes; report where it answers. */
 async function customizedResult(tenantId: string, agentId: string, name: string, actor: string | null): Promise<GoLiveResult> {
-  const reach = await whereEmployeeAnswers(tenantId, agentId).catch(() => []);
-  const answered = new Set(reach.filter((r: any) => r.reach === "always").map((r: any) => r.channel));
-  const accounts = await prisma.channelAccount.findMany({ where: { tenantId, isActive: true }, select: { id: true, channel: true, displayName: true } });
+  const channels = await channelsOf(tenantId, agentId);
   await logAudit({
     tenantId,
     actor: { type: actor ? "user" : "system", id: actor ?? undefined },
@@ -289,11 +315,11 @@ async function customizedResult(tenantId: string, agentId: string, name: string,
   return {
     employee: { id: agentId, name, status: "ACTIVE" },
     created: false,
-    channels: accounts.map((a) => ({ id: a.id, type: String(a.channel), displayName: a.displayName, routed: answered.has(String(a.channel)) })),
+    channels,
     knowledgeBases: 0,
     policiesApplied: 0,
     tools: { platform: null, granted: [] },
-    warnings: ["employee_customized"],
+    warnings: ["employee_customized", ...channelWarnings(channels)],
     suggestedOrderQuestion: null,
   };
 }

@@ -19,6 +19,10 @@ const H = vi.hoisted(() => ({
   accounts: [] as any[],
   adapterCalls: [] as any[],
   adapterReply: { ok: true, result: { orders: [{ name: "#1043" }] } } as any,
+  shops: [] as any[],
+}));
+vi.mock("../services/website-widget.service", () => ({
+  installOf: async () => ({ shopify: H.shops }),
 }));
 vi.mock("../services/connectors/integration-framework", () => ({
   executeAdapterTool: async (opts: any) => { H.adapterCalls.push(opts); return H.adapterReply; },
@@ -82,7 +86,7 @@ const tool = (id: string, slug: string, category: string, ti = "ti-shop") => ({ 
 
 beforeEach(() => {
   H.setting = new Map(); H.agents = []; H.kbLinks = []; H.perms = []; H.canvas = null; H.depts = []; H.audits = [];
-  H.adapterCalls = []; H.adapterReply = { ok: true, result: { orders: [{ name: "#1043" }] } };
+  H.adapterCalls = []; H.shops = []; H.adapterReply = { ok: true, result: { orders: [{ name: "#1043" }] } };
   H.discovery = {
     status: "COMPLETE", business: { name: "Acme", industry: "Fashion", summary: "Clothes" }, brand: { voice: "warm" },
     knowledge: { structured: { lang: "he", policies: POLICIES } }, recommendation: { employeeName: "מאיה" }, technology: {}, primaryGoal: null,
@@ -172,6 +176,43 @@ describe("go-live", () => {
     const r = await goLiveEmployee({ tenantId: "T" });
     expect(r.warnings).toEqual(["no_channels", "no_platform_connected"]);
     expect(r.tools).toEqual({ platform: null, granted: [] });
+  });
+
+  it("a website widget never seen on the site is waiting_for_install; WhatsApp is live", async () => {
+    const r = await goLiveEmployee({ tenantId: "T" });
+    expect(r.channels.map((c) => [c.type, c.reach])).toEqual([["WEBCHAT", "waiting_for_install"], ["WHATSAPP", "live"]]);
+    expect(r.warnings).not.toContain("no_reachable_channel");
+  });
+
+  it("ONLY a not-yet-installed widget: no_reachable_channel, never 'live on: website'", async () => {
+    H.accounts = [{ id: "ca1", channel: "WEBCHAT", displayName: "Site", connectionStatus: "PENDING" }];
+    const r = await goLiveEmployee({ tenantId: "T" });
+    expect(r.channels[0].reach).toBe("waiting_for_install");
+    expect(r.warnings).toEqual(["no_reachable_channel"]);
+  });
+
+  it("a widget seen on the site is live", async () => {
+    H.accounts = [{ id: "ca1", channel: "WEBCHAT", displayName: "Site", connectionStatus: "CONNECTED" }];
+    const r = await goLiveEmployee({ tenantId: "T" });
+    expect(r.channels[0].reach).toBe("live");
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("Shopify chat is live only when enabled AND its app embed loaded this week", async () => {
+    H.accounts = [
+      { id: "s1", channel: "SHOPIFY_LIVE_CHAT", displayName: "A" },
+      { id: "s2", channel: "SHOPIFY_LIVE_CHAT", displayName: "B" },
+      { id: "s3", channel: "SHOPIFY_LIVE_CHAT", displayName: "C" },
+    ];
+    H.shops = [
+      { channelId: "s1", status: "active", embedLive: true },
+      { channelId: "s2", status: "active", embedLive: false },
+      { channelId: "s3", status: "not_enabled", embedLive: true },
+    ];
+    const r = await goLiveEmployee({ tenantId: "T" });
+    expect(r.channels.map((c) => c.reach)).toEqual(["live", "waiting_for_install", "waiting_for_install"]);
+    H.shops = [];
+    expect((await goLiveEmployee({ tenantId: "T" })).warnings).toContain("no_reachable_channel");
   });
 
   it("refuses before the scan finished: NOT_LEARNED, nothing created", async () => {
