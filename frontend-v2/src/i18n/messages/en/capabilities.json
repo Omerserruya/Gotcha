@@ -285,5 +285,14 @@
       "inactive": "Disconnecting needs an active workspace.",
       "failed": "{name} wasn't disconnected. Try again."
     }
+  },
+  "fieldLabels": {
+    "api_key": "API key",
+    "api_secret": "API secret",
+    "access_token": "Access token",
+    "store_url": "Store URL",
+    "username": "Username",
+    "password": "Password",
+    "account_id": "Account ID"
   }
 }

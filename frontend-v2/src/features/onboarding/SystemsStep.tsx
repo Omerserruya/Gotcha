@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import { isFailing, type Integration } from '@/api/contracts/integrations';
 import type { IntegrationSuggestion } from '@/api/contracts/onboarding-v2';
 import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
-import { ConnectFor } from '@/features/capabilities/ConnectFor';
+import { ConnectFor, isLaunchable } from '@/features/capabilities/ConnectFor';
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import type { ShopifyAvailability } from '@/features/capabilities/load-capabilities';
 import { Link } from '@/i18n/navigation';
@@ -64,7 +64,19 @@ export function SystemsStep({
     if (integration) return standingOf(integration);
     return suggestion.connected ? 'connected' : 'none';
   };
-  const anyConnected = (suggestions ?? []).some((each) => standing(each) === 'connected');
+  /*
+   * Only what can be connected from HERE: one that can't (its sign-in returns
+   * elsewhere) is not shown at all - a line under the list says more systems
+   * connect later, in Settings - so an owner never meets a dead control.
+   */
+  const shown = (suggestions ?? []).filter((each) => {
+    const integration = of(each.slug);
+    const state = standing(each);
+    return !integration || state === 'connected' || isLaunchable(integration, state === 'failing');
+  });
+  const hidden = (suggestions?.length ?? 0) - shown.length;
+  const anyConnected = shown.some((each) => standing(each) === 'connected');
+  const nothingToDo = suggestions !== null && shown.length === 0;
   const drawn = (integration: Integration) => ({
     connect: t('connectName', { name: integration.name }),
     oauthNotHere: tc('oauthNotHere', { name: integration.name }),
@@ -80,13 +92,13 @@ export function SystemsStep({
         <p className={styles.why} role="alert" data-testid="systems-unread">
           {t('unread')}
         </p>
-      ) : suggestions.length === 0 ? (
+      ) : shown.length === 0 && hidden === 0 ? (
         <p className={styles.why} data-testid="systems-empty">
           {t('empty')}
         </p>
       ) : (
         <ul className={styles.suggestions}>
-          {suggestions.map((suggestion) => {
+          {shown.map((suggestion) => {
             const integration = of(suggestion.slug);
             const name = integration?.name || suggestion.name || suggestion.slug;
             const state = standing(suggestion);
@@ -170,7 +182,6 @@ export function SystemsStep({
                       reconnect={state === 'failing'}
                       drawn={drawn(integration)}
                       formLabel={t('connectName', { name })}
-                      whyInWords
                     />
                   </div>
                 )}
@@ -180,17 +191,23 @@ export function SystemsStep({
         </ul>
       )}
 
+      {hidden > 0 ? (
+        <p className={styles.quiet} data-testid="systems-more-later">
+          {t('moreLater')}
+        </p>
+      ) : null}
+
       <span className={styles.actions}>
         {/* Connecting is the step's point: skipping it is the quiet way on, never the loud one. */}
         <Link
           href={afterSystems(preview)}
-          className={anyConnected || suggestions?.length === 0 ? styles.primary : styles.secondary}
+          className={anyConnected || nothingToDo ? styles.primary : styles.secondary}
           data-testid="systems-next"
         >
-          {anyConnected || suggestions?.length === 0 ? t('next') : t('skip')}
+          {anyConnected || nothingToDo ? t('next') : t('skip')}
         </Link>
       </span>
-      {anyConnected || suggestions?.length === 0 ? null : (
+      {anyConnected || nothingToDo ? null : (
         <p className={styles.quiet} data-testid="systems-skip-why">
           {t('skipWhy')}
         </p>

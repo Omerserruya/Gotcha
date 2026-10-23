@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { integrationSchema } from '@/api/contracts/integrations';
 import capabilitiesEn from '@/i18n/messages/en/capabilities.json';
+import capabilitiesHe from '@/i18n/messages/he/capabilities.json';
 
 /** The launcher's two opt-ins (onboarding's step 2). Mocked: nothing connects. */
 vi.mock('./connect-actions', () => ({
@@ -73,5 +74,31 @@ describe('★ ConnectFor’s opt-ins', () => {
   it('★ a control that works never carries a why line', () => {
     show(<ConnectFor integration={keyed} drawn={drawn} whyInWords />);
     expect(screen.queryByTestId('connect-drawn-why')).toBeNull();
+  });
+});
+
+describe('★ the key form’s labels in the screen’s language', () => {
+  it('★★ "API key" reads "מפתח API" on a Hebrew screen; a label it doesn’t know stays as the catalogue wrote it', () => {
+    const odd = integrationSchema.parse({
+      id: 'i-o',
+      slug: 'odd',
+      name: 'Odd',
+      authType: 'API_KEY',
+      authSchema: {
+        oauth: false,
+        fields: [
+          { key: 'apiKey', type: 'password', label: 'API key', required: true },
+          { key: 'zone', type: 'text', label: 'Data center zone', required: true },
+        ],
+      },
+    });
+    render(
+      <NextIntlClientProvider locale="he" messages={{ capabilities: capabilitiesHe }}>
+        <ConnectFor integration={odd} drawn={drawn} />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByText('מפתח API')).toBeInTheDocument();
+    expect(screen.queryByText('API key')).toBeNull();
+    expect(screen.getByText('Data center zone')).toBeInTheDocument();
   });
 });

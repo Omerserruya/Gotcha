@@ -342,7 +342,8 @@
     "next": "Continue",
     "skip": "Continue without connecting",
     "skipWhy": "Without a store connected, GOTCHA can explain your policies but can't check an order, a price or stock.",
-    "connectName": "Connect {name}"
+    "connectName": "Connect {name}",
+    "moreLater": "More systems can be connected later, in Settings."
   },
   "channels": {
     "headline": "Where your customers write.",

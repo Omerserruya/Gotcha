@@ -86,7 +86,7 @@ export function ConnectFor({
 }
 
 /** Does `ConnectFor` draw a working control for this system (not the drawn, disabled one)? */
-function isLaunchable(integration: Integration, reconnect: boolean): boolean {
+export function isLaunchable(integration: Integration, reconnect: boolean): boolean {
   const { oauth, fields } = integration.authSchema;
   if (integration.slug === 'shopify' && !reconnect) return true;
   if (integration.slug === 'woocommerce') return true;

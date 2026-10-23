@@ -10,25 +10,24 @@ import onboardingEn from '@/i18n/messages/en/onboarding.json';
 import onboardingHe from '@/i18n/messages/he/onboarding.json';
 
 /** Step 2. Mocked: nothing connects; the launcher is a marker. */
-vi.mock('@/features/capabilities/ConnectFor', () => ({
+vi.mock('@/features/capabilities/ConnectFor', async (original) => ({
+  // The real rule for what can connect from here; only the launcher is a marker.
+  isLaunchable: (await original<{ isLaunchable: unknown }>()).isLaunchable,
   ConnectFor: ({
     integration,
     reconnect,
     formLabel,
-    whyInWords,
     drawn,
   }: {
     integration: { slug: string };
     reconnect?: boolean;
     formLabel?: string;
-    whyInWords?: boolean;
     drawn: { connect: string };
   }) => (
     <span
       data-testid={`launcher-${integration.slug}`}
       data-form-label={formLabel}
       data-drawn={drawn.connect}
-      data-why={String(Boolean(whyInWords))}
     >
       {reconnect ? 'reconnect' : 'connect'}
     </span>
@@ -50,8 +49,15 @@ const integration = (slug: string, connection: object | null = null): Integratio
     id: `i-${slug}`,
     slug,
     name: slug === 'shopify' ? 'Shopify' : 'ReturnGO',
-    authType: 'OAUTH2',
-    authSchema: { oauth: true, fields: [] },
+    // Shopify installs from Shopify; ReturnGO is a key form, as in the catalogue.
+    authType: slug === 'shopify' ? 'OAUTH2' : 'API_KEY',
+    authSchema:
+      slug === 'shopify'
+        ? { oauth: true, fields: [] }
+        : {
+            oauth: false,
+            fields: [{ key: 'apiKey', type: 'password', label: 'API key', required: true }],
+          },
     tenantConnection: connection ? { id: `c-${slug}`, ...connection } : null,
   });
 const suggestions = integrationSuggestionsSchema.parse([
@@ -141,12 +147,54 @@ describe('★★ step 2: only what the site suggests, each with why and one way 
     );
   });
 
-  it('★★ connect names the system, and a control that can’t connect says why in words', () => {
+  it('★★ connect names the system', () => {
     show();
     const launcher = screen.getByTestId('launcher-returngo');
     expect(launcher).toHaveAttribute('data-form-label', 'Connect ReturnGO');
     expect(launcher).toHaveAttribute('data-drawn', 'Connect ReturnGO');
-    expect(launcher).toHaveAttribute('data-why', 'true');
+  });
+
+  it('★★ a system that can’t connect from HERE is not shown; one quiet line says more connect later', () => {
+    const elsewhere = integrationSchema.parse({
+      id: 'i-k',
+      slug: 'klaviyo',
+      name: 'Klaviyo',
+      authType: 'OAUTH2',
+      authSchema: { oauth: true, fields: [] },
+    });
+    show({
+      suggestions: integrationSuggestionsSchema.parse([
+        { slug: 'shopify', name: 'Shopify', reason: 'platform' },
+        { slug: 'klaviyo', name: 'Klaviyo', reason: 'detected_on_site' },
+      ]),
+      integrations: [integration('shopify'), elsewhere],
+    });
+    expect(screen.getByTestId('systems-shopify')).toBeInTheDocument();
+    expect(screen.queryByTestId('systems-klaviyo')).toBeNull();
+    expect(screen.getByTestId('systems-more-later')).toHaveTextContent(
+      'More systems can be connected later, in Settings.',
+    );
+    expect(screen.getByTestId('systems')).not.toHaveTextContent('previous app');
+  });
+
+  it('★ only such systems: no empty card, the quiet line, and a primary Continue', () => {
+    const elsewhere = integrationSchema.parse({
+      id: 'i-k',
+      slug: 'klaviyo',
+      name: 'Klaviyo',
+      authType: 'OAUTH2',
+      authSchema: { oauth: true, fields: [] },
+    });
+    show({
+      suggestions: integrationSuggestionsSchema.parse([
+        { slug: 'klaviyo', name: 'Klaviyo', reason: 'detected_on_site' },
+      ]),
+      integrations: [elsewhere],
+    });
+    expect(screen.queryByTestId('systems-empty')).toBeNull();
+    expect(screen.getByTestId('systems-more-later')).toBeInTheDocument();
+    expect(screen.getByTestId('systems-next')).toHaveTextContent(/^Continue$/);
+    expect(screen.getByTestId('systems-next').className).toMatch(/primary/);
   });
 
   it('★★ the way on: "Continue without connecting" is the QUIET button, with what that costs; Continue is primary once one is connected', () => {

@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import onboardingEn from '@/i18n/messages/en/onboarding.json';
+import capabilitiesHe from '@/i18n/messages/he/capabilities.json';
 import onboardingHe from '@/i18n/messages/he/onboarding.json';
 
 vi.mock('@/i18n/navigation', () => ({
@@ -104,5 +105,32 @@ describe('★★ CSS: the phone shows the one line; Hebrew is never letter-space
         css,
       )?.[1] ?? '';
     for (const name of new Set(spaced)) expect(he).toContain(`.${name}`);
+  });
+});
+
+describe('★★ one way of addressing the owner: plural, everywhere onboarding speaks', () => {
+  // The screens say "שלכם"; a "יחזיר אותך" beside them reads as another voice.
+  const SINGULAR =
+    /(?<![\u05d0-\u05ea])(אותך|שלך|לך|אליך|עליך|ממך|בשבילך|איתך|תוכל|תוכלי|תצטרך|אתה)(?![\u05d0-\u05ea])/;
+  const strings = (value: unknown, at = ''): [string, string][] =>
+    typeof value === 'object' && value !== null
+      ? Object.entries(value).flatMap(([key, inner]) => strings(inner, `${at}.${key}`))
+      : typeof value === 'string'
+        ? [[at, value]]
+        : [];
+  const shown = {
+    onboarding: onboardingHe,
+    // The connect launchers onboarding's step 2 draws.
+    capabilities: {
+      shopify: capabilitiesHe.shopify,
+      woo: capabilitiesHe.woo,
+      oauth: capabilitiesHe.oauth,
+      available: capabilitiesHe.available,
+      fieldLabels: capabilitiesHe.fieldLabels,
+    },
+  };
+
+  it.each(strings(shown))('%s', (_, text) => {
+    expect(text).not.toMatch(SINGULAR);
   });
 });
