@@ -24,6 +24,7 @@ import { prisma, readDurableSetting, writeDurableSetting, defaultIntegrationAcce
 import { buildAgentFields, type BusinessProfileData, type DepartmentData } from "./agent-config-generator";
 import { whereEmployeeAnswers } from "./employee-reach.service";
 import { logAudit } from "./audit.service";
+import { executeAdapterTool } from "./connectors/integration-framework";
 
 export const EMPLOYEE_SETTING = "onboarding:employeeId";
 /** A fingerprint of the employee as go-live last wrote it: a change means the owner edited it. */
@@ -53,6 +54,53 @@ export const ORDER_READ_TOOLS: Record<string, string[]> = {
   ],
   woocommerce: ["get_order", "list_orders", "list_customer_orders", "get_shipment_tracking", "list_refunds"],
 };
+
+/** A customer-visible order number in a tool result: Shopify "name" ("#1043"), Woo "number", or order_number. */
+export function orderNumberIn(result: string): string | null {
+  let data: any;
+  try { data = JSON.parse(result); } catch { return null; }
+  const seen = new Set<any>();
+  const walk = (v: any, depth: number): string | null => {
+    if (!v || typeof v !== "object" || depth > 5 || seen.has(v)) return null;
+    seen.add(v);
+    if (typeof v.name === "string" && /^#?\d{2,}$/.test(v.name.trim())) return v.name.trim().replace(/^#/, "");
+    if ((typeof v.number === "string" || typeof v.number === "number") && /^\d+$/.test(String(v.number))) return String(v.number);
+    if ((typeof v.order_number === "string" || typeof v.order_number === "number") && /^\d+$/.test(String(v.order_number))) return String(v.order_number);
+    for (const x of Array.isArray(v) ? v : Object.values(v)) {
+      const n = walk(x, depth + 1);
+      if (n) return n;
+    }
+    return null;
+  };
+  return walk(data, 0);
+}
+
+/** The newest order's tool call per platform: read-only, and Shopify's default is open orders only. */
+const LATEST_ORDER: Record<string, { tool: string; args: Record<string, unknown> }> = {
+  shopify: { tool: "shopify.get_orders", args: { limit: 1, status: "any" } },
+  woocommerce: { tool: "woocommerce.list_orders", args: { per_page: 1 } },
+};
+
+/**
+ * A test question about a REAL order: the store's newest order number, read
+ * as the owner (the admin is the audited actor), phrased in the site's
+ * language. Null when there is no platform or no order - never invented.
+ */
+export async function suggestedOrderQuestion(tenantId: string, platform: string | null, lang: string, actor: string | null): Promise<string | null> {
+  const call = platform ? LATEST_ORDER[platform] : undefined;
+  if (!call) return null;
+  const r = await executeAdapterTool({
+    tenantId,
+    toolFunctionName: call.tool,
+    args: call.args,
+    accessScope: "internal",
+    ...(actor ? { actingFor: { userId: actor, reason: "onboarding_test" } } : {}),
+  }).catch(() => null);
+  if (!r || !r.ok) return null;
+  const n = orderNumberIn(typeof r.result === "string" ? r.result : JSON.stringify(r.result));
+  if (!n) return null;
+  return lang === "he" ? `איפה ההזמנה שלי #${n}?` : `Where is my order #${n}?`;
+}
 
 export class GoLiveRefused extends Error {
   constructor(readonly code: string) { super(code); this.name = "GoLiveRefused"; }
@@ -89,6 +137,8 @@ export interface GoLiveResult {
   policiesApplied: number;
   tools: { platform: string | null; granted: string[] };
   warnings: string[];
+  /** A test question about the store's newest real order, or null. */
+  suggestedOrderQuestion: string | null;
 }
 
 export async function goLiveEmployee(input: { tenantId: string; actor?: string | null; employeeName?: string | null }): Promise<GoLiveResult> {
@@ -220,6 +270,7 @@ export async function goLiveEmployee(input: { tenantId: string; actor?: string |
     policiesApplied: policies.length,
     tools,
     warnings,
+    suggestedOrderQuestion: await suggestedOrderQuestion(tenantId, tools.platform, lang, input.actor ?? null),
   };
 }
 
@@ -243,6 +294,7 @@ async function customizedResult(tenantId: string, agentId: string, name: string,
     policiesApplied: 0,
     tools: { platform: null, granted: [] },
     warnings: ["employee_customized"],
+    suggestedOrderQuestion: null,
   };
 }
 

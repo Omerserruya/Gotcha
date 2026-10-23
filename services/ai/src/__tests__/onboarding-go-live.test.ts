@@ -17,6 +17,11 @@ const H = vi.hoisted(() => ({
   tools: [] as any[],
   integrations: [] as any[],
   accounts: [] as any[],
+  adapterCalls: [] as any[],
+  adapterReply: { ok: true, result: { orders: [{ name: "#1043" }] } } as any,
+}));
+vi.mock("../services/connectors/integration-framework", () => ({
+  executeAdapterTool: async (opts: any) => { H.adapterCalls.push(opts); return H.adapterReply; },
 }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
@@ -77,6 +82,7 @@ const tool = (id: string, slug: string, category: string, ti = "ti-shop") => ({ 
 
 beforeEach(() => {
   H.setting = new Map(); H.agents = []; H.kbLinks = []; H.perms = []; H.canvas = null; H.depts = []; H.audits = [];
+  H.adapterCalls = []; H.adapterReply = { ok: true, result: { orders: [{ name: "#1043" }] } };
   H.discovery = {
     status: "COMPLETE", business: { name: "Acme", industry: "Fashion", summary: "Clothes" }, brand: { voice: "warm" },
     knowledge: { structured: { lang: "he", policies: POLICIES } }, recommendation: { employeeName: "מאיה" }, technology: {}, primaryGoal: null,
@@ -172,6 +178,27 @@ describe("go-live", () => {
     H.discovery = { ...H.discovery, status: "SCANNING" };
     await expect(goLiveEmployee({ tenantId: "T" })).rejects.toMatchObject({ code: "NOT_LEARNED" });
     expect(H.agents).toEqual([]);
+  });
+});
+
+describe("the suggested test question", () => {
+  it("names the store's newest REAL order, read as the owner, in the site's language", async () => {
+    const r = await goLiveEmployee({ tenantId: "T", actor: "u1" });
+    expect(r.suggestedOrderQuestion).toBe("איפה ההזמנה שלי #1043?");
+    expect(H.adapterCalls).toEqual([{
+      tenantId: "T", toolFunctionName: "shopify.get_orders", args: { limit: 1, status: "any" },
+      accessScope: "internal", actingFor: { userId: "u1", reason: "onboarding_test" },
+    }]);
+  });
+  it("no platform, no order, or a failed read: null - never an invented order", async () => {
+    H.adapterReply = { ok: true, result: { orders: [] } };
+    expect((await goLiveEmployee({ tenantId: "T" })).suggestedOrderQuestion).toBeNull();
+    H.adapterReply = { ok: false, reason: "token_expired" };
+    expect((await goLiveEmployee({ tenantId: "T" })).suggestedOrderQuestion).toBeNull();
+    H.integrations = [];
+    H.adapterCalls = [];
+    expect((await goLiveEmployee({ tenantId: "T" })).suggestedOrderQuestion).toBeNull();
+    expect(H.adapterCalls).toEqual([]);
   });
 });
 

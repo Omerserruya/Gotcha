@@ -2016,7 +2016,8 @@ router.post("/go-live", requireRole("ADMIN"), validate(goLiveSchema), async (req
     ]);
     await writeDurableSetting(tenantId, ONBOARDING_STEP_KEY, "live", (req as any).userId ?? undefined).catch(() => {});
 
-    res.json({ data: { ...r.body.data, test: { suggestedOrderQuestion: null } } });
+    const { suggestedOrderQuestion = null, ...live } = r.body.data ?? {};
+    res.json({ data: { ...live, test: { suggestedOrderQuestion } } });
   } catch (err: any) {
     console.error("[onboarding] go-live failed:", err?.message ?? err);
     res.status(500).json({ error: "Go-live failed", code: "GO_LIVE_FAILED" });

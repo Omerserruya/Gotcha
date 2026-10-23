@@ -17,7 +17,9 @@
 import { readDurableSetting, prisma } from "@chatcenter/shared";
 import { runSandboxTurn } from "./sandbox-conversation.service";
 import { platformPaidScope } from "./ai.service";
-import { EMPLOYEE_SETTING } from "./onboarding-employee.service";
+import { EMPLOYEE_SETTING, orderNumberIn } from "./onboarding-employee.service";
+
+export { orderNumberIn };
 
 export class EmployeeTestRefused extends Error {
   constructor(readonly code: string) { super(code); this.name = "EmployeeTestRefused"; }
@@ -25,26 +27,6 @@ export class EmployeeTestRefused extends Error {
 
 const ORDER_TOOL = /\.(get_order|get_orders|order_lookup|search_orders|find_latest_order|get_customer_orders|list_orders|list_customer_orders|track_shipment|get_shipment_status|get_shipment_tracking|get_tracking_number|get_tracking_url|get_order_items)$/;
 const FAILED = /^\s*(\{\s*"(error|ok)"\s*:\s*(false|")|error\b|access_denied|refused|tool_failed|failed)/i;
-
-/** A customer-visible order number in a tool result: Shopify "name" ("#1043"), Woo "number", or order_number. */
-export function orderNumberIn(result: string): string | null {
-  let data: any;
-  try { data = JSON.parse(result); } catch { return null; }
-  const seen = new Set<any>();
-  const walk = (v: any, depth: number): string | null => {
-    if (!v || typeof v !== "object" || depth > 5 || seen.has(v)) return null;
-    seen.add(v);
-    if (typeof v.name === "string" && /^#?\d{2,}$/.test(v.name.trim())) return v.name.trim().replace(/^#/, "");
-    if ((typeof v.number === "string" || typeof v.number === "number") && /^\d+$/.test(String(v.number))) return String(v.number);
-    if ((typeof v.order_number === "string" || typeof v.order_number === "number") && /^\d+$/.test(String(v.order_number))) return String(v.order_number);
-    for (const x of Array.isArray(v) ? v : Object.values(v)) {
-      const n = walk(x, depth + 1);
-      if (n) return n;
-    }
-    return null;
-  };
-  return walk(data, 0);
-}
 
 export interface EmployeeTestResult {
   answer: string;
