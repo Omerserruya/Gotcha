@@ -132,8 +132,9 @@ export function policyGuidelines(policies: any[]): string[] {
 
 /**
  * "waiting_for_install": the channel exists but no customer can write there
- * yet - website code never seen on the site, or a Shopify app embed that is
- * off, uninstalled or silent for a week. Every other active account is "live".
+ * yet - website code never seen on the site, a Shopify app embed that is off,
+ * uninstalled or silent for a week, or any other account whose connection is
+ * not CONNECTED (ERROR, PENDING, DISCONNECTED). "live" only when it can answer.
  */
 export type ChannelReach = "live" | "waiting_for_install";
 export interface GoLiveChannel { id: string; type: string; displayName: string; routed: boolean; reach: ChannelReach }
@@ -151,9 +152,9 @@ async function channelsOf(tenantId: string, agentId: string): Promise<GoLiveChan
     : new Set<string>();
   return accounts.map((a) => {
     const type = String(a.channel);
-    const live = type === "WEBCHAT" ? String(a.connectionStatus) === "CONNECTED"
-      : type === "SHOPIFY_LIVE_CHAT" ? liveShops.has(a.id)
-      : true;
+    // Shopify chat is live by its app embed; every other channel only when its
+    // connection is CONNECTED - an account in ERROR or PENDING answers no one.
+    const live = type === "SHOPIFY_LIVE_CHAT" ? liveShops.has(a.id) : String(a.connectionStatus) === "CONNECTED";
     return { id: a.id, type, displayName: a.displayName, routed: answered.has(type), reach: live ? "live" : "waiting_for_install" };
   });
 }
