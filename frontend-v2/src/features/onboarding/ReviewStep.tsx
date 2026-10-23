@@ -741,6 +741,8 @@ function AddMissing({
         readonly policies: number;
         readonly faq: number;
         readonly partial: boolean;
+        /** Kinds already learned that the file also had: never replaced. */
+        readonly skipped: readonly string[];
       }
     | { readonly ok: false; readonly reason: UploadRefusal }
     | null
@@ -839,6 +841,7 @@ function AddMissing({
                 policies: read.result.added.policies.length,
                 faq: read.result.added.faq,
                 partial: read.result.partial,
+                skipped: read.result.skipped.policies,
               });
               setFile(null);
             } else setUpload(read);
@@ -883,7 +886,17 @@ function AddMissing({
             {t('add.added', { policies: upload.policies, faq: upload.faq })}
             {upload.partial ? ` ${t('add.partial')}` : ''}
           </p>
-        ) : upload ? (
+        ) : null}
+        {upload?.ok && upload.skipped.length ? (
+          <ul className={styles.terms} data-testid="review-upload-skipped">
+            {upload.skipped.map((kind) => (
+              <li key={kind}>
+                {t('add.skipped', { policy: ts(`kinds.policy.${policyKind(kind)}`) })}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {upload && !upload.ok ? (
           <p className={styles.problem} role="alert" data-testid="review-upload-refused">
             {t(`add.uploadRefused.${upload.reason}`)}
           </p>
@@ -892,6 +905,10 @@ function AddMissing({
     </div>
   );
 }
+
+/** A kind as sent, read as one we name; anything else is "other". */
+const policyKind = (kind: string): LearnedPolicy['kind'] =>
+  (POLICY_KINDS as readonly string[]).includes(kind) ? (kind as LearnedPolicy['kind']) : 'other';
 
 /** Which terms a policy of each kind is edited by (plus any term it already has). */
 const TERMS_OF: Readonly<Record<string, readonly TermKey[]>> = {

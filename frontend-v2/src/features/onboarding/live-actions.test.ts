@@ -84,6 +84,8 @@ describe('★★ the sandboxed test', () => {
 
   it.each([
     ['NOT_LIVE', 409, 'not_live'],
+    ['AI_PAUSED', 409, 'ai_paused'],
+    ['NO_ANSWER', 409, 'no_answer'],
     ['QUESTION_REQUIRED', 422, 'question_required'],
     ['QUESTION_TOO_LONG', 422, 'too_long'],
     ['EMPLOYEE_TEST_FAILED', 500, 'failed'],

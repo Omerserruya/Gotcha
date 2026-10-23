@@ -457,6 +457,8 @@ describe('★★ adding what the site didn’t give us: paste a policy, or a fil
           ],
         }),
         added: { policies: ['warranty'], faq: 2, profile: false },
+        // The file also had returns, already learned: left as it was, and said.
+        skipped: { policies: ['returns', 'galactic'] },
         partial: true,
       },
     });
@@ -470,9 +472,34 @@ describe('★★ adding what the site didn’t give us: paste a policy, or a fil
       'From the file: 1 policy and 2 questions.',
     );
     expect(screen.getByTestId('review-upload-done')).toHaveTextContent('only its start was read');
+    const skipped = within(screen.getByTestId('review-upload-skipped')).getAllByRole('listitem');
+    expect(skipped.map((li) => li.textContent)).toEqual([
+      'Already learned, left as it was: returns policy. If the file is newer, edit it above.',
+      'Already learned, left as it was: another policy. If the file is newer, edit it above.',
+    ]);
     expect(
       within(screen.getByTestId('review-policy-warranty')).getByTestId('review-source'),
     ).toHaveTextContent('From your file policies.pdf');
+  });
+
+  it('nothing skipped: no skipped list', async () => {
+    upload.uploadLearned.mockResolvedValue({
+      ok: true,
+      result: {
+        ...learned(),
+        added: { policies: [], faq: 1, profile: false },
+        skipped: { policies: [] },
+        partial: false,
+      },
+    });
+    show();
+    openAdd();
+    fireEvent.change(screen.getByTestId('review-upload-file'), {
+      target: { files: [new File(['x'], 'a.txt')] },
+    });
+    await act(async () => fireEvent.submit(screen.getByTestId('review-upload')));
+    expect(screen.getByTestId('review-upload-done')).toBeInTheDocument();
+    expect(screen.queryByTestId('review-upload-skipped')).toBeNull();
   });
 
   it('★ nothing found in the file: said, nothing changes', async () => {

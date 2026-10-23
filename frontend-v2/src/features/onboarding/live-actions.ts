@@ -58,7 +58,14 @@ export type EmployeeTestResult =
   | { readonly ok: true; readonly test: EmployeeTest }
   | {
       readonly ok: false;
-      readonly reason: 'not_live' | 'question_required' | 'too_long' | 'rate_limited' | 'failed';
+      readonly reason:
+        | 'not_live'
+        | 'question_required'
+        | 'too_long'
+        | 'rate_limited'
+        | 'ai_paused'
+        | 'no_answer'
+        | 'failed';
       readonly retryAfterSeconds?: number | null;
     };
 
@@ -81,6 +88,9 @@ export async function askEmployee(question: string): Promise<EmployeeTestResult>
     await signInIfSignedOut(cause);
     if (isApiError(cause)) {
       if (cause.code === 'NOT_LIVE') return { ok: false, reason: 'not_live' };
+      // An empty turn is refused with why (Backend 17520008): paused, or no answer.
+      if (cause.code === 'AI_PAUSED') return { ok: false, reason: 'ai_paused' };
+      if (cause.code === 'NO_ANSWER') return { ok: false, reason: 'no_answer' };
       if (cause.code === 'QUESTION_REQUIRED') return { ok: false, reason: 'question_required' };
       if (cause.code === 'QUESTION_TOO_LONG') return { ok: false, reason: 'too_long' };
       if (cause.code === 'PREVIEW_RATE_LIMITED') {

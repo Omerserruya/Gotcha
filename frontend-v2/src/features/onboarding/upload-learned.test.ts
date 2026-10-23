@@ -28,6 +28,17 @@ describe('★★ a file into what was learned', () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
+  it('★ the skipped kinds are read; absent (an older backend) is none, never a failed upload', () => {
+    expect(
+      learnedUploadSchema.parse({ added: { policies: [] }, skipped: { policies: ['returns'] } })
+        .skipped,
+    ).toEqual({ policies: ['returns'] });
+    expect(learnedUploadSchema.parse({ added: { policies: [] } }).skipped).toEqual({
+      policies: [],
+    });
+    expect(learnedUploadSchema.parse({ skipped: 'x' }).skipped).toEqual({ policies: [] });
+  });
+
   it('★★ from the browser, multipart, ONE field named "file", with a long timeout', async () => {
     const parsed = learnedUploadSchema.parse({
       added: { policies: ['returns'], faq: 1 },

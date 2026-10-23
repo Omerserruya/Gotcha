@@ -339,6 +339,17 @@ describe('★★ the test: one question, in a sandbox', () => {
     );
   });
 
+  it.each([
+    ['ai_paused', 'Automatic answers are paused for this account, so there was no answer.'],
+    ['no_answer', 'No answer came back for this question.'],
+  ])('★★ an empty turn is said for what it is: %s', async (reason, text) => {
+    actions.askEmployee.mockResolvedValue({ ok: false, reason });
+    await goneLive();
+    await ask();
+    expect(screen.getByTestId('go-live-test-refused')).toHaveTextContent(text);
+    expect(screen.queryByTestId('go-live-answer')).toBeNull();
+  });
+
   it('★ an empty question is never sent', async () => {
     await goneLive();
     fireEvent.change(screen.getByLabelText('Question'), { target: { value: '  ' } });

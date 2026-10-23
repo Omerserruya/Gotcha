@@ -501,7 +501,8 @@
       },
       "choose": "Choose a file",
       "noFile": "No file chosen yet",
-      "collapsed": "A policy missing? Add from what you have"
+      "collapsed": "A policy missing? Add from what you have",
+      "skipped": "Already learned, left as it was: {policy}. If the file is newer, edit it above."
     },
     "termFields": {
       "windowDays": "Days to return",
@@ -568,7 +569,9 @@
         "too_long": "The question is too long.",
         "rate_limited": "Too many questions in a row. Try again in {seconds, plural, one {# second} other {# seconds}}.",
         "rate_limited_soon": "Too many questions in a row. Try again in a moment.",
-        "failed": "The test didn't run this time. You can try again."
+        "failed": "The test didn't run this time. You can try again.",
+        "ai_paused": "Automatic answers are paused for this account, so there was no answer. Check the plan and its AI units.",
+        "no_answer": "No answer came back for this question. Try asking it another way."
       },
       "titleNoName": "Try your employee"
     },

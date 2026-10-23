@@ -312,6 +312,11 @@ export const learnedUploadSchema = learnedSchema.extend({
       profile: flag,
     })
     .catch({ policies: [], faq: 0, profile: false }),
+  /** Kinds the file also had but were already learned: left as they were (Backend 6d90cffb). */
+  skipped: z
+    .object({ policies: z.array(z.string()).catch([]).default([]) })
+    .catch({ policies: [] })
+    .default({ policies: [] }),
   partial: flag,
 });
 export type LearnedUpload = z.infer<typeof learnedUploadSchema>;
