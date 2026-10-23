@@ -153,6 +153,13 @@ describe("the test", () => {
     expect(r).toMatchObject({ usedRealOrder: false, orderNumber: null, toolsUsed: [{ name: "shopify.get_order", ok: false }] });
   });
 
+  it("no answer is a refusal, never a blank success: billing pre-flight is AI_PAUSED with its reason, anything else NO_ANSWER", async () => {
+    H.turn = { reply: "", diagnostics: { knowledgeUsed: [], escalated: { reason: "billing_blocked:no_plan" } }, toolCallLog: [] };
+    await expect(testOnboardingEmployee({ tenantId: "T", userId: "u1", question: "q" })).rejects.toMatchObject({ code: "AI_PAUSED", reason: "no_plan" });
+    H.turn = { reply: "  ", diagnostics: { knowledgeUsed: [], escalated: null }, toolCallLog: [] };
+    await expect(testOnboardingEmployee({ tenantId: "T", userId: "u1", question: "q" })).rejects.toMatchObject({ code: "NO_ANSWER" });
+  });
+
   it("before go-live: 409 NOT_LIVE, no turn", async () => {
     H.setting = null;
     await expect(testOnboardingEmployee({ tenantId: "T", userId: "u1", question: "q" })).rejects.toMatchObject({ code: "NOT_LIVE" });

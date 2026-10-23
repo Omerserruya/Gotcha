@@ -22,7 +22,7 @@ import { EMPLOYEE_SETTING, orderNumberIn } from "./onboarding-employee.service";
 export { orderNumberIn };
 
 export class EmployeeTestRefused extends Error {
-  constructor(readonly code: string) { super(code); this.name = "EmployeeTestRefused"; }
+  constructor(readonly code: string, readonly reason: string | null = null) { super(code); this.name = "EmployeeTestRefused"; }
 }
 
 const ORDER_TOOL = /\.(get_order|get_orders|order_lookup|search_orders|find_latest_order|get_customer_orders|list_orders|list_customer_orders|track_shipment|get_shipment_status|get_shipment_tracking|get_tracking_number|get_tracking_url|get_order_items)$/;
@@ -56,6 +56,14 @@ export async function testOnboardingEmployee(input: { tenantId: string; userId: 
     }),
   );
   if (!turn) throw new EmployeeTestRefused("NOT_LIVE");
+  // No answer is never a blank success: found on dev, a workspace the billing
+  // pre-flight stops (no plan) came back 200 with answer "".
+  if (!turn.reply.trim()) {
+    const why = turn.diagnostics.escalated?.reason ?? null;
+    throw why?.startsWith("billing_blocked")
+      ? new EmployeeTestRefused("AI_PAUSED", why.slice("billing_blocked:".length) || null)
+      : new EmployeeTestRefused("NO_ANSWER", why);
+  }
 
   const toolsUsed = turn.toolCallLog.map((t) => ({ name: t.tool, ok: !FAILED.test(t.result) && t.decision !== "denied" }));
   let orderNumber: string | null = null;

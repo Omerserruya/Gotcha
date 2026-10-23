@@ -264,7 +264,10 @@ router.post("/onboarding-employee-test", authenticate, resolveTenant, requireRol
     res.json({ data });
   } catch (err: any) {
     if (err instanceof EmployeeTestRefused) {
-      res.status(409).json({ error: "The employee is not live yet", code: err.code });
+      const error = err.code === "AI_PAUSED" ? "AI answers are paused for this workspace"
+        : err.code === "NO_ANSWER" ? "The employee did not answer"
+        : "The employee is not live yet";
+      res.status(409).json({ error, code: err.code, ...(err.reason ? { reason: err.reason } : {}) });
       return;
     }
     console.error("[onboarding-employee-test] failed:", err?.message ?? err);
