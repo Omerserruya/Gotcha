@@ -79,7 +79,7 @@ vi.mock("../services/employee-reach.service", () => ({
   },
 }));
 
-import { goLiveEmployee, policyGuidelines, EMPLOYEE_SETTING, EMPLOYEE_HASH_SETTING } from "../services/onboarding-employee.service";
+import { goLiveEmployee, policyGuidelines, resyncEmployeePolicies, employeeFingerprint, EMPLOYEE_SETTING, EMPLOYEE_HASH_SETTING } from "../services/onboarding-employee.service";
 
 const POLICIES = [{ kind: "returns", summary: "Return within 30 days.", terms: { windowDays: 30, exchange: { allowed: true, how: "form" } } }];
 const tool = (id: string, slug: string, category: string, ti = "ti-shop") => ({ id, tenantIntegrationId: ti, isEnabled: true, catalogTool: { slug, category } });
@@ -268,5 +268,37 @@ describe("policy guidelines", () => {
   it("only stated terms are written; a policy with no summary is skipped", () => {
     expect(policyGuidelines([{ kind: "shipping", summary: "Ships fast.", terms: { shipping: { times: "2-3 days", freeOver: 300 } } }, { kind: "x", summary: "" }]))
       .toEqual(["Store policy (shipping): Ships fast. [shipping 2-3 days; free over 300]"]);
+  });
+});
+
+
+describe("policy re-sync after go-live (an edit, a paste, a file)", () => {
+  const guidelines = () => H.agents[0].identity.representationGuidelines as string[];
+
+  it("rewrites ONLY the Store policy lines from the current policies; the fingerprint follows, so it is not read as a studio edit", async () => {
+    await goLiveEmployee({ tenantId: "T" });
+    const others = guidelines().filter((g) => !g.startsWith("Store policy ("));
+    expect(guidelines().some((g) => g.includes("window 30 days"))).toBe(true);
+
+    H.discovery.knowledge.structured.policies = [{ kind: "returns", summary: "Return within 14 days.", terms: { windowDays: 14 } }];
+    expect(await resyncEmployeePolicies({ tenantId: "T" })).toBe("updated");
+    expect(guidelines().filter((g) => g.startsWith("Store policy ("))).toEqual(["Store policy (returns): Return within 14 days. [window 14 days]"]);
+    expect(guidelines().filter((g) => !g.startsWith("Store policy ("))).toEqual(others);
+    expect(H.setting.get(EMPLOYEE_HASH_SETTING)).toBe(employeeFingerprint(H.agents[0]));
+    // ...so a later go-live still updates it, and a second sync has nothing to do
+    expect(await resyncEmployeePolicies({ tenantId: "T" })).toBe("unchanged");
+    expect((await goLiveEmployee({ tenantId: "T" })).warnings).not.toContain("employee_customized");
+  });
+
+  it("an employee edited in the studio is left exactly as it is: customized", async () => {
+    await goLiveEmployee({ tenantId: "T" });
+    H.agents[0].identity = { ...H.agents[0].identity, representationGuidelines: ["Owner's own rule"] };
+    H.discovery.knowledge.structured.policies = [{ kind: "returns", summary: "Changed.", terms: { windowDays: 7 } }];
+    expect(await resyncEmployeePolicies({ tenantId: "T" })).toBe("customized");
+    expect(guidelines()).toEqual(["Owner's own rule"]);
+  });
+
+  it("before go-live there is no employee to sync", async () => {
+    expect(await resyncEmployeePolicies({ tenantId: "T" })).toBe("no_employee");
   });
 });

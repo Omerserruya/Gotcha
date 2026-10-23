@@ -172,7 +172,19 @@ export async function editLearned(tenantId: string, edit: LearnedEdit, ai: AiCal
     default:
       throw new LearnedEditRefused("UNKNOWN_SECTION");
   }
-  return readLearned(tenantId);
+  const view = await readLearned(tenantId);
+  return edit.section === "policies" ? { ...view, ...(await employeePolicySync(tenantId, ai)) } : view;
+}
+
+/**
+ * The go-live employee carries the policies as prompt lines too; after any
+ * policy change they are rewritten so the prompt and retrieval agree. A studio-
+ * customized employee is left alone and said: warnings ["employee_customized"].
+ */
+async function employeePolicySync(tenantId: string, ai: AiCall): Promise<{ employeeSync: string; warnings: string[] }> {
+  const r = await ai(tenantId, "POST", "/api/ai-assist/onboarding-employee-policies", {});
+  const sync = r.ok && typeof r.body?.data?.sync === "string" ? (r.body.data.sync as string) : "failed";
+  return { employeeSync: sync, warnings: sync === "customized" ? ["employee_customized"] : [] };
 }
 
 /** The found-flags the legacy readers use (exchange and refund count as returns), as the scan sets them. */
@@ -217,7 +229,10 @@ async function pastedPolicy(tenantId: string, kind: string | undefined, rawText:
 }
 
 export class LearnedUploadRefused extends Error {
-  constructor(readonly code: string, readonly status: number) { super(code); this.name = "LearnedUploadRefused"; }
+  constructor(readonly code: string, readonly status: number, readonly detail: Record<string, unknown> = {}) {
+    super(code);
+    this.name = "LearnedUploadRefused";
+  }
 }
 
 /**
@@ -294,7 +309,9 @@ export async function learnFromFile(
   const contactChanged = JSON.stringify(nextContact) !== JSON.stringify({ ...contact, emails: contact.emails ?? [], phones: contact.phones ?? [], whatsapp: contact.whatsapp ?? [] });
   const profileChanged = Object.keys(profileFill).length > 0 || contactChanged;
 
-  if (!newPolicies.length && !faqAdded && !profileChanged) throw new LearnedUploadRefused("NOTHING_FOUND", 422);
+  if (!newPolicies.length && !faqAdded && !profileChanged) {
+    throw new LearnedUploadRefused("NOTHING_FOUND", 422, { skipped: { policies: skippedPolicies } });
+  }
 
   const kbId = await ensureWebsiteKb(tenantId);
   for (const p of newPolicies) await writeDoc(tenantId, kbId, policyDoc(p, lang), ai);
@@ -309,8 +326,10 @@ export async function learnFromFile(
     },
   });
 
+  const sync = newPolicies.length ? await employeePolicySync(tenantId, ai) : { employeeSync: "unchanged", warnings: [] as string[] };
   return {
     ...(await readLearned(tenantId)),
+    ...sync,
     added: { policies: newPolicies.map((p) => p.kind), faq: faqAdded, profile: profileChanged },
     // Kinds the file also had, left as they were: already learned.
     skipped: { policies: skippedPolicies },
