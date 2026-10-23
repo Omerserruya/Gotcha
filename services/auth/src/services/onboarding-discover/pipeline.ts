@@ -26,6 +26,7 @@ import {
 } from "../site-crawl.service";
 import { type Fetcher, type PlatformHarvest, defaultFetcher, detectPlatform, harvestPlatform, platformFromAssets } from "./harvest";
 import { type PageKind, discoverSitemapUrls, kindOf, planPages } from "./sitemap";
+import { siteLanguage } from "./learn";
 import {
   type DiscoverJob,
   type EventKind,
@@ -47,6 +48,8 @@ export interface LearnContext {
   pages: ReadPage[];
   harvest: PlatformHarvest;
   signals: DiscoverySignals;
+  /** Tools the site's pages actually load (toolsFromAssets), not ones its copy names. */
+  tools: string[];
   emit: Emitter;
   /** Stages whose durable output already exists from an earlier attempt. */
   doneStages: Stage[];
@@ -196,6 +199,8 @@ export async function runDiscoverJob(tenantId: string, jobId: string, deps: Pipe
         ];
     const plan = planPages({
       origin,
+      // A Hebrew site's /he/ copy is the one its customers read: keep it, fold the other.
+      preferLang: homePage ? siteLanguage(homePage.html, "") : "",
       sitemapUrls: candidates,
       platformPolicyUrls: harvest.policyUrls,
       haveProductFeed: !!harvest.products,
@@ -256,7 +261,7 @@ export async function runDiscoverJob(tenantId: string, jobId: string, deps: Pipe
 
     // ── extract → write_knowledge → suggest_integrations ──
     if (deps.learn) {
-      await deps.learn({ tenantId, jobId, origin, locale: start.locale, pages, harvest, signals, emit, doneStages });
+      await deps.learn({ tenantId, jobId, origin, locale: start.locale, pages, harvest, signals, tools, emit, doneStages });
     }
 
     stage = "done";

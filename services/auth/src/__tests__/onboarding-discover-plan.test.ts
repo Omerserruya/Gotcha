@@ -201,6 +201,15 @@ describe("tools come from what the site LOADS, not what it says", async () => {
 });
 
 describe("language copies are read once", () => {
+  it("a Hebrew site keeps its /he/ copy and folds the English one (brand voice from what customers read)", () => {
+    const plan = planPages({
+      origin: O, preferLang: "he",
+      sitemapUrls: [`${O}/about`, `${O}/he/about`, `${O}/en/only-english`],
+      platformPolicyUrls: [], haveProductFeed: true, robots: { sitemaps: [], disallow: [] },
+    });
+    expect(plan.map((p) => p.url)).toEqual([O, `${O}/he/about`, `${O}/en/only-english`]);
+  });
+
   it("/he/about next to /about: only /about; a Hebrew-only page is kept", () => {
     const plan = planPages({
       origin: O,

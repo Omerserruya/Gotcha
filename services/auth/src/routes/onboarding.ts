@@ -25,6 +25,8 @@ import { ingestTaughtDocument, updateTaughtDocument } from "../services/teach-in
 import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
 import { readJob, startJob, reopenJob, isLive, viewOf } from "../services/onboarding-discover/job-store";
 import { enqueueDiscover } from "../services/onboarding-discover/queue";
+import { readLearned, editLearned, LearnedEditRefused, type LearnedEdit } from "../services/onboarding-discover/learned";
+import { integrationSuggestions } from "../services/onboarding-discover/learn";
 import { syncDiscoveryRecommendations, listRecommendations, setRecommendationStatus, addStoreInspectionRecs, reconcileConnectSystemRecs } from "../services/recommendations.service";
 import OpenAI from "openai";
 
@@ -1925,6 +1927,53 @@ router.post("/discover/retry", requireRole("ADMIN"), async (req: Request, res: R
   } catch (err: any) {
     console.error("[onboarding] discover retry failed:", err?.message ?? err);
     res.status(500).json({ error: "Could not retry the scan", code: "DISCOVER_RETRY_FAILED" });
+  }
+});
+
+// ─── What was learned (onboarding v2) ────────────────────────────────────────
+
+router.get("/learned", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await readLearned(req.tenantId!);
+    if (!data) {
+      res.status(404).json({ error: "Nothing has been learned yet", code: "NOT_LEARNED" });
+      return;
+    }
+    res.json({ data });
+  } catch (err: any) {
+    console.error("[onboarding] learned read failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not read what was learned", code: "LEARNED_READ_FAILED" });
+  }
+});
+
+const learnedEditSchema = z.object({
+  section: z.enum(["policies", "faq", "profile", "contact", "brand"]),
+  id: z.string().min(1).max(64).optional(),
+  value: z.record(z.unknown()).optional(),
+  remove: z.boolean().optional(),
+}).strict().refine((b) => b.remove || b.value, { message: "value or remove is required" });
+
+router.patch("/learned", requireRole("ADMIN"), validate(learnedEditSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await editLearned(req.tenantId!, req.body as LearnedEdit);
+    res.json({ data });
+  } catch (err: any) {
+    if (err instanceof LearnedEditRefused) {
+      const status = err.code === "NOT_LEARNED" || err.code === "NOT_FOUND" ? 404 : 400;
+      res.status(status).json({ error: "That edit cannot be made", code: err.code });
+      return;
+    }
+    console.error("[onboarding] learned edit failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not save the edit", code: "LEARNED_EDIT_FAILED" });
+  }
+});
+
+router.get("/integration-suggestions", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    res.json({ data: await integrationSuggestions(req.tenantId!) });
+  } catch (err: any) {
+    console.error("[onboarding] integration suggestions failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not suggest integrations", code: "SUGGESTIONS_FAILED" });
   }
 });
 

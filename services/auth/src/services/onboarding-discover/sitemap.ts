@@ -117,6 +117,12 @@ export function planPages(input: {
   haveProductFeed: boolean;
   robots: RobotsRules;
   cap?: number;
+  /**
+   * The site's main language ("he"). When both /he/x and /x are listed, the
+   * copy in that language is kept: brand voice must come from what customers
+   * read. Otherwise the unprefixed copy is kept.
+   */
+  preferLang?: string;
 }): PlannedPage[] {
   const cap = input.cap ?? PAGE_CAP;
   const host = new URL(input.origin).hostname.replace(/^www\./, "");
@@ -149,13 +155,22 @@ export function planPages(input: {
   // site came back identical. Read the unprefixed one only.
   // The home page is always read, so /he is a copy of it too.
   const listed = new Set([input.origin, ...input.sitemapUrls].map((u) => norm(u)).filter((u): u is string => !!u));
+  const pref = (input.preferLang ?? "").toLowerCase();
   const langCopy = (u: string): boolean => {
     try {
       const x = new URL(u);
       const m = /^\/(he|en|ar|ru|fr|es|de|it)(\/.*)?$/i.exec(x.pathname);
-      if (!m) return false;
-      x.pathname = m[2] || "/";
-      return listed.has(x.toString().replace(/\/$/, ""));
+      if (m) {
+        // A copy in the preferred language is the one to keep.
+        if (pref && m[1]!.toLowerCase() === pref) return false;
+        x.pathname = m[2] || "/";
+        return listed.has(x.toString().replace(/\/$/, ""));
+      }
+      // An unprefixed page whose preferred-language copy is listed gives way to it.
+      if (!pref) return false;
+      const copy = new URL(u);
+      copy.pathname = `/${pref}${x.pathname === "/" ? "" : x.pathname}`;
+      return listed.has(copy.toString().replace(/\/$/, ""));
     } catch { return false; }
   };
 

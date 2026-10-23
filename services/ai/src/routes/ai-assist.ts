@@ -38,6 +38,7 @@ import voiceRouter from "./ai-assist-voice";
 import { buildAgentPrompt } from "../services/prompt-builder.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { discoverBusiness, withoutWideDashes } from "../services/business-discovery.service";
+import { extractOnboarding, type ExtractKind } from "../services/onboarding-extract.service";
 import { previewAnswer, previewQuestions, PREVIEW_STATUSES, QUESTION_MAX, type PreviewLocale } from "../services/onboarding-preview.service";
 import { tuneEmployeeChat } from "../services/employee-tuning.service";
 
@@ -79,6 +80,26 @@ router.post("/discover-business", authenticate, resolveTenant, requireRole("ADMI
   } catch (err) {
     console.error("Discover business error:", err);
     res.status(500).json({ error: "Failed to run business discovery" });
+  }
+});
+
+// Onboarding v2: structured facts for one kind (policies terms, FAQ pairs,
+// profile and contact, brand) from the pages the scan read. Called by the auth
+// scan job with the internal key; returns { ok: false } when the model gave
+// nothing usable, never invented content. See onboarding-extract.service.
+const EXTRACT_KINDS = new Set<ExtractKind>(["policies", "faq", "profile", "brand"]);
+router.post("/onboarding-extract", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const { kind, locale, pages } = req.body as { kind?: ExtractKind; locale?: string; pages?: Array<{ url: string; title?: string; text: string }> };
+    if (!kind || !EXTRACT_KINDS.has(kind) || !Array.isArray(pages) || pages.length === 0) {
+      res.status(400).json({ error: "kind and pages are required", code: "BAD_REQUEST" });
+      return;
+    }
+    const result = await extractOnboarding({ tenantId: req.tenantId!, kind, locale, pages });
+    res.json({ data: result ? { ok: true, result } : { ok: false } });
+  } catch (err: any) {
+    console.error("Onboarding extract error:", err?.message ?? err);
+    res.status(500).json({ error: "Extraction failed", code: "EXTRACT_FAILED" });
   }
 });
 
