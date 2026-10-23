@@ -128,7 +128,10 @@ ENV NEXT_PUBLIC_REALTIME_URL=$NEXT_PUBLIC_REALTIME_URL
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY --from=build /app/.next ./.next
+# ★ OWNED BY `node`: Next writes its prerender cache under .next/server at
+# runtime. Copied as root, prod logged `Failed to update prerender cache for
+# /api EACCES mkdir /app/.next/server/app/api.segments` (2026-10-23).
+COPY --chown=node:node --from=build /app/.next ./.next
 # ★ `public/` IS EMPTY, AND IT IS TRACKED ONLY BY A `.gitkeep`.
 #
 # Git cannot store an empty directory. This COPY therefore depended on a
@@ -146,8 +149,8 @@ COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
 COPY --from=build /app/next.config.ts ./next.config.ts
 
-# `node` exists in the base image as an unprivileged user. Nothing here writes
-# to the filesystem at runtime, so it owns nothing it does not need.
+# `node` exists in the base image as an unprivileged user. It owns .next (the
+# prerender cache is written at runtime) and nothing else it does not need.
 USER node
 
 EXPOSE 3000
