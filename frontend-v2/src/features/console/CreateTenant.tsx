@@ -85,9 +85,13 @@ export function CreateTenant({
       planVersionId: planId,
       chatVolumeOptionKey: chatKey,
       voiceVolumeOptionKey: voiceKey,
-    }).then((result) => {
-      if (!cancelled) setAnswer({ key: selectionKey, result });
-    });
+    })
+      // A rejected action (network, a deploy in between) is a failed quote,
+      // never a "quoting" that waits forever with Create greyed out.
+      .catch(() => ({ ok: false, reason: 'failed' }) as const)
+      .then((result) => {
+        if (!cancelled) setAnswer({ key: selectionKey, result });
+      });
     return () => {
       cancelled = true;
     };

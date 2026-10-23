@@ -250,6 +250,36 @@ describe('★★ creating a tenant', () => {
     expect(screen.getByTestId('create-domains-unread')).toBeInTheDocument();
   });
 
+  it('★★ a rejected quote action reads as failed - never "quoting" forever', async () => {
+    create.quoteProvisioning.mockRejectedValue(new Error('Failed to fetch'));
+    show();
+    fireEvent.click(screen.getByTestId('create-open'));
+    fillWho();
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('create-plan'), { target: { value: 'pv1' } });
+    });
+    expect(screen.getByTestId('create-quote-refused')).toHaveTextContent(
+      consoleEn.create.quoteRefused.failed,
+    );
+    expect(screen.getByTestId('create-submit-open')).toBeDisabled();
+  });
+
+  it('★★ a rejected create action is said, and the confirm does not stay on "working"', async () => {
+    create.createTenant.mockRejectedValue(new Error('Failed to fetch'));
+    show();
+    fireEvent.click(screen.getByTestId('create-open'));
+    fillWho();
+    fireEvent.click(screen.getByTestId('mode-POC'));
+    type('Credit budget', '5000');
+    type('Expires on', '2099-12-31');
+    fireEvent.click(screen.getByRole('button', { name: 'ai' }));
+    fireEvent.click(screen.getByTestId('create-submit-open'));
+    await act(async () => fireEvent.click(screen.getByTestId('create-submit-yes')));
+    expect(screen.getByRole('alert')).toHaveTextContent(consoleEn.confirm.unconfirmed);
+    expect(screen.queryByTestId('create-submit-yes')).toBeNull();
+    expect(screen.getByTestId('create-submit-open')).toBeEnabled();
+  });
+
   it('a held paid create says so', async () => {
     create.createTenant.mockResolvedValue({ ok: false, reason: 'held' });
     show();

@@ -56,7 +56,8 @@
   },
   "confirm": {
     "cancel": "Cancel",
-    "working": "Working…"
+    "working": "Working…",
+    "unconfirmed": "The console couldn't confirm whether this went through. Reload the page and check before trying again."
   },
   "refusal": {
     "held": "Billing writes are off in this environment, because its billing is the live payment account. Nothing was sent.",

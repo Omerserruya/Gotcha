@@ -55,11 +55,15 @@ export function ConfirmedAction<R extends Outcome>({
   const confirm = async () => {
     setPending(true);
     setOutcome(null);
-    const result = await run();
+    // A rejected action is not a refusal: the write may or may not have
+    // happened, so it says so instead of staying on "working" for good.
+    const result = await run().catch(() => null);
     setOutcome(
-      result.ok
-        ? { ok: true, text: done(result as Extract<R, { ok: true }>) }
-        : { ok: false, text: refused(result as Extract<R, { ok: false }>) },
+      result === null
+        ? { ok: false, text: t('unconfirmed') }
+        : result.ok
+          ? { ok: true, text: done(result as Extract<R, { ok: true }>) }
+          : { ok: false, text: refused(result as Extract<R, { ok: false }>) },
     );
     setPending(false);
     setOpen(false);
