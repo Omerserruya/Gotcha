@@ -904,6 +904,8 @@
   .connectHere {
     display: flex;
     flex-direction: column;
+    /* A control is sized to its label at the card's start edge, never a full-width bar (00g). */
+    align-items: flex-start;
     gap: 8px;
   }
 

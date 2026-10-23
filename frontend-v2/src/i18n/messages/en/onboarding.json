@@ -341,7 +341,8 @@
     "empty": "We didn't find a system on your site to connect. You can connect systems later too.",
     "next": "Continue",
     "skip": "Continue without connecting",
-    "skipWhy": "Without a store connected, GOTCHA can explain your policies but can't check an order, a price or stock."
+    "skipWhy": "Without a store connected, GOTCHA can explain your policies but can't check an order, a price or stock.",
+    "connectName": "Connect {name}"
   },
   "channels": {
     "headline": "Where your customers write.",

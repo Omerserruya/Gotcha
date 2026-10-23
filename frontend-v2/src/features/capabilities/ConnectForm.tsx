@@ -20,10 +20,13 @@ export function ConnectForm({
   slug,
   name,
   fields,
+  label,
 }: {
   readonly slug: string;
   readonly name: string;
   readonly fields: readonly CredentialField[];
+  /** The button's words, when the caller names the system in them (onboarding). */
+  readonly label?: string;
 }) {
   const t = useTranslations('capabilities.available');
   const router = useRouter();
@@ -101,7 +104,7 @@ export function ConnectForm({
           disabled={!ready || isPending}
           data-testid="connect-submit"
         >
-          {isPending ? t('connecting') : t('connect')}
+          {isPending ? t('connecting') : (label ?? t('connect'))}
         </button>
         {problem ? (
           <span className={styles.connectProblem} role="alert" data-testid="connect-problem">

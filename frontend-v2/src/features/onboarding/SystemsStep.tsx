@@ -66,7 +66,7 @@ export function SystemsStep({
   };
   const anyConnected = (suggestions ?? []).some((each) => standing(each) === 'connected');
   const drawn = (integration: Integration) => ({
-    connect: tc('connect'),
+    connect: t('connectName', { name: integration.name }),
     oauthNotHere: tc('oauthNotHere', { name: integration.name }),
     noForm: tc('noForm'),
   });
@@ -169,6 +169,8 @@ export function SystemsStep({
                       shopify={shopify}
                       reconnect={state === 'failing'}
                       drawn={drawn(integration)}
+                      formLabel={t('connectName', { name })}
+                      whyInWords
                     />
                   </div>
                 )}
@@ -179,7 +181,12 @@ export function SystemsStep({
       )}
 
       <span className={styles.actions}>
-        <Link href={afterSystems(preview)} className={styles.primary} data-testid="systems-next">
+        {/* Connecting is the step's point: skipping it is the quiet way on, never the loud one. */}
+        <Link
+          href={afterSystems(preview)}
+          className={anyConnected || suggestions?.length === 0 ? styles.primary : styles.secondary}
+          data-testid="systems-next"
+        >
           {anyConnected || suggestions?.length === 0 ? t('next') : t('skip')}
         </Link>
       </span>

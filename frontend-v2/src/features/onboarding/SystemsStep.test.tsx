@@ -14,11 +14,24 @@ vi.mock('@/features/capabilities/ConnectFor', () => ({
   ConnectFor: ({
     integration,
     reconnect,
+    formLabel,
+    whyInWords,
+    drawn,
   }: {
     integration: { slug: string };
     reconnect?: boolean;
+    formLabel?: string;
+    whyInWords?: boolean;
+    drawn: { connect: string };
   }) => (
-    <span data-testid={`launcher-${integration.slug}`}>{reconnect ? 'reconnect' : 'connect'}</span>
+    <span
+      data-testid={`launcher-${integration.slug}`}
+      data-form-label={formLabel}
+      data-drawn={drawn.connect}
+      data-why={String(Boolean(whyInWords))}
+    >
+      {reconnect ? 'reconnect' : 'connect'}
+    </span>
   ),
 }));
 vi.mock('@/features/capabilities/IntegrationLogo', () => ({ IntegrationLogo: () => null }));
@@ -128,9 +141,19 @@ describe('★★ step 2: only what the site suggests, each with why and one way 
     );
   });
 
-  it('★★ the way on: "Continue without connecting", with what that costs; Continue once one is connected', () => {
+  it('★★ connect names the system, and a control that can’t connect says why in words', () => {
+    show();
+    const launcher = screen.getByTestId('launcher-returngo');
+    expect(launcher).toHaveAttribute('data-form-label', 'Connect ReturnGO');
+    expect(launcher).toHaveAttribute('data-drawn', 'Connect ReturnGO');
+    expect(launcher).toHaveAttribute('data-why', 'true');
+  });
+
+  it('★★ the way on: "Continue without connecting" is the QUIET button, with what that costs; Continue is primary once one is connected', () => {
     const { unmount } = show();
     expect(screen.getByTestId('systems-next')).toHaveTextContent('Continue without connecting');
+    expect(screen.getByTestId('systems-next').className).toMatch(/secondary/);
+    expect(screen.getByTestId('systems-next').className).not.toMatch(/primary/);
     expect(screen.getByTestId('systems-next')).toHaveAttribute('href', afterSystems(false));
     expect(screen.getByTestId('systems-skip-why')).toHaveTextContent("can't check an order");
     unmount();
@@ -138,6 +161,7 @@ describe('★★ step 2: only what the site suggests, each with why and one way 
       integrations: [integration('shopify', { status: 'CONNECTED' }), integration('returngo')],
     });
     expect(screen.getByTestId('systems-next')).toHaveTextContent(/^Continue$/);
+    expect(screen.getByTestId('systems-next').className).toMatch(/primary/);
     expect(screen.queryByTestId('systems-skip-why')).toBeNull();
   });
 

@@ -27,6 +27,8 @@ export function ConnectFor({
   shopify = null,
   reconnect = false,
   drawn,
+  formLabel,
+  whyInWords = false,
 }: {
   readonly integration: Integration;
   /** A connected system whose connection broke - the way back, not a first connect. */
@@ -38,6 +40,10 @@ export function ConnectFor({
     readonly oauthNotHere: string;
     readonly noForm: string;
   };
+  /** The key form's button words, when the caller names the system (onboarding). */
+  readonly formLabel?: string;
+  /** A control that can't connect from here says why beside it, not only on hover. */
+  readonly whyInWords?: boolean;
 }) {
   const { oauth, fields } = integration.authSchema;
   return (
@@ -48,7 +54,12 @@ export function ConnectFor({
         // B: the store's own approval replaces the key form.
         <WooConnect name={integration.name} />
       ) : !oauth && fields.length > 0 ? (
-        <ConnectForm slug={integration.slug} name={integration.name} fields={fields} />
+        <ConnectForm
+          slug={integration.slug}
+          name={integration.name}
+          fields={fields}
+          {...(formLabel ? { label: formLabel } : {})}
+        />
       ) : (oauth || integration.slug === 'shopify') && oauthHere(integration.slug, reconnect) ? (
         <OAuthButton
           slug={integration.slug}
@@ -65,6 +76,20 @@ export function ConnectFor({
           {drawn.connect}
         </span>
       )}
+      {whyInWords && !isLaunchable(integration, reconnect) ? (
+        <span className={styles.connectNote} data-testid="connect-drawn-why">
+          {oauth ? drawn.oauthNotHere : drawn.noForm}
+        </span>
+      ) : null}
     </>
   );
+}
+
+/** Does `ConnectFor` draw a working control for this system (not the drawn, disabled one)? */
+function isLaunchable(integration: Integration, reconnect: boolean): boolean {
+  const { oauth, fields } = integration.authSchema;
+  if (integration.slug === 'shopify' && !reconnect) return true;
+  if (integration.slug === 'woocommerce') return true;
+  if (!oauth && fields.length > 0) return true;
+  return (oauth || integration.slug === 'shopify') && oauthHere(integration.slug, reconnect);
 }
