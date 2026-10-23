@@ -482,6 +482,82 @@ describe('★★ a term changed while the description still says the old number'
   });
 });
 
+describe('★★ the read view says words that disagree with their terms', () => {
+  const policy = (summary: string, terms: object, kind = 'returns') => ({
+    id: kind,
+    kind,
+    summary,
+    terms,
+    sourceUrl: null,
+  });
+
+  it.each([
+    // [description, terms, the lines said]
+    [
+      'Return within 14 days.',
+      { windowDays: 30 },
+      ['The description still says 14 days. Update it too.'],
+    ],
+    ['Return within 30 days.', { windowDays: 30 }, []],
+    // 7 is the refund's own term; 14 is said for the window, which is 30.
+    [
+      'Return within 14 days; refunds within 7 days.',
+      { windowDays: 30, refund: { method: null, days: 7 } },
+      ['The description still says 14 days. Update it too.'],
+    ],
+    ['Refunds within 7 days.', { windowDays: 30, refund: { method: null, days: 7 } }, []],
+    ['No numbers here.', { windowDays: 30 }, []],
+    // Every term is said; a further number is the owner's own detail (a sale exception).
+    ['Return within 30 days, or 14 days for sale items.', { windowDays: 30 }, []],
+    ['Return within 14 days.', null, []],
+  ])('%s with %j', (summary, terms, lines) => {
+    show({ initial: learned({ policies: [policy(summary, terms as object)] }) });
+    expect(
+      screen.queryAllByTestId('review-policy-returns-stale').map((p) => p.textContent),
+    ).toEqual(lines);
+  });
+
+  it('months: a warranty', () => {
+    show({
+      initial: learned({
+        policies: [policy('12 months of warranty.', { warranty: { months: 24 } }, 'warranty')],
+      }),
+    });
+    expect(screen.getByTestId('review-policy-warranty-stale')).toHaveTextContent(
+      'The description still says 12 months.',
+    );
+  });
+
+  it('★ shipping days are free text: never read as a stale term', () => {
+    show({
+      initial: learned({
+        policies: [
+          policy(
+            'Ships in 3 to 5 business days.',
+            { shipping: { times: '3-5 days', costs: null, freeOver: 250 } },
+            'shipping',
+          ),
+        ],
+      }),
+    });
+    expect(screen.queryByTestId('review-policy-shipping-stale')).toBeNull();
+  });
+
+  it('★★ Hebrew: "14 יום" above a 30-day window', () => {
+    show(
+      {
+        initial: learned({
+          policies: [policy('אפשר להחזיר תוך 14 יום מקבלת ההזמנה.', { windowDays: 30 })],
+        }),
+      },
+      true,
+    );
+    expect(screen.getByTestId('review-policy-returns-stale')).toHaveTextContent(
+      /^התיאור עדיין אומר 14 יום\. כדאי לעדכן גם אותו\.$/,
+    );
+  });
+});
+
 describe('★★ adding what the site didn’t give us: paste a policy, or a file', () => {
   it('★★ in the policies card, after the list: one quiet line when some were learned, open when none were', () => {
     const { unmount } = show();

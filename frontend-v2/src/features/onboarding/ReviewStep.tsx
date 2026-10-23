@@ -501,6 +501,12 @@ function PolicyItem({
       ) : (
         <>
           {policy.summary ? <p className={styles.quiet}>{policy.summary}</p> : null}
+          {/* The words and the terms disagree: said under the words, never rewritten. */}
+          {staleInSummary(policy).map(({ unit, count }) => (
+            <p key={`${unit}-${count}`} className={styles.why} data-testid={`${testid}-stale`}>
+              {t(`termFields.stale.${unit}`, { count })}
+            </p>
+          ))}
           {terms(policy).length ? (
             <ul className={styles.terms} data-testid={`${testid}-terms`}>
               {terms(policy).map((line) => (
@@ -953,6 +959,34 @@ const STALE_UNIT = {
 /** The description says this number as a number of its own ("14", never the 14 in "140" or "1.4"). */
 const mentions = (text: string, value: string) =>
   new RegExp(`(?<![\\d.])${value.replace('.', '\\.')}(?![.,]?\\d)`).test(text);
+
+/** "14 יום", "14 ימים", "14 ימי עסקים", "14 days"; "12 חודשים", "12 months". */
+const UNIT_NUMBERS = {
+  days: /(?<![\d.])(\d+)\s*(?:יום|ימים|ימי|days?\b)/giu,
+  months: /(?<![\d.])(\d+)\s*(?:חודש|חודשים|months?\b)/giu,
+} as const;
+
+/**
+ * The read view's rule: the description names a number of days (or months)
+ * that none of the policy's own day (or month) terms has, while one of them
+ * goes unmentioned - "14 יום" above a 30-day window. A number that matches a
+ * term ("7 days" beside a 7-day refund) is not flagged. Amounts aren't read:
+ * a shipping cost is free text with numbers of its own.
+ */
+export function staleInSummary(policy: LearnedPolicy) {
+  const terms = policy.terms;
+  const values = {
+    days: [terms?.windowDays, terms?.refund?.days],
+    months: [terms?.warranty?.months],
+  };
+  return (Object.keys(UNIT_NUMBERS) as (keyof typeof UNIT_NUMBERS)[]).flatMap((unit) => {
+    const known = values[unit].filter((v): v is number => typeof v === 'number');
+    const said = [...(policy.summary ?? '').matchAll(UNIT_NUMBERS[unit])].map((m) => Number(m[1]));
+    // Every term is said (or there is none): an extra number is the owner's own detail.
+    if (known.every((v) => said.includes(v))) return [];
+    return [...new Set(said.filter((n) => !known.includes(n)))].map((count) => ({ unit, count }));
+  });
+}
 
 /** A kind as sent, read as one we name; anything else is "other". */
 const policyKind = (kind: string): LearnedPolicy['kind'] =>
