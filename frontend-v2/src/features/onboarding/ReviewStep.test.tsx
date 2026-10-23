@@ -7,9 +7,10 @@ import { learnedSchema } from '@/api/contracts/onboarding-v2';
 import onboardingEn from '@/i18n/messages/en/onboarding.json';
 
 /** Step 4, checking what was learned. Mocked: nothing is rewritten. */
-const { edit, upload } = vi.hoisted(() => ({
+const { edit, upload, router } = vi.hoisted(() => ({
   edit: { editLearned: vi.fn(), readLearned: vi.fn(), addPolicy: vi.fn() },
   upload: { uploadLearned: vi.fn() },
+  router: { refresh: vi.fn() },
 }));
 vi.mock('./learned-actions', () => edit);
 vi.mock('./upload-learned', async (original) => ({
@@ -17,6 +18,7 @@ vi.mock('./upload-learned', async (original) => ({
   uploadLearned: upload.uploadLearned,
 }));
 vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => router,
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
     <a href={href} {...rest}>
       {children}
@@ -79,7 +81,9 @@ describe('★★ checking what was learned', () => {
   it('★★ every section, in plain words: the business, products, a policy WITH its terms, FAQ, contact, voice, tools', () => {
     show();
     expect(screen.getByTestId('review-profile')).toHaveTextContent('Aviv & Co. · Fashion');
-    expect(screen.getByTestId('review-products-count')).toHaveTextContent('34 products, and more');
+    expect(screen.getByTestId('review-products-count')).toHaveTextContent(
+      /^At least 34 products in the store$/,
+    );
     const terms = screen.getByTestId('review-policy-returns-terms');
     expect(terms).toHaveTextContent('Returns within 14 days');
     expect(terms).toHaveTextContent('Exchanges allowed: In store');
@@ -93,12 +97,12 @@ describe('★★ checking what was learned', () => {
     expect(screen.getByTestId('review-tools')).toHaveTextContent('ReturnGO');
   });
 
-  it('★★ sampled products say "sampled", never a catalogue size; none learned is said', () => {
+  it('★★ products come only from the store’s own feed: a store count, "at least" only when paging stopped; none learned is said', () => {
     const { unmount } = show({
-      initial: learned({ products: { ...base.products, count: 6, source: 'sampled' } }),
+      initial: learned({ products: { ...base.products, more: false, source: 'woo_store_api' } }),
     });
     expect(screen.getByTestId('review-products-count')).toHaveTextContent(
-      '6 products sampled from product pages',
+      /^34 products in the store$/,
     );
     unmount();
     show({ initial: learned({ products: null }) });
@@ -117,19 +121,98 @@ describe('★★ checking what was learned', () => {
     show();
     fireEvent.click(screen.getByTestId('review-policy-returns-edit'));
     const form = screen.getByTestId('review-edit-policies-returns');
-    fireEvent.change(within(form).getByRole('textbox'), {
+    fireEvent.change(within(form).getByLabelText('What the policy says'), {
       target: { value: ' Return within 30 days. ' },
     });
+    fireEvent.change(within(form).getByLabelText('Days to return'), { target: { value: '30' } });
     await act(async () => fireEvent.submit(form));
+    // The terms travel with the words: one truth, whole objects per key (Backend merges by key).
     expect(edit.editLearned).toHaveBeenCalledWith({
       section: 'policies',
       id: 'returns',
-      value: { summary: 'Return within 30 days.' },
+      value: {
+        summary: 'Return within 30 days.',
+        terms: { windowDays: 30, exchange: { allowed: true, how: 'In store' }, refund: null },
+      },
     });
     expect(screen.getByTestId('review-policy-returns-terms')).toHaveTextContent(
       'Returns within 30 days',
     );
     expect(screen.queryByTestId('review-edit-policies-returns')).toBeNull();
+  });
+
+  it('★★ a policy’s term fields follow its kind; a term already there is always editable', () => {
+    show({
+      initial: learned({
+        policies: [
+          {
+            id: 'shipping',
+            kind: 'shipping',
+            summary: 'Ships fast.',
+            terms: { shipping: { times: '3 days', costs: null, freeOver: '200' }, windowDays: 7 },
+            sourceUrl: null,
+          },
+          {
+            id: 'privacy',
+            kind: 'privacy',
+            summary: 'We keep data safe.',
+            terms: null,
+            sourceUrl: null,
+          },
+        ],
+      }),
+    });
+    fireEvent.click(screen.getByTestId('review-policy-shipping-edit'));
+    const form = screen.getByTestId('review-edit-policies-shipping');
+    expect(within(form).getByLabelText('Shipping times')).toHaveValue('3 days');
+    expect(within(form).getByLabelText('Free shipping over')).toHaveValue('200');
+    expect(within(form).getByLabelText('Days to return')).toHaveValue('7');
+    expect(within(form).queryByLabelText('Warranty, in months')).toBeNull();
+    // Hebrew values on an English screen: each field takes its own direction.
+    for (const field of within(form).getAllByRole('textbox')) {
+      expect(field).toHaveAttribute('dir', 'auto');
+    }
+    fireEvent.click(screen.getByTestId('review-policy-privacy-edit'));
+    const words = screen.getByTestId('review-edit-policies-privacy');
+    expect(within(words).getAllByRole('textbox')).toHaveLength(1);
+    expect(words).not.toHaveTextContent('These terms are what GOTCHA answers from');
+  });
+
+  it('★ a policy with no terms sends its words only; a cleared term is sent as null', async () => {
+    const initial = learned({
+      policies: [
+        { id: 'privacy', kind: 'privacy', summary: 'Safe.', terms: null, sourceUrl: null },
+        {
+          id: 'warranty',
+          kind: 'warranty',
+          summary: '12 months.',
+          terms: { warranty: { months: 12 } },
+          sourceUrl: null,
+        },
+      ],
+    });
+    edit.editLearned.mockResolvedValue({ ok: true, learned: initial });
+    show({ initial });
+    fireEvent.click(screen.getByTestId('review-policy-privacy-edit'));
+    const words = screen.getByTestId('review-edit-policies-privacy');
+    fireEvent.change(within(words).getByRole('textbox'), { target: { value: 'Very safe.' } });
+    await act(async () => fireEvent.submit(words));
+    expect(edit.editLearned).toHaveBeenLastCalledWith({
+      section: 'policies',
+      id: 'privacy',
+      value: { summary: 'Very safe.' },
+    });
+    fireEvent.click(screen.getByTestId('review-policy-warranty-edit'));
+    const warranty = screen.getByTestId('review-edit-policies-warranty');
+    fireEvent.change(within(warranty).getByLabelText('Warranty, in months'), {
+      target: { value: '' },
+    });
+    await act(async () => fireEvent.submit(warranty));
+    expect(edit.editLearned).toHaveBeenLastCalledWith({
+      section: 'policies',
+      id: 'warranty',
+      value: { summary: '12 months.', terms: { warranty: null } },
+    });
   });
 
   it('★ Save waits for a change - pressing Enter on an unchanged form sends nothing either', async () => {
@@ -208,22 +291,58 @@ describe('★★ when there is nothing to check', () => {
       </NextIntlClientProvider>,
     );
 
-  it('not learned: said, with the way back to step 1', () => {
-    unavailable('not_learned');
-    expect(screen.getByRole('alert')).toHaveTextContent("We haven't learned your site yet");
-    expect(screen.getByRole('link')).toHaveAttribute('href', '/onboarding/website');
+  beforeEach(() => {
+    router.refresh.mockReset();
   });
 
-  it('unread: said as unread, never "nothing learned"', () => {
+  it('not learned: "we haven\'t read the site yet", with the way back to learning it; nothing to retry', () => {
+    unavailable('not_learned');
+    expect(screen.getByRole('alert')).toHaveTextContent("We haven't read the site yet");
+    expect(screen.getByTestId('review-back')).toHaveAttribute('href', '/onboarding/website');
+    expect(screen.getByTestId('review-back')).toHaveTextContent('Back to learning the site');
+    expect(screen.getByTestId('review-back').className).toMatch(/primary/);
+    expect(screen.queryByTestId('review-retry')).toBeNull();
+  });
+
+  it('★★ unread: said as a failed read, never "nothing learned"; try again reads it again, or go back', () => {
     unavailable('unread');
     expect(screen.getByRole('alert')).toHaveTextContent(
-      "We couldn't read what we learned just now.",
+      /^We couldn't read what we learned just now\.$/,
     );
-    expect(screen.queryByRole('link')).toBeNull();
+    fireEvent.click(screen.getByTestId('review-retry'));
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('review-retry').className).toMatch(/primary/);
+    expect(screen.getByTestId('review-back')).toHaveAttribute('href', '/onboarding/website');
+    expect(screen.getByTestId('review-back').className).toMatch(/secondary/);
   });
 });
 
+/** With a policy learned, the add form waits behind one quiet line. */
+const openAdd = () => fireEvent.click(screen.getByTestId('review-add-open'));
+
 describe('★★ adding what the site didn’t give us: paste a policy, or a file', () => {
+  it('★★ in the policies card, after the list: one quiet line when some were learned, open when none were', () => {
+    const { unmount } = show();
+    const card = screen.getByTestId('review-policies');
+    expect(within(card).getByTestId('review-add-open')).toHaveTextContent(
+      /^A policy missing\? Add from what you have$/,
+    );
+    expect(screen.queryByTestId('review-paste')).toBeNull();
+    const items = card.querySelectorAll(
+      '[data-testid^="review-policy-"], [data-testid="review-add-open"]',
+    );
+    expect(items[items.length - 1]).toHaveAttribute('data-testid', 'review-add-open');
+    openAdd();
+    expect(within(card).getByTestId('review-paste')).toBeInTheDocument();
+    expect(screen.queryByTestId('review-add-open')).toBeNull();
+    unmount();
+    show({ initial: learned({ policies: [] }) });
+    expect(screen.queryByTestId('review-add-open')).toBeNull();
+    expect(
+      within(screen.getByTestId('review-policies')).getByTestId('review-paste'),
+    ).toBeInTheDocument();
+  });
+
   it('★★ paste: only the kinds not learned yet; sent as { section, id: kind, value: { text } }; the screen redraws', async () => {
     edit.addPolicy.mockResolvedValue({
       ok: true,
@@ -242,6 +361,7 @@ describe('★★ adding what the site didn’t give us: paste a policy, or a fil
       }),
     });
     show();
+    openAdd();
     const kinds = [...screen.getByTestId('review-paste-kind').querySelectorAll('option')].map(
       (o) => o.value,
     );
@@ -263,6 +383,7 @@ describe('★★ adding what the site didn’t give us: paste a policy, or a fil
   it('★ a refused paste is said', async () => {
     edit.addPolicy.mockResolvedValue({ ok: false, reason: 'text_too_long' });
     show();
+    openAdd();
     fireEvent.change(screen.getByTestId('review-paste-text'), { target: { value: 'x' } });
     await act(async () => fireEvent.submit(screen.getByTestId('review-paste')));
     expect(screen.getByTestId('review-paste-refused')).toHaveTextContent('The text is too long.');
@@ -289,6 +410,7 @@ describe('★★ adding what the site didn’t give us: paste a policy, or a fil
       },
     });
     show();
+    openAdd();
     const file = new File(['%PDF'], 'policies.pdf', { type: 'application/pdf' });
     fireEvent.change(screen.getByTestId('review-upload-file'), { target: { files: [file] } });
     await act(async () => fireEvent.submit(screen.getByTestId('review-upload')));
@@ -305,6 +427,7 @@ describe('★★ adding what the site didn’t give us: paste a policy, or a fil
   it('★ nothing found in the file: said, nothing changes', async () => {
     upload.uploadLearned.mockResolvedValue({ ok: false, reason: 'nothing_found' });
     show();
+    openAdd();
     fireEvent.change(screen.getByTestId('review-upload-file'), {
       target: { files: [new File(['x'], 'a.txt')] },
     });
@@ -314,6 +437,7 @@ describe('★★ adding what the site didn’t give us: paste a policy, or a fil
 
   it('read a file waits for one', () => {
     show();
+    openAdd();
     expect(screen.getByTestId('review-upload-go')).toBeDisabled();
   });
 });
@@ -321,6 +445,7 @@ describe('★★ adding what the site didn’t give us: paste a policy, or a fil
 describe('★ the file control speaks the screen’s language', () => {
   it('our own label, and the chosen file’s name once chosen', () => {
     show();
+    openAdd();
     expect(screen.getByTestId('review-upload-name')).toHaveTextContent('No file chosen yet');
     fireEvent.change(screen.getByTestId('review-upload-file'), {
       target: { files: [new File(['x'], 'returns.pdf')] },

@@ -8,7 +8,7 @@
     "try": "Try it",
     "learn": "Learning your site",
     "systems": "Connect systems",
-    "channels": "Channels",
+    "channels": "Connect channels",
     "live": "Check and go live"
   },
   "website": {
@@ -409,9 +409,10 @@
       "failed": "We couldn't save. Try again in a moment."
     },
     "unavailable": {
-      "not_learned": "We haven't learned your site yet, so there is nothing to check.",
-      "unread": "We couldn't read what we learned just now. Reload the page to try again.",
-      "toWebsite": "To the first step"
+      "not_learned": "We haven't read the site yet, so there is nothing to check.",
+      "unread": "We couldn't read what we learned just now.",
+      "toWebsite": "Back to learning the site",
+      "retry": "Try again"
     },
     "profile": {
       "title": "The business",
@@ -422,15 +423,15 @@
     "products": {
       "title": "Products",
       "notLearned": "We didn't learn the products from the site.",
-      "count": "{count, plural, one {# product} other {# products}}{more, select, true {, and more} other {}}",
-      "sampled": "{count, plural, one {# product sampled} other {# products sampled}} from product pages",
+      "count": "{more, select, true {At least } other {}}{count, plural, one {# product} other {# products}} in the store",
       "price": "Prices from {min} to {max}",
       "fromStore": "Product and order details are checked in the store itself once it is connected."
     },
     "policies": {
       "title": "Policies",
       "none": "We didn't find policies on the site.",
-      "summary": "What the policy says"
+      "summary": "What the policy says",
+      "termsNote": "These terms are what GOTCHA answers from. Update them together with the description."
     },
     "terms": {
       "window": "Returns within {days, plural, one {# day} other {# days}}",
@@ -499,7 +500,22 @@
         "failed": "We couldn't read the file. Try again in a moment."
       },
       "choose": "Choose a file",
-      "noFile": "No file chosen yet"
+      "noFile": "No file chosen yet",
+      "collapsed": "A policy missing? Add from what you have"
+    },
+    "termFields": {
+      "windowDays": "Days to return",
+      "exchange": "Exchanges allowed?",
+      "exchangeHow": "How to exchange",
+      "unknown": "Not stated",
+      "yes": "Yes",
+      "no": "No",
+      "shippingTimes": "Shipping times",
+      "shippingCosts": "Shipping costs",
+      "freeOver": "Free shipping over",
+      "refundMethod": "How refunds are paid",
+      "refundDays": "Days to refund",
+      "warrantyMonths": "Warranty, in months"
     }
   }
 }

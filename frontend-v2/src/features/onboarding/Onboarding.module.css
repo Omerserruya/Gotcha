@@ -864,6 +864,29 @@
     border-block-end: none;
   }
 
+  /* A policy edited whole: its words across the card, its terms in an even grid below. */
+  .policyEdit {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .termGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px 16px;
+    align-items: end;
+  }
+
+  /* The add-from-what-you-have form, at the end of the policies card. */
+  .addMissing {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-block-start: 12px;
+    border-block-start: 1px solid var(--border-default);
+  }
+
   .itemTitle {
     margin: 0;
     font-size: 13.5px;

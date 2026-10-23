@@ -12,7 +12,7 @@ import {
   type LearnedSection,
 } from '@/api/contracts/onboarding-v2';
 import { Input } from '@/design-system/primitives/input/Input';
-import { Link } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 
 import {
   addPolicy,
@@ -75,7 +75,6 @@ export function ReviewStep({
       <Profile learned={learned} onDone={setLearned} preview={preview} />
       <Products learned={learned} />
       <Policies learned={learned} onDone={setLearned} preview={preview} />
-      {preview ? null : <AddMissing learned={learned} onDone={setLearned} />}
       <Faq learned={learned} onDone={setLearned} preview={preview} />
       <Contact learned={learned} onDone={setLearned} preview={preview} />
       <Brand learned={learned} onDone={setLearned} preview={preview} />
@@ -103,19 +102,33 @@ export function ReviewUnavailable({
   readonly preview?: boolean;
 }) {
   const t = useTranslations('onboarding.review');
+  const router = useRouter();
   return (
     <div className={styles.review} data-testid={`review-${reason}`}>
       <h1 className={styles.title}>{t('title')}</h1>
       <p className={styles.why} role="alert">
         {t(`unavailable.${reason}`)}
       </p>
-      {reason === 'not_learned' ? (
-        <span className={styles.actions}>
-          <Link href={stepHref('/onboarding/website', preview)} className={styles.primary}>
-            {t('unavailable.toWebsite')}
-          </Link>
-        </span>
-      ) : null}
+      <span className={styles.actions}>
+        {/* A read that failed can be tried again; nothing learned yet goes back to learning. */}
+        {reason === 'unread' ? (
+          <button
+            type="button"
+            className={styles.primary}
+            onClick={() => router.refresh()}
+            data-testid="review-retry"
+          >
+            {t('unavailable.retry')}
+          </button>
+        ) : null}
+        <Link
+          href={stepHref('/onboarding/website', preview)}
+          className={reason === 'unread' ? styles.secondary : styles.primary}
+          data-testid="review-back"
+        >
+          {t('unavailable.toWebsite')}
+        </Link>
+      </span>
     </div>
   );
 }
@@ -185,6 +198,7 @@ function FieldsEdit({
           <label key={field.key} className={styles.field}>
             <span className={styles.fieldLabel}>{field.label}</span>
             <textarea
+              dir="auto"
               className={styles.textarea}
               value={values[field.key] ?? ''}
               rows={4}
@@ -193,6 +207,7 @@ function FieldsEdit({
           </label>
         ) : (
           <Input
+            dir="auto"
             key={field.key}
             label={field.label}
             value={values[field.key] ?? ''}
@@ -341,9 +356,8 @@ function Products({ learned }: { readonly learned: Learned }) {
       ) : (
         <>
           <p className={styles.itemTitle} data-testid="review-products-count">
-            {products.source === 'sampled'
-              ? t('products.sampled', { count: products.count })
-              : t('products.count', { count: products.count, more: String(products.more) })}
+            {/* Only the store's own feed fills this (Shopify or Woo): a real count, "at least" when paging stopped. */}
+            {t('products.count', { count: products.count, more: String(products.more) })}
           </p>
           {price && price.min !== null && price.max !== null ? (
             <p className={styles.quiet}>
@@ -404,6 +418,10 @@ function Policies({ learned, onDone, preview }: SectionProps) {
           ))}
         </ul>
       )}
+      {/* Under the last policy: one quiet line when some were learned, open when none were. */}
+      {preview ? null : (
+        <AddMissing learned={learned} onDone={onDone} collapsed={learned.policies.length > 0} />
+      )}
     </Section>
   );
 }
@@ -427,14 +445,7 @@ function PolicyItem({
     <li className={styles.reviewItem} data-testid={testid}>
       <span className={styles.itemTitle}>{ts(`chips.policy.${policy.kind}`)}</span>
       {editing ? (
-        <FieldsEdit
-          fields={[{ key: 'summary', label: t('policies.summary'), long: true }]}
-          initial={{ summary: policy.summary ?? '' }}
-          section="policies"
-          id={policy.id}
-          onDone={onDone}
-          onCancel={() => setEditing(false)}
-        />
+        <PolicyEdit policy={policy} onDone={onDone} onCancel={() => setEditing(false)} />
       ) : (
         <>
           {policy.summary ? <p className={styles.quiet}>{policy.summary}</p> : null}
@@ -679,9 +690,12 @@ function Source({ sourceUrl }: { readonly sourceUrl: string | null }) {
 function AddMissing({
   learned,
   onDone,
+  collapsed,
 }: {
   readonly learned: Learned;
   readonly onDone: (learned: Learned) => void;
+  /** Some policies were learned: a quiet line that opens the form, so the screen stays short. */
+  readonly collapsed: boolean;
 }) {
   const t = useTranslations('onboarding.review');
   const ts = useTranslations('onboarding.scan');
@@ -694,6 +708,7 @@ function AddMissing({
   const [isPasting, startPaste] = useTransition();
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, startUpload] = useTransition();
+  const [open, setOpen] = useState(!collapsed);
   const [upload, setUpload] = useState<
     | {
         readonly ok: true;
@@ -705,8 +720,21 @@ function AddMissing({
     | null
   >(null);
 
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className={styles.textButton}
+        onClick={() => setOpen(true)}
+        data-testid="review-add-open"
+      >
+        {t('add.collapsed')}
+      </button>
+    );
+  }
   return (
-    <Section title={t('add.title')} testid="review-add">
+    <div className={styles.addMissing} data-testid="review-add">
+      <p className={styles.itemTitle}>{t('add.title')}</p>
       <p className={styles.quiet}>{t('add.lead')}</p>
 
       <form
@@ -745,6 +773,7 @@ function AddMissing({
         <label className={styles.field}>
           <span className={styles.fieldLabel}>{t('add.text')}</span>
           <textarea
+            dir="auto"
             className={styles.textarea}
             rows={5}
             value={text}
@@ -793,7 +822,7 @@ function AddMissing({
       >
         {/* The browser's own file control speaks its own language: ours is a labelled button. */}
         <span className={styles.fieldLabel}>{t('add.file')}</span>
-        <span className={styles.itemActions}>
+        <span className={styles.connectHere}>
           <label className={styles.secondary}>
             {t('add.choose')}
             <input
@@ -834,6 +863,224 @@ function AddMissing({
           </p>
         ) : null}
       </form>
-    </Section>
+    </div>
+  );
+}
+
+/** Which terms a policy of each kind is edited by (plus any term it already has). */
+const TERMS_OF: Readonly<Record<string, readonly TermKey[]>> = {
+  returns: ['windowDays', 'exchange', 'refund'],
+  exchange: ['exchange'],
+  shipping: ['shipping'],
+  refund: ['refund'],
+  warranty: ['warranty'],
+};
+type TermKey = 'windowDays' | 'exchange' | 'shipping' | 'refund' | 'warranty';
+const TERM_KEYS: readonly TermKey[] = ['windowDays', 'exchange', 'shipping', 'refund', 'warranty'];
+
+const asNumber = (value: string) => {
+  const n = Number(value.trim());
+  return value.trim() === '' || !Number.isFinite(n) || n < 0 ? null : Math.round(n);
+};
+const asText = (value: string) => (value.trim() === '' ? null : value.trim());
+/** A term with nothing in it is `null`, as the scan stores an unstated one. */
+const group = <T extends Record<string, unknown>>(value: T) =>
+  Object.values(value).every((each) => each === null) ? null : value;
+
+/**
+ * A policy is edited WHOLE: its summary and each of its terms, in one form,
+ * saved together. The terms are what the employee reads when a customer asks
+ * "how many days to return?", so they are never left behind by an edit to
+ * the words above them (Backend merges `terms` by key).
+ */
+function PolicyEdit({
+  policy,
+  onDone,
+  onCancel,
+}: {
+  readonly policy: LearnedPolicy;
+  readonly onDone: (learned: Learned) => void;
+  readonly onCancel: () => void;
+}) {
+  const t = useTranslations('onboarding.review');
+  const terms = policy.terms;
+  const keys = TERM_KEYS.filter(
+    (key) => (TERMS_OF[policy.kind] ?? []).includes(key) || (terms?.[key] ?? null) !== null,
+  );
+  const initial = {
+    summary: policy.summary ?? '',
+    windowDays: terms?.windowDays?.toString() ?? '',
+    exchangeAllowed:
+      terms?.exchange?.allowed === true ? 'yes' : terms?.exchange?.allowed === false ? 'no' : '',
+    exchangeHow: terms?.exchange?.how ?? '',
+    shippingTimes: terms?.shipping?.times ?? '',
+    shippingCosts: terms?.shipping?.costs ?? '',
+    freeOver: terms?.shipping?.freeOver ?? '',
+    refundMethod: terms?.refund?.method ?? '',
+    refundDays: terms?.refund?.days?.toString() ?? '',
+    warrantyMonths: terms?.warranty?.months?.toString() ?? '',
+  };
+  const [values, setValues] = useState(initial);
+  const { run, isPending, refused } = useEdit(onDone);
+  const set = (key: keyof typeof initial) => (event: { target: { value: string } }) =>
+    setValues({ ...values, [key]: event.target.value });
+  const changed = (Object.keys(initial) as (keyof typeof initial)[]).some(
+    (key) => values[key] !== initial[key],
+  );
+
+  const termsValue = () => {
+    const out: Record<string, unknown> = {};
+    if (keys.includes('windowDays')) out.windowDays = asNumber(values.windowDays);
+    if (keys.includes('exchange')) {
+      out.exchange = group({
+        allowed:
+          values.exchangeAllowed === 'yes' ? true : values.exchangeAllowed === 'no' ? false : null,
+        how: asText(values.exchangeHow),
+      });
+    }
+    if (keys.includes('shipping')) {
+      out.shipping = group({
+        times: asText(values.shippingTimes),
+        costs: asText(values.shippingCosts),
+        freeOver: asText(values.freeOver),
+      });
+    }
+    if (keys.includes('refund')) {
+      out.refund = group({
+        method: asText(values.refundMethod),
+        days: asNumber(values.refundDays),
+      });
+    }
+    if (keys.includes('warranty'))
+      out.warranty = group({ months: asNumber(values.warrantyMonths) });
+    return out;
+  };
+
+  return (
+    <form
+      className={styles.policyEdit}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!changed || isPending) return;
+        run(
+          {
+            section: 'policies',
+            id: policy.id,
+            value: {
+              summary: values.summary.trim(),
+              ...(keys.length ? { terms: termsValue() } : {}),
+            },
+          },
+          onCancel,
+        );
+      }}
+      data-testid={`review-edit-policies-${policy.id}`}
+    >
+      <label className={styles.field}>
+        <span className={styles.fieldLabel}>{t('policies.summary')}</span>
+        <textarea
+          dir="auto"
+          className={styles.textarea}
+          rows={3}
+          value={values.summary}
+          onChange={set('summary')}
+        />
+      </label>
+      {keys.length ? <p className={styles.quiet}>{t('policies.termsNote')}</p> : null}
+      <div className={styles.termGrid}>
+        {keys.includes('windowDays') ? (
+          <Input
+            dir="auto"
+            label={t('termFields.windowDays')}
+            inputMode="numeric"
+            value={values.windowDays}
+            onChange={set('windowDays')}
+          />
+        ) : null}
+        {keys.includes('exchange') ? (
+          <>
+            <label className={styles.field}>
+              <span className={styles.fieldLabel}>{t('termFields.exchange')}</span>
+              <select
+                className={styles.select}
+                value={values.exchangeAllowed}
+                onChange={set('exchangeAllowed')}
+              >
+                <option value="">{t('termFields.unknown')}</option>
+                <option value="yes">{t('termFields.yes')}</option>
+                <option value="no">{t('termFields.no')}</option>
+              </select>
+            </label>
+            <Input
+              dir="auto"
+              label={t('termFields.exchangeHow')}
+              value={values.exchangeHow}
+              onChange={set('exchangeHow')}
+            />
+          </>
+        ) : null}
+        {keys.includes('shipping') ? (
+          <>
+            <Input
+              dir="auto"
+              label={t('termFields.shippingTimes')}
+              value={values.shippingTimes}
+              onChange={set('shippingTimes')}
+            />
+            <Input
+              dir="auto"
+              label={t('termFields.shippingCosts')}
+              value={values.shippingCosts}
+              onChange={set('shippingCosts')}
+            />
+            <Input
+              dir="auto"
+              label={t('termFields.freeOver')}
+              value={values.freeOver}
+              onChange={set('freeOver')}
+            />
+          </>
+        ) : null}
+        {keys.includes('refund') ? (
+          <>
+            <Input
+              dir="auto"
+              label={t('termFields.refundMethod')}
+              value={values.refundMethod}
+              onChange={set('refundMethod')}
+            />
+            <Input
+              dir="auto"
+              label={t('termFields.refundDays')}
+              inputMode="numeric"
+              value={values.refundDays}
+              onChange={set('refundDays')}
+            />
+          </>
+        ) : null}
+        {keys.includes('warranty') ? (
+          <Input
+            dir="auto"
+            label={t('termFields.warrantyMonths')}
+            inputMode="numeric"
+            value={values.warrantyMonths}
+            onChange={set('warrantyMonths')}
+          />
+        ) : null}
+      </div>
+      <span className={styles.actions}>
+        <button type="submit" className={styles.primary} disabled={!changed || isPending}>
+          {isPending ? t('saving') : t('save')}
+        </button>
+        <button type="button" className={styles.secondary} onClick={onCancel}>
+          {t('cancel')}
+        </button>
+      </span>
+      {refused ? (
+        <p className={styles.problem} role="alert">
+          {t(`refused.${refused}`)}
+        </p>
+      ) : null}
+    </form>
   );
 }
