@@ -34,7 +34,9 @@ vi.mock('@/features/capabilities/ConnectFor', async (original) => ({
   ),
 }));
 vi.mock('@/features/capabilities/IntegrationLogo', () => ({ IntegrationLogo: () => null }));
+vi.mock('./step-actions', () => ({ saveStep: vi.fn(async () => true) }));
 vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
     <a href={href} {...rest}>
       {children}

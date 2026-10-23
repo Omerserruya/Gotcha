@@ -758,6 +758,12 @@ export const onboardingEndpoints = {
    * NO_JOB before any scan. The old POST /discover stays on the server.
    */
   discoverJob: () => endpoint('/api/onboarding/discover/job'),
+  /**
+   * GET → `{ data: { step | null } }`; PATCH `{ step }` - the onboarding step
+   * reached, saved on Continue/Skip (Backend CP3a 4cc88e81). Steps: website,
+   * reading, systems, channels, live, done.
+   */
+  step: () => endpoint('/api/onboarding/step'),
   /** POST - resumes a FAILED or STALLED job; 409 JOB_COMPLETE. */
   discoverRetry: () => endpoint('/api/onboarding/discover/retry'),
   /** GET → what was learned; PATCH `{ section, id?, value? | remove }` → the same, updated. 404 NOT_LEARNED. */

@@ -12,6 +12,8 @@ const { scan, router } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn() },
 }));
 vi.mock('./scan-actions', () => scan);
+const stepSave = vi.hoisted(() => ({ saveStep: vi.fn(async () => true) }));
+vi.mock('./step-actions', () => stepSave);
 vi.mock('@/i18n/navigation', () => ({
   useRouter: () => router,
   Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
@@ -144,6 +146,8 @@ describe('★★ reading the site, as it really goes', () => {
     expect(screen.getByTestId('reading-next')).toHaveAttribute('href', nextStep(false));
     expect(router.push).not.toHaveBeenCalled();
     await tick(ADVANCE_MS);
+    // Saved first, so a reload after the move resumes at systems.
+    expect(stepSave.saveStep).toHaveBeenCalledWith('systems');
     expect(router.push).toHaveBeenCalledWith(nextStep(false));
     expect(scan.readScan).not.toHaveBeenCalled();
   });

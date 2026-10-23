@@ -16,6 +16,7 @@ import { brandMark, brandName } from '@/lib/brand-mark';
 
 import type { GuessSource } from './load-onboarding';
 import { startScan } from './scan-actions';
+import { saveStep } from './step-actions';
 import styles from './Onboarding.module.css';
 import { stepHref } from './preview';
 
@@ -65,8 +66,10 @@ export function WebsiteStep({
       const started = await startScan(host, locale).catch(
         () => ({ ok: false, reason: 'failed' }) as const,
       );
-      if (started.ok) router.push(stepHref('/onboarding/reading', preview));
-      else setRefused(started.reason);
+      if (started.ok) {
+        await saveStep('reading').catch(() => false);
+        router.push(stepHref('/onboarding/reading', preview));
+      } else setRefused(started.reason);
     });
 
   // A scan's findings belong on the card only when they are about this site.

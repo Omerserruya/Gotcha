@@ -12,8 +12,11 @@ import { integrationsSchema, type Integration } from '@/api/contracts/integratio
 import { knowledgeListSchema } from '@/api/contracts/knowledge';
 import {
   integrationSuggestionsSchema,
+  savedStepSchema,
   type IntegrationSuggestion,
 } from '@/api/contracts/onboarding-v2';
+import type { ResumeFacts } from './resume-v2';
+import { readScan } from './scan-actions';
 import { workspaceVoiceSchema, type WorkspaceVoice } from '@/api/contracts/workspace';
 import {
   discoveryReadSchema,
@@ -224,25 +227,6 @@ export async function loadTry(locale: string): Promise<PreviewQuestions | null> 
   }
 }
 
-/**
- * Where an admin coming back resumes: by what exists on the server - the
- * website read's row and whether a core system is connected. Nothing stores
- * "the step reached", so this is read, not remembered.
- */
-export async function loadResumeState(): Promise<{
-  readonly discovery: { readonly status: string } | null;
-  readonly coreConnected: boolean;
-}> {
-  const [discovery, status] = await Promise.all([
-    loadDiscovery(),
-    serverApi()
-      .get({ endpoint: onboardingEndpoints.status(), payload: onboardingStatusSchema, raw: true })
-      .then((r) => r.data)
-      .catch(() => null),
-  ]);
-  return { discovery, coreConnected: Boolean(status?.coreSystemConnected) };
-}
-
 export interface SystemsRead {
   /** `null`: the suggestions could not be read - never "nothing to suggest". */
   readonly suggestions: readonly IntegrationSuggestion[] | null;
@@ -298,4 +282,48 @@ export async function loadChannelsStep(): Promise<ChannelsStepRead> {
     loadChannelsConfig(),
   ]);
   return { channels, install, config };
+}
+
+/**
+ * What onboarding resumes from: the step saved on Continue/Skip, and what
+ * the server can prove (the site job, a connected platform, anything to
+ * suggest, a channel a customer can reach). `job: 'unread'`: the job could
+ * not be read - neither proven nor disproven.
+ */
+export async function loadResumeFacts(): Promise<
+  Omit<ResumeFacts, 'job'> & { readonly job: ResumeFacts['job'] | 'unread' }
+> {
+  const api = serverApi();
+  const [saved, job, status, suggestions, channels, install] = await Promise.all([
+    api
+      .get({ endpoint: onboardingEndpoints.step(), payload: savedStepSchema })
+      .then((read) => read.step)
+      .catch(() => null),
+    readScan(0),
+    api
+      .get({ endpoint: onboardingEndpoints.status(), payload: onboardingStatusSchema, raw: true })
+      .then((r) => r.data)
+      .catch(() => null),
+    api
+      .get({
+        endpoint: onboardingEndpoints.integrationSuggestions(),
+        payload: integrationSuggestionsSchema,
+      })
+      .catch(() => null),
+    loadChannels()
+      .then((read) => read.channels)
+      .catch(() => null),
+    loadWidgetInstall(),
+  ]);
+  return {
+    // "done" is past the last screen: the last screen is where it resumes.
+    saved: saved === 'done' ? 'live' : saved,
+    job: job.ok ? { status: job.job.status } : job.reason === 'none' ? null : 'unread',
+    platformConnected: Boolean(status?.coreSystemConnected),
+    noSuggestions: suggestions !== null && suggestions.length === 0,
+    channelConnected:
+      (channels ?? []).some((each) => each.connectionStatus === 'CONNECTED') ||
+      install?.code?.status === 'live' ||
+      (install?.shopify ?? []).some((shop) => shop.status === 'active' && shop.embedLive),
+  };
 }

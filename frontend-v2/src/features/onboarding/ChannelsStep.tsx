@@ -13,10 +13,11 @@ import { ConnectWhatsApp } from '@/features/channels/ConnectWhatsApp';
 import { EmailStep } from '@/features/channels/ConnectPanel';
 import type { ChannelsConfig } from '@/features/channels/load-whatsapp';
 import { CopyCode, GetTheCode } from '@/features/webchat/WebchatSettings';
-import { Link, useRouter } from '@/i18n/navigation';
+import { useRouter } from '@/i18n/navigation';
 
 import styles from './Onboarding.module.css';
 import { stepHref } from './preview';
+import { StepLink } from './StepLink';
 
 /** The channels onboarding offers, in this order (Omer, 2026-10-23). */
 export const ONBOARDING_CHANNELS = ['WEBCHAT', 'WHATSAPP', 'INSTAGRAM', 'EMAIL'] as const;
@@ -167,13 +168,15 @@ export function ChannelsStep({
       </ul>
 
       <span className={styles.actions}>
-        <Link
+        <StepLink
           href={afterChannels(preview)}
+          step="live"
+          preview={preview}
           className={anyConnected ? styles.primary : styles.secondary}
           data-testid="channels-next"
         >
           {anyConnected ? t('next') : t('skip')}
-        </Link>
+        </StepLink>
       </span>
       {anyConnected ? null : (
         <p className={styles.quiet} data-testid="channels-skip-why">

@@ -9,6 +9,8 @@ import { Link, useRouter } from '@/i18n/navigation';
 
 import { stepHref } from './preview';
 import { readScan, retryScan } from './scan-actions';
+import { saveStep } from './step-actions';
+import { StepLink } from './StepLink';
 import { ScanChips, ScanFeed } from './ScanFeed';
 import styles from './Onboarding.module.css';
 
@@ -104,7 +106,12 @@ export function ReadingStep({
   const done = job?.status === 'COMPLETE';
   useEffect(() => {
     if (!done || preview) return;
-    const timer = setTimeout(() => router.push(nextStep(false)), ADVANCE_MS);
+    // Saved first, so a reload after the move resumes at systems.
+    const timer = setTimeout(() => {
+      void saveStep('systems')
+        .catch(() => false)
+        .then(() => router.push(nextStep(false)));
+    }, ADVANCE_MS);
     return () => clearTimeout(timer);
   }, [done, preview, router]);
 
@@ -187,13 +194,15 @@ export function ReadingStep({
               {retrying === 'working' ? t('retrying') : t('retry')}
             </button>
             {partway ? (
-              <Link
+              <StepLink
                 href={nextStep(preview)}
+                step="systems"
+                preview={preview}
                 className={styles.secondary}
                 data-testid="reading-with-found"
               >
                 {t('withFound')}
-              </Link>
+              </StepLink>
             ) : (
               <Link
                 href={stepHref('/onboarding/website', preview)}
@@ -214,9 +223,15 @@ export function ReadingStep({
 
       {done ? (
         <span className={styles.actions}>
-          <Link href={nextStep(preview)} className={styles.primary} data-testid="reading-next">
+          <StepLink
+            href={nextStep(preview)}
+            step="systems"
+            preview={preview}
+            className={styles.primary}
+            data-testid="reading-next"
+          >
             {t('next')}
-          </Link>
+          </StepLink>
         </span>
       ) : null}
     </div>

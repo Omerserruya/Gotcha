@@ -362,6 +362,14 @@ export type EmployeeTest = z.infer<typeof employeeTestSchema>;
 export const SHELL_STEPS = ['learn', 'systems', 'channels', 'live'] as const;
 export type ShellStep = (typeof SHELL_STEPS)[number];
 
+/** The step saved on the server (Backend's enum); `done` is past the last screen. */
+export const SAVED_STEPS = ['website', 'reading', 'systems', 'channels', 'live', 'done'] as const;
+export type SavedStep = (typeof SAVED_STEPS)[number];
+/** `GET /api/onboarding/step` → `{ data: { step } }`; one this build does not know is none. */
+export const savedStepSchema = z.object({
+  step: z.enum(SAVED_STEPS).nullable().catch(null).default(null),
+});
+
 /** The four steps, as routes (website and reading are both step 1). */
 export const ONBOARDING_V2_STEPS = ['website', 'reading', 'systems', 'channels', 'live'] as const;
 export type OnboardingV2Step = (typeof ONBOARDING_V2_STEPS)[number];

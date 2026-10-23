@@ -6,10 +6,10 @@ import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavai
 import { ConnectFor, isLaunchable } from '@/features/capabilities/ConnectFor';
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import type { ShopifyAvailability } from '@/features/capabilities/load-capabilities';
-import { Link } from '@/i18n/navigation';
 
 import styles from './Onboarding.module.css';
 import { stepHref } from './preview';
+import { StepLink } from './StepLink';
 
 export type Standing = 'connected' | 'failing' | 'none';
 
@@ -199,13 +199,15 @@ export function SystemsStep({
 
       <span className={styles.actions}>
         {/* Connecting is the step's point: skipping it is the quiet way on, never the loud one. */}
-        <Link
+        <StepLink
           href={afterSystems(preview)}
+          step="channels"
+          preview={preview}
           className={anyConnected || nothingToDo ? styles.primary : styles.secondary}
           data-testid="systems-next"
         >
           {anyConnected || nothingToDo ? t('next') : t('skip')}
-        </Link>
+        </StepLink>
       </span>
       {anyConnected || nothingToDo ? null : (
         <p className={styles.quiet} data-testid="systems-skip-why">

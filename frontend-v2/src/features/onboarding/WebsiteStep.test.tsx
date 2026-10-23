@@ -8,6 +8,8 @@ import onboardingMessages from '@/i18n/messages/en/onboarding.json';
 import workspaceMessages from '@/i18n/messages/en/workspace.json';
 
 const push = vi.hoisted(() => vi.fn());
+const stepSave = vi.hoisted(() => ({ saveStep: vi.fn(async () => true) }));
+vi.mock('./step-actions', () => stepSave);
 vi.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ push }),
   Link: ({ href, children }: { href: string; children: ReactNode }) => (
@@ -129,6 +131,7 @@ describe('★★ 00d - confirm, not type; nothing is read until yes', () => {
     });
     expect(actions.startScan).toHaveBeenCalledWith('avivco.il', 'en');
     // The job is the server's: reading reads it, no client clock in the address.
+    expect(stepSave.saveStep).toHaveBeenCalledWith('reading');
     expect(push).toHaveBeenCalledWith('/onboarding/reading');
   });
 

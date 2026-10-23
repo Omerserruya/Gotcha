@@ -22,6 +22,8 @@ const hrefOf = (href: unknown) => {
   const q = new URLSearchParams(query ?? {}).toString();
   return q ? `${pathname}?${q}` : pathname;
 };
+const stepSave = vi.hoisted(() => ({ saveStep: vi.fn(async () => true) }));
+vi.mock('./step-actions', () => stepSave);
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
     <a href={hrefOf(href)} {...rest}>

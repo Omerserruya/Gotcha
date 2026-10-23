@@ -80,16 +80,3 @@ export function asksForPreview(pathAndQuery: string | null): boolean {
   const at = pathAndQuery.indexOf('?');
   return at >= 0 && new URLSearchParams(pathAndQuery.slice(at + 1)).get('preview') === '1';
 }
-
-/** The onboarding step to resume at, by what really exists on the server. */
-export function resumeStep(state: {
-  /** The website read's row: `null` when it never ran. */
-  readonly discovery: { readonly status: string } | null;
-  /** A store or CRM counted as the core system. */
-  readonly coreConnected: boolean;
-}): 'website' | 'reading' | 'learned' | 'truth' | 'try' {
-  const status = state.discovery?.status ?? null;
-  if (status === 'SCANNING') return 'reading';
-  if (status !== 'COMPLETE') return 'website';
-  return state.coreConnected ? 'try' : 'learned';
-}

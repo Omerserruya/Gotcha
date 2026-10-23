@@ -27,6 +27,8 @@ vi.mock('@/features/webchat/WebchatSettings', () => ({
   GetTheCode: () => <button type="button" data-testid="get-the-code" />,
   CopyCode: ({ code }: { code: string }) => <span data-testid="copy-code" data-code={code} />,
 }));
+const stepSave = vi.hoisted(() => ({ saveStep: vi.fn(async () => true) }));
+vi.mock('./step-actions', () => stepSave);
 vi.mock('@/i18n/navigation', () => ({
   useRouter: () => router,
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (

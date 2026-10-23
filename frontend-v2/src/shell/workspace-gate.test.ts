@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { consoleOnly, isConsolePath, resumeStep, workspaceRoute } from './workspace-gate';
+import { consoleOnly, isConsolePath, workspaceRoute } from './workspace-gate';
 
 describe("★★ onboarding is a gate: each status to its place (the server's word)", () => {
   const at = (tenantStatus: string | null, role: string | null = 'ADMIN') =>
@@ -54,16 +54,6 @@ describe("★★ onboarding is a gate: each status to its place (the server's wo
   it('unread: the Retry screen - not the product, not a lock', () => {
     expect(workspaceRoute(null)).toBe('unavailable');
     expect(at(null)).toBe('unavailable');
-  });
-});
-
-describe('★ onboarding resumes where it really is', () => {
-  it('by the read and the core system', () => {
-    expect(resumeStep({ discovery: null, coreConnected: false })).toBe('website');
-    expect(resumeStep({ discovery: { status: 'FAILED' }, coreConnected: true })).toBe('website');
-    expect(resumeStep({ discovery: { status: 'SCANNING' }, coreConnected: false })).toBe('reading');
-    expect(resumeStep({ discovery: { status: 'COMPLETE' }, coreConnected: false })).toBe('learned');
-    expect(resumeStep({ discovery: { status: 'COMPLETE' }, coreConnected: true })).toBe('try');
   });
 });
 
