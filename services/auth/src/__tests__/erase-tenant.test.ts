@@ -17,6 +17,8 @@ const H = vi.hoisted(() => ({
   funded: 1,
   erasedSubjects: [] as string[],
   otherMemberships: 0,
+  mediaCount: 1,
+  slug: "acme",
 }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
@@ -32,14 +34,19 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     tenant: {
       findUnique: async ({ select }: any) => (select?._count
         ? { _count: { users: 1, conversations: 3, messages: 9, channelAccounts: 1, contacts: 2 } }
-        : { id: "T", name: "Acme", slug: "acme" }),
+        : { id: "T", name: "Acme", slug: H.slug }),
       delete: async () => { H.ops.push("tenant.delete"); },
     },
     user: {
       findMany: async () => [{ id: "u1", identityId: "i1", identity: { authentikSubject: "sub1" } }],
       count: async () => H.otherMemberships,
     },
-    message: { findMany: async () => [{ mediaUrl: "/api/uploads/0f8fad5b-d9cb-469f-a165-70867728950e.jpg" }, { mediaUrl: "https://elsewhere/x.png" }] },
+    message: {
+      findMany: async () => [
+        ...Array.from({ length: H.mediaCount }, (_, i) => ({ mediaUrl: `/api/uploads/0f8fad5b-d9cb-469f-a165-${String(i).padStart(12, "0")}.jpg` })),
+        { mediaUrl: "https://elsewhere/x.png" },
+      ],
+    },
     scheduledMessage: { findMany: async () => [{ mediaUrl: "/api/uploads/7c9e6679-7425-40de-944b-e07fc1f90ae7.pdf?x=1" }] },
     channelAccount: { findMany: async () => [{ channel: "WHATSAPP", displayName: "Acme WA", externalId: "pn1" }] },
     tenantIntegration: { findMany: async () => [{ status: "CONNECTED", integration: { slug: "hubspot" } }] },
@@ -71,20 +78,24 @@ vi.mock("../services/invitation.service", () => ({
   eraseUserIdentity: async (s: string) => { H.erasedSubjects.push(s); return true; },
 }));
 
-import { eraseTenant } from "../services/gdpr.service";
+import { eraseTenant, tenantDeletionRefusal, PURGE_BATCH } from "../services/gdpr.service";
 
 let calls: any[] = [];
 let uploadsReply: { status: number; body: any } = { status: 200, body: { ok: true, removed: 2, missing: 0 } };
+let failBatch = -1;
 let logged: string[] = [];
 
 beforeEach(() => {
-  H.ops = []; H.audit = null; H.erasedSubjects = []; H.otherMemberships = 0; H.funded = 1;
+  H.ops = []; H.audit = null; H.erasedSubjects = []; H.otherMemberships = 0; H.funded = 1; H.mediaCount = 1; H.slug = "acme";
   H.sub = { id: "s1", status: "ACTIVE", cancelAtPeriodEnd: true };
-  calls = []; logged = [];
+  calls = []; logged = []; failBatch = -1;
   uploadsReply = { status: 200, body: { ok: true, removed: 2, missing: 0 } };
   vi.stubGlobal("fetch", async (url: string, init: any) => {
     calls.push({ url, body: JSON.parse(init.body) });
-    const r = url.includes("/internal/uploads/purge") ? uploadsReply : { status: 200, body: {} };
+    const purgeCall = calls.filter((c) => c.url.includes("/internal/uploads/purge")).length - 1;
+    const r = url.includes("/internal/uploads/purge")
+      ? purgeCall === failBatch ? { status: 413, body: { error: "too large" } } : uploadsReply
+      : { status: 200, body: {} };
     return { status: r.status, ok: r.status < 300, json: async () => r.body } as any;
   });
   vi.spyOn(console, "log").mockImplementation((m: any) => { logged.push(String(m)); });
@@ -111,7 +122,7 @@ describe("eraseTenant", () => {
   it("removes only stored uploads, by name, after the commit", async () => {
     const out: any = await eraseTenant("T", "sa1");
     const purge = calls.find((c) => c.url.endsWith("/internal/uploads/purge"));
-    expect(purge.body.files.sort()).toEqual(["0f8fad5b-d9cb-469f-a165-70867728950e.jpg", "7c9e6679-7425-40de-944b-e07fc1f90ae7.pdf"]);
+    expect(purge.body.files.sort()).toEqual(["0f8fad5b-d9cb-469f-a165-000000000000.jpg", "7c9e6679-7425-40de-944b-e07fc1f90ae7.pdf"]);
     expect(out).toMatchObject({ uploadsRemoved: true, uploadFiles: 2, uploadsLeftBehind: [] });
   });
 
@@ -122,6 +133,21 @@ describe("eraseTenant", () => {
     expect(out.uploadsRemoved).toBe(false);
     expect(out.uploadsLeftBehind).toHaveLength(2);
     expect(logged.some((l) => l.includes("uploads NOT removed for deleted tenant T"))).toBe(true);
+  });
+
+
+  it("purges in batches small enough for the receiving body limit; only a failed batch is left behind (review 4)", async () => {
+    H.mediaCount = 1199; // + 1 scheduled = 1200 names
+    failBatch = 1;
+    const out: any = await eraseTenant("T", "sa1");
+    const purges = calls.filter((c) => c.url.endsWith("/internal/uploads/purge"));
+    expect(purges.map((c) => c.body.files.length)).toEqual([PURGE_BATCH, PURGE_BATCH, 200]);
+    expect(PURGE_BATCH).toBeLessThanOrEqual(500);
+    // ~50 bytes a name: a batch stays far under express's 100kb default.
+    expect(JSON.stringify({ files: purges[0].body.files }).length).toBeLessThan(100 * 1024);
+    expect(out.uploadsRemoved).toBe(false);
+    expect(out.uploadsLeftBehind).toEqual(purges[1].body.files);
+    expect(H.ops).toContain("tenant.delete");
   });
 
   it("reports what is left on the provider side, and calls no provider", async () => {
@@ -156,17 +182,28 @@ describe("eraseTenant", () => {
   });
 });
 
+
+describe("tenantDeletionRefusal: the guards both doors share (review 2)", () => {
+  it("the System tenant is refused, through every door", async () => {
+    H.slug = "system";
+    expect(await tenantDeletionRefusal("T")).toEqual({ code: "SYSTEM_TENANT" });
+  });
+  it("the caller's own tenant is refused", async () => {
+    expect(await tenantDeletionRefusal("T", { callerTenantId: "T" })).toEqual({ code: "OWN_TENANT" });
+  });
+});
+
 describe("the /api/gdpr door gains the same refusals, and nothing else", () => {
   it("refuses with 409 and the code; erases nothing", async () => {
     vi.resetModules();
     vi.doMock("../services/gdpr.service", async (orig) => ({
       ...(await orig<any>()),
-      tenantDeletionRefusal: async () => ({ code: "OPEN_CHECKOUT" }),
+      tenantDeletionRefusal: async (_t: string, opts: any) => (opts?.callerTenantId === "SYS" ? { code: "OPEN_CHECKOUT" } : null),
       eraseTenant: async () => { throw new Error("must not erase"); },
     }));
     vi.doMock("@chatcenter/shared", async (orig) => ({
       ...(await orig<any>()),
-      authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "sa1" }; n(); },
+      authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "sa1", tenantId: "SYS" }; n(); },
       requireSystemAdmin: () => (_q: any, _s: any, n: any) => n(),
     }));
     const { default: gdpr } = await import("../routes/gdpr");
@@ -174,6 +211,7 @@ describe("the /api/gdpr door gains the same refusals, and nothing else", () => {
     app.use(express.json());
     app.use("/api/gdpr", gdpr);
     const r = await request(app).delete("/api/gdpr/tenants/T");
+    // Refused only because the caller's tenant reached the shared guard.
     expect(r.status).toBe(409);
     expect(r.body).toMatchObject({ error: "erasure_refused", code: "OPEN_CHECKOUT" });
   });

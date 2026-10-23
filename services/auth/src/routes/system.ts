@@ -1256,17 +1256,11 @@ router.delete("/tenants/:id", authenticate, requireSystemAdmin(), validate(delet
       res.status(400).json({ error: "The slug typed does not match this organization", code: "CONFIRM_SLUG_MISMATCH" });
       return;
     }
-    if (tenant.slug === "system") {
-      res.status(409).json({ error: "The System organization cannot be deleted", code: "SYSTEM_TENANT" });
-      return;
-    }
-    if ((req as any).user?.tenantId === tenantId) {
-      res.status(409).json({ error: "You cannot delete the organization you are signed in to", code: "OWN_TENANT" });
-      return;
-    }
-    const refusal = await tenantDeletionRefusal(tenantId);
+    const refusal = await tenantDeletionRefusal(tenantId, { callerTenantId: (req as any).user?.tenantId ?? null });
     if (refusal) {
       const message = {
+        SYSTEM_TENANT: "The System organization cannot be deleted",
+        OWN_TENANT: "You cannot delete the organization you are signed in to",
         ACTIVE_PAID_SUBSCRIPTION: "This organization has a subscription that can still charge",
         OPEN_CHECKOUT: "This organization has a checkout the customer could still complete",
         SHOPIFY_BILLED: "Shopify bills this organization; uninstall the app on the Shopify side first",

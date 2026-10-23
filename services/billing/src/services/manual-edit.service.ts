@@ -31,8 +31,11 @@ import { prisma, grantUnits, getBalance, materializeEntitlements } from "@chatce
 import { ensureBillableEntity, getEntityIdForTenant, tenantsForEntity } from "./billable-entity.service";
 import { resolveAndValidatePlan, ProvisioningRefused } from "./paid-provisioning.service";
 import { quote, snapshotFor } from "./pricing.service";
-import { provisionPoc, PocProvisioningRefused } from "./poc.service";
+import { provisionPoc, PocProvisioningRefused, POC_FEATURE_DOMAINS } from "./poc.service";
 import { periodKeyFor } from "../lib/period";
+
+/** The subscription events this service writes; resume reads them. */
+export const MANUAL_EVENT_TYPES = ["manual_plan_change", "manual_end_date", "manual_switch_to_poc"];
 
 export class ManualEditRefused extends Error {
   constructor(public code: string, public detail?: string) {
@@ -338,9 +341,15 @@ export async function manualSwitchToPoc(input: {
   await assertEditable(input.tenantId, sub);
   assertFuture(input.expiresAt, now);
 
+  // Every refusal provisionPoc can make, made here first: the pending change
+  // is only cleared once provisioning has succeeded, so a refused POC leaves
+  // the scheduled downgrade or cancel exactly where it was.
+  if (!Number.isInteger(input.credits) || input.credits <= 0) throw new ManualEditRefused("credit_budget_required");
+  const unknown = input.features.filter((f) => !POC_FEATURE_DOMAINS.includes(f));
+  if (!input.features.length || unknown.length) throw new ManualEditRefused("unknown_feature_domain", unknown.join(","));
+
   const before = await view(sub);
   const cleared = sub ? await pendingChange(sub.id) : null;
-  if (sub) await prisma.pendingSubscriptionChange.deleteMany({ where: { subscriptionId: sub.id, appliedAt: null } });
 
   let result;
   try {
@@ -358,6 +367,9 @@ export async function manualSwitchToPoc(input: {
     if (err instanceof PocProvisioningRefused) throw new ManualEditRefused(err.code);
     throw err;
   }
+
+  // A POC never takes a scheduled downgrade or cancel: expireDuePocs ends it.
+  if (sub) await prisma.pendingSubscriptionChange.deleteMany({ where: { subscriptionId: sub.id, appliedAt: null } });
 
   const after = await currentSubscription(input.tenantId);
   if (after) {

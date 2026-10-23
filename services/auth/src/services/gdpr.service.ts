@@ -198,14 +198,29 @@ const OPEN_CHECKOUT_STATES = ["PENDING", "AWAITING_PROVIDER", "TOKENIZED"];
 /**
  * Why this tenant must not be deleted right now, or null when it may be.
  *
- * Shared by every door into eraseTenant. Each refusal protects money moving
- * after the organization is gone: a subscription that can still charge, a
+ * Shared by every door into eraseTenant. Beyond the System tenant and the
+ * caller's own, each refusal protects money moving after the organization is
+ * gone: a subscription that can still charge, a
  * checkout a customer could still complete, or a Shopify subscription that
  * Shopify keeps billing until the app is uninstalled on their side.
  */
+export type TenantDeletionRefusalCode =
+  | "SYSTEM_TENANT"
+  | "OWN_TENANT"
+  | "ACTIVE_PAID_SUBSCRIPTION"
+  | "OPEN_CHECKOUT"
+  | "SHOPIFY_BILLED";
+
 export async function tenantDeletionRefusal(
   tenantId: string,
-): Promise<{ code: "ACTIVE_PAID_SUBSCRIPTION" | "OPEN_CHECKOUT" | "SHOPIFY_BILLED"; detail?: string } | null> {
+  opts: { callerTenantId?: string | null } = {},
+): Promise<{ code: TenantDeletionRefusalCode; detail?: string } | null> {
+  // Erasing the System organization erases every sysadmin's login with it, and
+  // erasing your own ends the session doing the erasing. Both doors check this.
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } });
+  if (tenant?.slug === "system") return { code: "SYSTEM_TENANT" };
+  if (opts.callerTenantId && opts.callerTenantId === tenantId) return { code: "OWN_TENANT" };
+
   const shopify = await prisma.providerSubscription.findFirst({
     where: { tenantId, billingSource: "SHOPIFY", status: { notIn: ["DECLINED", "EXPIRED"] as any } },
     select: { id: true },
@@ -250,23 +265,38 @@ function uploadNameOf(url: string | null | undefined): string | null {
 
 const CONVERSATION_SERVICE_URL = process.env.CONVERSATION_SERVICE_URL || "http://conversation:4002";
 
-/** Ask the service that owns the uploads volume to remove these files. Never throws. */
-async function purgeUploads(files: string[]): Promise<{ ok: boolean; removed: number; missing: number }> {
-  if (!files.length) return { ok: true, removed: 0, missing: 0 };
-  try {
-    const res = await fetch(`${CONVERSATION_SERVICE_URL}/internal/uploads/purge`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-internal-key": getInternalServiceKey() },
-      body: JSON.stringify({ files }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    const body: any = await res.json().catch(() => ({}));
-    // 207 is a fetch "ok": the body says whether every file actually went.
-    return { ok: res.ok && body?.ok === true, removed: Number(body?.removed ?? 0), missing: Number(body?.missing ?? 0) };
-  } catch (err: any) {
-    console.error("[gdpr] uploads purge call failed:", err?.message ?? err);
-    return { ok: false, removed: 0, missing: 0 };
+/** Names per purge call: well under the receiving service's 100kb JSON body limit. */
+export const PURGE_BATCH = 500;
+
+/**
+ * Ask the service that owns the uploads volume to remove these files, in
+ * batches. Never throws. `left` holds the names of every batch that did not
+ * fully go, so the caller can report exactly those.
+ */
+async function purgeUploads(files: string[]): Promise<{ ok: boolean; removed: number; missing: number; left: string[] }> {
+  let removed = 0;
+  let missing = 0;
+  const left: string[] = [];
+  for (let i = 0; i < files.length; i += PURGE_BATCH) {
+    const batch = files.slice(i, i + PURGE_BATCH);
+    try {
+      const res = await fetch(`${CONVERSATION_SERVICE_URL}/internal/uploads/purge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-internal-key": getInternalServiceKey() },
+        body: JSON.stringify({ files: batch }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const body: any = await res.json().catch(() => ({}));
+      removed += Number(body?.removed ?? 0);
+      missing += Number(body?.missing ?? 0);
+      // 207 is a fetch "ok": the body says whether every file actually went.
+      if (!(res.ok && body?.ok === true)) left.push(...batch);
+    } catch (err: any) {
+      console.error("[gdpr] uploads purge call failed:", err?.message ?? err);
+      left.push(...batch);
+    }
   }
+  return { ok: left.length === 0, removed, missing, left };
 }
 
 /** What a channel leaves on the provider side when only our rows are removed. */
@@ -426,7 +456,7 @@ export async function eraseTenant(
   //    removed by hand, and the response says so.
   const uploads = await purgeUploads(uploadFiles);
   if (!uploads.ok) {
-    console.error(`[gdpr] uploads NOT removed for deleted tenant ${tenantId}: ${JSON.stringify(uploadFiles)}`);
+    console.error(`[gdpr] uploads NOT removed for deleted tenant ${tenantId}: ${JSON.stringify(uploads.left)}`);
   }
 
   return {
@@ -440,7 +470,7 @@ export async function eraseTenant(
     userCount: users.length,
     uploadsRemoved: uploads.ok,
     uploadFiles: uploadFiles.length,
-    uploadsLeftBehind: uploads.ok ? [] : uploadFiles,
+    uploadsLeftBehind: uploads.left,
     providerLeftovers: leftovers,
   };
 }

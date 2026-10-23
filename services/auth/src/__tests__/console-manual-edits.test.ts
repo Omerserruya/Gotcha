@@ -17,7 +17,7 @@ const H = vi.hoisted(() => ({
   checkouts: [] as any[],
   subs: [] as any[],
   shopify: [] as any[],
-  idp: { users: [] as any[], updates: [] as any[], failUpdate: false },
+  idp: { users: [] as any[], updates: [] as any[], failUpdate: false, applyThenThrow: false, readThrows: false },
   revoked: [] as string[],
   owners: true,
   planAccess: { state: "MISSING", label: "Missing", active: false, planKey: null, planName: null, expiresAt: null } as any,
@@ -70,12 +70,17 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     writeAudit: async (a: any) => { H.audits.push(a); },
     resolveTenantPlanAccess: async () => H.planAccess,
     getInternalServiceKey: () => "k",
-    findIdentityBySubject: async (subject: string) => H.idp.users.find((u) => u.subject === subject) ?? null,
+    findIdentityBySubject: async (subject: string) => {
+      if (H.idp.readThrows) throw new Error("[authentik] GET -> timeout");
+      return H.idp.users.find((u) => u.subject === subject) ?? null;
+    },
     findIdentityByEmail: async (email: string) => H.idp.users.find((u) => u.email.toLowerCase() === email.toLowerCase()) ?? null,
     updateIdentity: async (pk: number, attrs: any) => {
       if (H.idp.failUpdate) throw new Error("[authentik] PATCH -> 500");
       H.idp.updates.push({ pk, ...attrs });
       Object.assign(H.idp.users.find((u) => u.pk === pk), attrs);
+      // Applied in Authentik, but the reply never arrived.
+      if (H.idp.applyThenThrow) throw new Error("[authentik] PATCH -> timeout");
     },
   };
 });
@@ -129,7 +134,7 @@ beforeEach(() => {
     { id: "u1", tenantId: "T", email: "owner@acme.test", name: "Owner", role: "ADMIN", isActive: true, identityId: "i1" },
     { id: "u2", tenantId: "T", email: "agent@acme.test", name: "Agent", role: "AGENT", isActive: true, identityId: "i2" },
   ];
-  H.idp = { users: [{ subject: "sub1", pk: 7, email: "owner@acme.test", username: "owner@acme.test" }], updates: [], failUpdate: false };
+  H.idp = { users: [{ subject: "sub1", pk: 7, email: "owner@acme.test", username: "owner@acme.test" }], updates: [], failUpdate: false, applyThenThrow: false, readThrows: false };
   H.audits = []; H.checkouts = []; H.subs = []; H.shopify = []; H.revoked = []; H.erase = [];
   H.owners = true;
   H.planAccess = { state: "MISSING", label: "Missing", active: false, planKey: null, planName: null, expiresAt: null };
@@ -230,6 +235,31 @@ describe("PATCH /tenants/:id/admin-email", () => {
     expect(H.users[0].email).toBe("owner@acme.test");
     expect(H.identities[0].email).toBe("owner@acme.test");
     expect(H.audits).toEqual([]);
+  });
+
+  it("a throw AFTER Authentik applied it is followed, not reported as a failure: no drift (review 5)", async () => {
+    H.idp.applyThenThrow = true;
+    const r = await send({ newEmail: "x@acme.test" });
+    expect(r.status).toBe(200);
+    expect(H.idp.users[0].email).toBe("x@acme.test");
+    expect(H.users[0].email).toBe("x@acme.test");
+    expect(H.identities[0].email).toBe("x@acme.test");
+  });
+
+  it("Authentik unreadable: IDP_STATE_UNKNOWN, nothing written here (review 5)", async () => {
+    H.idp.readThrows = true;
+    const r = await send({ newEmail: "x@acme.test" });
+    expect(r.status).toBe(502);
+    expect(r.body.code).toBe("IDP_STATE_UNKNOWN");
+    expect(H.users[0].email).toBe("owner@acme.test");
+    expect(H.audits).toEqual([]);
+  });
+
+  it("a retry after an unknown outcome is not a clash with itself", async () => {
+    H.idp.users[0].email = "x@acme.test"; // the earlier attempt landed in Authentik only
+    const r = await send({ newEmail: "x@acme.test" });
+    expect(r.status).toBe(200);
+    expect(H.users[0].email).toBe("x@acme.test");
   });
 
   it("SAME_EMAIL, SYSTEM_ADMIN and USER_NOT_FOUND", async () => {

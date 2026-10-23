@@ -22,6 +22,7 @@ const H = vi.hoisted(() => ({
   grants: [] as any[],
   plans: [] as any[],
   provisionPoc: [] as any[],
+  pocThrows: null as null | Error,
   charges: 0,
 }));
 
@@ -56,7 +57,9 @@ vi.mock("../services/poc.service", () => {
   class PocProvisioningRefused extends Error { constructor(readonly code: string) { super(code); } }
   return {
     PocProvisioningRefused,
+    POC_FEATURE_DOMAINS: ["ai", "conversation", "analytics"],
     provisionPoc: async (input: any) => {
+      if (H.pocThrows) throw H.pocThrows;
       H.provisionPoc.push(input);
       // What setupPoc writes: no price, out of the renewal sweep.
       const sub = H.subs.find((s) => s.billableEntityId === `E_${input.tenantId}`);
@@ -159,7 +162,7 @@ function trialWouldCharge(s: any, at: Date): boolean {
 
 beforeEach(() => {
   H.tenants = new Set(); H.subs = []; H.pending = []; H.dunning = []; H.shopify = []; H.checkouts = [];
-  H.entitlements = []; H.events = []; H.grants = []; H.provisionPoc = []; H.charges = 0;
+  H.entitlements = []; H.events = []; H.grants = []; H.provisionPoc = []; H.pocThrows = null; H.charges = 0;
   H.plans = [
     { id: "pv_starter", key: "starter", version: 1, kind: "PUBLIC", billingInterval: "MONTHLY" },
     { id: "pv_growth", key: "growth", version: 2, kind: "PUBLIC", billingInterval: "MONTHLY" },
@@ -314,6 +317,34 @@ describe("switch_to_poc", () => {
     expect(H.provisionPoc).toEqual([expect.objectContaining({ tenantId: "T", credits: 500, expiresAt: LATER, features: ["ai", "conversation"], note: "pilot" })]);
     expect(r).toMatchObject({ renewal: "off", charges: "none", after: { planKey: "poc", cancelAtPeriodEnd: true }, pendingChangeCleared: { changeType: "DOWNGRADE" } });
     expect(renewalWouldCharge(H.subs[0], new Date("2030-01-01T00:00:00Z"))).toBe(false);
+  });
+});
+
+
+describe("switch_to_poc: a refused or failed POC leaves the pending change where it was (review 1)", () => {
+  const downgrade = () => ({ subscriptionId: "sub_T", changeType: "DOWNGRADE", targetPlanKey: "starter", effectiveAt: LATER, appliedAt: null });
+  const cases: Array<[string, any, string]> = [
+    ["an unknown feature area", { features: ["ai", "nope"] }, "unknown_feature_domain"],
+    ["no feature area", { features: [] }, "unknown_feature_domain"],
+    ["no credit budget", { credits: 0 }, "credit_budget_required"],
+    ["a fractional budget", { credits: 1.5 }, "credit_budget_required"],
+  ];
+  for (const [name, over, code] of cases) {
+    it(`${name} -> ${code}, before anything is touched`, async () => {
+      paidSub();
+      H.pending.push(downgrade());
+      await expect(manualSwitchToPoc({ tenantId: "T", credits: 100, expiresAt: LATER, features: ["ai"], reason: "r", ...over }, NOW)).rejects.toMatchObject({ code });
+      expect(H.pending).toEqual([downgrade()]);
+      expect(H.provisionPoc).toEqual([]);
+    });
+  }
+
+  it("provisioning failing part-way keeps it too (the operator retries)", async () => {
+    paidSub();
+    H.pending.push(downgrade());
+    H.pocThrows = new Error("database went away");
+    await expect(manualSwitchToPoc({ tenantId: "T", credits: 100, expiresAt: LATER, features: ["ai"], reason: "r" }, NOW)).rejects.toThrow("database went away");
+    expect(H.pending).toEqual([downgrade()]);
   });
 });
 

@@ -216,10 +216,25 @@ router.patch("/tenants/:id/admin-email", authenticate, requireSystemAdmin(), val
         // Usernames were created as the email; one that was changed on purpose
         // is not ours to overwrite.
         const movesUsername = (found.username ?? "").toLowerCase() === (found.email ?? "").toLowerCase();
-        await updateIdentity(found.pk, { email: newEmail, ...(movesUsername ? { username: newEmail } : {}) });
+        try {
+          await updateIdentity(found.pk, { email: newEmail, ...(movesUsername ? { username: newEmail } : {}) });
+        } catch (err: any) {
+          // A throw is not proof Authentik refused: a timeout can land after
+          // the change applied. Read back what Authentik now holds and follow
+          // it, so the two systems never drift apart.
+          console.error("Admin email: Authentik update threw:", err?.message ?? err);
+          const now = await findIdentityBySubject(identity.authentikSubject);
+          if ((now?.email ?? "").toLowerCase() !== newEmail) {
+            res.status(502).json({ error: "Authentik did not accept the change; nothing was changed", code: "IDP_SYNC_FAILED" });
+            return;
+          }
+        }
       } catch (err: any) {
-        console.error("Admin email: Authentik update failed:", err?.message ?? err);
-        res.status(502).json({ error: "Authentik did not accept the change; nothing was changed", code: "IDP_SYNC_FAILED" });
+        // Authentik could not be read, before or after the change: what it
+        // holds is unknown, so nothing local is written. Retrying is safe -
+        // the new email resolving to this same login is not a clash.
+        console.error("Admin email: Authentik state unknown:", err?.message ?? err);
+        res.status(502).json({ error: "Could not confirm the change in Authentik; nothing was changed here, try again", code: "IDP_STATE_UNKNOWN" });
         return;
       }
     }
