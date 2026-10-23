@@ -43,7 +43,12 @@ export async function canViewConversation(
       tenantId,
       ...(clause ? { OR: clause } : {}),
     },
-    select: { id: true },
+    select: { id: true, customerExternalId: true },
   });
-  return row != null;
+  if (!row) return false;
+  // A sandbox rehearsal ("sandbox:<agent>:<user>") is its tester's alone: no
+  // other agent can open it or join its room, whatever their role. The inbox
+  // already hides it; this closes every by-id door too (2026-10-23).
+  const ext = row.customerExternalId ?? "";
+  return !ext.startsWith("sandbox:") || ext.endsWith(`:${viewer.userId}`);
 }

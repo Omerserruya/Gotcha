@@ -24,7 +24,7 @@ import {
 } from "@chatcenter/shared";
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
 import { getShopifyAuthorization, shopifyCapabilityForTool } from "@chatcenter/shared";
-import { capabilitiesFor, MAX_CAROUSEL_ITEMS, loadIntegrationAccess, allowedIntegrationToolKeys, customAccessKey } from "@chatcenter/shared";
+import { capabilitiesFor, MAX_CAROUSEL_ITEMS, loadIntegrationAccess, allowedIntegrationToolKeys, customAccessKey, classifyToolEffect } from "@chatcenter/shared";
 import {
   readGrammaticalAddress,
   updateGrammaticalAddress,
@@ -1014,6 +1014,35 @@ export interface ClosedHoursContext {
   nextOpeningText?: { en?: string; he?: string };
 }
 
+/**
+ * Only the tools that read. classifyToolEffect is the dispatcher's own
+ * read/action split (unknown names count as action), so anything it does not
+ * know to be a read is left off.
+ */
+export function readOnlySurface<T extends { function?: { name?: string } }>(tools: T[]): T[] {
+  return tools.filter((t) => typeof t?.function?.name === "string" && classifyToolEffect(t.function.name) === "read");
+}
+
+/**
+ * The onboarding test flag, if it may apply: requested, on a sandboxed turn,
+ * in a conversation whose external id marks it a sandbox ("sandbox:..."). Any
+ * other turn gets null and runs exactly as a channel turn.
+ */
+export async function onboardingTestFor(opts: {
+  tenantId: string;
+  conversationId: string;
+  sandbox?: { enabled: true; writes: "safe" | "real" };
+  onboardingTest?: { actorUserId: string };
+}): Promise<{ actorUserId: string } | null> {
+  if (!opts.onboardingTest?.actorUserId || !opts.sandbox?.enabled) return null;
+  const c = await prisma.conversation.findFirst({
+    where: { id: opts.conversationId, tenantId: opts.tenantId },
+    select: { customerExternalId: true, handledBy: true },
+  });
+  if (!c?.customerExternalId?.startsWith("sandbox:") || c.handledBy !== "sandbox") return null;
+  return { actorUserId: opts.onboardingTest.actorUserId };
+}
+
 export async function generateAIBotReply(opts: {
   tenantId: string;
   conversationId: string;
@@ -1031,17 +1060,36 @@ export async function generateAIBotReply(opts: {
   sandbox?: { enabled: true; writes: "safe" | "real" };
   /** An automation's "Run a skill": start this business skill on this turn. */
   startSkillId?: string | null;
+  /**
+   * Set ONLY by the onboarding employee test (POST /api/ai-assist/onboarding-employee-test),
+   * never by a channel path (/api/ai-bot/reply forwards named fields only). Honoured only
+   * on a sandboxed turn in a "sandbox:" conversation - see onboardingTestFor. It makes the
+   * turn read-only (no write, action or approval-gated tool on the surface, no background
+   * CRM round, no CRM prefetch), turns the agent loop off, and runs store reads as the
+   * OWNER (accessScope "internal") with the admin as the audited actor.
+   */
+  onboardingTest?: { actorUserId: string };
 }): Promise<AIBotReplyResult> {
   // Per-conversation cancellation: if a newer inbound for this conversation
   // hits the AI service mid-turn, it calls beginTurn() again which aborts
   // this controller. Every generateResponse() below threads `signal` so the
   // underlying OpenAI fetch is cancelled - no tokens burned, no stale reply
   // emitted. The route layer converts the resulting AbortError into HTTP 499.
+  // The onboarding test flag counts only where it can: a sandboxed turn in a
+  // sandbox conversation. Anywhere else it is dropped, so a channel turn keeps
+  // the customer guard whatever reaches this function.
+  const honoured = await onboardingTestFor(opts);
+  if (opts.onboardingTest && !honoured) {
+    console.warn(`[ai-bot] onboardingTest ignored outside a sandbox conversation conv=${opts.conversationId}`);
+  }
+  opts = { ...opts, onboardingTest: honoured ?? undefined };
   const turn = beginTurn(opts.tenantId, opts.conversationId, "bot");
   try {
     // ── Agent Loop (flag-gated, beside the Planner) ───────────────────────────
     // Capability lifecycle: off → shadow → autonomous (see agent-loop/flags.ts).
-    const loopMode = agentLoopMode(opts.tenantId);
+    // Off for the onboarding test, whatever the mode: it writes its own rows and
+    // knows nothing of the read-only rules.
+    const loopMode = opts.onboardingTest ? "off" : agentLoopMode(opts.tenantId);
     // TEMPORARY migration routing floor (see agent-loop/operation-status.ts): the Kernel
     // may DRIVE a conversation only for an agent explicitly opted in via AGENT_LOOP_AGENTS
     // - one the operator has verified needs nothing beyond autonomous operations. Empty ⇒
@@ -1239,6 +1287,8 @@ async function generateAIBotReplyInner(
     sandbox?: { enabled: true; writes: "safe" | "real" };
     /** See generateAIBotReply. */
     startSkillId?: string | null;
+    /** See generateAIBotReply; already checked by onboardingTestFor. */
+    onboardingTest?: { actorUserId: string };
   },
   signal: AbortSignal,
 ): Promise<AIBotReplyResult> {
@@ -1371,7 +1421,9 @@ async function generateAIBotReplyInner(
   try {
     const recentEmail = extractRecentEmail(messages);
     resolvedCustomerEmail = recentEmail || undefined;
-    const prefetch = await prefetchCrmContext(opts.tenantId, opts.conversationId, {
+    // No CRM lookup in the onboarding test: there is no customer behind it, and
+    // the prefetch writes tool rows.
+    const prefetch = opts.onboardingTest ? null : await prefetchCrmContext(opts.tenantId, opts.conversationId, {
       externalId: conversation.customerExternalId,
       email: recentEmail,
     });
@@ -2013,7 +2065,10 @@ async function generateAIBotReplyInner(
         // customer/order tools are authorized against the conversation's
         // authenticated sender identity (P0 cross-customer guard). Typed
         // phones/emails/order numbers in chat can never widen this.
-        accessScope: "customer",
+        // The onboarding test is the one exception: the OWNER is testing their
+        // own store, so it reads as them and they are the actor of record.
+        accessScope: opts.onboardingTest ? "internal" : "customer",
+        ...(opts.onboardingTest ? { actingFor: { userId: opts.onboardingTest.actorUserId, reason: "onboarding_test" } } : {}),
       });
       // Fire-and-forget notification emit on success only. The classify
       // helper maps refund/discount/meeting tool names to SystemEvents;
@@ -2440,6 +2495,11 @@ async function generateAIBotReplyInner(
     });
   }
 
+  // The onboarding test answers; it never acts. Only reads stay on the surface,
+  // so no write, action or approval-gated tool can be chosen - and nothing can
+  // reach the orchestrator's approval path.
+  if (opts.onboardingTest) tools = readOnlySurface(tools as any[]) as typeof tools;
+
   let toolFunctionNames: string[] = (tools as any[])
     .map((t) => t?.function?.name)
     .filter((n): n is string => typeof n === "string");
@@ -2811,7 +2871,8 @@ async function generateAIBotReplyInner(
           contactId: contactRow?.id,
           toolFunctionName: tool,
           args,
-          accessScope: "customer",
+          accessScope: opts.onboardingTest ? "internal" : "customer",
+          ...(opts.onboardingTest ? { actingFor: { userId: opts.onboardingTest.actorUserId, reason: "onboarding_test" } } : {}),
         });
         if (!r.ok) throw new Error(r.reason);
         return r.result;
@@ -3924,7 +3985,8 @@ async function generateAIBotReplyInner(
   // message thread, so it NEVER changes the customer reply. Deliberately NOT
   // gated on awaitingApproval: an approval pending on one action must not freeze
   // CRM integrity on others (capability "continue progress during approval").
-  {
+  // Not in the onboarding test: these are CRM writes, and there is no customer.
+  if (!opts.onboardingTest) {
     const committedSoFar = [...new Set([...committedActionTools, ...thisTurnCommitted])];
     const ripeBackground = guaranteedBackgroundActions({
       role: config.role,

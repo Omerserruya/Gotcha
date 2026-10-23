@@ -35,9 +35,14 @@ import { generateFollowup } from "../services/followup-generator.service";
 import { buildCustomerState } from "../services/customer-state.service";
 import { getPolicy, setPolicy, validatePolicyPatch, PolicyValidationError } from "../services/policy.service";
 import voiceRouter from "./ai-assist-voice";
+import multer from "multer";
+import { parseFile, resolveMimeType } from "../services/file-parser.service";
 import { buildAgentPrompt } from "../services/prompt-builder.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { discoverBusiness, withoutWideDashes } from "../services/business-discovery.service";
+import { extractOnboarding, type ExtractKind } from "../services/onboarding-extract.service";
+import { goLiveEmployee, GoLiveRefused } from "../services/onboarding-employee.service";
+import { testOnboardingEmployee, EmployeeTestRefused } from "../services/onboarding-employee-test.service";
 import { previewAnswer, previewQuestions, PREVIEW_STATUSES, QUESTION_MAX, type PreviewLocale } from "../services/onboarding-preview.service";
 import { tuneEmployeeChat } from "../services/employee-tuning.service";
 
@@ -79,6 +84,94 @@ router.post("/discover-business", authenticate, resolveTenant, requireRole("ADMI
   } catch (err) {
     console.error("Discover business error:", err);
     res.status(500).json({ error: "Failed to run business discovery" });
+  }
+});
+
+// Onboarding v2: structured facts for one kind (policies terms, FAQ pairs,
+// profile and contact, brand) from the pages the scan read. Called by the auth
+// scan job with the internal key; returns { ok: false } when the model gave
+// nothing usable, never invented content. See onboarding-extract.service.
+const EXTRACT_KINDS = new Set<ExtractKind>(["policies", "faq", "profile", "brand"]);
+router.post("/onboarding-extract", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const { kind, locale, pages } = req.body as { kind?: ExtractKind; locale?: string; pages?: Array<{ url: string; title?: string; text: string }> };
+    if (!kind || !EXTRACT_KINDS.has(kind) || !Array.isArray(pages) || pages.length === 0) {
+      res.status(400).json({ error: "kind and pages are required", code: "BAD_REQUEST" });
+      return;
+    }
+    const result = await extractOnboarding({ tenantId: req.tenantId!, kind, locale, pages });
+    res.json({ data: result ? { ok: true, result } : { ok: false } });
+  } catch (err: any) {
+    console.error("Onboarding extract error:", err?.message ?? err);
+    res.status(500).json({ error: "Extraction failed", code: "EXTRACT_FAILED" });
+  }
+});
+
+// Onboarding v2: the text of ONE file the owner gives when their site blocks
+// automatic reading (PDF, DOCX, TXT, MD; 5MB). Text only: auth runs the same
+// extraction the scan runs and writes the knowledge. Called by auth's
+// POST /api/onboarding/learned/upload with the internal key.
+export const ONBOARDING_FILE_MAX = 5 * 1024 * 1024;
+const ONBOARDING_FILE_TYPES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
+  "text/markdown",
+  "text/x-markdown",
+]);
+const onboardingFile = multer({ storage: multer.memoryStorage(), limits: { fileSize: ONBOARDING_FILE_MAX, files: 1 } }).single("file");
+router.post("/onboarding-file-text", authenticate, resolveTenant, requireRole("ADMIN"), (req: Request, res: Response) => {
+  onboardingFile(req, res, async (err: any) => {
+    if (err) {
+      const tooLarge = err?.code === "LIMIT_FILE_SIZE";
+      res.status(tooLarge ? 413 : 400).json({ error: tooLarge ? "File too large" : "Bad upload", code: tooLarge ? "FILE_TOO_LARGE" : "BAD_UPLOAD" });
+      return;
+    }
+    const file = (req as any).file as { buffer: Buffer; mimetype: string; originalname: string } | undefined;
+    if (!file) {
+      res.status(400).json({ error: "A file is required", code: "FILE_REQUIRED" });
+      return;
+    }
+    const mime = resolveMimeType(file.mimetype, file.originalname);
+    if (!ONBOARDING_FILE_TYPES.has(mime)) {
+      res.status(415).json({ error: "PDF, DOCX, TXT or MD only", code: "UNSUPPORTED_TYPE" });
+      return;
+    }
+    let text: string;
+    try {
+      text = await parseFile(file.buffer, mime);
+    } catch {
+      res.status(422).json({ error: "The file could not be read", code: "UNREADABLE_FILE" });
+      return;
+    }
+    if (!text.trim()) {
+      res.status(422).json({ error: "No text in this file", code: "NOTHING_FOUND" });
+      return;
+    }
+    res.json({ data: { filename: file.originalname.slice(0, 200), text } });
+  });
+});
+
+// Onboarding v2 go-live: hire (or update) the first employee from what the scan
+// learned, give it every knowledge base and the platform's READ order tools,
+// route the channels to it and set it live. Idempotent. Called by auth's
+// POST /api/onboarding/go-live with the internal key; sends nothing.
+router.post("/onboarding-employee", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const { employeeName, actor } = (req.body ?? {}) as { employeeName?: string; actor?: string };
+    const result = await goLiveEmployee({
+      tenantId: req.tenantId!,
+      actor: typeof actor === "string" ? actor : null,
+      employeeName: typeof employeeName === "string" ? employeeName : null,
+    });
+    res.json({ data: result });
+  } catch (err: any) {
+    if (err instanceof GoLiveRefused) {
+      res.status(409).json({ error: "Cannot go live yet", code: err.code });
+      return;
+    }
+    console.error("Onboarding go-live error:", err?.message ?? err);
+    res.status(500).json({ error: "Go-live failed", code: "GO_LIVE_FAILED" });
   }
 });
 
@@ -145,6 +238,37 @@ router.post("/onboarding-preview-answer", authenticate, resolveTenant, requireRo
     }
     console.error("[onboarding-preview] answer failed:", err);
     res.status(500).json({ error: "Failed to answer" });
+  }
+});
+
+// Onboarding v2 step 4: ask the go-live employee one question through the REAL
+// runtime, sandboxed - read-only order tools, store reads as the asking admin,
+// nothing sent, nothing kept but the sandbox's 2 messages. The answer goes
+// back to the caller only. Same tenant gate and rate limit as the preview.
+router.post("/onboarding-employee-test", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const question = typeof req.body?.question === "string" ? req.body.question.trim() : "";
+    if (!question) { res.status(422).json({ error: "Write a question", code: "QUESTION_REQUIRED" }); return; }
+    if (question.length > QUESTION_MAX) { res.status(422).json({ error: "The question is too long", code: "QUESTION_TOO_LONG", max: QUESTION_MAX }); return; }
+    const userId = (req as any).user?.userId as string | undefined;
+    // A person asks; the internal service identity has no one to act for.
+    if (!userId || (req as any).user?.isInternal) { res.status(403).json({ error: "Only a signed-in admin can test", code: "ADMIN_ONLY" }); return; }
+    if (!(await previewTenantOk(req, res))) return;
+    const wait = await previewRateLimit(req.tenantId!);
+    if (wait !== null) {
+      res.setHeader("Retry-After", String(wait));
+      res.status(429).json({ error: "Too many questions. Try again in a moment.", code: "PREVIEW_RATE_LIMITED", retryAfterSeconds: wait });
+      return;
+    }
+    const data = await testOnboardingEmployee({ tenantId: req.tenantId!, userId, question });
+    res.json({ data });
+  } catch (err: any) {
+    if (err instanceof EmployeeTestRefused) {
+      res.status(409).json({ error: "The employee is not live yet", code: err.code });
+      return;
+    }
+    console.error("[onboarding-employee-test] failed:", err?.message ?? err);
+    res.status(500).json({ error: "The test could not run", code: "EMPLOYEE_TEST_FAILED" });
   }
 });
 

@@ -14,7 +14,7 @@ import {
   type DiscoverySignals,
 } from "../services/site-crawl.service";
 import { callDiscoverBusiness, persistCrawlReach, systemLanguage, crawlPagesForProjection, thinTopicsToRetire } from "../services/business-scan.service";
-import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, projectReadinessAnswers, withoutWideDashes, clampGuardrails, type SkippedTopic } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireRole, validate, readDurableSetting, writeDurableSetting, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, projectReadinessAnswers, withoutWideDashes, clampGuardrails, type SkippedTopic } from "@chatcenter/shared";
 import { applyProjection, type SyncReport } from "../services/onboarding-knowledge.service";
 import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
 import { inviteUser, resendSetupLink } from "../services/invitation.service";
@@ -23,6 +23,10 @@ import { resolveInviteRoleStrict, resolveInviteRoleWithFallback, ensureRoleAssig
 import { actorOf, inviteRoleRefusal } from "../lib/grant-ceiling";
 import { ingestTaughtDocument, updateTaughtDocument } from "../services/teach-ingest";
 import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
+import { readJob, startJob, reopenJob, isLive, viewOf } from "../services/onboarding-discover/job-store";
+import { enqueueDiscover } from "../services/onboarding-discover/queue";
+import { readLearned, editLearned, LearnedEditRefused, learnFromFile, LearnedUploadRefused, type LearnedEdit } from "../services/onboarding-discover/learned";
+import { integrationSuggestions, aiInternal } from "../services/onboarding-discover/learn";
 import { syncDiscoveryRecommendations, listRecommendations, setRecommendationStatus, addStoreInspectionRecs, reconcileConnectSystemRecs } from "../services/recommendations.service";
 import OpenAI from "openai";
 
@@ -1852,6 +1856,353 @@ const discoverSchema = z.object({
    * gate: the checkbox is the consent, this is the record of it.
    */
   legalAccepted: z.boolean().optional(),
+});
+
+// ─── Learn the site, as a job (onboarding v2, 2026-10-23) ─────────────────────
+//
+// POST starts (or resumes) the scan and returns at once; the worker does the
+// work; GET is polled about once a second for the feed. Nothing here can 409:
+// a scan already running for this domain is returned, a new domain supersedes
+// it, and a dead one can be retried. See services/onboarding-discover.
+
+/** The consent record the first setup screen produces. Never blocks the caller. */
+function recordLegalAcceptance(req: Request, locale: string): void {
+  prisma.auditLog.create({
+    data: {
+      tenantId: req.tenantId!,
+      actorType: "user",
+      actorId: (req as any).userId || null,
+      action: "legal.terms.accepted",
+      targetType: "tenant",
+      targetId: req.tenantId!,
+      metadata: { surface: "onboarding_setup", documents: ["terms-of-service", "privacy-policy"], locale },
+    },
+  }).catch((err: any) => console.warn("[onboarding] consent audit failed:", err?.message));
+}
+
+router.post("/discover/job", requireRole("ADMIN"), validate(discoverSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { domain, locale, legalAccepted } = req.body as { domain: string; locale: string; legalAccepted?: boolean };
+    const origin = normalizeDomain(domain);
+    if (!origin) {
+      res.status(400).json({ error: "That is not a website address", code: "INVALID_DOMAIN" });
+      return;
+    }
+    if (legalAccepted) recordLegalAcceptance(req, locale);
+
+    const current = await readJob(req.tenantId!);
+    if (current && current.domain === origin && isLive(current)) {
+      res.status(202).json({ data: { jobId: current.jobId, status: current.status, resumed: true } });
+      return;
+    }
+    // A new domain, or nothing live: a new run. Any older run is superseded
+    // by the jobId swap and stops at its next write.
+    const job = await startJob(req.tenantId!, origin, await systemLanguage(req.tenantId!, locale));
+    await enqueueDiscover(req.tenantId!, job.jobId);
+    res.status(202).json({ data: { jobId: job.jobId, status: job.status, resumed: false } });
+  } catch (err: any) {
+    console.error("[onboarding] discover job start failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not start reading the site", code: "DISCOVER_START_FAILED" });
+  }
+});
+
+router.get("/discover/job", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const since = Math.max(0, Number.parseInt(String(req.query.since ?? "0"), 10) || 0);
+    const job = await readJob(req.tenantId!);
+    if (!job) {
+      res.status(404).json({ error: "No scan has been started", code: "NO_JOB" });
+      return;
+    }
+    res.json({ data: viewOf(job, since) });
+  } catch (err: any) {
+    console.error("[onboarding] discover job read failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not read the scan", code: "DISCOVER_READ_FAILED" });
+  }
+});
+
+router.post("/discover/retry", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const job = await readJob(req.tenantId!);
+    if (!job) {
+      res.status(404).json({ error: "No scan has been started", code: "NO_JOB" });
+      return;
+    }
+    if (isLive(job)) {
+      // Nothing to retry: the run is alive. The client just keeps polling.
+      res.status(202).json({ data: { jobId: job.jobId, status: job.status, resumed: true } });
+      return;
+    }
+    if (job.status === "COMPLETE") {
+      res.status(409).json({ error: "This scan already finished", code: "JOB_COMPLETE" });
+      return;
+    }
+    const reopened = await reopenJob(req.tenantId!, job.jobId);
+    await enqueueDiscover(req.tenantId!, job.jobId, reopened.seq);
+    res.status(202).json({ data: { jobId: job.jobId, status: reopened.status, resumed: true } });
+  } catch (err: any) {
+    console.error("[onboarding] discover retry failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not retry the scan", code: "DISCOVER_RETRY_FAILED" });
+  }
+});
+
+// ─── Where the owner is in the v2 setup (exact resume) ───────────────────────
+//
+// A durable tenant setting, not a column: the screen saves the step it reached
+// and reads it back after a reload. The screen still checks it against what
+// the server can prove (a scan, a connection), so a stale value only ever
+// sends the owner a step back, never past something unfinished.
+
+export const ONBOARDING_STEPS = ["website", "reading", "systems", "channels", "live", "done"] as const;
+export const ONBOARDING_STEP_KEY = "onboarding:step";
+
+/** services/ai onboarding-employee EMPLOYEE_SETTING: the go-live employee's id. */
+const GO_LIVE_EMPLOYEE_KEY = "onboarding:employeeId";
+
+router.get("/step", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const [step, employeeId] = await Promise.all([
+      readDurableSetting(req.tenantId!, ONBOARDING_STEP_KEY),
+      readDurableSetting(req.tenantId!, GO_LIVE_EMPLOYEE_KEY),
+    ]);
+    // The employee go-live made (written by services/ai), so the screen can say
+    // "live as <name>" and prefill the name after a reload. Null when none, or
+    // when it was deleted since.
+    const employee = employeeId
+      ? await prisma.aIAgent.findFirst({ where: { id: employeeId, tenantId: req.tenantId! }, select: { id: true, name: true, status: true } })
+      : null;
+    res.json({ data: { step: (ONBOARDING_STEPS as readonly string[]).includes(step ?? "") ? step : null, employee } });
+  } catch (err: any) {
+    console.error("[onboarding] step read failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not read the setup step", code: "STEP_READ_FAILED" });
+  }
+});
+
+router.patch("/step", requireRole("ADMIN"), validate(z.object({ step: z.enum(ONBOARDING_STEPS) }).strict()), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { step } = req.body as { step: (typeof ONBOARDING_STEPS)[number] };
+    await writeDurableSetting(req.tenantId!, ONBOARDING_STEP_KEY, step, (req as any).userId ?? undefined);
+    res.json({ data: { step } });
+  } catch (err: any) {
+    console.error("[onboarding] step write failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not save the setup step", code: "STEP_WRITE_FAILED" });
+  }
+});
+
+// ─── Go live (onboarding v2) ─────────────────────────────────────────────────
+//
+// One press: the first employee is hired from what the scan learned (in
+// services/ai, deterministic, idempotent), the channels route to it, and the
+// workspace opens - the same tenant and tracker writes the legacy /complete
+// makes, and the same refusal while a paid plan is unpaid. The press that
+// opens the workspace also runs /complete's after-activation steps (billing
+// entity, activation email, nudge) - once: a later press only updates the
+// employee and sends nothing.
+
+/** A BusinessProfile from what the scan learned, only when none exists (the old finish's fields). */
+async function ensureProfileFromDiscovery(tenantId: string): Promise<void> {
+  const existing = await prisma.businessProfile.findUnique({ where: { tenantId }, select: { id: true } });
+  if (existing) return;
+  const [d, tenant] = await Promise.all([
+    prisma.businessDiscovery.findUnique({ where: { tenantId }, select: { status: true, business: true, websiteDomain: true } }),
+    prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
+  ]);
+  // Before the scan finished, the AI refuses NOT_LEARNED anyway; make nothing.
+  if (!d || d.status !== "COMPLETE") return;
+  const b = (d.business && typeof d.business === "object" ? d.business : {}) as Record<string, any>;
+  const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  await prisma.businessProfile.create({
+    data: {
+      tenantId,
+      organizationName: text(b.name) ?? tenant?.name ?? "",
+      businessDescription: text(b.summary) ?? "",
+      industry: text(b.industry) ?? "Other",
+      businessPriority: "FAST_RESPONSE",
+      estimatedDailyConversations: 100,
+      numberOfAgents: 5,
+      ...(d.websiteDomain ? { websiteDomain: d.websiteDomain } : {}),
+    },
+  }).catch((err: any) => {
+    // A profile created by a concurrent press is fine; anything else is logged, not fatal.
+    if (err?.code !== "P2002") console.error(`[onboarding] go-live profile create failed for ${tenantId}:`, err?.message ?? err);
+  });
+}
+
+const goLiveSchema = z.object({ confirm: z.literal(true), employeeName: z.string().trim().min(1).max(40).optional() }).strict();
+
+router.post("/go-live", requireRole("ADMIN"), validate(goLiveSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tenantId = req.tenantId!;
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true } });
+    if (!tenant) {
+      res.status(404).json({ error: "Tenant not found", code: "TENANT_NOT_FOUND" });
+      return;
+    }
+    // The paid plan's first payment opens the workspace, never this button;
+    // and a suspended workspace is billing's to reopen.
+    if (tenant.status === "PENDING_PAYMENT") {
+      res.status(409).json({ error: "The workspace opens once the plan is paid", code: "TENANT_AWAITING_PAYMENT" });
+      return;
+    }
+    if (tenant.status === "SUSPENDED") {
+      res.status(409).json({ error: "This workspace is suspended", code: "TENANT_SUSPENDED" });
+      return;
+    }
+    // /complete's own precondition: a workspace never opens without an active admin.
+    const admin = await prisma.user.findFirst({ where: { tenantId, role: "ADMIN", isActive: true }, select: { id: true } });
+    if (!admin) {
+      res.status(400).json({ error: "An active admin account is required before activation", code: "NO_ACTIVE_ADMIN" });
+      return;
+    }
+    // /complete requires a business profile; the old finish made it from the
+    // scan. Go-live makes it the same way when it is missing - never over one.
+    await ensureProfileFromDiscovery(tenantId);
+
+    const r = await aiInternal(tenantId, "POST", "/api/ai-assist/onboarding-employee", {
+      employeeName: (req.body as { employeeName?: string }).employeeName,
+      actor: (req as any).userId ?? null,
+    });
+    if (r.status === 409) {
+      res.status(409).json({ error: "Cannot go live yet", code: r.body?.code ?? "NOT_LEARNED" });
+      return;
+    }
+    if (!r.ok) {
+      res.status(502).json({ error: "The employee could not be set up; nothing went live", code: "GO_LIVE_FAILED" });
+      return;
+    }
+
+    // Only a workspace still being set up is opened here. Re-read, so a status
+    // that changed while the employee was being set up is honoured.
+    // The flip is conditional in the database itself, so two presses at once
+    // open the workspace (and send the email) exactly once.
+    const [flip] = await prisma.$transaction([
+      prisma.tenant.updateMany({
+        where: { id: tenantId, status: { in: ["PENDING_ADMIN_SETUP", "PENDING_ONBOARDING"] } },
+        data: { status: "ACTIVE" },
+      }),
+      prisma.tenantOnboarding.upsert({
+        where: { tenantId },
+        create: { tenantId, currentStep: "COMPLETED", completedAt: new Date() },
+        update: { currentStep: "COMPLETED", completedAt: new Date() },
+      }),
+    ]);
+    const opened = (flip as { count: number }).count > 0;
+    await writeDurableSetting(tenantId, ONBOARDING_STEP_KEY, "live", (req as any).userId ?? undefined).catch(() => {});
+
+    // /complete's after-activation steps, the same calls, best-effort.
+    let billingEntity: "provisioned" | "failed" | null = null;
+    if (opened) {
+      sendActivationConfirmation(tenantId).catch((err) => {
+        console.error("Failed to send activation confirmation:", err);
+      });
+      scheduleOnboardingNudge(tenantId, "1d").catch(() => {});
+      billingEntity = await provisionBilling(tenantId).then(() => "provisioned" as const, (err) => {
+        console.error(`[Onboarding] Billing provisioning failed for tenant ${tenantId}:`, err.message);
+        return "failed" as const;
+      });
+    }
+
+    const { suggestedOrderQuestion = null, ...live } = r.body.data ?? {};
+    res.json({ data: { ...live, activation: { opened, billingEntity }, test: { suggestedOrderQuestion } } });
+  } catch (err: any) {
+    console.error("[onboarding] go-live failed:", err?.message ?? err);
+    res.status(500).json({ error: "Go-live failed", code: "GO_LIVE_FAILED" });
+  }
+});
+
+// ─── What was learned (onboarding v2) ────────────────────────────────────────
+
+router.get("/learned", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await readLearned(req.tenantId!);
+    if (!data) {
+      res.status(404).json({ error: "Nothing has been learned yet", code: "NOT_LEARNED" });
+      return;
+    }
+    res.json({ data });
+  } catch (err: any) {
+    console.error("[onboarding] learned read failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not read what was learned", code: "LEARNED_READ_FAILED" });
+  }
+});
+
+const learnedEditSchema = z.object({
+  section: z.enum(["policies", "faq", "profile", "contact", "brand"]),
+  id: z.string().min(1).max(64).optional(),
+  value: z.record(z.unknown()).optional(),
+  remove: z.boolean().optional(),
+}).strict().refine((b) => b.remove || b.value, { message: "value or remove is required" });
+
+router.patch("/learned", requireRole("ADMIN"), validate(learnedEditSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await editLearned(req.tenantId!, req.body as LearnedEdit);
+    res.json({ data });
+  } catch (err: any) {
+    if (err instanceof LearnedEditRefused) {
+      const status = err.code === "NOT_LEARNED" || err.code === "NOT_FOUND" ? 404 : 400;
+      res.status(status).json({ error: "That edit cannot be made", code: err.code });
+      return;
+    }
+    console.error("[onboarding] learned edit failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not save the edit", code: "LEARNED_EDIT_FAILED" });
+  }
+});
+
+// The owner's file when the site blocks reading (multipart, one field "file":
+// PDF, DOCX, TXT or MD up to 5MB). Passed through to the AI service for its
+// text; the scan's extraction then writes /learned and the knowledge.
+const UPLOAD_MAX_BYTES = 5 * 1024 * 1024 + 64 * 1024; // the file plus the multipart framing
+
+function readCapped(req: Request, max: number): Promise<Buffer | null> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let over = false;
+    req.on("data", (c: Buffer) => {
+      size += c.length;
+      if (size > max) over = true;
+      else chunks.push(c);
+    });
+    req.on("end", () => resolve(over ? null : Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+router.post("/learned/upload", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const contentType = String(req.headers["content-type"] ?? "");
+    if (!/^multipart\/form-data;\s*boundary=/i.test(contentType)) {
+      res.status(400).json({ error: "Send the file as multipart/form-data", code: "FILE_REQUIRED" });
+      return;
+    }
+    if (Number(req.headers["content-length"] ?? 0) > UPLOAD_MAX_BYTES) {
+      req.resume();
+      res.status(413).json({ error: "File too large (5MB)", code: "FILE_TOO_LARGE" });
+      return;
+    }
+    const body = await readCapped(req, UPLOAD_MAX_BYTES);
+    if (!body) {
+      res.status(413).json({ error: "File too large (5MB)", code: "FILE_TOO_LARGE" });
+      return;
+    }
+    res.json({ data: await learnFromFile(req.tenantId!, { body, contentType }) });
+  } catch (err: any) {
+    if (err instanceof LearnedUploadRefused) {
+      res.status(err.status).json({ error: "That file could not be used", code: err.code });
+      return;
+    }
+    console.error("[onboarding] learned upload failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not read the file", code: "UPLOAD_FAILED" });
+  }
+});
+
+router.get("/integration-suggestions", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    res.json({ data: await integrationSuggestions(req.tenantId!) });
+  } catch (err: any) {
+    console.error("[onboarding] integration suggestions failed:", err?.message ?? err);
+    res.status(500).json({ error: "Could not suggest integrations", code: "SUGGESTIONS_FAILED" });
+  }
 });
 
 router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (req: Request, res: Response): Promise<void> => {

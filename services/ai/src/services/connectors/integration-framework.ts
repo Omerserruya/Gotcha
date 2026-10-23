@@ -670,12 +670,15 @@ async function auditAdapterCall(opts: {
    */
   failure?: "refused" | "errored";
   durationMs: number;
+  /** A person the call is made for (the onboarding test's admin): they are the actor of record. */
+  actingFor?: { userId: string; reason: string };
 }): Promise<void> {
   try {
     await (prisma as any).auditLog?.create?.({
       data: {
         tenantId: opts.tenantId,
-        actorType: "ai",
+        actorType: opts.actingFor ? "user" : "ai",
+        ...(opts.actingFor ? { actorId: opts.actingFor.userId } : {}),
         action: `adapter.${opts.ok ? "ok" : "err"}.${opts.toolFunctionName}`,
         targetType: opts.conversationId ? "conversation" : "tenant",
         targetId: opts.conversationId ?? opts.tenantId,
@@ -692,6 +695,7 @@ async function auditAdapterCall(opts: {
           failure: opts.failure,
           durationMs: opts.durationMs,
           source: "integration-framework",
+          ...(opts.actingFor ? { actingFor: opts.actingFor.userId, purpose: opts.actingFor.reason } : {}),
         },
       },
     });
@@ -905,6 +909,11 @@ export async function executeAdapterTool(opts: {
    * AI-supplied "isAuthorized" can never influence it.
    */
   accessScope?: "internal" | "customer";
+  /**
+   * The person this call is made for, recorded as the actor on its audit row.
+   * Set only by server code (the onboarding employee test), never from args.
+   */
+  actingFor?: { userId: string; reason: string };
 }): Promise<
   | { ok: true; result: unknown }
   // `failure` says WHICH KIND of not-ok this is, set at each return site where
@@ -1016,6 +1025,7 @@ export async function executeAdapterTool(opts: {
     const reason = `rate_limited:${slug}:retry_after_ms=${rl.retryAfterMs}`;
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
+      actingFor: opts.actingFor,
       toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason, failure: "refused",
       durationMs: Date.now() - start,
     });
@@ -1040,6 +1050,7 @@ export async function executeAdapterTool(opts: {
     const reason = `not_connected:${slug}`;
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
+      actingFor: opts.actingFor,
       toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason, failure: "refused",
       durationMs: Date.now() - start,
     });
@@ -1077,6 +1088,7 @@ export async function executeAdapterTool(opts: {
     const reason = (err?.message || "token_refresh_failed").slice(0, 240);
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
+      actingFor: opts.actingFor,
       toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason, failure: "errored",
       durationMs: Date.now() - start,
     });
@@ -1175,6 +1187,7 @@ export async function executeAdapterTool(opts: {
     }
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
+      actingFor: opts.actingFor,
       toolFunctionName: opts.toolFunctionName, args: opts.args, ok: true,
       durationMs: Date.now() - start,
     });
@@ -1258,6 +1271,7 @@ export async function executeAdapterTool(opts: {
     const reason = message.slice(0, 240);
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
+      actingFor: opts.actingFor,
       toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason, failure: "errored",
       durationMs: Date.now() - start,
     });

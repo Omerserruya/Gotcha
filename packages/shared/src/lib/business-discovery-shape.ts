@@ -36,6 +36,8 @@ export interface DiscoveryTechItem {
   name: string;
   category?: string;
   confidence?: DiscoveryConfidence;
+  /** The page that loads the tool, when the scan saw it there. */
+  evidenceUrl?: string;
 }
 
 export interface DiscoveryPlatform {
@@ -115,6 +117,7 @@ function techItem(raw: unknown): DiscoveryTechItem | null {
   const category = text(r.category, 40);
   if (category) item.category = category;
   if (r.confidence !== undefined) item.confidence = confidence(r.confidence);
+  if (typeof r.evidenceUrl === "string" && /^https?:\/\//i.test(r.evidenceUrl)) item.evidenceUrl = r.evidenceUrl.slice(0, 2048);
   return item;
 }
 
