@@ -207,6 +207,8 @@
     font: inherit;
     font-size: 13px;
     white-space: nowrap;
+    /* A link drawn as a button is never underlined, wherever it sits. */
+    text-decoration: none;
     cursor: pointer;
   }
 
@@ -834,6 +836,9 @@
 
   /* Step 3: the website widget's code, as the widget page shows it. */
   .code {
+    /* The card's width, never the snippet's: it scrolls inside, it never pushes the page. */
+    align-self: stretch;
+    min-inline-size: 0;
     margin: 0;
     padding: 12px 14px;
     max-inline-size: 100%;

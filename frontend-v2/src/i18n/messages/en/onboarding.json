@@ -359,7 +359,7 @@
     },
     "connected": "Connected",
     "live": "Live on your site",
-    "codeReady": "The code is ready. We haven't seen it on your site yet.",
+    "codeReady": "The code is ready. Once you paste it into your site, the chat starts answering.",
     "connectName": "Connect {name}",
     "close": "Close",
     "pasteCode": "Paste this code into your site, before the closing body tag. Once it appears on your site, you'll see it here.",
@@ -376,7 +376,13 @@
     "unread": "We couldn't check which channels are already connected. You can connect, and the page will update.",
     "next": "Continue",
     "skip": "Continue without a channel",
-    "skipWhy": "Without a connected channel GOTCHA won't answer customers. You can connect one later too."
+    "skipWhy": "Without a connected channel GOTCHA won't answer customers. You can connect one later too.",
+    "shop": "In your Shopify shop <ltr>{shop}</ltr>:",
+    "shopLive": "The chat is live in your shop",
+    "shopTheme": "Turn the chat on in Shopify's theme",
+    "shopThemeHow": "In the theme editor: App embeds, switch GOTCHA on, and save.",
+    "shopWaiting": "Waiting for the first visit to your shop. The status changes by itself.",
+    "orCode": "Or paste the code into your site:"
   },
   "live": {
     "headline": "Check, then go live.",

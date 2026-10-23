@@ -29,6 +29,10 @@ const HERE = stepHref('/onboarding/channels', false) as string;
 
 type Standing = 'connected' | 'codeReady' | 'none';
 
+type Shop = WidgetInstall['shopify'][number];
+/** A Shopify shop's chat is live: the app is enabled and its theme embed loaded recently. */
+const shopLive = (shop: Shop) => shop.status === 'active' && shop.embedLive;
+
 /**
  * Step 3 - channels: where the business's customers write. Each one is
  * connected right here, with the flow the product already has, or skipped.
@@ -60,8 +64,11 @@ export function ChannelsStep({
 
   const standing = (channel: OnboardingChannel): Standing => {
     if (channel === 'WEBCHAT') {
-      if (!install?.code) return 'none';
-      return install.code.status === 'live' ? 'connected' : 'codeReady';
+      // Live only where a customer can write: the code seen on the site, or a
+      // Shopify shop's chat switched on in its theme. Code that exists but was
+      // never seen answers nobody, so it never counts as connected.
+      if (install?.code?.status === 'live' || install?.shopify.some(shopLive)) return 'connected';
+      return install?.code ? 'codeReady' : 'none';
     }
     return channels?.some(
       (each) => each.channel === channel && each.connectionStatus === 'CONNECTED',
@@ -69,7 +76,7 @@ export function ChannelsStep({
       ? 'connected'
       : 'none';
   };
-  const anyConnected = ONBOARDING_CHANNELS.some((each) => standing(each) !== 'none');
+  const anyConnected = ONBOARDING_CHANNELS.some((each) => standing(each) === 'connected');
 
   return (
     <div className={styles.systemsStep} data-testid="channels">
@@ -98,12 +105,13 @@ export function ChannelsStep({
                   <span className={styles.connected} data-testid={`channels-connected-${channel}`}>
                     {channel === 'WEBCHAT' ? t('live') : t('connected')}
                   </span>
-                ) : state === 'codeReady' ? (
-                  <span className={styles.quiet} data-testid={`channels-code-ready-${channel}`}>
-                    {t('codeReady')}
-                  </span>
                 ) : null}
               </span>
+              {state === 'codeReady' ? (
+                <p className={styles.quiet} data-testid={`channels-code-ready-${channel}`}>
+                  {t('codeReady')}
+                </p>
+              ) : null}
               {preview ? (
                 <div className={styles.connectHere}>
                   <UnavailableAction
@@ -176,7 +184,11 @@ export function ChannelsStep({
   );
 }
 
-/** The website widget: its code, copied here; or the one press that makes it. */
+/**
+ * The website widget. A Shopify shop with GOTCHA installed is the easy way:
+ * switch the chat on in its theme (Shopify's editor, one toggle), above the
+ * code. Otherwise the code, copied here; or the one press that makes it.
+ */
 function Website({ install }: { readonly install: WidgetInstall | null }) {
   const t = useTranslations('onboarding.channels');
   if (install === null) {
@@ -186,20 +198,56 @@ function Website({ install }: { readonly install: WidgetInstall | null }) {
       </p>
     );
   }
-  if (!install.code) {
-    return (
-      <div className={styles.connectHere} data-testid="channels-get-code">
-        <GetTheCode />
-      </div>
-    );
-  }
+  const shops = install.shopify.filter((shop) => shop.status !== 'uninstalled');
   return (
-    <div className={styles.connectHere} data-testid="channels-code">
-      <span className={styles.quiet}>{t('pasteCode')}</span>
-      <pre className={styles.code} dir="ltr" data-testid="channels-code-snippet">
-        {install.code.snippet}
-      </pre>
-      <CopyCode code={install.code.snippet} />
+    <div className={styles.connectHere} data-testid="channels-website">
+      {shops.map((shop) => (
+        <div
+          key={shop.channelId}
+          className={styles.connectHere}
+          data-testid={`channels-shop-${shop.channelId}`}
+        >
+          <span className={styles.quiet}>
+            {t.rich('shop', {
+              shop: shop.shopDomain,
+              ltr: (chunks) => <bdi dir="ltr">{chunks}</bdi>,
+            })}
+          </span>
+          {shopLive(shop) ? (
+            <span className={styles.connected}>{t('shopLive')}</span>
+          ) : shop.themeEditorUrl ? (
+            <>
+              <a
+                href={shop.themeEditorUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.primary}
+                data-testid={`channels-shop-theme-${shop.channelId}`}
+              >
+                {t('shopTheme')}
+              </a>
+              <span className={styles.quiet}>{t('shopThemeHow')}</span>
+            </>
+          ) : (
+            <span className={styles.quiet}>{t('shopWaiting')}</span>
+          )}
+        </div>
+      ))}
+      {shops.length > 0 ? <span className={styles.quiet}>{t('orCode')}</span> : null}
+      {install.code ? (
+        <>
+          <span className={styles.quiet}>{t('pasteCode')}</span>
+          {/* The server's snippet, verbatim; it scrolls in its own box and copies whole. */}
+          <pre className={styles.code} dir="ltr" data-testid="channels-code-snippet">
+            {install.code.snippet}
+          </pre>
+          <CopyCode code={install.code.snippet} />
+        </>
+      ) : (
+        <div className={styles.connectHere} data-testid="channels-get-code">
+          <GetTheCode />
+        </div>
+      )}
     </div>
   );
 }

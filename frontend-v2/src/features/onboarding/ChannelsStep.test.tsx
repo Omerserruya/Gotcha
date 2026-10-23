@@ -95,7 +95,7 @@ describe('★★ step 3: where customers write - connect here, or skip', () => {
     expect(screen.getByTestId('channels-code-snippet')).toHaveTextContent('<script>chat</script>');
     expect(screen.getByTestId('copy-code')).toHaveAttribute('data-code', '<script>chat</script>');
     expect(screen.getByTestId('channels-code-ready-WEBCHAT')).toHaveTextContent(
-      "The code is ready. We haven't seen it on your site yet.",
+      'The code is ready. Once you paste it into your site, the chat starts answering.',
     );
     expect(screen.queryByTestId('channels-connected-WEBCHAT')).toBeNull();
   });
@@ -199,9 +199,79 @@ describe('★★ step 3: where customers write - connect here, or skip', () => {
     expect(screen.getByTestId('channels-next').className).toMatch(/primary/);
   });
 
-  it('★ the website code alone counts as a start (it can go live once pasted)', () => {
+  it('★★ code that exists but was never SEEN is not connected: Continue stays quiet', () => {
     show();
+    expect(screen.getByTestId('channels-code-ready-WEBCHAT')).toHaveTextContent(
+      'Once you paste it into your site, the chat starts answering.',
+    );
+    expect(screen.getByTestId('channels-next')).toHaveTextContent('Continue without a channel');
+    expect(screen.getByTestId('channels-next').className).toMatch(/secondary/);
+  });
+
+  it('★★ the code seen on the site is connected: primary Continue', () => {
+    show({ install: code('live') as never });
     expect(screen.getByTestId('channels-next')).toHaveTextContent(/^Continue$/);
+  });
+
+  it('★★ the server’s snippet is shown VERBATIM, loader line included, and copied whole', () => {
+    const real =
+      '<script>window.__chatcenter = { widgetId: "w1", apiUrl: "https://app.gotcha.co.il" };</script>\n<script src="https://app.gotcha.co.il/widget/chatcenter-widget.js" async></script>';
+    const install = code('not_seen');
+    install.code.snippet = real;
+    show({ install: install as never });
+    expect(screen.getByTestId('channels-code-snippet').textContent).toBe(real);
+    expect(screen.getByTestId('copy-code')).toHaveAttribute('data-code', real);
+  });
+
+  describe('★★ a Shopify shop: the theme toggle, above the code', () => {
+    const shop = (over: object) => ({
+      channelId: 'sh1',
+      shopDomain: 'avivco.myshopify.com',
+      status: 'active',
+      embedLive: false,
+      lastHeartbeatAt: null,
+      themeEditorUrl: 'https://admin.shopify.com/store/avivco/themes/current/editor?context=apps',
+      ...over,
+    });
+    const withShop = (over: object) => ({ ...code('not_seen'), shopify: [shop(over)] });
+
+    it('off in the theme: the editor link first, then "or paste the code"; not connected', () => {
+      show({ install: withShop({ status: 'not_enabled' }) as never });
+      const link = screen.getByTestId('channels-shop-theme-sh1');
+      expect(link).toHaveAttribute(
+        'href',
+        'https://admin.shopify.com/store/avivco/themes/current/editor?context=apps',
+      );
+      expect(screen.getByTestId('channels-website')).toHaveTextContent(
+        'Or paste the code into your site:',
+      );
+      expect(
+        link.compareDocumentPosition(screen.getByTestId('channels-code-snippet')) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(screen.getByTestId('channels-next').className).toMatch(/secondary/);
+    });
+
+    it('★ live in the shop (enabled, embed seen): connected, no editor link', () => {
+      show({ install: withShop({ status: 'active', embedLive: true }) as never });
+      expect(screen.getByTestId('channels-shop-sh1')).toHaveTextContent(
+        'The chat is live in your shop',
+      );
+      expect(screen.queryByTestId('channels-shop-theme-sh1')).toBeNull();
+      expect(screen.getByTestId('channels-connected-WEBCHAT')).toBeInTheDocument();
+    });
+
+    it('★ enabled but its theme embed never seen: NOT connected, the editor link stays', () => {
+      show({ install: withShop({ status: 'active', embedLive: false }) as never });
+      expect(screen.getByTestId('channels-shop-theme-sh1')).toBeInTheDocument();
+      expect(screen.queryByTestId('channels-connected-WEBCHAT')).toBeNull();
+      expect(screen.getByTestId('channels-next').className).toMatch(/secondary/);
+    });
+
+    it('an uninstalled shop is not offered', () => {
+      show({ install: withShop({ status: 'uninstalled' }) as never });
+      expect(screen.queryByTestId('channels-shop-sh1')).toBeNull();
+    });
   });
 
   it('channels unread: said, never "none connected"', () => {
