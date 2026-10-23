@@ -138,6 +138,18 @@
   .refused {
     color: var(--warning-banner-text);
   }
+
+  /* What a done write left to know: said under the outcome, never instead of it. */
+  .notes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+    padding-inline-start: var(--space-16);
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    color: var(--warning-banner-text);
+  }
 }
 
 @layer features {
