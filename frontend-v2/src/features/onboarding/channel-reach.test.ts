@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Channel } from '@/api/contracts/channels';
 import type { WidgetInstall } from '@/api/contracts/website-widget';
 
-import { joinNames, reachableChannels } from './channel-reach';
+import { channelsPhrase, inPlace, reachableChannels } from './channel-reach';
 
 const channel = (type: string, connectionStatus: string) =>
   ({ channel: type, connectionStatus }) as unknown as Channel;
@@ -11,6 +11,15 @@ const install = (over: Partial<WidgetInstall> = {}) =>
   ({ code: null, shopify: [], ...over }) as unknown as WidgetInstall;
 
 describe('★★ where a customer can write now', () => {
+  it('★ an inactive account never reaches, even CONNECTED (Backend counts active accounts only)', () => {
+    const off = {
+      channel: 'EMAIL',
+      connectionStatus: 'CONNECTED',
+      isActive: false,
+    } as unknown as Channel;
+    expect(reachableChannels([off], install())).toEqual([]);
+  });
+
   it('a CONNECTED channel reaches; any other status does not', () => {
     expect(
       reachableChannels(
@@ -48,16 +57,27 @@ describe('★★ where a customer can write now', () => {
   });
 });
 
-describe('★ names as one phrase', () => {
-  it('English', () => {
-    expect(joinNames(['Web chat'], 'en')).toBe('Web chat');
-    expect(joinNames(['Web chat', 'WhatsApp', 'Email'], 'en')).toBe('Web chat, WhatsApp and Email');
+describe('★★ where, as one phrase', () => {
+  it('English: the names, listed', () => {
+    expect(channelsPhrase(['Web chat'], 'en')).toBe('Web chat');
+    expect(channelsPhrase(['Web chat', 'WhatsApp', 'Email'], 'en')).toBe(
+      'Web chat, WhatsApp and Email',
+    );
   });
 
-  it('★★ Hebrew: ו joined; a maqaf before ו; U+2011 before Latin, never a hyphen-minus', () => {
-    expect(joinNames(['צ׳אט באתר', 'אימייל'], 'he')).toBe('צ׳אט באתר ואימייל');
-    expect(joinNames(['צ׳אט באתר', 'וואטסאפ'], 'he')).toBe('צ׳אט באתר ו־וואטסאפ');
-    expect(joinNames(['צ׳אט באתר', 'Instagram'], 'he')).toBe('צ׳אט באתר ו‑Instagram');
-    expect(joinNames([], 'he')).toBe('');
+  it('★★ Hebrew: the preposition on every item, joined straight to a Hebrew word', () => {
+    expect(channelsPhrase(['צ׳אט באתר'], 'he')).toBe('בצ׳אט באתר');
+    expect(channelsPhrase(['צ׳אט באתר', 'וואטסאפ'], 'he')).toBe('בצ׳אט באתר ובוואטסאפ');
+    expect(channelsPhrase(['צ׳אט באתר', 'וואטסאפ', 'אימייל'], 'he')).toBe(
+      'בצ׳אט באתר, בוואטסאפ ובאימייל',
+    );
+    expect(channelsPhrase([], 'he')).toBe('');
+  });
+
+  it('★ before Latin: a hyphen that never breaks (U+2011), never a maqaf or a hyphen-minus', () => {
+    expect(channelsPhrase(['צ׳אט באתר', 'Instagram'], 'he')).toBe('בצ׳אט באתר וב\u2011Instagram');
+    expect(inPlace('Shopify', 'he')).toBe('ב\u2011Shopify');
+    expect(inPlace('שופיפיי', 'he')).toBe('בשופיפיי');
+    expect(inPlace('Shopify', 'en')).toBe('in Shopify');
   });
 });

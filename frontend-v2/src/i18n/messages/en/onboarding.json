@@ -524,29 +524,31 @@
     "nameLabel": "Your employee's name",
     "nameHint": "Leave it empty and we'll choose one.",
     "willAnswer": "{name} answers customers on {channels} from now on.",
-    "noReach": "{name} will be live, but won't answer anywhere yet: no channel customers can write on is connected.",
-    "reachUnread": "We couldn't read your channels just now. {name} answers wherever a customer can write, and after you press we'll show where.",
-    "nothingSent": "Pressing sends nothing to anyone. {name} only answers when a customer writes.",
+    "noReach": "Going live, but there's no channel customers can write on yet, so nowhere to answer yet.",
+    "reachUnread": "We couldn't read your channels just now. After you press, we'll show where customers get answers.",
+    "nothingSent": "Pressing sends nothing to anyone. An answer goes out only when a customer writes.",
     "press": "Go live",
     "pressNoReach": "Go live, with no channel yet",
     "pressAgain": "Update the employee",
     "pressing": "Going live…",
     "toChannels": "Connect a channel first",
-    "again": "Your employee is already live. Pressing again updates it with what you corrected here.",
+    "again": "{name} is already live. Pressing again updates the employee with what you corrected here.",
     "refused": {
       "not_learned": "We haven't read the site yet, so there is nothing to build the employee from.",
-      "awaiting_payment": "The workspace opens after the plan's first payment. Nothing went live.",
-      "suspended": "This workspace is suspended, so nothing went live.",
-      "failed": "We couldn't go live, and nothing changed. You can try again."
+      "awaiting_payment": "The account opens after the first payment. Nothing went live.",
+      "suspended": "This account is suspended, so nothing went live.",
+      "failed": "We couldn't go live, and nothing changed. You can try again.",
+      "toPayment": "Go to payment",
+      "no_admin": "This account has no active admin right now, so nothing went live. Please contact us."
     },
     "live": "{name} is live.",
     "reachLive": "Answering here",
     "reachWaiting": "Waiting for install",
-    "orders": "{name} can look up orders in {platform}.",
+    "orders": "{name} can look up orders {inPlatform}.",
     "warn": {
-      "no_channels": "No channel is connected yet, so {name} isn't answering customers.",
+      "no_channels": "No channel is connected yet, so customers aren't getting answers.",
       "no_reachable_channel": "No channel is open to customers yet: the website code hasn't been seen, or the shop's chat is off.",
-      "no_platform_connected": "No store is connected, so {name} can't look up orders yet.",
+      "no_platform_connected": "No store is connected, so there's no access to orders yet.",
       "playbook_customized": "You had changed how conversations are routed, so we left it as it was.",
       "employee_customized": "You had changed this employee before, so we kept your changes."
     },
@@ -556,10 +558,10 @@
       "question": "Question",
       "ask": "Ask",
       "asking": "Asking…",
-      "fromOrder": "Answered from order #{number} in {platform}.",
-      "fromOrderNoPlatform": "Answered from order #{number}.",
-      "orderUnread": "{name} tried to read the order in the store and couldn't, so the answer isn't based on it.",
-      "fromKnowledge": "Answered from what we learned: {sources}",
+      "fromOrder": "The answer is based on order #{number} {inPlatform}.",
+      "fromOrderNoPlatform": "The answer is based on order #{number}.",
+      "orderUnread": "We tried to read the order in the store and couldn't, so the answer isn't based on it.",
+      "fromKnowledge": "The answer is based on what we learned: {sources}",
       "refused": {
         "not_live": "{name} isn't live yet. Press “Go live” first.",
         "question_required": "Write a question.",
@@ -570,6 +572,7 @@
       },
       "titleNoName": "Try your employee"
     },
-    "finish": "Done, to Home"
+    "finish": "Done, to Home",
+    "nameHintLive": "This is the name customers see today. Changing it here renames it."
   }
 }

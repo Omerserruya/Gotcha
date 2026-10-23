@@ -276,6 +276,24 @@ describe('★★ go live, and its test', () => {
     });
   });
 
+  it('★ GET /step: the go-live employee, or null before go-live; a broken one is null, never the step lost', async () => {
+    const { stepReadSchema } = await import('./onboarding-v2');
+    expect(
+      stepReadSchema.parse({
+        step: 'live',
+        employee: { id: 'a1', name: 'Dana', status: 'ACTIVE' },
+      }),
+    ).toEqual({ step: 'live', employee: { id: 'a1', name: 'Dana', status: 'ACTIVE' } });
+    expect(stepReadSchema.parse({ step: 'channels' })).toEqual({
+      step: 'channels',
+      employee: null,
+    });
+    expect(stepReadSchema.parse({ step: 'live', employee: { id: 7 } })).toEqual({
+      step: 'live',
+      employee: null,
+    });
+  });
+
   it('★ the sandboxed employee test: usedRealOrder is false unless the route says true', () => {
     const read = employeeTestSchema.parse({
       answer: `On its way ${EM} tomorrow`,

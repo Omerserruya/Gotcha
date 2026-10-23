@@ -12,9 +12,9 @@ import { integrationsSchema, type Integration } from '@/api/contracts/integratio
 import { knowledgeListSchema } from '@/api/contracts/knowledge';
 import {
   integrationSuggestionsSchema,
-  savedStepSchema,
+  stepReadSchema,
   type IntegrationSuggestion,
-  type SavedStep,
+  type StepRead,
 } from '@/api/contracts/onboarding-v2';
 import type { ResumeFacts } from './resume-v2';
 import { readScan } from './scan-actions';
@@ -285,11 +285,13 @@ export async function loadChannelsStep(): Promise<ChannelsStepRead> {
   return { channels, install, config };
 }
 
-/** The step saved on Continue/Skip (and by go-live); `null`: none, or unread. */
-export async function loadSavedStep(): Promise<SavedStep | null> {
+/**
+ * The step saved on Continue/Skip (and by go-live), and the employee go-live
+ * made; `null` when unread.
+ */
+export async function loadSavedStep(): Promise<StepRead | null> {
   return serverApi()
-    .get({ endpoint: onboardingEndpoints.step(), payload: savedStepSchema })
-    .then((read) => read.step)
+    .get({ endpoint: onboardingEndpoints.step(), payload: stepReadSchema })
     .catch(() => null);
 }
 
@@ -304,7 +306,7 @@ export async function loadResumeFacts(): Promise<
 > {
   const api = serverApi();
   const [saved, job, status, suggestions, channels, install] = await Promise.all([
-    loadSavedStep(),
+    loadSavedStep().then((read) => read?.step ?? null),
     readScan(0),
     api
       .get({ endpoint: onboardingEndpoints.status(), payload: onboardingStatusSchema, raw: true })

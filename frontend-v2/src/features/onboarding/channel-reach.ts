@@ -24,8 +24,11 @@ export function reaches(
   if (channel === 'WEBCHAT') {
     return install?.code?.status === 'live' || (install?.shopify ?? []).some(shopLive);
   }
+  // Backend's go-live counts active accounts only; CONNECTED is ours on top (an
+  // account in ERROR answers nobody).
   return (channels ?? []).some(
-    (each) => each.channel === channel && each.connectionStatus === 'CONNECTED',
+    (each) =>
+      each.channel === channel && each.isActive !== false && each.connectionStatus === 'CONNECTED',
   );
 }
 
@@ -42,17 +45,24 @@ export function reachableChannels(
   return ONBOARDING_CHANNELS.filter((channel) => reaches(channel, channels, install));
 }
 
+/** Latin or a digit right after a one-letter Hebrew prefix takes U+2011 (it reads as a hyphen, never breaks). */
+const prefixed = (prefix: string, word: string) =>
+  `${prefix}${/^[A-Za-z0-9]/.test(word) ? '\u2011' : ''}${word}`;
+
+/** "in <place>": "ב" joined to a Hebrew word, "ב‑Shopify" before Latin; "in Shopify" in English. */
+export const inPlace = (word: string, locale: string) =>
+  locale === 'he' ? prefixed('ב', word) : `in ${word}`;
+
 /**
- * Channel names as one phrase, written here rather than by Intl: Intl's
- * Hebrew list writes "ו-Instagram" with a hyphen-minus, and the copy rules
- * want U+2011 before Latin, a maqaf before a name that starts with ו, and
- * the ו joined to any other Hebrew word.
+ * Where customers write, as one phrase, built here rather than by Intl
+ * (whose Hebrew list writes "ו-" with a hyphen-minus). Hebrew repeats the
+ * preposition on every item, joined straight to a Hebrew word:
+ * "בצ׳אט באתר ובוואטסאפ"; English lists the names: "Web chat and WhatsApp".
  */
-export function joinNames(names: readonly string[], locale: string): string {
-  if (names.length <= 1) return names[0] ?? '';
-  const head = names.slice(0, -1).join(', ');
-  const last = names[names.length - 1]!;
-  if (locale !== 'he') return `${head} and ${last}`;
-  const joint = /^[A-Za-z0-9]/.test(last) ? 'ו‑' : last.startsWith('ו') ? 'ו־' : 'ו';
-  return `${head} ${joint}${last}`;
+export function channelsPhrase(names: readonly string[], locale: string): string {
+  const items = locale === 'he' ? names.map((name) => prefixed('ב', name)) : [...names];
+  if (items.length <= 1) return items[0] ?? '';
+  const head = items.slice(0, -1).join(', ');
+  const last = items[items.length - 1]!;
+  return locale === 'he' ? `${head} ו${last}` : `${head} and ${last}`;
 }

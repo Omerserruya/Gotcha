@@ -1,7 +1,7 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 
 import { channelName } from '@/api/contracts/inbox';
-import { joinNames, reachableChannels } from '@/features/onboarding/channel-reach';
+import { channelsPhrase, reachableChannels } from '@/features/onboarding/channel-reach';
 import { GoLiveStep } from '@/features/onboarding/GoLiveStep';
 import { readLearned } from '@/features/onboarding/learned-actions';
 import { loadChannelsStep, loadSavedStep } from '@/features/onboarding/load-onboarding';
@@ -32,7 +32,7 @@ export default async function Page({
   const reach =
     reachable === null
       ? null
-      : joinNames(
+      : channelsPhrase(
           reachable.map((each) => channelName(each, tc) ?? each),
           locale,
         );
@@ -42,13 +42,7 @@ export default async function Page({
         <ReviewStep
           initial={read.learned}
           preview={preview}
-          after={
-            <GoLiveStep
-              reach={reach}
-              alreadyLive={saved === 'live' || saved === 'done'}
-              preview={preview}
-            />
-          }
+          after={<GoLiveStep reach={reach} current={saved?.employee ?? null} preview={preview} />}
         />
       ) : (
         <ReviewUnavailable reason={read.reason} preview={preview} />

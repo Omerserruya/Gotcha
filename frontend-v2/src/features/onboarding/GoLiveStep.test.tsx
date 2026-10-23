@@ -66,7 +66,7 @@ const show = (props: Partial<Parameters<typeof GoLiveStep>[0]> = {}, he = false)
         channels: he ? channelsHe : channelsEn,
       }}
     >
-      <GoLiveStep reach="Web chat and WhatsApp" alreadyLive={false} {...props} />
+      <GoLiveStep reach="Web chat and WhatsApp" current={null} {...props} />
     </NextIntlClientProvider>,
   );
 
@@ -101,7 +101,7 @@ describe('★★ before the press: what happens, said plainly', () => {
   it('★★ no reachable channel: live, but answering nowhere yet - the button says so, and the way to a channel', () => {
     show({ reach: '' });
     expect(screen.getByTestId('go-live-what')).toHaveTextContent(
-      "Your AI employee will be live, but won't answer anywhere yet",
+      "Going live, but there's no channel customers can write on yet",
     );
     expect(screen.getByTestId('go-live-press')).toHaveTextContent(/^Go live, with no channel yet$/);
     expect(screen.getByTestId('go-live-to-channels')).toHaveAttribute(
@@ -117,10 +117,10 @@ describe('★★ before the press: what happens, said plainly', () => {
     expect(screen.queryByTestId('go-live-to-channels')).toBeNull();
   });
 
-  it('Hebrew: the employee is masculine, the owner plural, a maqaf before the channels', () => {
-    show({ reach: 'צ׳אט באתר ו־וואטסאפ' }, true);
+  it('★★ Hebrew: no gendered verb after the name (its gender is not known); the server’s phrase as is', () => {
+    show({ reach: 'בצ׳אט באתר ובוואטסאפ' }, true);
     expect(screen.getByTestId('go-live-what')).toHaveTextContent(
-      'מעכשיו העובד הדיגיטלי שלכם עונה ללקוחות ב־צ׳אט באתר ו־וואטסאפ.',
+      /^מעכשיו העובד הדיגיטלי שלכם על המשמרת: לקוחות שכותבים בצ׳אט באתר ובוואטסאפ יקבלו תשובה\.$/,
     );
   });
 
@@ -177,7 +177,7 @@ describe('★★ the press, and what went live', () => {
     await press();
     expect(screen.queryByTestId('go-live-orders')).toBeNull();
     expect(screen.getByTestId('go-live-warning-no_platform_connected')).toHaveTextContent(
-      "No store is connected, so Noa can't look up orders yet.",
+      "No store is connected, so there's no access to orders yet.",
     );
   });
 
@@ -208,14 +208,30 @@ describe('★★ the press, and what went live', () => {
   });
 
   it('★★ refused: said, nothing went live, the press stays', async () => {
-    actions.goLive.mockResolvedValue({ ok: false, reason: 'awaiting_payment' });
+    actions.goLive.mockResolvedValue({
+      ok: false,
+      reason: 'awaiting_payment',
+      payAt: '/en/checkout/payment-required?ref=r1',
+    });
     show();
     await press();
     expect(screen.getByTestId('go-live-refused')).toHaveTextContent(
-      "The workspace opens after the plan's first payment. Nothing went live.",
+      'The account opens after the first payment. Nothing went live.',
+    );
+    // The way out, right beside it.
+    expect(screen.getByTestId('go-live-pay')).toHaveAttribute(
+      'href',
+      '/en/checkout/payment-required?ref=r1',
     );
     expect(screen.getByTestId('go-live-press')).toBeInTheDocument();
     expect(screen.queryByTestId('go-live-test')).toBeNull();
+  });
+
+  it('a refusal other than payment offers no payment link', async () => {
+    actions.goLive.mockResolvedValue({ ok: false, reason: 'suspended' });
+    show();
+    await press();
+    expect(screen.queryByTestId('go-live-pay')).toBeNull();
   });
 
   it('★ a press that rejects reads as failed, never hangs', async () => {
@@ -225,11 +241,22 @@ describe('★★ the press, and what went live', () => {
     expect(screen.getByTestId('go-live-refused')).toHaveTextContent("We couldn't go live");
   });
 
-  it('★ already live (the saved step): pressing again updates it; the test is there', () => {
-    show({ alreadyLive: true });
-    expect(screen.getByTestId('go-live-again')).toBeInTheDocument();
+  it('★★ already live (GET /step): "<name> is already live", its name in the field, pressing again updates it; the test is there', () => {
+    show({ current: { name: 'Dana' } });
+    expect(screen.getByTestId('go-live-again')).toHaveTextContent(/^Dana is already live\./);
+    // The current name, never an empty field that reads as "we'll choose a new one".
+    expect(screen.getByLabelText("Your employee's name")).toHaveValue('Dana');
+    expect(screen.getByTestId('go-live')).toHaveTextContent('Changing it here renames it.');
+    expect(screen.getByTestId('go-live')).not.toHaveTextContent("we'll choose one");
     expect(screen.getByTestId('go-live-press')).toHaveTextContent(/^Update the employee$/);
-    expect(screen.getByTestId('go-live-test')).toHaveTextContent('Try your employee');
+    expect(screen.getByTestId('go-live-test')).toHaveTextContent('Try Dana');
+  });
+
+  it('before go-live: an empty name field, and "we\'ll choose one"', () => {
+    show();
+    expect(screen.getByLabelText("Your employee's name")).toHaveValue('');
+    expect(screen.getByTestId('go-live')).toHaveTextContent("Leave it empty and we'll choose one.");
+    expect(screen.queryByTestId('go-live-again')).toBeNull();
   });
 });
 
@@ -256,7 +283,7 @@ describe('★★ the test: one question, in a sandbox', () => {
     expect(actions.askEmployee).toHaveBeenCalledWith('Where is my order #1001?');
     expect(screen.getByTestId('go-live-answer')).toHaveTextContent('Your order shipped yesterday.');
     expect(screen.getByTestId('go-live-from-order')).toHaveTextContent(
-      /^Answered from order #1001 in Shopify\.$/,
+      /^The answer is based on order #1001 in Shopify\.$/,
     );
   });
 
@@ -273,7 +300,7 @@ describe('★★ the test: one question, in a sandbox', () => {
     await goneLive();
     await ask();
     expect(screen.getByTestId('go-live-order-unread')).toHaveTextContent(
-      "Noa tried to read the order in the store and couldn't",
+      "We tried to read the order in the store and couldn't",
     );
     expect(screen.queryByTestId('go-live-from-order')).toBeNull();
   });
@@ -295,7 +322,7 @@ describe('★★ the test: one question, in a sandbox', () => {
     await goneLive();
     await ask();
     expect(screen.getByTestId('go-live-from-knowledge')).toHaveTextContent(
-      /^Answered from what we learned: Returns policy$/,
+      /^The answer is based on what we learned: Returns policy$/,
     );
   });
 
@@ -325,6 +352,22 @@ describe('★★ the test: one question, in a sandbox', () => {
     await goneLive();
     await ask();
     expect(screen.getByTestId('go-live-test-refused')).toHaveTextContent("The test didn't run");
+  });
+});
+
+describe('★★ Hebrew: never a gendered verb after the name or "העובד"', () => {
+  it('the store, with ב joined by a non-breaking hyphen before Latin; the system is the subject', async () => {
+    actions.goLive.mockResolvedValue({ ok: true, live: live() });
+    actions.askEmployee.mockResolvedValue({ ok: true, test: answer() });
+    show({}, true);
+    await press();
+    expect(screen.getByTestId('go-live-orders')).toHaveTextContent(
+      /^יש גישה לקריאת הזמנות ב\u2011Shopify\.$/,
+    );
+    await act(async () => fireEvent.submit(screen.getByTestId('go-live-test')));
+    expect(screen.getByTestId('go-live-from-order')).toHaveTextContent(
+      /^התשובה מבוססת על הזמנה #1001 ב\u2011Shopify\.$/,
+    );
   });
 });
 

@@ -8,6 +8,10 @@ vi.mock('server-only', () => ({}));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => api }));
 vi.mock('@/api/client/signed-out', () => ({ signInIfSignedOut: vi.fn(async () => {}) }));
 vi.mock('@/observability/logger', () => ({ logger: { warn } }));
+vi.mock('next-intl/server', () => ({ getLocale: async () => 'he' }));
+vi.mock('@/api/client/payment-path', () => ({
+  paymentPath: async (locale: string) => `/${locale}/checkout/payment-required?ref=r1`,
+}));
 
 import { employeeTestSchema, goLiveSchema } from '@/api/contracts/onboarding-v2';
 
@@ -33,8 +37,8 @@ describe('★★ the press', () => {
 
   it.each([
     ['NOT_LEARNED', 'not_learned'],
-    ['TENANT_AWAITING_PAYMENT', 'awaiting_payment'],
     ['TENANT_SUSPENDED', 'suspended'],
+    ['NO_ACTIVE_ADMIN', 'no_admin'],
     ['GO_LIVE_FAILED', 'failed'],
   ])(
     '★ %s reads as %s (by code, whatever kind the client filed it under)',
@@ -49,6 +53,17 @@ describe('★★ the press', () => {
       expect(await goLive('')).toEqual({ ok: false, reason });
     },
   );
+
+  it('★★ awaiting payment: where it pays, in the interface language', async () => {
+    api.post.mockRejectedValue(
+      new ApiError({ kind: 'tenant_inactive', status: 409, code: 'TENANT_AWAITING_PAYMENT' }),
+    );
+    expect(await goLive('')).toEqual({
+      ok: false,
+      reason: 'awaiting_payment',
+      payAt: '/he/checkout/payment-required?ref=r1',
+    });
+  });
 
   it('a network failure is failed, and logged', async () => {
     api.post.mockRejectedValue(new ApiError({ kind: 'network' }));

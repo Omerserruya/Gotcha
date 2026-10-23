@@ -1,6 +1,9 @@
 'use server';
 
+import { getLocale } from 'next-intl/server';
+
 import { isApiError } from '@/api/client/api-error';
+import { paymentPath } from '@/api/client/payment-path';
 import { serverApi } from '@/api/client/server-api';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 import {
@@ -14,15 +17,14 @@ import { logger } from '@/observability/logger';
 
 export type GoLiveResult =
   | { readonly ok: true; readonly live: GoLive }
-  | {
-      readonly ok: false;
-      readonly reason: 'not_learned' | 'awaiting_payment' | 'suspended' | 'failed';
-    };
+  /** The plan's first payment opens the account, never this press: where it pays. */
+  | { readonly ok: false; readonly reason: 'awaiting_payment'; readonly payAt: string }
+  | { readonly ok: false; readonly reason: 'not_learned' | 'suspended' | 'no_admin' | 'failed' };
 
-const GO_LIVE_REFUSED: Readonly<Record<string, Exclude<GoLiveResult, { ok: true }>['reason']>> = {
+const GO_LIVE_REFUSED: Readonly<Record<string, 'not_learned' | 'suspended' | 'no_admin'>> = {
   NOT_LEARNED: 'not_learned',
-  TENANT_AWAITING_PAYMENT: 'awaiting_payment',
   TENANT_SUSPENDED: 'suspended',
+  NO_ACTIVE_ADMIN: 'no_admin',
 };
 
 /**
@@ -42,6 +44,9 @@ export async function goLive(employeeName: string): Promise<GoLiveResult> {
     return { ok: true, live };
   } catch (cause) {
     await signInIfSignedOut(cause);
+    if (isApiError(cause) && cause.code === 'TENANT_AWAITING_PAYMENT') {
+      return { ok: false, reason: 'awaiting_payment', payAt: await paymentPath(await getLocale()) };
+    }
     const known = isApiError(cause) && cause.code ? GO_LIVE_REFUSED[cause.code] : undefined;
     if (known) return { ok: false, reason: known };
     logger.warn('onboarding.go_live_failed', { cause });

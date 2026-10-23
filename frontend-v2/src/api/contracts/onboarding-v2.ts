@@ -416,6 +416,19 @@ export const savedStepSchema = z.object({
   step: z.enum(SAVED_STEPS).nullable().catch(null).default(null),
 });
 
+/**
+ * GET /api/onboarding/step (Backend 92196d5d): the step, and the employee
+ * go-live made - `null` before go-live, or once it was deleted.
+ */
+export const stepReadSchema = savedStepSchema.extend({
+  employee: z
+    .object({ id: z.string(), name: z.string(), status: z.string().catch('') })
+    .nullable()
+    .catch(null)
+    .default(null),
+});
+export type StepRead = z.infer<typeof stepReadSchema>;
+
 /** The four steps, as routes (website and reading are both step 1). */
 export const ONBOARDING_V2_STEPS = ['website', 'reading', 'systems', 'channels', 'live'] as const;
 export type OnboardingV2Step = (typeof ONBOARDING_V2_STEPS)[number];

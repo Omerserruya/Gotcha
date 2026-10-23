@@ -1,6 +1,6 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import type { EmployeeTest, GoLive } from '@/api/contracts/onboarding-v2';
@@ -10,6 +10,7 @@ import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavai
 import { Link, useRouter } from '@/i18n/navigation';
 
 import { askEmployee, goLive, type EmployeeTestResult, type GoLiveResult } from './live-actions';
+import { inPlace } from './channel-reach';
 import styles from './Onboarding.module.css';
 import { stepHref } from './preview';
 import { nameOf } from './ScanFeed';
@@ -46,7 +47,7 @@ const ORDER_TOOL = /order|shipment|tracking/i;
  */
 export function GoLiveStep({
   reach,
-  alreadyLive,
+  current,
   preview = false,
 }: {
   /**
@@ -54,13 +55,15 @@ export function GoLiveStep({
    * server ("the website and WhatsApp"); `''` none; `null` unread.
    */
   readonly reach: string | null;
-  /** The step saved says the employee already went live: pressing again updates it. */
-  readonly alreadyLive: boolean;
+  /** The employee go-live already made (GET /step); `null` before go-live. Pressing again updates it. */
+  readonly current: { readonly name: string } | null;
   readonly preview?: boolean;
 }) {
   const t = useTranslations('onboarding.goLive');
   const tn = useTranslations('onboarding');
-  const [name, setName] = useState('');
+  const alreadyLive = current !== null;
+  // The current name, so the field never suggests a rename; an empty field keeps it (Backend 92196d5d).
+  const [name, setName] = useState(current?.name ?? '');
   const [result, setResult] = useState<GoLiveResult | null>(null);
   const [isPending, start] = useTransition();
   const live = result?.ok ? result.live : null;
@@ -82,13 +85,13 @@ export function GoLiveStep({
         <>
           {alreadyLive ? (
             <p className={styles.quiet} data-testid="go-live-again">
-              {t('again')}
+              {t('again', { name: current.name })}
             </p>
           ) : null}
           <Input
             dir="auto"
             label={t('nameLabel')}
-            hint={t('nameHint')}
+            hint={alreadyLive ? t('nameHintLive') : t('nameHint')}
             maxLength={40}
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -142,12 +145,20 @@ export function GoLiveStep({
               {t(`refused.${result.reason}`)}
             </p>
           ) : null}
+          {/* The way out: the account opens on payment, so the payment page is right here. */}
+          {result && !result.ok && result.reason === 'awaiting_payment' ? (
+            <span className={styles.actions}>
+              <a href={result.payAt} className={styles.secondary} data-testid="go-live-pay">
+                {t('refused.toPayment')}
+              </a>
+            </span>
+          ) : null}
         </>
       )}
 
       {live || alreadyLive ? (
         <Test
-          who={live?.employee.name ?? null}
+          who={live?.employee.name ?? current?.name ?? null}
           suggested={live?.test.suggestedOrderQuestion ?? live?.test.suggestedQuestion ?? ''}
           preview={preview}
         />
@@ -161,6 +172,7 @@ export function GoLiveStep({
 function Result({ live }: { readonly live: GoLive }) {
   const t = useTranslations('onboarding.goLive');
   const tc = useTranslations('channels');
+  const locale = useLocale();
   const name = live.employee.name;
   const warnings = live.warnings.filter(isWarning);
   return (
@@ -183,7 +195,7 @@ function Result({ live }: { readonly live: GoLive }) {
       {/* Read tools only: it looks orders up, never changes them. */}
       {live.tools.platform && live.tools.granted.length ? (
         <p className={styles.quiet} data-testid="go-live-orders">
-          {t('orders', { name, platform: nameOf(live.tools.platform) })}
+          {t('orders', { name, inPlatform: inPlace(nameOf(live.tools.platform), locale) })}
         </p>
       ) : null}
       {warnings.map((warning) => (
@@ -252,7 +264,7 @@ function Test({
           {isPending ? t('asking') : t('ask')}
         </button>
       </span>
-      {result?.ok ? <Answer test={result.test} who={name} /> : null}
+      {result?.ok ? <Answer test={result.test} /> : null}
       {result && !result.ok ? (
         <p className={styles.problem} role="alert" data-testid="go-live-test-refused">
           {result.reason === 'rate_limited'
@@ -267,8 +279,9 @@ function Test({
 }
 
 /** The answer, and where it came from: a real order, an order it couldn't read, or what was learned. */
-function Answer({ test, who }: { readonly test: EmployeeTest; readonly who: string }) {
+function Answer({ test }: { readonly test: EmployeeTest }) {
   const t = useTranslations('onboarding.goLive.test');
+  const locale = useLocale();
   // Said only when no order number came back ("from order #N" is checked first).
   const orderFailed = test.toolsUsed.some((tool) => !tool.ok && ORDER_TOOL.test(tool.name));
   const titles = test.sources.map((source) => source.title).filter(Boolean);
@@ -280,12 +293,15 @@ function Answer({ test, who }: { readonly test: EmployeeTest; readonly who: stri
       {test.orderNumber ? (
         <p className={styles.connected} data-testid="go-live-from-order">
           {test.platform
-            ? t('fromOrder', { number: test.orderNumber, platform: nameOf(test.platform) })
+            ? t('fromOrder', {
+                number: test.orderNumber,
+                inPlatform: inPlace(nameOf(test.platform), locale),
+              })
             : t('fromOrderNoPlatform', { number: test.orderNumber })}
         </p>
       ) : orderFailed ? (
         <p className={styles.why} data-testid="go-live-order-unread">
-          {t('orderUnread', { name: who })}
+          {t('orderUnread')}
         </p>
       ) : titles.length ? (
         <p className={styles.quiet} data-testid="go-live-from-knowledge">
