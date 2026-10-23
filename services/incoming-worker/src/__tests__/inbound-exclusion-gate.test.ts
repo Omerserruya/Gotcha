@@ -170,3 +170,22 @@ describe("an excluded number on the business-app echo path", () => {
     expect(prisma.message.create).toHaveBeenCalled();
   });
 });
+
+describe("a workspace awaiting its first payment answers no one (onboarding v2, 2026-10-23)", () => {
+  // Go-live sets a PENDING_PAYMENT workspace up in full - employee, routing,
+  // knowledge - and leaves the status for the payment to change. This gate is
+  // what keeps that ready employee silent until then: the message is dropped
+  // before any row exists, so no AI call and no reply can follow.
+  it.each(["PENDING_PAYMENT", "PENDING_ONBOARDING", "SUSPENDED"])("%s: nothing is created and the AI is never asked", async (status) => {
+    prisma.tenant.findUnique.mockResolvedValue({ status });
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    await dispatch(INBOUND_JOB);
+
+    expect(prisma.conversation.create).not.toHaveBeenCalled();
+    expect(prisma.message.create).not.toHaveBeenCalled();
+    expect(publishEvent).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+});
