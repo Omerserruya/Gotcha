@@ -10,6 +10,7 @@ import { getInternalServiceKey } from "@chatcenter/shared";
  */
 
 import OpenAI from "openai";
+import { AsyncLocalStorage } from "async_hooks";
 import { trackAIUsage, assertAiAllowed, meterAiUnits, reportOperationalFailure, recordExpectedOutcome, ERROR_CODES } from "@chatcenter/shared";
 import { logAudit } from "./audit.service";
 import { stablePrefixOf } from "./prompt-builder.service";
@@ -377,6 +378,14 @@ async function meterAndReact(
  * An exact list, never a prefix: a caller cannot opt out of billing by naming
  * its call "onboarding_something".
  */
+/**
+ * A server-side scope in which every AI call is platform-paid: entered ONLY by
+ * the onboarding employee test around its one sandboxed turn, whose calls carry
+ * the ordinary runtime types (chat, knowledge resolve, ...). Never set from a
+ * request; AsyncLocalStorage keeps it to that turn's own call chain.
+ */
+export const platformPaidScope = new AsyncLocalStorage<{ reason: string }>();
+
 export const PLATFORM_PAID_AI_TYPES: ReadonlySet<string> = new Set([
   "onboarding_discovery",
   "onboarding_extract_policies",
@@ -389,7 +398,7 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
   const client = getClient();
   const model = params.model || defaultModel;
   const type = params.metadata?.type || "chat";
-  const platformPaid = PLATFORM_PAID_AI_TYPES.has(type);
+  const platformPaid = PLATFORM_PAID_AI_TYPES.has(type) || !!platformPaidScope.getStore();
 
   // Billing pre-flight: refuse AI when the tenant is out of AI Units or the
   // subscription isn't serviceable. Throws AiUnitsExhaustedError ONLY in

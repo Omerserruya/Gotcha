@@ -44,6 +44,8 @@ export interface SandboxTurnInput {
   writes?: SandboxWriteMode;
   /** Start over: clears the transcript but keeps the same conversation row. */
   reset?: boolean;
+  /** The onboarding employee test: read-only, owner-scoped store reads. Server-set only. */
+  onboardingTest?: { actorUserId: string };
 }
 
 export interface SandboxDiagnostics {
@@ -67,6 +69,8 @@ export interface SandboxDiagnostics {
 export interface SandboxTurnResult {
   reply: string;
   diagnostics: SandboxDiagnostics;
+  /** The turn's raw tool log, for server-side callers; routes choose what to expose. */
+  toolCallLog: Array<{ tool: string; result: string; decision?: string; sideEffect?: string }>;
 }
 
 /** Deterministic per (agent, tester) so repeat visits resume the same thread. */
@@ -171,6 +175,7 @@ export async function runSandboxTurn(input: SandboxTurnInput): Promise<SandboxTu
     incomingMessage: input.message,
     // Sandbox execution mode is threaded through to the tool dispatcher.
     sandbox: { enabled: true, writes },
+    ...(input.onboardingTest ? { onboardingTest: input.onboardingTest } : {}),
   });
 
   const reply = String(result.reply ?? "").trim();
@@ -214,6 +219,7 @@ export async function runSandboxTurn(input: SandboxTurnInput): Promise<SandboxTu
 
   return {
     reply,
+    toolCallLog: log.map((t) => ({ tool: t.tool, result: String(t.result ?? ""), decision: t.decision, sideEffect: t.sideEffect })),
     diagnostics: {
       employee: { id: agent.id, name: agent.name, role: agent.role ?? null },
       department,

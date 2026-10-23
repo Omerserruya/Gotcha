@@ -40,6 +40,7 @@ import { computeBehaviorState } from "../services/behavior-engine.service";
 import { discoverBusiness, withoutWideDashes } from "../services/business-discovery.service";
 import { extractOnboarding, type ExtractKind } from "../services/onboarding-extract.service";
 import { goLiveEmployee, GoLiveRefused } from "../services/onboarding-employee.service";
+import { testOnboardingEmployee, EmployeeTestRefused } from "../services/onboarding-employee-test.service";
 import { previewAnswer, previewQuestions, PREVIEW_STATUSES, QUESTION_MAX, type PreviewLocale } from "../services/onboarding-preview.service";
 import { tuneEmployeeChat } from "../services/employee-tuning.service";
 
@@ -190,6 +191,37 @@ router.post("/onboarding-preview-answer", authenticate, resolveTenant, requireRo
     }
     console.error("[onboarding-preview] answer failed:", err);
     res.status(500).json({ error: "Failed to answer" });
+  }
+});
+
+// Onboarding v2 step 4: ask the go-live employee one question through the REAL
+// runtime, sandboxed - read-only order tools, store reads as the asking admin,
+// nothing sent, nothing kept but the sandbox's 2 messages. The answer goes
+// back to the caller only. Same tenant gate and rate limit as the preview.
+router.post("/onboarding-employee-test", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const question = typeof req.body?.question === "string" ? req.body.question.trim() : "";
+    if (!question) { res.status(422).json({ error: "Write a question", code: "QUESTION_REQUIRED" }); return; }
+    if (question.length > QUESTION_MAX) { res.status(422).json({ error: "The question is too long", code: "QUESTION_TOO_LONG", max: QUESTION_MAX }); return; }
+    const userId = (req as any).user?.userId as string | undefined;
+    // A person asks; the internal service identity has no one to act for.
+    if (!userId || (req as any).user?.isInternal) { res.status(403).json({ error: "Only a signed-in admin can test", code: "ADMIN_ONLY" }); return; }
+    if (!(await previewTenantOk(req, res))) return;
+    const wait = await previewRateLimit(req.tenantId!);
+    if (wait !== null) {
+      res.setHeader("Retry-After", String(wait));
+      res.status(429).json({ error: "Too many questions. Try again in a moment.", code: "PREVIEW_RATE_LIMITED", retryAfterSeconds: wait });
+      return;
+    }
+    const data = await testOnboardingEmployee({ tenantId: req.tenantId!, userId, question });
+    res.json({ data });
+  } catch (err: any) {
+    if (err instanceof EmployeeTestRefused) {
+      res.status(409).json({ error: "The employee is not live yet", code: err.code });
+      return;
+    }
+    console.error("[onboarding-employee-test] failed:", err?.message ?? err);
+    res.status(500).json({ error: "The test could not run", code: "EMPLOYEE_TEST_FAILED" });
   }
 });
 
