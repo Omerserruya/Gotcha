@@ -259,7 +259,7 @@ export const learnedSchema = z.object({
           price: z.union([z.string(), z.number()]).nullable().catch(null).default(null),
         }),
       ),
-      /** feed: the store's own catalogue; sampled: a few product pages read. */
+      /** Always the store's own feed ("shopify_feed" | "woo_store_api"); a crawl sample is never written here. */
       source: text,
     })
     .nullable()
@@ -360,6 +360,12 @@ export const goLiveSchema = z.object({
       type: z.string(),
       displayName: text,
       routed: flag,
+      /**
+       * Can a customer write there NOW (Backend be07d3b2)? A website widget
+       * whose code was never seen, or a shop whose theme embed is off, waits
+       * for install. Unknown reads as waiting: never claimed live.
+       */
+      reach: z.enum(['live', 'waiting_for_install']).catch('waiting_for_install'),
     }),
   ),
   knowledgeBases: count,
@@ -380,16 +386,17 @@ export const goLiveSchema = z.object({
 export type GoLive = z.infer<typeof goLiveSchema>;
 
 /**
- * The live employee asked in a sandbox (supervisor, 2026-10-23: POST
- * /api/ai-assist/onboarding-employee-test, NOT BUILT YET). Read-only tools,
- * no conversation, no message, no outbox, no send; 409 before go-live.
+ * The live employee asked in a sandbox (POST
+ * /api/ai-assist/onboarding-employee-test, Backend's ai-assist.ts). Read-only
+ * tools, a sandbox conversation the inbox never shows, no outbox, no send;
+ * 409 NOT_LIVE before go-live.
  */
 export const employeeTestSchema = z.object({
   answer: z.string().transform((s) => plainDashes(s)),
   toolsUsed: listOf(z.object({ name: z.string(), ok: flag })),
-  sources: listOf(z.object({ title: z.string().catch(''), sourceUrl: text })),
+  sources: listOf(z.object({ title: z.string().catch(''), sourceType: text })),
   usedRealOrder: flag,
-  /** The order the answer came from, when it did (asked of Backend; null until sent). */
+  /** The order the answer came from, when it did; null otherwise. */
   orderNumber: text,
   platform: text,
 });

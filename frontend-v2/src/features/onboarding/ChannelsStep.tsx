@@ -15,13 +15,12 @@ import type { ChannelsConfig } from '@/features/channels/load-whatsapp';
 import { CopyCode, GetTheCode } from '@/features/webchat/WebchatSettings';
 import { useRouter } from '@/i18n/navigation';
 
+import { ONBOARDING_CHANNELS, reaches, shopLive, type OnboardingChannel } from './channel-reach';
 import styles from './Onboarding.module.css';
 import { stepHref } from './preview';
 import { StepLink } from './StepLink';
 
-/** The channels onboarding offers, in this order (Omer, 2026-10-23). */
-export const ONBOARDING_CHANNELS = ['WEBCHAT', 'WHATSAPP', 'INSTAGRAM', 'EMAIL'] as const;
-type OnboardingChannel = (typeof ONBOARDING_CHANNELS)[number];
+export { ONBOARDING_CHANNELS };
 
 /** The step after this one: check and go live. */
 export const afterChannels = (preview: boolean) => stepHref('/onboarding/live', preview);
@@ -30,9 +29,6 @@ const HERE = stepHref('/onboarding/channels', false) as string;
 
 type Standing = 'connected' | 'codeReady' | 'none';
 
-type Shop = WidgetInstall['shopify'][number];
-/** A Shopify shop's chat is live: the app is enabled and its theme embed loaded recently. */
-const shopLive = (shop: Shop) => shop.status === 'active' && shop.embedLive;
 /** A shop not live yet whose theme can switch the chat on: the one way offered. */
 const themePath = (install: WidgetInstall | null) =>
   (install?.shopify ?? []).some(
@@ -68,20 +64,14 @@ export function ChannelsStep({
   const router = useRouter();
   const [open, setOpen] = useState<OnboardingChannel | null>(null);
 
-  const standing = (channel: OnboardingChannel): Standing => {
-    if (channel === 'WEBCHAT') {
-      // Live only where a customer can write: the code seen on the site, or a
-      // Shopify shop's chat switched on in its theme. Code that exists but was
-      // never seen answers nobody, so it never counts as connected.
-      if (install?.code?.status === 'live' || install?.shopify.some(shopLive)) return 'connected';
-      return install?.code ? 'codeReady' : 'none';
-    }
-    return channels?.some(
-      (each) => each.channel === channel && each.connectionStatus === 'CONNECTED',
-    )
+  // Connected only where a customer can write (channel-reach); the website's
+  // code that exists but was never seen is "code ready", never connected.
+  const standing = (channel: OnboardingChannel): Standing =>
+    reaches(channel, channels, install)
       ? 'connected'
-      : 'none';
-  };
+      : channel === 'WEBCHAT' && install?.code
+        ? 'codeReady'
+        : 'none';
   const anyConnected = ONBOARDING_CHANNELS.some((each) => standing(each) === 'connected');
 
   return (

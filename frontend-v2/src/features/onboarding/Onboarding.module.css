@@ -878,6 +878,17 @@
     align-items: end;
   }
 
+  /* The employee's test answer: its own words, set apart from ours. */
+  .answer {
+    margin: 0;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background-color: var(--panel-sunken);
+    font-size: 14px;
+    color: var(--text-primary);
+    white-space: pre-line;
+  }
+
   /* The add-from-what-you-have form, at the end of the policies card. */
   .addMissing {
     display: flex;

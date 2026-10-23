@@ -517,5 +517,59 @@
       "refundDays": "Days to refund",
       "warrantyMonths": "Warranty, in months"
     }
+  },
+  "goLive": {
+    "title": "Go live",
+    "someone": "Your AI employee",
+    "nameLabel": "Your employee's name",
+    "nameHint": "Leave it empty and we'll choose one.",
+    "willAnswer": "{name} answers customers on {channels} from now on.",
+    "noReach": "{name} will be live, but won't answer anywhere yet: no channel customers can write on is connected.",
+    "reachUnread": "We couldn't read your channels just now. {name} answers wherever a customer can write, and after you press we'll show where.",
+    "nothingSent": "Pressing sends nothing to anyone. {name} only answers when a customer writes.",
+    "press": "Go live",
+    "pressNoReach": "Go live, with no channel yet",
+    "pressAgain": "Update the employee",
+    "pressing": "Going live…",
+    "toChannels": "Connect a channel first",
+    "again": "Your employee is already live. Pressing again updates it with what you corrected here.",
+    "refused": {
+      "not_learned": "We haven't read the site yet, so there is nothing to build the employee from.",
+      "awaiting_payment": "The workspace opens after the plan's first payment. Nothing went live.",
+      "suspended": "This workspace is suspended, so nothing went live.",
+      "failed": "We couldn't go live, and nothing changed. You can try again."
+    },
+    "live": "{name} is live.",
+    "reachLive": "Answering here",
+    "reachWaiting": "Waiting for install",
+    "orders": "{name} can look up orders in {platform}.",
+    "warn": {
+      "no_channels": "No channel is connected yet, so {name} isn't answering customers.",
+      "no_reachable_channel": "No channel is open to customers yet: the website code hasn't been seen, or the shop's chat is off.",
+      "no_platform_connected": "No store is connected, so {name} can't look up orders yet.",
+      "playbook_customized": "You had changed how conversations are routed, so we left it as it was.",
+      "employee_customized": "You had changed this employee before, so we kept your changes."
+    },
+    "test": {
+      "title": "Try {name}",
+      "lead": "One question, as a customer would ask it. The answer stays here: nothing is sent to anyone.",
+      "question": "Question",
+      "ask": "Ask",
+      "asking": "Asking…",
+      "fromOrder": "Answered from order #{number} in {platform}.",
+      "fromOrderNoPlatform": "Answered from order #{number}.",
+      "orderUnread": "{name} tried to read the order in the store and couldn't, so the answer isn't based on it.",
+      "fromKnowledge": "Answered from what we learned: {sources}",
+      "refused": {
+        "not_live": "{name} isn't live yet. Press “Go live” first.",
+        "question_required": "Write a question.",
+        "too_long": "The question is too long.",
+        "rate_limited": "Too many questions in a row. Try again in {seconds, plural, one {# second} other {# seconds}}.",
+        "rate_limited_soon": "Too many questions in a row. Try again in a moment.",
+        "failed": "The test didn't run this time. You can try again."
+      },
+      "titleNoName": "Try your employee"
+    },
+    "finish": "Done, to Home"
   }
 }

@@ -780,8 +780,8 @@ export const onboardingEndpoints = {
   goLive: () => endpoint('/api/onboarding/go-live'),
   /**
    * POST `{ question }` - the LIVE employee asked in a sandbox, read-only
-   * tools, nothing sent (supervisor's ask to Backend, 2026-10-23; not built
-   * yet: the test reads previewAnswer until it is).
+   * tools, nothing sent (Backend's ai-assist.ts). 409 NOT_LIVE, 422
+   * QUESTION_REQUIRED / QUESTION_TOO_LONG, 429 PREVIEW_RATE_LIMITED.
    */
   employeeTest: () => endpoint('/api/ai-assist/onboarding-employee-test'),
 } as const;

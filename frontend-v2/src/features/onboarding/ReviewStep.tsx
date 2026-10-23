@@ -60,9 +60,12 @@ function useEdit(onDone: (learned: Learned) => void) {
 export function ReviewStep({
   initial,
   preview = false,
+  after,
 }: {
   readonly initial: Learned;
   readonly preview?: boolean;
+  /** What follows the check, in the same column: the go-live card. */
+  readonly after?: ReactNode;
 }) {
   const t = useTranslations('onboarding.review');
   const [learned, setLearned] = useState(initial);
@@ -89,6 +92,7 @@ export function ReviewStep({
           </ul>
         </Section>
       ) : null}
+      {after}
     </div>
   );
 }
@@ -336,19 +340,30 @@ function Profile({ learned, onDone, preview }: SectionProps) {
   );
 }
 
-function Products({ learned }: { readonly learned: Learned }) {
-  const t = useTranslations('onboarding.review');
+/** The store's currency, as its catalogue gives it; null when unknown. */
+const currencyOf = (learned: Learned) => learned.products?.priceRange?.currency ?? null;
+
+/** An amount in the store's currency ("₪250"), or the plain number when none is known. */
+function useMoney(currency: string | null) {
   const format = useFormatter();
-  const products = learned.products;
-  const price = products?.priceRange;
-  const money = (amount: number) =>
-    price?.currency
+  return (amount: number) => {
+    const digits = Number.isInteger(amount) ? 0 : 2;
+    return currency
       ? format.number(amount, {
           style: 'currency',
-          currency: price.currency,
-          maximumFractionDigits: 0,
+          currency,
+          minimumFractionDigits: digits,
+          maximumFractionDigits: digits,
         })
-      : format.number(amount);
+      : format.number(amount, { maximumFractionDigits: 2 });
+  };
+}
+
+function Products({ learned }: { readonly learned: Learned }) {
+  const t = useTranslations('onboarding.review');
+  const products = learned.products;
+  const price = products?.priceRange;
+  const money = useMoney(currencyOf(learned));
   return (
     <Section title={t('products.title')} testid="review-products">
       {products === null || products.count === null ? (
@@ -381,8 +396,9 @@ function Products({ learned }: { readonly learned: Learned }) {
 }
 
 /** A policy's terms, in plain words: what a customer would ask about. */
-function useTerms() {
+function useTerms(currency: string | null) {
   const t = useTranslations('onboarding.review.terms');
+  const money = useMoney(currency);
   return (policy: LearnedPolicy): string[] => {
     const terms = policy.terms;
     if (!terms) return [];
@@ -396,7 +412,7 @@ function useTerms() {
     if (terms.shipping?.times) lines.push(t('shippingTimes', { times: terms.shipping.times }));
     if (terms.shipping?.costs) lines.push(t('shippingCosts', { costs: terms.shipping.costs }));
     if (terms.shipping?.freeOver !== null && terms.shipping?.freeOver !== undefined)
-      lines.push(t('freeOver', { amount: terms.shipping.freeOver }));
+      lines.push(t('freeOver', { amount: money(terms.shipping.freeOver) }));
     if (terms.refund?.method) lines.push(t('refundMethod', { method: terms.refund.method }));
     if (terms.refund?.days !== null && terms.refund?.days !== undefined)
       lines.push(t('refundDays', { days: terms.refund.days }));
@@ -415,7 +431,13 @@ function Policies({ learned, onDone, preview }: SectionProps) {
       ) : (
         <ul className={styles.reviewList}>
           {learned.policies.map((policy) => (
-            <PolicyItem key={policy.id} policy={policy} onDone={onDone} preview={preview} />
+            <PolicyItem
+              key={policy.id}
+              policy={policy}
+              currency={currencyOf(learned)}
+              onDone={onDone}
+              preview={preview}
+            />
           ))}
         </ul>
       )}
@@ -429,16 +451,19 @@ function Policies({ learned, onDone, preview }: SectionProps) {
 
 function PolicyItem({
   policy,
+  currency,
   onDone,
   preview,
 }: {
   readonly policy: LearnedPolicy;
+  /** The store's currency, for the amounts in its terms. */
+  readonly currency: string | null;
   readonly onDone: (learned: Learned) => void;
   readonly preview: boolean;
 }) {
   const t = useTranslations('onboarding.review');
   const ts = useTranslations('onboarding.scan');
-  const terms = useTerms();
+  const terms = useTerms(currency);
   const [editing, setEditing] = useState(false);
   const remove = useEdit(onDone);
   const testid = `review-policy-${policy.id}`;

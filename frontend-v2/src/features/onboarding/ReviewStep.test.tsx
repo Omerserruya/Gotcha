@@ -37,7 +37,7 @@ const base = {
     categories: ['Shirts'],
     priceRange: { min: 49, max: 390, currency: 'ILS' },
     highlights: [],
-    source: 'feed',
+    source: 'shopify_feed',
   },
   policies: [
     {
@@ -189,8 +189,9 @@ describe('★★ checking what was learned', () => {
     const initial = learned({ policies: [shipping] });
     edit.editLearned.mockResolvedValue({ ok: true, learned: initial });
     show({ initial });
+    // The store's currency where its catalogue gives one (the products card's own source)...
     expect(screen.getByTestId('review-policy-shipping-terms')).toHaveTextContent(
-      'Free shipping over 250',
+      'Free shipping over ₪250',
     );
     fireEvent.click(screen.getByTestId('review-policy-shipping-edit'));
     const form = screen.getByTestId('review-edit-policies-shipping');
@@ -207,6 +208,25 @@ describe('★★ checking what was learned', () => {
         terms: { shipping: { times: null, costs: null, freeOver: 199.9 } },
       },
     });
+  });
+
+  it('★ ...the plain number when no currency is known; cents kept when there are some', () => {
+    const shipping = (freeOver: number) => ({
+      id: 'shipping',
+      kind: 'shipping',
+      summary: 'Ships fast.',
+      terms: { shipping: { times: null, costs: null, freeOver } },
+      sourceUrl: null,
+    });
+    const { unmount } = show({ initial: learned({ products: null, policies: [shipping(250)] }) });
+    expect(screen.getByTestId('review-policy-shipping-terms')).toHaveTextContent(
+      /^Free shipping over 250$/,
+    );
+    unmount();
+    show({ initial: learned({ policies: [shipping(199.5)] }) });
+    expect(screen.getByTestId('review-policy-shipping-terms')).toHaveTextContent(
+      /^Free shipping over ₪199\.50$/,
+    );
   });
 
   it('★ a policy with no terms sends its words only; a cleared term is sent as null', async () => {

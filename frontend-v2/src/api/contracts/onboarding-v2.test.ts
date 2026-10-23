@@ -143,7 +143,7 @@ describe('★★ what was learned', () => {
       categories: ['Shirts'],
       priceRange: { min: 49, max: 390, currency: 'ILS' },
       highlights: [{ title: 'Tee', url: 'https://x/p/tee', price: '89.00' }],
-      source: 'feed',
+      source: 'shopify_feed',
     },
     policies: [
       {
@@ -227,6 +227,53 @@ describe('★★ go live, and its test', () => {
     });
     expect(read.test).toEqual({ suggestedQuestion: null, suggestedOrderQuestion: null });
     expect(read.channels[0]?.routed).toBe(true);
+  });
+
+  it('★★ each channel says whether a customer can write there now; unknown or missing is WAITING, never live', () => {
+    const read = goLiveSchema.parse({
+      employee: { id: 'a1', name: 'Noa', status: 'ACTIVE' },
+      channels: [
+        { id: 'c1', type: 'WHATSAPP', displayName: null, routed: true, reach: 'live' },
+        {
+          id: 'c2',
+          type: 'WEBCHAT',
+          displayName: null,
+          routed: true,
+          reach: 'waiting_for_install',
+        },
+        { id: 'c3', type: 'WEBCHAT', displayName: null, routed: true, reach: 'soon' },
+        { id: 'c4', type: 'EMAIL', displayName: null, routed: true },
+      ],
+      // Backend's go-live sends only the order question.
+      test: { suggestedOrderQuestion: 'Where is my order #1001?' },
+    });
+    expect(read.channels.map((each) => each.reach)).toEqual([
+      'live',
+      'waiting_for_install',
+      'waiting_for_install',
+      'waiting_for_install',
+    ]);
+    expect(read.test).toEqual({
+      suggestedQuestion: null,
+      suggestedOrderQuestion: 'Where is my order #1001?',
+    });
+  });
+
+  it('the test says which order, in which store, and what knowledge it used', () => {
+    const read = employeeTestSchema.parse({
+      answer: 'Shipped yesterday.',
+      toolsUsed: [{ name: 'shopify.get_order', ok: true }],
+      sources: [{ title: 'Shipping policy', sourceType: 'onboarding_scan' }],
+      usedRealOrder: true,
+      orderNumber: '1001',
+      platform: 'shopify',
+    });
+    expect(read).toMatchObject({
+      usedRealOrder: true,
+      orderNumber: '1001',
+      platform: 'shopify',
+      sources: [{ title: 'Shipping policy', sourceType: 'onboarding_scan' }],
+    });
   });
 
   it('★ the sandboxed employee test: usedRealOrder is false unless the route says true', () => {

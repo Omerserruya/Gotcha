@@ -14,6 +14,7 @@ import {
   integrationSuggestionsSchema,
   savedStepSchema,
   type IntegrationSuggestion,
+  type SavedStep,
 } from '@/api/contracts/onboarding-v2';
 import type { ResumeFacts } from './resume-v2';
 import { readScan } from './scan-actions';
@@ -284,6 +285,14 @@ export async function loadChannelsStep(): Promise<ChannelsStepRead> {
   return { channels, install, config };
 }
 
+/** The step saved on Continue/Skip (and by go-live); `null`: none, or unread. */
+export async function loadSavedStep(): Promise<SavedStep | null> {
+  return serverApi()
+    .get({ endpoint: onboardingEndpoints.step(), payload: savedStepSchema })
+    .then((read) => read.step)
+    .catch(() => null);
+}
+
 /**
  * What onboarding resumes from: the step saved on Continue/Skip, and what
  * the server can prove (the site job, a connected platform, anything to
@@ -295,10 +304,7 @@ export async function loadResumeFacts(): Promise<
 > {
   const api = serverApi();
   const [saved, job, status, suggestions, channels, install] = await Promise.all([
-    api
-      .get({ endpoint: onboardingEndpoints.step(), payload: savedStepSchema })
-      .then((read) => read.step)
-      .catch(() => null),
+    loadSavedStep(),
     readScan(0),
     api
       .get({ endpoint: onboardingEndpoints.status(), payload: onboardingStatusSchema, raw: true })
