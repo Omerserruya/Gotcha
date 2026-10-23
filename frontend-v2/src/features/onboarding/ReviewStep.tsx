@@ -395,7 +395,8 @@ function useTerms() {
     if (terms.exchange?.allowed === false) lines.push(t('noExchange'));
     if (terms.shipping?.times) lines.push(t('shippingTimes', { times: terms.shipping.times }));
     if (terms.shipping?.costs) lines.push(t('shippingCosts', { costs: terms.shipping.costs }));
-    if (terms.shipping?.freeOver) lines.push(t('freeOver', { amount: terms.shipping.freeOver }));
+    if (terms.shipping?.freeOver !== null && terms.shipping?.freeOver !== undefined)
+      lines.push(t('freeOver', { amount: terms.shipping.freeOver }));
     if (terms.refund?.method) lines.push(t('refundMethod', { method: terms.refund.method }));
     if (terms.refund?.days !== null && terms.refund?.days !== undefined)
       lines.push(t('refundDays', { days: terms.refund.days }));
@@ -882,6 +883,11 @@ const asNumber = (value: string) => {
   const n = Number(value.trim());
   return value.trim() === '' || !Number.isFinite(n) || n < 0 ? null : Math.round(n);
 };
+/** An order total: a number, cents kept; anything else is unstated. */
+const asAmount = (value: string) => {
+  const n = Number(value.trim());
+  return value.trim() === '' || !Number.isFinite(n) || n < 0 ? null : n;
+};
 const asText = (value: string) => (value.trim() === '' ? null : value.trim());
 /** A term with nothing in it is `null`, as the scan stores an unstated one. */
 const group = <T extends Record<string, unknown>>(value: T) =>
@@ -915,7 +921,7 @@ function PolicyEdit({
     exchangeHow: terms?.exchange?.how ?? '',
     shippingTimes: terms?.shipping?.times ?? '',
     shippingCosts: terms?.shipping?.costs ?? '',
-    freeOver: terms?.shipping?.freeOver ?? '',
+    freeOver: terms?.shipping?.freeOver?.toString() ?? '',
     refundMethod: terms?.refund?.method ?? '',
     refundDays: terms?.refund?.days?.toString() ?? '',
     warrantyMonths: terms?.warranty?.months?.toString() ?? '',
@@ -942,7 +948,7 @@ function PolicyEdit({
       out.shipping = group({
         times: asText(values.shippingTimes),
         costs: asText(values.shippingCosts),
-        freeOver: asText(values.freeOver),
+        freeOver: asAmount(values.freeOver),
       });
     }
     if (keys.includes('refund')) {
@@ -1036,6 +1042,7 @@ function PolicyEdit({
             <Input
               dir="auto"
               label={t('termFields.freeOver')}
+              inputMode="decimal"
               value={values.freeOver}
               onChange={set('freeOver')}
             />

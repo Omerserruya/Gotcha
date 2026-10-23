@@ -188,7 +188,13 @@ export const learnedPolicySchema = z.object({
         .catch(null)
         .default(null),
       shipping: z
-        .object({ times: modelText, costs: modelText, freeOver: modelText })
+        .object({
+          times: modelText,
+          costs: modelText,
+          // An order total, a NUMBER (Backend's extraction and the employee's guideline
+          // read it as one); a string here was dropped to null and erased on save.
+          freeOver: z.number().nonnegative().nullable().catch(null).default(null),
+        })
         .nullable()
         .catch(null)
         .default(null),

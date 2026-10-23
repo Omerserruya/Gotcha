@@ -149,7 +149,7 @@ describe('★★ checking what was learned', () => {
             id: 'shipping',
             kind: 'shipping',
             summary: 'Ships fast.',
-            terms: { shipping: { times: '3 days', costs: null, freeOver: '200' }, windowDays: 7 },
+            terms: { shipping: { times: '3 days', costs: null, freeOver: 200 }, windowDays: 7 },
             sourceUrl: null,
           },
           {
@@ -176,6 +176,37 @@ describe('★★ checking what was learned', () => {
     const words = screen.getByTestId('review-edit-policies-privacy');
     expect(within(words).getAllByRole('textbox')).toHaveLength(1);
     expect(words).not.toHaveTextContent('These terms are what GOTCHA answers from');
+  });
+
+  it('★★ free shipping over is an order total, a NUMBER: shown, edited, and sent back as one', async () => {
+    const shipping = {
+      id: 'shipping',
+      kind: 'shipping',
+      summary: 'Ships fast.',
+      terms: { shipping: { times: null, costs: null, freeOver: 250 } },
+      sourceUrl: null,
+    };
+    const initial = learned({ policies: [shipping] });
+    edit.editLearned.mockResolvedValue({ ok: true, learned: initial });
+    show({ initial });
+    expect(screen.getByTestId('review-policy-shipping-terms')).toHaveTextContent(
+      'Free shipping over 250',
+    );
+    fireEvent.click(screen.getByTestId('review-policy-shipping-edit'));
+    const form = screen.getByTestId('review-edit-policies-shipping');
+    expect(within(form).getByLabelText('Free shipping over')).toHaveValue('250');
+    fireEvent.change(within(form).getByLabelText('Free shipping over'), {
+      target: { value: '199.9' },
+    });
+    await act(async () => fireEvent.submit(form));
+    expect(edit.editLearned).toHaveBeenLastCalledWith({
+      section: 'policies',
+      id: 'shipping',
+      value: {
+        summary: 'Ships fast.',
+        terms: { shipping: { times: null, costs: null, freeOver: 199.9 } },
+      },
+    });
   });
 
   it('★ a policy with no terms sends its words only; a cleared term is sent as null', async () => {
