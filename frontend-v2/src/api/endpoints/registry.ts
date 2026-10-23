@@ -751,6 +751,27 @@ export const onboardingEndpoints = {
   discovery: () => endpoint('/api/onboarding/discovery'),
   discover: () => endpoint('/api/onboarding/discover'),
   teach: () => endpoint('/api/onboarding/teach'),
+  /**
+   * Onboarding v2 (Backend, feat/onboarding-v2). POST `{ domain, locale,
+   * legalAccepted }` → 202 `{ data: { jobId, status, resumed } }` (the same
+   * domain resumes the live job: no 409); GET `?since=<seq>` → the job, 404
+   * NO_JOB before any scan. The old POST /discover stays on the server.
+   */
+  discoverJob: () => endpoint('/api/onboarding/discover/job'),
+  /** POST - resumes a FAILED or STALLED job; 409 JOB_COMPLETE. */
+  discoverRetry: () => endpoint('/api/onboarding/discover/retry'),
+  /** GET → what was learned; PATCH `{ section, id?, value? | remove }` → the same, updated. 404 NOT_LEARNED. */
+  learned: () => endpoint('/api/onboarding/learned'),
+  /** GET → the platform's main integration and detected tools in the catalogue. */
+  integrationSuggestions: () => endpoint('/api/onboarding/integration-suggestions'),
+  /** POST `{ employeeName?, confirm: true }` - the first employee, live on the connected channels. Idempotent. */
+  goLive: () => endpoint('/api/onboarding/go-live'),
+  /**
+   * POST `{ question }` - the LIVE employee asked in a sandbox, read-only
+   * tools, nothing sent (supervisor's ask to Backend, 2026-10-23; not built
+   * yet: the test reads previewAnswer until it is).
+   */
+  employeeTest: () => endpoint('/api/ai-assist/onboarding-employee-test'),
 } as const;
 
 /**
