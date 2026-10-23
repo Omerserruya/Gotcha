@@ -80,7 +80,7 @@ export function GoLiveStep({
       <h2 className={styles.systemName}>{t('title')}</h2>
 
       {live ? (
-        <Result live={live} />
+        <Result live={live} payAt={result?.ok ? result.payAt : null} />
       ) : (
         <>
           {alreadyLive ? (
@@ -145,14 +145,6 @@ export function GoLiveStep({
               {t(`refused.${result.reason}`)}
             </p>
           ) : null}
-          {/* The way out: the account opens on payment, so the payment page is right here. */}
-          {result && !result.ok && result.reason === 'awaiting_payment' ? (
-            <span className={styles.actions}>
-              <a href={result.payAt} className={styles.secondary} data-testid="go-live-pay">
-                {t('refused.toPayment')}
-              </a>
-            </span>
-          ) : null}
         </>
       )}
 
@@ -169,7 +161,7 @@ export function GoLiveStep({
 }
 
 /** What went live: the employee, where it answers now, what it can do, and what to know. */
-function Result({ live }: { readonly live: GoLive }) {
+function Result({ live, payAt }: { readonly live: GoLive; readonly payAt: string | null }) {
   const t = useTranslations('onboarding.goLive');
   const tc = useTranslations('channels');
   const locale = useLocale();
@@ -177,10 +169,26 @@ function Result({ live }: { readonly live: GoLive }) {
   const warnings = live.warnings.filter(isWarning);
   return (
     <div className={styles.connectHere} data-testid="go-live-done">
-      <p className={styles.itemTitle} role="status">
-        {t('live', { name })}
-      </p>
-      {live.channels.length ? (
+      {/* Set up but unpaid: ready, answering no one until payment clears - never "live". */}
+      {live.paymentRequired ? (
+        <>
+          <p className={styles.itemTitle} role="status" data-testid="go-live-awaiting-payment">
+            {t('ready', { name })}
+          </p>
+          {payAt ? (
+            <span className={styles.actions}>
+              <a href={payAt} className={styles.primary} data-testid="go-live-pay">
+                {t('toPayment')}
+              </a>
+            </span>
+          ) : null}
+        </>
+      ) : (
+        <p className={styles.itemTitle} role="status">
+          {t('live', { name })}
+        </p>
+      )}
+      {live.channels.length && !live.paymentRequired ? (
         <ul className={styles.terms} data-testid="go-live-channels">
           {live.channels.map((channel) => (
             <li key={channel.id} data-testid={`go-live-channel-${channel.id}`}>

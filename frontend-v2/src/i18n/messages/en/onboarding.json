@@ -536,10 +536,8 @@
     "again": "{name} is already live. Pressing again updates the employee with what you corrected here.",
     "refused": {
       "not_learned": "We haven't read the site yet, so there is nothing to build the employee from.",
-      "awaiting_payment": "The account opens after the first payment. Nothing went live.",
       "suspended": "This account is suspended, so nothing went live.",
       "failed": "We couldn't go live, and nothing changed. You can try again.",
-      "toPayment": "Go to payment",
       "no_admin": "This account has no active admin right now, so nothing went live. Please contact us."
     },
     "live": "{name} is live.",
@@ -576,6 +574,8 @@
       "titleNoName": "Try your employee"
     },
     "finish": "Done, to Home",
-    "nameHintLive": "This is the name customers see today. Changing it here renames it."
+    "nameHintLive": "This is the name customers see today. Changing it here renames it.",
+    "ready": "Everything is ready. {name} starts answering as soon as payment clears.",
+    "toPayment": "Go to payment"
   }
 }

@@ -26,7 +26,7 @@ describe('★★ the press', () => {
   it('POST /go-live with confirm, and the name only when one was typed (trimmed)', async () => {
     const live = goLiveSchema.parse({ employee: { id: 'a1', name: 'Noa', status: 'ACTIVE' } });
     api.post.mockResolvedValue(live);
-    expect(await goLive(' Noa ')).toEqual({ ok: true, live });
+    expect(await goLive(' Noa ')).toEqual({ ok: true, live, payAt: null });
     const call = api.post.mock.calls[0]![0];
     expect(call.endpoint.path).toBe('/api/onboarding/go-live');
     expect(call.body).toEqual({ confirm: true, employeeName: 'Noa' });
@@ -54,13 +54,16 @@ describe('★★ the press', () => {
     },
   );
 
-  it('★★ awaiting payment: where it pays, in the interface language', async () => {
-    api.post.mockRejectedValue(
-      new ApiError({ kind: 'tenant_inactive', status: 409, code: 'TENANT_AWAITING_PAYMENT' }),
-    );
+  it('★★ set up but awaiting payment (Backend 5c073c64): where it pays, in the interface language', async () => {
+    const live = goLiveSchema.parse({
+      employee: { id: 'a1', name: 'Noa', status: 'ACTIVE' },
+      activation: { opened: false, awaitingPayment: true, billingEntity: 'provisioned' },
+      paymentRequired: true,
+    });
+    api.post.mockResolvedValue(live);
     expect(await goLive('')).toEqual({
-      ok: false,
-      reason: 'awaiting_payment',
+      ok: true,
+      live,
       payAt: '/he/checkout/payment-required?ref=r1',
     });
   });

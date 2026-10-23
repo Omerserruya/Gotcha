@@ -383,6 +383,11 @@ export const goLiveSchema = z.object({
     })
     .catch({ platform: null, granted: [] }),
   warnings: z.array(z.string()).catch([]).default([]),
+  /**
+   * A paid plan not paid yet (Backend 5c073c64): everything is set up, and
+   * the employee answers no one until payment clears. Unknown reads as not.
+   */
+  paymentRequired: flag,
   test: z
     .object({ suggestedQuestion: text, suggestedOrderQuestion: text })
     .catch({ suggestedQuestion: null, suggestedOrderQuestion: null })

@@ -207,31 +207,44 @@ describe('★★ the press, and what went live', () => {
     expect(screen.queryByTestId('go-live-warning-cosmic_rays')).toBeNull();
   });
 
-  it('★★ refused: said, nothing went live, the press stays', async () => {
+  it('★★ a paid plan not paid yet: ready, answering no one until payment clears, the payment page right there; never "live"', async () => {
     actions.goLive.mockResolvedValue({
-      ok: false,
-      reason: 'awaiting_payment',
+      ok: true,
+      live: live({ paymentRequired: true }),
       payAt: '/en/checkout/payment-required?ref=r1',
     });
     show();
     await press();
-    expect(screen.getByTestId('go-live-refused')).toHaveTextContent(
-      'The account opens after the first payment. Nothing went live.',
+    expect(screen.getByTestId('go-live-awaiting-payment')).toHaveTextContent(
+      /^Everything is ready\. Noa starts answering as soon as payment clears\.$/,
     );
-    // The way out, right beside it.
     expect(screen.getByTestId('go-live-pay')).toHaveAttribute(
       'href',
       '/en/checkout/payment-required?ref=r1',
+    );
+    expect(screen.getByTestId('go-live-done')).not.toHaveTextContent('Noa is live.');
+    // "Answering here" would be false while unpaid.
+    expect(screen.queryByTestId('go-live-channels')).toBeNull();
+  });
+
+  it('★★ refused: said, nothing went live, the press stays', async () => {
+    actions.goLive.mockResolvedValue({ ok: false, reason: 'suspended' });
+    show();
+    await press();
+    expect(screen.getByTestId('go-live-refused')).toHaveTextContent(
+      'This account is suspended, so nothing went live.',
     );
     expect(screen.getByTestId('go-live-press')).toBeInTheDocument();
     expect(screen.queryByTestId('go-live-test')).toBeNull();
   });
 
-  it('a refusal other than payment offers no payment link', async () => {
-    actions.goLive.mockResolvedValue({ ok: false, reason: 'suspended' });
+  it('paid, or nothing owed: no payment link, and "live"', async () => {
+    actions.goLive.mockResolvedValue({ ok: true, live: live(), payAt: null });
     show();
     await press();
     expect(screen.queryByTestId('go-live-pay')).toBeNull();
+    expect(screen.queryByTestId('go-live-awaiting-payment')).toBeNull();
+    expect(screen.getByTestId('go-live-done')).toHaveTextContent('Noa is live.');
   });
 
   it('★ a press that rejects reads as failed, never hangs', async () => {
