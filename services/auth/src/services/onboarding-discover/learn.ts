@@ -23,12 +23,21 @@ const WEBSITE_KB_MARKER = "onboarding:website";
 
 export type AiCall = (tenantId: string, method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown) => Promise<{ ok: boolean; status: number; body: any }>;
 
-/** The AI service, as the tenant's internal ADMIN (internal key + x-tenant-id). Never throws. */
+/** The AI service, as the tenant's internal ADMIN (internal secret as Bearer + x-tenant-id). Never throws. */
 export const aiInternal: AiCall = async (tenantId, method, path, body) => {
   try {
     const res = await fetch(`${AI_SERVICE_URL}${path}`, {
       method,
-      headers: { "Content-Type": "application/json", "X-Internal-Key": getInternalServiceKey(), "x-tenant-id": tenantId },
+      // authenticate() takes the internal secret as a Bearer token (with the
+      // tenant in x-tenant-id); requireInternalKey routes read X-Internal-Key.
+      // Both, so either kind of route accepts the call. Found on dev: the
+      // header alone is a 401 on every authenticate-gated AI route.
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getInternalServiceKey()}`,
+        "X-Internal-Key": getInternalServiceKey(),
+        "x-tenant-id": tenantId,
+      },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(120_000),
     });
