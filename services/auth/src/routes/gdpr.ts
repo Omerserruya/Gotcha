@@ -21,7 +21,7 @@ import {
   writeAudit,
   AuditAction,
 } from "@chatcenter/shared";
-import { exportUser, eraseUser, exportTenant, eraseTenant } from "../services/gdpr.service";
+import { exportUser, eraseUser, exportTenant, eraseTenant, tenantDeletionRefusal } from "../services/gdpr.service";
 
 const router = Router();
 
@@ -90,6 +90,12 @@ router.delete(
   authenticate, requireSystemAdmin(),
   async (req: Request, res: Response): Promise<void> => {
     try {
+      // The same refusals as the console delete: nothing that could still
+      // charge, or be completed by a customer, may lose its organization.
+      const refusal = await tenantDeletionRefusal(req.params.tenantId as string, {
+        callerTenantId: (req as any).user?.tenantId ?? null,
+      });
+      if (refusal) { res.status(409).json({ error: "erasure_refused", code: refusal.code, detail: refusal.detail ?? null }); return; }
       const out = await eraseTenant(req.params.tenantId as string, (req as any).user?.userId);
       if (!out) { res.status(404).json({ error: "tenant_not_found" }); return; }
       res.json({ data: out });

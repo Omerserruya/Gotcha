@@ -25,12 +25,12 @@ import {
   resolveTenantPlanAccess,
   resolveTenantPlanAccessBatch,
 } from "@chatcenter/shared";
-import { eraseTenant } from "../services/gdpr.service";
+import { eraseTenant, tenantDeletionRefusal } from "../services/gdpr.service";
 import { sendOnboardingEmail, sendPaidOnboardingEmail} from "../services/notification.service";
 import { createProvisioningRequest, runProvisioning, provisioningStatusForTenant } from "../services/billing-provisioning.service";
 import { scheduleOnboardingNudge, triggerNudgeNow } from "../services/nudge-engine.service";
 import { listOnboardingSnapshots, getOnboardingSnapshot } from "../services/onboarding-state.service";
-import { inviteUser, syncIdentityNameByUser, syncMembershipAccess, tenantAdminEntry } from "../services/invitation.service";
+import { InviteRefused, inviteUser, revokeUserAccess, syncIdentityNameByUser, syncMembershipAccess, tenantAdminEntry } from "../services/invitation.service";
 import { issueSetupLink } from "../services/setup-link.service";
 
 const router = Router();
@@ -1224,35 +1224,57 @@ router.post("/tenants/:id/resend-onboarding", authenticate, requireSystemAdmin()
 });
 
 // ─── Delete Tenant (hierarchical cascade) ──────────────────
-router.delete("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+/**
+ * Delete an organization permanently, now (Omer, 2026-10-23). No soft delete.
+ *
+ * The operator retypes the slug, and gives a reason that is kept in the one
+ * audit row that survives the delete. Refused for the System tenant, for the
+ * operator's own tenant, and whenever money could still move afterwards (see
+ * tenantDeletionRefusal). Never calls a payment provider and never disconnects
+ * anything on a provider's side; what is left there comes back in
+ * providerLeftovers for the operator to clean up.
+ */
+const deleteTenantSchema = z.object({
+  confirmSlug: z.string().min(1),
+  reason: z.string().trim().min(1).max(500),
+}).strict();
+
+router.delete("/tenants/:id", authenticate, requireSystemAdmin(), validate(deleteTenantSchema), async (req: Request, res: Response): Promise<void> => {
   try {
     const tenantId = req.params.id as string;
-    const force = req.query.force === "true";
+    const { confirmSlug, reason } = req.body as { confirmSlug: string; reason: string };
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { id: true, name: true, status: true },
+      select: { id: true, name: true, slug: true },
     });
-
     if (!tenant) {
-      res.status(404).json({ error: "Tenant not found" });
+      res.status(404).json({ error: "Tenant not found", code: "TENANT_NOT_FOUND" });
+      return;
+    }
+    if (confirmSlug !== tenant.slug) {
+      res.status(400).json({ error: "The slug typed does not match this organization", code: "CONFIRM_SLUG_MISMATCH" });
+      return;
+    }
+    const refusal = await tenantDeletionRefusal(tenantId, { callerTenantId: (req as any).user?.tenantId ?? null });
+    if (refusal) {
+      const message = {
+        SYSTEM_TENANT: "The System organization cannot be deleted",
+        OWN_TENANT: "You cannot delete the organization you are signed in to",
+        ACTIVE_PAID_SUBSCRIPTION: "This organization has a subscription that can still charge",
+        OPEN_CHECKOUT: "This organization has a checkout the customer could still complete",
+        SHOPIFY_BILLED: "Shopify bills this organization; uninstall the app on the Shopify side first",
+      }[refusal.code];
+      res.status(409).json({ error: message, code: refusal.code, ...(refusal.detail ? { detail: refusal.detail } : {}) });
       return;
     }
 
-    // Must be disabled unless force
-    if (tenant.status === "ACTIVE" && !force) {
-      res.status(400).json({ error: "Tenant must be disabled before deletion. Use ?force=true to override." });
-      return;
-    }
+    // Comprehensive purge: every tenant-scoped row (tenant-erasure-tables.ts),
+    // Qdrant vectors, Authentik identities with no other membership, tokens,
+    // and the uploads - with a surviving audit row. See eraseTenant.
+    const purge = await eraseTenant(tenantId, (req as any).user?.userId, { reason });
 
-    // Comprehensive GDPR off-boarding purge: DB (all tenant-scoped rows,
-    // including UsageLog/AuditLog/consent/retention that the FK cascade misses)
-    // + Qdrant vectors + Authentik identities, with a DataSubjectRequest and
-    // audit trail recorded before the tenant row is removed. Replaces the old
-    // partial cascade that orphaned Qdrant, UsageLog, AuditLog, and IdP data.
-    const purge = await eraseTenant(tenantId, (req as any).user?.userId);
-
-    res.json({ data: { deleted: true, tenantId, tenantName: tenant.name, ...purge } });
+    res.json({ data: { ...purge, tenantName: tenant.name } });
   } catch (err: any) {
     console.error("Delete tenant error:", err);
     res.status(500).json({ error: "Failed to delete tenant" });
@@ -1413,6 +1435,9 @@ const createUserSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1),
   role: z.enum(["ADMIN", "AGENT"]).optional().default("AGENT"),
+  // The operator's reason, for the audit row. Optional so callers that predate
+  // the console's manual-edit flow keep working.
+  reason: z.string().trim().min(1).max(500).optional(),
 });
 
 router.post("/tenants/:id/users", authenticate, requireSystemAdmin(), validate(createUserSchema), async (req: Request, res: Response): Promise<void> => {
@@ -1423,16 +1448,32 @@ router.post("/tenants/:id/users", authenticate, requireSystemAdmin(), validate(c
       return;
     }
 
-    const { email, name, role } = req.body;
+    const { email, name, role, reason } = req.body;
 
     const result = await inviteUser(tenant.id, email, name, role);
     void writeAudit({
       tenantId: tenant.id, actorType: "user", actorId: (req as any).user?.userId,
       action: AuditAction.USER_CREATED, targetType: "user", targetId: result.user.id,
-      metadata: { email, role },
+      metadata: {
+        email, role,
+        before: null,
+        after: { id: result.user.id, email: result.user.email, name: result.user.name, role: result.user.role },
+        reason: reason ?? null,
+      },
     });
     res.status(201).json({ data: result.user, setupLink: result.setupLink });
-  } catch (err) {
+  } catch (err: any) {
+    // Already a member (by this email, or the same person under another one):
+    // a 409 the console can explain, never a bare 500.
+    if (err instanceof InviteRefused) {
+      res.status(409).json({ error: err.message, code: err.code });
+      return;
+    }
+    // A unique clash at the row: the email is held by another login.
+    if (err?.code === "P2002") {
+      res.status(409).json({ error: "Another login already uses that email", code: "EMAIL_TAKEN" });
+      return;
+    }
     console.error("Create user error:", err);
     res.status(500).json({ error: "Failed to create user" });
   }
@@ -1526,7 +1567,7 @@ router.delete("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), 
     const currentUserId = (req as any).user?.userId as string | undefined;
     const user = await prisma.user.findFirst({
       where: { id: req.params.userId as string, tenantId: req.params.id as string },
-      select: { id: true, role: true, name: true },
+      select: { id: true, role: true, name: true, email: true, isActive: true },
     });
     if (!user) {
       res.status(404).json({ error: "User not found" });
@@ -1541,6 +1582,19 @@ router.delete("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), 
       return;
     }
 
+    // The same rule PATCH applies: removing the last Owner leaves a workspace
+    // nobody can run.
+    if (user.role === "ADMIN" && !(await ownerRemainsWithout(req.params.id as string, user.id))) {
+      res.status(409).json({ error: "This would leave the workspace without an Owner", code: "LAST_ADMIN" });
+      return;
+    }
+
+    // Revoke BEFORE the row goes: revokeUserAccess resolves the identity
+    // through this membership, disables it in Authentik and ends its live
+    // sessions when no other active membership remains. A plain delete left
+    // the Authentik login enabled and its sessions open.
+    await revokeUserAccess(user.id);
+
     // User relations cascade / SetNull at the DB level (conversations →
     // assignedAgentId SetNull, departmentMember → Cascade), so a single
     // delete cleans up cleanly.
@@ -1548,7 +1602,12 @@ router.delete("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), 
     void writeAudit({
       tenantId: req.params.id as string, actorType: "user", actorId: (req as any).user?.userId,
       action: AuditAction.USER_DELETED, targetType: "user", targetId: user.id,
-      metadata: { name: user.name, role: user.role },
+      metadata: {
+        name: user.name, role: user.role,
+        before: { id: user.id, email: user.email, name: user.name, role: user.role, isActive: user.isActive },
+        after: null,
+        reason: typeof req.body?.reason === "string" && req.body.reason.trim() ? req.body.reason.trim().slice(0, 500) : null,
+      },
     });
     res.json({ data: { deleted: true, userId: user.id, name: user.name } });
   } catch (err) {

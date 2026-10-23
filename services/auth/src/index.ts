@@ -8,6 +8,7 @@ import channelRoutes from "./routes/channels";
 import whatsappNumberRoutes from "./routes/whatsapp-numbers";
 import systemRoutes from "./routes/system";
 import systemFeatureRoutes from "./routes/system-features";
+import systemManualEditRoutes from "./routes/system-manual-edits";
 import knowledgeBackfillRoutes from "./routes/knowledge-backfill";
 import onboardingRoutes, { publicInviteRouter } from "./routes/onboarding";
 import waitlistRoutes from "./routes/waitlist";
@@ -70,6 +71,8 @@ app.use("/api/system", systemFeatureRoutes);
 // Platform operator only: onboarding → Knowledge Base backfill (preview by
 // default). Mounted before systemRoutes so its own SYSTEM_ADMIN guard applies.
 app.use("/api/system", knowledgeBackfillRoutes);
+// Console manual edits: status, login email, no-charge plan/credit changes.
+app.use("/api/system", systemManualEditRoutes);
 app.use("/api/system", systemRoutes);
 app.use("/api/permissions", permissionsRoutes);
 app.use("/api/account", accountRoutes);

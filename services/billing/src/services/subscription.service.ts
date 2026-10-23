@@ -33,6 +33,7 @@ import { chargeFor, chargeFigures, chargeRefusal, type ChargeFigures } from "./i
 import { unsuspendTenants } from "./tenant-status.service";
 import { expireDuePocs, reconcileLiveEvaluations } from "./poc.service";
 import { resolveDiscount, expireDueAssignments } from "./coupon.service";
+import { MANUAL_EVENT_TYPES } from "./manual-edit.service";
 
 const TRIAL_DAYS = parseInt(process.env.BILLING_TRIAL_DAYS || "14", 10);
 
@@ -532,11 +533,36 @@ export async function cancelSubscription(input: { tenantId: string; actor?: stri
   await emitBillingEvent({ type: "subscription.canceled", tenantId: input.tenantId, data: { when: "period_end", effectiveAt: sub.currentPeriodEnd } });
 }
 
+/**
+ * Events that set a subscription's commercial terms. The latest one says who
+ * set them: a customer or the billing cycle, or an operator by hand.
+ */
+const TERMS_EVENT_TYPES = [
+  "trial_started", "activated", "renewed", "plan_changed", "checkout_activated", "manual_contract_activated",
+  "downgrade_applied", "volume_change_applied", "upgrade_applied",
+  ...MANUAL_EVENT_TYPES,
+];
+
+/** Thrown when a customer tries to resume terms an operator set by hand. */
+export class ResumeRefused extends Error {
+  constructor(readonly code: string) { super(code); this.name = "ResumeRefused"; }
+}
+
 export async function resumeSubscription(input: { tenantId: string; actor?: string }): Promise<void> {
   const entityId = await getEntityIdForTenant(input.tenantId);
   if (!entityId) throw new Error("no billable entity");
   const sub = await prisma.subscription.findUnique({ where: { billableEntityId: entityId } });
   if (!sub) throw new Error("no subscription");
+  // A console manual edit turns renewal off on purpose and stores the plan's
+  // list price as its snapshot. Resuming it would start charging that price on
+  // the customer's click - a decision the operator made "no charge" for. The
+  // operator changes it; the customer cannot undo it from here.
+  const latest = await prisma.subscriptionEvent.findFirst({
+    where: { subscriptionId: sub.id, type: { in: TERMS_EVENT_TYPES } },
+    orderBy: { at: "desc" },
+    select: { type: true },
+  });
+  if (latest && MANUAL_EVENT_TYPES.includes(latest.type)) throw new ResumeRefused("manual_subscription");
   await prisma.subscription.update({ where: { id: sub.id }, data: { cancelAtPeriodEnd: false } });
   await prisma.pendingSubscriptionChange.deleteMany({ where: { subscriptionId: sub.id, changeType: "CANCEL", appliedAt: null } });
   await recordEvent(sub.id, "resumed", sub.status, sub.status, input.actor);

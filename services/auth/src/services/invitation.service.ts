@@ -75,14 +75,26 @@ async function ensureLocalIdentity(authentik: { subject: string; email: string }
   });
 }
 
+/**
+ * An invitation that cannot be made, with a code a route can answer with.
+ * The messages are the ones this function always threw.
+ */
+export class InviteRefused extends Error {
+  constructor(readonly code: "USER_EXISTS" | "EMAIL_TAKEN", message: string) {
+    super(message);
+    this.name = "InviteRefused";
+  }
+}
+
 export async function inviteUser(
   tenantId: string,
   email: string,
   name: string,
   role: "ADMIN" | "AGENT" = "AGENT",
 ): Promise<InviteResult> {
-  const existing = await prisma.user.findFirst({ where: { tenantId, email } });
-  if (existing) throw new Error("User with this email already exists for this tenant");
+  // Case-insensitive: "Dana@x.com" and "dana@x.com" are one inbox.
+  const existing = await prisma.user.findFirst({ where: { tenantId, email: { equals: email, mode: "insensitive" } } });
+  if (existing) throw new InviteRefused("USER_EXISTS", "User with this email already exists for this tenant");
 
   // Create the identity FIRST. If this fails we must not leave a GOTCHA user
   // row with no way to authenticate - better to surface the error and have the
@@ -96,7 +108,7 @@ export async function inviteUser(
     where: { tenantId_identityId: { tenantId, identityId: identity.id } },
     select: { id: true },
   });
-  if (already) throw new Error("This person is already a member of this tenant");
+  if (already) throw new InviteRefused("USER_EXISTS", "This person is already a member of this tenant");
 
   const user = await prisma.user.create({
     data: {
