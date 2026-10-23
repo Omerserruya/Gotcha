@@ -1978,9 +1978,14 @@ router.post("/go-live", requireRole("ADMIN"), validate(goLiveSchema), async (req
       res.status(404).json({ error: "Tenant not found", code: "TENANT_NOT_FOUND" });
       return;
     }
-    // The paid plan's first payment opens the workspace, never this button.
+    // The paid plan's first payment opens the workspace, never this button;
+    // and a suspended workspace is billing's to reopen.
     if (tenant.status === "PENDING_PAYMENT") {
       res.status(409).json({ error: "The workspace opens once the plan is paid", code: "TENANT_AWAITING_PAYMENT" });
+      return;
+    }
+    if (tenant.status === "SUSPENDED") {
+      res.status(409).json({ error: "This workspace is suspended", code: "TENANT_SUSPENDED" });
       return;
     }
 
@@ -1997,8 +2002,12 @@ router.post("/go-live", requireRole("ADMIN"), validate(goLiveSchema), async (req
       return;
     }
 
+    // Only a workspace still being set up is opened here. Re-read, so a status
+    // that changed while the employee was being set up is honoured.
+    const now = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true } });
+    const opening = now?.status === "PENDING_ADMIN_SETUP" || now?.status === "PENDING_ONBOARDING";
     await prisma.$transaction([
-      prisma.tenant.update({ where: { id: tenantId }, data: { status: "ACTIVE" } }),
+      ...(opening ? [prisma.tenant.update({ where: { id: tenantId }, data: { status: "ACTIVE" } })] : []),
       prisma.tenantOnboarding.upsert({
         where: { tenantId },
         create: { tenantId, currentStep: "COMPLETED", completedAt: new Date() },

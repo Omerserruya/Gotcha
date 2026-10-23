@@ -70,7 +70,7 @@ vi.mock("../services/employee-reach.service", () => ({
   },
 }));
 
-import { goLiveEmployee, policyGuidelines, EMPLOYEE_SETTING } from "../services/onboarding-employee.service";
+import { goLiveEmployee, policyGuidelines, EMPLOYEE_SETTING, EMPLOYEE_HASH_SETTING } from "../services/onboarding-employee.service";
 
 const POLICIES = [{ kind: "returns", summary: "Return within 30 days.", terms: { windowDays: 30, exchange: { allowed: true, how: "form" } } }];
 const tool = (id: string, slug: string, category: string, ti = "ti-shop") => ({ id, tenantIntegrationId: ti, isEnabled: true, catalogTool: { slug, category } });
@@ -108,6 +108,28 @@ describe("go-live", () => {
     expect(H.agents[0].name).toBe("נועה");
     expect(H.perms).toHaveLength(2);
     expect(H.kbLinks).toHaveLength(2);
+  });
+
+  it("an employee the owner edited in the studio is LEFT AS IS on a second press, and reported", async () => {
+    await goLiveEmployee({ tenantId: "T" });
+    const a = H.agents[0];
+    a.toneConfig = { ...a.toneConfig, brandVoice: "the owner's own words" };
+    const before = JSON.stringify(a);
+    const permsBefore = H.perms.length;
+    const r = await goLiveEmployee({ tenantId: "T", employeeName: "Someone else" });
+    expect(r.warnings).toEqual(["employee_customized"]);
+    expect(JSON.stringify(H.agents[0])).toBe(before);
+    expect(H.agents).toHaveLength(1);
+    expect(H.perms).toHaveLength(permsBefore);
+  });
+
+  it("an unedited employee keeps being updated (the fingerprint follows each write)", async () => {
+    await goLiveEmployee({ tenantId: "T" });
+    const h1 = H.setting.get(EMPLOYEE_HASH_SETTING);
+    const r = await goLiveEmployee({ tenantId: "T", employeeName: "נועה" });
+    expect(r.warnings).not.toContain("employee_customized");
+    expect(H.agents[0].name).toBe("נועה");
+    expect(H.setting.get(EMPLOYEE_HASH_SETTING)).not.toBe(h1);
   });
 
   it("grants ONLY the platform's order tools the catalogue marks READ - never a write, never an unlisted read", async () => {

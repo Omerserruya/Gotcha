@@ -19,12 +19,22 @@
  * Sends nothing. Activating an employee and routing to it only changes who
  * answers the NEXT inbound message.
  */
+import crypto from "crypto";
 import { prisma, readDurableSetting, writeDurableSetting, defaultIntegrationAccess } from "@chatcenter/shared";
 import { buildAgentFields, type BusinessProfileData, type DepartmentData } from "./agent-config-generator";
 import { whereEmployeeAnswers } from "./employee-reach.service";
 import { logAudit } from "./audit.service";
 
 export const EMPLOYEE_SETTING = "onboarding:employeeId";
+/** A fingerprint of the employee as go-live last wrote it: a change means the owner edited it. */
+export const EMPLOYEE_HASH_SETTING = "onboarding:employeeHash";
+
+/** The fields go-live writes, as a stable fingerprint. */
+export function employeeFingerprint(a: Record<string, any>): string {
+  const keys = ["name", "role", "departmentId", "identity", "goals", "goal", "successCriteria", "toneConfig", "behavioral", "persona", "customGuardrails", "status"];
+  const canon = (v: any): any => (Array.isArray(v) ? v.map(canon) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon(v[k])])) : v ?? null);
+  return crypto.createHash("sha256").update(JSON.stringify(keys.map((k) => canon(a[k])))).digest("hex");
+}
 const START_ID = "onboarding-start";
 const ROUTE_ID = "onboarding-route";
 
@@ -132,8 +142,20 @@ export async function goLiveEmployee(input: { tenantId: string; actor?: string |
   // ── the employee: the one go-live made before, or a new one ──
   const remembered = await readDurableSetting(tenantId, EMPLOYEE_SETTING);
   const existing = remembered
-    ? await prisma.aIAgent.findFirst({ where: { id: remembered, tenantId }, select: { id: true } })
+    ? await prisma.aIAgent.findFirst({
+        where: { id: remembered, tenantId },
+        select: {
+          id: true, name: true, role: true, departmentId: true, identity: true, goals: true, goal: true, successCriteria: true,
+          toneConfig: true, behavioral: true, persona: true, customGuardrails: true, status: true,
+        },
+      })
     : null;
+  // Edited in the studio since go-live wrote it: the owner's employee now, like
+  // a customized playbook - left exactly as it is, and reported.
+  const lastWritten = existing ? await readDurableSetting(tenantId, EMPLOYEE_HASH_SETTING) : null;
+  if (existing && lastWritten && employeeFingerprint(existing) !== lastWritten) {
+    return customizedResult(tenantId, existing.id, existing.name, input.actor ?? null);
+  }
   const data = {
     ...fields,
     name,
@@ -143,10 +165,15 @@ export async function goLiveEmployee(input: { tenantId: string; actor?: string |
     status: "ACTIVE" as const,
     builderStep: null,
   };
+  const FINGERPRINTED = {
+    id: true, name: true, role: true, departmentId: true, identity: true, goals: true, goal: true, successCriteria: true,
+    toneConfig: true, behavioral: true, persona: true, customGuardrails: true, status: true,
+  } as const;
   const agent = existing
-    ? await prisma.aIAgent.update({ where: { id: existing.id }, data, select: { id: true, name: true } })
-    : await prisma.aIAgent.create({ data: { tenantId, ...data }, select: { id: true, name: true } });
+    ? await prisma.aIAgent.update({ where: { id: existing.id }, data, select: FINGERPRINTED })
+    : await prisma.aIAgent.create({ data: { tenantId, ...data }, select: FINGERPRINTED });
   if (!existing) await writeDurableSetting(tenantId, EMPLOYEE_SETTING, agent.id, input.actor ?? undefined);
+  await writeDurableSetting(tenantId, EMPLOYEE_HASH_SETTING, employeeFingerprint(agent), input.actor ?? undefined);
 
   // ── every knowledge base ──
   const kbs = await prisma.knowledgeBase.findMany({ where: { tenantId, isActive: true }, select: { id: true } });
@@ -193,6 +220,29 @@ export async function goLiveEmployee(input: { tenantId: string; actor?: string |
     policiesApplied: policies.length,
     tools,
     warnings,
+  };
+}
+
+/** The owner's edited employee: nothing about it changes; report where it answers. */
+async function customizedResult(tenantId: string, agentId: string, name: string, actor: string | null): Promise<GoLiveResult> {
+  const reach = await whereEmployeeAnswers(tenantId, agentId).catch(() => []);
+  const answered = new Set(reach.filter((r: any) => r.reach === "always").map((r: any) => r.channel));
+  const accounts = await prisma.channelAccount.findMany({ where: { tenantId, isActive: true }, select: { id: true, channel: true, displayName: true } });
+  await logAudit({
+    tenantId,
+    actor: { type: actor ? "user" : "system", id: actor ?? undefined },
+    action: "onboarding.go_live",
+    target: { type: "ai_agent", id: agentId },
+    metadata: { created: false, left: "employee_customized" },
+  });
+  return {
+    employee: { id: agentId, name, status: "ACTIVE" },
+    created: false,
+    channels: accounts.map((a) => ({ id: a.id, type: String(a.channel), displayName: a.displayName, routed: answered.has(String(a.channel)) })),
+    knowledgeBases: 0,
+    policiesApplied: 0,
+    tools: { platform: null, granted: [] },
+    warnings: ["employee_customized"],
   };
 }
 
