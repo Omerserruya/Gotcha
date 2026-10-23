@@ -11,7 +11,7 @@ vi.mock('@/observability/logger', () => ({ logger: { warn } }));
 
 import { learnedSchema } from '@/api/contracts/onboarding-v2';
 
-import { editLearned, readLearned } from './learned-actions';
+import { addPolicy, editLearned, readLearned } from './learned-actions';
 
 const learned = learnedSchema.parse({ policies: [], faq: [] });
 
@@ -70,5 +70,28 @@ describe('★★ correcting it', () => {
       reason: 'failed',
     });
     expect(warn).toHaveBeenCalledWith('onboarding.learned_edit_failed', expect.anything());
+  });
+});
+
+describe('★★ a pasted policy', () => {
+  it('PATCH { section: policies, id: kind, value: { text } } with the text trimmed', async () => {
+    api.patch.mockResolvedValue(learned);
+    expect(await addPolicy('shipping', '  We ship in 3 days.  ')).toEqual({ ok: true, learned });
+    expect(api.patch.mock.calls[0]![0].body).toEqual({
+      section: 'policies',
+      id: 'shipping',
+      value: { text: 'We ship in 3 days.' },
+    });
+  });
+
+  it.each([
+    ['TEXT_REQUIRED', 'text_required'],
+    ['TEXT_TOO_LONG', 'text_too_long'],
+    ['BAD_KIND', 'bad_kind'],
+    ['NOT_LEARNED', 'not_learned'],
+    ['SOMETHING_NEW', 'failed'],
+  ])('★ %s reads as %s', async (code, reason) => {
+    api.patch.mockRejectedValue(new ApiError({ kind: 'validation', status: 400, code }));
+    expect(await addPolicy('shipping', 'x')).toEqual({ ok: false, reason });
   });
 });

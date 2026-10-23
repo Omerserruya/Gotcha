@@ -768,6 +768,12 @@ export const onboardingEndpoints = {
   discoverRetry: () => endpoint('/api/onboarding/discover/retry'),
   /** GET → what was learned; PATCH `{ section, id?, value? | remove }` → the same, updated. 404 NOT_LEARNED. */
   learned: () => endpoint('/api/onboarding/learned'),
+  /**
+   * POST multipart, one field "file" (PDF, DOCX, TXT, MD; 5MB): what the
+   * file says, into what was learned and the knowledge base (Backend
+   * e2e8623f). Sent from the browser, through the BFF, like a knowledge file.
+   */
+  learnedUpload: () => endpoint('/api/onboarding/learned/upload'),
   /** GET → the platform's main integration and detected tools in the catalogue. */
   integrationSuggestions: () => endpoint('/api/onboarding/integration-suggestions'),
   /** POST `{ employeeName?, confirm: true }` - the first employee, live on the connected channels. Idempotent. */

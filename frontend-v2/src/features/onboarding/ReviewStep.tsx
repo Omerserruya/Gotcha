@@ -3,19 +3,28 @@
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState, useTransition, type ReactNode } from 'react';
 
-import type {
-  Learned,
-  LearnedFaq,
-  LearnedPolicy,
-  LearnedSection,
+import {
+  POLICY_KINDS,
+  sourceOf,
+  type Learned,
+  type LearnedFaq,
+  type LearnedPolicy,
+  type LearnedSection,
 } from '@/api/contracts/onboarding-v2';
 import { Input } from '@/design-system/primitives/input/Input';
 import { Link } from '@/i18n/navigation';
 
-import { editLearned, type LearnedEdit, type LearnedEditResult } from './learned-actions';
+import {
+  addPolicy,
+  editLearned,
+  type AddPolicyResult,
+  type LearnedEdit,
+  type LearnedEditResult,
+} from './learned-actions';
 import styles from './Onboarding.module.css';
 import { stepHref } from './preview';
 import { nameOf } from './ScanFeed';
+import { UPLOAD_TYPES, uploadLearned, type UploadRefusal } from './upload-learned';
 
 /** One write, its pending state, and what it was refused for. */
 function useEdit(onDone: (learned: Learned) => void) {
@@ -66,6 +75,7 @@ export function ReviewStep({
       <Profile learned={learned} onDone={setLearned} preview={preview} />
       <Products learned={learned} />
       <Policies learned={learned} onDone={setLearned} preview={preview} />
+      {preview ? null : <AddMissing learned={learned} onDone={setLearned} />}
       <Faq learned={learned} onDone={setLearned} preview={preview} />
       <Contact learned={learned} onDone={setLearned} preview={preview} />
       <Brand learned={learned} onDone={setLearned} preview={preview} />
@@ -435,16 +445,7 @@ function PolicyItem({
               ))}
             </ul>
           ) : null}
-          {policy.sourceUrl ? (
-            <a
-              href={policy.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.inlineLink}
-            >
-              {t('source')}
-            </a>
-          ) : null}
+          <Source sourceUrl={policy.sourceUrl} />
           <ItemActions
             onEdit={() => setEditing(true)}
             onRemove={() => remove.run({ section: 'policies', id: policy.id, remove: true })}
@@ -641,6 +642,198 @@ function Brand({ learned, onDone, preview }: SectionProps) {
           <ItemActions onEdit={() => setEditing(true)} preview={preview} testid="review-brand" />
         </>
       )}
+    </Section>
+  );
+}
+
+/** Where an item came from: the site (a link), what the owner pasted, or their file. */
+function Source({ sourceUrl }: { readonly sourceUrl: string | null }) {
+  const t = useTranslations('onboarding.review');
+  const source = sourceOf(sourceUrl);
+  if (!source) return null;
+  if (source.kind === 'web') {
+    return (
+      <a href={source.url} target="_blank" rel="noopener noreferrer" className={styles.inlineLink}>
+        {t('source')}
+      </a>
+    );
+  }
+  return (
+    <span className={styles.quiet} data-testid="review-source">
+      {source.kind === 'pasted'
+        ? t('fromPasted')
+        : t.rich('fromFile', {
+            name: source.name,
+            file: (chunks) => <bdi dir="auto">{chunks}</bdi>,
+          })}
+    </span>
+  );
+}
+
+/**
+ * What the site didn't give us - a site that blocks automatic reading, a
+ * policy that isn't on it - added from what the owner has: a policy pasted
+ * in, or a file. Both land in what was learned AND the knowledge base
+ * (Backend e2e8623f), and the screen redraws from the answer.
+ */
+function AddMissing({
+  learned,
+  onDone,
+}: {
+  readonly learned: Learned;
+  readonly onDone: (learned: Learned) => void;
+}) {
+  const t = useTranslations('onboarding.review');
+  const ts = useTranslations('onboarding.scan');
+  const missing = POLICY_KINDS.filter((kind) => !learned.policies.some((p) => p.kind === kind));
+  const [kind, setKind] = useState<string>(missing[0] ?? 'other');
+  const [text, setText] = useState('');
+  const [pasteRefused, setPasteRefused] = useState<
+    Exclude<AddPolicyResult, { ok: true }>['reason'] | null
+  >(null);
+  const [isPasting, startPaste] = useTransition();
+  const [file, setFile] = useState<File | null>(null);
+  const [isUploading, startUpload] = useTransition();
+  const [upload, setUpload] = useState<
+    | {
+        readonly ok: true;
+        readonly policies: number;
+        readonly faq: number;
+        readonly partial: boolean;
+      }
+    | { readonly ok: false; readonly reason: UploadRefusal }
+    | null
+  >(null);
+
+  return (
+    <Section title={t('add.title')} testid="review-add">
+      <p className={styles.quiet}>{t('add.lead')}</p>
+
+      <form
+        className={styles.connectHere}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!text.trim() || isPasting) return;
+          startPaste(async () => {
+            setPasteRefused(null);
+            const result = await addPolicy(kind, text).catch(
+              () => ({ ok: false, reason: 'failed' }) as const,
+            );
+            if (result.ok) {
+              onDone(result.learned);
+              setText('');
+            } else setPasteRefused(result.reason);
+          });
+        }}
+        data-testid="review-paste"
+      >
+        <label className={styles.field}>
+          <span className={styles.fieldLabel}>{t('add.kind')}</span>
+          <select
+            className={styles.select}
+            value={kind}
+            onChange={(event) => setKind(event.target.value)}
+            data-testid="review-paste-kind"
+          >
+            {(missing.length ? missing : (['other'] as const)).map((each) => (
+              <option key={each} value={each}>
+                {ts(`chips.policy.${each}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.field}>
+          <span className={styles.fieldLabel}>{t('add.text')}</span>
+          <textarea
+            className={styles.textarea}
+            rows={5}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            data-testid="review-paste-text"
+          />
+        </label>
+        <button
+          type="submit"
+          className={styles.secondary}
+          disabled={!text.trim() || isPasting}
+          data-testid="review-paste-add"
+        >
+          {isPasting ? t('add.adding') : t('add.addPolicy')}
+        </button>
+        {pasteRefused ? (
+          <p className={styles.problem} role="alert" data-testid="review-paste-refused">
+            {t(`add.refused.${pasteRefused}`)}
+          </p>
+        ) : null}
+      </form>
+
+      <form
+        className={styles.connectHere}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!file || isUploading) return;
+          startUpload(async () => {
+            setUpload(null);
+            const read = await uploadLearned(file).catch(
+              () => ({ ok: false, reason: 'failed' }) as const,
+            );
+            if (read.ok) {
+              onDone(read.result);
+              setUpload({
+                ok: true,
+                policies: read.result.added.policies.length,
+                faq: read.result.added.faq,
+                partial: read.result.partial,
+              });
+              setFile(null);
+            } else setUpload(read);
+          });
+        }}
+        data-testid="review-upload"
+      >
+        {/* The browser's own file control speaks its own language: ours is a labelled button. */}
+        <span className={styles.fieldLabel}>{t('add.file')}</span>
+        <span className={styles.itemActions}>
+          <label className={styles.secondary}>
+            {t('add.choose')}
+            <input
+              type="file"
+              className={styles.srOnly}
+              accept={UPLOAD_TYPES.join(',')}
+              onChange={(event) => {
+                setUpload(null);
+                setFile(event.target.files?.[0] ?? null);
+              }}
+              data-testid="review-upload-file"
+            />
+          </label>
+          <span className={styles.quiet} data-testid="review-upload-name">
+            {file ? <bdi dir="auto">{file.name}</bdi> : t('add.noFile')}
+          </span>
+        </span>
+        <span className={styles.quiet}>
+          {t.rich('add.fileHint', { ltr: (chunks) => <bdi dir="ltr">{chunks}</bdi> })}
+        </span>
+        <button
+          type="submit"
+          className={styles.secondary}
+          disabled={!file || isUploading}
+          data-testid="review-upload-go"
+        >
+          {isUploading ? t('add.reading') : t('add.readFile')}
+        </button>
+        {isUploading ? <p className={styles.quiet}>{t('add.readingWhy')}</p> : null}
+        {upload?.ok ? (
+          <p className={styles.quiet} role="status" data-testid="review-upload-done">
+            {t('add.added', { policies: upload.policies, faq: upload.faq })}
+            {upload.partial ? ` ${t('add.partial')}` : ''}
+          </p>
+        ) : upload ? (
+          <p className={styles.problem} role="alert" data-testid="review-upload-refused">
+            {t(`add.uploadRefused.${upload.reason}`)}
+          </p>
+        ) : null}
+      </form>
     </Section>
   );
 }

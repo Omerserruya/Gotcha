@@ -206,7 +206,10 @@ export const learnedPolicySchema = z.object({
     .nullable()
     .catch(null)
     .default(null),
+  /** A web page (https), "pasted", or "upload:<file name>". */
   sourceUrl: text,
+  /** A pasted policy's own words, kept whole. */
+  text: text,
 });
 export type LearnedPolicy = z.infer<typeof learnedPolicySchema>;
 
@@ -290,6 +293,36 @@ export const learnedSchema = z.object({
   tools: listOf(z.object({ slug: z.string(), name: z.string().catch('') })),
 });
 export type Learned = z.infer<typeof learnedSchema>;
+
+/**
+ * POST /learned/upload → `{ data: { ...learned, added, partial } }` (Backend
+ * e2e8623f): what a file added, and whether only its start was read.
+ */
+export const learnedUploadSchema = learnedSchema.extend({
+  added: z
+    .object({
+      policies: z.array(z.string()).catch([]).default([]),
+      faq: count,
+      profile: flag,
+    })
+    .catch({ policies: [], faq: 0, profile: false }),
+  partial: flag,
+});
+export type LearnedUpload = z.infer<typeof learnedUploadSchema>;
+
+/** Where a learned item came from, for the screen to say. */
+export type LearnedSource =
+  | { readonly kind: 'web'; readonly url: string }
+  | { readonly kind: 'pasted' }
+  | { readonly kind: 'file'; readonly name: string }
+  | null;
+export function sourceOf(sourceUrl: string | null): LearnedSource {
+  if (!sourceUrl) return null;
+  if (sourceUrl === 'pasted') return { kind: 'pasted' };
+  if (sourceUrl.startsWith('upload:'))
+    return { kind: 'file', name: sourceUrl.slice('upload:'.length) };
+  return /^https?:\/\//i.test(sourceUrl) ? { kind: 'web', url: sourceUrl } : null;
+}
 
 /** The sections PATCH /learned edits. */
 export const LEARNED_SECTIONS = ['policies', 'faq', 'profile', 'contact', 'brand'] as const;

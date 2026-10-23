@@ -7,8 +7,15 @@ import { learnedSchema } from '@/api/contracts/onboarding-v2';
 import onboardingEn from '@/i18n/messages/en/onboarding.json';
 
 /** Step 4, checking what was learned. Mocked: nothing is rewritten. */
-const { edit } = vi.hoisted(() => ({ edit: { editLearned: vi.fn(), readLearned: vi.fn() } }));
+const { edit, upload } = vi.hoisted(() => ({
+  edit: { editLearned: vi.fn(), readLearned: vi.fn(), addPolicy: vi.fn() },
+  upload: { uploadLearned: vi.fn() },
+}));
 vi.mock('./learned-actions', () => edit);
+vi.mock('./upload-learned', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  uploadLearned: upload.uploadLearned,
+}));
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
     <a href={href} {...rest}>
@@ -64,6 +71,8 @@ const show = (props: Partial<Parameters<typeof ReviewStep>[0]> = {}) =>
 
 beforeEach(() => {
   edit.editLearned.mockReset();
+  edit.addPolicy.mockReset();
+  upload.uploadLearned.mockReset();
 });
 
 describe('★★ checking what was learned', () => {
@@ -211,5 +220,112 @@ describe('★★ when there is nothing to check', () => {
       "We couldn't read what we learned just now.",
     );
     expect(screen.queryByRole('link')).toBeNull();
+  });
+});
+
+describe('★★ adding what the site didn’t give us: paste a policy, or a file', () => {
+  it('★★ paste: only the kinds not learned yet; sent as { section, id: kind, value: { text } }; the screen redraws', async () => {
+    edit.addPolicy.mockResolvedValue({
+      ok: true,
+      learned: learned({
+        policies: [
+          ...base.policies,
+          {
+            id: 'shipping',
+            kind: 'shipping',
+            summary: 'Ships in 3 days.',
+            terms: null,
+            sourceUrl: 'pasted',
+            text: 'We ship in 3 days.',
+          },
+        ],
+      }),
+    });
+    show();
+    const kinds = [...screen.getByTestId('review-paste-kind').querySelectorAll('option')].map(
+      (o) => o.value,
+    );
+    expect(kinds).not.toContain('returns');
+    expect(kinds[0]).toBe('exchange');
+    fireEvent.change(screen.getByTestId('review-paste-kind'), { target: { value: 'shipping' } });
+    expect(screen.getByTestId('review-paste-add')).toBeDisabled();
+    fireEvent.change(screen.getByTestId('review-paste-text'), {
+      target: { value: 'We ship in 3 days.' },
+    });
+    await act(async () => fireEvent.submit(screen.getByTestId('review-paste')));
+    expect(edit.addPolicy).toHaveBeenCalledWith('shipping', 'We ship in 3 days.');
+    expect(
+      within(screen.getByTestId('review-policy-shipping')).getByTestId('review-source'),
+    ).toHaveTextContent('From what you pasted');
+    expect(screen.getByTestId('review-paste-text')).toHaveValue('');
+  });
+
+  it('★ a refused paste is said', async () => {
+    edit.addPolicy.mockResolvedValue({ ok: false, reason: 'text_too_long' });
+    show();
+    fireEvent.change(screen.getByTestId('review-paste-text'), { target: { value: 'x' } });
+    await act(async () => fireEvent.submit(screen.getByTestId('review-paste')));
+    expect(screen.getByTestId('review-paste-refused')).toHaveTextContent('The text is too long.');
+  });
+
+  it('★★ upload: what the file added is said; its policies say "from your file"', async () => {
+    upload.uploadLearned.mockResolvedValue({
+      ok: true,
+      result: {
+        ...learned({
+          policies: [
+            ...base.policies,
+            {
+              id: 'warranty',
+              kind: 'warranty',
+              summary: '12 months.',
+              terms: { warranty: { months: 12 } },
+              sourceUrl: 'upload:policies.pdf',
+            },
+          ],
+        }),
+        added: { policies: ['warranty'], faq: 2, profile: false },
+        partial: true,
+      },
+    });
+    show();
+    const file = new File(['%PDF'], 'policies.pdf', { type: 'application/pdf' });
+    fireEvent.change(screen.getByTestId('review-upload-file'), { target: { files: [file] } });
+    await act(async () => fireEvent.submit(screen.getByTestId('review-upload')));
+    expect(upload.uploadLearned).toHaveBeenCalledWith(file);
+    expect(screen.getByTestId('review-upload-done')).toHaveTextContent(
+      'From the file: 1 policy and 2 questions.',
+    );
+    expect(screen.getByTestId('review-upload-done')).toHaveTextContent('only its start was read');
+    expect(
+      within(screen.getByTestId('review-policy-warranty')).getByTestId('review-source'),
+    ).toHaveTextContent('From your file policies.pdf');
+  });
+
+  it('★ nothing found in the file: said, nothing changes', async () => {
+    upload.uploadLearned.mockResolvedValue({ ok: false, reason: 'nothing_found' });
+    show();
+    fireEvent.change(screen.getByTestId('review-upload-file'), {
+      target: { files: [new File(['x'], 'a.txt')] },
+    });
+    await act(async () => fireEvent.submit(screen.getByTestId('review-upload')));
+    expect(screen.getByTestId('review-upload-refused')).toHaveTextContent('Nothing was added.');
+  });
+
+  it('read a file waits for one', () => {
+    show();
+    expect(screen.getByTestId('review-upload-go')).toBeDisabled();
+  });
+});
+
+describe('★ the file control speaks the screen’s language', () => {
+  it('our own label, and the chosen file’s name once chosen', () => {
+    show();
+    expect(screen.getByTestId('review-upload-name')).toHaveTextContent('No file chosen yet');
+    fireEvent.change(screen.getByTestId('review-upload-file'), {
+      target: { files: [new File(['x'], 'returns.pdf')] },
+    });
+    expect(screen.getByTestId('review-upload-name')).toHaveTextContent('returns.pdf');
+    expect(screen.getByText('Choose a file')).toBeInTheDocument();
   });
 });

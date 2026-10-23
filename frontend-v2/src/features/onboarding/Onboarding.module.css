@@ -901,6 +901,17 @@
     color: var(--text-secondary);
   }
 
+  .select {
+    inline-size: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
   .textarea {
     inline-size: 100%;
     padding: 10px 12px;

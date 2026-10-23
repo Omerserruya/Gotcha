@@ -466,6 +466,40 @@
     },
     "tools": {
       "title": "Tools we saw on the site"
+    },
+    "fromPasted": "From what you pasted",
+    "fromFile": "From your file <file>{name}</file>",
+    "add": {
+      "title": "Add from what you have",
+      "lead": "A policy missing, or the site blocked reading? Paste the text or upload a file, and GOTCHA learns from it.",
+      "kind": "Which policy",
+      "text": "The policy text",
+      "addPolicy": "Add the policy",
+      "adding": "Adding…",
+      "refused": {
+        "text_required": "Paste the text first.",
+        "text_too_long": "The text is too long. Paste only the policy itself.",
+        "bad_kind": "That kind of policy can't be added. Choose another.",
+        "not_learned": "We haven't learned the site yet. Go back to the first step.",
+        "failed": "We couldn't add it. Try again in a moment."
+      },
+      "file": "File",
+      "fileHint": "<ltr>PDF</ltr>, <ltr>Word (docx)</ltr>, text or <ltr>Markdown</ltr>, up to <ltr>5MB</ltr>.",
+      "readFile": "Read the file",
+      "reading": "Reading the file…",
+      "readingWhy": "This takes a few seconds.",
+      "added": "From the file: {policies, plural, =0 {no policies} one {# policy} other {# policies}} and {faq, plural, =0 {no questions} one {# question} other {# questions}}.",
+      "partial": "The file is long, so only its start was read.",
+      "uploadRefused": {
+        "too_large": "The file is too large. Up to 5MB.",
+        "unsupported": "That kind of file can't be read. PDF, docx, text or Markdown.",
+        "unreadable": "We couldn't open the file. It may be damaged.",
+        "nothing_found": "We found no policy, question or business details in the file. Nothing was added.",
+        "not_learned": "We haven't learned the site yet. Go back to the first step.",
+        "failed": "We couldn't read the file. Try again in a moment."
+      },
+      "choose": "Choose a file",
+      "noFile": "No file chosen yet"
     }
   }
 }

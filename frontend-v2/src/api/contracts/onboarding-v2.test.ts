@@ -238,3 +238,17 @@ describe('★★ go live, and its test', () => {
     expect(read.answer).toBe('On its way - tomorrow');
   });
 });
+
+describe('★ where a learned item came from', () => {
+  it('site, pasted, a file; anything else is no source (never a fake link)', async () => {
+    const { sourceOf } = await import('./onboarding-v2');
+    expect(sourceOf('https://avivco.il/returns')).toEqual({
+      kind: 'web',
+      url: 'https://avivco.il/returns',
+    });
+    expect(sourceOf('pasted')).toEqual({ kind: 'pasted' });
+    expect(sourceOf('upload:policies.pdf')).toEqual({ kind: 'file', name: 'policies.pdf' });
+    expect(sourceOf('javascript:alert(1)')).toBeNull();
+    expect(sourceOf(null)).toBeNull();
+  });
+});
