@@ -891,6 +891,19 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
       return;
     }
 
+    // Only a workspace still being set up (or one setting up while its first
+    // payment is pending) may finish onboarding. A SUSPENDED workspace was
+    // suspended by billing, and finishing onboarding again would have set it
+    // ACTIVE with no payment - refused before ANY write: no employee hire, no
+    // email, no nudge, no status change (2026-10-23).
+    if (tenant.status !== "PENDING_ADMIN_SETUP" && tenant.status !== "PENDING_ONBOARDING" && tenant.status !== "PENDING_PAYMENT") {
+      res.status(409).json({
+        error: tenant.status === "SUSPENDED" ? "This workspace is suspended" : "This workspace is not being set up",
+        code: tenant.status === "SUSPENDED" ? "TENANT_SUSPENDED" : "TENANT_NOT_ONBOARDING",
+      });
+      return;
+    }
+
     const profile = await prisma.businessProfile.findUnique({
       where: { tenantId: req.tenantId! },
       select: { id: true },
@@ -962,9 +975,12 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
     // was, in practice, optional. Onboarding still COMPLETES: the customer's
     // work is real and must not be thrown away or repeated after they pay.
     const awaitingPayment = tenant.status === "PENDING_PAYMENT";
+    // The only statuses this write may ever open (the gate above already
+    // refused everything else; this keeps the write itself honest).
+    const opening = tenant.status === "PENDING_ADMIN_SETUP" || tenant.status === "PENDING_ONBOARDING";
 
     await prisma.$transaction([
-      ...(awaitingPayment
+      ...(awaitingPayment || !opening
         ? []
         : [
             prisma.tenant.update({
