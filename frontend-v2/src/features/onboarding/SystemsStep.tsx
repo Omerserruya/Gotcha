@@ -26,8 +26,8 @@ export function standingOf(integration: Integration | null): Standing {
   return connection.status === 'CONNECTED' ? 'connected' : 'none';
 }
 
-/** The step after this one (channels, once it exists). */
-export const afterSystems = (preview: boolean) => stepHref('/onboarding/learned', preview);
+/** The step after this one: channels. */
+export const afterSystems = (preview: boolean) => stepHref('/onboarding/channels', preview);
 
 /**
  * Step 2 - connect your systems (00g's card, once per suggestion). Only what

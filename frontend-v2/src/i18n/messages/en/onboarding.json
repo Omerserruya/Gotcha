@@ -348,7 +348,35 @@
   "channels": {
     "headline": "Where your customers write.",
     "lead": "Connect the channels GOTCHA will answer on. One is enough to start.",
-    "foot": "Nothing reaches a customer until you go live"
+    "foot": "Nothing reaches a customer until you go live",
+    "title": "Where your customers write",
+    "subtitle": "Connect at least one channel, and GOTCHA answers on it from the moment you go live. Nothing is sent before that.",
+    "why": {
+      "WEBCHAT": "A chat window on your site. Paste the code once.",
+      "WHATSAPP": "Your business's WhatsApp number, through Meta.",
+      "INSTAGRAM": "Direct messages to your Instagram account, through Meta.",
+      "EMAIL": "Your service mailbox, with its server details."
+    },
+    "connected": "Connected",
+    "live": "Live on your site",
+    "codeReady": "The code is ready. We haven't seen it on your site yet.",
+    "connectName": "Connect {name}",
+    "close": "Close",
+    "pasteCode": "Paste this code into your site, before the closing body tag. Once it appears on your site, you'll see it here.",
+    "codeUnread": "We couldn't read the chat code just now. Reload the page to try again.",
+    "notSetUp": "This channel can't be connected from here yet.",
+    "atMeta": "Connect {name} at Meta",
+    "opening": "Opening Meta…",
+    "metaNote": "You approve at Meta, then come back here.",
+    "refused": {
+      "not_configured": "This channel can't be connected from here yet.",
+      "forbidden": "Only owners can connect channels.",
+      "failed": "We couldn't open Meta. Try again in a moment."
+    },
+    "unread": "We couldn't check which channels are already connected. You can connect, and the page will update.",
+    "next": "Continue",
+    "skip": "Continue without a channel",
+    "skipWhy": "Without a connected channel GOTCHA won't answer customers. You can connect one later too."
   },
   "live": {
     "headline": "Check, then go live.",

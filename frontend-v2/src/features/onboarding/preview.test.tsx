@@ -129,7 +129,7 @@ describe('★★ the shell in preview: says what it is, Home one click away, the
     );
     // Every other step with a screen is a link that stays a preview; this one is where you are.
     expect(stepLinks(container).sort()).toEqual(
-      ['website', 'systems'].map((s) => `/onboarding/${s}?preview=1`).sort(),
+      ['website', 'systems', 'channels'].map((s) => `/onboarding/${s}?preview=1`).sort(),
     );
   });
 
@@ -317,6 +317,7 @@ describe("★★ the banner is exactly the step column's width - and the column 
     ['reading', 'reading', '620px'],
     ['learned', 'learned', '800px'],
     ['systems', 'systemsStep', '680px'],
+    ['channels', 'systemsStep', '680px'],
     ['try', 'try', '660px'],
   ])('%s: its width is set once, and the step reads it', async (step, root, width) => {
     const all = await css();

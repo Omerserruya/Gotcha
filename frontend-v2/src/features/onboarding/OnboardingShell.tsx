@@ -13,7 +13,7 @@ import { stepHref } from './preview';
 const STEP_HREF: Readonly<Record<ShellStep, (() => ReturnType<typeof stepHref>) | null>> = {
   learn: () => stepHref('/onboarding/website', true),
   systems: () => stepHref('/onboarding/systems', true),
-  channels: null,
+  channels: () => stepHref('/onboarding/channels', true),
   live: () => stepHref('/onboarding/learned', true),
 };
 

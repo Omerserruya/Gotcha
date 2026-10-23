@@ -1381,7 +1381,7 @@ function ShopRow({
   );
 }
 
-function CopyCode({ code }: { readonly code: string }) {
+export function CopyCode({ code }: { readonly code: string }) {
   const t = useTranslations('channels.webchat.install');
   const [copied, setCopied] = useState<boolean | null>(null);
   return (
@@ -1557,7 +1557,7 @@ function dealWords(
  * No code yet: it is created by the web chat's own create (idempotent, and it
  * owns the plan's channel limit) - never by a settings save.
  */
-function GetTheCode() {
+export function GetTheCode() {
   const t = useTranslations('channels.webchat.install');
   const router = useRouter();
   const [problem, setProblem] = useState<'limit' | 'forbidden' | 'failed' | null>(null);

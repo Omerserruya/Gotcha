@@ -1,6 +1,11 @@
 import 'server-only';
 
 import { isApiError } from '@/api/client/api-error';
+import type { Channel } from '@/api/contracts/channels';
+import type { WidgetInstall } from '@/api/contracts/website-widget';
+import { loadChannels } from '@/features/channels/load-channels';
+import { loadChannelsConfig, type ChannelsConfig } from '@/features/channels/load-whatsapp';
+import { loadWidgetInstall } from '@/features/webchat/load-website-widget';
 import { serverApi } from '@/api/client/server-api';
 import { currentUserSchema } from '@/api/contracts/identity';
 import { integrationsSchema, type Integration } from '@/api/contracts/integrations';
@@ -274,4 +279,23 @@ export async function loadSystems(): Promise<SystemsRead> {
     loadShopifyAvailability(),
   ]);
   return { suggestions, integrations, shopify };
+}
+
+export interface ChannelsStepRead {
+  /** The tenant's channels; `null`: unread - never "none connected". */
+  readonly channels: readonly Channel[] | null;
+  /** The website widget's install code and whether it is live; `null`: unread. */
+  readonly install: WidgetInstall | null;
+  /** WhatsApp's signup launches, and which OAuth providers are set up (`null`: unread). */
+  readonly config: ChannelsConfig;
+}
+
+/** Step 3: what is connected, the widget's code, and how each channel connects. */
+export async function loadChannelsStep(): Promise<ChannelsStepRead> {
+  const [channels, install, config] = await Promise.all([
+    loadChannels().then((read) => read.channels),
+    loadWidgetInstall(),
+    loadChannelsConfig(),
+  ]);
+  return { channels, install, config };
 }

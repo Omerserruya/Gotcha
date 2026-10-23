@@ -176,7 +176,14 @@ function WebChatStep({ onClose }: { readonly onClose: () => void }) {
  * that fills it in has handed someone's credential to a system on their
  * behalf.
  */
-function EmailStep({ onClose }: { readonly onClose: () => void }) {
+export function EmailStep({
+  onClose,
+  note = true,
+}: {
+  readonly onClose: () => void;
+  /** The "who answers" note links into Studio; onboarding, which can't go there yet, leaves it out. */
+  readonly note?: boolean;
+}) {
   const t = useTranslations('channels');
   const [form, setForm] = useState({
     emailAddress: '',
@@ -237,7 +244,7 @@ function EmailStep({ onClose }: { readonly onClose: () => void }) {
         />
       </div>
 
-      <WhoAnswersNote />
+      {note ? <WhoAnswersNote /> : null}
 
       <div className={styles.connectActions}>
         <Button

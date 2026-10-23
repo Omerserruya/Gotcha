@@ -75,10 +75,12 @@ describe('★★ the column: four steps', () => {
     expect(container.querySelector('[data-step="reading"]')).not.toBeNull();
   });
 
-  it('★ in preview, a step with no screen yet is not a link', () => {
+  it('★ in preview, every other step is a link that stays a preview', () => {
     show({ preview: true });
-    expect(screen.queryByTestId('onboarding-step-link-channels')).toBeNull();
-    expect(screen.getByTestId('onboarding-step-link-learn')).toBeInTheDocument();
+    for (const name of ['learn', 'channels', 'live']) {
+      expect(screen.getByTestId(`onboarding-step-link-${name}`)).toBeInTheDocument();
+    }
+    expect(screen.queryByTestId('onboarding-step-link-systems')).toBeNull();
   });
 });
 

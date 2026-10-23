@@ -832,6 +832,20 @@
     max-inline-size: var(--step-width);
   }
 
+  /* Step 3: the website widget's code, as the widget page shows it. */
+  .code {
+    margin: 0;
+    padding: 12px 14px;
+    max-inline-size: 100%;
+    overflow-x: auto;
+    border-radius: 10px;
+    background-color: var(--panel-inset);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.5;
+    white-space: pre;
+  }
+
   /* Step 2: 00g's card, once per suggestion. */
   .suggestions {
     display: flex;
@@ -944,6 +958,10 @@
   }
 
   .work[data-step='systems'] {
+    --step-width: 680px;
+  }
+
+  .work[data-step='channels'] {
     --step-width: 680px;
   }
 
