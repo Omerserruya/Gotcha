@@ -215,6 +215,11 @@ export async function ensureWebsiteKb(tenantId: string): Promise<string> {
  * the employee could quote instead of the current one.
  */
 export async function writeDoc(tenantId: string, kbId: string, doc: KnowledgeDoc, ai: AiCall = aiInternal): Promise<string | null> {
+  return (await writeDocResult(tenantId, kbId, doc, ai)).id;
+}
+
+/** writeDoc, plus the AI service's status when the write was refused. */
+export async function writeDocResult(tenantId: string, kbId: string, doc: KnowledgeDoc, ai: AiCall = aiInternal): Promise<{ id: string | null; status?: number }> {
   const metadata = { dedupeKey: doc.key, source: "onboarding_scan" };
   const existing = await prisma.knowledgeDocument.findFirst({
     where: { tenantId, knowledgeBaseId: kbId, metadata: { path: ["dedupeKey"], equals: doc.key } },
@@ -224,8 +229,8 @@ export async function writeDoc(tenantId: string, kbId: string, doc: KnowledgeDoc
   const r = existing
     ? await ai(tenantId, "PUT", `/api/knowledge-bases/${encodeURIComponent(kbId)}/documents/${encodeURIComponent(existing.id)}`, body)
     : await ai(tenantId, "POST", `/api/knowledge-bases/${encodeURIComponent(kbId)}/documents`, { ...body, sourceType: "text" });
-  if (!r.ok) return null;
-  return (r.body?.data?.id as string | undefined) ?? existing?.id ?? null;
+  if (!r.ok) return { id: null, status: r.status };
+  return { id: (r.body?.data?.id as string | undefined) ?? existing?.id ?? null };
 }
 
 // ── discovery row ────────────────────────────────────────────────────────────
@@ -262,12 +267,14 @@ export function learnStages(deps: LearnDeps = {}) {
     const kb = async () => (kbId ??= await ensureWebsiteKb(tenantId));
     const write = async (doc: KnowledgeDoc) => {
       if (!doc.content.trim()) return;
-      const id = await writeDoc(tenantId, await kb(), doc, ai);
+      const { id, status } = await writeDocResult(tenantId, await kb(), doc, ai);
       if (id) {
         documents++;
         await emit("write_knowledge", "found", "knowledge.written", { key: doc.key, title: doc.title }, { counts: { documents } });
       } else {
-        await emit("write_knowledge", "warn", "knowledge.write_failed", { key: doc.key });
+        // The status is what tells a 403 from the tenant gate apart from a
+        // write error; without it the event says only that something failed.
+        await emit("write_knowledge", "warn", "knowledge.write_failed", { key: doc.key, ...(status ? { status } : {}) });
       }
     };
     const extract = async (kind: "policies" | "faq" | "profile" | "brand") => {

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, decryptCredentials, assertPublicUrl, metaGraphBaseUrl, resolveVoicePublicUrl, AppOriginError } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole, decryptCredentials, assertPublicUrl, metaGraphBaseUrl, resolveVoicePublicUrl, AppOriginError } from "@chatcenter/shared";
 import { REMOVAL_LINE, hasRemovalLine } from "@chatcenter/shared/src/lib/marketing-optout";
 import { REQUIRED_TEMPLATES, REQUIRED_ROLES, draftFields, stateOf, languagesFor, requiredRolesFor, type RequiredRole, type TemplateLanguage } from "../lib/required-templates";
 
@@ -320,7 +320,9 @@ function voiceOrigin(): string | null {
 }
 
 /** The required templates of one number, each with its state. */
-router.get("/required", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+// Read is onboarding-reachable (the channels step shows a new number's
+// required templates); submitting them to Meta still needs the paid product.
+router.get("/required", authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId! as string;
     const account = await whatsappAccount(tenantId, req.query.channelAccountId);

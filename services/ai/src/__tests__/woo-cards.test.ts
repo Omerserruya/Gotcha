@@ -32,6 +32,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1" }; n(); },
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },
     requireActiveTenant: () => (_q: any, _r: any, n: any) => n(),
+    requireOnboardingOrActiveTenant: () => (_q: any, _r: any, n: any) => n(),
     requirePermission: () => (_q: any, _r: any, n: any) => n(),
     getRedis: () => ({ get: async (k: string) => H.kv.get(k) ?? null, set: async (k: string, v: string) => { H.kv.set(k, v); return "OK"; } }),
     prisma: {

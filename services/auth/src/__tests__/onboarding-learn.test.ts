@@ -134,6 +134,17 @@ describe("the learn stages", () => {
     expect(H.docs.find((d) => d.metadata.dedupeKey === "products").content).toContain("10-99 ILS");
   });
 
+  it("a refused knowledge write says so with the AI service's status (omer-onb-1: 403 from the tenant gate)", async () => {
+    const refusing: AiCall = async (tenantId, method, path, body) =>
+      /\/documents/.test(path) ? { ok: false, status: 403, body: {} } : ai(tenantId, method, path, body);
+    const { ctx: c, events } = ctx();
+    await learnStages({ ai: refusing })(c as any);
+    const failed = events.filter((e) => e.key === "knowledge.write_failed");
+    expect(failed.length).toBeGreaterThan(0);
+    for (const e of failed) expect(e.params).toMatchObject({ status: 403 });
+    expect(events.some((e) => e.key === "knowledge.written")).toBe(false);
+  });
+
   it("the discovery row keeps the structured results and finishes the scan for legacy readers", async () => {
     await learnStages({ ai })(ctx().ctx as any);
     expect(H.disc.knowledge.structured).toMatchObject({ lang: "he", policies: [{ kind: "returns", terms: { windowDays: 30 } }], faq: [{ q: "מתי המשלוח מגיע?" }] });

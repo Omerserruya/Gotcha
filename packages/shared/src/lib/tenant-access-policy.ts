@@ -116,13 +116,20 @@ export function evaluateTenantAccess(
       return ALLOW;
 
     case "PENDING_ADMIN_SETUP":
-      // The admin has not completed first-time setup; nothing else is usable.
-      return {
-        allow: false,
-        httpStatus: 403,
-        code: "TENANT_ADMIN_SETUP_REQUIRED",
-        message: "Admin setup is required before using the platform",
-      };
+      // Where a console-created tenant starts. Anyone signed in here has
+      // already set their password, so onboarding works exactly as in
+      // PENDING_ONBOARDING. It used to be identity-only, and nothing in
+      // onboarding v2 moves the tenant on (the old wizard's business-profile
+      // save did), so every step's reads and the scan's knowledge writes 403'd
+      // (2026-10-24). The paid product stays closed.
+      return scope === "ONBOARDING"
+        ? ALLOW
+        : {
+            allow: false,
+            httpStatus: 403,
+            code: "TENANT_ADMIN_SETUP_REQUIRED",
+            message: "Admin setup is required before using the platform",
+          };
 
     case "PENDING_ONBOARDING":
       // Onboarding routes work, because connecting the source-of-truth system
