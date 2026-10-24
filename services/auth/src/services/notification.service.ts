@@ -229,23 +229,68 @@ export {
 
 // ─── HTML Email Templates ───────────────────────────────────
 
-export function onboardingEmailHtml(adminName: string, tenantName: string, setupUrl: string): string {
+/** "he" or "en": a tenant's stored locale, as the emails read it. */
+export function emailLocale(raw: string | null | undefined): "he" | "en" {
+  return typeof raw === "string" && raw.toLowerCase().startsWith("he") ? "he" : "en";
+}
+
+/** The tenant's stored locale; null when it cannot be read (the email still goes, in English). */
+async function storedLocale(tenantId: string): Promise<string | null> {
+  try {
+    return (await prisma.tenant.findUnique({ where: { id: tenantId }, select: { defaultLocale: true } }))?.defaultLocale ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The welcome email of a console-created workspace: onboarding v2's four steps,
+ * in the workspace's language. The link sets a password - it is not a
+ * "no login" link. Hebrew follows the UI: GOTCHA is the subject (no gendered
+ * verb after "the employee"), and a non-breaking hyphen (U+2011) joins a
+ * Hebrew prefix to a Latin word.
+ */
+export function onboardingEmailHtml(adminName: string, tenantName: string, setupUrl: string, locale?: string): string {
+  const name = escapeHtml(adminName);
+  const org = escapeHtml(tenantName);
+  if (emailLocale(locale) === "he") {
+    return renderBrandEmail({
+      locale: "he",
+      title: `הקמת ${org} ב\u2011GOTCHA.`,
+      preheader: "סביבת העבודה מוכנה. ארבעה צעדים קצרים, ו\u2011GOTCHA עולה לאוויר.",
+      eyebrow: "סביבת העבודה מוכנה",
+      icon: "&#9889;",
+      headline: `בואו נקים את ${org}.`,
+      subhead: `${name}, \u200FGOTCHA מוכנה להכיר את העסק. היא קוראת, אתם מאשרים.`,
+      bodyHtml: emailSteps("ארבעה צעדים עד שעולים לאוויר", [
+        { marker: "1", title: "לומדים את האתר", desc: "נותנים את כתובת האתר. GOTCHA קוראת את המדיניות, המוצרים והשאלות הנפוצות, ומראה לכם מה למדה, כדי שתתקנו לפני שהיא עונה ללקוחות." },
+        { marker: "2", title: "מחברים מערכות", desc: "מחברים את החנות או את ה\u2011CRM, כדי שהתשובות יתבססו על הזמנות ומלאי אמיתיים." },
+        { marker: "3", title: "מחברים ערוצים", desc: "וואטסאפ, אינסטגרם, מייל או הצ'אט באתר. בוחרים איפה הלקוחות פונים אליכם." },
+        { marker: "&#10003;", title: "בודקים ועולים לאוויר", desc: "שואלים שאלה אמיתית, רואים את התשובה, ומפעילים." },
+      ], "he"),
+      cta: { label: "בוחרים סיסמה ומתחילים", url: setupUrl },
+      fallbackUrl: setupUrl,
+      expiryNote: `הקישור לשימוש חד-פעמי ובתוקף <strong style="color:#7C3291;">48 שעות</strong>. בדרך תבחרו סיסמה.`,
+      footerNote: "קיבלתם את המייל הזה כי נפתחה עבור הכתובת הזו סביבת עבודה ב\u2011GOTCHA.",
+    });
+  }
   return renderBrandEmail({
-    title: `Set up ${escapeHtml(tenantName)} - GOTCHA.`,
-    preheader: "Your workspace is ready - your AI wants to meet your business.",
+    title: `Set up ${org} on GOTCHA.`,
+    preheader: "Your workspace is ready. Four short steps and your AI employee goes live.",
     eyebrow: "Your workspace is ready",
     icon: "&#9889;",
-    headline: `Let's set up ${escapeHtml(tenantName)}.`,
-    subhead: `${escapeHtml(adminName)}, your AI employee is ready to meet your business &mdash; it does the reading, you do the approving.`,
-    bodyHtml: emailSteps("What happens next", [
-      { marker: "1", title: "Watch it investigate your business", desc: "It reads your website end to end and shows you everything it learned." },
-      { marker: "2", title: "Meet your first AI employee", desc: "Tuned to your brand voice &mdash; chat with it and shape it before it starts." },
-      { marker: "&#10003;", title: "Put it to work", desc: "Connect your channels and it handles real customer conversations from day one." },
+    headline: `Let's set up ${org}.`,
+    subhead: `${name}, your AI employee is ready to learn your business. It does the reading, you approve.`,
+    bodyHtml: emailSteps("Four steps to go live", [
+      { marker: "1", title: "Learning your site", desc: "Give us your website. Your employee reads your policies, products and FAQs, and shows you what it learned so you can fix it before it answers a customer." },
+      { marker: "2", title: "Connect systems", desc: "Connect your store or CRM so it answers with real orders and stock." },
+      { marker: "3", title: "Connect channels", desc: "WhatsApp, Instagram, email or the chat on your site. Choose where customers reach you." },
+      { marker: "&#10003;", title: "Check and go live", desc: "Ask it a real question, see the answer, and switch it on." },
     ]),
-    cta: { label: "Start setup", url: setupUrl },
+    cta: { label: "Set your password and start", url: setupUrl },
     fallbackUrl: setupUrl,
-    expiryNote: `This link expires in <strong style="color:#7C3291;">48 hours</strong> &bull; No login required`,
-    footerNote: "You're receiving this because your workspace was created on gotcha.co.il",
+    expiryNote: `This link works once and expires in <strong style="color:#7C3291;">48 hours</strong>. You'll choose your password on the way.`,
+    footerNote: "You're receiving this because a GOTCHA. workspace was created for this address.",
   });
 }
 
@@ -367,33 +412,44 @@ export async function sendOnboardingEmail(
   tenantName: string,
   tenantSlug: string,
   adminUserId: string,
+  /** Omitted: the tenant's stored locale (resends pass nothing). */
+  locale?: string,
 ): Promise<void> {
-  const frontendUrl = resolveAppPublicUrl(process.env);
+  const lang = emailLocale(locale ?? (await storedLocale(tenantId)));
 
   // One-time Authentik link: the admin sets their password there, then lands
   // back in GOTCHA authenticated. GOTCHA never issues the credential.
   const setupUrl = await createSetupLink(adminUserId);
 
-  const subject = `Welcome to Gotcha. - Set up your ${tenantName} workspace`;
-  const html = onboardingEmailHtml(adminName, tenantName, setupUrl);
-  const text = [
-    `Hello ${adminName},`,
-    "",
-    `Your organization "${tenantName}" has been created on Gotcha.`,
-    "",
-    "Click the link below to complete the setup wizard (no login required):",
-    setupUrl,
-    "",
-    "This link expires in 48 hours.",
-    "",
-    "The setup wizard will guide you through:",
-    "1. Setting up your business profile",
-    "2. Configuring your departments",
-    "3. Automatic AI agent configuration",
-    "",
-    "Best regards,",
-    "The Gotcha. Team",
-  ].join("\n");
+  const subject = lang === "he"
+    ? `מקימים את ${tenantName} ב-GOTCHA.`
+    : `Set up ${tenantName} on GOTCHA.`;
+  const html = onboardingEmailHtml(adminName, tenantName, setupUrl, lang);
+  const text = (lang === "he"
+    ? [
+        `שלום ${adminName},`, "",
+        `סביבת העבודה "${tenantName}" נפתחה ב-GOTCHA.`, "",
+        "בוחרים סיסמה ומתחילים:", setupUrl, "",
+        "הקישור לשימוש חד-פעמי ובתוקף 48 שעות.", "",
+        "ארבעה צעדים עד שעולים לאוויר:",
+        "1. לומדים את האתר: GOTCHA קוראת את האתר ומראה לכם מה למדה.",
+        "2. מחברים מערכות: החנות או ה-CRM, כדי שהתשובות יתבססו על הזמנות ומלאי אמיתיים.",
+        "3. מחברים ערוצים: וואטסאפ, אינסטגרם, מייל או הצ'אט באתר.",
+        "4. בודקים ועולים לאוויר: שאלה אמיתית, תשובה, והפעלה.", "",
+        "צוות GOTCHA.",
+      ]
+    : [
+        `Hello ${adminName},`, "",
+        `Your workspace "${tenantName}" has been created on GOTCHA.`, "",
+        "Set your password and start:", setupUrl, "",
+        "This link works once and expires in 48 hours.", "",
+        "Four steps to go live:",
+        "1. Learning your site: your employee reads it and shows you what it learned.",
+        "2. Connect systems: your store or CRM, for real orders and stock.",
+        "3. Connect channels: WhatsApp, Instagram, email or the chat on your site.",
+        "4. Check and go live: a real question, the answer, and switch it on.", "",
+        "The GOTCHA. Team",
+      ]).join("\n");
 
   const payload: NotificationPayload = {
     tenantId,
@@ -867,6 +923,8 @@ export async function sendPaidOnboardingEmail(a: {
   locale?: string;
   resend?: boolean;
 }): Promise<void> {
+  // Omitted: the tenant's stored locale, so every resend speaks it too.
+  a = { ...a, locale: emailLocale(a.locale ?? (await storedLocale(a.tenantId))) };
   const frontendUrl = resolveAppPublicUrl(process.env);
   // Both parts are needed, and they do different jobs: `ref` says WHICH
   // checkout, `token` proves the holder may act on it. The entry page strips
