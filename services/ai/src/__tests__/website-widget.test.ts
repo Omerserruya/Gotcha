@@ -36,6 +36,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     authenticate: (req: any, _res: any, next: any) => { req.perms = String(req.headers["x-perms"] ?? "").split(","); next(); },
     resolveTenant: (req: any, _res: any, next: any) => { req.tenantId = "T"; next(); },
     requireActiveTenant: () => (_req: any, _res: any, next: any) => next(),
+    requireOnboardingOrActiveTenant: () => (_req: any, _res: any, next: any) => next(),
     requirePermission: (...need: string[]) => (req: any, res: any, next: any) =>
       need.some((p) => req.perms.includes(p)) ? next() : res.status(403).json({ error: "forbidden" }),
     prisma: {

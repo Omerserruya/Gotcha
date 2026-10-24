@@ -52,9 +52,9 @@ describe("the matrix", () => {
     for (const scope of SCOPES) expect(decide("ACTIVE", scope)).toBe(true);
   });
 
-  it("PENDING_ADMIN_SETUP: identity only", () => {
+  it("PENDING_ADMIN_SETUP: onboarding and identity, not the paid product or payment", () => {
     expect(decide("PENDING_ADMIN_SETUP", "FULL_APPLICATION")).toBe(false);
-    expect(decide("PENDING_ADMIN_SETUP", "ONBOARDING")).toBe(false);
+    expect(decide("PENDING_ADMIN_SETUP", "ONBOARDING")).toBe(true);
     expect(decide("PENDING_ADMIN_SETUP", "PAYMENT_SETUP")).toBe(false);
     expect(decide("PENDING_ADMIN_SETUP", "IDENTITY")).toBe(true);
   });

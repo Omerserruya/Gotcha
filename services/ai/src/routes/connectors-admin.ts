@@ -255,7 +255,9 @@ const CALENDAR_PROVIDER_BY_SLUG: Record<string, "GOOGLE_CALENDAR" | "CALENDLY"> 
 
 router.post(
   "/connectors/:slug/disconnect",
-  authenticate, resolveTenant, requireActiveTenant(), canManageSystems,
+  // Onboarding-reachable like connect: the systems step lets the owner undo a
+  // wrong connection before the workspace is ACTIVE.
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canManageSystems,
   async (req: Request, res: Response) => {
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }

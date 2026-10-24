@@ -25,6 +25,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1", role: H.role }; n(); },
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },
     requireActiveTenant: () => (_q: any, _s: any, n: any) => n(),
+    requireOnboardingOrActiveTenant: () => (_q: any, _s: any, n: any) => n(),
     requirePermission: () => (_q: any, _s: any, n: any) => n(),
     auditUser: async (...a: any[]) => { H.audits.push(a); },
     prisma: {

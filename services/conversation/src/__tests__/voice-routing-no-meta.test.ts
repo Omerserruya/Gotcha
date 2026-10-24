@@ -18,6 +18,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1", role: "ADMIN" }; n(); },
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },
     requireActiveTenant: () => pass,
+    requireOnboardingOrActiveTenant: () => pass,
     requireRole: () => pass,
     requireEntitlement: () => pass,
     requireCapacity: () => pass,

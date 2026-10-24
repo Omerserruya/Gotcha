@@ -8,6 +8,7 @@ import {
   authenticate,
   resolveTenant,
   requireActiveTenant,
+  requireOnboardingOrActiveTenant,
   requirePermission,
   requireRole,
   asksToHidePoweredBy,
@@ -19,6 +20,19 @@ import { resolveWooCurrency } from "../services/discovery-integration.service";
 import { readAssignment, writeAssignment, AssignmentError } from "../services/widget-assignment.service";
 
 const router = Router();
+
+// Before the gate below, with its own: onboarding's channels step shows the
+// install code before the workspace is ACTIVE. Read-only; the widget answers
+// no one until the tenant is ACTIVE (the inbound worker drops it before then).
+router.get("/install", authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requirePermission("channels:manage:read"), async (req: Request & { tenantId?: string }, res: Response) => {
+  try {
+    res.json({ data: await installOf(req.tenantId!) });
+  } catch (err) {
+    console.error("[website-widget] install failed:", (err as Error)?.message);
+    res.status(500).json({ error: "Could not load the install state" });
+  }
+});
+
 router.use(authenticate, resolveTenant, requireActiveTenant());
 
 const isObj = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -144,15 +158,6 @@ router.put("/assignment", requireRole("ADMIN"), async (req: Request & { tenantId
     }
     console.error("[website-widget] assignment write failed:", (err as Error)?.message);
     res.status(500).json({ error: "Could not change who answers the widget" });
-  }
-});
-
-router.get("/install", requirePermission("channels:manage:read"), async (req: Request & { tenantId?: string }, res: Response) => {
-  try {
-    res.json({ data: await installOf(req.tenantId!) });
-  } catch (err) {
-    console.error("[website-widget] install failed:", (err as Error)?.message);
-    res.status(500).json({ error: "Could not load the install state" });
   }
 });
 

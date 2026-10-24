@@ -30,6 +30,7 @@ import {
   authenticate,
   resolveTenant,
   requireActiveTenant,
+  requireOnboardingOrActiveTenant,
   requireRole,
   encryptCredentials,
   decryptCredentials,
@@ -418,7 +419,14 @@ async function recordVoiceError(
 }
 
 // ─── Auth middleware (everything below is authenticated admin) ────
-router.use(authenticate, resolveTenant, requireActiveTenant());
+// The list alone is onboarding-readable: the channels step shows what is
+// connected before the workspace is ACTIVE. Everything else, writes included,
+// needs the paid product.
+const listScope = requireOnboardingOrActiveTenant();
+const activeScope = requireActiveTenant();
+router.use(authenticate, resolveTenant, (req: Request, res: Response, next: NextFunction) =>
+  (req.method === "GET" && req.path === "/" ? listScope : activeScope)(req, res, next),
+);
 
 // ─── Feature-flag gate ────────────────────────────────────────
 async function voiceCopilotGate(req: Request, res: Response, next: NextFunction): Promise<void> {

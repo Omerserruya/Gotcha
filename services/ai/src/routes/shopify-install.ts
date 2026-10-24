@@ -438,7 +438,9 @@ router.post(
   "/connectors/shopify/install/claim",
   authenticate,
   resolveTenant,
-  requireActiveTenant(),
+  // Onboarding-reachable like start and pending: the claim completes the same
+  // install, and onboarding's systems step is where it begins.
+  requireOnboardingOrActiveTenant(),
   canConnectSystems,
   async (req: Request, res: Response) => {
     // Body first, cookie as the fallback - the same recovery the pending
