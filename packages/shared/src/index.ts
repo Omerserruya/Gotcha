@@ -1005,8 +1005,9 @@ export {
   publicWebchatConfig,
   normalizeWebchatCommerce,
   MAX_PROMOTION_COUPONS,
+  WEBCHAT_NAME_SOURCES,
 } from "./lib/webchat-widget";
-export type { WebchatConfig, LegacyWebchatSettings, WebchatPosition, WebchatCommerce } from "./lib/webchat-widget";
+export type { WebchatConfig, LegacyWebchatSettings, WebchatPosition, WebchatCommerce, WebchatNameSource } from "./lib/webchat-widget";
 // WooCommerce product cards on the website widget (W9).
 export {
   WOO_MESSAGE_TYPES,

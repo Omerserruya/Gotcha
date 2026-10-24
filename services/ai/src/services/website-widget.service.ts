@@ -26,7 +26,7 @@ import {
 } from "@chatcenter/shared";
 import { listChannels, saveChannelConfig } from "./shopify-live-chat.service";
 import { activationSnapshot } from "./shopify-chat-install.service";
-import { entryFor } from "./employee-reach.service";
+import { answeringEmployee } from "./widget-assignment.service";
 import { splitErrorCode } from "../lib/error-code";
 
 export interface WidgetSettings {
@@ -36,6 +36,8 @@ export interface WidgetSettings {
   offline: { message: string };
   /** The web chat's products (W9). Stored on the web chat only; the Shopify chat has its own. */
   commerce: WebchatConfig["commerce"];
+  /** The header's name: the answering employee's, or ux.welcome.assistantName. Web chat only. */
+  nameSource: WebchatConfig["nameSource"];
 }
 
 /** The settings as a webchat config sees them (the canonical projection). */
@@ -46,6 +48,7 @@ function fromWebchat(c: WebchatConfig): WidgetSettings {
     handoff: { allowHumanHandoff: c.behaviour.allowHumanHandoff },
     offline: { message: c.offline.message },
     commerce: c.commerce,
+    nameSource: c.nameSource,
   };
 }
 
@@ -68,6 +71,8 @@ function fromShopify(platformMeta: unknown): WidgetSettings {
     handoff: { allowHumanHandoff: s.routing.allowHumanHandoff },
     offline: { message: s.hours.offlineMessage },
     commerce: base.commerce,
+    // The Shopify chat's name is the one its merchant typed.
+    nameSource: "custom",
   };
 }
 
@@ -86,6 +91,7 @@ function nextWebchat(current: WebchatConfig, patch: Partial<WidgetSettings>): We
     commerce: patch.commerce
       ? { ...current.commerce, ...patch.commerce, promotions: { ...current.commerce.promotions, ...((patch.commerce as any).promotions ?? {}) } }
       : current.commerce,
+    nameSource: patch.nameSource ?? current.nameSource,
   }, current);
 }
 
@@ -99,7 +105,7 @@ function deepMerge(base: any, patch: any): any {
 }
 
 /** The shared settings as a Shopify config patch: only the shared sections. */
-export function shopifyPatchOf(s: Omit<WidgetSettings, "commerce">): Record<string, unknown> {
+export function shopifyPatchOf(s: Omit<WidgetSettings, "commerce" | "nameSource">): Record<string, unknown> {
   return {
     appearance: {
       primaryColor: s.appearance.primaryColor,
@@ -130,29 +136,14 @@ export function shopifyPatchOf(s: Omit<WidgetSettings, "commerce">): Record<stri
 }
 
 /**
- * Who answers the website channel according to the playbook: the first route
- * to an AI employee on the single path from the web chat's channel entry.
- * Null when the path branches before reaching one (it depends) or routes to a
- * team; the playbook stays the one place that decides.
+ * Who answers the website channel: the "New conversation" automation that
+ * matches it, else (a workspace not migrated yet) the playbook. Null when the
+ * route depends on conditions, goes to a team, or nothing matches. This read
+ * only the playbook until 2026-10-24, so after automations took over
+ * (2026-10-22) it could name an employee the web chat no longer went to.
  */
 export async function assignedEmployeeOf(tenantId: string): Promise<{ id: string; name: string } | null> {
-  const canvas = await (prisma as any).flowCanvas.findUnique({ where: { tenantId }, select: { nodes: true, edges: true } });
-  const nodes: any[] = Array.isArray(canvas?.nodes) ? canvas.nodes : [];
-  const edges: any[] = Array.isArray(canvas?.edges) ? canvas.edges : [];
-  // The same entry the flow executor uses for a web chat inbound.
-  const entry = entryFor(nodes, "WEBCHAT");
-  let cur = entry;
-  for (let i = 0; cur && i < 30; i++) {
-    const routeType = cur?.data?.routeType ?? (cur?.data?.targetId ? "agent" : null);
-    if (cur !== entry && routeType === "agent" && cur?.data?.targetId) {
-      const agent = await prisma.aIAgent.findFirst({ where: { id: String(cur.data.targetId), tenantId }, select: { id: true, name: true } });
-      return agent ? { id: agent.id, name: agent.name } : null;
-    }
-    const out = edges.filter((e) => e?.source === cur.id);
-    if (out.length !== 1) return null;
-    cur = nodes.find((n) => n?.id === out[0].target);
-  }
-  return null;
+  return (await answeringEmployee(tenantId, "WEBCHAT")).employee;
 }
 
 /** The workspace's WhatsApp numbers, for "Continue on WhatsApp", and whether each can take it. */
@@ -267,6 +258,10 @@ export async function getWidget(tenantId: string) {
   return {
     settings,
     assignedEmployee: await assignedEmployeeOf(tenantId).catch(() => null),
+    // Who answers the web chat and which automation says so ("set by
+    // automation <name>"); the header shows this employee's name when
+    // settings.nameSource is "employee".
+    answering: await answeringEmployee(tenantId, "WEBCHAT").catch(() => ({ employee: null, automation: null })),
     // For "Continue on WhatsApp": the numbers to choose from, each with whether it can take it.
     whatsappNumbers: await whatsappNumbers(tenantId),
     places: {

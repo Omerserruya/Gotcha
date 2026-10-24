@@ -25,6 +25,9 @@ import { effectivePoweredBy } from "./powered-by";
 
 export const WEBCHAT_CHANNEL = "WEBCHAT" as const;
 
+export const WEBCHAT_NAME_SOURCES = ["employee", "custom"] as const;
+export type WebchatNameSource = (typeof WEBCHAT_NAME_SOURCES)[number];
+
 /** Where the widget's launcher sits, kept for the legacy flat settings. */
 export type WebchatPosition = "right" | "left";
 
@@ -44,6 +47,15 @@ export interface WebchatConfig {
   };
   /** The shared experience block - the same one the storefront widget uses. */
   ux: ShopifyChatUx;
+  /**
+   * Where the header's name comes from (2026-10-24):
+   *   "employee" - the AI employee the automation routes the web chat to, so
+   *                changing who answers changes the name;
+   *   "custom"   - ux.welcome.assistantName, typed by the merchant.
+   * A widget saved before this field reads as "custom" (it kept the name it
+   * had); a widget never configured reads as "employee". No row is rewritten.
+   */
+  nameSource: WebchatNameSource;
   behaviour: {
     /** Offer "talk to a person" in the composer footer. */
     allowHumanHandoff: boolean;
@@ -138,6 +150,7 @@ export function defaultWebchatConfig(): WebchatConfig {
       showPoweredBy: true,
     },
     ux: defaultShopifyChatUx(),
+    nameSource: "employee",
     behaviour: { allowHumanHandoff: true },
     offline: { message: "We are away right now. Leave a message and we will get back to you." },
     commerce: { productMessagingEnabled: false, addToCartEnabled: false, suggestComplementary: false, promotions: { couponIds: [] } },
@@ -184,6 +197,8 @@ export function migrateLegacyWebchat(
 
   return {
     ...base,
+    // A legacy widget was configured, its name included.
+    nameSource: "custom",
     appearance: {
       ...base.appearance,
       primaryColor: primary,
@@ -242,6 +257,8 @@ export function normalizeWebchatConfig(raw: unknown, base = defaultWebchatConfig
       showPoweredBy: effectivePoweredBy(a.showPoweredBy, base.appearance.showPoweredBy),
     },
     ux: normalizeShopifyChatUx(s.ux, base.ux),
+    // Absent on a configured widget = it predates the field = "custom".
+    nameSource: oneOf(s.nameSource, WEBCHAT_NAME_SOURCES, Object.keys(s).length ? "custom" : base.nameSource),
     behaviour: { allowHumanHandoff: bool(b.allowHumanHandoff, base.behaviour.allowHumanHandoff) },
     offline: { message: text(o.message, 300, base.offline.message) },
     commerce: normalizeWebchatCommerce(s.commerce, base.commerce),

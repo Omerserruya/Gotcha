@@ -16,6 +16,7 @@ import {
 import crypto from "crypto";
 import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanitizer.service";
 import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef, connectedWooStore, brandOf } from "../services/website-widget.service";
+import { answeringEmployee } from "../services/widget-assignment.service";
 import { translateWidgetTexts } from "../services/widget-text-translation.service";
 import { executeAdapterTool } from "../services/connectors/integration-framework";
 import { listActivePromotions } from "../services/widget-promotions.service";
@@ -220,8 +221,18 @@ async function withHandoff(tenantId: string, config: WebchatConfig, offline = fa
   if (config.ux.kind === "whatsapp" && !target) return null;
   // The business's wordmark on the bubble and pop-up (design 7).
   const brand = await withCrossTenantAccess(() => brandOf(tenantId)).catch(() => null);
+  // The header's name (nameSource "employee"): the employee the automation
+  // routes this web chat to, so changing who answers changes the name. When
+  // the route names no one (conditions, a team), the typed name stays.
+  const employeeName = config.nameSource === "employee"
+    ? (await withCrossTenantAccess(() => answeringEmployee(tenantId, "WEBCHAT")).catch(() => null))?.employee?.name?.trim() || null
+    : null;
+  const assistantName = employeeName ?? base.welcome.assistantName;
   return {
     ...base,
+    welcome: { ...base.welcome, assistantName },
+    ux: { ...base.ux, welcome: { ...base.ux.welcome, assistantName } },
+    nameSource: employeeName ? "employee" : "custom",
     brand,
     promotions: promotions.map(({ id: _id, ...p }) => ({ ...p, currency: promotionCurrency })),
     features: { ...base.features, whatsappHandoff: !!target },

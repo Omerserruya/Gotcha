@@ -81,6 +81,8 @@ export interface ReachAccount {
 /** An active "New conversation" automation, as the runner sees it. */
 export interface RoutingAutomation {
   id: string;
+  /** The automation's own name, shown as "set by automation <name>". */
+  name: string;
   channels: string[];
   nodes: any[];
   edges: any[];
@@ -95,10 +97,11 @@ export async function routingAutomations(tenantId: string): Promise<RoutingAutom
   const rows = await (prisma as any).chatbotFlow.findMany({
     where: { tenantId, isActive: true, triggerType: "conversation_started" },
     orderBy: { activatedAt: "asc" },
-    select: { id: true, triggerConfig: true, nodes: true, edges: true },
+    select: { id: true, name: true, triggerConfig: true, nodes: true, edges: true },
   });
   return (rows as any[]).map((r) => ({
     id: String(r.id),
+    name: String(r.name ?? ""),
     channels: Array.isArray(r.triggerConfig?.channels) ? r.triggerConfig.channels.map((c: unknown) => String(c).toUpperCase()) : [],
     nodes: Array.isArray(r.nodes) ? r.nodes : [],
     edges: Array.isArray(r.edges) ? r.edges : [],

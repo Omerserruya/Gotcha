@@ -151,3 +151,18 @@ describe("what reaches a visitor's browser", () => {
     expect(publicWebchatConfig(cfg, { offline: false }).offline).toMatchObject({ active: false });
   });
 });
+
+describe("nameSource: where the header's name comes from (2026-10-24)", () => {
+  it("never configured: the employee's; configured before the field, or legacy: the typed name", () => {
+    expect(normalizeWebchatConfig({}).nameSource).toBe("employee");
+    expect(normalizeWebchatConfig(null).nameSource).toBe("employee");
+    expect(normalizeWebchatConfig({ v: 2, ux: { welcome: { assistantName: "מאיה" } } }).nameSource).toBe("custom");
+    expect(normalizeWebchatConfig({ primaryColor: "#123456", title: "Hi", position: "left" }).nameSource).toBe("custom");
+  });
+
+  it("a stored value is kept; anything else falls back the same way", () => {
+    expect(normalizeWebchatConfig({ v: 2, nameSource: "employee" }).nameSource).toBe("employee");
+    expect(normalizeWebchatConfig({ v: 2, nameSource: "custom" }).nameSource).toBe("custom");
+    expect(normalizeWebchatConfig({ v: 2, nameSource: "robot" }).nameSource).toBe("custom");
+  });
+});

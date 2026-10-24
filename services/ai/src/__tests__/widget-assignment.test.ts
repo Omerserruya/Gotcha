@@ -100,15 +100,22 @@ describe("read", () => {
   });
 
   it("★ with automations: the channel's own automation decides, and the canvas is ignored", async () => {
-    H.flows = [routing("all", [], "maya"), routing("wc", ["WEBCHAT"], "noa", { activatedAt: new Date(2026, 5, 1) })];
+    H.flows = [routing("all", [], "maya", { name: "Everyone to Maya" }), routing("wc", ["WEBCHAT"], "noa", { activatedAt: new Date(2026, 5, 1), name: "Web chat to Noa" })];
     const c = webchat((await get()).body.data ?? (await get()).body);
     expect(c).toMatchObject({ employee: { id: "noa" }, how: "always", dedicated: true, sharedWith: [], editable: true });
+    // ★ "set by automation <name>" on the widget's card.
+    expect(c.automation).toEqual({ id: "wc", name: "Web chat to Noa", dedicated: true, everyChannel: false });
   });
 
   it("a channel answered by an every-channel automation says which others share it", async () => {
-    H.flows = [routing("all", [], "maya")];
+    H.flows = [routing("all", [], "maya", { name: "Everyone to Maya" })];
     const c = webchat((await get()).body.data ?? (await get()).body);
     expect(c).toMatchObject({ employee: { id: "maya" }, dedicated: false, sharedWith: ["WHATSAPP"], editable: true });
+    expect(c.automation).toEqual({ id: "all", name: "Everyone to Maya", dedicated: false, everyChannel: true });
+  });
+
+  it("not migrated: no automation to name", async () => {
+    expect(webchat((await get()).body.data ?? (await get()).body).automation).toBeNull();
   });
 });
 

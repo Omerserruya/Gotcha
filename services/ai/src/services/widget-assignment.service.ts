@@ -167,6 +167,9 @@ export async function readAssignment(tenantId: string) {
           channel,
           employee: emp ? { id: emp.id, name: emp.name } : null,
           how: p.how,
+          // WHICH automation decides, for "set by automation <name>" on the
+          // widget's card. Null when none matches the channel (nobody answers).
+          automation: automationRef(auto, channel),
           // A write always targets the channel's OWN automation, so only a
           // channel whose own automation has conditions cannot be set here.
           editable: !(p.dedicated && p.how === "conditional"),
@@ -199,10 +202,48 @@ export async function readAssignment(tenantId: string) {
         dedicated: p.dedicated,
         sharedWith: shared,
         movesWith,
+        // Not migrated to automations yet: the playbook decides.
+        automation: null,
       };
     }),
     employees: employees.map((e) => ({ id: e.id, name: e.name, active: e.status === "ACTIVE" })),
   };
+}
+
+/** The automation that decides a channel, as the widget's card names it. */
+function automationRef(auto: RoutingAutomation | null, channel: string) {
+  return auto
+    ? { id: auto.id, name: auto.name, dedicated: auto.channels.length === 1 && auto.channels[0] === channel.toUpperCase(), everyChannel: auto.channels.length === 0 }
+    : null;
+}
+
+/**
+ * The AI employee that answers a new conversation on this channel, and the
+ * automation that says so: the same decision readAssignment shows, without
+ * the rest of the card. The website widget's header name reads it
+ * (nameSource "employee"). Null employee when the route depends on
+ * conditions, goes to a team or flow, or nothing matches.
+ */
+export async function answeringEmployee(tenantId: string, channel: string): Promise<{
+  employee: { id: string; name: string } | null;
+  automation: ReturnType<typeof automationRef>;
+}> {
+  const autos = await routingAutomations(tenantId);
+  let employeeId: string | null = null;
+  let automation: ReturnType<typeof automationRef> = null;
+  if (autos.length) {
+    const auto = routingAutomationFor(autos, channel);
+    automation = automationRef(auto, channel);
+    const p = auto ? automationPath(auto, channel) : null;
+    employeeId = p?.how === "always" ? p.employeeId : null;
+  } else {
+    const canvas = await (prisma as any).flowCanvas.findUnique({ where: { tenantId }, select: { nodes: true, edges: true } });
+    const p = pathFor(Array.isArray(canvas?.nodes) ? canvas.nodes : [], Array.isArray(canvas?.edges) ? canvas.edges : [], channel);
+    employeeId = p.how === "always" ? p.employeeId : null;
+  }
+  if (!employeeId) return { employee: null, automation };
+  const agent = await prisma.aIAgent.findFirst({ where: { id: employeeId, tenantId }, select: { id: true, name: true } });
+  return { employee: agent ? { id: agent.id, name: agent.name } : null, automation };
 }
 
 export class AssignmentError extends Error {

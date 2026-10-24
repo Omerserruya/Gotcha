@@ -16,11 +16,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
+import { buildRoutingGraph } from "@chatcenter/shared";
 
 const H = vi.hoisted(() => ({
   accounts: [] as any[],
   canvas: null as any,
   agents: [] as any[],
+  flows: [] as any[],
   installs: [] as any[],
   raw: [] as { sql: string; values: any[] }[],
   updates: 0,
@@ -51,6 +53,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         },
       },
       flowCanvas: { findUnique: async () => H.canvas },
+      chatbotFlow: { findMany: async (a: any) => H.flows.filter((f) => f.tenantId === a.where.tenantId && f.isActive && f.triggerType === a.where.triggerType) },
       aIAgent: { findFirst: async (a: any) => H.agents.find((x) => x.id === a.where.id && x.tenantId === a.where.tenantId) ?? null },
       shopifyChatInstallation: { findMany: async () => H.installs },
       tenantIntegration: {
@@ -202,10 +205,10 @@ describe("assignedEmployee: the playbook's single path from the web chat entry",
     { id: "wa", type: "channel_entry", data: { channelType: "whatsapp" } },
     { id: "e", type: "channel_entry", data: { channelType: "WEBCHAT" } },
     { id: "hours", type: "condition", data: {} },
-    { id: "r1", type: "route", data: { routeType: "agent", targetId: target } },
-    { id: "r2", type: "route", data: { routeType: "agent", targetId: "ag_2" } },
+    { id: "r1", type: "route_target", data: { routeType: "agent", targetId: target } },
+    { id: "r2", type: "route_target", data: { routeType: "agent", targetId: "ag_2" } },
   ];
-  beforeEach(() => { H.agents = [{ id: "ag_1", tenantId: "T", name: "Maya" }, { id: "ag_2", tenantId: "T", name: "Dan" }, { id: "ag_x", tenantId: "OTHER", name: "Foreign" }]; });
+  beforeEach(() => { H.flows = []; H.agents = [{ id: "ag_1", tenantId: "T", name: "Maya" }, { id: "ag_2", tenantId: "T", name: "Dan" }, { id: "ag_x", tenantId: "OTHER", name: "Foreign" }]; });
 
   it("a single path → that employee (from the web chat entry, not another channel's)", async () => {
     H.canvas = { nodes: nodes(), edges: [{ source: "wa", target: "r2" }, { source: "e", target: "hours" }, { source: "hours", target: "r1" }] };
@@ -225,6 +228,54 @@ describe("assignedEmployee: the playbook's single path from the web chat entry",
   it("another tenant's employee id → null", async () => {
     H.canvas = { nodes: nodes("ag_x"), edges: [{ source: "e", target: "r1" }] };
     expect((await get("/api/website-widget")).body.data.assignedEmployee).toBeNull();
+  });
+
+  // ★ 2026-10-24: automations decide since 2026-10-22; this card still read the playbook.
+  const routing = (o: any = {}) => ({
+    id: "flow_web", tenantId: "T", name: "Who answers the website chat", isActive: true, triggerType: "conversation_started",
+    triggerConfig: { channels: ["WEBCHAT"] }, activatedAt: new Date(),
+    // The graph the widget's card itself writes (writeAssignment).
+    ...buildRoutingGraph("ag_2"), ...o,
+  });
+
+  it("★ the routing automation wins over the playbook, and the card names it", async () => {
+    H.canvas = { nodes: nodes(), edges: [{ source: "e", target: "r1" }] }; // the playbook says Maya
+    H.flows = [routing()];
+    const d = (await get("/api/website-widget")).body.data;
+    expect(d.assignedEmployee).toEqual({ id: "ag_2", name: "Dan" });
+    expect(d.answering).toEqual({
+      employee: { id: "ag_2", name: "Dan" },
+      automation: { id: "flow_web", name: "Who answers the website chat", dedicated: true, everyChannel: false },
+    });
+  });
+
+  it("an automation for every channel answers too; a paused one does not", async () => {
+    H.canvas = null;
+    H.flows = [routing({ id: "flow_all", name: "Everyone to Dan", triggerConfig: { channels: [] } })];
+    expect((await get("/api/website-widget")).body.data.answering.automation).toEqual({ id: "flow_all", name: "Everyone to Dan", dedicated: false, everyChannel: true });
+    H.flows = [routing({ isActive: false })];
+    expect((await get("/api/website-widget")).body.data.answering).toEqual({ employee: null, automation: null });
+  });
+});
+
+describe("★ nameSource: where the header's name comes from", () => {
+  it("a widget saved before the field reads as custom; one never configured as employee", async () => {
+    H.accounts = [webchat({ credentials: { v: 2, ux: { welcome: { assistantName: "מאיה" } } } })];
+    expect((await get("/api/website-widget")).body.data.settings.nameSource).toBe("custom");
+    H.accounts = [webchat({ credentials: {} })];
+    expect((await get("/api/website-widget")).body.data.settings.nameSource).toBe("employee");
+  });
+
+  it("saved through PUT; an unknown value is dropped, never a 400", async () => {
+    H.accounts = [webchat({ credentials: { v: 2, ux: { welcome: { assistantName: "מאיה" } } } })];
+    let r = await put({ nameSource: "employee" });
+    expect(r.status).toBe(200);
+    expect(r.body.data.settings.nameSource).toBe("employee");
+    r = await put({ nameSource: "robot" });
+    expect(r.status).toBe(200);
+    expect(r.body.data.settings.nameSource).toBe("employee");
+    // The typed name is kept for when the merchant switches back.
+    expect(r.body.data.settings.ux.welcome.assistantName).toBe("מאיה");
   });
 });
 

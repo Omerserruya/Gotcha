@@ -13,6 +13,7 @@ import {
   requireRole,
   asksToHidePoweredBy,
   POWERED_BY_LOCKED_CODE,
+  WEBCHAT_NAME_SOURCES,
 } from "@chatcenter/shared";
 import { getWidget, putWidget, installOf, WidgetInputError, connectedWooStore, type WidgetSettings } from "../services/website-widget.service";
 import { storeCoupons, personalCouponIds } from "../services/widget-promotions.service";
@@ -47,6 +48,8 @@ function patchOf(body: unknown): Partial<WidgetSettings> {
   if (isObj(body.offline) && typeof body.offline.message === "string") out.offline = { message: body.offline.message };
   // The website widget's products (W9); normalised against the stored value.
   if (isObj(body.commerce)) out.commerce = body.commerce as any;
+  // Where the header's name comes from; anything else is dropped like the rest.
+  if ((WEBCHAT_NAME_SOURCES as readonly string[]).includes(String(body.nameSource))) out.nameSource = body.nameSource as any;
   return out;
 }
 
