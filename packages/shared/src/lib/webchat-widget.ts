@@ -234,7 +234,8 @@ export function migrateLegacyWebchat(
  * refuses to load because of a stray field is worse than one that falls
  * back to a sane default.
  */
-export function normalizeWebchatConfig(raw: unknown, base = defaultWebchatConfig()): WebchatConfig {
+export function normalizeWebchatConfig(raw: unknown, current?: WebchatConfig): WebchatConfig {
+  const base = current ?? defaultWebchatConfig();
   if (isLegacyWebchatSettings(raw)) {
     return migrateLegacyWebchat(raw as LegacyWebchatSettings, base);
   }
@@ -257,8 +258,10 @@ export function normalizeWebchatConfig(raw: unknown, base = defaultWebchatConfig
       showPoweredBy: effectivePoweredBy(a.showPoweredBy, base.appearance.showPoweredBy),
     },
     ux: normalizeShopifyChatUx(s.ux, base.ux),
-    // Absent on a configured widget = it predates the field = "custom".
-    nameSource: oneOf(s.nameSource, WEBCHAT_NAME_SOURCES, Object.keys(s).length ? "custom" : base.nameSource),
+    // Absent from a patch over the current config: unchanged. Absent from a
+    // stored widget: configured before the field = "custom", never configured
+    // ({}) = "employee".
+    nameSource: oneOf(s.nameSource, WEBCHAT_NAME_SOURCES, current ? current.nameSource : Object.keys(s).length ? "custom" : base.nameSource),
     behaviour: { allowHumanHandoff: bool(b.allowHumanHandoff, base.behaviour.allowHumanHandoff) },
     offline: { message: text(o.message, 300, base.offline.message) },
     commerce: normalizeWebchatCommerce(s.commerce, base.commerce),

@@ -166,3 +166,11 @@ describe("nameSource: where the header's name comes from (2026-10-24)", () => {
     expect(normalizeWebchatConfig({ v: 2, nameSource: "robot" }).nameSource).toBe("custom");
   });
 });
+
+describe("nameSource survives a partial save", () => {
+  it("a patch without it keeps the current value (the old settings PUT sends none)", () => {
+    const current = normalizeWebchatConfig({ v: 2, nameSource: "employee", ux: { welcome: { assistantName: "מאיה" } } });
+    expect(normalizeWebchatConfig({ v: 2, appearance: { primaryColor: "#112233" } }, current).nameSource).toBe("employee");
+    expect(normalizeWebchatConfig({ v: 2, nameSource: "custom" }, current).nameSource).toBe("custom");
+  });
+});
