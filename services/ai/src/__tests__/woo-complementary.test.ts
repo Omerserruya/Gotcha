@@ -85,7 +85,8 @@ describe("★ the gate (no CatalogTool row by design)", () => {
   });
 
   it("the tool name is the gate's constant", () => {
-    expect(WOO_COMPLEMENTARY_TOOL.function.name).toBe("woocommerce.complementary_products");
+    expect(WOO_COMPLEMENTARY_TOOL.function.name).toBe(WOO_COMPLEMENTARY_TOOL_NAME);
+    expect(WOO_COMPLEMENTARY_TOOL_NAME).toBe("woocommerce.complementary_products");
   });
 });
 

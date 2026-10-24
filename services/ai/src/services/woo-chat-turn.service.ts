@@ -16,7 +16,6 @@ import {
   summarizeWooCards,
   WOO_MESSAGE_TYPES,
   MAX_CAROUSEL_ITEMS,
-  WOO_COMPLEMENTARY_TOOL_NAME,
   type SendShopifyProductsArgs,
   type SendShopifyProductsResult,
   type WooCommercePayload,
@@ -122,6 +121,11 @@ export const WOO_TURN_HIDDEN_TOOLS: ReadonlySet<string> = new Set(["shopify.sear
 // cards, exactly as for a search. Offered only while the widget's toggle is on.
 
 export const WOO_COMPLEMENTARY_LIMIT = 4;
+
+// The same name as shared tool-gate's WOO_COMPLEMENTARY_TOOL_NAME (a test pins
+// it). A literal, not the import: this module loads in many suites whose
+// shared mock has no such export, and the tool is built at import time.
+const WOO_COMPLEMENTARY_TOOL_NAME = "woocommerce.complementary_products";
 
 export const WOO_COMPLEMENTARY_TOOL = {
   type: "function" as const,
