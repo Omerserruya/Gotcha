@@ -884,11 +884,20 @@ const CHANNEL_PLATFORMS = ["messenger", "instagram", "whatsapp", "gmail", "outlo
 
 /**
  * Allow-listed `flow` values, signed into the state - never a return URL from
- * the browser. `redesign_studio` lands in the redesigned app (/v2).
+ * the browser. Each names a fixed landing page in the redesigned app (/v2):
+ * `redesign_studio` the channels settings, `onboarding_channels` onboarding's
+ * channels step. No flow keeps the legacy landing.
  */
-const CHANNEL_FLOWS = new Set(["redesign_studio"]);
+const CHANNEL_FLOW_PATHS: Record<string, string> = {
+  redesign_studio: "/settings/channels",
+  onboarding_channels: "/onboarding/channels",
+};
 function parseChannelFlow(raw: unknown): string | undefined {
-  return typeof raw === "string" && CHANNEL_FLOWS.has(raw) ? raw : undefined;
+  return typeof raw === "string" && Object.hasOwn(CHANNEL_FLOW_PATHS, raw) ? raw : undefined;
+}
+/** Whether a flow lands in the redesigned app (and so speaks its query). */
+function isRedesignFlow(flow: unknown): flow is string {
+  return typeof flow === "string" && Object.hasOwn(CHANNEL_FLOW_PATHS, flow);
 }
 
 type ChannelInitOutcome =
@@ -1049,7 +1058,7 @@ const CHANNEL_ERROR_ALIASES: Record<string, string> = {
 /** The reasons a connect can land as connected-but-pending (closed list). */
 const PENDING_REASONS = new Set(["SUBSCRIBE_FAILED"]);
 
-export function redesignChannelsUrl(origin: string, platform: string | undefined, legacyQuery: string): string {
+export function redesignChannelsUrl(origin: string, platform: string | undefined, legacyQuery: string, flow = "redesign_studio"): string {
   const legacy = new URLSearchParams(legacyQuery);
   const out = new URLSearchParams();
   const err = legacy.get("error");
@@ -1076,7 +1085,8 @@ export function redesignChannelsUrl(origin: string, platform: string | undefined
       }
     }
   }
-  return `${origin}${REDESIGN_BASE_PATH}/settings/channels?${out.toString()}`;
+  const path = CHANNEL_FLOW_PATHS[isRedesignFlow(flow) ? flow : "redesign_studio"];
+  return `${origin}${REDESIGN_BASE_PATH}${path}?${out.toString()}`;
 }
 
 /**
@@ -1287,8 +1297,8 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
     }
     if (outcome.kind === "not_configured") {
       res.redirect(
-        flow === "redesign_studio"
-          ? redesignChannelsUrl(FRONTEND_URL, outcome.platform, "error=not_configured")
+        isRedesignFlow(flow)
+          ? redesignChannelsUrl(FRONTEND_URL, outcome.platform, "error=not_configured", flow)
           : `${FRONTEND_URL}/settings/channels?error=not_configured&platform=${outcome.platform}`,
       );
       return;
@@ -1346,8 +1356,8 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
   let flow: string | undefined;
   let platformForReturn: string | undefined;
   const back = (legacyQuery: string) =>
-    flow === "redesign_studio"
-      ? redesignChannelsUrl(frontendUrl, platformForReturn, legacyQuery)
+    isRedesignFlow(flow)
+      ? redesignChannelsUrl(frontendUrl, platformForReturn, legacyQuery, flow)
       : `${frontendUrl}/settings/channels?${legacyQuery}`;
 
   try {
@@ -1359,8 +1369,8 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       // every other flow gets exactly the answer it always had.
       if (typeof state === "string" && state) {
         const consumed = await consumeOAuthState<{ flow?: string; platform?: string }>(state, "meta_channels");
-        if (consumed.ok && consumed.claims.flow === "redesign_studio") {
-          res.redirect(redesignChannelsUrl(frontendUrl, consumed.claims.platform, "error=denied"));
+        if (consumed.ok && isRedesignFlow(consumed.claims.flow)) {
+          res.redirect(redesignChannelsUrl(frontendUrl, consumed.claims.platform, "error=denied", consumed.claims.flow));
           return;
         }
       }
@@ -1707,7 +1717,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       // The redesigned app lets the customer choose when the grant holds more
       // than one Page; connecting every Page a person can manage was never
       // their choice (2026-10-09). v1 has no picker and keeps connecting all.
-      if (flow === "redesign_studio" && usable.length > 1) {
+      if (isRedesignFlow(flow) && usable.length > 1) {
         let sessionId: string;
         try {
           sessionId = await startPageSession(tenantId, userId, { tokenExpiresAt: tokenExpiresAt.toISOString(), pages: usable });
@@ -2224,7 +2234,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
     res.redirect(back(
       `connected=${platform}&count=${connectedAccounts.length}` +
         // v1's pending copy is WhatsApp's; only the redesign says this one.
-        (subscribeGap && flow === "redesign_studio" ? `&pending=true&reason=SUBSCRIBE_FAILED` : ""),
+        (subscribeGap && isRedesignFlow(flow) ? `&pending=true&reason=SUBSCRIBE_FAILED` : ""),
     ));
   } catch (err: any) {
     console.error("OAuth callback error:", err.response?.data || err.message);

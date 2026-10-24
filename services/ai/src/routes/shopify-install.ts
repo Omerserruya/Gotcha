@@ -53,6 +53,7 @@ import {
   writeDurableSetting,
   normalizeShopifyShopDomain,
 } from "@chatcenter/shared";
+import { isRedesignSystemsFlow, redesignSystemsPath } from "../services/redesign-return";
 import {
   createInstallIntent,
   readInstallIntent,
@@ -80,7 +81,7 @@ const canConnectSystems = requirePermission(
 );
 
 /** Recognised `flow` values - the same allow-list the OAuth callback uses. */
-const KNOWN_FLOWS = new Set(["onboarding", "settings_business_systems", "redesign_studio"]);
+const KNOWN_FLOWS = new Set(["onboarding", "settings_business_systems", "redesign_studio", "onboarding_systems"]);
 function parseFlow(raw: unknown): string | undefined {
   const v = singleValue(raw);
   return v && KNOWN_FLOWS.has(v) ? v : undefined;
@@ -193,7 +194,7 @@ router.get(
     await writeDurableSetting(
       req.tenantId!,
       SHOPIFY_RETURN_FLOW_KEY,
-      flow === "redesign_studio" ? "redesign_studio" : null,
+      isRedesignSystemsFlow(flow) ? flow : null,
     ).catch(() => undefined);
 
     // SameSite=Lax survives the top-level GET navigation Shopify performs back
@@ -286,9 +287,9 @@ router.get("/connectors/shopify/billing/return", async (req: Request, res: Respo
     const shop = normalizeShopifyShopDomain(singleValue(req.query.shop) || "");
     const owner = shop ? await findShopOwner(shop) : null;
     const flow = owner ? await readDurableSetting(owner.tenantId, SHOPIFY_RETURN_FLOW_KEY) : null;
-    if (shop && flow === "redesign_studio") {
+    if (shop && isRedesignSystemsFlow(flow)) {
       const p = new URLSearchParams({ system: "shopify", billing: "verify", shop });
-      res.redirect(`${base}/studio/capabilities?${p.toString()}`);
+      res.redirect(`${base}${redesignSystemsPath(flow)}?${p.toString()}`);
       return;
     }
   } catch (err: any) {

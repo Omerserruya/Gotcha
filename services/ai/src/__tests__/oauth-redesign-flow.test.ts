@@ -214,6 +214,29 @@ describe("the user pressed Cancel at the provider (?error=, no code)", () => {
 
 // 2026-10-09: refusals BEFORE the state verifies answered plain text on the
 // API host and stranded the browser. They land on v2 now, for every flow.
+describe("★ onboarding_systems: the same answers, on onboarding's systems step (2026-10-24)", () => {
+  const ONB = "https://app.gotcha.co.il/onboarding/systems";
+  it("init signs it; success, failure and Cancel land on the step", async () => {
+    const res = await request(app).get("/api/connectors/hubspot/oauth/init").query({ flow: "onboarding_systems" });
+    const url = new URL(res.body.url ?? res.headers.location);
+    expect(JSON.parse(Buffer.from(url.searchParams.get("state")!.split(".")[1], "base64url").toString()).flow).toBe("onboarding_systems");
+    vi.stubGlobal("fetch", vi.fn(async () => tokenOk));
+    expect((await callback("hubspot", { code: "c", state: stateFor("hubspot", "onboarding_systems") })).headers.location).toBe(`${ONB}?system=hubspot&connected=1`);
+    vi.stubGlobal("fetch", vi.fn(async () => tokenFail));
+    expect((await callback("hubspot", { code: "c", state: stateFor("hubspot", "onboarding_systems") })).headers.location).toBe(`${ONB}?system=hubspot&error=token_exchange_failed`);
+    expect((await callback("hubspot", { error: "access_denied", state: stateFor("hubspot", "onboarding_systems") })).headers.location).toBe(`${ONB}?system=hubspot&error=denied`);
+  });
+  it.each(["__proto__", "constructor", "onboarding_systems/../../x"])("★ %s is no flow", async (flow) => {
+    const res = await request(app).get("/api/connectors/hubspot/oauth/init").query({ flow });
+    const url = new URL(res.body.url ?? res.headers.location);
+    expect(JSON.parse(Buffer.from(url.searchParams.get("state")!.split(".")[1], "base64url").toString()).flow).toBeUndefined();
+  });
+  it("Stripe carries it too", async () => {
+    const r = await request(app).get("/api/connectors/stripe/oauth/init").query({ flow: "onboarding_systems" });
+    expect(JSON.parse(Buffer.from(new URL(r.body.url ?? r.headers.location).searchParams.get("state")!.split(".")[1], "base64url").toString()).flow).toBe("onboarding_systems");
+  });
+});
+
 describe("refused before the state verifies: the browser lands on v2", () => {
   const V2 = "https://app.gotcha.co.il/studio/capabilities";
   const SLUGS = ["hubspot", "stripe", "monday", "salesforce", "airtable"] as const;

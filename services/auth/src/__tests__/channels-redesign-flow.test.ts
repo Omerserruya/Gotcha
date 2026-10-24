@@ -237,6 +237,35 @@ describe("callback: failures", () => {
   });
 });
 
+describe("★ onboarding_channels: the same answers, on onboarding's channels step (2026-10-24)", () => {
+  const ONB = "https://dev.example.test/onboarding/channels";
+  it("init signs it into the state; init-url too", async () => {
+    const r = await request(app()).get("/api/channels/oauth/init?platform=gmail&token=t&flow=onboarding_channels");
+    expect(flowInUrl(r.headers.location)).toBe("onboarding_channels");
+    const j = await request(app()).get("/api/channels/oauth/init-url?platform=gmail&flow=onboarding_channels");
+    expect(flowInUrl(j.body.url)).toBe("onboarding_channels");
+  });
+  it("success, cancel, replay and not_configured all land on the step, with the redesign query", async () => {
+    expect((await cb({ code: "c", state: st("gmail", "onboarding_channels") })).headers.location).toBe(`${ONB}?connected=gmail&count=1`);
+    expect((await cb({ error: "access_denied", state: st("gmail", "onboarding_channels") })).headers.location).toBe(`${ONB}?platform=gmail&error=denied`);
+    const s = st("gmail", "onboarding_channels");
+    await cb({ code: "c", state: s });
+    expect((await cb({ code: "c", state: s })).headers.location).toBe(`${ONB}?platform=gmail&error=state_already_used`);
+    const nc = await request(app()).get("/api/channels/oauth/init?platform=slack&token=t&flow=onboarding_channels");
+    expect(nc.headers.location).toBe(`${ONB}?platform=slack&error=not_configured`);
+  });
+  it.each(["onboarding_channels/../x", "constructor", "__proto__", "toString"])("★ a near-miss or prototype key %s is no flow at all", async (flow) => {
+    const r = await request(app()).get(`/api/channels/oauth/init?platform=gmail&token=t&flow=${encodeURIComponent(flow)}`);
+    expect(flowInUrl(r.headers.location)).toBeUndefined();
+  });
+  it("the URL builder never leaves its fixed paths: an unknown flow is the settings page", () => {
+    expect(redesignChannelsUrl("https://o", "gmail", "connected=gmail", "onboarding_channels")).toBe("https://o/onboarding/channels?connected=gmail");
+    expect(redesignChannelsUrl("https://o", "gmail", "connected=gmail", "https://evil.example")).toBe("https://o/settings/channels?connected=gmail");
+    expect(redesignChannelsUrl("https://o", "gmail", "connected=gmail", "__proto__")).toBe("https://o/settings/channels?connected=gmail");
+    expect(redesignChannelsUrl("https://o", "gmail", "connected=gmail")).toBe("https://o/settings/channels?connected=gmail");
+  });
+});
+
 describe("redesignChannelsUrl - the closed list", () => {
   const u = (q: string) => new URL(redesignChannelsUrl("https://o", "slack", q)).search;
   it("folds the callback's provider-specific codes onto the list", () => {

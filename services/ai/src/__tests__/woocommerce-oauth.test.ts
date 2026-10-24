@@ -121,6 +121,20 @@ describe("init", () => {
   });
 });
 
+describe("★ onboarding_systems lands on onboarding's systems step (2026-10-24)", () => {
+  const ONB = "https://dev.example.test/onboarding/systems";
+  it("connected, denied and never-called-back all land on the step", async () => {
+    let state = (await startFlow("onboarding_systems")).searchParams.get("user_id")!;
+    storeAnswers(true);
+    await callback({ ...KEYS, user_id: state });
+    expect((await back({ success: "1", user_id: state })).headers.location).toBe(`${ONB}?system=woocommerce&connected=1`);
+    state = (await startFlow("onboarding_systems")).searchParams.get("user_id")!;
+    expect((await back({ success: "0", user_id: state })).headers.location).toBe(`${ONB}?system=woocommerce&error=denied`);
+    state = (await startFlow("onboarding_systems")).searchParams.get("user_id")!;
+    expect((await back({ success: "1", user_id: state })).headers.location).toBe(`${ONB}?system=woocommerce&error=callback_not_received`);
+  });
+});
+
 describe("callback + return: the whole round-trip", () => {
   it("★ approve → keys validated → CONNECTED, stored encrypted → lands connected=1", async () => {
     const state = (await startFlow()).searchParams.get("user_id")!;

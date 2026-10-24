@@ -24,7 +24,7 @@ import {
   ZOHO_DEFAULT_SCOPES,
 } from "../services/zoho.service";
 
-import { parseConnectFlow, redesignCapabilitiesUrl, redirectRedesignDenied, REDESIGN_FLOW } from "../services/redesign-return";
+import { parseConnectFlow, redesignCapabilitiesUrl, redirectRedesignDenied, isRedesignSystemsFlow } from "../services/redesign-return";
 const router = Router();
 
 // 2026-10-09: the connect permission every other integration uses (see
@@ -109,7 +109,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
     });
     if (!catalog) {
       console.error("[Zoho OAuth] Catalog entry not found:", payload.integrationSlug);
-      res.redirect(flow === REDESIGN_FLOW ? redesignCapabilitiesUrl("zoho_crm", { error: "catalog_missing" }) : redesignCapabilitiesUrl("zoho_crm", { error: "catalog_missing" }));
+      res.redirect(redesignCapabilitiesUrl("zoho_crm", { error: "catalog_missing" }, isRedesignSystemsFlow(flow) ? flow : undefined));
       return;
     }
 
@@ -199,8 +199,8 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
     // During onboarding, return to the onboarding screen; otherwise the
     // app's capabilities page (the legacy pages are gone since 2026-10-21).
     res.redirect(
-      payload.flow === REDESIGN_FLOW
-        ? redesignCapabilitiesUrl(payload.integrationSlug)
+      isRedesignSystemsFlow(payload.flow)
+        ? redesignCapabilitiesUrl(payload.integrationSlug, {}, payload.flow)
         : payload.flow === "onboarding"
           ? `${frontendUrl}/onboarding`
           : redesignCapabilitiesUrl(payload.integrationSlug),
@@ -215,7 +215,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
       cause: err,
       context: { stage: "callback" },
     });
-    res.redirect(flow === REDESIGN_FLOW ? redesignCapabilitiesUrl("zoho_crm", { error: "callback_error" }) : redesignCapabilitiesUrl("zoho_crm", { error: "callback_error" }));
+    res.redirect(redesignCapabilitiesUrl("zoho_crm", { error: "callback_error" }, isRedesignSystemsFlow(flow) ? flow : undefined));
   }
 });
 
