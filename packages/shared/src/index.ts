@@ -215,6 +215,7 @@ export {
   evaluateToolGate,
   evaluatePolicies,
   getDefaultHighRiskTools,
+  WOO_COMPLEMENTARY_TOOL_NAME,
 } from "./lib/tool-gate";
 export type {
   ToolGateDecision,

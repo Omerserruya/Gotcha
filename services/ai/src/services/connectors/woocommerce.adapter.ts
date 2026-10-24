@@ -474,6 +474,12 @@ const WooCommerceAdapter: ProviderAdapter = {
         if (price(args.price_min)) params.set("min_price", price(args.price_min)!);
         if (price(args.price_max)) params.set("max_price", price(args.price_max)!);
         if (args.in_stock === true) params.set("stock_status", "instock");
+        // Internal callers only (the web chat's complementary products): not in
+        // the model's schema. Numeric ids and a numeric category, nothing else.
+        const ids = (v: unknown) => (Array.isArray(v) ? v : []).map((x) => String(x ?? "").trim()).filter((x) => /^\d{1,12}$/.test(x)).slice(0, 100);
+        if (ids(args.include).length) params.set("include", ids(args.include).join(","));
+        if (ids(args.exclude).length) params.set("exclude", ids(args.exclude).join(","));
+        if (/^\d{1,12}$/.test(String(args.category ?? ""))) params.set("category", String(args.category));
         const list: any = await wooRequest(auth, "GET", `${base}/products?${params}`);
         return Array.isArray(list) ? list.filter((p: any) => p?.catalog_visibility !== "hidden") : list;
       }

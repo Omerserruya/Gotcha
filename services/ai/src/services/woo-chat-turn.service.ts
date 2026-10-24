@@ -16,6 +16,7 @@ import {
   summarizeWooCards,
   WOO_MESSAGE_TYPES,
   MAX_CAROUSEL_ITEMS,
+  WOO_COMPLEMENTARY_TOOL_NAME,
   type SendShopifyProductsArgs,
   type SendShopifyProductsResult,
   type WooCommercePayload,
@@ -32,6 +33,8 @@ export interface WooTurn {
   storeUrl: string;
   channelAccountId: string;
   productMessagingEnabled: true;
+  /** The widget's "suggest complementary products" (commerce.suggestComplementary). */
+  suggestComplementary: boolean;
   carouselSize: number;
   staged: ProductMessageRecord[];
   sendShopifyProducts: (args: SendShopifyProductsArgs) => Promise<SendShopifyProductsResult>;
@@ -59,6 +62,7 @@ export async function prepareWebchatCommerceTurn(opts: { tenantId: string; conve
     storeUrl: store.storeUrl,
     channelAccountId: account.id,
     productMessagingEnabled: true,
+    suggestComplementary: config.commerce.suggestComplementary,
     carouselSize: MAX_CAROUSEL_ITEMS,
     staged: [],
     sendShopifyProducts: async () => ({ ok: false, reason: "not_ready" }),
@@ -106,7 +110,81 @@ async function stageWooProducts(turn: WooTurn, tenantId: string, addToCartEnable
 }
 
 /** Shopify's catalogue tools: not this conversation's store on a web chat whose cards come from WooCommerce. */
-export const WOO_TURN_HIDDEN_TOOLS: ReadonlySet<string> = new Set(["shopify.search_products", "shopify.get_product"]);
+export const WOO_TURN_HIDDEN_TOOLS: ReadonlySet<string> = new Set(["shopify.search_products", "shopify.get_product", "shopify.complementary_products"]);
+
+// ─── Complementary products (2026-10-24) ─────────────────────────────────────
+//
+// What goes with the product the customer chose, from THIS store: its own
+// cross-sells and upsells first (what the merchant linked in WooCommerce), then,
+// when those are fewer than asked for, in-stock products from the same
+// category. Published, visible and in stock only. The result has the shape of
+// list_products, so the typed product path grounds it and the widget shows
+// cards, exactly as for a search. Offered only while the widget's toggle is on.
+
+export const WOO_COMPLEMENTARY_LIMIT = 4;
+
+export const WOO_COMPLEMENTARY_TOOL = {
+  type: "function" as const,
+  function: {
+    name: WOO_COMPLEMENTARY_TOOL_NAME,
+    description:
+      "Products from this store that go with one product: what the store links to it (cross-sells and upsells), " +
+      "else in-stock products from its category. Returns products to show as cards.\n\n" +
+      "WHEN TO USE: the customer has settled on a product you showed them (they said they will take it, asked how to order it, or added it to the cart). " +
+      "Offer the add-ons once, briefly, after answering what they asked.\n\n" +
+      "DO NOT USE: before the customer chose something, for a product you never showed them, or again for the same product.",
+    parameters: {
+      type: "object",
+      properties: {
+        product_id: { type: "string", description: "The numeric id of the product the customer chose, from a result you showed." },
+      },
+      required: ["product_id"],
+      additionalProperties: false,
+    },
+  },
+};
+
+const idList = (v: unknown): string[] =>
+  (Array.isArray(v) ? v : []).map((x) => String(x ?? "").trim()).filter((x) => /^\d{1,12}$/.test(x));
+const sellable = (p: any) =>
+  p && p.status === "publish" && p.catalog_visibility !== "hidden" && p.stock_status === "instock" && p.purchasable !== false;
+
+export async function wooComplementaryProducts(
+  tenantId: string,
+  productId: string,
+  limit = WOO_COMPLEMENTARY_LIMIT,
+): Promise<{ ok: true; result: any[]; sources: { linked: number; sameCategory: number } } | { ok: false; reason: string }> {
+  const id = String(productId ?? "").trim();
+  if (!/^\d{1,12}$/.test(id)) return { ok: false, reason: "complementary_products needs the numeric product_id of the product the customer chose." };
+  const read = (toolFunctionName: string, args: Record<string, unknown>) =>
+    executeAdapterTool({ tenantId, toolFunctionName, args, accessScope: "internal" });
+
+  const anchor = await read("woocommerce.get_product", { product_id: id });
+  if (!anchor.ok) return { ok: false, reason: `product ${id} is not in this store` };
+  const raw: any = anchor.result;
+
+  const linkedIds = [...new Set([...idList(raw?.cross_sell_ids), ...idList(raw?.upsell_ids)])].filter((x) => x !== id);
+  let linked: any[] = [];
+  if (linkedIds.length) {
+    const got = await read("woocommerce.list_products", { include: linkedIds, in_stock: true, per_page: Math.min(100, linkedIds.length) });
+    // Keep the merchant's order (cross-sells first), not the API's.
+    const byId = new Map((got.ok && Array.isArray(got.result) ? (got.result as any[]) : []).filter(sellable).map((p) => [String(p.id), p]));
+    linked = linkedIds.map((x) => byId.get(x)).filter(Boolean).slice(0, limit);
+  }
+
+  let sameCategory: any[] = [];
+  const category = idList((raw?.categories ?? []).map((c: any) => c?.id))[0];
+  if (linked.length < limit && category) {
+    const exclude = [id, ...linked.map((p) => String(p.id))];
+    const got = await read("woocommerce.list_products", { category, exclude, in_stock: true, per_page: limit * 2 });
+    sameCategory = (got.ok && Array.isArray(got.result) ? (got.result as any[]) : [])
+      .filter(sellable)
+      .filter((p) => !exclude.includes(String(p.id)))
+      .slice(0, limit - linked.length);
+  }
+
+  return { ok: true, result: [...linked, ...sameCategory], sources: { linked: linked.length, sameCategory: sameCategory.length } };
+}
 
 /** The tool surface without the other store's catalogue (unchanged when there is no Woo turn). */
 export function withoutOtherStoreTools<T extends { function?: { name?: string } }>(tools: T[], wooTurn: WooTurn | null): T[] {

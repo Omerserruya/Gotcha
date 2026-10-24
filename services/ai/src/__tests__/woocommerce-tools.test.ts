@@ -104,6 +104,17 @@ describe("★ the new WooCommerce tools (2026-10-13), stubbed store", () => {
     await expect(run("update_shipping_address", { order_id: "8", address_1: "x", city: "y" })).rejects.toThrow("order_already_completed");
   });
 
+  it("list_products: the internal include / exclude / category filters, numeric only", async () => {
+    store({ "GET /products": [] });
+    await run("list_products", { include: ["5", 3, "x"], exclude: ["1"], category: "7", in_stock: true });
+    const q = new URL(H.calls[0].url).searchParams;
+    expect([q.get("include"), q.get("exclude"), q.get("category"), q.get("stock_status"), q.get("status")]).toEqual(["5,3", "1", "7", "instock", "publish"]);
+    store({ "GET /products": [] });
+    await run("list_products", { include: ["a"], category: "7;drop", query: "coat" });
+    const q2 = new URL(H.calls[0].url).searchParams;
+    expect([q2.get("include"), q2.get("category"), q2.get("search")]).toEqual([null, null, "coat"]);
+  });
+
   it("add_order_note: private unless asked to be customer-visible", async () => {
     store({});
     await run("add_order_note", { order_id: "9", note: "Checked stock" });

@@ -63,6 +63,9 @@ export interface PolicyResult {
 // no CatalogTool row. Their floor policy lives here. Tenants can still tighten
 // via TenantToolPermission rows.
 
+/** See the branch in evaluatePolicies; ai woo-chat-turn.service builds and runs it. */
+export const WOO_COMPLEMENTARY_TOOL_NAME = "woocommerce.complementary_products";
+
 const SYSTEM_TOOL_POLICIES: Record<string, HitlPolicy> = {
   // Low-risk / context tools - always allowed.
   link_customer_identifier:    { mode: "never" },
@@ -152,6 +155,17 @@ export async function evaluatePolicies(opts: {
     // tenants). Tenant overrides flow through the static TenantToolPermission
     // path (tenantToolId stays null).
     catalog = SYSTEM_TOOL_POLICIES[opts.toolName] ?? { mode: "never" };
+  } else if (opts.toolName === WOO_COMPLEMENTARY_TOOL_NAME) {
+    // The web chat's cross-sell from the WooCommerce store (2026-10-24). It
+    // has no CatalogTool row by design: it is not a store endpoint but a read
+    // the AI service composes from get_product and list_products, offered only
+    // on a web chat whose widget turned "suggest complementary products" on.
+    // That widget toggle is the merchant's grant. The one per-employee gate is
+    // the allowlist: an employee kept off WooCommerce never gets it.
+    if (opts.aiAgentId && !(await loadIntegrationAccess(opts.tenantId, opts.aiAgentId)).has("woocommerce")) {
+      return denyResult(`integration "woocommerce" not allowed for agent "${opts.aiAgentId}"`, {});
+    }
+    catalog = { mode: "never" };
   } else if (opts.toolName.startsWith("custom.") || opts.toolName.startsWith("custom_db.")) {
     // Tenant-defined custom HTTP / DB-query tools. Their definition lives in
     // CustomApiTool / CustomDbQueryTool, NOT CatalogTool, so the dynamic branch

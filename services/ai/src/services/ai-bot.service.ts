@@ -236,7 +236,7 @@ import {
 } from "./action-contracts.repo";
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -2046,6 +2046,14 @@ async function generateAIBotReplyInner(
           return { ok: false as const, reason: gate.reason };
         }
       }
+      // The web chat's cross-sell is composed here from the store's own reads,
+      // not a store endpoint (woo-chat-turn.service).
+      if (toolFunctionName === WOO_COMPLEMENTARY_TOOL.function.name) {
+        if (!wooTurn?.suggestComplementary) return { ok: false as const, reason: "complementary products are off for this widget" };
+        const out = await wooComplementaryProducts(opts.tenantId, String((args as Record<string, any>)?.product_id ?? ""));
+        if (out.ok) console.log(`[ai-bot][cross-sell] woocommerce anchor=${String((args as any)?.product_id)} linked=${out.sources.linked} sameCategory=${out.sources.sameCategory}`);
+        return out.ok ? { ok: true as const, result: out.result } : out;
+      }
 
       // A budget the conversation already established is applied to the SEARCH,
       // not to the prose about the search. See enrichProductSearchArgs.
@@ -2312,6 +2320,10 @@ async function generateAIBotReplyInner(
   } catch (err: any) {
     console.warn("[ai-bot] adapter tool surface failed:", err?.message);
   }
+
+  // The web chat's "suggest complementary products" (off unless the widget
+  // turned it on). Its gate is the employee's WooCommerce allowlist.
+  if (wooTurn?.suggestComplementary) tools.push(WOO_COMPLEMENTARY_TOOL as any);
 
   // ── Unified semantic lead/contact creation ──
   // Collapse every vendor's raw create path (adapter `<slug>.create_record` /

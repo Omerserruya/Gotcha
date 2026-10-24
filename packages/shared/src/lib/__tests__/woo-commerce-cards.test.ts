@@ -76,10 +76,10 @@ describe("★ projectWooCommerce", () => {
 
 describe("★ the widget's products are opt-in and need the store", () => {
   it("off by default; add to cart needs cards; coupon ids sanitised and capped", () => {
-    expect(normalizeWebchatConfig(null).commerce).toEqual({ productMessagingEnabled: false, addToCartEnabled: false, promotions: { couponIds: [] } });
+    expect(normalizeWebchatConfig(null).commerce).toEqual({ productMessagingEnabled: false, addToCartEnabled: false, suggestComplementary: false, promotions: { couponIds: [] } });
     expect(normalizeWebchatConfig({ v: 2, commerce: { addToCartEnabled: true } }).commerce.addToCartEnabled).toBe(false);
     const c = normalizeWebchatConfig({ v: 2, commerce: { productMessagingEnabled: true, addToCartEnabled: true, promotions: { couponIds: [12, "13", "13", "x1", "<b>", "14", "15", "16", "17"] } } }).commerce;
-    expect(c).toEqual({ productMessagingEnabled: true, addToCartEnabled: true, promotions: { couponIds: ["12", "13", "14", "15", "16"] } });
+    expect(c).toEqual({ productMessagingEnabled: true, addToCartEnabled: true, suggestComplementary: false, promotions: { couponIds: ["12", "13", "14", "15", "16"] } });
   });
 
   it("★ served on only while the store is connected", () => {

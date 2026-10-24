@@ -50,6 +50,8 @@ export function productSearchProviderOf(toolName: string | undefined): ProductPr
       return "shopify";
     case "woocommerce.list_products":
     case "woocommerce.get_product":
+    // Its result is list_products-shaped: the add-ons become cards like a search.
+    case "woocommerce.complementary_products":
       return "woocommerce";
     default:
       return null;
@@ -491,8 +493,10 @@ export async function recordDiscoverySearchOutcome(opts: {
   toolCallLog: Array<{ tool?: string; args?: unknown; result?: unknown; decision?: string }>;
 }): Promise<void> {
   try {
+    // WooCommerce's catalogue reads count too: without them a Woo product was
+    // never "shown", and the cross-sell gate refused every Woo anchor.
     const call = opts.toolCallLog.find(
-      (t) => typeof t.tool === "string" && /(^|\.)search_products$/.test(t.tool),
+      (t) => typeof t.tool === "string" && (/(^|\.)search_products$/.test(t.tool) || t.tool === "woocommerce.list_products" || t.tool === "woocommerce.get_product"),
     );
     if (!call) return;
     const profile = getDiscoveryProfile("product_recommendation") as DiscoveryProfile;

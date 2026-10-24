@@ -192,10 +192,15 @@ describe("the widget's commerce in settings", () => {
   it("saved through PUT, normalised (cart needs cards), returned by GET", async () => {
     H.accounts = [web({ productMessagingEnabled: false })];
     let r = await request(app()).put("/api/website-widget").send({ commerce: { addToCartEnabled: true } });
-    expect(r.body.data.settings.commerce).toEqual({ productMessagingEnabled: false, addToCartEnabled: false, promotions: { couponIds: [] } });
+    expect(r.body.data.settings.commerce).toEqual({ productMessagingEnabled: false, addToCartEnabled: false, suggestComplementary: false, promotions: { couponIds: [] } });
     r = await request(app()).put("/api/website-widget").send({ commerce: { productMessagingEnabled: true, addToCartEnabled: true, promotions: { couponIds: ["7", "x"] } } });
-    expect(r.body.data.settings.commerce).toEqual({ productMessagingEnabled: true, addToCartEnabled: true, promotions: { couponIds: ["7"] } });
+    expect(r.body.data.settings.commerce).toEqual({ productMessagingEnabled: true, addToCartEnabled: true, suggestComplementary: false, promotions: { couponIds: ["7"] } });
     expect((await request(app()).get("/api/website-widget")).body.data.settings.commerce.productMessagingEnabled).toBe(true);
+    // The complementary toggle saves like the others; it needs cards too.
+    r = await request(app()).put("/api/website-widget").send({ commerce: { suggestComplementary: true } });
+    expect(r.body.data.settings.commerce.suggestComplementary).toBe(true);
+    r = await request(app()).put("/api/website-widget").send({ commerce: { productMessagingEnabled: false } });
+    expect(r.body.data.settings.commerce.suggestComplementary).toBe(false);
   });
 });
 

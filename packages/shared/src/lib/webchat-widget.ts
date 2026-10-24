@@ -65,6 +65,12 @@ export const MAX_PROMOTION_COUPONS = 5;
 export interface WebchatCommerce {
   productMessagingEnabled: boolean;
   addToCartEnabled: boolean;
+  /**
+   * After the customer chose a product, the AI may suggest what goes with it:
+   * the store's own cross-sells and upsells, else in-stock products from the
+   * same category, as cards. Cards only, so it needs productMessagingEnabled.
+   */
+  suggestComplementary: boolean;
   /** The store coupons the merchant chose to show (Woo coupon ids). Nothing shows without a choice. */
   promotions: { couponIds: string[] };
 }
@@ -80,6 +86,7 @@ export function normalizeWebchatCommerce(raw: unknown, base: WebchatCommerce = d
     productMessagingEnabled,
     // Add to cart lives on a product card: no cards, no cart.
     addToCartEnabled: productMessagingEnabled && bool(s.addToCartEnabled, base.addToCartEnabled),
+    suggestComplementary: productMessagingEnabled && bool(s.suggestComplementary, base.suggestComplementary),
     promotions: { couponIds: ids },
   };
 }
@@ -133,7 +140,7 @@ export function defaultWebchatConfig(): WebchatConfig {
     ux: defaultShopifyChatUx(),
     behaviour: { allowHumanHandoff: true },
     offline: { message: "We are away right now. Leave a message and we will get back to you." },
-    commerce: { productMessagingEnabled: false, addToCartEnabled: false, promotions: { couponIds: [] } },
+    commerce: { productMessagingEnabled: false, addToCartEnabled: false, suggestComplementary: false, promotions: { couponIds: [] } },
   };
 }
 
