@@ -90,6 +90,25 @@ describe('★★ CSS: the phone shows the one line; Hebrew is never letter-space
     'utf8',
   );
 
+  const rule = (selector: string, within = css) =>
+    new RegExp(`\\n {2,4}${selector.replace(/\./g, '\\.')} \\{([^}]*)\\}`).exec(within)?.[1] ?? '';
+
+  it('★★ on a desktop only the work surface scrolls: the frame is the window, the column stays', () => {
+    const desktop = css.slice(0, css.indexOf('@media (width <= 1000px)'));
+    expect(rule('.frame', desktop)).toMatch(/\bblock-size:\s*100dvh;/);
+    expect(rule('.frame', desktop)).not.toMatch(/min-block-size/);
+    expect(rule('.surface', desktop)).toMatch(/overflow-y:\s*auto;/);
+    expect(rule('.surface', desktop)).toMatch(/min-block-size:\s*0;/);
+    // Centred, and a step taller than the panel is never cut off above it.
+    expect(rule('.work', desktop)).toMatch(/justify-content:\s*safe center;/);
+  });
+
+  it('below 1000px the page scrolls again: the column is one line', () => {
+    const media = css.slice(css.indexOf('@media (width <= 1000px)'));
+    expect(rule('.frame', media)).toMatch(/block-size:\s*auto;/);
+    expect(rule('.surface', media)).toMatch(/overflow-y:\s*visible;/);
+  });
+
   it('below 1000px: the list and the foot hide, the one line shows', () => {
     const media = css.slice(css.indexOf('@media (width <= 1000px)'));
     expect(media).toMatch(/\.steps,\s*\.foot\s*\{\s*display:\s*none;/);

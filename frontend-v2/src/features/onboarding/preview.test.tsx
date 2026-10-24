@@ -316,10 +316,10 @@ describe("★★ the banner is exactly the step column's width - and the column 
   });
 
   it.each([
-    ['reading', 'reading', '620px'],
+    ['reading', 'reading', '760px'],
     ['learned', 'learned', '800px'],
-    ['systems', 'systemsStep', '680px'],
-    ['channels', 'systemsStep', '680px'],
+    ['systems', 'systemsStep', '760px'],
+    ['channels', 'systemsStep', '760px'],
     ['try', 'try', '660px'],
   ])('%s: its width is set once, and the step reads it', async (step, root, width) => {
     const all = await css();
