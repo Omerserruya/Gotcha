@@ -145,9 +145,13 @@ export function ReadingStep({
           data-long={host && host.length > LONG_HOST ? '' : undefined}
           data-testid="reading-title"
         >
+          {/* Past tense once it is done: "We read", never "Reading" over a finished read. */}
           {host
-            ? t.rich('title', { host, ltr: (chunks) => <bdi dir="ltr">{chunks}</bdi> })
-            : t('titleNoHost')}
+            ? t.rich(done ? 'titleDone' : 'title', {
+                host,
+                ltr: (chunks) => <bdi dir="ltr">{chunks}</bdi>,
+              })
+            : t(done ? 'titleDoneNoHost' : 'titleNoHost')}
         </h1>
         <p className={styles.subtitle} role="status" data-testid="reading-stage">
           {status === 'RUNNING' ? (

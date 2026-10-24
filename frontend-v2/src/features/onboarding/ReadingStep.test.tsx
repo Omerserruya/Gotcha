@@ -162,6 +162,8 @@ describe('★★ reading the site, as it really goes', () => {
 
   it('★★ already finished when you arrive (back from step 2): it stays, with Continue', async () => {
     show(job({ status: 'COMPLETE', stage: 'done' }));
+    // Past tense: a finished read never says "Reading".
+    expect(screen.getByTestId('reading-title')).toHaveTextContent('We read avivco.il');
     expect(screen.getByTestId('reading-stage')).toHaveTextContent('Done. Here is what we learned.');
     expect(screen.getByTestId('reading-next')).toHaveAttribute('href', nextStep(false));
     await tick(ADVANCE_MS * 3);

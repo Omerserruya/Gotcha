@@ -166,6 +166,8 @@
   "scan": {
     "title": "קוראים את <ltr>{host}</ltr>",
     "titleNoHost": "קוראים את האתר שלכם",
+    "titleDone": "קראנו את <ltr>{host}</ltr>",
+    "titleDoneNoHost": "קראנו את האתר שלכם",
     "status": {
       "QUEUED": "מתחילים לקרוא…",
       "RUNNING": "{stage}",
