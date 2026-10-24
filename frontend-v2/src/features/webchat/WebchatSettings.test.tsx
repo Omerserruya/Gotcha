@@ -105,6 +105,7 @@ const show = (
     assigned = null,
     numbers = null,
     initial = config,
+    answering = null,
   }: {
     read?: WidgetInstall | null;
     data?: ShopifyData | null;
@@ -112,6 +113,7 @@ const show = (
     /** Stage B's numbers; `null` is a stage A service. */
     numbers?: readonly HandoffNumber[] | null;
     initial?: WebchatConfig;
+    answering?: WebsiteWidget['answering'];
   } = {},
 ) =>
   render(
@@ -125,6 +127,7 @@ const show = (
         business="Aviv & Co."
         tab={tab}
         handoffNumbers={numbers}
+        answering={answering}
       />
     </NextIntlClientProvider>,
   );
@@ -250,9 +253,11 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
     const { displayName: _sent, ...expected } = bodyOfConfig(config);
     expect(bodyOfWidget(settings)).toEqual({
       ...expected,
+      nameSource: 'custom',
       commerce: {
         productMessagingEnabled: false,
         addToCartEnabled: false,
+        suggestComplementary: false,
         promotions: { couponIds: [] },
       },
     });
@@ -263,10 +268,76 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
       commerce: {
         productMessagingEnabled: false,
         addToCartEnabled: true,
+        suggestComplementary: false,
         promotions: { couponIds: [] },
       },
     };
     expect(bodyOfWidget(odd).commerce.addToCartEnabled).toBe(false);
+    // Add-ons are product cards too (Backend f7c36959).
+    const addOns = { ...odd, commerce: { ...odd.commerce, suggestComplementary: true } };
+    expect(bodyOfWidget(addOns).commerce.suggestComplementary).toBe(false);
+  });
+});
+
+describe("★★ the header name: the answering employee's, or one you choose (Backend 330b0461)", () => {
+  const employee = { employee: { id: 'e1', name: 'Noa' }, automation: null };
+
+  it('an existing widget reads as "custom": the typed name, in its field and in the preview', () => {
+    show('conversation', { answering: employee });
+    expect(screen.getByTestId('webchat-name-custom')).toBeChecked();
+    expect(screen.getByTestId('webchat-name-input')).toHaveValue(config.ux.welcome.assistantName);
+  });
+
+  it('★ "the employee\'s name": the field goes, the name shows, the choice is saved, the typed one kept', async () => {
+    show('conversation', { answering: employee });
+    fireEvent.click(screen.getByTestId('webchat-name-employee'));
+    expect(screen.queryByTestId('webchat-name-input')).toBeNull();
+    expect(screen.getByTestId('webchat-name')).toHaveTextContent('Noa');
+    expect(screen.getByTestId('webchat-preview')).toHaveTextContent('Noa');
+    await pause();
+    expect(bodyOfWidget(sentAt()).nameSource).toBe('employee');
+    // Kept while unused, so switching back restores it.
+    expect(bodyOfWidget(sentAt()).ux.welcome.assistantName).toBe(config.ux.welcome.assistantName);
+  });
+
+  it('no employee yet: says so, never a guessed name', () => {
+    show('conversation', { initial: { ...config, nameSource: 'employee' } });
+    expect(screen.getByTestId('webchat-name-employee')).toBeChecked();
+    expect(screen.getByTestId('webchat-name')).toHaveTextContent(
+      'No AI employee is set for the web chat yet.',
+    );
+  });
+
+  it('★ "set by automation <name>", a link to that automation', () => {
+    show('conversation', {
+      answering: {
+        employee: null,
+        automation: { id: 'au 1', name: 'Website triage', dedicated: true, everyChannel: false },
+      },
+    });
+    const line = screen.getByTestId('webchat-employee-automation');
+    expect(line).toHaveTextContent('Set by the automation Website triage.');
+    expect(screen.getByTestId('webchat-employee-automation-link')).toHaveAttribute(
+      'href',
+      '/studio/automations/au%201',
+    );
+  });
+
+  it('an automation for every channel says so', () => {
+    show('conversation', {
+      answering: {
+        employee: { id: 'e1', name: 'Noa' },
+        automation: { id: 'a2', name: 'All channels', dedicated: false, everyChannel: true },
+      },
+    });
+    expect(screen.getByTestId('webchat-employee-automation')).toHaveTextContent(
+      'which covers every channel',
+    );
+  });
+
+  it('no automation read: nothing is said about one', () => {
+    show('conversation', { answering: employee });
+    expect(screen.queryByTestId('webchat-employee-automation')).toBeNull();
   });
 });
 
@@ -1374,7 +1445,22 @@ describe('★★ W9: products, cart and deals from a WooCommerce store connected
     expect(sentAt().commerce).toEqual({
       productMessagingEnabled: true,
       addToCartEnabled: true,
+      suggestComplementary: false,
       promotions: { couponIds: [] },
+    });
+  });
+
+  it('★ complementary products wait for product cards, then save (Backend f7c36959)', async () => {
+    show('behaviour', { read: woo() });
+    expect(screen.getByTestId('webchat-complementary-unavailable')).toHaveTextContent(
+      'add-ons show as product cards',
+    );
+    fireEvent.click(screen.getByTestId('webchat-products-switch'));
+    fireEvent.click(screen.getByTestId('webchat-complementary-switch'));
+    await pause();
+    expect(sentAt().commerce).toMatchObject({
+      productMessagingEnabled: true,
+      suggestComplementary: true,
     });
   });
 
@@ -1384,6 +1470,7 @@ describe('★★ W9: products, cart and deals from a WooCommerce store connected
       commerce: {
         productMessagingEnabled: true,
         addToCartEnabled: true,
+        suggestComplementary: false,
         promotions: { couponIds: [] },
       },
     };
@@ -1433,6 +1520,7 @@ describe('★★ W9: products, cart and deals from a WooCommerce store connected
       commerce: {
         productMessagingEnabled: false,
         addToCartEnabled: false,
+        suggestComplementary: false,
         promotions: { couponIds: ['1', '2', '3', '4', '5'] },
       },
     };
@@ -1522,6 +1610,7 @@ describe('★★ W9: products, cart and deals from a WooCommerce store connected
       commerce: {
         productMessagingEnabled: false,
         addToCartEnabled: false,
+        suggestComplementary: false,
         promotions: { couponIds: ['31'] },
       },
     };

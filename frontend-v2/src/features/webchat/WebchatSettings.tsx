@@ -96,6 +96,8 @@ interface Setters {
   readonly whatsapp: (patch: Partial<WebchatConfig['ux']['whatsapp']>) => void;
   /** W9: products, cart and the chosen coupons. */
   readonly commerce: (patch: Partial<WebchatConfig['commerce']>) => void;
+  /** The header's name: the answering employee's, or the one typed (kept while unused). */
+  readonly nameSource: (source: WebchatConfig['nameSource']) => void;
 }
 
 /**
@@ -128,6 +130,7 @@ export function WebchatSettings({
   tab,
   handoffNumbers = null,
   assignment = null,
+  answering = null,
 }: {
   readonly initial: WebchatConfig;
   /**
@@ -142,6 +145,8 @@ export function WebchatSettings({
   readonly handoffNumbers?: readonly HandoffNumber[] | null;
   /** Who answers the website per the playbook - read-only here. */
   readonly assigned: WebsiteWidget['assignedEmployee'];
+  /** Who answers, automation-first (Backend 330b0461); `null` from an older service. */
+  readonly answering?: WebsiteWidget['answering'];
   /** `null`: the installs could not be read. */
   readonly install: WidgetInstall | null;
   readonly shopifyData: ShopifyData | null;
@@ -227,6 +232,7 @@ export function WebchatSettings({
     greeting: (title) => ux({ welcome: { ...config.ux.welcome, title } }),
     whatsapp: (patch) => ux({ whatsapp: { ...config.ux.whatsapp, ...patch } }),
     commerce: (patch) => change({ ...config, commerce: { ...config.commerce, ...patch } }),
+    nameSource: (nameSource) => change({ ...config, nameSource }),
   };
   /* The number "Continue on WhatsApp" would use - the button shows only when it can take it. */
   const handoff =
@@ -304,7 +310,13 @@ export function WebchatSettings({
           {tab === 'appearance' ? (
             <Appearance config={config} set={set} />
           ) : tab === 'conversation' ? (
-            <Conversation config={config} set={set} assigned={assigned} assignment={assignment} />
+            <Conversation
+              config={config}
+              set={set}
+              assigned={assigned}
+              assignment={assignment}
+              answering={answering}
+            />
           ) : tab === 'behaviour' ? (
             <Behaviour
               config={config}
@@ -321,7 +333,13 @@ export function WebchatSettings({
             />
           )}
         </div>
-        <Preview config={config} site={site} business={business} handoff={handoff !== null} />
+        <Preview
+          config={config}
+          site={site}
+          business={business}
+          handoff={handoff !== null}
+          employeeName={answering?.employee?.name ?? assigned?.name ?? null}
+        />
       </div>
     </div>
   );
@@ -797,13 +815,17 @@ function Conversation({
   set,
   assigned,
   assignment,
+  answering,
 }: {
   readonly config: WebchatConfig;
   readonly set: Setters;
   readonly assigned: WebsiteWidget['assignedEmployee'];
   readonly assignment: WidgetAssignment | 'forbidden' | null;
+  readonly answering: WebsiteWidget['answering'];
 }) {
   const t = useTranslations('channels.webchat.conversation');
+  // The employee the header would name: the automation-first read, else the playbook's.
+  const employeeName = answering?.employee?.name ?? assigned?.name ?? null;
   const questions = [0, 1, 2].map((i) => config.ux.welcome.suggestedQuestions[i] ?? '');
   return (
     <>
@@ -821,13 +843,39 @@ function Conversation({
           </Row>
         ) : (
           <Row label={t('name')} testid="webchat-name">
-            <TextField
-              label={t('name')}
-              value={config.ux.welcome.assistantName}
-              onChange={set.assistantName}
-              max={40}
-              testid="webchat-name-input"
-            />
+            {/* Backend 330b0461: the answering employee's name, or one typed here (kept while unused). */}
+            <span className={styles.nameSource} role="radiogroup" aria-label={t('name')}>
+              {(['employee', 'custom'] as const).map((source) => (
+                <label key={source} className={styles.radio}>
+                  <input
+                    type="radio"
+                    name="webchat-name-source"
+                    checked={config.nameSource === source}
+                    onChange={() => set.nameSource(source)}
+                    data-testid={`webchat-name-${source}`}
+                  />
+                  {t(`nameSource.${source}`)}
+                </label>
+              ))}
+            </span>
+            {config.nameSource === 'employee' ? (
+              <span className={styles.rowHint} data-testid="webchat-name-from-employee">
+                {employeeName
+                  ? t.rich('nameFromEmployee', {
+                      name: employeeName,
+                      user: (chunks) => <bdi dir="auto">{chunks}</bdi>,
+                    })
+                  : t('nameNoEmployee')}
+              </span>
+            ) : (
+              <TextField
+                label={t('name')}
+                value={config.ux.welcome.assistantName}
+                onChange={set.assistantName}
+                max={40}
+                testid="webchat-name-input"
+              />
+            )}
           </Row>
         )}
         <Row
@@ -875,7 +923,11 @@ function Conversation({
             Who answers is decided in one place, the playbook - and since Omer's
             2026-10-08 decision, an admin can set it from here, written to it.
           */}
-            <WidgetAssignmentCard read={assignment} assigned={assigned} />
+            <WidgetAssignmentCard
+              read={assignment}
+              assigned={assigned}
+              automation={answering?.automation ?? null}
+            />
           </section>
           <section
             className={styles.card}
@@ -1105,7 +1157,11 @@ function Behaviour({
               set.commerce(
                 on
                   ? { productMessagingEnabled: true }
-                  : { productMessagingEnabled: false, addToCartEnabled: false },
+                  : {
+                      productMessagingEnabled: false,
+                      addToCartEnabled: false,
+                      suggestComplementary: false,
+                    },
               )
             }
             testid="webchat-products"
@@ -1125,6 +1181,24 @@ function Behaviour({
               on={false}
               why={t('cartNeedsProducts')}
               testid="webchat-cart"
+            />
+          )}
+          {/* Backend f7c36959: add-ons are product cards, so they wait on "Recommend products". */}
+          {config.commerce.productMessagingEnabled ? (
+            <Toggle
+              label={t('complementary.label')}
+              hint={t('complementary.hint')}
+              on={config.commerce.suggestComplementary}
+              onChange={(on) => set.commerce({ suggestComplementary: on })}
+              testid="webchat-complementary"
+            />
+          ) : (
+            <Toggle
+              label={t('complementary.label')}
+              hint={t('complementary.hint')}
+              on={false}
+              why={t('complementaryNeedsProducts')}
+              testid="webchat-complementary"
             />
           )}
         </>
@@ -1599,16 +1673,21 @@ function Preview({
   site,
   business,
   handoff,
+  employeeName,
 }: {
   readonly config: WebchatConfig;
   readonly site: string | null;
   readonly business: string | null;
   /** "Continue on WhatsApp" is on and its number can take it: the button shows. */
   readonly handoff: boolean;
+  /** The answering employee's name, for a header that takes it (`nameSource: employee`). */
+  readonly employeeName: string | null;
 }) {
   const t = useTranslations('channels.webchat.preview');
   const colour = isHex(config.appearance.primaryColor) ? config.appearance.primaryColor : '#121212';
-  const name = config.ux.welcome.assistantName.trim() || t('assistant');
+  const name =
+    (config.nameSource === 'employee' ? employeeName : config.ux.welcome.assistantName)?.trim() ||
+    t('assistant');
   const mark = brandMark(business ?? name);
   // The bubble's and the pop-up's mark: the brand's initial, as the live widget draws it.
   const initial = brandInitial(business ?? name);

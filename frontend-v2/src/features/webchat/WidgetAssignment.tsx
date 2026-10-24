@@ -11,7 +11,7 @@ import type {
 } from '@/api/contracts/website-widget';
 import { UnavailableItem } from '@/design-system/primitives/unavailable/Unavailable';
 import { automationsLink } from '@/features/employees/WhoAnswers';
-import { useRouter } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 import { initials } from '@/lib/brand-mark';
 
 import { saveWidgetAssignment, type AssignmentSave } from './website-widget-actions';
@@ -38,8 +38,54 @@ import styles from './Webchat.module.css';
 export function WidgetAssignmentCard({
   read,
   assigned,
+  automation = null,
 }: {
   /** `null`: could not be read; `'forbidden'`: not an admin. */
+  readonly read: WidgetAssignment | 'forbidden' | null;
+  readonly assigned: WebsiteWidget['assignedEmployee'];
+  /** The routing automation that decides who answers (Backend 330b0461); `null`: none, or unread. */
+  readonly automation?: NonNullable<WebsiteWidget['answering']>['automation'];
+}) {
+  return (
+    <>
+      <AssignmentBody read={read} assigned={assigned} />
+      {automation ? <SetBy automation={automation} /> : null}
+    </>
+  );
+}
+
+/**
+ * "Set by automation <name>", a link to it: who answers is that
+ * automation's decision, so that is where to change it. Without an employee
+ * it routes by conditions or to a team - said, never a guessed name.
+ */
+function SetBy({
+  automation,
+}: {
+  readonly automation: NonNullable<NonNullable<WebsiteWidget['answering']>['automation']>;
+}) {
+  const t = useTranslations('channels.webchat.conversation');
+  return (
+    <p className={styles.rowHint} data-testid="webchat-employee-automation">
+      {t.rich(automation.everyChannel ? 'setByAutomationEvery' : 'setByAutomation', {
+        name: automation.name,
+        link: (chunks) => (
+          <Link
+            href={`/studio/automations/${encodeURIComponent(automation.id)}`}
+            data-testid="webchat-employee-automation-link"
+          >
+            <bdi dir="auto">{chunks}</bdi>
+          </Link>
+        ),
+      })}
+    </p>
+  );
+}
+
+function AssignmentBody({
+  read,
+  assigned,
+}: {
   readonly read: WidgetAssignment | 'forbidden' | null;
   readonly assigned: WebsiteWidget['assignedEmployee'];
 }) {

@@ -1577,4 +1577,11 @@
       grid-template-columns: 1fr;
     }
   }
+
+  /* The header name's source: the employee's, or one typed (Backend 330b0461). */
+  .nameSource {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+  }
 }

@@ -35,10 +35,14 @@ export function bodyOfWidget(settings: WidgetSettings, { stageB = false } = {}) 
   // W9: the website widget's own products, cart and chosen coupons.
   const body = {
     ...config,
+    nameSource: settings.nameSource,
     commerce: {
       productMessagingEnabled: settings.commerce.productMessagingEnabled,
       addToCartEnabled:
         settings.commerce.productMessagingEnabled && settings.commerce.addToCartEnabled,
+      // Add-ons are product cards: no cards, no add-ons (the server forces it too).
+      suggestComplementary:
+        settings.commerce.productMessagingEnabled && settings.commerce.suggestComplementary,
       promotions: { couponIds: [...settings.commerce.promotions.couponIds] },
     },
   };
@@ -96,6 +100,29 @@ export const websiteWidgetSchema = z.object({
      * service - which is how the screen knows stage B is there at all.
      */
     whatsappNumbers: z.array(handoffNumberSchema).optional(),
+    /**
+     * Backend 330b0461 - who answers the web chat, read automation-first:
+     * the employee, and the routing automation that decides it (`dedicated`:
+     * the web chat's own; `everyChannel`: one for every channel). An
+     * automation without an employee routes by conditions or to a team.
+     * Absent (an older service) or unreadable: `null`, and nothing is said.
+     */
+    answering: z
+      .object({
+        employee: z.object({ id: z.string(), name: z.string() }).nullable().catch(null),
+        automation: z
+          .object({
+            id: z.string(),
+            name: z.string(),
+            dedicated: z.boolean().catch(false),
+            everyChannel: z.boolean().catch(false),
+          })
+          .nullable()
+          .catch(null),
+      })
+      .nullable()
+      .catch(null)
+      .default(null),
   }),
 });
 export type WebsiteWidget = z.infer<typeof websiteWidgetSchema>['data'];

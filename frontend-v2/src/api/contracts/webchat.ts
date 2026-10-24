@@ -43,11 +43,18 @@ export const MAX_PROMOTION_COUPONS = 5;
 const NO_COMMERCE = {
   productMessagingEnabled: false,
   addToCartEnabled: false,
+  suggestComplementary: false,
   promotions: { couponIds: [] as string[] },
 };
 
 export const webchatConfigSchema = z.object({
   displayName: z.string().catch(''),
+  /**
+   * Backend 330b0461: where the widget's header name comes from - the AI
+   * employee that answers the web chat, or `ux.welcome.assistantName`. Absent
+   * or unknown reads as `custom`: an existing widget keeps its typed name.
+   */
+  nameSource: z.enum(['employee', 'custom']).catch('custom').default('custom'),
   appearance: z.object({
     primaryColor: z.string().catch('#121212'),
     logoUrl: url,
@@ -94,6 +101,13 @@ export const webchatConfigSchema = z.object({
     .object({
       productMessagingEnabled: z.boolean().catch(false),
       addToCartEnabled: z.boolean().catch(false),
+      /**
+       * Backend f7c36959: after the customer chose a product, the AI may show
+       * add-ons as ordinary product cards (the store's cross-sells and upsells,
+       * else in-stock items of the same category). Needs product cards: the
+       * server keeps it off while they are off. Absent: off.
+       */
+      suggestComplementary: z.boolean().catch(false).default(false),
       promotions: z
         .object({ couponIds: z.array(z.string()).catch([]) })
         .catch({ couponIds: [] })

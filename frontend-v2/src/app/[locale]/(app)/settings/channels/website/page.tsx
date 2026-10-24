@@ -39,6 +39,7 @@ export default async function Page({
     <WebchatSettings
       initial={asConfig(read.widget.settings)}
       assigned={read.widget.assignedEmployee}
+      answering={read.widget.answering}
       install={read.install}
       shopifyData={read.shopifyData}
       shopifyAvailability={read.shopifyAvailability}
