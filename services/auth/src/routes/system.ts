@@ -340,6 +340,9 @@ export const createTenantSchema = z.object({
   slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
   adminEmail: z.string().email(),
   adminName: z.string().min(1),
+  // The workspace's language: its emails and its onboarding. "he" when absent,
+  // so a console without the field keeps working (2026-10-24).
+  locale: z.enum(["he", "en"]).default("he"),
   // Required. An organization without a commercial decision is the thing this
   // whole route now exists to prevent.
   billing: billingSchema,
@@ -347,7 +350,7 @@ export const createTenantSchema = z.object({
 
 router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenantSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, slug, adminEmail, adminName, billing } = req.body;
+    const { name, slug, adminEmail, adminName, billing, locale } = req.body;
     const paid = billing.mode === "PAID_PLAN";
     const isPoc = billing.mode === "POC";
     const actorId = (req as any).user?.userId as string | undefined;
@@ -420,7 +423,7 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
         // A paid tenant starts owing money. PENDING_PAYMENT denies the paid
         // product at the shared access matrix while still permitting identity
         // onboarding and payment setup.
-        data: { name, slug, status: paid ? "PENDING_PAYMENT" : "PENDING_ADMIN_SETUP" },
+        data: { name, slug, status: paid ? "PENDING_PAYMENT" : "PENDING_ADMIN_SETUP", defaultLocale: locale },
       });
 
       const admin = await tx.user.create({
@@ -599,12 +602,13 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
         currency: paidProvisioning.summary.currency,
         includedCredits: paidProvisioning.summary.includedCredits,
         setupUrl: entry?.needsPassword ? entry.actionUrl : null,
+        locale,
       }).catch((err) => {
         // Delivery failure must not activate anything. Resend is the repair.
         console.error("Failed to send paid onboarding email:", err?.message ?? err);
       });
     } else {
-      sendOnboardingEmail(result.tenant.id, adminEmail, adminName, name, slug, result.admin.id).catch((err) => {
+      sendOnboardingEmail(result.tenant.id, adminEmail, adminName, name, slug, result.admin.id, locale).catch((err) => {
         console.error("Failed to send onboarding email:", err);
       });
     }

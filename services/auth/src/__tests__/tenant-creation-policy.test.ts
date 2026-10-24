@@ -60,6 +60,23 @@ describe("the commercial decision is mandatory", () => {
   });
 });
 
+describe("the workspace's language (2026-10-24)", () => {
+  it("absent: Hebrew, so a console without the field keeps working", () => {
+    const r = createTenantSchema.safeParse(poc());
+    expect(r.success && r.data.locale).toBe("he");
+  });
+  it("he or en, nothing else", () => {
+    expect(createTenantSchema.safeParse({ ...poc(), locale: "en" }).success).toBe(true);
+    expect(createTenantSchema.safeParse({ ...poc(), locale: "fr" }).success).toBe(false);
+  });
+  it("the route stores it on the tenant and hands it to both emails", () => {
+    const src = require("fs").readFileSync(require("path").join(__dirname, "../routes/system.ts"), "utf8");
+    expect(src).toContain('status: paid ? "PENDING_PAYMENT" : "PENDING_ADMIN_SETUP", defaultLocale: locale');
+    expect(src).toContain("sendOnboardingEmail(result.tenant.id, adminEmail, adminName, name, slug, result.admin.id, locale)");
+    expect(src).toMatch(/setupUrl: entry\?\.needsPassword \? entry\.actionUrl : null,\n\s+locale,/);
+  });
+});
+
 describe("PAID_PLAN must name a plan and may not carry money", () => {
   it("requires a plan version", () => {
     expect(createTenantSchema.safeParse({ ...WHO, billing: { mode: "PAID_PLAN" } }).success).toBe(false);
