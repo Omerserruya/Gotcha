@@ -583,11 +583,14 @@ export const channelEndpoints = {
    * The callable variant (backend ecd64c4d): asked server side with our
    * session, answers `200 { url }` - the provider's page - or `409
    * { error: 'not_configured' }`, or 403 for a non-admin. The way back lands
-   * on `/v2/settings/channels?connected=<p>&count=N` or `?platform=<p>&error=<code>`.
+   * on `/settings/channels?connected=<p>&count=N` or `?platform=<p>&error=<code>`.
    * `onboarding_channels` (backend 2c1653b0) lands the same query on
-   * `/v2/onboarding/channels` instead.
+   * `/onboarding/channels` instead.
    */
-  oauthInitUrl: (platform: string, flow: 'redesign_studio' | 'onboarding_channels' = 'redesign_studio') =>
+  oauthInitUrl: (
+    platform: string,
+    flow: 'redesign_studio' | 'onboarding_channels' = 'redesign_studio',
+  ) =>
     endpoint('/api/channels/oauth/init-url?platform={platform}&flow={flow}', {
       platform,
       flow,
@@ -889,7 +892,7 @@ export const integrationEndpoints = {
   disconnect: (slug: string) => endpoint('/api/connectors/{slug}/disconnect', { slug }),
   /**
    * OAuth at the provider, returning to THIS app (backend 381a5d1b): the
-   * `redesign_studio` flow lands on `/v2/studio/capabilities?system=<slug>`
+   * `redesign_studio` flow lands on `/studio/capabilities?system=<slug>`
    * with `connected=1` or `error=<code>`. Answers `{ url }` (not enveloped).
    * Salesforce takes the login host; Shopify re-authorises the store already
    * connected and refuses 409 without one.
@@ -1539,7 +1542,7 @@ export const knowledgeEndpoints = {
   createBase: () => endpoint('/api/knowledge-bases'),
   /**
    * Drive or Confluence at the provider, returning HERE (backend df9ee4cd):
-   * `/v2/studio/knowledge?add=1&way=drive|confluence&connected=1|error=<code>`.
+   * `/studio/knowledge?add=1&way=drive|confluence&connected=1|error=<code>`.
    * Answers `{ url }` (not enveloped). ADMIN only; `kbId` required.
    */
   /** 08b after connecting: the base's Drive / Confluence connections. `{ data: [...] }`. */

@@ -6,7 +6,13 @@ import type { WidgetInstall } from '@/api/contracts/website-widget';
  * joined beside Instagram (2026-10-24): its connect comes back to the step
  * too, with its Page picker.
  */
-export const ONBOARDING_CHANNELS = ['WEBCHAT', 'WHATSAPP', 'INSTAGRAM', 'MESSENGER', 'EMAIL'] as const;
+export const ONBOARDING_CHANNELS = [
+  'WEBCHAT',
+  'WHATSAPP',
+  'INSTAGRAM',
+  'MESSENGER',
+  'EMAIL',
+] as const;
 export type OnboardingChannel = (typeof ONBOARDING_CHANNELS)[number];
 
 /** The platform types each row stands for: email is a mailbox on a server, Gmail or Outlook. */

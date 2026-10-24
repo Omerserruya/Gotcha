@@ -1096,7 +1096,7 @@
     border-radius: 14px;
     background-color: var(--panel-field);
     list-style: none;
-    overflow: hidden;
+    overflow: clip;
   }
 
   .channelRow {

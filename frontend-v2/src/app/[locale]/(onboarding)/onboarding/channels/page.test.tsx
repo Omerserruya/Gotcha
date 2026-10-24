@@ -76,7 +76,13 @@ describe('★★ the way back lands on the step, read as 13 reads it', () => {
   });
 
   it('★ a preview reads no way back', async () => {
-    const got = await props({ preview: '1', connected: 'instagram', pick: '1', platform: 'messenger', session: 's' });
+    const got = await props({
+      preview: '1',
+      connected: 'instagram',
+      pick: '1',
+      platform: 'messenger',
+      session: 's',
+    });
     expect(got.landing).toBeNull();
     expect(got.pick).toBeNull();
     expect(got.preview).toBe(true);

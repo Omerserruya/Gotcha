@@ -222,7 +222,10 @@ describe('★★ each channel connects from its row', () => {
   it.each(['INSTAGRAM', 'MESSENGER'] as const)(
     '★★ %s: the row’s action goes to Meta, coming back to THIS step; a refusal is said on the row',
     async (name) => {
-      actions.startChannelConnect.mockResolvedValueOnce({ ok: true, url: 'https://meta.example/o' });
+      actions.startChannelConnect.mockResolvedValueOnce({
+        ok: true,
+        url: 'https://meta.example/o',
+      });
       show();
       await act(async () => fireEvent.click(screen.getByTestId(`channels-open-${name}`)));
       expect(actions.startChannelConnect).toHaveBeenCalledWith(name, 'onboarding_channels');
@@ -242,7 +245,10 @@ describe('★★ each channel connects from its row', () => {
   });
 
   it('★★ email: Gmail and Outlook at the provider (back HERE); another server inline, without the Studio link', async () => {
-    actions.startChannelConnect.mockResolvedValueOnce({ ok: true, url: 'https://google.example/o' });
+    actions.startChannelConnect.mockResolvedValueOnce({
+      ok: true,
+      url: 'https://google.example/o',
+    });
     show();
     fireEvent.click(screen.getByTestId('channels-open-EMAIL'));
     await act(async () => fireEvent.click(screen.getByTestId('channels-email-GMAIL')));

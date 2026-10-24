@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { NextIntlClientProvider } from 'next-intl';
+import { createTranslator, NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -164,6 +164,26 @@ describe('★★ CSS: the phone shows the one line; Hebrew is never letter-space
         css,
       )?.[1] ?? '';
     for (const name of new Set(spaced)) expect(he).toContain(`.${name}`);
+  });
+});
+
+describe('★★ no maqaf in the Hebrew onboarding catalogue (Omer, 2026-10-24)', () => {
+  // By code point: the character this guard forbids is never typed here.
+  const MAQAF = String.fromCharCode(0x05be);
+
+  it('he/onboarding.json has none: U+2011 before Latin or a digit, nothing before Hebrew', () => {
+    const at = JSON.stringify(onboardingHe)
+      .split(MAQAF)
+      .slice(0, -1)
+      .map((before) => before.slice(-12));
+    expect(at).toEqual([]);
+  });
+
+  it('a plural that can say a Hebrew word joins it directly: "לחודש אחד", "ל‑12 חודשים"', () => {
+    const t = createTranslator({ locale: 'he', messages: { onboarding: onboardingHe } });
+    const key = 'onboarding.review.terms.warranty' as never;
+    expect(t(key, { months: 1 } as never)).toBe('אחריות לחודש אחד');
+    expect(t(key, { months: 12 } as never)).toBe('אחריות ל\u201112 חודשים');
   });
 });
 
